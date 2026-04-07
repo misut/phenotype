@@ -4,30 +4,40 @@
 //   import { mount } from './phenotype.js';
 //   mount('hello.wasm', document.body);
 
-// --- DOM command buffer executor ---
+// --- DOM command opcodes (must match phenotype.cppm Cmd enum) ---
 
 const CMD_CREATE_ELEMENT = 1;
 const CMD_SET_TEXT = 2;
 const CMD_APPEND_CHILD = 3;
+const CMD_SET_ATTRIBUTE = 4;
+const CMD_SET_STYLE = 5;
+const CMD_SET_INNER_HTML = 6;
+const CMD_ADD_CLASS = 7;
+const CMD_REMOVE_CHILD = 8;
+
+// --- DOM command buffer executor ---
 
 function createExecutor(instance, rootElement) {
   const handles = new Map();
   handles.set(0, rootElement); // handle 0 = root element
 
+  const decoder = new TextDecoder();
   function readString(bytes, offset, len) {
-    return new TextDecoder().decode(bytes.slice(offset, offset + len));
+    return decoder.decode(bytes.slice(offset, offset + len));
+  }
+
+  function align4(pos) {
+    return (pos + 3) & ~3;
   }
 
   return function flush() {
     const mem = instance.exports.memory.buffer;
-
-    // Get command buffer location via exported accessor functions
     const bufOffset = instance.exports.phenotype_get_cmd_buf();
     const bufLen = instance.exports.phenotype_get_cmd_len();
-
     if (bufLen === 0) return;
 
     const bytes = new Uint8Array(mem);
+    const view = new DataView(mem);
     let pos = bufOffset;
     const end = bufOffset + bufLen;
 
@@ -39,8 +49,7 @@ function createExecutor(instance, rootElement) {
           const handle = view.getUint32(pos, true); pos += 4;
           const tagLen = view.getUint32(pos, true); pos += 4;
           const tag = readString(bytes, pos, tagLen);
-          pos += tagLen;
-          pos = (pos + 3) & ~3;
+          pos = align4(pos + tagLen);
           handles.set(handle, document.createElement(tag));
           break;
         }
@@ -48,8 +57,7 @@ function createExecutor(instance, rootElement) {
           const handle = view.getUint32(pos, true); pos += 4;
           const textLen = view.getUint32(pos, true); pos += 4;
           const text = readString(bytes, pos, textLen);
-          pos += textLen;
-          pos = (pos + 3) & ~3;
+          pos = align4(pos + textLen);
           const el = handles.get(handle);
           if (el) el.textContent = text;
           break;
@@ -60,6 +68,56 @@ function createExecutor(instance, rootElement) {
           const parentEl = handles.get(parent);
           const childEl = handles.get(child);
           if (parentEl && childEl) parentEl.appendChild(childEl);
+          break;
+        }
+        case CMD_SET_ATTRIBUTE: {
+          const handle = view.getUint32(pos, true); pos += 4;
+          const keyLen = view.getUint32(pos, true); pos += 4;
+          const key = readString(bytes, pos, keyLen);
+          pos = align4(pos + keyLen);
+          const valLen = view.getUint32(pos, true); pos += 4;
+          const val = readString(bytes, pos, valLen);
+          pos = align4(pos + valLen);
+          const el = handles.get(handle);
+          if (el) el.setAttribute(key, val);
+          break;
+        }
+        case CMD_SET_STYLE: {
+          const handle = view.getUint32(pos, true); pos += 4;
+          const propLen = view.getUint32(pos, true); pos += 4;
+          const prop = readString(bytes, pos, propLen);
+          pos = align4(pos + propLen);
+          const valLen = view.getUint32(pos, true); pos += 4;
+          const val = readString(bytes, pos, valLen);
+          pos = align4(pos + valLen);
+          const el = handles.get(handle);
+          if (el) el.style[prop] = val;
+          break;
+        }
+        case CMD_SET_INNER_HTML: {
+          const handle = view.getUint32(pos, true); pos += 4;
+          const htmlLen = view.getUint32(pos, true); pos += 4;
+          const html = readString(bytes, pos, htmlLen);
+          pos = align4(pos + htmlLen);
+          const el = handles.get(handle);
+          if (el) el.innerHTML = html;
+          break;
+        }
+        case CMD_ADD_CLASS: {
+          const handle = view.getUint32(pos, true); pos += 4;
+          const clsLen = view.getUint32(pos, true); pos += 4;
+          const cls = readString(bytes, pos, clsLen);
+          pos = align4(pos + clsLen);
+          const el = handles.get(handle);
+          if (el) el.classList.add(cls);
+          break;
+        }
+        case CMD_REMOVE_CHILD: {
+          const parent = view.getUint32(pos, true); pos += 4;
+          const child = view.getUint32(pos, true); pos += 4;
+          const parentEl = handles.get(parent);
+          const childEl = handles.get(child);
+          if (parentEl && childEl) parentEl.removeChild(childEl);
           break;
         }
         default:
@@ -73,8 +131,6 @@ function createExecutor(instance, rootElement) {
 // --- Loader ---
 
 export async function mount(wasmUrl, rootElement = document.body) {
-  // Late-binding reference: instance is set after instantiation,
-  // but import functions capture it via closure.
   let inst = null;
 
   function getMemory() {
@@ -83,7 +139,6 @@ export async function mount(wasmUrl, rootElement = document.body) {
 
   let executor = null;
 
-  // WASI imports — each function captures `inst` via closure
   const wasiImports = {
     fd_write(fd, iovs_ptr, iovs_len, nwritten_ptr) {
       const mem = new DataView(getMemory().buffer);
@@ -130,7 +185,6 @@ export async function mount(wasmUrl, rootElement = document.body) {
     },
   };
 
-  // Phenotype imports
   const phenotypeImports = {
     flush() {
       if (executor) executor();
@@ -147,7 +201,6 @@ export async function mount(wasmUrl, rootElement = document.body) {
   inst = result.instance;
   executor = createExecutor(inst, rootElement);
 
-  // Run WASI entry point
   if (inst.exports._start) {
     inst.exports._start();
   }
