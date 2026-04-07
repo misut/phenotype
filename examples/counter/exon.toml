@@ -1,0 +1,10 @@
+[package]
+name = "counter"
+version = "0.1.0"
+description = "phenotype counter example with reactive state"
+type = "bin"
+standard = 23
+platforms = [{ os = "wasi" }]
+
+[dependencies.path]
+phenotype = "../.."
