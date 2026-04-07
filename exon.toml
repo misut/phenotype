@@ -1,0 +1,11 @@
+[package]
+name = "phenotype"
+version = "0.1.0"
+description = "C++ WASM UI framework using wasi-sdk + browser shim"
+authors = ["misut"]
+license = "MIT"
+type = "lib"
+standard = 23
+platforms = [{ os = "wasi" }]
+
+[dependencies]

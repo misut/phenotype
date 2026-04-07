@@ -1,0 +1,10 @@
+[package]
+name = "hello"
+version = "0.1.0"
+description = "phenotype hello world example"
+type = "bin"
+standard = 23
+platforms = [{ os = "wasi" }]
+
+[dependencies.path]
+phenotype = "../.."
