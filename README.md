@@ -1,21 +1,30 @@
 # phenotype
 
-A cross-platform C++ UI framework. Currently targets the web via wasi-sdk + browser shim, with plans to support native platforms (Windows, macOS, Android, etc.) in the future.
+A cross-platform C++ UI framework with a Compose-style declarative DSL. Currently targets the web via wasi-sdk + browser shim, with plans to support native platforms (Windows, macOS, Android, etc.) in the future.
 
-## How it works
-
-1. **C++ side**: Import the `phenotype` module. Use `create_element`, `set_text`, `append_child`, etc. to build DOM commands. Call `flush()` to execute them.
-2. **Build**: `exon build --target wasm32-wasi` — produces a `.wasm` binary.
-3. **Browser**: Load `phenotype.js` shim which provides WASI polyfill + DOM command buffer executor, then instantiates your `.wasm`.
+## Example
 
 ```cpp
+#include <string>
 import phenotype;
+using namespace phenotype;
+
+auto CounterApp() {
+    auto count = encode(0);
+
+    Column([count] {
+        Text("Hello, phenotype!");
+        Text(std::string("Count: ") + std::to_string(count->value()));
+
+        Row(
+            [count] { Button("-", [count] { count->set(count->value() - 1); }); },
+            [count] { Button("+", [count] { count->set(count->value() + 1); }); }
+        );
+    });
+}
 
 int main() {
-    auto h1 = phenotype::create_element("h1", 2);
-    phenotype::set_text(h1, "Hello from C++!", 15);
-    phenotype::append_child(0, h1); // 0 = document.body
-    phenotype::flush();
+    express(CounterApp);
     return 0;
 }
 ```
@@ -23,30 +32,38 @@ int main() {
 ```html
 <script type="module">
     import { mount } from './phenotype.js';
-    mount('hello.wasm');
+    mount('counter.wasm');
 </script>
 ```
 
+## Key concepts
+
+| Concept | Description |
+|---|---|
+| `express(fn)` | Application entry point — "expresses" the UI (genotype → phenotype) |
+| `Trait<T>` | Reactive state holder — subscribers are notified on change |
+| `encode(value)` | Create a persistent `Trait<T>` that survives mutations |
+| `Column([&] { ... })` | Vertical flex layout (lambda builder for dynamic content) |
+| `Column(child1, child2)` | Vertical flex layout (variadic for static content) |
+| `Row(...)` | Horizontal flex layout (same dual overload as Column) |
+| `Text(str)` | Text display |
+| `Button(str, callback)` | Clickable button with event handler |
+
 ## Architecture
 
-- **Command buffer**: C++ writes DOM commands to a fixed region of WASM linear memory, then calls `flush()`. The JS shim reads and executes all queued commands in one batch — minimizing WASM-JS boundary crossings.
-- **Platform-agnostic C++ API**: The C++ layer (`phenotype.cppm`) is runtime-independent. Platform-specific logic lives in the shim layer only, making it possible to add native backends in the future.
-- **WASI polyfill**: Minimal `wasi_snapshot_preview1` implementation for browser (fd_write, proc_exit, etc.)
+```
+express(App)
+  → Scope stack + App() execution
+    → Command buffer (phenotype low-level API)
+      → flush()
+        → JS DOM executor
+```
+
+- **Declarative DSL**: Compose-style implicit scope stack. `Column([&] { Text("hi"); })` automatically parents Text under Column.
+- **Partial mutation**: When `Trait::set()` is called, only the subscribed scopes rebuild — not the entire UI tree.
+- **Command buffer**: C++ writes DOM commands to WASM linear memory, JS reads and executes them in one batch.
+- **Platform-agnostic C++ API**: Platform-specific logic lives in the shim layer only, enabling future native backends.
 - **C++ modules**: Uses `.cppm` modules — supported by wasi-sdk's Clang.
-
-## Available commands
-
-| C++ function | DOM operation |
-|---|---|
-| `create_element(tag, len)` | `document.createElement(tag)` |
-| `set_text(handle, text, len)` | `el.textContent = text` |
-| `append_child(parent, child)` | `parent.appendChild(child)` |
-| `set_attribute(handle, key, klen, val, vlen)` | `el.setAttribute(key, val)` |
-| `set_style(handle, prop, plen, val, vlen)` | `el.style[prop] = val` |
-| `set_inner_html(handle, html, len)` | `el.innerHTML = html` |
-| `add_class(handle, cls, len)` | `el.classList.add(cls)` |
-| `remove_child(parent, child)` | `parent.removeChild(child)` |
-| `flush()` | Execute all queued commands |
 
 ## Requirements
 
@@ -66,6 +83,11 @@ python3 -m http.server 8080
 ## Roadmap
 
 - [x] Web (wasi-sdk + browser WASI shim)
+- [x] Compose-style declarative DSL
+- [x] Reactive state (`Trait<T>`) with partial mutation
+- [x] Event handling (click)
+- [ ] Modifier chains (padding, background, etc.)
+- [ ] More event types (input, hover, etc.)
 - [ ] Windows (native backend)
 - [ ] macOS (native backend)
 - [ ] Android (native backend)
