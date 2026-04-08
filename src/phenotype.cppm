@@ -396,6 +396,99 @@ void Box(A&& a, B&& b, Rest&&... rest) {
 }
 
 // ============================================================
+// Compose-style higher-level components
+// ============================================================
+
+// Scaffold — page layout with topBar, content, bottomBar
+void Scaffold(std::function<void()> top_bar,
+              std::function<void()> content,
+              std::function<void()> bottom_bar = {}) {
+    if (top_bar)
+        detail::open_container("header", std::move(top_bar));
+    if (content)
+        detail::open_container("main", std::move(content));
+    if (bottom_bar)
+        detail::open_container("footer", std::move(bottom_bar));
+}
+
+// Surface — grouped container with background
+template<typename F>
+    requires std::is_invocable_v<F>
+void Surface(F&& builder) {
+    detail::open_container("div", std::forward<F>(builder));
+}
+
+// Card — surface with border-radius and shadow
+template<typename F>
+    requires std::is_invocable_v<F>
+void Card(F&& builder) {
+    detail::open_container("div", [&builder] {
+        auto h = Scope::current()->handle;
+        set_style(h, "borderRadius", "8px");
+        set_style(h, "boxShadow", "0 1px 3px rgba(0,0,0,0.12)");
+        set_style(h, "padding", "16px");
+        builder();
+    });
+}
+
+// Divider — horizontal separator line
+void Divider() {
+    auto h = create_element("hr");
+    append_child(Scope::current()->handle, h);
+}
+
+// Spacer — empty space with given height in pixels
+void Spacer(unsigned int height_px) {
+    auto h = create_element("div");
+    // build height string manually (no std::to_string for small ints)
+    char buf[16];
+    unsigned int i = 0;
+    unsigned int v = height_px;
+    if (v == 0) buf[i++] = '0';
+    else {
+        char tmp[10];
+        unsigned int j = 0;
+        while (v > 0) { tmp[j++] = '0' + (v % 10); v /= 10; }
+        while (j > 0) buf[i++] = tmp[--j];
+    }
+    buf[i++] = 'p'; buf[i++] = 'x'; buf[i] = '\0';
+    set_style(h, "height", str(buf, i));
+    append_child(Scope::current()->handle, h);
+}
+
+// Link — clickable hyperlink
+void Link(str label, str href) {
+    auto h = create_element("a");
+    set_text(h, label);
+    set_attribute(h, "href", href);
+    append_child(Scope::current()->handle, h);
+}
+
+// Code — code block with monospace font
+void Code(str content) {
+    auto pre = create_element("pre");
+    add_class(pre, "code-block");
+    append_child(Scope::current()->handle, pre);
+    auto code_el = create_element("code");
+    set_text(code_el, content);
+    append_child(pre, code_el);
+}
+
+// ListItems — unordered list container
+template<typename F>
+    requires std::is_invocable_v<F>
+void ListItems(F&& builder) {
+    detail::open_container("ul", std::forward<F>(builder));
+}
+
+// Item — list item (use inside ListItems)
+void Item(str content) {
+    auto h = create_element("li");
+    set_text(h, content);
+    append_child(Scope::current()->handle, h);
+}
+
+// ============================================================
 // express() — application entry point
 // ============================================================
 
