@@ -43,19 +43,6 @@ extern "C" {
     unsigned int phenotype_get_cmd_len(void) { return phenotype_cmd_len; }
 }
 
-// Callback registry for event handling (survives _start() return)
-namespace phenotype_detail {
-    std::vector<std::function<void()>> g_callbacks;
-}
-
-extern "C" {
-    __attribute__((export_name("phenotype_handle_event")))
-    void phenotype_handle_event(unsigned int callback_id) {
-        if (callback_id < phenotype_detail::g_callbacks.size())
-            phenotype_detail::g_callbacks[callback_id]();
-    }
-}
-
 export namespace phenotype {
 
 // ============================================================
@@ -113,11 +100,7 @@ struct Theme {
     float max_content_width  = 720.0f;
 };
 
-namespace detail {
-    Theme g_theme;
-}
-
-Theme const& current_theme() { return detail::g_theme; }
+// g_app forward-declared — defined after LayoutNode and Arena
 
 // ============================================================
 // Draw commands — 2D primitives, self-contained
@@ -306,50 +289,70 @@ struct LayoutNode {
     // Computed layout
     float x = 0, y = 0, width = 0, height = 0;
 
+    // Cached text layout (filled during layout pass, reused in paint)
+    std::vector<std::string> text_lines;
+
     // Tree
     LayoutNode* parent = nullptr;
     std::vector<LayoutNode*> children;
 };
 
 // ============================================================
-// Arena allocator — reset per frame
+// Arena allocator
 // ============================================================
 
+struct Arena {
+    static constexpr unsigned int STORAGE_SIZE = 1024 * 1024; // 1MB
+    static constexpr unsigned int MAX_NODES = 4096;
+
+    alignas(16) unsigned char storage[STORAGE_SIZE];
+    unsigned int offset = 0;
+    unsigned int node_count = 0;
+    LayoutNode* nodes[MAX_NODES];
+
+    void* alloc(unsigned int size) {
+        size = (size + 15) & ~15u;
+        auto* p = &storage[offset];
+        offset += size;
+        return p;
+    }
+
+    LayoutNode* alloc_node() {
+        auto* mem = alloc(sizeof(LayoutNode));
+        auto* node = new (mem) LayoutNode();
+        nodes[node_count++] = node;
+        return node;
+    }
+
+    void reset() {
+        for (unsigned int i = 0; i < node_count; ++i) nodes[i]->~LayoutNode();
+        node_count = 0;
+        offset = 0;
+    }
+};
+
+// ============================================================
+// AppState — consolidated global state
+// ============================================================
+
+struct StateSlot {
+    void* ptr;
+    void (*deleter)(void*);
+    ~StateSlot() { if (deleter) deleter(ptr); }
+};
+
+struct AppState {
+    Theme theme;
+    Arena arena;
+    LayoutNode* root = nullptr;
+    float scroll_y = 0;
+    std::vector<std::function<void()>> callbacks;
+    std::vector<StateSlot> states;
+};
+
 namespace detail {
-
-constexpr unsigned int ARENA_SIZE = 1024 * 1024; // 1MB
-alignas(16) unsigned char g_arena[ARENA_SIZE];
-unsigned int g_arena_offset = 0;
-
-void* arena_alloc(unsigned int size) {
-    size = (size + 15) & ~15u;
-    auto* p = &g_arena[g_arena_offset];
-    g_arena_offset += size;
-    return p;
-}
-
-void arena_reset() {
-    // Destruct all LayoutNodes in arena
-    // Since we use placement new, we need to track them
-    g_arena_offset = 0;
-}
-
-// We need a separate list to track nodes for destruction
-std::vector<LayoutNode*> g_nodes;
-
-LayoutNode* alloc_node() {
-    auto* mem = arena_alloc(sizeof(LayoutNode));
-    auto* node = new (mem) LayoutNode();
-    g_nodes.push_back(node);
-    return node;
-}
-
-void reset_nodes() {
-    for (auto* n : g_nodes) n->~LayoutNode();
-    g_nodes.clear();
-    arena_reset();
-}
-
+    AppState g_app;
+    LayoutNode* alloc_node() { return g_app.arena.alloc_node(); }
 } // namespace detail
 
 // ============================================================
@@ -454,10 +457,11 @@ void layout_node(LayoutNode* node, float available_width) {
 
     float inner_width = content_width - s.padding[1] - s.padding[3]; // right, left
 
-    // Text leaf
+    // Text leaf — compute and cache word-wrapped lines
     if (!node->text.empty() && node->children.empty()) {
-        float line_height = node->font_size * g_theme.line_height_ratio;
+        float line_height = node->font_size * g_app.theme.line_height_ratio;
         auto tl = layout_text(node->text, node->font_size, node->mono, inner_width, line_height);
+        node->text_lines = std::move(tl.lines);
         node->height = tl.height + s.padding[0] + s.padding[2];
         return;
     }
@@ -629,14 +633,12 @@ void paint_node(LayoutNode* node, float ox, float oy, float scroll_y,
                          node->border_width, node->border_color);
     }
 
-    // Text
-    if (!node->text.empty() && node->children.empty()) {
-        float line_height = node->font_size * g_theme.line_height_ratio;
+    // Text — use cached text_lines from layout pass
+    if (!node->text_lines.empty()) {
+        float line_height = node->font_size * g_app.theme.line_height_ratio;
         float inner_width = node->width - node->style.padding[1] - node->style.padding[3];
-        auto tl = layout_text(node->text, node->font_size, node->mono,
-                               inner_width, line_height);
         float ty = draw_y + node->style.padding[0];
-        for (auto const& line : tl.lines) {
+        for (auto const& line : node->text_lines) {
             if (!line.empty()) {
                 float line_w = phenotype_measure_text(
                     node->font_size, node->mono ? 1 : 0,
@@ -720,24 +722,10 @@ public:
     }
 };
 
-// Global state storage (heap-allocated, survives _start())
-namespace detail {
-    struct StateSlot {
-        void* ptr;
-        void (*deleter)(void*);
-        ~StateSlot() { if (deleter) deleter(ptr); }
-    };
-    std::vector<StateSlot> g_states;
-
-    // Root node for relayout/repaint on mutate
-    LayoutNode* g_root = nullptr;
-    float g_scroll_y = 0;
-}
-
 template<typename T>
 Trait<T>* encode(T initial) {
     auto* p = new Trait<T>(std::move(initial));
-    detail::g_states.push_back({p, [](void* ptr) { delete static_cast<Trait<T>*>(ptr); }});
+    detail::g_app.states.push_back({p, [](void* ptr) { delete static_cast<Trait<T>*>(ptr); }});
     return p;
 }
 
@@ -750,12 +738,12 @@ void Scope::mutate() {
     builder();
     set_current(prev);
     // Relayout and repaint entire tree
-    if (detail::g_root) {
+    if (detail::g_app.root) {
         float cw = phenotype_get_canvas_width();
-        detail::layout_node(detail::g_root, cw);
-        emit_clear(detail::g_theme.background);
+        detail::layout_node(detail::g_app.root, cw);
+        emit_clear(detail::g_app.theme.background);
         float vh = phenotype_get_canvas_height();
-        detail::paint_node(detail::g_root, 0, 0, detail::g_scroll_y, vh);
+        detail::paint_node(detail::g_app.root, 0, 0, detail::g_app.scroll_y, vh);
         flush();
     }
 }
@@ -763,14 +751,6 @@ void Scope::mutate() {
 // ============================================================
 // DSL — style context for Scaffold sections
 // ============================================================
-
-namespace detail {
-
-enum class Section { Normal, Hero, Footer };
-Section g_section = Section::Normal;
-unsigned int g_section_child_index = 0;
-
-} // namespace detail
 
 // ============================================================
 // DSL Components
@@ -780,29 +760,10 @@ unsigned int g_section_child_index = 0;
 void Text(str content) {
     auto* node = detail::alloc_node();
     node->text = std::string(content.data, content.len);
-
-    auto const& t = detail::g_theme;
-    if (detail::g_section == detail::Section::Hero) {
-        if (detail::g_section_child_index == 0) {
-            // Hero title
-            node->font_size = t.hero_title_size;
-            node->text_color = t.hero_fg;
-        } else {
-            // Hero subtitle
-            node->font_size = t.hero_subtitle_size;
-            node->text_color = t.hero_muted;
-        }
-        detail::g_section_child_index++;
-    } else if (detail::g_section == detail::Section::Footer) {
-        node->font_size = t.small_font_size;
-        node->text_color = t.muted;
-    } else {
-        node->font_size = t.body_font_size;
-        node->text_color = t.foreground;
-    }
+    node->font_size = detail::g_app.theme.body_font_size;
+    node->text_color = detail::g_app.theme.foreground;
 
     if (Scope::current()) {
-        // Inherit text_align from parent
         node->style.text_align = Scope::current()->node->style.text_align;
         Scope::current()->node->children.push_back(node);
     }
@@ -812,17 +773,17 @@ void Text(str content) {
 void Button(str label, std::function<void()> on_click = {}) {
     auto* node = detail::alloc_node();
     node->text = std::string(label.data, label.len);
-    node->font_size = detail::g_theme.body_font_size;
-    node->text_color = detail::g_theme.foreground;
-    node->background = detail::g_theme.code_bg;
+    node->font_size = detail::g_app.theme.body_font_size;
+    node->text_color = detail::g_app.theme.foreground;
+    node->background = detail::g_app.theme.code_bg;
     node->border_radius = 4;
     node->style.padding[0] = 6; node->style.padding[1] = 12;
     node->style.padding[2] = 6; node->style.padding[3] = 12;
     node->cursor_type = 1; // pointer
 
     if (on_click) {
-        auto id = static_cast<unsigned int>(phenotype_detail::g_callbacks.size());
-        phenotype_detail::g_callbacks.push_back(std::move(on_click));
+        auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
+        detail::g_app.callbacks.push_back(std::move(on_click));
         node->callback_id = id;
     }
 
@@ -834,19 +795,15 @@ void Button(str label, std::function<void()> on_click = {}) {
 void Link(str label, str href) {
     auto* node = detail::alloc_node();
     node->text = std::string(label.data, label.len);
-    node->font_size = detail::g_theme.small_font_size;
-    node->text_color = detail::g_theme.accent;
+    node->font_size = detail::g_app.theme.small_font_size;
+    node->text_color = detail::g_app.theme.accent;
     node->url = std::string(href.data, href.len);
     node->cursor_type = 1; // pointer
 
-    if (detail::g_section == detail::Section::Footer) {
-        node->font_size = detail::g_theme.small_font_size;
-    }
-
     // Register click callback to open URL
     auto url_copy = node->url;
-    auto id = static_cast<unsigned int>(phenotype_detail::g_callbacks.size());
-    phenotype_detail::g_callbacks.push_back([url_copy] {
+    auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
+    detail::g_app.callbacks.push_back([url_copy] {
         phenotype_open_url(url_copy.c_str(), static_cast<unsigned int>(url_copy.size()));
     });
     node->callback_id = id;
@@ -859,11 +816,11 @@ void Link(str label, str href) {
 void Code(str content) {
     auto* node = detail::alloc_node();
     node->text = std::string(content.data, content.len);
-    node->font_size = detail::g_theme.code_font_size;
-    node->text_color = detail::g_theme.foreground;
+    node->font_size = detail::g_app.theme.code_font_size;
+    node->text_color = detail::g_app.theme.foreground;
     node->mono = true;
-    node->background = detail::g_theme.code_bg;
-    node->border_color = detail::g_theme.border;
+    node->background = detail::g_app.theme.code_bg;
+    node->border_color = detail::g_app.theme.border;
     node->border_width = 1;
     node->border_radius = 6;
     node->style.padding[0] = 16; node->style.padding[1] = 16;
@@ -877,7 +834,7 @@ void Code(str content) {
 void Divider() {
     auto* node = detail::alloc_node();
     node->style.fixed_height = 1;
-    node->background = detail::g_theme.border;
+    node->background = detail::g_app.theme.border;
 
     if (Scope::current())
         Scope::current()->node->children.push_back(node);
@@ -1005,24 +962,28 @@ void Scaffold(std::function<void()> top_bar,
         header->style.gap = 8;
         header->style.cross_align = CrossAxisAlignment::Center;
         header->style.text_align = TextAlign::Center;
-        header->background = detail::g_theme.hero_bg;
+        header->background = detail::g_app.theme.hero_bg;
         header->style.padding[0] = 48; header->style.padding[1] = 24;
         header->style.padding[2] = 48; header->style.padding[3] = 24;
 
-        auto saved_section = detail::g_section;
-        auto saved_index = detail::g_section_child_index;
-        detail::g_section = detail::Section::Hero;
-        detail::g_section_child_index = 0;
         detail::open_container(header, std::move(top_bar));
-        detail::g_section = saved_section;
-        detail::g_section_child_index = saved_index;
+        // Post-build: apply hero styles to children
+        auto const& t = detail::g_app.theme;
+        if (header->children.size() >= 1) {
+            header->children[0]->font_size = t.hero_title_size;
+            header->children[0]->text_color = t.hero_fg;
+        }
+        if (header->children.size() >= 2) {
+            header->children[1]->font_size = t.hero_subtitle_size;
+            header->children[1]->text_color = t.hero_muted;
+        }
     }
 
     if (content) {
         auto* main = detail::alloc_node();
         main->style.flex_direction = FlexDirection::Column;
         main->style.gap = 32;
-        main->style.max_width = detail::g_theme.max_content_width;
+        main->style.max_width = detail::g_app.theme.max_content_width;
         main->style.padding[0] = 32; main->style.padding[1] = 24;
         main->style.padding[2] = 32; main->style.padding[3] = 24;
 
@@ -1037,13 +998,16 @@ void Scaffold(std::function<void()> top_bar,
         footer->style.cross_align = CrossAxisAlignment::Center;
         footer->style.padding[0] = 32; footer->style.padding[1] = 24;
         footer->style.padding[2] = 32; footer->style.padding[3] = 24;
-        footer->border_color = detail::g_theme.border;
+        footer->border_color = detail::g_app.theme.border;
         footer->border_width = 1;
 
-        auto saved_section = detail::g_section;
-        detail::g_section = detail::Section::Footer;
         detail::open_container(footer, std::move(bottom_bar));
-        detail::g_section = saved_section;
+        // Post-build: apply footer styles to children
+        auto const& t = detail::g_app.theme;
+        for (auto* child : footer->children) {
+            child->font_size = t.small_font_size;
+            child->text_color = t.muted;
+        }
     }
 }
 
@@ -1087,15 +1051,15 @@ void Item(str content) {
     // Bullet
     auto* bullet = detail::alloc_node();
     bullet->text = "\xe2\x80\xa2"; // bullet character "•"
-    bullet->font_size = detail::g_theme.body_font_size;
-    bullet->text_color = detail::g_theme.foreground;
+    bullet->font_size = detail::g_app.theme.body_font_size;
+    bullet->text_color = detail::g_app.theme.foreground;
     row->children.push_back(bullet);
 
     // Text
     auto* text = detail::alloc_node();
     text->text = std::string(content.data, content.len);
-    text->font_size = detail::g_theme.body_font_size;
-    text->text_color = detail::g_theme.foreground;
+    text->font_size = detail::g_app.theme.body_font_size;
+    text->text_color = detail::g_app.theme.foreground;
     row->children.push_back(text);
 
     if (Scope::current())
@@ -1108,13 +1072,13 @@ void Item(str content) {
 
 template<typename F>
 void express(F&& app_fn) {
-    detail::reset_nodes();
-    phenotype_detail::g_callbacks.clear();
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
 
     auto* root = detail::alloc_node();
     root->style.flex_direction = FlexDirection::Column;
-    root->background = detail::g_theme.background;
-    detail::g_root = root;
+    root->background = detail::g_app.theme.background;
+    detail::g_app.root = root;
 
     static Scope root_scope(root);
     root_scope.node = root;
@@ -1126,8 +1090,8 @@ void express(F&& app_fn) {
     detail::layout_node(root, cw); // Layout pass
 
     float vh = phenotype_get_canvas_height();
-    emit_clear(detail::g_theme.background);
-    detail::paint_node(root, 0, 0, detail::g_scroll_y, vh); // Paint pass
+    emit_clear(detail::g_app.theme.background);
+    detail::paint_node(root, 0, 0, detail::g_app.scroll_y, vh); // Paint pass
     flush();
 
     Scope::set_current(nullptr);
@@ -1142,21 +1106,27 @@ void express(F&& app_fn) {
 extern "C" {
     __attribute__((export_name("phenotype_repaint")))
     void phenotype_repaint(float scroll_y) {
-        phenotype::detail::g_scroll_y = scroll_y;
-        if (phenotype::detail::g_root) {
+        phenotype::detail::g_app.scroll_y = scroll_y;
+        if (phenotype::detail::g_app.root) {
             float cw = phenotype_get_canvas_width();
-            phenotype::detail::layout_node(phenotype::detail::g_root, cw);
-            phenotype::emit_clear(phenotype::detail::g_theme.background);
+            phenotype::detail::layout_node(phenotype::detail::g_app.root, cw);
+            phenotype::emit_clear(phenotype::detail::g_app.theme.background);
             float vh = phenotype_get_canvas_height();
-            phenotype::detail::paint_node(phenotype::detail::g_root, 0, 0, scroll_y, vh);
+            phenotype::detail::paint_node(phenotype::detail::g_app.root, 0, 0, scroll_y, vh);
             phenotype::flush();
         }
     }
 
     __attribute__((export_name("phenotype_get_total_height")))
     float phenotype_get_total_height(void) {
-        if (phenotype::detail::g_root)
-            return phenotype::detail::g_root->height;
+        if (phenotype::detail::g_app.root)
+            return phenotype::detail::g_app.root->height;
         return 0;
+    }
+
+    __attribute__((export_name("phenotype_handle_event")))
+    void phenotype_handle_event(unsigned int callback_id) {
+        if (callback_id < phenotype::detail::g_app.callbacks.size())
+            phenotype::detail::g_app.callbacks[callback_id]();
     }
 }
