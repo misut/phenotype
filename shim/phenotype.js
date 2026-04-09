@@ -700,14 +700,6 @@ export async function mount(wasmUrl, rootElement = document.body) {
   );
   inst = result.instance;
 
-  // Ensure at least 16MB of WASM memory (256 pages)
-  const mem = inst.exports.memory;
-  const MIN_PAGES = 256; // 16MB
-  if (mem.buffer.byteLength < MIN_PAGES * 65536) {
-    const needed = MIN_PAGES - (mem.buffer.byteLength / 65536);
-    if (needed > 0) mem.grow(needed);
-  }
-
   if (inst.exports._start) {
     inst.exports._start();
   }
