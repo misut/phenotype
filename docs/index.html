@@ -11,9 +11,13 @@
     </style>
 </head>
 <body>
+    <noscript>JavaScript is required.</noscript>
     <script type="module">
         import { mount } from './phenotype.js';
-        mount('docs.wasm');
+        mount('docs.wasm').catch(e => {
+            document.body.style.cssText = 'color:#c00;padding:2rem;font-family:monospace;overflow:auto';
+            document.body.textContent = 'Error: ' + e.message;
+        });
     </script>
 </body>
 </html>
