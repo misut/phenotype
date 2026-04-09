@@ -255,8 +255,31 @@ void flush() {
 
 enum class FlexDirection { Column, Row };
 
+enum class MainAxisAlignment {
+    Start,
+    Center,
+    End,
+    SpaceBetween,
+};
+
+enum class CrossAxisAlignment {
+    Start,
+    Center,
+    End,
+    Stretch,
+};
+
+enum class TextAlign {
+    Start,
+    Center,
+    End,
+};
+
 struct Style {
     FlexDirection flex_direction = FlexDirection::Column;
+    MainAxisAlignment main_align = MainAxisAlignment::Start;
+    CrossAxisAlignment cross_align = CrossAxisAlignment::Start;
+    TextAlign text_align = TextAlign::Start;
     float gap = 0;
     float padding[4] = {}; // top, right, bottom, left
     float max_width = 0;   // 0 = no limit
@@ -445,18 +468,57 @@ void layout_node(LayoutNode* node, float available_width) {
         return;
     }
 
+    // Auto-center nodes with max_width
+    if (s.max_width > 0 && content_width < available_width) {
+        node->x += (available_width - content_width) / 2;
+    }
+
     // Container layout
     if (s.flex_direction == FlexDirection::Column) {
-        float y = s.padding[0]; // top
-        for (unsigned int i = 0; i < node->children.size(); ++i) {
+        // First pass: layout children to compute total height
+        float total_children_h = 0;
+        unsigned int nc = static_cast<unsigned int>(node->children.size());
+        for (unsigned int i = 0; i < nc; ++i) {
             auto* child = node->children[i];
-            layout_node(child, inner_width);
-            child->x = s.padding[3]; // left
+            if (s.cross_align == CrossAxisAlignment::Stretch)
+                layout_node(child, inner_width);
+            else
+                layout_node(child, inner_width);
+            total_children_h += child->height;
+            if (i + 1 < nc) total_children_h += s.gap;
+        }
+
+        // Main axis (vertical) alignment
+        float y = s.padding[0];
+        float effective_gap = s.gap;
+        if (s.main_align == MainAxisAlignment::SpaceBetween && nc > 1) {
+            float avail_h = node->height > 0
+                ? node->height - s.padding[0] - s.padding[2]
+                : total_children_h;
+            float children_only = total_children_h - s.gap * static_cast<float>(nc - 1);
+            effective_gap = (avail_h - children_only) / static_cast<float>(nc - 1);
+        }
+        // (Center/End only meaningful if node has a fixed or known height)
+
+        for (unsigned int i = 0; i < nc; ++i) {
+            auto* child = node->children[i];
+            // Cross axis (horizontal) alignment
+            switch (s.cross_align) {
+                case CrossAxisAlignment::Center:
+                    child->x = s.padding[3] + (inner_width - child->width) / 2;
+                    break;
+                case CrossAxisAlignment::End:
+                    child->x = s.padding[3] + inner_width - child->width;
+                    break;
+                default: // Start, Stretch
+                    child->x = s.padding[3];
+                    break;
+            }
             child->y = y;
             y += child->height;
-            if (i + 1 < node->children.size()) y += s.gap;
+            if (i + 1 < nc) y += effective_gap;
         }
-        node->height = y + s.padding[2]; // bottom
+        node->height = y + s.padding[2];
     } else {
         // Row: intrinsic-width children get their measured size,
         // remaining space goes to the last flexible child.
@@ -465,12 +527,11 @@ void layout_node(LayoutNode* node, float available_width) {
 
         // First pass: measure intrinsic widths for text leaves
         float used = total_gap;
-        int flex_index = -1; // last non-leaf or last child takes remaining space
+        int flex_index = -1;
         for (unsigned int i = 0; i < n; ++i) {
             auto* child = node->children[i];
             bool is_text_leaf = !child->text.empty() && child->children.empty();
             if (is_text_leaf) {
-                float line_height = child->font_size * g_theme.line_height_ratio;
                 float measured = phenotype_measure_text(
                     child->font_size, child->mono ? 1 : 0,
                     child->text.c_str(), static_cast<unsigned int>(child->text.size()));
@@ -481,26 +542,53 @@ void layout_node(LayoutNode* node, float available_width) {
                 flex_index = static_cast<int>(i);
             }
         }
-        // If no non-leaf child found, the last child is flexible
         if (flex_index < 0) flex_index = static_cast<int>(n) - 1;
 
         float remaining = inner_width - used;
         if (remaining < 0) remaining = 0;
 
         // Second pass: layout with computed widths
-        float x = s.padding[3]; // left
+        float total_used_w = 0;
         float max_h = 0;
         for (unsigned int i = 0; i < n; ++i) {
             auto* child = node->children[i];
             float cw = (static_cast<int>(i) == flex_index)
-                ? remaining + child->width  // flex child gets remaining space
+                ? remaining + child->width
                 : child->width;
             layout_node(child, cw);
-            child->x = x;
-            child->y = s.padding[0]; // top
-            x += child->width;
-            if (i + 1 < n) x += s.gap;
+            total_used_w += child->width;
             if (child->height > max_h) max_h = child->height;
+        }
+
+        // Main axis (horizontal) alignment
+        float x = s.padding[3];
+        float effective_gap = s.gap;
+        float total_w = total_used_w + total_gap;
+        if (s.main_align == MainAxisAlignment::Center) {
+            x = s.padding[3] + (inner_width - total_w) / 2;
+        } else if (s.main_align == MainAxisAlignment::End) {
+            x = s.padding[3] + inner_width - total_w;
+        } else if (s.main_align == MainAxisAlignment::SpaceBetween && n > 1) {
+            effective_gap = (inner_width - total_used_w) / static_cast<float>(n - 1);
+        }
+
+        for (unsigned int i = 0; i < n; ++i) {
+            auto* child = node->children[i];
+            child->x = x;
+            // Cross axis (vertical) alignment
+            switch (s.cross_align) {
+                case CrossAxisAlignment::Center:
+                    child->y = s.padding[0] + (max_h - child->height) / 2;
+                    break;
+                case CrossAxisAlignment::End:
+                    child->y = s.padding[0] + max_h - child->height;
+                    break;
+                default: // Start, Stretch
+                    child->y = s.padding[0];
+                    break;
+            }
+            x += child->width;
+            if (i + 1 < n) x += effective_gap;
         }
         node->height = max_h + s.padding[0] + s.padding[2];
     }
@@ -547,10 +635,17 @@ void paint_node(LayoutNode* node, float ox, float oy, float scroll_y,
         float inner_width = node->width - node->style.padding[1] - node->style.padding[3];
         auto tl = layout_text(node->text, node->font_size, node->mono,
                                inner_width, line_height);
-        float tx = ax + node->style.padding[3];
         float ty = draw_y + node->style.padding[0];
         for (auto const& line : tl.lines) {
             if (!line.empty()) {
+                float line_w = phenotype_measure_text(
+                    node->font_size, node->mono ? 1 : 0,
+                    line.c_str(), static_cast<unsigned int>(line.size()));
+                float tx = ax + node->style.padding[3];
+                if (node->style.text_align == TextAlign::Center)
+                    tx += (inner_width - line_w) / 2;
+                else if (node->style.text_align == TextAlign::End)
+                    tx += inner_width - line_w;
                 emit_draw_text(tx, ty, node->font_size, node->mono ? 1 : 0,
                                node->text_color, line.c_str(),
                                static_cast<unsigned int>(line.size()));
@@ -706,8 +801,11 @@ void Text(str content) {
         node->text_color = t.foreground;
     }
 
-    if (Scope::current())
+    if (Scope::current()) {
+        // Inherit text_align from parent
+        node->style.text_align = Scope::current()->node->style.text_align;
         Scope::current()->node->children.push_back(node);
+    }
 }
 
 // Button
@@ -905,6 +1003,8 @@ void Scaffold(std::function<void()> top_bar,
         auto* header = detail::alloc_node();
         header->style.flex_direction = FlexDirection::Column;
         header->style.gap = 8;
+        header->style.cross_align = CrossAxisAlignment::Center;
+        header->style.text_align = TextAlign::Center;
         header->background = detail::g_theme.hero_bg;
         header->style.padding[0] = 48; header->style.padding[1] = 24;
         header->style.padding[2] = 48; header->style.padding[3] = 24;
@@ -933,6 +1033,8 @@ void Scaffold(std::function<void()> top_bar,
         auto* footer = detail::alloc_node();
         footer->style.flex_direction = FlexDirection::Row;
         footer->style.gap = 0;
+        footer->style.main_align = MainAxisAlignment::Center;
+        footer->style.cross_align = CrossAxisAlignment::Center;
         footer->style.padding[0] = 32; footer->style.padding[1] = 24;
         footer->style.padding[2] = 32; footer->style.padding[3] = 24;
         footer->border_color = detail::g_theme.border;
