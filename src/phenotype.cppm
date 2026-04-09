@@ -458,15 +458,44 @@ void layout_node(LayoutNode* node, float available_width) {
         }
         node->height = y + s.padding[2]; // bottom
     } else {
-        // Row: distribute width evenly among children
+        // Row: intrinsic-width children get their measured size,
+        // remaining space goes to the last flexible child.
         unsigned int n = static_cast<unsigned int>(node->children.size());
         float total_gap = (n > 1) ? s.gap * static_cast<float>(n - 1) : 0;
-        float child_width = n > 0 ? (inner_width - total_gap) / static_cast<float>(n) : 0;
+
+        // First pass: measure intrinsic widths for text leaves
+        float used = total_gap;
+        int flex_index = -1; // last non-leaf or last child takes remaining space
+        for (unsigned int i = 0; i < n; ++i) {
+            auto* child = node->children[i];
+            bool is_text_leaf = !child->text.empty() && child->children.empty();
+            if (is_text_leaf) {
+                float line_height = child->font_size * g_theme.line_height_ratio;
+                float measured = phenotype_measure_text(
+                    child->font_size, child->mono ? 1 : 0,
+                    child->text.c_str(), static_cast<unsigned int>(child->text.size()));
+                float w = measured + child->style.padding[1] + child->style.padding[3];
+                child->width = w;
+                used += w;
+            } else {
+                flex_index = static_cast<int>(i);
+            }
+        }
+        // If no non-leaf child found, the last child is flexible
+        if (flex_index < 0) flex_index = static_cast<int>(n) - 1;
+
+        float remaining = inner_width - used;
+        if (remaining < 0) remaining = 0;
+
+        // Second pass: layout with computed widths
         float x = s.padding[3]; // left
         float max_h = 0;
         for (unsigned int i = 0; i < n; ++i) {
             auto* child = node->children[i];
-            layout_node(child, child_width);
+            float cw = (static_cast<int>(i) == flex_index)
+                ? remaining + child->width  // flex child gets remaining space
+                : child->width;
+            layout_node(child, cw);
             child->x = x;
             child->y = s.padding[0]; // top
             x += child->width;
