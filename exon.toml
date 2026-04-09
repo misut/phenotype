@@ -1,7 +1,7 @@
 [package]
 name = "phenotype"
-version = "0.1.0"
-description = "C++ WASM UI framework using wasi-sdk + browser shim"
+version = "0.4.0"
+description = "C++ cross-platform UI framework with WebGPU renderer"
 authors = ["misut"]
 license = "MIT"
 type = "lib"
