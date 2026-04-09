@@ -125,7 +125,9 @@ As exon dependency:
 - [x] Theme system (design tokens for colors, fonts, spacing)
 - [x] Event handling (click, pointer cursor)
 - [x] Scroll and resize support
-- [ ] More event types (input, hover, drag)
+- [x] Hover states (visual feedback on Button/Link)
+- [x] Text input (TextField component with caret, placeholder)
+- [x] Keyboard navigation (Tab/Enter, focus ring)
 - [ ] Custom theming API
 - [ ] macOS (Metal backend)
 - [ ] Windows (Direct3D backend)
