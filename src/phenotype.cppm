@@ -356,7 +356,24 @@ struct Arena {
 struct StateSlot {
     void* ptr;
     void (*deleter)(void*);
+
+    StateSlot(void* p, void (*d)(void*)) : ptr(p), deleter(d) {}
+    StateSlot(StateSlot&& o) noexcept : ptr(o.ptr), deleter(o.deleter) {
+        o.ptr = nullptr;
+        o.deleter = nullptr;
+    }
+    StateSlot& operator=(StateSlot&& o) noexcept {
+        if (this != &o) {
+            if (deleter) deleter(ptr);
+            ptr = o.ptr; deleter = o.deleter;
+            o.ptr = nullptr; o.deleter = nullptr;
+        }
+        return *this;
+    }
     ~StateSlot() { if (deleter) deleter(ptr); }
+
+    StateSlot(StateSlot const&) = delete;
+    StateSlot& operator=(StateSlot const&) = delete;
 };
 
 struct AppState {
