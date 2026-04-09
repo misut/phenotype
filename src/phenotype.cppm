@@ -490,8 +490,10 @@ void paint_node(LayoutNode* node, float ox, float oy, float scroll_y,
     float ax = ox + node->x;
     float ay = oy + node->y;
 
-    // Viewport culling
-    if (ay + node->height < scroll_y || ay > scroll_y + vp_height) return;
+    // Viewport culling (leaf nodes only — containers delegate to children)
+    if (node->children.empty()) {
+        if (ay + node->height < scroll_y || ay > scroll_y + vp_height) return;
+    }
 
     float draw_y = ay - scroll_y;
 
