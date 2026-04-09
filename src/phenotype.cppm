@@ -31,7 +31,7 @@ void phenotype_open_url(char const* url, unsigned int len);
 // Command buffer — shared memory between C++ and JS
 // ============================================================
 
-constexpr unsigned int BUF_SIZE = 262144; // 256KB
+constexpr unsigned int BUF_SIZE = 65536; // 64KB
 
 extern "C" {
     alignas(4) unsigned char phenotype_cmd_buf[BUF_SIZE];
@@ -312,15 +312,23 @@ struct LayoutNode {
 // ============================================================
 
 struct Arena {
-    static constexpr unsigned int STORAGE_SIZE = 1024 * 1024; // 1MB
+    static constexpr unsigned int STORAGE_SIZE = 512 * 1024; // 512KB
     static constexpr unsigned int MAX_NODES = 4096;
 
-    alignas(16) unsigned char storage[STORAGE_SIZE];
+    unsigned char* storage = nullptr;
     unsigned int offset = 0;
     unsigned int node_count = 0;
-    LayoutNode* nodes[MAX_NODES];
+    LayoutNode** nodes = nullptr;
+
+    void ensure_init() {
+        if (!storage) {
+            storage = new unsigned char[STORAGE_SIZE];
+            nodes = new LayoutNode*[MAX_NODES];
+        }
+    }
 
     void* alloc(unsigned int size) {
+        ensure_init();
         size = (size + 15) & ~15u;
         auto* p = &storage[offset];
         offset += size;
