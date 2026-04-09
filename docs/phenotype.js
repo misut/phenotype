@@ -577,6 +577,7 @@ function parseCommands(instance) {
 // --- Loader ---
 
 export async function mount(wasmUrl, rootElement = document.body) {
+  try {
   // --- WebGPU init ---
   if (!navigator.gpu) {
     rootElement.textContent = 'WebGPU is not supported in this browser.';
@@ -827,4 +828,11 @@ export async function mount(wasmUrl, rootElement = document.body) {
       }
     });
   });
+  } catch (e) {
+    console.error('phenotype mount error:', e);
+    rootElement.style.color = '#c00';
+    rootElement.style.padding = '2rem';
+    rootElement.style.fontFamily = 'monospace';
+    rootElement.textContent = 'Error: ' + e.message;
+  }
 }
