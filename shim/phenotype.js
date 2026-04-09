@@ -722,20 +722,87 @@ export async function mount(wasmUrl, rootElement = document.body) {
     return null;
   }
 
+  // Focus & click
+  let focusedId = 0xFFFFFFFF;
+  canvas.setAttribute('tabindex', '0');
+
   canvas.addEventListener('click', (e) => {
+    canvas.focus();
     const hr = hitTest(e.clientX, e.clientY);
+    // Update focus
+    const newFocus = hr ? hr.callbackId : 0xFFFFFFFF;
+    if (newFocus !== focusedId) {
+      focusedId = newFocus;
+      if (inst.exports.phenotype_set_focus)
+        inst.exports.phenotype_set_focus(focusedId);
+    }
     if (hr && inst.exports.phenotype_handle_event) {
       inst.exports.phenotype_handle_event(hr.callbackId);
-      if (inst.exports.phenotype_get_total_height) {
+      if (inst.exports.phenotype_get_total_height)
         totalHeight = inst.exports.phenotype_get_total_height();
-      }
     }
   });
 
+  // Hover
+  let currentHoverId = 0xFFFFFFFF;
   canvas.addEventListener('pointermove', (e) => {
     const hr = hitTest(e.clientX, e.clientY);
     canvas.style.cursor = (hr && hr.cursorType === 1) ? 'pointer' : 'default';
+    const newHoverId = hr ? hr.callbackId : 0xFFFFFFFF;
+    if (newHoverId !== currentHoverId) {
+      currentHoverId = newHoverId;
+      if (inst.exports.phenotype_set_hover)
+        inst.exports.phenotype_set_hover(newHoverId);
+    }
   });
+
+  canvas.addEventListener('pointerleave', () => {
+    if (currentHoverId !== 0xFFFFFFFF) {
+      currentHoverId = 0xFFFFFFFF;
+      if (inst.exports.phenotype_set_hover)
+        inst.exports.phenotype_set_hover(0xFFFFFFFF);
+    }
+  });
+
+  // Keyboard
+  canvas.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      if (inst.exports.phenotype_handle_tab)
+        inst.exports.phenotype_handle_tab(e.shiftKey ? 1 : 0);
+      return;
+    }
+    if (e.key === 'Enter' && focusedId !== 0xFFFFFFFF) {
+      if (inst.exports.phenotype_handle_event)
+        inst.exports.phenotype_handle_event(focusedId);
+      return;
+    }
+    // Text input keys
+    if (focusedId === 0xFFFFFFFF) return;
+    let keyType = -1, codepoint = 0;
+    if (e.key === 'Backspace') keyType = 1;
+    else if (e.key === 'Delete') keyType = 2;
+    else if (e.key === 'ArrowLeft') keyType = 3;
+    else if (e.key === 'ArrowRight') keyType = 4;
+    else if (e.key === 'Home') keyType = 5;
+    else if (e.key === 'End') keyType = 6;
+    else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
+      keyType = 0;
+      codepoint = e.key.codePointAt(0);
+    }
+    if (keyType >= 0) {
+      e.preventDefault();
+      if (inst.exports.phenotype_handle_key)
+        inst.exports.phenotype_handle_key(keyType, codepoint);
+    }
+  });
+
+  // Caret blink timer
+  setInterval(() => {
+    if (focusedId !== 0xFFFFFFFF && inst.exports.phenotype_toggle_caret) {
+      inst.exports.phenotype_toggle_caret();
+    }
+  }, 530);
 
   // Scroll
   canvas.addEventListener('wheel', (e) => {

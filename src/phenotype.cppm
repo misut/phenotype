@@ -4,6 +4,7 @@ module;
 #include <functional>
 #include <string>
 #include <vector>
+#include <map>
 export module phenotype;
 
 // ============================================================
@@ -286,6 +287,15 @@ struct LayoutNode {
     unsigned int callback_id = 0xFFFFFFFF;
     unsigned int cursor_type = 0; // 0=default, 1=pointer
 
+    // Hover styles (alpha=0 means no hover override)
+    Color hover_background = {0, 0, 0, 0};
+    Color hover_text_color = {0, 0, 0, 0};
+
+    // Input field
+    bool is_input = false;
+    std::string placeholder;
+    void* input_state = nullptr; // Trait<std::string>*, resolved at runtime
+
     // Computed layout
     float x = 0, y = 0, width = 0, height = 0;
 
@@ -346,8 +356,14 @@ struct AppState {
     Arena arena;
     LayoutNode* root = nullptr;
     float scroll_y = 0;
+    unsigned int hovered_id = 0xFFFFFFFF;
+    unsigned int focused_id = 0xFFFFFFFF;
+    unsigned int caret_pos = 0;
+    bool caret_visible = true;
     std::vector<std::function<void()>> callbacks;
     std::vector<StateSlot> states;
+    std::vector<unsigned int> focusable_ids;
+    std::map<unsigned int, LayoutNode*> input_nodes; // callback_id → input node
 };
 
 namespace detail {
@@ -618,22 +634,33 @@ void paint_node(LayoutNode* node, float ox, float oy, float scroll_y,
 
     float draw_y = ay - scroll_y;
 
-    // Background
-    if (node->background.a > 0) {
+    // Hover/focus state
+    bool is_hovered = (node->callback_id != 0xFFFFFFFF &&
+                       node->callback_id == g_app.hovered_id);
+    bool is_focused = (node->callback_id != 0xFFFFFFFF &&
+                       node->callback_id == g_app.focused_id);
+
+    // Background (with hover override)
+    Color bg = (is_hovered && node->hover_background.a > 0)
+        ? node->hover_background : node->background;
+    if (bg.a > 0) {
         if (node->border_radius > 0)
             emit_round_rect(ax, draw_y, node->width, node->height,
-                            node->border_radius, node->background);
+                            node->border_radius, bg);
         else
-            emit_fill_rect(ax, draw_y, node->width, node->height, node->background);
+            emit_fill_rect(ax, draw_y, node->width, node->height, bg);
     }
 
-    // Border
-    if (node->border_width > 0 && node->border_color.a > 0) {
-        emit_stroke_rect(ax, draw_y, node->width, node->height,
-                         node->border_width, node->border_color);
+    // Border (accent color when focused)
+    Color bc = is_focused ? g_app.theme.accent : node->border_color;
+    float bw = is_focused ? 2.0f : node->border_width;
+    if (bw > 0 && bc.a > 0) {
+        emit_stroke_rect(ax, draw_y, node->width, node->height, bw, bc);
     }
 
     // Text — use cached text_lines from layout pass
+    Color tc = (is_hovered && node->hover_text_color.a > 0)
+        ? node->hover_text_color : node->text_color;
     if (!node->text_lines.empty()) {
         float line_height = node->font_size * g_app.theme.line_height_ratio;
         float inner_width = node->width - node->style.padding[1] - node->style.padding[3];
@@ -649,12 +676,31 @@ void paint_node(LayoutNode* node, float ox, float oy, float scroll_y,
                 else if (node->style.text_align == TextAlign::End)
                     tx += inner_width - line_w;
                 emit_draw_text(tx, ty, node->font_size, node->mono ? 1 : 0,
-                               node->text_color, line.c_str(),
+                               tc, line.c_str(),
                                static_cast<unsigned int>(line.size()));
             }
             ty += line_height;
         }
     }
+
+    // Caret for focused input — use displayed text to compute position
+    if (is_focused && node->is_input && g_app.caret_visible) {
+        float caret_x = ax + node->style.padding[3];
+        // Measure displayed text width (text_lines[0] if not placeholder)
+        if (!node->text_lines.empty() && !node->text_lines[0].empty() &&
+            tc.r != g_app.theme.muted.r) { // not placeholder
+            caret_x += phenotype_measure_text(
+                node->font_size, 0, node->text_lines[0].c_str(),
+                static_cast<unsigned int>(node->text_lines[0].size()));
+        }
+        float caret_y = draw_y + node->style.padding[0];
+        float caret_h = node->font_size * g_app.theme.line_height_ratio;
+        emit_draw_line(caret_x, caret_y, caret_x, caret_y + caret_h, 1.5f, g_app.theme.accent);
+    }
+
+    // Collect focusable IDs (for Tab navigation)
+    if (node->callback_id != 0xFFFFFFFF)
+        g_app.focusable_ids.push_back(node->callback_id);
 
     // Hit region
     if (node->callback_id != 0xFFFFFFFF) {
@@ -776,6 +822,7 @@ void Button(str label, std::function<void()> on_click = {}) {
     node->font_size = detail::g_app.theme.body_font_size;
     node->text_color = detail::g_app.theme.foreground;
     node->background = detail::g_app.theme.code_bg;
+    node->hover_background = detail::g_app.theme.border; // slightly darker on hover
     node->border_radius = 4;
     node->style.padding[0] = 6; node->style.padding[1] = 12;
     node->style.padding[2] = 6; node->style.padding[3] = 12;
@@ -797,6 +844,7 @@ void Link(str label, str href) {
     node->text = std::string(label.data, label.len);
     node->font_size = detail::g_app.theme.small_font_size;
     node->text_color = detail::g_app.theme.accent;
+    node->hover_text_color = {29, 78, 216, 255}; // darker blue on hover
     node->url = std::string(href.data, href.len);
     node->cursor_type = 1; // pointer
 
@@ -825,6 +873,36 @@ void Code(str content) {
     node->border_radius = 6;
     node->style.padding[0] = 16; node->style.padding[1] = 16;
     node->style.padding[2] = 16; node->style.padding[3] = 16;
+
+    if (Scope::current())
+        Scope::current()->node->children.push_back(node);
+}
+
+// TextField — single-line text input bound to Trait<std::string>
+void TextField(Trait<std::string>* state, str placeholder = "") {
+    auto* node = detail::alloc_node();
+    node->is_input = true;
+    node->input_state = state;
+    node->placeholder = std::string(placeholder.data, placeholder.len);
+
+    // Display current value or placeholder
+    auto const& val = state->value();
+    node->text = val.empty() ? node->placeholder : val;
+    node->font_size = detail::g_app.theme.body_font_size;
+    node->text_color = val.empty() ? detail::g_app.theme.muted : detail::g_app.theme.foreground;
+    node->background = {255, 255, 255, 255};
+    node->border_color = detail::g_app.theme.border;
+    node->border_width = 1;
+    node->border_radius = 4;
+    node->style.padding[0] = 8; node->style.padding[1] = 12;
+    node->style.padding[2] = 8; node->style.padding[3] = 12;
+    node->cursor_type = 1; // text cursor
+
+    // Register callback (for focus) and track as input node
+    auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
+    detail::g_app.callbacks.push_back([]{}); // no-op click, focus handled by phenotype_set_focus
+    node->callback_id = id;
+    detail::g_app.input_nodes[id] = node;
 
     if (Scope::current())
         Scope::current()->node->children.push_back(node);
@@ -1074,6 +1152,7 @@ template<typename F>
 void express(F&& app_fn) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
+    detail::g_app.input_nodes.clear();
 
     auto* root = detail::alloc_node();
     root->style.flex_direction = FlexDirection::Column;
@@ -1090,6 +1169,7 @@ void express(F&& app_fn) {
     detail::layout_node(root, cw); // Layout pass
 
     float vh = phenotype_get_canvas_height();
+    detail::g_app.focusable_ids.clear();
     emit_clear(detail::g_app.theme.background);
     detail::paint_node(root, 0, 0, detail::g_app.scroll_y, vh); // Paint pass
     flush();
@@ -1110,6 +1190,7 @@ extern "C" {
         if (phenotype::detail::g_app.root) {
             float cw = phenotype_get_canvas_width();
             phenotype::detail::layout_node(phenotype::detail::g_app.root, cw);
+            phenotype::detail::g_app.focusable_ids.clear();
             phenotype::emit_clear(phenotype::detail::g_app.theme.background);
             float vh = phenotype_get_canvas_height();
             phenotype::detail::paint_node(phenotype::detail::g_app.root, 0, 0, scroll_y, vh);
@@ -1128,5 +1209,93 @@ extern "C" {
     void phenotype_handle_event(unsigned int callback_id) {
         if (callback_id < phenotype::detail::g_app.callbacks.size())
             phenotype::detail::g_app.callbacks[callback_id]();
+    }
+
+    __attribute__((export_name("phenotype_set_hover")))
+    void phenotype_set_hover(unsigned int callback_id) {
+        if (phenotype::detail::g_app.hovered_id == callback_id) return;
+        phenotype::detail::g_app.hovered_id = callback_id;
+        phenotype_repaint(phenotype::detail::g_app.scroll_y);
+    }
+
+    __attribute__((export_name("phenotype_set_focus")))
+    void phenotype_set_focus(unsigned int callback_id) {
+        phenotype::detail::g_app.focused_id = callback_id;
+        phenotype::detail::g_app.caret_pos = 0xFFFFFFFF; // end of text
+        phenotype::detail::g_app.caret_visible = true;
+        phenotype_repaint(phenotype::detail::g_app.scroll_y);
+    }
+
+    __attribute__((export_name("phenotype_handle_tab")))
+    void phenotype_handle_tab(unsigned int reverse) {
+        auto& app = phenotype::detail::g_app;
+        if (app.focusable_ids.empty()) return;
+        int n = static_cast<int>(app.focusable_ids.size());
+        // Find current index
+        int idx = -1;
+        for (int i = 0; i < n; ++i) {
+            if (app.focusable_ids[i] == app.focused_id) { idx = i; break; }
+        }
+        if (reverse)
+            idx = (idx <= 0) ? n - 1 : idx - 1;
+        else
+            idx = (idx < 0 || idx >= n - 1) ? 0 : idx + 1;
+        app.focused_id = app.focusable_ids[idx];
+        app.caret_visible = true;
+        phenotype_repaint(app.scroll_y);
+    }
+
+    __attribute__((export_name("phenotype_toggle_caret")))
+    void phenotype_toggle_caret() {
+        auto& app = phenotype::detail::g_app;
+        app.caret_visible = !app.caret_visible;
+        phenotype_repaint(app.scroll_y);
+    }
+
+    __attribute__((export_name("phenotype_handle_key")))
+    void phenotype_handle_key(unsigned int key_type, unsigned int codepoint) {
+        auto& app = phenotype::detail::g_app;
+        auto it = app.input_nodes.find(app.focused_id);
+        if (it == app.input_nodes.end() || !it->second->input_state) return;
+
+        auto* state = static_cast<phenotype::Trait<std::string>*>(it->second->input_state);
+        auto val = state->value();
+
+        switch (key_type) {
+            case 0: { // character
+                char buf[4];
+                unsigned int len = 0;
+                if (codepoint < 0x80) {
+                    buf[0] = static_cast<char>(codepoint); len = 1;
+                } else if (codepoint < 0x800) {
+                    buf[0] = static_cast<char>(0xC0 | (codepoint >> 6));
+                    buf[1] = static_cast<char>(0x80 | (codepoint & 0x3F)); len = 2;
+                } else if (codepoint < 0x10000) {
+                    buf[0] = static_cast<char>(0xE0 | (codepoint >> 12));
+                    buf[1] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+                    buf[2] = static_cast<char>(0x80 | (codepoint & 0x3F)); len = 3;
+                } else {
+                    buf[0] = static_cast<char>(0xF0 | (codepoint >> 18));
+                    buf[1] = static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
+                    buf[2] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+                    buf[3] = static_cast<char>(0x80 | (codepoint & 0x3F)); len = 4;
+                }
+                val.append(buf, len);
+                break;
+            }
+            case 1: // backspace
+                if (!val.empty()) {
+                    // Remove last UTF-8 character
+                    auto i = val.size() - 1;
+                    while (i > 0 && (static_cast<unsigned char>(val[i]) & 0xC0) == 0x80) --i;
+                    val.erase(i);
+                }
+                break;
+            default:
+                return; // other keys not yet handled
+        }
+
+        app.caret_visible = true; // reset blink on input
+        state->set(std::move(val));
     }
 }
