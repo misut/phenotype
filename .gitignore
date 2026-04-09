@@ -47,8 +47,10 @@
 build/
 .exon/
 exon.lock
+!docs/exon.lock
 CMakeLists.txt
 *.wasm
+!docs/*.wasm
 
 # Claude Code
 CLAUDE.md
