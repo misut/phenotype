@@ -3,7 +3,7 @@ name: Deploy docs to GitHub Pages
 on:
   push:
     branches: [main]
-    paths: [docs/**, src/**, shim/**]
+    paths: [docs/**]
   workflow_dispatch:
 
 permissions:
@@ -16,45 +16,18 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  build:
-    runs-on: ubuntu-24.04
+  deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - uses: actions/checkout@v4
-
-      - name: Install intron
-        run: curl -fsSL https://raw.githubusercontent.com/misut/intron/main/install.sh | sh
-
-      - name: Install toolchains
-        run: |
-          export PATH="$HOME/.intron/bin:$PATH"
-          intron install llvm 22.1.2
-          intron install cmake 4.3.1
-          intron install ninja 1.13.2
-          intron install wasi-sdk 32
-
-      - name: Install exon
-        run: curl -fsSL https://raw.githubusercontent.com/misut/exon/main/install.sh | sh
-
-      - name: Build docs
-        run: |
-          export PATH="$HOME/.intron/bin:$HOME/.exon/bin:$PATH"
-          eval "$(intron env)"
-          cd docs
-          exon build --target wasm32-wasi
-          cp .exon/wasm32-wasi/debug/docs docs.wasm
-          cp "$(find ~/.exon/cache -name phenotype.js -path '*/shim/*' | head -1)" phenotype.js
 
       - name: Upload pages artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: docs/
 
-  deploy:
-    needs: build
-    runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
-    steps:
       - id: deployment
         uses: actions/deploy-pages@v4
