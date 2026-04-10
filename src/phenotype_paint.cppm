@@ -238,9 +238,12 @@ inline void paint_node(NodeHandle node_h, float ox, float oy, float scroll_y,
     if (node.callback_id != 0xFFFFFFFF)
         g_app.focusable_ids.push_back(node.callback_id);
 
-    // Hit region
+    // Hit region — emit in world-space (pre-scroll). The JS hit-test
+    // adds scrollY back when comparing against client coordinates, so
+    // both sides end up in world-space and the click area tracks the
+    // visual button under any scroll offset.
     if (node.callback_id != 0xFFFFFFFF) {
-        emit_hit_region(ax, draw_y, node.width, node.height,
+        emit_hit_region(ax, ay, node.width, node.height,
                         node.callback_id, node.cursor_type);
     }
 
