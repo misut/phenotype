@@ -115,6 +115,42 @@ struct StateSlot {
 // AppState — consolidated global state
 // ============================================================
 
+// Type-erased text-input dispatcher used by the new message DSL.
+// New TextField registers one of these per call site so that
+// phenotype_handle_key can route the new value into a typed mapper +
+// post<Msg>. Click callbacks still go through `callbacks` (above).
+//
+// `current` holds the actual input value as the view rendered it
+// (separate from the displayed text, which may be the placeholder when
+// empty). phenotype_handle_key reads it, applies the keystroke, and
+// passes the new full string to `invoke`.
+struct InputHandler {
+    std::string current;                   // value as the view rendered it
+    void* state;                           // captured state (e.g. mapper fn pointer storage)
+    void (*invoke)(void*, std::string);   // trampoline: calls user mapper + post + trigger
+    void (*deleter)(void*);                // free `state`
+    InputHandler() : state(nullptr), invoke(nullptr), deleter(nullptr) {}
+    InputHandler(std::string c, void* s, void (*i)(void*, std::string), void (*d)(void*))
+        : current(std::move(c)), state(s), invoke(i), deleter(d) {}
+    InputHandler(InputHandler&& o) noexcept
+        : current(std::move(o.current)), state(o.state),
+          invoke(o.invoke), deleter(o.deleter) {
+        o.state = nullptr; o.invoke = nullptr; o.deleter = nullptr;
+    }
+    InputHandler& operator=(InputHandler&& o) noexcept {
+        if (this != &o) {
+            if (deleter && state) deleter(state);
+            current = std::move(o.current);
+            state = o.state; invoke = o.invoke; deleter = o.deleter;
+            o.state = nullptr; o.invoke = nullptr; o.deleter = nullptr;
+        }
+        return *this;
+    }
+    ~InputHandler() { if (deleter && state) deleter(state); }
+    InputHandler(InputHandler const&) = delete;
+    InputHandler& operator=(InputHandler const&) = delete;
+};
+
 struct AppState {
     Theme theme;
     Arena arena;
@@ -134,6 +170,13 @@ struct AppState {
     // (Trait::set / Scope::mutate) can re-enter rebuild without
     // depending on layout/paint at the type level.
     void (*rebuild_fn)() = nullptr;
+    // Installed by phenotype::run<State, Msg>(...) for the message DSL.
+    // When set, trigger_rebuild() invokes this instead of rebuild_fn so the
+    // runner can drain the message queue, fold via update, and re-view.
+    void (*app_runner)() = nullptr;
+    // New message DSL: typed text-input dispatchers, sparse by callback id.
+    // Only TextField<Msg> registers entries here; lookups walk the vector.
+    std::vector<std::pair<unsigned int, InputHandler>> input_handlers;
 };
 
 namespace detail {
@@ -145,6 +188,76 @@ namespace detail {
     inline AppState& g_app = *new (&g_app_storage) AppState();
     inline NodeHandle alloc_node() { return g_app.arena.alloc_node(); }
     inline LayoutNode& node_at(NodeHandle h) { return g_app.arena.must_get(h); }
+
+    // ============================================================
+    // Message dispatcher — type-erased message queue for the new DSL
+    // ============================================================
+    //
+    // Each Button<Msg>(label, msg) registers a callback that calls
+    // detail::post<Msg>(msg), then trigger_rebuild(). The runner installed
+    // by run<State, Msg>(view, update) drains the queue, folds via
+    // update(state, msg), and calls view(state) to rebuild the tree.
+    //
+    // Storage is type-erased to keep AppState free of template parameters.
+
+    struct DispatchedMsg {
+        void* storage;
+        void (*deleter)(void*);
+        DispatchedMsg() : storage(nullptr), deleter(nullptr) {}
+        DispatchedMsg(void* s, void (*d)(void*)) : storage(s), deleter(d) {}
+        DispatchedMsg(DispatchedMsg&& o) noexcept
+            : storage(o.storage), deleter(o.deleter) {
+            o.storage = nullptr; o.deleter = nullptr;
+        }
+        DispatchedMsg& operator=(DispatchedMsg&& o) noexcept {
+            if (this != &o) {
+                if (deleter && storage) deleter(storage);
+                storage = o.storage; deleter = o.deleter;
+                o.storage = nullptr; o.deleter = nullptr;
+            }
+            return *this;
+        }
+        ~DispatchedMsg() { if (deleter && storage) deleter(storage); }
+        DispatchedMsg(DispatchedMsg const&) = delete;
+        DispatchedMsg& operator=(DispatchedMsg const&) = delete;
+    };
+
+    inline std::vector<DispatchedMsg>& msg_queue() {
+        static std::vector<DispatchedMsg> q;
+        return q;
+    }
+
+    template<typename Msg>
+    void post(Msg msg) {
+        auto* p = new Msg(std::move(msg));
+        msg_queue().emplace_back(
+            p,
+            [](void* ptr) { delete static_cast<Msg*>(ptr); }
+        );
+    }
+
+    template<typename Msg>
+    std::vector<Msg> drain() {
+        auto& q = msg_queue();
+        std::vector<Msg> out;
+        out.reserve(q.size());
+        for (auto& dm : q) {
+            out.push_back(std::move(*static_cast<Msg*>(dm.storage)));
+            // dm's destructor will free the moved-from storage; that's fine
+            // since the move leaves the Msg in a valid (empty) state.
+        }
+        q.clear();
+        return out;
+    }
+
+    inline void install_app_runner(void (*runner)()) { g_app.app_runner = runner; }
+
+    inline void trigger_rebuild() {
+        // Prefer the new typed runner if installed; fall back to the legacy
+        // rebuild_fn so the old DSL still works during step 1+2.
+        if (g_app.app_runner) g_app.app_runner();
+        else if (g_app.rebuild_fn) g_app.rebuild_fn();
+    }
 } // namespace detail
 
 // ============================================================
