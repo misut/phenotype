@@ -193,6 +193,53 @@ void test_newline_handling() {
     std::puts("PASS: newline handling");
 }
 
+// `layout::row` defaults cross_align to Center so that mixed-height inline
+// content (e.g. widget::text alongside widget::code) lines up on a shared
+// centerline instead of leaving the shorter child dangling at the top of
+// the row. The test puts a plain text widget next to a padded code widget
+// inside layout::row and asserts both children share the same vertical
+// midpoint.
+void test_row_cross_align_center_default() {
+    detail::g_app.arena.reset();
+    auto root_h = detail::alloc_node();
+    auto& root = detail::node_at(root_h);
+    root.style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::row([&] {
+        widget::text("plain");
+        widget::code("code");
+    });
+    Scope::set_current(nullptr);
+
+    assert(root.children.size() == 1);
+    auto& row = detail::node_at(root.children[0]);
+    assert(row.style.cross_align == CrossAxisAlignment::Center);
+    assert(row.children.size() == 2);
+
+    detail::layout_node(root_h, 800.0f);
+
+    auto& tnode = detail::node_at(row.children[0]);
+    auto& cnode = detail::node_at(row.children[1]);
+
+    // Padded code widget is taller than plain text — that's what makes the
+    // alignment visible in the first place.
+    assert(cnode.height > tnode.height + 1.0f);
+
+    // The shorter text child is pushed down by Center alignment instead of
+    // sitting at the top of the row.
+    assert(tnode.y > 0.5f);
+
+    // Centerlines align within sub-pixel tolerance.
+    float t_center = tnode.y + tnode.height / 2.0f;
+    float c_center = cnode.y + cnode.height / 2.0f;
+    float diff = t_center - c_center;
+    if (diff < 0) diff = -diff;
+    assert(diff < 0.5f);
+    std::puts("PASS: row cross-align center default");
+}
+
 // ============================================================
 // Runner
 // ============================================================
@@ -205,6 +252,7 @@ int main() {
     test_max_width_centering();
     test_word_wrap();
     test_newline_handling();
+    test_row_cross_align_center_default();
     std::puts("\nAll tests passed.");
     return 0;
 }
