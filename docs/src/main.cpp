@@ -43,61 +43,61 @@ void update(State& state, Msg msg) {
 
 void view(State const& state) {
     using namespace phenotype;
-    Scaffold(
+    layout::scaffold(
         // Hero
         [&] {
-            Text("phenotype");
-            Text("A cross-platform C++ UI framework with WebGPU renderer");
+            widget::text("phenotype");
+            widget::text("A cross-platform C++ UI framework with WebGPU renderer");
         },
         // Content
         [&] {
             // Features
-            Column([&] {
-                Text("Features");
-                ListItems([&] {
-                    Item("WebGPU 2D renderer (WGSL shaders, instanced draws, text atlas)");
-                    Item("Compose-style declarative DSL (Column, Row, Scaffold, Card)");
-                    Item("Flexbox layout engine with alignment (main/cross axis)");
-                    Item("Pure-function view with typed messages (Iced/Elm pattern)");
-                    Item("Hover states and keyboard navigation (Tab/Enter)");
-                    Item("Text input (TextField) with caret and placeholder");
-                    Item("Theme system with design tokens");
-                    Item("Scroll and resize support with viewport culling");
+            layout::column([&] {
+                widget::text("Features");
+                layout::list_items([&] {
+                    layout::item("WebGPU 2D renderer (WGSL shaders, instanced draws, text atlas)");
+                    layout::item("Compose-style declarative DSL (column, row, scaffold, card)");
+                    layout::item("Flexbox layout engine with alignment (main/cross axis)");
+                    layout::item("Pure-function view with typed messages (Iced/Elm pattern)");
+                    layout::item("Hover states and keyboard navigation (Tab/Enter)");
+                    layout::item("Text input (text_field) with caret and placeholder");
+                    layout::item("Theme system with design tokens");
+                    layout::item("Scroll and resize support with viewport culling");
                 });
             });
 
             // Interactive demo — counter
-            Column([&] {
-                Text("Interactive Demo");
-                Text("Click the buttons or use Tab + Enter:");
+            layout::column([&] {
+                widget::text("Interactive Demo");
+                widget::text("Click the buttons or use Tab + Enter:");
 
-                Column([&] {
-                    Text(std::string("Count: ") + std::to_string(state.count));
-                    Row(
-                        [&] { Button<Msg>("-", Decrement{}); },
-                        [&] { Button<Msg>("+", Increment{}); }
+                layout::column([&] {
+                    widget::text(std::string("Count: ") + std::to_string(state.count));
+                    layout::row(
+                        [&] { widget::button<Msg>("-", Decrement{}); },
+                        [&] { widget::button<Msg>("+", Increment{}); }
                     );
                 });
             });
 
             // TextField demo
-            Column([&] {
-                Text("Text Input");
-                Text("Click the field and type:");
+            layout::column([&] {
+                widget::text("Text Input");
+                widget::text("Click the field and type:");
 
-                Column([&] {
-                    TextField<Msg>("Type something...", state.input,
+                layout::column([&] {
+                    widget::text_field<Msg>("Type something...", state.input,
                         +[](std::string s) -> Msg { return InputChanged{std::move(s)}; });
-                    Text(std::string("Echo: ") + state.input);
+                    widget::text(std::string("Echo: ") + state.input);
                 });
             });
 
-            Divider();
+            layout::divider();
 
             // Quick start
-            Column([&] {
-                Text("Quick Start");
-                Code(
+            layout::column([&] {
+                widget::text("Quick Start");
+                widget::code(
                     "# Install tools\n"
                     "curl -fsSL https://raw.githubusercontent.com/misut/exon/main/install.sh | sh\n"
                     "curl -fsSL https://raw.githubusercontent.com/misut/intron/main/install.sh | sh\n"
@@ -112,29 +112,29 @@ void view(State const& state) {
             });
 
             // Component reference
-            Column([&] {
-                Text("Components");
-                Row([&] { Code("Column(builder)");                 Text("Vertical flex layout"); });
-                Row([&] { Code("Row(builder)");                    Text("Horizontal flex layout"); });
-                Row([&] { Code("Text(str)");                       Text("Text display"); });
-                Row([&] { Code("Button<Msg>(label, msg)");         Text("Clickable button posting a message"); });
-                Row([&] { Code("TextField<Msg>(hint, val, fn)");   Text("Text input mapping value to message"); });
-                Row([&] { Code("Link(label, url)");                Text("Hyperlink"); });
-                Row([&] { Code("Code(str)");                       Text("Monospace code block"); });
-                Row([&] { Code("Scaffold(top, body, bot)");        Text("Page layout with hero"); });
-                Row([&] { Code("Card(builder)");                   Text("Rounded container"); });
-                Row([&] { Code("ListItems(builder)");              Text("Bullet list"); });
-                Row([&] { Code("Divider()");                       Text("Horizontal separator"); });
-                Row([&] { Code("Spacer(px)");                      Text("Vertical spacing"); });
-                Row([&] { Code("run<State, Msg>(view, update)");   Text("Application entry point"); });
+            layout::column([&] {
+                widget::text("Components");
+                layout::row([&] { widget::code("layout::column(builder)");          widget::text("Vertical flex layout"); });
+                layout::row([&] { widget::code("layout::row(builder)");             widget::text("Horizontal flex layout"); });
+                layout::row([&] { widget::code("widget::text(str)");                widget::text("Text display"); });
+                layout::row([&] { widget::code("widget::button<Msg>(label, msg)");  widget::text("Clickable button posting a message"); });
+                layout::row([&] { widget::code("widget::text_field<Msg>(...)");     widget::text("Text input mapping value to message"); });
+                layout::row([&] { widget::code("widget::link(label, url)");         widget::text("Hyperlink"); });
+                layout::row([&] { widget::code("widget::code(str)");                widget::text("Monospace code block"); });
+                layout::row([&] { widget::code("layout::scaffold(top, body, bot)"); widget::text("Page layout with hero"); });
+                layout::row([&] { widget::code("layout::card(builder)");            widget::text("Rounded container"); });
+                layout::row([&] { widget::code("layout::list_items(builder)");      widget::text("Bullet list"); });
+                layout::row([&] { widget::code("layout::divider()");                widget::text("Horizontal separator"); });
+                layout::row([&] { widget::code("layout::spacer(px)");               widget::text("Vertical spacing"); });
+                layout::row([&] { widget::code("run<State, Msg>(view, update)");    widget::text("Application entry point"); });
             });
         },
         // Footer
         [&] {
-            Row(
-                [&] { Link("GitHub", "https://github.com/misut/phenotype"); },
-                [&] { Text(" · "); },
-                [&] { Link("MIT License", "https://github.com/misut/phenotype/blob/main/LICENSE"); }
+            layout::row(
+                [&] { widget::link("GitHub", "https://github.com/misut/phenotype"); },
+                [&] { widget::text(" · "); },
+                [&] { widget::link("MIT License", "https://github.com/misut/phenotype/blob/main/LICENSE"); }
             );
         }
     );

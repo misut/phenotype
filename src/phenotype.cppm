@@ -31,10 +31,6 @@ void phenotype_open_url(char const* url, unsigned int len);
 
 export namespace phenotype {
 
-// ============================================================
-// DSL Components
-// ============================================================
-
 namespace detail {
 // Append a freshly allocated node to the current scope's children, if any.
 inline void attach_to_scope(NodeHandle h) {
@@ -43,8 +39,19 @@ inline void attach_to_scope(NodeHandle h) {
 }
 } // namespace detail
 
-// Text
-inline void Text(str content) {
+// ============================================================
+// widget:: — leaf components (text, code, link, button, text_field)
+// ============================================================
+//
+// Widgets are non-container components that produce a single LayoutNode.
+// Interactive widgets (button, text_field) are templated on the user's
+// Msg type so the click closure carries only the message *value* — there
+// is no caller-scope capture.
+
+namespace widget {
+
+// text — single string label, inherits text_align from current scope.
+inline void text(str content) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.text = std::string(content.data, content.len);
@@ -57,8 +64,8 @@ inline void Text(str content) {
     }
 }
 
-// Link
-inline void Link(str label, str href) {
+// link — clickable hyperlink that opens via the host JS shim.
+inline void link(str label, str href) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.text = std::string(label.data, label.len);
@@ -68,7 +75,8 @@ inline void Link(str label, str href) {
     node.url = std::string(href.data, href.len);
     node.cursor_type = 1; // pointer
 
-    // Register click callback to open URL
+    // Register click callback to open URL. The closure captures only the
+    // immutable URL string (a value), not any caller-scope reference.
     auto url_copy = node.url;
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
     detail::g_app.callbacks.push_back([url_copy] {
@@ -79,8 +87,8 @@ inline void Link(str label, str href) {
     detail::attach_to_scope(h);
 }
 
-// Code block
-inline void Code(str content) {
+// code — monospaced code block with subtle background and border.
+inline void code(str content) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.text = std::string(content.data, content.len);
@@ -97,35 +105,9 @@ inline void Code(str content) {
     detail::attach_to_scope(h);
 }
 
-// Divider
-inline void Divider() {
-    auto h = detail::alloc_node();
-    auto& node = detail::node_at(h);
-    node.style.fixed_height = 1;
-    node.background = detail::g_app.theme.border;
-
-    detail::attach_to_scope(h);
-}
-
-// Spacer
-inline void Spacer(unsigned int height_px) {
-    auto h = detail::alloc_node();
-    detail::node_at(h).style.fixed_height = static_cast<float>(height_px);
-    detail::attach_to_scope(h);
-}
-
-// ============================================================
-// Message-based DSL — Button<Msg>, TextField<Msg>, run<State, Msg>
-// ============================================================
-//
-// The DSL takes the message value (or a stateless function pointer for
-// TextField mappers) instead of a closure that captures user state.
-// State lives in a user-defined struct and is mutated only inside
-// `update()`. The runner is installed by `run<State, Msg>(view, update)`.
-
-// Button<Msg> — click posts a copy of `msg` and triggers a rebuild.
+// button<Msg> — click posts a copy of `msg` and triggers a rebuild.
 template<typename Msg>
-inline void Button(str label, Msg msg) {
+inline void button(str label, Msg msg) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.text = std::string(label.data, label.len);
@@ -148,13 +130,12 @@ inline void Button(str label, Msg msg) {
     detail::attach_to_scope(h);
 }
 
-// TextField<Msg> — typing posts InputChanged-equivalent messages built
-// by the user-supplied mapper. The mapper is a stateless function
-// pointer (stateless lambdas auto-convert) so we never store a closure
-// that could capture caller-scope state.
+// text_field<Msg> — typing posts mapper(new_value)-derived messages.
+// `mapper` is a stateless function pointer (stateless lambdas auto-convert)
+// so we never store a closure that could capture caller-scope state.
 template<typename Msg>
-inline void TextField(str hint, std::string const& current,
-                      Msg(*mapper)(std::string)) {
+inline void text_field(str hint, std::string const& current,
+                       Msg(*mapper)(std::string)) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.is_input = true;
@@ -200,7 +181,12 @@ inline void TextField(str hint, std::string const& current,
     detail::attach_to_scope(h);
 }
 
+} // namespace widget
+
+// ============================================================
 // run<State, Msg>(view, update) — application entry point.
+// ============================================================
+//
 // Installs an app runner that drains the message queue, folds via
 // update, and re-runs view to rebuild the tree. Initial render with
 // State{} and an empty queue.
@@ -284,10 +270,21 @@ void render_one(Arg&& arg) {
 
 } // namespace detail
 
-// Column
+// ============================================================
+// layout:: — containers, spacing, and structural components
+// ============================================================
+//
+// Layouts wrap a builder lambda (or a parameter pack of children-as-
+// builder lambdas) and produce a parent LayoutNode with cross/main-axis
+// flex semantics. Variadic overloads exist for the common
+// `column(a, b, c)` shorthand alongside `column([&] { ... })`.
+
+namespace layout {
+
+// column — vertical flex container.
 template<typename F>
     requires std::is_invocable_v<F>
-void Column(F&& builder) {
+void column(F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
@@ -296,7 +293,7 @@ void Column(F&& builder) {
 }
 
 template<typename A, typename B, typename... Rest>
-void Column(A&& a, B&& b, Rest&&... rest) {
+void column(A&& a, B&& b, Rest&&... rest) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
@@ -311,10 +308,10 @@ void Column(A&& a, B&& b, Rest&&... rest) {
     Scope::set_current(prev);
 }
 
-// Row
+// row — horizontal flex container.
 template<typename F>
     requires std::is_invocable_v<F>
-void Row(F&& builder) {
+void row(F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Row;
@@ -323,7 +320,7 @@ void Row(F&& builder) {
 }
 
 template<typename A, typename B, typename... Rest>
-void Row(A&& a, B&& b, Rest&&... rest) {
+void row(A&& a, B&& b, Rest&&... rest) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Row;
@@ -338,16 +335,16 @@ void Row(A&& a, B&& b, Rest&&... rest) {
     Scope::set_current(prev);
 }
 
-// Box
+// box — generic single-child wrapper (no inherent direction or gap).
 template<typename F>
     requires std::is_invocable_v<F>
-void Box(F&& builder) {
+void box(F&& builder) {
     auto h = detail::alloc_node();
     detail::open_container(h, std::forward<F>(builder));
 }
 
 template<typename A, typename B, typename... Rest>
-void Box(A&& a, B&& b, Rest&&... rest) {
+void box(A&& a, B&& b, Rest&&... rest) {
     auto h = detail::alloc_node();
     detail::attach_to_scope(h);
     Scope child_scope(h);
@@ -359,12 +356,9 @@ void Box(A&& a, B&& b, Rest&&... rest) {
     Scope::set_current(prev);
 }
 
-// ============================================================
-// Compose-style higher-level components
-// ============================================================
-
-// Scaffold — page layout with topBar, content, bottomBar
-inline void Scaffold(std::function<void()> top_bar,
+// scaffold — page-level layout with hero header, max-width content,
+// and footer. Children of the top_bar slot get hero styling auto-applied.
+inline void scaffold(std::function<void()> top_bar,
                      std::function<void()> content,
                      std::function<void()> bottom_bar = {}) {
     if (top_bar) {
@@ -435,18 +429,18 @@ inline void Scaffold(std::function<void()> top_bar,
     }
 }
 
-// Surface
+// surface — bare wrapper, no styling. Useful as a stable parent slot.
 template<typename F>
     requires std::is_invocable_v<F>
-void Surface(F&& builder) {
+void surface(F&& builder) {
     auto h = detail::alloc_node();
     detail::open_container(h, std::forward<F>(builder));
 }
 
-// Card
+// card — rounded white container with padding.
 template<typename F>
     requires std::is_invocable_v<F>
-void Card(F&& builder) {
+void card(F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.border_radius = 8;
@@ -456,10 +450,10 @@ void Card(F&& builder) {
     detail::open_container(h, std::forward<F>(builder));
 }
 
-// ListItems
+// list_items — vertical container with left indent for bullet items.
 template<typename F>
     requires std::is_invocable_v<F>
-void ListItems(F&& builder) {
+void list_items(F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
@@ -468,8 +462,8 @@ void ListItems(F&& builder) {
     detail::open_container(h, std::forward<F>(builder));
 }
 
-// Item (list item with bullet)
-inline void Item(str content) {
+// item — bullet + text row, designed to live inside list_items.
+inline void item(str content) {
     auto row_h = detail::alloc_node();
     {
         auto& row = detail::node_at(row_h);
@@ -499,6 +493,25 @@ inline void Item(str content) {
 
     detail::attach_to_scope(row_h);
 }
+
+// divider — full-width 1px horizontal rule.
+inline void divider() {
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    node.style.fixed_height = 1;
+    node.background = detail::g_app.theme.border;
+
+    detail::attach_to_scope(h);
+}
+
+// spacer — fixed-height vertical gap.
+inline void spacer(unsigned int height_px) {
+    auto h = detail::alloc_node();
+    detail::node_at(h).style.fixed_height = static_cast<float>(height_px);
+    detail::attach_to_scope(h);
+}
+
+} // namespace layout
 
 } // namespace phenotype
 
