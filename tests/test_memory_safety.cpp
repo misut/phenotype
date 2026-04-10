@@ -82,20 +82,20 @@ inline void update(State& state, Msg msg) {
 
 inline Msg input_to_msg(std::string s) { return InputChanged{std::move(s)}; }
 
-// View 0: counter only — single Button at id 0
+// View 0: counter only — single button at id 0
 inline void view_counter(State const& s) {
-    Column([&] {
-        Text("count=" + std::to_string(s.count));
-        Button<Msg>("inc", Increment{});
+    layout::column([&] {
+        widget::text("count=" + std::to_string(s.count));
+        widget::button<Msg>("inc", Increment{});
     });
 }
 
 // View 1: counter + text field
 inline void view_full(State const& s) {
-    Column([&] {
-        Text("count=" + std::to_string(s.count));
-        Button<Msg>("inc", Increment{});
-        TextField<Msg>("type", s.input, +input_to_msg);
+    layout::column([&] {
+        widget::text("count=" + std::to_string(s.count));
+        widget::button<Msg>("inc", Increment{});
+        widget::text_field<Msg>("type", s.input, +input_to_msg);
     });
 }
 
