@@ -1,5 +1,6 @@
 module;
 #include <concepts>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <type_traits>
@@ -8,6 +9,7 @@ module;
 #include <vector>
 export module phenotype;
 
+export import phenotype.diag;
 export import phenotype.types;
 export import phenotype.state;
 export import phenotype.layout;
@@ -206,10 +208,15 @@ void run(View view, Update update) {
     saved_update = std::move(update);
 
     detail::install_app_runner([] {
+        auto t0 = metrics::detail::now_ns();
+
         // 1. Drain pending messages and fold via update.
         auto msgs = detail::drain<Msg>();
         for (auto& m : msgs)
             saved_update(state, std::move(m));
+        auto t1 = metrics::detail::now_ns();
+        metrics::inst::phase_duration.record(
+            t1 - t0, {{"phase", "update"}});
 
         // 2. Reset arena + callbacks for the next view pass.
         auto& app = detail::g_app;
@@ -231,15 +238,39 @@ void run(View view, Update update) {
         Scope::set_current(&scope);
         saved_view(state);
         Scope::set_current(nullptr);
+        auto t2 = metrics::detail::now_ns();
+        metrics::inst::phase_duration.record(
+            t2 - t1, {{"phase", "view"}});
 
         // 4. Layout + paint + flush.
         float cw = phenotype_get_canvas_width();
         detail::layout_node(root_h, cw);
+        auto t3 = metrics::detail::now_ns();
+        metrics::inst::phase_duration.record(
+            t3 - t2, {{"phase", "layout"}});
+
         app.focusable_ids.clear();
         emit_clear(app.theme.background);
         float vh = phenotype_get_canvas_height();
         detail::paint_node(root_h, 0, 0, app.scroll_y, vh);
+        auto t4 = metrics::detail::now_ns();
+        metrics::inst::phase_duration.record(
+            t4 - t3, {{"phase", "paint"}});
+
         flush();
+        metrics::inst::flush_calls.add();
+        auto t5 = metrics::detail::now_ns();
+        metrics::inst::phase_duration.record(
+            t5 - t4, {{"phase", "flush"}});
+
+        auto total = t5 - t0;
+        metrics::inst::frame_duration.record(total);
+        metrics::inst::rebuilds.add();
+        log::debug("phenotype.runner",
+            "rebuild #{} total={}us update={}us view={}us layout={}us paint={}us flush={}us",
+            metrics::inst::rebuilds.total(), total / 1000,
+            (t1 - t0) / 1000, (t2 - t1) / 1000, (t3 - t2) / 1000,
+            (t4 - t3) / 1000, (t5 - t4) / 1000);
     });
 
     // Initial render — no messages yet, view runs against State{}.
@@ -551,19 +582,28 @@ extern "C" {
 
     __attribute__((export_name("phenotype_handle_event")))
     void phenotype_handle_event(unsigned int callback_id) {
-        if (callback_id < phenotype::detail::g_app.callbacks.size())
+        phenotype::metrics::inst::input_events.add(1, {{"event", "click"}});
+        if (callback_id < phenotype::detail::g_app.callbacks.size()) {
+            phenotype::log::trace("phenotype.input", "click id={}", callback_id);
             phenotype::detail::g_app.callbacks[callback_id]();
+        } else {
+            phenotype::log::warn("phenotype.input",
+                "click id={} out of range (size={})",
+                callback_id, phenotype::detail::g_app.callbacks.size());
+        }
     }
 
     __attribute__((export_name("phenotype_set_hover")))
     void phenotype_set_hover(unsigned int callback_id) {
         if (phenotype::detail::g_app.hovered_id == callback_id) return;
+        phenotype::metrics::inst::input_events.add(1, {{"event", "hover"}});
         phenotype::detail::g_app.hovered_id = callback_id;
         phenotype_repaint(phenotype::detail::g_app.scroll_y);
     }
 
     __attribute__((export_name("phenotype_set_focus")))
     void phenotype_set_focus(unsigned int callback_id) {
+        phenotype::metrics::inst::input_events.add(1, {{"event", "focus"}});
         phenotype::detail::g_app.focused_id = callback_id;
         phenotype::detail::g_app.caret_pos = 0xFFFFFFFF; // end of text
         phenotype::detail::g_app.caret_visible = true;
@@ -577,6 +617,7 @@ extern "C" {
 
     __attribute__((export_name("phenotype_handle_tab")))
     void phenotype_handle_tab(unsigned int reverse) {
+        phenotype::metrics::inst::input_events.add(1, {{"event", "tab"}});
         auto& app = phenotype::detail::g_app;
         if (app.focusable_ids.empty()) return;
         int n = static_cast<int>(app.focusable_ids.size());
@@ -644,6 +685,7 @@ extern "C" {
 
     __attribute__((export_name("phenotype_handle_key")))
     void phenotype_handle_key(unsigned int key_type, unsigned int codepoint) {
+        phenotype::metrics::inst::input_events.add(1, {{"event", "key"}});
         auto& app = phenotype::detail::g_app;
         for (auto& [id, handler] : app.input_handlers) {
             if (id != app.focused_id) continue;
@@ -654,5 +696,47 @@ extern "C" {
             handler.invoke(handler.state, std::move(val));
             return;
         }
+    }
+
+    // ============================================================
+    // Diagnostics — JSON snapshot exposed via shared linear memory.
+    // JS reads (phenotype_diag_get_buf, phenotype_diag_get_len) after
+    // calling phenotype_diag_export() and JSON.parse()s the result.
+    // ============================================================
+
+    constexpr unsigned int PHENOTYPE_DIAG_BUF_SIZE = 64u * 1024u;
+    alignas(4) unsigned char phenotype_diag_buf[PHENOTYPE_DIAG_BUF_SIZE];
+    unsigned int phenotype_diag_buf_len = 0;
+
+    __attribute__((export_name("phenotype_diag_get_buf")))
+    unsigned char* phenotype_diag_get_buf(void) { return phenotype_diag_buf; }
+
+    __attribute__((export_name("phenotype_diag_get_buf_size")))
+    unsigned int phenotype_diag_get_buf_size(void) { return PHENOTYPE_DIAG_BUF_SIZE; }
+
+    __attribute__((export_name("phenotype_diag_get_len")))
+    unsigned int phenotype_diag_get_len(void) { return phenotype_diag_buf_len; }
+
+    __attribute__((export_name("phenotype_diag_export")))
+    unsigned int phenotype_diag_export(void) {
+        auto json = phenotype::diag::serialize_snapshot();
+        if (json.size() > PHENOTYPE_DIAG_BUF_SIZE) {
+            phenotype_diag_buf_len = 0;
+            return 0;
+        }
+        std::memcpy(phenotype_diag_buf, json.data(), json.size());
+        phenotype_diag_buf_len = static_cast<unsigned int>(json.size());
+        return phenotype_diag_buf_len;
+    }
+
+    __attribute__((export_name("phenotype_diag_set_log_level")))
+    void phenotype_diag_set_log_level(unsigned int level) {
+        phenotype::log::set_level(
+            static_cast<phenotype::log::Severity>(level));
+    }
+
+    __attribute__((export_name("phenotype_diag_reset")))
+    void phenotype_diag_reset(void) {
+        phenotype::metrics::reset_all();
     }
 }

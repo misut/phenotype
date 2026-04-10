@@ -9,6 +9,7 @@ module;
 export module phenotype.state;
 
 import phenotype.types;
+import phenotype.diag;
 
 export namespace phenotype {
 
@@ -42,13 +43,15 @@ struct Arena {
     NodeHandle alloc_node() {
         ensure_init();
         if (node_count >= MAX_NODES) {
-            std::fprintf(stderr,
-                "phenotype: arena node count exhausted (max %u)\n",
-                MAX_NODES);
+            log::error("phenotype.arena",
+                "node count exhausted (max {})", MAX_NODES);
             std::abort();
         }
         new (&nodes[node_count]) LayoutNode();
         generations[node_count] = current_gen;
+        metrics::inst::alloc_nodes.add();
+        metrics::inst::live_nodes.set(static_cast<std::int64_t>(node_count + 1));
+        metrics::inst::max_nodes_seen.update_max(static_cast<std::int64_t>(node_count + 1));
         return {node_count++, current_gen};
     }
 
@@ -61,8 +64,8 @@ struct Arena {
     LayoutNode& must_get(NodeHandle h) {
         auto* p = get(h);
         if (!p) {
-            std::fprintf(stderr,
-                "phenotype: stale NodeHandle (index=%u gen=%u current_gen=%u)\n",
+            log::error("phenotype.arena",
+                "stale NodeHandle (index={} gen={} current_gen={})",
                 h.index, h.generation, current_gen);
             std::abort();
         }
@@ -71,7 +74,9 @@ struct Arena {
 
     void reset() {
         for (std::uint32_t i = 0; i < node_count; ++i) nodes[i].~LayoutNode();
+        metrics::inst::arena_resets.add();
         node_count = 0;
+        metrics::inst::live_nodes.set(0);
         ++current_gen; // invalidate all outstanding handles
     }
 };
@@ -187,15 +192,20 @@ namespace detail {
     template<typename Msg>
     void post(Msg msg) {
         auto* p = new Msg(std::move(msg));
-        msg_queue().emplace_back(
+        auto& q = msg_queue();
+        q.emplace_back(
             p,
             [](void* ptr) { delete static_cast<Msg*>(ptr); }
         );
+        metrics::inst::messages_posted.add();
+        metrics::inst::max_queue_depth.update_max(
+            static_cast<std::int64_t>(q.size()));
     }
 
     template<typename Msg>
     std::vector<Msg> drain() {
         auto& q = msg_queue();
+        metrics::inst::messages_drained.add(static_cast<std::uint64_t>(q.size()));
         std::vector<Msg> out;
         out.reserve(q.size());
         for (auto& dm : q) {
