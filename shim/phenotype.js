@@ -744,10 +744,21 @@ export async function mount(wasmUrl, rootElement = document.body) {
     }
   });
 
-  // Hover
+  // Hover. The cursor and hovered_id are derived from the pointer's
+  // current canvas position, but the browser only fires pointermove when
+  // the mouse actually moves. Scroll and resize repaint the layout
+  // underneath a stationary mouse, so without re-evaluating after each
+  // repaint the cursor stays stuck on whatever was last under the
+  // pointer (e.g. a `pointer` cursor lingers after the button scrolls
+  // out from under the mouse). applyHoverAt() centralizes the lookup
+  // so pointermove / pointerleave / wheel / resize all share it.
   let currentHoverId = 0xFFFFFFFF;
-  canvas.addEventListener('pointermove', (e) => {
-    const hr = hitTest(e.clientX, e.clientY);
+  let lastClientX = -1;
+  let lastClientY = -1;
+
+  function applyHoverAt(clientX, clientY) {
+    if (clientX < 0 || clientY < 0) return; // pointer not yet over canvas
+    const hr = hitTest(clientX, clientY);
     canvas.style.cursor = (hr && hr.cursorType === 1) ? 'pointer' : 'default';
     const newHoverId = hr ? hr.callbackId : 0xFFFFFFFF;
     if (newHoverId !== currentHoverId) {
@@ -755,9 +766,18 @@ export async function mount(wasmUrl, rootElement = document.body) {
       if (inst.exports.phenotype_set_hover)
         inst.exports.phenotype_set_hover(newHoverId);
     }
+  }
+
+  canvas.addEventListener('pointermove', (e) => {
+    lastClientX = e.clientX;
+    lastClientY = e.clientY;
+    applyHoverAt(lastClientX, lastClientY);
   });
 
   canvas.addEventListener('pointerleave', () => {
+    lastClientX = -1;
+    lastClientY = -1;
+    canvas.style.cursor = 'default';
     if (currentHoverId !== 0xFFFFFFFF) {
       currentHoverId = 0xFFFFFFFF;
       if (inst.exports.phenotype_set_hover)
@@ -851,6 +871,9 @@ export async function mount(wasmUrl, rootElement = document.body) {
     if (inst.exports.phenotype_repaint) {
       inst.exports.phenotype_repaint(scrollY);
     }
+    // Hit regions just shifted under a stationary pointer — re-derive
+    // the cursor + hovered_id from the cached pointer position.
+    applyHoverAt(lastClientX, lastClientY);
   }, { passive: false });
 
   // Resize
@@ -864,6 +887,7 @@ export async function mount(wasmUrl, rootElement = document.body) {
           totalHeight = inst.exports.phenotype_get_total_height();
         }
       }
+      applyHoverAt(lastClientX, lastClientY);
     });
   });
   } catch (e) {
