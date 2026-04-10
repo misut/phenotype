@@ -765,8 +765,33 @@ export async function mount(wasmUrl, rootElement = document.body) {
     }
   });
 
+  // IME composition (Korean / Japanese / Chinese / etc.)
+  // Each composing keystroke fires a normal keydown with the partial
+  // jamo/kana, AND a composition* event with the composed text. We
+  // ignore the keydowns during composition and commit the final
+  // string from compositionend instead.
+  let isComposing = false;
+  canvas.addEventListener('compositionstart', () => {
+    isComposing = true;
+  });
+  canvas.addEventListener('compositionend', (e) => {
+    isComposing = false;
+    if (focusedId === 0xFFFFFFFF || !e.data) return;
+    // Send each codepoint of the composed text as a regular character
+    // keypress; phenotype_handle_key encodes UTF-8 internally.
+    for (const ch of e.data) {
+      const cp = ch.codePointAt(0);
+      if (inst.exports.phenotype_handle_key) {
+        inst.exports.phenotype_handle_key(0, cp);
+      }
+    }
+  });
+
   // Keyboard
   canvas.addEventListener('keydown', (e) => {
+    // Skip text-character processing during IME composition.
+    // Each composed syllable lands via compositionend instead.
+    if (e.isComposing || isComposing) return;
     if (e.key === 'Tab') {
       e.preventDefault();
       if (inst.exports.phenotype_handle_tab)
