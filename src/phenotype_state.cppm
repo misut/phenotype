@@ -1,6 +1,11 @@
 module;
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
 #include <functional>
 #include <new>
+#include <source_location>
+#include <typeindex>
 #include <utility>
 #include <vector>
 export module phenotype.state;
@@ -32,12 +37,25 @@ struct Arena {
     void* alloc(unsigned int size) {
         ensure_init();
         size = (size + 15) & ~15u;
+        if (offset + size > STORAGE_SIZE) {
+            std::fprintf(stderr,
+                "phenotype: arena storage exhausted "
+                "(requested %u, used %u, capacity %u)\n",
+                size, offset, STORAGE_SIZE);
+            std::abort();
+        }
         auto* p = &storage[offset];
         offset += size;
         return p;
     }
 
     LayoutNode* alloc_node() {
+        if (node_count >= MAX_NODES) {
+            std::fprintf(stderr,
+                "phenotype: arena node count exhausted (max %u)\n",
+                MAX_NODES);
+            std::abort();
+        }
         auto* mem = alloc(sizeof(LayoutNode));
         auto* node = new (mem) LayoutNode();
         nodes[node_count++] = node;
@@ -59,17 +77,22 @@ struct StateSlot {
     void* ptr;
     void (*deleter)(void*);
     void (*clearer)(void*); // clears subscribers on rebuild
+    std::type_index type;          // recorded at first encode<T>(), checked on reuse
+    std::source_location origin;   // call site of the first encode<T>()
 
-    StateSlot(void* p, void (*d)(void*), void (*c)(void*))
-        : ptr(p), deleter(d), clearer(c) {}
+    StateSlot(void* p, void (*d)(void*), void (*c)(void*),
+              std::type_index t, std::source_location o)
+        : ptr(p), deleter(d), clearer(c), type(t), origin(o) {}
     StateSlot(StateSlot&& o) noexcept
-        : ptr(o.ptr), deleter(o.deleter), clearer(o.clearer) {
+        : ptr(o.ptr), deleter(o.deleter), clearer(o.clearer),
+          type(o.type), origin(o.origin) {
         o.ptr = nullptr; o.deleter = nullptr; o.clearer = nullptr;
     }
     StateSlot& operator=(StateSlot&& o) noexcept {
         if (this != &o) {
             if (deleter) deleter(ptr);
             ptr = o.ptr; deleter = o.deleter; clearer = o.clearer;
+            type = o.type; origin = o.origin;
             o.ptr = nullptr; o.deleter = nullptr; o.clearer = nullptr;
         }
         return *this;
@@ -172,17 +195,47 @@ public:
 };
 
 template<typename T>
-Trait<T>* encode(T initial) {
+Trait<T>* encode(T initial,
+                 std::source_location loc = std::source_location::current()) {
     auto& app = detail::g_app;
-    // Hook-style: reuse existing Trait on rebuild (preserves state)
+    // Hook-style: reuse existing Trait on rebuild (preserves state).
+    // Validates type AND call site so a reordered or conditional encode()
+    // chain trips an immediate abort instead of silently aliasing slots.
+    // Mirrors React's "Rendered fewer/more hooks than expected" guard,
+    // strengthened with std::source_location.
     if (app.encode_index < app.states.size()) {
-        return static_cast<Trait<T>*>(app.states[app.encode_index++].ptr);
+        auto& slot = app.states[app.encode_index];
+        auto want = std::type_index(typeid(Trait<T>));
+        if (slot.type != want) {
+            std::fprintf(stderr,
+                "phenotype: encode() type mismatch at index %u "
+                "(slot is %s, encode<T> got %s) — hook order changed at %s:%u "
+                "(slot first registered at %s:%u)\n",
+                app.encode_index, slot.type.name(), want.name(),
+                loc.file_name(), loc.line(),
+                slot.origin.file_name(), slot.origin.line());
+            std::abort();
+        }
+        if (slot.origin.line() != loc.line() ||
+            std::strcmp(slot.origin.file_name(), loc.file_name()) != 0) {
+            std::fprintf(stderr,
+                "phenotype: encode() call site moved at index %u "
+                "(was %s:%u, now %s:%u)\n",
+                app.encode_index,
+                slot.origin.file_name(), slot.origin.line(),
+                loc.file_name(), loc.line());
+            std::abort();
+        }
+        ++app.encode_index;
+        return static_cast<Trait<T>*>(slot.ptr);
     }
     auto* p = new Trait<T>(std::move(initial));
-    app.states.push_back({
+    app.states.push_back(StateSlot{
         p,
         [](void* ptr) { delete static_cast<Trait<T>*>(ptr); },
-        [](void* ptr) { static_cast<Trait<T>*>(ptr)->clear_subscribers(); }
+        [](void* ptr) { static_cast<Trait<T>*>(ptr)->clear_subscribers(); },
+        std::type_index(typeid(Trait<T>)),
+        loc,
     });
     app.encode_index++;
     return p;

@@ -8,22 +8,24 @@
 // heap-use-after-free, leak, double-free, or OOB inside the tested
 // sequences will abort with a stack trace.
 //
-// Tests deliberately covered:
-//   1. test_rebuild_cycle           — many express()/Trait::set() rounds
-//   2. test_callback_after_rebuild  — callback id maps to fresh handler post-rebuild
-//   3. test_trait_subscriber_clear  — Trait::set() doesn't deref dangling Scope*
-//   4. test_input_state_after_rebuild — phenotype_handle_key after rebuild
-//   5. test_stress_random_events    — randomized click/type/repaint loop
+// Tests covered:
+//   1. test_rebuild_cycle              — many express()/Trait::set() rounds
+//   2. test_callback_after_rebuild     — callback id maps to fresh handler
+//   3. test_trait_subscriber_clear     — Trait::set() doesn't deref dangling Scope*
+//   4. test_input_state_after_rebuild  — phenotype_handle_key after rebuild
+//   5. test_stress_random_events       — randomized click/type/repaint loop
 //
-// Deferred (need Tier 2 changes to land first):
-//   - test_encode_order_violation   — needs encode-order detection
-//   - test_arena_overflow_graceful  — needs explicit overflow handling
+// Negative tests (POSIX native only — fork+waitpid catches the abort):
+//   6. test_encode_order_violation     — encode<T> type/site mismatch traps
+//   7. test_arena_overflow_graceful    — Arena::alloc_node beyond MAX_NODES traps
 
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
 #include <random>
+#include <source_location>
 #include <string>
+#include <typeindex>
 #include <vector>
 import phenotype;
 
@@ -293,6 +295,85 @@ void test_stress_random_events() {
 }
 
 // ============================================================
+// 6 + 7. Negative tests — encode/arena guards must trap
+// ============================================================
+//
+// PR #D added an std::abort() in encode<T>() for type/site mismatches and
+// in Arena::alloc/alloc_node for overflow. We need to *catch* the abort to
+// assert the guards fired. POSIX fork() lets us run the offending sequence
+// in a child whose abort doesn't take down the test runner. wasi has no
+// fork(), so these tests are skipped on the wasm target — the native CI
+// matrix exercises them.
+
+#if !defined(__wasi__) && !defined(_WIN32)
+#include <csignal>
+#include <sys/wait.h>
+extern "C" {
+    int fork(void);
+    int waitpid(int pid, int* status, int options);
+    [[noreturn]] void _exit(int status);
+}
+
+template<typename F>
+bool runs_to_abort(F body) {
+    // Flush before fork so the child doesn't replay buffered output on exit.
+    std::fflush(stdout);
+    std::fflush(stderr);
+    int pid = fork();
+    if (pid == 0) {
+        // Child: silence abort's stderr noise so test output stays clean.
+        std::fclose(stderr);
+        body();
+        // body returned without aborting — exit via _exit so stdio buffers
+        // (which the child copied from the parent) don't get flushed.
+        _exit(0);
+    }
+    int status = 0;
+    waitpid(pid, &status, 0);
+    return WIFSIGNALED(status) && WTERMSIG(status) == SIGABRT;
+}
+
+void test_encode_order_violation() {
+    reset_app();
+
+    // First rebuild registers a Trait<int> at the body's encode call site.
+    Trait<int>* first = nullptr;
+    express([&] { first = encode(0); });
+    (void)first;
+
+    // Now drive a SECOND express() that registers a Trait<std::string> at
+    // the same slot index in a child process. encode() should detect the
+    // type mismatch (Trait<int> already in slot 0) and abort.
+    bool aborted = runs_to_abort([] {
+        express([] {
+            Trait<std::string>* s = encode<std::string>("oops");
+            (void)s;
+        });
+    });
+    assert(aborted);
+
+    reset_app();
+    std::puts("PASS: encode order violation traps");
+}
+
+void test_arena_overflow_graceful() {
+    reset_app();
+
+    // Allocate one node beyond MAX_NODES inside a child. Arena::alloc_node
+    // is supposed to abort with a diagnostic, not silently corrupt heap.
+    bool aborted = runs_to_abort([] {
+        auto& a = detail::g_app.arena;
+        for (unsigned int i = 0; i < detail::g_app.arena.MAX_NODES + 1; ++i)
+            a.alloc_node();
+    });
+    assert(aborted);
+
+    reset_app();
+    std::puts("PASS: arena overflow traps");
+}
+#endif
+
+// ============================================================
 // Runner
 // ============================================================
 
@@ -302,6 +383,10 @@ int main() {
     test_trait_subscriber_clear();
     test_input_state_after_rebuild();
     test_stress_random_events();
+#if !defined(__wasi__) && !defined(_WIN32)
+    test_encode_order_violation();
+    test_arena_overflow_graceful();
+#endif
     std::puts("\nAll memory-safety tests passed.");
     return 0;
 }
