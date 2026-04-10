@@ -28,9 +28,9 @@ using namespace phenotype;
 void test_stateslot_move() {
     {
         std::vector<StateSlot> vec;
-        vec.push_back(StateSlot{new int(1), [](void* p) { delete static_cast<int*>(p); }});
-        vec.push_back(StateSlot{new int(2), [](void* p) { delete static_cast<int*>(p); }});
-        vec.push_back(StateSlot{new int(3), [](void* p) { delete static_cast<int*>(p); }});
+        vec.push_back(StateSlot{new int(1), [](void* p) { delete static_cast<int*>(p); }, nullptr});
+        vec.push_back(StateSlot{new int(2), [](void* p) { delete static_cast<int*>(p); }, nullptr});
+        vec.push_back(StateSlot{new int(3), [](void* p) { delete static_cast<int*>(p); }, nullptr});
         // After vector reallocation, old elements must NOT free via deleter
         assert(*static_cast<int*>(vec[0].ptr) == 1);
         assert(*static_cast<int*>(vec[1].ptr) == 2);
