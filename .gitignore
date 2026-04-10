@@ -47,10 +47,11 @@
 build/
 .exon/
 exon.lock
-!docs/exon.lock
 CMakeLists.txt
 *.wasm
-!docs/*.wasm
+
+# docs build outputs (built by CI)
+docs/phenotype.js
 
 # Claude Code
 CLAUDE.md
