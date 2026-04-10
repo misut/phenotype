@@ -1170,6 +1170,70 @@ void Item(str content) {
 }
 
 // ============================================================
+// Debug utilities
+// ============================================================
+
+std::string dump_layout_tree(LayoutNode* node, int depth = 0) {
+    std::string indent(depth * 2, ' ');
+    std::string out = indent + "[" +
+        std::to_string(static_cast<int>(node->x)) + "," +
+        std::to_string(static_cast<int>(node->y)) + " " +
+        std::to_string(static_cast<int>(node->width)) + "x" +
+        std::to_string(static_cast<int>(node->height)) + "]";
+    if (!node->text.empty()) {
+        out += " \"";
+        out += node->text.size() > 30 ? node->text.substr(0, 30) + "..." : node->text;
+        out += "\"";
+    }
+    out += "\n";
+    for (auto* child : node->children)
+        out += dump_layout_tree(child, depth + 1);
+    return out;
+}
+
+std::string dump_commands() {
+    std::string out;
+    unsigned int pos = 0;
+    while (pos < phenotype_cmd_len) {
+        auto cmd = *reinterpret_cast<unsigned int*>(&phenotype_cmd_buf[pos]); pos += 4;
+        switch (static_cast<Cmd>(cmd)) {
+            case Cmd::Clear: pos += 4; out += "Clear\n"; break;
+            case Cmd::FillRect: {
+                float x, y, w, h;
+                std::memcpy(&x, &phenotype_cmd_buf[pos], 4); pos += 4;
+                std::memcpy(&y, &phenotype_cmd_buf[pos], 4); pos += 4;
+                std::memcpy(&w, &phenotype_cmd_buf[pos], 4); pos += 4;
+                std::memcpy(&h, &phenotype_cmd_buf[pos], 4); pos += 4;
+                pos += 4; // rgba
+                out += "FillRect " + std::to_string(static_cast<int>(x)) + ","
+                    + std::to_string(static_cast<int>(y)) + " "
+                    + std::to_string(static_cast<int>(w)) + "x"
+                    + std::to_string(static_cast<int>(h)) + "\n";
+                break;
+            }
+            case Cmd::StrokeRect: pos += 24; out += "StrokeRect\n"; break;
+            case Cmd::RoundRect: pos += 24; out += "RoundRect\n"; break;
+            case Cmd::DrawText: {
+                float x, y;
+                std::memcpy(&x, &phenotype_cmd_buf[pos], 4); pos += 4;
+                std::memcpy(&y, &phenotype_cmd_buf[pos], 4); pos += 4;
+                pos += 12; // font_size, mono, rgba
+                auto len = *reinterpret_cast<unsigned int*>(&phenotype_cmd_buf[pos]); pos += 4;
+                std::string text(reinterpret_cast<char*>(&phenotype_cmd_buf[pos]), len);
+                pos += (len + 3) & ~3u;
+                out += "DrawText " + std::to_string(static_cast<int>(x)) + ","
+                    + std::to_string(static_cast<int>(y)) + " \"" + text + "\"\n";
+                break;
+            }
+            case Cmd::DrawLine: pos += 24; out += "DrawLine\n"; break;
+            case Cmd::HitRegion: pos += 24; out += "HitRegion\n"; break;
+            default: return out;
+        }
+    }
+    return out;
+}
+
+// ============================================================
 // express() — application entry point
 // ============================================================
 
