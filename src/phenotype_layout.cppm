@@ -5,11 +5,23 @@ export module phenotype.layout;
 
 import phenotype.types;
 import phenotype.state;
+import phenotype.diag;
 
 // Host imports — declared per-module so each TU resolves them at link time.
 extern "C" __attribute__((import_module("phenotype"), import_name("measure_text")))
 float phenotype_measure_text(float font_size, unsigned int mono,
                              char const* text, unsigned int len);
+
+namespace phenotype::detail {
+// Wrapper around the host measure_text import that increments the
+// `phenotype.host.measure_text_calls` counter on every invocation. Used
+// in place of the raw `phenotype_measure_text` at all layout call sites.
+inline float measure_text_counted(float font_size, unsigned int mono,
+                                  char const* text, unsigned int len) {
+    metrics::inst::measure_text_calls.add();
+    return phenotype_measure_text(font_size, mono, text, len);
+}
+} // namespace phenotype::detail
 
 export namespace phenotype::detail {
 
@@ -20,7 +32,7 @@ struct TextLayout {
 };
 
 inline float measure(str text, float font_size, bool mono) {
-    return phenotype_measure_text(font_size, mono ? 1 : 0, text.data, text.len);
+    return measure_text_counted(font_size, mono ? 1 : 0, text.data, text.len);
 }
 
 inline TextLayout layout_text(std::string const& text, float font_size, bool mono,
@@ -60,8 +72,8 @@ inline TextLayout layout_text(std::string const& text, float font_size, bool mon
             while (i < para.size() && para[i] == ' ') ++i;
 
             float space_width = current_line.empty() ? 0
-                : phenotype_measure_text(font_size, mono ? 1 : 0, " ", 1);
-            float word_width = phenotype_measure_text(
+                : measure_text_counted(font_size, mono ? 1 : 0, " ", 1);
+            float word_width = measure_text_counted(
                 font_size, mono ? 1 : 0, word.c_str(),
                 static_cast<unsigned int>(word.size()));
 
@@ -179,7 +191,7 @@ inline void layout_node(NodeHandle node_h, float available_width) {
             auto& child = node_at(node.children[i]);
             bool is_text_leaf = !child.text.empty() && child.children.empty();
             if (is_text_leaf) {
-                float measured = phenotype_measure_text(
+                float measured = measure_text_counted(
                     child.font_size, child.mono ? 1 : 0,
                     child.text.c_str(), static_cast<unsigned int>(child.text.size()));
                 float w = measured + child.style.padding[1] + child.style.padding[3];
