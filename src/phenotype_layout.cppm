@@ -89,50 +89,49 @@ inline TextLayout layout_text(std::string const& text, float font_size, bool mon
     return result;
 }
 
-inline void layout_node(LayoutNode* node, float available_width) {
-    auto const& s = node->style;
+inline void layout_node(NodeHandle node_h, float available_width) {
+    auto& node = node_at(node_h);
+    auto const& s = node.style;
     float content_width = available_width;
 
     // Apply max_width
     if (s.max_width > 0 && content_width > s.max_width)
         content_width = s.max_width;
 
-    node->width = content_width;
+    node.width = content_width;
 
     float inner_width = content_width - s.padding[1] - s.padding[3]; // right, left
 
     // Text leaf — compute and cache word-wrapped lines
-    if (!node->text.empty() && node->children.empty()) {
-        float line_height = node->font_size * g_app.theme.line_height_ratio;
-        auto tl = layout_text(node->text, node->font_size, node->mono, inner_width, line_height);
-        node->text_lines = std::move(tl.lines);
-        node->height = tl.height + s.padding[0] + s.padding[2];
+    if (!node.text.empty() && node.children.empty()) {
+        float line_height = node.font_size * g_app.theme.line_height_ratio;
+        auto tl = layout_text(node.text, node.font_size, node.mono, inner_width, line_height);
+        node.text_lines = std::move(tl.lines);
+        node.height = tl.height + s.padding[0] + s.padding[2];
         return;
     }
 
     // Fixed height (Spacer, Divider)
-    if (s.fixed_height >= 0 && node->children.empty()) {
-        node->height = s.fixed_height + s.padding[0] + s.padding[2];
+    if (s.fixed_height >= 0 && node.children.empty()) {
+        node.height = s.fixed_height + s.padding[0] + s.padding[2];
         return;
     }
 
     // Auto-center nodes with max_width
     if (s.max_width > 0 && content_width < available_width) {
-        node->x += (available_width - content_width) / 2;
+        node.x += (available_width - content_width) / 2;
     }
 
     // Container layout
     if (s.flex_direction == FlexDirection::Column) {
         // First pass: layout children to compute total height
         float total_children_h = 0;
-        unsigned int nc = static_cast<unsigned int>(node->children.size());
+        unsigned int nc = static_cast<unsigned int>(node.children.size());
         for (unsigned int i = 0; i < nc; ++i) {
-            auto* child = node->children[i];
-            if (s.cross_align == CrossAxisAlignment::Stretch)
-                layout_node(child, inner_width);
-            else
-                layout_node(child, inner_width);
-            total_children_h += child->height;
+            auto child_h = node.children[i];
+            layout_node(child_h, inner_width);
+            auto& child = node_at(child_h);
+            total_children_h += child.height;
             if (i + 1 < nc) total_children_h += s.gap;
         }
 
@@ -140,8 +139,8 @@ inline void layout_node(LayoutNode* node, float available_width) {
         float y = s.padding[0];
         float effective_gap = s.gap;
         if (s.main_align == MainAxisAlignment::SpaceBetween && nc > 1) {
-            float avail_h = node->height > 0
-                ? node->height - s.padding[0] - s.padding[2]
+            float avail_h = node.height > 0
+                ? node.height - s.padding[0] - s.padding[2]
                 : total_children_h;
             float children_only = total_children_h - s.gap * static_cast<float>(nc - 1);
             effective_gap = (avail_h - children_only) / static_cast<float>(nc - 1);
@@ -149,42 +148,42 @@ inline void layout_node(LayoutNode* node, float available_width) {
         // (Center/End only meaningful if node has a fixed or known height)
 
         for (unsigned int i = 0; i < nc; ++i) {
-            auto* child = node->children[i];
+            auto& child = node_at(node.children[i]);
             // Cross axis (horizontal) alignment
             switch (s.cross_align) {
                 case CrossAxisAlignment::Center:
-                    child->x = s.padding[3] + (inner_width - child->width) / 2;
+                    child.x = s.padding[3] + (inner_width - child.width) / 2;
                     break;
                 case CrossAxisAlignment::End:
-                    child->x = s.padding[3] + inner_width - child->width;
+                    child.x = s.padding[3] + inner_width - child.width;
                     break;
                 default: // Start, Stretch
-                    child->x = s.padding[3];
+                    child.x = s.padding[3];
                     break;
             }
-            child->y = y;
-            y += child->height;
+            child.y = y;
+            y += child.height;
             if (i + 1 < nc) y += effective_gap;
         }
-        node->height = y + s.padding[2];
+        node.height = y + s.padding[2];
     } else {
         // Row: intrinsic-width children get their measured size,
         // remaining space goes to the last flexible child.
-        unsigned int n = static_cast<unsigned int>(node->children.size());
+        unsigned int n = static_cast<unsigned int>(node.children.size());
         float total_gap = (n > 1) ? s.gap * static_cast<float>(n - 1) : 0;
 
         // First pass: measure intrinsic widths for text leaves
         float used = total_gap;
         int flex_index = -1;
         for (unsigned int i = 0; i < n; ++i) {
-            auto* child = node->children[i];
-            bool is_text_leaf = !child->text.empty() && child->children.empty();
+            auto& child = node_at(node.children[i]);
+            bool is_text_leaf = !child.text.empty() && child.children.empty();
             if (is_text_leaf) {
                 float measured = phenotype_measure_text(
-                    child->font_size, child->mono ? 1 : 0,
-                    child->text.c_str(), static_cast<unsigned int>(child->text.size()));
-                float w = measured + child->style.padding[1] + child->style.padding[3];
-                child->width = w;
+                    child.font_size, child.mono ? 1 : 0,
+                    child.text.c_str(), static_cast<unsigned int>(child.text.size()));
+                float w = measured + child.style.padding[1] + child.style.padding[3];
+                child.width = w;
                 used += w;
             } else {
                 flex_index = static_cast<int>(i);
@@ -199,13 +198,17 @@ inline void layout_node(LayoutNode* node, float available_width) {
         float total_used_w = 0;
         float max_h = 0;
         for (unsigned int i = 0; i < n; ++i) {
-            auto* child = node->children[i];
+            auto child_h = node.children[i];
+            auto& child = node_at(child_h);
             float cw = (static_cast<int>(i) == flex_index)
-                ? remaining + child->width
-                : child->width;
-            layout_node(child, cw);
-            total_used_w += child->width;
-            if (child->height > max_h) max_h = child->height;
+                ? remaining + child.width
+                : child.width;
+            layout_node(child_h, cw);
+            // Re-fetch in case the recursive call invalidated nothing
+            // (it doesn't — layout doesn't alloc — but be explicit).
+            auto& child2 = node_at(child_h);
+            total_used_w += child2.width;
+            if (child2.height > max_h) max_h = child2.height;
         }
 
         // Main axis (horizontal) alignment
@@ -221,24 +224,24 @@ inline void layout_node(LayoutNode* node, float available_width) {
         }
 
         for (unsigned int i = 0; i < n; ++i) {
-            auto* child = node->children[i];
-            child->x = x;
+            auto& child = node_at(node.children[i]);
+            child.x = x;
             // Cross axis (vertical) alignment
             switch (s.cross_align) {
                 case CrossAxisAlignment::Center:
-                    child->y = s.padding[0] + (max_h - child->height) / 2;
+                    child.y = s.padding[0] + (max_h - child.height) / 2;
                     break;
                 case CrossAxisAlignment::End:
-                    child->y = s.padding[0] + max_h - child->height;
+                    child.y = s.padding[0] + max_h - child.height;
                     break;
                 default: // Start, Stretch
-                    child->y = s.padding[0];
+                    child.y = s.padding[0];
                     break;
             }
-            x += child->width;
+            x += child.width;
             if (i + 1 < n) x += effective_gap;
         }
-        node->height = max_h + s.padding[0] + s.padding[2];
+        node.height = max_h + s.padding[0] + s.padding[2];
     }
 }
 
