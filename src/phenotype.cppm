@@ -118,13 +118,10 @@ inline void Spacer(unsigned int height_px) {
 // Message-based DSL — Button<Msg>, TextField<Msg>, run<State, Msg>
 // ============================================================
 //
-// The new DSL takes the message value (or a stateless function pointer
-// for TextField mappers) instead of a closure that captures user state.
+// The DSL takes the message value (or a stateless function pointer for
+// TextField mappers) instead of a closure that captures user state.
 // State lives in a user-defined struct and is mutated only inside
 // `update()`. The runner is installed by `run<State, Msg>(view, update)`.
-//
-// Old (callback) Button/TextField overloads still exist for one PR step
-// so docs/ keeps compiling during the migration. Step 3 deletes them.
 
 // Button<Msg> — click posts a copy of `msg` and triggers a rebuild.
 template<typename Msg>
