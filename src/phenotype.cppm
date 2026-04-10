@@ -339,13 +339,17 @@ void column(A&& a, B&& b, Rest&&... rest) {
     Scope::set_current(prev);
 }
 
-// row — horizontal flex container.
+// row — horizontal flex container. Cross-axis defaults to Center so that
+// inline patterns (icon + text, button + label, code + text) line up on
+// a shared centerline; rows of unequal-height children otherwise stack
+// from the top, leaving short text dangling above its taller siblings.
 template<typename F>
     requires std::is_invocable_v<F>
 void row(F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Row;
+    node.style.cross_align = CrossAxisAlignment::Center;
     node.style.gap = 8;
     detail::open_container(h, std::forward<F>(builder));
 }
@@ -355,6 +359,7 @@ void row(A&& a, B&& b, Rest&&... rest) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Row;
+    node.style.cross_align = CrossAxisAlignment::Center;
     node.style.gap = 8;
     detail::attach_to_scope(h);
     Scope child_scope(h);
