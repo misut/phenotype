@@ -6,6 +6,10 @@ authors = ["misut"]
 license = "MIT"
 type = "lib"
 standard = 23
-platforms = [{ os = "wasi" }]
+platforms = [
+    { os = "wasi" },
+    { os = "macos", arch = "aarch64" },
+    { os = "linux", arch = "x86_64" },
+]
 
 [dependencies]
