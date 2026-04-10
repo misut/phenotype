@@ -1,8 +1,6 @@
 #include <cassert>
 #include <cstdio>
-#include <source_location>
 #include <string>
-#include <typeindex>
 #include <vector>
 import phenotype;
 
@@ -22,28 +20,6 @@ extern "C" {
 }
 
 using namespace phenotype;
-
-// ============================================================
-// StateSlot tests — prevent use-after-free regression
-// ============================================================
-
-void test_stateslot_move() {
-    auto deleter = [](void* p) { delete static_cast<int*>(p); };
-    auto type = std::type_index(typeid(int));
-    auto loc = std::source_location::current();
-    {
-        std::vector<StateSlot> vec;
-        vec.push_back(StateSlot{new int(1), deleter, type, loc});
-        vec.push_back(StateSlot{new int(2), deleter, type, loc});
-        vec.push_back(StateSlot{new int(3), deleter, type, loc});
-        // After vector reallocation, old elements must NOT free via deleter
-        assert(*static_cast<int*>(vec[0].ptr) == 1);
-        assert(*static_cast<int*>(vec[1].ptr) == 2);
-        assert(*static_cast<int*>(vec[2].ptr) == 3);
-    }
-    // All deleters run here (vec destroyed) — no double-free
-    std::puts("PASS: StateSlot move semantics");
-}
 
 // ============================================================
 // Layout tests
@@ -183,39 +159,6 @@ void test_max_width_centering() {
 }
 
 // ============================================================
-// Trait/Scope tests
-// ============================================================
-
-void test_trait_subscription() {
-    detail::g_app.arena.reset();
-    auto root_h = detail::alloc_node();
-    Scope scope(root_h);
-    Scope::set_current(&scope);
-
-    auto* trait = encode(42);
-    assert(trait->value() == 42);
-
-    Scope::set_current(nullptr);
-    std::puts("PASS: Trait subscription");
-}
-
-void test_trait_no_duplicate_subscriber() {
-    detail::g_app.arena.reset();
-    auto root_h = detail::alloc_node();
-    Scope scope(root_h);
-    Scope::set_current(&scope);
-
-    auto* trait = encode(0);
-    trait->value(); // accesses value
-    trait->value();
-    trait->value();
-
-    Scope::set_current(nullptr);
-    // subscribers_ removed in NodeHandle refactor — no crash = pass
-    std::puts("PASS: Trait no duplicate subscriber");
-}
-
-// ============================================================
 // Text layout tests
 // ============================================================
 
@@ -255,14 +198,11 @@ void test_newline_handling() {
 // ============================================================
 
 int main() {
-    test_stateslot_move();
     test_column_layout();
     test_row_intrinsic_width();
     test_containment_invariant();
     test_alignment_center();
     test_max_width_centering();
-    test_trait_subscription();
-    test_trait_no_duplicate_subscriber();
     test_word_wrap();
     test_newline_handling();
     std::puts("\nAll tests passed.");

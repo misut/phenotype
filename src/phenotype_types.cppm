@@ -158,7 +158,6 @@ struct LayoutNode {
     // Input field
     bool is_input = false;
     std::string placeholder;
-    void* input_state = nullptr; // Trait<std::string>*, resolved at runtime
 
     // Computed layout
     float x = 0, y = 0, width = 0, height = 0;
