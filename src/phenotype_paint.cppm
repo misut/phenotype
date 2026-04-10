@@ -157,60 +157,61 @@ inline void flush() {
 
 export namespace phenotype::detail {
 
-inline void paint_node(LayoutNode* node, float ox, float oy, float scroll_y,
+inline void paint_node(NodeHandle node_h, float ox, float oy, float scroll_y,
                        float vp_height) {
-    float ax = ox + node->x;
-    float ay = oy + node->y;
+    auto& node = node_at(node_h);
+    float ax = ox + node.x;
+    float ay = oy + node.y;
 
     // Viewport culling (leaf nodes only — containers delegate to children)
-    if (node->children.empty()) {
-        if (ay + node->height < scroll_y || ay > scroll_y + vp_height) return;
+    if (node.children.empty()) {
+        if (ay + node.height < scroll_y || ay > scroll_y + vp_height) return;
     }
 
     float draw_y = ay - scroll_y;
 
     // Hover/focus state
-    bool is_hovered = (node->callback_id != 0xFFFFFFFF &&
-                       node->callback_id == g_app.hovered_id);
-    bool is_focused = (node->callback_id != 0xFFFFFFFF &&
-                       node->callback_id == g_app.focused_id);
+    bool is_hovered = (node.callback_id != 0xFFFFFFFF &&
+                       node.callback_id == g_app.hovered_id);
+    bool is_focused = (node.callback_id != 0xFFFFFFFF &&
+                       node.callback_id == g_app.focused_id);
 
     // Background (with hover override)
-    Color bg = (is_hovered && node->hover_background.a > 0)
-        ? node->hover_background : node->background;
+    Color bg = (is_hovered && node.hover_background.a > 0)
+        ? node.hover_background : node.background;
     if (bg.a > 0) {
-        if (node->border_radius > 0)
-            emit_round_rect(ax, draw_y, node->width, node->height,
-                            node->border_radius, bg);
+        if (node.border_radius > 0)
+            emit_round_rect(ax, draw_y, node.width, node.height,
+                            node.border_radius, bg);
         else
-            emit_fill_rect(ax, draw_y, node->width, node->height, bg);
+            emit_fill_rect(ax, draw_y, node.width, node.height, bg);
     }
 
     // Border (accent color when focused)
-    Color bc = is_focused ? g_app.theme.accent : node->border_color;
-    float bw = is_focused ? 2.0f : node->border_width;
+    Color bc = is_focused ? g_app.theme.accent : node.border_color;
+    float bw = is_focused ? 2.0f : node.border_width;
     if (bw > 0 && bc.a > 0) {
-        emit_stroke_rect(ax, draw_y, node->width, node->height, bw, bc);
+        emit_stroke_rect(ax, draw_y, node.width, node.height, bw, bc);
     }
 
     // Text — use cached text_lines from layout pass
-    Color tc = (is_hovered && node->hover_text_color.a > 0)
-        ? node->hover_text_color : node->text_color;
-    if (!node->text_lines.empty()) {
-        float line_height = node->font_size * g_app.theme.line_height_ratio;
-        float inner_width = node->width - node->style.padding[1] - node->style.padding[3];
-        float ty = draw_y + node->style.padding[0];
-        for (auto const& line : node->text_lines) {
+    Color tc = (is_hovered && node.hover_text_color.a > 0)
+        ? node.hover_text_color : node.text_color;
+    if (!node.text_lines.empty()) {
+        float line_height = node.font_size * g_app.theme.line_height_ratio;
+        float inner_width = node.width - node.style.padding[1] - node.style.padding[3];
+        float ty = draw_y + node.style.padding[0];
+        for (auto const& line : node.text_lines) {
             if (!line.empty()) {
                 float line_w = phenotype_measure_text(
-                    node->font_size, node->mono ? 1 : 0,
+                    node.font_size, node.mono ? 1 : 0,
                     line.c_str(), static_cast<unsigned int>(line.size()));
-                float tx = ax + node->style.padding[3];
-                if (node->style.text_align == TextAlign::Center)
+                float tx = ax + node.style.padding[3];
+                if (node.style.text_align == TextAlign::Center)
                     tx += (inner_width - line_w) / 2;
-                else if (node->style.text_align == TextAlign::End)
+                else if (node.style.text_align == TextAlign::End)
                     tx += inner_width - line_w;
-                emit_draw_text(tx, ty, node->font_size, node->mono ? 1 : 0,
+                emit_draw_text(tx, ty, node.font_size, node.mono ? 1 : 0,
                                tc, line.c_str(),
                                static_cast<unsigned int>(line.size()));
             }
@@ -219,33 +220,33 @@ inline void paint_node(LayoutNode* node, float ox, float oy, float scroll_y,
     }
 
     // Caret for focused input — use displayed text to compute position
-    if (is_focused && node->is_input && g_app.caret_visible) {
-        float caret_x = ax + node->style.padding[3];
+    if (is_focused && node.is_input && g_app.caret_visible) {
+        float caret_x = ax + node.style.padding[3];
         // Measure displayed text width (text_lines[0] if not placeholder)
-        if (!node->text_lines.empty() && !node->text_lines[0].empty() &&
+        if (!node.text_lines.empty() && !node.text_lines[0].empty() &&
             tc.r != g_app.theme.muted.r) { // not placeholder
             caret_x += phenotype_measure_text(
-                node->font_size, 0, node->text_lines[0].c_str(),
-                static_cast<unsigned int>(node->text_lines[0].size()));
+                node.font_size, 0, node.text_lines[0].c_str(),
+                static_cast<unsigned int>(node.text_lines[0].size()));
         }
-        float caret_y = draw_y + node->style.padding[0];
-        float caret_h = node->font_size * g_app.theme.line_height_ratio;
+        float caret_y = draw_y + node.style.padding[0];
+        float caret_h = node.font_size * g_app.theme.line_height_ratio;
         emit_draw_line(caret_x, caret_y, caret_x, caret_y + caret_h, 1.5f, g_app.theme.accent);
     }
 
     // Collect focusable IDs (for Tab navigation)
-    if (node->callback_id != 0xFFFFFFFF)
-        g_app.focusable_ids.push_back(node->callback_id);
+    if (node.callback_id != 0xFFFFFFFF)
+        g_app.focusable_ids.push_back(node.callback_id);
 
     // Hit region
-    if (node->callback_id != 0xFFFFFFFF) {
-        emit_hit_region(ax, draw_y, node->width, node->height,
-                        node->callback_id, node->cursor_type);
+    if (node.callback_id != 0xFFFFFFFF) {
+        emit_hit_region(ax, draw_y, node.width, node.height,
+                        node.callback_id, node.cursor_type);
     }
 
     // Children
-    for (auto* child : node->children)
-        paint_node(child, ax, ay, scroll_y, vp_height);
+    for (auto child_h : node.children)
+        paint_node(child_h, ax, ay, scroll_y, vp_height);
 }
 
 } // namespace phenotype::detail
