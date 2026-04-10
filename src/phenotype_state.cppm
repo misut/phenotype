@@ -1,11 +1,9 @@
 module;
 #include <cstdio>
 #include <cstdlib>
-#include <cstring>
 #include <functional>
 #include <new>
-#include <source_location>
-#include <typeindex>
+#include <string>
 #include <utility>
 #include <vector>
 export module phenotype.state;
@@ -79,39 +77,6 @@ struct Arena {
 };
 
 // ============================================================
-// StateSlot — type-erased slot for hook-style Trait persistence
-// ============================================================
-
-struct StateSlot {
-    void* ptr;
-    void (*deleter)(void*);
-    std::type_index type;          // recorded at first encode<T>(), checked on reuse
-    std::source_location origin;   // call site of the first encode<T>()
-
-    StateSlot(void* p, void (*d)(void*),
-              std::type_index t, std::source_location o)
-        : ptr(p), deleter(d), type(t), origin(o) {}
-    StateSlot(StateSlot&& o) noexcept
-        : ptr(o.ptr), deleter(o.deleter),
-          type(o.type), origin(o.origin) {
-        o.ptr = nullptr; o.deleter = nullptr;
-    }
-    StateSlot& operator=(StateSlot&& o) noexcept {
-        if (this != &o) {
-            if (deleter) deleter(ptr);
-            ptr = o.ptr; deleter = o.deleter;
-            type = o.type; origin = o.origin;
-            o.ptr = nullptr; o.deleter = nullptr;
-        }
-        return *this;
-    }
-    ~StateSlot() { if (deleter) deleter(ptr); }
-
-    StateSlot(StateSlot const&) = delete;
-    StateSlot& operator=(StateSlot const&) = delete;
-};
-
-// ============================================================
 // AppState — consolidated global state
 // ============================================================
 
@@ -160,22 +125,14 @@ struct AppState {
     unsigned int focused_id = 0xFFFFFFFF;
     unsigned int caret_pos = 0;
     bool caret_visible = true;
+    // Click callbacks indexed by callback_id, registered by Button<Msg>.
     std::vector<std::function<void()>> callbacks;
-    std::vector<StateSlot> states;
     std::vector<unsigned int> focusable_ids;
+    // Tracks input nodes by callback_id for focus / handle_key lookup.
     std::vector<std::pair<unsigned int, NodeHandle>> input_nodes;
-    std::function<void()> app_builder;
-    unsigned int encode_index = 0; // hook-style index for encode() across rebuilds
-    // Installed by express() in the umbrella module so the engine layer
-    // (Trait::set / Scope::mutate) can re-enter rebuild without
-    // depending on layout/paint at the type level.
-    void (*rebuild_fn)() = nullptr;
-    // Installed by phenotype::run<State, Msg>(...) for the message DSL.
-    // When set, trigger_rebuild() invokes this instead of rebuild_fn so the
-    // runner can drain the message queue, fold via update, and re-view.
+    // Installed by phenotype::run<State, Msg>(...). trigger_rebuild calls it.
     void (*app_runner)() = nullptr;
-    // New message DSL: typed text-input dispatchers, sparse by callback id.
-    // Only TextField<Msg> registers entries here; lookups walk the vector.
+    // Sparse map of typed text-input dispatchers, registered by TextField<Msg>.
     std::vector<std::pair<unsigned int, InputHandler>> input_handlers;
 };
 
@@ -253,10 +210,7 @@ namespace detail {
     inline void install_app_runner(void (*runner)()) { g_app.app_runner = runner; }
 
     inline void trigger_rebuild() {
-        // Prefer the new typed runner if installed; fall back to the legacy
-        // rebuild_fn so the old DSL still works during step 1+2.
         if (g_app.app_runner) g_app.app_runner();
-        else if (g_app.rebuild_fn) g_app.rebuild_fn();
     }
 } // namespace detail
 
@@ -264,16 +218,13 @@ namespace detail {
 // Scope — implicit parent tracking for declarative DSL
 // ============================================================
 
+// Scope — implicit parent tracking for nested DSL builders.
+// Used by attach_to_scope/open_container to thread NodeHandles through
+// Column/Row/Box/Scaffold/Card builder lambdas without explicit args.
 struct Scope {
     NodeHandle node;
-    std::function<void()> builder;
 
     Scope(NodeHandle n) : node(n) {}
-    Scope(NodeHandle n, std::function<void()> b) : node(n), builder(std::move(b)) {}
-
-    void mutate() {
-        if (detail::g_app.rebuild_fn) detail::g_app.rebuild_fn();
-    }
 
     static Scope*& current() {
         static Scope* s = nullptr;
@@ -282,71 +233,5 @@ struct Scope {
 
     static void set_current(Scope* s) { current() = s; }
 };
-
-// ============================================================
-// Trait<T> — reactive state with full-rebuild on mutation
-// ============================================================
-
-template<typename T>
-class Trait {
-    T value_;
-
-public:
-    explicit Trait(T initial) : value_(std::move(initial)) {}
-
-    T const& value() noexcept { return value_; }
-
-    void set(T new_val) {
-        if (value_ == new_val) return;
-        value_ = std::move(new_val);
-        if (detail::g_app.rebuild_fn) detail::g_app.rebuild_fn();
-    }
-};
-
-template<typename T>
-Trait<T>* encode(T initial,
-                 std::source_location loc = std::source_location::current()) {
-    auto& app = detail::g_app;
-    // Hook-style: reuse existing Trait on rebuild (preserves state).
-    // Validates type AND call site so a reordered or conditional encode()
-    // chain trips an immediate abort instead of silently aliasing slots.
-    // Mirrors React's "Rendered fewer/more hooks than expected" guard,
-    // strengthened with std::source_location.
-    if (app.encode_index < app.states.size()) {
-        auto& slot = app.states[app.encode_index];
-        auto want = std::type_index(typeid(Trait<T>));
-        if (slot.type != want) {
-            std::fprintf(stderr,
-                "phenotype: encode() type mismatch at index %u "
-                "(slot is %s, encode<T> got %s) — hook order changed at %s:%u "
-                "(slot first registered at %s:%u)\n",
-                app.encode_index, slot.type.name(), want.name(),
-                loc.file_name(), loc.line(),
-                slot.origin.file_name(), slot.origin.line());
-            std::abort();
-        }
-        if (slot.origin.line() != loc.line() ||
-            std::strcmp(slot.origin.file_name(), loc.file_name()) != 0) {
-            std::fprintf(stderr,
-                "phenotype: encode() call site moved at index %u "
-                "(was %s:%u, now %s:%u)\n",
-                app.encode_index,
-                slot.origin.file_name(), slot.origin.line(),
-                loc.file_name(), loc.line());
-            std::abort();
-        }
-        ++app.encode_index;
-        return static_cast<Trait<T>*>(slot.ptr);
-    }
-    auto* p = new Trait<T>(std::move(initial));
-    app.states.push_back(StateSlot{
-        p,
-        [](void* ptr) { delete static_cast<Trait<T>*>(ptr); },
-        std::type_index(typeid(Trait<T>)),
-        loc,
-    });
-    app.encode_index++;
-    return p;
-}
 
 } // namespace phenotype

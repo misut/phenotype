@@ -57,29 +57,6 @@ inline void Text(str content) {
     }
 }
 
-// Button
-inline void Button(str label, std::function<void()> on_click = {}) {
-    auto h = detail::alloc_node();
-    auto& node = detail::node_at(h);
-    node.text = std::string(label.data, label.len);
-    node.font_size = detail::g_app.theme.body_font_size;
-    node.text_color = detail::g_app.theme.foreground;
-    node.background = detail::g_app.theme.code_bg;
-    node.hover_background = detail::g_app.theme.border; // slightly darker on hover
-    node.border_radius = 4;
-    node.style.padding[0] = 6; node.style.padding[1] = 12;
-    node.style.padding[2] = 6; node.style.padding[3] = 12;
-    node.cursor_type = 1; // pointer
-
-    if (on_click) {
-        auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
-        detail::g_app.callbacks.push_back(std::move(on_click));
-        node.callback_id = id;
-    }
-
-    detail::attach_to_scope(h);
-}
-
 // Link
 inline void Link(str label, str href) {
     auto h = detail::alloc_node();
@@ -120,36 +97,6 @@ inline void Code(str content) {
     detail::attach_to_scope(h);
 }
 
-// TextField — single-line text input bound to Trait<std::string>
-inline void TextField(Trait<std::string>* state, str placeholder = "") {
-    auto h = detail::alloc_node();
-    auto& node = detail::node_at(h);
-    node.is_input = true;
-    node.input_state = state;
-    node.placeholder = std::string(placeholder.data, placeholder.len);
-
-    // Display current value or placeholder
-    auto const& val = state->value();
-    node.text = val.empty() ? node.placeholder : val;
-    node.font_size = detail::g_app.theme.body_font_size;
-    node.text_color = val.empty() ? detail::g_app.theme.muted : detail::g_app.theme.foreground;
-    node.background = {255, 255, 255, 255};
-    node.border_color = detail::g_app.theme.border;
-    node.border_width = 1;
-    node.border_radius = 4;
-    node.style.padding[0] = 8; node.style.padding[1] = 12;
-    node.style.padding[2] = 8; node.style.padding[3] = 12;
-    node.cursor_type = 1; // text cursor
-
-    // Register callback (for focus) and track as input node
-    auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
-    detail::g_app.callbacks.push_back([]{}); // no-op click, focus handled by phenotype_set_focus
-    node.callback_id = id;
-    detail::g_app.input_nodes.push_back({id, h});
-
-    detail::attach_to_scope(h);
-}
-
 // Divider
 inline void Divider() {
     auto h = detail::alloc_node();
@@ -180,11 +127,7 @@ inline void Spacer(unsigned int height_px) {
 // so docs/ keeps compiling during the migration. Step 3 deletes them.
 
 // Button<Msg> — click posts a copy of `msg` and triggers a rebuild.
-// Distinguished from the old Button(label, std::function) overload by
-// the second arg type: Msg here is not invocable, so std::function's
-// SFINAE rejects it and selects this template instead.
 template<typename Msg>
-    requires (!std::is_invocable_v<Msg>)
 inline void Button(str label, Msg msg) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
@@ -218,7 +161,6 @@ inline void TextField(str hint, std::string const& current,
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.is_input = true;
-    node.input_state = nullptr; // new path uses input_handlers, not input_state
     node.placeholder = std::string(hint.data, hint.len);
 
     node.text = current.empty() ? node.placeholder : current;
@@ -556,56 +498,6 @@ inline void Item(str content) {
     detail::attach_to_scope(row_h);
 }
 
-// ============================================================
-// rebuild — full UI rebuild, shared by express() and Trait::set()
-// ============================================================
-
-namespace detail {
-
-inline void rebuild() {
-    auto& app = g_app;
-    if (!app.app_builder) return;
-
-    app.arena.reset(); // bumps generation, invalidates all old NodeHandles
-    app.callbacks.clear();
-    app.input_nodes.clear();
-    app.encode_index = 0;
-
-    auto root_h = alloc_node();
-    {
-        auto& root = node_at(root_h);
-        root.style.flex_direction = FlexDirection::Column;
-        root.background = app.theme.background;
-    }
-    app.root = root_h;
-
-    Scope scope(root_h);
-    Scope::set_current(&scope);
-    app.app_builder();
-    Scope::set_current(nullptr);
-
-    float cw = phenotype_get_canvas_width();
-    layout_node(root_h, cw);
-    app.focusable_ids.clear();
-    emit_clear(app.theme.background);
-    float vh = phenotype_get_canvas_height();
-    paint_node(root_h, 0, 0, app.scroll_y, vh);
-    flush();
-}
-
-} // namespace detail
-
-// ============================================================
-// express() — application entry point
-// ============================================================
-
-template<typename F>
-void express(F&& app_fn) {
-    detail::g_app.app_builder = std::function<void()>(app_fn);
-    detail::g_app.rebuild_fn = &detail::rebuild;
-    detail::rebuild();
-}
-
 } // namespace phenotype
 
 // ============================================================
@@ -733,8 +625,6 @@ extern "C" {
     __attribute__((export_name("phenotype_handle_key")))
     void phenotype_handle_key(unsigned int key_type, unsigned int codepoint) {
         auto& app = phenotype::detail::g_app;
-
-        // New message DSL path: look up an InputHandler for the focused id.
         for (auto& [id, handler] : app.input_handlers) {
             if (id != app.focused_id) continue;
             std::string val = handler.current;
@@ -744,21 +634,5 @@ extern "C" {
             handler.invoke(handler.state, std::move(val));
             return;
         }
-
-        // Legacy path: walk input_nodes for a Trait<string>* on the focused node.
-        phenotype::LayoutNode* input_node = nullptr;
-        for (auto& [id, handle] : app.input_nodes) {
-            if (id == app.focused_id) {
-                input_node = app.arena.get(handle);
-                break;
-            }
-        }
-        if (!input_node || !input_node->input_state) return;
-
-        auto* state = static_cast<phenotype::Trait<std::string>*>(input_node->input_state);
-        auto val = state->value();
-        if (!phenotype_apply_key_to_string(key_type, codepoint, val)) return;
-        app.caret_visible = true;
-        state->set(std::move(val));
     }
 }
