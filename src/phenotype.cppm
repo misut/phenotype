@@ -4,7 +4,6 @@ module;
 #include <functional>
 #include <string>
 #include <vector>
-#include <map>
 export module phenotype;
 
 // ============================================================
@@ -356,17 +355,19 @@ struct Arena {
 struct StateSlot {
     void* ptr;
     void (*deleter)(void*);
+    void (*clearer)(void*); // clears subscribers on rebuild
 
-    StateSlot(void* p, void (*d)(void*)) : ptr(p), deleter(d) {}
-    StateSlot(StateSlot&& o) noexcept : ptr(o.ptr), deleter(o.deleter) {
-        o.ptr = nullptr;
-        o.deleter = nullptr;
+    StateSlot(void* p, void (*d)(void*), void (*c)(void*))
+        : ptr(p), deleter(d), clearer(c) {}
+    StateSlot(StateSlot&& o) noexcept
+        : ptr(o.ptr), deleter(o.deleter), clearer(o.clearer) {
+        o.ptr = nullptr; o.deleter = nullptr; o.clearer = nullptr;
     }
     StateSlot& operator=(StateSlot&& o) noexcept {
         if (this != &o) {
             if (deleter) deleter(ptr);
-            ptr = o.ptr; deleter = o.deleter;
-            o.ptr = nullptr; o.deleter = nullptr;
+            ptr = o.ptr; deleter = o.deleter; clearer = o.clearer;
+            o.ptr = nullptr; o.deleter = nullptr; o.clearer = nullptr;
         }
         return *this;
     }
@@ -388,11 +389,18 @@ struct AppState {
     std::vector<std::function<void()>> callbacks;
     std::vector<StateSlot> states;
     std::vector<unsigned int> focusable_ids;
-    std::map<unsigned int, LayoutNode*> input_nodes; // callback_id → input node
+    std::vector<std::pair<unsigned int, LayoutNode*>> input_nodes;
+    std::function<void()> app_builder;
+    unsigned int encode_index = 0; // hook-style index for encode() across rebuilds
 };
 
 namespace detail {
-    AppState g_app;
+    // Placement-new into static storage to avoid global destructor.
+    // wasi-sdk's crt1-command.o calls __cxa_atexit on exit, which destroys
+    // global C++ objects. Without this trick, g_app's destructors run after
+    // _start() and clear the callbacks vector, breaking event handling.
+    alignas(AppState) inline unsigned char g_app_storage[sizeof(AppState)];
+    inline AppState& g_app = *new (&g_app_storage) AppState();
     LayoutNode* alloc_node() { return g_app.arena.alloc_node(); }
 } // namespace detail
 
@@ -761,6 +769,8 @@ struct Scope {
     static void set_current(Scope* s) { current() = s; }
 };
 
+namespace detail { void rebuild(); } // forward declaration
+
 // ============================================================
 // Trait<T> — reactive state with partial mutation
 // ============================================================
@@ -788,35 +798,66 @@ public:
     void set(T new_val) {
         if (value_ == new_val) return;
         value_ = std::move(new_val);
-        for (auto* scope : subscribers_)
-            scope->mutate();
+        detail::rebuild();
     }
+
+    void clear_subscribers() { subscribers_.clear(); }
 };
 
 template<typename T>
 Trait<T>* encode(T initial) {
+    auto& app = detail::g_app;
+    // Hook-style: reuse existing Trait on rebuild (preserves state)
+    if (app.encode_index < app.states.size()) {
+        return static_cast<Trait<T>*>(app.states[app.encode_index++].ptr);
+    }
     auto* p = new Trait<T>(std::move(initial));
-    detail::g_app.states.push_back({p, [](void* ptr) { delete static_cast<Trait<T>*>(ptr); }});
+    app.states.push_back({
+        p,
+        [](void* ptr) { delete static_cast<Trait<T>*>(ptr); },
+        [](void* ptr) { static_cast<Trait<T>*>(ptr)->clear_subscribers(); }
+    });
+    app.encode_index++;
     return p;
 }
 
-// Scope::mutate needs access to relayout/repaint
-void Scope::mutate() {
-    if (!builder) return;
-    node->children.clear();
-    auto* prev = current();
-    set_current(this);
-    builder();
-    set_current(prev);
-    // Relayout and repaint entire tree
-    if (detail::g_app.root) {
+namespace detail {
+    // Full UI rebuild — shared by express() and Scope::mutate()
+    void rebuild() {
+        auto& app = g_app;
+        if (!app.app_builder) return;
+
+        // Clear Trait subscribers (they point to old stack Scopes)
+        for (auto& slot : app.states)
+            if (slot.clearer) slot.clearer(slot.ptr);
+
+        app.arena.reset();
+        app.callbacks.clear();
+        app.input_nodes.clear();
+        app.encode_index = 0;
+
+        auto* root = alloc_node();
+        root->style.flex_direction = FlexDirection::Column;
+        root->background = app.theme.background;
+        app.root = root;
+
+        Scope scope(root);
+        Scope::set_current(&scope);
+        app.app_builder();
+        Scope::set_current(nullptr);
+
         float cw = phenotype_get_canvas_width();
-        detail::layout_node(detail::g_app.root, cw);
-        emit_clear(detail::g_app.theme.background);
+        layout_node(root, cw);
+        app.focusable_ids.clear();
+        emit_clear(app.theme.background);
         float vh = phenotype_get_canvas_height();
-        detail::paint_node(detail::g_app.root, 0, 0, detail::g_app.scroll_y, vh);
+        paint_node(root, 0, 0, app.scroll_y, vh);
         flush();
     }
+}
+
+void Scope::mutate() {
+    detail::rebuild();
 }
 
 // ============================================================
@@ -927,7 +968,7 @@ void TextField(Trait<std::string>* state, str placeholder = "") {
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
     detail::g_app.callbacks.push_back([]{}); // no-op click, focus handled by phenotype_set_focus
     node->callback_id = id;
-    detail::g_app.input_nodes[id] = node;
+    detail::g_app.input_nodes.push_back({id, node});
 
     if (Scope::current())
         Scope::current()->node->children.push_back(node);
@@ -961,10 +1002,10 @@ namespace detail {
 void open_container(LayoutNode* container, std::function<void()> builder) {
     if (Scope::current())
         Scope::current()->node->children.push_back(container);
-    auto* scope = new Scope(container, std::move(builder));
+    Scope scope(container);
     auto* prev = Scope::current();
-    Scope::set_current(scope);
-    scope->builder();
+    Scope::set_current(&scope);
+    builder();
     Scope::set_current(prev);
 }
 
@@ -1239,31 +1280,8 @@ std::string dump_commands() {
 
 template<typename F>
 void express(F&& app_fn) {
-    detail::g_app.arena.reset();
-    detail::g_app.callbacks.clear();
-    detail::g_app.input_nodes.clear();
-
-    auto* root = detail::alloc_node();
-    root->style.flex_direction = FlexDirection::Column;
-    root->background = detail::g_app.theme.background;
-    detail::g_app.root = root;
-
-    static Scope root_scope(root);
-    root_scope.node = root;
-    Scope::set_current(&root_scope);
-
-    app_fn(); // Build pass
-
-    float cw = phenotype_get_canvas_width();
-    detail::layout_node(root, cw); // Layout pass
-
-    float vh = phenotype_get_canvas_height();
-    detail::g_app.focusable_ids.clear();
-    emit_clear(detail::g_app.theme.background);
-    detail::paint_node(root, 0, 0, detail::g_app.scroll_y, vh); // Paint pass
-    flush();
-
-    Scope::set_current(nullptr);
+    detail::g_app.app_builder = std::function<void()>(app_fn);
+    detail::rebuild();
 }
 
 // ============================================================
@@ -1275,16 +1293,20 @@ void express(F&& app_fn) {
 extern "C" {
     __attribute__((export_name("phenotype_repaint")))
     void phenotype_repaint(float scroll_y) {
-        phenotype::detail::g_app.scroll_y = scroll_y;
-        if (phenotype::detail::g_app.root) {
-            float cw = phenotype_get_canvas_width();
-            phenotype::detail::layout_node(phenotype::detail::g_app.root, cw);
-            phenotype::detail::g_app.focusable_ids.clear();
-            phenotype::emit_clear(phenotype::detail::g_app.theme.background);
-            float vh = phenotype_get_canvas_height();
-            phenotype::detail::paint_node(phenotype::detail::g_app.root, 0, 0, scroll_y, vh);
-            phenotype::flush();
-        }
+        auto& app = phenotype::detail::g_app;
+        app.scroll_y = scroll_y;
+        if (!app.root) return;
+
+        // Relayout only on resize (canvas width changed)
+        float cw = phenotype_get_canvas_width();
+        if (cw != app.root->width)
+            phenotype::detail::layout_node(app.root, cw);
+
+        app.focusable_ids.clear();
+        phenotype::emit_clear(app.theme.background);
+        float vh = phenotype_get_canvas_height();
+        phenotype::detail::paint_node(app.root, 0, 0, scroll_y, vh);
+        phenotype::flush();
     }
 
     __attribute__((export_name("phenotype_get_total_height")))
@@ -1344,10 +1366,13 @@ extern "C" {
     __attribute__((export_name("phenotype_handle_key")))
     void phenotype_handle_key(unsigned int key_type, unsigned int codepoint) {
         auto& app = phenotype::detail::g_app;
-        auto it = app.input_nodes.find(app.focused_id);
-        if (it == app.input_nodes.end() || !it->second->input_state) return;
+        phenotype::LayoutNode* input_node = nullptr;
+        for (auto& [id, node] : app.input_nodes) {
+            if (id == app.focused_id) { input_node = node; break; }
+        }
+        if (!input_node || !input_node->input_state) return;
 
-        auto* state = static_cast<phenotype::Trait<std::string>*>(it->second->input_state);
+        auto* state = static_cast<phenotype::Trait<std::string>*>(input_node->input_state);
         auto val = state->value();
 
         switch (key_type) {
