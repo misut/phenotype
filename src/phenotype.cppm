@@ -557,6 +557,11 @@ extern "C" {
         phenotype_repaint(phenotype::detail::g_app.scroll_y);
     }
 
+    __attribute__((export_name("phenotype_get_focused_id")))
+    unsigned int phenotype_get_focused_id(void) {
+        return phenotype::detail::g_app.focused_id;
+    }
+
     __attribute__((export_name("phenotype_handle_tab")))
     void phenotype_handle_tab(unsigned int reverse) {
         auto& app = phenotype::detail::g_app;

@@ -765,17 +765,55 @@ export async function mount(wasmUrl, rootElement = document.body) {
     }
   });
 
+  // IME composition (Korean / Japanese / Chinese / etc.)
+  // Each composing keystroke fires a normal keydown with the partial
+  // jamo/kana, AND a composition* event with the composed text. We
+  // ignore the keydowns during composition and commit the final
+  // string from compositionend instead.
+  let isComposing = false;
+  canvas.addEventListener('compositionstart', () => {
+    isComposing = true;
+  });
+  canvas.addEventListener('compositionend', (e) => {
+    isComposing = false;
+    if (focusedId === 0xFFFFFFFF || !e.data) return;
+    // Send each codepoint of the composed text as a regular character
+    // keypress; phenotype_handle_key encodes UTF-8 internally.
+    for (const ch of e.data) {
+      const cp = ch.codePointAt(0);
+      if (inst.exports.phenotype_handle_key) {
+        inst.exports.phenotype_handle_key(0, cp);
+      }
+    }
+  });
+
   // Keyboard
   canvas.addEventListener('keydown', (e) => {
+    // Skip text-character processing during IME composition.
+    // Each composed syllable lands via compositionend instead.
+    if (e.isComposing || isComposing) return;
     if (e.key === 'Tab') {
       e.preventDefault();
       if (inst.exports.phenotype_handle_tab)
         inst.exports.phenotype_handle_tab(e.shiftKey ? 1 : 0);
+      // Tab cycles focus inside C++; sync the JS-side cache so subsequent
+      // Enter / caret-blink logic targets the right element.
+      if (inst.exports.phenotype_get_focused_id)
+        focusedId = inst.exports.phenotype_get_focused_id();
       return;
     }
-    if (e.key === 'Enter' && focusedId !== 0xFFFFFFFF) {
-      if (inst.exports.phenotype_handle_event)
-        inst.exports.phenotype_handle_event(focusedId);
+    if (e.key === 'Enter') {
+      // Always read the fresh focused id — Tab updates it in C++ only,
+      // so a stale local copy would dispatch to the wrong callback.
+      const fid = inst.exports.phenotype_get_focused_id
+        ? inst.exports.phenotype_get_focused_id()
+        : focusedId;
+      if (fid !== 0xFFFFFFFF) {
+        e.preventDefault();
+        if (inst.exports.phenotype_handle_event)
+          inst.exports.phenotype_handle_event(fid);
+        focusedId = fid;
+      }
       return;
     }
     // Text input keys
