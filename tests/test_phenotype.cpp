@@ -1,6 +1,8 @@
 #include <cassert>
 #include <cstdio>
+#include <source_location>
 #include <string>
+#include <typeindex>
 #include <vector>
 import phenotype;
 
@@ -26,11 +28,14 @@ using namespace phenotype;
 // ============================================================
 
 void test_stateslot_move() {
+    auto deleter = [](void* p) { delete static_cast<int*>(p); };
+    auto type = std::type_index(typeid(int));
+    auto loc = std::source_location::current();
     {
         std::vector<StateSlot> vec;
-        vec.push_back(StateSlot{new int(1), [](void* p) { delete static_cast<int*>(p); }, nullptr});
-        vec.push_back(StateSlot{new int(2), [](void* p) { delete static_cast<int*>(p); }, nullptr});
-        vec.push_back(StateSlot{new int(3), [](void* p) { delete static_cast<int*>(p); }, nullptr});
+        vec.push_back(StateSlot{new int(1), deleter, nullptr, type, loc});
+        vec.push_back(StateSlot{new int(2), deleter, nullptr, type, loc});
+        vec.push_back(StateSlot{new int(3), deleter, nullptr, type, loc});
         // After vector reallocation, old elements must NOT free via deleter
         assert(*static_cast<int*>(vec[0].ptr) == 1);
         assert(*static_cast<int*>(vec[1].ptr) == 2);
