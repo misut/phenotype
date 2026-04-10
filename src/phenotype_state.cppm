@@ -15,57 +15,66 @@ import phenotype.types;
 export namespace phenotype {
 
 // ============================================================
-// Arena allocator
+// Arena — generational, fixed-capacity slot pool for LayoutNode
 // ============================================================
+//
+// Stores LayoutNodes in a contiguous typed array with a parallel
+// generations array. alloc_node() returns a NodeHandle = (index, gen);
+// reset() bumps current_gen so prior handles fail get() deref. Storage
+// addresses are stable for the lifetime of one epoch (between resets),
+// so layout/paint can hold transient `LayoutNode&` references during
+// a build pass.
 
 struct Arena {
-    static constexpr unsigned int STORAGE_SIZE = 512 * 1024; // 512KB
-    static constexpr unsigned int MAX_NODES = 4096;
+    static constexpr std::uint32_t MAX_NODES = 4096;
 
-    unsigned char* storage = nullptr;
-    unsigned int offset = 0;
-    unsigned int node_count = 0;
-    LayoutNode** nodes = nullptr;
+    LayoutNode* nodes = nullptr;
+    std::uint32_t* generations = nullptr;
+    std::uint32_t node_count = 0;
+    std::uint32_t current_gen = 0;
 
     void ensure_init() {
-        if (!storage) {
-            storage = new unsigned char[STORAGE_SIZE];
-            nodes = new LayoutNode*[MAX_NODES];
+        if (!nodes) {
+            nodes = static_cast<LayoutNode*>(
+                ::operator new(sizeof(LayoutNode) * MAX_NODES));
+            generations = new std::uint32_t[MAX_NODES]{};
         }
     }
 
-    void* alloc(unsigned int size) {
+    NodeHandle alloc_node() {
         ensure_init();
-        size = (size + 15) & ~15u;
-        if (offset + size > STORAGE_SIZE) {
-            std::fprintf(stderr,
-                "phenotype: arena storage exhausted "
-                "(requested %u, used %u, capacity %u)\n",
-                size, offset, STORAGE_SIZE);
-            std::abort();
-        }
-        auto* p = &storage[offset];
-        offset += size;
-        return p;
-    }
-
-    LayoutNode* alloc_node() {
         if (node_count >= MAX_NODES) {
             std::fprintf(stderr,
                 "phenotype: arena node count exhausted (max %u)\n",
                 MAX_NODES);
             std::abort();
         }
-        auto* mem = alloc(sizeof(LayoutNode));
-        auto* node = new (mem) LayoutNode();
-        nodes[node_count++] = node;
-        return node;
+        new (&nodes[node_count]) LayoutNode();
+        generations[node_count] = current_gen;
+        return {node_count++, current_gen};
+    }
+
+    LayoutNode* get(NodeHandle h) noexcept {
+        if (!h.valid() || h.index >= node_count) return nullptr;
+        if (generations[h.index] != h.generation) return nullptr;
+        return &nodes[h.index];
+    }
+
+    LayoutNode& must_get(NodeHandle h) {
+        auto* p = get(h);
+        if (!p) {
+            std::fprintf(stderr,
+                "phenotype: stale NodeHandle (index=%u gen=%u current_gen=%u)\n",
+                h.index, h.generation, current_gen);
+            std::abort();
+        }
+        return *p;
     }
 
     void reset() {
-        for (unsigned int i = 0; i < node_count; ++i) nodes[i]->~LayoutNode();
+        for (std::uint32_t i = 0; i < node_count; ++i) nodes[i].~LayoutNode();
         node_count = 0;
-        offset = 0;
+        ++current_gen; // invalidate all outstanding handles
     }
 };
 
@@ -76,24 +85,23 @@ struct Arena {
 struct StateSlot {
     void* ptr;
     void (*deleter)(void*);
-    void (*clearer)(void*); // clears subscribers on rebuild
     std::type_index type;          // recorded at first encode<T>(), checked on reuse
     std::source_location origin;   // call site of the first encode<T>()
 
-    StateSlot(void* p, void (*d)(void*), void (*c)(void*),
+    StateSlot(void* p, void (*d)(void*),
               std::type_index t, std::source_location o)
-        : ptr(p), deleter(d), clearer(c), type(t), origin(o) {}
+        : ptr(p), deleter(d), type(t), origin(o) {}
     StateSlot(StateSlot&& o) noexcept
-        : ptr(o.ptr), deleter(o.deleter), clearer(o.clearer),
+        : ptr(o.ptr), deleter(o.deleter),
           type(o.type), origin(o.origin) {
-        o.ptr = nullptr; o.deleter = nullptr; o.clearer = nullptr;
+        o.ptr = nullptr; o.deleter = nullptr;
     }
     StateSlot& operator=(StateSlot&& o) noexcept {
         if (this != &o) {
             if (deleter) deleter(ptr);
-            ptr = o.ptr; deleter = o.deleter; clearer = o.clearer;
+            ptr = o.ptr; deleter = o.deleter;
             type = o.type; origin = o.origin;
-            o.ptr = nullptr; o.deleter = nullptr; o.clearer = nullptr;
+            o.ptr = nullptr; o.deleter = nullptr;
         }
         return *this;
     }
@@ -110,7 +118,7 @@ struct StateSlot {
 struct AppState {
     Theme theme;
     Arena arena;
-    LayoutNode* root = nullptr;
+    NodeHandle root = NodeHandle::null();
     float scroll_y = 0;
     unsigned int hovered_id = 0xFFFFFFFF;
     unsigned int focused_id = 0xFFFFFFFF;
@@ -119,7 +127,7 @@ struct AppState {
     std::vector<std::function<void()>> callbacks;
     std::vector<StateSlot> states;
     std::vector<unsigned int> focusable_ids;
-    std::vector<std::pair<unsigned int, LayoutNode*>> input_nodes;
+    std::vector<std::pair<unsigned int, NodeHandle>> input_nodes;
     std::function<void()> app_builder;
     unsigned int encode_index = 0; // hook-style index for encode() across rebuilds
     // Installed by express() in the umbrella module so the engine layer
@@ -135,7 +143,8 @@ namespace detail {
     // _start() and clear the callbacks vector, breaking event handling.
     alignas(AppState) inline unsigned char g_app_storage[sizeof(AppState)];
     inline AppState& g_app = *new (&g_app_storage) AppState();
-    inline LayoutNode* alloc_node() { return g_app.arena.alloc_node(); }
+    inline NodeHandle alloc_node() { return g_app.arena.alloc_node(); }
+    inline LayoutNode& node_at(NodeHandle h) { return g_app.arena.must_get(h); }
 } // namespace detail
 
 // ============================================================
@@ -143,11 +152,11 @@ namespace detail {
 // ============================================================
 
 struct Scope {
-    LayoutNode* node;
+    NodeHandle node;
     std::function<void()> builder;
 
-    Scope(LayoutNode* n) : node(n) {}
-    Scope(LayoutNode* n, std::function<void()> b) : node(n), builder(std::move(b)) {}
+    Scope(NodeHandle n) : node(n) {}
+    Scope(NodeHandle n, std::function<void()> b) : node(n), builder(std::move(b)) {}
 
     void mutate() {
         if (detail::g_app.rebuild_fn) detail::g_app.rebuild_fn();
@@ -168,30 +177,17 @@ struct Scope {
 template<typename T>
 class Trait {
     T value_;
-    std::vector<Scope*> subscribers_;
 
 public:
     explicit Trait(T initial) : value_(std::move(initial)) {}
 
-    T const& value() {
-        if (Scope::current()) {
-            auto* s = Scope::current();
-            bool found = false;
-            for (auto* sub : subscribers_)
-                if (sub == s) { found = true; break; }
-            if (!found)
-                subscribers_.push_back(s);
-        }
-        return value_;
-    }
+    T const& value() noexcept { return value_; }
 
     void set(T new_val) {
         if (value_ == new_val) return;
         value_ = std::move(new_val);
         if (detail::g_app.rebuild_fn) detail::g_app.rebuild_fn();
     }
-
-    void clear_subscribers() { subscribers_.clear(); }
 };
 
 template<typename T>
@@ -233,7 +229,6 @@ Trait<T>* encode(T initial,
     app.states.push_back(StateSlot{
         p,
         [](void* ptr) { delete static_cast<Trait<T>*>(ptr); },
-        [](void* ptr) { static_cast<Trait<T>*>(ptr)->clear_subscribers(); },
         std::type_index(typeid(Trait<T>)),
         loc,
     });

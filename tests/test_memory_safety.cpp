@@ -69,7 +69,7 @@ void reset_app() {
     app.input_nodes.clear();
     app.focusable_ids.clear();
     app.encode_index = 0;
-    app.root = nullptr;
+    app.root = NodeHandle::null();
     app.scroll_y = 0;
     app.hovered_id = 0xFFFFFFFF;
     app.focused_id = 0xFFFFFFFF;
@@ -371,6 +371,30 @@ void test_arena_overflow_graceful() {
     reset_app();
     std::puts("PASS: arena overflow traps");
 }
+
+void test_node_handle_stale_traps() {
+    reset_app();
+
+    // Pre-condition: a fresh handle is valid.
+    auto h = detail::g_app.arena.alloc_node();
+    assert(detail::g_app.arena.get(h) != nullptr);
+
+    // After reset() the generation is bumped → handle goes stale.
+    detail::g_app.arena.reset();
+    assert(detail::g_app.arena.get(h) == nullptr);
+
+    // must_get on the same stale handle should trap.
+    bool aborted = runs_to_abort([h] {
+        // Re-bump the arena once more so the slot index gets re-used by
+        // a different generation; this is the realistic UAF analogue.
+        (void)detail::g_app.arena.alloc_node();
+        detail::g_app.arena.must_get(h);
+    });
+    assert(aborted);
+
+    reset_app();
+    std::puts("PASS: stale NodeHandle traps");
+}
 #endif
 
 // ============================================================
@@ -386,6 +410,7 @@ int main() {
 #if !defined(__wasi__) && !defined(_WIN32)
     test_encode_order_violation();
     test_arena_overflow_graceful();
+    test_node_handle_stale_traps();
 #endif
     std::puts("\nAll memory-safety tests passed.");
     return 0;

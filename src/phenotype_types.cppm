@@ -1,4 +1,5 @@
 module;
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <vector>
@@ -76,6 +77,27 @@ enum class Cmd : unsigned int {
 };
 
 // ============================================================
+// NodeHandle — generational handle to a LayoutNode in the Arena
+// ============================================================
+//
+// Replaces raw `LayoutNode*` everywhere a node identity outlives the
+// alloc-and-build pass. Each handle stores (index, generation); the
+// arena bumps `current_gen` on every reset(), so handles from a prior
+// rebuild fail validation at deref time instead of returning a
+// freshly-recycled but unrelated node. Pattern from Rust's slotmap /
+// id_arena / generational_arena crates.
+
+struct NodeHandle {
+    std::uint32_t index = 0xFFFFFFFFu;
+    std::uint32_t generation = 0xFFFFFFFFu;
+
+    constexpr bool valid() const noexcept { return index != 0xFFFFFFFFu; }
+    constexpr bool operator==(NodeHandle const&) const noexcept = default;
+
+    static constexpr NodeHandle null() noexcept { return {}; }
+};
+
+// ============================================================
 // Layout tree
 // ============================================================
 
@@ -144,9 +166,9 @@ struct LayoutNode {
     // Cached text layout (filled during layout pass, reused in paint)
     std::vector<std::string> text_lines;
 
-    // Tree
-    LayoutNode* parent = nullptr;
-    std::vector<LayoutNode*> children;
+    // Tree — generational handles, validated via Arena::get/must_get
+    NodeHandle parent = NodeHandle::null();
+    std::vector<NodeHandle> children;
 };
 
 } // namespace phenotype
