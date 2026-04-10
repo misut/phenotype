@@ -212,10 +212,15 @@ template<typename State, typename Msg, typename View, typename Update>
           && std::invocable<Update, State&, Msg>
 void run(View view, Update update) {
     // Static storage for state and the user functions, captured by the
-    // type-erased runner trampoline below. Single instance per program.
+    // type-erased runner trampoline below. One instance per
+    // (State, Msg, View, Update) instantiation; reassigned on each call
+    // so re-running run<> from tests resets cleanly.
     static State state{};
-    static View saved_view = std::move(view);
-    static Update saved_update = std::move(update);
+    static View saved_view{view};
+    static Update saved_update{update};
+    state = State{};
+    saved_view = std::move(view);
+    saved_update = std::move(update);
 
     detail::install_app_runner([] {
         // 1. Drain pending messages and fold via update.
