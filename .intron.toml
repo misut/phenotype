@@ -2,4 +2,5 @@
 llvm = "22.1.2"
 cmake = "4.3.1"
 ninja = "1.13.2"
-wasi-sdk = "25.0"
+wasi-sdk = "32"
+wasmtime = "30.0.2"
