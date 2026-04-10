@@ -796,11 +796,24 @@ export async function mount(wasmUrl, rootElement = document.body) {
       e.preventDefault();
       if (inst.exports.phenotype_handle_tab)
         inst.exports.phenotype_handle_tab(e.shiftKey ? 1 : 0);
+      // Tab cycles focus inside C++; sync the JS-side cache so subsequent
+      // Enter / caret-blink logic targets the right element.
+      if (inst.exports.phenotype_get_focused_id)
+        focusedId = inst.exports.phenotype_get_focused_id();
       return;
     }
-    if (e.key === 'Enter' && focusedId !== 0xFFFFFFFF) {
-      if (inst.exports.phenotype_handle_event)
-        inst.exports.phenotype_handle_event(focusedId);
+    if (e.key === 'Enter') {
+      // Always read the fresh focused id — Tab updates it in C++ only,
+      // so a stale local copy would dispatch to the wrong callback.
+      const fid = inst.exports.phenotype_get_focused_id
+        ? inst.exports.phenotype_get_focused_id()
+        : focusedId;
+      if (fid !== 0xFFFFFFFF) {
+        e.preventDefault();
+        if (inst.exports.phenotype_handle_event)
+          inst.exports.phenotype_handle_event(fid);
+        focusedId = fid;
+      }
       return;
     }
     // Text input keys
