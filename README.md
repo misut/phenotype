@@ -1,30 +1,51 @@
 # phenotype
 
-A cross-platform C++ UI framework with a Compose-style declarative DSL. Renders via WebGPU on the web, with plans to support native graphics APIs (Metal, Direct3D, Vulkan) on desktop and mobile.
+A cross-platform C++ UI framework with a declarative DSL inspired by Iced and
+Elm. Single source of truth, typed messages, pure-function view. Renders via
+WebGPU on the web today; native graphics backends (Metal, Direct3D, Vulkan)
+will replace only the JS shim layer.
 
 ## Example
 
 ```cpp
+#include <concepts>
 #include <string>
+#include <type_traits>
+#include <variant>
 import phenotype;
-using namespace phenotype;
 
-auto CounterApp() {
-    auto count = encode(0);
+// 1. Messages — every event the UI emits.
+struct Increment {};
+struct Decrement {};
+using Msg = std::variant<Increment, Decrement>;
 
-    Column([count] {
-        Text("Hello, phenotype!");
-        Text(std::string("Count: ") + std::to_string(count->value()));
+// 2. State — single source of truth, owned by the framework runner.
+struct State { int count = 0; };
 
-        Row(
-            [count] { Button("-", [count] { count->set(count->value() - 1); }); },
-            [count] { Button("+", [count] { count->set(count->value() + 1); }); }
+// 3. update — pure transformation, the only place state mutates.
+void update(State& state, Msg msg) {
+    std::visit([&](auto const& m) {
+        using T = std::decay_t<decltype(m)>;
+        if constexpr (std::same_as<T, Increment>) state.count += 1;
+        else if constexpr (std::same_as<T, Decrement>) state.count -= 1;
+    }, msg);
+}
+
+// 4. view — pure function from state to a UI tree.
+void view(State const& state) {
+    using namespace phenotype;
+    layout::column([&] {
+        widget::text("Counter");
+        widget::text(std::string("Count: ") + std::to_string(state.count));
+        layout::row(
+            [&] { widget::button<Msg>("-", Decrement{}); },
+            [&] { widget::button<Msg>("+", Increment{}); }
         );
     });
 }
 
 int main() {
-    express(CounterApp);
+    phenotype::run<State, Msg>(view, update);
     return 0;
 }
 ```
@@ -36,68 +57,113 @@ int main() {
 </script>
 ```
 
-## Key concepts
+## Programming model
 
-| Concept | Description |
+phenotype follows the Iced/Elm pattern: state lives in one place, messages are
+the only way to mutate it, the view function is pure, and the framework owns
+the rebuild loop.
+
+| Step | Role |
 |---|---|
-| `express(fn)` | Application entry point — "expresses" the UI (genotype → phenotype) |
-| `Trait<T>` | Reactive state holder — subscribers are notified on change |
-| `encode(value)` | Create a persistent `Trait<T>` that survives mutations |
-| `Column([&] { ... })` | Vertical flex layout (lambda builder for dynamic content) |
-| `Row(...)` | Horizontal flex layout (same dual overload as Column) |
-| `Text(str)` | Text display |
-| `Button(str, callback)` | Clickable button with event handler |
-| `Link(str, str)` | Hyperlink (opens URL on click) |
-| `Code(str)` | Monospace code block with background |
-| `Scaffold(top, content, bottom)` | Page layout with hero header, content area, and footer |
-| `ListItems([&] { ... })` | Unordered list container |
-| `Item(str)` | Bulleted list item |
-| `Card([&] { ... })` | Rounded container with shadow |
-| `Divider()` | Horizontal separator |
-| `Spacer(px)` | Empty vertical space |
+| `Msg` | A `std::variant` (or any type) listing every event the app emits |
+| `State` | The application's data, owned by the framework runner |
+| `update(State&, Msg)` | Pure transformation — the only place state changes |
+| `view(State const&)` | Pure function that builds the UI tree from state |
+| `run<State, Msg>(view, update)` | Installs the runner; calls `view` once, then again after every dispatched message |
+
+Widgets that emit events (`button`, `text_field`) are templated on `Msg` and
+post a value to the queue when triggered. The runner drains the queue, folds
+through `update`, then re-runs `view` to rebuild the layout tree.
+
+## DSL reference
+
+### Layout containers (`namespace layout`)
+
+| Function | Description |
+|---|---|
+| `column(builder)` / `column(a, b, ...)` | Vertical flex container |
+| `row(builder)` / `row(a, b, ...)` | Horizontal flex container, defaults to centered cross-axis so inline children share a baseline |
+| `box(builder)` / `box(a, b, ...)` | Generic single-purpose wrapper, no direction or gap |
+| `scaffold(top, content, bottom)` | Page layout with hero header, max-width content, and footer |
+| `card(builder)` | Rounded white container with padding |
+| `list_items(builder)` + `item(str)` | Bulleted list |
+| `divider()` | 1px horizontal rule |
+| `spacer(px)` | Fixed-height vertical gap |
+
+### Widgets (`namespace widget`)
+
+| Function | Description |
+|---|---|
+| `text(str)` | Plain text label |
+| `code(str)` | Monospaced block with background, border, and padding |
+| `link(label, href)` | Hyperlink that opens via the host JS shim |
+| `button<Msg>(label, msg)` | Clickable button that posts `msg` on click |
+| `text_field<Msg>(hint, current, mapper)` | Text input that maps each new value through `mapper` to a `Msg` |
+
+### Application entry (`namespace phenotype`)
+
+| Function | Description |
+|---|---|
+| `run<State, Msg>(view, update)` | Installs the runner and triggers the initial render |
+
+### Diagnostics (`namespace phenotype::log`, `phenotype::metrics`, `phenotype::diag`)
+
+OpenTelemetry-shaped logs and metrics are wired into the framework hot path
+(`phenotype.diag`). Logs go to stderr (routed to `console.error` by the WASI
+`fd_write` polyfill, no new host import needed). Counters / Gauges / Histograms
+cover arena allocation, dispatch queue depth, runner phase timing, host
+`measure_text` call counts, and input events. JS can call
+`phenotype_diag_export()` to stage an OTLP-shaped JSON snapshot in shared
+linear memory and forward it to an OTel collector via a separate adapter.
+See `src/phenotype_diag.cppm` for the full instrument list and JSON shape.
 
 ## Architecture
 
 ```
-express(App)
-  → Build pass: DSL builds layout tree (LayoutNode)
-    → Layout pass: flexbox algorithm computes (x, y, w, h)
-      → Paint pass: emit 2D draw commands to command buffer
-        → flush()
-          → JS WebGPU executor renders to canvas
+phenotype::run<State, Msg>(view, update)
+  └─ runner loop:
+     ├─ drain message queue
+     ├─ fold via update(state, msg)
+     ├─ reset arena, run view(state)         ──┐
+     ├─ layout pass (flexbox subset)            ├── instrumented as
+     ├─ paint pass (emits draw commands)        │   phenotype.runner.phase_duration
+     └─ flush() ──► JS WebGPU executor       ──┘
 ```
 
 ### Rendering pipeline
 
-1. **Build**: DSL calls (`Column`, `Text`, etc.) create `LayoutNode` objects in an arena allocator.
-2. **Layout**: A flexbox subset algorithm computes pixel positions. Text measurement is delegated to JS via WASM import (`measureText`).
-3. **Paint**: The layout tree is walked top-down, emitting draw commands (`FillRect`, `DrawText`, `RoundRect`, etc.) to a 256KB command buffer.
-4. **Execute**: The JS shim reads the command buffer. Colored quads are rendered via instanced WebGPU draw calls. Text is rendered to an offscreen Canvas2D atlas, uploaded as a GPU texture, and drawn as textured quads.
-
-### Draw commands
-
-| Command | Description |
-|---|---|
-| `Clear` | Clear canvas with background color |
-| `FillRect` | Filled rectangle |
-| `StrokeRect` | Outlined rectangle |
-| `RoundRect` | Rounded corner rectangle |
-| `DrawText` | Text at position with font size and color |
-| `DrawLine` | Line segment |
-| `HitRegion` | Invisible click/hover target for event handling |
+1. **Build** — DSL calls (`layout::column`, `widget::text`, …) allocate
+   `LayoutNode`s in a generational arena. Stale `NodeHandle`s from prior
+   rebuilds fail validation at deref time instead of dangling.
+2. **Layout** — A flexbox subset (column / row / gap / padding / max-width /
+   main-axis and cross-axis alignment) computes pixel positions. Text
+   measurement is delegated to JS via the `measure_text` host import.
+3. **Paint** — The layout tree is walked top-down, emitting draw commands
+   (`Clear`, `FillRect`, `StrokeRect`, `RoundRect`, `DrawText`, `DrawLine`,
+   `HitRegion`) into a 64KB shared linear-memory command buffer.
+4. **Execute** — The JS shim parses the buffer. Colored quads render via
+   instanced WebGPU draws; text is rasterized into an offscreen Canvas2D
+   atlas, uploaded as a GPU texture, and drawn as textured quads.
 
 ### Design principles
 
-- **No external libraries**: Everything from scratch — layout, rendering, event handling.
-- **Platform-agnostic C++ API**: All platform-specific logic lives in the JS shim. Native backends (Metal, Direct3D, Vulkan) will replace only the shim layer.
-- **Compose-style DSL**: Implicit scope stack — `Column([&] { Text("hi"); })` automatically parents Text under Column.
-- **Partial mutation**: `Trait::set()` rebuilds only subscribed scopes, not the entire tree.
-- **C++23 modules**: Uses `.cppm` — no headers, no `#include`.
+- **Iced/Elm message DSL** — single source of truth, typed messages, pure
+  view, pure update. No reactive primitives, no observer chains.
+- **No external libraries** — layout, rendering, event handling, JSON, and
+  diagnostics are all implemented from scratch.
+- **Platform-agnostic C++ API** — every platform-specific call goes through
+  the JS shim. Native backends (Metal, Direct3D, Vulkan) will replace only
+  that layer.
+- **C++23 modules** — `.cppm` files, `import std;` (or GMF on wasi-sdk).
+- **OTel-shaped observability** — diagnostics are framed as Counter / Gauge /
+  Histogram + Severity 1/5/9/13/17/21 from day one so an external adapter can
+  forward them to OTel collectors without changing the wasm side.
 
 ## Requirements
 
 - [exon](https://github.com/misut/exon) (C++ package manager)
-- [intron](https://github.com/misut/intron) (toolchain manager) or wasi-sdk installed manually
+- [intron](https://github.com/misut/intron) (toolchain manager — installs
+  llvm, cmake, ninja, wasi-sdk, wasmtime) or those tools installed manually
 
 ## Quick start
 
@@ -109,25 +175,29 @@ python3 -m http.server 8080
 # Open http://localhost:8080
 ```
 
-As exon dependency:
+The `examples/counter` directory has the same structure but renders the
+`Counter` example from the top of this README.
+
+As an exon dependency:
+
 ```toml
 [dependencies]
-"github.com/misut/phenotype" = "0.4.1"
+"github.com/misut/phenotype" = "0.7.0"
 ```
 
 ## Roadmap
 
 - [x] WebGPU renderer (WGSL shaders, instanced draws, text atlas)
-- [x] Compose-style declarative DSL
-- [x] Layout engine (flexbox subset: column, row, gap, padding, max-width)
+- [x] Iced/Elm message-based declarative DSL
+- [x] Layout engine (flexbox subset: column / row / gap / padding / max-width / alignment)
 - [x] Text wrapping (word-wrap + newline support)
-- [x] Reactive state (`Trait<T>`) with partial mutation
 - [x] Theme system (design tokens for colors, fonts, spacing)
-- [x] Event handling (click, pointer cursor)
-- [x] Scroll and resize support
-- [x] Hover states (visual feedback on Button/Link)
-- [x] Text input (TextField component with caret, placeholder)
+- [x] Event handling (click, hover, pointer cursor)
+- [x] Scroll and resize support with viewport culling
+- [x] Hover states (visual feedback on `widget::button` and `widget::link`)
+- [x] Text input (`widget::text_field` with caret, placeholder, IME)
 - [x] Keyboard navigation (Tab/Enter, focus ring)
+- [x] OpenTelemetry-shaped logs and metrics (`phenotype.diag`)
 - [ ] Custom theming API
 - [ ] macOS (Metal backend)
 - [ ] Windows (Direct3D backend)
