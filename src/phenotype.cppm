@@ -132,6 +132,90 @@ inline void button(str label, Msg msg) {
     detail::attach_to_scope(h);
 }
 
+// checkbox<Msg> / radio<Msg> share this body — only border_radius differs
+// (3 for checkbox, 8 for radio, where 8 = half of the 16x16 indicator and
+// rounds it into a circle via the existing SDF rounded-rect shader).
+//
+// The widget is built as a row with two leaves: a 16x16 indicator box
+// (which owns the click callback and is the Tab focus target) and a plain
+// text label to the right. v1 deliberately:
+//
+//   * Renders the checked/selected state as a flat accent fill rather
+//     than a checkmark glyph or inner dot. The two-state filled-vs-
+//     bordered visual is universally readable and avoids fighting font
+//     metrics inside a 16px box. A polish PR can add a glyph later.
+//   * Puts the click + Tab focus on the indicator box only, not the row
+//     container. The row container would be a wider click target but
+//     would also receive the focus ring on Tab, which would draw an
+//     awkward 2px accent stroke around the entire (indicator + label)
+//     bounds. Box-only keeps the focus ring snug around the actual
+//     indicator. Label-as-click-target is captured as a polish item.
+namespace _impl {
+template<typename Msg>
+inline void toggle(str label, bool active, Msg msg, float corner_radius) {
+    // Outer row — pure layout, no callback. Children handle the click.
+    auto row_h = ::phenotype::detail::alloc_node();
+    {
+        auto& row = ::phenotype::detail::node_at(row_h);
+        row.style.flex_direction = FlexDirection::Row;
+        row.style.cross_align    = CrossAxisAlignment::Center;
+        row.style.gap            = 8;
+    }
+    ::phenotype::detail::attach_to_scope(row_h);
+
+    // Indicator box — visible toggle, callback target, focusable.
+    {
+        auto box_h = ::phenotype::detail::alloc_node();
+        auto& box  = ::phenotype::detail::node_at(box_h);
+        box.style.max_width    = 16;
+        box.style.fixed_height = 16;
+        box.border_radius      = corner_radius;
+        box.cursor_type        = 1; // pointer
+        if (active) {
+            box.background   = ::phenotype::detail::g_app.theme.accent;
+            box.border_color = ::phenotype::detail::g_app.theme.accent;
+        } else {
+            box.background   = {255, 255, 255, 255};
+            box.border_color = ::phenotype::detail::g_app.theme.border;
+        }
+        box.border_width = 1;
+
+        auto id = static_cast<unsigned int>(
+            ::phenotype::detail::g_app.callbacks.size());
+        ::phenotype::detail::g_app.callbacks.push_back([msg = std::move(msg)] {
+            ::phenotype::detail::post<Msg>(msg);
+            ::phenotype::detail::trigger_rebuild();
+        });
+        box.callback_id = id;
+        ::phenotype::detail::node_at(row_h).children.push_back(box_h);
+    }
+
+    // Label — plain text leaf, decorative.
+    {
+        auto lbl_h = ::phenotype::detail::alloc_node();
+        auto& lbl  = ::phenotype::detail::node_at(lbl_h);
+        lbl.text       = std::string(label.data, label.len);
+        lbl.font_size  = ::phenotype::detail::g_app.theme.body_font_size;
+        lbl.text_color = ::phenotype::detail::g_app.theme.foreground;
+        ::phenotype::detail::node_at(row_h).children.push_back(lbl_h);
+    }
+}
+} // namespace _impl
+
+// checkbox<Msg> — square 16x16 indicator + label. Click on the indicator
+// posts `msg`; the update function is responsible for toggling state.
+template<typename Msg>
+inline void checkbox(str label, bool checked, Msg msg) {
+    _impl::toggle(label, checked, std::move(msg), /*corner_radius=*/3.0f);
+}
+
+// radio<Msg> — circular 16x16 indicator + label. Same click semantics
+// as checkbox; the update function sets the new selection in state.
+template<typename Msg>
+inline void radio(str label, bool selected, Msg msg) {
+    _impl::toggle(label, selected, std::move(msg), /*corner_radius=*/8.0f);
+}
+
 // text_field<Msg> — typing posts mapper(new_value)-derived messages.
 // `mapper` is a stateless function pointer (stateless lambdas auto-convert)
 // so we never store a closure that could capture caller-scope state.

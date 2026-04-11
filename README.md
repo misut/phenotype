@@ -234,6 +234,7 @@ As an exon dependency:
 - [x] Custom theming API (runtime-configurable `Theme` via `phenotype::set_theme` / `current_theme`)
 - [x] Theme-aware cache invalidation (`set_theme` clears the `measure_text` cache)
 - [x] Image / icon rendering (`widget::image` + persistent atlas in the JS shim)
+- [x] Checkbox / radio widgets (`widget::checkbox<Msg>` / `widget::radio<Msg>` — filled accent indicator + label, click + Tab focus on the indicator)
 
 ### Performance
 
@@ -249,7 +250,7 @@ As an exon dependency:
 ### Framework features
 
 - [ ] Animation system (transitions, easings, animated layout values)
-- [ ] More widgets (checkbox, radio, slider, dropdown, modal/dialog, tooltip)
+- [ ] More widgets (slider, dropdown, modal/dialog, tooltip)
 - [ ] Multi-line text input (`widget::text_area<Msg>` with a `<textarea>` overlay)
 
 ### Native backends

@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstring>
 #include <string>
+#include <variant>
 #include <vector>
 import phenotype;
 
@@ -397,6 +398,107 @@ void test_image_widget_layout_and_emit() {
     std::puts("PASS: widget::image lays out and emits DrawImage");
 }
 
+// widget::checkbox<Msg> and widget::radio<Msg> share an internal helper
+// that builds a row container holding a 16x16 indicator box (callback
+// owner) plus a text label. v1 visual contract:
+//   * border_radius = 3 for checkbox, 8 for radio (the latter rounds
+//     into a circle via the existing SDF rounded-rect shader)
+//   * active   → background = theme.accent
+//   * inactive → background = white, border = theme.border
+//   * the indicator box owns the callback (and is the Tab focus target)
+//   * the label is a plain decorative text leaf
+// This test exercises both states of both widgets and verifies the
+// click callback dispatches a message of the user's Msg type.
+void test_checkbox_and_radio_widgets() {
+    struct ToggleA {};
+    struct PickB { int idx; };
+    using Msg = std::variant<ToggleA, PickB>;
+
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::checkbox<Msg>("Subscribe",  /*checked=*/false, ToggleA{});
+    widget::checkbox<Msg>("Subscribe!", /*checked=*/true,  ToggleA{});
+    widget::radio<Msg>   ("Option A",   /*selected=*/false, PickB{0});
+    widget::radio<Msg>   ("Option B",   /*selected=*/true,  PickB{1});
+    Scope::set_current(nullptr);
+
+    detail::layout_node(root_h, 400.0f);
+
+    // Each widget produces a row container (no callback) with two children:
+    // an indicator box (callback target) + a label leaf.
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 4);
+
+    auto check_widget = [](NodeHandle row_h, bool active, float radius) {
+        auto& row = detail::node_at(row_h);
+        assert(row.style.flex_direction == FlexDirection::Row);
+        assert(row.callback_id == 0xFFFFFFFF); // row itself is not clickable
+        assert(row.children.size() == 2);
+
+        auto& box = detail::node_at(row.children[0]);
+        assert(box.style.max_width == 16.0f);
+        assert(box.style.fixed_height == 16.0f);
+        assert(box.border_radius == radius);
+        assert(box.callback_id != 0xFFFFFFFF);
+        assert(box.cursor_type == 1);
+        if (active) {
+            assert(box.background.r == detail::g_app.theme.accent.r);
+            assert(box.background.g == detail::g_app.theme.accent.g);
+            assert(box.background.b == detail::g_app.theme.accent.b);
+            assert(box.background.a == 255);
+        } else {
+            assert(box.background.r == 255);
+            assert(box.background.g == 255);
+            assert(box.background.b == 255);
+            assert(box.border_color.r == detail::g_app.theme.border.r);
+        }
+
+        auto& lbl = detail::node_at(row.children[1]);
+        assert(!lbl.text.empty());
+        assert(lbl.callback_id == 0xFFFFFFFF); // label is decorative
+    };
+
+    check_widget(root.children[0], /*active=*/false, 3.0f);
+    check_widget(root.children[1], /*active=*/true,  3.0f);
+    check_widget(root.children[2], /*active=*/false, 8.0f);
+    check_widget(root.children[3], /*active=*/true,  8.0f);
+
+    // Click the unchecked checkbox's indicator → posts ToggleA.
+    auto cb_id_a = detail::node_at(detail::node_at(root.children[0]).children[0]).callback_id;
+    detail::g_app.callbacks[cb_id_a]();
+    auto msgs = detail::drain<Msg>();
+    assert(msgs.size() == 1);
+    assert(std::holds_alternative<ToggleA>(msgs[0]));
+
+    // Click the selected radio's indicator → posts PickB{1}.
+    auto cb_id_b = detail::node_at(detail::node_at(root.children[3]).children[0]).callback_id;
+    detail::g_app.callbacks[cb_id_b]();
+    auto msgs2 = detail::drain<Msg>();
+    assert(msgs2.size() == 1);
+    assert(std::holds_alternative<PickB>(msgs2[0]));
+    assert(std::get<PickB>(msgs2[0]).idx == 1);
+
+    // Paint pass should emit one HitRegion opcode per indicator box (4 total).
+    phenotype_cmd_len = 0;
+    detail::paint_node(root_h, 0, 0, 0, 600.0f);
+    int hit_regions = 0;
+    for (unsigned int i = 0; i + 4 <= phenotype_cmd_len; i += 4) {
+        unsigned int word;
+        std::memcpy(&word, &phenotype_cmd_buf[i], 4);
+        if (word == static_cast<unsigned int>(Cmd::HitRegion)) ++hit_regions;
+    }
+    assert(hit_regions == 4);
+
+    std::puts("PASS: checkbox + radio widgets");
+}
+
 // flush_if_changed hashes the cmd buffer after each paint pass and
 // skips the (mocked) phenotype_flush() trampoline when the bytes are
 // identical to the previous frame. This is the v1 partial-paint
@@ -506,6 +608,7 @@ int main() {
     test_set_theme_updates_and_invalidates_cache();
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();
+    test_checkbox_and_radio_widgets();
     test_frame_skip_on_identical_cmd_buffer();
     test_row_cross_align_center_default();
     std::puts("\nAll tests passed.");
