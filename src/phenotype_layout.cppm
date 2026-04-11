@@ -256,6 +256,7 @@ inline void layout_node(NodeHandle node_h, float available_width) {
         for (unsigned int i = 0; i < n; ++i) {
             auto& child = node_at(node.children[i]);
             bool is_text_leaf = !child.text.empty() && child.children.empty();
+            bool has_max_width = child.style.max_width > 0;
             if (is_text_leaf) {
                 float measured = measure_text_cached(
                     child.font_size, child.mono ? 1 : 0,
@@ -263,6 +264,15 @@ inline void layout_node(NodeHandle node_h, float available_width) {
                 float w = measured + child.style.padding[1] + child.style.padding[3];
                 child.width = w;
                 used += w;
+            } else if (has_max_width) {
+                // Container child with an explicit max_width is treated as
+                // having a fixed intrinsic width: row layout sizes it to
+                // exactly that value, leaving the flex slot for an unsized
+                // sibling. Used by layout::sized_box() to build columns of
+                // fixed-width children (e.g. the docs Examples section's
+                // code-on-left / live-on-right pairs).
+                child.width = child.style.max_width;
+                used += child.width;
             } else {
                 flex_index = static_cast<int>(i);
             }

@@ -428,6 +428,20 @@ void box(A&& a, B&& b, Rest&&... rest) {
     Scope::set_current(prev);
 }
 
+// sized_box — box with an explicit max_width. In a row, this becomes
+// a fixed-intrinsic-width child (the row layout treats containers
+// with style.max_width > 0 as having a known width, so they don't
+// compete with the flex slot). Used to build columns of equal-width
+// row children — e.g. the docs Examples section's code-on-left /
+// live-on-right pairs.
+template<typename F>
+    requires std::is_invocable_v<F>
+void sized_box(float max_width, F&& builder) {
+    auto h = detail::alloc_node();
+    detail::node_at(h).style.max_width = max_width;
+    detail::open_container(h, std::forward<F>(builder));
+}
+
 // scaffold — page-level layout with hero header, max-width content,
 // and footer. Children of the top_bar slot get hero styling auto-applied.
 inline void scaffold(std::function<void()> top_bar,

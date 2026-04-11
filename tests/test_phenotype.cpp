@@ -286,6 +286,51 @@ void test_set_theme_updates_and_invalidates_cache() {
     std::puts("PASS: set_theme swaps theme and invalidates measure cache");
 }
 
+// layout::sized_box exposes Style::max_width on a container, and the
+// row layout treats container children with max_width > 0 as having
+// a fixed intrinsic width (instead of the default "you're a flex
+// child, take what's left"). The test puts two sized_boxes inside a
+// row and asserts each one is exactly its max_width pixels wide,
+// regardless of the row's available width.
+void test_sized_box_in_row() {
+    detail::g_app.arena.reset();
+
+    auto root_h = detail::alloc_node();
+    auto& root = detail::node_at(root_h);
+    root.style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::row([&] {
+        layout::sized_box(200.0f, [&] {
+            widget::text("left");
+        });
+        layout::sized_box(300.0f, [&] {
+            widget::text("right");
+        });
+    });
+    Scope::set_current(nullptr);
+
+    detail::layout_node(root_h, 800.0f);
+
+    assert(root.children.size() == 1);
+    auto& row = detail::node_at(root.children[0]);
+    assert(row.children.size() == 2);
+
+    auto& left = detail::node_at(row.children[0]);
+    auto& right = detail::node_at(row.children[1]);
+
+    // Each sized_box must be sized to exactly its max_width.
+    assert(left.width == 200.0f);
+    assert(right.width == 300.0f);
+
+    // The row must respect the gap between fixed-width children.
+    // (default row gap = 8)
+    assert(right.x >= left.x + left.width);
+
+    std::puts("PASS: sized_box honors max_width inside row layout");
+}
+
 // `layout::row` defaults cross_align to Center so that mixed-height inline
 // content (e.g. widget::text alongside widget::code) lines up on a shared
 // centerline instead of leaving the shorter child dangling at the top of
@@ -347,6 +392,7 @@ int main() {
     test_newline_handling();
     test_measure_text_cache_dedup();
     test_set_theme_updates_and_invalidates_cache();
+    test_sized_box_in_row();
     test_row_cross_align_center_default();
     std::puts("\nAll tests passed.");
     return 0;
