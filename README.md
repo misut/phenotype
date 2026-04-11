@@ -249,7 +249,7 @@ As an exon dependency:
 - [ ] Image / icon rendering (host import + `widget::image`)
 - [ ] Animation system (transitions, easings, animated layout values)
 - [ ] More widgets (checkbox, radio, slider, dropdown, modal/dialog, tooltip)
-- [ ] Text input maturity (click-to-position-caret, paste handling, multi-line)
+- [ ] Multi-line text input (`widget::text_area<Msg>` with a `<textarea>` overlay)
 
 ### Native backends
 
