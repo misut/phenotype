@@ -233,6 +233,7 @@ As an exon dependency:
 - [x] Host `measure_text` cache (cross-rebuild memoization keyed by font size + content)
 - [x] Custom theming API (runtime-configurable `Theme` via `phenotype::set_theme` / `current_theme`)
 - [x] Theme-aware cache invalidation (`set_theme` clears the `measure_text` cache)
+- [x] Image / icon rendering (`widget::image` + persistent atlas in the JS shim)
 
 ### Performance
 
@@ -246,7 +247,6 @@ As an exon dependency:
 
 ### Framework features
 
-- [ ] Image / icon rendering (host import + `widget::image`)
 - [ ] Animation system (transitions, easings, animated layout values)
 - [ ] More widgets (checkbox, radio, slider, dropdown, modal/dialog, tooltip)
 - [ ] Multi-line text input (`widget::text_area<Msg>` with a `<textarea>` overlay)

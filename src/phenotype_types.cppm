@@ -74,6 +74,7 @@ enum class Cmd : unsigned int {
     DrawText   = 5,
     DrawLine   = 6,
     HitRegion  = 7,
+    DrawImage  = 8,
 };
 
 // ============================================================
@@ -148,6 +149,7 @@ struct LayoutNode {
     // Content
     std::string text;
     std::string url;
+    std::string image_url;            // non-empty → image leaf
     unsigned int callback_id = 0xFFFFFFFF;
     unsigned int cursor_type = 0; // 0=default, 1=pointer
 
