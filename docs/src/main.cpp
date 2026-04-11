@@ -1,9 +1,39 @@
+#include <functional>
 #include <string>
 #include <utility>
 #include <variant>
 import phenotype;
 
 namespace docs {
+
+// ============================================================
+// example(source, live) — code-on-left / live-on-right helper
+// ============================================================
+//
+// Each call renders a row with the source-code literal on the left
+// (in the existing widget::code styling) and the live phenotype
+// rendering of the same code on the right (wrapped in a layout::card
+// for visual separation). Both sides are wrapped in layout::sized_box
+// at the same width so every example row has the same 50/50 split
+// regardless of how long the code line is. The source string is
+// manually kept in sync with the lambda body — small price for the
+// readability of raw-string-literal code over a fragile
+// stringification macro.
+inline constexpr float EXAMPLE_PANE_WIDTH = 320.0f;
+
+inline void example(phenotype::str source, std::function<void()> live) {
+    using namespace phenotype;
+    layout::row([&] {
+        layout::sized_box(EXAMPLE_PANE_WIDTH, [&] {
+            widget::code(source);
+        });
+        layout::sized_box(EXAMPLE_PANE_WIDTH, [&] {
+            layout::card([&] {
+                live();
+            });
+        });
+    });
+}
 
 // ============================================================
 // Messages — every user-facing event the docs site emits
@@ -111,22 +141,114 @@ void view(State const& state) {
                 );
             });
 
-            // Component reference
+            // Examples — each widget / layout primitive shown alongside
+            // its live rendering. The example() helper renders the source
+            // literal on the left (widget::code) and runs the lambda on
+            // the right (inside a layout::card).
             layout::column([&] {
-                widget::text("Components");
-                layout::row([&] { widget::code("layout::column(builder)");          widget::text("Vertical flex layout"); });
-                layout::row([&] { widget::code("layout::row(builder)");             widget::text("Horizontal flex layout"); });
-                layout::row([&] { widget::code("widget::text(str)");                widget::text("Text display"); });
-                layout::row([&] { widget::code("widget::button<Msg>(label, msg)");  widget::text("Clickable button posting a message"); });
-                layout::row([&] { widget::code("widget::text_field<Msg>(...)");     widget::text("Text input mapping value to message"); });
-                layout::row([&] { widget::code("widget::link(label, url)");         widget::text("Hyperlink"); });
-                layout::row([&] { widget::code("widget::code(str)");                widget::text("Monospace code block"); });
-                layout::row([&] { widget::code("layout::scaffold(top, body, bot)"); widget::text("Page layout with hero"); });
-                layout::row([&] { widget::code("layout::card(builder)");            widget::text("Rounded container"); });
-                layout::row([&] { widget::code("layout::list_items(builder)");      widget::text("Bullet list"); });
-                layout::row([&] { widget::code("layout::divider()");                widget::text("Horizontal separator"); });
-                layout::row([&] { widget::code("layout::spacer(px)");               widget::text("Vertical spacing"); });
-                layout::row([&] { widget::code("run<State, Msg>(view, update)");    widget::text("Application entry point"); });
+                widget::text("Examples");
+                widget::text("Each widget and layout below is shown next to its live "
+                             "rendering so you can see exactly what the code produces.");
+
+                example(
+                    R"(widget::text("Hello, phenotype");)",
+                    [&] {
+                        widget::text("Hello, phenotype");
+                    });
+
+                example(
+                    R"(widget::link("GitHub", "https://github.com/misut/phenotype");)",
+                    [&] {
+                        widget::link("GitHub", "https://github.com/misut/phenotype");
+                    });
+
+                example(
+                    R"(widget::code("exon build --target wasm32-wasi");)",
+                    [&] {
+                        widget::code("exon build --target wasm32-wasi");
+                    });
+
+                example(
+                    R"(widget::button<Msg>("Click me", Increment{});)",
+                    [&] {
+                        widget::button<Msg>("Click me", Increment{});
+                    });
+
+                example(
+                    R"(widget::text_field<Msg>(
+    "Type here...",
+    state.input,
+    +[](std::string s) -> Msg { return InputChanged{std::move(s)}; });)",
+                    [&] {
+                        widget::text_field<Msg>(
+                            "Type here...",
+                            state.input,
+                            +[](std::string s) -> Msg { return InputChanged{std::move(s)}; });
+                    });
+
+                example(
+                    R"(layout::column([&] {
+    widget::text("First");
+    widget::text("Second");
+    widget::text("Third");
+});)",
+                    [&] {
+                        layout::column([&] {
+                            widget::text("First");
+                            widget::text("Second");
+                            widget::text("Third");
+                        });
+                    });
+
+                example(
+                    R"(layout::row([&] {
+    widget::text("Left");
+    widget::text("Middle");
+    widget::text("Right");
+});)",
+                    [&] {
+                        layout::row([&] {
+                            widget::text("Left");
+                            widget::text("Middle");
+                            widget::text("Right");
+                        });
+                    });
+
+                example(
+                    R"(layout::card([&] {
+    widget::text("Inside a card");
+});)",
+                    [&] {
+                        layout::card([&] {
+                            widget::text("Inside a card");
+                        });
+                    });
+
+                example(
+                    R"(layout::list_items([&] {
+    layout::item("First item");
+    layout::item("Second item");
+    layout::item("Third item");
+});)",
+                    [&] {
+                        layout::list_items([&] {
+                            layout::item("First item");
+                            layout::item("Second item");
+                            layout::item("Third item");
+                        });
+                    });
+
+                example(
+                    R"(layout::divider();)",
+                    [&] {
+                        layout::divider();
+                    });
+
+                example(
+                    R"(layout::spacer(24);)",
+                    [&] {
+                        layout::spacer(24);
+                    });
             });
         },
         // Footer
