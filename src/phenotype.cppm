@@ -183,6 +183,25 @@ inline void text_field(str hint, std::string const& current,
     detail::attach_to_scope(h);
 }
 
+// image — display a bitmap (PNG, JPEG, GIF, SVG) at fixed dimensions.
+// The URL is fetched lazily by the JS shim's persistent image cache;
+// the first paint shows a neutral grey placeholder while the load is
+// in flight, and the cache triggers a repaint once the texture is
+// uploaded to the GPU. The image is stretched to fill (width, height)
+// — aspect-ratio-correct fitting is the user's responsibility for
+// now (compute both dimensions before calling).
+inline void image(str url, float width, float height) {
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    node.image_url = std::string(url.data, url.len);
+    // max_width is treated as a fixed intrinsic width by row layout
+    // (PR #35), and as a max-clamp by column layout. Either way the
+    // image ends up exactly `width` pixels wide.
+    node.style.max_width = width;
+    node.style.fixed_height = height;
+    detail::attach_to_scope(h);
+}
+
 } // namespace widget
 
 // ============================================================
