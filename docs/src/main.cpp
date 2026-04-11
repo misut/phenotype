@@ -103,20 +103,6 @@ void view(State const& state) {
                 });
             });
 
-            // Interactive demo — counter
-            layout::column([&] {
-                widget::text("Interactive Demo");
-                widget::text("Click the buttons or use Tab + Enter:");
-
-                layout::column([&] {
-                    widget::text(std::string("Count: ") + std::to_string(state.count));
-                    layout::row(
-                        [&] { widget::button<Msg>("-", Decrement{}); },
-                        [&] { widget::button<Msg>("+", Increment{}); }
-                    );
-                });
-            });
-
             // TextField demo
             layout::column([&] {
                 widget::text("Text Input");
