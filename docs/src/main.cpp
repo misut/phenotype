@@ -134,7 +134,7 @@ void view(State const& state) {
                     "\n"
                     "# Create project\n"
                     "exon init --lib my-app\n"
-                    "exon add github.com/misut/phenotype 0.8.0\n"
+                    "exon add github.com/misut/phenotype 0.9.0\n"
                     "\n"
                     "# Build for WebAssembly\n"
                     "exon build --target wasm32-wasi"
