@@ -399,16 +399,21 @@ void test_image_widget_layout_and_emit() {
 }
 
 // widget::checkbox<Msg> and widget::radio<Msg> share an internal helper
-// that builds a row container holding a 16x16 indicator box (callback
-// owner) plus a text label. v1 visual contract:
+// that builds a row container holding a 16x16 indicator box plus a text
+// label. The visual + interaction contract:
 //   * border_radius = 3 for checkbox, 8 for radio (the latter rounds
 //     into a circle via the existing SDF rounded-rect shader)
-//   * active   → background = theme.accent
-//   * inactive → background = white, border = theme.border
-//   * the indicator box owns the callback (and is the Tab focus target)
-//   * the label is a plain decorative text leaf
-// This test exercises both states of both widgets and verifies the
-// click callback dispatches a message of the user's Msg type.
+//   * active   → background = theme.accent + decoration glyph (Check or Dot)
+//   * inactive → background = white, border = theme.border, no decoration
+//   * indicator and label SHARE one callback id, so clicks on either
+//     dispatch the same Msg
+//   * indicator is `focusable = true` (default) so Tab focus + the focus
+//     ring land on the snug 16x16 indicator
+//   * label is `focusable = false` so Tab skips it and the focus ring
+//     never draws around the label text
+// This test exercises both states of both widgets and verifies that
+// clicks routed through both the indicator's and the label's hit
+// regions dispatch the message of the user's Msg type.
 void test_checkbox_and_radio_widgets() {
     struct ToggleA {};
     struct PickB { int idx; };
@@ -431,12 +436,14 @@ void test_checkbox_and_radio_widgets() {
 
     detail::layout_node(root_h, 400.0f);
 
-    // Each widget produces a row container (no callback) with two children:
-    // an indicator box (callback target) + a label leaf.
+    // Each widget produces a row container (no callback) with two
+    // children: an indicator box and a label leaf, both holding the
+    // same shared callback id.
     auto& root = detail::node_at(root_h);
     assert(root.children.size() == 4);
 
-    auto check_widget = [](NodeHandle row_h, bool active, float radius) {
+    auto check_widget = [](NodeHandle row_h, bool active, float radius,
+                           Decoration expected_decoration) {
         auto& row = detail::node_at(row_h);
         assert(row.style.flex_direction == FlexDirection::Row);
         assert(row.callback_id == 0xFFFFFFFF); // row itself is not clickable
@@ -448,27 +455,33 @@ void test_checkbox_and_radio_widgets() {
         assert(box.border_radius == radius);
         assert(box.callback_id != 0xFFFFFFFF);
         assert(box.cursor_type == 1);
+        assert(box.focusable == true); // indicator is the Tab target
         if (active) {
             assert(box.background.r == detail::g_app.theme.accent.r);
             assert(box.background.g == detail::g_app.theme.accent.g);
             assert(box.background.b == detail::g_app.theme.accent.b);
             assert(box.background.a == 255);
+            assert(box.decoration == expected_decoration);
         } else {
             assert(box.background.r == 255);
             assert(box.background.g == 255);
             assert(box.background.b == 255);
             assert(box.border_color.r == detail::g_app.theme.border.r);
+            assert(box.decoration == Decoration::None);
         }
 
         auto& lbl = detail::node_at(row.children[1]);
         assert(!lbl.text.empty());
-        assert(lbl.callback_id == 0xFFFFFFFF); // label is decorative
+        // Label shares the indicator's callback id and is non-focusable.
+        assert(lbl.callback_id == box.callback_id);
+        assert(lbl.cursor_type == 1);
+        assert(lbl.focusable == false);
     };
 
-    check_widget(root.children[0], /*active=*/false, 3.0f);
-    check_widget(root.children[1], /*active=*/true,  3.0f);
-    check_widget(root.children[2], /*active=*/false, 8.0f);
-    check_widget(root.children[3], /*active=*/true,  8.0f);
+    check_widget(root.children[0], /*active=*/false, 3.0f, Decoration::Check);
+    check_widget(root.children[1], /*active=*/true,  3.0f, Decoration::Check);
+    check_widget(root.children[2], /*active=*/false, 8.0f, Decoration::Dot);
+    check_widget(root.children[3], /*active=*/true,  8.0f, Decoration::Dot);
 
     // Click the unchecked checkbox's indicator → posts ToggleA.
     auto cb_id_a = detail::node_at(detail::node_at(root.children[0]).children[0]).callback_id;
@@ -477,16 +490,19 @@ void test_checkbox_and_radio_widgets() {
     assert(msgs.size() == 1);
     assert(std::holds_alternative<ToggleA>(msgs[0]));
 
-    // Click the selected radio's indicator → posts PickB{1}.
-    auto cb_id_b = detail::node_at(detail::node_at(root.children[3]).children[0]).callback_id;
-    detail::g_app.callbacks[cb_id_b]();
+    // Click the selected radio's LABEL (not the indicator) → also
+    // posts PickB{1} because they share a callback id.
+    auto lbl_id_b = detail::node_at(detail::node_at(root.children[3]).children[1]).callback_id;
+    detail::g_app.callbacks[lbl_id_b]();
     auto msgs2 = detail::drain<Msg>();
     assert(msgs2.size() == 1);
     assert(std::holds_alternative<PickB>(msgs2[0]));
     assert(std::get<PickB>(msgs2[0]).idx == 1);
 
-    // Paint pass should emit one HitRegion opcode per indicator box (4 total).
+    // Paint pass: 4 widgets × 2 hit regions each (indicator + label) = 8.
+    // Clear cmd buffer + focusable_ids so we measure only this paint pass.
     phenotype_cmd_len = 0;
+    detail::g_app.focusable_ids.clear();
     detail::paint_node(root_h, 0, 0, 0, 600.0f);
     int hit_regions = 0;
     for (unsigned int i = 0; i + 4 <= phenotype_cmd_len; i += 4) {
@@ -494,7 +510,12 @@ void test_checkbox_and_radio_widgets() {
         std::memcpy(&word, &phenotype_cmd_buf[i], 4);
         if (word == static_cast<unsigned int>(Cmd::HitRegion)) ++hit_regions;
     }
-    assert(hit_regions == 4);
+    assert(hit_regions == 8);
+
+    // focusable_ids should hold exactly 4 entries — one per indicator,
+    // because the labels are non-focusable. The labels share the
+    // indicators' callback ids, so the unique-id count is also 4.
+    assert(detail::g_app.focusable_ids.size() == 4);
 
     std::puts("PASS: checkbox + radio widgets");
 }

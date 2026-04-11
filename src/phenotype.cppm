@@ -132,27 +132,29 @@ inline void button(str label, Msg msg) {
     detail::attach_to_scope(h);
 }
 
-// checkbox<Msg> / radio<Msg> share this body — only border_radius differs
-// (3 for checkbox, 8 for radio, where 8 = half of the 16x16 indicator and
-// rounds it into a circle via the existing SDF rounded-rect shader).
+// checkbox<Msg> / radio<Msg> share this body — checkbox uses border_radius
+// 3 + Decoration::Check, radio uses border_radius 8 (half of the 16x16
+// indicator, rounding it into a circle via the SDF rounded-rect shader)
+// + Decoration::Dot.
 //
-// The widget is built as a row with two leaves: a 16x16 indicator box
-// (which owns the click callback and is the Tab focus target) and a plain
-// text label to the right. v1 deliberately:
+// The widget is built as a row with two leaves:
 //
-//   * Renders the checked/selected state as a flat accent fill rather
-//     than a checkmark glyph or inner dot. The two-state filled-vs-
-//     bordered visual is universally readable and avoids fighting font
-//     metrics inside a 16px box. A polish PR can add a glyph later.
-//   * Puts the click + Tab focus on the indicator box only, not the row
-//     container. The row container would be a wider click target but
-//     would also receive the focus ring on Tab, which would draw an
-//     awkward 2px accent stroke around the entire (indicator + label)
-//     bounds. Box-only keeps the focus ring snug around the actual
-//     indicator. Label-as-click-target is captured as a polish item.
+//   * An indicator box — 16x16, owns the click callback id, is Tab-
+//     focusable, draws the focus ring around its own snug bounds. When
+//     active, it fills with theme.accent and the Decoration field tells
+//     paint_node to draw a white V (checkbox) or white inner dot
+//     (radio) on top of the fill.
+//
+//   * A label text leaf — shares the SAME callback id as the indicator
+//     so clicks on the label dispatch the same Msg, but is marked
+//     `focusable = false` so Tab does not visit it and the focus ring
+//     never draws around the label text. The two LayoutNode fields
+//     enabling this design (`focusable` and `decoration`) live in
+//     phenotype.types.
 namespace _impl {
 template<typename Msg>
-inline void toggle(str label, bool active, Msg msg, float corner_radius) {
+inline void toggle(str label, bool active, Msg msg,
+                   float corner_radius, Decoration active_decoration) {
     // Outer row — pure layout, no callback. Children handle the click.
     auto row_h = ::phenotype::detail::alloc_node();
     {
@@ -163,7 +165,17 @@ inline void toggle(str label, bool active, Msg msg, float corner_radius) {
     }
     ::phenotype::detail::attach_to_scope(row_h);
 
-    // Indicator box — visible toggle, callback target, focusable.
+    // One callback closure shared by indicator + label. Both nodes
+    // emit hit regions with this id, so clicking either dispatches
+    // the same Msg; the indicator alone is in focusable_ids.
+    auto id = static_cast<unsigned int>(
+        ::phenotype::detail::g_app.callbacks.size());
+    ::phenotype::detail::g_app.callbacks.push_back([msg = std::move(msg)] {
+        ::phenotype::detail::post<Msg>(msg);
+        ::phenotype::detail::trigger_rebuild();
+    });
+
+    // Indicator box — focus target, draws background + decoration glyph.
     {
         auto box_h = ::phenotype::detail::alloc_node();
         auto& box  = ::phenotype::detail::node_at(box_h);
@@ -171,49 +183,53 @@ inline void toggle(str label, bool active, Msg msg, float corner_radius) {
         box.style.fixed_height = 16;
         box.border_radius      = corner_radius;
         box.cursor_type        = 1; // pointer
+        box.callback_id        = id;
+        // box.focusable defaults to true
         if (active) {
             box.background   = ::phenotype::detail::g_app.theme.accent;
             box.border_color = ::phenotype::detail::g_app.theme.accent;
+            box.decoration   = active_decoration;
         } else {
             box.background   = {255, 255, 255, 255};
             box.border_color = ::phenotype::detail::g_app.theme.border;
         }
         box.border_width = 1;
-
-        auto id = static_cast<unsigned int>(
-            ::phenotype::detail::g_app.callbacks.size());
-        ::phenotype::detail::g_app.callbacks.push_back([msg = std::move(msg)] {
-            ::phenotype::detail::post<Msg>(msg);
-            ::phenotype::detail::trigger_rebuild();
-        });
-        box.callback_id = id;
         ::phenotype::detail::node_at(row_h).children.push_back(box_h);
     }
 
-    // Label — plain text leaf, decorative.
+    // Label — clickable via the same callback id, but NOT focusable so
+    // Tab skips it and the focus ring never draws around the label text.
     {
         auto lbl_h = ::phenotype::detail::alloc_node();
         auto& lbl  = ::phenotype::detail::node_at(lbl_h);
-        lbl.text       = std::string(label.data, label.len);
-        lbl.font_size  = ::phenotype::detail::g_app.theme.body_font_size;
-        lbl.text_color = ::phenotype::detail::g_app.theme.foreground;
+        lbl.text        = std::string(label.data, label.len);
+        lbl.font_size   = ::phenotype::detail::g_app.theme.body_font_size;
+        lbl.text_color  = ::phenotype::detail::g_app.theme.foreground;
+        lbl.cursor_type = 1; // pointer
+        lbl.callback_id = id;
+        lbl.focusable   = false;
         ::phenotype::detail::node_at(row_h).children.push_back(lbl_h);
     }
 }
 } // namespace _impl
 
-// checkbox<Msg> — square 16x16 indicator + label. Click on the indicator
-// posts `msg`; the update function is responsible for toggling state.
+// checkbox<Msg> — square 16x16 indicator + label. Click on either the
+// indicator or the label posts `msg`; the update function is responsible
+// for toggling state. Active state renders as an accent fill with a
+// white V checkmark glyph drawn on top.
 template<typename Msg>
 inline void checkbox(str label, bool checked, Msg msg) {
-    _impl::toggle(label, checked, std::move(msg), /*corner_radius=*/3.0f);
+    _impl::toggle(label, checked, std::move(msg),
+                  /*corner_radius=*/3.0f, Decoration::Check);
 }
 
 // radio<Msg> — circular 16x16 indicator + label. Same click semantics
 // as checkbox; the update function sets the new selection in state.
+// Active state renders as an accent fill with a small white inner dot.
 template<typename Msg>
 inline void radio(str label, bool selected, Msg msg) {
-    _impl::toggle(label, selected, std::move(msg), /*corner_radius=*/8.0f);
+    _impl::toggle(label, selected, std::move(msg),
+                  /*corner_radius=*/8.0f, Decoration::Dot);
 }
 
 // text_field<Msg> — typing posts mapper(new_value)-derived messages.
