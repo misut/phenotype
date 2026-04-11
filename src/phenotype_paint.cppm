@@ -120,6 +120,18 @@ inline void emit_draw_text(float x, float y, float font_size, unsigned int mono,
     detail::write_bytes(text, len);
 }
 
+inline void emit_draw_image(float x, float y, float w, float h,
+                            char const* url, unsigned int len) {
+    detail::ensure(24 + detail::padded(len));
+    detail::write_u32(static_cast<unsigned int>(Cmd::DrawImage));
+    detail::write_f32(x);
+    detail::write_f32(y);
+    detail::write_f32(w);
+    detail::write_f32(h);
+    detail::write_u32(len);
+    detail::write_bytes(url, len);
+}
+
 inline void emit_draw_line(float x1, float y1, float x2, float y2, float thickness, Color c) {
     detail::ensure(28);
     detail::write_u32(static_cast<unsigned int>(Cmd::DrawLine));
@@ -232,6 +244,16 @@ inline void paint_node(NodeHandle node_h, float ox, float oy, float scroll_y,
     // the focus-ring border immediately above is still painted by
     // the canvas, and the next reader will want to know why the
     // caret block is missing.
+
+    // Image leaf — emit DrawImage with the world-space rect and the
+    // URL bytes. The JS shim looks up the URL in its persistent image
+    // cache, lazy-loads on first sight, and renders a placeholder
+    // grey rectangle until the load completes (and triggers a repaint).
+    if (!node.image_url.empty()) {
+        emit_draw_image(ax, draw_y, node.width, node.height,
+                        node.image_url.c_str(),
+                        static_cast<unsigned int>(node.image_url.size()));
+    }
 
     // Collect focusable IDs (for Tab navigation)
     if (node.callback_id != 0xFFFFFFFF)

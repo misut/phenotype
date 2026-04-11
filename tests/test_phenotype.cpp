@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <cstring>
 #include <string>
 #include <vector>
 import phenotype;
@@ -17,6 +18,14 @@ extern "C" {
     float phenotype_get_canvas_height() { return 600.0f; }
 
     void phenotype_open_url(char const* /*url*/, unsigned int /*len*/) {}
+
+    // Reach into phenotype.paint's cmd buffer via linkage so the
+    // image-emit regression test can scan it. The buffer / length are
+    // declared in src/phenotype_paint.cppm as extern "C" exports for
+    // the JS shim; they have C linkage so the test process can pick
+    // them up directly without going through the module export path.
+    extern unsigned char phenotype_cmd_buf[];
+    extern unsigned int phenotype_cmd_len;
 }
 
 using namespace phenotype;
@@ -331,6 +340,63 @@ void test_sized_box_in_row() {
     std::puts("PASS: sized_box honors max_width inside row layout");
 }
 
+// widget::image stores its URL in node.image_url, sizes the leaf
+// to (width, height) via max_width + fixed_height, and the paint
+// pass emits a DrawImage opcode containing the URL bytes. The shim
+// renders the actual texture; this test only verifies the C++ side
+// of the contract.
+void test_image_widget_layout_and_emit() {
+    detail::g_app.arena.reset();
+
+    // Build a row containing one image leaf so we go through the
+    // row layout path that PR #35 added max_width-as-fixed-intrinsic
+    // semantics to.
+    auto root_h = detail::alloc_node();
+    auto& root = detail::node_at(root_h);
+    root.style.flex_direction = FlexDirection::Row;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::image({"logo.png", 8}, 64.0f, 48.0f);
+    Scope::set_current(nullptr);
+
+    detail::layout_node(root_h, 200.0f);
+
+    assert(root.children.size() == 1);
+    auto& img = detail::node_at(root.children[0]);
+    assert(img.image_url == std::string("logo.png"));
+    assert(img.width == 64.0f);
+    assert(img.height == 48.0f);
+
+    // Paint the tree and scan the cmd buffer for the DrawImage
+    // opcode + the URL bytes that follow.
+    phenotype_cmd_len = 0;
+    detail::paint_node(root_h, 0, 0, 0, 600.0f);
+
+    bool found_opcode = false;
+    bool found_url = false;
+    for (unsigned int i = 0; i + 4 <= phenotype_cmd_len; i += 4) {
+        unsigned int word;
+        std::memcpy(&word, &phenotype_cmd_buf[i], 4);
+        if (word == static_cast<unsigned int>(Cmd::DrawImage)) {
+            found_opcode = true;
+        }
+    }
+    // The URL bytes are emitted right after the header — search for
+    // the literal "logo.png" anywhere in the buffer.
+    char const* needle = "logo.png";
+    for (unsigned int i = 0; i + 8 <= phenotype_cmd_len; ++i) {
+        if (std::memcmp(&phenotype_cmd_buf[i], needle, 8) == 0) {
+            found_url = true;
+            break;
+        }
+    }
+    assert(found_opcode);
+    assert(found_url);
+
+    std::puts("PASS: widget::image lays out and emits DrawImage");
+}
+
 // `layout::row` defaults cross_align to Center so that mixed-height inline
 // content (e.g. widget::text alongside widget::code) lines up on a shared
 // centerline instead of leaving the shorter child dangling at the top of
@@ -393,6 +459,7 @@ int main() {
     test_measure_text_cache_dedup();
     test_set_theme_updates_and_invalidates_cache();
     test_sized_box_in_row();
+    test_image_widget_layout_and_emit();
     test_row_cross_align_center_default();
     std::puts("\nAll tests passed.");
     return 0;
