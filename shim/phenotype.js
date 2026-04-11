@@ -814,12 +814,20 @@ export async function mount(wasmUrl, rootElement = document.body) {
     hiddenInput.style.color = 'rgb(26, 26, 26)';
     hiddenInput.style.caretColor = 'rgb(37, 99, 235)';
     hiddenInput.style.zIndex = '1';
-    // pointer-events: none keeps mouse clicks routing to the canvas
-    // (so canvas-side click → focus-change logic stays the source of
-    // truth). Click-to-position-caret inside an already-focused field
-    // is a small UX limitation; arrow / Home / End / Backspace still
-    // work via the HTML input's native key handling.
-    hiddenInput.style.pointerEvents = 'none';
+    // pointer-events: auto so clicks within the focused field's
+    // screen rectangle are caught by the HTML input — that's what
+    // enables click-to-position-caret, drag-select, double-click
+    // word selection, triple-click line selection, paste, and the
+    // I-beam mouse cursor over the field. This is safe because the
+    // overlay is positioned exactly over the focused field's
+    // hit-region rectangle, so a click within it is by definition
+    // a click on the currently focused field — there is no scenario
+    // where it should change focus to anything else. Clicks
+    // *outside* the input's bounding box still reach the canvas
+    // because the overlay isn't covering them, so the canvas-side
+    // click → focus-change logic stays the source of truth for
+    // every other interaction.
+    hiddenInput.style.pointerEvents = 'auto';
 
     // Load the C++ side's current value so the user starts editing
     // from the existing text rather than an empty buffer.
