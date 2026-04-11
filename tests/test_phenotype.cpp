@@ -238,6 +238,54 @@ void test_measure_text_cache_dedup() {
     std::puts("PASS: measure_text cache deduplicates across rebuilds");
 }
 
+// set_theme replaces the global Theme and clears the measure_text
+// cache so that fonts or font sizes changing in the new theme don't
+// keep returning stale widths.
+void test_set_theme_updates_and_invalidates_cache() {
+    detail::g_app.arena.reset();
+    metrics::reset_all();
+    detail::clear_measure_cache();
+
+    // Prime the cache with a layout pass at the default theme.
+    auto root_h = detail::alloc_node();
+    auto& root = detail::node_at(root_h);
+    root.style.flex_direction = FlexDirection::Column;
+    auto leaf_h = detail::alloc_node();
+    auto& leaf = detail::node_at(leaf_h);
+    leaf.text = "theme demo";
+    leaf.font_size = current_theme().body_font_size;
+    detail::node_at(root_h).children.push_back(leaf_h);
+    detail::layout_node(root_h, 400.0f);
+    assert(metrics::inst::measure_text_cache_hits.total()
+           + metrics::inst::measure_text_calls.total() > 0);
+
+    // Switch to a different theme (only the fields we care about
+    // are overridden; the rest keep defaults).
+    Theme dark{};
+    dark.background = {10,  10,  10, 255};
+    dark.foreground = {240, 240, 240, 255};
+    dark.body_font_size = 18.0f;
+    set_theme(dark);
+
+    // current_theme reflects the new values.
+    assert(current_theme().body_font_size == 18.0f);
+    assert(current_theme().background.r == 10);
+    assert(current_theme().foreground.r == 240);
+
+    // Measure cache is empty — the next measurement re-hits the host
+    // trampoline because the old entries (keyed on the old font size
+    // and string content) are gone.
+    metrics::inst::measure_text_calls.reset();
+    metrics::inst::measure_text_cache_hits.reset();
+    detail::layout_node(root_h, 400.0f);
+    assert(metrics::inst::measure_text_calls.total() > 0);
+
+    // Reset to default so later tests see the stock theme again.
+    set_theme(Theme{});
+
+    std::puts("PASS: set_theme swaps theme and invalidates measure cache");
+}
+
 // `layout::row` defaults cross_align to Center so that mixed-height inline
 // content (e.g. widget::text alongside widget::code) lines up on a shared
 // centerline instead of leaving the shorter child dangling at the top of
@@ -298,6 +346,7 @@ int main() {
     test_word_wrap();
     test_newline_handling();
     test_measure_text_cache_dedup();
+    test_set_theme_updates_and_invalidates_cache();
     test_row_cross_align_center_default();
     std::puts("\nAll tests passed.");
     return 0;
