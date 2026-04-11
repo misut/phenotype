@@ -182,7 +182,7 @@ As an exon dependency:
 
 ```toml
 [dependencies]
-"github.com/misut/phenotype" = "0.7.0"
+"github.com/misut/phenotype" = "0.8.0"
 ```
 
 ## Roadmap
