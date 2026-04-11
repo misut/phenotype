@@ -1,5 +1,8 @@
 module;
+#include <cstddef>
+#include <map>
 #include <string>
+#include <tuple>
 #include <vector>
 export module phenotype.layout;
 
@@ -13,17 +16,80 @@ float phenotype_measure_text(float font_size, unsigned int mono,
                              char const* text, unsigned int len);
 
 namespace phenotype::detail {
-// Wrapper around the host measure_text import that increments the
-// `phenotype.host.measure_text_calls` counter on every invocation. Used
-// in place of the raw `phenotype_measure_text` at all layout call sites.
-inline float measure_text_counted(float font_size, unsigned int mono,
-                                  char const* text, unsigned int len) {
-    metrics::inst::measure_text_calls.add();
-    return phenotype_measure_text(font_size, mono, text, len);
+
+// ============================================================
+// measure_text cache
+// ============================================================
+//
+// The host measure_text import is on the JS↔WASM trampoline, the most
+// expensive call type byte-for-byte phenotype makes. Most measurements
+// repeat across rebuilds — the same button label, the same heading,
+// the same code-block strings — so a (font_size, mono, text) → width
+// cache amortizes them to one host call per distinct tuple per wasm
+// instance.
+//
+// The cache is unbounded by design: a typical phenotype app has on
+// the order of a few hundred distinct text snippets. If a future
+// caller produces unbounded text strings (e.g. echoing user input
+// into a measured leaf), revisit with an LRU. For now simplicity
+// wins — see `phenotype.host.measure_text_calls` (real misses) and
+// `phenotype.host.measure_text_cache_hits` in the diag snapshot to
+// confirm the cache is doing its job in production.
+//
+// Theme changes will need to call `clear_measure_cache()` once the
+// custom theming roadmap item lands; until then theme is const so
+// the cache is effectively process-lifetime.
+
+// Cache key is just a (font_size, mono, text) tuple. std::map is used
+// instead of std::unordered_map because clang 22's libc++ unordered_map
+// references __hash_memory, which wasn't in the macOS system libc++
+// the test binaries link against. std::map keeps lookup O(log n) but
+// the cache has on the order of a few hundred entries — log n is
+// dwarfed by the JS↔WASM trampoline cost we're avoiding.
+using MeasureKey = std::tuple<float, unsigned int, std::string>;
+
+// Heap-bound reference for the same reason the diag instruments use
+// the pattern: wasi-sdk's crt1-command.o runs __cxa_finalize after
+// _start() returns, and we still want the cache alive for every
+// JS-driven rebuild after that. See phenotype_diag.cppm:262 for the
+// precedent.
+inline std::map<MeasureKey, float>& measure_cache() {
+    static std::map<MeasureKey, float>& m = *new std::map<MeasureKey, float>();
+    return m;
 }
+
+// Cached wrapper around the host measure_text import. On hit the
+// width is returned without crossing the trampoline and the
+// `phenotype.host.measure_text_cache_hits` counter is bumped instead
+// of `measure_text_calls`. The latter therefore once again reflects
+// real JS↔WASM cost — exactly the metric the diag baseline in PR #26
+// was supposed to optimize.
+inline float measure_text_cached(float font_size, unsigned int mono,
+                                 char const* text, unsigned int len) {
+    auto& cache = measure_cache();
+    MeasureKey key{font_size, mono, std::string(text, len)};
+    if (auto it = cache.find(key); it != cache.end()) {
+        metrics::inst::measure_text_cache_hits.add();
+        return it->second;
+    }
+    metrics::inst::measure_text_calls.add();
+    float w = phenotype_measure_text(font_size, mono, text, len);
+    cache.emplace(std::move(key), w);
+    return w;
+}
+
 } // namespace phenotype::detail
 
 export namespace phenotype::detail {
+
+// Test-only helper — exposed via the export namespace so tests
+// outside the module can reset the cache between assertions. Real
+// runtime callers should never need it: the cache is process-
+// lifetime and only theme changes invalidate it (which the future
+// custom-theming PR will hook in here).
+inline void clear_measure_cache() noexcept {
+    measure_cache().clear();
+}
 
 struct TextLayout {
     std::vector<std::string> lines;
@@ -32,7 +98,7 @@ struct TextLayout {
 };
 
 inline float measure(str text, float font_size, bool mono) {
-    return measure_text_counted(font_size, mono ? 1 : 0, text.data, text.len);
+    return measure_text_cached(font_size, mono ? 1 : 0, text.data, text.len);
 }
 
 inline TextLayout layout_text(std::string const& text, float font_size, bool mono,
@@ -72,8 +138,8 @@ inline TextLayout layout_text(std::string const& text, float font_size, bool mon
             while (i < para.size() && para[i] == ' ') ++i;
 
             float space_width = current_line.empty() ? 0
-                : measure_text_counted(font_size, mono ? 1 : 0, " ", 1);
-            float word_width = measure_text_counted(
+                : measure_text_cached(font_size, mono ? 1 : 0, " ", 1);
+            float word_width = measure_text_cached(
                 font_size, mono ? 1 : 0, word.c_str(),
                 static_cast<unsigned int>(word.size()));
 
@@ -191,7 +257,7 @@ inline void layout_node(NodeHandle node_h, float available_width) {
             auto& child = node_at(node.children[i]);
             bool is_text_leaf = !child.text.empty() && child.children.empty();
             if (is_text_leaf) {
-                float measured = measure_text_counted(
+                float measured = measure_text_cached(
                     child.font_size, child.mono ? 1 : 0,
                     child.text.c_str(), static_cast<unsigned int>(child.text.size()));
                 float w = measured + child.style.padding[1] + child.style.padding[3];
