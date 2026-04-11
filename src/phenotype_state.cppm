@@ -1,4 +1,5 @@
 module;
+#include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
@@ -139,6 +140,13 @@ struct AppState {
     void (*app_runner)() = nullptr;
     // Sparse map of typed text-input dispatchers, registered by TextField<Msg>.
     std::vector<std::pair<unsigned int, InputHandler>> input_handlers;
+    // FNV-1a 64-bit hash of the previous frame's cmd buffer. Used by
+    // phenotype::flush_if_changed() to skip the JS↔WASM phenotype_flush
+    // round-trip when the new paint pass produces the exact same bytes
+    // (e.g. caret-blink frames where the canvas no longer paints the
+    // caret because of the HTML overlay from PR #31). 0 sentinel means
+    // "no previous frame yet" — the first paint always flushes.
+    std::uint64_t last_paint_hash = 0;
 };
 
 namespace detail {

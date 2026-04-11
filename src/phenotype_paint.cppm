@@ -1,10 +1,12 @@
 module;
+#include <cstdint>
 #include <cstring>
 #include <string>
 export module phenotype.paint;
 
 import phenotype.types;
 import phenotype.state;
+import phenotype.diag;
 
 // Host imports
 extern "C" __attribute__((import_module("phenotype"), import_name("flush")))
@@ -61,6 +63,20 @@ inline void write_bytes(char const* data, unsigned int len) {
 
 inline unsigned int padded(unsigned int len) {
     return (len + 3) & ~3u;
+}
+
+// FNV-1a 64-bit. Used by phenotype::flush_if_changed() to detect
+// frames whose cmd buffer is byte-identical to the previous frame
+// (caret blink, idle repaints, etc.) and skip the JS↔WASM flush
+// trampoline. Standard, predictable, microseconds for the typical
+// 4-8 KB cmd buffer; collision probability ~1e-15.
+inline std::uint64_t fnv1a_64(unsigned char const* data, unsigned int len) noexcept {
+    std::uint64_t h = 0xcbf29ce484222325ULL;
+    for (unsigned int i = 0; i < len; ++i) {
+        h ^= data[i];
+        h *= 0x100000001b3ULL;
+    }
+    return h;
 }
 
 } // namespace phenotype::detail
@@ -159,6 +175,39 @@ inline void flush() {
     if (phenotype_cmd_len == 0) return;
     phenotype_flush();
     phenotype_cmd_len = 0;
+}
+
+// flush_if_changed — frame-skip-aware version of flush() that hashes
+// the current cmd buffer and compares it to the previous frame. If the
+// bytes are identical, the buffer is discarded and no JS↔WASM round
+// trip happens — the previous frame's pixels stay on screen, which
+// is the correct visible result. Used by both the runner (full-rebuild
+// path) and phenotype_repaint (re-paint-only path) so caret blinks,
+// idle repaints, and any future "useless rebuild" trigger collapse to
+// a hash + return rather than a full GPU upload + draw.
+//
+// Diag counters: frames_skipped on the skip branch, flush_calls on
+// the flush branch. The headline KPI is
+// frames_skipped / (frames_skipped + flush_calls).
+//
+// Animation safety note: when an animated widget is added in a
+// future PR, its cmd buffer bytes will differ on every tick (because
+// the animated values are time-derived state baked into the draw
+// commands), so the hash will mismatch and frame skip will not
+// erroneously suppress motion.
+inline void flush_if_changed() {
+    if (phenotype_cmd_len == 0) return;
+    auto hash = detail::fnv1a_64(phenotype_cmd_buf, phenotype_cmd_len);
+    auto& app = detail::g_app;
+    if (hash == app.last_paint_hash) {
+        // Identical to previous frame — discard the buffer and skip.
+        phenotype_cmd_len = 0;
+        metrics::inst::frames_skipped.add();
+        return;
+    }
+    app.last_paint_hash = hash;
+    flush();
+    metrics::inst::flush_calls.add();
 }
 
 } // namespace phenotype

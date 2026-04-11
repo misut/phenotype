@@ -237,7 +237,8 @@ As an exon dependency:
 
 ### Performance
 
-- [ ] vDOM-style diff / partial paint (only repaint changed nodes; baseline via `phenotype.runner.phase_duration`)
+- [x] vDOM-style diff / partial paint v1 — frame skip on identical cmd buffer (FNV-1a hash gates `phenotype_flush()`; caret blinks and idle repaints collapse to hash + return). Tracked by `phenotype.runner.frames_skipped` vs `phenotype.host.flush_calls`.
+- [ ] vDOM-style diff / partial paint v2 — stable-key structural diff with sub-frame partial GPU updates (scissor + `loadOp: 'load'`)
 
 ### Observability
 
