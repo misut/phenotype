@@ -193,6 +193,51 @@ void test_newline_handling() {
     std::puts("PASS: newline handling");
 }
 
+// The host `measure_text` cache deduplicates (font_size, mono, text)
+// triples across rebuilds. After laying out a tree with repeated text,
+// the number of host calls (cache misses) must be far below the total
+// number of measurement requests, and a second layout pass on the same
+// tree must produce zero new host calls — every measurement is a hit.
+void test_measure_text_cache_dedup() {
+    detail::g_app.arena.reset();
+    metrics::reset_all();
+    detail::clear_measure_cache();
+
+    auto root_h = detail::alloc_node();
+    auto& root = detail::node_at(root_h);
+    root.style.flex_direction = FlexDirection::Column;
+
+    // Five leaves with the same content. Word-wrap measures every word
+    // and every space; without the cache that's roughly five leaves *
+    // (two words + one space) = ~15 host calls. With the cache the
+    // distinct tuples are { "hello", "world", " " } at one font size,
+    // so misses should stay in the single digits.
+    for (int i = 0; i < 5; ++i) {
+        auto h = detail::alloc_node();
+        auto& n = detail::node_at(h);
+        n.text = "hello world hello";
+        n.font_size = 16.0f;
+        detail::node_at(root_h).children.push_back(h);
+    }
+
+    detail::layout_node(root_h, 800.0f);
+
+    auto host_calls_first = metrics::inst::measure_text_calls.total();
+    auto cache_hits_first = metrics::inst::measure_text_cache_hits.total();
+    assert(host_calls_first > 0);
+    assert(host_calls_first < 10);
+    assert(cache_hits_first > host_calls_first);
+
+    // Second pass on the same tree: every measurement is a cache hit.
+    metrics::inst::measure_text_calls.reset();
+    metrics::inst::measure_text_cache_hits.reset();
+    detail::layout_node(root_h, 800.0f);
+    assert(metrics::inst::measure_text_calls.total() == 0);
+    assert(metrics::inst::measure_text_cache_hits.total() > 0);
+
+    std::puts("PASS: measure_text cache deduplicates across rebuilds");
+}
+
 // `layout::row` defaults cross_align to Center so that mixed-height inline
 // content (e.g. widget::text alongside widget::code) lines up on a shared
 // centerline instead of leaving the shorter child dangling at the top of
@@ -252,6 +297,7 @@ int main() {
     test_max_width_centering();
     test_word_wrap();
     test_newline_handling();
+    test_measure_text_cache_dedup();
     test_row_cross_align_center_default();
     std::puts("\nAll tests passed.");
     return 0;

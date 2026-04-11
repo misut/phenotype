@@ -187,6 +187,8 @@ As an exon dependency:
 
 ## Roadmap
 
+### Done
+
 - [x] WebGPU renderer (WGSL shaders, instanced draws, text atlas)
 - [x] Iced/Elm message-based declarative DSL
 - [x] Layout engine (flexbox subset: column / row / gap / padding / max-width / alignment)
@@ -195,10 +197,32 @@ As an exon dependency:
 - [x] Event handling (click, hover, pointer cursor)
 - [x] Scroll and resize support with viewport culling
 - [x] Hover states (visual feedback on `widget::button` and `widget::link`)
-- [x] Text input (`widget::text_field` with caret, placeholder, IME)
+- [x] Text input (`widget::text_field` with caret, placeholder, native OS IME composition)
 - [x] Keyboard navigation (Tab/Enter, focus ring)
 - [x] OpenTelemetry-shaped logs and metrics (`phenotype.diag`)
-- [ ] Custom theming API
+- [x] Host `measure_text` cache (cross-rebuild memoization keyed by font size + content)
+
+### Performance
+
+- [ ] vDOM-style diff / partial paint (only repaint changed nodes; baseline via `phenotype.runner.phase_duration`)
+- [ ] Theme-aware cache invalidation when custom theming lands
+
+### Observability
+
+- [ ] OTel JS adapter (`shim/phenotype-otel.js`) — forward `phenotype_diag_export()` to a collector via OTLP/HTTP
+- [ ] Spans / traces (`phenotype::diag::trace::Span`, runner phases as child spans)
+- [ ] Histogram exemplars (slowest frame's trace id attached to the bucket)
+
+### Framework features
+
+- [ ] Custom theming API (runtime-configurable `Theme` via `run<>` overload or `set_theme()`)
+- [ ] Image / icon rendering (host import + `widget::image`)
+- [ ] Animation system (transitions, easings, animated layout values)
+- [ ] More widgets (checkbox, radio, slider, dropdown, modal/dialog, tooltip)
+- [ ] Text input maturity (click-to-position-caret, paste handling, multi-line)
+
+### Native backends
+
 - [ ] macOS (Metal backend)
 - [ ] Windows (Direct3D backend)
 - [ ] Linux (Vulkan backend)
