@@ -305,7 +305,13 @@ inline Counter& input_events = *new Counter{
 inline Counter& flush_calls = *new Counter{
     "phenotype.host.flush_calls", "Host phenotype_flush() invocations", "{call}"};
 inline Counter& measure_text_calls = *new Counter{
-    "phenotype.host.measure_text_calls", "Host phenotype_measure_text() invocations", "{call}"};
+    "phenotype.host.measure_text_calls",
+    "Host phenotype_measure_text() invocations that crossed the JS↔WASM trampoline (cache misses)",
+    "{call}"};
+inline Counter& measure_text_cache_hits = *new Counter{
+    "phenotype.host.measure_text_cache_hits",
+    "Cache hits served from the in-process measure_text cache",
+    "{hit}"};
 
 inline Histogram& frame_duration = *new Histogram{
     "phenotype.runner.frame_duration",
@@ -450,6 +456,7 @@ inline void reset_all() noexcept {
     inst::input_events.reset();
     inst::flush_calls.reset();
     inst::measure_text_calls.reset();
+    inst::measure_text_cache_hits.reset();
     inst::frame_duration.reset();
     inst::phase_duration.reset();
     auto& ring = ::phenotype::log::detail::ring();
@@ -581,6 +588,7 @@ inline json::Value build_snapshot() {
     counters.push_back(counter_to_json(inst::input_events, now));
     counters.push_back(counter_to_json(inst::flush_calls, now));
     counters.push_back(counter_to_json(inst::measure_text_calls, now));
+    counters.push_back(counter_to_json(inst::measure_text_cache_hits, now));
 
     json::Array gauges;
     gauges.push_back(gauge_to_json(inst::live_nodes, now));
