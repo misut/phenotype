@@ -312,8 +312,11 @@ void run(View view, Update update) {
         metrics::inst::phase_duration.record(
             t4 - t3, {{"phase", "paint"}});
 
-        flush();
-        metrics::inst::flush_calls.add();
+        // Frame-skip-aware flush: hashes the cmd buffer and skips the
+        // JS↔WASM phenotype_flush() round trip when the bytes are
+        // identical to the previous frame (caret blink, idle repaint,
+        // etc.). Diag counters are updated inside the helper.
+        flush_if_changed();
         auto t5 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(
             t5 - t4, {{"phase", "flush"}});
@@ -643,7 +646,9 @@ extern "C" {
         phenotype::emit_clear(app.theme.background);
         float vh = phenotype_get_canvas_height();
         phenotype::detail::paint_node(app.root, 0, 0, scroll_y, vh);
-        phenotype::flush();
+        // flush_if_changed instead of flush so caret-blink and other
+        // no-visible-change repaints collapse to a hash + return.
+        phenotype::flush_if_changed();
     }
 
     __attribute__((export_name("phenotype_get_total_height")))

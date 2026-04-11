@@ -397,6 +397,52 @@ void test_image_widget_layout_and_emit() {
     std::puts("PASS: widget::image lays out and emits DrawImage");
 }
 
+// flush_if_changed hashes the cmd buffer after each paint pass and
+// skips the (mocked) phenotype_flush() trampoline when the bytes are
+// identical to the previous frame. This is the v1 partial-paint
+// optimization: caret blinks, idle repaints, and any rebuild that
+// happens to produce the same draw commands collapse to a hash +
+// return rather than a full GPU upload + draw.
+void test_frame_skip_on_identical_cmd_buffer() {
+    detail::g_app.arena.reset();
+    metrics::reset_all();
+    detail::clear_measure_cache();
+    detail::g_app.last_paint_hash = 0;
+    // Earlier tests in this binary call paint_node directly without
+    // going through flush(), so the cmd buffer can carry stale bytes
+    // from the previous test. The runner relies on flush() to reset
+    // it, so in production this is fine; here we reset it manually
+    // so the first rebuild starts from a clean buffer.
+    phenotype_cmd_len = 0;
+
+    // Install a runner with a trivially-stable view.
+    run<int, int>(
+        [](int const&) {
+            widget::text("hello frame skip");
+        },
+        [](int& s, int m) { s = m; });
+
+    // run<>() triggered the initial rebuild — that's flush #1.
+    auto initial_flushes = metrics::inst::flush_calls.total();
+    auto initial_skips   = metrics::inst::frames_skipped.total();
+    assert(initial_flushes >= 1);
+    assert(initial_skips == 0);
+
+    // Manually re-trigger the runner without changing state. The
+    // view body is identical, so the cmd buffer is identical, and
+    // the second flush should be skipped.
+    detail::trigger_rebuild();
+    assert(metrics::inst::flush_calls.total() == initial_flushes);
+    assert(metrics::inst::frames_skipped.total() == initial_skips + 1);
+
+    // A third rebuild should also skip.
+    detail::trigger_rebuild();
+    assert(metrics::inst::flush_calls.total() == initial_flushes);
+    assert(metrics::inst::frames_skipped.total() == initial_skips + 2);
+
+    std::puts("PASS: frame skip when cmd buffer is identical");
+}
+
 // `layout::row` defaults cross_align to Center so that mixed-height inline
 // content (e.g. widget::text alongside widget::code) lines up on a shared
 // centerline instead of leaving the shorter child dangling at the top of
@@ -460,6 +506,7 @@ int main() {
     test_set_theme_updates_and_invalidates_cache();
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();
+    test_frame_skip_on_identical_cmd_buffer();
     test_row_cross_align_center_default();
     std::puts("\nAll tests passed.");
     return 0;

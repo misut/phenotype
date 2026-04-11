@@ -304,6 +304,10 @@ inline Counter& input_events = *new Counter{
 
 inline Counter& flush_calls = *new Counter{
     "phenotype.host.flush_calls", "Host phenotype_flush() invocations", "{call}"};
+inline Counter& frames_skipped = *new Counter{
+    "phenotype.runner.frames_skipped",
+    "Frames where paint produced an identical cmd buffer to the previous frame and the flush was skipped",
+    "{frame}"};
 inline Counter& measure_text_calls = *new Counter{
     "phenotype.host.measure_text_calls",
     "Host phenotype_measure_text() invocations that crossed the JS↔WASM trampoline (cache misses)",
@@ -455,10 +459,15 @@ inline void reset_all() noexcept {
     inst::max_queue_depth.reset();
     inst::input_events.reset();
     inst::flush_calls.reset();
+    inst::frames_skipped.reset();
     inst::measure_text_calls.reset();
     inst::measure_text_cache_hits.reset();
     inst::frame_duration.reset();
     inst::phase_duration.reset();
+    // NOTE: g_app.last_paint_hash is NOT reset here — phenotype.diag
+    // cannot import phenotype.state (cycle: state already imports diag).
+    // Tests that need a clean hash state assign detail::g_app.last_paint_hash
+    // = 0 directly themselves.
     auto& ring = ::phenotype::log::detail::ring();
     ring.head = 0;
     ring.count = 0;
@@ -587,6 +596,7 @@ inline json::Value build_snapshot() {
     counters.push_back(counter_to_json(inst::messages_drained, now));
     counters.push_back(counter_to_json(inst::input_events, now));
     counters.push_back(counter_to_json(inst::flush_calls, now));
+    counters.push_back(counter_to_json(inst::frames_skipped, now));
     counters.push_back(counter_to_json(inst::measure_text_calls, now));
     counters.push_back(counter_to_json(inst::measure_text_cache_hits, now));
 
