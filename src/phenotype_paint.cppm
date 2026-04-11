@@ -194,10 +194,18 @@ inline void paint_node(NodeHandle node_h, float ox, float oy, float scroll_y,
         emit_stroke_rect(ax, draw_y, node.width, node.height, bw, bc);
     }
 
-    // Text — use cached text_lines from layout pass
+    // Text — use cached text_lines from layout pass.
+    //
+    // Skip when this node is the focused text input: the JS shim is
+    // rendering an HTML <input> overlay over it so that the OS IME's
+    // inline composition (Korean / Japanese / Chinese / etc.) is
+    // visible to the user. The canvas still paints the field's
+    // background, border, and focus ring; the overlay handles the
+    // text glyphs and the caret natively.
+    bool html_overlay_active = is_focused && node.is_input;
     Color tc = (is_hovered && node.hover_text_color.a > 0)
         ? node.hover_text_color : node.text_color;
-    if (!node.text_lines.empty()) {
+    if (!html_overlay_active && !node.text_lines.empty()) {
         float line_height = node.font_size * g_app.theme.line_height_ratio;
         float inner_width = node.width - node.style.padding[1] - node.style.padding[3];
         float ty = draw_y + node.style.padding[0];
@@ -219,20 +227,11 @@ inline void paint_node(NodeHandle node_h, float ox, float oy, float scroll_y,
         }
     }
 
-    // Caret for focused input — use displayed text to compute position
-    if (is_focused && node.is_input && g_app.caret_visible) {
-        float caret_x = ax + node.style.padding[3];
-        // Measure displayed text width (text_lines[0] if not placeholder)
-        if (!node.text_lines.empty() && !node.text_lines[0].empty() &&
-            tc.r != g_app.theme.muted.r) { // not placeholder
-            caret_x += phenotype_measure_text(
-                node.font_size, 0, node.text_lines[0].c_str(),
-                static_cast<unsigned int>(node.text_lines[0].size()));
-        }
-        float caret_y = draw_y + node.style.padding[0];
-        float caret_h = node.font_size * g_app.theme.line_height_ratio;
-        emit_draw_line(caret_x, caret_y, caret_x, caret_y + caret_h, 1.5f, g_app.theme.accent);
-    }
+    // Caret for focused input — handled by the HTML overlay now, so
+    // the canvas no longer paints it. Kept here as a comment because
+    // the focus-ring border immediately above is still painted by
+    // the canvas, and the next reader will want to know why the
+    // caret block is missing.
 
     // Collect focusable IDs (for Tab navigation)
     if (node.callback_id != 0xFFFFFFFF)
