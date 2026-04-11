@@ -124,6 +124,16 @@ enum class TextAlign {
     End,
 };
 
+// Decoration — small visual glyph drawn on top of a node's background.
+// Used by widget::checkbox and widget::radio to render the active state
+// (a white "V" checkmark or a small white inner circle, respectively)
+// without needing a font glyph or a new draw-command opcode.
+enum class Decoration {
+    None,
+    Check,
+    Dot,
+};
+
 struct Style {
     FlexDirection flex_direction = FlexDirection::Column;
     MainAxisAlignment main_align = MainAxisAlignment::Start;
@@ -145,6 +155,7 @@ struct LayoutNode {
     float border_radius = 0;
     Color border_color = {0, 0, 0, 0};
     float border_width = 0;
+    Decoration decoration = Decoration::None; // checkmark / inner dot glyph
 
     // Content
     std::string text;
@@ -152,6 +163,7 @@ struct LayoutNode {
     std::string image_url;            // non-empty → image leaf
     unsigned int callback_id = 0xFFFFFFFF;
     unsigned int cursor_type = 0; // 0=default, 1=pointer
+    bool focusable = true;        // false = clickable but skipped by Tab + no focus ring
 
     // Hover styles (alpha=0 means no hover override)
     Color hover_background = {0, 0, 0, 0};

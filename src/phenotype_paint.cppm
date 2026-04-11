@@ -231,11 +231,16 @@ inline void paint_node(NodeHandle node_h, float ox, float oy, float scroll_y,
 
     float draw_y = ay - scroll_y;
 
-    // Hover/focus state
+    // Hover/focus state. Focus is gated on `focusable` so non-focusable
+    // click targets (e.g. the label leaf inside widget::checkbox/radio,
+    // which shares its callback_id with the indicator box for click
+    // dispatch) never satisfy the focus-ring branch even when the JS
+    // shim's click handler set focused_id to their shared id.
     bool is_hovered = (node.callback_id != 0xFFFFFFFF &&
                        node.callback_id == g_app.hovered_id);
     bool is_focused = (node.callback_id != 0xFFFFFFFF &&
-                       node.callback_id == g_app.focused_id);
+                       node.callback_id == g_app.focused_id &&
+                       node.focusable);
 
     // Background (with hover override)
     Color bg = (is_hovered && node.hover_background.a > 0)
@@ -246,6 +251,34 @@ inline void paint_node(NodeHandle node_h, float ox, float oy, float scroll_y,
                             node.border_radius, bg);
         else
             emit_fill_rect(ax, draw_y, node.width, node.height, bg);
+    }
+
+    // Decoration — small white glyph drawn on top of the background.
+    // Used by widget::checkbox and widget::radio to render the active
+    // state without a font glyph or a new opcode. The geometry is
+    // empirical, scaled by node.width so it stays balanced if the
+    // 16x16 indicator size ever changes.
+    if (node.decoration != Decoration::None) {
+        Color white = {255, 255, 255, 255};
+        if (node.decoration == Decoration::Check) {
+            // V-shaped checkmark from two short diagonal strokes. The
+            // elbow sits slightly below center; the long arm runs up
+            // and to the right.
+            float cx = ax + node.width * 0.5f;
+            float cy = draw_y + node.height * 0.5f;
+            float u  = node.width;
+            emit_draw_line(cx - u * 0.25f, cy + u * 0.02f,
+                           cx - u * 0.05f, cy + u * 0.18f,
+                           2.0f, white);
+            emit_draw_line(cx - u * 0.05f, cy + u * 0.18f,
+                           cx + u * 0.28f, cy - u * 0.18f,
+                           2.0f, white);
+        } else { // Decoration::Dot
+            float dot = node.width * 0.4f;
+            float dx  = ax + (node.width  - dot) * 0.5f;
+            float dy  = draw_y + (node.height - dot) * 0.5f;
+            emit_round_rect(dx, dy, dot, dot, dot * 0.5f, white);
+        }
     }
 
     // Border (accent color when focused)
@@ -304,8 +337,11 @@ inline void paint_node(NodeHandle node_h, float ox, float oy, float scroll_y,
                         static_cast<unsigned int>(node.image_url.size()));
     }
 
-    // Collect focusable IDs (for Tab navigation)
-    if (node.callback_id != 0xFFFFFFFF)
+    // Collect focusable IDs (for Tab navigation). Gated on `focusable`
+    // so non-focusable click targets (label leaf of checkbox/radio,
+    // which shares its callback_id with the indicator) are not visited
+    // by Tab — the indicator alone owns the focus slot.
+    if (node.callback_id != 0xFFFFFFFF && node.focusable)
         g_app.focusable_ids.push_back(node.callback_id);
 
     // Hit region — emit in world-space (pre-scroll). The JS hit-test
