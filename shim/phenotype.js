@@ -597,6 +597,31 @@ export async function mount(wasmUrl, rootElement = document.body) {
   canvas.style.display = 'block';
   rootElement.appendChild(canvas);
 
+  // Hidden input proxy — the real IME composition target and the
+  // visible editor while a phenotype text field has focus. The
+  // canvas itself is not an editable element, so the browser refuses
+  // to start an IME composition session against it; routing keys
+  // through a real <input> lets the browser engage the OS IME
+  // normally and deliver composed text via input / compositionend
+  // events.
+  const hiddenInput = document.createElement('input');
+  hiddenInput.type = 'text';
+  hiddenInput.setAttribute('autocomplete', 'off');
+  hiddenInput.setAttribute('autocorrect', 'off');
+  hiddenInput.setAttribute('autocapitalize', 'off');
+  hiddenInput.setAttribute('spellcheck', 'false');
+  hiddenInput.style.position = 'absolute';
+  hiddenInput.style.top = '-9999px';
+  hiddenInput.style.left = '-9999px';
+  hiddenInput.style.width = '1px';
+  hiddenInput.style.height = '1px';
+  hiddenInput.style.opacity = '0';
+  hiddenInput.style.border = '0';
+  hiddenInput.style.padding = '0';
+  hiddenInput.style.outline = '0';
+  hiddenInput.style.zIndex = '-1';
+  rootElement.appendChild(hiddenInput);
+
   const gpuContext = canvas.getContext('webgpu');
   const format = navigator.gpu.getPreferredCanvasFormat();
   gpuContext.configure({ device, format, alphaMode: 'premultiplied' });
@@ -727,8 +752,92 @@ export async function mount(wasmUrl, rootElement = document.body) {
   let focusedId = 0xFFFFFFFF;
   canvas.setAttribute('tabindex', '0');
 
+  // Sync the hidden input element to the currently focused phenotype
+  // text field. While a text field is focused, hiddenInput becomes
+  // the *visible* editor: it sits exactly over the canvas-painted
+  // field with a transparent background and matching font / padding,
+  // and shows the OS IME's inline composition natively (Korean /
+  // Japanese / Chinese all work as in any normal text input). The
+  // canvas still paints the background, border, and focus ring; the
+  // HTML input handles the text glyphs, caret, and selection.
+  //
+  // When no text field is focused, hiddenInput is parked off-screen
+  // with opacity 0 so the canvas's own painting takes over.
+  function syncHiddenInputForFocus() {
+    // Only show the HTML overlay when the focused element is a real
+    // text input. Buttons and links also receive focus (Tab cycle,
+    // click) but they're not in app.input_handlers, so phenotype_-
+    // focused_is_input() returns 0 for them. Without this guard the
+    // hidden input would still be positioned over the button with
+    // opacity 1, and the browser would draw its native caret '|' on
+    // top of the +/- glyph.
+    const isInput = inst.exports.phenotype_focused_is_input
+      ? inst.exports.phenotype_focused_is_input() === 1
+      : false;
+    if (focusedId === 0xFFFFFFFF || !isInput
+        || !inst.exports.phenotype_input_load_focused) {
+      hiddenInput.style.top = '-9999px';
+      hiddenInput.style.left = '-9999px';
+      hiddenInput.style.opacity = '0';
+      hiddenInput.value = '';
+      return;
+    }
+    const hr = hitRegions.find((h) => h.callbackId === focusedId);
+    if (!hr) {
+      hiddenInput.style.top = '-9999px';
+      hiddenInput.style.left = '-9999px';
+      hiddenInput.style.opacity = '0';
+      return;
+    }
+
+    const rect = canvas.getBoundingClientRect();
+    // hitRegions are world-space (pre-scroll). Subtract scrollY to get
+    // canvas-space, then add the canvas's screen offset.
+    hiddenInput.style.left = `${rect.left + window.scrollX + hr.x}px`;
+    hiddenInput.style.top = `${rect.top + window.scrollY + hr.y - scrollY}px`;
+    hiddenInput.style.width = `${hr.w}px`;
+    hiddenInput.style.height = `${hr.h}px`;
+
+    // Visible overlay. Transparent background and zero border so the
+    // canvas-painted background, border, and focus ring still show
+    // through. Padding / font / color match the widget::text_field
+    // defaults from src/phenotype.cppm so the text doesn't visually
+    // jump when the field gains or loses focus.
+    hiddenInput.style.opacity = '1';
+    hiddenInput.style.background = 'transparent';
+    hiddenInput.style.border = '0';
+    hiddenInput.style.outline = 'none';
+    hiddenInput.style.padding = '8px 12px';
+    hiddenInput.style.margin = '0';
+    hiddenInput.style.boxSizing = 'border-box';
+    hiddenInput.style.font = `16px ${FONT_SANS}`;
+    hiddenInput.style.color = 'rgb(26, 26, 26)';
+    hiddenInput.style.caretColor = 'rgb(37, 99, 235)';
+    hiddenInput.style.zIndex = '1';
+    // pointer-events: none keeps mouse clicks routing to the canvas
+    // (so canvas-side click → focus-change logic stays the source of
+    // truth). Click-to-position-caret inside an already-focused field
+    // is a small UX limitation; arrow / Home / End / Backspace still
+    // work via the HTML input's native key handling.
+    hiddenInput.style.pointerEvents = 'none';
+
+    // Load the C++ side's current value so the user starts editing
+    // from the existing text rather than an empty buffer.
+    const len = inst.exports.phenotype_input_load_focused();
+    if (len > 0) {
+      const ptr = inst.exports.phenotype_input_buf();
+      const bytes = new Uint8Array(inst.exports.memory.buffer, ptr, len);
+      hiddenInput.value = new TextDecoder().decode(bytes);
+    } else {
+      hiddenInput.value = '';
+    }
+    // Caret to the end of the loaded content — natural place for the
+    // user to keep typing.
+    hiddenInput.setSelectionRange(hiddenInput.value.length, hiddenInput.value.length);
+  }
+
   canvas.addEventListener('click', (e) => {
-    canvas.focus();
+    hiddenInput.focus();
     const hr = hitTest(e.clientX, e.clientY);
     // Update focus
     const newFocus = hr ? hr.callbackId : 0xFFFFFFFF;
@@ -736,6 +845,10 @@ export async function mount(wasmUrl, rootElement = document.body) {
       focusedId = newFocus;
       if (inst.exports.phenotype_set_focus)
         inst.exports.phenotype_set_focus(focusedId);
+      // Re-sync the HTML overlay to the new focus target. The C++
+      // side's value is loaded into hiddenInput.value here so the
+      // user starts editing from the existing text.
+      syncHiddenInputForFocus();
     }
     if (hr && inst.exports.phenotype_handle_event) {
       inst.exports.phenotype_handle_event(hr.callbackId);
@@ -785,41 +898,45 @@ export async function mount(wasmUrl, rootElement = document.body) {
     }
   });
 
-  // IME composition (Korean / Japanese / Chinese / etc.)
-  // Each composing keystroke fires a normal keydown with the partial
-  // jamo/kana, AND a composition* event with the composed text. We
-  // ignore the keydowns during composition and commit the final
-  // string from compositionend instead.
-  let isComposing = false;
-  canvas.addEventListener('compositionstart', () => {
-    isComposing = true;
-  });
-  canvas.addEventListener('compositionend', (e) => {
-    isComposing = false;
-    if (focusedId === 0xFFFFFFFF || !e.data) return;
-    // Send each codepoint of the composed text as a regular character
-    // keypress; phenotype_handle_key encodes UTF-8 internally.
-    for (const ch of e.data) {
-      const cp = ch.codePointAt(0);
-      if (inst.exports.phenotype_handle_key) {
-        inst.exports.phenotype_handle_key(0, cp);
-      }
-    }
+  // Text input — push hiddenInput.value to C++ on every change.
+  //
+  // hiddenInput is a real <input> element, so the browser's native
+  // editing handles every keystroke (English / numbers / symbols),
+  // every IME composition tick (Korean / Japanese / Chinese inline
+  // preview), Backspace, arrow / Home / End cursor moves, paste, and
+  // selection. We don't filter on e.isComposing because the input's
+  // .value IS the source of truth: whatever it currently shows is
+  // what should be in C++. Pushing the same string twice is
+  // idempotent — phenotype_input_commit just runs the user's mapper
+  // and triggers a rebuild, which the runner is already designed for.
+  hiddenInput.addEventListener('input', () => {
+    if (focusedId === 0xFFFFFFFF || !inst.exports.phenotype_input_commit) return;
+    const utf8 = new TextEncoder().encode(hiddenInput.value);
+    if (utf8.length > 4096) return; // matches PHENOTYPE_INPUT_BUF_SIZE
+    const ptr = inst.exports.phenotype_input_buf();
+    const buf = new Uint8Array(inst.exports.memory.buffer, ptr, utf8.length);
+    buf.set(utf8);
+    inst.exports.phenotype_input_commit(utf8.length);
   });
 
-  // Keyboard
-  canvas.addEventListener('keydown', (e) => {
-    // Skip text-character processing during IME composition.
-    // Each composed syllable lands via compositionend instead.
-    if (e.isComposing || isComposing) return;
+  // Keyboard — only Tab and Enter need explicit handling now. Every
+  // character key (including IME jamo / kana) is delivered through
+  // hiddenInput's native input event above, so the keydown handler
+  // no longer routes character codepoints into phenotype_handle_key.
+  // Backspace / arrows / Home / End are handled natively by the HTML
+  // input while a text field is focused; outside text fields they're
+  // no-ops anyway, so we drop the per-key forwarding entirely.
+  hiddenInput.addEventListener('keydown', (e) => {
     if (e.key === 'Tab') {
       e.preventDefault();
       if (inst.exports.phenotype_handle_tab)
         inst.exports.phenotype_handle_tab(e.shiftKey ? 1 : 0);
       // Tab cycles focus inside C++; sync the JS-side cache so subsequent
-      // Enter / caret-blink logic targets the right element.
+      // Enter / caret-blink logic targets the right element, then
+      // re-position the overlay onto whatever field Tab landed on.
       if (inst.exports.phenotype_get_focused_id)
         focusedId = inst.exports.phenotype_get_focused_id();
+      syncHiddenInputForFocus();
       return;
     }
     if (e.key === 'Enter') {
@@ -835,24 +952,6 @@ export async function mount(wasmUrl, rootElement = document.body) {
         focusedId = fid;
       }
       return;
-    }
-    // Text input keys
-    if (focusedId === 0xFFFFFFFF) return;
-    let keyType = -1, codepoint = 0;
-    if (e.key === 'Backspace') keyType = 1;
-    else if (e.key === 'Delete') keyType = 2;
-    else if (e.key === 'ArrowLeft') keyType = 3;
-    else if (e.key === 'ArrowRight') keyType = 4;
-    else if (e.key === 'Home') keyType = 5;
-    else if (e.key === 'End') keyType = 6;
-    else if (e.key.length === 1 && !e.ctrlKey && !e.metaKey) {
-      keyType = 0;
-      codepoint = e.key.codePointAt(0);
-    }
-    if (keyType >= 0) {
-      e.preventDefault();
-      if (inst.exports.phenotype_handle_key)
-        inst.exports.phenotype_handle_key(keyType, codepoint);
     }
   });
 
@@ -874,6 +973,8 @@ export async function mount(wasmUrl, rootElement = document.body) {
     // Hit regions just shifted under a stationary pointer — re-derive
     // the cursor + hovered_id from the cached pointer position.
     applyHoverAt(lastClientX, lastClientY);
+    // Keep the IME anchor following the focused field across the scroll.
+    syncHiddenInputForFocus();
   }, { passive: false });
 
   // Resize
@@ -888,8 +989,15 @@ export async function mount(wasmUrl, rootElement = document.body) {
         }
       }
       applyHoverAt(lastClientX, lastClientY);
+      syncHiddenInputForFocus();
     });
   });
+
+  // Initial keyboard focus — make sure the OS IME has an editable
+  // target ready before the user touches anything. Without this, the
+  // first Korean keystroke after page load lands on document.body
+  // instead of hiddenInput and gets dropped.
+  hiddenInput.focus();
   } catch (e) {
     console.error('phenotype mount error:', e);
     rootElement.style.color = '#c00';

@@ -744,4 +744,78 @@ extern "C" {
     void phenotype_diag_reset(void) {
         phenotype::metrics::reset_all();
     }
+
+    // ============================================================
+    // Text input value buffer — JS uses this to read / write the
+    // currently focused text field's value so it can render an HTML
+    // <input> overlay over the canvas-painted field. The overlay is
+    // what makes OS IME (Korean / Japanese / Chinese) inline
+    // composition visible to the user; the C++ side just owns the
+    // canonical value via the existing InputHandler::current state.
+    // ============================================================
+
+    constexpr unsigned int PHENOTYPE_INPUT_BUF_SIZE = 4u * 1024u;
+    alignas(4) unsigned char phenotype_input_buf_storage[PHENOTYPE_INPUT_BUF_SIZE];
+    unsigned int phenotype_input_buf_len_value = 0;
+
+    __attribute__((export_name("phenotype_input_buf")))
+    unsigned char* phenotype_input_buf(void) { return phenotype_input_buf_storage; }
+
+    __attribute__((export_name("phenotype_input_buf_size")))
+    unsigned int phenotype_input_buf_size(void) { return PHENOTYPE_INPUT_BUF_SIZE; }
+
+    __attribute__((export_name("phenotype_input_buf_len")))
+    unsigned int phenotype_input_buf_len(void) { return phenotype_input_buf_len_value; }
+
+    // Returns 1 if the currently focused id belongs to a text input
+    // node (i.e. is registered in app.input_handlers), 0 otherwise.
+    // The JS shim uses this to decide whether to show the HTML
+    // overlay — load_focused() alone is ambiguous because it also
+    // returns length 0 for an empty (but real) text field.
+    __attribute__((export_name("phenotype_focused_is_input")))
+    unsigned int phenotype_focused_is_input(void) {
+        auto& app = phenotype::detail::g_app;
+        for (auto const& [id, handler] : app.input_handlers) {
+            (void)handler;
+            if (id == app.focused_id) return 1;
+        }
+        return 0;
+    }
+
+    // Copy the focused text field's current value into the shared
+    // buffer so JS can populate hiddenInput.value on focus / re-focus.
+    // Returns the byte length (also stored in phenotype_input_buf_len).
+    // If no text field is focused, length is 0.
+    __attribute__((export_name("phenotype_input_load_focused")))
+    unsigned int phenotype_input_load_focused(void) {
+        auto& app = phenotype::detail::g_app;
+        phenotype_input_buf_len_value = 0;
+        for (auto& [id, handler] : app.input_handlers) {
+            if (id != app.focused_id) continue;
+            unsigned int n = static_cast<unsigned int>(handler.current.size());
+            if (n > PHENOTYPE_INPUT_BUF_SIZE) n = PHENOTYPE_INPUT_BUF_SIZE;
+            std::memcpy(phenotype_input_buf_storage, handler.current.data(), n);
+            phenotype_input_buf_len_value = n;
+            return n;
+        }
+        return 0;
+    }
+
+    // Commit a new value (UTF-8 bytes the JS side wrote into
+    // phenotype_input_buf_storage) for the currently focused text
+    // field. Goes through the existing InputHandler::invoke trampoline
+    // so the user's update() runs and the runner rebuilds the view
+    // exactly the way today's per-character path does.
+    __attribute__((export_name("phenotype_input_commit")))
+    void phenotype_input_commit(unsigned int len) {
+        if (len > PHENOTYPE_INPUT_BUF_SIZE) return;
+        auto& app = phenotype::detail::g_app;
+        for (auto& [id, handler] : app.input_handlers) {
+            if (id != app.focused_id) continue;
+            std::string val(
+                reinterpret_cast<char const*>(phenotype_input_buf_storage), len);
+            handler.invoke(handler.state, std::move(val));
+            return;
+        }
+    }
 }
