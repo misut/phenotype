@@ -42,8 +42,11 @@ inline void example(phenotype::str source, std::function<void()> live) {
 struct Increment {};
 struct Decrement {};
 struct InputChanged { std::string text; };
+struct ToggleSubscribed {};
+struct PickPlan { std::string id; };
 
-using Msg = std::variant<Increment, Decrement, InputChanged>;
+using Msg = std::variant<Increment, Decrement, InputChanged,
+                         ToggleSubscribed, PickPlan>;
 
 // ============================================================
 // State — single source of truth, owned by the framework runner
@@ -52,6 +55,8 @@ using Msg = std::variant<Increment, Decrement, InputChanged>;
 struct State {
     int count = 0;
     std::string input;
+    bool subscribed = false;
+    std::string plan = "free";
 };
 
 // ============================================================
@@ -64,6 +69,8 @@ void update(State& state, Msg msg) {
         if constexpr (std::same_as<T, Increment>)         state.count += 1;
         else if constexpr (std::same_as<T, Decrement>)    state.count -= 1;
         else if constexpr (std::same_as<T, InputChanged>) state.input = m.text;
+        else if constexpr (std::same_as<T, ToggleSubscribed>) state.subscribed = !state.subscribed;
+        else if constexpr (std::same_as<T, PickPlan>)     state.plan = m.id;
     }, msg);
 }
 
@@ -184,6 +191,30 @@ void view(State const& state) {
                             "Type here...",
                             state.input,
                             +[](std::string s) -> Msg { return InputChanged{std::move(s)}; });
+                    });
+
+                example(
+                    R"(widget::checkbox<Msg>(
+    "Subscribe to updates",
+    state.subscribed,
+    ToggleSubscribed{});)",
+                    [&] {
+                        widget::checkbox<Msg>(
+                            "Subscribe to updates",
+                            state.subscribed,
+                            ToggleSubscribed{});
+                    });
+
+                example(
+                    R"(widget::radio<Msg>("Free", state.plan == "free", PickPlan{"free"});
+widget::radio<Msg>("Pro",  state.plan == "pro",  PickPlan{"pro"});
+widget::radio<Msg>("Team", state.plan == "team", PickPlan{"team"});)",
+                    [&] {
+                        layout::column([&] {
+                            widget::radio<Msg>("Free", state.plan == "free", PickPlan{"free"});
+                            widget::radio<Msg>("Pro",  state.plan == "pro",  PickPlan{"pro"});
+                            widget::radio<Msg>("Team", state.plan == "team", PickPlan{"team"});
+                        });
                     });
 
                 example(
