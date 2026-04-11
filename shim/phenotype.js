@@ -597,6 +597,34 @@ export async function mount(wasmUrl, rootElement = document.body) {
   canvas.style.display = 'block';
   rootElement.appendChild(canvas);
 
+  // Hidden input proxy — the real IME composition target. The canvas
+  // itself is not an editable element so the browser refuses to start
+  // an IME composition session against it; compositionstart/end never
+  // fire on canvas, leaving Korean / Japanese / Chinese text as
+  // decomposed jamo / kana. Routing keys through a real <input> lets
+  // the browser engage the OS IME normally and deliver the composed
+  // text via compositionend's e.data. The input itself is invisible
+  // and only acts as an event sink — its value is cleared after each
+  // composition and the canvas remains the sole source of truth for
+  // the displayed text.
+  const hiddenInput = document.createElement('input');
+  hiddenInput.type = 'text';
+  hiddenInput.setAttribute('autocomplete', 'off');
+  hiddenInput.setAttribute('autocorrect', 'off');
+  hiddenInput.setAttribute('autocapitalize', 'off');
+  hiddenInput.setAttribute('spellcheck', 'false');
+  hiddenInput.style.position = 'absolute';
+  hiddenInput.style.top = '-9999px';
+  hiddenInput.style.left = '-9999px';
+  hiddenInput.style.width = '1px';
+  hiddenInput.style.height = '1px';
+  hiddenInput.style.opacity = '0';
+  hiddenInput.style.border = '0';
+  hiddenInput.style.padding = '0';
+  hiddenInput.style.outline = '0';
+  hiddenInput.style.zIndex = '-1';
+  rootElement.appendChild(hiddenInput);
+
   const gpuContext = canvas.getContext('webgpu');
   const format = navigator.gpu.getPreferredCanvasFormat();
   gpuContext.configure({ device, format, alphaMode: 'premultiplied' });
@@ -727,8 +755,34 @@ export async function mount(wasmUrl, rootElement = document.body) {
   let focusedId = 0xFFFFFFFF;
   canvas.setAttribute('tabindex', '0');
 
+  // Position the hidden input over the focused phenotype text field's
+  // screen rectangle so that the OS IME's inline composition lands
+  // where the user is looking. Lookup is via the cached hitRegions[]
+  // (world-space, populated on every flush). When no field is focused
+  // the input is parked off-screen.
+  function positionHiddenInput() {
+    if (focusedId === 0xFFFFFFFF) {
+      hiddenInput.style.top = '-9999px';
+      hiddenInput.style.left = '-9999px';
+      return;
+    }
+    const hr = hitRegions.find((h) => h.callbackId === focusedId);
+    if (!hr) {
+      hiddenInput.style.top = '-9999px';
+      hiddenInput.style.left = '-9999px';
+      return;
+    }
+    const rect = canvas.getBoundingClientRect();
+    // hitRegions are world-space (pre-scroll). Subtract scrollY to get
+    // canvas-space, then add the canvas's screen offset.
+    hiddenInput.style.left = `${rect.left + window.scrollX + hr.x}px`;
+    hiddenInput.style.top = `${rect.top + window.scrollY + hr.y - scrollY}px`;
+    hiddenInput.style.width = `${hr.w}px`;
+    hiddenInput.style.height = `${hr.h}px`;
+  }
+
   canvas.addEventListener('click', (e) => {
-    canvas.focus();
+    hiddenInput.focus();
     const hr = hitTest(e.clientX, e.clientY);
     // Update focus
     const newFocus = hr ? hr.callbackId : 0xFFFFFFFF;
@@ -736,6 +790,10 @@ export async function mount(wasmUrl, rootElement = document.body) {
       focusedId = newFocus;
       if (inst.exports.phenotype_set_focus)
         inst.exports.phenotype_set_focus(focusedId);
+      // Reset the hidden input on every focus change so the next
+      // IME session doesn't accumulate stale composition text.
+      hiddenInput.value = '';
+      positionHiddenInput();
     }
     if (hr && inst.exports.phenotype_handle_event) {
       inst.exports.phenotype_handle_event(hr.callbackId);
@@ -786,17 +844,24 @@ export async function mount(wasmUrl, rootElement = document.body) {
   });
 
   // IME composition (Korean / Japanese / Chinese / etc.)
-  // Each composing keystroke fires a normal keydown with the partial
-  // jamo/kana, AND a composition* event with the composed text. We
-  // ignore the keydowns during composition and commit the final
-  // string from compositionend instead.
+  //
+  // The browser only fires compositionstart / compositionend on focused
+  // editable elements. The canvas is not editable, so the listeners
+  // must live on hiddenInput — that's the whole reason hiddenInput
+  // exists. compositionend's e.data carries the fully composed text;
+  // we forward each codepoint to phenotype_handle_key (which UTF-8-
+  // encodes it on the C++ side) and then clear the hidden input so
+  // the next composition starts from an empty buffer.
   let isComposing = false;
-  canvas.addEventListener('compositionstart', () => {
+  hiddenInput.addEventListener('compositionstart', () => {
     isComposing = true;
   });
-  canvas.addEventListener('compositionend', (e) => {
+  hiddenInput.addEventListener('compositionend', (e) => {
     isComposing = false;
-    if (focusedId === 0xFFFFFFFF || !e.data) return;
+    if (focusedId === 0xFFFFFFFF || !e.data) {
+      hiddenInput.value = '';
+      return;
+    }
     // Send each codepoint of the composed text as a regular character
     // keypress; phenotype_handle_key encodes UTF-8 internally.
     for (const ch of e.data) {
@@ -805,10 +870,11 @@ export async function mount(wasmUrl, rootElement = document.body) {
         inst.exports.phenotype_handle_key(0, cp);
       }
     }
+    hiddenInput.value = '';
   });
 
   // Keyboard
-  canvas.addEventListener('keydown', (e) => {
+  hiddenInput.addEventListener('keydown', (e) => {
     // Skip text-character processing during IME composition.
     // Each composed syllable lands via compositionend instead.
     if (e.isComposing || isComposing) return;
@@ -874,6 +940,8 @@ export async function mount(wasmUrl, rootElement = document.body) {
     // Hit regions just shifted under a stationary pointer — re-derive
     // the cursor + hovered_id from the cached pointer position.
     applyHoverAt(lastClientX, lastClientY);
+    // Keep the IME anchor following the focused field across the scroll.
+    positionHiddenInput();
   }, { passive: false });
 
   // Resize
@@ -888,8 +956,15 @@ export async function mount(wasmUrl, rootElement = document.body) {
         }
       }
       applyHoverAt(lastClientX, lastClientY);
+      positionHiddenInput();
     });
   });
+
+  // Initial keyboard focus — make sure the OS IME has an editable
+  // target ready before the user touches anything. Without this, the
+  // first Korean keystroke after page load lands on document.body
+  // instead of hiddenInput and gets dropped.
+  hiddenInput.focus();
   } catch (e) {
     console.error('phenotype mount error:', e);
     rootElement.style.color = '#c00';
