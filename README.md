@@ -117,6 +117,36 @@ cover arena allocation, dispatch queue depth, runner phase timing, host
 linear memory and forward it to an OTel collector via a separate adapter.
 See `src/phenotype_diag.cppm` for the full instrument list and JSON shape.
 
+## Custom theming
+
+Every phenotype app starts with the default `Theme` (design tokens
+tuned for the docs site). To override any of them — colors, font
+sizes, padding — call `phenotype::set_theme(...)` before `run<>()`,
+or from inside `update()` for dynamic theme switching:
+
+```cpp
+int main() {
+    phenotype::set_theme({
+        .background = {10,  10,  10, 255},
+        .foreground = {240, 240, 240, 255},
+        .accent     = {100, 150, 255, 255},
+        // any fields you omit keep their default value
+    });
+    phenotype::run<State, Msg>(view, update);
+    return 0;
+}
+```
+
+`set_theme` never triggers a rebuild on its own — the next rebuild
+picks up the new values automatically because paint / layout /
+widget code all read the theme directly. If you change the theme
+from a non-message path (timer, external event), post a no-op
+`Msg` afterwards to force a redraw.
+
+`phenotype::current_theme()` reads the active theme from inside your
+view function when you need to compute a derived color or pass a
+palette to a helper.
+
 ## Architecture
 
 ```
@@ -201,11 +231,12 @@ As an exon dependency:
 - [x] Keyboard navigation (Tab/Enter, focus ring)
 - [x] OpenTelemetry-shaped logs and metrics (`phenotype.diag`)
 - [x] Host `measure_text` cache (cross-rebuild memoization keyed by font size + content)
+- [x] Custom theming API (runtime-configurable `Theme` via `phenotype::set_theme` / `current_theme`)
+- [x] Theme-aware cache invalidation (`set_theme` clears the `measure_text` cache)
 
 ### Performance
 
 - [ ] vDOM-style diff / partial paint (only repaint changed nodes; baseline via `phenotype.runner.phase_duration`)
-- [ ] Theme-aware cache invalidation when custom theming lands
 
 ### Observability
 
@@ -215,7 +246,6 @@ As an exon dependency:
 
 ### Framework features
 
-- [ ] Custom theming API (runtime-configurable `Theme` via `run<>` overload or `set_theme()`)
 - [ ] Image / icon rendering (host import + `widget::image`)
 - [ ] Animation system (transitions, easings, animated layout values)
 - [ ] More widgets (checkbox, radio, slider, dropdown, modal/dialog, tooltip)

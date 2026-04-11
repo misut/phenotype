@@ -186,6 +186,42 @@ inline void text_field(str hint, std::string const& current,
 } // namespace widget
 
 // ============================================================
+// Theme — runtime-configurable design tokens
+// ============================================================
+//
+// set_theme replaces the current Theme in the global app state and
+// invalidates per-theme caches (currently just the measure_text
+// cache, which is keyed on font size). Typical usage:
+//
+//   int main() {
+//       phenotype::set_theme({
+//           .background = {10,  10,  10, 255},
+//           .foreground = {240, 240, 240, 255},
+//           // any fields you omit keep their default value
+//       });
+//       phenotype::run<State, Msg>(view, update);
+//       return 0;
+//   }
+//
+// It can also be called from inside update() for dynamic theme
+// switching (light/dark mode). set_theme never triggers a rebuild
+// on its own — the next rebuild picks up the new values because
+// paint / layout / widget code all read g_app.theme.X directly.
+// Callers that need an immediate redraw from a non-message path
+// (e.g. a timer) should post a no-op Msg afterwards.
+inline void set_theme(Theme const& theme) {
+    detail::g_app.theme = theme;
+    detail::clear_measure_cache();
+}
+
+// Read-only accessor for use inside view() when an app needs to
+// read a theme value (e.g. to compute a derived color or to pass
+// a palette to a child view helper).
+inline Theme const& current_theme() noexcept {
+    return detail::g_app.theme;
+}
+
+// ============================================================
 // run<State, Msg>(view, update) — application entry point.
 // ============================================================
 //
