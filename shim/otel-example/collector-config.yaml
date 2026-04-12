@@ -1,0 +1,32 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        cors:
+          # phenotype docs site usually serves on :8765 during dev.
+          # Add your own origins here. CORS is mandatory — without
+          # this stanza the browser blocks every POST.
+          allowed_origins:
+            - http://localhost:8765
+            - http://127.0.0.1:8765
+
+processors:
+  batch:
+
+exporters:
+  # Logs incoming metrics + logs to stdout in human-readable form.
+  # Tail with: docker compose logs -f collector
+  debug:
+    verbosity: detailed
+
+service:
+  pipelines:
+    metrics:
+      receivers:  [otlp]
+      processors: [batch]
+      exporters:  [debug]
+    logs:
+      receivers:  [otlp]
+      processors: [batch]
+      exporters:  [debug]
