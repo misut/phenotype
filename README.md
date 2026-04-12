@@ -243,7 +243,7 @@ As an exon dependency:
 
 ### Observability
 
-- [ ] OTel JS adapter (`shim/phenotype-otel.js`) — forward `phenotype_diag_export()` to a collector via OTLP/HTTP
+- [x] OTel JS adapter (`shim/phenotype-otel.js`) — polls `phenotype_diag_export()`, transforms to OTLP/HTTP JSON, POSTs to a user-configured collector. Includes a local collector example (`shim/otel-example/`).
 - [ ] Spans / traces (`phenotype::diag::trace::Span`, runner phases as child spans)
 - [ ] Histogram exemplars (slowest frame's trace id attached to the bucket)
 

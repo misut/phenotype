@@ -1174,6 +1174,23 @@ export async function mount(wasmUrl, rootElement = document.body) {
   // first Korean keystroke after page load lands on document.body
   // instead of hiddenInput and gets dropped.
   hiddenInput.focus();
+
+  // Public handle for opt-in extensions like phenotype-otel.js. The
+  // adapter stores `inst` so it can call the diag exports on a timer.
+  // diagExport() is provided as a convenience: it calls the three
+  // host exports, decodes the buffer as UTF-8, and JSON.parses the
+  // result, returning the snapshot object directly so callers don't
+  // have to touch linear memory.
+  return {
+    inst,
+    diagExport() {
+      const len = inst.exports.phenotype_diag_export();
+      if (len === 0) return null;
+      const ptr = inst.exports.phenotype_diag_get_buf();
+      const bytes = new Uint8Array(inst.exports.memory.buffer, ptr, len);
+      return JSON.parse(new TextDecoder().decode(bytes));
+    },
+  };
   } catch (e) {
     console.error('phenotype mount error:', e);
     rootElement.style.color = '#c00';
