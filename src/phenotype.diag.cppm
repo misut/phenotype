@@ -317,6 +317,15 @@ inline Counter& measure_text_cache_hits = *new Counter{
     "Cache hits served from the in-process measure_text cache",
     "{hit}"};
 
+inline Counter& layout_nodes_skipped = *new Counter{
+    "phenotype.runner.layout_nodes_skipped",
+    "Nodes whose layout was copied from the previous frame by diff",
+    "{node}"};
+inline Counter& layout_nodes_computed = *new Counter{
+    "phenotype.runner.layout_nodes_computed",
+    "Nodes whose layout was computed fresh by layout_node",
+    "{node}"};
+
 inline Histogram& frame_duration = *new Histogram{
     "phenotype.runner.frame_duration",
     "Total frame duration (drain + update + view + layout + paint + flush)",
@@ -462,6 +471,8 @@ inline void reset_all() noexcept {
     inst::frames_skipped.reset();
     inst::measure_text_calls.reset();
     inst::measure_text_cache_hits.reset();
+    inst::layout_nodes_skipped.reset();
+    inst::layout_nodes_computed.reset();
     inst::frame_duration.reset();
     inst::phase_duration.reset();
     // NOTE: g_app.last_paint_hash is NOT reset here — phenotype.diag
@@ -599,6 +610,8 @@ inline json::Value build_snapshot() {
     counters.push_back(counter_to_json(inst::frames_skipped, now));
     counters.push_back(counter_to_json(inst::measure_text_calls, now));
     counters.push_back(counter_to_json(inst::measure_text_cache_hits, now));
+    counters.push_back(counter_to_json(inst::layout_nodes_skipped, now));
+    counters.push_back(counter_to_json(inst::layout_nodes_computed, now));
 
     json::Array gauges;
     gauges.push_back(gauge_to_json(inst::live_nodes, now));
