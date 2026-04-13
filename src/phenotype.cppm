@@ -14,6 +14,7 @@ export import phenotype.types;
 export import phenotype.state;
 export import phenotype.layout;
 export import phenotype.paint;
+export import phenotype.theme_json;
 
 // ============================================================
 // WASM imports — JS shim implements these
@@ -917,6 +918,32 @@ extern "C" {
     __attribute__((export_name("phenotype_diag_reset")))
     void phenotype_diag_reset(void) {
         phenotype::metrics::reset_all();
+    }
+
+    // ============================================================
+    // Theme from JSON — JS side calls this to push a theme JSON
+    // string into the framework. Reads `len` UTF-8 bytes from the
+    // input buffer, parses as JSON, deserializes to Theme via txn,
+    // and calls set_theme(). Returns 1 on success, 0 on failure
+    // (with a warn log).
+    // ============================================================
+
+    // Forward-declare the input buffer function — it lives further down
+    // in the same extern "C" block, after the text input section.
+    unsigned char* phenotype_input_buf(void);
+
+    __attribute__((export_name("phenotype_set_theme_json")))
+    unsigned int phenotype_set_theme_json(unsigned int len) {
+        auto* buf = phenotype_input_buf();
+        std::string_view json_str(reinterpret_cast<char const*>(buf), len);
+        auto result = phenotype::theme_from_json(json_str);
+        if (!result) {
+            phenotype::log::warn("phenotype.theme",
+                "theme_from_json: {}", result.error());
+            return 0;
+        }
+        phenotype::set_theme(*result);
+        return 1;
     }
 
     // ============================================================

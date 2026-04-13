@@ -1190,6 +1190,21 @@ export async function mount(wasmUrl, rootElement = document.body) {
       const bytes = new Uint8Array(inst.exports.memory.buffer, ptr, len);
       return JSON.parse(new TextDecoder().decode(bytes));
     },
+    setThemeJson(jsonStr) {
+      // Pre-validate so malformed JSON doesn't abort the WASM instance
+      // (jsoncpp aborts on parse errors when exceptions are disabled).
+      try { JSON.parse(jsonStr); } catch (e) {
+        console.warn('[phenotype] setThemeJson: invalid JSON', e.message);
+        return false;
+      }
+      const utf8 = new TextEncoder().encode(jsonStr);
+      const ptr = inst.exports.phenotype_input_buf();
+      const buf = new Uint8Array(inst.exports.memory.buffer, ptr, utf8.length);
+      buf.set(utf8);
+      const ok = inst.exports.phenotype_set_theme_json(utf8.length);
+      if (!ok) console.warn('[phenotype] setThemeJson: deserialization failed — check field names/types');
+      return ok === 1;
+    },
   };
   } catch (e) {
     console.error('phenotype mount error:', e);

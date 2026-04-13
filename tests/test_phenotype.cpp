@@ -613,6 +613,35 @@ void test_row_cross_align_center_default() {
     std::puts("PASS: row cross-align center default");
 }
 
+// Theme JSON roundtrip: serialize a Theme to JSON, deserialize it back,
+// verify all fields survived. Also test error path for bad input.
+void test_theme_json_roundtrip() {
+    Theme original{};
+    original.accent = {255, 0, 0, 255}; // red override
+
+    auto json_str = theme_to_json(original);
+    auto parsed = theme_from_json(json_str);
+    assert(parsed.has_value());
+    // Overridden field
+    assert(parsed->accent.r == 255);
+    assert(parsed->accent.g == 0);
+    assert(parsed->accent.b == 0);
+    assert(parsed->accent.a == 255);
+    // Default fields survived roundtrip
+    assert(parsed->background.r == original.background.r);
+    assert(parsed->background.g == original.background.g);
+    assert(parsed->foreground.r == original.foreground.r);
+    assert(parsed->body_font_size == original.body_font_size);
+    assert(parsed->line_height_ratio == original.line_height_ratio);
+    assert(parsed->max_content_width == original.max_content_width);
+
+    // Bad JSON — missing required fields
+    auto bad = theme_from_json(R"({"background":{"r":0,"g":0,"b":0,"a":255}})");
+    assert(!bad.has_value());
+
+    std::puts("PASS: theme JSON roundtrip");
+}
+
 // ============================================================
 // Runner
 // ============================================================
@@ -632,6 +661,7 @@ int main() {
     test_checkbox_and_radio_widgets();
     test_frame_skip_on_identical_cmd_buffer();
     test_row_cross_align_center_default();
+    test_theme_json_roundtrip();
     std::puts("\nAll tests passed.");
     return 0;
 }
