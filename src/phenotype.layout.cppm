@@ -4,16 +4,12 @@ module;
 #include <string>
 #include <tuple>
 #include <vector>
+#include "phenotype_host.h"
 export module phenotype.layout;
 
 import phenotype.types;
 import phenotype.state;
 import phenotype.diag;
-
-// Host imports — declared per-module so each TU resolves them at link time.
-extern "C" __attribute__((import_module("phenotype"), import_name("measure_text")))
-float phenotype_measure_text(float font_size, unsigned int mono,
-                             char const* text, unsigned int len);
 
 namespace phenotype::detail {
 
