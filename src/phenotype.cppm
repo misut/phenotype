@@ -15,6 +15,7 @@ export import phenotype.types;
 export import phenotype.state;
 export import phenotype.layout;
 export import phenotype.paint;
+export import phenotype.commands;
 export import phenotype.theme_json;
 
 export namespace phenotype {

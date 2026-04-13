@@ -698,6 +698,62 @@ void test_vdom_diff_layout_skip() {
     std::puts("PASS: vDOM diff layout skip");
 }
 
+// parse_commands: decode the raw cmd buffer into typed C++ structs.
+// Exercises every opcode to verify round-trip fidelity with the emit
+// functions (same encoding the JS parseCommands uses).
+void test_parse_commands() {
+    phenotype_cmd_len = 0;
+    emit_clear({250, 250, 250, 255});
+    emit_fill_rect(10, 20, 100, 50, {255, 0, 0, 255});
+    emit_stroke_rect(5, 5, 200, 100, 2.0f, {0, 128, 0, 255});
+    emit_round_rect(0, 0, 80, 40, 8.0f, {0, 0, 255, 255});
+    emit_draw_text(10, 30, 16.0f, 0, {26, 26, 26, 255}, "hello", 5);
+    emit_draw_line(0, 0, 100, 100, 2.0f, {255, 255, 255, 255});
+    emit_hit_region(10, 20, 100, 50, 42, 1);
+    emit_draw_image(0, 0, 64, 48, "img.png", 7);
+
+    auto cmds = parse_commands(phenotype_cmd_buf, phenotype_cmd_len);
+    assert(cmds.size() == 8);
+
+    // Clear
+    auto& c0 = std::get<ClearCmd>(cmds[0]);
+    assert(c0.color.r == 250 && c0.color.a == 255);
+
+    // FillRect
+    auto& c1 = std::get<FillRectCmd>(cmds[1]);
+    assert(c1.x == 10.0f && c1.y == 20.0f && c1.w == 100.0f && c1.h == 50.0f);
+    assert(c1.color.r == 255 && c1.color.g == 0);
+
+    // StrokeRect
+    auto& c2 = std::get<StrokeRectCmd>(cmds[2]);
+    assert(c2.line_width == 2.0f && c2.color.g == 128);
+
+    // RoundRect
+    auto& c3 = std::get<RoundRectCmd>(cmds[3]);
+    assert(c3.radius == 8.0f && c3.color.b == 255);
+
+    // DrawText
+    auto& c4 = std::get<DrawTextCmd>(cmds[4]);
+    assert(c4.text == "hello");
+    assert(c4.font_size == 16.0f && !c4.mono);
+    assert(c4.color.r == 26);
+
+    // DrawLine
+    auto& c5 = std::get<DrawLineCmd>(cmds[5]);
+    assert(c5.x1 == 0.0f && c5.y2 == 100.0f && c5.thickness == 2.0f);
+
+    // HitRegion
+    auto& c6 = std::get<HitRegionCmd>(cmds[6]);
+    assert(c6.callback_id == 42 && c6.cursor_type == 1);
+
+    // DrawImage
+    auto& c7 = std::get<DrawImageCmd>(cmds[7]);
+    assert(c7.url == "img.png");
+    assert(c7.w == 64.0f && c7.h == 48.0f);
+
+    std::puts("PASS: parse_commands round-trip");
+}
+
 // ============================================================
 // Runner
 // ============================================================
@@ -719,6 +775,7 @@ int main() {
     test_row_cross_align_center_default();
     test_theme_json_roundtrip();
     test_vdom_diff_layout_skip();
+    test_parse_commands();
     std::puts("\nAll tests passed.");
     return 0;
 }
