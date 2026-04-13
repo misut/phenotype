@@ -13,4 +13,5 @@ platforms = [
 ]
 
 [dependencies]
-"github.com/misut/jsoncpp" = "0.1.3"
+"github.com/misut/jsoncpp" = "0.1.4"
+"github.com/misut/txn" = "0.6.0"

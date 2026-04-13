@@ -235,6 +235,7 @@ As an exon dependency:
 - [x] Theme-aware cache invalidation (`set_theme` clears the `measure_text` cache)
 - [x] Image / icon rendering (`widget::image` + persistent atlas in the JS shim)
 - [x] Checkbox / radio widgets (`widget::checkbox<Msg>` / `widget::radio<Msg>` — filled accent indicator + label, click + Tab focus on the indicator)
+- [x] Theme from JSON (`theme_from_json` / `theme_to_json` via txn auto-reflection + `setThemeJson()` JS shim method)
 
 ### Performance
 
