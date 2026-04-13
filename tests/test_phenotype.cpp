@@ -642,6 +642,62 @@ void test_theme_json_roundtrip() {
     std::puts("PASS: theme JSON roundtrip");
 }
 
+// vDOM diff v2: the runner uses double-buffer arenas. After view()
+// builds the new tree, diff_and_copy_layout compares against the
+// previous frame's tree and copies layout for subtrees where all
+// layout-affecting properties match. layout_node then skips nodes
+// with layout_valid = true.
+void test_vdom_diff_layout_skip() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    metrics::reset_all();
+    detail::clear_measure_cache();
+    detail::g_app.last_paint_hash = 0;
+    detail::g_app.prev_root = NodeHandle::null();
+    phenotype_cmd_len = 0;
+
+    static int rebuild_count = 0;
+    rebuild_count = 0;
+
+    // View that renders a stable structure + one dynamic text.
+    run<int, int>(
+        [](int const& s) {
+            widget::text("static label");
+            widget::text(std::string("count=") + std::to_string(s));
+            widget::text("another static");
+        },
+        [](int& s, int m) { s += m; ++rebuild_count; });
+
+    // run<>() triggered the initial rebuild (first frame).
+    // First frame: prev_root is null → diff is skipped → full layout.
+    auto initial_computed = metrics::inst::layout_nodes_computed.total();
+    auto initial_skipped  = metrics::inst::layout_nodes_skipped.total();
+    assert(initial_computed > 0); // all nodes laid out fresh
+    assert(initial_skipped == 0); // no previous tree to diff against
+
+    // Second rebuild: same state → identical tree → diff copies ALL layout.
+    detail::trigger_rebuild();
+    auto after2_computed = metrics::inst::layout_nodes_computed.total();
+    auto after2_skipped  = metrics::inst::layout_nodes_skipped.total();
+    // layout_node should have skipped everything (root is layout_valid).
+    assert(after2_computed == initial_computed); // no new computed nodes
+    assert(after2_skipped > initial_skipped);   // all nodes skipped
+
+    // Third rebuild: post a message that changes the count.
+    // "count=0" → "count=1" — the text node's content differs.
+    // Diff marks the text node + root dirty (subtree-level diff),
+    // but the two static siblings are inside the same root subtree
+    // so they can't be individually skipped (root is dirty because
+    // one child's text changed). All nodes get recomputed.
+    detail::post<int>(1);
+    detail::trigger_rebuild();
+    auto after3_computed = metrics::inst::layout_nodes_computed.total();
+    // After the state change, layout recomputes at least the changed nodes.
+    assert(after3_computed > after2_computed);
+
+    std::puts("PASS: vDOM diff layout skip");
+}
+
 // ============================================================
 // Runner
 // ============================================================
@@ -662,6 +718,7 @@ int main() {
     test_frame_skip_on_identical_cmd_buffer();
     test_row_cross_align_center_default();
     test_theme_json_roundtrip();
+    test_vdom_diff_layout_skip();
     std::puts("\nAll tests passed.");
     return 0;
 }

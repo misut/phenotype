@@ -374,8 +374,10 @@ void run(View view, Update update) {
         metrics::inst::phase_duration.record(
             t1 - t0, {{"phase", "update"}});
 
-        // 2. Reset arena + callbacks for the next view pass.
+        // 2. Save previous tree, swap arenas, reset the fresh arena.
         auto& app = detail::g_app;
+        app.prev_root = app.root;
+        std::swap(app.arena, app.prev_arena);
         app.arena.reset();
         app.callbacks.clear();
         app.input_handlers.clear();
@@ -398,7 +400,16 @@ void run(View view, Update update) {
         metrics::inst::phase_duration.record(
             t2 - t1, {{"phase", "view"}});
 
-        // 4. Layout + paint + flush.
+        // 4. Diff against previous tree — copy layout for unchanged
+        //    subtrees so layout_node can skip them.
+        if (app.prev_root.valid()) {
+            detail::diff_and_copy_layout(
+                app.prev_root, root_h,
+                app.prev_arena, app.arena);
+        }
+
+        // 5. Layout + paint + flush. layout_node skips nodes with
+        //    layout_valid = true (set by diff).
         float cw = phenotype_get_canvas_width();
         detail::layout_node(root_h, cw);
         auto t3 = metrics::detail::now_ns();

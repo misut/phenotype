@@ -175,6 +175,7 @@ struct LayoutNode {
 
     // Computed layout
     float x = 0, y = 0, width = 0, height = 0;
+    bool layout_valid = false; // true = copied from prev frame by diff, layout_node skips
 
     // Cached text layout (filled during layout pass, reused in paint)
     std::vector<std::string> text_lines;
