@@ -215,6 +215,10 @@ As an exon dependency:
 "github.com/misut/phenotype" = "0.10.0"
 ```
 
+## Architecture
+
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline, host interface, command buffer protocol, native backend strategy (Dawn/WebGPU), and module dependency graph.
+
 ## Roadmap
 
 ### Done
