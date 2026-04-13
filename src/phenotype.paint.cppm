@@ -2,19 +2,12 @@ module;
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include "phenotype_host.h"
 export module phenotype.paint;
 
 import phenotype.types;
 import phenotype.state;
 import phenotype.diag;
-
-// Host imports
-extern "C" __attribute__((import_module("phenotype"), import_name("flush")))
-void phenotype_flush(void);
-
-extern "C" __attribute__((import_module("phenotype"), import_name("measure_text")))
-float phenotype_measure_text(float font_size, unsigned int mono,
-                             char const* text, unsigned int len);
 
 // ============================================================
 // Command buffer — shared memory between C++ and JS

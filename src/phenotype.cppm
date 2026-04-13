@@ -7,6 +7,7 @@ module;
 #include <utility>
 #include <variant>
 #include <vector>
+#include "phenotype_host.h"
 export module phenotype;
 
 export import phenotype.diag;
@@ -15,22 +16,6 @@ export import phenotype.state;
 export import phenotype.layout;
 export import phenotype.paint;
 export import phenotype.theme_json;
-
-// ============================================================
-// WASM imports — JS shim implements these
-// ============================================================
-
-extern "C" __attribute__((import_module("phenotype"), import_name("flush")))
-void phenotype_flush(void);
-
-extern "C" __attribute__((import_module("phenotype"), import_name("get_canvas_width")))
-float phenotype_get_canvas_width(void);
-
-extern "C" __attribute__((import_module("phenotype"), import_name("get_canvas_height")))
-float phenotype_get_canvas_height(void);
-
-extern "C" __attribute__((import_module("phenotype"), import_name("open_url")))
-void phenotype_open_url(char const* url, unsigned int len);
 
 export namespace phenotype {
 
