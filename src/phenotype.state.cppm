@@ -125,7 +125,9 @@ struct InputHandler {
 struct AppState {
     Theme theme;
     Arena arena;
+    Arena prev_arena;       // previous frame's tree, kept alive for diff
     NodeHandle root = NodeHandle::null();
+    NodeHandle prev_root = NodeHandle::null();
     float scroll_y = 0;
     unsigned int hovered_id = 0xFFFFFFFF;
     unsigned int focused_id = 0xFFFFFFFF;

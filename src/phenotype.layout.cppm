@@ -167,8 +167,66 @@ inline TextLayout layout_text(std::string const& text, float font_size, bool mon
     return result;
 }
 
+// Compare the fields that affect layout output. If all match AND child
+// count is the same, the subtree's layout can be reused from the
+// previous frame. String comparisons short-circuit on the first byte.
+inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
+    return a.text == b.text
+        && a.font_size == b.font_size
+        && a.mono == b.mono
+        && a.image_url == b.image_url
+        && a.style.flex_direction == b.style.flex_direction
+        && a.style.main_align == b.style.main_align
+        && a.style.cross_align == b.style.cross_align
+        && a.style.text_align == b.style.text_align
+        && a.style.gap == b.style.gap
+        && a.style.padding[0] == b.style.padding[0]
+        && a.style.padding[1] == b.style.padding[1]
+        && a.style.padding[2] == b.style.padding[2]
+        && a.style.padding[3] == b.style.padding[3]
+        && a.style.max_width == b.style.max_width
+        && a.style.fixed_height == b.style.fixed_height;
+}
+
+// Post-order subtree diff: returns true if the ENTIRE subtree matches
+// (all nodes have identical layout-affecting properties and the same
+// child count). When true, copies computed layout from old → new and
+// sets layout_valid = true so layout_node() skips the subtree.
+inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
+                                 Arena& old_a, Arena& new_a) {
+    auto* old_n = old_a.get(old_h);
+    auto* new_n = new_a.get(new_h);
+    if (!old_n || !new_n) return false;
+
+    if (!layout_props_equal(*old_n, *new_n)) return false;
+    if (old_n->children.size() != new_n->children.size()) return false;
+
+    // Recurse — all children must also match for this subtree to be clean.
+    for (std::size_t i = 0; i < new_n->children.size(); ++i) {
+        if (!diff_and_copy_layout(old_n->children[i], new_n->children[i],
+                                  old_a, new_a))
+            return false;
+    }
+
+    // Entire subtree matches — copy layout from previous frame.
+    new_n->x = old_n->x;
+    new_n->y = old_n->y;
+    new_n->width = old_n->width;
+    new_n->height = old_n->height;
+    new_n->text_lines = std::move(old_n->text_lines);
+    new_n->layout_valid = true;
+    return true;
+}
+
 inline void layout_node(NodeHandle node_h, float available_width) {
     auto& node = node_at(node_h);
+    // Subtree layout was copied from the previous frame by diff —
+    // all descendants are also valid, so skip the entire subtree.
+    if (node.layout_valid) {
+        metrics::inst::layout_nodes_skipped.add();
+        return;
+    }
+    metrics::inst::layout_nodes_computed.add();
     auto const& s = node.style;
     float content_width = available_width;
 

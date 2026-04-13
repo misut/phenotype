@@ -240,7 +240,8 @@ As an exon dependency:
 ### Performance
 
 - [x] vDOM-style diff / partial paint v1 — frame skip on identical cmd buffer (FNV-1a hash gates `phenotype_flush()`; caret blinks and idle repaints collapse to hash + return). Tracked by `phenotype.runner.frames_skipped` vs `phenotype.host.flush_calls`.
-- [ ] vDOM-style diff / partial paint v2 — stable-key structural diff with sub-frame partial GPU updates (scissor + `loadOp: 'load'`)
+- [x] vDOM-style diff / partial paint v2 — double-buffer arena + position-based subtree diff. Copies layout from previous frame for unchanged subtrees. Tracked by `phenotype.runner.layout_nodes_skipped` vs `layout_nodes_computed`.
+- [ ] vDOM-style diff v3 — stable-key structural diff for efficient list reorder + sub-frame partial GPU updates (scissor + `loadOp: 'load'`)
 
 ### Observability
 
