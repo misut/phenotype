@@ -1,12 +1,9 @@
 [package]
 name = "phenotype-native"
 version = "0.1.0"
-description = "Native rendering prototype using Dawn/WebGPU"
+description = "Native demo app using Dawn/WebGPU"
 type = "bin"
 standard = 23
 
 [dependencies.path]
 phenotype = ".."
-
-[dependencies.cmake]
-dawn = { git = "https://dawn.googlesource.com/dawn", tag = "main", targets = "webgpu_dawn;webgpu_glfw;glfw", options = { DAWN_FETCH_DEPENDENCIES = "ON" } }

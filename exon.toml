@@ -15,3 +15,6 @@ platforms = [
 [dependencies]
 "github.com/misut/jsoncpp" = "0.1.4"
 "github.com/misut/txn" = "0.6.0"
+
+[target.'cfg(not(os = "wasi"))'.dependencies.cmake]
+dawn = { git = "https://dawn.googlesource.com/dawn", tag = "main", targets = "webgpu_dawn;webgpu_glfw;glfw", options = { DAWN_FETCH_DEPENDENCIES = "ON" } }
