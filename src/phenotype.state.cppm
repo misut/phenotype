@@ -232,6 +232,11 @@ namespace detail {
     inline void trigger_rebuild() {
         if (g_app.app_runner) g_app.app_runner();
     }
+
+    // Function pointer for URL opening — set by the backend module
+    // (phenotype.wasm or phenotype.native) at initialization time.
+    // Keeps widget::link non-templated.
+    inline void (*g_open_url)(char const*, unsigned int) = nullptr;
 } // namespace detail
 
 // ============================================================
