@@ -1,0 +1,9 @@
+[package]
+name = "native-counter"
+version = "0.1.0"
+description = "Native counter demo using Dawn/WebGPU"
+type = "bin"
+standard = 23
+
+[dependencies.path]
+phenotype = "../.."
