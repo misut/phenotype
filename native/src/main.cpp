@@ -4,25 +4,8 @@
 
 #include <GLFW/glfw3.h>
 
-#include "renderer.h"
-#include "text.h"
-
-namespace native {
-void set_window(GLFWwindow* w);
-}
-
 import phenotype;
-
-// Phenotype exports for event dispatch
-extern "C" {
-    void phenotype_handle_event(unsigned int callback_id);
-    void phenotype_set_hover(unsigned int callback_id);
-    void phenotype_set_focus(unsigned int callback_id);
-    void phenotype_handle_tab(unsigned int direction);
-    void phenotype_repaint(float scroll_y);
-    unsigned int phenotype_get_focused_id(void);
-    float phenotype_get_total_height(void);
-}
+import phenotype.native;
 
 // ---- Simple counter app ----
 
@@ -54,6 +37,7 @@ void view(State const& state) {
 
 // ---- Event state ----
 
+static phenotype::native::native_host* g_host = nullptr;
 static float g_scroll_y = 0;
 static unsigned int g_hovered_id = 0xFFFFFFFF;
 
@@ -63,24 +47,24 @@ static void on_mouse_button(GLFWwindow* window, int button, int action, int /*mo
     if (button == GLFW_MOUSE_BUTTON_LEFT && action == GLFW_PRESS) {
         double mx, my;
         glfwGetCursorPos(window, &mx, &my);
-        auto hit = native::renderer::hit_test(
+        auto hit = phenotype::native::hit_test(
             static_cast<float>(mx), static_cast<float>(my), g_scroll_y);
         if (hit) {
-            phenotype_set_focus(*hit);
-            phenotype_handle_event(*hit);
+            phenotype::detail::set_focus_id(*hit);
+            phenotype::detail::handle_event(*hit);
         }
     }
 }
 
 static void on_cursor_pos(GLFWwindow* window, double mx, double my) {
-    auto hit = native::renderer::hit_test(
+    auto hit = phenotype::native::hit_test(
         static_cast<float>(mx), static_cast<float>(my), g_scroll_y);
     unsigned int new_hover = hit.value_or(0xFFFFFFFF);
     if (new_hover != g_hovered_id) {
         g_hovered_id = new_hover;
-        phenotype_set_hover(new_hover);
+        if (phenotype::detail::set_hover_id(new_hover))
+            phenotype::detail::repaint(*g_host, g_scroll_y);
     }
-    // Cursor shape
     static GLFWcursor* arrow = nullptr;
     static GLFWcursor* hand = nullptr;
     if (!arrow) arrow = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
@@ -89,7 +73,7 @@ static void on_cursor_pos(GLFWwindow* window, double mx, double my) {
 }
 
 static void on_scroll(GLFWwindow* window, double /*dx*/, double dy) {
-    float total = phenotype_get_total_height();
+    float total = phenotype::detail::get_total_height();
     int w, h;
     glfwGetWindowSize(window, &w, &h);
     float max_scroll = total - static_cast<float>(h);
@@ -97,21 +81,22 @@ static void on_scroll(GLFWwindow* window, double /*dx*/, double dy) {
     g_scroll_y += static_cast<float>(dy);
     if (g_scroll_y < 0) g_scroll_y = 0;
     if (g_scroll_y > max_scroll) g_scroll_y = max_scroll;
-    phenotype_repaint(g_scroll_y);
+    phenotype::detail::repaint(*g_host, g_scroll_y);
 }
 
 static void on_framebuffer_size(GLFWwindow*, int /*w*/, int /*h*/) {
-    phenotype_repaint(g_scroll_y);
+    phenotype::detail::repaint(*g_host, g_scroll_y);
 }
 
 static void on_key(GLFWwindow*, int key, int /*scancode*/, int action, int mods) {
     if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
     if (key == GLFW_KEY_TAB) {
-        phenotype_handle_tab((mods & GLFW_MOD_SHIFT) ? 1 : 0);
+        phenotype::detail::handle_tab((mods & GLFW_MOD_SHIFT) ? 1 : 0);
+        phenotype::detail::repaint(*g_host, g_scroll_y);
     } else if (key == GLFW_KEY_ENTER) {
-        unsigned int fid = phenotype_get_focused_id();
+        unsigned int fid = phenotype::detail::get_focused_id();
         if (fid != 0xFFFFFFFF)
-            phenotype_handle_event(fid);
+            phenotype::detail::handle_event(fid);
     }
 }
 
@@ -132,10 +117,10 @@ int main() {
         return 1;
     }
 
-    // Init subsystems
-    native::set_window(window);
-    native::text::init();
-    native::renderer::init(window);
+    // Init host
+    static phenotype::native::native_host host;
+    host.window = window;
+    g_host = &host;
 
     // Register GLFW event callbacks
     glfwSetMouseButtonCallback(window, on_mouse_button);
@@ -145,14 +130,14 @@ int main() {
     glfwSetKeyCallback(window, on_key);
 
     // Install phenotype app (triggers initial rebuild + render)
-    phenotype::run<State, Msg>(view, update);
+    phenotype::native::run<State, Msg>(host, view, update);
 
     // Event loop
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
     }
 
-    native::renderer::shutdown();
+    phenotype::native::shutdown();
     glfwDestroyWindow(window);
     glfwTerminate();
     return 0;
