@@ -1,8 +1,10 @@
 #include "renderer.h"
+#include "text.h"
 
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <optional>
 #include <variant>
 #include <vector>
 
@@ -21,17 +23,24 @@ namespace native::renderer {
 
 // --- Globals ---
 
-static wgpu::Instance       g_instance;
-static wgpu::Device         g_device;
-static wgpu::Surface        g_surface;
-static wgpu::Queue          g_queue;
-static GLFWwindow*          g_window = nullptr;
-static wgpu::RenderPipeline g_color_pipeline;
-static wgpu::Buffer         g_uniform_buf;
-static wgpu::BindGroup      g_bind_group;
+static wgpu::Instance        g_instance;
+static wgpu::Device          g_device;
+static wgpu::Surface         g_surface;
+static wgpu::Queue           g_queue;
+static GLFWwindow*           g_window = nullptr;
+static wgpu::RenderPipeline  g_color_pipeline;
+static wgpu::RenderPipeline  g_text_pipeline;
+static wgpu::Buffer          g_uniform_buf;
+static wgpu::BindGroup       g_bind_group;
 static wgpu::BindGroupLayout g_bind_group_layout;
-static wgpu::ShaderModule   g_shader_module;
-static wgpu::PipelineLayout g_pipeline_layout;
+static wgpu::BindGroupLayout g_text_bind_group_layout;
+static wgpu::ShaderModule    g_shader_module;
+static wgpu::PipelineLayout  g_pipeline_layout;
+static wgpu::PipelineLayout  g_text_pipeline_layout;
+static wgpu::Sampler         g_sampler;
+
+// Hit regions from the last frame (for event hit testing)
+static std::vector<phenotype::HitRegionCmd> g_hit_regions;
 
 // --- WGSL color shader (from shim/phenotype.js) ---
 
@@ -94,6 +103,41 @@ struct ColorVsOut {
   }
   if (draw_type == 3u) { return in.color; }
   return in.color;
+}
+
+// --- Text pipeline ---
+struct TextInstance {
+  @location(0) rect: vec4f,
+  @location(1) uv_rect: vec4f,
+};
+struct TextVsOut {
+  @builtin(position) pos: vec4f,
+  @location(0) uv: vec2f,
+};
+@vertex fn vs_text(
+  @builtin(vertex_index) vi: u32,
+  inst: TextInstance,
+) -> TextVsOut {
+  var corners = array<vec2f, 6>(
+    vec2f(0, 0), vec2f(1, 0), vec2f(0, 1),
+    vec2f(1, 0), vec2f(1, 1), vec2f(0, 1),
+  );
+  let c = corners[vi];
+  let px = inst.rect.x + c.x * inst.rect.z;
+  let py = inst.rect.y + c.y * inst.rect.w;
+  let cx = (px / uniforms.viewport.x) * 2.0 - 1.0;
+  let cy = 1.0 - (py / uniforms.viewport.y) * 2.0;
+  var out: TextVsOut;
+  out.pos = vec4f(cx, cy, 0, 1);
+  out.uv = inst.uv_rect.xy + c * inst.uv_rect.zw;
+  return out;
+}
+@group(0) @binding(1) var textAtlas: texture_2d<f32>;
+@group(0) @binding(2) var textSampler: sampler;
+@fragment fn fs_text(in: TextVsOut) -> @location(0) vec4f {
+  let sample = textureSample(textAtlas, textSampler, in.uv);
+  if (sample.a < 0.01) { discard; }
+  return sample;
 }
 )";
 
@@ -194,6 +238,71 @@ static void create_pipelines() {
     rpDesc.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
 
     g_color_pipeline = g_device.CreateRenderPipeline(&rpDesc);
+
+    // --- Text pipeline ---
+
+    // Sampler
+    wgpu::SamplerDescriptor samplerDesc{};
+    samplerDesc.minFilter = wgpu::FilterMode::Linear;
+    samplerDesc.magFilter = wgpu::FilterMode::Linear;
+    g_sampler = g_device.CreateSampler(&samplerDesc);
+
+    // Text bind group layout: uniform + texture + sampler
+    wgpu::BindGroupLayoutEntry textBglEntries[3]{};
+    textBglEntries[0].binding = 0;
+    textBglEntries[0].visibility = wgpu::ShaderStage::Vertex;
+    textBglEntries[0].buffer.type = wgpu::BufferBindingType::Uniform;
+    textBglEntries[1].binding = 1;
+    textBglEntries[1].visibility = wgpu::ShaderStage::Fragment;
+    textBglEntries[1].texture.sampleType = wgpu::TextureSampleType::Float;
+    textBglEntries[1].texture.viewDimension = wgpu::TextureViewDimension::e2D;
+    textBglEntries[2].binding = 2;
+    textBglEntries[2].visibility = wgpu::ShaderStage::Fragment;
+    textBglEntries[2].sampler.type = wgpu::SamplerBindingType::Filtering;
+
+    wgpu::BindGroupLayoutDescriptor textBglDesc{};
+    textBglDesc.entryCount = 3;
+    textBglDesc.entries = textBglEntries;
+    g_text_bind_group_layout = g_device.CreateBindGroupLayout(&textBglDesc);
+
+    // Text pipeline layout
+    wgpu::PipelineLayoutDescriptor textPlDesc{};
+    textPlDesc.bindGroupLayoutCount = 1;
+    textPlDesc.bindGroupLayouts = &g_text_bind_group_layout;
+    g_text_pipeline_layout = g_device.CreatePipelineLayout(&textPlDesc);
+
+    // Text vertex layout: 8 floats per instance (rect:4 + uv_rect:4)
+    wgpu::VertexAttribute textAttrs[2]{};
+    textAttrs[0].format = wgpu::VertexFormat::Float32x4; textAttrs[0].offset = 0;  textAttrs[0].shaderLocation = 0;
+    textAttrs[1].format = wgpu::VertexFormat::Float32x4; textAttrs[1].offset = 16; textAttrs[1].shaderLocation = 1;
+
+    wgpu::VertexBufferLayout textVbLayout{};
+    textVbLayout.arrayStride = 32; // 8 * 4 bytes
+    textVbLayout.stepMode = wgpu::VertexStepMode::Instance;
+    textVbLayout.attributeCount = 2;
+    textVbLayout.attributes = textAttrs;
+
+    // Text color target with alpha blending
+    wgpu::ColorTargetState textColorTarget{};
+    textColorTarget.format = wgpu::TextureFormat::BGRA8Unorm;
+    textColorTarget.blend = &blend; // reuse blend state from color pipeline
+
+    wgpu::FragmentState textFragState{};
+    textFragState.module = g_shader_module;
+    textFragState.entryPoint = "fs_text";
+    textFragState.targetCount = 1;
+    textFragState.targets = &textColorTarget;
+
+    wgpu::RenderPipelineDescriptor textRpDesc{};
+    textRpDesc.layout = g_text_pipeline_layout;
+    textRpDesc.vertex.module = g_shader_module;
+    textRpDesc.vertex.entryPoint = "vs_text";
+    textRpDesc.vertex.bufferCount = 1;
+    textRpDesc.vertex.buffers = &textVbLayout;
+    textRpDesc.fragment = &textFragState;
+    textRpDesc.primitive.topology = wgpu::PrimitiveTopology::TriangleList;
+
+    g_text_pipeline = g_device.CreateRenderPipeline(&textRpDesc);
 }
 
 // --- Init ---
@@ -256,14 +365,22 @@ void flush() {
 
     auto cmds = phenotype::parse_commands(phenotype_cmd_buf, phenotype_cmd_len);
 
-    // Build clear color + color instance data
+    // Build clear color + color instances + text entries + hit regions
     double cr = 0.98, cg = 0.98, cb = 0.98, ca = 1.0;
     std::vector<float> colorData;
+    std::vector<native::text::TextEntry> textEntries;
+    g_hit_regions.clear();
 
     for (auto& cmd : cmds) {
         if (auto* c = std::get_if<phenotype::ClearCmd>(&cmd)) {
             cr = c->color.r / 255.0; cg = c->color.g / 255.0;
             cb = c->color.b / 255.0; ca = c->color.a / 255.0;
+        } else if (auto* t = std::get_if<phenotype::DrawTextCmd>(&cmd)) {
+            textEntries.push_back({t->x, t->y, t->font_size, t->mono,
+                t->color.r/255.f, t->color.g/255.f, t->color.b/255.f, t->color.a/255.f,
+                t->text});
+        } else if (auto* hr = std::get_if<phenotype::HitRegionCmd>(&cmd)) {
+            g_hit_regions.push_back(*hr);
         } else if (auto* r = std::get_if<phenotype::FillRectCmd>(&cmd)) {
             colorData.insert(colorData.end(), {
                 r->x, r->y, r->w, r->h,
@@ -352,10 +469,84 @@ void flush() {
         pass.Draw(6, instanceCount);
     }
 
+    // Draw text instances
+    if (!textEntries.empty() && g_text_pipeline) {
+        auto atlas = native::text::build_atlas(textEntries);
+        if (!atlas.quads.empty() && !atlas.pixels.empty()) {
+            // Create atlas texture
+            wgpu::TextureDescriptor texDesc{};
+            texDesc.size = {static_cast<uint32_t>(atlas.width),
+                            static_cast<uint32_t>(atlas.height), 1};
+            texDesc.format = wgpu::TextureFormat::RGBA8Unorm;
+            texDesc.usage = wgpu::TextureUsage::TextureBinding | wgpu::TextureUsage::CopyDst;
+            auto atlasTex = g_device.CreateTexture(&texDesc);
+
+            // Upload atlas pixels
+            wgpu::TexelCopyBufferLayout dataLayout{};
+            dataLayout.bytesPerRow = static_cast<uint32_t>(atlas.width * 4);
+            dataLayout.rowsPerImage = static_cast<uint32_t>(atlas.height);
+            wgpu::TexelCopyTextureInfo destInfo{};
+            destInfo.texture = atlasTex;
+            wgpu::Extent3D extent = {static_cast<uint32_t>(atlas.width),
+                                      static_cast<uint32_t>(atlas.height), 1};
+            g_queue.WriteTexture(&destInfo, atlas.pixels.data(),
+                atlas.pixels.size(), &dataLayout, &extent);
+
+            // Create text bind group
+            wgpu::BindGroupEntry textBgEntries[3]{};
+            textBgEntries[0].binding = 0;
+            textBgEntries[0].buffer = g_uniform_buf;
+            textBgEntries[0].size = 16;
+            textBgEntries[1].binding = 1;
+            textBgEntries[1].textureView = atlasTex.CreateView();
+            textBgEntries[2].binding = 2;
+            textBgEntries[2].sampler = g_sampler;
+
+            wgpu::BindGroupDescriptor textBgDesc{};
+            textBgDesc.layout = g_text_bind_group_layout;
+            textBgDesc.entryCount = 3;
+            textBgDesc.entries = textBgEntries;
+            auto textBindGroup = g_device.CreateBindGroup(&textBgDesc);
+
+            // Build text instance buffer (8 floats per quad)
+            std::vector<float> textData;
+            textData.reserve(atlas.quads.size() * 8);
+            for (auto& q : atlas.quads) {
+                textData.insert(textData.end(), {
+                    q.x, q.y, q.w, q.h,
+                    q.u, q.v, q.uw, q.vh
+                });
+            }
+
+            wgpu::BufferDescriptor tbDesc{};
+            tbDesc.size = textData.size() * sizeof(float);
+            tbDesc.usage = wgpu::BufferUsage::Vertex | wgpu::BufferUsage::CopyDst;
+            tbDesc.mappedAtCreation = true;
+            auto textBuf = g_device.CreateBuffer(&tbDesc);
+            std::memcpy(textBuf.GetMappedRange(), textData.data(), tbDesc.size);
+            textBuf.Unmap();
+
+            pass.SetBindGroup(0, textBindGroup);
+            pass.SetPipeline(g_text_pipeline);
+            pass.SetVertexBuffer(0, textBuf);
+            pass.Draw(6, static_cast<uint32_t>(atlas.quads.size()));
+        }
+    }
+
     pass.End();
     auto commands = encoder.Finish();
     g_queue.Submit(1, &commands);
     g_surface.Present();
+}
+
+std::optional<unsigned int> hit_test(float x, float y, float scroll_y) {
+    float wy = y + scroll_y; // world-space Y
+    for (int i = static_cast<int>(g_hit_regions.size()) - 1; i >= 0; --i) {
+        auto& hr = g_hit_regions[i];
+        if (x >= hr.x && x <= hr.x + hr.w && wy >= hr.y && wy <= hr.y + hr.h)
+            return hr.callback_id;
+    }
+    return std::nullopt;
 }
 
 void shutdown() {
