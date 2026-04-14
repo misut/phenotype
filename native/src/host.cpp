@@ -1,4 +1,5 @@
 #include "renderer.h"
+#include "text.h"
 #include <GLFW/glfw3.h>
 
 // Global window pointer — set by main before phenotype::run().
@@ -16,11 +17,9 @@ extern "C" void phenotype_flush() {
     native::renderer::flush();
 }
 
-extern "C" float phenotype_measure_text(float font_size, unsigned int /*mono*/,
-                                         char const* /*text*/, unsigned int len) {
-    // Phase A stub: fixed-width approximation (same as test stubs).
-    // Phase C will replace this with real font metrics.
-    return static_cast<float>(len) * font_size * 0.6f;
+extern "C" float phenotype_measure_text(float font_size, unsigned int mono,
+                                         char const* text, unsigned int len) {
+    return native::text::measure(font_size, mono != 0, text, len);
 }
 
 extern "C" float phenotype_get_canvas_width() {
