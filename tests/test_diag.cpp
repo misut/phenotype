@@ -12,22 +12,21 @@
 import phenotype;
 import json;
 
-// Mock WASM imports — wasm-ld uses local definitions instead of imports
+using namespace phenotype;
+
+#ifndef __wasi__
+static null_host diag_host;
+#else
 extern "C" {
     void phenotype_flush() {}
-
-    float phenotype_measure_text(float font_size, unsigned int /*mono*/,
-                                 char const* /*text*/, unsigned int len) {
-        return static_cast<float>(len) * font_size * 0.6f;
+    float phenotype_measure_text(float fs, unsigned int, char const*, unsigned int len) {
+        return static_cast<float>(len) * fs * 0.6f;
     }
-
     float phenotype_get_canvas_width() { return 800.0f; }
     float phenotype_get_canvas_height() { return 600.0f; }
-
-    void phenotype_open_url(char const* /*url*/, unsigned int /*len*/) {}
+    void phenotype_open_url(char const*, unsigned int) {}
 }
-
-using namespace phenotype;
+#endif
 
 namespace {
 
@@ -204,7 +203,11 @@ struct DiagMsg {};
 void test_runner_records_phases() {
     metrics::reset_all();
     log::set_level(log::Severity::info);
+#ifndef __wasi__
+    run<DiagState, DiagMsg>(diag_host,
+#else
     run<DiagState, DiagMsg>(
+#endif
         [](DiagState const&) {
             widget::text({"diag", 4});
         },
