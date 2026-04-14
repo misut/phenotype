@@ -4,12 +4,15 @@ module;
 #include <string>
 #include <tuple>
 #include <vector>
+#ifdef __wasi__
 #include "phenotype_host.h"
+#endif
 export module phenotype.layout;
 
 import phenotype.types;
 import phenotype.state;
 import phenotype.diag;
+import phenotype.host;
 
 namespace phenotype::detail {
 
@@ -17,72 +20,66 @@ namespace phenotype::detail {
 // measure_text cache
 // ============================================================
 //
-// The host measure_text import is on the JS↔WASM trampoline, the most
-// expensive call type byte-for-byte phenotype makes. Most measurements
-// repeat across rebuilds — the same button label, the same heading,
-// the same code-block strings — so a (font_size, mono, text) → width
-// cache amortizes them to one host call per distinct tuple per wasm
-// instance.
+// Most measurements repeat across rebuilds — the same button label,
+// the same heading, the same code-block strings — so a
+// (font_size, mono, text) → width cache amortizes them to one host
+// call per distinct tuple per process.
 //
 // The cache is unbounded by design: a typical phenotype app has on
 // the order of a few hundred distinct text snippets. If a future
 // caller produces unbounded text strings (e.g. echoing user input
-// into a measured leaf), revisit with an LRU. For now simplicity
-// wins — see `phenotype.host.measure_text_calls` (real misses) and
-// `phenotype.host.measure_text_cache_hits` in the diag snapshot to
-// confirm the cache is doing its job in production.
-//
-// Theme changes will need to call `clear_measure_cache()` once the
-// custom theming roadmap item lands; until then theme is const so
-// the cache is effectively process-lifetime.
+// into a measured leaf), revisit with an LRU.
 
 // Cache key is just a (font_size, mono, text) tuple. std::map is used
 // instead of std::unordered_map because clang 22's libc++ unordered_map
 // references __hash_memory, which wasn't in the macOS system libc++
 // the test binaries link against. std::map keeps lookup O(log n) but
 // the cache has on the order of a few hundred entries — log n is
-// dwarfed by the JS↔WASM trampoline cost we're avoiding.
+// dwarfed by the host call cost we're avoiding.
 using MeasureKey = std::tuple<float, unsigned int, std::string>;
 
 // Heap-bound reference for the same reason the diag instruments use
 // the pattern: wasi-sdk's crt1-command.o runs __cxa_finalize after
 // _start() returns, and we still want the cache alive for every
-// JS-driven rebuild after that. See phenotype_diag.cppm:262 for the
-// precedent.
+// JS-driven rebuild after that.
 inline std::map<MeasureKey, float>& measure_cache() {
     static std::map<MeasureKey, float>& m = *new std::map<MeasureKey, float>();
     return m;
 }
 
-// Cached wrapper around the host measure_text import. On hit the
-// width is returned without crossing the trampoline and the
-// `phenotype.host.measure_text_cache_hits` counter is bumped instead
-// of `measure_text_calls`. The latter therefore once again reflects
-// real JS↔WASM cost — exactly the metric the diag baseline in PR #26
-// was supposed to optimize.
-inline float measure_text_cached(float font_size, unsigned int mono,
-                                 char const* text, unsigned int len) {
+// Non-template cache helpers — compiled once in this TU to avoid
+// wasi-sdk's cross-module operator new ambiguity with std::map.
+inline float* cache_find(float fs, unsigned int mono,
+                         char const* text, unsigned int len) {
     auto& cache = measure_cache();
-    MeasureKey key{font_size, mono, std::string(text, len)};
-    if (auto it = cache.find(key); it != cache.end()) {
-        metrics::inst::measure_text_cache_hits.add();
-        return it->second;
-    }
-    metrics::inst::measure_text_calls.add();
-    float w = phenotype_measure_text(font_size, mono, text, len);
-    cache.emplace(std::move(key), w);
-    return w;
+    MeasureKey key{fs, mono, std::string(text, len)};
+    auto it = cache.find(key);
+    return it != cache.end() ? &it->second : nullptr;
+}
+
+inline void cache_insert(float fs, unsigned int mono,
+                         char const* text, unsigned int len, float w) {
+    measure_cache().insert({MeasureKey{fs, mono, std::string(text, len)}, w});
 }
 
 } // namespace phenotype::detail
 
 export namespace phenotype::detail {
 
-// Test-only helper — exposed via the export namespace so tests
-// outside the module can reset the cache between assertions. Real
-// runtime callers should never need it: the cache is process-
-// lifetime and only theme changes invalidate it (which the future
-// custom-theming PR will hook in here).
+template <text_measurer M>
+float measure_text_cached(M const& measurer, float font_size,
+                          unsigned int mono, char const* text,
+                          unsigned int len) {
+    if (auto* cached = cache_find(font_size, mono, text, len)) {
+        metrics::inst::measure_text_cache_hits.add();
+        return *cached;
+    }
+    metrics::inst::measure_text_calls.add();
+    float w = measurer.measure_text(font_size, mono, text, len);
+    cache_insert(font_size, mono, text, len, w);
+    return w;
+}
+
 inline void clear_measure_cache() noexcept {
     measure_cache().clear();
 }
@@ -93,12 +90,15 @@ struct TextLayout {
     float height;
 };
 
-inline float measure(str text, float font_size, bool mono) {
-    return measure_text_cached(font_size, mono ? 1 : 0, text.data, text.len);
+template <text_measurer M>
+float measure(M const& measurer, str text, float font_size, bool mono) {
+    return measure_text_cached(measurer, font_size, mono ? 1 : 0, text.data, text.len);
 }
 
-inline TextLayout layout_text(std::string const& text, float font_size, bool mono,
-                              float max_width, float line_height) {
+template <text_measurer M>
+TextLayout layout_text(M const& measurer, std::string const& text,
+                       float font_size, bool mono, float max_width,
+                       float line_height) {
     TextLayout result;
     result.width = 0;
 
@@ -134,9 +134,9 @@ inline TextLayout layout_text(std::string const& text, float font_size, bool mon
             while (i < para.size() && para[i] == ' ') ++i;
 
             float space_width = current_line.empty() ? 0
-                : measure_text_cached(font_size, mono ? 1 : 0, " ", 1);
+                : measure_text_cached(measurer, font_size, mono ? 1 : 0, " ", 1);
             float word_width = measure_text_cached(
-                font_size, mono ? 1 : 0, word.c_str(),
+                measurer, font_size, mono ? 1 : 0, word.c_str(),
                 static_cast<unsigned int>(word.size()));
 
             if (!current_line.empty() && current_width + space_width + word_width > max_width) {
@@ -165,7 +165,7 @@ inline TextLayout layout_text(std::string const& text, float font_size, bool mon
 
 // Compare the fields that affect layout output. If all match AND child
 // count is the same, the subtree's layout can be reused from the
-// previous frame. String comparisons short-circuit on the first byte.
+// previous frame.
 inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
     return a.text == b.text
         && a.font_size == b.font_size
@@ -184,10 +184,9 @@ inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
         && a.style.fixed_height == b.style.fixed_height;
 }
 
-// Post-order subtree diff: returns true if the ENTIRE subtree matches
-// (all nodes have identical layout-affecting properties and the same
-// child count). When true, copies computed layout from old → new and
-// sets layout_valid = true so layout_node() skips the subtree.
+// Post-order subtree diff: returns true if the ENTIRE subtree matches.
+// When true, copies computed layout from old → new and sets
+// layout_valid = true so layout_node() skips the subtree.
 inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
                                  Arena& old_a, Arena& new_a) {
     auto* old_n = old_a.get(old_h);
@@ -197,14 +196,12 @@ inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
     if (!layout_props_equal(*old_n, *new_n)) return false;
     if (old_n->children.size() != new_n->children.size()) return false;
 
-    // Recurse — all children must also match for this subtree to be clean.
     for (std::size_t i = 0; i < new_n->children.size(); ++i) {
         if (!diff_and_copy_layout(old_n->children[i], new_n->children[i],
                                   old_a, new_a))
             return false;
     }
 
-    // Entire subtree matches — copy layout from previous frame.
     new_n->x = old_n->x;
     new_n->y = old_n->y;
     new_n->width = old_n->width;
@@ -214,10 +211,9 @@ inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
     return true;
 }
 
-inline void layout_node(NodeHandle node_h, float available_width) {
+template <text_measurer M>
+void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
     auto& node = node_at(node_h);
-    // Subtree layout was copied from the previous frame by diff —
-    // all descendants are also valid, so skip the entire subtree.
     if (node.layout_valid) {
         metrics::inst::layout_nodes_skipped.add();
         return;
@@ -226,18 +222,18 @@ inline void layout_node(NodeHandle node_h, float available_width) {
     auto const& s = node.style;
     float content_width = available_width;
 
-    // Apply max_width
     if (s.max_width > 0 && content_width > s.max_width)
         content_width = s.max_width;
 
     node.width = content_width;
 
-    float inner_width = content_width - s.padding[1] - s.padding[3]; // right, left
+    float inner_width = content_width - s.padding[1] - s.padding[3];
 
-    // Text leaf — compute and cache word-wrapped lines
+    // Text leaf
     if (!node.text.empty() && node.children.empty()) {
         float line_height = node.font_size * g_app.theme.line_height_ratio;
-        auto tl = layout_text(node.text, node.font_size, node.mono, inner_width, line_height);
+        auto tl = layout_text(measurer, node.text, node.font_size, node.mono,
+                              inner_width, line_height);
         node.text_lines = std::move(tl.lines);
         node.height = tl.height + s.padding[0] + s.padding[2];
         return;
@@ -256,18 +252,16 @@ inline void layout_node(NodeHandle node_h, float available_width) {
 
     // Container layout
     if (s.flex_direction == FlexDirection::Column) {
-        // First pass: layout children to compute total height
         float total_children_h = 0;
         unsigned int nc = static_cast<unsigned int>(node.children.size());
         for (unsigned int i = 0; i < nc; ++i) {
             auto child_h = node.children[i];
-            layout_node(child_h, inner_width);
+            layout_node(measurer, child_h, inner_width);
             auto& child = node_at(child_h);
             total_children_h += child.height;
             if (i + 1 < nc) total_children_h += s.gap;
         }
 
-        // Main axis (vertical) alignment
         float y = s.padding[0];
         float effective_gap = s.gap;
         if (s.main_align == MainAxisAlignment::SpaceBetween && nc > 1) {
@@ -277,11 +271,9 @@ inline void layout_node(NodeHandle node_h, float available_width) {
             float children_only = total_children_h - s.gap * static_cast<float>(nc - 1);
             effective_gap = (avail_h - children_only) / static_cast<float>(nc - 1);
         }
-        // (Center/End only meaningful if node has a fixed or known height)
 
         for (unsigned int i = 0; i < nc; ++i) {
             auto& child = node_at(node.children[i]);
-            // Cross axis (horizontal) alignment
             switch (s.cross_align) {
                 case CrossAxisAlignment::Center:
                     child.x = s.padding[3] + (inner_width - child.width) / 2;
@@ -289,7 +281,7 @@ inline void layout_node(NodeHandle node_h, float available_width) {
                 case CrossAxisAlignment::End:
                     child.x = s.padding[3] + inner_width - child.width;
                     break;
-                default: // Start, Stretch
+                default:
                     child.x = s.padding[3];
                     break;
             }
@@ -299,12 +291,10 @@ inline void layout_node(NodeHandle node_h, float available_width) {
         }
         node.height = y + s.padding[2];
     } else {
-        // Row: intrinsic-width children get their measured size,
-        // remaining space goes to the last flexible child.
+        // Row
         unsigned int n = static_cast<unsigned int>(node.children.size());
         float total_gap = (n > 1) ? s.gap * static_cast<float>(n - 1) : 0;
 
-        // First pass: measure intrinsic widths for text leaves
         float used = total_gap;
         int flex_index = -1;
         for (unsigned int i = 0; i < n; ++i) {
@@ -313,18 +303,12 @@ inline void layout_node(NodeHandle node_h, float available_width) {
             bool has_max_width = child.style.max_width > 0;
             if (is_text_leaf) {
                 float measured = measure_text_cached(
-                    child.font_size, child.mono ? 1 : 0,
+                    measurer, child.font_size, child.mono ? 1 : 0,
                     child.text.c_str(), static_cast<unsigned int>(child.text.size()));
                 float w = measured + child.style.padding[1] + child.style.padding[3];
                 child.width = w;
                 used += w;
             } else if (has_max_width) {
-                // Container child with an explicit max_width is treated as
-                // having a fixed intrinsic width: row layout sizes it to
-                // exactly that value, leaving the flex slot for an unsized
-                // sibling. Used by layout::sized_box() to build columns of
-                // fixed-width children (e.g. the docs Examples section's
-                // code-on-left / live-on-right pairs).
                 child.width = child.style.max_width;
                 used += child.width;
             } else {
@@ -336,7 +320,6 @@ inline void layout_node(NodeHandle node_h, float available_width) {
         float remaining = inner_width - used;
         if (remaining < 0) remaining = 0;
 
-        // Second pass: layout with computed widths
         float total_used_w = 0;
         float max_h = 0;
         for (unsigned int i = 0; i < n; ++i) {
@@ -345,15 +328,12 @@ inline void layout_node(NodeHandle node_h, float available_width) {
             float cw = (static_cast<int>(i) == flex_index)
                 ? remaining + child.width
                 : child.width;
-            layout_node(child_h, cw);
-            // Re-fetch in case the recursive call invalidated nothing
-            // (it doesn't — layout doesn't alloc — but be explicit).
+            layout_node(measurer, child_h, cw);
             auto& child2 = node_at(child_h);
             total_used_w += child2.width;
             if (child2.height > max_h) max_h = child2.height;
         }
 
-        // Main axis (horizontal) alignment
         float x = s.padding[3];
         float effective_gap = s.gap;
         float total_w = total_used_w + total_gap;
@@ -368,7 +348,6 @@ inline void layout_node(NodeHandle node_h, float available_width) {
         for (unsigned int i = 0; i < n; ++i) {
             auto& child = node_at(node.children[i]);
             child.x = x;
-            // Cross axis (vertical) alignment
             switch (s.cross_align) {
                 case CrossAxisAlignment::Center:
                     child.y = s.padding[0] + (max_h - child.height) / 2;
@@ -376,7 +355,7 @@ inline void layout_node(NodeHandle node_h, float available_width) {
                 case CrossAxisAlignment::End:
                     child.y = s.padding[0] + max_h - child.height;
                     break;
-                default: // Start, Stretch
+                default:
                     child.y = s.padding[0];
                     break;
             }
@@ -388,3 +367,31 @@ inline void layout_node(NodeHandle node_h, float available_width) {
 }
 
 } // namespace phenotype::detail
+
+// ---- WASM non-template wrappers ----
+// Instantiates templates within this TU using phenotype_host.h to avoid
+// a wasi-sdk clang 22 crash on cross-module template instantiation.
+#ifdef __wasi__
+namespace phenotype::detail {
+    struct wasi_measurer {
+        float measure_text(float fs, unsigned int m,
+                           char const* t, unsigned int l) const {
+            return phenotype_measure_text(fs, m, t, l);
+        }
+    };
+    inline wasi_measurer g_wasi_measurer;
+}
+
+export namespace phenotype::detail {
+
+inline float measure(str text, float font_size, bool mono) {
+    return measure_text_cached(g_wasi_measurer, font_size, mono ? 1 : 0,
+                               text.data, text.len);
+}
+
+inline void layout_node(NodeHandle h, float w) {
+    layout_node(g_wasi_measurer, h, w);
+}
+
+} // namespace phenotype::detail
+#endif
