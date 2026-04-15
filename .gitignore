@@ -47,7 +47,7 @@
 build/
 .exon/
 exon.lock
-CMakeLists.txt
+
 *.wasm
 
 # docs build outputs (built by CI)
