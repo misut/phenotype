@@ -63,6 +63,16 @@ jobs:
           path: ~/.intron/toolchains
           key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.intron.toml') }}
 
+      - name: Cache build artifacts
+        uses: actions/cache@v4
+        with:
+          path: |
+            .exon
+            ~/.exon/cache
+          key: build-${{ matrix.os }}-${{ matrix.target }}-${{ hashFiles('exon.toml', 'exon.lock') }}
+          restore-keys: |
+            build-${{ matrix.os }}-${{ matrix.target }}-
+
       - name: Install intron
         run: |
           gh release download v0.17.0 -R misut/intron -p "intron-*-${{ matrix.platform }}.tar.gz"
