@@ -19,6 +19,7 @@ platforms = [
 [target.'cfg(not(os = "wasi"))'.dependencies.cmake.dawn]
 git = "https://dawn.googlesource.com/dawn"
 tag = "b1e1e17ff454bc7845de78ff0c1fa0974912ce45"
+shallow = false
 targets = "webgpu_dawn;webgpu_glfw;glfw"
 
 [target.'cfg(not(os = "wasi"))'.dependencies.cmake.dawn.options]
