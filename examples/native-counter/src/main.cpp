@@ -26,7 +26,7 @@ void update(State& state, Msg msg) {
 void view(State const& state) {
     using namespace phenotype;
     layout::column([&] {
-        widget::text("phenotype — native (Dawn/Metal)");
+        widget::text("phenotype — native (Metal)");
         widget::text(std::string("Count: ") + std::to_string(state.count));
         layout::row(
             [&] { widget::button<Msg>("-", Decrement{}); },
