@@ -1,7 +1,7 @@
 [package]
 name = "phenotype"
 version = "0.10.0"
-description = "C++ cross-platform UI framework with WebGPU renderer"
+description = "C++ cross-platform UI framework"
 authors = ["misut"]
 license = "MIT"
 type = "lib"
@@ -16,19 +16,12 @@ platforms = [
 "github.com/misut/jsoncpp" = "0.1.4"
 "github.com/misut/txn" = "0.6.0"
 
-[target.'cfg(not(os = "wasi"))'.dependencies.cmake.dawn]
-git = "https://dawn.googlesource.com/dawn"
-tag = "b1e1e17ff454bc7845de78ff0c1fa0974912ce45"
-shallow = false
-targets = "webgpu_dawn;webgpu_glfw;glfw"
+[target.'cfg(not(os = "wasi"))'.dependencies.cmake.glfw]
+git = "https://github.com/glfw/glfw.git"
+tag = "3.4"
+targets = "glfw"
 
-[target.'cfg(not(os = "wasi"))'.dependencies.cmake.dawn.options]
-DAWN_FETCH_DEPENDENCIES = "ON"
-DAWN_BUILD_SAMPLES = "OFF"
-DAWN_BUILD_TESTS = "OFF"
-DAWN_BUILD_NODE_BINDINGS = "OFF"
-DAWN_BUILD_BENCHMARKS = "OFF"
-DAWN_BUILD_FUZZERS = "OFF"
-DAWN_ENABLE_SWIFTSHADER = "OFF"
-DAWN_ENABLE_DESKTOP_GL = "OFF"
-DAWN_ENABLE_OPENGLES = "OFF"
+[target.'cfg(not(os = "wasi"))'.dependencies.cmake.glfw.options]
+GLFW_BUILD_DOCS = "OFF"
+GLFW_BUILD_TESTS = "OFF"
+GLFW_BUILD_EXAMPLES = "OFF"
