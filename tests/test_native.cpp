@@ -128,12 +128,27 @@ static void test_text_build_atlas_respects_line_box() {
     entries.push_back({10.f, 20.f, 16.f, false, 0.f, 0.f, 0.f, 1.f, "Hello", 32.f});
     auto atlas = text::build_atlas(entries, 1.0f);
     assert(atlas.quads.size() == 1);
-    assert(atlas.quads[0].y >= 20.f);
-    assert(atlas.quads[0].y + atlas.quads[0].h <= 53.f);
-    assert(atlas.quads[0].y > 21.f);
+    assert(std::fabs(atlas.quads[0].y - 20.f) < 0.1f);
+    assert(std::fabs(atlas.quads[0].h - 32.f) < 1.1f);
 
     text::shutdown();
     std::puts("PASS: text build atlas respects line box");
+}
+
+static void test_text_build_atlas_keeps_line_box_stable() {
+    text::init();
+    std::vector<text::TextEntry> entries;
+    entries.push_back({10.f, 20.f, 16.f, false, 0.f, 0.f, 0.f, 1.f, "ttt", 32.f});
+    entries.push_back({10.f, 60.f, 16.f, false, 0.f, 0.f, 0.f, 1.f, "ppp", 32.f});
+    auto atlas = text::build_atlas(entries, 2.0f);
+    assert(atlas.quads.size() == 2);
+    assert(std::fabs(atlas.quads[0].y - 20.f) < 0.1f);
+    assert(std::fabs(atlas.quads[1].y - 60.f) < 0.1f);
+    assert(std::fabs(atlas.quads[0].h - atlas.quads[1].h) < 0.1f);
+    assert(std::fabs(atlas.quads[0].h - 32.f) < 0.6f);
+
+    text::shutdown();
+    std::puts("PASS: text build atlas keeps line box stable");
 }
 
 static void test_text_build_atlas_empty() {
@@ -186,6 +201,7 @@ int main() {
     test_text_build_atlas_crops_padding();
     test_text_build_atlas_scale_preserves_logical_bounds();
     test_text_build_atlas_respects_line_box();
+    test_text_build_atlas_keeps_line_box_stable();
     test_text_build_atlas_empty();
     test_text_init_shutdown_cycle();
     test_renderer_flush_empty();

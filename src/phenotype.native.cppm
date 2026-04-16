@@ -107,6 +107,38 @@ inline float snap_to_pixel_grid(float value, float scale) {
     return std::round(value * s) / s;
 }
 
+struct LineBoxMetrics {
+    int slot_width = 0;
+    int slot_height = 0;
+    int render_top = 0;
+    int render_height = 0;
+    float baseline_y = 0;
+};
+
+inline LineBoxMetrics make_line_box(float logical_width, float logical_line_height,
+                                    float ascent, float descent, float leading,
+                                    float scale, int padding) {
+    LineBoxMetrics box;
+    float natural_line_height = ascent + descent + leading;
+    int text_width_px = logical_pixels(logical_width, scale, 0);
+    int line_height_px = logical_pixels(logical_line_height, scale);
+    int natural_height_px = static_cast<int>(std::ceil(natural_line_height));
+    if (natural_height_px < 1) natural_height_px = 1;
+
+    box.slot_width = text_width_px + padding * 2;
+    if (box.slot_width < padding * 2 + 1) box.slot_width = padding * 2 + 1;
+
+    box.render_top = padding;
+    box.render_height = (line_height_px > natural_height_px)
+        ? line_height_px : natural_height_px;
+    box.slot_height = box.render_height + padding * 2;
+
+    float extra_leading = static_cast<float>(box.render_height) - natural_line_height;
+    if (extra_leading < 0.f) extra_leading = 0.f;
+    box.baseline_y = static_cast<float>(box.render_top) + extra_leading * 0.5f + ascent;
+    return box;
+}
+
 inline void init() {
     if (g_text.initialized) return;
     g_text.sans = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 16.0, nullptr);
@@ -217,7 +249,6 @@ inline TextAtlas build_atlas(std::vector<TextEntry> const& entries,
         float ascent = static_cast<float>(CTFontGetAscent(font));
         float descent = static_cast<float>(CTFontGetDescent(font));
         float leading = static_cast<float>(CTFontGetLeading(font));
-        float natural_line_height = ascent + descent + leading;
         float logical_line_height = e.line_height > 0
             ? e.line_height
             : e.font_size * 1.6f;
@@ -226,20 +257,11 @@ inline TextAtlas build_atlas(std::vector<TextEntry> const& entries,
 
         float tw_f = measure(e.font_size, e.mono, e.text.c_str(),
             static_cast<unsigned int>(e.text.size()));
-        int text_width_px = logical_pixels(tw_f, scale, 0);
-        int line_height_px = logical_pixels(logical_line_height, scale);
-        int natural_height_px = static_cast<int>(std::ceil(natural_line_height));
-        if (natural_height_px < 1) natural_height_px = 1;
-        int slot_w = text_width_px + padding * 2;
-        if (slot_w < padding * 2 + 1) slot_w = padding * 2 + 1;
-        int slot_h = ((line_height_px > natural_height_px)
-            ? line_height_px : natural_height_px) + padding * 2;
-        float extra_leading = static_cast<float>(line_height_px) - natural_line_height;
-        if (extra_leading < 0.f) extra_leading = 0.f;
-        float baseline_y = static_cast<float>(padding) + extra_leading * 0.5f + ascent;
+        auto box = make_line_box(tw_f, logical_line_height, ascent, descent, leading,
+            scale, padding);
 
-        if (ax + slot_w > ATLAS_SIZE) { ax = 0; ay += row_height; row_height = 0; }
-        if (ay + slot_h > ATLAS_SIZE) break;
+        if (ax + box.slot_width > ATLAS_SIZE) { ax = 0; ay += row_height; row_height = 0; }
+        if (ay + box.slot_height > ATLAS_SIZE) break;
 
         decode_utf8(e.text.c_str(), static_cast<unsigned int>(e.text.size()), codepoints);
         codepoints_to_unichars(codepoints, unichars);
@@ -252,8 +274,8 @@ inline TextAtlas build_atlas(std::vector<TextEntry> const& entries,
                                     glyphs.data(), advances.data(), count);
 
         bool has_ink = false;
-        int ink_min_x = slot_w, ink_min_y = slot_h;
-        int ink_max_x = -1, ink_max_y = -1;
+        int ink_min_x = box.slot_width;
+        int ink_max_x = -1;
         float pen_x = static_cast<float>(padding);
         for (CFIndex gi = 0; gi < count; ++gi) {
             if (glyphs[gi] == 0) { pen_x += static_cast<float>(advances[gi].width); continue; }
@@ -276,14 +298,14 @@ inline TextAtlas build_atlas(std::vector<TextEntry> const& entries,
 
             int gx = static_cast<int>(std::lround(pen_x + bbox.origin.x));
             int gy = static_cast<int>(std::lround(
-                baseline_y - bbox.origin.y - bbox.size.height));
+                box.baseline_y - bbox.origin.y - bbox.size.height));
 
             for (int row = 0; row < gh; ++row) {
                 for (int col = 0; col < gw; ++col) {
                     int local_x = gx + col;
                     int local_y = gy + row;
-                    if (local_x >= 0 && local_x < slot_w &&
-                        local_y >= 0 && local_y < slot_h) {
+                    if (local_x >= 0 && local_x < box.slot_width &&
+                        local_y >= 0 && local_y < box.slot_height) {
                         int px = ax + local_x;
                         int py = ay + local_y;
                         if (px < 0 || px >= ATLAS_SIZE || py < 0 || py >= ATLAS_SIZE)
@@ -292,9 +314,7 @@ inline TextAtlas build_atlas(std::vector<TextEntry> const& entries,
                         if (alpha == 0) continue;
                         has_ink = true;
                         if (local_x < ink_min_x) ink_min_x = local_x;
-                        if (local_y < ink_min_y) ink_min_y = local_y;
                         if (local_x > ink_max_x) ink_max_x = local_x;
-                        if (local_y > ink_max_y) ink_max_y = local_y;
                         int idx = (py * ATLAS_SIZE + px) * 4;
                         atlas.pixels[idx + 0] = static_cast<uint8_t>(e.r * 255.f * alpha / 255.f);
                         atlas.pixels[idx + 1] = static_cast<uint8_t>(e.g * 255.f * alpha / 255.f);
@@ -308,21 +328,20 @@ inline TextAtlas build_atlas(std::vector<TextEntry> const& entries,
 
         if (has_ink) {
             int ink_w = ink_max_x - ink_min_x + 1;
-            int ink_h = ink_max_y - ink_min_y + 1;
             atlas.quads.push_back({
                 snapped_x + static_cast<float>(ink_min_x) / scale,
-                snapped_y + static_cast<float>(ink_min_y) / scale,
+                snapped_y,
                 static_cast<float>(ink_w) / scale,
-                static_cast<float>(ink_h) / scale,
+                static_cast<float>(box.render_height) / scale,
                 static_cast<float>(ax + ink_min_x) / ATLAS_SIZE,
-                static_cast<float>(ay + ink_min_y) / ATLAS_SIZE,
+                static_cast<float>(ay + box.render_top) / ATLAS_SIZE,
                 static_cast<float>(ink_w) / ATLAS_SIZE,
-                static_cast<float>(ink_h) / ATLAS_SIZE,
+                static_cast<float>(box.render_height) / ATLAS_SIZE,
             });
         }
 
-        ax += slot_w;
-        if (slot_h > row_height) row_height = slot_h;
+        ax += box.slot_width;
+        if (box.slot_height > row_height) row_height = box.slot_height;
     }
 
     return atlas;
