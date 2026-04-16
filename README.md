@@ -241,32 +241,30 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline, hos
 - [x] Image / icon rendering (`widget::image` + persistent atlas in the JS shim)
 - [x] Checkbox / radio widgets (`widget::checkbox<Msg>` / `widget::radio<Msg>` — filled accent indicator + label, click + Tab focus on the indicator)
 - [x] Theme from JSON (`theme_from_json` / `theme_to_json` via txn auto-reflection + `setThemeJson()` JS shim method)
-
-### Performance
-
-- [x] vDOM-style diff / partial paint v1 — frame skip on identical cmd buffer (FNV-1a hash gates `phenotype_flush()`; caret blinks and idle repaints collapse to hash + return). Tracked by `phenotype.runner.frames_skipped` vs `phenotype.host.flush_calls`.
-- [x] vDOM-style diff / partial paint v2 — double-buffer arena + position-based subtree diff. Copies layout from previous frame for unchanged subtrees. Tracked by `phenotype.runner.layout_nodes_skipped` vs `layout_nodes_computed`.
-- [ ] vDOM-style diff v3 — stable-key structural diff for efficient list reorder + sub-frame partial GPU updates (scissor + `loadOp: 'load'`)
-
-### Observability
-
-- [x] OTel JS adapter (`shim/phenotype-otel.js`) — polls `phenotype_diag_export()`, transforms to OTLP/HTTP JSON, POSTs to a user-configured collector. Includes a local collector example (`shim/otel-example/`).
-- [ ] Spans / traces (`phenotype::diag::trace::Span`, runner phases as child spans)
-- [ ] Histogram exemplars (slowest frame's trace id attached to the bucket)
-
-### Framework features
-
-- [ ] Animation system (transitions, easings, animated layout values)
-- [ ] More widgets (slider, dropdown, modal/dialog, tooltip)
-- [ ] Multi-line text input (`widget::text_area<Msg>` with a `<textarea>` overlay)
-
-### Native backends
-
+- [x] OTel JS adapter (`shim/phenotype-otel.js`) for exporting metrics snapshots to OTLP/HTTP
+- [x] vDOM-style diff / partial paint v1 — frame skip on identical cmd buffers
+- [x] vDOM-style diff / partial paint v2 — double-buffer arena + position-based subtree diff
+- [x] Native backend split (public coordinator + shared shell + platform modules)
 - [x] macOS native backend (GLFW shell + CoreText + Metal)
 - [x] Windows native skeleton (shared shell + stub text / renderer)
 - [x] Linux desktop stub backend
-- [ ] Windows native renderer / text stack
-- [ ] Linux native renderer / text stack
+- [x] Docs package no longer syncs a root `CMakeLists.txt`
+
+### Next Up
+
+- [ ] Windows native renderer / text stack — the shortest path from today's skeleton to real Windows desktop support
+- [ ] OS-native URL opener per platform — the capability already exists in the shell contract and only needs platform wiring
+- [ ] Broader non-macOS native contract tests — needed to lock the shell/platform contract before Windows gets real implementations
+- [ ] vDOM-style diff v3 — stable-key structural diff for efficient list reorder + sub-frame partial GPU updates
+- [ ] Multi-line text input (`widget::text_area<Msg>`) — a high-value feature that builds directly on the current input model
+- [ ] Spans / traces (`phenotype::diag::trace::Span`) — needed once native performance work moves beyond basic histograms
+- [ ] Histogram exemplars — useful once slow-frame tracing exists and can be attached to exported metrics
+
+### Later
+
+- [ ] Animation system (transitions, easings, animated layout values) — best tackled after keyed diff and frame scheduling needs are clearer
+- [ ] More widgets (slider, dropdown, modal/dialog, tooltip)
+- [ ] Linux native renderer / text stack — useful after the Windows path proves out the current platform contracts
 - [ ] Android / iOS
 
 ## License

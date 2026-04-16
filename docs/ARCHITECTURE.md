@@ -102,7 +102,7 @@ This means Metal, Direct3D, Vulkan, Skia, software raster, or another future ren
 - [x] Shared GLFW shell extracted from platform-specific native code
 - [x] macOS native code isolated behind a dedicated platform module
 - [x] Windows backend skeleton wired into the native module graph
-- [ ] Native text measurement (DirectWrite on Windows, CoreText on macOS, FreeType on Linux)
+- [ ] Native text measurement on Windows and Linux (`text_api`)
 - [ ] Windows renderer implementation behind `renderer_api`
 - [ ] OS-native URL opener per platform
 - [ ] Broader contract tests for non-macOS native backends
