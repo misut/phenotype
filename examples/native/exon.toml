@@ -1,0 +1,17 @@
+[package]
+name = "native"
+version = "0.1.0"
+description = "Native desktop widget showcase"
+type = "bin"
+standard = 23
+build-system = "cmake"
+platforms = [
+    { os = "macos", arch = "aarch64" },
+    # { os = "windows", arch = "x86_64" },
+]
+
+[sync]
+cmake-in-root = false
+
+[dependencies.path]
+phenotype = "../.."
