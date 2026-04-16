@@ -2,8 +2,9 @@
 
 A cross-platform C++ UI framework with a declarative DSL inspired by Iced and
 Elm. Single source of truth, typed messages, pure-function view. Renders via
-WebGPU on the web today; native graphics backends (Metal, Direct3D, Vulkan)
-will replace only the JS shim layer.
+WebGPU on the web today; native desktop support is split into a shared shell
+plus platform-specific text / renderer adapters so macOS and Windows can
+evolve independently without changing the core.
 
 ## Example
 
@@ -217,7 +218,7 @@ As an exon dependency:
 
 ## Architecture
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline, host interface, command buffer protocol, native backend strategy (Dawn/WebGPU), and module dependency graph.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline, host interface, command buffer protocol, native backend structure, and module dependency graph.
 
 ## Roadmap
 
@@ -261,9 +262,11 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline, hos
 
 ### Native backends
 
-- [ ] macOS (Metal backend)
-- [ ] Windows (Direct3D backend)
-- [ ] Linux (Vulkan backend)
+- [x] macOS native backend (GLFW shell + CoreText + Metal)
+- [x] Windows native skeleton (shared shell + stub text / renderer)
+- [x] Linux desktop stub backend
+- [ ] Windows native renderer / text stack
+- [ ] Linux native renderer / text stack
 - [ ] Android / iOS
 
 ## License

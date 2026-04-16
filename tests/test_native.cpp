@@ -1,4 +1,4 @@
-// Native backend tests — CoreText text measurement/atlas + Metal safety.
+// Native backend tests — macOS CoreText/Metal + cross-platform stub contracts.
 // CoreText tests run on any macOS (no GPU needed).
 // Metal tests require a Metal device (SKIP if unavailable).
 
@@ -182,10 +182,36 @@ static void test_renderer_flush_empty() {
     std::puts("PASS: renderer flush empty");
 }
 
+// ============================================================
+// Stub backend contract tests
+// ============================================================
+
 #else // !__APPLE__
 
-static void skip_all() {
-    std::puts("SKIP: all native tests (not macOS)");
+static void test_stub_text_measure_basic() {
+    text::init();
+    float w = text::measure(16.0f, false, "Hello", 5);
+    assert(w > 0.f);
+    text::shutdown();
+    std::puts("PASS: stub text measure basic");
+}
+
+static void test_stub_renderer_hit_test() {
+    native_host host;
+    host.platform = &current_platform();
+
+    emit_hit_region(host, 10.0f, 20.0f, 50.0f, 30.0f, 42u, 0u);
+    host.flush();
+
+    auto hit = renderer::hit_test(20.0f, 30.0f, 0.0f);
+    assert(hit.has_value());
+    assert(*hit == 42u);
+
+    auto miss = renderer::hit_test(5.0f, 5.0f, 0.0f);
+    assert(!miss.has_value());
+
+    renderer::shutdown();
+    std::puts("PASS: stub renderer hit test");
 }
 
 #endif // __APPLE__
@@ -207,7 +233,9 @@ int main() {
     test_renderer_flush_empty();
     std::puts("\nAll native tests passed.");
 #else
-    skip_all();
+    test_stub_text_measure_basic();
+    test_stub_renderer_hit_test();
+    std::puts("\nAll stub native tests passed.");
 #endif
     return 0;
 }

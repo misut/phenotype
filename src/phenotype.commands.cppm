@@ -1,7 +1,7 @@
 // Command buffer parser — decodes the raw phenotype_cmd_buf bytes into
 // typed C++ structs. The JS shim has an equivalent parseCommands() in
 // shim/phenotype.js; this module is the C++ counterpart for native
-// backends (Dawn, D3D, Vulkan) that consume draw commands directly.
+// backends that consume draw commands directly.
 
 module;
 #include <cstring>

@@ -24,9 +24,10 @@ FetchContent_Declare(glfw
 )
 FetchContent_MakeAvailable(glfw)
 
-# metal-cpp
-add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../libs/metal-cpp
-                 ${CMAKE_BINARY_DIR}/_deps/metal-cpp-build)
+if(APPLE)
+    add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../libs/metal-cpp
+                     ${CMAKE_BINARY_DIR}/_deps/metal-cpp-build)
+endif()
 
 # phenotype git dependencies
 FetchContent_Declare(jsoncpp
@@ -62,12 +63,21 @@ target_sources(phenotype
     ${PHENOTYPE_ROOT}/src/phenotype.paint.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.theme_json.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.wasm.cppm
+    ${PHENOTYPE_ROOT}/src/phenotype.native.platform.cppm
+    ${PHENOTYPE_ROOT}/src/phenotype.native.stub.cppm
+    ${PHENOTYPE_ROOT}/src/phenotype.native.shell.cppm
+    ${PHENOTYPE_ROOT}/src/phenotype.native.macos.cppm
+    ${PHENOTYPE_ROOT}/src/phenotype.native.windows.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.native.cppm
 )
 target_link_libraries(phenotype PUBLIC
-    jsoncpp txn glfw metal-cpp
+    jsoncpp txn glfw
 )
+
+if(APPLE)
+    target_link_libraries(phenotype PUBLIC metal-cpp)
+endif()
 
 # example
 add_executable(native src/main.cpp)

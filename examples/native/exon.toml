@@ -7,7 +7,7 @@ standard = 23
 build-system = "cmake"
 platforms = [
     { os = "macos", arch = "aarch64" },
-    # { os = "windows", arch = "x86_64" },
+    { os = "windows", arch = "x86_64" },
 ]
 
 [sync]

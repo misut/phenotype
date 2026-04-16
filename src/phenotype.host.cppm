@@ -5,7 +5,7 @@
 // a concrete struct satisfying host_platform:
 //
 //   phenotype.wasm   — wasm_host  (JS shim imports)
-//   phenotype.native — native_host (Dawn/WebGPU + stb_truetype)
+//   phenotype.native — native_host (platform shell + text + renderer adapters)
 //
 // Tests inject null_host — no link-time mocking, no WASM runtime.
 

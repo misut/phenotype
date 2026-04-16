@@ -9,6 +9,7 @@ standard = 23
 platforms = [
     { os = "wasi" },
     { os = "macos", arch = "aarch64" },
+    { os = "windows", arch = "x86_64" },
     { os = "linux", arch = "x86_64" },
 ]
 
@@ -31,4 +32,3 @@ metal-cpp = "libs/metal-cpp"
 
 [sync]
 cmake-in-root = false
-

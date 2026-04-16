@@ -84,7 +84,7 @@ void view(State const& state) {
         // Hero
         [&] {
             widget::text("phenotype");
-            widget::text("A cross-platform C++ UI framework with WebGPU renderer");
+            widget::text("A cross-platform C++ UI framework with a web renderer and modular native backends");
         },
         // Content
         [&] {
@@ -92,7 +92,8 @@ void view(State const& state) {
             layout::column([&] {
                 widget::text("Features");
                 layout::list_items([&] {
-                    layout::item("WebGPU 2D renderer (WGSL shaders, instanced draws, text atlas)");
+                    layout::item("WebGPU 2D renderer for the web target");
+                    layout::item("Shared native shell with platform-specific text and renderer adapters");
                     layout::item("Compose-style declarative DSL (column, row, scaffold, card)");
                     layout::item("Flexbox layout engine with alignment (main/cross axis)");
                     layout::item("Pure-function view with typed messages (Iced/Elm pattern)");
