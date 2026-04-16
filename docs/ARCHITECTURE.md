@@ -83,7 +83,7 @@ This keeps the framework core pure while pushing side effects into thin adapters
 ### Current native backends
 
 - **macOS**: GLFW shell + CoreText text measurement/atlas + Metal renderer
-- **Windows**: GLFW shell + DirectWrite text measurement/atlas + Direct3D 12 renderer
+- **Windows**: GLFW shell + DirectWrite text measurement/atlas + Direct3D 12 renderer + IME composition overlay + native `DrawImage`
 - **Linux / other desktop**: shared stub backend
 
 ### Modularity guarantee
@@ -105,9 +105,12 @@ This means Metal, Direct3D, Vulkan, Skia, software raster, or another future ren
 - [x] Native text measurement on Windows (`text_api`) via DirectWrite
 - [x] Windows renderer implementation behind `renderer_api` via Direct3D 12
 - [x] OS-native URL opener on Windows
+- [x] IME composition for native text input on Windows
+- [x] Native `DrawImage` support on Windows
 - [x] Contract tests for the Windows native backend (text, renderer smoke, text input)
-- [ ] IME composition for native text input
-- [ ] Native `DrawImage` support on desktop backends
+- [x] `examples/native` positioned as the Windows native acceptance showcase
+- [ ] IME composition for native text input on macOS
+- [ ] Native `DrawImage` support on macOS
 
 ## Module dependency graph
 
