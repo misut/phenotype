@@ -769,6 +769,113 @@ inline void shutdown() {
     renderer::shutdown();
 }
 
+// ============================================================
+// run_app — self-contained entry point (GLFW lifecycle internal)
+// ============================================================
+
+namespace app_detail {
+
+struct AppState {
+    native_host* host = nullptr;
+    float scroll_y = 0;
+    unsigned int hovered_id = 0xFFFFFFFF;
+};
+inline AppState g_app_state;
+
+inline void on_mouse_button(GLFWwindow* window, int button, int action, int) {
+    if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) return;
+    double mx, my;
+    glfwGetCursorPos(window, &mx, &my);
+    if (auto h = hit_test(static_cast<float>(mx), static_cast<float>(my), g_app_state.scroll_y)) {
+        ::phenotype::detail::set_focus_id(*h);
+        ::phenotype::detail::handle_event(*h);
+    }
+}
+
+inline void on_cursor_pos(GLFWwindow* window, double mx, double my) {
+    auto h = hit_test(static_cast<float>(mx), static_cast<float>(my), g_app_state.scroll_y);
+    unsigned int id = h.value_or(0xFFFFFFFF);
+    if (id != g_app_state.hovered_id) {
+        g_app_state.hovered_id = id;
+        if (::phenotype::detail::set_hover_id(id))
+            ::phenotype::detail::repaint(*g_app_state.host, g_app_state.scroll_y);
+    }
+    static GLFWcursor* arrow = nullptr;
+    static GLFWcursor* hand  = nullptr;
+    if (!arrow) arrow = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+    if (!hand)  hand  = glfwCreateStandardCursor(GLFW_POINTING_HAND_CURSOR);
+    glfwSetCursor(window, h ? hand : arrow);
+}
+
+inline void on_scroll(GLFWwindow* window, double, double dy) {
+    float total = ::phenotype::detail::get_total_height();
+    int w, h;
+    glfwGetWindowSize(window, &w, &h);
+    float max_scroll = total - static_cast<float>(h);
+    if (max_scroll < 0) max_scroll = 0;
+    g_app_state.scroll_y += static_cast<float>(dy);
+    if (g_app_state.scroll_y < 0) g_app_state.scroll_y = 0;
+    if (g_app_state.scroll_y > max_scroll) g_app_state.scroll_y = max_scroll;
+    ::phenotype::detail::repaint(*g_app_state.host, g_app_state.scroll_y);
+}
+
+inline void on_framebuffer_size(GLFWwindow*, int, int) {
+    ::phenotype::detail::repaint(*g_app_state.host, g_app_state.scroll_y);
+}
+
+inline void on_key(GLFWwindow*, int key, int, int action, int mods) {
+    if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
+    if (key == GLFW_KEY_TAB) {
+        ::phenotype::detail::handle_tab((mods & GLFW_MOD_SHIFT) ? 1 : 0);
+        ::phenotype::detail::repaint(*g_app_state.host, g_app_state.scroll_y);
+    } else if (key == GLFW_KEY_ENTER) {
+        unsigned int fid = ::phenotype::detail::get_focused_id();
+        if (fid != 0xFFFFFFFF) ::phenotype::detail::handle_event(fid);
+    }
+}
+
+} // namespace app_detail
+
+// Self-contained app runner. Owns the GLFW window and event loop.
+// Returns 0 on success, 1 on failure.
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+int run_app(int width, int height, char const* title, View view, Update update) {
+    if (!glfwInit()) {
+        std::fprintf(stderr, "Failed to initialize GLFW\n");
+        return 1;
+    }
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+
+    auto* window = glfwCreateWindow(width, height, title, nullptr, nullptr);
+    if (!window) {
+        std::fprintf(stderr, "Failed to create GLFW window\n");
+        glfwTerminate();
+        return 1;
+    }
+
+    static native_host host;
+    host.window = window;
+    app_detail::g_app_state = {&host, 0, 0xFFFFFFFF};
+
+    glfwSetMouseButtonCallback(window, app_detail::on_mouse_button);
+    glfwSetCursorPosCallback(window, app_detail::on_cursor_pos);
+    glfwSetScrollCallback(window, app_detail::on_scroll);
+    glfwSetFramebufferSizeCallback(window, app_detail::on_framebuffer_size);
+    glfwSetKeyCallback(window, app_detail::on_key);
+
+    run<State, Msg>(host, std::move(view), std::move(update));
+
+    while (!glfwWindowShouldClose(window))
+        glfwPollEvents();
+
+    shutdown();
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    return 0;
+}
+
 } // namespace phenotype::native
 
 #endif // !__wasi__
