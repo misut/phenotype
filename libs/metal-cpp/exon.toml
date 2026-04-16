@@ -6,3 +6,4 @@ authors = ["misut"]
 license = "Apache-2.0"
 type = "lib"
 standard = 23
+build-system = "cmake"
