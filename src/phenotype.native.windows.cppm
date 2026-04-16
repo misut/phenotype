@@ -93,6 +93,45 @@ inline bool env_enabled(char const* name) {
 #endif
 }
 
+struct LineBoxMetrics {
+    int slot_width = 0;
+    int slot_height = 0;
+    int render_top = 0;
+    int render_height = 0;
+    float baseline_y = 0;
+};
+
+inline LineBoxMetrics make_line_box(float logical_width,
+                                    float logical_line_height,
+                                    float ascent, float descent, float leading,
+                                    float scale, int padding) {
+    LineBoxMetrics box;
+    float natural_line_height = ascent + descent + leading;
+    int text_width_px = logical_pixels(logical_width, scale, 0);
+    int line_height_px = logical_pixels(logical_line_height, scale);
+    int natural_height_px = static_cast<int>(std::ceil(natural_line_height));
+    if (natural_height_px < 1) natural_height_px = 1;
+
+    box.slot_width = text_width_px + padding * 2;
+    if (box.slot_width < padding * 2 + 1)
+        box.slot_width = padding * 2 + 1;
+
+    box.render_top = padding;
+    box.render_height = (line_height_px > natural_height_px)
+        ? line_height_px : natural_height_px;
+    box.slot_height = box.render_height + padding * 2;
+
+    float extra_leading = static_cast<float>(box.render_height) - natural_line_height;
+    if (extra_leading < 0.0f) extra_leading = 0.0f;
+    box.baseline_y = static_cast<float>(box.render_top)
+        + extra_leading * 0.5f + ascent;
+    return box;
+}
+
+#ifdef _WIN32
+
+using Microsoft::WRL::ComPtr;
+
 inline std::wstring utf8_to_wstring(char const* text, unsigned int len) {
     if (!text || len == 0) return {};
     int needed = MultiByteToWideChar(
@@ -141,45 +180,6 @@ inline std::string wstring_to_utf8(std::wstring_view text) {
         nullptr);
     return out;
 }
-
-struct LineBoxMetrics {
-    int slot_width = 0;
-    int slot_height = 0;
-    int render_top = 0;
-    int render_height = 0;
-    float baseline_y = 0;
-};
-
-inline LineBoxMetrics make_line_box(float logical_width,
-                                    float logical_line_height,
-                                    float ascent, float descent, float leading,
-                                    float scale, int padding) {
-    LineBoxMetrics box;
-    float natural_line_height = ascent + descent + leading;
-    int text_width_px = logical_pixels(logical_width, scale, 0);
-    int line_height_px = logical_pixels(logical_line_height, scale);
-    int natural_height_px = static_cast<int>(std::ceil(natural_line_height));
-    if (natural_height_px < 1) natural_height_px = 1;
-
-    box.slot_width = text_width_px + padding * 2;
-    if (box.slot_width < padding * 2 + 1)
-        box.slot_width = padding * 2 + 1;
-
-    box.render_top = padding;
-    box.render_height = (line_height_px > natural_height_px)
-        ? line_height_px : natural_height_px;
-    box.slot_height = box.render_height + padding * 2;
-
-    float extra_leading = static_cast<float>(box.render_height) - natural_line_height;
-    if (extra_leading < 0.0f) extra_leading = 0.0f;
-    box.baseline_y = static_cast<float>(box.render_top)
-        + extra_leading * 0.5f + ascent;
-    return box;
-}
-
-#ifdef _WIN32
-
-using Microsoft::WRL::ComPtr;
 
 inline void log_hresult(char const* label, HRESULT hr) {
     std::fprintf(stderr, "[windows] %s failed (hr=0x%08lx)\n",
