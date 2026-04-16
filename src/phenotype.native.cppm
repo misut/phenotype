@@ -245,7 +245,7 @@ inline TextAtlas build_atlas(std::vector<TextEntry> const& entries) {
                     int px = gx + col;
                     int py = gy + row;
                     if (px >= 0 && px < ATLAS_SIZE && py >= 0 && py < ATLAS_SIZE) {
-                        uint8_t alpha = glyph_buf[(gh - 1 - row) * gw + col];
+                        uint8_t alpha = glyph_buf[row * gw + col];
                         if (alpha == 0) continue;
                         int idx = (py * ATLAS_SIZE + px) * 4;
                         atlas.pixels[idx + 0] = static_cast<uint8_t>(e.r * 255.f * alpha / 255.f);
@@ -319,7 +319,7 @@ vertex ColorVsOut vs_color(
     constant Uniforms& u [[buffer(0)]],
     const device ColorInstance* instances [[buffer(1)]]
 ) {
-    constant float2 corners[] = {
+    constexpr float2 corners[] = {
         float2(0,0), float2(1,0), float2(0,1),
         float2(1,0), float2(1,1), float2(0,1),
     };
@@ -376,7 +376,7 @@ vertex TextVsOut vs_text(
     constant Uniforms& u [[buffer(0)]],
     const device TextInstance* instances [[buffer(1)]]
 ) {
-    constant float2 corners[] = {
+    constexpr float2 corners[] = {
         float2(0,0), float2(1,0), float2(0,1),
         float2(1,0), float2(1,1), float2(0,1),
     };
@@ -489,6 +489,10 @@ inline void init(GLFWwindow* window) {
     g_state.color_pipeline = create_pipeline(g_state.device, lib, "vs_color", "fs_color");
     g_state.text_pipeline = create_pipeline(g_state.device, lib, "vs_text", "fs_text");
     lib->release();
+    if (!g_state.color_pipeline || !g_state.text_pipeline) {
+        std::fprintf(stderr, "[metal] failed to create render pipelines\n");
+        return;
+    }
 
     g_state.uniform_buf = g_state.device->newBuffer(16, MTL::ResourceStorageModeShared);
 
