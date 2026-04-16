@@ -8,8 +8,8 @@ The core handles widgets, layout, state management, vDOM diff, and draw-command 
 
 - **Core modules**: types, state, layout, paint, commands, diag, theme_json
 - **Backend contract**: `phenotype_host.h` (5 host functions) + `phenotype.commands` (typed draw commands)
-- **Current backends**: WASM+JS (production), native test stubs (CI)
-- **Planned backends**: Dawn/WebGPU (Windows, macOS, Linux)
+- **Current backends**: WASM+JS (production), macOS native (GLFW shell + CoreText + Metal), Windows/Linux stub native backends
+- **Planned backends**: platform-specific native renderers/text systems behind the same shell + command-buffer contract
 
 ## Rendering pipeline
 
@@ -34,7 +34,7 @@ flush_if_changed() — FNV-1a hash, skip if identical to previous frame
   ▼
 Backend consumes the cmd buffer:
   ├── WASM:   JS shim parseCommands() → WebGPU renderer
-  └── Native: phenotype::parse_commands() → Dawn / D3D / Vulkan renderer
+  └── Native: phenotype::parse_commands() → platform renderer
 ```
 
 ## Host interface
@@ -70,53 +70,42 @@ All values are little-endian. Colors are packed as `(r << 24) | (g << 16) | (b <
 
 The `phenotype.commands` module provides a C++ parser (`parse_commands(buf, len)`) that decodes these bytes into typed structs (`ClearCmd`, `FillRectCmd`, etc.) for native backends.
 
-## Native rendering strategy
+## Native backend structure
 
-### Decision: Google Dawn (WebGPU)
+The native path is intentionally split into three layers so macOS and Windows work mostly in separate files:
 
-phenotype uses [Dawn](https://dawn.googlesource.com/dawn) — Google's C++ WebGPU implementation — as the initial native renderer.
+1. **`phenotype.native.shell`** — the shared GLFW shell: window lifecycle, input callbacks, scroll/focus/hover translation, event loop
+2. **`phenotype.native.platform`** — capability contracts for `text`, `renderer`, and platform services
+3. **Platform implementation modules** — `phenotype.native.macos`, `phenotype.native.windows`, `phenotype.native.stub`
 
-**Why Dawn:**
-- Reuses the existing WGSL shaders (~125 lines) from `shim/phenotype.js` as-is
-- Cross-platform with a single codebase: D3D12 (Windows), Metal (macOS), Vulkan (Linux)
-- Memory-safe by design: automatic resource lifetime management, implicit barrier insertion, built-in validation layer
-- Proven at scale (powers Chrome's WebGPU)
+This keeps the framework core pure while pushing side effects into thin adapters.
 
-### Hybrid approach (future-proofing for game engine use)
+### Current native backends
 
-| Phase | Trigger | Action |
-|-------|---------|--------|
-| **Phase 1** (current) | Default | Dawn for all rendering. One WGSL shader set covers all platforms. |
-| **Phase 2** | Performance ceiling hit (>1000 draw calls, need bindless) | Use Dawn's native handle interop (`dawn::native`) to drop into D3D12/Vulkan for specific render passes. Core stays on Dawn. |
-| **Phase 3** | AAA-level requirements (mesh shaders, ray tracing, GPU-driven pipeline) | Swap the renderer entirely to raw D3D12/Vulkan. The core framework is untouched because it only depends on `phenotype_host.h` + `phenotype.commands`. |
+- **macOS**: GLFW shell + CoreText text measurement/atlas + Metal renderer
+- **Windows**: backend skeleton using the shared shell and a stub renderer/text implementation
+- **Linux / other desktop**: shared stub backend
 
 ### Modularity guarantee
 
-The renderer is always behind two abstraction layers:
+The core remains isolated from platform SDKs. Native implementations only meet two contracts:
 
-1. **`phenotype_host.h`** — 5 functions the renderer implements
-2. **`phenotype.commands`** — typed draw commands the renderer consumes
+1. **Core host capabilities** — measurement, canvas sizing, URL opening, command-buffer flush
+2. **`phenotype.commands`** — typed draw commands parsed from the shared buffer
 
-Any renderer (Dawn, wgpu-native, raw D3D12, Metal, Vulkan, or a future GPU API) can be plugged in by implementing these two interfaces. The core framework modules (`types`, `state`, `layout`, `paint`, `diag`) never link against any GPU library.
-
-### Known WebGPU limitations
-
-These are acceptable for UI + 2D + indie 3D workloads. They become blocking only at AAA scale, at which point Phase 2 or Phase 3 kicks in.
-
-- No bindless rendering (bind-group based)
-- No mesh shaders
-- No hardware ray tracing (proposal stage in the WebGPU spec)
-- Limited multi-threaded command recording
-- ~10-30% CPU-side overhead vs raw D3D12/Vulkan for >1000 draw calls per frame
+This means Metal, Direct3D, Vulkan, Skia, software raster, or another future renderer can replace a platform backend without rewriting `types`, `state`, `layout`, `paint`, or `diag`.
 
 ## Native backend roadmap
 
 - [x] Host interface abstraction — `src/phenotype_host.h` (PR #52)
 - [x] Command buffer C++ parser — `phenotype.commands` module (PR #53)
-- [ ] Dawn integration + prototype window
+- [x] Shared GLFW shell extracted from platform-specific native code
+- [x] macOS native code isolated behind a dedicated platform module
+- [x] Windows backend skeleton wired into the native module graph
 - [ ] Native text measurement (DirectWrite on Windows, CoreText on macOS, FreeType on Linux)
-- [ ] Windowing + event loop (SDL3 or GLFW — decision depends on Dawn surface requirements)
-- [ ] Native entry point (`phenotype::run_native`)
+- [ ] Windows renderer implementation behind `renderer_api`
+- [ ] OS-native URL opener per platform
+- [ ] Broader contract tests for non-macOS native backends
 
 ## Module dependency graph
 
@@ -129,7 +118,12 @@ phenotype (umbrella re-export)
 ├── phenotype.paint       — draw command emitters, cmd buffer, flush_if_changed
 ├── phenotype.commands    — typed command structs (ClearCmd, ...) + parse_commands()
 ├── phenotype.theme_json  — Theme ↔ JSON via txn auto-reflection
-└── (future) phenotype.backend.dawn — Dawn renderer, native text, windowing
+├── phenotype.native      — public native entrypoint, platform selection
+├── phenotype.native.shell — GLFW event loop + input translation
+├── phenotype.native.platform — shared native capability contracts
+├── phenotype.native.macos — macOS text + Metal renderer
+├── phenotype.native.windows — Windows backend skeleton
+└── phenotype.native.stub — shared stub backend for non-macOS native targets
 ```
 
 External dependencies:
