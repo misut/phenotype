@@ -3,10 +3,12 @@
 // Metal tests require a Metal device (SKIP if unavailable).
 
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
 #include <string>
+#include <thread>
 #include <vector>
 
 #ifdef _WIN32
@@ -314,6 +316,7 @@ static void test_windows_renderer_hit_test_and_smoke() {
     auto miss = renderer::hit_test(5.0f, 5.0f, 0.0f);
     assert(!miss.has_value());
 
+    std::this_thread::sleep_for(std::chrono::milliseconds(50));
     renderer::shutdown();
     text::shutdown();
     glfwDestroyWindow(window);

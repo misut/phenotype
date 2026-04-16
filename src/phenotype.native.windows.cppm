@@ -2231,7 +2231,9 @@ inline HRESULT upload_image_atlas() {
 }
 
 inline void begin_frame(FrameContext& frame) {
-    wait_for_fence(frame.fence_value);
+    // The upload heap is shared across all frames. Reusing it before every
+    // in-flight copy finishes can race WARP's background copy worker.
+    wait_for_all_frames();
     frame.atlas_texture.Reset();
     frame.allocator->Reset();
     g_renderer.command_list->Reset(frame.allocator.Get(), nullptr);

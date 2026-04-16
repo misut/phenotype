@@ -37,12 +37,12 @@ FetchContent_Declare(jsoncpp
 )
 FetchContent_Declare(cppx
     GIT_REPOSITORY https://github.com/misut/cppx.git
-    GIT_TAG v1.0.2
+    GIT_TAG v1.0.3
     GIT_SHALLOW ON
 )
 FetchContent_Declare(txn
     GIT_REPOSITORY https://github.com/misut/txn.git
-    GIT_TAG v0.6.0
+    GIT_TAG v0.6.1
     GIT_SHALLOW ON
 )
 FetchContent_MakeAvailable(jsoncpp cppx txn)
@@ -82,3 +82,11 @@ endif()
 # example
 add_executable(native src/main.cpp)
 target_link_libraries(native PRIVATE phenotype)
+target_compile_definitions(native PRIVATE
+    PHENOTYPE_EXAMPLE_ASSET_ROOT="${CMAKE_CURRENT_SOURCE_DIR}/assets"
+)
+add_custom_command(TARGET native POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+            ${CMAKE_CURRENT_SOURCE_DIR}/assets
+            $<TARGET_FILE_DIR:native>/assets
+)

@@ -182,9 +182,9 @@ phenotype::run<State, Msg>(view, update)
   view, pure update. No reactive primitives, no observer chains.
 - **No external libraries** — layout, rendering, event handling, JSON, and
   diagnostics are all implemented from scratch.
-- **Platform-agnostic C++ API** — every platform-specific call goes through
-  the JS shim. Native backends (Metal, Direct3D, Vulkan) will replace only
-  that layer.
+- **Platform-agnostic C++ API** — the web path goes through the JS shim,
+  while desktop native paths use the shared GLFW shell plus platform-specific
+  text / renderer adapters behind the same command-buffer contract.
 - **C++23 modules** — `.cppm` files, `import std;` (or GMF on wasi-sdk).
 - **OTel-shaped observability** — diagnostics are framed as Counter / Gauge /
   Histogram + Severity 1/5/9/13/17/21 from day one so an external adapter can
@@ -247,6 +247,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline, hos
 - [x] Native backend split (public coordinator + shared shell + platform modules)
 - [x] macOS native backend (GLFW shell + CoreText + Metal)
 - [x] Windows native backend (shared shell + DirectWrite + Direct3D 12)
+- [x] Windows native IME composition and candidate overlay
+- [x] Windows native image rendering (`DrawImage` via WIC + cppx HTTP)
+- [x] `examples/native` as a Windows acceptance showcase for text, IME, images, scroll, and interaction
 - [x] Linux desktop stub backend
 - [x] Docs package no longer syncs a root `CMakeLists.txt`
 
@@ -255,8 +258,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline, hos
 - [x] Windows native renderer / text stack — DirectWrite text measurement/atlas + Direct3D 12 renderer + WARP smoke coverage
 - [x] OS-native URL opener on Windows — ShellExecuteW-backed native link opening
 - [x] Broader non-macOS native contract tests — Windows native text/renderer/text-field coverage
-- [ ] IME composition for native text input — needed for full parity with the WASM overlay path
-- [ ] Native image rendering (`DrawImage`) on Windows/macOS — the JS path already has an image atlas, native still skips it
+- [ ] macOS native IME composition — Windows is implemented, macOS still needs parity work
+- [ ] macOS native image rendering (`DrawImage`) — Windows is implemented, macOS still needs parity work
 - [ ] vDOM-style diff v3 — stable-key structural diff for efficient list reorder + sub-frame partial GPU updates
 - [ ] Multi-line text input (`widget::text_area<Msg>`) — a high-value feature that builds directly on the current input model
 - [ ] Spans / traces (`phenotype::diag::trace::Span`) — needed once native performance work moves beyond basic histograms
