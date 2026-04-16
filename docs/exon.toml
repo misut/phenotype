@@ -12,3 +12,6 @@ platforms = [{ os = "wasi" }]
 
 [dependencies.path]
 phenotype = ".."
+
+[sync]
+cmake-in-root = false
