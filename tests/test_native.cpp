@@ -71,7 +71,7 @@ static void test_text_measure_unicode() {
 static void test_text_build_atlas() {
     text::init();
     std::vector<text::TextEntry> entries;
-    entries.push_back({10.f, 20.f, 16.f, false, 0.f, 0.f, 0.f, 1.f, "Hi"});
+    entries.push_back({10.f, 20.f, 16.f, false, 0.f, 0.f, 0.f, 1.f, "Hi", 16.f * 1.6f});
     auto atlas = text::build_atlas(entries);
     assert(!atlas.pixels.empty());
     assert(atlas.width > 0);
@@ -81,6 +81,59 @@ static void test_text_build_atlas() {
     assert(atlas.quads[0].v >= 0.f && atlas.quads[0].v <= 1.f);
     text::shutdown();
     std::puts("PASS: text build atlas");
+}
+
+static void test_text_build_atlas_crops_padding() {
+    text::init();
+    std::vector<text::TextEntry> entries;
+    entries.push_back({10.f, 20.f, 16.f, false, 0.f, 0.f, 0.f, 1.f, "Hi", 16.f * 1.6f});
+    auto atlas = text::build_atlas(entries, 2.0f);
+    assert(atlas.quads.size() == 1);
+
+    float atlas_px_w = atlas.quads[0].uw * static_cast<float>(atlas.width);
+    float atlas_px_h = atlas.quads[0].vh * static_cast<float>(atlas.height);
+    assert(std::fabs(atlas_px_w - atlas.quads[0].w * 2.0f) < 1.1f);
+    assert(std::fabs(atlas_px_h - atlas.quads[0].h * 2.0f) < 1.1f);
+
+    text::shutdown();
+    std::puts("PASS: text build atlas crops padding");
+}
+
+static void test_text_build_atlas_scale_preserves_logical_bounds() {
+    text::init();
+    std::vector<text::TextEntry> entries;
+    entries.push_back({10.f, 20.f, 16.f, false, 0.f, 0.f, 0.f, 1.f, "Hello", 16.f * 1.6f});
+
+    auto atlas1 = text::build_atlas(entries, 1.0f);
+    auto atlas2 = text::build_atlas(entries, 2.0f);
+    assert(atlas1.quads.size() == 1);
+    assert(atlas2.quads.size() == 1);
+
+    float px_w1 = atlas1.quads[0].uw * static_cast<float>(atlas1.width);
+    float px_w2 = atlas2.quads[0].uw * static_cast<float>(atlas2.width);
+    assert(px_w2 > px_w1 * 1.7f);
+    assert(std::fabs(atlas1.quads[0].x - atlas2.quads[0].x) < 0.6f);
+    assert(atlas1.quads[0].w > 0.f);
+    assert(atlas2.quads[0].w > 0.f);
+    assert(atlas1.quads[0].h > 0.f);
+    assert(atlas2.quads[0].h > 0.f);
+
+    text::shutdown();
+    std::puts("PASS: text build atlas scale preserves logical bounds");
+}
+
+static void test_text_build_atlas_respects_line_box() {
+    text::init();
+    std::vector<text::TextEntry> entries;
+    entries.push_back({10.f, 20.f, 16.f, false, 0.f, 0.f, 0.f, 1.f, "Hello", 32.f});
+    auto atlas = text::build_atlas(entries, 1.0f);
+    assert(atlas.quads.size() == 1);
+    assert(atlas.quads[0].y >= 20.f);
+    assert(atlas.quads[0].y + atlas.quads[0].h <= 53.f);
+    assert(atlas.quads[0].y > 21.f);
+
+    text::shutdown();
+    std::puts("PASS: text build atlas respects line box");
 }
 
 static void test_text_build_atlas_empty() {
@@ -130,6 +183,9 @@ int main() {
     test_text_measure_empty();
     test_text_measure_unicode();
     test_text_build_atlas();
+    test_text_build_atlas_crops_padding();
+    test_text_build_atlas_scale_preserves_logical_bounds();
+    test_text_build_atlas_respects_line_box();
     test_text_build_atlas_empty();
     test_text_init_shutdown_cycle();
     test_renderer_flush_empty();
