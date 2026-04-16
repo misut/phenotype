@@ -168,7 +168,7 @@ inline void on_scroll(GLFWwindow* window, double, double dy) {
     glfwGetWindowSize(window, &w, &h);
     float max_scroll = total - static_cast<float>(h);
     if (max_scroll < 0) max_scroll = 0;
-    g_app_state.scroll_y += static_cast<float>(dy);
+    g_app_state.scroll_y -= static_cast<float>(dy);
     if (g_app_state.scroll_y < 0) g_app_state.scroll_y = 0;
     if (g_app_state.scroll_y > max_scroll) g_app_state.scroll_y = max_scroll;
     repaint_current();

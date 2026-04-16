@@ -324,6 +324,22 @@ inline Counter& layout_nodes_computed = *new Counter{
     "phenotype.runner.layout_nodes_computed",
     "Nodes whose layout was computed fresh by layout_node",
     "{node}"};
+inline Counter& native_text_cache_hits = *new Counter{
+    "phenotype.native.text_cache_hits",
+    "Native text atlas cache hits (attributes: platform)",
+    "{hit}"};
+inline Counter& native_text_cache_misses = *new Counter{
+    "phenotype.native.text_cache_misses",
+    "Native text atlas cache misses (attributes: platform)",
+    "{miss}"};
+inline Counter& native_texture_upload_bytes = *new Counter{
+    "phenotype.native.texture_upload_bytes",
+    "Native renderer texture upload bytes (attributes: platform)",
+    "By"};
+inline Counter& native_buffer_reallocations = *new Counter{
+    "phenotype.native.buffer_reallocations",
+    "Native renderer GPU buffer reallocations (attributes: platform, buffer)",
+    "{realloc}"};
 
 inline Histogram& frame_duration = *new Histogram{
     "phenotype.runner.frame_duration",
@@ -332,6 +348,10 @@ inline Histogram& frame_duration = *new Histogram{
 inline Histogram& phase_duration = *new Histogram{
     "phenotype.runner.phase_duration",
     "Per-phase duration inside one rebuild (attribute: phase)",
+    "ns"};
+inline Histogram& native_phase_duration = *new Histogram{
+    "phenotype.native.phase_duration",
+    "Per-phase duration inside a native renderer flush (attributes: platform, phase)",
     "ns"};
 
 } // namespace inst
@@ -472,8 +492,13 @@ inline void reset_all() noexcept {
     inst::measure_text_cache_hits.reset();
     inst::layout_nodes_skipped.reset();
     inst::layout_nodes_computed.reset();
+    inst::native_text_cache_hits.reset();
+    inst::native_text_cache_misses.reset();
+    inst::native_texture_upload_bytes.reset();
+    inst::native_buffer_reallocations.reset();
     inst::frame_duration.reset();
     inst::phase_duration.reset();
+    inst::native_phase_duration.reset();
     // NOTE: g_app.last_paint_hash is NOT reset here — phenotype.diag
     // cannot import phenotype.state (cycle: state already imports diag).
     // Tests that need a clean hash state assign detail::g_app.last_paint_hash
@@ -611,6 +636,10 @@ inline json::Value build_snapshot() {
     counters.push_back(counter_to_json(inst::measure_text_cache_hits, now));
     counters.push_back(counter_to_json(inst::layout_nodes_skipped, now));
     counters.push_back(counter_to_json(inst::layout_nodes_computed, now));
+    counters.push_back(counter_to_json(inst::native_text_cache_hits, now));
+    counters.push_back(counter_to_json(inst::native_text_cache_misses, now));
+    counters.push_back(counter_to_json(inst::native_texture_upload_bytes, now));
+    counters.push_back(counter_to_json(inst::native_buffer_reallocations, now));
 
     json::Array gauges;
     gauges.push_back(gauge_to_json(inst::live_nodes, now));
@@ -620,6 +649,7 @@ inline json::Value build_snapshot() {
     json::Array histograms;
     histograms.push_back(histogram_to_json(inst::frame_duration, now));
     histograms.push_back(histogram_to_json(inst::phase_duration, now));
+    histograms.push_back(histogram_to_json(inst::native_phase_duration, now));
 
     json::Object root;
     root.emplace("resource",   resource_to_json());

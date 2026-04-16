@@ -130,6 +130,10 @@ void test_snapshot_shape() {
     metrics::inst::rebuilds.add();
     metrics::inst::input_events.add(1, {{"event", "click"}});
     metrics::inst::frame_duration.record(8'000'000); // 8ms
+    metrics::inst::native_text_cache_hits.add(2, {{"platform", "macos"}});
+    metrics::inst::native_phase_duration.record(
+        1'000'000,
+        {{"platform", "macos"}, {"phase", "command_decode"}});
     log::info("test", "hello {}", 42);
 
     auto json_str = diag::serialize_snapshot();
@@ -166,6 +170,13 @@ void test_snapshot_shape() {
     auto const& ev_attrs = ev_points[0].as_object().at("attributes").as_object();
     assert(ev_attrs.at("event").as_string() == "click");
 
+    auto const* native_hits = find_metric(counters, "phenotype.native.text_cache_hits");
+    assert(native_hits != nullptr);
+    auto const& native_hit_points = native_hits->at("data_points").as_array();
+    assert(native_hit_points.size() == 1);
+    auto const& native_hit_attrs = native_hit_points[0].as_object().at("attributes").as_object();
+    assert(native_hit_attrs.at("platform").as_string() == "macos");
+
     // Frame histogram has 14 explicit bounds and one populated data point.
     auto const& histograms = root.at("histograms").as_array();
     auto const* frame = find_metric(histograms, "phenotype.runner.frame_duration");
@@ -179,6 +190,15 @@ void test_snapshot_shape() {
     auto const& fd_buckets = fd0.at("bucket_counts").as_array();
     // bounds_ns.size() + 1 buckets including the +Inf overflow.
     assert(fd_buckets.size() == metrics::Histogram::bounds_ns.size() + 1);
+
+    auto const* native_phase = find_metric(histograms, "phenotype.native.phase_duration");
+    assert(native_phase != nullptr);
+    auto const& native_phase_points = native_phase->at("data_points").as_array();
+    assert(native_phase_points.size() == 1);
+    auto const& native_phase_attrs =
+        native_phase_points[0].as_object().at("attributes").as_object();
+    assert(native_phase_attrs.at("platform").as_string() == "macos");
+    assert(native_phase_attrs.at("phase").as_string() == "command_decode");
 
     // Logs round-trip with severity_text and body.
     auto const& logs = root.at("logs").as_array();
