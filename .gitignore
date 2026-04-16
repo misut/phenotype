@@ -47,6 +47,10 @@
 build/
 .exon/
 exon.lock
+!/exon.lock
+!/docs/exon.lock
+/examples/*/exon.lock
+/libs/*/exon.lock
 
 *.wasm
 
