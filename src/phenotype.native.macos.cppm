@@ -829,6 +829,7 @@ inline platform_api const& macos_platform() {
             detail::renderer_shutdown,
             detail::renderer_hit_test,
         },
+        {},
         detail::macos_open_url,
         nullptr,
     };

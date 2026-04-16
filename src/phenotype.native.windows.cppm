@@ -4,13 +4,21 @@ module;
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <condition_variable>
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
+#include <deque>
+#include <expected>
+#include <filesystem>
 #include <limits>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <thread>
+#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -23,7 +31,9 @@ module;
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <imm.h>
 #include <shellapi.h>
+#include <wincodec.h>
 
 #include <d3d12.h>
 #include <d3d12sdklayers.h>
@@ -37,15 +47,18 @@ module;
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "gdi32.lib")
+#pragma comment(lib, "imm32.lib")
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "user32.lib")
+#pragma comment(lib, "windowscodecs.lib")
 #endif
 #endif
 
 export module phenotype.native.windows;
 
 #ifndef __wasi__
+import cppx.http.system;
 import phenotype.commands;
 import phenotype.state;
 import phenotype.native.platform;
@@ -102,6 +115,31 @@ inline std::wstring utf8_to_wstring(char const* text, unsigned int len) {
 inline std::wstring utf8_to_wstring(std::string const& text) {
     return utf8_to_wstring(text.c_str(),
                            static_cast<unsigned int>(text.size()));
+}
+
+inline std::string wstring_to_utf8(std::wstring_view text) {
+    if (text.empty()) return {};
+    int needed = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        text.data(),
+        static_cast<int>(text.size()),
+        nullptr,
+        0,
+        nullptr,
+        nullptr);
+    if (needed <= 0) return {};
+    std::string out(static_cast<std::size_t>(needed), '\0');
+    WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        text.data(),
+        static_cast<int>(text.size()),
+        out.data(),
+        needed,
+        nullptr,
+        nullptr);
+    return out;
 }
 
 struct LineBoxMetrics {
@@ -703,6 +741,7 @@ struct RendererState {
     ComPtr<ID3D12Fence> fence;
     HANDLE fence_event = nullptr;
     UINT rtv_descriptor_size = 0;
+    UINT srv_descriptor_size = 0;
     FrameContext frames[frame_count];
     UploadBuffer upload{};
     std::vector<HitRegionCmd> hit_regions;
@@ -715,6 +754,118 @@ struct RendererState {
 };
 
 static RendererState g_renderer;
+constexpr UINT WM_PHENOTYPE_IMAGE_READY = WM_APP + 61;
+constexpr UINT TEXT_SRV_SLOT = 0;
+constexpr UINT IMAGE_SRV_SLOT = 1;
+
+enum class CandidateHitKind {
+    none,
+    item,
+    prev_page,
+    next_page,
+};
+
+struct CandidateHit {
+    CandidateHitKind kind = CandidateHitKind::none;
+    unsigned int index = 0;
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+
+    bool contains(float px, float py) const noexcept {
+        return px >= x && px <= x + w && py >= y && py <= y + h;
+    }
+};
+
+struct CandidateOverlayLayout {
+    bool visible = false;
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+    float row_height = 0.0f;
+    std::vector<CandidateHit> hits;
+};
+
+struct ImeState {
+    GLFWwindow* window = nullptr;
+    HWND hwnd = nullptr;
+    WNDPROC prev_wndproc = nullptr;
+    void (*request_repaint)() = nullptr;
+    bool attached = false;
+    bool composition_active = false;
+    std::wstring composition_text;
+    LONG composition_cursor = 0;
+    bool candidate_open = false;
+    std::vector<std::wstring> candidates;
+    DWORD candidate_selection = 0;
+    DWORD candidate_page_start = 0;
+    DWORD candidate_page_size = 0;
+    int hovered_candidate = -1;
+    CandidateHitKind hovered_kind = CandidateHitKind::none;
+    CandidateOverlayLayout overlay{};
+};
+
+struct DecodedImage {
+    std::string url;
+    int width = 0;
+    int height = 0;
+    std::vector<unsigned char> pixels;
+    bool failed = false;
+};
+
+enum class ImageEntryState {
+    pending,
+    ready,
+    failed,
+};
+
+struct ImageCacheEntry {
+    ImageEntryState state = ImageEntryState::pending;
+    float u = 0.0f;
+    float v = 0.0f;
+    float uw = 0.0f;
+    float vh = 0.0f;
+};
+
+struct ImageAtlasState {
+    static constexpr int atlas_size = 2048;
+
+    ComPtr<ID3D12Resource> texture;
+    std::vector<unsigned char> pixels;
+    std::unordered_map<std::string, ImageCacheEntry> cache;
+    std::deque<std::string> pending_jobs;
+    std::deque<DecodedImage> completed_jobs;
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::thread worker;
+    bool worker_started = false;
+    bool stop_worker = false;
+    bool atlas_dirty = false;
+    int cursor_x = 0;
+    int cursor_y = 0;
+    int row_height = 0;
+};
+
+static ImeState g_ime;
+static ImageAtlasState g_images;
+
+inline void request_window_repaint() {
+    if (g_ime.request_repaint)
+        g_ime.request_repaint();
+}
+
+inline bool is_http_url(std::string const& url) {
+    return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
+}
+
+inline std::filesystem::path resolve_image_path(std::string const& url) {
+    auto path = std::filesystem::path(url);
+    if (path.is_absolute())
+        return path;
+    return std::filesystem::current_path() / path;
+}
 
 inline float current_backing_scale(GLFWwindow* window) {
     if (!window) return 1.0f;
@@ -727,6 +878,729 @@ inline float current_backing_scale(GLFWwindow* window) {
     float sx = (winw > 0) ? static_cast<float>(fbw) / static_cast<float>(winw) : 1.0f;
     float sy = (winh > 0) ? static_cast<float>(fbh) / static_cast<float>(winh) : 1.0f;
     return sanitize_scale((sx > sy) ? sx : sy);
+}
+
+inline void wait_for_fence(UINT64 value);
+inline void transition_resource(ID3D12Resource* resource,
+                                D3D12_RESOURCE_STATES before,
+                                D3D12_RESOURCE_STATES after);
+inline std::pair<void*, UINT64> upload_alloc(UINT64 bytes, UINT64 alignment = 16);
+
+inline void wait_for_all_frames() {
+    for (auto const& frame : g_renderer.frames)
+        wait_for_fence(frame.fence_value);
+}
+
+inline D3D12_CPU_DESCRIPTOR_HANDLE srv_cpu_handle(UINT slot) {
+    auto handle = g_renderer.srv_heap->GetCPUDescriptorHandleForHeapStart();
+    handle.ptr += static_cast<SIZE_T>(slot) * g_renderer.srv_descriptor_size;
+    return handle;
+}
+
+inline D3D12_GPU_DESCRIPTOR_HANDLE srv_gpu_handle(UINT slot) {
+    auto handle = g_renderer.srv_heap->GetGPUDescriptorHandleForHeapStart();
+    handle.ptr += static_cast<UINT64>(slot) * g_renderer.srv_descriptor_size;
+    return handle;
+}
+
+inline void append_color_instance(std::vector<float>& color_data,
+                                  float x, float y, float w, float h,
+                                  float r, float g, float b, float a,
+                                  float p0 = 0.0f, float p1 = 0.0f,
+                                  float kind = 0.0f, float p3 = 0.0f) {
+    color_data.insert(color_data.end(), {
+        x, y, w, h,
+        r, g, b, a,
+        p0, p1, kind, p3,
+    });
+}
+
+inline void append_textured_quad(std::vector<float>& quad_data,
+                                 float x, float y, float w, float h,
+                                 float u, float v, float uw, float vh) {
+    quad_data.insert(quad_data.end(), {
+        x, y, w, h,
+        u, v, uw, vh,
+    });
+}
+
+inline std::optional<CandidateHit> find_candidate_hit(float x, float y) {
+    for (auto const& hit : g_ime.overlay.hits) {
+        if (hit.contains(x, y))
+            return hit;
+    }
+    return std::nullopt;
+}
+
+inline std::vector<std::wstring> load_candidate_strings(HIMC himc) {
+    std::vector<std::wstring> out;
+    auto bytes = ImmGetCandidateListW(himc, 0, nullptr, 0);
+    if (bytes == 0)
+        return out;
+    std::vector<unsigned char> storage(static_cast<std::size_t>(bytes), 0);
+    auto* list = reinterpret_cast<CANDIDATELIST*>(storage.data());
+    auto written = ImmGetCandidateListW(himc, 0, list, bytes);
+    if (written == 0)
+        return out;
+    out.reserve(list->dwCount);
+    for (DWORD i = 0; i < list->dwCount; ++i) {
+        auto offset = list->dwOffset[i];
+        auto const* text = reinterpret_cast<wchar_t const*>(storage.data() + offset);
+        out.emplace_back(text ? text : L"");
+    }
+    g_ime.candidate_selection = list->dwSelection;
+    g_ime.candidate_page_start = list->dwPageStart;
+    g_ime.candidate_page_size = list->dwPageSize;
+    return out;
+}
+
+inline void update_candidate_state(HIMC himc) {
+    g_ime.candidates = load_candidate_strings(himc);
+    g_ime.candidate_open = !g_ime.candidates.empty();
+    if (!g_ime.candidate_open) {
+        g_ime.hovered_candidate = -1;
+        g_ime.hovered_kind = CandidateHitKind::none;
+    }
+}
+
+inline void clear_ime_state() {
+    g_ime.composition_active = false;
+    g_ime.composition_text.clear();
+    g_ime.composition_cursor = 0;
+    g_ime.candidate_open = false;
+    g_ime.candidates.clear();
+    g_ime.candidate_selection = 0;
+    g_ime.candidate_page_start = 0;
+    g_ime.candidate_page_size = 0;
+    g_ime.hovered_candidate = -1;
+    g_ime.hovered_kind = CandidateHitKind::none;
+    g_ime.overlay = {};
+}
+
+inline void commit_result_string(std::wstring_view result) {
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid)
+        return;
+    auto suffix = wstring_to_utf8(result);
+    if (suffix.empty())
+        return;
+    auto next = snapshot.value;
+    next += suffix;
+    for (auto& [id, handler] : ::phenotype::detail::g_app.input_handlers) {
+        if (id != ::phenotype::detail::g_app.focused_id)
+            continue;
+        handler.invoke(handler.state, std::move(next));
+        return;
+    }
+}
+
+inline void update_composition_state(HWND hwnd, LPARAM lparam) {
+    auto himc = ImmGetContext(hwnd);
+    if (!himc)
+        return;
+
+    if (lparam & GCS_RESULTSTR) {
+        auto bytes = ImmGetCompositionStringW(himc, GCS_RESULTSTR, nullptr, 0);
+        if (bytes > 0) {
+            std::wstring result(static_cast<std::size_t>(bytes / sizeof(wchar_t)), L'\0');
+            ImmGetCompositionStringW(
+                himc,
+                GCS_RESULTSTR,
+                result.data(),
+                bytes);
+            commit_result_string(result);
+        }
+    }
+
+    if (lparam & GCS_COMPSTR) {
+        auto bytes = ImmGetCompositionStringW(himc, GCS_COMPSTR, nullptr, 0);
+        if (bytes > 0) {
+            g_ime.composition_text.assign(static_cast<std::size_t>(bytes / sizeof(wchar_t)), L'\0');
+            ImmGetCompositionStringW(
+                himc,
+                GCS_COMPSTR,
+                g_ime.composition_text.data(),
+                bytes);
+            g_ime.composition_active = true;
+        } else {
+            g_ime.composition_text.clear();
+            g_ime.composition_active = false;
+        }
+    }
+
+    if (lparam & GCS_CURSORPOS) {
+        auto pos = ImmGetCompositionStringW(himc, GCS_CURSORPOS, nullptr, 0);
+        g_ime.composition_cursor = (pos >= 0) ? pos : 0;
+    } else if (g_ime.composition_cursor > static_cast<LONG>(g_ime.composition_text.size())) {
+        g_ime.composition_cursor = static_cast<LONG>(g_ime.composition_text.size());
+    }
+
+    update_candidate_state(himc);
+    ImmReleaseContext(hwnd, himc);
+}
+
+inline void sync_ime_windows() {
+    if (!g_ime.hwnd)
+        return;
+
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid) {
+        clear_ime_state();
+        return;
+    }
+
+    g_ime.overlay = {};
+
+    auto const scroll_y = ::phenotype::detail::g_app.scroll_y;
+    float draw_y = snapshot.y - scroll_y;
+    float text_x = snapshot.x + snapshot.padding[3];
+    float text_y = draw_y + snapshot.padding[0];
+    float caret_x = text_x;
+    if (!snapshot.value.empty()) {
+        caret_x += text_measure(
+            snapshot.font_size,
+            snapshot.mono,
+            snapshot.value.c_str(),
+            static_cast<unsigned int>(snapshot.value.size()));
+    }
+    if (g_ime.composition_active && !g_ime.composition_text.empty()) {
+        auto cursor_units = static_cast<std::size_t>(
+            (g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor);
+        if (cursor_units > g_ime.composition_text.size())
+            cursor_units = g_ime.composition_text.size();
+        auto prefix = wstring_to_utf8(
+            std::wstring_view(g_ime.composition_text.data(), cursor_units));
+        if (!prefix.empty()) {
+            caret_x += text_measure(
+                snapshot.font_size,
+                snapshot.mono,
+                prefix.c_str(),
+                static_cast<unsigned int>(prefix.size()));
+        }
+    }
+
+    auto himc = ImmGetContext(g_ime.hwnd);
+    if (!himc)
+        return;
+
+    COMPOSITIONFORM comp{};
+    comp.dwStyle = CFS_FORCE_POSITION;
+    comp.ptCurrentPos.x = static_cast<LONG>(std::round(caret_x));
+    comp.ptCurrentPos.y = static_cast<LONG>(std::round(text_y));
+    ImmSetCompositionWindow(himc, &comp);
+
+    CANDIDATEFORM cand{};
+    cand.dwIndex = 0;
+    cand.dwStyle = CFS_CANDIDATEPOS;
+    cand.ptCurrentPos.x = static_cast<LONG>(std::round(snapshot.x));
+    cand.ptCurrentPos.y = static_cast<LONG>(std::round(draw_y + snapshot.height));
+    ImmSetCandidateWindow(himc, &cand);
+    ImmReleaseContext(g_ime.hwnd, himc);
+
+    if (!g_ime.candidate_open || g_ime.candidates.empty()) {
+        g_ime.hovered_candidate = -1;
+        g_ime.hovered_kind = CandidateHitKind::none;
+        return;
+    }
+
+    int winw = 0;
+    int winh = 0;
+    glfwGetWindowSize(g_ime.window, &winw, &winh);
+    if (winw <= 0) winw = 1;
+    if (winh <= 0) winh = 1;
+
+    auto total = static_cast<unsigned int>(g_ime.candidates.size());
+    auto page_size = (g_ime.candidate_page_size > 0)
+        ? static_cast<unsigned int>(g_ime.candidate_page_size)
+        : static_cast<unsigned int>((total > 8u) ? 8u : total);
+    if (page_size == 0)
+        page_size = 1;
+    auto page_start = static_cast<unsigned int>(g_ime.candidate_page_start);
+    if (page_start >= total)
+        page_start = 0;
+    auto page_end = (page_start + page_size < total)
+        ? (page_start + page_size)
+        : total;
+    auto visible_count = page_end - page_start;
+    bool has_prev = page_start > 0;
+    bool has_next = page_end < total;
+
+    float row_height = snapshot.line_height + 10.0f;
+    if (row_height < snapshot.font_size + 14.0f)
+        row_height = snapshot.font_size + 14.0f;
+
+    float content_width = snapshot.width;
+    for (unsigned int index = page_start; index < page_end; ++index) {
+        auto utf8 = wstring_to_utf8(g_ime.candidates[index]);
+        if (utf8.empty())
+            continue;
+        float measured = text_measure(
+            snapshot.font_size,
+            snapshot.mono,
+            utf8.c_str(),
+            static_cast<unsigned int>(utf8.size()));
+        if (measured > content_width)
+            content_width = measured;
+    }
+
+    float panel_width = content_width + 24.0f;
+    if (panel_width < snapshot.width)
+        panel_width = snapshot.width;
+    if (panel_width < 160.0f)
+        panel_width = 160.0f;
+
+    float footer_height = (has_prev || has_next) ? row_height : 0.0f;
+    float panel_height = visible_count * row_height + footer_height;
+    float panel_x = snapshot.x;
+    if (panel_x + panel_width > static_cast<float>(winw) - 8.0f)
+        panel_x = static_cast<float>(winw) - panel_width - 8.0f;
+    if (panel_x < 8.0f)
+        panel_x = 8.0f;
+
+    float panel_y = draw_y + snapshot.height + 4.0f;
+    if (panel_y + panel_height > static_cast<float>(winh) - 8.0f)
+        panel_y = draw_y - panel_height - 4.0f;
+    if (panel_y < 8.0f)
+        panel_y = 8.0f;
+
+    g_ime.overlay.visible = true;
+    g_ime.overlay.x = panel_x;
+    g_ime.overlay.y = panel_y;
+    g_ime.overlay.w = panel_width;
+    g_ime.overlay.h = panel_height;
+    g_ime.overlay.row_height = row_height;
+    g_ime.overlay.hits.clear();
+    g_ime.overlay.hits.reserve(
+        static_cast<std::size_t>(visible_count) + (has_prev ? 1u : 0u) + (has_next ? 1u : 0u));
+
+    for (unsigned int row = 0; row < visible_count; ++row) {
+        g_ime.overlay.hits.push_back({
+            CandidateHitKind::item,
+            page_start + row,
+            panel_x,
+            panel_y + row * row_height,
+            panel_width,
+            row_height,
+        });
+    }
+
+    if (footer_height > 0.0f) {
+        float footer_y = panel_y + visible_count * row_height;
+        float button_width = (panel_width - 24.0f) * 0.5f;
+        if (button_width < 56.0f)
+            button_width = 56.0f;
+        if (has_prev) {
+            g_ime.overlay.hits.push_back({
+                CandidateHitKind::prev_page,
+                0,
+                panel_x + 8.0f,
+                footer_y + 4.0f,
+                button_width,
+                footer_height - 8.0f,
+            });
+        }
+        if (has_next) {
+            g_ime.overlay.hits.push_back({
+                CandidateHitKind::next_page,
+                0,
+                panel_x + panel_width - button_width - 8.0f,
+                footer_y + 4.0f,
+                button_width,
+                footer_height - 8.0f,
+            });
+        }
+    }
+
+    if (g_ime.hovered_kind == CandidateHitKind::item) {
+        if (g_ime.hovered_candidate < static_cast<int>(page_start)
+            || g_ime.hovered_candidate >= static_cast<int>(page_end)) {
+            g_ime.hovered_candidate = -1;
+            g_ime.hovered_kind = CandidateHitKind::none;
+        }
+    } else if ((g_ime.hovered_kind == CandidateHitKind::prev_page && !has_prev)
+               || (g_ime.hovered_kind == CandidateHitKind::next_page && !has_next)) {
+        g_ime.hovered_kind = CandidateHitKind::none;
+    }
+}
+
+inline bool handle_candidate_click(CandidateHit const& hit) {
+    if (!g_ime.hwnd)
+        return false;
+    auto himc = ImmGetContext(g_ime.hwnd);
+    if (!himc)
+        return false;
+
+    BOOL ok = FALSE;
+    if (hit.kind == CandidateHitKind::item) {
+        ok = ImmNotifyIME(himc, NI_SELECTCANDIDATESTR, 0, hit.index);
+    } else if (hit.kind == CandidateHitKind::prev_page) {
+        auto next = (g_ime.candidate_page_start > g_ime.candidate_page_size)
+            ? (g_ime.candidate_page_start - g_ime.candidate_page_size)
+            : 0;
+        ok = ImmNotifyIME(himc, NI_SETCANDIDATE_PAGESTART, 0, next);
+    } else if (hit.kind == CandidateHitKind::next_page) {
+        auto next = g_ime.candidate_page_start + g_ime.candidate_page_size;
+        ok = ImmNotifyIME(himc, NI_SETCANDIDATE_PAGESTART, 0, next);
+    }
+    ImmReleaseContext(g_ime.hwnd, himc);
+    return ok != FALSE;
+}
+
+inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+    switch (msg) {
+    case WM_IME_SETCONTEXT: {
+        LPARAM filtered = lparam;
+        filtered &= ~static_cast<LPARAM>(ISC_SHOWUICOMPOSITIONWINDOW);
+        filtered &= ~static_cast<LPARAM>(ISC_SHOWUICANDIDATEWINDOW);
+        filtered &= ~static_cast<LPARAM>(ISC_SHOWUICANDIDATEWINDOW << 1);
+        filtered &= ~static_cast<LPARAM>(ISC_SHOWUICANDIDATEWINDOW << 2);
+        filtered &= ~static_cast<LPARAM>(ISC_SHOWUICANDIDATEWINDOW << 3);
+        return CallWindowProcW(g_ime.prev_wndproc, hwnd, msg, wparam, filtered);
+    }
+    case WM_IME_STARTCOMPOSITION:
+        g_ime.composition_active = true;
+        request_window_repaint();
+        return 0;
+    case WM_IME_COMPOSITION:
+        update_composition_state(hwnd, lparam);
+        request_window_repaint();
+        return 0;
+    case WM_IME_ENDCOMPOSITION:
+        clear_ime_state();
+        request_window_repaint();
+        return 0;
+    case WM_IME_NOTIFY: {
+        auto himc = ImmGetContext(hwnd);
+        if (himc) {
+            if (wparam == IMN_OPENCANDIDATE || wparam == IMN_CHANGECANDIDATE) {
+                update_candidate_state(himc);
+            } else if (wparam == IMN_CLOSECANDIDATE) {
+                g_ime.candidate_open = false;
+                g_ime.candidates.clear();
+                g_ime.overlay = {};
+            }
+            ImmReleaseContext(hwnd, himc);
+        }
+        request_window_repaint();
+        return 0;
+    }
+    case WM_KILLFOCUS:
+        clear_ime_state();
+        break;
+    case WM_PHENOTYPE_IMAGE_READY:
+        request_window_repaint();
+        return 0;
+    default:
+        break;
+    }
+    return CallWindowProcW(g_ime.prev_wndproc, hwnd, msg, wparam, lparam);
+}
+
+inline void input_attach(GLFWwindow* window, void (*request_repaint)()) {
+    g_ime.window = window;
+    g_ime.request_repaint = request_repaint;
+    g_ime.hwnd = window ? glfwGetWin32Window(window) : nullptr;
+    if (!g_ime.hwnd || g_ime.attached)
+        return;
+    g_ime.prev_wndproc = reinterpret_cast<WNDPROC>(
+        SetWindowLongPtrW(g_ime.hwnd, GWLP_WNDPROC,
+                          reinterpret_cast<LONG_PTR>(ime_wndproc)));
+    g_ime.attached = (g_ime.prev_wndproc != nullptr);
+}
+
+inline void input_detach() {
+    if (g_ime.hwnd && g_ime.prev_wndproc) {
+        SetWindowLongPtrW(g_ime.hwnd, GWLP_WNDPROC,
+                          reinterpret_cast<LONG_PTR>(g_ime.prev_wndproc));
+    }
+    clear_ime_state();
+    g_ime.window = nullptr;
+    g_ime.hwnd = nullptr;
+    g_ime.prev_wndproc = nullptr;
+    g_ime.request_repaint = nullptr;
+    g_ime.attached = false;
+}
+
+inline bool input_handle_cursor_pos(float x, float y) {
+    if (!g_ime.overlay.visible)
+        return false;
+    auto hit = find_candidate_hit(x, y);
+    int next_hover = -1;
+    CandidateHitKind next_kind = CandidateHitKind::none;
+    if (hit.has_value()) {
+        next_kind = hit->kind;
+        if (hit->kind == CandidateHitKind::item)
+            next_hover = static_cast<int>(hit->index);
+    }
+    bool inside_panel = hit.has_value()
+        || (x >= g_ime.overlay.x && x <= g_ime.overlay.x + g_ime.overlay.w
+            && y >= g_ime.overlay.y && y <= g_ime.overlay.y + g_ime.overlay.h);
+    if (next_hover != g_ime.hovered_candidate || next_kind != g_ime.hovered_kind) {
+        g_ime.hovered_candidate = next_hover;
+        g_ime.hovered_kind = next_kind;
+        request_window_repaint();
+    }
+    return inside_panel;
+}
+
+inline bool input_handle_mouse_button(float x, float y,
+                                      int button, int action, int) {
+    if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS)
+        return false;
+    auto hit = find_candidate_hit(x, y);
+    bool inside_panel = g_ime.overlay.visible
+        && x >= g_ime.overlay.x && x <= g_ime.overlay.x + g_ime.overlay.w
+        && y >= g_ime.overlay.y && y <= g_ime.overlay.y + g_ime.overlay.h;
+    if (!hit.has_value())
+        return inside_panel;
+    auto ok = handle_candidate_click(*hit);
+    request_window_repaint();
+    return inside_panel || ok;
+}
+
+inline std::expected<DecodedImage, std::string> decode_image_with_decoder(
+        IWICImagingFactory* factory,
+        IWICBitmapDecoder* decoder) {
+    ComPtr<IWICBitmapFrameDecode> frame;
+    auto hr = decoder->GetFrame(0, &frame);
+    if (FAILED(hr))
+        return std::unexpected("GetFrame");
+
+    UINT width = 0;
+    UINT height = 0;
+    hr = frame->GetSize(&width, &height);
+    if (FAILED(hr) || width == 0 || height == 0)
+        return std::unexpected("GetSize");
+
+    ComPtr<IWICFormatConverter> converter;
+    hr = factory->CreateFormatConverter(&converter);
+    if (FAILED(hr))
+        return std::unexpected("CreateConverter");
+
+    hr = converter->Initialize(
+        frame.Get(),
+        GUID_WICPixelFormat32bppRGBA,
+        WICBitmapDitherTypeNone,
+        nullptr,
+        0.0,
+        WICBitmapPaletteTypeCustom);
+    if (FAILED(hr))
+        return std::unexpected("ConverterInitialize");
+
+    DecodedImage decoded;
+    decoded.width = static_cast<int>(width);
+    decoded.height = static_cast<int>(height);
+    decoded.pixels.resize(static_cast<std::size_t>(width) * height * 4);
+    hr = converter->CopyPixels(
+        nullptr,
+        width * 4,
+        static_cast<UINT>(decoded.pixels.size()),
+        decoded.pixels.data());
+    if (FAILED(hr))
+        return std::unexpected("CopyPixels");
+    return decoded;
+}
+
+inline std::expected<DecodedImage, std::string> decode_image_file(
+        std::filesystem::path const& path) {
+    ComPtr<IWICImagingFactory> factory;
+    auto hr = CoCreateInstance(
+        CLSID_WICImagingFactory,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&factory));
+    if (FAILED(hr))
+        return std::unexpected("CreateFactory");
+
+    ComPtr<IWICBitmapDecoder> decoder;
+    auto wide = path.wstring();
+    hr = factory->CreateDecoderFromFilename(
+        wide.c_str(),
+        nullptr,
+        GENERIC_READ,
+        WICDecodeMetadataCacheOnLoad,
+        &decoder);
+    if (FAILED(hr))
+        return std::unexpected("CreateDecoderFromFilename");
+    return decode_image_with_decoder(factory.Get(), decoder.Get());
+}
+
+inline std::expected<DecodedImage, std::string> decode_image_memory(
+        std::vector<unsigned char> const& bytes) {
+    if (bytes.empty())
+        return std::unexpected("empty");
+
+    ComPtr<IWICImagingFactory> factory;
+    auto hr = CoCreateInstance(
+        CLSID_WICImagingFactory,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&factory));
+    if (FAILED(hr))
+        return std::unexpected("CreateFactory");
+
+    ComPtr<IWICStream> stream;
+    hr = factory->CreateStream(&stream);
+    if (FAILED(hr))
+        return std::unexpected("CreateStream");
+    hr = stream->InitializeFromMemory(
+        const_cast<BYTE*>(bytes.data()),
+        static_cast<DWORD>(bytes.size()));
+    if (FAILED(hr))
+        return std::unexpected("InitializeFromMemory");
+
+    ComPtr<IWICBitmapDecoder> decoder;
+    hr = factory->CreateDecoderFromStream(
+        stream.Get(),
+        nullptr,
+        WICDecodeMetadataCacheOnLoad,
+        &decoder);
+    if (FAILED(hr))
+        return std::unexpected("CreateDecoderFromStream");
+    return decode_image_with_decoder(factory.Get(), decoder.Get());
+}
+
+inline void image_worker_main() {
+    auto co_hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    (void)co_hr;
+    for (;;) {
+        std::string url;
+        {
+            std::unique_lock lock(g_images.mutex);
+            g_images.cv.wait(lock, [] {
+                return g_images.stop_worker || !g_images.pending_jobs.empty();
+            });
+            if (g_images.stop_worker && g_images.pending_jobs.empty())
+                break;
+            url = std::move(g_images.pending_jobs.front());
+            g_images.pending_jobs.pop_front();
+        }
+
+        DecodedImage decoded;
+        decoded.url = url;
+        if (is_http_url(url)) {
+            auto resp = cppx::http::system::get(url);
+            if (resp && resp->stat.ok()) {
+                std::vector<unsigned char> body;
+                body.reserve(resp->body.size());
+                for (auto b : resp->body)
+                    body.push_back(static_cast<unsigned char>(b));
+                auto result = decode_image_memory(body);
+                if (result) {
+                    decoded = std::move(*result);
+                    decoded.url = url;
+                } else {
+                    decoded.failed = true;
+                }
+            } else {
+                decoded.failed = true;
+            }
+        } else {
+            auto result = decode_image_file(resolve_image_path(url));
+            if (result) {
+                decoded = std::move(*result);
+                decoded.url = url;
+            } else {
+                decoded.failed = true;
+            }
+        }
+
+        {
+            std::lock_guard lock(g_images.mutex);
+            g_images.completed_jobs.push_back(std::move(decoded));
+        }
+        if (g_ime.hwnd)
+            PostMessageW(g_ime.hwnd, WM_PHENOTYPE_IMAGE_READY, 0, 0);
+    }
+    if (SUCCEEDED(co_hr))
+        CoUninitialize();
+}
+
+inline void ensure_image_worker() {
+    if (g_images.worker_started)
+        return;
+    g_images.pixels.resize(
+        static_cast<std::size_t>(ImageAtlasState::atlas_size)
+        * ImageAtlasState::atlas_size * 4,
+        0);
+    g_images.stop_worker = false;
+    g_images.worker = std::thread(image_worker_main);
+    g_images.worker_started = true;
+}
+
+inline void shutdown_image_worker() {
+    {
+        std::lock_guard lock(g_images.mutex);
+        g_images.stop_worker = true;
+    }
+    g_images.cv.notify_all();
+    if (g_images.worker.joinable())
+        g_images.worker.join();
+    g_images.worker_started = false;
+}
+
+inline void queue_image_load(std::string const& url) {
+    std::lock_guard lock(g_images.mutex);
+    auto [it, inserted] = g_images.cache.try_emplace(url, ImageCacheEntry{});
+    if (!inserted)
+        return;
+    g_images.pending_jobs.push_back(url);
+    g_images.cv.notify_one();
+}
+
+inline void store_decoded_image(DecodedImage decoded) {
+    auto [it, inserted] = g_images.cache.try_emplace(decoded.url, ImageCacheEntry{});
+    if (!inserted && it == g_images.cache.end())
+        return;
+    if (decoded.failed || decoded.width <= 0 || decoded.height <= 0
+        || decoded.pixels.empty()) {
+        it->second.state = ImageEntryState::failed;
+        return;
+    }
+
+    if (g_images.cursor_x + decoded.width + 1 > ImageAtlasState::atlas_size) {
+        g_images.cursor_x = 0;
+        g_images.cursor_y += g_images.row_height;
+        g_images.row_height = 0;
+    }
+    if (g_images.cursor_y + decoded.height > ImageAtlasState::atlas_size) {
+        it->second.state = ImageEntryState::failed;
+        return;
+    }
+
+    auto slot_x = g_images.cursor_x;
+    auto slot_y = g_images.cursor_y;
+    g_images.cursor_x += decoded.width + 1;
+    if (decoded.height + 1 > g_images.row_height)
+        g_images.row_height = decoded.height + 1;
+
+    for (int row = 0; row < decoded.height; ++row) {
+        auto* dst = g_images.pixels.data()
+            + static_cast<std::size_t>(((slot_y + row) * ImageAtlasState::atlas_size + slot_x) * 4);
+        auto const* src = decoded.pixels.data()
+            + static_cast<std::size_t>(row * decoded.width * 4);
+        std::memcpy(dst, src, static_cast<std::size_t>(decoded.width) * 4);
+    }
+
+    it->second.state = ImageEntryState::ready;
+    it->second.u = static_cast<float>(slot_x) / ImageAtlasState::atlas_size;
+    it->second.v = static_cast<float>(slot_y) / ImageAtlasState::atlas_size;
+    it->second.uw = static_cast<float>(decoded.width) / ImageAtlasState::atlas_size;
+    it->second.vh = static_cast<float>(decoded.height) / ImageAtlasState::atlas_size;
+    g_images.atlas_dirty = true;
+}
+
+inline void process_completed_images() {
+    std::deque<DecodedImage> completed;
+    {
+        std::lock_guard lock(g_images.mutex);
+        completed.swap(g_images.completed_jobs);
+    }
+
+    while (!completed.empty()) {
+        store_decoded_image(std::move(completed.front()));
+        completed.pop_front();
+    }
 }
 
 inline void wait_for_fence(UINT64 value) {
@@ -749,7 +1623,7 @@ inline void transition_resource(ID3D12Resource* resource,
     g_renderer.command_list->ResourceBarrier(1, &barrier);
 }
 
-inline std::pair<void*, UINT64> upload_alloc(UINT64 bytes, UINT64 alignment = 16) {
+inline std::pair<void*, UINT64> upload_alloc(UINT64 bytes, UINT64 alignment) {
     auto aligned = align_up(static_cast<UINT64>(g_renderer.upload.offset), alignment);
     if (aligned + bytes > g_renderer.upload.capacity) {
         std::fprintf(stderr, "[dx12] upload buffer exhausted (%llu bytes requested)\n",
@@ -963,7 +1837,7 @@ inline HRESULT create_frame_resources() {
 
     D3D12_DESCRIPTOR_HEAP_DESC srv_desc{};
     srv_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    srv_desc.NumDescriptors = 1;
+    srv_desc.NumDescriptors = 2;
     srv_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     hr = g_renderer.device->CreateDescriptorHeap(
         &srv_desc, IID_PPV_ARGS(&g_renderer.srv_heap));
@@ -972,6 +1846,9 @@ inline HRESULT create_frame_resources() {
     g_renderer.rtv_descriptor_size =
         g_renderer.device->GetDescriptorHandleIncrementSize(
             D3D12_DESCRIPTOR_HEAP_TYPE_RTV);
+    g_renderer.srv_descriptor_size =
+        g_renderer.device->GetDescriptorHandleIncrementSize(
+            D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV);
 
     auto handle = g_renderer.rtv_heap->GetCPUDescriptorHandleForHeapStart();
     for (UINT i = 0; i < RendererState::frame_count; ++i) {
@@ -1236,7 +2113,120 @@ inline HRESULT create_atlas_texture(
     g_renderer.device->CreateShaderResourceView(
         frame.atlas_texture.Get(),
         &srv,
-        g_renderer.srv_heap->GetCPUDescriptorHandleForHeapStart());
+        srv_cpu_handle(TEXT_SRV_SLOT));
+    return S_OK;
+}
+
+inline HRESULT ensure_image_atlas_texture() {
+    if (g_images.texture)
+        return S_OK;
+    if (g_images.pixels.empty()) {
+        g_images.pixels.resize(
+            static_cast<std::size_t>(ImageAtlasState::atlas_size)
+            * ImageAtlasState::atlas_size * 4,
+            0);
+    }
+
+    D3D12_RESOURCE_DESC tex_desc{};
+    tex_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    tex_desc.Width = static_cast<UINT64>(ImageAtlasState::atlas_size);
+    tex_desc.Height = static_cast<UINT>(ImageAtlasState::atlas_size);
+    tex_desc.DepthOrArraySize = 1;
+    tex_desc.MipLevels = 1;
+    tex_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    tex_desc.SampleDesc.Count = 1;
+    tex_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+
+    D3D12_HEAP_PROPERTIES default_heap{};
+    default_heap.Type = D3D12_HEAP_TYPE_DEFAULT;
+    auto hr = g_renderer.device->CreateCommittedResource(
+        &default_heap,
+        D3D12_HEAP_FLAG_NONE,
+        &tex_desc,
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+        nullptr,
+        IID_PPV_ARGS(&g_images.texture));
+    if (FAILED(hr))
+        return hr;
+
+    D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
+    srv.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    srv.ViewDimension = D3D12_SRV_DIMENSION_TEXTURE2D;
+    srv.Shader4ComponentMapping = D3D12_DEFAULT_SHADER_4_COMPONENT_MAPPING;
+    srv.Texture2D.MipLevels = 1;
+    g_renderer.device->CreateShaderResourceView(
+        g_images.texture.Get(),
+        &srv,
+        srv_cpu_handle(IMAGE_SRV_SLOT));
+    return S_OK;
+}
+
+inline HRESULT upload_image_atlas() {
+    if (!g_images.atlas_dirty)
+        return S_OK;
+    auto hr = ensure_image_atlas_texture();
+    if (FAILED(hr))
+        return hr;
+
+    D3D12_RESOURCE_DESC tex_desc{};
+    tex_desc.Dimension = D3D12_RESOURCE_DIMENSION_TEXTURE2D;
+    tex_desc.Width = static_cast<UINT64>(ImageAtlasState::atlas_size);
+    tex_desc.Height = static_cast<UINT>(ImageAtlasState::atlas_size);
+    tex_desc.DepthOrArraySize = 1;
+    tex_desc.MipLevels = 1;
+    tex_desc.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
+    tex_desc.SampleDesc.Count = 1;
+    tex_desc.Layout = D3D12_TEXTURE_LAYOUT_UNKNOWN;
+
+    UINT64 upload_size = 0;
+    D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
+    UINT num_rows = 0;
+    UINT64 row_size = 0;
+    g_renderer.device->GetCopyableFootprints(
+        &tex_desc, 0, 1, 0,
+        &footprint,
+        &num_rows,
+        &row_size,
+        &upload_size);
+
+    auto [mapped, offset] = upload_alloc(
+        upload_size,
+        D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
+    if (!mapped)
+        return E_OUTOFMEMORY;
+
+    for (UINT row = 0; row < num_rows; ++row) {
+        auto* dst = static_cast<unsigned char*>(mapped)
+            + row * footprint.Footprint.RowPitch;
+        auto const* src = g_images.pixels.data()
+            + static_cast<std::size_t>(row) * ImageAtlasState::atlas_size * 4;
+        std::memcpy(
+            dst,
+            src,
+            static_cast<std::size_t>(ImageAtlasState::atlas_size) * 4);
+    }
+
+    D3D12_TEXTURE_COPY_LOCATION dst{};
+    dst.pResource = g_images.texture.Get();
+    dst.Type = D3D12_TEXTURE_COPY_TYPE_SUBRESOURCE_INDEX;
+    dst.SubresourceIndex = 0;
+
+    D3D12_TEXTURE_COPY_LOCATION src{};
+    src.pResource = g_renderer.upload.resource.Get();
+    src.Type = D3D12_TEXTURE_COPY_TYPE_PLACED_FOOTPRINT;
+    src.PlacedFootprint = footprint;
+    src.PlacedFootprint.Offset = offset;
+
+    transition_resource(
+        g_images.texture.Get(),
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+        D3D12_RESOURCE_STATE_COPY_DEST);
+    g_renderer.command_list->CopyTextureRegion(&dst, 0, 0, 0, &src, nullptr);
+    transition_resource(
+        g_images.texture.Get(),
+        D3D12_RESOURCE_STATE_COPY_DEST,
+        D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    g_images.atlas_dirty = false;
     return S_OK;
 }
 
@@ -1278,10 +2268,13 @@ inline void renderer_init(GLFWwindow* window) {
         || FAILED(create_swap_chain(window))
         || FAILED(create_root_signature())
         || FAILED(create_pipelines())
-        || FAILED(create_frame_resources())) {
+        || FAILED(create_frame_resources())
+        || FAILED(ensure_image_atlas_texture())) {
         std::fprintf(stderr, "[dx12] renderer initialization failed\n");
         return;
     }
+
+    ensure_image_worker();
 
     auto desc = describe_adapter(g_renderer.adapter.Get());
     std::printf("[phenotype-native] Direct3D 12 initialized (%ls%s)\n",
@@ -1313,14 +2306,17 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
 
     auto cmds = parse_commands(buf, len);
+    process_completed_images();
     float text_scale = current_backing_scale(g_renderer.window);
     float line_height_ratio = ::phenotype::detail::g_app.theme.line_height_ratio;
+    float const scroll_y = ::phenotype::detail::g_app.scroll_y;
 
     double cr = 0.98;
     double cg = 0.98;
     double cb = 0.98;
     double ca = 1.0;
     std::vector<float> color_data;
+    std::vector<float> image_data;
     std::vector<TextEntry> text_entries;
     g_renderer.hit_regions.clear();
 
@@ -1346,26 +2342,25 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         } else if (auto const* hr = std::get_if<HitRegionCmd>(&cmd)) {
             g_renderer.hit_regions.push_back(*hr);
         } else if (auto const* rect = std::get_if<FillRectCmd>(&cmd)) {
-            color_data.insert(color_data.end(), {
+            append_color_instance(
+                color_data,
                 rect->x, rect->y, rect->w, rect->h,
                 rect->color.r / 255.0f, rect->color.g / 255.0f,
-                rect->color.b / 255.0f, rect->color.a / 255.0f,
-                0, 0, 0, 0,
-            });
+                rect->color.b / 255.0f, rect->color.a / 255.0f);
         } else if (auto const* stroke = std::get_if<StrokeRectCmd>(&cmd)) {
-            color_data.insert(color_data.end(), {
+            append_color_instance(
+                color_data,
                 stroke->x, stroke->y, stroke->w, stroke->h,
                 stroke->color.r / 255.0f, stroke->color.g / 255.0f,
                 stroke->color.b / 255.0f, stroke->color.a / 255.0f,
-                0, stroke->line_width, 1, 0,
-            });
+                0.0f, stroke->line_width, 1.0f);
         } else if (auto const* round = std::get_if<RoundRectCmd>(&cmd)) {
-            color_data.insert(color_data.end(), {
+            append_color_instance(
+                color_data,
                 round->x, round->y, round->w, round->h,
                 round->color.r / 255.0f, round->color.g / 255.0f,
                 round->color.b / 255.0f, round->color.a / 255.0f,
-                round->radius, 0, 2, 0,
-            });
+                round->radius, 0.0f, 2.0f);
         } else if (auto const* line = std::get_if<DrawLineCmd>(&cmd)) {
             float dx = line->x2 - line->x1;
             float dy = line->y2 - line->y1;
@@ -1378,16 +2373,210 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             float y = (dy == 0)
                 ? line->y1 - line->thickness / 2
                 : (line->y1 < line->y2 ? line->y1 : line->y2);
-            color_data.insert(color_data.end(), {
+            append_color_instance(
+                color_data,
                 x, y, w, h,
                 line->color.r / 255.0f, line->color.g / 255.0f,
                 line->color.b / 255.0f, line->color.a / 255.0f,
-                0, 0, 3, 0,
-            });
+                0.0f, 0.0f, 3.0f);
+        } else if (auto const* image = std::get_if<DrawImageCmd>(&cmd)) {
+            auto it = g_images.cache.find(image->url);
+            if (it == g_images.cache.end()) {
+                g_images.cache.try_emplace(image->url, ImageCacheEntry{});
+                if (is_http_url(image->url)) {
+                    queue_image_load(image->url);
+                } else {
+                    auto decoded = decode_image_file(resolve_image_path(image->url));
+                    if (decoded) {
+                        decoded->url = image->url;
+                        store_decoded_image(std::move(*decoded));
+                    } else {
+                        g_images.cache[image->url].state = ImageEntryState::failed;
+                    }
+                }
+                it = g_images.cache.find(image->url);
+            }
+            if (it != g_images.cache.end() && it->second.state == ImageEntryState::ready) {
+                append_textured_quad(
+                    image_data,
+                    image->x, image->y, image->w, image->h,
+                    it->second.u, it->second.v, it->second.uw, it->second.vh);
+            } else {
+                bool failed = it != g_images.cache.end()
+                    && it->second.state == ImageEntryState::failed;
+                float fill = failed ? 0.90f : 0.94f;
+                float edge = failed ? 0.78f : 0.82f;
+                append_color_instance(
+                    color_data,
+                    image->x, image->y, image->w, image->h,
+                    fill, fill, fill, 1.0f,
+                    6.0f, 0.0f, 2.0f);
+                append_color_instance(
+                    color_data,
+                    image->x, image->y, image->w, image->h,
+                    edge, edge, edge, 1.0f,
+                    0.0f, 1.0f, 1.0f);
+            }
+        }
+    }
+
+    auto append_overlay_text = [&](float x, float y, float font_size, bool mono,
+                                   Color color, std::string text, float line_height) {
+        if (text.empty())
+            return;
+        text_entries.push_back({
+            x,
+            y,
+            font_size,
+            mono,
+            color.r / 255.0f,
+            color.g / 255.0f,
+            color.b / 255.0f,
+            color.a / 255.0f,
+            std::move(text),
+            line_height,
+        });
+    };
+
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (snapshot.valid) {
+        float draw_y = snapshot.y - scroll_y;
+        if (g_ime.composition_active && !g_ime.composition_text.empty()) {
+            std::string composition = wstring_to_utf8(g_ime.composition_text);
+            float base_x = snapshot.x + snapshot.padding[3];
+            if (!snapshot.value.empty()) {
+                base_x += text_measure(
+                    snapshot.font_size,
+                    snapshot.mono,
+                    snapshot.value.c_str(),
+                    static_cast<unsigned int>(snapshot.value.size()));
+            }
+            append_overlay_text(
+                base_x,
+                draw_y + snapshot.padding[0],
+                snapshot.font_size,
+                snapshot.mono,
+                snapshot.foreground,
+                composition,
+                snapshot.line_height);
+
+            if (!composition.empty()) {
+                float preedit_w = text_measure(
+                    snapshot.font_size,
+                    snapshot.mono,
+                    composition.c_str(),
+                    static_cast<unsigned int>(composition.size()));
+                append_color_instance(
+                    color_data,
+                    base_x,
+                    draw_y + snapshot.padding[0] + snapshot.line_height - 2.0f,
+                    preedit_w,
+                    1.5f,
+                    snapshot.accent.r / 255.0f,
+                    snapshot.accent.g / 255.0f,
+                    snapshot.accent.b / 255.0f,
+                    1.0f);
+            }
+
+            auto cursor_units = static_cast<std::size_t>(
+                (g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor);
+            if (cursor_units > g_ime.composition_text.size())
+                cursor_units = g_ime.composition_text.size();
+            auto prefix = wstring_to_utf8(
+                std::wstring_view(g_ime.composition_text.data(), cursor_units));
+            float caret_x = base_x;
+            if (!prefix.empty()) {
+                caret_x += text_measure(
+                    snapshot.font_size,
+                    snapshot.mono,
+                    prefix.c_str(),
+                    static_cast<unsigned int>(prefix.size()));
+            }
+            append_color_instance(
+                color_data,
+                caret_x,
+                draw_y + snapshot.padding[0] + 2.0f,
+                1.5f,
+                (snapshot.line_height > 4.0f) ? (snapshot.line_height - 4.0f) : snapshot.line_height,
+                snapshot.accent.r / 255.0f,
+                snapshot.accent.g / 255.0f,
+                snapshot.accent.b / 255.0f,
+                1.0f);
+        }
+
+        if (g_ime.overlay.visible) {
+            append_color_instance(
+                color_data,
+                g_ime.overlay.x, g_ime.overlay.y, g_ime.overlay.w, g_ime.overlay.h,
+                1.0f, 1.0f, 1.0f, 0.98f,
+                8.0f, 0.0f, 2.0f);
+            append_color_instance(
+                color_data,
+                g_ime.overlay.x, g_ime.overlay.y, g_ime.overlay.w, g_ime.overlay.h,
+                0.80f, 0.84f, 0.90f, 1.0f,
+                0.0f, 1.0f, 1.0f);
+
+            for (auto const& hit : g_ime.overlay.hits) {
+                if (hit.kind == CandidateHitKind::item) {
+                    bool selected = hit.index == g_ime.candidate_selection;
+                    bool hovered = static_cast<int>(hit.index) == g_ime.hovered_candidate;
+                    if (selected || hovered) {
+                        float alpha = selected ? 0.22f : 0.12f;
+                        append_color_instance(
+                            color_data,
+                            hit.x + 2.0f, hit.y + 1.0f, hit.w - 4.0f, hit.h - 2.0f,
+                            snapshot.accent.r / 255.0f,
+                            snapshot.accent.g / 255.0f,
+                            snapshot.accent.b / 255.0f,
+                            alpha,
+                            6.0f, 0.0f, 2.0f);
+                    }
+                    if (hit.index < g_ime.candidates.size()) {
+                        append_overlay_text(
+                            hit.x + 10.0f,
+                            hit.y + (hit.h - snapshot.line_height) * 0.5f,
+                            snapshot.font_size,
+                            snapshot.mono,
+                            snapshot.foreground,
+                            wstring_to_utf8(g_ime.candidates[hit.index]),
+                            snapshot.line_height);
+                    }
+                } else if (hit.kind == CandidateHitKind::prev_page
+                           || hit.kind == CandidateHitKind::next_page) {
+                    bool hovered = g_ime.hovered_kind == hit.kind;
+                    float fill = hovered ? 0.90f : 0.95f;
+                    append_color_instance(
+                        color_data,
+                        hit.x, hit.y, hit.w, hit.h,
+                        fill, fill, fill, 1.0f,
+                        6.0f, 0.0f, 2.0f);
+                    append_color_instance(
+                        color_data,
+                        hit.x, hit.y, hit.w, hit.h,
+                        0.82f, 0.82f, 0.82f, 1.0f,
+                        0.0f, 1.0f, 1.0f);
+                    std::string label = (hit.kind == CandidateHitKind::prev_page)
+                        ? "Prev" : "Next";
+                    float label_w = text_measure(
+                        snapshot.font_size * 0.92f,
+                        false,
+                        label.c_str(),
+                        static_cast<unsigned int>(label.size()));
+                    append_overlay_text(
+                        hit.x + (hit.w - label_w) * 0.5f,
+                        hit.y + (hit.h - snapshot.line_height * 0.92f) * 0.5f,
+                        snapshot.font_size * 0.92f,
+                        false,
+                        snapshot.foreground,
+                        label,
+                        snapshot.line_height * 0.92f);
+                }
+            }
         }
     }
 
     begin_frame(frame);
+    (void)upload_image_atlas();
     transition_resource(
         frame.render_target.Get(),
         D3D12_RESOURCE_STATE_PRESENT,
@@ -1439,6 +2628,26 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         }
     }
 
+    if (!image_data.empty() && g_images.texture) {
+        UINT64 bytes = static_cast<UINT64>(image_data.size() * sizeof(float));
+        auto [mapped, offset] = upload_alloc(bytes, 16);
+        if (mapped) {
+            std::memcpy(mapped, image_data.data(), static_cast<std::size_t>(bytes));
+            D3D12_VERTEX_BUFFER_VIEW vbv{};
+            vbv.BufferLocation = g_renderer.upload.resource->GetGPUVirtualAddress() + offset;
+            vbv.SizeInBytes = static_cast<UINT>(bytes);
+            vbv.StrideInBytes = 32;
+            ID3D12DescriptorHeap* heaps[] = {g_renderer.srv_heap.Get()};
+            g_renderer.command_list->SetDescriptorHeaps(1, heaps);
+            g_renderer.command_list->SetGraphicsRootDescriptorTable(
+                1, srv_gpu_handle(IMAGE_SRV_SLOT));
+            g_renderer.command_list->SetPipelineState(g_renderer.text_pipeline.Get());
+            g_renderer.command_list->IASetVertexBuffers(0, 1, &vbv);
+            g_renderer.command_list->DrawInstanced(
+                6, static_cast<UINT>(image_data.size() / 8), 0, 0);
+        }
+    }
+
     if (!text_entries.empty() && g_text.initialized) {
         auto atlas = text_build_atlas(text_entries, text_scale);
         if (!atlas.quads.empty() && !atlas.pixels.empty()
@@ -1446,10 +2655,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             std::vector<float> text_data;
             text_data.reserve(atlas.quads.size() * 8);
             for (auto const& quad : atlas.quads) {
-                text_data.insert(text_data.end(), {
+                append_textured_quad(
+                    text_data,
                     quad.x, quad.y, quad.w, quad.h,
-                    quad.u, quad.v, quad.uw, quad.vh,
-                });
+                    quad.u, quad.v, quad.uw, quad.vh);
             }
 
             UINT64 bytes = static_cast<UINT64>(text_data.size() * sizeof(float));
@@ -1463,7 +2672,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 ID3D12DescriptorHeap* heaps[] = {g_renderer.srv_heap.Get()};
                 g_renderer.command_list->SetDescriptorHeaps(1, heaps);
                 g_renderer.command_list->SetGraphicsRootDescriptorTable(
-                    1, g_renderer.srv_heap->GetGPUDescriptorHandleForHeapStart());
+                    1, srv_gpu_handle(TEXT_SRV_SLOT));
                 g_renderer.command_list->SetPipelineState(g_renderer.text_pipeline.Get());
                 g_renderer.command_list->IASetVertexBuffers(0, 1, &vbv);
                 g_renderer.command_list->DrawInstanced(
@@ -1480,10 +2689,18 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 }
 
 inline void renderer_shutdown() {
-    if (g_renderer.fence) {
-        for (auto const& frame : g_renderer.frames)
-            wait_for_fence(frame.fence_value);
-    }
+    wait_for_all_frames();
+    shutdown_image_worker();
+    g_images.texture.Reset();
+    g_images.pixels.clear();
+    g_images.cache.clear();
+    g_images.pending_jobs.clear();
+    g_images.completed_jobs.clear();
+    g_images.atlas_dirty = false;
+    g_images.cursor_x = 0;
+    g_images.cursor_y = 0;
+    g_images.row_height = 0;
+    g_ime.overlay = {};
     if (g_renderer.upload.resource && g_renderer.upload.mapped) {
         g_renderer.upload.resource->Unmap(0, nullptr);
     }
@@ -1539,6 +2756,13 @@ inline platform_api const& windows_platform() {
             detail::renderer_flush,
             detail::renderer_shutdown,
             detail::renderer_hit_test,
+        },
+        {
+            detail::input_attach,
+            detail::input_detach,
+            detail::sync_ime_windows,
+            detail::input_handle_cursor_pos,
+            detail::input_handle_mouse_button,
         },
         detail::windows_open_url,
         nullptr,

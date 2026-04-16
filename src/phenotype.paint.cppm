@@ -280,7 +280,10 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         emit_stroke_rect(r, ax, draw_y, node.width, node.height, bw, bc);
     }
 
-    bool html_overlay_active = is_focused && node.is_input;
+    bool html_overlay_active = false;
+#ifdef __wasi__
+    html_overlay_active = is_focused && node.is_input;
+#endif
     Color tc = (is_hovered && node.hover_text_color.a > 0)
         ? node.hover_text_color : node.text_color;
     if (!html_overlay_active && !node.text_lines.empty()) {

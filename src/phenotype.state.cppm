@@ -122,6 +122,24 @@ struct InputHandler {
     InputHandler& operator=(InputHandler const&) = delete;
 };
 
+struct FocusedInputSnapshot {
+    bool valid = false;
+    unsigned int callback_id = 0xFFFFFFFFu;
+    float x = 0.0f;
+    float y = 0.0f;
+    float width = 0.0f;
+    float height = 0.0f;
+    float font_size = 0.0f;
+    float line_height = 0.0f;
+    bool mono = false;
+    float padding[4] = {};
+    Color foreground = {0, 0, 0, 255};
+    Color placeholder_color = {0, 0, 0, 255};
+    Color accent = {0, 0, 0, 255};
+    std::string value;
+    std::string placeholder;
+};
+
 struct AppState {
     Theme theme;
     Arena arena;
@@ -237,6 +255,63 @@ namespace detail {
     // (phenotype.wasm or phenotype.native) at initialization time.
     // Keeps widget::link non-templated.
     inline void (*g_open_url)(char const*, unsigned int) = nullptr;
+
+    inline FocusedInputSnapshot focused_input_snapshot() {
+        FocusedInputSnapshot snapshot{};
+        if (g_app.focused_id == 0xFFFFFFFFu)
+            return snapshot;
+
+        NodeHandle input_h = NodeHandle::null();
+        for (auto const& [id, node_h] : g_app.input_nodes) {
+            if (id == g_app.focused_id) {
+                input_h = node_h;
+                break;
+            }
+        }
+        if (!input_h.valid())
+            return snapshot;
+
+        auto* input = g_app.arena.get(input_h);
+        if (!input || !input->is_input)
+            return snapshot;
+
+        std::string current_value;
+        for (auto const& [id, handler] : g_app.input_handlers) {
+            if (id == g_app.focused_id) {
+                current_value = handler.current;
+                break;
+            }
+        }
+
+        float ax = 0.0f;
+        float ay = 0.0f;
+        auto cursor = input_h;
+        while (cursor.valid()) {
+            auto* node = g_app.arena.get(cursor);
+            if (!node) break;
+            ax += node->x;
+            ay += node->y;
+            cursor = node->parent;
+        }
+
+        snapshot.valid = true;
+        snapshot.callback_id = g_app.focused_id;
+        snapshot.x = ax;
+        snapshot.y = ay;
+        snapshot.width = input->width;
+        snapshot.height = input->height;
+        snapshot.font_size = input->font_size;
+        snapshot.line_height = input->font_size * g_app.theme.line_height_ratio;
+        snapshot.mono = input->mono;
+        for (int i = 0; i < 4; ++i)
+            snapshot.padding[i] = input->style.padding[i];
+        snapshot.foreground = g_app.theme.foreground;
+        snapshot.placeholder_color = g_app.theme.muted;
+        snapshot.accent = g_app.theme.accent;
+        snapshot.value = std::move(current_value);
+        snapshot.placeholder = input->placeholder;
+        return snapshot;
+    }
 } // namespace detail
 
 // ============================================================

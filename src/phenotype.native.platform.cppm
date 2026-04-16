@@ -50,11 +50,21 @@ struct renderer_api {
                                             float scroll_y) = nullptr;
 };
 
+struct input_api {
+    void (*attach)(GLFWwindow* window, void (*request_repaint)()) = nullptr;
+    void (*detach)() = nullptr;
+    void (*sync)() = nullptr;
+    bool (*handle_cursor_pos)(float x, float y) = nullptr;
+    bool (*handle_mouse_button)(float x, float y,
+                                int button, int action, int mods) = nullptr;
+};
+
 struct platform_api {
     char const* name = "stub";
     bool enabled = true;
     text_api text{};
     renderer_api renderer{};
+    input_api input{};
     void (*open_url)(char const* url, unsigned int len) = nullptr;
     char const* startup_message = nullptr;
 };
