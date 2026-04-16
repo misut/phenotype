@@ -83,6 +83,13 @@ inline void open_url_bridge(char const* url, unsigned int len) {
         g_active_host->open_url(url, len);
 }
 
+inline void sync_platform_input() {
+    if (!g_app_state.host || !g_app_state.host->platform
+        || !g_app_state.host->platform->input.sync)
+        return;
+    g_app_state.host->platform->input.sync();
+}
+
 inline std::optional<unsigned int> hit_test(float x, float y, float scroll_y) {
     if (!g_app_state.host || !g_app_state.host->platform
         || !g_app_state.host->platform->renderer.hit_test)
@@ -91,23 +98,53 @@ inline std::optional<unsigned int> hit_test(float x, float y, float scroll_y) {
 }
 
 inline void repaint_current() {
-    if (g_app_state.host)
+    if (g_app_state.host) {
         ::phenotype::detail::repaint(*g_app_state.host, g_app_state.scroll_y);
+        sync_platform_input();
+    }
 }
 
 inline void on_mouse_button(GLFWwindow* window, int button, int action, int) {
-    if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) return;
     double mx = 0.0;
     double my = 0.0;
     glfwGetCursorPos(window, &mx, &my);
+    if (g_app_state.host && g_app_state.host->platform
+        && g_app_state.host->platform->input.handle_mouse_button
+        && g_app_state.host->platform->input.handle_mouse_button(
+            static_cast<float>(mx),
+            static_cast<float>(my),
+            button,
+            action,
+            0)) {
+        repaint_current();
+        return;
+    }
+    if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) return;
     if (auto h = hit_test(static_cast<float>(mx), static_cast<float>(my),
                           g_app_state.scroll_y)) {
         ::phenotype::detail::set_focus_id(*h);
         ::phenotype::detail::handle_event(*h);
+        repaint_current();
+    } else {
+        ::phenotype::detail::set_focus_id(invalid_callback_id);
+        repaint_current();
     }
 }
 
 inline void on_cursor_pos(GLFWwindow* window, double mx, double my) {
+    if (g_app_state.host && g_app_state.host->platform
+        && g_app_state.host->platform->input.handle_cursor_pos
+        && g_app_state.host->platform->input.handle_cursor_pos(
+            static_cast<float>(mx),
+            static_cast<float>(my))) {
+        g_app_state.hovered_id = invalid_callback_id;
+        if (::phenotype::detail::set_hover_id(invalid_callback_id))
+            repaint_current();
+        static GLFWcursor* arrow = nullptr;
+        if (!arrow) arrow = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
+        glfwSetCursor(window, arrow);
+        return;
+    }
     auto h = hit_test(static_cast<float>(mx), static_cast<float>(my),
                       g_app_state.scroll_y);
     unsigned int id = h.value_or(invalid_callback_id);
@@ -187,14 +224,19 @@ template<typename State, typename Msg, typename View, typename Update>
 void run_host(native_host& host, View view, Update update) {
     detail::g_active_host = &host;
     ::phenotype::detail::g_open_url = detail::open_url_bridge;
+    if (host.platform && host.platform->input.attach)
+        host.platform->input.attach(host.window, detail::repaint_current);
     if (host.platform && host.platform->text.init)
         host.platform->text.init();
     if (host.platform && host.platform->renderer.init)
         host.platform->renderer.init(host.window);
     phenotype::run<State, Msg>(host, std::move(view), std::move(update));
+    sync_platform_input();
 }
 
 inline void shutdown_host(native_host& host) {
+    if (host.platform && host.platform->input.detach)
+        host.platform->input.detach();
     if (host.platform && host.platform->renderer.shutdown)
         host.platform->renderer.shutdown();
     if (host.platform && host.platform->text.shutdown)
