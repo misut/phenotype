@@ -38,12 +38,23 @@ namespace phenotype::detail {
 // dwarfed by the host call cost we're avoiding.
 using MeasureKey = std::tuple<float, unsigned int, std::string>;
 
+struct MeasureKeyLess {
+    bool operator()(MeasureKey const& lhs, MeasureKey const& rhs) const noexcept {
+        if (std::get<0>(lhs) < std::get<0>(rhs)) return true;
+        if (std::get<0>(rhs) < std::get<0>(lhs)) return false;
+        if (std::get<1>(lhs) < std::get<1>(rhs)) return true;
+        if (std::get<1>(rhs) < std::get<1>(lhs)) return false;
+        return std::get<2>(lhs) < std::get<2>(rhs);
+    }
+};
+
 // Heap-bound reference for the same reason the diag instruments use
 // the pattern: wasi-sdk's crt1-command.o runs __cxa_finalize after
 // _start() returns, and we still want the cache alive for every
 // JS-driven rebuild after that.
-inline std::map<MeasureKey, float>& measure_cache() {
-    static std::map<MeasureKey, float>& m = *new std::map<MeasureKey, float>();
+inline std::map<MeasureKey, float, MeasureKeyLess>& measure_cache() {
+    static std::map<MeasureKey, float, MeasureKeyLess>& m
+        = *new std::map<MeasureKey, float, MeasureKeyLess>();
     return m;
 }
 

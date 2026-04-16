@@ -83,7 +83,7 @@ This keeps the framework core pure while pushing side effects into thin adapters
 ### Current native backends
 
 - **macOS**: GLFW shell + CoreText text measurement/atlas + Metal renderer
-- **Windows**: backend skeleton using the shared shell and a stub renderer/text implementation
+- **Windows**: GLFW shell + DirectWrite text measurement/atlas + Direct3D 12 renderer
 - **Linux / other desktop**: shared stub backend
 
 ### Modularity guarantee
@@ -101,11 +101,13 @@ This means Metal, Direct3D, Vulkan, Skia, software raster, or another future ren
 - [x] Command buffer C++ parser — `phenotype.commands` module (PR #53)
 - [x] Shared GLFW shell extracted from platform-specific native code
 - [x] macOS native code isolated behind a dedicated platform module
-- [x] Windows backend skeleton wired into the native module graph
-- [ ] Native text measurement on Windows and Linux (`text_api`)
-- [ ] Windows renderer implementation behind `renderer_api`
-- [ ] OS-native URL opener per platform
-- [ ] Broader contract tests for non-macOS native backends
+- [x] Windows backend wired into the native module graph
+- [x] Native text measurement on Windows (`text_api`) via DirectWrite
+- [x] Windows renderer implementation behind `renderer_api` via Direct3D 12
+- [x] OS-native URL opener on Windows
+- [x] Contract tests for the Windows native backend (text, renderer smoke, text input)
+- [ ] IME composition for native text input
+- [ ] Native `DrawImage` support on desktop backends
 
 ## Module dependency graph
 
@@ -122,7 +124,7 @@ phenotype (umbrella re-export)
 ├── phenotype.native.shell — GLFW event loop + input translation
 ├── phenotype.native.platform — shared native capability contracts
 ├── phenotype.native.macos — macOS text + Metal renderer
-├── phenotype.native.windows — Windows backend skeleton
+├── phenotype.native.windows — Windows text + Direct3D 12 renderer
 └── phenotype.native.stub — shared stub backend for non-macOS native targets
 ```
 

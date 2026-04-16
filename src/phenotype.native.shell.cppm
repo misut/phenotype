@@ -148,11 +148,24 @@ inline void on_key(GLFWwindow*, int key, int, int action, int mods) {
         repaint_current();
         return;
     }
+    if (key == GLFW_KEY_BACKSPACE) {
+        ::phenotype::detail::handle_key(1, 0);
+        repaint_current();
+        return;
+    }
     if (key == GLFW_KEY_ENTER) {
         unsigned int focused_id = ::phenotype::detail::get_focused_id();
-        if (focused_id != invalid_callback_id)
+        if (focused_id != invalid_callback_id) {
             ::phenotype::detail::handle_event(focused_id);
+            repaint_current();
+        }
     }
+}
+
+inline void on_char(GLFWwindow*, unsigned int codepoint) {
+    ::phenotype::detail::handle_key(0, codepoint);
+    if (::phenotype::detail::focused_is_input())
+        repaint_current();
 }
 
 inline void install_callbacks(GLFWwindow* window) {
@@ -161,6 +174,7 @@ inline void install_callbacks(GLFWwindow* window) {
     glfwSetScrollCallback(window, on_scroll);
     glfwSetFramebufferSizeCallback(window, on_framebuffer_size);
     glfwSetKeyCallback(window, on_key);
+    glfwSetCharCallback(window, on_char);
 }
 
 } // namespace detail

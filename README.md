@@ -246,15 +246,17 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline, hos
 - [x] vDOM-style diff / partial paint v2 — double-buffer arena + position-based subtree diff
 - [x] Native backend split (public coordinator + shared shell + platform modules)
 - [x] macOS native backend (GLFW shell + CoreText + Metal)
-- [x] Windows native skeleton (shared shell + stub text / renderer)
+- [x] Windows native backend (shared shell + DirectWrite + Direct3D 12)
 - [x] Linux desktop stub backend
 - [x] Docs package no longer syncs a root `CMakeLists.txt`
 
 ### Next Up
 
-- [ ] Windows native renderer / text stack — the shortest path from today's skeleton to real Windows desktop support
-- [ ] OS-native URL opener per platform — the capability already exists in the shell contract and only needs platform wiring
-- [ ] Broader non-macOS native contract tests — needed to lock the shell/platform contract before Windows gets real implementations
+- [x] Windows native renderer / text stack — DirectWrite text measurement/atlas + Direct3D 12 renderer + WARP smoke coverage
+- [x] OS-native URL opener on Windows — ShellExecuteW-backed native link opening
+- [x] Broader non-macOS native contract tests — Windows native text/renderer/text-field coverage
+- [ ] IME composition for native text input — needed for full parity with the WASM overlay path
+- [ ] Native image rendering (`DrawImage`) on Windows/macOS — the JS path already has an image atlas, native still skips it
 - [ ] vDOM-style diff v3 — stable-key structural diff for efficient list reorder + sub-frame partial GPU updates
 - [ ] Multi-line text input (`widget::text_area<Msg>`) — a high-value feature that builds directly on the current input model
 - [ ] Spans / traces (`phenotype::diag::trace::Span`) — needed once native performance work moves beyond basic histograms

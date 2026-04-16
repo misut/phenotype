@@ -18,10 +18,10 @@
 
 module;
 #include <array>
+#include <chrono>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
-#include <ctime>
 #include <format>
 #include <limits>
 #include <map>
@@ -103,34 +103,34 @@ inline void set_level(Severity s) noexcept { detail::g_level = s; }
 // runtime threshold *before* doing any formatting work, so disabled
 // log calls are O(1).
 template<typename... Args>
-inline void trace(char const* scope, std::format_string<Args...> fmt, Args&&... args) {
+inline void trace(char const* scope, std::string_view fmt, Args&&... args) {
     if (Severity::trace < current_level()) return;
     detail::emit_formatted(Severity::trace, scope,
-        std::format(fmt, std::forward<Args>(args)...));
+        std::vformat(fmt, std::make_format_args(args...)));
 }
 template<typename... Args>
-inline void debug(char const* scope, std::format_string<Args...> fmt, Args&&... args) {
+inline void debug(char const* scope, std::string_view fmt, Args&&... args) {
     if (Severity::debug < current_level()) return;
     detail::emit_formatted(Severity::debug, scope,
-        std::format(fmt, std::forward<Args>(args)...));
+        std::vformat(fmt, std::make_format_args(args...)));
 }
 template<typename... Args>
-inline void info(char const* scope, std::format_string<Args...> fmt, Args&&... args) {
+inline void info(char const* scope, std::string_view fmt, Args&&... args) {
     if (Severity::info < current_level()) return;
     detail::emit_formatted(Severity::info, scope,
-        std::format(fmt, std::forward<Args>(args)...));
+        std::vformat(fmt, std::make_format_args(args...)));
 }
 template<typename... Args>
-inline void warn(char const* scope, std::format_string<Args...> fmt, Args&&... args) {
+inline void warn(char const* scope, std::string_view fmt, Args&&... args) {
     if (Severity::warn < current_level()) return;
     detail::emit_formatted(Severity::warn, scope,
-        std::format(fmt, std::forward<Args>(args)...));
+        std::vformat(fmt, std::make_format_args(args...)));
 }
 template<typename... Args>
-inline void error(char const* scope, std::format_string<Args...> fmt, Args&&... args) {
+inline void error(char const* scope, std::string_view fmt, Args&&... args) {
     if (Severity::error < current_level()) return;
     detail::emit_formatted(Severity::error, scope,
-        std::format(fmt, std::forward<Args>(args)...));
+        std::vformat(fmt, std::make_format_args(args...)));
 }
 
 } // namespace log
@@ -151,10 +151,9 @@ struct Attribute {
 
 namespace detail {
     inline std::uint64_t now_ns() noexcept {
-        timespec ts;
-        std::timespec_get(&ts, TIME_UTC);
-        return static_cast<std::uint64_t>(ts.tv_sec) * 1'000'000'000ULL
-             + static_cast<std::uint64_t>(ts.tv_nsec);
+        auto now = std::chrono::system_clock::now().time_since_epoch();
+        return static_cast<std::uint64_t>(
+            std::chrono::duration_cast<std::chrono::nanoseconds>(now).count());
     }
 
     inline std::uint64_t start_time_ns() {
