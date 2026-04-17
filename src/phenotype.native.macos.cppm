@@ -131,77 +131,225 @@ inline void text_shutdown() {
     g_text.initialized = false;
 }
 
-inline unsigned int decode_utf8(char const* src, unsigned int byte_len,
-                                std::vector<uint32_t>& out) {
-    out.clear();
-    for (unsigned int i = 0; i < byte_len; ) {
-        uint32_t cp = 0;
-        auto c = static_cast<unsigned char>(src[i]);
-        if (c < 0x80) {
-            cp = c;
-            i += 1;
-        } else if (c < 0xE0) {
-            cp = (c & 0x1F) << 6;
-            if (i + 1 < byte_len) cp |= (src[i + 1] & 0x3F);
-            i += 2;
-        } else if (c < 0xF0) {
-            cp = (c & 0x0F) << 12;
-            if (i + 1 < byte_len) cp |= (src[i + 1] & 0x3F) << 6;
-            if (i + 2 < byte_len) cp |= (src[i + 2] & 0x3F);
-            i += 3;
-        } else {
-            cp = (c & 0x07) << 18;
-            if (i + 1 < byte_len) cp |= (src[i + 1] & 0x3F) << 12;
-            if (i + 2 < byte_len) cp |= (src[i + 2] & 0x3F) << 6;
-            if (i + 3 < byte_len) cp |= (src[i + 3] & 0x3F);
-            i += 4;
-        }
-        out.push_back(cp);
-    }
-    return static_cast<unsigned int>(out.size());
+struct TextLineMetrics {
+    float logical_width = 0.0f;
+    float ascent = 0.0f;
+    float descent = 0.0f;
+    float leading = 0.0f;
+    CGRect glyph_bounds = CGRectNull;
+};
+
+inline CFGuard<CTFontRef> copy_text_font(float font_size, bool mono) {
+    CTFontRef base = mono ? g_text.mono : g_text.sans;
+    return CFGuard<CTFontRef>(
+        base ? CTFontCreateCopyWithAttributes(base, font_size, nullptr, nullptr) : nullptr);
 }
 
-inline void codepoints_to_unichars(std::vector<uint32_t> const& cps,
-                                   std::vector<UniChar>& out) {
-    out.clear();
-    out.reserve(cps.size());
-    for (auto cp : cps) {
-        if (cp <= 0xFFFF) {
-            out.push_back(static_cast<UniChar>(cp));
-            continue;
-        }
-        cp -= 0x10000;
-        out.push_back(static_cast<UniChar>(0xD800 + (cp >> 10)));
-        out.push_back(static_cast<UniChar>(0xDC00 + (cp & 0x3FF)));
+inline CFGuard<CFStringRef> create_text_cf_string(char const* text_ptr,
+                                                  unsigned int len) {
+    return CFGuard<CFStringRef>(
+        (text_ptr && len > 0)
+            ? CFStringCreateWithBytes(
+                kCFAllocatorDefault,
+                reinterpret_cast<UInt8 const*>(text_ptr),
+                static_cast<CFIndex>(len),
+                kCFStringEncodingUTF8,
+                false)
+            : nullptr);
+}
+
+inline CFGuard<CTLineRef> create_text_line(CTFontRef font,
+                                           char const* text_ptr,
+                                           unsigned int len) {
+    if (!font || !text_ptr || len == 0)
+        return CFGuard<CTLineRef>(nullptr);
+
+    auto text = create_text_cf_string(text_ptr, len);
+    if (!text)
+        return CFGuard<CTLineRef>(nullptr);
+
+    CFTypeRef keys[] = {kCTFontAttributeName};
+    CFTypeRef values[] = {font};
+    auto attrs = CFGuard<CFDictionaryRef>(CFDictionaryCreate(
+        kCFAllocatorDefault,
+        reinterpret_cast<void const**>(keys),
+        reinterpret_cast<void const**>(values),
+        1,
+        &kCFTypeDictionaryKeyCallBacks,
+        &kCFTypeDictionaryValueCallBacks));
+    if (!attrs)
+        return CFGuard<CTLineRef>(nullptr);
+
+    auto attr_text = CFGuard<CFAttributedStringRef>(
+        CFAttributedStringCreate(kCFAllocatorDefault, text, attrs));
+    if (!attr_text)
+        return CFGuard<CTLineRef>(nullptr);
+
+    return CFGuard<CTLineRef>(CTLineCreateWithAttributedString(attr_text));
+}
+
+inline bool describe_text_line(CTLineRef line, float scale, TextLineMetrics& out) {
+    if (!line)
+        return false;
+
+    CGFloat ascent = 0.0;
+    CGFloat descent = 0.0;
+    CGFloat leading = 0.0;
+    double width = CTLineGetTypographicBounds(line, &ascent, &descent, &leading);
+    if (!std::isfinite(width))
+        return false;
+
+    out.logical_width = static_cast<float>(width) / sanitize_scale(scale);
+    out.ascent = static_cast<float>(ascent);
+    out.descent = static_cast<float>(descent);
+    out.leading = static_cast<float>(leading);
+    out.glyph_bounds = CTLineGetBoundsWithOptions(
+        line,
+        static_cast<CTLineBoundsOptions>(kCTLineBoundsUseGlyphPathBounds));
+    return true;
+}
+
+inline void expand_line_box_for_ink(LineBoxMetrics& box,
+                                    CGRect const& glyph_bounds,
+                                    float logical_width,
+                                    float scale,
+                                    int padding,
+                                    int& line_origin_x) {
+    line_origin_x = padding;
+    if (CGRectIsNull(glyph_bounds)
+        || !std::isfinite(glyph_bounds.origin.x)
+        || !std::isfinite(glyph_bounds.size.width))
+        return;
+
+    float typographic_width_px = logical_width * sanitize_scale(scale);
+    int left_overhang = 0;
+    if (glyph_bounds.origin.x < 0.0)
+        left_overhang = static_cast<int>(std::ceil(-glyph_bounds.origin.x));
+
+    float bounds_max_x = static_cast<float>(CGRectGetMaxX(glyph_bounds));
+    int right_overhang = 0;
+    if (std::isfinite(bounds_max_x) && bounds_max_x > typographic_width_px) {
+        right_overhang = static_cast<int>(
+            std::ceil(bounds_max_x - typographic_width_px));
     }
+
+    box.slot_width += left_overhang + right_overhang;
+    if (box.slot_width < padding * 2 + 1)
+        box.slot_width = padding * 2 + 1;
+    line_origin_x = padding + left_overhang;
+}
+
+inline bool rasterize_line_alpha(CTLineRef line,
+                                 int slot_width,
+                                 int slot_height,
+                                 int line_origin_x,
+                                 float baseline_y,
+                                 std::vector<std::uint8_t>& slot_alpha,
+                                 int& ink_min_x,
+                                 int& ink_max_x) {
+    slot_alpha.assign(static_cast<std::size_t>(slot_width * slot_height), 0);
+    ink_min_x = slot_width;
+    ink_max_x = -1;
+
+    auto runs = CTLineGetGlyphRuns(line);
+    if (!runs)
+        return false;
+
+    bool has_ink = false;
+    auto run_count = CFArrayGetCount(runs);
+    for (CFIndex run_index = 0; run_index < run_count; ++run_index) {
+        auto run = static_cast<CTRunRef>(CFArrayGetValueAtIndex(runs, run_index));
+        if (!run)
+            continue;
+
+        auto run_attrs = CTRunGetAttributes(run);
+        auto run_font = static_cast<CTFontRef>(
+            run_attrs ? CFDictionaryGetValue(run_attrs, kCTFontAttributeName) : nullptr);
+        if (!run_font)
+            continue;
+
+        auto glyph_count = CTRunGetGlyphCount(run);
+        if (glyph_count <= 0)
+            continue;
+
+        std::vector<CGGlyph> glyphs(static_cast<std::size_t>(glyph_count));
+        std::vector<CGPoint> positions(static_cast<std::size_t>(glyph_count));
+        CFRange full_range{0, 0};
+        CTRunGetGlyphs(run, full_range, glyphs.data());
+        CTRunGetPositions(run, full_range, positions.data());
+
+        for (CFIndex glyph_index = 0; glyph_index < glyph_count; ++glyph_index) {
+            auto glyph = glyphs[static_cast<std::size_t>(glyph_index)];
+            if (glyph == 0)
+                continue;
+
+            CGRect bbox;
+            CTFontGetBoundingRectsForGlyphs(
+                run_font, kCTFontOrientationHorizontal, &glyph, &bbox, 1);
+            int gw = static_cast<int>(std::ceil(bbox.size.width)) + 2;
+            int gh = static_cast<int>(std::ceil(bbox.size.height)) + 2;
+            if (gw <= 0 || gh <= 0)
+                continue;
+
+            std::vector<std::uint8_t> glyph_buf(static_cast<std::size_t>(gw * gh), 0);
+            auto* ctx = CGBitmapContextCreate(
+                glyph_buf.data(), gw, gh, 8, gw, nullptr, kCGImageAlphaOnly);
+            if (!ctx)
+                continue;
+
+            CGPoint pos{
+                .x = static_cast<CGFloat>(-bbox.origin.x + 1.0),
+                .y = static_cast<CGFloat>(-bbox.origin.y + 1.0),
+            };
+            CTFontDrawGlyphs(run_font, &glyph, &pos, 1, ctx);
+            CGContextRelease(ctx);
+
+            auto run_pos = positions[static_cast<std::size_t>(glyph_index)];
+            int gx = static_cast<int>(std::lround(
+                static_cast<float>(line_origin_x) + run_pos.x + bbox.origin.x));
+            int gy = static_cast<int>(std::lround(
+                baseline_y + run_pos.y - bbox.origin.y - bbox.size.height));
+
+            for (int row = 0; row < gh; ++row) {
+                for (int col = 0; col < gw; ++col) {
+                    int local_x = gx + col;
+                    int local_y = gy + row;
+                    if (local_x < 0 || local_x >= slot_width
+                        || local_y < 0 || local_y >= slot_height)
+                        continue;
+
+                    auto alpha = glyph_buf[static_cast<std::size_t>(row * gw + col)];
+                    if (alpha == 0)
+                        continue;
+
+                    has_ink = true;
+                    if (local_x < ink_min_x) ink_min_x = local_x;
+                    if (local_x > ink_max_x) ink_max_x = local_x;
+                    slot_alpha[static_cast<std::size_t>(
+                        local_y * slot_width + local_x)] = alpha;
+                }
+            }
+        }
+    }
+
+    return has_ink;
 }
 
 inline float text_measure(float font_size, bool mono,
                           char const* text_ptr, unsigned int len) {
-    if (!g_text.initialized || len == 0) return 0.0f;
+    if (!g_text.initialized || len == 0)
+        return 0.0f;
 
-    CTFontRef base = mono ? g_text.mono : g_text.sans;
-    CFGuard<CTFontRef> font(
-        CTFontCreateCopyWithAttributes(base, font_size, nullptr, nullptr));
-    if (!font) return 0.0f;
+    auto font = copy_text_font(font_size, mono);
+    if (!font)
+        return 0.0f;
 
-    static thread_local std::vector<uint32_t> codepoints;
-    static thread_local std::vector<UniChar> unichars;
-    decode_utf8(text_ptr, len, codepoints);
-    codepoints_to_unichars(codepoints, unichars);
+    auto line = create_text_line(font, text_ptr, len);
+    if (!line)
+        return 0.0f;
 
-    auto count = static_cast<CFIndex>(unichars.size());
-    std::vector<CGGlyph> glyphs(static_cast<std::size_t>(count));
-    CTFontGetGlyphsForCharacters(font, unichars.data(), glyphs.data(), count);
-
-    std::vector<CGSize> advances(static_cast<std::size_t>(count));
-    CTFontGetAdvancesForGlyphs(font, kCTFontOrientationHorizontal,
-                               glyphs.data(), advances.data(), count);
-
-    double width = 0.0;
-    for (CFIndex i = 0; i < count; ++i)
-        width += advances[static_cast<std::size_t>(i)].width;
-    return static_cast<float>(width);
+    double width = CTLineGetTypographicBounds(line, nullptr, nullptr, nullptr);
+    return std::isfinite(width) ? static_cast<float>(width) : 0.0f;
 }
 
 inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
@@ -221,32 +369,41 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
     int padding = static_cast<int>(std::ceil(scale)) + 1;
     if (padding < 2) padding = 2;
 
-    static thread_local std::vector<uint32_t> codepoints;
-    static thread_local std::vector<UniChar> unichars;
-
     for (auto const& entry : entries) {
         if (entry.text.empty()) continue;
 
-        CTFontRef base = entry.mono ? g_text.mono : g_text.sans;
-        CFGuard<CTFontRef> font(
-            CTFontCreateCopyWithAttributes(base, entry.font_size * scale,
-                                           nullptr, nullptr));
+        auto font = copy_text_font(entry.font_size * scale, entry.mono);
         if (!font) continue;
+        auto line = create_text_line(
+            font, entry.text.c_str(), static_cast<unsigned int>(entry.text.size()));
+        if (!line) continue;
 
-        float ascent = static_cast<float>(CTFontGetAscent(font));
-        float descent = static_cast<float>(CTFontGetDescent(font));
-        float leading = static_cast<float>(CTFontGetLeading(font));
+        TextLineMetrics line_metrics;
+        if (!describe_text_line(line, scale, line_metrics))
+            continue;
+
         float logical_line_height = entry.line_height > 0
             ? entry.line_height
             : entry.font_size * 1.6f;
         float snapped_x = snap_to_pixel_grid(entry.x, scale);
         float snapped_y = snap_to_pixel_grid(entry.y, scale);
 
-        float width = text_measure(entry.font_size, entry.mono,
-                                   entry.text.c_str(),
-                                   static_cast<unsigned int>(entry.text.size()));
-        auto box = make_line_box(width, logical_line_height, ascent, descent,
-                                 leading, scale, padding);
+        auto box = make_line_box(
+            line_metrics.logical_width,
+            logical_line_height,
+            line_metrics.ascent,
+            line_metrics.descent,
+            line_metrics.leading,
+            scale,
+            padding);
+        int line_origin_x = padding;
+        expand_line_box_for_ink(
+            box,
+            line_metrics.glyph_bounds,
+            line_metrics.logical_width,
+            scale,
+            padding,
+            line_origin_x);
 
         if (ax + box.slot_width > ATLAS_SIZE) {
             ax = 0;
@@ -255,90 +412,43 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
         }
         if (ay + box.slot_height > ATLAS_SIZE) break;
 
-        decode_utf8(entry.text.c_str(),
-                    static_cast<unsigned int>(entry.text.size()),
-                    codepoints);
-        codepoints_to_unichars(codepoints, unichars);
-        auto count = static_cast<CFIndex>(unichars.size());
-        std::vector<CGGlyph> glyphs(static_cast<std::size_t>(count));
-        CTFontGetGlyphsForCharacters(font, unichars.data(), glyphs.data(), count);
-
-        std::vector<CGSize> advances(static_cast<std::size_t>(count));
-        CTFontGetAdvancesForGlyphs(font, kCTFontOrientationHorizontal,
-                                   glyphs.data(), advances.data(), count);
-
-        bool has_ink = false;
+        std::vector<std::uint8_t> slot_alpha;
         int ink_min_x = box.slot_width;
         int ink_max_x = -1;
-        float pen_x = static_cast<float>(padding);
+        bool has_ink = rasterize_line_alpha(
+            line,
+            box.slot_width,
+            box.slot_height,
+            line_origin_x,
+            box.baseline_y,
+            slot_alpha,
+            ink_min_x,
+            ink_max_x);
 
-        for (CFIndex gi = 0; gi < count; ++gi) {
-            auto glyph_index = static_cast<std::size_t>(gi);
-            if (glyphs[glyph_index] == 0) {
-                pen_x += static_cast<float>(advances[glyph_index].width);
-                continue;
-            }
-
-            CGRect bbox;
-            CTFontGetBoundingRectsForGlyphs(font, kCTFontOrientationHorizontal,
-                                            &glyphs[glyph_index], &bbox, 1);
-            int gw = static_cast<int>(std::ceil(bbox.size.width)) + 2;
-            int gh = static_cast<int>(std::ceil(bbox.size.height)) + 2;
-            if (gw <= 0 || gh <= 0) {
-                pen_x += static_cast<float>(advances[glyph_index].width);
-                continue;
-            }
-
-            std::vector<uint8_t> glyph_buf(static_cast<std::size_t>(gw * gh), 0);
-            auto* ctx = CGBitmapContextCreate(
-                glyph_buf.data(), gw, gh, 8, gw, nullptr, kCGImageAlphaOnly);
-            if (!ctx) {
-                pen_x += static_cast<float>(advances[glyph_index].width);
-                continue;
-            }
-
-            CGPoint pos{
-                .x = static_cast<CGFloat>(-bbox.origin.x + 1),
-                .y = static_cast<CGFloat>(-bbox.origin.y + 1),
-            };
-            CTFontDrawGlyphs(font, &glyphs[glyph_index], &pos, 1, ctx);
-            CGContextRelease(ctx);
-
-            int gx = static_cast<int>(std::lround(pen_x + bbox.origin.x));
-            int gy = static_cast<int>(std::lround(
-                box.baseline_y - bbox.origin.y - bbox.size.height));
-
-            for (int row = 0; row < gh; ++row) {
-                for (int col = 0; col < gw; ++col) {
-                    int local_x = gx + col;
-                    int local_y = gy + row;
-                    if (local_x < 0 || local_x >= box.slot_width
-                        || local_y < 0 || local_y >= box.slot_height)
+        if (has_ink) {
+            for (int row = 0; row < box.slot_height; ++row) {
+                for (int col = 0; col < box.slot_width; ++col) {
+                    auto alpha = slot_alpha[static_cast<std::size_t>(
+                        row * box.slot_width + col)];
+                    if (alpha == 0)
                         continue;
 
-                    int px = ax + local_x;
-                    int py = ay + local_y;
+                    int px = ax + col;
+                    int py = ay + row;
                     if (px < 0 || px >= ATLAS_SIZE || py < 0 || py >= ATLAS_SIZE)
                         continue;
 
-                    uint8_t alpha = glyph_buf[static_cast<std::size_t>(row * gw + col)];
-                    if (alpha == 0) continue;
-                    has_ink = true;
-                    if (local_x < ink_min_x) ink_min_x = local_x;
-                    if (local_x > ink_max_x) ink_max_x = local_x;
-
                     auto idx = static_cast<std::size_t>((py * ATLAS_SIZE + px) * 4);
-                    atlas.pixels[idx + 0] = static_cast<uint8_t>(entry.r * 255.0f * alpha / 255.0f);
-                    atlas.pixels[idx + 1] = static_cast<uint8_t>(entry.g * 255.0f * alpha / 255.0f);
-                    atlas.pixels[idx + 2] = static_cast<uint8_t>(entry.b * 255.0f * alpha / 255.0f);
+                    atlas.pixels[idx + 0] = static_cast<std::uint8_t>(
+                        entry.r * 255.0f * alpha / 255.0f);
+                    atlas.pixels[idx + 1] = static_cast<std::uint8_t>(
+                        entry.g * 255.0f * alpha / 255.0f);
+                    atlas.pixels[idx + 2] = static_cast<std::uint8_t>(
+                        entry.b * 255.0f * alpha / 255.0f);
                     atlas.pixels[idx + 3] = alpha;
                 }
             }
 
-            pen_x += static_cast<float>(advances[glyph_index].width);
-        }
-
-        if (has_ink) {
             int ink_w = ink_max_x - ink_min_x + 1;
             atlas.quads.push_back({
                 snapped_x + static_cast<float>(ink_min_x) / scale,
@@ -789,108 +899,52 @@ inline bool rasterize_text_run(char const* text_ptr, unsigned int len,
     if (!g_text.initialized || len == 0)
         return false;
 
-    CTFontRef base = mono ? g_text.mono : g_text.sans;
-    CFGuard<CTFontRef> font(
-        CTFontCreateCopyWithAttributes(base, font_size * scale, nullptr, nullptr));
+    auto font = copy_text_font(font_size * scale, mono);
     if (!font)
         return false;
+    auto line = create_text_line(font, text_ptr, len);
+    if (!line)
+        return false;
 
-    static thread_local std::vector<uint32_t> codepoints;
-    static thread_local std::vector<UniChar> unichars;
-    decode_utf8(text_ptr, len, codepoints);
-    codepoints_to_unichars(codepoints, unichars);
+    TextLineMetrics line_metrics;
+    if (!describe_text_line(line, scale, line_metrics))
+        return false;
 
-    auto count = static_cast<CFIndex>(unichars.size());
-    std::vector<CGGlyph> glyphs(static_cast<std::size_t>(count));
-    CTFontGetGlyphsForCharacters(font, unichars.data(), glyphs.data(), count);
-
-    std::vector<CGSize> advances(static_cast<std::size_t>(count));
-    CTFontGetAdvancesForGlyphs(font, kCTFontOrientationHorizontal,
-                               glyphs.data(), advances.data(), count);
-
-    double logical_width = 0.0;
-    for (CFIndex i = 0; i < count; ++i)
-        logical_width += advances[static_cast<std::size_t>(i)].width / scale;
-
-    float ascent = static_cast<float>(CTFontGetAscent(font));
-    float descent = static_cast<float>(CTFontGetDescent(font));
-    float leading = static_cast<float>(CTFontGetLeading(font));
     int padding = static_cast<int>(std::ceil(scale)) + 1;
     if (padding < 2) padding = 2;
 
     auto box = make_line_box(
-        static_cast<float>(logical_width),
+        line_metrics.logical_width,
         line_height > 0.0f ? line_height : font_size * 1.6f,
-        ascent, descent, leading, scale, padding);
+        line_metrics.ascent,
+        line_metrics.descent,
+        line_metrics.leading,
+        scale,
+        padding);
+    int line_origin_x = padding;
+    expand_line_box_for_ink(
+        box,
+        line_metrics.glyph_bounds,
+        line_metrics.logical_width,
+        scale,
+        padding,
+        line_origin_x);
 
-    std::vector<std::uint8_t> slot_alpha(
-        static_cast<std::size_t>(box.slot_width * box.slot_height), 0);
-
-    bool has_ink = false;
+    std::vector<std::uint8_t> slot_alpha;
     int ink_min_x = box.slot_width;
     int ink_max_x = -1;
-    float pen_x = static_cast<float>(padding);
-
-    for (CFIndex gi = 0; gi < count; ++gi) {
-        auto glyph_index = static_cast<std::size_t>(gi);
-        if (glyphs[glyph_index] == 0) {
-            pen_x += static_cast<float>(advances[glyph_index].width);
-            continue;
-        }
-
-        CGRect bbox;
-        CTFontGetBoundingRectsForGlyphs(font, kCTFontOrientationHorizontal,
-                                        &glyphs[glyph_index], &bbox, 1);
-        int gw = static_cast<int>(std::ceil(bbox.size.width)) + 2;
-        int gh = static_cast<int>(std::ceil(bbox.size.height)) + 2;
-        if (gw <= 0 || gh <= 0) {
-            pen_x += static_cast<float>(advances[glyph_index].width);
-            continue;
-        }
-
-        std::vector<std::uint8_t> glyph_buf(static_cast<std::size_t>(gw * gh), 0);
-        auto* ctx = CGBitmapContextCreate(
-            glyph_buf.data(), gw, gh, 8, gw, nullptr, kCGImageAlphaOnly);
-        if (!ctx) {
-            pen_x += static_cast<float>(advances[glyph_index].width);
-            continue;
-        }
-
-        CGPoint pos{
-            .x = static_cast<CGFloat>(-bbox.origin.x + 1),
-            .y = static_cast<CGFloat>(-bbox.origin.y + 1),
-        };
-        CTFontDrawGlyphs(font, &glyphs[glyph_index], &pos, 1, ctx);
-        CGContextRelease(ctx);
-
-        int gx = static_cast<int>(std::lround(pen_x + bbox.origin.x));
-        int gy = static_cast<int>(std::lround(
-            box.baseline_y - bbox.origin.y - bbox.size.height));
-
-        for (int row = 0; row < gh; ++row) {
-            for (int col = 0; col < gw; ++col) {
-                int local_x = gx + col;
-                int local_y = gy + row;
-                if (local_x < 0 || local_x >= box.slot_width
-                    || local_y < 0 || local_y >= box.slot_height)
-                    continue;
-
-                auto alpha = glyph_buf[static_cast<std::size_t>(row * gw + col)];
-                if (alpha == 0)
-                    continue;
-
-                has_ink = true;
-                if (local_x < ink_min_x) ink_min_x = local_x;
-                if (local_x > ink_max_x) ink_max_x = local_x;
-                slot_alpha[static_cast<std::size_t>(local_y * box.slot_width + local_x)] = alpha;
-            }
-        }
-
-        pen_x += static_cast<float>(advances[glyph_index].width);
-    }
-
-    if (!has_ink || ink_max_x < ink_min_x)
+    if (!rasterize_line_alpha(
+            line,
+            box.slot_width,
+            box.slot_height,
+            line_origin_x,
+            box.baseline_y,
+            slot_alpha,
+            ink_min_x,
+            ink_max_x)
+        || ink_max_x < ink_min_x) {
         return false;
+    }
 
     out.has_ink = true;
     out.pixel_width = ink_max_x - ink_min_x + 1;
