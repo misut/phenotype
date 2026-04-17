@@ -308,8 +308,10 @@ int run_app_with_platform(platform_api const& platform,
 
     run_host<State, Msg>(host, std::move(view), std::move(update));
 
-    while (!glfwWindowShouldClose(window))
+    while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        sync_platform_input();
+    }
 
     shutdown_host(host);
     glfwDestroyWindow(window);

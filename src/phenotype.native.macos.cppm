@@ -3,14 +3,19 @@ module;
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <condition_variable>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
+#include <deque>
+#include <filesystem>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <variant>
 #include <vector>
 
@@ -36,6 +41,7 @@ module;
 export module phenotype.native.macos;
 
 #ifndef __wasi__
+import cppx.http.system;
 import cppx.os;
 import cppx.os.system;
 import phenotype.commands;
@@ -540,14 +546,79 @@ struct TextAtlasCache {
     int active_scale_key = 0;
 };
 
+struct PendingImageCmd {
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+    std::string url;
+};
+
+struct ImageInstanceGPU {
+    float rect[4]{};
+    float uv_rect[4]{};
+    float color[4]{};
+};
+
+struct DecodedImage {
+    std::string url;
+    std::vector<std::uint8_t> pixels;
+    int width = 0;
+    int height = 0;
+    bool failed = false;
+};
+
+enum class ImageEntryState {
+    pending,
+    ready,
+    failed,
+};
+
+struct ImageCacheEntry {
+    ImageEntryState state = ImageEntryState::pending;
+    float u = 0.0f;
+    float v = 0.0f;
+    float uw = 0.0f;
+    float vh = 0.0f;
+};
+
+struct ImageAtlasCache {
+    static constexpr int atlas_size = 2048;
+
+    std::vector<std::uint8_t> pixels;
+    std::map<std::string, ImageCacheEntry> cache;
+    std::deque<std::string> pending_jobs;
+    std::deque<DecodedImage> completed_jobs;
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::thread worker;
+    void (*request_repaint)() = nullptr;
+    bool worker_started = false;
+    bool stop_worker = false;
+    int cursor_x = 0;
+    int cursor_y = 0;
+    int row_height = 0;
+    bool dirty = false;
+    int dirty_min_x = atlas_size;
+    int dirty_min_y = atlas_size;
+    int dirty_max_x = 0;
+    int dirty_max_y = 0;
+};
+
+inline ImageAtlasCache g_images;
+
 struct FrameScratch {
     std::vector<ColorInstanceGPU> color_instances;
     std::vector<ParsedTextRun> text_runs;
+    std::vector<PendingImageCmd> images;
+    std::vector<ImageInstanceGPU> image_instances;
     std::vector<TextInstanceGPU> text_instances;
 
     void clear() {
         color_instances.clear();
         text_runs.clear();
+        images.clear();
+        image_instances.clear();
         text_instances.clear();
     }
 };
@@ -618,6 +689,27 @@ inline void append_text_instance(std::vector<TextInstanceGPU>& out,
     out.push_back(inst);
 }
 
+inline void append_image_instance(std::vector<ImageInstanceGPU>& out,
+                                  float x, float y, float w, float h,
+                                  float u, float v, float uw, float vh,
+                                  float r = 1.0f, float g = 1.0f,
+                                  float b = 1.0f, float a = 1.0f) {
+    ImageInstanceGPU inst{};
+    inst.rect[0] = x;
+    inst.rect[1] = y;
+    inst.rect[2] = w;
+    inst.rect[3] = h;
+    inst.uv_rect[0] = u;
+    inst.uv_rect[1] = v;
+    inst.uv_rect[2] = uw;
+    inst.uv_rect[3] = vh;
+    inst.color[0] = r;
+    inst.color[1] = g;
+    inst.color[2] = b;
+    inst.color[3] = a;
+    out.push_back(inst);
+}
+
 struct CommandReader {
     unsigned char const* cur = nullptr;
     unsigned char const* end = nullptr;
@@ -652,6 +744,17 @@ struct CommandReader {
         return true;
     }
 };
+
+inline bool is_http_url(std::string const& url) {
+    return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
+}
+
+inline std::filesystem::path resolve_image_path(std::string const& url) {
+    auto path = std::filesystem::path(url);
+    if (path.is_absolute())
+        return path;
+    return std::filesystem::current_path() / path;
+}
 
 inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                                   float line_height_ratio,
@@ -801,14 +904,16 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 break;
             }
             case Cmd::DrawImage: {
-                float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+                PendingImageCmd image{};
                 unsigned int url_len = 0;
-                char const* ignored = nullptr;
-                if (!reader.read_f32(x) || !reader.read_f32(y)
-                    || !reader.read_f32(w) || !reader.read_f32(h)
+                char const* url = nullptr;
+                if (!reader.read_f32(image.x) || !reader.read_f32(image.y)
+                    || !reader.read_f32(image.w) || !reader.read_f32(image.h)
                     || !reader.read_u32(url_len)
-                    || !reader.read_text(ignored, url_len))
+                    || !reader.read_text(url, url_len))
                     return false;
+                image.url.assign(url ? url : "", url_len);
+                scratch.images.push_back(std::move(image));
                 break;
             }
             default:
@@ -816,6 +921,264 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
         }
     }
     return true;
+}
+
+inline void mark_image_cache_dirty(ImageAtlasCache& cache,
+                                   int x, int y, int w, int h) {
+    cache.dirty = true;
+    if (x < cache.dirty_min_x) cache.dirty_min_x = x;
+    if (y < cache.dirty_min_y) cache.dirty_min_y = y;
+    if (x + w > cache.dirty_max_x) cache.dirty_max_x = x + w;
+    if (y + h > cache.dirty_max_y) cache.dirty_max_y = y + h;
+}
+
+inline bool reserve_image_slot(ImageAtlasCache& cache, int width, int height,
+                               int& out_x, int& out_y) {
+    if (width <= 0 || height <= 0
+        || width > ImageAtlasCache::atlas_size
+        || height > ImageAtlasCache::atlas_size) {
+        return false;
+    }
+
+    if (cache.pixels.size()
+        != static_cast<std::size_t>(ImageAtlasCache::atlas_size * ImageAtlasCache::atlas_size * 4)) {
+        cache.pixels.assign(
+            static_cast<std::size_t>(ImageAtlasCache::atlas_size * ImageAtlasCache::atlas_size * 4),
+            0);
+    }
+
+    if (cache.cursor_x + width > ImageAtlasCache::atlas_size) {
+        cache.cursor_x = 0;
+        cache.cursor_y += cache.row_height;
+        cache.row_height = 0;
+    }
+    if (cache.cursor_y + height > ImageAtlasCache::atlas_size)
+        return false;
+
+    out_x = cache.cursor_x;
+    out_y = cache.cursor_y;
+    cache.cursor_x += width;
+    if (height > cache.row_height) cache.row_height = height;
+    return true;
+}
+
+inline std::uint16_t read_le16(std::uint8_t const* ptr) noexcept {
+    return static_cast<std::uint16_t>(ptr[0])
+        | (static_cast<std::uint16_t>(ptr[1]) << 8);
+}
+
+inline std::uint32_t read_le32(std::uint8_t const* ptr) noexcept {
+    return static_cast<std::uint32_t>(ptr[0])
+        | (static_cast<std::uint32_t>(ptr[1]) << 8)
+        | (static_cast<std::uint32_t>(ptr[2]) << 16)
+        | (static_cast<std::uint32_t>(ptr[3]) << 24);
+}
+
+inline bool decode_bmp_memory(std::vector<std::uint8_t> const& bytes,
+                              DecodedImage& out) {
+    if (bytes.size() < 54)
+        return false;
+    if (bytes[0] != 'B' || bytes[1] != 'M')
+        return false;
+
+    auto const dib_size = read_le32(bytes.data() + 14);
+    if (dib_size < 40)
+        return false;
+
+    auto const data_offset = read_le32(bytes.data() + 10);
+    auto const raw_width = static_cast<std::int32_t>(read_le32(bytes.data() + 18));
+    auto const raw_height = static_cast<std::int32_t>(read_le32(bytes.data() + 22));
+    auto const planes = read_le16(bytes.data() + 26);
+    auto const bits_per_pixel = read_le16(bytes.data() + 28);
+    auto const compression = read_le32(bytes.data() + 30);
+
+    if (planes != 1 || raw_width <= 0 || raw_height == 0 || compression != 0)
+        return false;
+    if (bits_per_pixel != 24 && bits_per_pixel != 32)
+        return false;
+
+    auto const top_down = raw_height < 0;
+    auto const height = top_down ? -raw_height : raw_height;
+    auto const width = raw_width;
+    auto const bytes_per_pixel = bits_per_pixel / 8;
+    auto const row_stride = static_cast<std::size_t>(((width * bits_per_pixel + 31) / 32) * 4);
+    auto const required = static_cast<std::size_t>(data_offset)
+        + row_stride * static_cast<std::size_t>(height);
+    if (required > bytes.size())
+        return false;
+
+    out.width = width;
+    out.height = height;
+    out.failed = false;
+    out.pixels.assign(static_cast<std::size_t>(width * height * 4), 0);
+
+    for (int row = 0; row < height; ++row) {
+        int const src_row = top_down ? row : (height - 1 - row);
+        auto const* src = bytes.data()
+            + static_cast<std::size_t>(data_offset)
+            + static_cast<std::size_t>(src_row) * row_stride;
+        auto* dst = out.pixels.data()
+            + static_cast<std::size_t>(row * width * 4);
+
+        for (int col = 0; col < width; ++col) {
+            auto const pixel_index = static_cast<std::size_t>(col * bytes_per_pixel);
+            dst[col * 4 + 0] = src[pixel_index + 2];
+            dst[col * 4 + 1] = src[pixel_index + 1];
+            dst[col * 4 + 2] = src[pixel_index + 0];
+            dst[col * 4 + 3] = (bytes_per_pixel == 4)
+                ? src[pixel_index + 3]
+                : static_cast<std::uint8_t>(255);
+        }
+    }
+
+    return true;
+}
+
+inline bool decode_bmp_file(std::filesystem::path const& path, DecodedImage& out) {
+    auto file = std::fopen(path.string().c_str(), "rb");
+    if (!file)
+        return false;
+
+    std::vector<std::uint8_t> bytes;
+    std::array<std::uint8_t, 8192> chunk{};
+    while (true) {
+        auto const read = std::fread(chunk.data(), 1, chunk.size(), file);
+        if (read > 0) {
+            bytes.insert(bytes.end(), chunk.begin(), chunk.begin() + static_cast<std::ptrdiff_t>(read));
+        }
+        if (read < chunk.size()) {
+            if (std::ferror(file)) {
+                std::fclose(file);
+                return false;
+            }
+            break;
+        }
+    }
+    std::fclose(file);
+    return decode_bmp_memory(bytes, out);
+}
+
+inline void ensure_image_worker();
+
+inline void queue_image_load(std::string const& url) {
+    auto [it, inserted] = g_images.cache.try_emplace(url, ImageCacheEntry{});
+    if (!inserted)
+        return;
+    ensure_image_worker();
+    {
+        std::lock_guard lock(g_images.mutex);
+        g_images.pending_jobs.push_back(url);
+    }
+    g_images.cv.notify_one();
+}
+
+inline bool store_decoded_image(DecodedImage decoded) {
+    auto [it, inserted] = g_images.cache.try_emplace(decoded.url, ImageCacheEntry{});
+    if (!inserted && it->second.state == ImageEntryState::ready)
+        return false;
+
+    if (decoded.failed || decoded.pixels.empty()
+        || decoded.width <= 0 || decoded.height <= 0) {
+        bool changed = it->second.state != ImageEntryState::failed;
+        it->second = ImageCacheEntry{.state = ImageEntryState::failed};
+        return changed;
+    }
+
+    int slot_x = 0;
+    int slot_y = 0;
+    if (!reserve_image_slot(g_images, decoded.width, decoded.height, slot_x, slot_y)) {
+        bool changed = it->second.state != ImageEntryState::failed;
+        it->second = ImageCacheEntry{.state = ImageEntryState::failed};
+        return changed;
+    }
+
+    for (int row = 0; row < decoded.height; ++row) {
+        auto* dst = g_images.pixels.data()
+            + static_cast<std::size_t>(
+                ((slot_y + row) * ImageAtlasCache::atlas_size + slot_x) * 4);
+        auto const* src = decoded.pixels.data()
+            + static_cast<std::size_t>(row * decoded.width * 4);
+        std::memcpy(dst, src, static_cast<std::size_t>(decoded.width * 4));
+    }
+    mark_image_cache_dirty(g_images, slot_x, slot_y, decoded.width, decoded.height);
+
+    it->second.state = ImageEntryState::ready;
+    it->second.u = static_cast<float>(slot_x) / ImageAtlasCache::atlas_size;
+    it->second.v = static_cast<float>(slot_y) / ImageAtlasCache::atlas_size;
+    it->second.uw = static_cast<float>(decoded.width) / ImageAtlasCache::atlas_size;
+    it->second.vh = static_cast<float>(decoded.height) / ImageAtlasCache::atlas_size;
+    return true;
+}
+
+inline bool process_completed_images() {
+    std::deque<DecodedImage> completed;
+    {
+        std::lock_guard lock(g_images.mutex);
+        if (g_images.completed_jobs.empty())
+            return false;
+        completed.swap(g_images.completed_jobs);
+    }
+
+    bool changed = false;
+    while (!completed.empty()) {
+        changed = store_decoded_image(std::move(completed.front())) || changed;
+        completed.pop_front();
+    }
+    return changed;
+}
+
+inline void image_worker_main() {
+    for (;;) {
+        std::string url;
+        {
+            std::unique_lock lock(g_images.mutex);
+            g_images.cv.wait(lock, [] {
+                return g_images.stop_worker || !g_images.pending_jobs.empty();
+            });
+            if (g_images.stop_worker && g_images.pending_jobs.empty())
+                break;
+            url = std::move(g_images.pending_jobs.front());
+            g_images.pending_jobs.pop_front();
+        }
+
+        DecodedImage decoded;
+        decoded.url = url;
+        if (auto response = cppx::http::system::get(url);
+            response && response->stat.ok()) {
+            std::vector<std::uint8_t> body;
+            body.reserve(response->body.size());
+            for (auto byte : response->body)
+                body.push_back(static_cast<std::uint8_t>(byte));
+            decoded.failed = !decode_bmp_memory(body, decoded);
+        } else {
+            decoded.failed = true;
+        }
+
+        {
+            std::lock_guard lock(g_images.mutex);
+            g_images.completed_jobs.push_back(std::move(decoded));
+        }
+    }
+}
+
+inline void ensure_image_worker() {
+    if (g_images.worker_started)
+        return;
+    g_images.stop_worker = false;
+    g_images.worker = std::thread(image_worker_main);
+    g_images.worker_started = true;
+}
+
+inline void shutdown_image_worker() {
+    {
+        std::lock_guard lock(g_images.mutex);
+        g_images.stop_worker = true;
+        g_images.pending_jobs.clear();
+    }
+    g_images.cv.notify_all();
+    if (g_images.worker.joinable())
+        g_images.worker.join();
+    g_images.worker_started = false;
 }
 
 inline void reset_text_cache(TextAtlasCache& cache) {
@@ -1047,11 +1410,11 @@ struct TextInstance {
     float4 color;
 };
 
-vertex TextVsOut vs_text(
-    uint vi [[vertex_id]],
-    uint ii [[instance_id]],
-    constant Uniforms& u [[buffer(0)]],
-    const device TextInstance* instances [[buffer(1)]]
+inline TextVsOut make_textured_vs(
+    uint vi,
+    uint ii,
+    constant Uniforms& u,
+    const device TextInstance* instances
 ) {
     constexpr float2 corners[] = {
         float2(0,0), float2(1,0), float2(0,1),
@@ -1070,6 +1433,15 @@ vertex TextVsOut vs_text(
     return out;
 }
 
+vertex TextVsOut vs_text(
+    uint vi [[vertex_id]],
+    uint ii [[instance_id]],
+    constant Uniforms& u [[buffer(0)]],
+    const device TextInstance* instances [[buffer(1)]]
+) {
+    return make_textured_vs(vi, ii, u, instances);
+}
+
 fragment float4 fs_text(
     TextVsOut in [[stage_in]],
     texture2d<float> atlas [[texture(0)]],
@@ -1079,6 +1451,25 @@ fragment float4 fs_text(
     if (coverage < 0.01) discard_fragment();
     return float4(in.color.rgb, in.color.a * coverage);
 }
+
+vertex TextVsOut vs_image(
+    uint vi [[vertex_id]],
+    uint ii [[instance_id]],
+    constant Uniforms& u [[buffer(0)]],
+    const device TextInstance* instances [[buffer(1)]]
+) {
+    return make_textured_vs(vi, ii, u, instances);
+}
+
+fragment float4 fs_image(
+    TextVsOut in [[stage_in]],
+    texture2d<float> atlas [[texture(0)]],
+    sampler samp [[sampler(0)]]
+) {
+    float4 sample = atlas.sample(samp, in.uv);
+    if (sample.a < 0.01) discard_fragment();
+    return sample * in.color;
+}
 )";
 
 struct RendererState {
@@ -1086,12 +1477,16 @@ struct RendererState {
     MTL::CommandQueue* queue = nullptr;
     CA::MetalLayer* layer = nullptr;
     MTL::RenderPipelineState* color_pipeline = nullptr;
+    MTL::RenderPipelineState* image_pipeline = nullptr;
     MTL::RenderPipelineState* text_pipeline = nullptr;
     MTL::Buffer* uniform_buf = nullptr;
     MTL::Buffer* color_instances_buf = nullptr;
     std::size_t color_instances_capacity = 0;
+    MTL::Buffer* image_instances_buf = nullptr;
+    std::size_t image_instances_capacity = 0;
     MTL::Buffer* text_instances_buf = nullptr;
     std::size_t text_instances_capacity = 0;
+    MTL::Texture* image_atlas_texture = nullptr;
     MTL::Texture* text_atlas_texture = nullptr;
     MTL::SamplerState* sampler = nullptr;
     std::vector<HitRegionCmd> hit_regions;
@@ -1197,6 +1592,20 @@ inline bool ensure_text_atlas_texture() {
     return g_renderer.text_atlas_texture != nullptr;
 }
 
+inline bool ensure_image_atlas_texture() {
+    if (g_renderer.image_atlas_texture)
+        return true;
+
+    auto* tex_desc = MTL::TextureDescriptor::texture2DDescriptor(
+        MTL::PixelFormatRGBA8Unorm,
+        NS::UInteger(ImageAtlasCache::atlas_size),
+        NS::UInteger(ImageAtlasCache::atlas_size),
+        false);
+    tex_desc->setUsage(MTL::TextureUsageShaderRead);
+    g_renderer.image_atlas_texture = g_renderer.device->newTexture(tex_desc);
+    return g_renderer.image_atlas_texture != nullptr;
+}
+
 inline void sync_drawable_size(int fbw, int fbh) {
     if (fbw == g_renderer.drawable_width && fbh == g_renderer.drawable_height)
         return;
@@ -1247,6 +1656,49 @@ inline bool upload_text_cache() {
     cache.dirty = false;
     cache.dirty_min_x = TextAtlasCache::atlas_size;
     cache.dirty_min_y = TextAtlasCache::atlas_size;
+    cache.dirty_max_x = 0;
+    cache.dirty_max_y = 0;
+    return true;
+}
+
+inline bool upload_image_cache() {
+    auto& cache = g_images;
+    if (!cache.dirty)
+        return true;
+    if (!ensure_image_atlas_texture())
+        return false;
+
+    auto width = cache.dirty_max_x - cache.dirty_min_x;
+    auto height = cache.dirty_max_y - cache.dirty_min_y;
+    if (width <= 0 || height <= 0) {
+        cache.dirty = false;
+        cache.dirty_min_x = ImageAtlasCache::atlas_size;
+        cache.dirty_min_y = ImageAtlasCache::atlas_size;
+        cache.dirty_max_x = 0;
+        cache.dirty_max_y = 0;
+        return true;
+    }
+
+    MTL::Region region = MTL::Region::Make2D(
+        cache.dirty_min_x,
+        cache.dirty_min_y,
+        width,
+        height);
+    auto const* src = cache.pixels.data()
+        + static_cast<std::size_t>(
+            (cache.dirty_min_y * ImageAtlasCache::atlas_size + cache.dirty_min_x) * 4);
+    g_renderer.image_atlas_texture->replaceRegion(
+        region,
+        0,
+        src,
+        ImageAtlasCache::atlas_size * 4);
+    metrics::inst::native_texture_upload_bytes.add(
+        static_cast<std::uint64_t>(width * height * 4),
+        native_platform_attrs());
+
+    cache.dirty = false;
+    cache.dirty_min_x = ImageAtlasCache::atlas_size;
+    cache.dirty_min_y = ImageAtlasCache::atlas_size;
     cache.dirty_max_x = 0;
     cache.dirty_max_y = 0;
     return true;
@@ -1366,6 +1818,69 @@ inline bool prepare_text_instances(float scale) {
     }
 }
 
+inline void prepare_image_instances(float scale) {
+    auto& scratch = g_renderer.scratch;
+    scratch.image_instances.clear();
+
+    for (auto const& image : scratch.images) {
+        auto it = g_images.cache.find(image.url);
+        if (it == g_images.cache.end()) {
+            it = g_images.cache.try_emplace(image.url, ImageCacheEntry{}).first;
+            if (is_http_url(image.url)) {
+                queue_image_load(image.url);
+            } else {
+                DecodedImage decoded;
+                decoded.url = image.url;
+                decoded.failed = !decode_bmp_file(resolve_image_path(image.url), decoded);
+                (void)store_decoded_image(std::move(decoded));
+            }
+            it = g_images.cache.find(image.url);
+        }
+
+        if (it != g_images.cache.end() && it->second.state == ImageEntryState::ready) {
+            append_image_instance(
+                scratch.image_instances,
+                snap_to_pixel_grid(image.x, scale),
+                snap_to_pixel_grid(image.y, scale),
+                image.w,
+                image.h,
+                it->second.u,
+                it->second.v,
+                it->second.uw,
+                it->second.vh);
+            continue;
+        }
+
+        bool failed = it != g_images.cache.end()
+            && it->second.state == ImageEntryState::failed;
+        float fill = failed ? 0.90f : 0.94f;
+        float edge = failed ? 0.78f : 0.82f;
+        append_color_instance(
+            scratch.color_instances,
+            image.x, image.y, image.w, image.h,
+            fill, fill, fill, 1.0f,
+            6.0f, 0.0f, 2.0f);
+        append_color_instance(
+            scratch.color_instances,
+            image.x, image.y, image.w, image.h,
+            edge, edge, edge, 1.0f,
+            0.0f, 1.0f, 1.0f);
+    }
+}
+
+inline void input_attach(GLFWwindow*, void (*request_repaint)()) {
+    g_images.request_repaint = request_repaint;
+}
+
+inline void input_detach() {
+    g_images.request_repaint = nullptr;
+}
+
+inline void input_sync() {
+    if (process_completed_images() && g_images.request_repaint)
+        g_images.request_repaint();
+}
+
 inline void renderer_init(GLFWwindow* window) {
     if (g_renderer.initialized) return;
     g_renderer.window = window;
@@ -1406,9 +1921,10 @@ inline void renderer_init(GLFWwindow* window) {
     }
 
     g_renderer.color_pipeline = create_pipeline(g_renderer.device, lib, "vs_color", "fs_color");
+    g_renderer.image_pipeline = create_pipeline(g_renderer.device, lib, "vs_image", "fs_image");
     g_renderer.text_pipeline = create_pipeline(g_renderer.device, lib, "vs_text", "fs_text");
     lib->release();
-    if (!g_renderer.color_pipeline || !g_renderer.text_pipeline) {
+    if (!g_renderer.color_pipeline || !g_renderer.image_pipeline || !g_renderer.text_pipeline) {
         std::fprintf(stderr, "[metal] failed to create render pipelines\n");
         return;
     }
@@ -1443,6 +1959,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     double cg = 0.98;
     double cb = 0.98;
     double ca = 1.0;
+    (void)process_completed_images();
     auto decode_started = metrics::detail::now_ns();
     if (!decode_frame_commands(
             buf, len, line_height_ratio,
@@ -1465,6 +1982,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     sync_drawable_size(fbw, fbh);
 
+    auto image_started = metrics::detail::now_ns();
+    prepare_image_instances(text_scale);
+    metrics::inst::native_phase_duration.record(
+        metrics::detail::now_ns() - image_started,
+        native_attrs("image_prepare"));
+
     auto text_started = metrics::detail::now_ns();
     if (!prepare_text_instances(text_scale)) {
         pool->release();
@@ -1484,6 +2007,24 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         0,
     };
     std::memcpy(g_renderer.uniform_buf->contents(), uniforms, 16);
+
+    auto image_upload_started = metrics::detail::now_ns();
+    if (!upload_image_cache()) {
+        pool->release();
+        return;
+    }
+    metrics::inst::native_phase_duration.record(
+        metrics::detail::now_ns() - image_upload_started,
+        native_attrs("image_upload"));
+
+    auto upload_started = metrics::detail::now_ns();
+    if (!upload_text_cache()) {
+        pool->release();
+        return;
+    }
+    metrics::inst::native_phase_duration.record(
+        metrics::detail::now_ns() - upload_started,
+        native_attrs("text_upload"));
 
     auto* drawable = g_renderer.layer->nextDrawable();
     if (!drawable) {
@@ -1524,15 +2065,30 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                                 NS::UInteger(0), 6, NS::UInteger(color_count));
     }
 
-    auto upload_started = metrics::detail::now_ns();
-    if (!upload_text_cache()) {
-        encoder->endEncoding();
-        pool->release();
-        return;
+    auto const image_bytes = scratch.image_instances.size() * sizeof(ImageInstanceGPU);
+    if (!scratch.image_instances.empty() && g_renderer.image_atlas_texture) {
+        if (!ensure_instance_buffer(
+                g_renderer.image_instances_buf,
+                g_renderer.image_instances_capacity,
+                image_bytes,
+                "image_instances")) {
+            encoder->endEncoding();
+            pool->release();
+            return;
+        }
+        std::memcpy(
+            g_renderer.image_instances_buf->contents(),
+            scratch.image_instances.data(),
+            image_bytes);
+        encoder->setRenderPipelineState(g_renderer.image_pipeline);
+        encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+        encoder->setVertexBuffer(g_renderer.image_instances_buf, 0, 1);
+        encoder->setFragmentTexture(g_renderer.image_atlas_texture, 0);
+        encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+        encoder->drawPrimitives(
+            MTL::PrimitiveTypeTriangle,
+            NS::UInteger(0), 6, NS::UInteger(scratch.image_instances.size()));
     }
-    metrics::inst::native_phase_duration.record(
-        metrics::detail::now_ns() - upload_started,
-        native_attrs("text_upload"));
 
     auto const text_bytes = scratch.text_instances.size() * sizeof(TextInstanceGPU);
     if (!scratch.text_instances.empty() && g_renderer.text_atlas_texture) {
@@ -1569,17 +2125,33 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
 inline void renderer_shutdown() {
     if (g_renderer.sampler) { g_renderer.sampler->release(); g_renderer.sampler = nullptr; }
+    if (g_renderer.image_atlas_texture) { g_renderer.image_atlas_texture->release(); g_renderer.image_atlas_texture = nullptr; }
     if (g_renderer.text_atlas_texture) { g_renderer.text_atlas_texture->release(); g_renderer.text_atlas_texture = nullptr; }
+    if (g_renderer.image_instances_buf) { g_renderer.image_instances_buf->release(); g_renderer.image_instances_buf = nullptr; }
     if (g_renderer.text_instances_buf) { g_renderer.text_instances_buf->release(); g_renderer.text_instances_buf = nullptr; }
     if (g_renderer.color_instances_buf) { g_renderer.color_instances_buf->release(); g_renderer.color_instances_buf = nullptr; }
     if (g_renderer.uniform_buf) { g_renderer.uniform_buf->release(); g_renderer.uniform_buf = nullptr; }
+    if (g_renderer.image_pipeline) { g_renderer.image_pipeline->release(); g_renderer.image_pipeline = nullptr; }
     if (g_renderer.text_pipeline) { g_renderer.text_pipeline->release(); g_renderer.text_pipeline = nullptr; }
     if (g_renderer.color_pipeline) { g_renderer.color_pipeline->release(); g_renderer.color_pipeline = nullptr; }
     if (g_renderer.layer) { g_renderer.layer->release(); g_renderer.layer = nullptr; }
     if (g_renderer.queue) { g_renderer.queue->release(); g_renderer.queue = nullptr; }
     if (g_renderer.device) { g_renderer.device->release(); g_renderer.device = nullptr; }
+    shutdown_image_worker();
     g_renderer.hit_regions.clear();
     g_renderer.scratch.clear();
+    g_images.cache.clear();
+    g_images.completed_jobs.clear();
+    g_images.pixels.clear();
+    g_images.cursor_x = 0;
+    g_images.cursor_y = 0;
+    g_images.row_height = 0;
+    g_images.dirty = false;
+    g_images.dirty_min_x = ImageAtlasCache::atlas_size;
+    g_images.dirty_min_y = ImageAtlasCache::atlas_size;
+    g_images.dirty_max_x = 0;
+    g_images.dirty_max_y = 0;
+    g_images.request_repaint = nullptr;
     g_renderer.text_cache.entries.clear();
     g_renderer.text_cache.pixels.clear();
     g_renderer.text_cache.cursor_x = 0;
@@ -1592,6 +2164,7 @@ inline void renderer_shutdown() {
     g_renderer.text_cache.dirty_max_y = 0;
     g_renderer.text_cache.active_scale_key = 0;
     g_renderer.color_instances_capacity = 0;
+    g_renderer.image_instances_capacity = 0;
     g_renderer.text_instances_capacity = 0;
     g_renderer.drawable_width = 0;
     g_renderer.drawable_height = 0;
@@ -1632,7 +2205,14 @@ inline platform_api const& macos_platform() {
             detail::renderer_shutdown,
             detail::renderer_hit_test,
         },
-        {},
+        {
+            detail::input_attach,
+            detail::input_detach,
+            detail::input_sync,
+            nullptr,
+            nullptr,
+            nullptr,
+        },
         [](char const* url, unsigned int len) {
             auto opened = cppx::os::system::open_url(std::string_view(url, len));
             if (!opened) {

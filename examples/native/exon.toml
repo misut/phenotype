@@ -13,5 +13,8 @@ platforms = [
 [sync]
 cmake-in-root = false
 
+[target.'cfg(os = "macos")'.build]
+ldflags = ["-framework", "Security", "-Wl,-framework,CoreFoundation"]
+
 [dependencies.path]
 phenotype = "../.."

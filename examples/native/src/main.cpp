@@ -1,3 +1,4 @@
+#include <filesystem>
 #include <string>
 #include <variant>
 
@@ -55,7 +56,18 @@ static Msg on_name_changed(std::string s) { return NameChanged{std::move(s)}; }
 static Msg on_ime_changed(std::string s) { return ImeChanged{std::move(s)}; }
 
 static std::string local_image_url() {
-    return std::string(PHENOTYPE_EXAMPLE_ASSET_ROOT) + "/showcase.bmp";
+    namespace fs = std::filesystem;
+
+    auto root = fs::path(PHENOTYPE_EXAMPLE_ASSET_ROOT);
+    auto direct = root / "showcase.bmp";
+    if (fs::exists(direct))
+        return direct.string();
+
+    auto nested = root / "assets" / "showcase.bmp";
+    if (fs::exists(nested))
+        return nested.string();
+
+    return nested.string();
 }
 
 static std::string remote_image_url() {

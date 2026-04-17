@@ -30,5 +30,8 @@ GLFW_BUILD_EXAMPLES = "OFF"
 [target.'cfg(os = "macos")'.dependencies.path]
 metal-cpp = "libs/metal-cpp"
 
+[target.'cfg(os = "macos")'.build]
+ldflags = ["-framework", "Security", "-Wl,-framework,CoreFoundation"]
+
 [sync]
 cmake-in-root = false
