@@ -134,6 +134,26 @@ enum class Decoration {
     Dot,
 };
 
+enum class InteractionRole {
+    None,
+    Link,
+    Button,
+    Checkbox,
+    Radio,
+    TextField,
+};
+
+inline constexpr char const* interaction_role_name(InteractionRole role) noexcept {
+    switch (role) {
+        case InteractionRole::Link:      return "link";
+        case InteractionRole::Button:    return "button";
+        case InteractionRole::Checkbox:  return "checkbox";
+        case InteractionRole::Radio:     return "radio";
+        case InteractionRole::TextField: return "text_field";
+        default:                         return "none";
+    }
+}
+
 struct Style {
     FlexDirection flex_direction = FlexDirection::Column;
     MainAxisAlignment main_align = MainAxisAlignment::Start;
@@ -164,6 +184,7 @@ struct LayoutNode {
     unsigned int callback_id = 0xFFFFFFFF;
     unsigned int cursor_type = 0; // 0=default, 1=pointer
     bool focusable = true;        // false = clickable but skipped by Tab + no focus ring
+    InteractionRole interaction_role = InteractionRole::None;
 
     // Hover styles (alpha=0 means no hover override)
     Color hover_background = {0, 0, 0, 0};

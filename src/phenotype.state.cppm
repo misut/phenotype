@@ -125,6 +125,7 @@ struct InputHandler {
 struct FocusedInputSnapshot {
     bool valid = false;
     unsigned int callback_id = 0xFFFFFFFFu;
+    InteractionRole role = InteractionRole::None;
     float x = 0.0f;
     float y = 0.0f;
     float width = 0.0f;
@@ -136,6 +137,7 @@ struct FocusedInputSnapshot {
     Color foreground = {0, 0, 0, 255};
     Color placeholder_color = {0, 0, 0, 255};
     Color accent = {0, 0, 0, 255};
+    unsigned int caret_pos = 0xFFFFFFFFu;
     std::string value;
     std::string placeholder;
 };
@@ -149,10 +151,11 @@ struct AppState {
     float scroll_y = 0;
     unsigned int hovered_id = 0xFFFFFFFF;
     unsigned int focused_id = 0xFFFFFFFF;
-    unsigned int caret_pos = 0;
+    unsigned int caret_pos = 0xFFFFFFFFu;
     bool caret_visible = true;
     // Click callbacks indexed by callback_id, registered by Button<Msg>.
     std::vector<std::function<void()>> callbacks;
+    std::vector<InteractionRole> callback_roles;
     std::vector<unsigned int> focusable_ids;
     // Tracks input nodes by callback_id for focus / handle_key lookup.
     std::vector<std::pair<unsigned int, NodeHandle>> input_nodes;
@@ -167,6 +170,7 @@ struct AppState {
     // caret because of the HTML overlay from PR #31). 0 sentinel means
     // "no previous frame yet" — the first paint always flushes.
     std::uint64_t last_paint_hash = 0;
+    diag::InputDebugSnapshot input_debug;
 };
 
 namespace detail {
@@ -296,6 +300,7 @@ namespace detail {
 
         snapshot.valid = true;
         snapshot.callback_id = g_app.focused_id;
+        snapshot.role = input->interaction_role;
         snapshot.x = ax;
         snapshot.y = ay;
         snapshot.width = input->width;
@@ -308,6 +313,7 @@ namespace detail {
         snapshot.foreground = g_app.theme.foreground;
         snapshot.placeholder_color = g_app.theme.muted;
         snapshot.accent = g_app.theme.accent;
+        snapshot.caret_pos = g_app.caret_pos;
         snapshot.value = std::move(current_value);
         snapshot.placeholder = input->placeholder;
         return snapshot;

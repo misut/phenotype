@@ -82,6 +82,48 @@ static std::string selected_choice_label(int choice) {
     }
 }
 
+static std::string debug_id_text(unsigned int id) {
+    if (id == phenotype::native::invalid_callback_id)
+        return "none";
+    return std::to_string(id);
+}
+
+static std::string debug_caret_text(unsigned int caret_pos) {
+    if (caret_pos == phenotype::native::invalid_callback_id)
+        return "none";
+    return std::to_string(caret_pos);
+}
+
+static std::string input_debug_block(phenotype::diag::InputDebugSnapshot const& debug) {
+    auto platform_name = phenotype::native::current_platform().name;
+    std::string block;
+    block += "platform: ";
+    block += platform_name ? platform_name : "unknown";
+    block += "\nlast_event: ";
+    block += debug.event.empty() ? "none" : debug.event;
+    block += "\nsource: ";
+    block += debug.source.empty() ? "none" : debug.source;
+    block += "\ndetail: ";
+    block += debug.detail.empty() ? "none" : debug.detail;
+    block += "\nresult: ";
+    block += debug.result.empty() ? "none" : debug.result;
+    block += "\ncallback_id: ";
+    block += debug_id_text(debug.callback_id);
+    block += "\nrole: ";
+    block += debug.role;
+    block += "\nfocused_id: ";
+    block += debug_id_text(debug.focused_id);
+    block += "\nfocused_role: ";
+    block += debug.focused_role;
+    block += "\nhovered_id: ";
+    block += debug_id_text(debug.hovered_id);
+    block += "\nscroll_y: ";
+    block += std::to_string(debug.scroll_y);
+    block += "\ntext caret: ";
+    block += debug_caret_text(debug.caret_pos);
+    return block;
+}
+
 static void render_expectation_card(phenotype::str title, phenotype::str body) {
     using namespace phenotype;
     layout::card([&] {
@@ -93,6 +135,7 @@ static void render_expectation_card(phenotype::str title, phenotype::str body) {
 
 void view(State const& state) {
     using namespace phenotype;
+    auto input_debug = phenotype::diag::input_debug_snapshot();
 
     layout::scaffold(
         [] {
@@ -117,6 +160,17 @@ void view(State const& state) {
                 "- Multiple native backends\n"
                 "- Stable manual verification flow"
             );
+        });
+
+        layout::spacer(12);
+        layout::card([&] {
+            widget::text("Input Debug Panel");
+            layout::spacer(6);
+            widget::text("Use this panel to distinguish whether the shared shell received an input, ignored it, handled it, or let a platform-specific hook consume it.");
+            layout::spacer(8);
+            widget::code(input_debug_block(input_debug));
+            layout::spacer(8);
+            widget::text("Manual check: hover a control, click it, tab through the focus order, type into a field, then scroll with both wheel and keyboard and confirm the panel changes immediately.");
         });
 
         layout::spacer(12);

@@ -84,6 +84,7 @@ void reset_app() {
     auto& app = detail::g_app;
     app.app_runner = nullptr;
     app.callbacks.clear();
+    app.callback_roles.clear();
     app.input_handlers.clear();
     app.input_nodes.clear();
     app.focusable_ids.clear();
@@ -92,6 +93,10 @@ void reset_app() {
     app.scroll_y = 0;
     app.hovered_id = 0xFFFFFFFF;
     app.focused_id = 0xFFFFFFFF;
+    app.caret_pos = 0xFFFFFFFF;
+    app.caret_visible = true;
+    app.last_paint_hash = 0;
+    app.input_debug = {};
     app.arena.reset();
     app.prev_arena.reset();
     detail::msg_queue().clear();

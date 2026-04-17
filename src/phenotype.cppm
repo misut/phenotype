@@ -1,4 +1,5 @@
 module;
+#include <algorithm>
 #include <concepts>
 #include <cstring>
 #include <functional>
@@ -62,6 +63,7 @@ inline void link(str label, str href) {
     node.hover_text_color = {29, 78, 216, 255};
     node.url = std::string(href.data, href.len);
     node.cursor_type = 1;
+    node.interaction_role = InteractionRole::Link;
 
     auto url_copy = node.url;
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
@@ -75,6 +77,7 @@ inline void link(str label, str href) {
                                static_cast<unsigned int>(url_copy.size()));
 #endif
     });
+    detail::g_app.callback_roles.push_back(InteractionRole::Link);
     node.callback_id = id;
 
     detail::attach_to_scope(h);
@@ -112,12 +115,14 @@ inline void button(str label, Msg msg) {
     node.style.padding[0] = 6; node.style.padding[1] = 12;
     node.style.padding[2] = 6; node.style.padding[3] = 12;
     node.cursor_type = 1;
+    node.interaction_role = InteractionRole::Button;
 
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
     detail::g_app.callbacks.push_back([msg = std::move(msg)] {
         detail::post<Msg>(msg);
         detail::trigger_rebuild();
     });
+    detail::g_app.callback_roles.push_back(InteractionRole::Button);
     node.callback_id = id;
 
     detail::attach_to_scope(h);
@@ -126,7 +131,8 @@ inline void button(str label, Msg msg) {
 namespace _impl {
 template<typename Msg>
 inline void toggle(str label, bool active, Msg msg,
-                   float corner_radius, Decoration active_decoration) {
+                   float corner_radius, Decoration active_decoration,
+                   InteractionRole role) {
     auto row_h = ::phenotype::detail::alloc_node();
     {
         auto& row = ::phenotype::detail::node_at(row_h);
@@ -142,6 +148,7 @@ inline void toggle(str label, bool active, Msg msg,
         ::phenotype::detail::post<Msg>(msg);
         ::phenotype::detail::trigger_rebuild();
     });
+    ::phenotype::detail::g_app.callback_roles.push_back(role);
 
     {
         auto box_h = ::phenotype::detail::alloc_node();
@@ -151,6 +158,7 @@ inline void toggle(str label, bool active, Msg msg,
         box.border_radius      = corner_radius;
         box.cursor_type        = 1;
         box.callback_id        = id;
+        box.interaction_role   = role;
         if (active) {
             box.background   = ::phenotype::detail::g_app.theme.accent;
             box.border_color = ::phenotype::detail::g_app.theme.accent;
@@ -172,6 +180,7 @@ inline void toggle(str label, bool active, Msg msg,
         lbl.cursor_type = 1;
         lbl.callback_id = id;
         lbl.focusable   = false;
+        lbl.interaction_role = role;
         ::phenotype::detail::node_at(row_h).children.push_back(lbl_h);
     }
 }
@@ -180,13 +189,15 @@ inline void toggle(str label, bool active, Msg msg,
 template<typename Msg>
 inline void checkbox(str label, bool checked, Msg msg) {
     _impl::toggle(label, checked, std::move(msg),
-                  /*corner_radius=*/3.0f, Decoration::Check);
+                  /*corner_radius=*/3.0f, Decoration::Check,
+                  InteractionRole::Checkbox);
 }
 
 template<typename Msg>
 inline void radio(str label, bool selected, Msg msg) {
     _impl::toggle(label, selected, std::move(msg),
-                  /*corner_radius=*/8.0f, Decoration::Dot);
+                  /*corner_radius=*/8.0f, Decoration::Dot,
+                  InteractionRole::Radio);
 }
 
 template<typename Msg>
@@ -195,6 +206,7 @@ inline void text_field(str hint, std::string const& current,
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.is_input = true;
+    node.interaction_role = InteractionRole::TextField;
     node.placeholder = std::string(hint.data, hint.len);
 
     node.text = current.empty() ? node.placeholder : current;
@@ -211,6 +223,7 @@ inline void text_field(str hint, std::string const& current,
 
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
     detail::g_app.callbacks.push_back([] {});
+    detail::g_app.callback_roles.push_back(InteractionRole::TextField);
     using MapperFn = Msg(*)(std::string);
     auto* mapper_storage = new MapperFn(mapper);
     detail::g_app.input_handlers.push_back({
@@ -279,6 +292,8 @@ void run(Host& host, View view, Update update) {
     state = State{};
     saved_view = std::move(view);
     saved_update = std::move(update);
+    detail::g_app.input_debug = {};
+    detail::g_app.callback_roles.clear();
 
     detail::install_app_runner([] {
         auto& host = *saved_host;
@@ -295,6 +310,7 @@ void run(Host& host, View view, Update update) {
         std::swap(app.arena, app.prev_arena);
         app.arena.reset();
         app.callbacks.clear();
+        app.callback_roles.clear();
         app.input_handlers.clear();
         app.input_nodes.clear();
 
@@ -355,6 +371,8 @@ void run(View view, Update update) {
     state = State{};
     saved_view = std::move(view);
     saved_update = std::move(update);
+    detail::g_app.input_debug = {};
+    detail::g_app.callback_roles.clear();
 
     detail::install_app_runner([] {
         auto t0 = metrics::detail::now_ns();
@@ -370,6 +388,7 @@ void run(View view, Update update) {
         std::swap(app.arena, app.prev_arena);
         app.arena.reset();
         app.callbacks.clear();
+        app.callback_roles.clear();
         app.input_handlers.clear();
         app.input_nodes.clear();
 
@@ -686,30 +705,160 @@ inline void spacer(unsigned int height_px) {
 
 namespace detail {
 
-inline void handle_event(unsigned int callback_id) {
-    metrics::inst::input_events.add(1, {{"event", "click"}});
-    if (callback_id < g_app.callbacks.size()) {
-        log::trace("phenotype.input", "click id={}", callback_id);
-        g_app.callbacks[callback_id]();
+inline bool is_utf8_continuation(unsigned char byte) {
+    return (byte & 0xC0u) == 0x80u;
+}
+
+inline std::size_t clamp_utf8_boundary(std::string const& value, std::size_t pos) {
+    pos = std::min(pos, value.size());
+    while (pos > 0 && pos < value.size()
+           && is_utf8_continuation(static_cast<unsigned char>(value[pos]))) {
+        --pos;
+    }
+    return pos;
+}
+
+inline std::size_t prev_utf8_boundary(std::string const& value, std::size_t pos) {
+    pos = clamp_utf8_boundary(value, pos);
+    if (pos == 0) return 0;
+    --pos;
+    while (pos > 0
+           && is_utf8_continuation(static_cast<unsigned char>(value[pos]))) {
+        --pos;
+    }
+    return pos;
+}
+
+inline std::size_t next_utf8_boundary(std::string const& value, std::size_t pos) {
+    pos = clamp_utf8_boundary(value, pos);
+    if (pos >= value.size()) return value.size();
+    ++pos;
+    while (pos < value.size()
+           && is_utf8_continuation(static_cast<unsigned char>(value[pos]))) {
+        ++pos;
+    }
+    return pos;
+}
+
+inline InteractionRole callback_role(unsigned int callback_id) {
+    if (callback_id < g_app.callback_roles.size())
+        return g_app.callback_roles[callback_id];
+    return InteractionRole::None;
+}
+
+inline InputHandler* find_input_handler(unsigned int callback_id) {
+    for (auto& [id, handler] : g_app.input_handlers) {
+        if (id == callback_id)
+            return &handler;
+    }
+    return nullptr;
+}
+
+inline unsigned int resolved_caret_pos(std::string const& value) {
+    if (g_app.caret_pos == 0xFFFFFFFFu)
+        return static_cast<unsigned int>(value.size());
+    return static_cast<unsigned int>(
+        clamp_utf8_boundary(value, static_cast<std::size_t>(g_app.caret_pos)));
+}
+
+inline void assign_focus(unsigned int callback_id) {
+    g_app.focused_id = callback_id;
+    if (auto const* handler = find_input_handler(callback_id)) {
+        g_app.caret_pos = static_cast<unsigned int>(
+            clamp_utf8_boundary(handler->current, handler->current.size()));
     } else {
-        log::warn("phenotype.input",
-            "click id={} out of range (size={})",
-            callback_id, g_app.callbacks.size());
+        g_app.caret_pos = 0xFFFFFFFFu;
+    }
+    g_app.caret_visible = true;
+}
+
+inline char const* input_key_detail_name(unsigned int key_type) {
+    switch (key_type) {
+        case 0: return "char";
+        case 1: return "backspace";
+        case 2: return "arrow-left";
+        case 3: return "arrow-right";
+        case 4: return "home";
+        case 5: return "end";
+        default: return "key";
     }
 }
 
-inline bool set_hover_id(unsigned int callback_id) {
-    if (g_app.hovered_id == callback_id) return false;
-    metrics::inst::input_events.add(1, {{"event", "hover"}});
+inline std::string callback_id_text(unsigned int callback_id) {
+    if (callback_id == 0xFFFFFFFFu)
+        return "none";
+    return std::to_string(callback_id);
+}
+
+inline void note_input_event(char const* event,
+                             char const* source,
+                             char const* detail,
+                             char const* result,
+                             unsigned int callback_id) {
+    auto role = callback_role(callback_id);
+    auto focused_role = callback_role(g_app.focused_id);
+    auto& snapshot = g_app.input_debug;
+    snapshot.event = event ? event : "";
+    snapshot.source = source ? source : "";
+    snapshot.detail = detail ? detail : "";
+    snapshot.result = result ? result : "";
+    snapshot.callback_id = callback_id;
+    snapshot.role = interaction_role_name(role);
+    snapshot.focused_id = g_app.focused_id;
+    snapshot.focused_role = interaction_role_name(focused_role);
+    snapshot.hovered_id = g_app.hovered_id;
+    snapshot.scroll_y = g_app.scroll_y;
+    snapshot.caret_pos = g_app.caret_pos;
+    snapshot.focused_is_input = find_input_handler(g_app.focused_id) != nullptr;
+
+    metrics::inst::input_events.add(1, {
+        {"event", snapshot.event},
+        {"source", snapshot.source},
+        {"detail", snapshot.detail},
+        {"result", snapshot.result},
+        {"callback_id", callback_id_text(callback_id)},
+        {"role", snapshot.role},
+    });
+}
+
+inline bool handle_event(unsigned int callback_id,
+                         char const* source = "core",
+                         char const* detail = "activate") {
+    if (callback_id < g_app.callbacks.size()) {
+        log::trace("phenotype.input", "click id={}", callback_id);
+        g_app.callbacks[callback_id]();
+        note_input_event("click", source, detail, "handled", callback_id);
+        return true;
+    }
+    log::warn("phenotype.input",
+        "click id={} out of range (size={})",
+        callback_id, g_app.callbacks.size());
+    note_input_event("click", source, detail, "ignored", callback_id);
+    return false;
+}
+
+inline bool set_hover_id(unsigned int callback_id,
+                         char const* source = "core",
+                         char const* detail = "pointer-move") {
+    if (g_app.hovered_id == callback_id) {
+        note_input_event("hover", source, detail, "ignored", callback_id);
+        return false;
+    }
     g_app.hovered_id = callback_id;
+    note_input_event("hover", source, detail, "handled", callback_id);
     return true;
 }
 
-inline void set_focus_id(unsigned int callback_id) {
-    metrics::inst::input_events.add(1, {{"event", "focus"}});
-    g_app.focused_id = callback_id;
-    g_app.caret_pos = 0xFFFFFFFF;
-    g_app.caret_visible = true;
+inline bool set_focus_id(unsigned int callback_id,
+                         char const* source = "core",
+                         char const* detail = "focus-change") {
+    if (g_app.focused_id == callback_id) {
+        note_input_event("focus", source, detail, "ignored", callback_id);
+        return false;
+    }
+    assign_focus(callback_id);
+    note_input_event("focus", source, detail, "handled", callback_id);
+    return true;
 }
 
 inline unsigned int get_focused_id() {
@@ -722,9 +871,14 @@ inline float get_total_height() {
     return 0;
 }
 
-inline void handle_tab(unsigned int reverse) {
-    metrics::inst::input_events.add(1, {{"event", "tab"}});
-    if (g_app.focusable_ids.empty()) return;
+inline bool handle_tab(unsigned int reverse,
+                       char const* source = "core",
+                       char const* detail = nullptr) {
+    auto detail_name = detail ? detail : (reverse ? "shift-tab" : "tab");
+    if (g_app.focusable_ids.empty()) {
+        note_input_event("tab", source, detail_name, "ignored", g_app.focused_id);
+        return false;
+    }
     int n = static_cast<int>(g_app.focusable_ids.size());
     int idx = -1;
     for (int i = 0; i < n; ++i) {
@@ -734,8 +888,9 @@ inline void handle_tab(unsigned int reverse) {
         idx = (idx <= 0) ? n - 1 : idx - 1;
     else
         idx = (idx < 0 || idx >= n - 1) ? 0 : idx + 1;
-    g_app.focused_id = g_app.focusable_ids[idx];
-    g_app.caret_visible = true;
+    assign_focus(g_app.focusable_ids[idx]);
+    note_input_event("tab", source, detail_name, "handled", g_app.focused_id);
+    return true;
 }
 
 inline void toggle_caret() {
@@ -744,7 +899,10 @@ inline void toggle_caret() {
 
 inline bool apply_key_to_string(unsigned int key_type,
                                 unsigned int codepoint,
-                                std::string& val) {
+                                std::string& value,
+                                std::size_t& caret,
+                                bool& text_changed) {
+    text_changed = false;
     switch (key_type) {
         case 0: {
             char buf[4];
@@ -764,33 +922,69 @@ inline bool apply_key_to_string(unsigned int key_type,
                 buf[2] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
                 buf[3] = static_cast<char>(0x80 | (codepoint & 0x3F)); len = 4;
             }
-            val.append(buf, len);
+            value.insert(caret, buf, len);
+            caret += len;
+            text_changed = true;
             return true;
         }
-        case 1:
-            if (!val.empty()) {
-                auto i = val.size() - 1;
-                while (i > 0 && (static_cast<unsigned char>(val[i]) & 0xC0) == 0x80) --i;
-                val.erase(i);
-                return true;
-            }
-            return false;
+        case 1: {
+            if (caret == 0)
+                return false;
+            auto start = prev_utf8_boundary(value, caret);
+            value.erase(start, caret - start);
+            caret = start;
+            text_changed = true;
+            return true;
+        }
+        case 2:
+            if (caret == 0)
+                return false;
+            caret = prev_utf8_boundary(value, caret);
+            return true;
+        case 3:
+            if (caret >= value.size())
+                return false;
+            caret = next_utf8_boundary(value, caret);
+            return true;
+        case 4:
+            if (caret == 0)
+                return false;
+            caret = 0;
+            return true;
+        case 5:
+            if (caret >= value.size())
+                return false;
+            caret = value.size();
+            return true;
         default:
             return false;
     }
 }
 
-inline void handle_key(unsigned int key_type, unsigned int codepoint) {
-    metrics::inst::input_events.add(1, {{"event", "key"}});
-    for (auto& [id, handler] : g_app.input_handlers) {
-        if (id != g_app.focused_id) continue;
-        std::string val = handler.current;
-        if (!apply_key_to_string(key_type, codepoint, val))
-            return;
-        g_app.caret_visible = true;
-        handler.invoke(handler.state, std::move(val));
-        return;
+inline bool handle_key(unsigned int key_type, unsigned int codepoint,
+                       char const* source = "core",
+                       char const* detail = nullptr) {
+    auto detail_name = detail ? detail : input_key_detail_name(key_type);
+    auto* handler = find_input_handler(g_app.focused_id);
+    if (!handler) {
+        note_input_event("key", source, detail_name, "ignored", g_app.focused_id);
+        return false;
     }
+
+    std::string value = handler->current;
+    std::size_t caret = resolved_caret_pos(value);
+    bool text_changed = false;
+    if (!apply_key_to_string(key_type, codepoint, value, caret, text_changed)) {
+        note_input_event("key", source, detail_name, "ignored", g_app.focused_id);
+        return false;
+    }
+
+    g_app.caret_pos = static_cast<unsigned int>(caret);
+    g_app.caret_visible = true;
+    if (text_changed)
+        handler->invoke(handler->state, std::move(value));
+    note_input_event("key", source, detail_name, "handled", g_app.focused_id);
+    return true;
 }
 
 #ifndef __wasi__
@@ -830,34 +1024,65 @@ inline void repaint(float scroll_y) {
 
 // Input buffer helpers — used by WASM exports for text input overlay.
 inline bool focused_is_input() {
-    for (auto const& [id, handler] : g_app.input_handlers) {
-        (void)handler;
-        if (id == g_app.focused_id) return true;
-    }
-    return false;
+    return find_input_handler(g_app.focused_id) != nullptr;
 }
 
 inline unsigned int input_load_focused(unsigned char* buf, unsigned int buf_size) {
-    for (auto& [id, handler] : g_app.input_handlers) {
-        if (id != g_app.focused_id) continue;
-        unsigned int n = static_cast<unsigned int>(handler.current.size());
-        if (n > buf_size) n = buf_size;
-        std::memcpy(buf, handler.current.data(), n);
-        return n;
-    }
-    return 0;
+    auto* handler = find_input_handler(g_app.focused_id);
+    if (!handler)
+        return 0;
+    unsigned int n = static_cast<unsigned int>(handler->current.size());
+    if (n > buf_size) n = buf_size;
+    std::memcpy(buf, handler->current.data(), n);
+    return n;
+}
+
+inline diag::InputDebugSnapshot const& current_input_debug_snapshot() {
+    return g_app.input_debug;
+}
+
+inline InteractionRole focused_role() {
+    return callback_role(g_app.focused_id);
+}
+
+inline unsigned int get_hovered_id() {
+    return g_app.hovered_id;
+}
+
+inline float get_scroll_y() {
+    return g_app.scroll_y;
+}
+
+inline unsigned int get_caret_pos() {
+    return g_app.caret_pos;
+}
+
+inline void set_scroll_y(float scroll_y) {
+    g_app.scroll_y = scroll_y;
+}
+
+inline void set_hover_id_without_event(unsigned int callback_id) {
+    g_app.hovered_id = callback_id;
 }
 
 inline void input_commit(unsigned char const* buf, unsigned int len) {
-    for (auto& [id, handler] : g_app.input_handlers) {
-        if (id != g_app.focused_id) continue;
-        std::string val(reinterpret_cast<char const*>(buf), len);
-        handler.invoke(handler.state, std::move(val));
+    auto* handler = find_input_handler(g_app.focused_id);
+    if (!handler)
         return;
-    }
+    std::string value(reinterpret_cast<char const*>(buf), len);
+    g_app.caret_pos = static_cast<unsigned int>(value.size());
+    handler->invoke(handler->state, std::move(value));
 }
 
 } // namespace detail
+
+namespace diag {
+
+inline InputDebugSnapshot input_debug_snapshot() {
+    return detail::current_input_debug_snapshot();
+}
+
+} // namespace diag
 
 } // namespace phenotype
 
