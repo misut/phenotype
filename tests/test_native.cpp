@@ -440,6 +440,21 @@ static void test_windows_renderer_hit_test_and_smoke() {
     std::puts("PASS: windows renderer hit test + smoke");
 }
 
+static void test_windows_renderer_reinit_cycle() {
+    {
+        WindowsRendererFixture fixture;
+        unsigned char empty[4] = {};
+        renderer::flush(empty, 0);
+    }
+    {
+        WindowsRendererFixture fixture;
+        unsigned char empty[4] = {};
+        renderer::flush(empty, 0);
+    }
+
+    std::puts("PASS: windows renderer reinit cycle");
+}
+
 static void test_windows_renderer_rejects_truncated_hit_region() {
     WindowsRendererFixture fixture;
 
@@ -600,6 +615,7 @@ int main() {
     test_windows_text_build_atlas_scale_preserves_bounds();
     test_windows_text_build_atlas_empty();
     test_renderer_flush_empty();
+    test_windows_renderer_reinit_cycle();
     test_windows_renderer_hit_test_and_smoke();
     test_windows_renderer_rejects_truncated_hit_region();
     test_windows_renderer_rejects_truncated_text_payload();

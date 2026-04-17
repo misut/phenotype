@@ -2348,11 +2348,11 @@ inline HRESULT create_atlas_texture(
 inline HRESULT ensure_image_atlas_texture() {
     if (g_images.texture)
         return S_OK;
+    constexpr std::size_t atlas_bytes =
+        static_cast<std::size_t>(ImageAtlasState::atlas_size)
+        * ImageAtlasState::atlas_size * 4;
     if (g_images.pixels.empty()) {
-        g_images.pixels.resize(
-            static_cast<std::size_t>(ImageAtlasState::atlas_size)
-            * ImageAtlasState::atlas_size * 4,
-            0);
+        g_images.pixels.resize(atlas_bytes, 0);
     }
 
     D3D12_RESOURCE_DESC tex_desc{};
@@ -2862,7 +2862,12 @@ inline void renderer_shutdown() {
     wait_for_all_frames();
     shutdown_image_worker();
     g_images.texture.Reset();
-    g_images.pixels.clear();
+    if (!g_images.pixels.empty()) {
+        std::fill(
+            g_images.pixels.begin(),
+            g_images.pixels.end(),
+            static_cast<unsigned char>(0));
+    }
     g_images.cache.clear();
     g_images.pending_jobs.clear();
     g_images.completed_jobs.clear();
