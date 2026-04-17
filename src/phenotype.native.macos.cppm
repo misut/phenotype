@@ -10,6 +10,7 @@ module;
 #include <map>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 
@@ -35,6 +36,8 @@ module;
 export module phenotype.native.macos;
 
 #ifndef __wasi__
+import cppx.os;
+import cppx.os.system;
 import phenotype.commands;
 import phenotype.diag;
 import phenotype.state;
@@ -1607,10 +1610,6 @@ inline std::optional<unsigned int> renderer_hit_test(float x, float y,
     return std::nullopt;
 }
 
-inline void macos_open_url(char const*, unsigned int) {
-    // TODO: bridge to `open` or LaunchServices from the shell layer.
-}
-
 } // namespace phenotype::native::detail
 #endif
 
@@ -1634,7 +1633,18 @@ inline platform_api const& macos_platform() {
             detail::renderer_hit_test,
         },
         {},
-        detail::macos_open_url,
+        [](char const* url, unsigned int len) {
+            auto opened = cppx::os::system::open_url(std::string_view(url, len));
+            if (!opened) {
+                std::fprintf(
+                    stderr,
+                    "[macos] failed to open url: %.*s (%.*s)\n",
+                    static_cast<int>(len),
+                    url,
+                    static_cast<int>(cppx::os::to_string(opened.error()).size()),
+                    cppx::os::to_string(opened.error()).data());
+            }
+        },
         nullptr,
     };
     return api;

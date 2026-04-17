@@ -17,6 +17,7 @@ module;
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -32,7 +33,6 @@ module;
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <imm.h>
-#include <shellapi.h>
 #include <wincodec.h>
 
 #include <d3d12.h>
@@ -49,7 +49,6 @@ module;
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "imm32.lib")
 #pragma comment(lib, "ole32.lib")
-#pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "windowscodecs.lib")
 #endif
@@ -58,7 +57,12 @@ module;
 export module phenotype.native.windows;
 
 #ifndef __wasi__
+import cppx.env.system;
+import cppx.os;
+import cppx.os.system;
+import cppx.resource;
 import cppx.http.system;
+import cppx.unicode;
 import phenotype.commands;
 import phenotype.state;
 import phenotype.native.platform;
@@ -78,19 +82,6 @@ inline int logical_pixels(float logical, float scale, int minimum = 1) {
 inline float snap_to_pixel_grid(float value, float scale) {
     float s = sanitize_scale(scale);
     return std::round(value * s) / s;
-}
-
-inline bool env_enabled(char const* name) {
-#ifdef _WIN32
-    char buf[8]{};
-    DWORD len = GetEnvironmentVariableA(name, buf, static_cast<DWORD>(std::size(buf)));
-    if (len == 0 || len >= std::size(buf)) return false;
-    return buf[0] == '1' || buf[0] == 'y' || buf[0] == 'Y'
-        || buf[0] == 't' || buf[0] == 'T';
-#else
-    (void)name;
-    return false;
-#endif
 }
 
 struct LineBoxMetrics {
@@ -131,55 +122,6 @@ inline LineBoxMetrics make_line_box(float logical_width,
 #ifdef _WIN32
 
 using Microsoft::WRL::ComPtr;
-
-inline std::wstring utf8_to_wstring(char const* text, unsigned int len) {
-    if (!text || len == 0) return {};
-    int needed = MultiByteToWideChar(
-        CP_UTF8, MB_ERR_INVALID_CHARS,
-        text, static_cast<int>(len), nullptr, 0);
-    if (needed <= 0) {
-        needed = MultiByteToWideChar(
-            CP_UTF8, 0,
-            text, static_cast<int>(len), nullptr, 0);
-    }
-    if (needed <= 0) return {};
-    std::wstring out(static_cast<std::size_t>(needed), L'\0');
-    MultiByteToWideChar(
-        CP_UTF8, 0,
-        text, static_cast<int>(len),
-        out.data(), needed);
-    return out;
-}
-
-inline std::wstring utf8_to_wstring(std::string const& text) {
-    return utf8_to_wstring(text.c_str(),
-                           static_cast<unsigned int>(text.size()));
-}
-
-inline std::string wstring_to_utf8(std::wstring_view text) {
-    if (text.empty()) return {};
-    int needed = WideCharToMultiByte(
-        CP_UTF8,
-        0,
-        text.data(),
-        static_cast<int>(text.size()),
-        nullptr,
-        0,
-        nullptr,
-        nullptr);
-    if (needed <= 0) return {};
-    std::string out(static_cast<std::size_t>(needed), '\0');
-    WideCharToMultiByte(
-        CP_UTF8,
-        0,
-        text.data(),
-        static_cast<int>(text.size()),
-        out.data(),
-        needed,
-        nullptr,
-        nullptr);
-    return out;
-}
 
 inline void log_hresult(char const* label, HRESULT hr) {
     std::fprintf(stderr, "[windows] %s failed (hr=0x%08lx)\n",
@@ -300,12 +242,12 @@ inline float text_measure(float font_size, bool mono,
                           char const* text_ptr, unsigned int len) {
     if (!g_text.initialized || len == 0) return 0.0f;
 
-    auto wide = utf8_to_wstring(text_ptr, len);
-    if (wide.empty()) return 0.0f;
+    auto wide = cppx::unicode::utf8_to_wide(std::string_view{text_ptr, len});
+    if (!wide || wide->empty()) return 0.0f;
 
     ComPtr<IDWriteTextLayout> layout;
     auto hr = make_text_layout(
-        wide, font_size, mono,
+        *wide, font_size, mono,
         16384.0f, font_size * 4.0f + 32.0f,
         layout);
     if (FAILED(hr)) {
@@ -460,13 +402,13 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
     for (auto const& entry : entries) {
         if (entry.text.empty()) continue;
 
-        auto wide = utf8_to_wstring(entry.text);
-        if (wide.empty()) continue;
+        auto wide = cppx::unicode::utf8_to_wide(entry.text);
+        if (!wide || wide->empty()) continue;
 
         float scaled_font_size = entry.font_size * scale;
         ComPtr<IDWriteTextLayout> metrics_layout;
         auto hr = make_text_layout(
-            wide,
+            *wide,
             scaled_font_size,
             entry.mono,
             16384.0f,
@@ -856,17 +798,6 @@ inline void request_window_repaint() {
         g_ime.request_repaint();
 }
 
-inline bool is_http_url(std::string const& url) {
-    return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
-}
-
-inline std::filesystem::path resolve_image_path(std::string const& url) {
-    auto path = std::filesystem::path(url);
-    if (path.is_absolute())
-        return path;
-    return std::filesystem::current_path() / path;
-}
-
 inline float current_backing_scale(GLFWwindow* window) {
     if (!window) return 1.0f;
     int fbw = 0;
@@ -981,11 +912,11 @@ inline void commit_result_string(std::wstring_view result) {
     auto snapshot = ::phenotype::detail::focused_input_snapshot();
     if (!snapshot.valid)
         return;
-    auto suffix = wstring_to_utf8(result);
-    if (suffix.empty())
+    auto suffix = cppx::unicode::wide_to_utf8(result);
+    if (!suffix || suffix->empty())
         return;
     auto next = snapshot.value;
-    next += suffix;
+    next += *suffix;
     for (auto& [id, handler] : ::phenotype::detail::g_app.input_handlers) {
         if (id != ::phenotype::detail::g_app.focused_id)
             continue;
@@ -1068,14 +999,14 @@ inline void sync_ime_windows() {
             (g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor);
         if (cursor_units > g_ime.composition_text.size())
             cursor_units = g_ime.composition_text.size();
-        auto prefix = wstring_to_utf8(
+        auto prefix = cppx::unicode::wide_to_utf8(
             std::wstring_view(g_ime.composition_text.data(), cursor_units));
-        if (!prefix.empty()) {
+        if (prefix && !prefix->empty()) {
             caret_x += text_measure(
                 snapshot.font_size,
                 snapshot.mono,
-                prefix.c_str(),
-                static_cast<unsigned int>(prefix.size()));
+                prefix->c_str(),
+                static_cast<unsigned int>(prefix->size()));
         }
     }
 
@@ -1131,14 +1062,14 @@ inline void sync_ime_windows() {
 
     float content_width = snapshot.width;
     for (unsigned int index = page_start; index < page_end; ++index) {
-        auto utf8 = wstring_to_utf8(g_ime.candidates[index]);
-        if (utf8.empty())
+        auto utf8 = cppx::unicode::wide_to_utf8(g_ime.candidates[index]);
+        if (!utf8 || utf8->empty())
             continue;
         float measured = text_measure(
             snapshot.font_size,
             snapshot.mono,
-            utf8.c_str(),
-            static_cast<unsigned int>(utf8.size()));
+            utf8->c_str(),
+            static_cast<unsigned int>(utf8->size()));
         if (measured > content_width)
             content_width = measured;
     }
@@ -1478,7 +1409,9 @@ inline void image_worker_main() {
 
         DecodedImage decoded;
         decoded.url = url;
-        if (is_http_url(url)) {
+        auto const kind = cppx::resource::classify(url);
+        if (kind == cppx::resource::resource_kind::http_url
+            || kind == cppx::resource::resource_kind::https_url) {
             auto resp = cppx::http::system::get(url);
             if (resp && resp->stat.ok()) {
                 std::vector<unsigned char> body;
@@ -1496,7 +1429,9 @@ inline void image_worker_main() {
                 decoded.failed = true;
             }
         } else {
-            auto result = decode_image_file(resolve_image_path(url));
+            auto result = decode_image_file(cppx::resource::resolve_path(
+                std::filesystem::current_path(),
+                std::filesystem::path(url)));
             if (result) {
                 decoded = std::move(*result);
                 decoded.url = url;
@@ -2252,8 +2187,10 @@ inline void end_frame(FrameContext& frame) {
 inline void renderer_init(GLFWwindow* window) {
     if (g_renderer.initialized) return;
     g_renderer.window = window;
-    g_renderer.debug_enabled = env_enabled("PHENOTYPE_DX12_DEBUG");
-    g_renderer.warp_enabled = env_enabled("PHENOTYPE_DX12_WARP");
+    g_renderer.debug_enabled = cppx::env::system::get_bool_or(
+        "PHENOTYPE_DX12_DEBUG", false);
+    g_renderer.warp_enabled = cppx::env::system::get_bool_or(
+        "PHENOTYPE_DX12_WARP", false);
 
     auto co_hr = CoInitializeEx(
         nullptr,
@@ -2385,10 +2322,14 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             auto it = g_images.cache.find(image->url);
             if (it == g_images.cache.end()) {
                 g_images.cache.try_emplace(image->url, ImageCacheEntry{});
-                if (is_http_url(image->url)) {
+                auto const kind = cppx::resource::classify(image->url);
+                if (kind == cppx::resource::resource_kind::http_url
+                    || kind == cppx::resource::resource_kind::https_url) {
                     queue_image_load(image->url);
                 } else {
-                    auto decoded = decode_image_file(resolve_image_path(image->url));
+                    auto decoded = decode_image_file(cppx::resource::resolve_path(
+                        std::filesystem::current_path(),
+                        std::filesystem::path(image->url)));
                     if (decoded) {
                         decoded->url = image->url;
                         store_decoded_image(std::move(*decoded));
@@ -2444,7 +2385,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (snapshot.valid) {
         float draw_y = snapshot.y - scroll_y;
         if (g_ime.composition_active && !g_ime.composition_text.empty()) {
-            std::string composition = wstring_to_utf8(g_ime.composition_text);
+            auto composition_utf8 = cppx::unicode::wide_to_utf8(g_ime.composition_text);
+            std::string composition = composition_utf8
+                ? std::move(*composition_utf8)
+                : std::string{};
             float base_x = snapshot.x + snapshot.padding[3];
             if (!snapshot.value.empty()) {
                 base_x += text_measure(
@@ -2484,8 +2428,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 (g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor);
             if (cursor_units > g_ime.composition_text.size())
                 cursor_units = g_ime.composition_text.size();
-            auto prefix = wstring_to_utf8(
+            auto prefix_utf8 = cppx::unicode::wide_to_utf8(
                 std::wstring_view(g_ime.composition_text.data(), cursor_units));
+            std::string prefix = prefix_utf8
+                ? std::move(*prefix_utf8)
+                : std::string{};
             float caret_x = base_x;
             if (!prefix.empty()) {
                 caret_x += text_measure(
@@ -2534,13 +2481,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                             6.0f, 0.0f, 2.0f);
                     }
                     if (hit.index < g_ime.candidates.size()) {
+                        auto candidate_utf8 = cppx::unicode::wide_to_utf8(
+                            g_ime.candidates[hit.index]);
                         append_overlay_text(
                             hit.x + 10.0f,
                             hit.y + (hit.h - snapshot.line_height) * 0.5f,
                             snapshot.font_size,
                             snapshot.mono,
                             snapshot.foreground,
-                            wstring_to_utf8(g_ime.candidates[hit.index]),
+                            candidate_utf8 ? std::move(*candidate_utf8) : std::string{},
                             snapshot.line_height);
                     }
                 } else if (hit.kind == CandidateHitKind::prev_page
@@ -2726,16 +2675,6 @@ inline std::optional<unsigned int> renderer_hit_test(float x, float y,
     return std::nullopt;
 }
 
-inline void windows_open_url(char const* url, unsigned int len) {
-    auto wide = utf8_to_wstring(url, len);
-    if (wide.empty()) return;
-    auto result = reinterpret_cast<std::intptr_t>(
-        ShellExecuteW(nullptr, L"open", wide.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
-    if (result <= 32) {
-        std::fprintf(stderr, "[windows] ShellExecuteW failed (%td)\n", result);
-    }
-}
-
 #endif
 
 } // namespace phenotype::native::detail
@@ -2766,7 +2705,18 @@ inline platform_api const& windows_platform() {
             detail::input_handle_cursor_pos,
             detail::input_handle_mouse_button,
         },
-        detail::windows_open_url,
+        [](char const* url, unsigned int len) {
+            auto opened = cppx::os::system::open_url(std::string_view(url, len));
+            if (!opened) {
+                std::fprintf(
+                    stderr,
+                    "[windows] failed to open url: %.*s (%.*s)\n",
+                    static_cast<int>(len),
+                    url,
+                    static_cast<int>(cppx::os::to_string(opened.error()).size()),
+                    cppx::os::to_string(opened.error()).data());
+            }
+        },
         nullptr,
     };
     return api;
