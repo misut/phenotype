@@ -51,6 +51,10 @@ module;
 #pragma comment(lib, "ole32.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "windowscodecs.lib")
+
+#ifdef DrawText
+#undef DrawText
+#endif
 #endif
 #endif
 
@@ -60,6 +64,7 @@ export module phenotype.native.windows;
 import cppx.http.system;
 import phenotype.commands;
 import phenotype.state;
+import phenotype.types;
 import phenotype.native.platform;
 import phenotype.native.stub;
 
@@ -902,6 +907,15 @@ inline D3D12_GPU_DESCRIPTOR_HANDLE srv_gpu_handle(UINT slot) {
     return handle;
 }
 
+inline Color unpack_color(unsigned int packed) noexcept {
+    return {
+        static_cast<unsigned char>((packed >> 24) & 0xFF),
+        static_cast<unsigned char>((packed >> 16) & 0xFF),
+        static_cast<unsigned char>((packed >> 8) & 0xFF),
+        static_cast<unsigned char>(packed & 0xFF),
+    };
+}
+
 inline void append_color_instance(std::vector<float>& color_data,
                                   float x, float y, float w, float h,
                                   float r, float g, float b, float a,
@@ -921,6 +935,221 @@ inline void append_textured_quad(std::vector<float>& quad_data,
         x, y, w, h,
         u, v, uw, vh,
     });
+}
+
+struct CommandReader {
+    unsigned char const* cur = nullptr;
+    unsigned char const* end = nullptr;
+
+    bool can_read(unsigned int bytes) const noexcept {
+        return static_cast<std::size_t>(end - cur) >= bytes;
+    }
+
+    bool read_u32(unsigned int& value) noexcept {
+        if (!can_read(4)) return false;
+        std::memcpy(&value, cur, 4);
+        cur += 4;
+        return true;
+    }
+
+    bool read_f32(float& value) noexcept {
+        unsigned int bits = 0;
+        if (!read_u32(bits)) return false;
+        std::memcpy(&value, &bits, 4);
+        return true;
+    }
+
+    bool read_string(std::string& value, unsigned int len) {
+        if (!can_read(len)) return false;
+        value.assign(reinterpret_cast<char const*>(cur), len);
+        cur += len;
+        auto padded_len = (len + 3u) & ~3u;
+        if (padded_len > len) {
+            auto padding = padded_len - len;
+            if (!can_read(padding)) return false;
+            cur += padding;
+        }
+        return true;
+    }
+};
+
+struct PendingImageCmd {
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+    std::string url;
+};
+
+struct DecodedFrame {
+    double clear_r = 0.98;
+    double clear_g = 0.98;
+    double clear_b = 0.98;
+    double clear_a = 1.0;
+    std::vector<float> color_data;
+    std::vector<float> image_data;
+    std::vector<TextEntry> text_entries;
+    std::vector<HitRegionCmd> hit_regions;
+    std::vector<PendingImageCmd> images;
+};
+
+inline bool decode_frame_commands(unsigned char const* buf,
+                                  unsigned int len,
+                                  float line_height_ratio,
+                                  DecodedFrame& frame) {
+    frame = {};
+    CommandReader reader{buf, buf + len};
+    while (reader.cur < reader.end) {
+        unsigned int raw_cmd = 0;
+        if (!reader.read_u32(raw_cmd))
+            return false;
+
+        switch (static_cast<Cmd>(raw_cmd)) {
+        case Cmd::Clear: {
+            unsigned int packed = 0;
+            if (!reader.read_u32(packed))
+                return false;
+            auto color = unpack_color(packed);
+            frame.clear_r = color.r / 255.0;
+            frame.clear_g = color.g / 255.0;
+            frame.clear_b = color.b / 255.0;
+            frame.clear_a = color.a / 255.0;
+            break;
+        }
+        case Cmd::FillRect: {
+            float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+            unsigned int packed = 0;
+            if (!reader.read_f32(x) || !reader.read_f32(y)
+                || !reader.read_f32(w) || !reader.read_f32(h)
+                || !reader.read_u32(packed))
+                return false;
+            auto color = unpack_color(packed);
+            append_color_instance(
+                frame.color_data,
+                x, y, w, h,
+                color.r / 255.0f, color.g / 255.0f,
+                color.b / 255.0f, color.a / 255.0f);
+            break;
+        }
+        case Cmd::StrokeRect: {
+            float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+            float line_width = 0.0f;
+            unsigned int packed = 0;
+            if (!reader.read_f32(x) || !reader.read_f32(y)
+                || !reader.read_f32(w) || !reader.read_f32(h)
+                || !reader.read_f32(line_width)
+                || !reader.read_u32(packed))
+                return false;
+            auto color = unpack_color(packed);
+            append_color_instance(
+                frame.color_data,
+                x, y, w, h,
+                color.r / 255.0f, color.g / 255.0f,
+                color.b / 255.0f, color.a / 255.0f,
+                0.0f, line_width, 1.0f);
+            break;
+        }
+        case Cmd::RoundRect: {
+            float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+            float radius = 0.0f;
+            unsigned int packed = 0;
+            if (!reader.read_f32(x) || !reader.read_f32(y)
+                || !reader.read_f32(w) || !reader.read_f32(h)
+                || !reader.read_f32(radius)
+                || !reader.read_u32(packed))
+                return false;
+            auto color = unpack_color(packed);
+            append_color_instance(
+                frame.color_data,
+                x, y, w, h,
+                color.r / 255.0f, color.g / 255.0f,
+                color.b / 255.0f, color.a / 255.0f,
+                radius, 0.0f, 2.0f);
+            break;
+        }
+        case Cmd::DrawText: {
+            float x = 0.0f, y = 0.0f, font_size = 0.0f;
+            unsigned int mono = 0;
+            unsigned int packed = 0;
+            unsigned int text_len = 0;
+            std::string text;
+            if (!reader.read_f32(x) || !reader.read_f32(y)
+                || !reader.read_f32(font_size)
+                || !reader.read_u32(mono)
+                || !reader.read_u32(packed)
+                || !reader.read_u32(text_len)
+                || !reader.read_string(text, text_len))
+                return false;
+            auto color = unpack_color(packed);
+            frame.text_entries.push_back({
+                x,
+                y,
+                font_size,
+                mono != 0,
+                color.r / 255.0f,
+                color.g / 255.0f,
+                color.b / 255.0f,
+                color.a / 255.0f,
+                std::move(text),
+                font_size * line_height_ratio,
+            });
+            break;
+        }
+        case Cmd::DrawLine: {
+            float x1 = 0.0f, y1 = 0.0f, x2 = 0.0f, y2 = 0.0f;
+            float thickness = 0.0f;
+            unsigned int packed = 0;
+            if (!reader.read_f32(x1) || !reader.read_f32(y1)
+                || !reader.read_f32(x2) || !reader.read_f32(y2)
+                || !reader.read_f32(thickness)
+                || !reader.read_u32(packed))
+                return false;
+            auto color = unpack_color(packed);
+            float dx = x2 - x1;
+            float dy = y2 - y1;
+            float line_len = std::sqrt(dx * dx + dy * dy);
+            float w = (dy == 0.0f) ? line_len : thickness;
+            float h = (dx == 0.0f) ? line_len : thickness;
+            float x = (dx == 0.0f)
+                ? x1 - thickness / 2.0f
+                : (x1 < x2 ? x1 : x2);
+            float y = (dy == 0.0f)
+                ? y1 - thickness / 2.0f
+                : (y1 < y2 ? y1 : y2);
+            append_color_instance(
+                frame.color_data,
+                x, y, w, h,
+                color.r / 255.0f, color.g / 255.0f,
+                color.b / 255.0f, color.a / 255.0f,
+                0.0f, 0.0f, 3.0f);
+            break;
+        }
+        case Cmd::HitRegion: {
+            HitRegionCmd hit{};
+            if (!reader.read_f32(hit.x) || !reader.read_f32(hit.y)
+                || !reader.read_f32(hit.w) || !reader.read_f32(hit.h)
+                || !reader.read_u32(hit.callback_id)
+                || !reader.read_u32(hit.cursor_type))
+                return false;
+            frame.hit_regions.push_back(hit);
+            break;
+        }
+        case Cmd::DrawImage: {
+            PendingImageCmd image{};
+            unsigned int url_len = 0;
+            if (!reader.read_f32(image.x) || !reader.read_f32(image.y)
+                || !reader.read_f32(image.w) || !reader.read_f32(image.h)
+                || !reader.read_u32(url_len)
+                || !reader.read_string(image.url, url_len))
+                return false;
+            frame.images.push_back(std::move(image));
+            break;
+        }
+        default:
+            return false;
+        }
+    }
+    return true;
 }
 
 inline std::optional<CandidateHit> find_candidate_hit(float x, float y) {
@@ -2306,118 +2535,57 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         if (FAILED(resize_swap_chain())) return;
     }
 
-    auto cmds = parse_commands(buf, len);
-    process_completed_images();
     float text_scale = current_backing_scale(g_renderer.window);
     float line_height_ratio = ::phenotype::detail::g_app.theme.line_height_ratio;
     float const scroll_y = ::phenotype::detail::g_app.scroll_y;
+    DecodedFrame decoded;
+    if (!decode_frame_commands(buf, len, line_height_ratio, decoded)) {
+        if (g_renderer.debug_enabled) {
+            std::fprintf(stderr,
+                         "[phenotype-native] dropped invalid draw command stream (%u bytes)\n",
+                         len);
+        }
+        return;
+    }
 
-    double cr = 0.98;
-    double cg = 0.98;
-    double cb = 0.98;
-    double ca = 1.0;
-    std::vector<float> color_data;
-    std::vector<float> image_data;
-    std::vector<TextEntry> text_entries;
-    g_renderer.hit_regions.clear();
-
-    for (auto const& cmd : cmds) {
-        if (auto const* clear = std::get_if<ClearCmd>(&cmd)) {
-            cr = clear->color.r / 255.0;
-            cg = clear->color.g / 255.0;
-            cb = clear->color.b / 255.0;
-            ca = clear->color.a / 255.0;
-        } else if (auto const* text = std::get_if<DrawTextCmd>(&cmd)) {
-            text_entries.push_back({
-                text->x,
-                text->y,
-                text->font_size,
-                text->mono,
-                text->color.r / 255.0f,
-                text->color.g / 255.0f,
-                text->color.b / 255.0f,
-                text->color.a / 255.0f,
-                text->text,
-                text->font_size * line_height_ratio,
-            });
-        } else if (auto const* hr = std::get_if<HitRegionCmd>(&cmd)) {
-            g_renderer.hit_regions.push_back(*hr);
-        } else if (auto const* rect = std::get_if<FillRectCmd>(&cmd)) {
-            append_color_instance(
-                color_data,
-                rect->x, rect->y, rect->w, rect->h,
-                rect->color.r / 255.0f, rect->color.g / 255.0f,
-                rect->color.b / 255.0f, rect->color.a / 255.0f);
-        } else if (auto const* stroke = std::get_if<StrokeRectCmd>(&cmd)) {
-            append_color_instance(
-                color_data,
-                stroke->x, stroke->y, stroke->w, stroke->h,
-                stroke->color.r / 255.0f, stroke->color.g / 255.0f,
-                stroke->color.b / 255.0f, stroke->color.a / 255.0f,
-                0.0f, stroke->line_width, 1.0f);
-        } else if (auto const* round = std::get_if<RoundRectCmd>(&cmd)) {
-            append_color_instance(
-                color_data,
-                round->x, round->y, round->w, round->h,
-                round->color.r / 255.0f, round->color.g / 255.0f,
-                round->color.b / 255.0f, round->color.a / 255.0f,
-                round->radius, 0.0f, 2.0f);
-        } else if (auto const* line = std::get_if<DrawLineCmd>(&cmd)) {
-            float dx = line->x2 - line->x1;
-            float dy = line->y2 - line->y1;
-            float line_len = std::sqrt(dx * dx + dy * dy);
-            float w = (dy == 0) ? line_len : line->thickness;
-            float h = (dx == 0) ? line_len : line->thickness;
-            float x = (dx == 0)
-                ? line->x1 - line->thickness / 2
-                : (line->x1 < line->x2 ? line->x1 : line->x2);
-            float y = (dy == 0)
-                ? line->y1 - line->thickness / 2
-                : (line->y1 < line->y2 ? line->y1 : line->y2);
-            append_color_instance(
-                color_data,
-                x, y, w, h,
-                line->color.r / 255.0f, line->color.g / 255.0f,
-                line->color.b / 255.0f, line->color.a / 255.0f,
-                0.0f, 0.0f, 3.0f);
-        } else if (auto const* image = std::get_if<DrawImageCmd>(&cmd)) {
-            auto it = g_images.cache.find(image->url);
-            if (it == g_images.cache.end()) {
-                g_images.cache.try_emplace(image->url, ImageCacheEntry{});
-                if (is_http_url(image->url)) {
-                    queue_image_load(image->url);
-                } else {
-                    auto decoded = decode_image_file(resolve_image_path(image->url));
-                    if (decoded) {
-                        decoded->url = image->url;
-                        store_decoded_image(std::move(*decoded));
-                    } else {
-                        g_images.cache[image->url].state = ImageEntryState::failed;
-                    }
-                }
-                it = g_images.cache.find(image->url);
-            }
-            if (it != g_images.cache.end() && it->second.state == ImageEntryState::ready) {
-                append_textured_quad(
-                    image_data,
-                    image->x, image->y, image->w, image->h,
-                    it->second.u, it->second.v, it->second.uw, it->second.vh);
+    process_completed_images();
+    for (auto const& image : decoded.images) {
+        auto it = g_images.cache.find(image.url);
+        if (it == g_images.cache.end()) {
+            g_images.cache.try_emplace(image.url, ImageCacheEntry{});
+            if (is_http_url(image.url)) {
+                queue_image_load(image.url);
             } else {
-                bool failed = it != g_images.cache.end()
-                    && it->second.state == ImageEntryState::failed;
-                float fill = failed ? 0.90f : 0.94f;
-                float edge = failed ? 0.78f : 0.82f;
-                append_color_instance(
-                    color_data,
-                    image->x, image->y, image->w, image->h,
-                    fill, fill, fill, 1.0f,
-                    6.0f, 0.0f, 2.0f);
-                append_color_instance(
-                    color_data,
-                    image->x, image->y, image->w, image->h,
-                    edge, edge, edge, 1.0f,
-                    0.0f, 1.0f, 1.0f);
+                auto loaded = decode_image_file(resolve_image_path(image.url));
+                if (loaded) {
+                    loaded->url = image.url;
+                    store_decoded_image(std::move(*loaded));
+                } else {
+                    g_images.cache[image.url].state = ImageEntryState::failed;
+                }
             }
+            it = g_images.cache.find(image.url);
+        }
+        if (it != g_images.cache.end() && it->second.state == ImageEntryState::ready) {
+            append_textured_quad(
+                decoded.image_data,
+                image.x, image.y, image.w, image.h,
+                it->second.u, it->second.v, it->second.uw, it->second.vh);
+        } else {
+            bool failed = it != g_images.cache.end()
+                && it->second.state == ImageEntryState::failed;
+            float fill = failed ? 0.90f : 0.94f;
+            float edge = failed ? 0.78f : 0.82f;
+            append_color_instance(
+                decoded.color_data,
+                image.x, image.y, image.w, image.h,
+                fill, fill, fill, 1.0f,
+                6.0f, 0.0f, 2.0f);
+            append_color_instance(
+                decoded.color_data,
+                image.x, image.y, image.w, image.h,
+                edge, edge, edge, 1.0f,
+                0.0f, 1.0f, 1.0f);
         }
     }
 
@@ -2425,7 +2593,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                                    Color color, std::string text, float line_height) {
         if (text.empty())
             return;
-        text_entries.push_back({
+        decoded.text_entries.push_back({
             x,
             y,
             font_size,
@@ -2468,7 +2636,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                     composition.c_str(),
                     static_cast<unsigned int>(composition.size()));
                 append_color_instance(
-                    color_data,
+                    decoded.color_data,
                     base_x,
                     draw_y + snapshot.padding[0] + snapshot.line_height - 2.0f,
                     preedit_w,
@@ -2494,7 +2662,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                     static_cast<unsigned int>(prefix.size()));
             }
             append_color_instance(
-                color_data,
+                decoded.color_data,
                 caret_x,
                 draw_y + snapshot.padding[0] + 2.0f,
                 1.5f,
@@ -2507,12 +2675,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
         if (g_ime.overlay.visible) {
             append_color_instance(
-                color_data,
+                decoded.color_data,
                 g_ime.overlay.x, g_ime.overlay.y, g_ime.overlay.w, g_ime.overlay.h,
                 1.0f, 1.0f, 1.0f, 0.98f,
                 8.0f, 0.0f, 2.0f);
             append_color_instance(
-                color_data,
+                decoded.color_data,
                 g_ime.overlay.x, g_ime.overlay.y, g_ime.overlay.w, g_ime.overlay.h,
                 0.80f, 0.84f, 0.90f, 1.0f,
                 0.0f, 1.0f, 1.0f);
@@ -2524,7 +2692,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                     if (selected || hovered) {
                         float alpha = selected ? 0.22f : 0.12f;
                         append_color_instance(
-                            color_data,
+                            decoded.color_data,
                             hit.x + 2.0f, hit.y + 1.0f, hit.w - 4.0f, hit.h - 2.0f,
                             snapshot.accent.r / 255.0f,
                             snapshot.accent.g / 255.0f,
@@ -2547,12 +2715,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                     bool hovered = g_ime.hovered_kind == hit.kind;
                     float fill = hovered ? 0.90f : 0.95f;
                     append_color_instance(
-                        color_data,
+                        decoded.color_data,
                         hit.x, hit.y, hit.w, hit.h,
                         fill, fill, fill, 1.0f,
                         6.0f, 0.0f, 2.0f);
                     append_color_instance(
-                        color_data,
+                        decoded.color_data,
                         hit.x, hit.y, hit.w, hit.h,
                         0.82f, 0.82f, 0.82f, 1.0f,
                         0.0f, 1.0f, 1.0f);
@@ -2595,10 +2763,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     g_renderer.command_list->RSSetScissorRects(1, &scissor);
     g_renderer.command_list->OMSetRenderTargets(1, &frame.rtv_handle, FALSE, nullptr);
     float clear_color[4]{
-        static_cast<float>(cr),
-        static_cast<float>(cg),
-        static_cast<float>(cb),
-        static_cast<float>(ca),
+        static_cast<float>(decoded.clear_r),
+        static_cast<float>(decoded.clear_g),
+        static_cast<float>(decoded.clear_b),
+        static_cast<float>(decoded.clear_a),
     };
     g_renderer.command_list->ClearRenderTargetView(frame.rtv_handle, clear_color, 0, nullptr);
 
@@ -2613,12 +2781,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     g_renderer.command_list->SetGraphicsRoot32BitConstants(0, 4, uniforms, 0);
     g_renderer.command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
 
-    UINT color_count = static_cast<UINT>(color_data.size() / 12);
+    UINT color_count = static_cast<UINT>(decoded.color_data.size() / 12);
     if (color_count > 0) {
-        UINT64 bytes = static_cast<UINT64>(color_data.size() * sizeof(float));
+        UINT64 bytes = static_cast<UINT64>(decoded.color_data.size() * sizeof(float));
         auto [mapped, offset] = upload_alloc(bytes, 16);
         if (mapped) {
-            std::memcpy(mapped, color_data.data(), static_cast<std::size_t>(bytes));
+            std::memcpy(mapped, decoded.color_data.data(), static_cast<std::size_t>(bytes));
             D3D12_VERTEX_BUFFER_VIEW vbv{};
             vbv.BufferLocation = g_renderer.upload.resource->GetGPUVirtualAddress() + offset;
             vbv.SizeInBytes = static_cast<UINT>(bytes);
@@ -2629,11 +2797,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         }
     }
 
-    if (!image_data.empty() && g_images.texture) {
-        UINT64 bytes = static_cast<UINT64>(image_data.size() * sizeof(float));
+    if (!decoded.image_data.empty() && g_images.texture) {
+        UINT64 bytes = static_cast<UINT64>(decoded.image_data.size() * sizeof(float));
         auto [mapped, offset] = upload_alloc(bytes, 16);
         if (mapped) {
-            std::memcpy(mapped, image_data.data(), static_cast<std::size_t>(bytes));
+            std::memcpy(mapped, decoded.image_data.data(), static_cast<std::size_t>(bytes));
             D3D12_VERTEX_BUFFER_VIEW vbv{};
             vbv.BufferLocation = g_renderer.upload.resource->GetGPUVirtualAddress() + offset;
             vbv.SizeInBytes = static_cast<UINT>(bytes);
@@ -2645,12 +2813,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             g_renderer.command_list->SetPipelineState(g_renderer.text_pipeline.Get());
             g_renderer.command_list->IASetVertexBuffers(0, 1, &vbv);
             g_renderer.command_list->DrawInstanced(
-                6, static_cast<UINT>(image_data.size() / 8), 0, 0);
+                6, static_cast<UINT>(decoded.image_data.size() / 8), 0, 0);
         }
     }
 
-    if (!text_entries.empty() && g_text.initialized) {
-        auto atlas = text_build_atlas(text_entries, text_scale);
+    if (!decoded.text_entries.empty() && g_text.initialized) {
+        auto atlas = text_build_atlas(decoded.text_entries, text_scale);
         if (!atlas.quads.empty() && !atlas.pixels.empty()
             && SUCCEEDED(create_atlas_texture(atlas, frame))) {
             std::vector<float> text_data;
@@ -2687,6 +2855,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         D3D12_RESOURCE_STATE_RENDER_TARGET,
         D3D12_RESOURCE_STATE_PRESENT);
     end_frame(frame);
+    g_renderer.hit_regions.swap(decoded.hit_regions);
 }
 
 inline void renderer_shutdown() {
@@ -2723,6 +2892,31 @@ inline std::optional<unsigned int> renderer_hit_test(float x, float y,
             return hr.callback_id;
     }
     return std::nullopt;
+}
+
+inline float windows_scroll_delta_y(double dy,
+                                    float line_height,
+                                    float viewport_height) {
+    if (dy == 0.0) return 0.0f;
+
+    if (line_height <= 0.0f)
+        line_height = 1.0f;
+
+    UINT lines = 3;
+    if (!SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0))
+        lines = 3;
+
+    if (lines == 0u)
+        return 0.0f;
+
+    if (lines == WHEEL_PAGESCROLL) {
+        float page = viewport_height - line_height;
+        if (page < line_height)
+            page = line_height;
+        return static_cast<float>(dy) * page;
+    }
+
+    return static_cast<float>(dy) * static_cast<float>(lines) * line_height;
 }
 
 inline void windows_open_url(char const* url, unsigned int len) {
@@ -2764,6 +2958,7 @@ inline platform_api const& windows_platform() {
             detail::sync_ime_windows,
             detail::input_handle_cursor_pos,
             detail::input_handle_mouse_button,
+            detail::windows_scroll_delta_y,
         },
         detail::windows_open_url,
         nullptr,
