@@ -11,6 +11,8 @@
 #include <thread>
 #include <vector>
 
+#ifndef __wasi__
+
 #ifdef _WIN32
 #include <GLFW/glfw3.h>
 #endif
@@ -406,3 +408,12 @@ int main() {
 #endif
     return 0;
 }
+
+#else
+
+int main() {
+    std::puts("SKIP: native backend tests are not available on wasi");
+    return 0;
+}
+
+#endif
