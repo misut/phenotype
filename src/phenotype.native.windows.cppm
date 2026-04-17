@@ -57,8 +57,6 @@ module;
 export module phenotype.native.windows;
 
 #ifndef __wasi__
-import cppx.env.system;
-import cppx.resource;
 import cppx.http.system;
 import phenotype.commands;
 import phenotype.state;
@@ -79,6 +77,19 @@ inline int logical_pixels(float logical, float scale, int minimum = 1) {
 inline float snap_to_pixel_grid(float value, float scale) {
     float s = sanitize_scale(scale);
     return std::round(value * s) / s;
+}
+
+inline bool env_enabled(char const* name) {
+#ifdef _WIN32
+    char buf[8]{};
+    DWORD len = GetEnvironmentVariableA(name, buf, static_cast<DWORD>(std::size(buf)));
+    if (len == 0 || len >= std::size(buf)) return false;
+    return buf[0] == '1' || buf[0] == 'y' || buf[0] == 'Y'
+        || buf[0] == 't' || buf[0] == 'T';
+#else
+    (void)name;
+    return false;
+#endif
 }
 
 struct LineBoxMetrics {
@@ -844,6 +855,17 @@ inline void request_window_repaint() {
         g_ime.request_repaint();
 }
 
+inline bool is_http_url(std::string const& url) {
+    return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
+}
+
+inline std::filesystem::path resolve_image_path(std::string const& url) {
+    auto path = std::filesystem::path(url);
+    if (path.is_absolute())
+        return path;
+    return std::filesystem::current_path() / path;
+}
+
 inline float current_backing_scale(GLFWwindow* window) {
     if (!window) return 1.0f;
     int fbw = 0;
@@ -1455,9 +1477,7 @@ inline void image_worker_main() {
 
         DecodedImage decoded;
         decoded.url = url;
-        auto const kind = cppx::resource::classify(url);
-        if (kind == cppx::resource::resource_kind::http_url
-            || kind == cppx::resource::resource_kind::https_url) {
+        if (is_http_url(url)) {
             auto resp = cppx::http::system::get(url);
             if (resp && resp->stat.ok()) {
                 std::vector<unsigned char> body;
@@ -1475,9 +1495,7 @@ inline void image_worker_main() {
                 decoded.failed = true;
             }
         } else {
-            auto result = decode_image_file(cppx::resource::resolve_path(
-                std::filesystem::current_path(),
-                std::filesystem::path(url)));
+            auto result = decode_image_file(resolve_image_path(url));
             if (result) {
                 decoded = std::move(*result);
                 decoded.url = url;
@@ -2233,10 +2251,8 @@ inline void end_frame(FrameContext& frame) {
 inline void renderer_init(GLFWwindow* window) {
     if (g_renderer.initialized) return;
     g_renderer.window = window;
-    g_renderer.debug_enabled = cppx::env::system::get_bool_or(
-        "PHENOTYPE_DX12_DEBUG", false);
-    g_renderer.warp_enabled = cppx::env::system::get_bool_or(
-        "PHENOTYPE_DX12_WARP", false);
+    g_renderer.debug_enabled = env_enabled("PHENOTYPE_DX12_DEBUG");
+    g_renderer.warp_enabled = env_enabled("PHENOTYPE_DX12_WARP");
 
     auto co_hr = CoInitializeEx(
         nullptr,
@@ -2368,14 +2384,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             auto it = g_images.cache.find(image->url);
             if (it == g_images.cache.end()) {
                 g_images.cache.try_emplace(image->url, ImageCacheEntry{});
-                auto const kind = cppx::resource::classify(image->url);
-                if (kind == cppx::resource::resource_kind::http_url
-                    || kind == cppx::resource::resource_kind::https_url) {
+                if (is_http_url(image->url)) {
                     queue_image_load(image->url);
                 } else {
-                    auto decoded = decode_image_file(cppx::resource::resolve_path(
-                        std::filesystem::current_path(),
-                        std::filesystem::path(image->url)));
+                    auto decoded = decode_image_file(resolve_image_path(image->url));
                     if (decoded) {
                         decoded->url = image->url;
                         store_decoded_image(std::move(*decoded));
