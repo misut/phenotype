@@ -25,3 +25,13 @@ name = "github.com/misut/txn"
 version = "0.6.1"
 commit = "374a1ee7b84d1d6a53fd88280293bcac27fab4a3"
 
+[[package]]
+name = "github.com/misut/cppx"
+version = "1.2.0"
+commit = "6597b1fa19a78a13851d05c3d5bf9ff0c79852f7"
+
+[[package]]
+name = "github.com/misut/txn"
+version = "0.6.2"
+commit = "4614675bae7cd73c655524f842279ebb7f5ad742"
+

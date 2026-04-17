@@ -37,12 +37,12 @@ FetchContent_Declare(jsoncpp
 )
 FetchContent_Declare(cppx
     GIT_REPOSITORY https://github.com/misut/cppx.git
-    GIT_TAG v1.0.3
+    GIT_TAG v1.2.0
     GIT_SHALLOW ON
 )
 FetchContent_Declare(txn
     GIT_REPOSITORY https://github.com/misut/txn.git
-    GIT_TAG v0.6.1
+    GIT_TAG v0.6.2
     GIT_SHALLOW ON
 )
 FetchContent_MakeAvailable(jsoncpp cppx txn)

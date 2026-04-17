@@ -17,6 +17,7 @@ module;
 #include <mutex>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <utility>
@@ -32,7 +33,6 @@ module;
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <imm.h>
-#include <shellapi.h>
 #include <wincodec.h>
 
 #include <d3d12.h>
@@ -49,7 +49,6 @@ module;
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "imm32.lib")
 #pragma comment(lib, "ole32.lib")
-#pragma comment(lib, "shell32.lib")
 #pragma comment(lib, "user32.lib")
 #pragma comment(lib, "windowscodecs.lib")
 #endif
@@ -2444,7 +2443,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (snapshot.valid) {
         float draw_y = snapshot.y - scroll_y;
         if (g_ime.composition_active && !g_ime.composition_text.empty()) {
-            std::string composition = wstring_to_utf8(g_ime.composition_text);
+            auto composition = wstring_to_utf8(g_ime.composition_text);
             float base_x = snapshot.x + snapshot.padding[3];
             if (!snapshot.value.empty()) {
                 base_x += text_measure(
