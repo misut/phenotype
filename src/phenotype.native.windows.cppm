@@ -1586,6 +1586,19 @@ inline bool input_handle_mouse_button(float x, float y,
     return inside_panel || ok;
 }
 
+inline bool input_dismiss_transient() {
+    bool had_transient = g_ime.composition_active
+        || !g_ime.composition_text.empty()
+        || g_ime.candidate_open
+        || !g_ime.candidates.empty()
+        || g_ime.overlay.visible;
+    if (!had_transient)
+        return false;
+    clear_ime_state();
+    request_window_repaint();
+    return true;
+}
+
 inline std::expected<DecodedImage, std::string> decode_image_with_decoder(
         IWICImagingFactory* factory,
         IWICBitmapDecoder* decoder) {
@@ -2963,6 +2976,7 @@ inline platform_api const& windows_platform() {
             detail::sync_ime_windows,
             detail::input_handle_cursor_pos,
             detail::input_handle_mouse_button,
+            detail::input_dismiss_transient,
             detail::windows_scroll_delta_y,
         },
         detail::windows_open_url,

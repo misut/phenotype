@@ -122,83 +122,354 @@ inline void repaint_current() {
     }
 }
 
-inline void on_mouse_button(GLFWwindow* window, int button, int action, int) {
-    double mx = 0.0;
-    double my = 0.0;
-    glfwGetCursorPos(window, &mx, &my);
-    if (g_app_state.host && g_app_state.host->platform
-        && g_app_state.host->platform->input.handle_mouse_button
-        && g_app_state.host->platform->input.handle_mouse_button(
-            static_cast<float>(mx),
-            static_cast<float>(my),
-            button,
-            action,
-            0)) {
-        repaint_current();
-        return;
-    }
-    if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) return;
-    if (auto h = hit_test(static_cast<float>(mx), static_cast<float>(my),
-                          g_app_state.scroll_y)) {
-        ::phenotype::detail::set_focus_id(*h);
-        ::phenotype::detail::handle_event(*h);
-        repaint_current();
-    } else {
-        ::phenotype::detail::set_focus_id(invalid_callback_id);
-        repaint_current();
-    }
+inline void bind_host(native_host& host, float scroll_y = 0.0f) {
+    g_app_state = {&host, scroll_y, invalid_callback_id};
+    ::phenotype::detail::set_scroll_y(scroll_y);
+    ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
 }
 
-inline void on_cursor_pos(GLFWwindow* window, double mx, double my) {
-    if (g_app_state.host && g_app_state.host->platform
-        && g_app_state.host->platform->input.handle_cursor_pos
-        && g_app_state.host->platform->input.handle_cursor_pos(
-            static_cast<float>(mx),
-            static_cast<float>(my))) {
-        g_app_state.hovered_id = invalid_callback_id;
-        if (::phenotype::detail::set_hover_id(invalid_callback_id))
-            repaint_current();
-        static GLFWcursor* arrow = nullptr;
-        if (!arrow) arrow = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
-        glfwSetCursor(window, arrow);
+inline void update_cursor(GLFWwindow* window, bool pointing) {
+    if (!window)
         return;
-    }
-    auto h = hit_test(static_cast<float>(mx), static_cast<float>(my),
-                      g_app_state.scroll_y);
-    unsigned int id = h.value_or(invalid_callback_id);
-    if (id != g_app_state.hovered_id) {
-        g_app_state.hovered_id = id;
-        if (::phenotype::detail::set_hover_id(id))
-            repaint_current();
-    }
-
     static GLFWcursor* arrow = nullptr;
     static GLFWcursor* hand = nullptr;
     if (!arrow) arrow = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
     if (!hand) hand = glfwCreateStandardCursor(GLFW_POINTING_HAND_CURSOR);
-    glfwSetCursor(window, h ? hand : arrow);
+    glfwSetCursor(window, pointing ? hand : arrow);
 }
 
-inline void on_scroll(GLFWwindow* window, double, double dy) {
+inline float viewport_height(GLFWwindow* window) {
+    if (window) {
+        int w = 0;
+        int h = 0;
+        glfwGetWindowSize(window, &w, &h);
+        return (h > 0) ? static_cast<float>(h) : 1.0f;
+    }
+    if (g_app_state.host)
+        return g_app_state.host->canvas_height();
+    return 600.0f;
+}
+
+inline float max_scroll_for_viewport(float viewport_height) {
     float total = ::phenotype::detail::get_total_height();
-    int w = 0;
-    int h = 0;
-    glfwGetWindowSize(window, &w, &h);
-    float max_scroll = total - static_cast<float>(h);
-    if (max_scroll < 0) max_scroll = 0;
+    float max_scroll = total - viewport_height;
+    return (max_scroll > 0.0f) ? max_scroll : 0.0f;
+}
+
+inline bool set_scroll_position(float next_scroll,
+                                float viewport_height,
+                                char const* detail) {
+    float max_scroll = max_scroll_for_viewport(viewport_height);
+    if (next_scroll < 0.0f) next_scroll = 0.0f;
+    if (next_scroll > max_scroll) next_scroll = max_scroll;
+    if (next_scroll == g_app_state.scroll_y) {
+        ::phenotype::detail::note_input_event(
+            "scroll", "shell", detail, "ignored", invalid_callback_id);
+        return false;
+    }
+    g_app_state.scroll_y = next_scroll;
+    repaint_current();
+    ::phenotype::detail::note_input_event(
+        "scroll", "shell", detail, "handled", invalid_callback_id);
+    return true;
+}
+
+inline bool scroll_by_pixels(float delta_pixels,
+                             float viewport_height,
+                             char const* detail) {
+    return set_scroll_position(g_app_state.scroll_y + delta_pixels,
+                               viewport_height,
+                               detail);
+}
+
+inline bool dismiss_platform_transient() {
+    auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
+    return platform && platform->input.dismiss_transient
+        && platform->input.dismiss_transient();
+}
+
+inline bool dispatch_mouse_button(float mx, float my,
+                                  int button, int action, int mods,
+                                  GLFWwindow* window = nullptr) {
+    if (g_app_state.host && g_app_state.host->platform
+        && g_app_state.host->platform->input.handle_mouse_button
+        && g_app_state.host->platform->input.handle_mouse_button(
+            mx, my, button, action, mods)) {
+        repaint_current();
+        ::phenotype::detail::note_input_event(
+            "click", "shell", "pointer-click", "platform-consumed", invalid_callback_id);
+        return true;
+    }
+
+    if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) {
+        ::phenotype::detail::note_input_event(
+            "click", "shell", "pointer-click", "ignored", invalid_callback_id);
+        return false;
+    }
+
+    if (auto hit = hit_test(mx, my, g_app_state.scroll_y)) {
+        bool focus_changed = ::phenotype::detail::set_focus_id(
+            *hit, "shell", "pointer-focus");
+        bool activated = ::phenotype::detail::handle_event(
+            *hit, "shell", "pointer-click");
+        if (focus_changed || activated)
+            repaint_current();
+        return focus_changed || activated;
+    }
+
+    bool cleared = ::phenotype::detail::set_focus_id(
+        invalid_callback_id, "shell", "pointer-clear");
+    if (cleared)
+        repaint_current();
+    return cleared;
+}
+
+inline bool dispatch_cursor_pos(float mx, float my,
+                                GLFWwindow* window = nullptr) {
+    if (g_app_state.host && g_app_state.host->platform
+        && g_app_state.host->platform->input.handle_cursor_pos
+        && g_app_state.host->platform->input.handle_cursor_pos(mx, my)) {
+        g_app_state.hovered_id = invalid_callback_id;
+        ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
+        repaint_current();
+        update_cursor(window, false);
+        ::phenotype::detail::note_input_event(
+            "hover", "shell", "pointer-move", "platform-consumed", invalid_callback_id);
+        return true;
+    }
+
+    auto hit = hit_test(mx, my, g_app_state.scroll_y);
+    auto hovered_id = hit.value_or(invalid_callback_id);
+    g_app_state.hovered_id = hovered_id;
+    bool handled = ::phenotype::detail::set_hover_id(
+        hovered_id, "shell", "pointer-move");
+    if (handled)
+        repaint_current();
+    update_cursor(window, hit.has_value());
+    return handled;
+}
+
+inline bool dispatch_scroll(double dy, float viewport_height_value) {
     auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
     float scroll_delta = normalize_scroll_delta(
         platform,
         dy,
         scroll_line_height(),
-        static_cast<float>(h));
-    if (scroll_delta == 0.0f) return;
-    float prev_scroll = g_app_state.scroll_y;
-    g_app_state.scroll_y -= scroll_delta;
-    if (g_app_state.scroll_y < 0) g_app_state.scroll_y = 0;
-    if (g_app_state.scroll_y > max_scroll) g_app_state.scroll_y = max_scroll;
-    if (g_app_state.scroll_y != prev_scroll)
+        viewport_height_value);
+    if (scroll_delta == 0.0f) {
+        ::phenotype::detail::note_input_event(
+            "scroll", "shell", "wheel", "ignored", invalid_callback_id);
+        return false;
+    }
+    return set_scroll_position(g_app_state.scroll_y - scroll_delta,
+                               viewport_height_value,
+                               "wheel");
+}
+
+inline bool dispatch_activation(char const* detail, bool include_links) {
+    auto focused_id = ::phenotype::detail::get_focused_id();
+    if (focused_id == invalid_callback_id) {
+        ::phenotype::detail::note_input_event(
+            "key", "shell", detail, "ignored", focused_id);
+        return false;
+    }
+
+    auto role = ::phenotype::detail::focused_role();
+    bool allowed = role == ::phenotype::InteractionRole::Button
+        || role == ::phenotype::InteractionRole::Checkbox
+        || role == ::phenotype::InteractionRole::Radio
+        || (include_links && role == ::phenotype::InteractionRole::Link);
+    if (!allowed) {
+        ::phenotype::detail::note_input_event(
+            "key", "shell", detail, "ignored", focused_id);
+        return false;
+    }
+
+    bool handled = ::phenotype::detail::handle_event(focused_id, "shell", detail);
+    if (handled)
         repaint_current();
+    return handled;
+}
+
+inline char const* key_detail_name(int key, bool shift) {
+    switch (key) {
+        case GLFW_KEY_TAB: return shift ? "shift-tab" : "tab";
+        case GLFW_KEY_BACKSPACE: return "backspace";
+        case GLFW_KEY_ENTER:
+        case GLFW_KEY_KP_ENTER: return "enter";
+        case GLFW_KEY_SPACE: return "space";
+        case GLFW_KEY_LEFT: return "arrow-left";
+        case GLFW_KEY_RIGHT: return "arrow-right";
+        case GLFW_KEY_UP: return "arrow-up";
+        case GLFW_KEY_DOWN: return "arrow-down";
+        case GLFW_KEY_PAGE_UP: return "page-up";
+        case GLFW_KEY_PAGE_DOWN: return "page-down";
+        case GLFW_KEY_HOME: return "home";
+        case GLFW_KEY_END: return "end";
+        case GLFW_KEY_ESCAPE: return "escape";
+        default: return "key";
+    }
+}
+
+inline bool dispatch_key(int key, int action, int mods) {
+    bool shift = (mods & GLFW_MOD_SHIFT) != 0;
+    auto detail = key_detail_name(key, shift);
+    auto repeat_allowed = key == GLFW_KEY_BACKSPACE
+        || key == GLFW_KEY_LEFT
+        || key == GLFW_KEY_RIGHT
+        || key == GLFW_KEY_UP
+        || key == GLFW_KEY_DOWN
+        || key == GLFW_KEY_PAGE_UP
+        || key == GLFW_KEY_PAGE_DOWN
+        || key == GLFW_KEY_HOME
+        || key == GLFW_KEY_END;
+
+    if (action != GLFW_PRESS && action != GLFW_REPEAT) {
+        ::phenotype::detail::note_input_event(
+            "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
+        return false;
+    }
+    if (action == GLFW_REPEAT && !repeat_allowed) {
+        ::phenotype::detail::note_input_event(
+            "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
+        return false;
+    }
+
+    switch (key) {
+        case GLFW_KEY_TAB:
+            if (::phenotype::detail::handle_tab(shift ? 1u : 0u, "shell", detail)) {
+                repaint_current();
+                return true;
+            }
+            return false;
+        case GLFW_KEY_BACKSPACE:
+            if (::phenotype::detail::handle_key(1, 0, "shell", detail)) {
+                repaint_current();
+                return true;
+            }
+            return false;
+        case GLFW_KEY_ENTER:
+        case GLFW_KEY_KP_ENTER:
+            return dispatch_activation(detail, true);
+        case GLFW_KEY_SPACE:
+            if (::phenotype::detail::focused_is_input()) {
+                ::phenotype::detail::note_input_event(
+                    "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
+                return false;
+            }
+            return dispatch_activation(detail, false);
+        case GLFW_KEY_LEFT:
+            if (::phenotype::detail::handle_key(2, 0, "shell", detail)) {
+                repaint_current();
+                return true;
+            }
+            return false;
+        case GLFW_KEY_RIGHT:
+            if (::phenotype::detail::handle_key(3, 0, "shell", detail)) {
+                repaint_current();
+                return true;
+            }
+            return false;
+        case GLFW_KEY_UP:
+            if (::phenotype::detail::focused_is_input()) {
+                ::phenotype::detail::note_input_event(
+                    "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
+                return false;
+            }
+            return scroll_by_pixels(-scroll_line_height(), viewport_height(nullptr), detail);
+        case GLFW_KEY_DOWN:
+            if (::phenotype::detail::focused_is_input()) {
+                ::phenotype::detail::note_input_event(
+                    "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
+                return false;
+            }
+            return scroll_by_pixels(scroll_line_height(), viewport_height(nullptr), detail);
+        case GLFW_KEY_PAGE_UP: {
+            float page = viewport_height(nullptr) - scroll_line_height();
+            if (page < scroll_line_height())
+                page = scroll_line_height();
+            return scroll_by_pixels(-page, viewport_height(nullptr), detail);
+        }
+        case GLFW_KEY_PAGE_DOWN: {
+            float page = viewport_height(nullptr) - scroll_line_height();
+            if (page < scroll_line_height())
+                page = scroll_line_height();
+            return scroll_by_pixels(page, viewport_height(nullptr), detail);
+        }
+        case GLFW_KEY_HOME:
+            if (::phenotype::detail::focused_is_input()) {
+                if (::phenotype::detail::handle_key(4, 0, "shell", detail)) {
+                    repaint_current();
+                    return true;
+                }
+                return false;
+            }
+            return set_scroll_position(0.0f, viewport_height(nullptr), detail);
+        case GLFW_KEY_END:
+            if (::phenotype::detail::focused_is_input()) {
+                if (::phenotype::detail::handle_key(5, 0, "shell", detail)) {
+                    repaint_current();
+                    return true;
+                }
+                return false;
+            }
+            return set_scroll_position(max_scroll_for_viewport(viewport_height(nullptr)),
+                                       viewport_height(nullptr),
+                                       detail);
+        case GLFW_KEY_ESCAPE: {
+            bool dismissed = dismiss_platform_transient();
+            bool cleared = false;
+            if (::phenotype::detail::get_focused_id() != invalid_callback_id)
+                cleared = ::phenotype::detail::set_focus_id(
+                    invalid_callback_id, "shell", "escape-clear");
+            bool handled = dismissed || cleared;
+            if (handled)
+                repaint_current();
+            ::phenotype::detail::note_input_event(
+                "key", "shell", detail, handled ? "handled" : "ignored", invalid_callback_id);
+            return handled;
+        }
+        default:
+            ::phenotype::detail::note_input_event(
+                "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
+            return false;
+    }
+}
+
+inline bool dispatch_char(unsigned int codepoint) {
+    auto detail = (codepoint == static_cast<unsigned int>(' ')) ? "space-char" : "char";
+    if (!::phenotype::detail::focused_is_input()) {
+        ::phenotype::detail::note_input_event(
+            "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
+        return false;
+    }
+    if (::phenotype::detail::handle_key(0, codepoint, "shell", detail)) {
+        repaint_current();
+        return true;
+    }
+    return false;
+}
+
+inline void on_mouse_button(GLFWwindow* window, int button, int action, int mods) {
+    double mx = 0.0;
+    double my = 0.0;
+    glfwGetCursorPos(window, &mx, &my);
+    dispatch_mouse_button(static_cast<float>(mx),
+                          static_cast<float>(my),
+                          button,
+                          action,
+                          mods,
+                          window);
+}
+
+inline void on_cursor_pos(GLFWwindow* window, double mx, double my) {
+    dispatch_cursor_pos(static_cast<float>(mx),
+                        static_cast<float>(my),
+                        window);
+}
+
+inline void on_scroll(GLFWwindow* window, double, double dy) {
+    dispatch_scroll(dy, viewport_height(window));
 }
 
 inline void on_framebuffer_size(GLFWwindow*, int, int) {
@@ -206,30 +477,11 @@ inline void on_framebuffer_size(GLFWwindow*, int, int) {
 }
 
 inline void on_key(GLFWwindow*, int key, int, int action, int mods) {
-    if (action != GLFW_PRESS && action != GLFW_REPEAT) return;
-    if (key == GLFW_KEY_TAB) {
-        ::phenotype::detail::handle_tab((mods & GLFW_MOD_SHIFT) ? 1 : 0);
-        repaint_current();
-        return;
-    }
-    if (key == GLFW_KEY_BACKSPACE) {
-        ::phenotype::detail::handle_key(1, 0);
-        repaint_current();
-        return;
-    }
-    if (key == GLFW_KEY_ENTER) {
-        unsigned int focused_id = ::phenotype::detail::get_focused_id();
-        if (focused_id != invalid_callback_id) {
-            ::phenotype::detail::handle_event(focused_id);
-            repaint_current();
-        }
-    }
+    dispatch_key(key, action, mods);
 }
 
 inline void on_char(GLFWwindow*, unsigned int codepoint) {
-    ::phenotype::detail::handle_key(0, codepoint);
-    if (::phenotype::detail::focused_is_input())
-        repaint_current();
+    dispatch_char(codepoint);
 }
 
 inline void install_callbacks(GLFWwindow* window) {
@@ -249,6 +501,7 @@ template<typename State, typename Msg, typename View, typename Update>
     requires std::invocable<View, State const&>
           && std::invocable<Update, State&, Msg>
 void run_host(native_host& host, View view, Update update) {
+    bind_host(host, g_app_state.scroll_y);
     detail::g_active_host = &host;
     ::phenotype::detail::g_open_url = detail::open_url_bridge;
     if (host.platform && host.platform->input.attach)
@@ -303,7 +556,7 @@ int run_app_with_platform(platform_api const& platform,
     native_host host;
     host.window = window;
     host.platform = &platform;
-    detail::g_app_state = {&host, 0.0f, invalid_callback_id};
+    detail::bind_host(host, 0.0f);
     detail::install_callbacks(window);
 
     run_host<State, Msg>(host, std::move(view), std::move(update));

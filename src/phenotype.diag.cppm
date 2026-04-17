@@ -298,7 +298,7 @@ inline Gauge&   max_queue_depth = *new Gauge{
 
 inline Counter& input_events = *new Counter{
     "phenotype.input.events",
-    "Input events received by WASM exports (attribute: event)",
+    "Input events observed by core and native shells (attributes: event, source, detail, result, callback_id, role)",
     "{event}"};
 
 inline Counter& flush_calls = *new Counter{
@@ -510,7 +510,22 @@ inline void reset_all() noexcept {
 
 } // namespace phenotype::metrics
 
-namespace phenotype::diag {
+export namespace phenotype::diag {
+
+struct InputDebugSnapshot {
+    std::string event;
+    std::string source;
+    std::string detail;
+    std::string result;
+    unsigned int callback_id = 0xFFFFFFFFu;
+    std::string role = "none";
+    unsigned int focused_id = 0xFFFFFFFFu;
+    std::string focused_role = "none";
+    unsigned int hovered_id = 0xFFFFFFFFu;
+    float scroll_y = 0.0f;
+    unsigned int caret_pos = 0xFFFFFFFFu;
+    bool focused_is_input = false;
+};
 
 inline json::Value attributes_to_json(std::vector<metrics::Attribute> const& attrs) {
     json::Object out;

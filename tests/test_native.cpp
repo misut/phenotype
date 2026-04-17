@@ -10,6 +10,7 @@
 #include <filesystem>
 #include <string>
 #include <thread>
+#include <variant>
 #include <vector>
 
 #ifndef __wasi__
@@ -26,6 +27,7 @@
 #endif
 
 import phenotype.native;
+import phenotype.native.stub;
 
 using namespace phenotype::native;
 using namespace phenotype;
@@ -101,6 +103,356 @@ static void test_default_scroll_delta_fallback() {
     assert(std::fabs(full - line_height * 3.0f) < 0.001f);
     assert(std::fabs(half - line_height * 1.5f) < 0.001f);
     std::puts("PASS: default scroll delta fallback");
+}
+
+namespace input_regression {
+
+struct ActivateButton {};
+struct ToggleChecked {};
+struct SelectChoice { int value; };
+struct TextChanged { std::string text; };
+
+using Msg = std::variant<ActivateButton, ToggleChecked, SelectChoice, TextChanged>;
+
+struct State {
+    int button_activations = 0;
+    bool checked = false;
+    int choice = 0;
+    std::string text;
+};
+
+inline State g_observed_state{};
+inline int g_link_open_count = 0;
+
+inline constexpr unsigned int button_id = 0;
+inline constexpr unsigned int link_id = 1;
+inline constexpr unsigned int checkbox_id = 2;
+inline constexpr unsigned int radio_a_id = 3;
+inline constexpr unsigned int radio_b_id = 4;
+inline constexpr unsigned int text_field_id = 5;
+
+static void reset_core_state() {
+    auto& app = phenotype::detail::g_app;
+    app.app_runner = nullptr;
+    app.callbacks.clear();
+    app.callback_roles.clear();
+    app.input_handlers.clear();
+    app.input_nodes.clear();
+    app.focusable_ids.clear();
+    app.root = NodeHandle::null();
+    app.prev_root = NodeHandle::null();
+    app.scroll_y = 0.0f;
+    app.hovered_id = phenotype::native::invalid_callback_id;
+    app.focused_id = phenotype::native::invalid_callback_id;
+    app.caret_pos = phenotype::native::invalid_callback_id;
+    app.caret_visible = true;
+    app.last_paint_hash = 0;
+    app.input_debug = {};
+    app.arena.reset();
+    app.prev_arena.reset();
+    phenotype::detail::msg_queue().clear();
+    phenotype::metrics::reset_all();
+    g_observed_state = {};
+    g_link_open_count = 0;
+}
+
+static void open_url(char const*, unsigned int) {
+    ++g_link_open_count;
+}
+
+static Msg map_text(std::string value) {
+    return TextChanged{std::move(value)};
+}
+
+static void update(State& state, Msg msg) {
+    if (std::get_if<ActivateButton>(&msg)) {
+        state.button_activations += 1;
+    } else if (std::get_if<ToggleChecked>(&msg)) {
+        state.checked = !state.checked;
+    } else if (auto const* choice = std::get_if<SelectChoice>(&msg)) {
+        state.choice = choice->value;
+    } else if (auto const* text = std::get_if<TextChanged>(&msg)) {
+        state.text = text->text;
+    }
+    g_observed_state = state;
+}
+
+static void view(State const& state) {
+    phenotype::layout::column([&] {
+        phenotype::widget::button<Msg>("Action", ActivateButton{});
+        phenotype::layout::spacer(10);
+        phenotype::widget::link("Open docs", "https://example.com/phenotype");
+        phenotype::layout::spacer(10);
+        phenotype::widget::checkbox<Msg>("Enable option", state.checked, ToggleChecked{});
+        phenotype::layout::spacer(10);
+        phenotype::widget::radio<Msg>("Choice A", state.choice == 0, SelectChoice{0});
+        phenotype::layout::spacer(6);
+        phenotype::widget::radio<Msg>("Choice B", state.choice == 1, SelectChoice{1});
+        phenotype::layout::spacer(10);
+        phenotype::widget::text_field<Msg>("Type here", state.text, +map_text);
+        phenotype::layout::spacer(1200);
+        phenotype::widget::text("Bottom marker");
+    });
+}
+
+static bool has_metric(std::string_view event,
+                       std::string_view detail,
+                       std::string_view result,
+                       std::string_view role = {}) {
+    for (auto const& point : phenotype::metrics::inst::input_events.data_points()) {
+        std::string_view event_attr;
+        std::string_view detail_attr;
+        std::string_view result_attr;
+        std::string_view role_attr;
+        for (auto const& attr : point.attributes) {
+            if (attr.key == "event") event_attr = attr.value;
+            else if (attr.key == "detail") detail_attr = attr.value;
+            else if (attr.key == "result") result_attr = attr.value;
+            else if (attr.key == "role") role_attr = attr.value;
+        }
+        if (event_attr == event
+            && detail_attr == detail
+            && result_attr == result
+            && (role.empty() || role_attr == role))
+            return true;
+    }
+    return false;
+}
+
+struct Harness {
+    platform_api platform = make_stub_platform("test-stub", nullptr);
+    native_host host{};
+
+    Harness() {
+        reset_core_state();
+        platform.open_url = open_url;
+        host.platform = &platform;
+        phenotype::native::run<State, Msg>(host, view, update);
+        assert(phenotype::detail::g_app.callbacks.size() == 6);
+        assert(phenotype::detail::g_app.focusable_ids.size() == 6);
+    }
+
+    ~Harness() {
+        phenotype::native::detail::shutdown_host(host);
+        reset_core_state();
+    }
+
+    std::pair<float, float> point_for(unsigned int callback_id) const {
+        for (float y = 0.0f; y <= 420.0f; y += 2.0f) {
+            for (float x = 0.0f; x <= 360.0f; x += 2.0f) {
+                auto hit = phenotype::native::detail::hit_test(
+                    x, y, phenotype::detail::get_scroll_y());
+                if (hit.has_value() && *hit == callback_id)
+                    return {x, y};
+            }
+        }
+        assert(false && "missing hit-test point");
+        return {0.0f, 0.0f};
+    }
+};
+
+} // namespace input_regression
+
+static void test_shell_pointer_hover_click_and_tab_navigation() {
+    using namespace input_regression;
+
+    Harness harness;
+    auto [x, y] = harness.point_for(button_id);
+
+    assert(phenotype::native::detail::dispatch_cursor_pos(x, y));
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.event == "hover");
+    assert(debug.detail == "pointer-move");
+    assert(debug.result == "handled");
+    assert(debug.callback_id == button_id);
+    assert(debug.role == "button");
+    assert(debug.hovered_id == button_id);
+    assert(has_metric("hover", "pointer-move", "handled", "button"));
+
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x, y, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0));
+    assert(g_observed_state.button_activations == 1);
+    assert(phenotype::detail::get_focused_id() == button_id);
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.event == "click");
+    assert(debug.detail == "pointer-click");
+    assert(debug.result == "handled");
+    assert(debug.callback_id == button_id);
+    assert(debug.focused_id == button_id);
+    assert(debug.focused_role == "button");
+    assert(has_metric("click", "pointer-click", "handled", "button"));
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_TAB, GLFW_PRESS, 0));
+    assert(phenotype::detail::get_focused_id() == link_id);
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_TAB, GLFW_PRESS, 0));
+    assert(phenotype::detail::get_focused_id() == checkbox_id);
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_TAB, GLFW_PRESS, GLFW_MOD_SHIFT));
+    assert(phenotype::detail::get_focused_id() == link_id);
+    std::puts("PASS: shared shell pointer hover/click and tab navigation");
+}
+
+static void test_shell_activation_keys_respect_roles() {
+    using namespace input_regression;
+
+    Harness harness;
+
+    phenotype::detail::set_focus_id(button_id, "test", "setup");
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_SPACE, GLFW_PRESS, 0));
+    assert(g_observed_state.button_activations == 1);
+
+    phenotype::detail::set_focus_id(checkbox_id, "test", "setup");
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_SPACE, GLFW_PRESS, 0));
+    assert(g_observed_state.checked);
+
+    phenotype::detail::set_focus_id(radio_b_id, "test", "setup");
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_SPACE, GLFW_PRESS, 0));
+    assert(g_observed_state.choice == 1);
+
+    phenotype::detail::set_focus_id(link_id, "test", "setup");
+    assert(!phenotype::native::detail::dispatch_key(GLFW_KEY_SPACE, GLFW_PRESS, 0));
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.event == "key");
+    assert(debug.detail == "space");
+    assert(debug.result == "ignored");
+    assert(debug.role == "link");
+    assert(has_metric("key", "space", "ignored", "link"));
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ENTER, GLFW_PRESS, 0));
+    assert(g_link_open_count == 1);
+
+    phenotype::detail::set_focus_id(button_id, "test", "setup");
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ENTER, GLFW_PRESS, 0));
+    assert(g_observed_state.button_activations == 2);
+
+    phenotype::detail::set_focus_id(checkbox_id, "test", "setup");
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ENTER, GLFW_PRESS, 0));
+    assert(!g_observed_state.checked);
+
+    phenotype::detail::set_focus_id(radio_b_id, "test", "setup");
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ENTER, GLFW_PRESS, 0));
+    assert(g_observed_state.choice == 1);
+    std::puts("PASS: shared shell activation keys respect roles");
+}
+
+static void test_shell_text_space_char_and_enter_behavior() {
+    using namespace input_regression;
+
+    Harness harness;
+
+    phenotype::detail::set_focus_id(text_field_id, "test", "setup");
+    assert(!phenotype::native::detail::dispatch_key(GLFW_KEY_ENTER, GLFW_PRESS, 0));
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.event == "key");
+    assert(debug.detail == "enter");
+    assert(debug.result == "ignored");
+    assert(debug.role == "text_field");
+
+    assert(!phenotype::native::detail::dispatch_key(GLFW_KEY_SPACE, GLFW_PRESS, 0));
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.detail == "space");
+    assert(debug.result == "ignored");
+    assert(g_observed_state.text.empty());
+    assert(has_metric("key", "space", "ignored", "text_field"));
+
+    assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>(' ')));
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.detail == "space-char");
+    assert(debug.result == "handled");
+    assert(debug.caret_pos == 1);
+    assert(g_observed_state.text == " ");
+    assert(has_metric("key", "space-char", "handled", "text_field"));
+    std::puts("PASS: shared shell text space char and enter behavior");
+}
+
+static void test_shell_text_caret_navigation_and_backspace() {
+    using namespace input_regression;
+
+    Harness harness;
+
+    phenotype::detail::set_focus_id(text_field_id, "test", "setup");
+    assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>('A')));
+    assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>('B')));
+    assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>('C')));
+    assert(g_observed_state.text == "ABC");
+    assert(phenotype::detail::get_caret_pos() == 3);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_LEFT, GLFW_PRESS, 0));
+    assert(phenotype::detail::get_caret_pos() == 2);
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_RIGHT, GLFW_PRESS, 0));
+    assert(phenotype::detail::get_caret_pos() == 3);
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_HOME, GLFW_PRESS, 0));
+    assert(phenotype::detail::get_caret_pos() == 0);
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_RIGHT, GLFW_PRESS, 0));
+    assert(phenotype::detail::get_caret_pos() == 1);
+
+    assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>('Z')));
+    assert(g_observed_state.text == "AZBC");
+    assert(phenotype::detail::get_caret_pos() == 2);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_END, GLFW_PRESS, 0));
+    assert(phenotype::detail::get_caret_pos() == 4);
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_LEFT, GLFW_PRESS, 0));
+    assert(phenotype::detail::get_caret_pos() == 3);
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_BACKSPACE, GLFW_PRESS, 0));
+    assert(g_observed_state.text == "AZC");
+    assert(phenotype::detail::get_caret_pos() == 2);
+
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.event == "key");
+    assert(debug.detail == "backspace");
+    assert(debug.result == "handled");
+    assert(debug.focused_role == "text_field");
+    assert(debug.caret_pos == 2);
+    assert(has_metric("key", "backspace", "handled", "text_field"));
+    std::puts("PASS: shared shell text caret navigation and backspace");
+}
+
+static void test_shell_scroll_and_escape_observability() {
+    using namespace input_regression;
+
+    Harness harness;
+
+    assert(phenotype::detail::get_total_height() > harness.host.canvas_height());
+
+    assert(phenotype::native::detail::dispatch_scroll(-1.0, harness.host.canvas_height()));
+    float after_wheel = phenotype::detail::get_scroll_y();
+    assert(after_wheel > 0.0f);
+    assert(has_metric("scroll", "wheel", "handled"));
+
+    phenotype::detail::set_focus_id(button_id, "test", "setup");
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_PAGE_DOWN, GLFW_PRESS, 0));
+    float after_page_down = phenotype::detail::get_scroll_y();
+    assert(after_page_down > after_wheel);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_DOWN, GLFW_PRESS, 0));
+    float after_down = phenotype::detail::get_scroll_y();
+    assert(after_down > after_page_down);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_END, GLFW_PRESS, 0));
+    float max_scroll = phenotype::native::detail::max_scroll_for_viewport(
+        harness.host.canvas_height());
+    assert(std::fabs(phenotype::detail::get_scroll_y() - max_scroll) < 0.001f);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_HOME, GLFW_PRESS, 0));
+    assert(phenotype::detail::get_scroll_y() == 0.0f);
+
+    phenotype::detail::set_focus_id(text_field_id, "test", "setup");
+    float before_input_up = phenotype::detail::get_scroll_y();
+    assert(!phenotype::native::detail::dispatch_key(GLFW_KEY_UP, GLFW_PRESS, 0));
+    assert(phenotype::detail::get_scroll_y() == before_input_up);
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.detail == "arrow-up");
+    assert(debug.result == "ignored");
+    assert(debug.focused_role == "text_field");
+
+    phenotype::detail::set_focus_id(button_id, "test", "setup");
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ESCAPE, GLFW_PRESS, 0));
+    assert(phenotype::detail::get_focused_id() == phenotype::native::invalid_callback_id);
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.detail == "escape");
+    assert(debug.result == "handled");
+    assert(has_metric("key", "escape", "handled"));
+    std::puts("PASS: shared shell scroll and escape observability");
 }
 
 // ============================================================
@@ -649,6 +1001,11 @@ static void test_stub_renderer_hit_test() {
 #endif // __APPLE__ / _WIN32
 
 int main() {
+    test_shell_pointer_hover_click_and_tab_navigation();
+    test_shell_activation_keys_respect_roles();
+    test_shell_text_space_char_and_enter_behavior();
+    test_shell_text_caret_navigation_and_backspace();
+    test_shell_scroll_and_escape_observability();
 #ifdef __APPLE__
     test_default_scroll_delta_fallback();
     test_text_measure_basic();
