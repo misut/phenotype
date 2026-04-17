@@ -1,4 +1,3 @@
-#include <array>
 #include <string>
 #include <variant>
 
@@ -63,6 +62,14 @@ static std::string remote_image_url() {
     return "https://raw.githubusercontent.com/misut/phenotype/main/examples/native/assets/showcase.bmp";
 }
 
+static std::string selected_choice_label(int choice) {
+    switch (choice) {
+    case 1: return "Option B";
+    case 2: return "Option C";
+    default: return "Option A";
+    }
+}
+
 static void render_expectation_card(phenotype::str title, phenotype::str body) {
     using namespace phenotype;
     layout::card([&] {
@@ -77,26 +84,34 @@ void view(State const& state) {
 
     layout::scaffold(
         [] {
-            widget::text("phenotype native acceptance");
-            widget::text("Windows DirectWrite + Direct3D 12 showcase for text, IME, images, scroll, and interaction.");
+            widget::text("Native Widget Showcase");
+            widget::text("A backend-neutral native demo for validating the shared UI contract across Metal, DirectX 12, and future Vulkan paths.");
         },
         [&] {
         layout::card([&] {
-            widget::text("What To Verify");
+            widget::text("Overview");
+            layout::spacer(8);
+            widget::text("This scene keeps the content focused on shared widgets, layout, input, and image behavior instead of any one renderer implementation.");
             layout::spacer(8);
             layout::list_items([&] {
-                layout::item("Buttons, cards, code blocks, and links should render sharply on the first frame.");
-                layout::item("The IME field should show composition text and candidate UI anchored to the focused input.");
-                layout::item("The local image should load immediately and the remote image should replace its placeholder after download.");
-                layout::item("Scroll, resize, minimize/restore, and alt-tab should not leave stale overlays or black frames.");
+                layout::item("Shared contract: text, cards, buttons, links, focus, scrolling, resizing, and async image states should stay coherent.");
+                layout::item("Platform extras can differ by backend, but the same scene should remain useful for manual walkthroughs everywhere.");
+                layout::item("Known gaps should read as backend status notes, not as a reason to redesign the content around a single graphics API.");
             });
             layout::spacer(10);
-            widget::code("Tip: set PHENOTYPE_DX12_WARP=1 if you want a software-rendered smoke path on Windows.");
+            widget::code(
+                "Shared goal:\n"
+                "- One widget scene\n"
+                "- Multiple native backends\n"
+                "- Stable manual verification flow"
+            );
         });
 
         layout::spacer(12);
         layout::card([&] {
-            widget::text("Counter");
+            widget::text("Core Widgets");
+            layout::spacer(6);
+            widget::text("This section covers first-frame text rendering, button interaction, inline code styling, link behavior, and state updates.");
             layout::spacer(6);
             widget::text(std::string("Count: ") + std::to_string(state.count));
             layout::spacer(6);
@@ -105,15 +120,23 @@ void view(State const& state) {
                 [&] { widget::button<Msg>("+", Increment{}); }
             );
             layout::spacer(8);
-            widget::text("Use this card to verify button hover, focus, click dispatch, and text updates.");
+            widget::text("Use the buttons to confirm hover, focus, click dispatch, and immediate text refresh.");
+            layout::spacer(8);
+            widget::code(
+                "widget::button<Msg>(\"-\", Decrement{});\n"
+                "widget::button<Msg>(\"+\", Increment{});\n"
+                "widget::link(\"Project page\", \"https://github.com/misut/phenotype\");"
+            );
+            layout::spacer(8);
+            widget::link("Open phenotype on GitHub", "https://github.com/misut/phenotype");
         });
 
         layout::spacer(12);
 
         layout::card([&] {
-            widget::text("Text Input + IME");
+            widget::text("Text Input and IME");
             layout::spacer(6);
-            widget::text("The first field is a simple Latin input. The second one is for Korean/Japanese/Chinese IME composition.");
+            widget::text("The first field is a basic text input. The second one is reserved for native IME composition and platform-specific text system parity.");
             layout::spacer(8);
             widget::text_field<Msg>("Enter your name...", state.name, on_name_changed);
             if (!state.name.empty()) {
@@ -126,15 +149,35 @@ void view(State const& state) {
             widget::text(std::string("Committed text: ")
                 + (state.ime_sample.empty() ? std::string("(empty)") : state.ime_sample));
             layout::spacer(8);
-            widget::code("Expected behavior: preedit text, caret, and candidate overlay stay attached to the focused field while scrolling and resizing.");
+            widget::text("Platform-specific status: caret, preedit text, and candidate overlays should feel attached to the focused field where that backend already supports native IME parity.");
+            layout::spacer(8);
+            widget::code("Walkthrough: tab into each field, type plain text, then try native IME composition and keep the field focused while scrolling.");
         });
 
         layout::spacer(12);
 
         layout::card([&] {
-            widget::text("Native DrawImage");
+            widget::text("Selection Controls");
             layout::spacer(6);
-            widget::text("The first image is loaded from the local repository. The second image uses the Windows HTTP path through cppx.");
+            widget::text("Checkboxes and radios help verify focus order, pointer interaction, and persistent selection state.");
+            layout::spacer(8);
+            widget::checkbox<Msg>("I agree to the terms", state.agreed, ToggleAgreed{});
+            layout::spacer(6);
+            widget::radio<Msg>("Option A", state.choice == 0, SetChoice{0});
+            widget::radio<Msg>("Option B", state.choice == 1, SetChoice{1});
+            widget::radio<Msg>("Option C", state.choice == 2, SetChoice{2});
+            layout::spacer(10);
+            widget::text(std::string("Agreement: ") + (state.agreed ? "enabled" : "disabled"));
+            layout::spacer(4);
+            widget::text(std::string("Selected plan: ") + selected_choice_label(state.choice));
+        });
+
+        layout::spacer(12);
+
+        layout::card([&] {
+            widget::text("Images and Async Loading");
+            layout::spacer(6);
+            widget::text("The first image is a local asset. The second image exercises an async remote load and should remain visually safe even when the network path is unavailable.");
             layout::spacer(10);
             widget::text("Local file");
             layout::spacer(4);
@@ -144,53 +187,48 @@ void view(State const& state) {
             layout::spacer(4);
             widget::image(remote_image_url(), 320.0f, 180.0f);
             layout::spacer(8);
-            widget::text("A soft placeholder is expected until the remote image finishes downloading.");
+            widget::text("Expected state: show a placeholder first, replace it when the remote image succeeds, and keep the frame stable if it never arrives.");
         });
 
         layout::spacer(12);
 
         layout::card([&] {
-            widget::text("Interaction");
+            widget::text("Layout, Scroll, and Resize");
             layout::spacer(6);
-            widget::checkbox<Msg>("I agree to the terms", state.agreed, ToggleAgreed{});
-            layout::spacer(6);
-            widget::radio<Msg>("Option A", state.choice == 0, SetChoice{0});
-            widget::radio<Msg>("Option B", state.choice == 1, SetChoice{1});
-            widget::radio<Msg>("Option C", state.choice == 2, SetChoice{2});
-            layout::spacer(10);
-            widget::link("Open phenotype on GitHub", "https://github.com/misut/phenotype");
-        });
-
-        layout::spacer(12);
-
-        layout::card([&] {
-            widget::text("Render Notes");
-            layout::spacer(6);
+            widget::text("This page is intentionally longer than the initial window so scrolling, section spacing, and viewport updates are always part of the walkthrough.");
+            layout::spacer(8);
+            layout::list_items([&] {
+                layout::item("Resize the window a few times and make sure cards, text blocks, and images keep their proportions.");
+                layout::item("Scroll with an input focused and confirm that the page stays readable while interactive state remains intact.");
+                layout::item("Treat backend differences as status notes, but keep the same content structure for every native renderer.");
+            });
+            layout::spacer(8);
             widget::code(
                 "import phenotype;\n"
                 "import phenotype.native;\n\n"
-                "// This example is the Windows native acceptance scene.\n"
-                "// It exercises text, IME, images, scroll, link opening, and resize."
+                "// This example is a native widget showcase.\n"
+                "// It exercises shared widgets, layout, IME paths, images,\n"
+                "// scrolling, and manual backend walkthroughs."
             );
         });
 
         layout::spacer(12);
 
         render_expectation_card(
-            "Resize + DPI",
-            "Resize the window a few times. Cards, text, and images should keep their proportions without flicker or stale candidate UI.");
+            "Resize and DPI",
+            "Cards, text, and images should adapt cleanly as the window changes size. Use this to spot layout drift, stale overlays, or scale mismatches.");
         layout::spacer(12);
         render_expectation_card(
-            "Scroll",
-            "Scroll through the page while the IME field is focused. The composition underline and candidate panel should continue to track the input.");
+            "Scroll Behavior",
+            "Scroll from top to bottom and back again. The content should remain readable and interactive states should stay attached to the right controls.");
         layout::spacer(12);
         render_expectation_card(
-            "Image Fallbacks",
-            "If the machine is offline, the remote image should stay on a neutral placeholder without affecting the rest of the frame.");
+            "Platform Status Notes",
+            "If a backend is missing IME parity or remote image support, keep the note neutral and preserve the same showcase structure for future backend work.");
     },
         [] {
-            widget::text("Windows acceptance checklist");
-            widget::text("Tab through controls, type with IME, wait for the remote image, then resize and scroll.");
+            widget::text("Manual Walkthrough");
+            widget::text("Tab through the controls, type in both fields, verify the selection state, inspect both image slots, then scroll and resize the window.");
         }
     );
 }
