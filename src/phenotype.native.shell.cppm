@@ -97,6 +97,24 @@ inline std::optional<unsigned int> hit_test(float x, float y, float scroll_y) {
     return g_app_state.host->platform->renderer.hit_test(x, y, scroll_y);
 }
 
+inline float scroll_line_height() {
+    auto const& theme = ::phenotype::current_theme();
+    float line_height = theme.body_font_size * theme.line_height_ratio;
+    return (line_height > 0.0f) ? line_height : 1.0f;
+}
+
+inline float normalize_scroll_delta(platform_api const* platform,
+                                    double dy,
+                                    float line_height,
+                                    float viewport_height) {
+    if (dy == 0.0) return 0.0f;
+    if (line_height <= 0.0f)
+        line_height = 1.0f;
+    if (platform && platform->input.scroll_delta_y)
+        return platform->input.scroll_delta_y(dy, line_height, viewport_height);
+    return static_cast<float>(dy) * line_height * 3.0f;
+}
+
 inline void repaint_current() {
     if (g_app_state.host) {
         ::phenotype::detail::repaint(*g_app_state.host, g_app_state.scroll_y);
@@ -168,10 +186,19 @@ inline void on_scroll(GLFWwindow* window, double, double dy) {
     glfwGetWindowSize(window, &w, &h);
     float max_scroll = total - static_cast<float>(h);
     if (max_scroll < 0) max_scroll = 0;
-    g_app_state.scroll_y -= static_cast<float>(dy);
+    auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
+    float scroll_delta = normalize_scroll_delta(
+        platform,
+        dy,
+        scroll_line_height(),
+        static_cast<float>(h));
+    if (scroll_delta == 0.0f) return;
+    float prev_scroll = g_app_state.scroll_y;
+    g_app_state.scroll_y -= scroll_delta;
     if (g_app_state.scroll_y < 0) g_app_state.scroll_y = 0;
     if (g_app_state.scroll_y > max_scroll) g_app_state.scroll_y = max_scroll;
-    repaint_current();
+    if (g_app_state.scroll_y != prev_scroll)
+        repaint_current();
 }
 
 inline void on_framebuffer_size(GLFWwindow*, int, int) {

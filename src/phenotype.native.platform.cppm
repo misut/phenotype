@@ -57,6 +57,9 @@ struct input_api {
     bool (*handle_cursor_pos)(float x, float y) = nullptr;
     bool (*handle_mouse_button)(float x, float y,
                                 int button, int action, int mods) = nullptr;
+    float (*scroll_delta_y)(double dy,
+                            float line_height,
+                            float viewport_height) = nullptr;
 };
 
 struct platform_api {

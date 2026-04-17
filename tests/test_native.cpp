@@ -14,7 +14,13 @@
 #ifndef __wasi__
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #include <GLFW/glfw3.h>
+
+#ifdef DrawText
+#undef DrawText
+#endif
 #endif
 
 import phenotype.native;
@@ -22,10 +28,77 @@ import phenotype.native;
 using namespace phenotype::native;
 using namespace phenotype;
 
+#ifdef _WIN32
+static void append_u32(std::vector<unsigned char>& buf, unsigned int value) {
+    auto offset = buf.size();
+    buf.resize(offset + 4);
+    std::memcpy(buf.data() + offset, &value, 4);
+}
+
+static void append_f32(std::vector<unsigned char>& buf, float value) {
+    unsigned int bits = 0;
+    std::memcpy(&bits, &value, 4);
+    append_u32(buf, bits);
+}
+
+static void append_bytes(std::vector<unsigned char>& buf, char const* text, unsigned int len) {
+    auto offset = buf.size();
+    buf.resize(offset + len);
+    if (len > 0)
+        std::memcpy(buf.data() + offset, text, len);
+    while ((buf.size() & 3u) != 0)
+        buf.push_back(0);
+}
+
+struct WindowsRendererFixture {
+    GLFWwindow* window = nullptr;
+    native_host host{};
+
+    WindowsRendererFixture() {
+        _putenv_s("PHENOTYPE_DX12_WARP", "1");
+        _putenv_s("PHENOTYPE_DX12_DEBUG", "0");
+
+        assert(glfwInit());
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        window = glfwCreateWindow(320, 240, "phenotype-test", nullptr, nullptr);
+        assert(window != nullptr);
+
+        text::init();
+        renderer::init(window);
+
+        host.window = window;
+        host.platform = &current_platform();
+    }
+
+    ~WindowsRendererFixture() {
+        renderer::shutdown();
+        text::shutdown();
+        if (window)
+            glfwDestroyWindow(window);
+        glfwTerminate();
+    }
+};
+#endif
+
 static void test_renderer_flush_empty() {
     unsigned char buf[4] = {};
     renderer::flush(buf, 0);
     std::puts("PASS: renderer flush empty");
+}
+
+static void test_default_scroll_delta_fallback() {
+    constexpr float line_height = 25.6f;
+    constexpr float viewport_height = 320.0f;
+
+    float full = phenotype::native::detail::normalize_scroll_delta(
+        nullptr, 1.0, line_height, viewport_height);
+    float half = phenotype::native::detail::normalize_scroll_delta(
+        nullptr, 0.5, line_height, viewport_height);
+
+    assert(std::fabs(full - line_height * 3.0f) < 0.001f);
+    assert(std::fabs(half - line_height * 1.5f) < 0.001f);
+    std::puts("PASS: default scroll delta fallback");
 }
 
 // ============================================================
@@ -341,42 +414,101 @@ static void test_windows_text_build_atlas_empty() {
 }
 
 static void test_windows_renderer_hit_test_and_smoke() {
-    _putenv_s("PHENOTYPE_DX12_WARP", "1");
-    _putenv_s("PHENOTYPE_DX12_DEBUG", "0");
+    WindowsRendererFixture fixture;
 
-    assert(glfwInit());
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-    auto* window = glfwCreateWindow(320, 240, "phenotype-test", nullptr, nullptr);
-    assert(window != nullptr);
+    emit_clear(fixture.host, {240, 240, 240, 255});
+    emit_round_rect(fixture.host, 16.0f, 16.0f, 92.0f, 36.0f, 8.0f, {0, 102, 204, 255});
+    emit_draw_text(fixture.host, 40.0f, 26.0f, 16.0f, 0u, {255, 255, 255, 255}, "Primary", 7);
+    emit_hit_region(fixture.host, 16.0f, 16.0f, 92.0f, 36.0f, 42u, 1u);
+    emit_round_rect(fixture.host, 124.0f, 16.0f, 92.0f, 36.0f, 8.0f, {236, 72, 153, 255});
+    emit_draw_text(fixture.host, 150.0f, 26.0f, 16.0f, 0u, {255, 255, 255, 255}, "Action", 6);
+    emit_hit_region(fixture.host, 124.0f, 16.0f, 92.0f, 36.0f, 84u, 1u);
+    fixture.host.flush();
 
-    text::init();
-    renderer::init(window);
+    auto first = renderer::hit_test(32.0f, 30.0f, 0.0f);
+    assert(first.has_value());
+    assert(*first == 42u);
 
-    native_host host;
-    host.window = window;
-    host.platform = &current_platform();
-
-    emit_clear(host, {240, 240, 240, 255});
-    emit_fill_rect(host, 8.0f, 8.0f, 40.0f, 30.0f, {255, 0, 0, 255});
-    emit_round_rect(host, 64.0f, 12.0f, 80.0f, 28.0f, 6.0f, {0, 128, 255, 255});
-    emit_draw_text(host, 16.0f, 64.0f, 16.0f, 0u, {0, 0, 0, 255}, "DX12", 4);
-    emit_hit_region(host, 10.0f, 20.0f, 50.0f, 30.0f, 42u, 0u);
-    host.flush();
-
-    auto hit = renderer::hit_test(20.0f, 30.0f, 0.0f);
-    assert(hit.has_value());
-    assert(*hit == 42u);
+    auto second = renderer::hit_test(150.0f, 30.0f, 0.0f);
+    assert(second.has_value());
+    assert(*second == 84u);
 
     auto miss = renderer::hit_test(5.0f, 5.0f, 0.0f);
     assert(!miss.has_value());
 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
-    renderer::shutdown();
-    text::shutdown();
-    glfwDestroyWindow(window);
-    glfwTerminate();
     std::puts("PASS: windows renderer hit test + smoke");
+}
+
+static void test_windows_renderer_reinit_cycle() {
+    {
+        WindowsRendererFixture fixture;
+        unsigned char empty[4] = {};
+        renderer::flush(empty, 0);
+    }
+    {
+        WindowsRendererFixture fixture;
+        unsigned char empty[4] = {};
+        renderer::flush(empty, 0);
+    }
+
+    std::puts("PASS: windows renderer reinit cycle");
+}
+
+static void test_windows_renderer_rejects_truncated_hit_region() {
+    WindowsRendererFixture fixture;
+
+    emit_clear(fixture.host, {245, 245, 245, 255});
+    emit_round_rect(fixture.host, 20.0f, 20.0f, 100.0f, 40.0f, 8.0f, {37, 99, 235, 255});
+    emit_draw_text(fixture.host, 45.0f, 31.0f, 16.0f, 0u, {255, 255, 255, 255}, "Button", 6);
+    emit_hit_region(fixture.host, 20.0f, 20.0f, 100.0f, 40.0f, 77u, 1u);
+    fixture.host.flush();
+
+    auto before = renderer::hit_test(50.0f, 40.0f, 0.0f);
+    assert(before.has_value());
+    assert(*before == 77u);
+
+    std::vector<unsigned char> broken;
+    append_u32(broken, static_cast<unsigned int>(Cmd::HitRegion));
+    append_f32(broken, 10.0f);
+    append_f32(broken, 20.0f);
+    append_f32(broken, 80.0f);
+    append_f32(broken, 30.0f);
+    append_u32(broken, 99u);
+    renderer::flush(broken.data(), static_cast<unsigned int>(broken.size()));
+
+    auto after = renderer::hit_test(50.0f, 40.0f, 0.0f);
+    assert(after.has_value());
+    assert(*after == 77u);
+    std::puts("PASS: windows renderer rejects truncated hit region");
+}
+
+static void test_windows_renderer_rejects_truncated_text_payload() {
+    WindowsRendererFixture fixture;
+
+    emit_clear(fixture.host, {245, 245, 245, 255});
+    emit_hit_region(fixture.host, 24.0f, 24.0f, 96.0f, 32.0f, 55u, 1u);
+    fixture.host.flush();
+
+    auto before = renderer::hit_test(40.0f, 40.0f, 0.0f);
+    assert(before.has_value());
+    assert(*before == 55u);
+
+    std::vector<unsigned char> broken;
+    append_u32(broken, static_cast<unsigned int>(Cmd::DrawText));
+    append_f32(broken, 32.0f);
+    append_f32(broken, 48.0f);
+    append_f32(broken, 16.0f);
+    append_u32(broken, 0u);
+    append_u32(broken, Color{0, 0, 0, 255}.packed());
+    append_u32(broken, 5u);
+    append_bytes(broken, "Hi", 2);
+    renderer::flush(broken.data(), static_cast<unsigned int>(broken.size()));
+
+    auto after = renderer::hit_test(40.0f, 40.0f, 0.0f);
+    assert(after.has_value());
+    assert(*after == 55u);
+    std::puts("PASS: windows renderer rejects truncated text payload");
 }
 
 static void test_windows_text_field_key_dispatch() {
@@ -394,6 +526,34 @@ static void test_windows_text_field_key_dispatch() {
     phenotype::detail::handle_key(1, 0);
     assert(phenotype::detail::g_app.input_handlers[0].second.current == "A");
     std::puts("PASS: windows text field key dispatch");
+}
+
+static void test_windows_scroll_delta_uses_system_settings() {
+    auto const scroll_delta = windows_platform().input.scroll_delta_y;
+    assert(scroll_delta != nullptr);
+
+    constexpr float line_height = 25.6f;
+    constexpr float viewport_height = 240.0f;
+
+    UINT lines = 3;
+    auto ok = SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0);
+    assert(ok != 0);
+
+    float expected = 0.0f;
+    if (lines == WHEEL_PAGESCROLL) {
+        expected = viewport_height - line_height;
+    } else if (lines != 0u) {
+        expected = static_cast<float>(lines) * line_height;
+    }
+
+    float zero = scroll_delta(0.0, line_height, viewport_height);
+    float forward = scroll_delta(1.0, line_height, viewport_height);
+    float backward = scroll_delta(-1.0, line_height, viewport_height);
+
+    assert(zero == 0.0f);
+    assert(std::fabs(forward - expected) < 0.001f);
+    assert(std::fabs(backward + expected) < 0.001f);
+    std::puts("PASS: windows scroll delta uses system settings");
 }
 
 #else // !__APPLE__ && !_WIN32
@@ -428,6 +588,7 @@ static void test_stub_renderer_hit_test() {
 
 int main() {
 #ifdef __APPLE__
+    test_default_scroll_delta_fallback();
     test_text_measure_basic();
     test_text_measure_proportional();
     test_text_measure_mono_fixed_width();
@@ -445,6 +606,7 @@ int main() {
     test_renderer_flush_empty();
     std::puts("\nAll native tests passed.");
 #elif defined(_WIN32)
+    test_default_scroll_delta_fallback();
     test_windows_text_measure_basic();
     test_windows_text_measure_proportional();
     test_windows_text_measure_mono_fixed_width();
@@ -453,10 +615,15 @@ int main() {
     test_windows_text_build_atlas_scale_preserves_bounds();
     test_windows_text_build_atlas_empty();
     test_renderer_flush_empty();
+    test_windows_renderer_reinit_cycle();
     test_windows_renderer_hit_test_and_smoke();
+    test_windows_renderer_rejects_truncated_hit_region();
+    test_windows_renderer_rejects_truncated_text_payload();
     test_windows_text_field_key_dispatch();
+    test_windows_scroll_delta_uses_system_settings();
     std::puts("\nAll Windows native tests passed.");
 #else
+    test_default_scroll_delta_fallback();
     test_stub_text_measure_basic();
     test_stub_renderer_hit_test();
     std::puts("\nAll stub native tests passed.");
