@@ -128,6 +128,28 @@ inline void log_hresult(char const* label, HRESULT hr) {
                  label, static_cast<unsigned long>(hr));
 }
 
+inline auto utf8_to_wide_or_empty(std::string_view text) -> std::wstring {
+    auto converted = cppx::unicode::utf8_to_wide(text);
+    if (!converted.has_value())
+        return {};
+    return converted.value();
+}
+
+inline auto wide_to_utf8_or_empty(std::wstring_view text) -> std::string {
+    auto converted = cppx::unicode::wide_to_utf8(text);
+    if (!converted.has_value())
+        return {};
+    return converted.value();
+}
+
+inline auto open_url_error(std::string_view url)
+    -> std::optional<cppx::os::open_error> {
+    auto opened = cppx::os::system::open_url(url);
+    if (opened.has_value())
+        return std::nullopt;
+    return opened.error();
+}
+
 inline UINT64 align_up(UINT64 value, UINT64 alignment) {
     return (value + alignment - 1) / alignment * alignment;
 }
@@ -242,12 +264,12 @@ inline float text_measure(float font_size, bool mono,
                           char const* text_ptr, unsigned int len) {
     if (!g_text.initialized || len == 0) return 0.0f;
 
-    auto wide = cppx::unicode::utf8_to_wide(std::string_view{text_ptr, len});
-    if (!wide || wide->empty()) return 0.0f;
+    auto wide = utf8_to_wide_or_empty(std::string_view{text_ptr, len});
+    if (wide.empty()) return 0.0f;
 
     ComPtr<IDWriteTextLayout> layout;
     auto hr = make_text_layout(
-        *wide, font_size, mono,
+        wide, font_size, mono,
         16384.0f, font_size * 4.0f + 32.0f,
         layout);
     if (FAILED(hr)) {
@@ -402,13 +424,13 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
     for (auto const& entry : entries) {
         if (entry.text.empty()) continue;
 
-        auto wide = cppx::unicode::utf8_to_wide(entry.text);
-        if (!wide || wide->empty()) continue;
+        auto wide = utf8_to_wide_or_empty(entry.text);
+        if (wide.empty()) continue;
 
         float scaled_font_size = entry.font_size * scale;
         ComPtr<IDWriteTextLayout> metrics_layout;
         auto hr = make_text_layout(
-            *wide,
+            wide,
             scaled_font_size,
             entry.mono,
             16384.0f,
@@ -912,11 +934,11 @@ inline void commit_result_string(std::wstring_view result) {
     auto snapshot = ::phenotype::detail::focused_input_snapshot();
     if (!snapshot.valid)
         return;
-    auto suffix = cppx::unicode::wide_to_utf8(result);
-    if (!suffix || suffix->empty())
+    auto suffix = wide_to_utf8_or_empty(result);
+    if (suffix.empty())
         return;
     auto next = snapshot.value;
-    next += *suffix;
+    next += suffix;
     for (auto& [id, handler] : ::phenotype::detail::g_app.input_handlers) {
         if (id != ::phenotype::detail::g_app.focused_id)
             continue;
@@ -999,14 +1021,14 @@ inline void sync_ime_windows() {
             (g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor);
         if (cursor_units > g_ime.composition_text.size())
             cursor_units = g_ime.composition_text.size();
-        auto prefix = cppx::unicode::wide_to_utf8(
+        auto prefix = wide_to_utf8_or_empty(
             std::wstring_view(g_ime.composition_text.data(), cursor_units));
-        if (prefix && !prefix->empty()) {
+        if (!prefix.empty()) {
             caret_x += text_measure(
                 snapshot.font_size,
                 snapshot.mono,
-                prefix->c_str(),
-                static_cast<unsigned int>(prefix->size()));
+                prefix.c_str(),
+                static_cast<unsigned int>(prefix.size()));
         }
     }
 
@@ -1062,14 +1084,14 @@ inline void sync_ime_windows() {
 
     float content_width = snapshot.width;
     for (unsigned int index = page_start; index < page_end; ++index) {
-        auto utf8 = cppx::unicode::wide_to_utf8(g_ime.candidates[index]);
-        if (!utf8 || utf8->empty())
+        auto utf8 = wide_to_utf8_or_empty(g_ime.candidates[index]);
+        if (utf8.empty())
             continue;
         float measured = text_measure(
             snapshot.font_size,
             snapshot.mono,
-            utf8->c_str(),
-            static_cast<unsigned int>(utf8->size()));
+            utf8.c_str(),
+            static_cast<unsigned int>(utf8.size()));
         if (measured > content_width)
             content_width = measured;
     }
@@ -2385,10 +2407,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (snapshot.valid) {
         float draw_y = snapshot.y - scroll_y;
         if (g_ime.composition_active && !g_ime.composition_text.empty()) {
-            auto composition_utf8 = cppx::unicode::wide_to_utf8(g_ime.composition_text);
-            std::string composition = composition_utf8
-                ? std::move(*composition_utf8)
-                : std::string{};
+            auto composition = wide_to_utf8_or_empty(g_ime.composition_text);
             float base_x = snapshot.x + snapshot.padding[3];
             if (!snapshot.value.empty()) {
                 base_x += text_measure(
@@ -2428,11 +2447,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 (g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor);
             if (cursor_units > g_ime.composition_text.size())
                 cursor_units = g_ime.composition_text.size();
-            auto prefix_utf8 = cppx::unicode::wide_to_utf8(
+            auto prefix = wide_to_utf8_or_empty(
                 std::wstring_view(g_ime.composition_text.data(), cursor_units));
-            std::string prefix = prefix_utf8
-                ? std::move(*prefix_utf8)
-                : std::string{};
             float caret_x = base_x;
             if (!prefix.empty()) {
                 caret_x += text_measure(
@@ -2481,15 +2497,13 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                             6.0f, 0.0f, 2.0f);
                     }
                     if (hit.index < g_ime.candidates.size()) {
-                        auto candidate_utf8 = cppx::unicode::wide_to_utf8(
-                            g_ime.candidates[hit.index]);
                         append_overlay_text(
                             hit.x + 10.0f,
                             hit.y + (hit.h - snapshot.line_height) * 0.5f,
                             snapshot.font_size,
                             snapshot.mono,
                             snapshot.foreground,
-                            candidate_utf8 ? std::move(*candidate_utf8) : std::string{},
+                            wide_to_utf8_or_empty(g_ime.candidates[hit.index]),
                             snapshot.line_height);
                     }
                 } else if (hit.kind == CandidateHitKind::prev_page
@@ -2706,15 +2720,15 @@ inline platform_api const& windows_platform() {
             detail::input_handle_mouse_button,
         },
         [](char const* url, unsigned int len) {
-            auto opened = cppx::os::system::open_url(std::string_view(url, len));
-            if (!opened) {
+            if (auto error = open_url_error(std::string_view(url, len)); error) {
+                auto message = cppx::os::to_string(*error);
                 std::fprintf(
                     stderr,
                     "[windows] failed to open url: %.*s (%.*s)\n",
                     static_cast<int>(len),
                     url,
-                    static_cast<int>(cppx::os::to_string(opened.error()).size()),
-                    cppx::os::to_string(opened.error()).data());
+                    static_cast<int>(message.size()),
+                    message.data());
             }
         },
         nullptr,
