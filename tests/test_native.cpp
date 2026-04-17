@@ -7,16 +7,18 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstdio>
+#include <filesystem>
 #include <string>
 #include <thread>
 #include <vector>
 
 #ifndef __wasi__
 
+#include <GLFW/glfw3.h>
+
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
-#include <GLFW/glfw3.h>
 
 #ifdef DrawText
 #undef DrawText
@@ -28,7 +30,6 @@ import phenotype.native;
 using namespace phenotype::native;
 using namespace phenotype;
 
-#ifdef _WIN32
 static void append_u32(std::vector<unsigned char>& buf, unsigned int value) {
     auto offset = buf.size();
     buf.resize(offset + 4);
@@ -50,6 +51,7 @@ static void append_bytes(std::vector<unsigned char>& buf, char const* text, unsi
         buf.push_back(0);
 }
 
+#ifdef _WIN32
 struct WindowsRendererFixture {
     GLFWwindow* window = nullptr;
     native_host host{};
@@ -106,6 +108,33 @@ static void test_default_scroll_delta_fallback() {
 // ============================================================
 
 #ifdef __APPLE__
+
+struct MacRendererFixture {
+    GLFWwindow* window = nullptr;
+    native_host host{};
+
+    MacRendererFixture() {
+        assert(glfwInit());
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        window = glfwCreateWindow(320, 240, "phenotype-test", nullptr, nullptr);
+        assert(window != nullptr);
+
+        text::init();
+        renderer::init(window);
+
+        host.window = window;
+        host.platform = &current_platform();
+    }
+
+    ~MacRendererFixture() {
+        renderer::shutdown();
+        text::shutdown();
+        if (window)
+            glfwDestroyWindow(window);
+        glfwTerminate();
+    }
+};
 
 static void test_text_measure_basic() {
     text::init();
@@ -311,6 +340,39 @@ static void test_text_init_shutdown_cycle() {
         text::shutdown();
     }
     std::puts("PASS: text init/shutdown cycle");
+}
+
+static void test_macos_renderer_uploads_image_texture() {
+    MacRendererFixture fixture;
+
+    auto repo_root = std::filesystem::path(__FILE__).parent_path().parent_path();
+    auto example_root = repo_root / "examples" / "native";
+    auto image_path = example_root / "assets" / "showcase.bmp";
+    assert(std::filesystem::exists(image_path));
+
+    metrics::inst::native_texture_upload_bytes.reset();
+    auto previous_cwd = std::filesystem::current_path();
+    std::filesystem::current_path(example_root);
+
+    std::vector<unsigned char> commands;
+    append_u32(commands, static_cast<unsigned int>(Cmd::Clear));
+    append_u32(commands, Color{245, 245, 245, 255}.packed());
+    append_u32(commands, static_cast<unsigned int>(Cmd::DrawImage));
+    append_f32(commands, 16.0f);
+    append_f32(commands, 24.0f);
+    append_f32(commands, 320.0f);
+    append_f32(commands, 180.0f);
+    auto image_string = std::string("assets/showcase.bmp");
+    append_u32(commands, static_cast<unsigned int>(image_string.size()));
+    append_bytes(
+        commands,
+        image_string.data(),
+        static_cast<unsigned int>(image_string.size()));
+
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+    std::filesystem::current_path(previous_cwd);
+    assert(metrics::inst::native_texture_upload_bytes.total() > 0);
+    std::puts("PASS: macOS renderer uploads local image texture");
 }
 
 // ============================================================
@@ -603,6 +665,7 @@ int main() {
     test_text_build_atlas_keeps_line_box_stable();
     test_text_build_atlas_empty();
     test_text_init_shutdown_cycle();
+    test_macos_renderer_uploads_image_texture();
     test_renderer_flush_empty();
     std::puts("\nAll native tests passed.");
 #elif defined(_WIN32)
