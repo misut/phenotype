@@ -84,6 +84,25 @@ static void test_text_measure_unicode() {
     std::puts("PASS: text measure unicode");
 }
 
+static void test_text_measure_uses_kerning_pairs() {
+    text::init();
+
+    float a = text::measure(16.0f, false, "A", 1);
+    float v = text::measure(16.0f, false, "V", 1);
+    float av = text::measure(16.0f, false, "AV", 2);
+    assert(av > 0.f);
+    assert(av + 0.25f < a + v);
+
+    float t = text::measure(16.0f, false, "T", 1);
+    float o = text::measure(16.0f, false, "o", 1);
+    float to = text::measure(16.0f, false, "To", 2);
+    assert(to > 0.f);
+    assert(to + 0.25f < t + o);
+
+    text::shutdown();
+    std::puts("PASS: text measure uses kerning pairs");
+}
+
 static void test_text_build_atlas() {
     text::init();
     std::vector<text::TextEntry> entries;
@@ -136,6 +155,40 @@ static void test_text_build_atlas_scale_preserves_logical_bounds() {
 
     text::shutdown();
     std::puts("PASS: text build atlas scale preserves logical bounds");
+}
+
+static void test_text_build_atlas_mixed_fallback_scale_preserves_bounds() {
+    text::init();
+    std::vector<text::TextEntry> entries;
+    entries.push_back({
+        10.f,
+        20.f,
+        16.f,
+        false,
+        0.f,
+        0.f,
+        0.f,
+        1.f,
+        "Hello \xec\x95\x88\xeb\x85\x95",
+        16.f * 1.6f
+    });
+
+    auto atlas1 = text::build_atlas(entries, 1.0f);
+    auto atlas2 = text::build_atlas(entries, 2.0f);
+    assert(atlas1.quads.size() == 1);
+    assert(atlas2.quads.size() == 1);
+
+    float px_w1 = atlas1.quads[0].uw * static_cast<float>(atlas1.width);
+    float px_w2 = atlas2.quads[0].uw * static_cast<float>(atlas2.width);
+    assert(px_w2 > px_w1 * 1.7f);
+    assert(std::fabs(atlas1.quads[0].x - atlas2.quads[0].x) < 0.6f);
+    assert(std::fabs(atlas1.quads[0].y - atlas2.quads[0].y) < 0.6f);
+    assert(std::fabs(atlas1.quads[0].h - atlas2.quads[0].h) < 1.2f);
+    assert(atlas1.quads[0].w > 0.f);
+    assert(atlas2.quads[0].w > 0.f);
+
+    text::shutdown();
+    std::puts("PASS: text build atlas mixed fallback scale preserves bounds");
 }
 
 static void test_text_build_atlas_respects_line_box() {
@@ -380,9 +433,11 @@ int main() {
     test_text_measure_mono_fixed_width();
     test_text_measure_empty();
     test_text_measure_unicode();
+    test_text_measure_uses_kerning_pairs();
     test_text_build_atlas();
     test_text_build_atlas_crops_padding();
     test_text_build_atlas_scale_preserves_logical_bounds();
+    test_text_build_atlas_mixed_fallback_scale_preserves_bounds();
     test_text_build_atlas_respects_line_box();
     test_text_build_atlas_keeps_line_box_stable();
     test_text_build_atlas_empty();
