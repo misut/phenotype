@@ -863,7 +863,7 @@ inline void request_window_repaint() {
 }
 
 inline std::size_t snapshot_caret_byte_offset(
-        ::phenotype::detail::FocusedInputSnapshot const& snapshot) {
+        ::phenotype::FocusedInputSnapshot const& snapshot) {
     if (snapshot.caret_pos == ::phenotype::native::invalid_callback_id)
         return snapshot.value.size();
     return ::phenotype::detail::clamp_utf8_boundary(snapshot.value, snapshot.caret_pos);
