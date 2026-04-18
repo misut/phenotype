@@ -210,6 +210,8 @@ inline bool dispatch_mouse_button(float mx, float my,
     if (auto hit = hit_test(mx, my, g_app_state.scroll_y)) {
         bool focus_changed = ::phenotype::detail::set_focus_id(
             *hit, "shell", "pointer-focus");
+        if (focus_changed)
+            sync_platform_input();
         bool activated = ::phenotype::detail::handle_event(
             *hit, "shell", "pointer-click");
         if (focus_changed || activated)
@@ -219,6 +221,8 @@ inline bool dispatch_mouse_button(float mx, float my,
 
     bool cleared = ::phenotype::detail::set_focus_id(
         invalid_callback_id, "shell", "pointer-clear");
+    if (cleared)
+        sync_platform_input();
     if (cleared)
         repaint_current();
     return cleared;
@@ -338,6 +342,7 @@ inline bool dispatch_key(int key, int action, int mods) {
     switch (key) {
         case GLFW_KEY_TAB:
             if (::phenotype::detail::handle_tab(shift ? 1u : 0u, "shell", detail)) {
+                sync_platform_input();
                 repaint_current();
                 return true;
             }
@@ -422,6 +427,8 @@ inline bool dispatch_key(int key, int action, int mods) {
             if (::phenotype::detail::get_focused_id() != invalid_callback_id)
                 cleared = ::phenotype::detail::set_focus_id(
                     invalid_callback_id, "shell", "escape-clear");
+            if (cleared)
+                sync_platform_input();
             bool handled = dismissed || cleared;
             if (handled)
                 repaint_current();

@@ -525,6 +525,9 @@ struct InputDebugSnapshot {
     float scroll_y = 0.0f;
     unsigned int caret_pos = 0xFFFFFFFFu;
     bool focused_is_input = false;
+    bool composition_active = false;
+    std::string composition_text;
+    unsigned int composition_cursor = 0;
 };
 
 inline json::Value attributes_to_json(std::vector<metrics::Attribute> const& attrs) {

@@ -62,6 +62,7 @@ export module phenotype.native.windows;
 
 #ifndef __wasi__
 import cppx.http.system;
+import phenotype;
 import phenotype.commands;
 import phenotype.state;
 import phenotype.types;
@@ -801,6 +802,7 @@ struct ImeState {
     bool composition_active = false;
     std::wstring composition_text;
     LONG composition_cursor = 0;
+    std::size_t composition_anchor = 0;
     bool candidate_open = false;
     std::vector<std::wstring> candidates;
     DWORD candidate_selection = 0;
@@ -858,6 +860,52 @@ static ImageAtlasState g_images;
 inline void request_window_repaint() {
     if (g_ime.request_repaint)
         g_ime.request_repaint();
+}
+
+inline std::size_t snapshot_caret_byte_offset(
+        ::phenotype::FocusedInputSnapshot const& snapshot) {
+    if (snapshot.caret_pos == ::phenotype::native::invalid_callback_id)
+        return snapshot.value.size();
+    return ::phenotype::detail::clamp_utf8_boundary(snapshot.value, snapshot.caret_pos);
+}
+
+inline float measure_utf8_prefix(float font_size,
+                                 bool mono,
+                                 std::string const& text,
+                                 std::size_t bytes) {
+    bytes = ::phenotype::detail::clamp_utf8_boundary(text, bytes);
+    if (bytes == 0)
+        return 0.0f;
+    return text_measure(
+        font_size,
+        mono,
+        text.data(),
+        static_cast<unsigned int>(bytes));
+}
+
+inline unsigned int composition_cursor_bytes() {
+    auto cursor_units = static_cast<std::size_t>(
+        (g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor);
+    if (cursor_units > g_ime.composition_text.size())
+        cursor_units = g_ime.composition_text.size();
+    auto prefix = wstring_to_utf8(
+        std::wstring_view(g_ime.composition_text.data(), cursor_units));
+    return static_cast<unsigned int>(prefix.size());
+}
+
+inline void sync_input_debug_composition_state() {
+    auto composition = wstring_to_utf8(g_ime.composition_text);
+    ::phenotype::detail::set_input_composition_state(
+        g_ime.composition_active && !composition.empty(),
+        composition,
+        composition_cursor_bytes());
+}
+
+inline void capture_composition_anchor() {
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid)
+        return;
+    g_ime.composition_anchor = snapshot_caret_byte_offset(snapshot);
 }
 
 inline bool is_http_url(std::string const& url) {
@@ -1195,6 +1243,7 @@ inline void clear_ime_state() {
     g_ime.composition_active = false;
     g_ime.composition_text.clear();
     g_ime.composition_cursor = 0;
+    g_ime.composition_anchor = 0;
     g_ime.candidate_open = false;
     g_ime.candidates.clear();
     g_ime.candidate_selection = 0;
@@ -1203,29 +1252,28 @@ inline void clear_ime_state() {
     g_ime.hovered_candidate = -1;
     g_ime.hovered_kind = CandidateHitKind::none;
     g_ime.overlay = {};
+    ::phenotype::detail::clear_input_composition_state();
 }
 
 inline void commit_result_string(std::wstring_view result) {
-    auto snapshot = ::phenotype::detail::focused_input_snapshot();
-    if (!snapshot.valid)
-        return;
     auto suffix = wstring_to_utf8(result);
     if (suffix.empty())
         return;
-    auto next = snapshot.value;
-    next += suffix;
-    for (auto& [id, handler] : ::phenotype::detail::g_app.input_handlers) {
-        if (id != ::phenotype::detail::g_app.focused_id)
-            continue;
-        handler.invoke(handler.state, std::move(next));
+    if (!::phenotype::detail::replace_focused_input_text(
+            g_ime.composition_anchor,
+            g_ime.composition_anchor,
+            suffix))
         return;
-    }
+    g_ime.composition_anchor += suffix.size();
 }
 
 inline void update_composition_state(HWND hwnd, LPARAM lparam) {
     auto himc = ImmGetContext(hwnd);
     if (!himc)
         return;
+
+    if ((lparam & (GCS_RESULTSTR | GCS_COMPSTR)) && !g_ime.composition_active)
+        capture_composition_anchor();
 
     if (lparam & GCS_RESULTSTR) {
         auto bytes = ImmGetCompositionStringW(himc, GCS_RESULTSTR, nullptr, 0);
@@ -1265,6 +1313,7 @@ inline void update_composition_state(HWND hwnd, LPARAM lparam) {
 
     update_candidate_state(himc);
     ImmReleaseContext(hwnd, himc);
+    sync_input_debug_composition_state();
 }
 
 inline void sync_ime_windows() {
@@ -1283,21 +1332,18 @@ inline void sync_ime_windows() {
     float draw_y = snapshot.y - scroll_y;
     float text_x = snapshot.x + snapshot.padding[3];
     float text_y = draw_y + snapshot.padding[0];
-    float caret_x = text_x;
-    if (!snapshot.value.empty()) {
-        caret_x += text_measure(
-            snapshot.font_size,
-            snapshot.mono,
-            snapshot.value.c_str(),
-            static_cast<unsigned int>(snapshot.value.size()));
-    }
+    float caret_x = text_x + measure_utf8_prefix(
+        snapshot.font_size,
+        snapshot.mono,
+        snapshot.value,
+        g_ime.composition_active ? g_ime.composition_anchor : snapshot_caret_byte_offset(snapshot));
     if (g_ime.composition_active && !g_ime.composition_text.empty()) {
-        auto cursor_units = static_cast<std::size_t>(
-            (g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor);
-        if (cursor_units > g_ime.composition_text.size())
-            cursor_units = g_ime.composition_text.size();
         auto prefix = wstring_to_utf8(
-            std::wstring_view(g_ime.composition_text.data(), cursor_units));
+            std::wstring_view(
+                g_ime.composition_text.data(),
+                std::min<std::size_t>(
+                    static_cast<std::size_t>((g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor),
+                    g_ime.composition_text.size())));
         if (!prefix.empty()) {
             caret_x += text_measure(
                 snapshot.font_size,
@@ -1320,10 +1366,11 @@ inline void sync_ime_windows() {
     CANDIDATEFORM cand{};
     cand.dwIndex = 0;
     cand.dwStyle = CFS_CANDIDATEPOS;
-    cand.ptCurrentPos.x = static_cast<LONG>(std::round(snapshot.x));
+    cand.ptCurrentPos.x = static_cast<LONG>(std::round(caret_x));
     cand.ptCurrentPos.y = static_cast<LONG>(std::round(draw_y + snapshot.height));
     ImmSetCandidateWindow(himc, &cand);
     ImmReleaseContext(g_ime.hwnd, himc);
+    sync_input_debug_composition_state();
 
     if (!g_ime.candidate_open || g_ime.candidates.empty()) {
         g_ime.hovered_candidate = -1;
@@ -2625,14 +2672,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         float draw_y = snapshot.y - scroll_y;
         if (g_ime.composition_active && !g_ime.composition_text.empty()) {
             auto composition = wstring_to_utf8(g_ime.composition_text);
-            float base_x = snapshot.x + snapshot.padding[3];
-            if (!snapshot.value.empty()) {
-                base_x += text_measure(
-                    snapshot.font_size,
-                    snapshot.mono,
-                    snapshot.value.c_str(),
-                    static_cast<unsigned int>(snapshot.value.size()));
-            }
+            float base_x = snapshot.x + snapshot.padding[3] + measure_utf8_prefix(
+                snapshot.font_size,
+                snapshot.mono,
+                snapshot.value,
+                g_ime.composition_anchor);
             append_overlay_text(
                 base_x,
                 draw_y + snapshot.padding[0],
@@ -2660,12 +2704,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                     1.0f);
             }
 
-            auto cursor_units = static_cast<std::size_t>(
-                (g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor);
-            if (cursor_units > g_ime.composition_text.size())
-                cursor_units = g_ime.composition_text.size();
             auto prefix = wstring_to_utf8(
-                std::wstring_view(g_ime.composition_text.data(), cursor_units));
+                std::wstring_view(
+                    g_ime.composition_text.data(),
+                    std::min<std::size_t>(
+                        static_cast<std::size_t>((g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor),
+                        g_ime.composition_text.size())));
             float caret_x = base_x;
             if (!prefix.empty()) {
                 caret_x += text_measure(

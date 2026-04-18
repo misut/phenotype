@@ -35,6 +35,7 @@ module;
 #include <CoreText/CoreText.h>
 #include <CoreGraphics/CoreGraphics.h>
 #include <objc/message.h>
+#include <objc/runtime.h>
 #endif
 #endif
 
@@ -44,6 +45,7 @@ export module phenotype.native.macos;
 import cppx.http.system;
 import cppx.os;
 import cppx.os.system;
+import phenotype;
 import phenotype.commands;
 import phenotype.diag;
 import phenotype.state;
@@ -72,6 +74,312 @@ struct TextState {
 
 inline TextState g_text;
 
+struct CocoaRange {
+    unsigned long location = 0;
+    unsigned long length = 0;
+};
+
+inline constexpr unsigned long cocoa_not_found =
+    std::numeric_limits<unsigned long>::max();
+
+template<typename Ret, typename... Args>
+inline Ret objc_send(id obj, SEL sel, Args... args) {
+    return reinterpret_cast<Ret (*)(id, SEL, Args...)>(objc_msgSend)(
+        obj, sel, args...);
+}
+
+inline id class_as_id(Class type) {
+    return reinterpret_cast<id>(type);
+}
+
+template<typename T>
+inline id cf_as_id(T value) {
+    return reinterpret_cast<id>(const_cast<void*>(reinterpret_cast<void const*>(value)));
+}
+
+template<typename T>
+inline T id_as_cf(id value) {
+    return reinterpret_cast<T>(value);
+}
+
+template<typename Ret, typename... Args>
+inline Ret objc_send_super(id obj, Class super_class, SEL sel, Args... args) {
+    objc_super super{
+        .receiver = obj,
+        .super_class = super_class,
+    };
+    return reinterpret_cast<Ret (*)(objc_super*, SEL, Args...)>(objc_msgSendSuper)(
+        &super, sel, args...);
+}
+
+inline SEL sel_accepts_first_responder() {
+    static auto sel = sel_registerName("acceptsFirstResponder");
+    return sel;
+}
+
+inline SEL sel_add_subview() {
+    static auto sel = sel_registerName("addSubview:");
+    return sel;
+}
+
+inline SEL sel_alloc() {
+    static auto sel = sel_registerName("alloc");
+    return sel;
+}
+
+inline SEL sel_array() {
+    static auto sel = sel_registerName("array");
+    return sel;
+}
+
+inline SEL sel_array_with_object() {
+    static auto sel = sel_registerName("arrayWithObject:");
+    return sel;
+}
+
+inline SEL sel_autorelease() {
+    static auto sel = sel_registerName("autorelease");
+    return sel;
+}
+
+inline SEL sel_bounds() {
+    static auto sel = sel_registerName("bounds");
+    return sel;
+}
+
+inline SEL sel_cancel_operation() {
+    static auto sel = sel_registerName("cancelOperation:");
+    return sel;
+}
+
+inline SEL sel_character_index_for_point() {
+    static auto sel = sel_registerName("characterIndexForPoint:");
+    return sel;
+}
+
+inline SEL sel_convert_rect_to_screen() {
+    static auto sel = sel_registerName("convertRectToScreen:");
+    return sel;
+}
+
+inline SEL sel_convert_rect_to_view() {
+    static auto sel = sel_registerName("convertRect:toView:");
+    return sel;
+}
+
+inline SEL sel_content_view() {
+    static auto sel = sel_registerName("contentView");
+    return sel;
+}
+
+inline SEL sel_conversation_identifier() {
+    static auto sel = sel_registerName("conversationIdentifier");
+    return sel;
+}
+
+inline SEL sel_discard_marked_text() {
+    static auto sel = sel_registerName("discardMarkedText");
+    return sel;
+}
+
+inline SEL sel_do_command_by_selector() {
+    static auto sel = sel_registerName("doCommandBySelector:");
+    return sel;
+}
+
+inline SEL sel_first_rect_for_character_range() {
+    static auto sel = sel_registerName("firstRectForCharacterRange:actualRange:");
+    return sel;
+}
+
+inline SEL sel_first_responder() {
+    static auto sel = sel_registerName("firstResponder");
+    return sel;
+}
+
+inline SEL sel_has_marked_text() {
+    static auto sel = sel_registerName("hasMarkedText");
+    return sel;
+}
+
+inline SEL sel_handle_event() {
+    static auto sel = sel_registerName("handleEvent:");
+    return sel;
+}
+
+inline SEL sel_input_context() {
+    static auto sel = sel_registerName("inputContext");
+    return sel;
+}
+
+inline SEL sel_init_with_frame() {
+    static auto sel = sel_registerName("initWithFrame:");
+    return sel;
+}
+
+inline SEL sel_insert_newline() {
+    static auto sel = sel_registerName("insertNewline:");
+    return sel;
+}
+
+inline SEL sel_insert_tab() {
+    static auto sel = sel_registerName("insertTab:");
+    return sel;
+}
+
+inline SEL sel_insert_backtab() {
+    static auto sel = sel_registerName("insertBacktab:");
+    return sel;
+}
+
+inline SEL sel_interpret_key_events() {
+    static auto sel = sel_registerName("interpretKeyEvents:");
+    return sel;
+}
+
+inline SEL sel_invalidate_character_coordinates() {
+    static auto sel = sel_registerName("invalidateCharacterCoordinates");
+    return sel;
+}
+
+inline SEL sel_key_code() {
+    static auto sel = sel_registerName("keyCode");
+    return sel;
+}
+
+inline SEL sel_key_down() {
+    static auto sel = sel_registerName("keyDown:");
+    return sel;
+}
+
+inline SEL sel_length() {
+    static auto sel = sel_registerName("length");
+    return sel;
+}
+
+inline SEL sel_make_first_responder() {
+    static auto sel = sel_registerName("makeFirstResponder:");
+    return sel;
+}
+
+inline SEL sel_marked_range() {
+    static auto sel = sel_registerName("markedRange");
+    return sel;
+}
+
+inline SEL sel_move_left() {
+    static auto sel = sel_registerName("moveLeft:");
+    return sel;
+}
+
+inline SEL sel_move_right() {
+    static auto sel = sel_registerName("moveRight:");
+    return sel;
+}
+
+inline SEL sel_move_to_beginning() {
+    static auto sel = sel_registerName("moveToBeginningOfLine:");
+    return sel;
+}
+
+inline SEL sel_move_to_end() {
+    static auto sel = sel_registerName("moveToEndOfLine:");
+    return sel;
+}
+
+inline SEL sel_move_up() {
+    static auto sel = sel_registerName("moveUp:");
+    return sel;
+}
+
+inline SEL sel_move_down() {
+    static auto sel = sel_registerName("moveDown:");
+    return sel;
+}
+
+inline SEL sel_delete_backward() {
+    static auto sel = sel_registerName("deleteBackward:");
+    return sel;
+}
+
+inline SEL sel_responds_to_selector() {
+    static auto sel = sel_registerName("respondsToSelector:");
+    return sel;
+}
+
+inline SEL sel_release() {
+    static auto sel = sel_registerName("release");
+    return sel;
+}
+
+inline SEL sel_remove_from_superview() {
+    static auto sel = sel_registerName("removeFromSuperview");
+    return sel;
+}
+
+inline SEL sel_selected_range() {
+    static auto sel = sel_registerName("selectedRange");
+    return sel;
+}
+
+inline SEL sel_set_marked_text() {
+    static auto sel = sel_registerName("setMarkedText:selectedRange:replacementRange:");
+    return sel;
+}
+
+inline SEL sel_insert_text_with_range() {
+    static auto sel = sel_registerName("insertText:replacementRange:");
+    return sel;
+}
+
+inline SEL sel_string() {
+    static auto sel = sel_registerName("string");
+    return sel;
+}
+
+inline SEL sel_substring_with_range() {
+    static auto sel = sel_registerName("substringWithRange:");
+    return sel;
+}
+
+inline SEL sel_set_frame() {
+    static auto sel = sel_registerName("setFrame:");
+    return sel;
+}
+
+inline SEL sel_unmark_text() {
+    static auto sel = sel_registerName("unmarkText");
+    return sel;
+}
+
+inline SEL sel_utf8_string() {
+    static auto sel = sel_registerName("UTF8String");
+    return sel;
+}
+
+inline SEL sel_valid_attributes_for_marked_text() {
+    static auto sel = sel_registerName("validAttributesForMarkedText");
+    return sel;
+}
+
+inline SEL sel_window() {
+    static auto sel = sel_registerName("window");
+    return sel;
+}
+
+inline SEL sel_attributed_substring_for_range() {
+    static auto sel =
+        sel_registerName("attributedSubstringForProposedRange:actualRange:");
+    return sel;
+}
+
+inline bool objc_responds_to(id obj, SEL sel) {
+    return obj && objc_send<bool>(obj, sel_responds_to_selector(), sel);
+}
+
+inline float text_measure(float font_size, bool mono,
+                          char const* text_ptr, unsigned int len);
+
 inline float sanitize_scale(float scale) {
     return (scale > 0.0f && std::isfinite(scale)) ? scale : 1.0f;
 }
@@ -84,6 +392,27 @@ inline int logical_pixels(float logical, float scale, int minimum = 1) {
 inline float snap_to_pixel_grid(float value, float scale) {
     float s = sanitize_scale(scale);
     return std::round(value * s) / s;
+}
+
+inline std::size_t clamp_snapshot_caret(
+        ::phenotype::FocusedInputSnapshot const& snapshot) {
+    if (snapshot.caret_pos == ::phenotype::native::invalid_callback_id)
+        return snapshot.value.size();
+    return ::phenotype::detail::clamp_utf8_boundary(snapshot.value, snapshot.caret_pos);
+}
+
+inline float measure_utf8_prefix(float font_size,
+                                 bool mono,
+                                 std::string const& text,
+                                 std::size_t bytes) {
+    bytes = ::phenotype::detail::clamp_utf8_boundary(text, bytes);
+    if (bytes == 0)
+        return 0.0f;
+    return text_measure(
+        font_size,
+        mono,
+        text.data(),
+        static_cast<unsigned int>(bytes));
 }
 
 struct LineBoxMetrics {
@@ -361,6 +690,49 @@ inline float text_measure(float font_size, bool mono,
     return std::isfinite(width) ? static_cast<float>(width) : 0.0f;
 }
 
+inline unsigned long utf16_length(std::string_view utf8) {
+    if (utf8.empty())
+        return 0;
+    auto text = create_text_cf_string(utf8.data(), static_cast<unsigned int>(utf8.size()));
+    return text ? static_cast<unsigned long>(CFStringGetLength(text)) : 0;
+}
+
+inline std::string text_object_to_utf8(id value) {
+    if (!value)
+        return {};
+    if (objc_responds_to(value, sel_string()))
+        value = objc_send<id>(value, sel_string());
+    if (!value)
+        return {};
+    auto utf8 = objc_send<char const*>(value, sel_utf8_string());
+    return utf8 ? std::string(utf8) : std::string{};
+}
+
+inline unsigned long text_object_length_utf16(id value) {
+    if (!value)
+        return 0;
+    if (objc_responds_to(value, sel_string()))
+        value = objc_send<id>(value, sel_string());
+    if (!value)
+        return 0;
+    return objc_send<unsigned long>(value, sel_length());
+}
+
+inline std::string text_object_prefix_utf8(id value, unsigned long length) {
+    if (!value)
+        return {};
+    if (objc_responds_to(value, sel_string()))
+        value = objc_send<id>(value, sel_string());
+    if (!value)
+        return {};
+    auto total = objc_send<unsigned long>(value, sel_length());
+    if (length > total)
+        length = total;
+    CocoaRange range{0, length};
+    auto prefix = objc_send<id>(value, sel_substring_with_range(), range);
+    return text_object_to_utf8(prefix);
+}
+
 inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
                                   float backing_scale) {
     if (entries.empty()) return {};
@@ -607,12 +979,31 @@ struct ImageAtlasCache {
 
 inline ImageAtlasCache g_images;
 
+struct ImeState {
+    GLFWwindow* window = nullptr;
+    id ns_window = nullptr;
+    id content_view = nullptr;
+    id editor_view = nullptr;
+    Class editor_class = Nil;
+    void (*request_repaint)() = nullptr;
+    bool composition_active = false;
+    std::string marked_text;
+    CocoaRange marked_selection = {0, 0};
+    std::size_t composition_anchor = 0;
+    std::size_t replacement_start = 0;
+    std::size_t replacement_end = 0;
+    unsigned int focused_callback_id = ::phenotype::native::invalid_callback_id;
+};
+
+inline ImeState g_ime;
+
 struct FrameScratch {
     std::vector<ColorInstanceGPU> color_instances;
     std::vector<ParsedTextRun> text_runs;
     std::vector<PendingImageCmd> images;
     std::vector<ImageInstanceGPU> image_instances;
     std::vector<TextInstanceGPU> text_instances;
+    std::vector<std::string> overlay_text_storage;
 
     void clear() {
         color_instances.clear();
@@ -620,6 +1011,7 @@ struct FrameScratch {
         images.clear();
         image_instances.clear();
         text_instances.clear();
+        overlay_text_storage.clear();
     }
 };
 
@@ -1868,17 +2260,734 @@ inline void prepare_image_instances(float scale) {
     }
 }
 
-inline void input_attach(GLFWwindow*, void (*request_repaint)()) {
+inline void request_window_repaint() {
+    if (g_ime.request_repaint)
+        g_ime.request_repaint();
+}
+
+struct ByteRange {
+    std::size_t start = 0;
+    std::size_t end = 0;
+};
+
+inline std::size_t utf16_offset_to_utf8(std::string const& text,
+                                        unsigned long units) {
+    if (text.empty() || units == 0)
+        return 0;
+
+    auto source = create_text_cf_string(text.data(), static_cast<unsigned int>(text.size()));
+    if (!source)
+        return 0;
+
+    auto total_units = static_cast<unsigned long>(CFStringGetLength(source));
+    if (units > total_units)
+        units = total_units;
+
+    CFIndex used_bytes = 0;
+    CFStringGetBytes(
+        source,
+        CFRange{0, static_cast<CFIndex>(units)},
+        kCFStringEncodingUTF8,
+        0,
+        false,
+        nullptr,
+        0,
+        &used_bytes);
+    return static_cast<std::size_t>(used_bytes);
+}
+
+inline ByteRange utf16_range_to_utf8_range(std::string const& text,
+                                           CocoaRange range) {
+    auto start = utf16_offset_to_utf8(text, range.location);
+    auto end = utf16_offset_to_utf8(text, range.location + range.length);
+    if (end < start)
+        end = start;
+    return {start, end};
+}
+
+inline CocoaRange clamp_cocoa_range(CocoaRange range, unsigned long total_units) {
+    if (range.location == cocoa_not_found)
+        return {total_units, 0};
+    if (range.location > total_units)
+        range.location = total_units;
+    auto max_len = total_units - range.location;
+    if (range.length > max_len)
+        range.length = max_len;
+    return range;
+}
+
+inline std::string substring_for_utf16_range(std::string const& text,
+                                             CocoaRange range) {
+    auto bytes = utf16_range_to_utf8_range(text, range);
+    return text.substr(bytes.start, bytes.end - bytes.start);
+}
+
+inline ByteRange caret_byte_range(::phenotype::FocusedInputSnapshot const& snapshot) {
+    auto caret = clamp_snapshot_caret(snapshot);
+    return {caret, caret};
+}
+
+inline ByteRange requested_document_range(
+        ::phenotype::FocusedInputSnapshot const& snapshot,
+        CocoaRange replacement_range) {
+    if (replacement_range.location == cocoa_not_found)
+        return caret_byte_range(snapshot);
+    return utf16_range_to_utf8_range(snapshot.value, replacement_range);
+}
+
+inline ByteRange effective_replacement_range(
+        ::phenotype::FocusedInputSnapshot const& snapshot,
+        CocoaRange replacement_range) {
+    if (replacement_range.location != cocoa_not_found)
+        return utf16_range_to_utf8_range(snapshot.value, replacement_range);
+    if (g_ime.composition_active)
+        return {g_ime.replacement_start, g_ime.replacement_end};
+    return caret_byte_range(snapshot);
+}
+
+inline std::size_t composition_cursor_bytes() {
+    auto total_units = utf16_length(g_ime.marked_text);
+    auto selected = clamp_cocoa_range(g_ime.marked_selection, total_units);
+    return utf16_offset_to_utf8(g_ime.marked_text, selected.location);
+}
+
+inline void sync_input_debug_composition_state() {
+    ::phenotype::detail::set_input_composition_state(
+        g_ime.composition_active && !g_ime.marked_text.empty(),
+        g_ime.marked_text,
+        static_cast<unsigned int>(composition_cursor_bytes()));
+}
+
+inline void clear_ime_state() {
+    g_ime.composition_active = false;
+    g_ime.marked_text.clear();
+    g_ime.marked_selection = {0, 0};
+    g_ime.composition_anchor = 0;
+    g_ime.replacement_start = 0;
+    g_ime.replacement_end = 0;
+    ::phenotype::detail::clear_input_composition_state();
+}
+
+struct CompositionVisualState {
+    bool valid = false;
+    ::phenotype::FocusedInputSnapshot snapshot{};
+    std::string erase_text;
+    std::string visible_text;
+    std::size_t caret_bytes = 0;
+    std::size_t marked_start = 0;
+    std::size_t marked_end = 0;
+    float draw_y = 0.0f;
+    float text_y = 0.0f;
+    float base_x = 0.0f;
+    float caret_x = 0.0f;
+    float underline_x = 0.0f;
+    float underline_width = 0.0f;
+};
+
+inline CompositionVisualState current_composition_visual_state() {
+    CompositionVisualState visual{};
+    visual.snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!visual.snapshot.valid || !g_ime.composition_active || g_ime.marked_text.empty())
+        return visual;
+
+    auto start = ::phenotype::detail::clamp_utf8_boundary(
+        visual.snapshot.value,
+        g_ime.replacement_start);
+    auto end = ::phenotype::detail::clamp_utf8_boundary(
+        visual.snapshot.value,
+        g_ime.replacement_end);
+    if (end < start)
+        end = start;
+
+    auto prefix = visual.snapshot.value.substr(0, start);
+    auto suffix = visual.snapshot.value.substr(end);
+    visual.valid = true;
+    visual.erase_text = visual.snapshot.value.empty()
+        ? visual.snapshot.placeholder
+        : visual.snapshot.value;
+    visual.visible_text = prefix + g_ime.marked_text + suffix;
+    visual.marked_start = prefix.size();
+    visual.marked_end = visual.marked_start + g_ime.marked_text.size();
+    visual.caret_bytes = std::min(
+        visual.visible_text.size(),
+        visual.marked_start + composition_cursor_bytes());
+
+    auto scroll_y = ::phenotype::detail::get_scroll_y();
+    visual.draw_y = visual.snapshot.y - scroll_y;
+    visual.text_y = visual.draw_y + visual.snapshot.padding[0];
+    visual.base_x = visual.snapshot.x + visual.snapshot.padding[3];
+    visual.underline_x = visual.base_x + measure_utf8_prefix(
+        visual.snapshot.font_size,
+        visual.snapshot.mono,
+        visual.visible_text,
+        visual.marked_start);
+    auto underline_end = visual.base_x + measure_utf8_prefix(
+        visual.snapshot.font_size,
+        visual.snapshot.mono,
+        visual.visible_text,
+        visual.marked_end);
+    visual.underline_width = underline_end - visual.underline_x;
+    visual.caret_x = visual.base_x + measure_utf8_prefix(
+        visual.snapshot.font_size,
+        visual.snapshot.mono,
+        visual.visible_text,
+        visual.caret_bytes);
+    return visual;
+}
+
+inline CGRect current_caret_rect_screen() {
+    auto visual = current_composition_visual_state();
+    if (!visual.valid || !g_ime.content_view || !g_ime.ns_window)
+        return CGRectNull;
+
+    auto bounds = objc_send<CGRect>(g_ime.content_view, sel_bounds());
+    CGRect content_rect{};
+    content_rect.origin.x = visual.caret_x;
+    content_rect.origin.y = bounds.size.height
+        - (visual.text_y + visual.snapshot.line_height);
+    content_rect.size.width = 1.0;
+    content_rect.size.height = visual.snapshot.line_height;
+
+    auto window_rect = objc_send<CGRect>(
+        g_ime.content_view,
+        sel_convert_rect_to_view(),
+        content_rect,
+        static_cast<id>(nullptr));
+    return objc_send<CGRect>(g_ime.ns_window, sel_convert_rect_to_screen(), window_rect);
+}
+
+inline CocoaRange current_marked_range() {
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid || !g_ime.composition_active || g_ime.marked_text.empty())
+        return {cocoa_not_found, 0};
+
+    auto start = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, g_ime.replacement_start);
+    return {
+        utf16_length(std::string_view(snapshot.value.data(), start)),
+        utf16_length(g_ime.marked_text),
+    };
+}
+
+inline CocoaRange current_selected_range() {
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid)
+        return {cocoa_not_found, 0};
+
+    if (!g_ime.composition_active || g_ime.marked_text.empty()) {
+        auto caret = clamp_snapshot_caret(snapshot);
+        return {utf16_length(std::string_view(snapshot.value.data(), caret)), 0};
+    }
+
+    auto marked = current_marked_range();
+    auto selected = clamp_cocoa_range(g_ime.marked_selection, utf16_length(g_ime.marked_text));
+    return {
+        marked.location + selected.location,
+        selected.length,
+    };
+}
+
+inline id autorelease_object(id value) {
+    return value ? objc_send<id>(value, sel_autorelease()) : value;
+}
+
+inline id make_nsstring(std::string_view utf8) {
+    auto* text = CFStringCreateWithBytes(
+        kCFAllocatorDefault,
+        reinterpret_cast<UInt8 const*>(utf8.empty() ? "" : utf8.data()),
+        static_cast<CFIndex>(utf8.size()),
+        kCFStringEncodingUTF8,
+        false);
+    return autorelease_object(cf_as_id(text));
+}
+
+inline id make_attributed_string(std::string_view utf8) {
+    auto string = make_nsstring(utf8);
+    if (!string)
+        return nil;
+    auto* attr = CFAttributedStringCreate(
+        kCFAllocatorDefault,
+        id_as_cf<CFStringRef>(string),
+        nullptr);
+    return autorelease_object(cf_as_id(attr));
+}
+
+inline void append_overlay_text(FrameScratch& scratch,
+                                float x,
+                                float y,
+                                float font_size,
+                                bool mono,
+                                ::phenotype::Color const& color,
+                                std::string text,
+                                float line_height) {
+    if (text.empty())
+        return;
+    scratch.overlay_text_storage.push_back(std::move(text));
+    auto const& stored = scratch.overlay_text_storage.back();
+    scratch.text_runs.push_back({
+        x,
+        y,
+        font_size,
+        mono,
+        color.r / 255.0f,
+        color.g / 255.0f,
+        color.b / 255.0f,
+        color.a / 255.0f,
+        line_height,
+        stored.c_str(),
+        static_cast<unsigned int>(stored.size()),
+    });
+}
+
+inline void append_ime_overlay(FrameScratch& scratch) {
+    auto visual = current_composition_visual_state();
+    if (!visual.valid)
+        return;
+
+    append_overlay_text(
+        scratch,
+        visual.base_x,
+        visual.text_y,
+        visual.snapshot.font_size,
+        visual.snapshot.mono,
+        visual.snapshot.background,
+        visual.erase_text,
+        visual.snapshot.line_height);
+
+    append_overlay_text(
+        scratch,
+        visual.base_x,
+        visual.text_y,
+        visual.snapshot.font_size,
+        visual.snapshot.mono,
+        visual.snapshot.foreground,
+        visual.visible_text,
+        visual.snapshot.line_height);
+
+    if (visual.underline_width > 0.0f) {
+        append_color_instance(
+            scratch.color_instances,
+            visual.underline_x,
+            visual.text_y + visual.snapshot.line_height - 2.0f,
+            visual.underline_width,
+            1.5f,
+            visual.snapshot.accent.r / 255.0f,
+            visual.snapshot.accent.g / 255.0f,
+            visual.snapshot.accent.b / 255.0f,
+            1.0f);
+    }
+
+    append_color_instance(
+        scratch.color_instances,
+        visual.caret_x,
+        visual.text_y + 2.0f,
+        1.5f,
+        (visual.snapshot.line_height > 4.0f)
+            ? (visual.snapshot.line_height - 4.0f)
+            : visual.snapshot.line_height,
+        visual.snapshot.accent.r / 255.0f,
+        visual.snapshot.accent.g / 255.0f,
+        visual.snapshot.accent.b / 255.0f,
+        1.0f);
+}
+
+inline void discard_marked_text_from_system() {
+    if (!g_ime.editor_view)
+        return;
+    auto input_context = objc_send<id>(g_ime.editor_view, sel_input_context());
+    if (input_context && objc_responds_to(input_context, sel_discard_marked_text()))
+        objc_send<void>(input_context, sel_discard_marked_text());
+}
+
+inline void sync_input_context_geometry() {
+    if (!g_ime.editor_view)
+        return;
+    auto input_context = objc_send<id>(g_ime.editor_view, sel_input_context());
+    if (input_context
+        && objc_responds_to(input_context, sel_invalidate_character_coordinates())) {
+        objc_send<void>(input_context, sel_invalidate_character_coordinates());
+    }
+}
+
+inline bool editor_is_first_responder() {
+    return g_ime.ns_window
+        && objc_send<id>(g_ime.ns_window, sel_first_responder()) == g_ime.editor_view;
+}
+
+inline void restore_content_view_first_responder() {
+    if (g_ime.ns_window && g_ime.content_view)
+        objc_send<bool>(g_ime.ns_window, sel_make_first_responder(), g_ime.content_view);
+}
+
+inline void focus_editor_view() {
+    if (g_ime.ns_window && g_ime.editor_view)
+        objc_send<bool>(g_ime.ns_window, sel_make_first_responder(), g_ime.editor_view);
+}
+
+inline bool input_dismiss_transient();
+
+inline bool is_line_break_text(std::string_view text) {
+    return text == "\n" || text == "\r" || text == "\r\n";
+}
+
+inline void editor_key_down(id self, SEL, id event) {
+    auto events = objc_send<id>(
+        class_as_id(objc_getClass("NSArray")),
+        sel_array_with_object(),
+        event);
+    objc_send<void>(self, sel_interpret_key_events(), events);
+}
+
+inline bool editor_accepts_first_responder(id, SEL) {
+    return true;
+}
+
+inline long long editor_conversation_identifier(id self, SEL) {
+    return reinterpret_cast<long long>(self);
+}
+
+inline bool editor_has_marked_text(id, SEL) {
+    return g_ime.composition_active && !g_ime.marked_text.empty();
+}
+
+inline CocoaRange editor_marked_range(id, SEL) {
+    return current_marked_range();
+}
+
+inline CocoaRange editor_selected_range(id, SEL) {
+    return current_selected_range();
+}
+
+inline void editor_set_marked_text(id, SEL, id value,
+                                   CocoaRange selected_range,
+                                   CocoaRange replacement_range) {
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid)
+        return;
+
+    auto bytes = effective_replacement_range(snapshot, replacement_range);
+    bytes.start = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, bytes.start);
+    bytes.end = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, bytes.end);
+    if (bytes.end < bytes.start)
+        bytes.end = bytes.start;
+
+    g_ime.marked_text = text_object_to_utf8(value);
+    g_ime.composition_active = !g_ime.marked_text.empty();
+    g_ime.composition_anchor = bytes.start;
+    g_ime.replacement_start = bytes.start;
+    g_ime.replacement_end = bytes.end;
+    g_ime.marked_selection = clamp_cocoa_range(
+        selected_range,
+        utf16_length(g_ime.marked_text));
+    sync_input_debug_composition_state();
+    sync_input_context_geometry();
+    request_window_repaint();
+}
+
+inline void editor_unmark_text(id, SEL) {
+    auto had_marked = g_ime.composition_active || !g_ime.marked_text.empty();
+    clear_ime_state();
+    if (had_marked) {
+        sync_input_context_geometry();
+        request_window_repaint();
+    }
+}
+
+inline void editor_insert_text(id, SEL, id value, CocoaRange replacement_range) {
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid)
+        return;
+
+    auto replacement = effective_replacement_range(snapshot, replacement_range);
+    replacement.start = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, replacement.start);
+    replacement.end = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, replacement.end);
+    if (replacement.end < replacement.start)
+        replacement.end = replacement.start;
+
+    auto text = text_object_to_utf8(value);
+    if (!is_line_break_text(text)) {
+        ::phenotype::detail::replace_focused_input_text(
+            replacement.start,
+            replacement.end,
+            text);
+    }
+
+    clear_ime_state();
+    sync_input_context_geometry();
+    request_window_repaint();
+}
+
+inline CGRect editor_first_rect_for_character_range(id,
+                                                    SEL,
+                                                    CocoaRange range,
+                                                    CocoaRange* actual_range) {
+    if (actual_range)
+        *actual_range = range;
+    auto rect = current_caret_rect_screen();
+    if (!CGRectIsNull(rect))
+        return rect;
+    if (!g_ime.content_view || !g_ime.ns_window)
+        return CGRectNull;
+
+    CGRect content_rect{};
+    content_rect.origin = CGPointZero;
+    content_rect.size.width = 1.0;
+    content_rect.size.height = 1.0;
+    auto window_rect = objc_send<CGRect>(
+        g_ime.content_view,
+        sel_convert_rect_to_view(),
+        content_rect,
+        static_cast<id>(nullptr));
+    return objc_send<CGRect>(g_ime.ns_window, sel_convert_rect_to_screen(), window_rect);
+}
+
+inline unsigned long editor_character_index_for_point(id, SEL, CGPoint) {
+    auto selected = current_selected_range();
+    return (selected.location == cocoa_not_found) ? 0 : selected.location;
+}
+
+inline id editor_attributed_substring_for_range(id,
+                                                SEL,
+                                                CocoaRange range,
+                                                CocoaRange* actual_range) {
+    auto visual = current_composition_visual_state();
+    auto snapshot = visual.valid
+        ? visual.snapshot
+        : ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid)
+        return nil;
+
+    auto const& document = visual.valid ? visual.visible_text : snapshot.value;
+    auto total_units = utf16_length(document);
+    auto clamped = clamp_cocoa_range(range, total_units);
+    if (actual_range)
+        *actual_range = clamped;
+    return make_attributed_string(substring_for_utf16_range(document, clamped));
+}
+
+inline id editor_valid_attributes_for_marked_text(id, SEL) {
+    return objc_send<id>(class_as_id(objc_getClass("NSArray")), sel_array());
+}
+
+inline void editor_do_command_by_selector(id,
+                                          SEL,
+                                          SEL command) {
+    bool handled = false;
+    if (command == sel_delete_backward()) {
+        handled = ::phenotype::detail::handle_key(
+            1, 0, "macos-ime", "deleteBackward:");
+    } else if (command == sel_move_left()) {
+        handled = ::phenotype::detail::handle_key(
+            2, 0, "macos-ime", "moveLeft:");
+    } else if (command == sel_move_right()) {
+        handled = ::phenotype::detail::handle_key(
+            3, 0, "macos-ime", "moveRight:");
+    } else if (command == sel_move_to_beginning()) {
+        handled = ::phenotype::detail::handle_key(
+            4, 0, "macos-ime", "moveToBeginningOfLine:");
+    } else if (command == sel_move_to_end()) {
+        handled = ::phenotype::detail::handle_key(
+            5, 0, "macos-ime", "moveToEndOfLine:");
+    } else if (command == sel_insert_tab()) {
+        handled = ::phenotype::detail::handle_tab(0, "macos-ime", "insertTab:");
+    } else if (command == sel_insert_backtab()) {
+        handled = ::phenotype::detail::handle_tab(1, "macos-ime", "insertBacktab:");
+    } else if (command == sel_cancel_operation()) {
+        bool dismissed = input_dismiss_transient();
+        bool cleared = false;
+        if (::phenotype::detail::get_focused_id() != ::phenotype::native::invalid_callback_id)
+            cleared = ::phenotype::detail::set_focus_id(
+                ::phenotype::native::invalid_callback_id,
+                "macos-ime",
+                "cancelOperation:");
+        if (cleared)
+            restore_content_view_first_responder();
+        handled = dismissed || cleared;
+    } else if (command == sel_insert_newline()) {
+        handled = g_ime.composition_active;
+    }
+
+    if (handled)
+        request_window_repaint();
+}
+
+inline Class ensure_editor_view_class() {
+    if (g_ime.editor_class)
+        return g_ime.editor_class;
+
+    static char const* class_name = "PhenotypeIMEFieldEditorView";
+    if (auto existing = objc_lookUpClass(class_name)) {
+        g_ime.editor_class = existing;
+        return existing;
+    }
+
+    auto base_class = static_cast<Class>(objc_getClass("NSView"));
+    auto subclass = objc_allocateClassPair(base_class, class_name, 0);
+    if (auto protocol = objc_getProtocol("NSTextInputClient"))
+        class_addProtocol(subclass, protocol);
+    class_addMethod(
+        subclass,
+        sel_accepts_first_responder(),
+        reinterpret_cast<IMP>(editor_accepts_first_responder),
+        "B@:");
+    class_addMethod(
+        subclass,
+        sel_conversation_identifier(),
+        reinterpret_cast<IMP>(editor_conversation_identifier),
+        "q@:");
+    class_addMethod(
+        subclass,
+        sel_key_down(),
+        reinterpret_cast<IMP>(editor_key_down),
+        "v@:@");
+    class_addMethod(
+        subclass,
+        sel_has_marked_text(),
+        reinterpret_cast<IMP>(editor_has_marked_text),
+        "B@:");
+    class_addMethod(
+        subclass,
+        sel_marked_range(),
+        reinterpret_cast<IMP>(editor_marked_range),
+        "{_NSRange=QQ}@:");
+    class_addMethod(
+        subclass,
+        sel_selected_range(),
+        reinterpret_cast<IMP>(editor_selected_range),
+        "{_NSRange=QQ}@:");
+    class_addMethod(
+        subclass,
+        sel_set_marked_text(),
+        reinterpret_cast<IMP>(editor_set_marked_text),
+        "v@:@@{_NSRange=QQ}{_NSRange=QQ}");
+    class_addMethod(
+        subclass,
+        sel_unmark_text(),
+        reinterpret_cast<IMP>(editor_unmark_text),
+        "v@:");
+    class_addMethod(
+        subclass,
+        sel_insert_text_with_range(),
+        reinterpret_cast<IMP>(editor_insert_text),
+        "v@:@@{_NSRange=QQ}");
+    class_addMethod(
+        subclass,
+        sel_first_rect_for_character_range(),
+        reinterpret_cast<IMP>(editor_first_rect_for_character_range),
+        "{CGRect={CGPoint=dd}{CGSize=dd}}@:{_NSRange=QQ}^{_NSRange=QQ}");
+    class_addMethod(
+        subclass,
+        sel_character_index_for_point(),
+        reinterpret_cast<IMP>(editor_character_index_for_point),
+        "Q@:{CGPoint=dd}");
+    class_addMethod(
+        subclass,
+        sel_attributed_substring_for_range(),
+        reinterpret_cast<IMP>(editor_attributed_substring_for_range),
+        "@@:{_NSRange=QQ}^{_NSRange=QQ}");
+    class_addMethod(
+        subclass,
+        sel_valid_attributes_for_marked_text(),
+        reinterpret_cast<IMP>(editor_valid_attributes_for_marked_text),
+        "@@:");
+    class_addMethod(
+        subclass,
+        sel_do_command_by_selector(),
+        reinterpret_cast<IMP>(editor_do_command_by_selector),
+        "v@::");
+    objc_registerClassPair(subclass);
+    g_ime.editor_class = subclass;
+    return subclass;
+}
+
+inline void ensure_editor_view() {
+    if (!g_ime.content_view)
+        return;
+    if (!g_ime.editor_view) {
+        auto editor_class = ensure_editor_view_class();
+        CGRect frame{};
+        auto view = objc_send<id>(class_as_id(editor_class), sel_alloc());
+        g_ime.editor_view = objc_send<id>(view, sel_init_with_frame(), frame);
+        objc_send<void>(g_ime.content_view, sel_add_subview(), g_ime.editor_view);
+    }
+    objc_send<void>(g_ime.editor_view, sel_set_frame(), CGRect{});
+}
+
+inline void input_attach(GLFWwindow* window, void (*request_repaint)()) {
     g_images.request_repaint = request_repaint;
+    g_ime.window = window;
+    g_ime.request_repaint = request_repaint;
+    g_ime.ns_window = window
+        ? static_cast<id>(glfwGetCocoaWindow(window))
+        : nullptr;
+    g_ime.content_view = g_ime.ns_window
+        ? objc_send<id>(g_ime.ns_window, sel_content_view())
+        : nullptr;
+    g_ime.focused_callback_id = ::phenotype::native::invalid_callback_id;
+    clear_ime_state();
+    ensure_editor_view();
+    restore_content_view_first_responder();
 }
 
 inline void input_detach() {
+    discard_marked_text_from_system();
+    clear_ime_state();
+    if (g_ime.editor_view) {
+        objc_send<void>(g_ime.editor_view, sel_remove_from_superview());
+        objc_send<void>(g_ime.editor_view, sel_release());
+    }
     g_images.request_repaint = nullptr;
+    g_ime.window = nullptr;
+    g_ime.ns_window = nullptr;
+    g_ime.content_view = nullptr;
+    g_ime.editor_view = nullptr;
+    g_ime.request_repaint = nullptr;
+    g_ime.focused_callback_id = ::phenotype::native::invalid_callback_id;
 }
 
 inline void input_sync() {
-    if (process_completed_images() && g_images.request_repaint)
+    bool needs_repaint = process_completed_images() && g_images.request_repaint;
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+
+    if (!snapshot.valid) {
+        if (g_ime.composition_active || !g_ime.marked_text.empty()) {
+            discard_marked_text_from_system();
+            clear_ime_state();
+            needs_repaint = true;
+        }
+        g_ime.focused_callback_id = ::phenotype::native::invalid_callback_id;
+        if (editor_is_first_responder())
+            restore_content_view_first_responder();
+        if (needs_repaint && g_images.request_repaint)
+            g_images.request_repaint();
+        return;
+    }
+
+    ensure_editor_view();
+    auto focus_changed = snapshot.callback_id != g_ime.focused_callback_id;
+    if (focus_changed && (g_ime.composition_active || !g_ime.marked_text.empty())) {
+        discard_marked_text_from_system();
+        clear_ime_state();
+        needs_repaint = true;
+    }
+
+    g_ime.focused_callback_id = snapshot.callback_id;
+    if (!editor_is_first_responder())
+        focus_editor_view();
+    if (focus_changed || g_ime.composition_active)
+        sync_input_context_geometry();
+
+    if (needs_repaint && g_images.request_repaint)
         g_images.request_repaint();
+}
+
+inline bool input_dismiss_transient() {
+    bool had_transient = g_ime.composition_active || !g_ime.marked_text.empty();
+    if (!had_transient)
+        return false;
+    discard_marked_text_from_system();
+    clear_ime_state();
+    request_window_repaint();
+    return true;
 }
 
 inline void renderer_init(GLFWwindow* window) {
@@ -1987,6 +3096,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     metrics::inst::native_phase_duration.record(
         metrics::detail::now_ns() - image_started,
         native_attrs("image_prepare"));
+
+    append_ime_overlay(g_renderer.scratch);
 
     auto text_started = metrics::detail::now_ns();
     if (!prepare_text_instances(text_scale)) {
@@ -2186,6 +3297,86 @@ inline std::optional<unsigned int> renderer_hit_test(float x, float y,
 } // namespace phenotype::native::detail
 #endif
 
+export namespace phenotype::native::macos_test {
+#ifdef __APPLE__
+struct Utf8Range {
+    std::size_t start = 0;
+    std::size_t end = 0;
+};
+
+struct CompositionVisualDebug {
+    std::string visible_text;
+    std::size_t caret_bytes = 0;
+    std::size_t marked_start = 0;
+    std::size_t marked_end = 0;
+};
+
+inline Utf8Range utf16_range_to_utf8(std::string const& text,
+                                     unsigned long location,
+                                     unsigned long length) {
+    auto range = detail::utf16_range_to_utf8_range(text, {location, length});
+    return {range.start, range.end};
+}
+
+inline unsigned long utf8_prefix_to_utf16(std::string const& text,
+                                          std::size_t bytes) {
+    bytes = ::phenotype::detail::clamp_utf8_boundary(text, bytes);
+    return detail::utf16_length(std::string_view(text.data(), bytes));
+}
+
+inline CompositionVisualDebug build_visual_text(std::string const& committed,
+                                                std::size_t replacement_start,
+                                                std::size_t replacement_end,
+                                                std::string const& marked,
+                                                unsigned long selected_location_utf16) {
+    replacement_start = ::phenotype::detail::clamp_utf8_boundary(committed, replacement_start);
+    replacement_end = ::phenotype::detail::clamp_utf8_boundary(committed, replacement_end);
+    if (replacement_end < replacement_start)
+        replacement_end = replacement_start;
+
+    auto prefix = committed.substr(0, replacement_start);
+    auto suffix = committed.substr(replacement_end);
+    auto marked_cursor = detail::utf16_offset_to_utf8(marked, selected_location_utf16);
+    return {
+        prefix + marked + suffix,
+        std::min(prefix.size() + marked_cursor, prefix.size() + marked.size() + suffix.size()),
+        prefix.size(),
+        prefix.size() + marked.size(),
+    };
+}
+#else
+struct Utf8Range {
+    std::size_t start = 0;
+    std::size_t end = 0;
+};
+
+struct CompositionVisualDebug {
+    std::string visible_text;
+    std::size_t caret_bytes = 0;
+    std::size_t marked_start = 0;
+    std::size_t marked_end = 0;
+};
+
+inline Utf8Range utf16_range_to_utf8(std::string const&,
+                                     unsigned long,
+                                     unsigned long) {
+    return {};
+}
+
+inline unsigned long utf8_prefix_to_utf16(std::string const&, std::size_t) {
+    return 0;
+}
+
+inline CompositionVisualDebug build_visual_text(std::string const&,
+                                                std::size_t,
+                                                std::size_t,
+                                                std::string const&,
+                                                unsigned long) {
+    return {};
+}
+#endif
+} // namespace phenotype::native::macos_test
+
 export namespace phenotype::native {
 
 inline platform_api const& macos_platform() {
@@ -2211,6 +3402,7 @@ inline platform_api const& macos_platform() {
             detail::input_sync,
             nullptr,
             nullptr,
+            detail::input_dismiss_transient,
             nullptr,
         },
         [](char const* url, unsigned int len) {

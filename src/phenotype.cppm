@@ -961,6 +961,47 @@ inline bool apply_key_to_string(unsigned int key_type,
     }
 }
 
+inline bool replace_focused_input_text(std::size_t start,
+                                       std::size_t end,
+                                       std::string_view replacement) {
+    auto* handler = find_input_handler(g_app.focused_id);
+    if (!handler)
+        return false;
+
+    std::string value = handler->current;
+    start = clamp_utf8_boundary(value, start);
+    end = clamp_utf8_boundary(value, end);
+    if (end < start)
+        std::swap(start, end);
+
+    value.replace(start, end - start, replacement);
+    g_app.caret_pos = static_cast<unsigned int>(start + replacement.size());
+    g_app.caret_visible = true;
+    handler->invoke(handler->state, std::move(value));
+    return true;
+}
+
+inline bool insert_focused_input_text(std::string_view replacement) {
+    auto* handler = find_input_handler(g_app.focused_id);
+    if (!handler)
+        return false;
+    auto caret = static_cast<std::size_t>(resolved_caret_pos(handler->current));
+    return replace_focused_input_text(caret, caret, replacement);
+}
+
+inline void set_input_composition_state(bool active,
+                                        std::string_view text,
+                                        unsigned int cursor) {
+    auto& snapshot = g_app.input_debug;
+    snapshot.composition_active = active;
+    snapshot.composition_text.assign(text.data(), text.size());
+    snapshot.composition_cursor = cursor;
+}
+
+inline void clear_input_composition_state() {
+    set_input_composition_state(false, {}, 0);
+}
+
 inline bool handle_key(unsigned int key_type, unsigned int codepoint,
                        char const* source = "core",
                        char const* detail = nullptr) {
