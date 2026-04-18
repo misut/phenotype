@@ -134,6 +134,7 @@ struct FocusedInputSnapshot {
     float line_height = 0.0f;
     bool mono = false;
     float padding[4] = {};
+    Color background = {255, 255, 255, 255};
     Color foreground = {0, 0, 0, 255};
     Color placeholder_color = {0, 0, 0, 255};
     Color accent = {0, 0, 0, 255};
@@ -310,6 +311,7 @@ namespace detail {
         snapshot.mono = input->mono;
         for (int i = 0; i < 4; ++i)
             snapshot.padding[i] = input->style.padding[i];
+        snapshot.background = input->background;
         snapshot.foreground = g_app.theme.foreground;
         snapshot.placeholder_color = g_app.theme.muted;
         snapshot.accent = g_app.theme.accent;

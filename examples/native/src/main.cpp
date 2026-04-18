@@ -121,6 +121,12 @@ static std::string input_debug_block(phenotype::diag::InputDebugSnapshot const& 
     block += std::to_string(debug.scroll_y);
     block += "\ntext caret: ";
     block += debug_caret_text(debug.caret_pos);
+    block += "\ncomposition active: ";
+    block += debug.composition_active ? "true" : "false";
+    block += "\ncomposition cursor: ";
+    block += std::to_string(debug.composition_cursor);
+    block += "\ncomposition text: ";
+    block += debug.composition_text.empty() ? "(empty)" : debug.composition_text;
     return block;
 }
 
@@ -215,7 +221,7 @@ void view(State const& state) {
             widget::text(std::string("Committed text: ")
                 + (state.ime_sample.empty() ? std::string("(empty)") : state.ime_sample));
             layout::spacer(8);
-            widget::text("Platform-specific status: caret, preedit text, and candidate overlays should feel attached to the focused field where that backend already supports native IME parity.");
+            widget::text("Platform-specific status: caret, live marked text, and candidate overlays should feel attached to the focused field where that backend already supports native IME parity.");
             layout::spacer(8);
             widget::code("Walkthrough: tab into each field, type plain text, then try native IME composition and keep the field focused while scrolling.");
         });

@@ -5,6 +5,7 @@
 #include <cassert>
 #include <chrono>
 #include <cmath>
+#include <cstring>
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
@@ -28,6 +29,9 @@
 
 import phenotype.native;
 import phenotype.native.stub;
+#ifdef __APPLE__
+import phenotype.native.macos;
+#endif
 
 using namespace phenotype::native;
 using namespace phenotype;
@@ -253,6 +257,14 @@ struct Harness {
 
 } // namespace input_regression
 
+namespace {
+int g_platform_sync_calls = 0;
+
+void count_platform_sync() {
+    ++g_platform_sync_calls;
+}
+}
+
 static void test_shell_pointer_hover_click_and_tab_navigation() {
     using namespace input_regression;
 
@@ -407,6 +419,76 @@ static void test_shell_text_caret_navigation_and_backspace() {
     std::puts("PASS: shared shell text caret navigation and backspace");
 }
 
+static void test_shared_text_replacement_helper() {
+    using namespace input_regression;
+
+    Harness harness;
+    phenotype::detail::set_focus_id(text_field_id, "test", "setup");
+
+    assert(phenotype::detail::replace_focused_input_text(0, 0, "AB"));
+    assert(g_observed_state.text == "AB");
+    assert(phenotype::detail::get_caret_pos() == 2);
+
+    assert(phenotype::detail::replace_focused_input_text(1, 1, "찬"));
+    assert(g_observed_state.text == std::string("A") + "찬" + "B");
+    assert(phenotype::detail::get_caret_pos() == 1 + std::strlen("찬"));
+
+    assert(phenotype::detail::replace_focused_input_text(1, 4, "Z"));
+    assert(g_observed_state.text == std::string("AZ") + "B");
+    assert(phenotype::detail::get_caret_pos() == 2);
+
+    assert(phenotype::detail::replace_focused_input_text(0, 0, "가"));
+    assert(g_observed_state.text == std::string("가") + "AZB");
+    assert(phenotype::detail::replace_focused_input_text(1, 2, "X"));
+    assert(g_observed_state.text == std::string("X") + "가AZB");
+    assert(phenotype::detail::get_caret_pos() == 1);
+
+    phenotype::detail::set_input_composition_state(true, "찮", 3);
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.composition_active);
+    assert(debug.composition_text == "찮");
+    assert(debug.composition_cursor == 3);
+
+    harness.platform.input.dismiss_transient = []() {
+        phenotype::detail::clear_input_composition_state();
+        return true;
+    };
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ESCAPE, GLFW_PRESS, 0));
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(!debug.composition_active);
+    assert(debug.composition_text.empty());
+    assert(debug.composition_cursor == 0);
+
+    std::puts("PASS: shared text replacement helper");
+}
+
+static void test_focus_transitions_sync_platform_input() {
+    using namespace input_regression;
+
+    Harness harness;
+    g_platform_sync_calls = 0;
+    harness.platform.input.sync = count_platform_sync;
+
+    auto [text_x, text_y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        text_x,
+        text_y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+    auto after_click = g_platform_sync_calls;
+    assert(after_click >= 1);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_TAB, GLFW_PRESS, 0));
+    auto after_tab = g_platform_sync_calls;
+    assert(after_tab > after_click);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ESCAPE, GLFW_PRESS, 0));
+    assert(g_platform_sync_calls > after_tab);
+
+    std::puts("PASS: focus transitions sync platform input");
+}
+
 static void test_shell_scroll_and_escape_observability() {
     using namespace input_regression;
 
@@ -460,6 +542,27 @@ static void test_shell_scroll_and_escape_observability() {
 // ============================================================
 
 #ifdef __APPLE__
+
+static void test_macos_utf16_utf8_range_helpers() {
+    using phenotype::native::macos_test::build_visual_text;
+    using phenotype::native::macos_test::utf16_range_to_utf8;
+    using phenotype::native::macos_test::utf8_prefix_to_utf16;
+
+    auto bytes = utf16_range_to_utf8("A찬B", 1, 1);
+    assert(bytes.start == 1);
+    assert(bytes.end == 4);
+
+    auto prefix_units = utf8_prefix_to_utf16("가나다", 3);
+    assert(prefix_units == 1);
+
+    auto visual = build_visual_text("ABCD", 1, 3, "XY", 1);
+    assert(visual.visible_text == "AXYD");
+    assert(visual.marked_start == 1);
+    assert(visual.marked_end == 3);
+    assert(visual.caret_bytes == 2);
+
+    std::puts("PASS: macOS utf16/utf8 range helpers");
+}
 
 struct MacRendererFixture {
     GLFWwindow* window = nullptr;
@@ -1005,8 +1108,11 @@ int main() {
     test_shell_activation_keys_respect_roles();
     test_shell_text_space_char_and_enter_behavior();
     test_shell_text_caret_navigation_and_backspace();
+    test_shared_text_replacement_helper();
+    test_focus_transitions_sync_platform_input();
     test_shell_scroll_and_escape_observability();
 #ifdef __APPLE__
+    test_macos_utf16_utf8_range_helpers();
     test_default_scroll_delta_fallback();
     test_text_measure_basic();
     test_text_measure_proportional();
