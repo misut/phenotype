@@ -213,7 +213,7 @@ As an exon dependency:
 
 ```toml
 [dependencies]
-"github.com/misut/phenotype" = "0.11.0"
+"github.com/misut/phenotype" = "0.11.1"
 ```
 
 ## Architecture
