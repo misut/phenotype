@@ -57,8 +57,6 @@ module;
 export module phenotype.native.windows;
 
 #ifndef __wasi__
-import cppx.os;
-import cppx.os.system;
 import cppx.resource;
 import phenotype;
 import phenotype.commands;
@@ -3353,15 +3351,13 @@ inline float windows_scroll_delta_y(double dy,
 }
 
 inline void windows_open_url(char const* url, unsigned int len) {
-    auto opened = cppx::os::system::open_url(std::string_view(url, len));
-    if (!opened) {
-        std::fprintf(
-            stderr,
-            "[windows] failed to open url: %.*s (%.*s)\n",
-            static_cast<int>(len),
-            url,
-            static_cast<int>(cppx::os::to_string(opened.error()).size()),
-            cppx::os::to_string(opened.error()).data());
+    auto wide = utf8_to_wstring(url, len);
+    if (wide.empty())
+        return;
+    auto result = reinterpret_cast<std::intptr_t>(
+        ShellExecuteW(nullptr, L"open", wide.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
+    if (result <= 32) {
+        std::fprintf(stderr, "[windows] ShellExecuteW failed (%td)\n", result);
     }
 }
 
