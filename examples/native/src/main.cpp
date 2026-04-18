@@ -70,9 +70,11 @@ static std::string local_image_url() {
     return nested.string();
 }
 
+#ifndef _WIN32
 static std::string remote_image_url() {
     return "https://raw.githubusercontent.com/misut/phenotype/main/examples/native/assets/showcase.bmp";
 }
+#endif
 
 static std::string selected_choice_label(int choice) {
     switch (choice) {
@@ -280,9 +282,9 @@ void view(State const& state) {
         layout::spacer(12);
 
         layout::card([&] {
-            widget::text("Images and Async Loading");
+            widget::text("Images and Backend Status");
             layout::spacer(6);
-            widget::text("The first image is a local asset. The second image exercises an async remote load and should remain visually safe even when the network path is unavailable.");
+            widget::text("The first image is a local asset used for manual acceptance. Backend-specific notes below should stay stable without changing the shared page structure.");
             layout::spacer(10);
             widget::text("Local file");
             layout::spacer(4);
@@ -290,9 +292,15 @@ void view(State const& state) {
             layout::spacer(10);
             widget::text("Remote HTTP");
             layout::spacer(4);
+#ifdef _WIN32
+            widget::text("Status: Remote images are disabled on Windows for now. This pass validates local file rendering only.");
+            layout::spacer(8);
+            widget::text("Expected state: the local BMP above should render, and this section should stay text-only with no fetch attempt.");
+#else
             widget::image(remote_image_url(), 320.0f, 180.0f);
             layout::spacer(8);
             widget::text("Expected state: show a placeholder first, replace it when the remote image succeeds, and keep the frame stable if it never arrives.");
+#endif
         });
 
         layout::spacer(12);

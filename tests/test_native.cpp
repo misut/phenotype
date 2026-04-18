@@ -87,6 +87,34 @@ struct WindowsRendererFixture {
         glfwTerminate();
     }
 };
+
+static std::filesystem::path native_example_root() {
+    return std::filesystem::path(__FILE__).parent_path().parent_path()
+        / "examples" / "native";
+}
+
+static std::vector<unsigned char> make_draw_image_commands(std::string const& image_url) {
+    std::vector<unsigned char> commands;
+    append_u32(commands, static_cast<unsigned int>(Cmd::Clear));
+    append_u32(commands, Color{245, 245, 245, 255}.packed());
+    append_u32(commands, static_cast<unsigned int>(Cmd::DrawImage));
+    append_f32(commands, 16.0f);
+    append_f32(commands, 24.0f);
+    append_f32(commands, 320.0f);
+    append_f32(commands, 180.0f);
+    append_u32(commands, static_cast<unsigned int>(image_url.size()));
+    append_bytes(
+        commands,
+        image_url.data(),
+        static_cast<unsigned int>(image_url.size()));
+    return commands;
+}
+
+static std::string local_test_image_url() {
+    auto image_path = native_example_root() / "assets" / "showcase.bmp";
+    assert(std::filesystem::exists(image_path));
+    return image_path.string();
+}
 #endif
 
 static void test_renderer_flush_empty() {
@@ -1247,6 +1275,31 @@ static void test_windows_text_build_atlas_empty() {
     std::puts("PASS: windows text build atlas empty");
 }
 
+static void test_windows_renderer_uploads_local_image_texture() {
+    WindowsRendererFixture fixture;
+
+    metrics::inst::native_texture_upload_bytes.reset();
+    auto commands = make_draw_image_commands(local_test_image_url());
+
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+    assert(metrics::inst::native_texture_upload_bytes.total() > 0);
+    std::puts("PASS: windows renderer uploads local image texture");
+}
+
+static void test_windows_renderer_rejects_remote_image_uploads() {
+    WindowsRendererFixture fixture;
+
+    metrics::inst::native_texture_upload_bytes.reset();
+    auto commands = make_draw_image_commands("http://127.0.0.1/showcase.bmp");
+
+    for (int i = 0; i < 5; ++i) {
+        renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+    }
+
+    assert(metrics::inst::native_texture_upload_bytes.total() == 0);
+    std::puts("PASS: windows renderer rejects remote image uploads");
+}
+
 static void test_windows_renderer_hit_test_and_smoke() {
     WindowsRendererFixture fixture;
 
@@ -1464,6 +1517,8 @@ int main() {
     test_windows_text_build_atlas_empty();
     test_renderer_flush_empty();
     test_windows_renderer_reinit_cycle();
+    test_windows_renderer_uploads_local_image_texture();
+    test_windows_renderer_rejects_remote_image_uploads();
     test_windows_renderer_hit_test_and_smoke();
     test_windows_renderer_rejects_truncated_hit_region();
     test_windows_renderer_rejects_truncated_text_payload();

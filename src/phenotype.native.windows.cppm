@@ -4,22 +4,17 @@ module;
 #include <array>
 #include <atomic>
 #include <cmath>
-#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
-#include <deque>
 #include <expected>
 #include <filesystem>
 #include <limits>
-#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
-#include <thread>
-#include <unordered_map>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -61,7 +56,6 @@ module;
 export module phenotype.native.windows;
 
 #ifndef __wasi__
-import cppx.http.system;
 import phenotype;
 import phenotype.commands;
 import phenotype.state;
@@ -759,7 +753,6 @@ struct RendererState {
 };
 
 static RendererState g_renderer;
-constexpr UINT WM_PHENOTYPE_IMAGE_READY = WM_APP + 61;
 constexpr UINT TEXT_SRV_SLOT = 0;
 constexpr UINT IMAGE_SRV_SLOT = 1;
 
@@ -833,6 +826,12 @@ struct ImageCacheEntry {
     float v = 0.0f;
     float uw = 0.0f;
     float vh = 0.0f;
+    std::string failure_reason;
+};
+
+struct CachedImageRecord {
+    std::string url;
+    ImageCacheEntry entry;
 };
 
 struct ImageAtlasState {
@@ -840,14 +839,7 @@ struct ImageAtlasState {
 
     ComPtr<ID3D12Resource> texture;
     std::vector<unsigned char> pixels;
-    std::unordered_map<std::string, ImageCacheEntry> cache;
-    std::deque<std::string> pending_jobs;
-    std::deque<DecodedImage> completed_jobs;
-    std::mutex mutex;
-    std::condition_variable cv;
-    std::thread worker;
-    bool worker_started = false;
-    bool stop_worker = false;
+    std::vector<CachedImageRecord> cache;
     bool atlas_dirty = false;
     int cursor_x = 0;
     int cursor_y = 0;
@@ -860,6 +852,86 @@ static ImageAtlasState g_images;
 inline void request_window_repaint() {
     if (g_ime.request_repaint)
         g_ime.request_repaint();
+}
+
+inline std::vector<metrics::Attribute> native_platform_attrs() {
+    return {{"platform", "windows"}};
+}
+
+inline std::string format_hresult_detail(char const* label, HRESULT hr) {
+    char buffer[96]{};
+    std::snprintf(
+        buffer,
+        std::size(buffer),
+        "%s (hr=0x%08lx)",
+        label,
+        static_cast<unsigned long>(hr));
+    return buffer;
+}
+
+inline void log_image_issue(std::string_view url, std::string_view detail) {
+    std::fprintf(
+        stderr,
+        "[windows/image] '%.*s': %.*s\n",
+        static_cast<int>(url.size()),
+        url.data(),
+        static_cast<int>(detail.size()),
+        detail.data());
+}
+
+inline constexpr std::size_t image_atlas_byte_size() {
+    return static_cast<std::size_t>(ImageAtlasState::atlas_size)
+        * ImageAtlasState::atlas_size * 4;
+}
+
+inline std::expected<std::size_t, std::string> rgba_byte_size(UINT width, UINT height) {
+    if (width == 0 || height == 0)
+        return std::unexpected("Invalid image dimensions");
+    auto width_sz = static_cast<std::size_t>(width);
+    auto height_sz = static_cast<std::size_t>(height);
+    if (width_sz > ((std::numeric_limits<std::size_t>::max)() / height_sz) / 4)
+        return std::unexpected("RGBA pixel buffer overflow");
+    return width_sz * height_sz * 4;
+}
+
+inline std::expected<UINT, std::string> rgba_stride(UINT width) {
+    if (width == 0)
+        return std::unexpected("Image row stride overflow");
+    if (width > ((std::numeric_limits<UINT>::max)() / 4))
+        return std::unexpected("Image row stride overflow");
+    return width * 4;
+}
+
+inline void clear_image_entry(ImageCacheEntry& entry) {
+    entry.u = 0.0f;
+    entry.v = 0.0f;
+    entry.uw = 0.0f;
+    entry.vh = 0.0f;
+    entry.failure_reason.clear();
+}
+
+inline void mark_image_entry_failed(ImageCacheEntry& entry,
+                                    std::string_view url,
+                                    std::string_view detail) {
+    entry.state = ImageEntryState::failed;
+    clear_image_entry(entry);
+    entry.failure_reason = std::string(detail);
+    log_image_issue(url, detail);
+}
+
+inline ImageCacheEntry* find_image_entry(std::string_view url) {
+    for (auto& record : g_images.cache) {
+        if (record.url == url)
+            return &record.entry;
+    }
+    return nullptr;
+}
+
+inline ImageCacheEntry& ensure_image_entry(std::string const& url) {
+    if (auto* entry = find_image_entry(url))
+        return *entry;
+    g_images.cache.push_back({url, {}});
+    return g_images.cache.back().entry;
 }
 
 inline std::size_t snapshot_caret_byte_offset(
@@ -1627,9 +1699,6 @@ inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
     case WM_KILLFOCUS:
         clear_ime_state();
         break;
-    case WM_PHENOTYPE_IMAGE_READY:
-        request_window_repaint();
-        return 0;
     default:
         break;
     }
@@ -1717,18 +1786,24 @@ inline std::expected<DecodedImage, std::string> decode_image_with_decoder(
     ComPtr<IWICBitmapFrameDecode> frame;
     auto hr = decoder->GetFrame(0, &frame);
     if (FAILED(hr))
-        return std::unexpected("GetFrame");
+        return std::unexpected(format_hresult_detail("GetFrame", hr));
 
     UINT width = 0;
     UINT height = 0;
     hr = frame->GetSize(&width, &height);
-    if (FAILED(hr) || width == 0 || height == 0)
-        return std::unexpected("GetSize");
+    if (FAILED(hr))
+        return std::unexpected(format_hresult_detail("GetSize", hr));
+    if (width == 0 || height == 0)
+        return std::unexpected("GetSize returned zero dimensions");
+    if (width > static_cast<UINT>(ImageAtlasState::atlas_size)
+        || height > static_cast<UINT>(ImageAtlasState::atlas_size)) {
+        return std::unexpected("Image dimensions exceed the 2048x2048 atlas");
+    }
 
     ComPtr<IWICFormatConverter> converter;
     hr = factory->CreateFormatConverter(&converter);
     if (FAILED(hr))
-        return std::unexpected("CreateConverter");
+        return std::unexpected(format_hresult_detail("CreateFormatConverter", hr));
 
     hr = converter->Initialize(
         frame.Get(),
@@ -1738,19 +1813,31 @@ inline std::expected<DecodedImage, std::string> decode_image_with_decoder(
         0.0,
         WICBitmapPaletteTypeCustom);
     if (FAILED(hr))
-        return std::unexpected("ConverterInitialize");
+        return std::unexpected(format_hresult_detail("IWICFormatConverter::Initialize", hr));
+
+    auto byte_size = rgba_byte_size(width, height);
+    if (!byte_size)
+        return std::unexpected(byte_size.error());
+
+    auto stride = rgba_stride(width);
+    if (!stride)
+        return std::unexpected(stride.error());
+    if (*byte_size > (std::numeric_limits<UINT>::max)())
+        return std::unexpected("Decoded image buffer is too large for WIC CopyPixels");
 
     DecodedImage decoded;
     decoded.width = static_cast<int>(width);
     decoded.height = static_cast<int>(height);
-    decoded.pixels.resize(static_cast<std::size_t>(width) * height * 4);
+    decoded.pixels.resize(*byte_size);
     hr = converter->CopyPixels(
         nullptr,
-        width * 4,
-        static_cast<UINT>(decoded.pixels.size()),
+        *stride,
+        static_cast<UINT>(*byte_size),
         decoded.pixels.data());
     if (FAILED(hr))
-        return std::unexpected("CopyPixels");
+        return std::unexpected(format_hresult_detail("IWICBitmapSource::CopyPixels", hr));
+    if (decoded.pixels.size() != *byte_size)
+        return std::unexpected("Decoded image buffer size mismatch");
     return decoded;
 }
 
@@ -1763,7 +1850,7 @@ inline std::expected<DecodedImage, std::string> decode_image_file(
         CLSCTX_INPROC_SERVER,
         IID_PPV_ARGS(&factory));
     if (FAILED(hr))
-        return std::unexpected("CreateFactory");
+        return std::unexpected(format_hresult_detail("CoCreateInstance(IWICImagingFactory)", hr));
 
     ComPtr<IWICBitmapDecoder> decoder;
     auto wide = path.wstring();
@@ -1774,158 +1861,73 @@ inline std::expected<DecodedImage, std::string> decode_image_file(
         WICDecodeMetadataCacheOnLoad,
         &decoder);
     if (FAILED(hr))
-        return std::unexpected("CreateDecoderFromFilename");
+        return std::unexpected(format_hresult_detail("CreateDecoderFromFilename", hr));
     return decode_image_with_decoder(factory.Get(), decoder.Get());
-}
-
-inline std::expected<DecodedImage, std::string> decode_image_memory(
-        std::vector<unsigned char> const& bytes) {
-    if (bytes.empty())
-        return std::unexpected("empty");
-
-    ComPtr<IWICImagingFactory> factory;
-    auto hr = CoCreateInstance(
-        CLSID_WICImagingFactory,
-        nullptr,
-        CLSCTX_INPROC_SERVER,
-        IID_PPV_ARGS(&factory));
-    if (FAILED(hr))
-        return std::unexpected("CreateFactory");
-
-    ComPtr<IWICStream> stream;
-    hr = factory->CreateStream(&stream);
-    if (FAILED(hr))
-        return std::unexpected("CreateStream");
-    hr = stream->InitializeFromMemory(
-        const_cast<BYTE*>(bytes.data()),
-        static_cast<DWORD>(bytes.size()));
-    if (FAILED(hr))
-        return std::unexpected("InitializeFromMemory");
-
-    ComPtr<IWICBitmapDecoder> decoder;
-    hr = factory->CreateDecoderFromStream(
-        stream.Get(),
-        nullptr,
-        WICDecodeMetadataCacheOnLoad,
-        &decoder);
-    if (FAILED(hr))
-        return std::unexpected("CreateDecoderFromStream");
-    return decode_image_with_decoder(factory.Get(), decoder.Get());
-}
-
-inline void image_worker_main() {
-    auto co_hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
-    (void)co_hr;
-    for (;;) {
-        std::string url;
-        {
-            std::unique_lock lock(g_images.mutex);
-            g_images.cv.wait(lock, [] {
-                return g_images.stop_worker || !g_images.pending_jobs.empty();
-            });
-            if (g_images.stop_worker && g_images.pending_jobs.empty())
-                break;
-            url = std::move(g_images.pending_jobs.front());
-            g_images.pending_jobs.pop_front();
-        }
-
-        DecodedImage decoded;
-        decoded.url = url;
-        if (is_http_url(url)) {
-            auto resp = cppx::http::system::get(url);
-            if (resp && resp->stat.ok()) {
-                std::vector<unsigned char> body;
-                body.reserve(resp->body.size());
-                for (auto b : resp->body)
-                    body.push_back(static_cast<unsigned char>(b));
-                auto result = decode_image_memory(body);
-                if (result) {
-                    decoded = std::move(*result);
-                    decoded.url = url;
-                } else {
-                    decoded.failed = true;
-                }
-            } else {
-                decoded.failed = true;
-            }
-        } else {
-            auto result = decode_image_file(resolve_image_path(url));
-            if (result) {
-                decoded = std::move(*result);
-                decoded.url = url;
-            } else {
-                decoded.failed = true;
-            }
-        }
-
-        {
-            std::lock_guard lock(g_images.mutex);
-            g_images.completed_jobs.push_back(std::move(decoded));
-        }
-        if (g_ime.hwnd)
-            PostMessageW(g_ime.hwnd, WM_PHENOTYPE_IMAGE_READY, 0, 0);
-    }
-    if (SUCCEEDED(co_hr))
-        CoUninitialize();
-}
-
-inline void ensure_image_worker() {
-    if (g_images.worker_started)
-        return;
-    g_images.pixels.resize(
-        static_cast<std::size_t>(ImageAtlasState::atlas_size)
-        * ImageAtlasState::atlas_size * 4,
-        0);
-    g_images.stop_worker = false;
-    g_images.worker = std::thread(image_worker_main);
-    g_images.worker_started = true;
-}
-
-inline void shutdown_image_worker() {
-    {
-        std::lock_guard lock(g_images.mutex);
-        g_images.stop_worker = true;
-    }
-    g_images.cv.notify_all();
-    if (g_images.worker.joinable())
-        g_images.worker.join();
-    g_images.worker_started = false;
-}
-
-inline void queue_image_load(std::string const& url) {
-    std::lock_guard lock(g_images.mutex);
-    auto [it, inserted] = g_images.cache.try_emplace(url, ImageCacheEntry{});
-    if (!inserted)
-        return;
-    g_images.pending_jobs.push_back(url);
-    g_images.cv.notify_one();
 }
 
 inline void store_decoded_image(DecodedImage decoded) {
-    auto [it, inserted] = g_images.cache.try_emplace(decoded.url, ImageCacheEntry{});
-    if (!inserted && it == g_images.cache.end())
-        return;
-    if (decoded.failed || decoded.width <= 0 || decoded.height <= 0
-        || decoded.pixels.empty()) {
-        it->second.state = ImageEntryState::failed;
+    auto& entry = ensure_image_entry(decoded.url);
+    clear_image_entry(entry);
+
+    if (decoded.width <= 0 || decoded.height <= 0) {
+        mark_image_entry_failed(entry, decoded.url, "Decoded image has invalid dimensions");
         return;
     }
 
-    if (g_images.cursor_x + decoded.width + 1 > ImageAtlasState::atlas_size) {
-        g_images.cursor_x = 0;
-        g_images.cursor_y += g_images.row_height;
-        g_images.row_height = 0;
+    auto expected_bytes = rgba_byte_size(
+        static_cast<UINT>(decoded.width),
+        static_cast<UINT>(decoded.height));
+    if (!expected_bytes) {
+        mark_image_entry_failed(entry, decoded.url, expected_bytes.error());
+        return;
     }
-    if (g_images.cursor_y + decoded.height > ImageAtlasState::atlas_size) {
-        it->second.state = ImageEntryState::failed;
+    if (decoded.pixels.size() != *expected_bytes) {
+        mark_image_entry_failed(entry, decoded.url, "Decoded image buffer size mismatch");
+        return;
+    }
+    if (decoded.width > ImageAtlasState::atlas_size
+        || decoded.height > ImageAtlasState::atlas_size) {
+        mark_image_entry_failed(entry, decoded.url, "Image dimensions exceed the 2048x2048 atlas");
+        return;
+    }
+
+    if (g_images.pixels.empty()) {
+        g_images.pixels.resize(image_atlas_byte_size(), 0);
+    } else if (g_images.pixels.size() != image_atlas_byte_size()) {
+        mark_image_entry_failed(entry, decoded.url, "Image atlas backing store has an unexpected size");
         return;
     }
 
     auto slot_x = g_images.cursor_x;
     auto slot_y = g_images.cursor_y;
-    g_images.cursor_x += decoded.width + 1;
-    if (decoded.height + 1 > g_images.row_height)
-        g_images.row_height = decoded.height + 1;
+    auto row_height = g_images.row_height;
+    if (slot_x < 0 || slot_y < 0 || row_height < 0) {
+        mark_image_entry_failed(entry, decoded.url, "Image atlas packing state is invalid");
+        return;
+    }
+
+    auto const atlas_size = static_cast<long long>(ImageAtlasState::atlas_size);
+    if (static_cast<long long>(slot_x) + decoded.width + 1 > atlas_size) {
+        slot_x = 0;
+        auto next_row = static_cast<long long>(slot_y) + row_height;
+        if (next_row > atlas_size) {
+            mark_image_entry_failed(entry, decoded.url, "Image atlas packing overflow");
+            return;
+        }
+        slot_y = static_cast<int>(next_row);
+        row_height = 0;
+    }
+    if (static_cast<long long>(slot_y) + decoded.height > atlas_size) {
+        mark_image_entry_failed(entry, decoded.url, "Image atlas overflow");
+        return;
+    }
+
+    auto next_cursor_x = static_cast<long long>(slot_x) + decoded.width + 1;
+    if (next_cursor_x > atlas_size) {
+        mark_image_entry_failed(entry, decoded.url, "Image atlas packing overflow");
+        return;
+    }
+    auto next_row_height = (std::max)(row_height, decoded.height + 1);
 
     for (int row = 0; row < decoded.height; ++row) {
         auto* dst = g_images.pixels.data()
@@ -1935,25 +1937,41 @@ inline void store_decoded_image(DecodedImage decoded) {
         std::memcpy(dst, src, static_cast<std::size_t>(decoded.width) * 4);
     }
 
-    it->second.state = ImageEntryState::ready;
-    it->second.u = static_cast<float>(slot_x) / ImageAtlasState::atlas_size;
-    it->second.v = static_cast<float>(slot_y) / ImageAtlasState::atlas_size;
-    it->second.uw = static_cast<float>(decoded.width) / ImageAtlasState::atlas_size;
-    it->second.vh = static_cast<float>(decoded.height) / ImageAtlasState::atlas_size;
+    entry.state = ImageEntryState::ready;
+    entry.u = static_cast<float>(slot_x) / ImageAtlasState::atlas_size;
+    entry.v = static_cast<float>(slot_y) / ImageAtlasState::atlas_size;
+    entry.uw = static_cast<float>(decoded.width) / ImageAtlasState::atlas_size;
+    entry.vh = static_cast<float>(decoded.height) / ImageAtlasState::atlas_size;
+    g_images.cursor_x = static_cast<int>(next_cursor_x);
+    g_images.cursor_y = slot_y;
+    g_images.row_height = next_row_height;
     g_images.atlas_dirty = true;
 }
 
-inline void process_completed_images() {
-    std::deque<DecodedImage> completed;
-    {
-        std::lock_guard lock(g_images.mutex);
-        completed.swap(g_images.completed_jobs);
+inline void load_image_entry(std::string const& url) {
+    auto image_url = std::string(url);
+    if (find_image_entry(image_url))
+        return;
+    auto remote = is_http_url(image_url);
+    auto& entry = ensure_image_entry(image_url);
+
+    if (remote) {
+        mark_image_entry_failed(
+            entry,
+            image_url,
+            "Remote images are disabled on Windows for now");
+        return;
     }
 
-    while (!completed.empty()) {
-        store_decoded_image(std::move(completed.front()));
-        completed.pop_front();
+    auto path = resolve_image_path(image_url);
+    auto loaded = decode_image_file(path);
+    if (!loaded) {
+        mark_image_entry_failed(entry, image_url, loaded.error());
+        return;
     }
+
+    loaded->url = image_url;
+    store_decoded_image(std::move(*loaded));
 }
 
 inline void wait_for_fence(UINT64 value) {
@@ -2579,6 +2597,9 @@ inline HRESULT upload_image_atlas() {
         g_images.texture.Get(),
         D3D12_RESOURCE_STATE_COPY_DEST,
         D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE);
+    metrics::inst::native_texture_upload_bytes.add(
+        static_cast<std::uint64_t>(upload_size),
+        native_platform_attrs());
     g_images.atlas_dirty = false;
     return S_OK;
 }
@@ -2629,8 +2650,6 @@ inline void renderer_init(GLFWwindow* window) {
         return;
     }
 
-    ensure_image_worker();
-
     auto desc = describe_adapter(g_renderer.adapter.Get());
     std::printf("[phenotype-native] Direct3D 12 initialized (%ls%s)\n",
                 desc.Description,
@@ -2662,7 +2681,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     float text_scale = current_backing_scale(g_renderer.window);
     float line_height_ratio = ::phenotype::detail::g_app.theme.line_height_ratio;
-    float const scroll_y = ::phenotype::detail::g_app.scroll_y;
     DecodedFrame decoded;
     if (!decode_frame_commands(buf, len, line_height_ratio, decoded)) {
         if (g_renderer.debug_enabled) {
@@ -2673,32 +2691,20 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         return;
     }
 
-    process_completed_images();
     for (auto const& image : decoded.images) {
-        auto it = g_images.cache.find(image.url);
-        if (it == g_images.cache.end()) {
-            g_images.cache.try_emplace(image.url, ImageCacheEntry{});
-            if (is_http_url(image.url)) {
-                queue_image_load(image.url);
-            } else {
-                auto loaded = decode_image_file(resolve_image_path(image.url));
-                if (loaded) {
-                    loaded->url = image.url;
-                    store_decoded_image(std::move(*loaded));
-                } else {
-                    g_images.cache[image.url].state = ImageEntryState::failed;
-                }
-            }
-            it = g_images.cache.find(image.url);
+        auto* entry = find_image_entry(image.url);
+        if (!entry) {
+            load_image_entry(image.url);
+            entry = find_image_entry(image.url);
         }
-        if (it != g_images.cache.end() && it->second.state == ImageEntryState::ready) {
+        if (entry && entry->state == ImageEntryState::ready) {
             append_textured_quad(
                 decoded.image_data,
                 image.x, image.y, image.w, image.h,
-                it->second.u, it->second.v, it->second.uw, it->second.vh);
+                entry->u, entry->v, entry->uw, entry->vh);
         } else {
-            bool failed = it != g_images.cache.end()
-                && it->second.state == ImageEntryState::failed;
+            bool failed = entry != nullptr
+                && entry->state == ImageEntryState::failed;
             float fill = failed ? 0.90f : 0.94f;
             float edge = failed ? 0.78f : 0.82f;
             append_color_instance(
@@ -2992,7 +2998,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
 inline void renderer_shutdown() {
     wait_for_all_frames();
-    shutdown_image_worker();
     g_images.texture.Reset();
     if (!g_images.pixels.empty()) {
         std::fill(
@@ -3000,9 +3005,7 @@ inline void renderer_shutdown() {
             g_images.pixels.end(),
             static_cast<unsigned char>(0));
     }
-    g_images.cache.clear();
-    g_images.pending_jobs.clear();
-    g_images.completed_jobs.clear();
+    std::vector<CachedImageRecord>().swap(g_images.cache);
     g_images.atlas_dirty = false;
     g_images.cursor_x = 0;
     g_images.cursor_y = 0;
