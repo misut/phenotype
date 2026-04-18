@@ -901,6 +901,90 @@ inline void sync_input_debug_composition_state() {
         composition_cursor_bytes());
 }
 
+struct WindowsCaretLayout {
+    bool valid = false;
+    bool composition_active = false;
+    ::phenotype::FocusedInputSnapshot snapshot{};
+    ::phenotype::FocusedInputCaretLayout base{};
+    float draw_x = 0.0f;
+    float draw_y = 0.0f;
+    float content_x = 0.0f;
+    float content_y = 0.0f;
+    float height = 0.0f;
+};
+
+inline WindowsCaretLayout current_windows_caret_layout(
+        ::phenotype::FocusedInputSnapshot snapshot =
+            ::phenotype::detail::focused_input_snapshot()) {
+    WindowsCaretLayout layout{};
+    if (!snapshot.valid)
+        return layout;
+
+    auto measure_prefix = [](auto const& input, std::size_t bytes) {
+        return measure_utf8_prefix(
+            input.font_size,
+            input.mono,
+            input.value,
+            bytes);
+    };
+
+    auto base_snapshot = snapshot;
+    bool composition_active = g_ime.composition_active && !g_ime.composition_text.empty();
+    if (composition_active)
+        base_snapshot.caret_pos = static_cast<unsigned int>(g_ime.composition_anchor);
+    layout.base = ::phenotype::detail::compute_single_line_caret_layout(
+        base_snapshot,
+        ::phenotype::detail::get_scroll_y(),
+        composition_active,
+        measure_prefix);
+    if (!layout.base.valid)
+        return layout;
+
+    layout.valid = true;
+    layout.composition_active = composition_active;
+    layout.snapshot = std::move(snapshot);
+    layout.draw_x = layout.base.draw_x;
+    layout.draw_y = layout.base.draw_y;
+    layout.content_x = layout.base.content_x;
+    layout.content_y = layout.base.content_y;
+    layout.height = layout.base.height;
+
+    if (composition_active) {
+        auto prefix = wstring_to_utf8(
+            std::wstring_view(
+                g_ime.composition_text.data(),
+                std::min<std::size_t>(
+                    static_cast<std::size_t>((g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor),
+                    g_ime.composition_text.size())));
+        if (!prefix.empty()) {
+            float advance = text_measure(
+                layout.snapshot.font_size,
+                layout.snapshot.mono,
+                prefix.c_str(),
+                static_cast<unsigned int>(prefix.size()));
+            layout.draw_x += advance;
+            layout.content_x += advance;
+        }
+    }
+
+    return layout;
+}
+
+inline void sync_windows_debug_caret_presentation() {
+    auto layout = current_windows_caret_layout();
+    if (!layout.valid || (!layout.snapshot.caret_visible && !layout.composition_active)) {
+        ::phenotype::detail::clear_input_debug_caret_presentation();
+        return;
+    }
+
+    ::phenotype::detail::set_input_debug_caret_presentation(
+        "custom",
+        layout.draw_x,
+        layout.draw_y,
+        1.5f,
+        layout.height);
+}
+
 inline void capture_composition_anchor() {
     auto snapshot = ::phenotype::detail::focused_input_snapshot();
     if (!snapshot.valid)
@@ -1035,6 +1119,7 @@ struct DecodedFrame {
     double clear_b = 0.98;
     double clear_a = 1.0;
     std::vector<float> color_data;
+    std::vector<float> overlay_color_data;
     std::vector<float> image_data;
     std::vector<TextEntry> text_entries;
     std::vector<HitRegionCmd> hit_regions;
@@ -1320,57 +1405,37 @@ inline void sync_ime_windows() {
     if (!g_ime.hwnd)
         return;
 
-    auto snapshot = ::phenotype::detail::focused_input_snapshot();
-    if (!snapshot.valid) {
+    auto layout = current_windows_caret_layout();
+    if (!layout.valid) {
         clear_ime_state();
+        ::phenotype::detail::clear_input_debug_caret_presentation();
         return;
     }
+    auto const& snapshot = layout.snapshot;
 
     g_ime.overlay = {};
 
-    auto const scroll_y = ::phenotype::detail::g_app.scroll_y;
-    float draw_y = snapshot.y - scroll_y;
-    float text_x = snapshot.x + snapshot.padding[3];
-    float text_y = draw_y + snapshot.padding[0];
-    float caret_x = text_x + measure_utf8_prefix(
-        snapshot.font_size,
-        snapshot.mono,
-        snapshot.value,
-        g_ime.composition_active ? g_ime.composition_anchor : snapshot_caret_byte_offset(snapshot));
-    if (g_ime.composition_active && !g_ime.composition_text.empty()) {
-        auto prefix = wstring_to_utf8(
-            std::wstring_view(
-                g_ime.composition_text.data(),
-                std::min<std::size_t>(
-                    static_cast<std::size_t>((g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor),
-                    g_ime.composition_text.size())));
-        if (!prefix.empty()) {
-            caret_x += text_measure(
-                snapshot.font_size,
-                snapshot.mono,
-                prefix.c_str(),
-                static_cast<unsigned int>(prefix.size()));
-        }
-    }
-
     auto himc = ImmGetContext(g_ime.hwnd);
-    if (!himc)
+    if (!himc) {
+        sync_windows_debug_caret_presentation();
         return;
+    }
 
     COMPOSITIONFORM comp{};
     comp.dwStyle = CFS_FORCE_POSITION;
-    comp.ptCurrentPos.x = static_cast<LONG>(std::round(caret_x));
-    comp.ptCurrentPos.y = static_cast<LONG>(std::round(text_y));
+    comp.ptCurrentPos.x = static_cast<LONG>(std::round(layout.content_x));
+    comp.ptCurrentPos.y = static_cast<LONG>(std::round(layout.content_y));
     ImmSetCompositionWindow(himc, &comp);
 
     CANDIDATEFORM cand{};
     cand.dwIndex = 0;
     cand.dwStyle = CFS_CANDIDATEPOS;
-    cand.ptCurrentPos.x = static_cast<LONG>(std::round(caret_x));
-    cand.ptCurrentPos.y = static_cast<LONG>(std::round(draw_y + snapshot.height));
+    cand.ptCurrentPos.x = static_cast<LONG>(std::round(layout.content_x));
+    cand.ptCurrentPos.y = static_cast<LONG>(std::round(layout.draw_y + snapshot.height));
     ImmSetCandidateWindow(himc, &cand);
     ImmReleaseContext(g_ime.hwnd, himc);
     sync_input_debug_composition_state();
+    sync_windows_debug_caret_presentation();
 
     if (!g_ime.candidate_open || g_ime.candidates.empty()) {
         g_ime.hovered_candidate = -1;
@@ -1432,9 +1497,9 @@ inline void sync_ime_windows() {
     if (panel_x < 8.0f)
         panel_x = 8.0f;
 
-    float panel_y = draw_y + snapshot.height + 4.0f;
+    float panel_y = layout.draw_y + snapshot.height + 4.0f;
     if (panel_y + panel_height > static_cast<float>(winh) - 8.0f)
-        panel_y = draw_y - panel_height - 4.0f;
+        panel_y = layout.draw_y - panel_height - 4.0f;
     if (panel_y < 8.0f)
         panel_y = 8.0f;
 
@@ -2667,16 +2732,13 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         });
     };
 
-    auto snapshot = ::phenotype::detail::focused_input_snapshot();
-    if (snapshot.valid) {
-        float draw_y = snapshot.y - scroll_y;
-        if (g_ime.composition_active && !g_ime.composition_text.empty()) {
+    auto layout = current_windows_caret_layout();
+    if (layout.valid) {
+        auto const& snapshot = layout.snapshot;
+        float draw_y = layout.draw_y - snapshot.padding[0];
+        if (layout.composition_active && !g_ime.composition_text.empty()) {
             auto composition = wstring_to_utf8(g_ime.composition_text);
-            float base_x = snapshot.x + snapshot.padding[3] + measure_utf8_prefix(
-                snapshot.font_size,
-                snapshot.mono,
-                snapshot.value,
-                g_ime.composition_anchor);
+            float base_x = layout.base.draw_x;
             append_overlay_text(
                 base_x,
                 draw_y + snapshot.padding[0],
@@ -2693,7 +2755,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                     composition.c_str(),
                     static_cast<unsigned int>(composition.size()));
                 append_color_instance(
-                    decoded.color_data,
+                    decoded.overlay_color_data,
                     base_x,
                     draw_y + snapshot.padding[0] + snapshot.line_height - 2.0f,
                     preedit_w,
@@ -2704,23 +2766,20 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                     1.0f);
             }
 
-            auto prefix = wstring_to_utf8(
-                std::wstring_view(
-                    g_ime.composition_text.data(),
-                    std::min<std::size_t>(
-                        static_cast<std::size_t>((g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor),
-                        g_ime.composition_text.size())));
-            float caret_x = base_x;
-            if (!prefix.empty()) {
-                caret_x += text_measure(
-                    snapshot.font_size,
-                    snapshot.mono,
-                    prefix.c_str(),
-                    static_cast<unsigned int>(prefix.size()));
-            }
             append_color_instance(
-                decoded.color_data,
-                caret_x,
+                decoded.overlay_color_data,
+                layout.draw_x,
+                draw_y + snapshot.padding[0] + 2.0f,
+                1.5f,
+                (snapshot.line_height > 4.0f) ? (snapshot.line_height - 4.0f) : snapshot.line_height,
+                snapshot.accent.r / 255.0f,
+                snapshot.accent.g / 255.0f,
+                snapshot.accent.b / 255.0f,
+                1.0f);
+        } else if (snapshot.caret_visible) {
+            append_color_instance(
+                decoded.overlay_color_data,
+                layout.draw_x,
                 draw_y + snapshot.padding[0] + 2.0f,
                 1.5f,
                 (snapshot.line_height > 4.0f) ? (snapshot.line_height - 4.0f) : snapshot.line_height,
@@ -2907,6 +2966,22 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         }
     }
 
+    UINT overlay_color_count = static_cast<UINT>(decoded.overlay_color_data.size() / 12);
+    if (overlay_color_count > 0) {
+        UINT64 bytes = static_cast<UINT64>(decoded.overlay_color_data.size() * sizeof(float));
+        auto [mapped, offset] = upload_alloc(bytes, 16);
+        if (mapped) {
+            std::memcpy(mapped, decoded.overlay_color_data.data(), static_cast<std::size_t>(bytes));
+            D3D12_VERTEX_BUFFER_VIEW vbv{};
+            vbv.BufferLocation = g_renderer.upload.resource->GetGPUVirtualAddress() + offset;
+            vbv.SizeInBytes = static_cast<UINT>(bytes);
+            vbv.StrideInBytes = 48;
+            g_renderer.command_list->SetPipelineState(g_renderer.color_pipeline.Get());
+            g_renderer.command_list->IASetVertexBuffers(0, 1, &vbv);
+            g_renderer.command_list->DrawInstanced(6, overlay_color_count, 0, 0);
+        }
+    }
+
     transition_resource(
         frame.render_target.Get(),
         D3D12_RESOURCE_STATE_RENDER_TARGET,
@@ -2991,6 +3066,10 @@ inline void windows_open_url(char const* url, unsigned int len) {
     }
 }
 
+inline bool windows_uses_shared_caret_blink() {
+    return true;
+}
+
 #endif
 
 } // namespace phenotype::native::detail
@@ -3018,6 +3097,7 @@ inline platform_api const& windows_platform() {
             detail::input_attach,
             detail::input_detach,
             detail::sync_ime_windows,
+            detail::windows_uses_shared_caret_blink,
             detail::input_handle_cursor_pos,
             detail::input_handle_mouse_button,
             detail::input_dismiss_transient,

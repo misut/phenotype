@@ -193,7 +193,10 @@ static void view(State const& state) {
         phenotype::layout::spacer(6);
         phenotype::widget::radio<Msg>("Choice B", state.choice == 1, SelectChoice{1});
         phenotype::layout::spacer(10);
-        phenotype::widget::text_field<Msg>("Type here", state.text, +map_text);
+        phenotype::layout::card([&] {
+            phenotype::widget::text("Nested input");
+            phenotype::widget::text_field<Msg>("Type here", state.text, +map_text);
+        });
         phenotype::layout::spacer(1200);
         phenotype::widget::text("Bottom marker");
     });
@@ -242,7 +245,7 @@ struct Harness {
     }
 
     std::pair<float, float> point_for(unsigned int callback_id) const {
-        for (float y = 0.0f; y <= 420.0f; y += 2.0f) {
+        for (float y = 0.0f; y <= 640.0f; y += 2.0f) {
             for (float x = 0.0f; x <= 360.0f; x += 2.0f) {
                 auto hit = phenotype::native::detail::hit_test(
                     x, y, phenotype::detail::get_scroll_y());
@@ -371,6 +374,7 @@ static void test_shell_text_space_char_and_enter_behavior() {
     assert(debug.detail == "space-char");
     assert(debug.result == "handled");
     assert(debug.caret_pos == 1);
+    assert(debug.caret_visible);
     assert(g_observed_state.text == " ");
     assert(has_metric("key", "space-char", "handled", "text_field"));
     std::puts("PASS: shared shell text space char and enter behavior");
@@ -388,8 +392,11 @@ static void test_shell_text_caret_navigation_and_backspace() {
     assert(g_observed_state.text == "ABC");
     assert(phenotype::detail::get_caret_pos() == 3);
 
+    phenotype::detail::toggle_caret();
+    assert(!phenotype::detail::get_caret_visible());
     assert(phenotype::native::detail::dispatch_key(GLFW_KEY_LEFT, GLFW_PRESS, 0));
     assert(phenotype::detail::get_caret_pos() == 2);
+    assert(phenotype::detail::get_caret_visible());
     assert(phenotype::native::detail::dispatch_key(GLFW_KEY_RIGHT, GLFW_PRESS, 0));
     assert(phenotype::detail::get_caret_pos() == 3);
     assert(phenotype::native::detail::dispatch_key(GLFW_KEY_HOME, GLFW_PRESS, 0));
@@ -415,8 +422,159 @@ static void test_shell_text_caret_navigation_and_backspace() {
     assert(debug.result == "handled");
     assert(debug.focused_role == "text_field");
     assert(debug.caret_pos == 2);
+    assert(debug.caret_visible);
     assert(has_metric("key", "backspace", "handled", "text_field"));
     std::puts("PASS: shared shell text caret navigation and backspace");
+}
+
+static void test_shell_pointer_text_caret_placement_and_visibility_reset() {
+    using namespace input_regression;
+
+    Harness harness;
+
+    phenotype::detail::set_focus_id(text_field_id, "test", "setup");
+    assert(phenotype::detail::replace_focused_input_text(0, 0, "ABC"));
+
+    auto click_text_field = [&](float x) {
+        auto snapshot = phenotype::detail::focused_input_snapshot();
+        assert(snapshot.valid);
+        float y = snapshot.y + snapshot.height * 0.5f;
+        return phenotype::native::detail::dispatch_mouse_button(
+            x,
+            y,
+            GLFW_MOUSE_BUTTON_LEFT,
+            GLFW_PRESS,
+            0);
+    };
+
+    auto prefix_width = [&](std::string const& value, std::size_t bytes) {
+        auto snapshot = phenotype::detail::focused_input_snapshot();
+        return harness.host.measure_text(
+            snapshot.font_size,
+            snapshot.mono ? 1u : 0u,
+            value.data(),
+            static_cast<unsigned int>(bytes));
+    };
+
+    {
+        auto snapshot = phenotype::detail::focused_input_snapshot();
+        phenotype::detail::toggle_caret();
+        assert(!phenotype::detail::get_caret_visible());
+        assert(click_text_field(snapshot.x + 1.0f));
+        assert(phenotype::detail::get_caret_pos() == 0);
+        assert(phenotype::detail::get_caret_visible());
+    }
+
+    {
+        auto snapshot = phenotype::detail::focused_input_snapshot();
+        float base_x = snapshot.x + snapshot.padding[3];
+        float x = base_x + prefix_width(snapshot.value, 1) + 1.0f;
+        assert(click_text_field(x));
+        assert(phenotype::detail::get_caret_pos() == 1);
+        assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>('Z')));
+        assert(g_observed_state.text == "AZBC");
+    }
+
+    assert(phenotype::detail::replace_focused_input_text(0, g_observed_state.text.size(), "A가C"));
+    {
+        auto snapshot = phenotype::detail::focused_input_snapshot();
+        float base_x = snapshot.x + snapshot.padding[3];
+        float after_multibyte = prefix_width(snapshot.value, 4);
+        phenotype::detail::toggle_caret();
+        assert(!phenotype::detail::get_caret_visible());
+        assert(click_text_field(base_x + after_multibyte - 1.0f));
+        assert(phenotype::detail::get_caret_pos() == 4);
+        assert(phenotype::detail::get_caret_visible());
+    }
+
+    {
+        auto snapshot = phenotype::detail::focused_input_snapshot();
+        assert(click_text_field(snapshot.x + snapshot.width - 1.0f));
+        assert(phenotype::detail::get_caret_pos() == snapshot.value.size());
+    }
+
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.event == "click");
+    assert(debug.detail == "pointer-click");
+    assert(debug.result == "handled");
+    assert(debug.focused_role == "text_field");
+    assert(debug.caret_pos == static_cast<unsigned int>(g_observed_state.text.size()));
+    assert(debug.caret_visible);
+    std::puts("PASS: shared shell pointer text caret placement and visibility reset");
+}
+
+static void test_shared_caret_debug_rect_tracks_layout() {
+    using namespace input_regression;
+
+    Harness harness;
+    phenotype::detail::set_focus_id(text_field_id, "test", "setup");
+    assert(phenotype::detail::replace_focused_input_text(0, 0, "A가C"));
+    phenotype::native::detail::repaint_current();
+
+    auto snapshot = phenotype::detail::focused_input_snapshot();
+    assert(snapshot.valid);
+    float base_x = snapshot.x + snapshot.padding[3];
+    auto prefix_width = [&](std::size_t bytes) {
+        return harness.host.measure_text(
+            snapshot.font_size,
+            snapshot.mono ? 1u : 0u,
+            snapshot.value.data(),
+            static_cast<unsigned int>(bytes));
+    };
+
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.caret_renderer == "custom");
+    assert(debug.caret_rect.valid);
+    assert(std::fabs(debug.caret_rect.x - (base_x + prefix_width(snapshot.value.size()))) < 0.75f);
+    assert(std::fabs(debug.caret_rect.y - (snapshot.y + snapshot.padding[0])) < 0.75f);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_HOME, GLFW_PRESS, 0));
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.caret_renderer == "custom");
+    assert(debug.caret_rect.valid);
+    assert(std::fabs(debug.caret_rect.x - base_x) < 0.75f);
+    assert(std::fabs(debug.caret_rect.y - (snapshot.y + snapshot.padding[0])) < 0.75f);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_RIGHT, GLFW_PRESS, 0));
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(std::fabs(debug.caret_rect.x - (base_x + prefix_width(1))) < 0.75f);
+    assert(std::fabs(debug.caret_rect.y - (snapshot.y + snapshot.padding[0])) < 0.75f);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_RIGHT, GLFW_PRESS, 0));
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(std::fabs(debug.caret_rect.x - (base_x + prefix_width(4))) < 0.75f);
+    assert(std::fabs(debug.caret_rect.y - (snapshot.y + snapshot.padding[0])) < 0.75f);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_END, GLFW_PRESS, 0));
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(std::fabs(debug.caret_rect.x - (base_x + prefix_width(snapshot.value.size()))) < 0.75f);
+    assert(std::fabs(debug.caret_rect.y - (snapshot.y + snapshot.padding[0])) < 0.75f);
+
+    std::puts("PASS: shared caret debug rect tracks layout");
+}
+
+static void test_caret_overlay_state_invalidates_cached_frame_hash() {
+    using namespace input_regression;
+
+    Harness harness;
+
+    phenotype::detail::set_focus_id(text_field_id, "test", "setup");
+    phenotype::native::detail::repaint_current();
+    auto baseline_hash = phenotype::detail::g_app.last_paint_hash;
+    assert(baseline_hash != 0);
+
+    phenotype::detail::toggle_caret();
+    assert(phenotype::detail::g_app.last_paint_hash == 0);
+    phenotype::native::detail::repaint_current();
+    assert(phenotype::detail::g_app.last_paint_hash != 0);
+
+    assert(phenotype::detail::set_focused_input_caret_pos(0));
+    assert(phenotype::detail::g_app.last_paint_hash == 0);
+
+    phenotype::detail::set_input_composition_state(true, "가", 3);
+    assert(phenotype::detail::g_app.last_paint_hash == 0);
+
+    std::puts("PASS: caret overlay state invalidates cached frame hash");
 }
 
 static void test_shared_text_replacement_helper() {
@@ -590,6 +748,165 @@ struct MacRendererFixture {
         glfwTerminate();
     }
 };
+
+struct MacInputHarness {
+    GLFWwindow* window = nullptr;
+    native_host host{};
+
+    MacInputHarness() {
+        input_regression::reset_core_state();
+        assert(glfwInit());
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        window = glfwCreateWindow(360, 640, "phenotype-input-test", nullptr, nullptr);
+        assert(window != nullptr);
+
+        host.window = window;
+        host.platform = &current_platform();
+        phenotype::native::run<input_regression::State, input_regression::Msg>(
+            host,
+            input_regression::view,
+            input_regression::update);
+    }
+
+    ~MacInputHarness() {
+        phenotype::native::detail::shutdown_host(host);
+        if (window)
+            glfwDestroyWindow(window);
+        glfwTerminate();
+        phenotype::native::macos_test::force_disable_system_caret(false);
+        input_regression::reset_core_state();
+    }
+
+    std::pair<float, float> point_for(unsigned int callback_id) const {
+        for (float y = 0.0f; y <= 740.0f; y += 2.0f) {
+            for (float x = 0.0f; x <= 360.0f; x += 2.0f) {
+                auto hit = renderer::hit_test(
+                    x, y, phenotype::detail::get_scroll_y());
+                if (hit.has_value() && *hit == callback_id)
+                    return {x, y};
+            }
+        }
+        assert(false && "missing hit-test point");
+        return {0.0f, 0.0f};
+    }
+};
+
+static void test_macos_system_caret_indicator_tracks_focus_and_composition() {
+    using namespace input_regression;
+    using phenotype::native::macos_test::clear_composition_for_tests;
+    using phenotype::native::macos_test::force_disable_system_caret;
+    using phenotype::native::macos_test::set_composition_for_tests;
+    using phenotype::native::macos_test::system_caret_debug;
+
+    force_disable_system_caret(false);
+    MacInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+
+    auto caret = system_caret_debug();
+    assert(caret.supported);
+    assert(caret.attached);
+    assert(caret.display_mode == 0);
+    assert(caret.frame.valid);
+    assert(caret.draw_rect.valid);
+    assert(caret.host_rect.valid);
+    assert(caret.screen_rect.valid);
+    assert(caret.host_bounds.valid);
+    assert(caret.host_flipped);
+    assert(caret.first_rect_screen.valid);
+    assert(std::fabs(caret.frame.x - caret.host_rect.x) < 0.001f);
+    assert(std::fabs(caret.frame.y - caret.host_rect.y) < 0.001f);
+    assert(std::fabs(caret.frame.w - caret.host_rect.w) < 0.001f);
+    assert(std::fabs(caret.frame.h - caret.host_rect.h) < 0.001f);
+    assert(std::fabs(caret.screen_rect.x - caret.first_rect_screen.x) < 1.0f);
+    assert(std::fabs(caret.screen_rect.y - caret.first_rect_screen.y) < 1.0f);
+    assert(std::fabs(caret.screen_rect.h - caret.first_rect_screen.h) < 1.0f);
+
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.caret_renderer == "system");
+    assert(debug.caret_rect.valid);
+    assert(debug.caret_draw_rect.valid);
+    assert(debug.caret_host_rect.valid);
+    assert(debug.caret_screen_rect.valid);
+    assert(debug.caret_host_bounds.valid);
+    assert(debug.caret_host_flipped);
+    assert(debug.caret_geometry_source == "draw");
+    assert(std::fabs(debug.caret_rect.y - debug.caret_draw_rect.y) < 0.001f);
+    assert(std::fabs(debug.caret_host_rect.y - caret.frame.y) < 0.001f);
+
+    assert(phenotype::native::detail::set_scroll_position(
+        48.0f,
+        harness.host.canvas_height(),
+        "test-scroll"));
+    caret = system_caret_debug();
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.caret_renderer == "system");
+    assert(debug.caret_rect.valid);
+    assert(debug.caret_draw_rect.valid);
+    assert(debug.caret_host_rect.valid);
+    assert(std::fabs(debug.caret_draw_rect.y - debug.caret_host_rect.y) < 0.001f);
+    assert(std::fabs(caret.frame.y - debug.caret_host_rect.y) < 0.001f);
+    assert(std::fabs(caret.draw_rect.y - debug.caret_draw_rect.y) < 0.001f);
+    assert(std::fabs(caret.host_rect.y - debug.caret_host_rect.y) < 0.001f);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ESCAPE, GLFW_PRESS, 0));
+    caret = system_caret_debug();
+    assert(caret.display_mode == 1);
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.caret_renderer == "hidden");
+    assert(!debug.caret_rect.valid);
+    assert(!debug.caret_draw_rect.valid);
+    assert(!debug.caret_host_rect.valid);
+    assert(!debug.caret_screen_rect.valid);
+
+    phenotype::detail::set_scroll_y(0.0f);
+    phenotype::detail::set_focus_id(text_field_id, "test", "setup");
+    harness.host.platform->input.sync();
+    set_composition_for_tests("가", 0, 0, 1);
+    harness.host.platform->input.sync();
+    caret = system_caret_debug();
+    assert(caret.display_mode == 1);
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.caret_renderer == "hidden");
+    clear_composition_for_tests();
+
+    std::puts("PASS: macOS system caret indicator tracks focus and composition");
+}
+
+static void test_macos_fallback_caret_path_exposes_custom_debug_rect() {
+    using namespace input_regression;
+    using phenotype::native::macos_test::force_disable_system_caret;
+    using phenotype::native::macos_test::system_caret_debug;
+
+    force_disable_system_caret(true);
+    MacInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+    phenotype::native::detail::repaint_current();
+
+    auto caret = system_caret_debug();
+    assert(!caret.supported);
+    assert(!caret.attached);
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.caret_renderer == "custom");
+    assert(debug.caret_rect.valid);
+    assert(debug.caret_draw_rect.valid);
+    assert(debug.caret_geometry_source == "draw");
+    assert(harness.host.platform->input.uses_shared_caret_blink());
+
+    std::puts("PASS: macOS fallback caret path exposes custom debug rect");
+}
 
 static void test_text_measure_basic() {
     text::init();
@@ -1108,11 +1425,16 @@ int main() {
     test_shell_activation_keys_respect_roles();
     test_shell_text_space_char_and_enter_behavior();
     test_shell_text_caret_navigation_and_backspace();
+    test_shell_pointer_text_caret_placement_and_visibility_reset();
+    test_shared_caret_debug_rect_tracks_layout();
+    test_caret_overlay_state_invalidates_cached_frame_hash();
     test_shared_text_replacement_helper();
     test_focus_transitions_sync_platform_input();
     test_shell_scroll_and_escape_observability();
 #ifdef __APPLE__
     test_macos_utf16_utf8_range_helpers();
+    test_macos_system_caret_indicator_tracks_focus_and_composition();
+    test_macos_fallback_caret_path_exposes_custom_debug_rect();
     test_default_scroll_delta_fallback();
     test_text_measure_basic();
     test_text_measure_proportional();

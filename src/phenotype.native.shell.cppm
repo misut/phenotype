@@ -1,5 +1,6 @@
 module;
 #ifndef __wasi__
+#include <chrono>
 #include <concepts>
 #include <cstdio>
 #include <optional>
@@ -73,6 +74,8 @@ struct AppState {
     native_host* host = nullptr;
     float scroll_y = 0.0f;
     unsigned int hovered_id = invalid_callback_id;
+    std::chrono::steady_clock::time_point next_caret_blink{};
+    bool caret_blink_armed = false;
 };
 
 inline AppState g_app_state;
@@ -88,6 +91,13 @@ inline void sync_platform_input() {
         || !g_app_state.host->platform->input.sync)
         return;
     g_app_state.host->platform->input.sync();
+}
+
+inline bool platform_uses_shared_caret_blink() {
+    auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
+    if (!platform || !platform->input.uses_shared_caret_blink)
+        return true;
+    return platform->input.uses_shared_caret_blink();
 }
 
 inline std::optional<unsigned int> hit_test(float x, float y, float scroll_y) {
@@ -123,9 +133,100 @@ inline void repaint_current() {
 }
 
 inline void bind_host(native_host& host, float scroll_y = 0.0f) {
-    g_app_state = {&host, scroll_y, invalid_callback_id};
+    g_app_state = {&host, scroll_y, invalid_callback_id, {}, false};
     ::phenotype::detail::set_scroll_y(scroll_y);
     ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
+}
+
+inline constexpr auto caret_blink_interval = std::chrono::milliseconds(530);
+
+inline float measure_utf8_prefix(::phenotype::FocusedInputSnapshot const& snapshot,
+                                 std::size_t bytes) {
+    if (!g_app_state.host)
+        return 0.0f;
+    bytes = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, bytes);
+    return g_app_state.host->measure_text(
+        snapshot.font_size,
+        snapshot.mono ? 1u : 0u,
+        snapshot.value.data(),
+        static_cast<unsigned int>(bytes));
+}
+
+inline std::size_t caret_pos_from_pointer_x(::phenotype::FocusedInputSnapshot const& snapshot,
+                                            float pointer_x) {
+    if (snapshot.value.empty())
+        return 0;
+
+    float base_x = snapshot.x + snapshot.padding[3];
+    if (pointer_x <= base_x)
+        return 0;
+
+    float full_width = measure_utf8_prefix(snapshot, snapshot.value.size());
+    if (pointer_x >= base_x + full_width)
+        return snapshot.value.size();
+
+    float target = pointer_x - base_x;
+    std::size_t prev = 0;
+    float prev_width = 0.0f;
+    while (prev < snapshot.value.size()) {
+        auto next = static_cast<std::size_t>(
+            ::phenotype::detail::next_utf8_boundary(snapshot.value, prev));
+        float next_width = measure_utf8_prefix(snapshot, next);
+        float midpoint = prev_width + (next_width - prev_width) * 0.5f;
+        if (target < midpoint)
+            return prev;
+        if (target <= next_width)
+            return next;
+        prev = next;
+        prev_width = next_width;
+    }
+    return snapshot.value.size();
+}
+
+inline bool move_focused_caret_from_pointer_x(float pointer_x) {
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid)
+        return false;
+    auto next_caret = caret_pos_from_pointer_x(snapshot, pointer_x);
+    auto previous_caret = ::phenotype::detail::get_caret_pos();
+    auto previous_visible = ::phenotype::detail::get_caret_visible();
+    if (!::phenotype::detail::set_focused_input_caret_pos(next_caret, true))
+        return false;
+    return previous_caret != ::phenotype::detail::get_caret_pos() || !previous_visible;
+}
+
+inline void reset_caret_blink_timer() {
+    if (!platform_uses_shared_caret_blink()) {
+        g_app_state.caret_blink_armed = false;
+        return;
+    }
+    if (!::phenotype::detail::focused_is_input()) {
+        g_app_state.caret_blink_armed = false;
+        return;
+    }
+    g_app_state.caret_blink_armed = true;
+    g_app_state.next_caret_blink = std::chrono::steady_clock::now() + caret_blink_interval;
+}
+
+inline void tick_caret_blink() {
+    if (!platform_uses_shared_caret_blink()) {
+        g_app_state.caret_blink_armed = false;
+        return;
+    }
+    if (!::phenotype::detail::focused_is_input()) {
+        g_app_state.caret_blink_armed = false;
+        return;
+    }
+    if (!g_app_state.caret_blink_armed) {
+        reset_caret_blink_timer();
+        return;
+    }
+    auto now = std::chrono::steady_clock::now();
+    if (now < g_app_state.next_caret_blink)
+        return;
+    ::phenotype::detail::toggle_caret();
+    g_app_state.next_caret_blink = now + caret_blink_interval;
+    repaint_current();
 }
 
 inline void update_cursor(GLFWwindow* window, bool pointing) {
@@ -210,19 +311,26 @@ inline bool dispatch_mouse_button(float mx, float my,
     if (auto hit = hit_test(mx, my, g_app_state.scroll_y)) {
         bool focus_changed = ::phenotype::detail::set_focus_id(
             *hit, "shell", "pointer-focus");
-        if (focus_changed)
+        bool caret_changed = false;
+        if (::phenotype::detail::focused_is_input() && ::phenotype::detail::get_focused_id() == *hit)
+            caret_changed = move_focused_caret_from_pointer_x(mx);
+        if (focus_changed || caret_changed)
             sync_platform_input();
+        if (::phenotype::detail::focused_is_input())
+            reset_caret_blink_timer();
         bool activated = ::phenotype::detail::handle_event(
             *hit, "shell", "pointer-click");
-        if (focus_changed || activated)
+        if (focus_changed || caret_changed || activated)
             repaint_current();
-        return focus_changed || activated;
+        return focus_changed || caret_changed || activated;
     }
 
     bool cleared = ::phenotype::detail::set_focus_id(
         invalid_callback_id, "shell", "pointer-clear");
     if (cleared)
         sync_platform_input();
+    if (cleared)
+        reset_caret_blink_timer();
     if (cleared)
         repaint_current();
     return cleared;
@@ -343,12 +451,14 @@ inline bool dispatch_key(int key, int action, int mods) {
         case GLFW_KEY_TAB:
             if (::phenotype::detail::handle_tab(shift ? 1u : 0u, "shell", detail)) {
                 sync_platform_input();
+                reset_caret_blink_timer();
                 repaint_current();
                 return true;
             }
             return false;
         case GLFW_KEY_BACKSPACE:
             if (::phenotype::detail::handle_key(1, 0, "shell", detail)) {
+                reset_caret_blink_timer();
                 repaint_current();
                 return true;
             }
@@ -365,12 +475,14 @@ inline bool dispatch_key(int key, int action, int mods) {
             return dispatch_activation(detail, false);
         case GLFW_KEY_LEFT:
             if (::phenotype::detail::handle_key(2, 0, "shell", detail)) {
+                reset_caret_blink_timer();
                 repaint_current();
                 return true;
             }
             return false;
         case GLFW_KEY_RIGHT:
             if (::phenotype::detail::handle_key(3, 0, "shell", detail)) {
+                reset_caret_blink_timer();
                 repaint_current();
                 return true;
             }
@@ -404,6 +516,7 @@ inline bool dispatch_key(int key, int action, int mods) {
         case GLFW_KEY_HOME:
             if (::phenotype::detail::focused_is_input()) {
                 if (::phenotype::detail::handle_key(4, 0, "shell", detail)) {
+                    reset_caret_blink_timer();
                     repaint_current();
                     return true;
                 }
@@ -413,6 +526,7 @@ inline bool dispatch_key(int key, int action, int mods) {
         case GLFW_KEY_END:
             if (::phenotype::detail::focused_is_input()) {
                 if (::phenotype::detail::handle_key(5, 0, "shell", detail)) {
+                    reset_caret_blink_timer();
                     repaint_current();
                     return true;
                 }
@@ -429,6 +543,8 @@ inline bool dispatch_key(int key, int action, int mods) {
                     invalid_callback_id, "shell", "escape-clear");
             if (cleared)
                 sync_platform_input();
+            if (cleared)
+                reset_caret_blink_timer();
             bool handled = dismissed || cleared;
             if (handled)
                 repaint_current();
@@ -451,6 +567,7 @@ inline bool dispatch_char(unsigned int codepoint) {
         return false;
     }
     if (::phenotype::detail::handle_key(0, codepoint, "shell", detail)) {
+        reset_caret_blink_timer();
         repaint_current();
         return true;
     }
@@ -570,6 +687,7 @@ int run_app_with_platform(platform_api const& platform,
 
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
+        tick_caret_blink();
         sync_platform_input();
     }
 

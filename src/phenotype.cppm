@@ -26,9 +26,14 @@ export namespace phenotype {
 
 namespace detail {
 // Append a freshly allocated node to the current scope's children, if any.
+inline void append_child(NodeHandle parent, NodeHandle child) {
+    node_at(child).parent = parent;
+    node_at(parent).children.push_back(child);
+}
+
 inline void attach_to_scope(NodeHandle h) {
     if (auto* s = Scope::current())
-        node_at(s->node).children.push_back(h);
+        append_child(s->node, h);
 }
 } // namespace detail
 
@@ -48,7 +53,7 @@ inline void text(str content) {
 
     if (auto* s = Scope::current()) {
         node.style.text_align = detail::node_at(s->node).style.text_align;
-        detail::node_at(s->node).children.push_back(h);
+        detail::append_child(s->node, h);
     }
 }
 
@@ -168,7 +173,7 @@ inline void toggle(str label, bool active, Msg msg,
             box.border_color = ::phenotype::detail::g_app.theme.border;
         }
         box.border_width = 1;
-        ::phenotype::detail::node_at(row_h).children.push_back(box_h);
+        ::phenotype::detail::append_child(row_h, box_h);
     }
 
     {
@@ -181,7 +186,7 @@ inline void toggle(str label, bool active, Msg msg,
         lbl.callback_id = id;
         lbl.focusable   = false;
         lbl.interaction_role = role;
-        ::phenotype::detail::node_at(row_h).children.push_back(lbl_h);
+        ::phenotype::detail::append_child(row_h, lbl_h);
     }
 }
 } // namespace _impl
@@ -666,7 +671,7 @@ inline void item(str content) {
         bullet.font_size = detail::g_app.theme.body_font_size;
         bullet.text_color = detail::g_app.theme.foreground;
     }
-    detail::node_at(row_h).children.push_back(bullet_h);
+    detail::append_child(row_h, bullet_h);
 
     auto text_h = detail::alloc_node();
     {
@@ -675,7 +680,7 @@ inline void item(str content) {
         text.font_size = detail::g_app.theme.body_font_size;
         text.text_color = detail::g_app.theme.foreground;
     }
-    detail::node_at(row_h).children.push_back(text_h);
+    detail::append_child(row_h, text_h);
 
     detail::attach_to_scope(row_h);
 }
@@ -761,15 +766,114 @@ inline unsigned int resolved_caret_pos(std::string const& value) {
         clamp_utf8_boundary(value, static_cast<std::size_t>(g_app.caret_pos)));
 }
 
+inline void sync_input_debug_caret_state() {
+    auto& snapshot = g_app.input_debug;
+    snapshot.caret_pos = g_app.caret_pos;
+    snapshot.caret_visible = g_app.caret_visible;
+    snapshot.focused_is_input = find_input_handler(g_app.focused_id) != nullptr;
+    if (!snapshot.focused_is_input) {
+        snapshot.caret_renderer = "hidden";
+        snapshot.caret_rect = {};
+        snapshot.caret_draw_rect = {};
+        snapshot.caret_host_rect = {};
+        snapshot.caret_screen_rect = {};
+        snapshot.caret_host_bounds = {};
+        snapshot.caret_host_flipped = false;
+        snapshot.caret_geometry_source = "draw";
+    }
+}
+
+inline diag::RectSnapshot make_debug_rect_snapshot(float x,
+                                                   float y,
+                                                   float w,
+                                                   float h) {
+    return {
+        true,
+        x,
+        y,
+        w,
+        h,
+    };
+}
+
+inline void set_input_debug_caret_presentation(char const* renderer,
+                                               float x,
+                                               float y,
+                                               float w,
+                                               float h) {
+    auto& snapshot = g_app.input_debug;
+    snapshot.caret_renderer = renderer ? renderer : "hidden";
+    snapshot.caret_rect = make_debug_rect_snapshot(x, y, w, h);
+    snapshot.caret_draw_rect = snapshot.caret_rect;
+    snapshot.caret_host_rect = {};
+    snapshot.caret_screen_rect = {};
+    snapshot.caret_host_bounds = {};
+    snapshot.caret_host_flipped = false;
+    snapshot.caret_geometry_source = "draw";
+}
+
+inline void set_input_debug_caret_geometry(char const* renderer,
+                                           diag::RectSnapshot draw_rect,
+                                           diag::RectSnapshot host_rect,
+                                           diag::RectSnapshot screen_rect,
+                                           diag::RectSnapshot host_bounds,
+                                           bool host_flipped,
+                                           char const* geometry_source = "draw") {
+    auto& snapshot = g_app.input_debug;
+    snapshot.caret_renderer = renderer ? renderer : "hidden";
+    snapshot.caret_rect = draw_rect;
+    snapshot.caret_draw_rect = draw_rect;
+    snapshot.caret_host_rect = host_rect;
+    snapshot.caret_screen_rect = screen_rect;
+    snapshot.caret_host_bounds = host_bounds;
+    snapshot.caret_host_flipped = host_flipped;
+    snapshot.caret_geometry_source = geometry_source ? geometry_source : "draw";
+}
+
+inline void clear_input_debug_caret_presentation(char const* renderer = "hidden") {
+    auto& snapshot = g_app.input_debug;
+    snapshot.caret_renderer = renderer ? renderer : "hidden";
+    snapshot.caret_rect = {};
+    snapshot.caret_draw_rect = {};
+    snapshot.caret_host_rect = {};
+    snapshot.caret_screen_rect = {};
+    snapshot.caret_host_bounds = {};
+    snapshot.caret_host_flipped = false;
+    snapshot.caret_geometry_source = "draw";
+}
+
+inline void clear_caret_state(bool visible = true) {
+    g_app.caret_pos = 0xFFFFFFFFu;
+    g_app.caret_visible = visible;
+    g_app.last_paint_hash = 0;
+    sync_input_debug_caret_state();
+}
+
+inline unsigned int set_caret_state(std::string const& value,
+                                    std::size_t pos,
+                                    bool visible = true) {
+    g_app.caret_pos = static_cast<unsigned int>(clamp_utf8_boundary(value, pos));
+    g_app.caret_visible = visible;
+    g_app.last_paint_hash = 0;
+    sync_input_debug_caret_state();
+    return g_app.caret_pos;
+}
+
+inline bool set_focused_input_caret_pos(std::size_t pos, bool visible = true) {
+    auto* handler = find_input_handler(g_app.focused_id);
+    if (!handler)
+        return false;
+    set_caret_state(handler->current, pos, visible);
+    return true;
+}
+
 inline void assign_focus(unsigned int callback_id) {
     g_app.focused_id = callback_id;
     if (auto const* handler = find_input_handler(callback_id)) {
-        g_app.caret_pos = static_cast<unsigned int>(
-            clamp_utf8_boundary(handler->current, handler->current.size()));
+        set_caret_state(handler->current, handler->current.size());
     } else {
-        g_app.caret_pos = 0xFFFFFFFFu;
+        clear_caret_state();
     }
-    g_app.caret_visible = true;
 }
 
 inline char const* input_key_detail_name(unsigned int key_type) {
@@ -809,7 +913,18 @@ inline void note_input_event(char const* event,
     snapshot.hovered_id = g_app.hovered_id;
     snapshot.scroll_y = g_app.scroll_y;
     snapshot.caret_pos = g_app.caret_pos;
+    snapshot.caret_visible = g_app.caret_visible;
     snapshot.focused_is_input = find_input_handler(g_app.focused_id) != nullptr;
+    if (!snapshot.focused_is_input) {
+        snapshot.caret_renderer = "hidden";
+        snapshot.caret_rect = {};
+        snapshot.caret_draw_rect = {};
+        snapshot.caret_host_rect = {};
+        snapshot.caret_screen_rect = {};
+        snapshot.caret_host_bounds = {};
+        snapshot.caret_host_flipped = false;
+        snapshot.caret_geometry_source = "draw";
+    }
 
     metrics::inst::input_events.add(1, {
         {"event", snapshot.event},
@@ -895,6 +1010,8 @@ inline bool handle_tab(unsigned int reverse,
 
 inline void toggle_caret() {
     g_app.caret_visible = !g_app.caret_visible;
+    g_app.last_paint_hash = 0;
+    sync_input_debug_caret_state();
 }
 
 inline bool apply_key_to_string(unsigned int key_type,
@@ -975,8 +1092,7 @@ inline bool replace_focused_input_text(std::size_t start,
         std::swap(start, end);
 
     value.replace(start, end - start, replacement);
-    g_app.caret_pos = static_cast<unsigned int>(start + replacement.size());
-    g_app.caret_visible = true;
+    set_caret_state(value, start + replacement.size());
     handler->invoke(handler->state, std::move(value));
     return true;
 }
@@ -996,6 +1112,7 @@ inline void set_input_composition_state(bool active,
     snapshot.composition_active = active;
     snapshot.composition_text.assign(text.data(), text.size());
     snapshot.composition_cursor = cursor;
+    g_app.last_paint_hash = 0;
 }
 
 inline void clear_input_composition_state() {
@@ -1020,8 +1137,7 @@ inline bool handle_key(unsigned int key_type, unsigned int codepoint,
         return false;
     }
 
-    g_app.caret_pos = static_cast<unsigned int>(caret);
-    g_app.caret_visible = true;
+    set_caret_state(value, caret);
     if (text_changed)
         handler->invoke(handler->state, std::move(value));
     note_input_event("key", source, detail_name, "handled", g_app.focused_id);
@@ -1098,6 +1214,10 @@ inline unsigned int get_caret_pos() {
     return g_app.caret_pos;
 }
 
+inline bool get_caret_visible() {
+    return g_app.caret_visible;
+}
+
 inline void set_scroll_y(float scroll_y) {
     g_app.scroll_y = scroll_y;
 }
@@ -1111,7 +1231,7 @@ inline void input_commit(unsigned char const* buf, unsigned int len) {
     if (!handler)
         return;
     std::string value(reinterpret_cast<char const*>(buf), len);
-    g_app.caret_pos = static_cast<unsigned int>(value.size());
+    set_caret_state(value, value.size());
     handler->invoke(handler->state, std::move(value));
 }
 

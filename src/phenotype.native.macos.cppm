@@ -202,6 +202,11 @@ inline SEL sel_has_marked_text() {
     return sel;
 }
 
+inline SEL sel_hit_test() {
+    static auto sel = sel_registerName("hitTest:");
+    return sel;
+}
+
 inline SEL sel_handle_event() {
     static auto sel = sel_registerName("handleEvent:");
     return sel;
@@ -239,6 +244,11 @@ inline SEL sel_interpret_key_events() {
 
 inline SEL sel_invalidate_character_coordinates() {
     static auto sel = sel_registerName("invalidateCharacterCoordinates");
+    return sel;
+}
+
+inline SEL sel_is_flipped() {
+    static auto sel = sel_registerName("isFlipped");
     return sel;
 }
 
@@ -302,6 +312,26 @@ inline SEL sel_delete_backward() {
     return sel;
 }
 
+inline SEL sel_display_mode() {
+    static auto sel = sel_registerName("displayMode");
+    return sel;
+}
+
+inline SEL sel_set_display_mode() {
+    static auto sel = sel_registerName("setDisplayMode:");
+    return sel;
+}
+
+inline SEL sel_automatic_mode_options() {
+    static auto sel = sel_registerName("automaticModeOptions");
+    return sel;
+}
+
+inline SEL sel_set_automatic_mode_options() {
+    static auto sel = sel_registerName("setAutomaticModeOptions:");
+    return sel;
+}
+
 inline SEL sel_responds_to_selector() {
     static auto sel = sel_registerName("respondsToSelector:");
     return sel;
@@ -344,6 +374,11 @@ inline SEL sel_substring_with_range() {
 
 inline SEL sel_set_frame() {
     static auto sel = sel_registerName("setFrame:");
+    return sel;
+}
+
+inline SEL sel_frame() {
+    static auto sel = sel_registerName("frame");
     return sel;
 }
 
@@ -979,12 +1014,22 @@ struct ImageAtlasCache {
 
 inline ImageAtlasCache g_images;
 
+inline constexpr long long insertion_indicator_display_mode_automatic = 0;
+inline constexpr long long insertion_indicator_display_mode_hidden = 1;
+inline constexpr long long insertion_indicator_display_mode_visible = 2;
+inline constexpr long long insertion_indicator_automatic_mode_show_effects = 1 << 0;
+
+inline bool g_force_disable_system_caret_for_tests = false;
+
 struct ImeState {
     GLFWwindow* window = nullptr;
     id ns_window = nullptr;
     id content_view = nullptr;
     id editor_view = nullptr;
+    id caret_host_view = nullptr;
+    id insertion_indicator = nullptr;
     Class editor_class = Nil;
+    Class caret_host_class = Nil;
     void (*request_repaint)() = nullptr;
     bool composition_active = false;
     std::string marked_text;
@@ -993,12 +1038,19 @@ struct ImeState {
     std::size_t replacement_start = 0;
     std::size_t replacement_end = 0;
     unsigned int focused_callback_id = ::phenotype::native::invalid_callback_id;
+    CGRect last_host_frame = CGRectNull;
+    CGRect last_indicator_frame = CGRectNull;
+    CGRect last_character_rect_draw = CGRectNull;
+    CGRect last_character_rect_host = CGRectNull;
+    long long last_indicator_display_mode = -1;
+    CGRect last_character_rect_screen = CGRectNull;
 };
 
 inline ImeState g_ime;
 
 struct FrameScratch {
     std::vector<ColorInstanceGPU> color_instances;
+    std::vector<ColorInstanceGPU> overlay_color_instances;
     std::vector<ParsedTextRun> text_runs;
     std::vector<PendingImageCmd> images;
     std::vector<ImageInstanceGPU> image_instances;
@@ -1007,6 +1059,7 @@ struct FrameScratch {
 
     void clear() {
         color_instances.clear();
+        overlay_color_instances.clear();
         text_runs.clear();
         images.clear();
         image_instances.clear();
@@ -1874,6 +1927,8 @@ struct RendererState {
     MTL::Buffer* uniform_buf = nullptr;
     MTL::Buffer* color_instances_buf = nullptr;
     std::size_t color_instances_capacity = 0;
+    MTL::Buffer* overlay_color_instances_buf = nullptr;
+    std::size_t overlay_color_instances_capacity = 0;
     MTL::Buffer* image_instances_buf = nullptr;
     std::size_t image_instances_capacity = 0;
     MTL::Buffer* text_instances_buf = nullptr;
@@ -2384,6 +2439,132 @@ struct CompositionVisualState {
     float underline_width = 0.0f;
 };
 
+struct CaretVisualState {
+    bool valid = false;
+    ::phenotype::FocusedInputSnapshot snapshot{};
+    ::phenotype::FocusedInputCaretLayout layout{};
+    float text_y = 0.0f;
+    float caret_x = 0.0f;
+};
+
+inline bool system_caret_supported() {
+    return !g_force_disable_system_caret_for_tests
+        && objc_lookUpClass("NSTextInsertionIndicator") != Nil;
+}
+
+inline bool macos_uses_shared_caret_blink() {
+    return !system_caret_supported();
+}
+
+inline CGRect make_content_caret_rect(float x, float y, float height) {
+    CGRect rect{};
+    rect.origin.x = x;
+    rect.origin.y = y;
+    rect.size.width = 1.5;
+    rect.size.height = height;
+    return rect;
+}
+
+inline ::phenotype::diag::RectSnapshot rect_snapshot(CGRect rect) {
+    if (CGRectIsNull(rect))
+        return {};
+    return {
+        true,
+        static_cast<float>(rect.origin.x),
+        static_cast<float>(rect.origin.y),
+        static_cast<float>(rect.size.width),
+        static_cast<float>(rect.size.height),
+    };
+}
+
+inline CGRect current_content_view_bounds() {
+    if (!g_ime.content_view)
+        return CGRectNull;
+    return objc_send<CGRect>(g_ime.content_view, sel_bounds());
+}
+
+inline CGRect current_caret_host_bounds() {
+    auto host_view = g_ime.editor_view ? g_ime.editor_view : g_ime.caret_host_view;
+    if (!host_view)
+        return CGRectNull;
+    return objc_send<CGRect>(host_view, sel_bounds());
+}
+
+inline bool caret_host_view_is_flipped() {
+    auto host_view = g_ime.editor_view ? g_ime.editor_view : g_ime.caret_host_view;
+    return host_view && objc_send<bool>(host_view, sel_is_flipped());
+}
+
+inline CGRect draw_rect_to_host_view(CGRect draw_rect) {
+    auto host_view = g_ime.editor_view ? g_ime.editor_view : g_ime.caret_host_view;
+    if (CGRectIsNull(draw_rect) || !host_view)
+        return CGRectNull;
+    return draw_rect;
+}
+
+inline CGRect view_rect_to_screen(id view, CGRect view_rect) {
+    if (CGRectIsNull(view_rect) || !view || !g_ime.ns_window)
+        return CGRectNull;
+    auto window_rect = objc_send<CGRect>(
+        view,
+        sel_convert_rect_to_view(),
+        view_rect,
+        static_cast<id>(nullptr));
+    return objc_send<CGRect>(g_ime.ns_window, sel_convert_rect_to_screen(), window_rect);
+}
+
+inline CGRect host_view_rect_to_screen(CGRect host_rect) {
+    if (CGRectIsNull(host_rect))
+        return CGRectNull;
+    auto host_view = g_ime.editor_view ? g_ime.editor_view : g_ime.caret_host_view;
+    return view_rect_to_screen(host_view, host_rect);
+}
+
+inline CGRect draw_rect_to_screen(CGRect draw_rect) {
+    if (CGRectIsNull(draw_rect))
+        return CGRectNull;
+    return host_view_rect_to_screen(draw_rect_to_host_view(draw_rect));
+}
+
+inline void ensure_editor_view();
+inline void ensure_caret_host_view();
+
+inline bool rect_changed(CGRect previous, CGRect current) {
+    if (CGRectIsNull(previous) && CGRectIsNull(current))
+        return false;
+    if (CGRectIsNull(previous) || CGRectIsNull(current))
+        return true;
+    return !CGRectEqualToRect(previous, current);
+}
+
+inline CaretVisualState current_text_caret_visual_state(bool require_visible = false) {
+    CaretVisualState visual{};
+    visual.snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!visual.snapshot.valid)
+        return visual;
+    if (require_visible && !visual.snapshot.caret_visible)
+        return visual;
+
+    visual.layout = ::phenotype::detail::compute_single_line_caret_layout(
+        visual.snapshot,
+        ::phenotype::detail::get_scroll_y(),
+        false,
+        [](auto const& input, std::size_t bytes) {
+            return measure_utf8_prefix(
+                input.font_size,
+                input.mono,
+                input.value,
+                bytes);
+        });
+    if (!visual.layout.valid)
+        return visual;
+
+    visual.text_y = visual.layout.draw_y;
+    visual.caret_x = visual.layout.draw_x;
+    visual.valid = true;
+    return visual;
+}
+
 inline CompositionVisualState current_composition_visual_state() {
     CompositionVisualState visual{};
     visual.snapshot = ::phenotype::detail::focused_input_snapshot();
@@ -2436,24 +2617,20 @@ inline CompositionVisualState current_composition_visual_state() {
 }
 
 inline CGRect current_caret_rect_screen() {
-    auto visual = current_composition_visual_state();
-    if (!visual.valid || !g_ime.content_view || !g_ime.ns_window)
+    auto composition = current_composition_visual_state();
+    auto caret = current_text_caret_visual_state();
+    bool use_composition = composition.valid;
+    if ((!use_composition && !caret.valid) || !g_ime.content_view || !g_ime.ns_window)
         return CGRectNull;
 
-    auto bounds = objc_send<CGRect>(g_ime.content_view, sel_bounds());
-    CGRect content_rect{};
-    content_rect.origin.x = visual.caret_x;
-    content_rect.origin.y = bounds.size.height
-        - (visual.text_y + visual.snapshot.line_height);
-    content_rect.size.width = 1.0;
-    content_rect.size.height = visual.snapshot.line_height;
-
-    auto window_rect = objc_send<CGRect>(
-        g_ime.content_view,
-        sel_convert_rect_to_view(),
-        content_rect,
-        static_cast<id>(nullptr));
-    return objc_send<CGRect>(g_ime.ns_window, sel_convert_rect_to_screen(), window_rect);
+    CGRect draw_rect{};
+    draw_rect.origin.x = use_composition ? composition.caret_x : caret.layout.draw_x;
+    draw_rect.origin.y = use_composition ? composition.text_y : caret.layout.draw_y;
+    draw_rect.size.width = 1.5;
+    draw_rect.size.height = use_composition
+        ? composition.snapshot.line_height
+        : caret.layout.height;
+    return draw_rect_to_screen(draw_rect);
 }
 
 inline CocoaRange current_marked_range() {
@@ -2565,7 +2742,7 @@ inline void append_ime_overlay(FrameScratch& scratch) {
 
     if (visual.underline_width > 0.0f) {
         append_color_instance(
-            scratch.color_instances,
+            scratch.overlay_color_instances,
             visual.underline_x,
             visual.text_y + visual.snapshot.line_height - 2.0f,
             visual.underline_width,
@@ -2577,7 +2754,7 @@ inline void append_ime_overlay(FrameScratch& scratch) {
     }
 
     append_color_instance(
-        scratch.color_instances,
+        scratch.overlay_color_instances,
         visual.caret_x,
         visual.text_y + 2.0f,
         1.5f,
@@ -2588,6 +2765,179 @@ inline void append_ime_overlay(FrameScratch& scratch) {
         visual.snapshot.accent.g / 255.0f,
         visual.snapshot.accent.b / 255.0f,
         1.0f);
+}
+
+inline void append_generic_caret_overlay(FrameScratch& scratch) {
+    if (!macos_uses_shared_caret_blink())
+        return;
+    if (g_ime.composition_active && !g_ime.marked_text.empty())
+        return;
+
+    auto visual = current_text_caret_visual_state(/*require_visible=*/true);
+    if (!visual.valid)
+        return;
+
+    append_color_instance(
+        scratch.overlay_color_instances,
+        visual.caret_x,
+        visual.text_y + 2.0f,
+        1.5f,
+        (visual.snapshot.line_height > 4.0f)
+            ? (visual.snapshot.line_height - 4.0f)
+            : visual.snapshot.line_height,
+        visual.snapshot.accent.r / 255.0f,
+        visual.snapshot.accent.g / 255.0f,
+        visual.snapshot.accent.b / 255.0f,
+        1.0f);
+}
+
+inline void ensure_system_insertion_indicator() {
+    if (!system_caret_supported() || !g_ime.content_view)
+        return;
+    ensure_editor_view();
+    auto host_view = g_ime.editor_view ? g_ime.editor_view : g_ime.caret_host_view;
+    if (!host_view)
+        return;
+    if (g_ime.insertion_indicator)
+        return;
+
+    auto indicator_class = objc_lookUpClass("NSTextInsertionIndicator");
+    if (!indicator_class)
+        return;
+
+    auto indicator = objc_send<id>(class_as_id(indicator_class), sel_alloc());
+    g_ime.insertion_indicator = objc_send<id>(indicator, sel_init_with_frame(), CGRect{});
+    if (!g_ime.insertion_indicator)
+        return;
+
+    objc_send<void>(host_view, sel_add_subview(), g_ime.insertion_indicator);
+    objc_send<void>(
+        g_ime.insertion_indicator,
+        sel_set_automatic_mode_options(),
+        insertion_indicator_automatic_mode_show_effects);
+    objc_send<void>(
+        g_ime.insertion_indicator,
+        sel_set_display_mode(),
+        insertion_indicator_display_mode_hidden);
+    g_ime.last_indicator_frame = CGRectNull;
+    g_ime.last_indicator_display_mode = insertion_indicator_display_mode_hidden;
+}
+
+inline void set_system_insertion_indicator_mode(long long mode) {
+    if (!g_ime.insertion_indicator)
+        return;
+    if (g_ime.last_indicator_display_mode == mode)
+        return;
+    objc_send<void>(g_ime.insertion_indicator, sel_set_display_mode(), mode);
+    g_ime.last_indicator_display_mode = mode;
+}
+
+inline void set_system_insertion_indicator_frame(CGRect host_rect) {
+    if (!g_ime.insertion_indicator)
+        return;
+    if (!rect_changed(g_ime.last_indicator_frame, host_rect))
+        return;
+    objc_send<void>(g_ime.insertion_indicator, sel_set_frame(), host_rect);
+    g_ime.last_indicator_frame = host_rect;
+}
+
+inline bool sync_caret_presentation(::phenotype::FocusedInputSnapshot const& snapshot) {
+    auto previous_draw_rect = g_ime.last_character_rect_draw;
+    auto previous_host_rect = g_ime.last_character_rect_host;
+    auto previous_screen_rect = g_ime.last_character_rect_screen;
+    auto previous_renderer = ::phenotype::diag::input_debug_snapshot().caret_renderer;
+    bool previous_valid = ::phenotype::diag::input_debug_snapshot().caret_rect.valid;
+    bool presentation_changed = false;
+
+    if (!snapshot.valid) {
+        if (g_ime.content_view)
+            ensure_editor_view();
+        if (system_caret_supported())
+            ensure_system_insertion_indicator();
+        set_system_insertion_indicator_mode(insertion_indicator_display_mode_hidden);
+        g_ime.last_character_rect_draw = CGRectNull;
+        g_ime.last_character_rect_host = CGRectNull;
+        g_ime.last_character_rect_screen = CGRectNull;
+        ::phenotype::detail::clear_input_debug_caret_presentation();
+        if (rect_changed(previous_draw_rect, CGRectNull)
+            || rect_changed(previous_host_rect, CGRectNull)) {
+            presentation_changed = true;
+        }
+        return rect_changed(previous_screen_rect, CGRectNull)
+            || previous_renderer != "hidden"
+            || previous_valid
+            || presentation_changed;
+    }
+
+    ensure_editor_view();
+    auto composition_active = g_ime.composition_active && !g_ime.marked_text.empty();
+    auto caret = current_text_caret_visual_state(/*require_visible=*/false);
+    CGRect caret_draw_rect = CGRectNull;
+    CGRect caret_host_rect = CGRectNull;
+    CGRect caret_screen_rect = CGRectNull;
+    auto host_bounds = current_caret_host_bounds();
+    if (caret.valid) {
+        caret_draw_rect = make_content_caret_rect(
+            caret.layout.draw_x,
+            caret.layout.draw_y,
+            caret.layout.height);
+        caret_host_rect = draw_rect_to_host_view(caret_draw_rect);
+        caret_screen_rect = draw_rect_to_screen(caret_draw_rect);
+    }
+
+    auto draw_snapshot = rect_snapshot(caret_draw_rect);
+    auto host_snapshot = rect_snapshot(caret_host_rect);
+    auto screen_snapshot = rect_snapshot(caret_screen_rect);
+    auto host_bounds_snapshot = rect_snapshot(host_bounds);
+    auto host_flipped = caret_host_view_is_flipped();
+
+    if (!macos_uses_shared_caret_blink()) {
+        ensure_system_insertion_indicator();
+        if (caret.valid && !composition_active) {
+            set_system_insertion_indicator_frame(caret_host_rect);
+            set_system_insertion_indicator_mode(insertion_indicator_display_mode_automatic);
+            ::phenotype::detail::set_input_debug_caret_geometry(
+                "system",
+                draw_snapshot,
+                host_snapshot,
+                screen_snapshot,
+                host_bounds_snapshot,
+                host_flipped,
+                "draw");
+        } else {
+            set_system_insertion_indicator_mode(insertion_indicator_display_mode_hidden);
+            ::phenotype::detail::clear_input_debug_caret_presentation();
+        }
+    } else {
+        set_system_insertion_indicator_mode(insertion_indicator_display_mode_hidden);
+        if (caret.valid && snapshot.caret_visible && !composition_active) {
+            ::phenotype::detail::set_input_debug_caret_geometry(
+                "custom",
+                draw_snapshot,
+                host_snapshot,
+                screen_snapshot,
+                host_bounds_snapshot,
+                host_flipped,
+                "draw");
+        } else {
+            ::phenotype::detail::clear_input_debug_caret_presentation();
+        }
+    }
+
+    auto current_renderer = ::phenotype::diag::input_debug_snapshot().caret_renderer;
+    bool current_valid = ::phenotype::diag::input_debug_snapshot().caret_rect.valid;
+    if (rect_changed(previous_draw_rect, caret_draw_rect)
+        || rect_changed(previous_host_rect, caret_host_rect)) {
+        presentation_changed = true;
+    }
+    if (rect_changed(previous_screen_rect, caret_screen_rect))
+        presentation_changed = true;
+    if (current_renderer != previous_renderer || current_valid != previous_valid)
+        presentation_changed = true;
+    g_ime.last_character_rect_draw = caret_draw_rect;
+    g_ime.last_character_rect_host = caret_host_rect;
+    g_ime.last_character_rect_screen = caret_screen_rect;
+    return presentation_changed;
 }
 
 inline void discard_marked_text_from_system() {
@@ -2639,6 +2989,14 @@ inline void editor_key_down(id self, SEL, id event) {
 
 inline bool editor_accepts_first_responder(id, SEL) {
     return true;
+}
+
+inline bool editor_is_flipped(id, SEL) {
+    return true;
+}
+
+inline id editor_hit_test(id, SEL, CGPoint) {
+    return static_cast<id>(nullptr);
 }
 
 inline long long editor_conversation_identifier(id self, SEL) {
@@ -2810,6 +3168,41 @@ inline void editor_do_command_by_selector(id,
         request_window_repaint();
 }
 
+inline bool caret_host_view_is_flipped_method(id, SEL) {
+    return true;
+}
+
+inline id caret_host_view_hit_test_method(id, SEL, CGPoint) {
+    return static_cast<id>(nullptr);
+}
+
+inline Class ensure_caret_host_view_class() {
+    if (g_ime.caret_host_class)
+        return g_ime.caret_host_class;
+
+    static char const* class_name = "PhenotypeCaretHostView";
+    if (auto existing = objc_lookUpClass(class_name)) {
+        g_ime.caret_host_class = existing;
+        return existing;
+    }
+
+    auto base_class = static_cast<Class>(objc_getClass("NSView"));
+    auto subclass = objc_allocateClassPair(base_class, class_name, 0);
+    class_addMethod(
+        subclass,
+        sel_is_flipped(),
+        reinterpret_cast<IMP>(caret_host_view_is_flipped_method),
+        "B@:");
+    class_addMethod(
+        subclass,
+        sel_hit_test(),
+        reinterpret_cast<IMP>(caret_host_view_hit_test_method),
+        "@@:{CGPoint=dd}");
+    objc_registerClassPair(subclass);
+    g_ime.caret_host_class = subclass;
+    return subclass;
+}
+
 inline Class ensure_editor_view_class() {
     if (g_ime.editor_class)
         return g_ime.editor_class;
@@ -2829,6 +3222,16 @@ inline Class ensure_editor_view_class() {
         sel_accepts_first_responder(),
         reinterpret_cast<IMP>(editor_accepts_first_responder),
         "B@:");
+    class_addMethod(
+        subclass,
+        sel_is_flipped(),
+        reinterpret_cast<IMP>(editor_is_flipped),
+        "B@:");
+    class_addMethod(
+        subclass,
+        sel_hit_test(),
+        reinterpret_cast<IMP>(editor_hit_test),
+        "@@:{CGPoint=dd}");
     class_addMethod(
         subclass,
         sel_conversation_identifier(),
@@ -2899,17 +3302,44 @@ inline Class ensure_editor_view_class() {
     return subclass;
 }
 
+inline void sync_caret_host_view_frame() {
+    if (!g_ime.caret_host_view)
+        return;
+    auto bounds = current_content_view_bounds();
+    if (CGRectIsNull(bounds))
+        return;
+    if (rect_changed(g_ime.last_host_frame, bounds)) {
+        objc_send<void>(g_ime.caret_host_view, sel_set_frame(), bounds);
+        g_ime.last_host_frame = bounds;
+    }
+}
+
+inline void ensure_caret_host_view() {
+    if (!g_ime.content_view)
+        return;
+    if (!g_ime.caret_host_view) {
+        auto host_class = ensure_caret_host_view_class();
+        auto bounds = current_content_view_bounds();
+        auto view = objc_send<id>(class_as_id(host_class), sel_alloc());
+        g_ime.caret_host_view = objc_send<id>(view, sel_init_with_frame(), bounds);
+        objc_send<void>(g_ime.content_view, sel_add_subview(), g_ime.caret_host_view);
+        g_ime.last_host_frame = CGRectNull;
+    }
+    sync_caret_host_view_frame();
+}
+
 inline void ensure_editor_view() {
     if (!g_ime.content_view)
         return;
+    auto bounds = current_content_view_bounds();
     if (!g_ime.editor_view) {
         auto editor_class = ensure_editor_view_class();
-        CGRect frame{};
         auto view = objc_send<id>(class_as_id(editor_class), sel_alloc());
-        g_ime.editor_view = objc_send<id>(view, sel_init_with_frame(), frame);
+        g_ime.editor_view = objc_send<id>(view, sel_init_with_frame(), bounds);
         objc_send<void>(g_ime.content_view, sel_add_subview(), g_ime.editor_view);
     }
-    objc_send<void>(g_ime.editor_view, sel_set_frame(), CGRect{});
+    if (!CGRectIsNull(bounds))
+        objc_send<void>(g_ime.editor_view, sel_set_frame(), bounds);
 }
 
 inline void input_attach(GLFWwindow* window, void (*request_repaint)()) {
@@ -2923,14 +3353,30 @@ inline void input_attach(GLFWwindow* window, void (*request_repaint)()) {
         ? objc_send<id>(g_ime.ns_window, sel_content_view())
         : nullptr;
     g_ime.focused_callback_id = ::phenotype::native::invalid_callback_id;
+    g_ime.last_host_frame = CGRectNull;
+    g_ime.last_indicator_frame = CGRectNull;
+    g_ime.last_indicator_display_mode = -1;
+    g_ime.last_character_rect_draw = CGRectNull;
+    g_ime.last_character_rect_host = CGRectNull;
+    g_ime.last_character_rect_screen = CGRectNull;
     clear_ime_state();
     ensure_editor_view();
+    ensure_system_insertion_indicator();
+    ::phenotype::detail::clear_input_debug_caret_presentation();
     restore_content_view_first_responder();
 }
 
 inline void input_detach() {
     discard_marked_text_from_system();
     clear_ime_state();
+    if (g_ime.insertion_indicator) {
+        objc_send<void>(g_ime.insertion_indicator, sel_remove_from_superview());
+        objc_send<void>(g_ime.insertion_indicator, sel_release());
+    }
+    if (g_ime.caret_host_view) {
+        objc_send<void>(g_ime.caret_host_view, sel_remove_from_superview());
+        objc_send<void>(g_ime.caret_host_view, sel_release());
+    }
     if (g_ime.editor_view) {
         objc_send<void>(g_ime.editor_view, sel_remove_from_superview());
         objc_send<void>(g_ime.editor_view, sel_release());
@@ -2940,8 +3386,17 @@ inline void input_detach() {
     g_ime.ns_window = nullptr;
     g_ime.content_view = nullptr;
     g_ime.editor_view = nullptr;
+    g_ime.caret_host_view = nullptr;
+    g_ime.insertion_indicator = nullptr;
     g_ime.request_repaint = nullptr;
     g_ime.focused_callback_id = ::phenotype::native::invalid_callback_id;
+    g_ime.last_host_frame = CGRectNull;
+    g_ime.last_indicator_frame = CGRectNull;
+    g_ime.last_indicator_display_mode = -1;
+    g_ime.last_character_rect_draw = CGRectNull;
+    g_ime.last_character_rect_host = CGRectNull;
+    g_ime.last_character_rect_screen = CGRectNull;
+    ::phenotype::detail::clear_input_debug_caret_presentation();
 }
 
 inline void input_sync() {
@@ -2955,14 +3410,18 @@ inline void input_sync() {
             needs_repaint = true;
         }
         g_ime.focused_callback_id = ::phenotype::native::invalid_callback_id;
+        auto presentation_changed = sync_caret_presentation(snapshot);
         if (editor_is_first_responder())
             restore_content_view_first_responder();
+        if (presentation_changed)
+            sync_input_context_geometry();
         if (needs_repaint && g_images.request_repaint)
             g_images.request_repaint();
         return;
     }
 
     ensure_editor_view();
+    ensure_system_insertion_indicator();
     auto focus_changed = snapshot.callback_id != g_ime.focused_callback_id;
     if (focus_changed && (g_ime.composition_active || !g_ime.marked_text.empty())) {
         discard_marked_text_from_system();
@@ -2973,7 +3432,8 @@ inline void input_sync() {
     g_ime.focused_callback_id = snapshot.callback_id;
     if (!editor_is_first_responder())
         focus_editor_view();
-    if (focus_changed || g_ime.composition_active)
+    auto presentation_changed = sync_caret_presentation(snapshot);
+    if (focus_changed || g_ime.composition_active || presentation_changed)
         sync_input_context_geometry();
 
     if (needs_repaint && g_images.request_repaint)
@@ -3098,6 +3558,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         native_attrs("image_prepare"));
 
     append_ime_overlay(g_renderer.scratch);
+    append_generic_caret_overlay(g_renderer.scratch);
 
     auto text_started = metrics::detail::now_ns();
     if (!prepare_text_instances(text_scale)) {
@@ -3227,6 +3688,32 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             NS::UInteger(0), 6, NS::UInteger(scratch.text_instances.size()));
     }
 
+    auto const overlay_color_bytes =
+        scratch.overlay_color_instances.size() * sizeof(ColorInstanceGPU);
+    uint32_t overlay_color_count =
+        static_cast<uint32_t>(scratch.overlay_color_instances.size());
+    if (overlay_color_count > 0) {
+        if (!ensure_instance_buffer(
+                g_renderer.overlay_color_instances_buf,
+                g_renderer.overlay_color_instances_capacity,
+                overlay_color_bytes,
+                "overlay_color_instances")) {
+            encoder->endEncoding();
+            pool->release();
+            return;
+        }
+        std::memcpy(
+            g_renderer.overlay_color_instances_buf->contents(),
+            scratch.overlay_color_instances.data(),
+            overlay_color_bytes);
+        encoder->setRenderPipelineState(g_renderer.color_pipeline);
+        encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+        encoder->setVertexBuffer(g_renderer.overlay_color_instances_buf, 0, 1);
+        encoder->drawPrimitives(
+            MTL::PrimitiveTypeTriangle,
+            NS::UInteger(0), 6, NS::UInteger(overlay_color_count));
+    }
+
     encoder->endEncoding();
     command_buffer->presentDrawable(drawable);
     command_buffer->commit();
@@ -3241,6 +3728,7 @@ inline void renderer_shutdown() {
     if (g_renderer.image_instances_buf) { g_renderer.image_instances_buf->release(); g_renderer.image_instances_buf = nullptr; }
     if (g_renderer.text_instances_buf) { g_renderer.text_instances_buf->release(); g_renderer.text_instances_buf = nullptr; }
     if (g_renderer.color_instances_buf) { g_renderer.color_instances_buf->release(); g_renderer.color_instances_buf = nullptr; }
+    if (g_renderer.overlay_color_instances_buf) { g_renderer.overlay_color_instances_buf->release(); g_renderer.overlay_color_instances_buf = nullptr; }
     if (g_renderer.uniform_buf) { g_renderer.uniform_buf->release(); g_renderer.uniform_buf = nullptr; }
     if (g_renderer.image_pipeline) { g_renderer.image_pipeline->release(); g_renderer.image_pipeline = nullptr; }
     if (g_renderer.text_pipeline) { g_renderer.text_pipeline->release(); g_renderer.text_pipeline = nullptr; }
@@ -3275,6 +3763,7 @@ inline void renderer_shutdown() {
     g_renderer.text_cache.dirty_max_y = 0;
     g_renderer.text_cache.active_scale_key = 0;
     g_renderer.color_instances_capacity = 0;
+    g_renderer.overlay_color_instances_capacity = 0;
     g_renderer.image_instances_capacity = 0;
     g_renderer.text_instances_capacity = 0;
     g_renderer.drawable_width = 0;
@@ -3311,6 +3800,19 @@ struct CompositionVisualDebug {
     std::size_t marked_end = 0;
 };
 
+struct SystemCaretDebug {
+    bool supported = false;
+    bool attached = false;
+    long long display_mode = -1;
+    bool host_flipped = false;
+    ::phenotype::diag::RectSnapshot frame{};
+    ::phenotype::diag::RectSnapshot draw_rect{};
+    ::phenotype::diag::RectSnapshot host_rect{};
+    ::phenotype::diag::RectSnapshot screen_rect{};
+    ::phenotype::diag::RectSnapshot host_bounds{};
+    ::phenotype::diag::RectSnapshot first_rect_screen{};
+};
+
 inline Utf8Range utf16_range_to_utf8(std::string const& text,
                                      unsigned long location,
                                      unsigned long length) {
@@ -3344,6 +3846,95 @@ inline CompositionVisualDebug build_visual_text(std::string const& committed,
         prefix.size() + marked.size(),
     };
 }
+
+inline void force_disable_system_caret(bool disabled) {
+    detail::g_force_disable_system_caret_for_tests = disabled;
+}
+
+inline SystemCaretDebug system_caret_debug() {
+    SystemCaretDebug debug{};
+    debug.supported = detail::system_caret_supported();
+    debug.attached = detail::g_ime.insertion_indicator != nullptr;
+    debug.host_flipped = detail::caret_host_view_is_flipped();
+    debug.draw_rect = detail::rect_snapshot(detail::g_ime.last_character_rect_draw);
+    debug.host_rect = detail::rect_snapshot(detail::g_ime.last_character_rect_host);
+    debug.host_bounds = detail::rect_snapshot(detail::current_caret_host_bounds());
+    if (detail::g_ime.insertion_indicator) {
+        auto frame = detail::objc_send<CGRect>(
+            detail::g_ime.insertion_indicator,
+            detail::sel_frame());
+        debug.display_mode = detail::objc_send<long long>(
+            detail::g_ime.insertion_indicator,
+            detail::sel_display_mode());
+        if (!CGRectIsNull(frame)) {
+            debug.frame = {
+                true,
+                static_cast<float>(frame.origin.x),
+                static_cast<float>(frame.origin.y),
+                static_cast<float>(frame.size.width),
+                static_cast<float>(frame.size.height),
+            };
+            auto screen = detail::host_view_rect_to_screen(frame);
+            if (!CGRectIsNull(screen)) {
+                debug.screen_rect = {
+                    true,
+                    static_cast<float>(screen.origin.x),
+                    static_cast<float>(screen.origin.y),
+                    static_cast<float>(screen.size.width),
+                    static_cast<float>(screen.size.height),
+                };
+            }
+        }
+    }
+
+    auto selected = detail::current_selected_range();
+    auto first_rect = detail::editor_first_rect_for_character_range(
+        static_cast<id>(nullptr),
+        nullptr,
+        selected,
+        nullptr);
+    if (!CGRectIsNull(first_rect)) {
+        debug.first_rect_screen = {
+            true,
+            static_cast<float>(first_rect.origin.x),
+            static_cast<float>(first_rect.origin.y),
+            static_cast<float>(first_rect.size.width),
+            static_cast<float>(first_rect.size.height),
+        };
+    }
+    return debug;
+}
+
+inline void set_composition_for_tests(std::string marked_text,
+                                      std::size_t replacement_start,
+                                      std::size_t replacement_end,
+                                      unsigned long selected_location_utf16) {
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid)
+        return;
+    replacement_start = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, replacement_start);
+    replacement_end = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, replacement_end);
+    if (replacement_end < replacement_start)
+        replacement_end = replacement_start;
+    detail::g_ime.marked_text = std::move(marked_text);
+    detail::g_ime.composition_active = !detail::g_ime.marked_text.empty();
+    detail::g_ime.composition_anchor = replacement_start;
+    detail::g_ime.replacement_start = replacement_start;
+    detail::g_ime.replacement_end = replacement_end;
+    detail::g_ime.marked_selection = {
+        selected_location_utf16,
+        0,
+    };
+    ::phenotype::detail::set_input_composition_state(
+        detail::g_ime.composition_active,
+        detail::g_ime.marked_text,
+        static_cast<unsigned int>(
+            detail::utf16_offset_to_utf8(detail::g_ime.marked_text, selected_location_utf16)));
+}
+
+inline void clear_composition_for_tests() {
+    detail::clear_ime_state();
+}
 #else
 struct Utf8Range {
     std::size_t start = 0;
@@ -3355,6 +3946,19 @@ struct CompositionVisualDebug {
     std::size_t caret_bytes = 0;
     std::size_t marked_start = 0;
     std::size_t marked_end = 0;
+};
+
+struct SystemCaretDebug {
+    bool supported = false;
+    bool attached = false;
+    long long display_mode = -1;
+    bool host_flipped = false;
+    ::phenotype::diag::RectSnapshot frame{};
+    ::phenotype::diag::RectSnapshot draw_rect{};
+    ::phenotype::diag::RectSnapshot host_rect{};
+    ::phenotype::diag::RectSnapshot screen_rect{};
+    ::phenotype::diag::RectSnapshot host_bounds{};
+    ::phenotype::diag::RectSnapshot first_rect_screen{};
 };
 
 inline Utf8Range utf16_range_to_utf8(std::string const&,
@@ -3374,6 +3978,19 @@ inline CompositionVisualDebug build_visual_text(std::string const&,
                                                 unsigned long) {
     return {};
 }
+
+inline void force_disable_system_caret(bool) {}
+
+inline SystemCaretDebug system_caret_debug() {
+    return {};
+}
+
+inline void set_composition_for_tests(std::string,
+                                      std::size_t,
+                                      std::size_t,
+                                      unsigned long) {}
+
+inline void clear_composition_for_tests() {}
 #endif
 } // namespace phenotype::native::macos_test
 
@@ -3400,6 +4017,7 @@ inline platform_api const& macos_platform() {
             detail::input_attach,
             detail::input_detach,
             detail::input_sync,
+            detail::macos_uses_shared_caret_blink,
             nullptr,
             nullptr,
             detail::input_dismiss_transient,
