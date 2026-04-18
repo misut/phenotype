@@ -1,5 +1,6 @@
 module;
 #ifndef __wasi__
+#include <cmath>
 #include <chrono>
 #include <concepts>
 #include <cstdio>
@@ -123,6 +124,27 @@ inline float normalize_scroll_delta(platform_api const* platform,
     if (platform && platform->input.scroll_delta_y)
         return platform->input.scroll_delta_y(dy, line_height, viewport_height);
     return static_cast<float>(dy) * line_height * 3.0f;
+}
+
+inline float glfw_backing_scale(GLFWwindow* window) {
+    if (!window) return 1.0f;
+#if defined(GLFW_VERSION_MAJOR) \
+    && ((GLFW_VERSION_MAJOR > 3) || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3))
+    float sx = 1.0f;
+    float sy = 1.0f;
+    glfwGetWindowContentScale(window, &sx, &sy);
+#else
+    int fbw = 0;
+    int fbh = 0;
+    int winw = 0;
+    int winh = 0;
+    glfwGetFramebufferSize(window, &fbw, &fbh);
+    glfwGetWindowSize(window, &winw, &winh);
+    float sx = (winw > 0) ? static_cast<float>(fbw) / static_cast<float>(winw) : 1.0f;
+    float sy = (winh > 0) ? static_cast<float>(fbh) / static_cast<float>(winh) : 1.0f;
+#endif
+    float scale = (sx > sy) ? sx : sy;
+    return (scale > 0.0f && std::isfinite(scale)) ? scale : 1.0f;
 }
 
 inline void repaint_current() {
@@ -617,6 +639,10 @@ inline void on_framebuffer_size(GLFWwindow*, int, int) {
     repaint_current();
 }
 
+inline void on_window_content_scale(GLFWwindow*, float, float) {
+    repaint_current();
+}
+
 inline void on_key(GLFWwindow*, int key, int, int action, int mods) {
     dispatch_key(key, action, mods);
 }
@@ -630,6 +656,10 @@ inline void install_callbacks(GLFWwindow* window) {
     glfwSetCursorPosCallback(window, on_cursor_pos);
     glfwSetScrollCallback(window, on_scroll);
     glfwSetFramebufferSizeCallback(window, on_framebuffer_size);
+#if defined(GLFW_VERSION_MAJOR) \
+    && ((GLFW_VERSION_MAJOR > 3) || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3))
+    glfwSetWindowContentScaleCallback(window, on_window_content_scale);
+#endif
     glfwSetKeyCallback(window, on_key);
     glfwSetCharCallback(window, on_char);
 }
@@ -686,6 +716,9 @@ int run_app_with_platform(platform_api const& platform,
         return 1;
     }
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+#ifdef GLFW_SCALE_TO_MONITOR
+    glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
+#endif
 
     auto* window = glfwCreateWindow(width, height, title, nullptr, nullptr);
     if (!window) {
