@@ -750,6 +750,55 @@ static void test_macos_utf16_utf8_range_helpers() {
     std::puts("PASS: macOS utf16/utf8 range helpers");
 }
 
+static void test_macos_scroll_delta_normalization() {
+    using phenotype::native::macos_test::normalize_scroll_delta;
+
+    float precise = normalize_scroll_delta(-12.5, true, 25.6f);
+    float line = normalize_scroll_delta(-2.0, false, 25.6f);
+    float default_line = normalize_scroll_delta(2.0, false, 0.0f);
+
+    assert(std::fabs(precise + 12.5f) < 0.001f);
+    assert(std::fabs(line + 51.2f) < 0.001f);
+    assert(std::fabs(default_line - 2.0f) < 0.001f);
+    std::puts("PASS: macOS scroll delta normalization");
+}
+
+static void test_macos_scroll_paths_record_precise_and_line_details() {
+    using namespace input_regression;
+
+    {
+        Harness harness;
+        assert(phenotype::detail::get_total_height() > harness.host.canvas_height());
+        assert(phenotype::native::detail::dispatch_scroll_pixels(
+            -12.5f,
+            harness.host.canvas_height(),
+            "wheel-precise"));
+        auto debug = phenotype::diag::input_debug_snapshot();
+        assert(debug.event == "scroll");
+        assert(debug.detail == "wheel-precise");
+        assert(debug.result == "handled");
+        assert(std::fabs(phenotype::detail::get_scroll_y() - 12.5f) < 0.001f);
+        assert(has_metric("scroll", "wheel-precise", "handled"));
+    }
+
+    {
+        Harness harness;
+        float line_height = phenotype::native::detail::scroll_line_height();
+        assert(phenotype::native::detail::dispatch_scroll_lines(
+            -2.0,
+            harness.host.canvas_height(),
+            "wheel-line"));
+        auto debug = phenotype::diag::input_debug_snapshot();
+        assert(debug.event == "scroll");
+        assert(debug.detail == "wheel-line");
+        assert(debug.result == "handled");
+        assert(std::fabs(phenotype::detail::get_scroll_y() - line_height * 2.0f) < 0.001f);
+        assert(has_metric("scroll", "wheel-line", "handled"));
+    }
+
+    std::puts("PASS: macOS scroll paths record precise and line details");
+}
+
 struct MacRendererFixture {
     GLFWwindow* window = nullptr;
     native_host host{};
@@ -1486,6 +1535,8 @@ int main() {
     test_shell_scroll_and_escape_observability();
 #ifdef __APPLE__
     test_macos_utf16_utf8_range_helpers();
+    test_macos_scroll_delta_normalization();
+    test_macos_scroll_paths_record_precise_and_line_details();
     test_macos_system_caret_indicator_tracks_focus_and_composition();
     test_macos_fallback_caret_path_exposes_custom_debug_rect();
     test_default_scroll_delta_fallback();
