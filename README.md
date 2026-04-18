@@ -248,8 +248,8 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline, hos
 - [x] macOS native backend (GLFW shell + CoreText + Metal)
 - [x] Windows native backend (shared shell + DirectWrite + Direct3D 12)
 - [x] Windows native IME composition and candidate overlay
-- [x] Windows native image rendering (`DrawImage` via WIC + cppx HTTP)
-- [x] `examples/native` as a Windows acceptance showcase for text, IME, images, scroll, and interaction
+- [x] Windows native image rendering (`DrawImage` local files via WIC in this pass)
+- [x] `examples/native` as a Windows acceptance showcase for text, IME, local images, scroll, and interaction
 - [x] Linux desktop stub backend
 - [x] Docs package no longer syncs a root `CMakeLists.txt`
 
@@ -257,9 +257,9 @@ See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline, hos
 
 - [x] Windows native renderer / text stack — DirectWrite text measurement/atlas + Direct3D 12 renderer + WARP smoke coverage
 - [x] OS-native URL opener on Windows — ShellExecuteW-backed native link opening
-- [x] Broader non-macOS native contract tests — Windows native text/renderer/text-field coverage
+- [x] Broader non-macOS native contract tests — Windows native text/renderer/text-field/local-image coverage
 - [ ] macOS native IME composition — Windows is implemented, macOS still needs parity work
-- [ ] macOS native image rendering (`DrawImage`) — Windows is implemented, macOS still needs parity work
+- [ ] macOS native image rendering (`DrawImage`) — Windows currently supports local files only, and macOS still needs parity work
 - [ ] vDOM-style diff v3 — stable-key structural diff for efficient list reorder + sub-frame partial GPU updates
 - [ ] Multi-line text input (`widget::text_area<Msg>`) — a high-value feature that builds directly on the current input model
 - [ ] Spans / traces (`phenotype::diag::trace::Span`) — needed once native performance work moves beyond basic histograms
