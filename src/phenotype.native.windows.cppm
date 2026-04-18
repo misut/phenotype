@@ -60,7 +60,6 @@ export module phenotype.native.windows;
 import cppx.os;
 import cppx.os.system;
 import cppx.resource;
-import cppx.unicode;
 import phenotype;
 import phenotype.commands;
 import phenotype.state;
@@ -140,8 +139,22 @@ using Microsoft::WRL::ComPtr;
 inline std::wstring utf8_to_wstring(char const* text, unsigned int len) {
     if (!text || len == 0)
         return {};
-    auto wide = cppx::unicode::utf8_to_wide(std::string_view{text, len});
-    return wide ? std::move(*wide) : std::wstring{};
+    int needed = MultiByteToWideChar(
+        CP_UTF8, MB_ERR_INVALID_CHARS,
+        text, static_cast<int>(len), nullptr, 0);
+    if (needed <= 0) {
+        needed = MultiByteToWideChar(
+            CP_UTF8, 0,
+            text, static_cast<int>(len), nullptr, 0);
+    }
+    if (needed <= 0)
+        return {};
+    std::wstring out(static_cast<std::size_t>(needed), L'\0');
+    MultiByteToWideChar(
+        CP_UTF8, 0,
+        text, static_cast<int>(len),
+        out.data(), needed);
+    return out;
 }
 
 inline std::wstring utf8_to_wstring(std::string const& text) {
@@ -152,8 +165,28 @@ inline std::wstring utf8_to_wstring(std::string const& text) {
 inline std::string wstring_to_utf8(std::wstring_view text) {
     if (text.empty())
         return {};
-    auto utf8 = cppx::unicode::wide_to_utf8(text);
-    return utf8 ? std::move(*utf8) : std::string{};
+    int needed = WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        text.data(),
+        static_cast<int>(text.size()),
+        nullptr,
+        0,
+        nullptr,
+        nullptr);
+    if (needed <= 0)
+        return {};
+    std::string out(static_cast<std::size_t>(needed), '\0');
+    WideCharToMultiByte(
+        CP_UTF8,
+        0,
+        text.data(),
+        static_cast<int>(text.size()),
+        out.data(),
+        needed,
+        nullptr,
+        nullptr);
+    return out;
 }
 
 inline void log_hresult(char const* label, HRESULT hr) {
