@@ -170,6 +170,11 @@ inline SEL sel_convert_rect_to_screen() {
     return sel;
 }
 
+inline SEL sel_color_using_color_space() {
+    static auto sel = sel_registerName("colorUsingColorSpace:");
+    return sel;
+}
+
 inline SEL sel_convert_rect_to_view() {
     static auto sel = sel_registerName("convertRect:toView:");
     return sel;
@@ -412,6 +417,21 @@ inline SEL sel_set_frame() {
 
 inline SEL sel_frame() {
     static auto sel = sel_registerName("frame");
+    return sel;
+}
+
+inline SEL sel_generic_rgb_color_space() {
+    static auto sel = sel_registerName("genericRGBColorSpace");
+    return sel;
+}
+
+inline SEL sel_get_red_green_blue_alpha() {
+    static auto sel = sel_registerName("getRed:green:blue:alpha:");
+    return sel;
+}
+
+inline SEL sel_text_insertion_point_color() {
+    static auto sel = sel_registerName("textInsertionPointColor");
     return sel;
 }
 
@@ -1048,8 +1068,15 @@ inline constexpr long long insertion_indicator_display_mode_automatic = 0;
 inline constexpr long long insertion_indicator_display_mode_hidden = 1;
 inline constexpr long long insertion_indicator_display_mode_visible = 2;
 inline constexpr long long insertion_indicator_automatic_mode_show_effects = 1 << 0;
+inline constexpr long long insertion_indicator_automatic_mode_show_while_tracking = 1 << 1;
 inline constexpr unsigned long long ns_event_mask_scroll_wheel = 1ull << 22;
 inline constexpr unsigned long long ns_event_phase_none = 0;
+inline constexpr unsigned long long ns_event_phase_began = 1ull << 0;
+inline constexpr unsigned long long ns_event_phase_stationary = 1ull << 1;
+inline constexpr unsigned long long ns_event_phase_changed = 1ull << 2;
+inline constexpr unsigned long long ns_event_phase_ended = 1ull << 3;
+inline constexpr unsigned long long ns_event_phase_cancelled = 1ull << 4;
+inline constexpr unsigned long long ns_event_phase_may_begin = 1ull << 5;
 
 inline bool g_force_disable_system_caret_for_tests = false;
 
@@ -1070,6 +1097,7 @@ struct ImeState {
     std::size_t composition_anchor = 0;
     std::size_t replacement_start = 0;
     std::size_t replacement_end = 0;
+    bool scroll_tracking_active = false;
     unsigned int focused_callback_id = ::phenotype::native::invalid_callback_id;
     CGRect last_host_frame = CGRectNull;
     CGRect last_indicator_frame = CGRectNull;
@@ -2467,6 +2495,65 @@ inline bool macos_uses_shared_caret_blink() {
     return !system_caret_supported();
 }
 
+inline bool use_custom_caret_overlay() {
+    return macos_uses_shared_caret_blink();
+}
+
+struct CaretOverlayColor {
+    float r = 0.0f;
+    float g = 0.0f;
+    float b = 0.0f;
+    float a = 1.0f;
+};
+
+inline CaretOverlayColor current_caret_overlay_color(
+        ::phenotype::FocusedInputSnapshot const& snapshot) {
+    CaretOverlayColor color{
+        snapshot.accent.r / 255.0f,
+        snapshot.accent.g / 255.0f,
+        snapshot.accent.b / 255.0f,
+        snapshot.accent.a / 255.0f,
+    };
+
+    auto color_class = static_cast<Class>(objc_getClass("NSColor"));
+    auto color_space_class = static_cast<Class>(objc_getClass("NSColorSpace"));
+    if (!color_class || !color_space_class)
+        return color;
+
+    auto insertion_point_color = objc_send<id>(
+        class_as_id(color_class),
+        sel_text_insertion_point_color());
+    auto rgb_space = objc_send<id>(
+        class_as_id(color_space_class),
+        sel_generic_rgb_color_space());
+    if (!insertion_point_color || !rgb_space)
+        return color;
+
+    auto rgb_color = objc_send<id>(
+        insertion_point_color,
+        sel_color_using_color_space(),
+        rgb_space);
+    if (!rgb_color || !objc_responds_to(rgb_color, sel_get_red_green_blue_alpha()))
+        return color;
+
+    double r = color.r;
+    double g = color.g;
+    double b = color.b;
+    double a = color.a;
+    objc_send<void>(
+        rgb_color,
+        sel_get_red_green_blue_alpha(),
+        &r,
+        &g,
+        &b,
+        &a);
+    color.r = static_cast<float>(r);
+    color.g = static_cast<float>(g);
+    color.b = static_cast<float>(b);
+    color.a = static_cast<float>(a);
+    return color;
+}
+
 inline CGRect make_content_caret_rect(float x, float y, float height) {
     CGRect rect{};
     rect.origin.x = x;
@@ -2779,7 +2866,7 @@ inline void append_ime_overlay(FrameScratch& scratch) {
 }
 
 inline void append_generic_caret_overlay(FrameScratch& scratch) {
-    if (!macos_uses_shared_caret_blink())
+    if (!use_custom_caret_overlay())
         return;
     if (g_ime.composition_active && !g_ime.marked_text.empty())
         return;
@@ -2787,19 +2874,18 @@ inline void append_generic_caret_overlay(FrameScratch& scratch) {
     auto visual = current_text_caret_visual_state(/*require_visible=*/true);
     if (!visual.valid)
         return;
+    auto color = current_caret_overlay_color(visual.snapshot);
 
     append_color_instance(
         scratch.overlay_color_instances,
-        visual.caret_x,
-        visual.text_y + 2.0f,
+        visual.layout.draw_x,
+        visual.layout.draw_y,
         1.5f,
-        (visual.snapshot.line_height > 4.0f)
-            ? (visual.snapshot.line_height - 4.0f)
-            : visual.snapshot.line_height,
-        visual.snapshot.accent.r / 255.0f,
-        visual.snapshot.accent.g / 255.0f,
-        visual.snapshot.accent.b / 255.0f,
-        1.0f);
+        visual.layout.height,
+        color.r,
+        color.g,
+        color.b,
+        color.a);
 }
 
 inline void ensure_system_insertion_indicator() {
@@ -2825,7 +2911,8 @@ inline void ensure_system_insertion_indicator() {
     objc_send<void>(
         g_ime.insertion_indicator,
         sel_set_automatic_mode_options(),
-        insertion_indicator_automatic_mode_show_effects);
+        insertion_indicator_automatic_mode_show_effects
+            | insertion_indicator_automatic_mode_show_while_tracking);
     objc_send<void>(
         g_ime.insertion_indicator,
         sel_set_display_mode(),
@@ -2902,9 +2989,9 @@ inline bool sync_caret_presentation(::phenotype::FocusedInputSnapshot const& sna
     auto host_bounds_snapshot = rect_snapshot(host_bounds);
     auto host_flipped = caret_host_view_is_flipped();
 
-    if (!macos_uses_shared_caret_blink()) {
+    if (!use_custom_caret_overlay()) {
         ensure_system_insertion_indicator();
-        if (caret.valid && !composition_active) {
+        if (caret.valid && !composition_active && !g_ime.scroll_tracking_active) {
             set_system_insertion_indicator_frame(caret_host_rect);
             set_system_insertion_indicator_mode(insertion_indicator_display_mode_automatic);
             ::phenotype::detail::set_input_debug_caret_geometry(
@@ -2921,7 +3008,9 @@ inline bool sync_caret_presentation(::phenotype::FocusedInputSnapshot const& sna
         }
     } else {
         set_system_insertion_indicator_mode(insertion_indicator_display_mode_hidden);
-        if (caret.valid && snapshot.caret_visible && !composition_active) {
+        if (caret.valid
+            && (snapshot.caret_visible || g_ime.scroll_tracking_active)
+            && !composition_active) {
             ::phenotype::detail::set_input_debug_caret_geometry(
                 "custom",
                 draw_snapshot,
@@ -3369,6 +3458,23 @@ inline bool scroll_phase_active(unsigned long long phase) {
     return phase != ns_event_phase_none;
 }
 
+inline bool scroll_phase_in_progress(unsigned long long phase) {
+    if (phase == ns_event_phase_none)
+        return false;
+    auto terminal_mask = ns_event_phase_ended | ns_event_phase_cancelled;
+    return (phase & terminal_mask) == 0;
+}
+
+inline bool sync_scroll_tracking_state(unsigned long long phase,
+                                       unsigned long long momentum_phase) {
+    bool next_active = scroll_phase_in_progress(phase)
+        || scroll_phase_in_progress(momentum_phase);
+    if (g_ime.scroll_tracking_active == next_active)
+        return false;
+    g_ime.scroll_tracking_active = next_active;
+    return true;
+}
+
 inline float current_scroll_viewport_height() {
     return viewport_height(g_ime.window);
 }
@@ -3386,6 +3492,7 @@ inline bool handle_local_scroll_event(id event) {
     double scrolling_delta_y = objc_send<double>(event, sel_scrolling_delta_y());
     auto phase = objc_send<unsigned long long>(event, sel_phase());
     auto momentum_phase = objc_send<unsigned long long>(event, sel_momentum_phase());
+    bool scroll_tracking_changed = sync_scroll_tracking_state(phase, momentum_phase);
     float normalized_delta = macos_normalize_scroll_delta(
         scrolling_delta_y,
         has_precise_scrolling_deltas,
@@ -3401,8 +3508,11 @@ inline bool handle_local_scroll_event(id event) {
                                     viewport_height_value,
                                     "wheel-line");
     }
+    if (scroll_tracking_changed && normalized_delta == 0.0f && g_ime.request_repaint)
+        g_ime.request_repaint();
     return handled
         || normalized_delta != 0.0f
+        || scroll_tracking_changed
         || scroll_phase_active(phase)
         || scroll_phase_active(momentum_phase);
 }
@@ -3451,6 +3561,7 @@ inline void input_attach(GLFWwindow* window, void (*request_repaint)()) {
         ? objc_send<id>(g_ime.ns_window, sel_content_view())
         : nullptr;
     g_ime.focused_callback_id = ::phenotype::native::invalid_callback_id;
+    g_ime.scroll_tracking_active = false;
     g_ime.last_host_frame = CGRectNull;
     g_ime.last_indicator_frame = CGRectNull;
     g_ime.last_indicator_display_mode = -1;
@@ -3490,6 +3601,7 @@ inline void input_detach() {
     g_ime.insertion_indicator = nullptr;
     g_ime.request_repaint = nullptr;
     g_ime.focused_callback_id = ::phenotype::native::invalid_callback_id;
+    g_ime.scroll_tracking_active = false;
     g_ime.last_host_frame = CGRectNull;
     g_ime.last_indicator_frame = CGRectNull;
     g_ime.last_indicator_display_mode = -1;
@@ -3904,6 +4016,8 @@ struct SystemCaretDebug {
     bool supported = false;
     bool attached = false;
     long long display_mode = -1;
+    long long automatic_mode_options = 0;
+    bool scroll_tracking_active = false;
     bool host_flipped = false;
     ::phenotype::diag::RectSnapshot frame{};
     ::phenotype::diag::RectSnapshot draw_rect{};
@@ -3960,10 +4074,15 @@ inline void force_disable_system_caret(bool disabled) {
     detail::g_force_disable_system_caret_for_tests = disabled;
 }
 
+inline void set_scroll_tracking_for_tests(bool active) {
+    detail::g_ime.scroll_tracking_active = active;
+}
+
 inline SystemCaretDebug system_caret_debug() {
     SystemCaretDebug debug{};
     debug.supported = detail::system_caret_supported();
     debug.attached = detail::g_ime.insertion_indicator != nullptr;
+    debug.scroll_tracking_active = detail::g_ime.scroll_tracking_active;
     debug.host_flipped = detail::caret_host_view_is_flipped();
     debug.draw_rect = detail::rect_snapshot(detail::g_ime.last_character_rect_draw);
     debug.host_rect = detail::rect_snapshot(detail::g_ime.last_character_rect_host);
@@ -3975,6 +4094,9 @@ inline SystemCaretDebug system_caret_debug() {
         debug.display_mode = detail::objc_send<long long>(
             detail::g_ime.insertion_indicator,
             detail::sel_display_mode());
+        debug.automatic_mode_options = detail::objc_send<long long>(
+            detail::g_ime.insertion_indicator,
+            detail::sel_automatic_mode_options());
         if (!CGRectIsNull(frame)) {
             debug.frame = {
                 true,
@@ -4061,6 +4183,8 @@ struct SystemCaretDebug {
     bool supported = false;
     bool attached = false;
     long long display_mode = -1;
+    long long automatic_mode_options = 0;
+    bool scroll_tracking_active = false;
     bool host_flipped = false;
     ::phenotype::diag::RectSnapshot frame{};
     ::phenotype::diag::RectSnapshot draw_rect{};
@@ -4093,6 +4217,7 @@ inline CompositionVisualDebug build_visual_text(std::string const&,
 }
 
 inline void force_disable_system_caret(bool) {}
+inline void set_scroll_tracking_for_tests(bool) {}
 
 inline SystemCaretDebug system_caret_debug() {
     return {};

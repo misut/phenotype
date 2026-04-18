@@ -929,6 +929,9 @@ static void test_macos_system_caret_indicator_tracks_focus_and_composition() {
     using phenotype::native::macos_test::set_composition_for_tests;
     using phenotype::native::macos_test::system_caret_debug;
 
+    constexpr long long show_effects = 1 << 0;
+    constexpr long long show_while_tracking = 1 << 1;
+
     force_disable_system_caret(false);
     MacInputHarness harness;
     auto [x, y] = harness.point_for(text_field_id);
@@ -943,6 +946,8 @@ static void test_macos_system_caret_indicator_tracks_focus_and_composition() {
     assert(caret.supported);
     assert(caret.attached);
     assert(caret.display_mode == 0);
+    assert((caret.automatic_mode_options & show_effects) != 0);
+    assert((caret.automatic_mode_options & show_while_tracking) != 0);
     assert(caret.frame.valid);
     assert(caret.draw_rect.valid);
     assert(caret.host_rect.valid);
@@ -977,6 +982,8 @@ static void test_macos_system_caret_indicator_tracks_focus_and_composition() {
     caret = system_caret_debug();
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.caret_renderer == "system");
+    assert((caret.automatic_mode_options & show_effects) != 0);
+    assert((caret.automatic_mode_options & show_while_tracking) != 0);
     assert(debug.caret_rect.valid);
     assert(debug.caret_draw_rect.valid);
     assert(debug.caret_host_rect.valid);
@@ -1036,6 +1043,45 @@ static void test_macos_fallback_caret_path_exposes_custom_debug_rect() {
     assert(harness.host.platform->input.uses_shared_caret_blink());
 
     std::puts("PASS: macOS fallback caret path exposes custom debug rect");
+}
+
+static void test_macos_scroll_tracking_hides_caret_until_idle() {
+    using namespace input_regression;
+    using phenotype::native::macos_test::force_disable_system_caret;
+    using phenotype::native::macos_test::set_scroll_tracking_for_tests;
+    using phenotype::native::macos_test::system_caret_debug;
+
+    force_disable_system_caret(false);
+    MacInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+
+    set_scroll_tracking_for_tests(true);
+    harness.host.platform->input.sync();
+
+    auto caret = system_caret_debug();
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(caret.scroll_tracking_active);
+    assert(caret.display_mode == 1);
+    assert(debug.caret_renderer == "hidden");
+    assert(!debug.caret_rect.valid);
+
+    set_scroll_tracking_for_tests(false);
+    harness.host.platform->input.sync();
+
+    caret = system_caret_debug();
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(!caret.scroll_tracking_active);
+    assert(caret.display_mode == 0);
+    assert(debug.caret_renderer == "system");
+    assert(debug.caret_rect.valid);
+
+    std::puts("PASS: macOS scroll tracking hides caret until idle");
 }
 
 static void test_text_measure_basic() {
@@ -1894,6 +1940,7 @@ int main() {
     test_macos_scroll_paths_record_precise_and_line_details();
     test_macos_system_caret_indicator_tracks_focus_and_composition();
     test_macos_fallback_caret_path_exposes_custom_debug_rect();
+    test_macos_scroll_tracking_hides_caret_until_idle();
     test_default_scroll_delta_fallback();
     test_text_measure_basic();
     test_text_measure_proportional();
