@@ -50,6 +50,7 @@ import phenotype.commands;
 import phenotype.diag;
 import phenotype.state;
 import phenotype.native.platform;
+import phenotype.native.shell;
 import phenotype.types;
 
 #ifdef __APPLE__
@@ -147,6 +148,11 @@ inline SEL sel_bounds() {
     return sel;
 }
 
+inline SEL sel_add_local_monitor_for_events_matching_mask_handler() {
+    static auto sel = sel_registerName("addLocalMonitorForEventsMatchingMask:handler:");
+    return sel;
+}
+
 inline SEL sel_cancel_operation() {
     static auto sel = sel_registerName("cancelOperation:");
     return sel;
@@ -199,6 +205,11 @@ inline SEL sel_first_responder() {
 
 inline SEL sel_has_marked_text() {
     static auto sel = sel_registerName("hasMarkedText");
+    return sel;
+}
+
+inline SEL sel_has_precise_scrolling_deltas() {
+    static auto sel = sel_registerName("hasPreciseScrollingDeltas");
     return sel;
 }
 
@@ -277,6 +288,11 @@ inline SEL sel_marked_range() {
     return sel;
 }
 
+inline SEL sel_momentum_phase() {
+    static auto sel = sel_registerName("momentumPhase");
+    return sel;
+}
+
 inline SEL sel_move_left() {
     static auto sel = sel_registerName("moveLeft:");
     return sel;
@@ -342,6 +358,11 @@ inline SEL sel_release() {
     return sel;
 }
 
+inline SEL sel_remove_monitor() {
+    static auto sel = sel_registerName("removeMonitor:");
+    return sel;
+}
+
 inline SEL sel_remove_from_superview() {
     static auto sel = sel_registerName("removeFromSuperview");
     return sel;
@@ -352,8 +373,18 @@ inline SEL sel_selected_range() {
     return sel;
 }
 
+inline SEL sel_scrolling_delta_y() {
+    static auto sel = sel_registerName("scrollingDeltaY");
+    return sel;
+}
+
 inline SEL sel_set_marked_text() {
     static auto sel = sel_registerName("setMarkedText:selectedRange:replacementRange:");
+    return sel;
+}
+
+inline SEL sel_phase() {
+    static auto sel = sel_registerName("phase");
     return sel;
 }
 
@@ -1018,6 +1049,8 @@ inline constexpr long long insertion_indicator_display_mode_automatic = 0;
 inline constexpr long long insertion_indicator_display_mode_hidden = 1;
 inline constexpr long long insertion_indicator_display_mode_visible = 2;
 inline constexpr long long insertion_indicator_automatic_mode_show_effects = 1 << 0;
+inline constexpr unsigned long long ns_event_mask_scroll_wheel = 1ull << 22;
+inline constexpr unsigned long long ns_event_phase_none = 0;
 
 inline bool g_force_disable_system_caret_for_tests = false;
 
@@ -1028,6 +1061,7 @@ struct ImeState {
     id editor_view = nullptr;
     id caret_host_view = nullptr;
     id insertion_indicator = nullptr;
+    id scroll_monitor = nullptr;
     Class editor_class = Nil;
     Class caret_host_class = Nil;
     void (*request_repaint)() = nullptr;
@@ -3342,6 +3376,93 @@ inline void ensure_editor_view() {
         objc_send<void>(g_ime.editor_view, sel_set_frame(), bounds);
 }
 
+inline float macos_normalize_scroll_delta(double scrolling_delta_y,
+                                          bool has_precise_scrolling_deltas,
+                                          float line_height) {
+    if (!std::isfinite(scrolling_delta_y) || scrolling_delta_y == 0.0)
+        return 0.0f;
+    if (has_precise_scrolling_deltas)
+        return static_cast<float>(scrolling_delta_y);
+    if (line_height <= 0.0f)
+        line_height = 1.0f;
+    return static_cast<float>(scrolling_delta_y) * line_height;
+}
+
+inline bool scroll_phase_active(unsigned long long phase) {
+    return phase != ns_event_phase_none;
+}
+
+inline float current_scroll_viewport_height() {
+    return viewport_height(g_ime.window);
+}
+
+inline bool handle_local_scroll_event(id event) {
+    if (!event || !g_ime.window || !g_ime.ns_window)
+        return false;
+
+    auto event_window = objc_send<id>(event, sel_window());
+    if (event_window != g_ime.ns_window)
+        return false;
+
+    bool has_precise_scrolling_deltas =
+        objc_send<bool>(event, sel_has_precise_scrolling_deltas());
+    double scrolling_delta_y = objc_send<double>(event, sel_scrolling_delta_y());
+    auto phase = objc_send<unsigned long long>(event, sel_phase());
+    auto momentum_phase = objc_send<unsigned long long>(event, sel_momentum_phase());
+    float normalized_delta = macos_normalize_scroll_delta(
+        scrolling_delta_y,
+        has_precise_scrolling_deltas,
+        scroll_line_height());
+    float viewport_height_value = current_scroll_viewport_height();
+    bool handled = false;
+    if (normalized_delta != 0.0f) {
+        handled = has_precise_scrolling_deltas
+            ? dispatch_scroll_pixels(normalized_delta,
+                                     viewport_height_value,
+                                     "wheel-precise")
+            : dispatch_scroll_lines(scrolling_delta_y,
+                                    viewport_height_value,
+                                    "wheel-line");
+    }
+    return handled
+        || normalized_delta != 0.0f
+        || scroll_phase_active(phase)
+        || scroll_phase_active(momentum_phase);
+}
+
+inline void install_local_scroll_monitor() {
+    if (g_ime.scroll_monitor)
+        return;
+
+    auto event_class = static_cast<Class>(objc_getClass("NSEvent"));
+    if (!event_class)
+        return;
+
+    // Intercept local scroll events before GLFW normalizes them so macOS can
+    // preserve AppKit's precise-vs-line semantics.
+    g_ime.scroll_monitor = objc_send<id>(
+        class_as_id(event_class),
+        sel_add_local_monitor_for_events_matching_mask_handler(),
+        ns_event_mask_scroll_wheel,
+        ^id(id event) {
+            return handle_local_scroll_event(event)
+                ? static_cast<id>(nullptr)
+                : event;
+        });
+}
+
+inline void remove_local_scroll_monitor() {
+    if (!g_ime.scroll_monitor)
+        return;
+
+    if (auto event_class = static_cast<Class>(objc_getClass("NSEvent")))
+        objc_send<void>(
+            class_as_id(event_class),
+            sel_remove_monitor(),
+            g_ime.scroll_monitor);
+    g_ime.scroll_monitor = nullptr;
+}
+
 inline void input_attach(GLFWwindow* window, void (*request_repaint)()) {
     g_images.request_repaint = request_repaint;
     g_ime.window = window;
@@ -3362,11 +3483,13 @@ inline void input_attach(GLFWwindow* window, void (*request_repaint)()) {
     clear_ime_state();
     ensure_editor_view();
     ensure_system_insertion_indicator();
+    install_local_scroll_monitor();
     ::phenotype::detail::clear_input_debug_caret_presentation();
     restore_content_view_first_responder();
 }
 
 inline void input_detach() {
+    remove_local_scroll_monitor();
     discard_marked_text_from_system();
     clear_ime_state();
     if (g_ime.insertion_indicator) {
@@ -3826,6 +3949,15 @@ inline unsigned long utf8_prefix_to_utf16(std::string const& text,
     return detail::utf16_length(std::string_view(text.data(), bytes));
 }
 
+inline float normalize_scroll_delta(double scrolling_delta_y,
+                                    bool has_precise_scrolling_deltas,
+                                    float line_height) {
+    return detail::macos_normalize_scroll_delta(
+        scrolling_delta_y,
+        has_precise_scrolling_deltas,
+        line_height);
+}
+
 inline CompositionVisualDebug build_visual_text(std::string const& committed,
                                                 std::size_t replacement_start,
                                                 std::size_t replacement_end,
@@ -3969,6 +4101,10 @@ inline Utf8Range utf16_range_to_utf8(std::string const&,
 
 inline unsigned long utf8_prefix_to_utf16(std::string const&, std::size_t) {
     return 0;
+}
+
+inline float normalize_scroll_delta(double, bool, float) {
+    return 0.0f;
 }
 
 inline CompositionVisualDebug build_visual_text(std::string const&,

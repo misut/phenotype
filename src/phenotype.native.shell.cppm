@@ -283,6 +283,23 @@ inline bool scroll_by_pixels(float delta_pixels,
                                detail);
 }
 
+inline bool dispatch_scroll_pixels(float delta_pixels,
+                                   float viewport_height_value,
+                                   char const* detail) {
+    return set_scroll_position(g_app_state.scroll_y - delta_pixels,
+                               viewport_height_value,
+                               detail);
+}
+
+inline bool dispatch_scroll_lines(double delta_lines,
+                                  float viewport_height_value,
+                                  char const* detail) {
+    return dispatch_scroll_pixels(
+        static_cast<float>(delta_lines) * scroll_line_height(),
+        viewport_height_value,
+        detail);
+}
+
 inline bool dismiss_platform_transient() {
     auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
     return platform && platform->input.dismiss_transient
@@ -373,9 +390,9 @@ inline bool dispatch_scroll(double dy, float viewport_height_value) {
             "scroll", "shell", "wheel", "ignored", invalid_callback_id);
         return false;
     }
-    return set_scroll_position(g_app_state.scroll_y - scroll_delta,
-                               viewport_height_value,
-                               "wheel");
+    return dispatch_scroll_pixels(scroll_delta,
+                                  viewport_height_value,
+                                  "wheel");
 }
 
 inline bool dispatch_activation(char const* detail, bool include_links) {
