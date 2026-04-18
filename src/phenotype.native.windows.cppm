@@ -57,7 +57,10 @@ module;
 export module phenotype.native.windows;
 
 #ifndef __wasi__
+import cppx.os;
+import cppx.os.system;
 import cppx.resource;
+import cppx.unicode;
 import phenotype;
 import phenotype.commands;
 import phenotype.state;
@@ -133,59 +136,6 @@ inline LineBoxMetrics make_line_box(float logical_width,
 #ifdef _WIN32
 
 using Microsoft::WRL::ComPtr;
-
-inline std::wstring utf8_to_wstring(char const* text, unsigned int len) {
-    if (!text || len == 0)
-        return {};
-    int needed = MultiByteToWideChar(
-        CP_UTF8, MB_ERR_INVALID_CHARS,
-        text, static_cast<int>(len), nullptr, 0);
-    if (needed <= 0) {
-        needed = MultiByteToWideChar(
-            CP_UTF8, 0,
-            text, static_cast<int>(len), nullptr, 0);
-    }
-    if (needed <= 0)
-        return {};
-    std::wstring out(static_cast<std::size_t>(needed), L'\0');
-    MultiByteToWideChar(
-        CP_UTF8, 0,
-        text, static_cast<int>(len),
-        out.data(), needed);
-    return out;
-}
-
-inline std::wstring utf8_to_wstring(std::string const& text) {
-    return utf8_to_wstring(text.c_str(),
-                           static_cast<unsigned int>(text.size()));
-}
-
-inline std::string wstring_to_utf8(std::wstring_view text) {
-    if (text.empty())
-        return {};
-    int needed = WideCharToMultiByte(
-        CP_UTF8,
-        0,
-        text.data(),
-        static_cast<int>(text.size()),
-        nullptr,
-        0,
-        nullptr,
-        nullptr);
-    if (needed <= 0)
-        return {};
-    std::string out(static_cast<std::size_t>(needed), '\0');
-    WideCharToMultiByte(
-        CP_UTF8,
-        0,
-        text.data(),
-        static_cast<int>(text.size()),
-        out.data(),
-        needed,
-        nullptr,
-        nullptr);
-    return out;
-}
 
 inline void log_hresult(char const* label, HRESULT hr) {
     std::fprintf(stderr, "[windows] %s failed (hr=0x%08lx)\n",
@@ -306,7 +256,8 @@ inline float text_measure(float font_size, bool mono,
                           char const* text_ptr, unsigned int len) {
     if (!g_text.initialized || len == 0) return 0.0f;
 
-    auto wide = utf8_to_wstring(text_ptr, len);
+    auto wide = cppx::unicode::utf8_to_wide(
+        std::string_view{text_ptr, len}).value_or(std::wstring{});
     if (wide.empty()) return 0.0f;
 
     ComPtr<IDWriteTextLayout> layout;
@@ -509,7 +460,7 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
     for (auto const& entry : entries) {
         if (entry.text.empty()) continue;
 
-        auto wide = utf8_to_wstring(entry.text);
+        auto wide = cppx::unicode::utf8_to_wide(entry.text).value_or(std::wstring{});
         if (wide.empty()) continue;
 
         ComPtr<IDWriteTextLayout> metrics_layout;
@@ -1065,8 +1016,9 @@ inline unsigned int composition_cursor_bytes() {
         (g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor);
     if (cursor_units > g_ime.composition_text.size())
         cursor_units = g_ime.composition_text.size();
-    auto prefix = wstring_to_utf8(
-        std::wstring_view(g_ime.composition_text.data(), cursor_units));
+    auto prefix = cppx::unicode::wide_to_utf8(
+        std::wstring_view(g_ime.composition_text.data(), cursor_units))
+                      .value_or(std::string{});
     return static_cast<unsigned int>(prefix.size());
 }
 
@@ -1078,7 +1030,8 @@ inline std::size_t resolved_composition_caret_bytes(std::string const& compositi
 }
 
 inline void sync_input_debug_composition_state() {
-    auto composition = wstring_to_utf8(g_ime.composition_text);
+    auto composition = cppx::unicode::wide_to_utf8(g_ime.composition_text)
+                           .value_or(std::string{});
     ::phenotype::detail::set_input_composition_state(
         g_ime.composition_active && !composition.empty(),
         composition,
@@ -1119,7 +1072,8 @@ inline CompositionVisualState current_composition_visual_state(
     if (!snapshot.valid || !g_ime.composition_active || g_ime.composition_text.empty())
         return visual;
 
-    auto composition = wstring_to_utf8(g_ime.composition_text);
+    auto composition = cppx::unicode::wide_to_utf8(g_ime.composition_text)
+                           .value_or(std::string{});
     if (composition.empty())
         return visual;
 
@@ -1626,7 +1580,7 @@ inline void clear_ime_state() {
 }
 
 inline void commit_result_string(std::wstring_view result) {
-    auto suffix = wstring_to_utf8(result);
+    auto suffix = cppx::unicode::wide_to_utf8(result).value_or(std::string{});
     if (suffix.empty())
         return;
     if (!::phenotype::detail::replace_focused_input_text(
@@ -1786,7 +1740,8 @@ inline void sync_ime_windows() {
 
                     float content_width = snapshot.width;
                     for (unsigned int index = page_start; index < page_end; ++index) {
-                        auto utf8 = wstring_to_utf8(g_ime.candidates[index]);
+                        auto utf8 = cppx::unicode::wide_to_utf8(g_ime.candidates[index])
+                                        .value_or(std::string{});
                         if (utf8.empty())
                             continue;
                         float measured = text_measure(
@@ -3120,7 +3075,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                             snapshot.font_size,
                             snapshot.mono,
                             snapshot.foreground,
-                            wstring_to_utf8(g_ime.candidates[hit.index]),
+                            cppx::unicode::wide_to_utf8(g_ime.candidates[hit.index])
+                                .value_or(std::string{}),
                             snapshot.line_height);
                     }
                 } else if (hit.kind == CandidateHitKind::prev_page
@@ -3350,17 +3306,6 @@ inline float windows_scroll_delta_y(double dy,
     return static_cast<float>(dy) * static_cast<float>(lines) * line_height;
 }
 
-inline void windows_open_url(char const* url, unsigned int len) {
-    auto wide = utf8_to_wstring(url, len);
-    if (wide.empty())
-        return;
-    auto result = reinterpret_cast<std::intptr_t>(
-        ShellExecuteW(nullptr, L"open", wide.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
-    if (result <= 32) {
-        std::fprintf(stderr, "[windows] ShellExecuteW failed (%td)\n", result);
-    }
-}
-
 inline bool windows_uses_shared_caret_blink() {
     return true;
 }
@@ -3398,7 +3343,21 @@ inline platform_api const& windows_platform() {
             detail::input_dismiss_transient,
             detail::windows_scroll_delta_y,
         },
-        detail::windows_open_url,
+        [](char const* url, unsigned int len) {
+            if (!url || len == 0)
+                return;
+            auto opened = cppx::os::system::open_url(std::string_view(url, len));
+            if (!opened) {
+                auto reason = cppx::os::to_string(opened.error());
+                std::fprintf(
+                    stderr,
+                    "[windows] failed to open url: %.*s (%.*s)\n",
+                    static_cast<int>(len),
+                    url,
+                    static_cast<int>(reason.size()),
+                    reason.data());
+            }
+        },
         nullptr,
     };
     return api;
@@ -3462,9 +3421,10 @@ inline void set_composition_for_tests(
     if (snapshot.valid) {
         anchor = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, anchor);
     }
-    detail::g_ime.composition_text = detail::utf8_to_wstring(
-        text ? text : "",
-        text ? static_cast<unsigned int>(std::strlen(text)) : 0u);
+    detail::g_ime.composition_text = cppx::unicode::utf8_to_wide(
+        std::string_view{text ? text : "",
+                         text ? std::strlen(text) : 0u})
+                                         .value_or(std::wstring{});
     detail::g_ime.composition_active = !detail::g_ime.composition_text.empty();
     detail::g_ime.composition_anchor = anchor;
     detail::g_ime.composition_cursor = cursor_units;
