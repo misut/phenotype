@@ -62,6 +62,7 @@ export module phenotype.native.windows;
 
 #ifndef __wasi__
 import cppx.http.system;
+import phenotype;
 import phenotype.commands;
 import phenotype.state;
 import phenotype.types;
@@ -861,7 +862,7 @@ inline void request_window_repaint() {
         g_ime.request_repaint();
 }
 
-inline std::size_t snapshot_caret_bytes(
+inline std::size_t snapshot_caret_byte_offset(
         ::phenotype::detail::FocusedInputSnapshot const& snapshot) {
     if (snapshot.caret_pos == ::phenotype::native::invalid_callback_id)
         return snapshot.value.size();
@@ -904,7 +905,7 @@ inline void capture_composition_anchor() {
     auto snapshot = ::phenotype::detail::focused_input_snapshot();
     if (!snapshot.valid)
         return;
-    g_ime.composition_anchor = snapshot_caret_bytes(snapshot);
+    g_ime.composition_anchor = snapshot_caret_byte_offset(snapshot);
 }
 
 inline bool is_http_url(std::string const& url) {
@@ -1335,7 +1336,7 @@ inline void sync_ime_windows() {
         snapshot.font_size,
         snapshot.mono,
         snapshot.value,
-        g_ime.composition_active ? g_ime.composition_anchor : snapshot_caret_bytes(snapshot));
+        g_ime.composition_active ? g_ime.composition_anchor : snapshot_caret_byte_offset(snapshot));
     if (g_ime.composition_active && !g_ime.composition_text.empty()) {
         auto prefix = wstring_to_utf8(
             std::wstring_view(
