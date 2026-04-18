@@ -617,6 +617,10 @@ inline void on_framebuffer_size(GLFWwindow*, int, int) {
     repaint_current();
 }
 
+inline void on_window_content_scale(GLFWwindow*, float, float) {
+    repaint_current();
+}
+
 inline void on_key(GLFWwindow*, int key, int, int action, int mods) {
     dispatch_key(key, action, mods);
 }
@@ -630,6 +634,10 @@ inline void install_callbacks(GLFWwindow* window) {
     glfwSetCursorPosCallback(window, on_cursor_pos);
     glfwSetScrollCallback(window, on_scroll);
     glfwSetFramebufferSizeCallback(window, on_framebuffer_size);
+#if defined(GLFW_VERSION_MAJOR) \
+    && ((GLFW_VERSION_MAJOR > 3) || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3))
+    glfwSetWindowContentScaleCallback(window, on_window_content_scale);
+#endif
     glfwSetKeyCallback(window, on_key);
     glfwSetCharCallback(window, on_char);
 }
@@ -686,6 +694,9 @@ int run_app_with_platform(platform_api const& platform,
         return 1;
     }
     glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+#ifdef GLFW_SCALE_TO_MONITOR
+    glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
+#endif
 
     auto* window = glfwCreateWindow(width, height, title, nullptr, nullptr);
     if (!window) {

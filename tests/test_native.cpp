@@ -1314,6 +1314,70 @@ static void test_windows_text_build_atlas_scale_preserves_bounds() {
     std::puts("PASS: windows text build atlas scale preserves bounds");
 }
 
+static void test_windows_text_build_atlas_preserves_vertical_orientation() {
+    text::init();
+    std::vector<text::TextEntry> entries;
+    entries.push_back({10.f, 20.f, 40.f, false, 0.f, 0.f, 0.f, 1.f, "A", 40.f * 1.2f});
+    auto atlas = text::build_atlas(entries);
+    assert(atlas.quads.size() == 1);
+
+    auto const& quad = atlas.quads[0];
+    int atlas_x = static_cast<int>(std::floor(quad.u * static_cast<float>(atlas.width)));
+    int atlas_y = static_cast<int>(std::floor(quad.v * static_cast<float>(atlas.height)));
+    int atlas_w = static_cast<int>(std::ceil(quad.uw * static_cast<float>(atlas.width)));
+    int atlas_h = static_cast<int>(std::ceil(quad.vh * static_cast<float>(atlas.height)));
+    assert(atlas_w > 0);
+    assert(atlas_h > 2);
+
+    auto alpha_sum = [&](int begin_row, int end_row) {
+        std::uint64_t total = 0;
+        for (int y = begin_row; y < end_row; ++y) {
+            for (int x = 0; x < atlas_w; ++x) {
+                auto idx = static_cast<std::size_t>(
+                    (((atlas_y + y) * atlas.width) + atlas_x + x) * 4 + 3);
+                total += atlas.pixels[idx];
+            }
+        }
+        return total;
+    };
+
+    int mid = atlas_h / 2;
+    auto top_alpha = alpha_sum(0, mid);
+    auto bottom_alpha = alpha_sum(mid, atlas_h);
+    assert(bottom_alpha > top_alpha);
+
+    text::shutdown();
+    std::puts("PASS: windows text build atlas preserves vertical orientation");
+}
+
+static void test_windows_backing_scale_matches_glfw_content_scale() {
+    assert(glfwInit());
+    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+#ifdef GLFW_SCALE_TO_MONITOR
+    glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
+#endif
+
+    auto* window = glfwCreateWindow(320, 240, "phenotype-scale", nullptr, nullptr);
+    assert(window != nullptr);
+
+#if defined(GLFW_VERSION_MAJOR) \
+    && ((GLFW_VERSION_MAJOR > 3) || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3))
+    float sx = 1.0f;
+    float sy = 1.0f;
+    glfwGetWindowContentScale(window, &sx, &sy);
+    float expected = (sx > sy) ? sx : sy;
+    float actual = phenotype::native::detail::current_backing_scale(window);
+    assert(std::fabs(actual - expected) < 0.001f);
+#else
+    assert(phenotype::native::detail::current_backing_scale(window) > 0.0f);
+#endif
+
+    glfwDestroyWindow(window);
+    glfwTerminate();
+    std::puts("PASS: windows backing scale matches GLFW content scale");
+}
+
 static void test_windows_text_build_atlas_empty() {
     text::init();
     std::vector<text::TextEntry> entries;
@@ -1565,6 +1629,8 @@ int main() {
     test_windows_text_measure_unicode();
     test_windows_text_build_atlas();
     test_windows_text_build_atlas_scale_preserves_bounds();
+    test_windows_text_build_atlas_preserves_vertical_orientation();
+    test_windows_backing_scale_matches_glfw_content_scale();
     test_windows_text_build_atlas_empty();
     test_renderer_flush_empty();
     test_windows_renderer_reinit_cycle();

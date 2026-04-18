@@ -35,6 +35,7 @@ module;
 #include <d3dcompiler.h>
 #include <dxgi1_6.h>
 #include <dwrite.h>
+#include <dwrite_1.h>
 #include <wrl/client.h>
 
 #pragma comment(lib, "d3d12.lib")
@@ -325,11 +326,13 @@ class GlyphBitmapRenderer final : public IDWriteTextRenderer {
 public:
     GlyphBitmapRenderer(IDWriteBitmapRenderTarget* target,
                         IDWriteRenderingParams* rendering_params,
-                        COLORREF text_color)
+                        COLORREF text_color,
+                        float pixels_per_dip)
         : refs_(1),
           target_(target),
           rendering_params_(rendering_params),
-          text_color_(text_color) {
+          text_color_(text_color),
+          pixels_per_dip_(sanitize_scale(pixels_per_dip)) {
         if (target_) target_->AddRef();
         if (rendering_params_) rendering_params_->AddRef();
     }
@@ -380,7 +383,7 @@ public:
     HRESULT STDMETHODCALLTYPE GetPixelsPerDip(
             void*, FLOAT* pixels_per_dip) override {
         if (!pixels_per_dip) return E_POINTER;
-        *pixels_per_dip = 1.0f;
+        *pixels_per_dip = pixels_per_dip_;
         return S_OK;
     }
 
@@ -437,7 +440,48 @@ private:
     IDWriteBitmapRenderTarget* target_ = nullptr;
     IDWriteRenderingParams* rendering_params_ = nullptr;
     COLORREF text_color_ = RGB(255, 255, 255);
+    float pixels_per_dip_ = 1.0f;
 };
+
+struct BitmapSectionView {
+    DIBSECTION dib{};
+    std::uint32_t* pixels = nullptr;
+    int stride_pixels = 0;
+};
+
+inline std::optional<BitmapSectionView> bitmap_section_view(HDC dc) {
+    if (!dc) return std::nullopt;
+    HBITMAP bitmap = static_cast<HBITMAP>(GetCurrentObject(dc, OBJ_BITMAP));
+    if (!bitmap) return std::nullopt;
+
+    BitmapSectionView view{};
+    if (GetObjectW(bitmap, sizeof(view.dib), &view.dib) != sizeof(view.dib))
+        return std::nullopt;
+    if (!view.dib.dsBm.bmBits || view.dib.dsBm.bmWidthBytes <= 0)
+        return std::nullopt;
+
+    view.pixels = static_cast<std::uint32_t*>(view.dib.dsBm.bmBits);
+    view.stride_pixels = view.dib.dsBm.bmWidthBytes / static_cast<int>(sizeof(std::uint32_t));
+    if (!view.pixels || view.stride_pixels <= 0)
+        return std::nullopt;
+    return view;
+}
+
+inline void clear_bitmap_section(BitmapSectionView const& view, int height) {
+    auto bytes = static_cast<std::size_t>(view.dib.dsBm.bmWidthBytes)
+        * static_cast<std::size_t>(height);
+    std::memset(view.pixels, 0, bytes);
+}
+
+inline std::uint32_t bitmap_section_pixel(
+        BitmapSectionView const& view,
+        int x, int y) {
+    // IDWrite bitmap render targets expose the DIB memory in draw order here,
+    // so treat scanlines as top-down when copying glyph coverage into the atlas.
+    int row = y;
+    return view.pixels[
+        static_cast<std::size_t>(row) * static_cast<std::size_t>(view.stride_pixels) + x];
+}
 
 inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
                                   float backing_scale) {
@@ -462,14 +506,13 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
         auto wide = utf8_to_wstring(entry.text);
         if (wide.empty()) continue;
 
-        float scaled_font_size = entry.font_size * scale;
         ComPtr<IDWriteTextLayout> metrics_layout;
         auto hr = make_text_layout(
             wide,
-            scaled_font_size,
+            entry.font_size,
             entry.mono,
             16384.0f,
-            scaled_font_size * 4.0f + 64.0f,
+            entry.font_size * 4.0f + 64.0f,
             metrics_layout);
         if (FAILED(hr)) continue;
 
@@ -484,9 +527,9 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
             &actual_lines);
         if (FAILED(hr) || actual_lines == 0) continue;
 
-        float logical_width = metrics.widthIncludingTrailingWhitespace / scale;
-        float ascent = line_metrics[0].baseline;
-        float descent = line_metrics[0].height - line_metrics[0].baseline;
+        float logical_width = metrics.widthIncludingTrailingWhitespace;
+        float ascent = line_metrics[0].baseline * scale;
+        float descent = (line_metrics[0].height - line_metrics[0].baseline) * scale;
         if (descent < 0.0f) descent = 0.0f;
         float logical_line_height = entry.line_height > 0
             ? entry.line_height
@@ -512,10 +555,10 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
         ComPtr<IDWriteTextLayout> draw_layout;
         hr = make_text_layout(
             wide,
-            scaled_font_size,
+            entry.font_size,
             entry.mono,
-            static_cast<float>(box.slot_width - padding * 2),
-            static_cast<float>(box.render_height),
+            static_cast<float>(box.slot_width - padding * 2) / scale,
+            static_cast<float>(box.render_height) / scale,
             draw_layout);
         if (FAILED(hr)) continue;
 
@@ -526,43 +569,36 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
             box.slot_height,
             &target);
         if (FAILED(hr) || !target) continue;
+        if (FAILED(target->SetPixelsPerDip(scale))) continue;
+
+        ComPtr<IDWriteBitmapRenderTarget1> target1;
+        hr = target.As(&target1);
+        if (FAILED(hr) || !target1) continue;
+        // This atlas is composited later with alpha, so ClearType subpixels cannot
+        // survive the intermediate bitmap. DirectWrite recommends grayscale here.
+        hr = target1->SetTextAntialiasMode(DWRITE_TEXT_ANTIALIAS_MODE_GRAYSCALE);
+        if (FAILED(hr)) continue;
 
         HDC dc = target->GetMemoryDC();
         if (!dc) continue;
 
-        RECT clear_rect{0, 0, box.slot_width, box.slot_height};
-        FillRect(dc, &clear_rect, static_cast<HBRUSH>(GetStockObject(BLACK_BRUSH)));
+        auto bitmap_view = bitmap_section_view(dc);
+        if (!bitmap_view) continue;
+        clear_bitmap_section(*bitmap_view, box.slot_height);
         SetBkMode(dc, TRANSPARENT);
 
         auto* renderer = new GlyphBitmapRenderer(
             target.Get(),
             g_text.rendering_params.Get(),
-            RGB(255, 255, 255));
+            RGB(255, 255, 255),
+            scale);
         hr = draw_layout->Draw(
             nullptr,
             renderer,
-            static_cast<float>(padding),
-            static_cast<float>(box.render_top));
+            static_cast<float>(padding) / scale,
+            static_cast<float>(box.render_top) / scale);
         renderer->Release();
         if (FAILED(hr)) continue;
-
-        HBITMAP bitmap = static_cast<HBITMAP>(GetCurrentObject(dc, OBJ_BITMAP));
-        if (!bitmap) continue;
-
-        BITMAPINFO bmi{};
-        bmi.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
-        bmi.bmiHeader.biWidth = box.slot_width;
-        bmi.bmiHeader.biHeight = -box.slot_height;
-        bmi.bmiHeader.biPlanes = 1;
-        bmi.bmiHeader.biBitCount = 32;
-        bmi.bmiHeader.biCompression = BI_RGB;
-
-        std::vector<std::uint32_t> pixels(
-            static_cast<std::size_t>(box.slot_width * box.slot_height), 0);
-        if (!GetDIBits(dc, bitmap, 0, static_cast<UINT>(box.slot_height),
-                       pixels.data(), &bmi, DIB_RGB_COLORS)) {
-            continue;
-        }
 
         bool has_ink = false;
         int ink_min_x = box.slot_width;
@@ -570,11 +606,8 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
         for (int py = box.render_top; py < box.render_top + box.render_height; ++py) {
             if (py < 0 || py >= box.slot_height) continue;
             for (int px = 0; px < box.slot_width; ++px) {
-                auto packed = pixels[static_cast<std::size_t>(py * box.slot_width + px)];
-                auto b = static_cast<unsigned int>(packed & 0xFF);
-                auto g = static_cast<unsigned int>((packed >> 8) & 0xFF);
-                auto r = static_cast<unsigned int>((packed >> 16) & 0xFF);
-                unsigned char alpha = static_cast<unsigned char>((std::max)({r, g, b}));
+                auto packed = bitmap_section_pixel(*bitmap_view, px, py);
+                unsigned char alpha = static_cast<unsigned char>((packed >> 24) & 0xFF);
                 if (alpha == 0) continue;
                 has_ink = true;
                 if (px < ink_min_x) ink_min_x = px;
@@ -673,7 +706,8 @@ float4 fs_color(ColorVsOut input) : SV_TARGET {
 }
 
 Texture2D atlas_tex : register(t0);
-SamplerState atlas_samp : register(s0);
+SamplerState image_samp : register(s0);
+SamplerState text_samp : register(s1);
 
 struct TextInstance {
     float4 rect : RECT;
@@ -701,8 +735,14 @@ TextVsOut vs_text(uint vertex_id : SV_VertexID, TextInstance inst) {
     return o;
 }
 
+float4 fs_image(TextVsOut input) : SV_TARGET {
+    float4 s = atlas_tex.Sample(image_samp, input.uv);
+    clip(s.a - 0.01f);
+    return s;
+}
+
 float4 fs_text(TextVsOut input) : SV_TARGET {
-    float4 s = atlas_tex.Sample(atlas_samp, input.uv);
+    float4 s = atlas_tex.Sample(text_samp, input.uv);
     clip(s.a - 0.01f);
     return s;
 }
@@ -735,6 +775,7 @@ struct RendererState {
     ComPtr<ID3D12DescriptorHeap> srv_heap;
     ComPtr<ID3D12RootSignature> root_signature;
     ComPtr<ID3D12PipelineState> color_pipeline;
+    ComPtr<ID3D12PipelineState> image_pipeline;
     ComPtr<ID3D12PipelineState> text_pipeline;
     ComPtr<ID3D12GraphicsCommandList> command_list;
     ComPtr<ID3D12Fence> fence;
@@ -1077,6 +1118,13 @@ inline std::filesystem::path resolve_image_path(std::string const& url) {
 
 inline float current_backing_scale(GLFWwindow* window) {
     if (!window) return 1.0f;
+#if defined(GLFW_VERSION_MAJOR) \
+    && ((GLFW_VERSION_MAJOR > 3) || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3))
+    float sx = 1.0f;
+    float sy = 1.0f;
+    glfwGetWindowContentScale(window, &sx, &sy);
+    return sanitize_scale((sx > sy) ? sx : sy);
+#else
     int fbw = 0;
     int fbh = 0;
     int winw = 0;
@@ -1086,6 +1134,7 @@ inline float current_backing_scale(GLFWwindow* window) {
     float sx = (winw > 0) ? static_cast<float>(fbw) / static_cast<float>(winw) : 1.0f;
     float sy = (winh > 0) ? static_cast<float>(fbh) / static_cast<float>(winh) : 1.0f;
     return sanitize_scale((sx > sy) ? sx : sy);
+#endif
 }
 
 inline void wait_for_fence(UINT64 value);
@@ -2053,22 +2102,26 @@ inline HRESULT create_root_signature() {
     params[1].DescriptorTable.pDescriptorRanges = &srv_range;
     params[1].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
 
-    D3D12_STATIC_SAMPLER_DESC sampler{};
-    sampler.Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
-    sampler.AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    sampler.AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    sampler.AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
-    sampler.ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
-    sampler.ShaderRegister = 0;
-    sampler.RegisterSpace = 0;
-    sampler.ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
-    sampler.MaxLOD = D3D12_FLOAT32_MAX;
+    D3D12_STATIC_SAMPLER_DESC samplers[2]{};
+    samplers[0].Filter = D3D12_FILTER_MIN_MAG_MIP_LINEAR;
+    samplers[0].AddressU = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    samplers[0].AddressV = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    samplers[0].AddressW = D3D12_TEXTURE_ADDRESS_MODE_CLAMP;
+    samplers[0].ComparisonFunc = D3D12_COMPARISON_FUNC_ALWAYS;
+    samplers[0].ShaderRegister = 0;
+    samplers[0].RegisterSpace = 0;
+    samplers[0].ShaderVisibility = D3D12_SHADER_VISIBILITY_PIXEL;
+    samplers[0].MaxLOD = D3D12_FLOAT32_MAX;
+
+    samplers[1] = samplers[0];
+    samplers[1].Filter = D3D12_FILTER_MIN_MAG_MIP_POINT;
+    samplers[1].ShaderRegister = 1;
 
     D3D12_ROOT_SIGNATURE_DESC desc{};
     desc.NumParameters = 2;
     desc.pParameters = params;
-    desc.NumStaticSamplers = 1;
-    desc.pStaticSamplers = &sampler;
+    desc.NumStaticSamplers = static_cast<UINT>(std::size(samplers));
+    desc.pStaticSamplers = samplers;
     desc.Flags = D3D12_ROOT_SIGNATURE_FLAG_ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT;
 
     ComPtr<ID3DBlob> serialized;
@@ -2096,10 +2149,12 @@ inline HRESULT create_pipelines() {
     ComPtr<ID3DBlob> color_vs;
     ComPtr<ID3DBlob> color_ps;
     ComPtr<ID3DBlob> text_vs;
+    ComPtr<ID3DBlob> image_ps;
     ComPtr<ID3DBlob> text_ps;
     if (FAILED(compile_shader("vs_color", "vs_5_0", color_vs))) return E_FAIL;
     if (FAILED(compile_shader("fs_color", "ps_5_0", color_ps))) return E_FAIL;
     if (FAILED(compile_shader("vs_text", "vs_5_0", text_vs))) return E_FAIL;
+    if (FAILED(compile_shader("fs_image", "ps_5_0", image_ps))) return E_FAIL;
     if (FAILED(compile_shader("fs_text", "ps_5_0", text_ps))) return E_FAIL;
 
     D3D12_BLEND_DESC blend{};
@@ -2158,9 +2213,15 @@ inline HRESULT create_pipelines() {
         {"UVRECT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 16,
          D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1},
     };
-    auto text_desc = base;
-    text_desc.InputLayout = {text_layout, static_cast<UINT>(std::size(text_layout))};
-    text_desc.VS = {text_vs->GetBufferPointer(), text_vs->GetBufferSize()};
+    auto image_desc = base;
+    image_desc.InputLayout = {text_layout, static_cast<UINT>(std::size(text_layout))};
+    image_desc.VS = {text_vs->GetBufferPointer(), text_vs->GetBufferSize()};
+    image_desc.PS = {image_ps->GetBufferPointer(), image_ps->GetBufferSize()};
+    hr = g_renderer.device->CreateGraphicsPipelineState(
+        &image_desc, IID_PPV_ARGS(&g_renderer.image_pipeline));
+    if (FAILED(hr)) return hr;
+
+    auto text_desc = image_desc;
     text_desc.PS = {text_ps->GetBufferPointer(), text_ps->GetBufferSize()};
     return g_renderer.device->CreateGraphicsPipelineState(
         &text_desc, IID_PPV_ARGS(&g_renderer.text_pipeline));
@@ -2932,7 +2993,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             g_renderer.command_list->SetDescriptorHeaps(1, heaps);
             g_renderer.command_list->SetGraphicsRootDescriptorTable(
                 1, srv_gpu_handle(IMAGE_SRV_SLOT));
-            g_renderer.command_list->SetPipelineState(g_renderer.text_pipeline.Get());
+            g_renderer.command_list->SetPipelineState(g_renderer.image_pipeline.Get());
             g_renderer.command_list->IASetVertexBuffers(0, 1, &vbv);
             g_renderer.command_list->DrawInstanced(
                 6, static_cast<UINT>(decoded.image_data.size() / 8), 0, 0);
