@@ -828,12 +828,37 @@ struct CandidateOverlayLayout {
     std::vector<CandidateHit> hits;
 };
 
+struct FlagGuard {
+    bool& flag;
+
+    explicit FlagGuard(bool& target) : flag(target) {
+        flag = true;
+    }
+
+    ~FlagGuard() {
+        flag = false;
+    }
+
+    FlagGuard(FlagGuard const&) = delete;
+    FlagGuard& operator=(FlagGuard const&) = delete;
+};
+
+struct WindowPointCache {
+    bool valid = false;
+    LONG x = 0;
+    LONG y = 0;
+};
+
 struct ImeState {
     GLFWwindow* window = nullptr;
     HWND hwnd = nullptr;
     WNDPROC prev_wndproc = nullptr;
     void (*request_repaint)() = nullptr;
     bool attached = false;
+    bool in_wndproc = false;
+    bool sync_in_progress = false;
+    bool repaint_pending = false;
+    bool repaint_dispatch_in_progress = false;
     bool composition_active = false;
     std::wstring composition_text;
     LONG composition_cursor = 0;
@@ -846,6 +871,11 @@ struct ImeState {
     int hovered_candidate = -1;
     CandidateHitKind hovered_kind = CandidateHitKind::none;
     CandidateOverlayLayout overlay{};
+    WindowPointCache composition_window{};
+    WindowPointCache candidate_window{};
+    std::size_t sync_call_count = 0;
+    std::size_t repaint_request_count = 0;
+    std::size_t deferred_repaint_count = 0;
 };
 
 struct DecodedImage {
@@ -891,9 +921,37 @@ struct ImageAtlasState {
 static ImeState g_ime;
 static ImageAtlasState g_images;
 
+inline void invalidate_ime_window_positions() {
+    g_ime.composition_window = {};
+    g_ime.candidate_window = {};
+}
+
+inline bool should_defer_window_repaint() {
+    return g_ime.in_wndproc
+        || g_ime.sync_in_progress
+        || g_ime.repaint_dispatch_in_progress;
+}
+
 inline void request_window_repaint() {
+    ++g_ime.repaint_request_count;
+    if (should_defer_window_repaint()) {
+        g_ime.repaint_pending = true;
+        ++g_ime.deferred_repaint_count;
+        return;
+    }
     if (g_ime.request_repaint)
         g_ime.request_repaint();
+}
+
+inline void drain_deferred_window_repaint() {
+    if (!g_ime.repaint_pending || !g_ime.request_repaint)
+        return;
+    if (should_defer_window_repaint())
+        return;
+    g_ime.repaint_pending = false;
+    g_ime.repaint_dispatch_in_progress = true;
+    g_ime.request_repaint();
+    g_ime.repaint_dispatch_in_progress = false;
 }
 
 inline std::vector<metrics::Attribute> native_platform_attrs() {
@@ -1007,6 +1065,13 @@ inline unsigned int composition_cursor_bytes() {
     return static_cast<unsigned int>(prefix.size());
 }
 
+inline std::size_t resolved_composition_caret_bytes(std::string const& composition) {
+    auto caret_bytes = static_cast<std::size_t>(composition_cursor_bytes());
+    if (caret_bytes == 0 && !composition.empty())
+        return composition.size();
+    return caret_bytes;
+}
+
 inline void sync_input_debug_composition_state() {
     auto composition = wstring_to_utf8(g_ime.composition_text);
     ::phenotype::detail::set_input_composition_state(
@@ -1027,6 +1092,72 @@ struct WindowsCaretLayout {
     float height = 0.0f;
 };
 
+struct CompositionVisualState {
+    bool valid = false;
+    ::phenotype::FocusedInputSnapshot snapshot{};
+    std::string erase_text;
+    std::string visible_text;
+    std::size_t marked_start = 0;
+    std::size_t marked_end = 0;
+    std::size_t caret_bytes = 0;
+    float base_x = 0.0f;
+    float text_y = 0.0f;
+    float underline_x = 0.0f;
+    float underline_width = 0.0f;
+    float caret_x = 0.0f;
+};
+
+inline CompositionVisualState current_composition_visual_state(
+        ::phenotype::FocusedInputSnapshot snapshot =
+            ::phenotype::detail::focused_input_snapshot()) {
+    CompositionVisualState visual{};
+    if (!snapshot.valid || !g_ime.composition_active || g_ime.composition_text.empty())
+        return visual;
+
+    auto composition = wstring_to_utf8(g_ime.composition_text);
+    if (composition.empty())
+        return visual;
+
+    auto anchor = ::phenotype::detail::clamp_utf8_boundary(
+        snapshot.value,
+        g_ime.composition_anchor);
+    auto prefix = snapshot.value.substr(0, anchor);
+    auto suffix = snapshot.value.substr(anchor);
+
+    visual.valid = true;
+    visual.snapshot = std::move(snapshot);
+    visual.erase_text = visual.snapshot.value.empty()
+        ? visual.snapshot.placeholder
+        : visual.snapshot.value;
+    visual.visible_text = prefix + composition + suffix;
+    visual.marked_start = prefix.size();
+    visual.marked_end = visual.marked_start + composition.size();
+    visual.caret_bytes = (std::min)(
+        visual.visible_text.size(),
+        visual.marked_start + resolved_composition_caret_bytes(composition));
+
+    auto scroll_y = ::phenotype::detail::get_scroll_y();
+    visual.base_x = visual.snapshot.x + visual.snapshot.padding[3];
+    visual.text_y = visual.snapshot.y - scroll_y + visual.snapshot.padding[0];
+    visual.underline_x = visual.base_x + measure_utf8_prefix(
+        visual.snapshot.font_size,
+        visual.snapshot.mono,
+        visual.visible_text,
+        visual.marked_start);
+    auto underline_end = visual.base_x + measure_utf8_prefix(
+        visual.snapshot.font_size,
+        visual.snapshot.mono,
+        visual.visible_text,
+        visual.marked_end);
+    visual.underline_width = underline_end - visual.underline_x;
+    visual.caret_x = visual.base_x + measure_utf8_prefix(
+        visual.snapshot.font_size,
+        visual.snapshot.mono,
+        visual.visible_text,
+        visual.caret_bytes);
+    return visual;
+}
+
 inline WindowsCaretLayout current_windows_caret_layout(
         ::phenotype::FocusedInputSnapshot snapshot =
             ::phenotype::detail::focused_input_snapshot()) {
@@ -1034,6 +1165,7 @@ inline WindowsCaretLayout current_windows_caret_layout(
     if (!snapshot.valid)
         return layout;
 
+    auto composition = current_composition_visual_state(snapshot);
     auto measure_prefix = [](auto const& input, std::size_t bytes) {
         return measure_utf8_prefix(
             input.font_size,
@@ -1043,7 +1175,7 @@ inline WindowsCaretLayout current_windows_caret_layout(
     };
 
     auto base_snapshot = snapshot;
-    bool composition_active = g_ime.composition_active && !g_ime.composition_text.empty();
+    bool composition_active = composition.valid;
     if (composition_active)
         base_snapshot.caret_pos = static_cast<unsigned int>(g_ime.composition_anchor);
     layout.base = ::phenotype::detail::compute_single_line_caret_layout(
@@ -1064,21 +1196,8 @@ inline WindowsCaretLayout current_windows_caret_layout(
     layout.height = layout.base.height;
 
     if (composition_active) {
-        auto prefix = wstring_to_utf8(
-            std::wstring_view(
-                g_ime.composition_text.data(),
-                std::min<std::size_t>(
-                    static_cast<std::size_t>((g_ime.composition_cursor < 0) ? 0 : g_ime.composition_cursor),
-                    g_ime.composition_text.size())));
-        if (!prefix.empty()) {
-            float advance = text_measure(
-                layout.snapshot.font_size,
-                layout.snapshot.mono,
-                prefix.c_str(),
-                static_cast<unsigned int>(prefix.size()));
-            layout.draw_x += advance;
-            layout.content_x += advance;
-        }
+        layout.draw_x = composition.caret_x;
+        layout.content_x = composition.caret_x;
     }
 
     return layout;
@@ -1386,6 +1505,66 @@ inline bool decode_frame_commands(unsigned char const* buf,
     return true;
 }
 
+inline bool matches_focused_input_base_text_entry(
+        TextEntry const& entry,
+        ::phenotype::FocusedInputSnapshot const& snapshot,
+        std::string const& rendered_text,
+        float expected_x,
+        float expected_y) {
+    return entry.text == rendered_text
+        && entry.mono == snapshot.mono
+        && std::fabs(entry.font_size - snapshot.font_size) < 0.01f
+        && std::fabs(entry.x - expected_x) < 0.75f
+        && std::fabs(entry.y - expected_y) < 0.75f;
+}
+
+inline bool suppress_focused_input_base_text_for_composition(DecodedFrame& frame) {
+    auto visual = current_composition_visual_state();
+    if (!visual.valid)
+        return false;
+
+    auto const& snapshot = visual.snapshot;
+    auto rendered_text = snapshot.value.empty()
+        ? snapshot.placeholder
+        : snapshot.value;
+    if (rendered_text.empty())
+        return false;
+
+    float expected_x = snapshot.x + snapshot.padding[3];
+    float expected_y = snapshot.y - ::phenotype::detail::get_scroll_y() + snapshot.padding[0];
+    auto original_size = frame.text_entries.size();
+    std::erase_if(
+        frame.text_entries,
+        [&](TextEntry const& entry) {
+            return matches_focused_input_base_text_entry(
+                entry,
+                snapshot,
+                rendered_text,
+                expected_x,
+                expected_y);
+        });
+    return frame.text_entries.size() != original_size;
+}
+
+inline std::vector<TextEntry> composition_overlay_text_entries() {
+    auto visual = current_composition_visual_state();
+    if (!visual.valid)
+        return {};
+
+    return {{
+        visual.base_x,
+        visual.text_y,
+        visual.snapshot.font_size,
+        visual.snapshot.mono,
+        visual.snapshot.foreground.r / 255.0f,
+        visual.snapshot.foreground.g / 255.0f,
+        visual.snapshot.foreground.b / 255.0f,
+        visual.snapshot.foreground.a / 255.0f,
+        visual.visible_text,
+        visual.snapshot.line_height,
+    }};
+}
+
 inline std::optional<CandidateHit> find_candidate_hit(float x, float y) {
     for (auto const& hit : g_ime.overlay.hits) {
         if (hit.contains(x, y))
@@ -1438,6 +1617,7 @@ inline void clear_ime_state() {
     g_ime.hovered_candidate = -1;
     g_ime.hovered_kind = CandidateHitKind::none;
     g_ime.overlay = {};
+    invalidate_ime_window_positions();
     ::phenotype::detail::clear_input_composition_state();
 }
 
@@ -1505,163 +1685,202 @@ inline void update_composition_state(HWND hwnd, LPARAM lparam) {
 inline void sync_ime_windows() {
     if (!g_ime.hwnd)
         return;
-
-    auto layout = current_windows_caret_layout();
-    if (!layout.valid) {
-        clear_ime_state();
-        ::phenotype::detail::clear_input_debug_caret_presentation();
+    ++g_ime.sync_call_count;
+    if (g_ime.sync_in_progress)
         return;
-    }
-    auto const& snapshot = layout.snapshot;
 
-    g_ime.overlay = {};
+    {
+        FlagGuard sync_guard{g_ime.sync_in_progress};
 
-    auto himc = ImmGetContext(g_ime.hwnd);
-    if (!himc) {
-        sync_windows_debug_caret_presentation();
-        return;
-    }
+        auto layout = current_windows_caret_layout();
+        if (!layout.valid) {
+            clear_ime_state();
+            ::phenotype::detail::clear_input_debug_caret_presentation();
+        } else {
+            auto const& snapshot = layout.snapshot;
 
-    COMPOSITIONFORM comp{};
-    comp.dwStyle = CFS_FORCE_POSITION;
-    comp.ptCurrentPos.x = static_cast<LONG>(std::round(layout.content_x));
-    comp.ptCurrentPos.y = static_cast<LONG>(std::round(layout.content_y));
-    ImmSetCompositionWindow(himc, &comp);
+            g_ime.overlay = {};
 
-    CANDIDATEFORM cand{};
-    cand.dwIndex = 0;
-    cand.dwStyle = CFS_CANDIDATEPOS;
-    cand.ptCurrentPos.x = static_cast<LONG>(std::round(layout.content_x));
-    cand.ptCurrentPos.y = static_cast<LONG>(std::round(layout.draw_y + snapshot.height));
-    ImmSetCandidateWindow(himc, &cand);
-    ImmReleaseContext(g_ime.hwnd, himc);
-    sync_input_debug_composition_state();
-    sync_windows_debug_caret_presentation();
+            auto himc = ImmGetContext(g_ime.hwnd);
+            if (!himc) {
+                sync_windows_debug_caret_presentation();
+            } else {
+                LONG composition_x = static_cast<LONG>(std::lround(layout.content_x));
+                LONG composition_y = static_cast<LONG>(std::lround(layout.content_y));
+                if (!g_ime.composition_window.valid
+                    || g_ime.composition_window.x != composition_x
+                    || g_ime.composition_window.y != composition_y) {
+                    COMPOSITIONFORM comp{};
+                    comp.dwStyle = CFS_FORCE_POSITION;
+                    comp.ptCurrentPos.x = composition_x;
+                    comp.ptCurrentPos.y = composition_y;
+                    if (ImmSetCompositionWindow(himc, &comp)) {
+                        g_ime.composition_window = {
+                            true,
+                            composition_x,
+                            composition_y,
+                        };
+                    } else {
+                        g_ime.composition_window = {};
+                    }
+                }
 
-    if (!g_ime.candidate_open || g_ime.candidates.empty()) {
-        g_ime.hovered_candidate = -1;
-        g_ime.hovered_kind = CandidateHitKind::none;
-        return;
-    }
+                LONG candidate_x = static_cast<LONG>(std::lround(layout.content_x));
+                LONG candidate_y = static_cast<LONG>(std::lround(layout.draw_y + snapshot.height));
+                if (!g_ime.candidate_window.valid
+                    || g_ime.candidate_window.x != candidate_x
+                    || g_ime.candidate_window.y != candidate_y) {
+                    CANDIDATEFORM cand{};
+                    cand.dwIndex = 0;
+                    cand.dwStyle = CFS_CANDIDATEPOS;
+                    cand.ptCurrentPos.x = candidate_x;
+                    cand.ptCurrentPos.y = candidate_y;
+                    if (ImmSetCandidateWindow(himc, &cand)) {
+                        g_ime.candidate_window = {
+                            true,
+                            candidate_x,
+                            candidate_y,
+                        };
+                    } else {
+                        g_ime.candidate_window = {};
+                    }
+                }
 
-    int winw = 0;
-    int winh = 0;
-    glfwGetWindowSize(g_ime.window, &winw, &winh);
-    if (winw <= 0) winw = 1;
-    if (winh <= 0) winh = 1;
+                ImmReleaseContext(g_ime.hwnd, himc);
+                sync_input_debug_composition_state();
+                sync_windows_debug_caret_presentation();
 
-    auto total = static_cast<unsigned int>(g_ime.candidates.size());
-    auto page_size = (g_ime.candidate_page_size > 0)
-        ? static_cast<unsigned int>(g_ime.candidate_page_size)
-        : static_cast<unsigned int>((total > 8u) ? 8u : total);
-    if (page_size == 0)
-        page_size = 1;
-    auto page_start = static_cast<unsigned int>(g_ime.candidate_page_start);
-    if (page_start >= total)
-        page_start = 0;
-    auto page_end = (page_start + page_size < total)
-        ? (page_start + page_size)
-        : total;
-    auto visible_count = page_end - page_start;
-    bool has_prev = page_start > 0;
-    bool has_next = page_end < total;
+                if (!g_ime.candidate_open || g_ime.candidates.empty()) {
+                    g_ime.hovered_candidate = -1;
+                    g_ime.hovered_kind = CandidateHitKind::none;
+                } else {
+                    int winw = 0;
+                    int winh = 0;
+                    glfwGetWindowSize(g_ime.window, &winw, &winh);
+                    if (winw <= 0) winw = 1;
+                    if (winh <= 0) winh = 1;
 
-    float row_height = snapshot.line_height + 10.0f;
-    if (row_height < snapshot.font_size + 14.0f)
-        row_height = snapshot.font_size + 14.0f;
+                    auto total = static_cast<unsigned int>(g_ime.candidates.size());
+                    auto page_size = (g_ime.candidate_page_size > 0)
+                        ? static_cast<unsigned int>(g_ime.candidate_page_size)
+                        : static_cast<unsigned int>((total > 8u) ? 8u : total);
+                    if (page_size == 0)
+                        page_size = 1;
+                    auto page_start = static_cast<unsigned int>(g_ime.candidate_page_start);
+                    if (page_start >= total)
+                        page_start = 0;
+                    auto page_end = (page_start + page_size < total)
+                        ? (page_start + page_size)
+                        : total;
+                    auto visible_count = page_end - page_start;
+                    bool has_prev = page_start > 0;
+                    bool has_next = page_end < total;
 
-    float content_width = snapshot.width;
-    for (unsigned int index = page_start; index < page_end; ++index) {
-        auto utf8 = wstring_to_utf8(g_ime.candidates[index]);
-        if (utf8.empty())
-            continue;
-        float measured = text_measure(
-            snapshot.font_size,
-            snapshot.mono,
-            utf8.c_str(),
-            static_cast<unsigned int>(utf8.size()));
-        if (measured > content_width)
-            content_width = measured;
-    }
+                    float row_height = snapshot.line_height + 10.0f;
+                    if (row_height < snapshot.font_size + 14.0f)
+                        row_height = snapshot.font_size + 14.0f;
 
-    float panel_width = content_width + 24.0f;
-    if (panel_width < snapshot.width)
-        panel_width = snapshot.width;
-    if (panel_width < 160.0f)
-        panel_width = 160.0f;
+                    float content_width = snapshot.width;
+                    for (unsigned int index = page_start; index < page_end; ++index) {
+                        auto utf8 = wstring_to_utf8(g_ime.candidates[index]);
+                        if (utf8.empty())
+                            continue;
+                        float measured = text_measure(
+                            snapshot.font_size,
+                            snapshot.mono,
+                            utf8.c_str(),
+                            static_cast<unsigned int>(utf8.size()));
+                        if (measured > content_width)
+                            content_width = measured;
+                    }
 
-    float footer_height = (has_prev || has_next) ? row_height : 0.0f;
-    float panel_height = visible_count * row_height + footer_height;
-    float panel_x = snapshot.x;
-    if (panel_x + panel_width > static_cast<float>(winw) - 8.0f)
-        panel_x = static_cast<float>(winw) - panel_width - 8.0f;
-    if (panel_x < 8.0f)
-        panel_x = 8.0f;
+                    float panel_width = content_width + 24.0f;
+                    if (panel_width < snapshot.width)
+                        panel_width = snapshot.width;
+                    if (panel_width < 160.0f)
+                        panel_width = 160.0f;
 
-    float panel_y = layout.draw_y + snapshot.height + 4.0f;
-    if (panel_y + panel_height > static_cast<float>(winh) - 8.0f)
-        panel_y = layout.draw_y - panel_height - 4.0f;
-    if (panel_y < 8.0f)
-        panel_y = 8.0f;
+                    float footer_height = (has_prev || has_next) ? row_height : 0.0f;
+                    float panel_height = visible_count * row_height + footer_height;
+                    float panel_x = snapshot.x;
+                    if (panel_x + panel_width > static_cast<float>(winw) - 8.0f)
+                        panel_x = static_cast<float>(winw) - panel_width - 8.0f;
+                    if (panel_x < 8.0f)
+                        panel_x = 8.0f;
 
-    g_ime.overlay.visible = true;
-    g_ime.overlay.x = panel_x;
-    g_ime.overlay.y = panel_y;
-    g_ime.overlay.w = panel_width;
-    g_ime.overlay.h = panel_height;
-    g_ime.overlay.row_height = row_height;
-    g_ime.overlay.hits.clear();
-    g_ime.overlay.hits.reserve(
-        static_cast<std::size_t>(visible_count) + (has_prev ? 1u : 0u) + (has_next ? 1u : 0u));
+                    float panel_y = layout.draw_y + snapshot.height + 4.0f;
+                    if (panel_y + panel_height > static_cast<float>(winh) - 8.0f)
+                        panel_y = layout.draw_y - panel_height - 4.0f;
+                    if (panel_y < 8.0f)
+                        panel_y = 8.0f;
 
-    for (unsigned int row = 0; row < visible_count; ++row) {
-        g_ime.overlay.hits.push_back({
-            CandidateHitKind::item,
-            page_start + row,
-            panel_x,
-            panel_y + row * row_height,
-            panel_width,
-            row_height,
-        });
-    }
+                    g_ime.overlay.visible = true;
+                    g_ime.overlay.x = panel_x;
+                    g_ime.overlay.y = panel_y;
+                    g_ime.overlay.w = panel_width;
+                    g_ime.overlay.h = panel_height;
+                    g_ime.overlay.row_height = row_height;
+                    g_ime.overlay.hits.clear();
+                    g_ime.overlay.hits.reserve(
+                        static_cast<std::size_t>(visible_count)
+                            + (has_prev ? 1u : 0u)
+                            + (has_next ? 1u : 0u));
 
-    if (footer_height > 0.0f) {
-        float footer_y = panel_y + visible_count * row_height;
-        float button_width = (panel_width - 24.0f) * 0.5f;
-        if (button_width < 56.0f)
-            button_width = 56.0f;
-        if (has_prev) {
-            g_ime.overlay.hits.push_back({
-                CandidateHitKind::prev_page,
-                0,
-                panel_x + 8.0f,
-                footer_y + 4.0f,
-                button_width,
-                footer_height - 8.0f,
-            });
+                    for (unsigned int row = 0; row < visible_count; ++row) {
+                        g_ime.overlay.hits.push_back({
+                            CandidateHitKind::item,
+                            page_start + row,
+                            panel_x,
+                            panel_y + row * row_height,
+                            panel_width,
+                            row_height,
+                        });
+                    }
+
+                    if (footer_height > 0.0f) {
+                        float footer_y = panel_y + visible_count * row_height;
+                        float button_width = (panel_width - 24.0f) * 0.5f;
+                        if (button_width < 56.0f)
+                            button_width = 56.0f;
+                        if (has_prev) {
+                            g_ime.overlay.hits.push_back({
+                                CandidateHitKind::prev_page,
+                                0,
+                                panel_x + 8.0f,
+                                footer_y + 4.0f,
+                                button_width,
+                                footer_height - 8.0f,
+                            });
+                        }
+                        if (has_next) {
+                            g_ime.overlay.hits.push_back({
+                                CandidateHitKind::next_page,
+                                0,
+                                panel_x + panel_width - button_width - 8.0f,
+                                footer_y + 4.0f,
+                                button_width,
+                                footer_height - 8.0f,
+                            });
+                        }
+                    }
+
+                    if (g_ime.hovered_kind == CandidateHitKind::item) {
+                        if (g_ime.hovered_candidate < static_cast<int>(page_start)
+                            || g_ime.hovered_candidate >= static_cast<int>(page_end)) {
+                            g_ime.hovered_candidate = -1;
+                            g_ime.hovered_kind = CandidateHitKind::none;
+                        }
+                    } else if (
+                        (g_ime.hovered_kind == CandidateHitKind::prev_page && !has_prev)
+                        || (g_ime.hovered_kind == CandidateHitKind::next_page && !has_next)) {
+                        g_ime.hovered_kind = CandidateHitKind::none;
+                    }
+                }
+            }
         }
-        if (has_next) {
-            g_ime.overlay.hits.push_back({
-                CandidateHitKind::next_page,
-                0,
-                panel_x + panel_width - button_width - 8.0f,
-                footer_y + 4.0f,
-                button_width,
-                footer_height - 8.0f,
-            });
-        }
     }
 
-    if (g_ime.hovered_kind == CandidateHitKind::item) {
-        if (g_ime.hovered_candidate < static_cast<int>(page_start)
-            || g_ime.hovered_candidate >= static_cast<int>(page_end)) {
-            g_ime.hovered_candidate = -1;
-            g_ime.hovered_kind = CandidateHitKind::none;
-        }
-    } else if ((g_ime.hovered_kind == CandidateHitKind::prev_page && !has_prev)
-               || (g_ime.hovered_kind == CandidateHitKind::next_page && !has_next)) {
-        g_ime.hovered_kind = CandidateHitKind::none;
-    }
+    drain_deferred_window_repaint();
 }
 
 inline bool handle_candidate_click(CandidateHit const& hit) {
@@ -1687,7 +1906,18 @@ inline bool handle_candidate_click(CandidateHit const& hit) {
     return ok != FALSE;
 }
 
+inline bool ime_notify_updates_candidates(WPARAM command) {
+    return command == IMN_OPENCANDIDATE || command == IMN_CHANGECANDIDATE;
+}
+
+inline bool ime_notify_needs_repaint(WPARAM command) {
+    return ime_notify_updates_candidates(command)
+        || command == IMN_CLOSECANDIDATE;
+}
+
 inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM lparam) {
+    FlagGuard wndproc_guard{g_ime.in_wndproc};
+
     switch (msg) {
     case WM_IME_SETCONTEXT: {
         LPARAM filtered = lparam;
@@ -1699,7 +1929,10 @@ inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
         return CallWindowProcW(g_ime.prev_wndproc, hwnd, msg, wparam, filtered);
     }
     case WM_IME_STARTCOMPOSITION:
+        capture_composition_anchor();
         g_ime.composition_active = true;
+        g_ime.composition_text.clear();
+        g_ime.composition_cursor = 0;
         request_window_repaint();
         return 0;
     case WM_IME_COMPOSITION:
@@ -1713,7 +1946,7 @@ inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
     case WM_IME_NOTIFY: {
         auto himc = ImmGetContext(hwnd);
         if (himc) {
-            if (wparam == IMN_OPENCANDIDATE || wparam == IMN_CHANGECANDIDATE) {
+            if (ime_notify_updates_candidates(wparam)) {
                 update_candidate_state(himc);
             } else if (wparam == IMN_CLOSECANDIDATE) {
                 g_ime.candidate_open = false;
@@ -1722,7 +1955,8 @@ inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
             }
             ImmReleaseContext(hwnd, himc);
         }
-        request_window_repaint();
+        if (ime_notify_needs_repaint(wparam))
+            request_window_repaint();
         return 0;
     }
     case WM_KILLFOCUS:
@@ -1738,6 +1972,11 @@ inline void input_attach(GLFWwindow* window, void (*request_repaint)()) {
     g_ime.window = window;
     g_ime.request_repaint = request_repaint;
     g_ime.hwnd = window ? glfwGetWin32Window(window) : nullptr;
+    g_ime.in_wndproc = false;
+    g_ime.sync_in_progress = false;
+    g_ime.repaint_pending = false;
+    g_ime.repaint_dispatch_in_progress = false;
+    invalidate_ime_window_positions();
     if (!g_ime.hwnd || g_ime.attached)
         return;
     g_ime.prev_wndproc = reinterpret_cast<WNDPROC>(
@@ -1756,6 +1995,10 @@ inline void input_detach() {
     g_ime.hwnd = nullptr;
     g_ime.prev_wndproc = nullptr;
     g_ime.request_repaint = nullptr;
+    g_ime.in_wndproc = false;
+    g_ime.sync_in_progress = false;
+    g_ime.repaint_pending = false;
+    g_ime.repaint_dispatch_in_progress = false;
     g_ime.attached = false;
 }
 
@@ -2731,6 +2974,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         }
         return;
     }
+    suppress_focused_input_base_text_for_composition(decoded);
 
     for (auto const& image : decoded.images) {
         auto* entry = find_image_entry(image.url);
@@ -2782,52 +3026,54 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     auto layout = current_windows_caret_layout();
     if (layout.valid) {
         auto const& snapshot = layout.snapshot;
-        float draw_y = layout.draw_y - snapshot.padding[0];
-        if (layout.composition_active && !g_ime.composition_text.empty()) {
-            auto composition = wstring_to_utf8(g_ime.composition_text);
-            float base_x = layout.base.draw_x;
-            append_overlay_text(
-                base_x,
-                draw_y + snapshot.padding[0],
-                snapshot.font_size,
-                snapshot.mono,
-                snapshot.foreground,
-                composition,
-                snapshot.line_height);
+        auto composition = current_composition_visual_state(snapshot);
+        if (composition.valid) {
+            for (auto const& entry : composition_overlay_text_entries()) {
+                append_overlay_text(
+                    entry.x,
+                    entry.y,
+                    entry.font_size,
+                    entry.mono,
+                    {
+                        static_cast<unsigned char>(std::lround(entry.r * 255.0f)),
+                        static_cast<unsigned char>(std::lround(entry.g * 255.0f)),
+                        static_cast<unsigned char>(std::lround(entry.b * 255.0f)),
+                        static_cast<unsigned char>(std::lround(entry.a * 255.0f)),
+                    },
+                    entry.text,
+                    entry.line_height);
+            }
 
-            if (!composition.empty()) {
-                float preedit_w = text_measure(
-                    snapshot.font_size,
-                    snapshot.mono,
-                    composition.c_str(),
-                    static_cast<unsigned int>(composition.size()));
+            if (composition.underline_width > 0.0f) {
                 append_color_instance(
                     decoded.overlay_color_data,
-                    base_x,
-                    draw_y + snapshot.padding[0] + snapshot.line_height - 2.0f,
-                    preedit_w,
+                    composition.underline_x,
+                    composition.text_y + composition.snapshot.line_height - 2.0f,
+                    composition.underline_width,
                     1.5f,
-                    snapshot.accent.r / 255.0f,
-                    snapshot.accent.g / 255.0f,
-                    snapshot.accent.b / 255.0f,
+                    composition.snapshot.accent.r / 255.0f,
+                    composition.snapshot.accent.g / 255.0f,
+                    composition.snapshot.accent.b / 255.0f,
                     1.0f);
             }
 
             append_color_instance(
                 decoded.overlay_color_data,
-                layout.draw_x,
-                draw_y + snapshot.padding[0] + 2.0f,
+                composition.caret_x,
+                composition.text_y + 2.0f,
                 1.5f,
-                (snapshot.line_height > 4.0f) ? (snapshot.line_height - 4.0f) : snapshot.line_height,
-                snapshot.accent.r / 255.0f,
-                snapshot.accent.g / 255.0f,
-                snapshot.accent.b / 255.0f,
+                (composition.snapshot.line_height > 4.0f)
+                    ? (composition.snapshot.line_height - 4.0f)
+                    : composition.snapshot.line_height,
+                composition.snapshot.accent.r / 255.0f,
+                composition.snapshot.accent.g / 255.0f,
+                composition.snapshot.accent.b / 255.0f,
                 1.0f);
         } else if (snapshot.caret_visible) {
             append_color_instance(
                 decoded.overlay_color_data,
                 layout.draw_x,
-                draw_y + snapshot.padding[0] + 2.0f,
+                layout.draw_y + 2.0f,
                 1.5f,
                 (snapshot.line_height > 4.0f) ? (snapshot.line_height - 4.0f) : snapshot.line_height,
                 snapshot.accent.r / 255.0f,
@@ -3158,6 +3404,103 @@ inline platform_api const& windows_platform() {
     return api;
 #endif
 }
+
+#ifdef _WIN32
+export namespace windows_test {
+
+struct CompositionVisualDebug {
+    bool valid = false;
+    std::size_t composition_anchor = 0;
+    std::string erase_text;
+    std::string visible_text;
+    std::size_t caret_bytes = 0;
+    std::size_t marked_start = 0;
+    std::size_t marked_end = 0;
+};
+
+inline HWND attached_hwnd() {
+    return detail::g_ime.hwnd;
+}
+
+inline void reset_input_debug_counters() {
+    detail::g_ime.sync_call_count = 0;
+    detail::g_ime.repaint_request_count = 0;
+    detail::g_ime.deferred_repaint_count = 0;
+    detail::g_ime.repaint_pending = false;
+}
+
+inline std::size_t sync_call_count() {
+    return detail::g_ime.sync_call_count;
+}
+
+inline std::size_t repaint_request_count() {
+    return detail::g_ime.repaint_request_count;
+}
+
+inline std::size_t deferred_repaint_count() {
+    return detail::g_ime.deferred_repaint_count;
+}
+
+inline bool repaint_pending() {
+    return detail::g_ime.repaint_pending;
+}
+
+inline std::size_t composition_anchor() {
+    return detail::g_ime.composition_anchor;
+}
+
+inline void set_composition_for_tests(
+        char const* text,
+        std::size_t anchor,
+        LONG cursor_units) {
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (snapshot.valid) {
+        anchor = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, anchor);
+    }
+    detail::g_ime.composition_text = detail::utf8_to_wstring(
+        text ? text : "",
+        text ? static_cast<unsigned int>(std::strlen(text)) : 0u);
+    detail::g_ime.composition_active = !detail::g_ime.composition_text.empty();
+    detail::g_ime.composition_anchor = anchor;
+    detail::g_ime.composition_cursor = cursor_units;
+    detail::sync_input_debug_composition_state();
+}
+
+inline void clear_composition_for_tests() {
+    detail::g_ime.composition_active = false;
+    detail::g_ime.composition_text.clear();
+    detail::g_ime.composition_cursor = 0;
+    detail::g_ime.composition_anchor = 0;
+    detail::sync_input_debug_composition_state();
+}
+
+inline CompositionVisualDebug composition_visual_debug() {
+    auto visual = detail::current_composition_visual_state();
+    return {
+        visual.valid,
+        detail::g_ime.composition_anchor,
+        std::move(visual.erase_text),
+        std::move(visual.visible_text),
+        visual.caret_bytes,
+        visual.marked_start,
+        visual.marked_end,
+    };
+}
+
+inline std::vector<TextEntry> suppressed_text_entries_for_tests(
+        std::vector<TextEntry> entries) {
+    detail::DecodedFrame frame{};
+    frame.text_entries = std::move(entries);
+    detail::suppress_focused_input_base_text_for_composition(frame);
+    return frame.text_entries;
+}
+
+inline std::vector<TextEntry> composition_overlay_text_entries_for_tests() {
+    return detail::composition_overlay_text_entries();
+}
+
+} // namespace windows_test
+#endif
 
 } // namespace phenotype::native
 #endif

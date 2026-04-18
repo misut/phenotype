@@ -32,6 +32,9 @@ import phenotype.native.stub;
 #ifdef __APPLE__
 import phenotype.native.macos;
 #endif
+#ifdef _WIN32
+import phenotype.native.windows;
+#endif
 
 using namespace phenotype::native;
 using namespace phenotype;
@@ -287,6 +290,56 @@ struct Harness {
 };
 
 } // namespace input_regression
+
+#ifdef _WIN32
+struct WindowsInputHarness {
+    GLFWwindow* window = nullptr;
+    native_host host{};
+
+    WindowsInputHarness() {
+        input_regression::reset_core_state();
+        phenotype::native::windows_test::reset_input_debug_counters();
+        _putenv_s("PHENOTYPE_DX12_WARP", "1");
+        _putenv_s("PHENOTYPE_DX12_DEBUG", "0");
+
+        assert(glfwInit());
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        window = glfwCreateWindow(360, 640, "phenotype-input-test", nullptr, nullptr);
+        assert(window != nullptr);
+
+        host.window = window;
+        host.platform = &current_platform();
+        phenotype::native::run<input_regression::State, input_regression::Msg>(
+            host,
+            input_regression::view,
+            input_regression::update);
+        assert(phenotype::native::windows_test::attached_hwnd() != nullptr);
+    }
+
+    ~WindowsInputHarness() {
+        phenotype::native::detail::shutdown_host(host);
+        if (window)
+            glfwDestroyWindow(window);
+        glfwTerminate();
+        phenotype::native::windows_test::reset_input_debug_counters();
+        input_regression::reset_core_state();
+    }
+
+    std::pair<float, float> point_for(unsigned int callback_id) const {
+        for (float y = 0.0f; y <= 740.0f; y += 2.0f) {
+            for (float x = 0.0f; x <= 360.0f; x += 2.0f) {
+                auto hit = renderer::hit_test(
+                    x, y, phenotype::detail::get_scroll_y());
+                if (hit.has_value() && *hit == callback_id)
+                    return {x, y};
+            }
+        }
+        assert(false && "missing hit-test point");
+        return {0.0f, 0.0f};
+    }
+};
+#endif
 
 namespace {
 int g_platform_sync_calls = 0;
@@ -1556,6 +1609,244 @@ static void test_windows_scroll_delta_uses_system_settings() {
     std::puts("PASS: windows scroll delta uses system settings");
 }
 
+static void test_windows_ime_repaint_requests_are_deferred_until_sync() {
+    using namespace input_regression;
+
+    WindowsInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+
+    auto hwnd = phenotype::native::windows_test::attached_hwnd();
+    assert(hwnd != nullptr);
+
+    phenotype::native::windows_test::reset_input_debug_counters();
+    SendMessageW(hwnd, WM_IME_STARTCOMPOSITION, 0, 0);
+
+    assert(phenotype::native::windows_test::repaint_request_count() == 1);
+    assert(phenotype::native::windows_test::deferred_repaint_count() == 1);
+    assert(phenotype::native::windows_test::repaint_pending());
+
+    phenotype::native::detail::sync_platform_input();
+
+    assert(!phenotype::native::windows_test::repaint_pending());
+    assert(phenotype::native::windows_test::repaint_request_count() == 1);
+    assert(phenotype::native::windows_test::deferred_repaint_count() == 1);
+    assert(phenotype::native::windows_test::sync_call_count() == 2);
+    std::puts("PASS: windows IME repaint requests are deferred until sync");
+}
+
+static void test_windows_ime_startcomposition_captures_current_caret_anchor() {
+    using namespace input_regression;
+
+    WindowsInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+
+    assert(phenotype::detail::replace_focused_input_text(0, 0, "가나"));
+    assert(phenotype::detail::set_focused_input_caret_pos(g_observed_state.text.size()));
+
+    auto hwnd = phenotype::native::windows_test::attached_hwnd();
+    assert(hwnd != nullptr);
+
+    phenotype::native::windows_test::clear_composition_for_tests();
+    SendMessageW(hwnd, WM_IME_STARTCOMPOSITION, 0, 0);
+    assert(phenotype::native::windows_test::composition_anchor() == g_observed_state.text.size());
+
+    phenotype::native::windows_test::set_composition_for_tests(
+        "다",
+        phenotype::native::windows_test::composition_anchor(),
+        1);
+    auto visual = phenotype::native::windows_test::composition_visual_debug();
+    assert(visual.valid);
+    assert(visual.visible_text == "가나다");
+    assert(visual.erase_text == "가나");
+    assert(visual.marked_start == std::string("가나").size());
+    assert(visual.marked_end == std::string("가나다").size());
+    assert(visual.caret_bytes == std::string("가나다").size());
+
+    phenotype::native::windows_test::clear_composition_for_tests();
+    std::puts("PASS: windows IME start composition captures current caret anchor");
+}
+
+static void test_windows_ime_composition_visual_replaces_placeholder() {
+    using namespace input_regression;
+
+    WindowsInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+
+    phenotype::native::windows_test::set_composition_for_tests("가", 0, 1);
+    auto visual = phenotype::native::windows_test::composition_visual_debug();
+    assert(visual.valid);
+    assert(visual.composition_anchor == 0);
+    assert(visual.erase_text == "Type here");
+    assert(visual.visible_text == "가");
+    assert(visual.marked_start == 0);
+    assert(visual.marked_end == std::string("가").size());
+    assert(visual.caret_bytes == std::string("가").size());
+
+    phenotype::native::windows_test::clear_composition_for_tests();
+    std::puts("PASS: windows IME composition visual replaces placeholder");
+}
+
+static void test_windows_ime_suppresses_base_placeholder_text_entry() {
+    using namespace input_regression;
+
+    WindowsInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+
+    phenotype::native::windows_test::set_composition_for_tests("아", 0, 1);
+    auto snapshot = phenotype::detail::focused_input_snapshot();
+    assert(snapshot.valid);
+
+    std::vector<phenotype::native::TextEntry> entries{
+        {
+            snapshot.x + snapshot.padding[3],
+            snapshot.y - phenotype::detail::get_scroll_y() + snapshot.padding[0],
+            snapshot.font_size,
+            snapshot.mono,
+            snapshot.placeholder_color.r / 255.0f,
+            snapshot.placeholder_color.g / 255.0f,
+            snapshot.placeholder_color.b / 255.0f,
+            snapshot.placeholder_color.a / 255.0f,
+            snapshot.placeholder,
+            snapshot.line_height,
+        },
+        {
+            12.0f,
+            18.0f,
+            16.0f,
+            false,
+            0.0f,
+            0.0f,
+            0.0f,
+            1.0f,
+            "keep me",
+            25.6f,
+        },
+    };
+
+    auto filtered = phenotype::native::windows_test::suppressed_text_entries_for_tests(
+        std::move(entries));
+    assert(filtered.size() == 1);
+    assert(filtered[0].text == "keep me");
+
+    phenotype::native::windows_test::clear_composition_for_tests();
+    std::puts("PASS: windows IME suppresses base placeholder text entry");
+}
+
+static void test_windows_ime_overlay_text_omits_erase_pass() {
+    using namespace input_regression;
+
+    WindowsInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+
+    phenotype::native::windows_test::set_composition_for_tests("아", 0, 1);
+    auto entries = phenotype::native::windows_test::composition_overlay_text_entries_for_tests();
+    assert(entries.size() == 1);
+    assert(entries[0].text == "아");
+
+    phenotype::native::windows_test::clear_composition_for_tests();
+    std::puts("PASS: windows IME overlay text omits erase pass");
+}
+
+static void test_windows_ime_zero_cursor_draws_caret_at_composition_end() {
+    using namespace input_regression;
+
+    WindowsInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+
+    assert(phenotype::detail::replace_focused_input_text(0, 0, "와우 친구들 "));
+    phenotype::native::windows_test::set_composition_for_tests(
+        "빡",
+        g_observed_state.text.size(),
+        0);
+
+    auto visual = phenotype::native::windows_test::composition_visual_debug();
+    assert(visual.valid);
+    assert(visual.visible_text == std::string("와우 친구들 ") + "빡");
+    assert(visual.marked_start == std::string("와우 친구들 ").size());
+    assert(visual.marked_end == visual.visible_text.size());
+    assert(visual.caret_bytes == visual.marked_end);
+
+    phenotype::native::windows_test::clear_composition_for_tests();
+    std::puts("PASS: windows IME zero cursor draws caret at composition end");
+}
+
+static void test_windows_ime_notify_self_generated_paths_do_not_request_repaint() {
+    using namespace input_regression;
+
+    WindowsInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+
+    auto hwnd = phenotype::native::windows_test::attached_hwnd();
+    assert(hwnd != nullptr);
+
+    phenotype::native::windows_test::reset_input_debug_counters();
+    SendMessageW(hwnd, WM_IME_NOTIFY, IMN_SETCOMPOSITIONWINDOW, 0);
+    assert(phenotype::native::windows_test::repaint_request_count() == 0);
+    assert(phenotype::native::windows_test::deferred_repaint_count() == 0);
+    assert(!phenotype::native::windows_test::repaint_pending());
+
+    phenotype::native::detail::sync_platform_input();
+    assert(phenotype::native::windows_test::sync_call_count() == 1);
+    assert(phenotype::native::windows_test::repaint_request_count() == 0);
+    assert(phenotype::native::windows_test::deferred_repaint_count() == 0);
+    assert(!phenotype::native::windows_test::repaint_pending());
+
+    phenotype::native::windows_test::reset_input_debug_counters();
+    SendMessageW(hwnd, WM_IME_NOTIFY, IMN_SETCANDIDATEPOS, 1);
+    assert(phenotype::native::windows_test::repaint_request_count() == 0);
+    assert(phenotype::native::windows_test::deferred_repaint_count() == 0);
+    assert(!phenotype::native::windows_test::repaint_pending());
+
+    phenotype::native::detail::sync_platform_input();
+    assert(phenotype::native::windows_test::sync_call_count() == 1);
+    assert(phenotype::native::windows_test::repaint_request_count() == 0);
+    assert(phenotype::native::windows_test::deferred_repaint_count() == 0);
+    assert(!phenotype::native::windows_test::repaint_pending());
+    std::puts("PASS: windows IME self-generated notify paths do not request repaint");
+}
+
 #else // !__APPLE__ && !_WIN32
 
 static void test_stub_text_measure_basic() {
@@ -1641,6 +1932,13 @@ int main() {
     test_windows_renderer_rejects_truncated_text_payload();
     test_windows_text_field_key_dispatch();
     test_windows_scroll_delta_uses_system_settings();
+    test_windows_ime_repaint_requests_are_deferred_until_sync();
+    test_windows_ime_startcomposition_captures_current_caret_anchor();
+    test_windows_ime_composition_visual_replaces_placeholder();
+    test_windows_ime_suppresses_base_placeholder_text_entry();
+    test_windows_ime_overlay_text_omits_erase_pass();
+    test_windows_ime_zero_cursor_draws_caret_at_composition_end();
+    test_windows_ime_notify_self_generated_paths_do_not_request_repaint();
     std::puts("\nAll Windows native tests passed.");
 #else
     test_default_scroll_delta_fallback();
