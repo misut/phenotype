@@ -1,5 +1,6 @@
 module;
 #ifndef __wasi__
+#include <cmath>
 #include <chrono>
 #include <concepts>
 #include <cstdio>
@@ -123,6 +124,27 @@ inline float normalize_scroll_delta(platform_api const* platform,
     if (platform && platform->input.scroll_delta_y)
         return platform->input.scroll_delta_y(dy, line_height, viewport_height);
     return static_cast<float>(dy) * line_height * 3.0f;
+}
+
+inline float current_backing_scale(GLFWwindow* window) {
+    if (!window) return 1.0f;
+#if defined(GLFW_VERSION_MAJOR) \
+    && ((GLFW_VERSION_MAJOR > 3) || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3))
+    float sx = 1.0f;
+    float sy = 1.0f;
+    glfwGetWindowContentScale(window, &sx, &sy);
+#else
+    int fbw = 0;
+    int fbh = 0;
+    int winw = 0;
+    int winh = 0;
+    glfwGetFramebufferSize(window, &fbw, &fbh);
+    glfwGetWindowSize(window, &winw, &winh);
+    float sx = (winw > 0) ? static_cast<float>(fbw) / static_cast<float>(winw) : 1.0f;
+    float sy = (winh > 0) ? static_cast<float>(fbh) / static_cast<float>(winh) : 1.0f;
+#endif
+    float scale = (sx > sy) ? sx : sy;
+    return (scale > 0.0f && std::isfinite(scale)) ? scale : 1.0f;
 }
 
 inline void repaint_current() {

@@ -62,6 +62,7 @@ import phenotype.commands;
 import phenotype.state;
 import phenotype.types;
 import phenotype.native.platform;
+import phenotype.native.shell;
 import phenotype.native.stub;
 
 namespace phenotype::native::detail {
@@ -1114,27 +1115,6 @@ inline std::filesystem::path resolve_image_path(std::string const& url) {
     if (path.is_absolute())
         return path;
     return std::filesystem::current_path() / path;
-}
-
-inline float current_backing_scale(GLFWwindow* window) {
-    if (!window) return 1.0f;
-#if defined(GLFW_VERSION_MAJOR) \
-    && ((GLFW_VERSION_MAJOR > 3) || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3))
-    float sx = 1.0f;
-    float sy = 1.0f;
-    glfwGetWindowContentScale(window, &sx, &sy);
-    return sanitize_scale((sx > sy) ? sx : sy);
-#else
-    int fbw = 0;
-    int fbh = 0;
-    int winw = 0;
-    int winh = 0;
-    glfwGetFramebufferSize(window, &fbw, &fbh);
-    glfwGetWindowSize(window, &winw, &winh);
-    float sx = (winw > 0) ? static_cast<float>(fbw) / static_cast<float>(winw) : 1.0f;
-    float sy = (winh > 0) ? static_cast<float>(fbh) / static_cast<float>(winh) : 1.0f;
-    return sanitize_scale((sx > sy) ? sx : sy);
-#endif
 }
 
 inline void wait_for_fence(UINT64 value);
