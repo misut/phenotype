@@ -54,6 +54,7 @@ struct input_api {
     void (*attach)(GLFWwindow* window, void (*request_repaint)()) = nullptr;
     void (*detach)() = nullptr;
     void (*sync)() = nullptr;
+    bool (*uses_shared_caret_blink)() = nullptr;
     bool (*handle_cursor_pos)(float x, float y) = nullptr;
     bool (*handle_mouse_button)(float x, float y,
                                 int button, int action, int mods) = nullptr;

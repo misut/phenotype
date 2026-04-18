@@ -139,8 +139,21 @@ struct FocusedInputSnapshot {
     Color placeholder_color = {0, 0, 0, 255};
     Color accent = {0, 0, 0, 255};
     unsigned int caret_pos = 0xFFFFFFFFu;
+    bool caret_visible = true;
     std::string value;
     std::string placeholder;
+};
+
+struct FocusedInputCaretLayout {
+    bool valid = false;
+    bool visible = false;
+    bool composition_active = false;
+    std::size_t caret_bytes = 0;
+    float content_x = 0.0f;
+    float content_y = 0.0f;
+    float draw_x = 0.0f;
+    float draw_y = 0.0f;
+    float height = 0.0f;
 };
 
 struct AppState {
@@ -316,9 +329,53 @@ namespace detail {
         snapshot.placeholder_color = g_app.theme.muted;
         snapshot.accent = g_app.theme.accent;
         snapshot.caret_pos = g_app.caret_pos;
+        snapshot.caret_visible = g_app.caret_visible;
         snapshot.value = std::move(current_value);
         snapshot.placeholder = input->placeholder;
         return snapshot;
+    }
+
+    inline bool is_utf8_continuation_byte(unsigned char ch) {
+        return (ch & 0xC0u) == 0x80u;
+    }
+
+    inline std::size_t clamp_caret_utf8_boundary(std::string const& value, std::size_t pos) {
+        if (pos > value.size())
+            pos = value.size();
+        while (pos > 0
+               && pos < value.size()
+               && is_utf8_continuation_byte(static_cast<unsigned char>(value[pos]))) {
+            --pos;
+        }
+        return pos;
+    }
+
+    template<typename MeasurePrefix>
+    inline FocusedInputCaretLayout compute_single_line_caret_layout(
+            FocusedInputSnapshot const& snapshot,
+            float scroll_y,
+            bool composition_active,
+            MeasurePrefix&& measure_prefix) {
+        FocusedInputCaretLayout layout{};
+        if (!snapshot.valid)
+            return layout;
+
+        layout.valid = true;
+        layout.visible = snapshot.caret_visible;
+        layout.composition_active = composition_active;
+        if (snapshot.caret_pos == 0xFFFFFFFFu) {
+            layout.caret_bytes = snapshot.value.size();
+        } else {
+            layout.caret_bytes = clamp_caret_utf8_boundary(snapshot.value, snapshot.caret_pos);
+        }
+
+        float prefix_width = measure_prefix(snapshot, layout.caret_bytes);
+        layout.content_x = snapshot.x + snapshot.padding[3] + prefix_width;
+        layout.content_y = snapshot.y + snapshot.padding[0];
+        layout.draw_x = layout.content_x;
+        layout.draw_y = layout.content_y - scroll_y;
+        layout.height = snapshot.line_height;
+        return layout;
     }
 } // namespace detail
 

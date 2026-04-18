@@ -94,6 +94,21 @@ static std::string debug_caret_text(unsigned int caret_pos) {
     return std::to_string(caret_pos);
 }
 
+static std::string debug_rect_text(phenotype::diag::RectSnapshot const& rect) {
+    if (!rect.valid)
+        return "(invalid)";
+    std::string text = "(";
+    text += std::to_string(rect.x);
+    text += ", ";
+    text += std::to_string(rect.y);
+    text += ", ";
+    text += std::to_string(rect.w);
+    text += ", ";
+    text += std::to_string(rect.h);
+    text += ")";
+    return text;
+}
+
 static std::string input_debug_block(phenotype::diag::InputDebugSnapshot const& debug) {
     auto platform_name = phenotype::native::current_platform().name;
     std::string block;
@@ -121,6 +136,24 @@ static std::string input_debug_block(phenotype::diag::InputDebugSnapshot const& 
     block += std::to_string(debug.scroll_y);
     block += "\ntext caret: ";
     block += debug_caret_text(debug.caret_pos);
+    block += "\ncaret visible: ";
+    block += debug.caret_visible ? "true" : "false";
+    block += "\ncaret renderer: ";
+    block += debug.caret_renderer.empty() ? "hidden" : debug.caret_renderer;
+    block += "\ncaret geometry source: ";
+    block += debug.caret_geometry_source.empty() ? "draw" : debug.caret_geometry_source;
+    block += "\ncaret rect: ";
+    block += debug_rect_text(debug.caret_rect);
+    block += "\ncaret draw rect: ";
+    block += debug_rect_text(debug.caret_draw_rect);
+    block += "\ncaret host rect: ";
+    block += debug_rect_text(debug.caret_host_rect);
+    block += "\ncaret screen rect: ";
+    block += debug_rect_text(debug.caret_screen_rect);
+    block += "\ncaret host bounds: ";
+    block += debug_rect_text(debug.caret_host_bounds);
+    block += "\ncaret host flipped: ";
+    block += debug.caret_host_flipped ? "true" : "false";
     block += "\ncomposition active: ";
     block += debug.composition_active ? "true" : "false";
     block += "\ncomposition cursor: ";

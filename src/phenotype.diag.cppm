@@ -512,6 +512,14 @@ inline void reset_all() noexcept {
 
 export namespace phenotype::diag {
 
+struct RectSnapshot {
+    bool valid = false;
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+};
+
 struct InputDebugSnapshot {
     std::string event;
     std::string source;
@@ -524,6 +532,15 @@ struct InputDebugSnapshot {
     unsigned int hovered_id = 0xFFFFFFFFu;
     float scroll_y = 0.0f;
     unsigned int caret_pos = 0xFFFFFFFFu;
+    bool caret_visible = true;
+    std::string caret_renderer = "hidden";
+    RectSnapshot caret_rect{};
+    RectSnapshot caret_draw_rect{};
+    RectSnapshot caret_host_rect{};
+    RectSnapshot caret_screen_rect{};
+    RectSnapshot caret_host_bounds{};
+    bool caret_host_flipped = false;
+    std::string caret_geometry_source = "draw";
     bool focused_is_input = false;
     bool composition_active = false;
     std::string composition_text;

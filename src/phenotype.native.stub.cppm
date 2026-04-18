@@ -10,6 +10,7 @@ struct GLFWwindow;
 export module phenotype.native.stub;
 
 #ifndef __wasi__
+import phenotype;
 import phenotype.commands;
 import phenotype.native.platform;
 
@@ -32,6 +33,43 @@ inline TextAtlas stub_build_atlas(std::vector<TextEntry> const&, float) {
 }
 
 inline void stub_renderer_init(GLFWwindow*) {}
+
+inline void stub_input_attach(GLFWwindow*, void (*)()) {}
+
+inline void stub_input_detach() {}
+
+inline bool stub_uses_shared_caret_blink() {
+    return true;
+}
+
+inline void stub_input_sync() {
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid || !snapshot.caret_visible) {
+        ::phenotype::detail::clear_input_debug_caret_presentation();
+        return;
+    }
+
+    auto layout = ::phenotype::detail::compute_single_line_caret_layout(
+        snapshot,
+        ::phenotype::detail::get_scroll_y(),
+        ::phenotype::diag::input_debug_snapshot().composition_active,
+        [](auto const& input, std::size_t bytes) {
+            bytes = ::phenotype::detail::clamp_utf8_boundary(input.value, bytes);
+            if (bytes == 0)
+                return 0.0f;
+            return stub_measure(
+                input.font_size,
+                input.mono,
+                input.value.data(),
+                static_cast<unsigned int>(bytes));
+        });
+    ::phenotype::detail::set_input_debug_caret_presentation(
+        "custom",
+        layout.draw_x,
+        layout.draw_y,
+        1.5f,
+        layout.height);
+}
 
 inline void stub_renderer_flush(unsigned char const* buf, unsigned int len) {
     auto& regions = stub_hit_regions();
@@ -83,6 +121,16 @@ inline platform_api make_stub_platform(char const* name,
         detail::stub_renderer_flush,
         detail::stub_renderer_shutdown,
         detail::stub_renderer_hit_test,
+    };
+    api.input = {
+        detail::stub_input_attach,
+        detail::stub_input_detach,
+        detail::stub_input_sync,
+        detail::stub_uses_shared_caret_blink,
+        nullptr,
+        nullptr,
+        nullptr,
+        nullptr,
     };
     api.open_url = detail::stub_open_url;
     api.startup_message = startup_message;
