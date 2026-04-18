@@ -126,7 +126,7 @@ inline float normalize_scroll_delta(platform_api const* platform,
     return static_cast<float>(dy) * line_height * 3.0f;
 }
 
-inline float current_backing_scale(GLFWwindow* window) {
+inline float glfw_backing_scale(GLFWwindow* window) {
     if (!window) return 1.0f;
 #if defined(GLFW_VERSION_MAJOR) \
     && ((GLFW_VERSION_MAJOR > 3) || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3))

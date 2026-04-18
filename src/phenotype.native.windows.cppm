@@ -2720,7 +2720,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         if (FAILED(resize_swap_chain())) return;
     }
 
-    float text_scale = current_backing_scale(g_renderer.window);
+        float text_scale = glfw_backing_scale(g_renderer.window);
     float line_height_ratio = ::phenotype::detail::g_app.theme.line_height_ratio;
     DecodedFrame decoded;
     if (!decode_frame_commands(buf, len, line_height_ratio, decoded)) {

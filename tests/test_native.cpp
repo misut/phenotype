@@ -1367,10 +1367,10 @@ static void test_windows_backing_scale_matches_glfw_content_scale() {
     float sy = 1.0f;
     glfwGetWindowContentScale(window, &sx, &sy);
     float expected = (sx > sy) ? sx : sy;
-    float actual = phenotype::native::detail::current_backing_scale(window);
+    float actual = phenotype::native::detail::glfw_backing_scale(window);
     assert(std::fabs(actual - expected) < 0.001f);
 #else
-    assert(phenotype::native::detail::current_backing_scale(window) > 0.0f);
+    assert(phenotype::native::detail::glfw_backing_scale(window) > 0.0f);
 #endif
 
     glfwDestroyWindow(window);
