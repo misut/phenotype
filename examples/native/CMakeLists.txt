@@ -37,7 +37,7 @@ FetchContent_Declare(jsoncpp
 )
 FetchContent_Declare(cppx
     GIT_REPOSITORY https://github.com/misut/cppx.git
-    GIT_TAG v1.2.0
+    GIT_TAG v1.6.0
     GIT_SHALLOW ON
 )
 FetchContent_Declare(txn

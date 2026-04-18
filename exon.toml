@@ -1,6 +1,6 @@
 [package]
 name = "phenotype"
-version = "0.10.0"
+version = "0.11.0"
 description = "C++ cross-platform UI framework"
 authors = ["misut"]
 license = "MIT"
@@ -14,7 +14,7 @@ platforms = [
 
 [dependencies]
 "github.com/misut/jsoncpp" = "0.1.4"
-"github.com/misut/cppx" = "1.2.0"
+"github.com/misut/cppx" = "1.6.0"
 "github.com/misut/txn" = "0.6.2"
 
 [target.'cfg(not(os = "wasi"))'.dependencies.cmake.glfw]

@@ -57,6 +57,10 @@ module;
 export module phenotype.native.windows;
 
 #ifndef __wasi__
+import cppx.os;
+import cppx.os.system;
+import cppx.resource;
+import cppx.unicode;
 import phenotype;
 import phenotype.commands;
 import phenotype.state;
@@ -134,22 +138,10 @@ inline LineBoxMetrics make_line_box(float logical_width,
 using Microsoft::WRL::ComPtr;
 
 inline std::wstring utf8_to_wstring(char const* text, unsigned int len) {
-    if (!text || len == 0) return {};
-    int needed = MultiByteToWideChar(
-        CP_UTF8, MB_ERR_INVALID_CHARS,
-        text, static_cast<int>(len), nullptr, 0);
-    if (needed <= 0) {
-        needed = MultiByteToWideChar(
-            CP_UTF8, 0,
-            text, static_cast<int>(len), nullptr, 0);
-    }
-    if (needed <= 0) return {};
-    std::wstring out(static_cast<std::size_t>(needed), L'\0');
-    MultiByteToWideChar(
-        CP_UTF8, 0,
-        text, static_cast<int>(len),
-        out.data(), needed);
-    return out;
+    if (!text || len == 0)
+        return {};
+    auto wide = cppx::unicode::utf8_to_wide(std::string_view{text, len});
+    return wide ? std::move(*wide) : std::wstring{};
 }
 
 inline std::wstring utf8_to_wstring(std::string const& text) {
@@ -158,28 +150,10 @@ inline std::wstring utf8_to_wstring(std::string const& text) {
 }
 
 inline std::string wstring_to_utf8(std::wstring_view text) {
-    if (text.empty()) return {};
-    int needed = WideCharToMultiByte(
-        CP_UTF8,
-        0,
-        text.data(),
-        static_cast<int>(text.size()),
-        nullptr,
-        0,
-        nullptr,
-        nullptr);
-    if (needed <= 0) return {};
-    std::string out(static_cast<std::size_t>(needed), '\0');
-    WideCharToMultiByte(
-        CP_UTF8,
-        0,
-        text.data(),
-        static_cast<int>(text.size()),
-        out.data(),
-        needed,
-        nullptr,
-        nullptr);
-    return out;
+    if (text.empty())
+        return {};
+    auto utf8 = cppx::unicode::wide_to_utf8(text);
+    return utf8 ? std::move(*utf8) : std::string{};
 }
 
 inline void log_hresult(char const* label, HRESULT hr) {
@@ -1226,14 +1200,13 @@ inline void capture_composition_anchor() {
 }
 
 inline bool is_http_url(std::string const& url) {
-    return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
+    return cppx::resource::is_remote(url);
 }
 
 inline std::filesystem::path resolve_image_path(std::string const& url) {
-    auto path = std::filesystem::path(url);
-    if (path.is_absolute())
-        return path;
-    return std::filesystem::current_path() / path;
+    return cppx::resource::resolve_path(
+        std::filesystem::current_path(),
+        std::string_view{url});
 }
 
 inline void wait_for_fence(UINT64 value);
@@ -3347,12 +3320,15 @@ inline float windows_scroll_delta_y(double dy,
 }
 
 inline void windows_open_url(char const* url, unsigned int len) {
-    auto wide = utf8_to_wstring(url, len);
-    if (wide.empty()) return;
-    auto result = reinterpret_cast<std::intptr_t>(
-        ShellExecuteW(nullptr, L"open", wide.c_str(), nullptr, nullptr, SW_SHOWNORMAL));
-    if (result <= 32) {
-        std::fprintf(stderr, "[windows] ShellExecuteW failed (%td)\n", result);
+    auto opened = cppx::os::system::open_url(std::string_view(url, len));
+    if (!opened) {
+        std::fprintf(
+            stderr,
+            "[windows] failed to open url: %.*s (%.*s)\n",
+            static_cast<int>(len),
+            url,
+            static_cast<int>(cppx::os::to_string(opened.error()).size()),
+            cppx::os::to_string(opened.error()).data());
     }
 }
 

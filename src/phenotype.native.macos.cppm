@@ -45,6 +45,8 @@ export module phenotype.native.macos;
 import cppx.http.system;
 import cppx.os;
 import cppx.os.system;
+import cppx.resource;
+import cppx.unicode;
 import phenotype;
 import phenotype.commands;
 import phenotype.diag;
@@ -757,10 +759,7 @@ inline float text_measure(float font_size, bool mono,
 }
 
 inline unsigned long utf16_length(std::string_view utf8) {
-    if (utf8.empty())
-        return 0;
-    auto text = create_text_cf_string(utf8.data(), static_cast<unsigned int>(utf8.size()));
-    return text ? static_cast<unsigned long>(CFStringGetLength(text)) : 0;
+    return static_cast<unsigned long>(cppx::unicode::utf16_length(utf8));
 }
 
 inline std::string text_object_to_utf8(id value) {
@@ -1225,14 +1224,13 @@ struct CommandReader {
 };
 
 inline bool is_http_url(std::string const& url) {
-    return url.rfind("http://", 0) == 0 || url.rfind("https://", 0) == 0;
+    return cppx::resource::is_remote(url);
 }
 
 inline std::filesystem::path resolve_image_path(std::string const& url) {
-    auto path = std::filesystem::path(url);
-    if (path.is_absolute())
-        return path;
-    return std::filesystem::current_path() / path;
+    return cppx::resource::resolve_path(
+        std::filesystem::current_path(),
+        std::string_view{url});
 }
 
 inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
@@ -2361,37 +2359,16 @@ struct ByteRange {
 
 inline std::size_t utf16_offset_to_utf8(std::string const& text,
                                         unsigned long units) {
-    if (text.empty() || units == 0)
-        return 0;
-
-    auto source = create_text_cf_string(text.data(), static_cast<unsigned int>(text.size()));
-    if (!source)
-        return 0;
-
-    auto total_units = static_cast<unsigned long>(CFStringGetLength(source));
-    if (units > total_units)
-        units = total_units;
-
-    CFIndex used_bytes = 0;
-    CFStringGetBytes(
-        source,
-        CFRange{0, static_cast<CFIndex>(units)},
-        kCFStringEncodingUTF8,
-        0,
-        false,
-        nullptr,
-        0,
-        &used_bytes);
-    return static_cast<std::size_t>(used_bytes);
+    return cppx::unicode::utf16_offset_to_utf8(text, units);
 }
 
 inline ByteRange utf16_range_to_utf8_range(std::string const& text,
                                            CocoaRange range) {
-    auto start = utf16_offset_to_utf8(text, range.location);
-    auto end = utf16_offset_to_utf8(text, range.location + range.length);
-    if (end < start)
-        end = start;
-    return {start, end};
+    auto bytes = cppx::unicode::utf16_range_to_utf8(
+        text,
+        range.location,
+        range.length);
+    return {bytes.start, bytes.end};
 }
 
 inline CocoaRange clamp_cocoa_range(CocoaRange range, unsigned long total_units) {
