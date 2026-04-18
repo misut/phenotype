@@ -308,6 +308,8 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
 
         float used = total_gap;
         int flex_index = -1;
+        int wrap_text_index = -1;
+        float wrap_text_width = 0;
         for (unsigned int i = 0; i < n; ++i) {
             auto& child = node_at(node.children[i]);
             bool is_text_leaf = !child.text.empty() && child.children.empty();
@@ -319,12 +321,20 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
                 float w = measured + child.style.padding[1] + child.style.padding[3];
                 child.width = w;
                 used += w;
+                wrap_text_index = static_cast<int>(i);
+                wrap_text_width = w;
             } else if (has_max_width) {
                 child.width = child.style.max_width;
                 used += child.width;
             } else {
                 flex_index = static_cast<int>(i);
             }
+        }
+        bool flex_is_wrap_text = false;
+        if (flex_index < 0 && wrap_text_index >= 0) {
+            flex_index = wrap_text_index;
+            used -= wrap_text_width;
+            flex_is_wrap_text = true;
         }
         if (flex_index < 0) flex_index = static_cast<int>(n) - 1;
 
@@ -336,9 +346,15 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
         for (unsigned int i = 0; i < n; ++i) {
             auto child_h = node.children[i];
             auto& child = node_at(child_h);
-            float cw = (static_cast<int>(i) == flex_index)
-                ? remaining + child.width
-                : child.width;
+            float cw = child.width;
+            if (static_cast<int>(i) == flex_index) {
+                if (flex_is_wrap_text) {
+                    cw = remaining;
+                    if (child.width < cw) cw = child.width;
+                } else {
+                    cw = remaining + child.width;
+                }
+            }
             layout_node(measurer, child_h, cw);
             auto& child2 = node_at(child_h);
             total_used_w += child2.width;

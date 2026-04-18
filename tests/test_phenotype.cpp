@@ -97,6 +97,33 @@ void test_row_intrinsic_width() {
     std::puts("PASS: row intrinsic width");
 }
 
+void test_row_wraps_last_text_leaf() {
+    detail::g_app.arena.reset();
+    auto row_h = detail::alloc_node();
+    auto& row = detail::node_at(row_h);
+    row.style.flex_direction = FlexDirection::Row;
+    row.style.gap = 8;
+
+    auto bullet_h = detail::alloc_node();
+    auto& bullet = detail::node_at(bullet_h);
+    bullet.text = "*";
+    bullet.font_size = 16.0f;
+    detail::node_at(row_h).children.push_back(bullet_h);
+
+    auto text_h = detail::alloc_node();
+    auto& text = detail::node_at(text_h);
+    text.text = "List item text that should wrap inside a narrow card row";
+    text.font_size = 16.0f;
+    detail::node_at(row_h).children.push_back(text_h);
+
+    LAYOUT_NODE(row_h, 120.0f);
+
+    assert(text.text_lines.size() > 1);
+    assert(text.x > bullet.x + bullet.width);
+    assert(text.width <= 120.0f - bullet.width - row.style.gap + 0.01f);
+    std::puts("PASS: row wraps last text leaf");
+}
+
 void test_containment_invariant() {
     detail::g_app.arena.reset();
     auto root_h = detail::alloc_node();
@@ -539,6 +566,7 @@ void test_theme_json_roundtrip() {
 int main() {
     test_column_layout();
     test_row_intrinsic_width();
+    test_row_wraps_last_text_leaf();
     test_containment_invariant();
     test_alignment_center();
     test_max_width_centering();
