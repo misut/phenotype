@@ -134,4 +134,4 @@ phenotype (umbrella re-export)
 External dependencies:
 - `jsoncpp` — JSON parse/emit (used by diag snapshot + theme_json)
 - `txn` — serialization framework (used by theme_json)
-- `cppx` — compile-time reflection (transitive via txn)
+- `cppx` — shared platform boundary helpers (HTTP, URL opening, Unicode/resource utilities) plus reflection used across native integration points

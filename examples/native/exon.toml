@@ -16,5 +16,8 @@ cmake-in-root = false
 [target.'cfg(os = "macos")'.build]
 ldflags = ["-framework", "Security", "-Wl,-framework,CoreFoundation"]
 
+[dependencies]
+"github.com/misut/cppx" = "1.6.0"
+
 [dependencies.path]
 phenotype = "../.."

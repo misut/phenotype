@@ -6,5 +6,8 @@ type = "bin"
 standard = 23
 platforms = [{ os = "wasi" }]
 
+[dependencies]
+"github.com/misut/cppx" = "1.6.0"
+
 [dependencies.path]
 phenotype = "../.."
