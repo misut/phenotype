@@ -4441,6 +4441,7 @@ inline void clear_composition_for_tests() {}
 #endif
 } // namespace phenotype::native::macos_test
 
+#ifdef __APPLE__
 namespace phenotype::native::detail {
 
 inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities() {
@@ -4735,6 +4736,7 @@ inline void install_macos_debug_providers() {
 }
 
 } // namespace phenotype::native::detail
+#endif
 
 export namespace phenotype::native {
 
