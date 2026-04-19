@@ -77,6 +77,8 @@ struct AppState {
     unsigned int hovered_id = invalid_callback_id;
     std::chrono::steady_clock::time_point next_caret_blink{};
     bool caret_blink_armed = false;
+    bool repaint_in_progress = false;
+    bool repaint_requested = false;
 };
 
 inline AppState g_app_state;
@@ -148,14 +150,24 @@ inline float glfw_backing_scale(GLFWwindow* window) {
 }
 
 inline void repaint_current() {
-    if (g_app_state.host) {
+    if (!g_app_state.host)
+        return;
+    if (g_app_state.repaint_in_progress) {
+        g_app_state.repaint_requested = true;
+        return;
+    }
+
+    g_app_state.repaint_in_progress = true;
+    do {
+        g_app_state.repaint_requested = false;
         ::phenotype::detail::repaint(*g_app_state.host, g_app_state.scroll_y);
         sync_platform_input();
-    }
+    } while (g_app_state.repaint_requested);
+    g_app_state.repaint_in_progress = false;
 }
 
 inline void bind_host(native_host& host, float scroll_y = 0.0f) {
-    g_app_state = {&host, scroll_y, invalid_callback_id, {}, false};
+    g_app_state = {&host, scroll_y, invalid_callback_id, {}, false, false, false};
     ::phenotype::detail::set_scroll_y(scroll_y);
     ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
 }

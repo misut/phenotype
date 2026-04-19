@@ -4,6 +4,7 @@ module;
 #include <array>
 #include <atomic>
 #include <cmath>
+#include <condition_variable>
 #include <cstddef>
 #include <cstdint>
 #include <cstdio>
@@ -12,9 +13,11 @@ module;
 #include <expected>
 #include <filesystem>
 #include <limits>
+#include <mutex>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -57,6 +60,8 @@ module;
 export module phenotype.native.windows;
 
 #ifndef __wasi__
+import cppx.http;
+import cppx.http.system;
 import cppx.os;
 import cppx.os.system;
 import cppx.resource;
@@ -140,6 +145,17 @@ using Microsoft::WRL::ComPtr;
 inline void log_hresult(char const* label, HRESULT hr) {
     std::fprintf(stderr, "[windows] %s failed (hr=0x%08lx)\n",
                  label, static_cast<unsigned long>(hr));
+}
+
+inline void set_debug_name(ID3D12Object* object, wchar_t const* name) {
+    if (!object || !name || !*name)
+        return;
+    (void)object->SetName(name);
+}
+
+template <typename T>
+inline void set_debug_name(ComPtr<T> const& object, wchar_t const* name) {
+    set_debug_name(object.Get(), name);
 }
 
 inline UINT64 align_up(UINT64 value, UINT64 alignment) {
@@ -710,6 +726,7 @@ struct FrameContext {
     ComPtr<ID3D12Resource> render_target;
     ComPtr<ID3D12Resource> atlas_texture;
     D3D12_CPU_DESCRIPTOR_HANDLE rtv_handle{};
+    UINT text_srv_slot = 0;
     UINT64 fence_value = 0;
 };
 
@@ -745,14 +762,211 @@ struct RendererState {
     GLFWwindow* window = nullptr;
     bool initialized = false;
     bool debug_enabled = false;
+    bool dred_enabled = false;
     bool warp_enabled = false;
     bool com_initialized = false;
+    bool lost = false;
     UINT64 next_fence_value = 1;
+    HRESULT last_failure_hr = S_OK;
+    HRESULT device_removed_reason = S_OK;
+    HRESULT last_close_hr = S_OK;
+    HRESULT last_present_hr = S_OK;
+    HRESULT last_signal_hr = S_OK;
+    D3D12_DRED_DEVICE_STATE dred_device_state = D3D12_DRED_DEVICE_STATE_UNKNOWN;
+    std::string last_failure_label;
 };
 
 static RendererState g_renderer;
-constexpr UINT TEXT_SRV_SLOT = 0;
-constexpr UINT IMAGE_SRV_SLOT = 1;
+constexpr UINT WM_PHENOTYPE_IMAGE_READY = WM_APP + 61;
+constexpr UINT IMAGE_SRV_SLOT = 0;
+constexpr UINT FIRST_TEXT_SRV_SLOT = 1;
+constexpr UINT SRV_SLOT_COUNT = FIRST_TEXT_SRV_SLOT + RendererState::frame_count;
+
+inline bool running_under_tests() {
+    char path[MAX_PATH]{};
+    auto len = GetModuleFileNameA(nullptr, path, static_cast<DWORD>(std::size(path)));
+    if (len == 0 || len >= std::size(path))
+        return false;
+    auto exe = std::string_view(path, len);
+    auto slash = exe.find_last_of("\\/");
+    if (slash != std::string_view::npos)
+        exe.remove_prefix(slash + 1);
+    return exe.find("test-") != std::string_view::npos
+        || exe.find("test_") != std::string_view::npos;
+}
+
+inline bool should_enable_dred() {
+    return g_renderer.debug_enabled || g_renderer.warp_enabled || running_under_tests();
+}
+
+inline UINT frame_text_srv_slot(UINT frame_index) {
+    return FIRST_TEXT_SRV_SLOT + frame_index;
+}
+
+inline char const* breadcrumb_op_name(D3D12_AUTO_BREADCRUMB_OP op) {
+    switch (op) {
+    case D3D12_AUTO_BREADCRUMB_OP_DRAWINSTANCED:
+        return "DrawInstanced";
+    case D3D12_AUTO_BREADCRUMB_OP_DRAWINDEXEDINSTANCED:
+        return "DrawIndexedInstanced";
+    case D3D12_AUTO_BREADCRUMB_OP_COPYTEXTUREREGION:
+        return "CopyTextureRegion";
+    case D3D12_AUTO_BREADCRUMB_OP_CLEARRENDERTARGETVIEW:
+        return "ClearRenderTargetView";
+    case D3D12_AUTO_BREADCRUMB_OP_RESOURCEBARRIER:
+        return "ResourceBarrier";
+    case D3D12_AUTO_BREADCRUMB_OP_PRESENT:
+        return "Present";
+    case D3D12_AUTO_BREADCRUMB_OP_BEGINSUBMISSION:
+        return "BeginSubmission";
+    case D3D12_AUTO_BREADCRUMB_OP_ENDSUBMISSION:
+        return "EndSubmission";
+    case D3D12_AUTO_BREADCRUMB_OP_SETPIPELINESTATE1:
+        return "SetPipelineState1";
+    case D3D12_AUTO_BREADCRUMB_OP_BEGIN_COMMAND_LIST:
+        return "BeginCommandList";
+    default:
+        return "Other";
+    }
+}
+
+inline char const* dred_allocation_type_name(D3D12_DRED_ALLOCATION_TYPE type) {
+    switch (type) {
+    case D3D12_DRED_ALLOCATION_TYPE_COMMAND_QUEUE:
+        return "command_queue";
+    case D3D12_DRED_ALLOCATION_TYPE_COMMAND_ALLOCATOR:
+        return "command_allocator";
+    case D3D12_DRED_ALLOCATION_TYPE_PIPELINE_STATE:
+        return "pipeline_state";
+    case D3D12_DRED_ALLOCATION_TYPE_COMMAND_LIST:
+        return "command_list";
+    case D3D12_DRED_ALLOCATION_TYPE_FENCE:
+        return "fence";
+    case D3D12_DRED_ALLOCATION_TYPE_DESCRIPTOR_HEAP:
+        return "descriptor_heap";
+    case D3D12_DRED_ALLOCATION_TYPE_HEAP:
+        return "heap";
+    case D3D12_DRED_ALLOCATION_TYPE_RESOURCE:
+        return "resource";
+    default:
+        return "other";
+    }
+}
+
+inline void dump_dred_allocation_list(
+        char const* label,
+        D3D12_DRED_ALLOCATION_NODE1 const* node) {
+    for (int i = 0; node && i < 6; ++i, node = node->pNext) {
+        if (node->ObjectNameW && *node->ObjectNameW) {
+            std::fprintf(
+                stderr,
+                "[dx12/dred] %s[%d] type=%s name=%ls\n",
+                label,
+                i,
+                dred_allocation_type_name(node->AllocationType),
+                node->ObjectNameW);
+        } else if (node->ObjectNameA && *node->ObjectNameA) {
+            std::fprintf(
+                stderr,
+                "[dx12/dred] %s[%d] type=%s name=%s\n",
+                label,
+                i,
+                dred_allocation_type_name(node->AllocationType),
+                node->ObjectNameA);
+        } else {
+            std::fprintf(
+                stderr,
+                "[dx12/dred] %s[%d] type=%s name=<unnamed>\n",
+                label,
+                i,
+                dred_allocation_type_name(node->AllocationType));
+        }
+    }
+}
+
+inline void dump_dred_diagnostics() {
+    if (!g_renderer.device)
+        return;
+
+    ComPtr<ID3D12DeviceRemovedExtendedData2> dred2;
+    if (SUCCEEDED(g_renderer.device.As(&dred2))) {
+        g_renderer.dred_device_state = dred2->GetDeviceState();
+    } else {
+        g_renderer.dred_device_state = D3D12_DRED_DEVICE_STATE_UNKNOWN;
+    }
+
+    ComPtr<ID3D12DeviceRemovedExtendedData1> dred1;
+    if (FAILED(g_renderer.device.As(&dred1)))
+        return;
+
+    D3D12_DRED_AUTO_BREADCRUMBS_OUTPUT1 breadcrumbs{};
+    auto hr = dred1->GetAutoBreadcrumbsOutput1(&breadcrumbs);
+    if (SUCCEEDED(hr) && breadcrumbs.pHeadAutoBreadcrumbNode) {
+        auto const* node = breadcrumbs.pHeadAutoBreadcrumbNode;
+        for (int i = 0; node && i < 8; ++i, node = node->pNext) {
+            auto completed = node->pLastBreadcrumbValue ? *node->pLastBreadcrumbValue : 0u;
+            auto history_len = node->BreadcrumbCount;
+            auto op = D3D12_AUTO_BREADCRUMB_OP_SETMARKER;
+            if (node->pCommandHistory && completed > 0 && history_len > 0) {
+                auto index = (completed - 1u) % history_len;
+                op = node->pCommandHistory[index];
+            }
+            auto const* list_name =
+                (node->pCommandListDebugNameW && *node->pCommandListDebugNameW)
+                ? node->pCommandListDebugNameW
+                : L"<unnamed>";
+            auto const* queue_name =
+                (node->pCommandQueueDebugNameW && *node->pCommandQueueDebugNameW)
+                ? node->pCommandQueueDebugNameW
+                : L"<unnamed>";
+            std::fprintf(
+                stderr,
+                "[dx12/dred] breadcrumb[%d] queue=%ls list=%ls completed=%u/%u last_op=%s\n",
+                i,
+                queue_name,
+                list_name,
+                completed,
+                history_len,
+                breadcrumb_op_name(op));
+        }
+    }
+
+    D3D12_DRED_PAGE_FAULT_OUTPUT1 page_fault{};
+    hr = dred1->GetPageFaultAllocationOutput1(&page_fault);
+    if (SUCCEEDED(hr)) {
+        if (page_fault.PageFaultVA != 0) {
+            std::fprintf(
+                stderr,
+                "[dx12/dred] page_fault_va=0x%llx state=%u\n",
+                static_cast<unsigned long long>(page_fault.PageFaultVA),
+                static_cast<unsigned int>(g_renderer.dred_device_state));
+        }
+        dump_dred_allocation_list("existing", page_fault.pHeadExistingAllocationNode);
+        dump_dred_allocation_list("recent_freed", page_fault.pHeadRecentFreedAllocationNode);
+    }
+}
+
+inline HRESULT mark_renderer_lost(char const* label, HRESULT hr) {
+    if (!FAILED(hr))
+        return hr;
+
+    log_hresult(label, hr);
+    g_renderer.lost = true;
+    g_renderer.last_failure_label = label ? label : "";
+    g_renderer.last_failure_hr = hr;
+    g_renderer.device_removed_reason =
+        g_renderer.device ? g_renderer.device->GetDeviceRemovedReason() : S_OK;
+
+    if (FAILED(g_renderer.device_removed_reason)) {
+        std::fprintf(
+            stderr,
+            "[dx12] device removed after %s (reason=0x%08lx)\n",
+            label ? label : "<unknown>",
+            static_cast<unsigned long>(g_renderer.device_removed_reason));
+        dump_dred_diagnostics();
+    }
+    return hr;
+}
 
 enum class CandidateHitKind {
     none,
@@ -810,6 +1024,7 @@ struct ImeState {
     HWND hwnd = nullptr;
     WNDPROC prev_wndproc = nullptr;
     void (*request_repaint)() = nullptr;
+    DWORD ui_thread_id = 0;
     bool attached = false;
     bool in_wndproc = false;
     bool sync_in_progress = false;
@@ -840,6 +1055,7 @@ struct DecodedImage {
     int height = 0;
     std::vector<unsigned char> pixels;
     bool failed = false;
+    std::string error_detail;
 };
 
 enum class ImageEntryState {
@@ -868,6 +1084,16 @@ struct ImageAtlasState {
     ComPtr<ID3D12Resource> texture;
     std::vector<unsigned char> pixels;
     std::vector<CachedImageRecord> cache;
+    std::vector<std::string> pending_jobs;
+    std::size_t pending_head = 0;
+    std::vector<DecodedImage> completed_jobs;
+    std::mutex mutex;
+    std::condition_variable cv;
+    std::thread worker;
+    std::atomic<DWORD> worker_thread_id = 0;
+    bool worker_started = false;
+    bool queue_only_for_tests = false;
+    bool stop_worker = false;
     bool atlas_dirty = false;
     int cursor_x = 0;
     int cursor_y = 0;
@@ -876,6 +1102,166 @@ struct ImageAtlasState {
 
 static ImeState g_ime;
 static ImageAtlasState g_images;
+
+struct AddressDescription {
+    std::uintptr_t relative = 0;
+    char module_path[MAX_PATH] = {};
+};
+
+inline AddressDescription describe_address(void const* address) {
+    AddressDescription info{};
+    if (!address)
+        return info;
+
+    HMODULE module = nullptr;
+    if (GetModuleHandleExA(
+            GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS
+                | GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+            static_cast<LPCSTR>(address),
+            &module)
+        && module) {
+        info.relative = reinterpret_cast<std::uintptr_t>(address)
+            - reinterpret_cast<std::uintptr_t>(module);
+        (void)GetModuleFileNameA(module, info.module_path, MAX_PATH);
+    }
+    return info;
+}
+
+inline void dump_context_stack(CONTEXT const* context) {
+#if defined(_M_X64)
+    if (!context)
+        return;
+
+    auto unwind = *context;
+    constexpr unsigned int max_frames = 24;
+    for (unsigned int frame = 0; frame < max_frames; ++frame) {
+        if (unwind.Rip == 0)
+            break;
+
+        auto const address = reinterpret_cast<void const*>(unwind.Rip);
+        auto info = describe_address(address);
+        std::fprintf(
+            stderr,
+            "[phenotype-windows] stack[%u]=%p module=%s relative=0x%zx sp=0x%llx\n",
+            frame,
+            address,
+            info.module_path[0] ? info.module_path : "<unknown>",
+            static_cast<std::size_t>(info.relative),
+            static_cast<unsigned long long>(unwind.Rsp));
+
+        DWORD64 image_base = 0;
+        auto* runtime_function = RtlLookupFunctionEntry(unwind.Rip, &image_base, nullptr);
+        if (!runtime_function) {
+            DWORD64 next_pc = 0;
+            __try {
+                next_pc = *reinterpret_cast<DWORD64 const*>(unwind.Rsp);
+            } __except (EXCEPTION_EXECUTE_HANDLER) {
+                break;
+            }
+            if (next_pc == 0 || next_pc == unwind.Rip)
+                break;
+            unwind.Rip = next_pc;
+            unwind.Rsp += sizeof(DWORD64);
+            continue;
+        }
+
+        void* handler_data = nullptr;
+        DWORD64 establisher_frame = 0;
+        KNONVOLATILE_CONTEXT_POINTERS context_pointers{};
+        RtlVirtualUnwind(
+            UNW_FLAG_NHANDLER,
+            image_base,
+            unwind.Rip,
+            runtime_function,
+            &unwind,
+            &handler_data,
+            &establisher_frame,
+            &context_pointers);
+    }
+#else
+    (void)context;
+#endif
+}
+
+inline void dump_runtime_diagnostics(char const* reason) {
+    std::fprintf(
+        stderr,
+        "[phenotype-windows] %s: renderer_lost=%d last_failure_hr=0x%08lx "
+        "device_removed=0x%08lx close_hr=0x%08lx present_hr=0x%08lx signal_hr=0x%08lx "
+        "dred_enabled=%d initialized=%d debug=%d warp=%d current_tid=%lu ui_tid=%lu worker_tid=%lu\n",
+        reason ? reason : "runtime diagnostics",
+        g_renderer.lost ? 1 : 0,
+        static_cast<unsigned long>(g_renderer.last_failure_hr),
+        static_cast<unsigned long>(g_renderer.device_removed_reason),
+        static_cast<unsigned long>(g_renderer.last_close_hr),
+        static_cast<unsigned long>(g_renderer.last_present_hr),
+        static_cast<unsigned long>(g_renderer.last_signal_hr),
+        g_renderer.dred_enabled ? 1 : 0,
+        g_renderer.initialized ? 1 : 0,
+        g_renderer.debug_enabled ? 1 : 0,
+        g_renderer.warp_enabled ? 1 : 0,
+        static_cast<unsigned long>(GetCurrentThreadId()),
+        static_cast<unsigned long>(g_ime.ui_thread_id),
+        static_cast<unsigned long>(g_images.worker_thread_id.load()));
+    if (!g_renderer.last_failure_label.empty()) {
+        std::fprintf(stderr,
+                     "[phenotype-windows] last failure label: %s\n",
+                     g_renderer.last_failure_label.c_str());
+    }
+    std::fflush(stderr);
+}
+
+inline LONG CALLBACK phenotype_unhandled_exception_filter(
+        EXCEPTION_POINTERS* exception) {
+    auto const code = exception && exception->ExceptionRecord
+        ? exception->ExceptionRecord->ExceptionCode
+        : 0ul;
+    auto const address = exception && exception->ExceptionRecord
+        ? exception->ExceptionRecord->ExceptionAddress
+        : nullptr;
+    auto info = describe_address(address);
+    std::fprintf(
+        stderr,
+        "[phenotype-windows] unhandled exception code=0x%08lx address=%p module=%s relative=0x%zx\n",
+        code,
+        address,
+        info.module_path[0] ? info.module_path : "<unknown>",
+        static_cast<std::size_t>(info.relative));
+    dump_context_stack(exception ? exception->ContextRecord : nullptr);
+    dump_runtime_diagnostics("unhandled exception");
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+inline void phenotype_terminate_handler() {
+    auto current = std::current_exception();
+    if (!current) {
+        std::fprintf(stderr,
+                     "[phenotype-windows] std::terminate without active exception\n");
+    } else {
+        try {
+            std::rethrow_exception(current);
+        } catch (std::exception const& ex) {
+            std::fprintf(stderr,
+                         "[phenotype-windows] std::terminate due to exception: %s\n",
+                         ex.what());
+        } catch (...) {
+            std::fprintf(stderr,
+                         "[phenotype-windows] std::terminate due to non-std exception\n");
+        }
+    }
+    dump_runtime_diagnostics("std::terminate");
+    std::fflush(stderr);
+    TerminateProcess(GetCurrentProcess(), 3);
+    std::_Exit(3);
+}
+
+inline void install_process_diagnostics() {
+    static std::once_flag once;
+    std::call_once(once, [] {
+        SetUnhandledExceptionFilter(phenotype_unhandled_exception_filter);
+        std::set_terminate(phenotype_terminate_handler);
+    });
+}
 
 inline void invalidate_ime_window_positions() {
     g_ime.composition_window = {};
@@ -988,6 +1374,35 @@ inline ImageCacheEntry& ensure_image_entry(std::string const& url) {
         return *entry;
     g_images.cache.push_back({url, {}});
     return g_images.cache.back().entry;
+}
+
+inline std::size_t pending_job_count_unlocked() {
+    if (g_images.pending_head >= g_images.pending_jobs.size())
+        return 0;
+    return g_images.pending_jobs.size() - g_images.pending_head;
+}
+
+inline bool pending_jobs_empty_unlocked() {
+    return pending_job_count_unlocked() == 0;
+}
+
+inline std::string pop_pending_job_unlocked() {
+    auto index = g_images.pending_head;
+    auto url = std::move(g_images.pending_jobs[index]);
+    ++g_images.pending_head;
+    if (g_images.pending_head >= g_images.pending_jobs.size()) {
+        g_images.pending_jobs.clear();
+        g_images.pending_head = 0;
+    }
+    return url;
+}
+
+inline bool is_remote_image_queued_unlocked(std::string const& url) {
+    for (auto index = g_images.pending_head; index < g_images.pending_jobs.size(); ++index) {
+        if (g_images.pending_jobs[index] == url)
+            return true;
+    }
+    return false;
 }
 
 inline std::size_t snapshot_caret_byte_offset(
@@ -1918,6 +2333,9 @@ inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
             request_window_repaint();
         return 0;
     }
+    case WM_PHENOTYPE_IMAGE_READY:
+        request_window_repaint();
+        return 0;
     case WM_KILLFOCUS:
         clear_ime_state();
         break;
@@ -1931,6 +2349,7 @@ inline void input_attach(GLFWwindow* window, void (*request_repaint)()) {
     g_ime.window = window;
     g_ime.request_repaint = request_repaint;
     g_ime.hwnd = window ? glfwGetWin32Window(window) : nullptr;
+    g_ime.ui_thread_id = GetCurrentThreadId();
     g_ime.in_wndproc = false;
     g_ime.sync_in_progress = false;
     g_ime.repaint_pending = false;
@@ -1954,6 +2373,7 @@ inline void input_detach() {
     g_ime.hwnd = nullptr;
     g_ime.prev_wndproc = nullptr;
     g_ime.request_repaint = nullptr;
+    g_ime.ui_thread_id = 0;
     g_ime.in_wndproc = false;
     g_ime.sync_in_progress = false;
     g_ime.repaint_pending = false;
@@ -2096,9 +2516,72 @@ inline std::expected<DecodedImage, std::string> decode_image_file(
     return decode_image_with_decoder(factory.Get(), decoder.Get());
 }
 
+inline std::expected<DecodedImage, std::string> decode_image_memory(
+        std::vector<unsigned char> const& bytes) {
+    if (bytes.empty())
+        return std::unexpected("Remote image response body is empty");
+
+    ComPtr<IWICImagingFactory> factory;
+    auto hr = CoCreateInstance(
+        CLSID_WICImagingFactory,
+        nullptr,
+        CLSCTX_INPROC_SERVER,
+        IID_PPV_ARGS(&factory));
+    if (FAILED(hr)) {
+        return std::unexpected(
+            format_hresult_detail("CoCreateInstance(IWICImagingFactory)", hr));
+    }
+
+    HGLOBAL buffer = GlobalAlloc(GMEM_MOVEABLE, bytes.size());
+    if (!buffer)
+        return std::unexpected("GlobalAlloc failed for remote image body");
+
+    struct GlobalBufferGuard {
+        HGLOBAL handle = nullptr;
+
+        ~GlobalBufferGuard() {
+            if (handle)
+                GlobalFree(handle);
+        }
+    } guard{buffer};
+
+    auto* locked = GlobalLock(buffer);
+    if (!locked)
+        return std::unexpected("GlobalLock failed for remote image body");
+
+    std::memcpy(locked, bytes.data(), bytes.size());
+    GlobalUnlock(buffer);
+
+    ComPtr<IStream> stream;
+    hr = CreateStreamOnHGlobal(buffer, TRUE, &stream);
+    if (FAILED(hr))
+        return std::unexpected(format_hresult_detail("CreateStreamOnHGlobal", hr));
+    guard.handle = nullptr;
+
+    ComPtr<IWICBitmapDecoder> decoder;
+    hr = factory->CreateDecoderFromStream(
+        stream.Get(),
+        nullptr,
+        WICDecodeMetadataCacheOnLoad,
+        &decoder);
+    if (FAILED(hr))
+        return std::unexpected(format_hresult_detail("CreateDecoderFromStream", hr));
+    return decode_image_with_decoder(factory.Get(), decoder.Get());
+}
+
 inline void store_decoded_image(DecodedImage decoded) {
     auto& entry = ensure_image_entry(decoded.url);
     clear_image_entry(entry);
+
+    if (decoded.failed) {
+        mark_image_entry_failed(
+            entry,
+            decoded.url,
+            decoded.error_detail.empty()
+                ? "Remote image decode failed"
+                : decoded.error_detail);
+        return;
+    }
 
     if (decoded.width <= 0 || decoded.height <= 0) {
         mark_image_entry_failed(entry, decoded.url, "Decoded image has invalid dimensions");
@@ -2179,6 +2662,153 @@ inline void store_decoded_image(DecodedImage decoded) {
     g_images.atlas_dirty = true;
 }
 
+inline bool process_completed_images() {
+    std::vector<DecodedImage> completed;
+    {
+        std::lock_guard lock(g_images.mutex);
+        if (g_images.completed_jobs.empty())
+            return false;
+        completed.swap(g_images.completed_jobs);
+    }
+
+    bool changed = false;
+    for (auto& decoded : completed) {
+        store_decoded_image(std::move(decoded));
+        changed = true;
+    }
+    return changed;
+}
+
+inline void image_worker_main() {
+    g_images.worker_thread_id = GetCurrentThreadId();
+    auto co_hr = CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+    if (FAILED(co_hr) && co_hr != RPC_E_CHANGED_MODE) {
+        std::fprintf(stderr, "[windows] image worker CoInitializeEx failed (hr=0x%08lx)\n",
+                     static_cast<unsigned long>(co_hr));
+    }
+
+    for (;;) {
+        std::string url;
+        {
+            std::unique_lock lock(g_images.mutex);
+            g_images.cv.wait(lock, [] {
+                return g_images.stop_worker || !pending_jobs_empty_unlocked();
+            });
+            if (pending_jobs_empty_unlocked()) {
+                if (g_images.stop_worker)
+                    break;
+                continue;
+            }
+            url = pop_pending_job_unlocked();
+        }
+
+        DecodedImage decoded;
+        decoded.url = url;
+        try {
+            auto response = cppx::http::system::get(url);
+            if (!response) {
+                decoded.failed = true;
+                decoded.error_detail = std::string(cppx::http::to_string(response.error()));
+            } else {
+                if (!response->stat.ok()) {
+                    decoded.failed = true;
+                    decoded.error_detail = "HTTP status " + std::to_string(response->stat.code);
+                } else {
+                    std::vector<unsigned char> body;
+                    body.reserve(response->body.size());
+                    for (auto byte : response->body)
+                        body.push_back(static_cast<unsigned char>(byte));
+                    auto result = decode_image_memory(body);
+                    if (result) {
+                        decoded = std::move(*result);
+                        decoded.url = url;
+                    } else {
+                        decoded.failed = true;
+                        decoded.error_detail = result.error();
+                    }
+                }
+            }
+        } catch (std::exception const& ex) {
+            decoded.failed = true;
+            decoded.error_detail = std::string("Worker exception: ") + ex.what();
+            std::fprintf(stderr,
+                         "[windows] image worker exception for %s: %s\n",
+                         url.c_str(),
+                         ex.what());
+        } catch (...) {
+            decoded.failed = true;
+            decoded.error_detail = "Worker exception: unknown";
+            std::fprintf(stderr,
+                         "[windows] image worker exception for %s: unknown\n",
+                         url.c_str());
+        }
+
+        if (!decoded.failed && decoded.error_detail.empty() && decoded.url.empty()) {
+            decoded.failed = true;
+            decoded.url = url;
+            decoded.error_detail = "Worker produced an empty image result";
+        }
+        if (decoded.url.empty())
+            decoded.url = url;
+
+        if (decoded.failed)
+            std::fflush(stderr);
+
+        {
+            std::lock_guard lock(g_images.mutex);
+            g_images.completed_jobs.push_back(std::move(decoded));
+        }
+
+        auto hwnd = g_ime.hwnd;
+        if (hwnd)
+            PostMessageW(hwnd, WM_PHENOTYPE_IMAGE_READY, 0, 0);
+    }
+
+    if (SUCCEEDED(co_hr))
+        CoUninitialize();
+    g_images.worker_thread_id = 0;
+}
+
+inline void ensure_image_worker() {
+    std::lock_guard lock(g_images.mutex);
+    if (g_images.worker_started || g_images.queue_only_for_tests)
+        return;
+    g_images.stop_worker = false;
+    g_images.worker = std::thread(image_worker_main);
+    g_images.worker_started = true;
+}
+
+inline void shutdown_image_worker() {
+    std::thread worker;
+    {
+        std::lock_guard lock(g_images.mutex);
+        if (!g_images.worker_started) {
+            g_images.stop_worker = true;
+            g_images.pending_jobs.clear();
+            g_images.pending_head = 0;
+            return;
+        }
+        g_images.stop_worker = true;
+        g_images.pending_jobs.clear();
+        g_images.pending_head = 0;
+        worker = std::move(g_images.worker);
+        g_images.worker_started = false;
+    }
+    g_images.cv.notify_all();
+    if (worker.joinable())
+        worker.join();
+}
+
+inline void queue_remote_image_load(std::string const& url) {
+    {
+        std::lock_guard lock(g_images.mutex);
+        if (!is_remote_image_queued_unlocked(url))
+            g_images.pending_jobs.push_back(url);
+    }
+    ensure_image_worker();
+    g_images.cv.notify_one();
+}
+
 inline void load_image_entry(std::string const& url) {
     auto image_url = std::string(url);
     if (find_image_entry(image_url))
@@ -2187,10 +2817,9 @@ inline void load_image_entry(std::string const& url) {
     auto& entry = ensure_image_entry(image_url);
 
     if (remote) {
-        mark_image_entry_failed(
-            entry,
-            image_url,
-            "Remote images are disabled on Windows for now");
+        entry.state = ImageEntryState::pending;
+        clear_image_entry(entry);
+        queue_remote_image_load(image_url);
         return;
     }
 
@@ -2410,7 +3039,11 @@ inline HRESULT create_pipelines() {
 }
 
 inline HRESULT create_upload_buffer() {
-    constexpr UINT64 upload_capacity = 32ull * 1024ull * 1024ull;
+    // A single frame can upload the full 2048x2048 image atlas (16 MiB)
+    // and a large text atlas in the same command list. Keep enough shared
+    // upload space for both plus vertex data to avoid runtime exhaustion
+    // when remote images become ready mid-scene.
+    constexpr UINT64 upload_capacity = 64ull * 1024ull * 1024ull;
     D3D12_HEAP_PROPERTIES heap_props{};
     heap_props.Type = D3D12_HEAP_TYPE_UPLOAD;
 
@@ -2431,6 +3064,7 @@ inline HRESULT create_upload_buffer() {
         nullptr,
         IID_PPV_ARGS(&g_renderer.upload.resource));
     if (FAILED(hr)) return hr;
+    set_debug_name(g_renderer.upload.resource, L"phenotype.upload_buffer");
 
     hr = g_renderer.upload.resource->Map(0, nullptr,
         reinterpret_cast<void**>(&g_renderer.upload.mapped));
@@ -2448,14 +3082,16 @@ inline HRESULT create_frame_resources() {
     auto hr = g_renderer.device->CreateDescriptorHeap(
         &rtv_desc, IID_PPV_ARGS(&g_renderer.rtv_heap));
     if (FAILED(hr)) return hr;
+    set_debug_name(g_renderer.rtv_heap, L"phenotype.rtv_heap");
 
     D3D12_DESCRIPTOR_HEAP_DESC srv_desc{};
     srv_desc.Type = D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV;
-    srv_desc.NumDescriptors = 2;
+    srv_desc.NumDescriptors = SRV_SLOT_COUNT;
     srv_desc.Flags = D3D12_DESCRIPTOR_HEAP_FLAG_SHADER_VISIBLE;
     hr = g_renderer.device->CreateDescriptorHeap(
         &srv_desc, IID_PPV_ARGS(&g_renderer.srv_heap));
     if (FAILED(hr)) return hr;
+    set_debug_name(g_renderer.srv_heap, L"phenotype.srv_heap");
 
     g_renderer.rtv_descriptor_size =
         g_renderer.device->GetDescriptorHandleIncrementSize(
@@ -2469,17 +3105,24 @@ inline HRESULT create_frame_resources() {
         hr = g_renderer.swap_chain->GetBuffer(
             i, IID_PPV_ARGS(&g_renderer.frames[i].render_target));
         if (FAILED(hr)) return hr;
+        g_renderer.frames[i].text_srv_slot = frame_text_srv_slot(i);
         g_renderer.frames[i].rtv_handle = handle;
         g_renderer.device->CreateRenderTargetView(
             g_renderer.frames[i].render_target.Get(),
             nullptr,
             handle);
+        auto render_target_name = std::wstring(L"phenotype.backbuffer.frame")
+            + std::to_wstring(i);
+        set_debug_name(g_renderer.frames[i].render_target, render_target_name.c_str());
         handle.ptr += g_renderer.rtv_descriptor_size;
 
         hr = g_renderer.device->CreateCommandAllocator(
             D3D12_COMMAND_LIST_TYPE_DIRECT,
             IID_PPV_ARGS(&g_renderer.frames[i].allocator));
         if (FAILED(hr)) return hr;
+        auto allocator_name = std::wstring(L"phenotype.command_allocator.frame")
+            + std::to_wstring(i);
+        set_debug_name(g_renderer.frames[i].allocator, allocator_name.c_str());
     }
 
     hr = g_renderer.device->CreateCommandList(
@@ -2489,11 +3132,14 @@ inline HRESULT create_frame_resources() {
         nullptr,
         IID_PPV_ARGS(&g_renderer.command_list));
     if (FAILED(hr)) return hr;
-    g_renderer.command_list->Close();
+    set_debug_name(g_renderer.command_list, L"phenotype.command_list");
+    hr = g_renderer.command_list->Close();
+    if (FAILED(hr)) return hr;
 
     hr = g_renderer.device->CreateFence(
         0, D3D12_FENCE_FLAG_NONE, IID_PPV_ARGS(&g_renderer.fence));
     if (FAILED(hr)) return hr;
+    set_debug_name(g_renderer.fence, L"phenotype.frame_fence");
 
     g_renderer.fence_event = CreateEventW(nullptr, FALSE, FALSE, nullptr);
     if (!g_renderer.fence_event) return HRESULT_FROM_WIN32(GetLastError());
@@ -2502,22 +3148,28 @@ inline HRESULT create_frame_resources() {
 }
 
 inline HRESULT enable_debug_layers() {
-    if (!g_renderer.debug_enabled) return S_OK;
+    g_renderer.dred_enabled = should_enable_dred();
 
-    ComPtr<ID3D12Debug1> debug;
-    auto hr = D3D12GetDebugInterface(IID_PPV_ARGS(&debug));
-    if (FAILED(hr)) {
-        log_hresult("D3D12GetDebugInterface", hr);
-        return hr;
+    if (g_renderer.debug_enabled) {
+        ComPtr<ID3D12Debug1> debug;
+        auto hr = D3D12GetDebugInterface(IID_PPV_ARGS(&debug));
+        if (FAILED(hr)) {
+            log_hresult("D3D12GetDebugInterface(debug)", hr);
+        } else {
+            debug->EnableDebugLayer();
+            debug->SetEnableGPUBasedValidation(TRUE);
+        }
     }
-    debug->EnableDebugLayer();
-    debug->SetEnableGPUBasedValidation(TRUE);
 
-    ComPtr<ID3D12DeviceRemovedExtendedDataSettings1> dred;
-    if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dred)))) {
+    if (g_renderer.dred_enabled) {
+        ComPtr<ID3D12DeviceRemovedExtendedDataSettings1> dred;
+        if (SUCCEEDED(D3D12GetDebugInterface(IID_PPV_ARGS(&dred)))) {
         dred->SetAutoBreadcrumbsEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
         dred->SetPageFaultEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
         dred->SetBreadcrumbContextEnablement(D3D12_DRED_ENABLEMENT_FORCED_ON);
+        } else {
+            std::fprintf(stderr, "[dx12] DRED settings interface unavailable\n");
+        }
     }
 
     return S_OK;
@@ -2560,6 +3212,7 @@ inline HRESULT create_factory_and_device() {
         D3D_FEATURE_LEVEL_11_0,
         IID_PPV_ARGS(&g_renderer.device));
     if (FAILED(hr)) return hr;
+    set_debug_name(g_renderer.device, L"phenotype.device");
 
     if (g_renderer.debug_enabled) {
         ComPtr<ID3D12InfoQueue> info_queue;
@@ -2574,6 +3227,7 @@ inline HRESULT create_factory_and_device() {
     hr = g_renderer.device->CreateCommandQueue(
         &queue_desc, IID_PPV_ARGS(&g_renderer.queue));
     if (FAILED(hr)) return hr;
+    set_debug_name(g_renderer.queue, L"phenotype.graphics_queue");
 
     return S_OK;
 }
@@ -2616,7 +3270,6 @@ inline HRESULT create_swap_chain(GLFWwindow* window) {
 inline void release_swap_chain_targets() {
     for (auto& frame : g_renderer.frames) {
         frame.render_target.Reset();
-        frame.atlas_texture.Reset();
     }
 }
 
@@ -2639,18 +3292,23 @@ inline HRESULT resize_swap_chain() {
         static_cast<UINT>(fbh),
         DXGI_FORMAT_B8G8R8A8_UNORM,
         0);
-    if (FAILED(hr)) return hr;
+    if (FAILED(hr))
+        return mark_renderer_lost("IDXGISwapChain::ResizeBuffers", hr);
 
     auto handle = g_renderer.rtv_heap->GetCPUDescriptorHandleForHeapStart();
     for (UINT i = 0; i < RendererState::frame_count; ++i) {
         hr = g_renderer.swap_chain->GetBuffer(
             i, IID_PPV_ARGS(&g_renderer.frames[i].render_target));
-        if (FAILED(hr)) return hr;
+        if (FAILED(hr))
+            return mark_renderer_lost("IDXGISwapChain::GetBuffer", hr);
         g_renderer.frames[i].rtv_handle = handle;
         g_renderer.device->CreateRenderTargetView(
             g_renderer.frames[i].render_target.Get(),
             nullptr,
             handle);
+        auto render_target_name = std::wstring(L"phenotype.backbuffer.frame")
+            + std::to_wstring(i);
+        set_debug_name(g_renderer.frames[i].render_target, render_target_name.c_str());
         handle.ptr += g_renderer.rtv_descriptor_size;
     }
     return S_OK;
@@ -2659,7 +3317,6 @@ inline HRESULT resize_swap_chain() {
 inline HRESULT create_atlas_texture(
         TextAtlas const& atlas,
         FrameContext& frame) {
-    frame.atlas_texture.Reset();
     if (atlas.quads.empty() || atlas.pixels.empty()) return S_OK;
 
     D3D12_RESOURCE_DESC tex_desc{};
@@ -2674,14 +3331,35 @@ inline HRESULT create_atlas_texture(
 
     D3D12_HEAP_PROPERTIES default_heap{};
     default_heap.Type = D3D12_HEAP_TYPE_DEFAULT;
-    auto hr = g_renderer.device->CreateCommittedResource(
-        &default_heap,
-        D3D12_HEAP_FLAG_NONE,
-        &tex_desc,
-        D3D12_RESOURCE_STATE_COPY_DEST,
-        nullptr,
-        IID_PPV_ARGS(&frame.atlas_texture));
-    if (FAILED(hr)) return hr;
+    auto recreate = true;
+    if (frame.atlas_texture) {
+        auto current = frame.atlas_texture->GetDesc();
+        recreate = current.Dimension != D3D12_RESOURCE_DIMENSION_TEXTURE2D
+            || current.Width != tex_desc.Width
+            || current.Height != tex_desc.Height
+            || current.Format != tex_desc.Format;
+    }
+    auto hr = S_OK;
+    if (recreate) {
+        frame.atlas_texture.Reset();
+        hr = g_renderer.device->CreateCommittedResource(
+            &default_heap,
+            D3D12_HEAP_FLAG_NONE,
+            &tex_desc,
+            D3D12_RESOURCE_STATE_COPY_DEST,
+            nullptr,
+            IID_PPV_ARGS(&frame.atlas_texture));
+        if (FAILED(hr))
+            return mark_renderer_lost("CreateCommittedResource(text atlas)", hr);
+        auto atlas_name = std::wstring(L"phenotype.text_atlas.frame")
+            + std::to_wstring(frame.text_srv_slot - FIRST_TEXT_SRV_SLOT);
+        set_debug_name(frame.atlas_texture, atlas_name.c_str());
+    } else {
+        transition_resource(
+            frame.atlas_texture.Get(),
+            D3D12_RESOURCE_STATE_PIXEL_SHADER_RESOURCE,
+            D3D12_RESOURCE_STATE_COPY_DEST);
+    }
 
     UINT64 upload_size = 0;
     D3D12_PLACED_SUBRESOURCE_FOOTPRINT footprint{};
@@ -2695,7 +3373,8 @@ inline HRESULT create_atlas_texture(
         &upload_size);
 
     auto [mapped, offset] = upload_alloc(upload_size, D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
-    if (!mapped) return E_OUTOFMEMORY;
+    if (!mapped)
+        return mark_renderer_lost("upload_alloc(text atlas)", E_OUTOFMEMORY);
     for (UINT row = 0; row < num_rows; ++row) {
         auto* dst = static_cast<unsigned char*>(mapped) + row * footprint.Footprint.RowPitch;
         auto const* src = atlas.pixels.data() + static_cast<std::size_t>(row) * atlas.width * 4;
@@ -2727,7 +3406,7 @@ inline HRESULT create_atlas_texture(
     g_renderer.device->CreateShaderResourceView(
         frame.atlas_texture.Get(),
         &srv,
-        srv_cpu_handle(TEXT_SRV_SLOT));
+        srv_cpu_handle(frame.text_srv_slot));
     return S_OK;
 }
 
@@ -2762,6 +3441,7 @@ inline HRESULT ensure_image_atlas_texture() {
         IID_PPV_ARGS(&g_images.texture));
     if (FAILED(hr))
         return hr;
+    set_debug_name(g_images.texture, L"phenotype.image_atlas");
 
     D3D12_SHADER_RESOURCE_VIEW_DESC srv{};
     srv.Format = DXGI_FORMAT_R8G8B8A8_UNORM;
@@ -2807,7 +3487,7 @@ inline HRESULT upload_image_atlas() {
         upload_size,
         D3D12_TEXTURE_DATA_PLACEMENT_ALIGNMENT);
     if (!mapped)
-        return E_OUTOFMEMORY;
+        return mark_renderer_lost("upload_alloc(image atlas)", E_OUTOFMEMORY);
 
     for (UINT row = 0; row < num_rows; ++row) {
         auto* dst = static_cast<unsigned char*>(mapped)
@@ -2851,22 +3531,44 @@ inline void begin_frame(FrameContext& frame) {
     // The upload heap is shared across all frames. Reusing it before every
     // in-flight copy finishes can race WARP's background copy worker.
     wait_for_all_frames();
-    frame.atlas_texture.Reset();
-    frame.allocator->Reset();
-    g_renderer.command_list->Reset(frame.allocator.Get(), nullptr);
+    auto hr = frame.allocator->Reset();
+    if (FAILED(hr)) {
+        (void)mark_renderer_lost("ID3D12CommandAllocator::Reset", hr);
+        return;
+    }
+    hr = g_renderer.command_list->Reset(frame.allocator.Get(), nullptr);
+    if (FAILED(hr)) {
+        (void)mark_renderer_lost("ID3D12GraphicsCommandList::Reset", hr);
+        return;
+    }
     g_renderer.upload.offset = 0;
 }
 
 inline void end_frame(FrameContext& frame) {
-    g_renderer.command_list->Close();
+    auto hr = g_renderer.command_list->Close();
+    g_renderer.last_close_hr = hr;
+    if (FAILED(hr)) {
+        (void)mark_renderer_lost("ID3D12GraphicsCommandList::Close", hr);
+        return;
+    }
     ID3D12CommandList* lists[] = {g_renderer.command_list.Get()};
     g_renderer.queue->ExecuteCommandLists(1, lists);
-    g_renderer.swap_chain->Present(1, 0);
+    hr = g_renderer.swap_chain->Present(1, 0);
+    g_renderer.last_present_hr = hr;
+    if (FAILED(hr)) {
+        (void)mark_renderer_lost("IDXGISwapChain::Present", hr);
+        return;
+    }
     frame.fence_value = g_renderer.next_fence_value++;
-    g_renderer.queue->Signal(g_renderer.fence.Get(), frame.fence_value);
+    hr = g_renderer.queue->Signal(g_renderer.fence.Get(), frame.fence_value);
+    g_renderer.last_signal_hr = hr;
+    if (FAILED(hr)) {
+        (void)mark_renderer_lost("ID3D12CommandQueue::Signal", hr);
+    }
 }
 
 inline void renderer_init(GLFWwindow* window) {
+    install_process_diagnostics();
     if (g_renderer.initialized) return;
     g_renderer.window = window;
     g_renderer.debug_enabled = env_enabled("PHENOTYPE_DX12_DEBUG");
@@ -2901,7 +3603,7 @@ inline void renderer_init(GLFWwindow* window) {
 }
 
 inline void renderer_flush(unsigned char const* buf, unsigned int len) {
-    if (len == 0 || !g_renderer.initialized) return;
+    if (len == 0 || !g_renderer.initialized || g_renderer.lost) return;
 
     int fbw = 0;
     int fbh = 0;
@@ -2934,6 +3636,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         return;
     }
     suppress_focused_input_base_text_for_composition(decoded);
+    (void)process_completed_images();
 
     for (auto const& image : decoded.images) {
         auto* entry = find_image_entry(image.url);
@@ -3114,7 +3817,13 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
 
     begin_frame(frame);
-    (void)upload_image_atlas();
+    if (g_renderer.lost)
+        return;
+    auto upload_hr = upload_image_atlas();
+    if (FAILED(upload_hr)) {
+        (void)mark_renderer_lost("upload_image_atlas", upload_hr);
+        return;
+    }
     transition_resource(
         frame.render_target.Get(),
         D3D12_RESOURCE_STATE_PRESENT,
@@ -3210,7 +3919,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 ID3D12DescriptorHeap* heaps[] = {g_renderer.srv_heap.Get()};
                 g_renderer.command_list->SetDescriptorHeaps(1, heaps);
                 g_renderer.command_list->SetGraphicsRootDescriptorTable(
-                    1, srv_gpu_handle(TEXT_SRV_SLOT));
+                    1, srv_gpu_handle(frame.text_srv_slot));
                 g_renderer.command_list->SetPipelineState(g_renderer.text_pipeline.Get());
                 g_renderer.command_list->IASetVertexBuffers(0, 1, &vbv);
                 g_renderer.command_list->DrawInstanced(
@@ -3240,11 +3949,14 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         D3D12_RESOURCE_STATE_RENDER_TARGET,
         D3D12_RESOURCE_STATE_PRESENT);
     end_frame(frame);
+    if (g_renderer.lost)
+        return;
     g_renderer.hit_regions.swap(decoded.hit_regions);
 }
 
 inline void renderer_shutdown() {
     wait_for_all_frames();
+    shutdown_image_worker();
     g_images.texture.Reset();
     if (!g_images.pixels.empty()) {
         std::fill(
@@ -3253,7 +3965,13 @@ inline void renderer_shutdown() {
             static_cast<unsigned char>(0));
     }
     std::vector<CachedImageRecord>().swap(g_images.cache);
+    std::vector<std::string>().swap(g_images.pending_jobs);
+    g_images.pending_head = 0;
+    std::vector<DecodedImage>().swap(g_images.completed_jobs);
     g_images.atlas_dirty = false;
+    g_images.worker_started = false;
+    g_images.queue_only_for_tests = false;
+    g_images.stop_worker = false;
     g_images.cursor_x = 0;
     g_images.cursor_y = 0;
     g_images.row_height = 0;
@@ -3382,6 +4100,27 @@ struct CompositionVisualDebug {
     std::size_t marked_end = 0;
 };
 
+struct RemoteImageDebug {
+    bool entry_exists = false;
+    int entry_state = -1;
+    std::size_t pending_jobs = 0;
+    std::size_t completed_jobs = 0;
+    bool worker_started = false;
+    std::string failure_reason;
+};
+
+struct Dx12DiagnosticsDebug {
+    bool lost = false;
+    bool dred_enabled = false;
+    long last_failure_hr = S_OK;
+    long device_removed_reason = S_OK;
+    long last_close_hr = S_OK;
+    long last_present_hr = S_OK;
+    long last_signal_hr = S_OK;
+    int dred_device_state = static_cast<int>(D3D12_DRED_DEVICE_STATE_UNKNOWN);
+    std::string failure_label;
+};
+
 inline HWND attached_hwnd() {
     return detail::g_ime.hwnd;
 }
@@ -3462,6 +4201,95 @@ inline std::vector<TextEntry> suppressed_text_entries_for_tests(
 
 inline std::vector<TextEntry> composition_overlay_text_entries_for_tests() {
     return detail::composition_overlay_text_entries();
+}
+
+inline void stop_image_worker() {
+    detail::g_images.queue_only_for_tests = true;
+    detail::shutdown_image_worker();
+}
+
+inline bool has_pending_remote_image(std::string const& url) {
+    if (auto const* entry = detail::find_image_entry(url);
+        entry && entry->state != detail::ImageEntryState::pending) {
+        return false;
+    }
+    std::lock_guard lock(detail::g_images.mutex);
+    for (auto index = detail::g_images.pending_head;
+         index < detail::g_images.pending_jobs.size();
+         ++index) {
+        if (detail::g_images.pending_jobs[index] == url)
+            return true;
+    }
+    return false;
+}
+
+inline void inject_completed_image(
+        std::string url,
+        int width,
+        int height,
+        bool failed = false,
+        std::string error_detail = {}) {
+    detail::DecodedImage decoded;
+    decoded.url = std::move(url);
+    decoded.width = width;
+    decoded.height = height;
+    decoded.failed = failed;
+    decoded.error_detail = std::move(error_detail);
+    if (!failed && width > 0 && height > 0) {
+        decoded.pixels.resize(static_cast<std::size_t>(width * height * 4));
+        for (int y = 0; y < height; ++y) {
+            for (int x = 0; x < width; ++x) {
+                auto offset = static_cast<std::size_t>((y * width + x) * 4);
+                decoded.pixels[offset + 0] = static_cast<unsigned char>(32 + x * 40);
+                decoded.pixels[offset + 1] = static_cast<unsigned char>(96 + y * 40);
+                decoded.pixels[offset + 2] = static_cast<unsigned char>(180);
+                decoded.pixels[offset + 3] = static_cast<unsigned char>(255);
+            }
+        }
+    }
+    if (detail::g_images.queue_only_for_tests) {
+        std::vector<std::string>().swap(detail::g_images.pending_jobs);
+        detail::g_images.pending_head = 0;
+        detail::store_decoded_image(std::move(decoded));
+        return;
+    }
+    std::lock_guard lock(detail::g_images.mutex);
+    detail::g_images.completed_jobs.push_back(std::move(decoded));
+}
+
+inline RemoteImageDebug remote_image_debug(std::string const& url) {
+    RemoteImageDebug debug{};
+    if (auto const* entry = detail::find_image_entry(url)) {
+        debug.entry_exists = true;
+        debug.entry_state = static_cast<int>(entry->state);
+        debug.failure_reason = entry->failure_reason;
+    }
+    {
+        std::lock_guard lock(detail::g_images.mutex);
+        debug.pending_jobs = detail::pending_job_count_unlocked();
+        debug.completed_jobs = detail::g_images.completed_jobs.size();
+        debug.worker_started = detail::g_images.worker_started;
+    }
+    if (detail::g_images.queue_only_for_tests
+        && debug.entry_exists
+        && debug.entry_state != static_cast<int>(detail::ImageEntryState::pending)) {
+        debug.pending_jobs = 0;
+    }
+    return debug;
+}
+
+inline Dx12DiagnosticsDebug dx12_diagnostics_debug() {
+    return {
+        detail::g_renderer.lost,
+        detail::g_renderer.dred_enabled,
+        detail::g_renderer.last_failure_hr,
+        detail::g_renderer.device_removed_reason,
+        detail::g_renderer.last_close_hr,
+        detail::g_renderer.last_present_hr,
+        detail::g_renderer.last_signal_hr,
+        static_cast<int>(detail::g_renderer.dred_device_state),
+        detail::g_renderer.last_failure_label,
+    };
 }
 
 } // namespace windows_test

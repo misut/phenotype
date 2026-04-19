@@ -8,7 +8,7 @@ The core handles widgets, layout, state management, vDOM diff, and draw-command 
 
 - **Core modules**: types, state, layout, paint, commands, diag, theme_json
 - **Backend contract**: `phenotype_host.h` (5 host functions) + `phenotype.commands` (typed draw commands)
-- **Current backends**: WASM+JS (production), macOS native (GLFW shell + CoreText + Metal), Windows/Linux stub native backends
+- **Current backends**: WASM+JS (production), macOS native (GLFW shell + CoreText + Metal), Windows native (GLFW shell + DirectWrite + Direct3D 12), Linux stub native backend
 - **Planned backends**: platform-specific native renderers/text systems behind the same shell + command-buffer contract
 
 ## Rendering pipeline
@@ -82,8 +82,8 @@ This keeps the framework core pure while pushing side effects into thin adapters
 
 ### Current native backends
 
-- **macOS**: GLFW shell + CoreText text measurement/atlas + Metal renderer
-- **Windows**: GLFW shell + DirectWrite text measurement/atlas + Direct3D 12 renderer + IME composition overlay + native `DrawImage` for local filesystem paths only in this pass
+- **macOS**: GLFW shell + CoreText text measurement/atlas + Metal renderer + native `DrawImage` for local files and async remote images
+- **Windows**: GLFW shell + DirectWrite text measurement/atlas + Direct3D 12 renderer + IME composition overlay + native `DrawImage` for local files and async remote images
 - **Linux / other desktop**: shared stub backend
 
 ### Modularity guarantee
@@ -107,10 +107,11 @@ This means Metal, Direct3D, Vulkan, Skia, software raster, or another future ren
 - [x] OS-native URL opener on Windows
 - [x] IME composition for native text input on Windows
 - [x] Native `DrawImage` local-file support on Windows
-- [x] Contract tests for the Windows native backend (text, renderer smoke, text input, local image upload)
+- [x] Native `DrawImage` async remote-image support on Windows
+- [x] Contract tests for the Windows native backend (text, renderer smoke, text input, local/remote image upload paths)
 - [x] `examples/native` positioned as the Windows native acceptance showcase
 - [ ] IME composition for native text input on macOS
-- [ ] Native `DrawImage` support on macOS
+- [x] Native `DrawImage` support on macOS
 
 ## Module dependency graph
 

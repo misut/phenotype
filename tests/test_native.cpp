@@ -10,6 +10,7 @@
 #include <cstdio>
 #include <filesystem>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <variant>
 #include <vector>
@@ -34,10 +35,16 @@ import phenotype.native.macos;
 #endif
 #ifdef _WIN32
 import phenotype.native.windows;
+import cppx.http;
+import cppx.http.server;
+import cppx.http.system;
 #endif
 
 using namespace phenotype::native;
 using namespace phenotype;
+
+static constexpr char kLocalExampleImageAsset[] = "showcase-local.bmp";
+static constexpr char kRemoteExampleImageAsset[] = "showcase.bmp";
 
 static void append_u32(std::vector<unsigned char>& buf, unsigned int value) {
     auto offset = buf.size();
@@ -113,11 +120,155 @@ static std::vector<unsigned char> make_draw_image_commands(std::string const& im
     return commands;
 }
 
+static void append_draw_text_command(
+        std::vector<unsigned char>& commands,
+        float x,
+        float y,
+        float font_size,
+        bool mono,
+        Color color,
+        std::string const& text) {
+    append_u32(commands, static_cast<unsigned int>(Cmd::DrawText));
+    append_f32(commands, x);
+    append_f32(commands, y);
+    append_f32(commands, font_size);
+    append_u32(commands, mono ? 1u : 0u);
+    append_u32(commands, color.packed());
+    append_u32(commands, static_cast<unsigned int>(text.size()));
+    append_bytes(
+        commands,
+        text.data(),
+        static_cast<unsigned int>(text.size()));
+}
+
+static std::vector<unsigned char> make_draw_image_and_heavy_text_commands(
+        std::string const& image_url) {
+    auto commands = make_draw_image_commands(image_url);
+    for (unsigned int i = 0; i < 40; ++i) {
+        std::string text = "Remote upload stress row ";
+        text += std::to_string(i);
+        text += " ";
+        text.append(44, static_cast<char>('A' + (i % 26)));
+        append_draw_text_command(
+            commands,
+            24.0f + static_cast<float>(i % 3) * 18.0f,
+            230.0f + static_cast<float>(i) * 34.0f,
+            44.0f + static_cast<float>(i % 4) * 4.0f,
+            false,
+            Color{20, 20, 20, 255},
+            text);
+    }
+    return commands;
+}
+
 static std::string local_test_image_url() {
-    auto image_path = native_example_root() / "assets" / "showcase.bmp";
+    auto image_path = native_example_root() / "assets" / kLocalExampleImageAsset;
     assert(std::filesystem::exists(image_path));
     return image_path.string();
 }
+
+static std::uint16_t find_free_local_port() {
+    auto listener = cppx::http::system::listener::bind("127.0.0.1", 0);
+    assert(listener);
+    auto port = listener->local_port();
+    listener->close();
+    assert(port != 0);
+    return port;
+}
+
+struct WindowsStaticHttpServer {
+    std::uint16_t port = 0;
+    cppx::http::server<cppx::http::system::listener, cppx::http::system::stream> server;
+    std::thread thread;
+
+    explicit WindowsStaticHttpServer(std::filesystem::path root) {
+        port = find_free_local_port();
+        server.serve_static("/", std::move(root));
+        thread = std::thread([this] {
+            auto result = server.run("127.0.0.1", port);
+            assert(result);
+        });
+        wait_until_ready();
+    }
+
+    ~WindowsStaticHttpServer() {
+        server.stop();
+        (void)cppx::http::system::get(url("/__stop__"));
+        if (thread.joinable())
+            thread.join();
+    }
+
+    std::string url(std::string_view path) const {
+        std::string value = "http://127.0.0.1:";
+        value += std::to_string(port);
+        if (path.empty() || path.front() != '/')
+            value += '/';
+        value += path;
+        return value;
+    }
+
+    void wait_until_ready() const {
+        auto ready_url = url(std::string("/") + kRemoteExampleImageAsset);
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+        while (std::chrono::steady_clock::now() < deadline) {
+            auto response = cppx::http::system::get(ready_url);
+            if (response && response->stat.code == 200)
+                return;
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        }
+        assert(false && "local HTTP server did not start in time");
+    }
+};
+
+static auto wait_for_remote_image_terminal_state(
+        std::vector<unsigned char> const& commands,
+        std::string const& remote_url)
+    -> phenotype::native::windows_test::RemoteImageDebug {
+    using phenotype::native::windows_test::remote_image_debug;
+
+    constexpr int ready_state = 1;
+    constexpr int failed_state = 2;
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < deadline) {
+        renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+        auto debug = remote_image_debug(remote_url);
+        if (debug.entry_exists
+            && (debug.entry_state == ready_state || debug.entry_state == failed_state)) {
+            return debug;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    }
+    assert(false && "remote image did not reach a terminal state in time");
+    return {};
+}
+
+static void assert_dx12_renderer_clean(std::string_view context) {
+    auto debug = phenotype::native::windows_test::dx12_diagnostics_debug();
+    if (!debug.dred_enabled || debug.lost || debug.last_failure_hr != S_OK) {
+        std::fprintf(
+            stderr,
+            "[test] unexpected DX12 diagnostics in %.*s: dred=%d lost=%d last_failure=0x%08lx removed=0x%08lx close=0x%08lx present=0x%08lx signal=0x%08lx label=%s\n",
+            static_cast<int>(context.size()),
+            context.data(),
+            debug.dred_enabled ? 1 : 0,
+            debug.lost ? 1 : 0,
+            static_cast<unsigned long>(debug.last_failure_hr),
+            static_cast<unsigned long>(debug.device_removed_reason),
+            static_cast<unsigned long>(debug.last_close_hr),
+            static_cast<unsigned long>(debug.last_present_hr),
+            static_cast<unsigned long>(debug.last_signal_hr),
+            debug.failure_label.c_str());
+    }
+    assert(debug.dred_enabled);
+    assert(!debug.lost);
+    assert(debug.last_failure_hr == S_OK);
+    assert(debug.device_removed_reason == S_OK);
+    assert(debug.last_close_hr == S_OK);
+    assert(debug.last_present_hr == S_OK);
+    assert(debug.last_signal_hr == S_OK);
+    assert(debug.failure_label.empty());
+}
+
 #endif
 
 static void test_renderer_flush_empty() {
@@ -339,13 +490,95 @@ struct WindowsInputHarness {
         return {0.0f, 0.0f};
     }
 };
+
+namespace remote_shell_regression {
+
+struct State {};
+using Msg = std::monostate;
+
+inline std::string g_remote_url;
+
+static void update(State&, Msg) {}
+
+static void view(State const&) {
+    phenotype::layout::column([&] {
+        phenotype::widget::text("Remote image shell stress");
+        phenotype::layout::spacer(24);
+        phenotype::widget::text(
+            "This hidden-window regression exercises shell scroll, async image completion, and repaint integration.");
+        phenotype::layout::spacer(1100);
+        phenotype::layout::card([&] {
+            phenotype::widget::text("Remote image");
+            phenotype::layout::spacer(8);
+            phenotype::widget::image(g_remote_url, 320.0f, 180.0f);
+            phenotype::layout::spacer(12);
+            phenotype::widget::text("The placeholder should swap cleanly after the worker completes.");
+        });
+        phenotype::layout::spacer(400);
+        phenotype::widget::text("Bottom marker");
+    });
+}
+
+} // namespace remote_shell_regression
+
+struct WindowsRemoteShellHarness {
+    GLFWwindow* window = nullptr;
+    native_host host{};
+
+    explicit WindowsRemoteShellHarness(std::string remote_url) {
+        input_regression::reset_core_state();
+        phenotype::native::windows_test::reset_input_debug_counters();
+        _putenv_s("PHENOTYPE_DX12_WARP", "1");
+        _putenv_s("PHENOTYPE_DX12_DEBUG", "0");
+
+        remote_shell_regression::g_remote_url = std::move(remote_url);
+
+        assert(glfwInit());
+        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
+        window = glfwCreateWindow(360, 640, "phenotype-remote-shell-test", nullptr, nullptr);
+        assert(window != nullptr);
+
+        host.window = window;
+        host.platform = &current_platform();
+        phenotype::native::run<remote_shell_regression::State, remote_shell_regression::Msg>(
+            host,
+            remote_shell_regression::view,
+            remote_shell_regression::update);
+        assert(phenotype::detail::get_total_height() > 640.0f);
+    }
+
+    ~WindowsRemoteShellHarness() {
+        phenotype::native::detail::shutdown_host(host);
+        if (window)
+            glfwDestroyWindow(window);
+        glfwTerminate();
+        remote_shell_regression::g_remote_url.clear();
+        phenotype::native::windows_test::reset_input_debug_counters();
+        input_regression::reset_core_state();
+    }
+};
 #endif
 
 namespace {
 int g_platform_sync_calls = 0;
+int g_platform_sync_depth = 0;
+int g_platform_sync_max_depth = 0;
+bool g_request_repaint_during_sync_once = false;
 
 void count_platform_sync() {
     ++g_platform_sync_calls;
+}
+
+void request_repaint_during_sync_once() {
+    ++g_platform_sync_calls;
+    ++g_platform_sync_depth;
+    g_platform_sync_max_depth = (std::max)(g_platform_sync_max_depth, g_platform_sync_depth);
+    if (g_request_repaint_during_sync_once) {
+        g_request_repaint_during_sync_once = false;
+        phenotype::native::detail::repaint_current();
+    }
+    --g_platform_sync_depth;
 }
 }
 
@@ -726,6 +959,24 @@ static void test_focus_transitions_sync_platform_input() {
     assert(g_platform_sync_calls > after_tab);
 
     std::puts("PASS: focus transitions sync platform input");
+}
+
+static void test_shell_repaint_coalesces_nested_requests() {
+    using namespace input_regression;
+
+    Harness harness;
+    g_platform_sync_calls = 0;
+    g_platform_sync_depth = 0;
+    g_platform_sync_max_depth = 0;
+    g_request_repaint_during_sync_once = true;
+    harness.platform.input.sync = request_repaint_during_sync_once;
+
+    phenotype::native::detail::repaint_current();
+
+    assert(g_platform_sync_calls == 2);
+    assert(g_platform_sync_max_depth == 1);
+    assert(!g_request_repaint_during_sync_once);
+    std::puts("PASS: shell repaint coalesces nested requests");
 }
 
 static void test_shell_scroll_and_escape_observability() {
@@ -1295,7 +1546,7 @@ static void test_macos_renderer_uploads_image_texture() {
 
     auto repo_root = std::filesystem::path(__FILE__).parent_path().parent_path();
     auto example_root = repo_root / "examples" / "native";
-    auto image_path = example_root / "assets" / "showcase.bmp";
+    auto image_path = example_root / "assets" / kLocalExampleImageAsset;
     assert(std::filesystem::exists(image_path));
 
     metrics::inst::native_texture_upload_bytes.reset();
@@ -1310,7 +1561,7 @@ static void test_macos_renderer_uploads_image_texture() {
     append_f32(commands, 24.0f);
     append_f32(commands, 320.0f);
     append_f32(commands, 180.0f);
-    auto image_string = std::string("assets/showcase.bmp");
+    auto image_string = std::string("assets/") + kLocalExampleImageAsset;
     append_u32(commands, static_cast<unsigned int>(image_string.size()));
     append_bytes(
         commands,
@@ -1544,21 +1795,260 @@ static void test_windows_renderer_uploads_local_image_texture() {
 
     renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
     assert(metrics::inst::native_texture_upload_bytes.total() > 0);
+    assert_dx12_renderer_clean("local image upload");
     std::puts("PASS: windows renderer uploads local image texture");
 }
 
-static void test_windows_renderer_rejects_remote_image_uploads() {
+static void test_windows_renderer_enables_dred_under_warp_fixture() {
     WindowsRendererFixture fixture;
+    assert_dx12_renderer_clean("warp fixture initialization");
+    std::puts("PASS: windows renderer enables DRED diagnostics under WARP");
+}
+
+static void test_windows_renderer_fetches_remote_image_via_worker() {
+    using phenotype::native::windows_test::remote_image_debug;
+
+    constexpr int pending_state = 0;
+    constexpr int ready_state = 1;
+    WindowsRendererFixture fixture;
+    WindowsStaticHttpServer server(native_example_root() / "assets");
 
     metrics::inst::native_texture_upload_bytes.reset();
-    auto commands = make_draw_image_commands("http://127.0.0.1/showcase.bmp");
+    auto remote_url = server.url("/showcase.bmp");
+    auto commands = make_draw_image_commands(remote_url);
 
-    for (int i = 0; i < 5; ++i) {
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto first = remote_image_debug(remote_url);
+    assert(first.entry_exists);
+    assert(first.entry_state == pending_state);
+    assert(first.worker_started);
+    assert(metrics::inst::native_texture_upload_bytes.total() == 0);
+
+    auto final = wait_for_remote_image_terminal_state(commands, remote_url);
+    assert(final.entry_exists);
+    assert(final.entry_state == ready_state);
+    assert(final.completed_jobs == 0);
+    assert(metrics::inst::native_texture_upload_bytes.total() > 0);
+    assert_dx12_renderer_clean("remote image worker fetch");
+    std::puts("PASS: windows renderer fetches remote image via worker");
+}
+
+static void test_windows_renderer_fetches_remote_image_with_large_text_uploads() {
+    using phenotype::native::windows_test::remote_image_debug;
+
+    constexpr int pending_state = 0;
+    constexpr int ready_state = 1;
+    WindowsRendererFixture fixture;
+    WindowsStaticHttpServer server(native_example_root() / "assets");
+
+    metrics::inst::native_texture_upload_bytes.reset();
+    auto remote_url = server.url("/showcase.bmp");
+    auto commands = make_draw_image_and_heavy_text_commands(remote_url);
+
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto first = remote_image_debug(remote_url);
+    assert(first.entry_exists);
+    assert(first.entry_state == pending_state);
+    assert(first.worker_started);
+
+    auto final = wait_for_remote_image_terminal_state(commands, remote_url);
+    assert(final.entry_exists);
+    assert(final.entry_state == ready_state);
+    assert(final.completed_jobs == 0);
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+    assert_dx12_renderer_clean("remote image heavy text");
+    std::puts("PASS: windows renderer fetches remote image with large text uploads");
+}
+
+static void test_windows_renderer_processes_remote_image_completion() {
+    using phenotype::native::windows_test::has_pending_remote_image;
+    using phenotype::native::windows_test::inject_completed_image;
+    using phenotype::native::windows_test::remote_image_debug;
+    using phenotype::native::windows_test::stop_image_worker;
+
+    constexpr int pending_state = 0;
+    constexpr int ready_state = 1;
+    WindowsRendererFixture fixture;
+
+    stop_image_worker();
+    metrics::inst::native_texture_upload_bytes.reset();
+    auto remote_url = std::string("http://127.0.0.1/showcase.bmp");
+    auto commands = make_draw_image_commands(remote_url);
+
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto first = remote_image_debug(remote_url);
+    assert(first.entry_exists);
+    assert(first.entry_state == pending_state);
+    assert(first.pending_jobs == 1);
+    assert(first.completed_jobs == 0);
+    assert(!first.worker_started);
+    assert(has_pending_remote_image(remote_url));
+    assert(metrics::inst::native_texture_upload_bytes.total() == 0);
+
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto second = remote_image_debug(remote_url);
+    assert(second.entry_exists);
+    assert(second.entry_state == pending_state);
+    assert(second.pending_jobs == 1);
+    assert(second.completed_jobs == 0);
+    assert(!second.worker_started);
+    assert(has_pending_remote_image(remote_url));
+    assert(metrics::inst::native_texture_upload_bytes.total() == 0);
+
+    inject_completed_image(
+        remote_url,
+        2,
+        2);
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto third = remote_image_debug(remote_url);
+    assert(third.entry_exists);
+    assert(third.entry_state == ready_state);
+    assert(third.pending_jobs == 0);
+    assert(third.completed_jobs == 0);
+    assert(!has_pending_remote_image(remote_url));
+    auto uploaded = metrics::inst::native_texture_upload_bytes.total();
+    assert(uploaded > 0);
+
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+    auto fourth = remote_image_debug(remote_url);
+    assert(fourth.entry_exists);
+    assert(fourth.entry_state == ready_state);
+    assert(fourth.pending_jobs == 0);
+    assert(fourth.completed_jobs == 0);
+    assert(metrics::inst::native_texture_upload_bytes.total() == uploaded);
+    assert_dx12_renderer_clean("remote image completion injection");
+    std::puts("PASS: windows renderer processes remote image completion");
+}
+
+static void test_windows_renderer_keeps_failed_remote_image_placeholder() {
+    using phenotype::native::windows_test::has_pending_remote_image;
+    using phenotype::native::windows_test::inject_completed_image;
+    using phenotype::native::windows_test::remote_image_debug;
+    using phenotype::native::windows_test::stop_image_worker;
+
+    constexpr int pending_state = 0;
+    constexpr int failed_state = 2;
+    WindowsRendererFixture fixture;
+
+    stop_image_worker();
+    metrics::inst::native_texture_upload_bytes.reset();
+    auto remote_url = std::string("http://127.0.0.1/failing.bmp");
+    auto commands = make_draw_image_commands(remote_url);
+
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto first = remote_image_debug(remote_url);
+    assert(first.entry_exists);
+    assert(first.entry_state == pending_state);
+    assert(first.pending_jobs == 1);
+    assert(first.completed_jobs == 0);
+    assert(has_pending_remote_image(remote_url));
+    assert(metrics::inst::native_texture_upload_bytes.total() == 0);
+
+    inject_completed_image(
+        remote_url,
+        0,
+        0,
+        true,
+        "Injected remote failure");
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto second = remote_image_debug(remote_url);
+    assert(second.entry_exists);
+    assert(second.entry_state == failed_state);
+    assert(second.pending_jobs == 0);
+    assert(second.completed_jobs == 0);
+    assert(!has_pending_remote_image(remote_url));
+    assert(second.failure_reason == "Injected remote failure");
+    assert(metrics::inst::native_texture_upload_bytes.total() == 0);
+
+    for (int i = 0; i < 3; ++i) {
         renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
     }
 
+    auto third = remote_image_debug(remote_url);
+    assert(third.entry_exists);
+    assert(third.entry_state == failed_state);
+    assert(third.pending_jobs == 0);
+    assert(third.completed_jobs == 0);
     assert(metrics::inst::native_texture_upload_bytes.total() == 0);
-    std::puts("PASS: windows renderer rejects remote image uploads");
+    assert_dx12_renderer_clean("remote image failure placeholder");
+    std::puts("PASS: windows renderer keeps failed remote image placeholder");
+}
+
+static void test_windows_renderer_remote_image_survives_resize_after_completion() {
+    WindowsRendererFixture fixture;
+    WindowsStaticHttpServer server(native_example_root() / "assets");
+
+    auto remote_url = server.url("/showcase.bmp");
+    auto commands = make_draw_image_and_heavy_text_commands(remote_url);
+
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+    auto final = wait_for_remote_image_terminal_state(commands, remote_url);
+    assert(final.entry_exists);
+    assert(final.entry_state == 1);
+
+    glfwSetWindowSize(fixture.window, 480, 360);
+    glfwPollEvents();
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+    assert_dx12_renderer_clean("remote image resize");
+    std::puts("PASS: windows renderer survives resize after remote image completion");
+}
+
+static void test_windows_shell_remote_image_scroll_path_survives_async_completion() {
+    using phenotype::native::windows_test::remote_image_debug;
+
+    constexpr int ready_state = 1;
+    constexpr int failed_state = 2;
+
+    WindowsStaticHttpServer server(native_example_root() / "assets");
+    auto remote_url = server.url("/showcase.bmp");
+    WindowsRemoteShellHarness harness(remote_url);
+
+    auto max_scroll = phenotype::native::detail::max_scroll_for_viewport(640.0f);
+    auto target_scroll = (std::min)(max_scroll, 920.0f);
+    assert(phenotype::native::detail::set_scroll_position(
+        target_scroll,
+        640.0f,
+        "remote-shell-stress"));
+    harness.host.platform->input.sync();
+
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    phenotype::native::windows_test::RemoteImageDebug final{};
+    while (std::chrono::steady_clock::now() < deadline) {
+        glfwPollEvents();
+        harness.host.platform->input.sync();
+        final = remote_image_debug(remote_url);
+        if (final.entry_exists
+            && (final.entry_state == ready_state || final.entry_state == failed_state)) {
+            break;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    }
+
+    assert(final.entry_exists);
+    assert(final.entry_state == ready_state || final.entry_state == failed_state);
+
+    for (int i = 0; i < 20; ++i) {
+        auto next = (i % 2 == 0)
+            ? target_scroll
+            : (std::max)(0.0f, target_scroll - 120.0f);
+        (void)phenotype::native::detail::set_scroll_position(
+            next,
+            640.0f,
+            "remote-shell-oscillation");
+        glfwPollEvents();
+        harness.host.platform->input.sync();
+        std::this_thread::sleep_for(std::chrono::milliseconds(10));
+    }
+
+    assert_dx12_renderer_clean("shell remote scroll path");
+    std::puts("PASS: windows shell remote image scroll path survives async completion");
 }
 
 static void test_windows_renderer_hit_test_and_smoke() {
@@ -1982,6 +2472,7 @@ int main() {
     test_caret_overlay_state_invalidates_cached_frame_hash();
     test_shared_text_replacement_helper();
     test_focus_transitions_sync_platform_input();
+    test_shell_repaint_coalesces_nested_requests();
     test_shell_scroll_and_escape_observability();
 #ifdef __APPLE__
     test_macos_utf16_utf8_range_helpers();
@@ -2023,7 +2514,13 @@ int main() {
     test_renderer_flush_empty();
     test_windows_renderer_reinit_cycle();
     test_windows_renderer_uploads_local_image_texture();
-    test_windows_renderer_rejects_remote_image_uploads();
+    test_windows_renderer_enables_dred_under_warp_fixture();
+    test_windows_renderer_fetches_remote_image_via_worker();
+    test_windows_renderer_fetches_remote_image_with_large_text_uploads();
+    test_windows_renderer_processes_remote_image_completion();
+    test_windows_renderer_keeps_failed_remote_image_placeholder();
+    test_windows_renderer_remote_image_survives_resize_after_completion();
+    test_windows_shell_remote_image_scroll_path_survives_async_completion();
     test_windows_renderer_hit_test_and_smoke();
     test_windows_renderer_rejects_truncated_hit_region();
     test_windows_renderer_rejects_truncated_text_payload();

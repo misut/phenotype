@@ -72,7 +72,7 @@ target_sources(phenotype
     ${PHENOTYPE_ROOT}/src/phenotype.native.cppm
 )
 target_link_libraries(phenotype PUBLIC
-    jsoncpp txn glfw
+    jsoncpp cppx txn glfw
 )
 
 if(APPLE)

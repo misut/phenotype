@@ -55,26 +55,29 @@ void update(State& state, Msg msg) {
 static Msg on_name_changed(std::string s) { return NameChanged{std::move(s)}; }
 static Msg on_ime_changed(std::string s) { return ImeChanged{std::move(s)}; }
 
+static constexpr char kLocalImageAsset[] = "showcase-local.bmp";
+static constexpr char kRemoteImageAsset[] = "showcase.bmp";
+
 static std::string local_image_url() {
     namespace fs = std::filesystem;
 
     auto root = fs::path(PHENOTYPE_EXAMPLE_ASSET_ROOT);
-    auto direct = root / "showcase.bmp";
+    auto direct = root / kLocalImageAsset;
     if (fs::exists(direct))
         return direct.string();
 
-    auto nested = root / "assets" / "showcase.bmp";
+    auto nested = root / "assets" / kLocalImageAsset;
     if (fs::exists(nested))
         return nested.string();
 
     return nested.string();
 }
 
-#ifndef _WIN32
 static std::string remote_image_url() {
-    return "https://raw.githubusercontent.com/misut/phenotype/main/examples/native/assets/showcase.bmp";
+    return std::string(
+        "https://raw.githubusercontent.com/misut/phenotype/main/examples/native/assets/")
+        + kRemoteImageAsset;
 }
-#endif
 
 static std::string selected_choice_label(int choice) {
     switch (choice) {
@@ -284,7 +287,7 @@ void view(State const& state) {
         layout::card([&] {
             widget::text("Images and Backend Status");
             layout::spacer(6);
-            widget::text("The first image is a local asset used for manual acceptance. Backend-specific notes below should stay stable without changing the shared page structure.");
+            widget::text("The first image is a dedicated local asset used for manual acceptance. The second image fetches a separate remote asset so the two paths stay independently testable.");
             layout::spacer(10);
             widget::text("Local file");
             layout::spacer(4);
@@ -292,15 +295,9 @@ void view(State const& state) {
             layout::spacer(10);
             widget::text("Remote HTTP");
             layout::spacer(4);
-#ifdef _WIN32
-            widget::text("Status: Remote images are disabled on Windows for now. This pass validates local file rendering only.");
-            layout::spacer(8);
-            widget::text("Expected state: the local BMP above should render, and this section should stay text-only with no fetch attempt.");
-#else
             widget::image(remote_image_url(), 320.0f, 180.0f);
             layout::spacer(8);
-            widget::text("Expected state: show a placeholder first, replace it when the remote image succeeds, and keep the frame stable if it never arrives.");
-#endif
+            widget::text("Expected state: show a placeholder first, replace it when the remote image succeeds, and keep the placeholder if the request never finishes.");
         });
 
         layout::spacer(12);
@@ -337,7 +334,7 @@ void view(State const& state) {
         layout::spacer(12);
         render_expectation_card(
             "Platform Status Notes",
-            "If a backend is missing IME parity or remote image support, keep the note neutral and preserve the same showcase structure for future backend work.");
+            "Backend-specific notes can still describe IME differences, but every native renderer should keep the same showcase structure, including local and remote image slots.");
     },
         [] {
             widget::text("Manual Walkthrough");
