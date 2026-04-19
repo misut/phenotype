@@ -80,6 +80,18 @@ The native path is intentionally split into three layers so macOS and Windows wo
 
 This keeps the framework core pure while pushing side effects into thin adapters.
 
+## Unified debug plane
+
+Debugging follows one shared model across native and WASI targets:
+
+- the common snapshot schema is defined in `phenotype` / `phenotype.diag`
+- platform adapters only provide capability overrides and `platform_runtime.details`
+- artifact bundles always start from `snapshot.json`, then add optional
+  `frame.bmp` and `platform/<platform>-runtime.json`
+
+See [DEBUG_WORKFLOW.md](DEBUG_WORKFLOW.md) for the full contract and the current
+macOS / WASI extensions.
+
 ### Current native backends
 
 - **macOS**: GLFW shell + CoreText text measurement/atlas + Metal renderer + native `DrawImage` for local files and async remote images

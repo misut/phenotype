@@ -116,7 +116,9 @@ cover arena allocation, dispatch queue depth, runner phase timing, host
 `measure_text` call counts, and input events. JS can call
 `phenotype_diag_export()` to stage an OTLP-shaped JSON snapshot in shared
 linear memory and forward it to an OTel collector via a separate adapter.
-See `src/phenotype_diag.cppm` for the full instrument list and JSON shape.
+See `src/phenotype_diag.cppm` for the full instrument list and JSON shape, and
+[docs/DEBUG_WORKFLOW.md](docs/DEBUG_WORKFLOW.md) for the shared debug plane,
+artifact bundle layout, and platform-specific runtime extensions.
 
 ## Custom theming
 
@@ -218,7 +220,10 @@ As an exon dependency:
 
 ## Architecture
 
-See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline, host interface, command buffer protocol, native backend structure, and module dependency graph.
+See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline,
+host interface, command buffer protocol, native backend structure, and module
+dependency graph. See [docs/DEBUG_WORKFLOW.md](docs/DEBUG_WORKFLOW.md) for the
+unified debug workflow and cross-platform snapshot contract.
 
 ## Roadmap
 

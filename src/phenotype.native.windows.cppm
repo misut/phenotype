@@ -4387,52 +4387,17 @@ inline std::optional<DebugFrameCapture> windows_capture_frame_rgba() {
 inline DebugArtifactBundleResult windows_write_artifact_bundle(
         char const* directory,
         char const* reason) {
-    DebugArtifactBundleResult result{};
-    result.directory = directory ? directory : "";
-
-    auto directory_path = std::filesystem::path{result.directory};
-    if (!::phenotype::native::detail::ensure_directory(directory_path, result.error))
-        return result;
-
-    auto snapshot_path = directory_path / "snapshot.json";
     auto snapshot = windows_snapshot_json();
-    if (!::phenotype::native::detail::write_text_file(
-            snapshot_path,
-            snapshot,
-            result.error)) {
-        return result;
-    }
-
-    auto platform_directory = directory_path / "platform";
-    if (!::phenotype::native::detail::ensure_directory(platform_directory, result.error))
-        return result;
-
-    auto runtime_path = platform_directory / "windows-runtime.json";
     auto runtime_json = json::emit(
         windows_platform_runtime_details_json_with_reason(
             reason ? std::string_view(reason) : std::string_view{}));
-    if (!::phenotype::native::detail::write_text_file(
-            runtime_path,
-            runtime_json,
-            result.error)) {
-        return result;
-    }
-
-    if (auto frame = windows_capture_frame_rgba()) {
-        auto frame_path = directory_path / "frame.bmp";
-        if (!::phenotype::native::detail::write_bmp_rgba(
-                frame_path,
-                *frame,
-                result.error)) {
-            return result;
-        }
-        result.frame_image_path = frame_path.string();
-    }
-
-    result.ok = true;
-    result.snapshot_json_path = snapshot_path.string();
-    result.platform_files.push_back(runtime_path.string());
-    return result;
+    auto frame = windows_capture_frame_rgba();
+    return ::phenotype::diag::detail::write_debug_artifact_bundle(
+        directory ? std::string_view(directory) : std::string_view{},
+        "windows",
+        snapshot,
+        runtime_json,
+        frame ? &*frame : nullptr);
 }
 
 inline void install_windows_debug_providers() {
