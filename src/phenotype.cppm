@@ -3,6 +3,7 @@ module;
 #include <concepts>
 #include <cstring>
 #include <functional>
+#include <optional>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -21,6 +22,8 @@ export import phenotype.paint;
 export import phenotype.commands;
 export import phenotype.theme_json;
 export import phenotype.host;
+
+import json;
 
 export namespace phenotype {
 
@@ -138,17 +141,21 @@ template<typename Msg>
 inline void toggle(str label, bool active, Msg msg,
                    float corner_radius, Decoration active_decoration,
                    InteractionRole role) {
+    auto id = static_cast<unsigned int>(
+        ::phenotype::detail::g_app.callbacks.size());
     auto row_h = ::phenotype::detail::alloc_node();
     {
         auto& row = ::phenotype::detail::node_at(row_h);
         row.style.flex_direction = FlexDirection::Row;
         row.style.cross_align    = CrossAxisAlignment::Center;
         row.style.gap            = 8;
+        row.debug_semantic_role = interaction_role_name(role);
+        row.debug_semantic_label = std::string(label.data, label.len);
+        row.debug_semantic_callback_id = id;
+        row.debug_semantic_focusable = true;
     }
     ::phenotype::detail::attach_to_scope(row_h);
 
-    auto id = static_cast<unsigned int>(
-        ::phenotype::detail::g_app.callbacks.size());
     ::phenotype::detail::g_app.callbacks.push_back([msg = std::move(msg)] {
         ::phenotype::detail::post<Msg>(msg);
         ::phenotype::detail::trigger_rebuild();
@@ -164,6 +171,7 @@ inline void toggle(str label, bool active, Msg msg,
         box.cursor_type        = 1;
         box.callback_id        = id;
         box.interaction_role   = role;
+        box.debug_semantic_hidden = true;
         if (active) {
             box.background   = ::phenotype::detail::g_app.theme.accent;
             box.border_color = ::phenotype::detail::g_app.theme.accent;
@@ -186,6 +194,7 @@ inline void toggle(str label, bool active, Msg msg,
         lbl.callback_id = id;
         lbl.focusable   = false;
         lbl.interaction_role = role;
+        lbl.debug_semantic_hidden = true;
         ::phenotype::detail::append_child(row_h, lbl_h);
     }
 }
@@ -346,6 +355,8 @@ void run(Host& host, View view, Update update) {
         app.focusable_ids.clear();
         emit_clear(host, app.theme.background);
         float vh = host.canvas_height();
+        app.debug_viewport_width = cw;
+        app.debug_viewport_height = vh;
         detail::paint_node(host, host, root_h, 0, 0, app.scroll_y, vh);
         auto t4 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t4 - t3, {{"phase", "paint"}});
@@ -424,6 +435,8 @@ void run(View view, Update update) {
         app.focusable_ids.clear();
         detail::wasi_emit_clear(app.theme.background);
         float vh = phenotype_get_canvas_height();
+        app.debug_viewport_width = cw;
+        app.debug_viewport_height = vh;
         detail::wasi_paint_node(root_h, 0, 0, app.scroll_y, vh);
         auto t4 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t4 - t3, {{"phase", "paint"}});
@@ -1119,6 +1132,31 @@ inline void clear_input_composition_state() {
     set_input_composition_state(false, {}, 0);
 }
 
+inline void clear_input_debug_caret_fields(diag::InputDebugSnapshot& snapshot) {
+    snapshot.caret_renderer = "hidden";
+    snapshot.caret_rect = {};
+    snapshot.caret_draw_rect = {};
+    snapshot.caret_host_rect = {};
+    snapshot.caret_screen_rect = {};
+    snapshot.caret_host_bounds = {};
+    snapshot.caret_host_flipped = false;
+    snapshot.caret_geometry_source = "draw";
+}
+
+inline diag::InputDebugSnapshot materialize_input_debug_snapshot() {
+    auto snapshot = g_app.input_debug;
+    snapshot.focused_id = g_app.focused_id;
+    snapshot.focused_role = interaction_role_name(callback_role(g_app.focused_id));
+    snapshot.hovered_id = g_app.hovered_id;
+    snapshot.scroll_y = g_app.scroll_y;
+    snapshot.caret_pos = g_app.caret_pos;
+    snapshot.caret_visible = g_app.caret_visible;
+    snapshot.focused_is_input = find_input_handler(g_app.focused_id) != nullptr;
+    if (!snapshot.focused_is_input)
+        clear_input_debug_caret_fields(snapshot);
+    return snapshot;
+}
+
 inline bool handle_key(unsigned int key_type, unsigned int codepoint,
                        char const* source = "core",
                        char const* detail = nullptr) {
@@ -1158,6 +1196,8 @@ void repaint(Host& host, float scroll_y) {
     app.focusable_ids.clear();
     emit_clear(host, app.theme.background);
     float vh = host.canvas_height();
+    app.debug_viewport_width = cw;
+    app.debug_viewport_height = vh;
     paint_node(host, host, app.root, 0, 0, scroll_y, vh);
     flush_if_changed(host);
 }
@@ -1174,6 +1214,8 @@ inline void repaint(float scroll_y) {
     app.focusable_ids.clear();
     wasi_emit_clear(app.theme.background);
     float vh = phenotype_get_canvas_height();
+    app.debug_viewport_width = cw;
+    app.debug_viewport_height = vh;
     wasi_paint_node(app.root, 0, 0, scroll_y, vh);
     wasi_flush_if_changed();
 }
@@ -1194,8 +1236,215 @@ inline unsigned int input_load_focused(unsigned char* buf, unsigned int buf_size
     return n;
 }
 
-inline diag::InputDebugSnapshot const& current_input_debug_snapshot() {
-    return g_app.input_debug;
+inline std::optional<unsigned int> optional_callback_id(unsigned int callback_id) {
+    if (callback_id == 0xFFFFFFFFu)
+        return std::nullopt;
+    return callback_id;
+}
+
+inline bool rect_intersects_viewport(diag::RectSnapshot const& rect) {
+    if (!rect.valid)
+        return false;
+    auto viewport_width = g_app.debug_viewport_width;
+    auto viewport_height = g_app.debug_viewport_height;
+    if (viewport_width <= 0.0f || viewport_height <= 0.0f)
+        return false;
+    if (rect.x + rect.w <= 0.0f || rect.x >= viewport_width)
+        return false;
+    float viewport_top = g_app.scroll_y;
+    float viewport_bottom = g_app.scroll_y + viewport_height;
+    return rect.y + rect.h > viewport_top && rect.y < viewport_bottom;
+}
+
+inline diag::RectSnapshot node_bounds_snapshot(float x, float y, float w, float h) {
+    return {
+        true,
+        x,
+        y,
+        w,
+        h,
+    };
+}
+
+inline void collect_semantic_nodes(NodeHandle node_h,
+                                   float ox,
+                                   float oy,
+                                   std::vector<diag::SemanticNodeSnapshot>& out) {
+    auto* node_ptr = g_app.arena.get(node_h);
+    if (!node_ptr)
+        return;
+
+    auto const& node = *node_ptr;
+    if (node.debug_semantic_hidden)
+        return;
+
+    float ax = ox + node.x;
+    float ay = oy + node.y;
+    bool is_root = !node.parent.valid();
+    bool explicit_semantics = !node.debug_semantic_role.empty()
+        || node.debug_semantic_callback_id != 0xFFFFFFFFu;
+    bool auto_semantics = is_root
+        || node.is_input
+        || (node.callback_id != 0xFFFFFFFFu
+            && node.interaction_role != InteractionRole::None)
+        || !node.image_url.empty()
+        || !node.text.empty();
+
+    if (!explicit_semantics && !auto_semantics) {
+        for (auto child_h : node.children)
+            collect_semantic_nodes(child_h, ax, ay, out);
+        return;
+    }
+
+    unsigned int semantic_callback_id = explicit_semantics
+        && node.debug_semantic_callback_id != 0xFFFFFFFFu
+        ? node.debug_semantic_callback_id
+        : node.callback_id;
+
+    diag::SemanticNodeSnapshot semantic{};
+    semantic.callback_id = optional_callback_id(semantic_callback_id);
+    if (!node.debug_semantic_role.empty()) {
+        semantic.role = node.debug_semantic_role;
+    } else if (is_root) {
+        semantic.role = "root";
+    } else if (node.is_input) {
+        semantic.role = "text_field";
+    } else if (node.callback_id != 0xFFFFFFFFu
+               && node.interaction_role != InteractionRole::None) {
+        semantic.role = interaction_role_name(node.interaction_role);
+    } else if (!node.image_url.empty()) {
+        semantic.role = "image";
+    } else {
+        semantic.role = "text";
+    }
+
+    if (!node.debug_semantic_label.empty()) {
+        semantic.label = node.debug_semantic_label;
+    } else if (!node.text.empty()) {
+        semantic.label = node.text;
+    }
+
+    semantic.bounds = node_bounds_snapshot(ax, ay, node.width, node.height);
+    semantic.visible = is_root || rect_intersects_viewport(semantic.bounds);
+    semantic.enabled = true;
+    semantic.focusable = explicit_semantics
+        ? node.debug_semantic_focusable
+        : (semantic_callback_id != 0xFFFFFFFFu && node.focusable);
+    semantic.focused = semantic_callback_id != 0xFFFFFFFFu
+        && semantic_callback_id == g_app.focused_id;
+    semantic.scroll_container = is_root;
+
+    for (auto child_h : node.children)
+        collect_semantic_nodes(child_h, ax, ay, semantic.children);
+    out.push_back(std::move(semantic));
+}
+
+inline std::optional<diag::SemanticNodeSnapshot> build_semantic_tree_snapshot() {
+    std::vector<diag::SemanticNodeSnapshot> nodes;
+    collect_semantic_nodes(g_app.root, 0.0f, 0.0f, nodes);
+    if (nodes.empty())
+        return std::nullopt;
+    return std::move(nodes.front());
+}
+
+inline char const* default_debug_platform_name() {
+#ifdef __wasi__
+    return "wasi";
+#else
+    return "native";
+#endif
+}
+
+inline char const* debug_backend_name() {
+#ifdef __wasi__
+    return "wasi";
+#else
+    return "native";
+#endif
+}
+
+inline diag::PlatformCapabilitiesSnapshot build_platform_capabilities_snapshot(
+        std::optional<diag::PlatformCapabilitiesSnapshot> platform_override = std::nullopt) {
+    auto snapshot = platform_override.has_value()
+        ? *platform_override
+        : diag::detail::current_platform_capabilities();
+    if (snapshot.platform.empty())
+        snapshot.platform = default_debug_platform_name();
+    snapshot.read_only = true;
+    snapshot.snapshot_json = true;
+    snapshot.semantic_tree = true;
+    snapshot.input_debug = true;
+    snapshot.platform_runtime = true;
+    return snapshot;
+}
+
+inline diag::PlatformRuntimeSnapshot build_platform_runtime_snapshot(
+        diag::PlatformCapabilitiesSnapshot const& capabilities,
+        std::optional<json::Value> runtime_details_override = std::nullopt) {
+    diag::PlatformRuntimeSnapshot runtime{};
+    runtime.platform = capabilities.platform;
+    runtime.backend = debug_backend_name();
+    runtime.viewport = node_bounds_snapshot(
+        0.0f,
+        0.0f,
+        g_app.debug_viewport_width,
+        g_app.debug_viewport_height);
+    runtime.scroll_y = g_app.scroll_y;
+    runtime.content_height = get_total_height();
+    runtime.focused_callback_id = optional_callback_id(g_app.focused_id);
+    runtime.hovered_callback_id = optional_callback_id(g_app.hovered_id);
+    runtime.details = runtime_details_override.has_value()
+        ? *runtime_details_override
+        : diag::detail::current_platform_runtime_details();
+    return runtime;
+}
+
+inline diag::DebugPlaneSnapshot build_debug_plane_snapshot(
+        std::optional<diag::PlatformCapabilitiesSnapshot> platform_override = std::nullopt,
+        std::optional<json::Value> runtime_details_override = std::nullopt) {
+    diag::DebugPlaneSnapshot snapshot{};
+    snapshot.platform_capabilities = build_platform_capabilities_snapshot(
+        std::move(platform_override));
+    snapshot.input_debug = materialize_input_debug_snapshot();
+    snapshot.semantic_tree = build_semantic_tree_snapshot();
+    snapshot.platform_runtime = build_platform_runtime_snapshot(
+        snapshot.platform_capabilities,
+        std::move(runtime_details_override));
+    return snapshot;
+}
+
+inline json::Value build_debug_plane_snapshot_json(
+        std::optional<diag::PlatformCapabilitiesSnapshot> platform_override = std::nullopt,
+        std::optional<json::Value> runtime_details_override = std::nullopt) {
+    return diag::debug_plane_snapshot_to_json(build_debug_plane_snapshot(
+        std::move(platform_override),
+        std::move(runtime_details_override)));
+}
+
+inline json::Value build_diag_snapshot_with_debug(
+        std::optional<diag::PlatformCapabilitiesSnapshot> platform_override = std::nullopt,
+        std::optional<json::Value> runtime_details_override = std::nullopt) {
+    auto snapshot = diag::build_snapshot();
+    auto& root = snapshot.as_object();
+    root.erase("debug");
+    root.emplace(
+        "debug",
+        build_debug_plane_snapshot_json(
+            std::move(platform_override),
+            std::move(runtime_details_override)));
+    return snapshot;
+}
+
+inline std::string serialize_diag_snapshot_with_debug(
+        std::optional<diag::PlatformCapabilitiesSnapshot> platform_override = std::nullopt,
+        std::optional<json::Value> runtime_details_override = std::nullopt) {
+    return json::emit(build_diag_snapshot_with_debug(
+        std::move(platform_override),
+        std::move(runtime_details_override)));
+}
+
+inline diag::InputDebugSnapshot current_input_debug_snapshot() {
+    return materialize_input_debug_snapshot();
 }
 
 inline InteractionRole focused_role() {
@@ -1240,7 +1489,7 @@ inline void input_commit(unsigned char const* buf, unsigned int len) {
 namespace diag {
 
 inline InputDebugSnapshot input_debug_snapshot() {
-    return detail::current_input_debug_snapshot();
+    return ::phenotype::detail::current_input_debug_snapshot();
 }
 
 } // namespace diag
@@ -1316,7 +1565,7 @@ extern "C" {
 
     __attribute__((export_name("phenotype_diag_export")))
     unsigned int phenotype_diag_export(void) {
-        auto json = phenotype::diag::serialize_snapshot();
+        auto json = phenotype::detail::serialize_diag_snapshot_with_debug();
         if (json.size() > PHENOTYPE_DIAG_BUF_SIZE) { phenotype_diag_buf_len = 0; return 0; }
         std::memcpy(phenotype_diag_buf, json.data(), json.size());
         phenotype_diag_buf_len = static_cast<unsigned int>(json.size());

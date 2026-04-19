@@ -26,6 +26,7 @@ module;
 #include <limits>
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -547,6 +548,220 @@ struct InputDebugSnapshot {
     unsigned int composition_cursor = 0;
 };
 
+struct SemanticNodeSnapshot {
+    std::optional<unsigned int> callback_id;
+    std::string role = "none";
+    std::string label;
+    RectSnapshot bounds{};
+    bool visible = false;
+    bool enabled = true;
+    bool focusable = false;
+    bool focused = false;
+    bool scroll_container = false;
+    std::vector<SemanticNodeSnapshot> children;
+};
+
+struct PlatformCapabilitiesSnapshot {
+    std::string platform;
+    bool read_only = true;
+    bool snapshot_json = true;
+    bool capture_frame_rgba = false;
+    bool write_artifact_bundle = false;
+    bool semantic_tree = true;
+    bool input_debug = true;
+    bool platform_runtime = true;
+    bool frame_image = false;
+    bool platform_diagnostics = false;
+};
+
+struct PlatformRuntimeSnapshot {
+    std::string platform;
+    std::string backend;
+    RectSnapshot viewport{};
+    float scroll_y = 0.0f;
+    float content_height = 0.0f;
+    std::optional<unsigned int> focused_callback_id;
+    std::optional<unsigned int> hovered_callback_id;
+    json::Value details = json::Value{json::Object{}};
+};
+
+struct DebugPlaneSnapshot {
+    PlatformCapabilitiesSnapshot platform_capabilities{};
+    InputDebugSnapshot input_debug{};
+    std::optional<SemanticNodeSnapshot> semantic_tree;
+    PlatformRuntimeSnapshot platform_runtime{};
+};
+
+namespace detail {
+    using DebugPayloadBuilder = json::Value (*)();
+    using PlatformCapabilitiesProvider = PlatformCapabilitiesSnapshot (*)();
+    using PlatformRuntimeDetailsProvider = json::Value (*)();
+
+    DebugPayloadBuilder& debug_payload_builder_storage() noexcept {
+        static DebugPayloadBuilder builder = nullptr;
+        return builder;
+    }
+
+    PlatformCapabilitiesProvider& platform_capabilities_provider_storage() noexcept {
+        static PlatformCapabilitiesProvider provider = nullptr;
+        return provider;
+    }
+
+    PlatformRuntimeDetailsProvider& platform_runtime_details_provider_storage() noexcept {
+        static PlatformRuntimeDetailsProvider provider = nullptr;
+        return provider;
+    }
+
+    void set_debug_payload_builder(DebugPayloadBuilder builder) noexcept {
+        debug_payload_builder_storage() = builder;
+    }
+
+    void set_platform_capabilities_provider(PlatformCapabilitiesProvider provider) noexcept {
+        platform_capabilities_provider_storage() = provider;
+    }
+
+    void set_platform_runtime_details_provider(PlatformRuntimeDetailsProvider provider) noexcept {
+        platform_runtime_details_provider_storage() = provider;
+    }
+
+    DebugPayloadBuilder current_debug_payload_builder() noexcept {
+        return debug_payload_builder_storage();
+    }
+
+    PlatformCapabilitiesSnapshot current_platform_capabilities() {
+        if (auto provider = platform_capabilities_provider_storage())
+            return provider();
+        return {};
+    }
+
+    json::Value current_platform_runtime_details() {
+        if (auto provider = platform_runtime_details_provider_storage())
+            return provider();
+        return json::Value{json::Object{}};
+    }
+} // namespace detail
+
+inline json::Value rect_to_json(RectSnapshot const& rect) {
+    json::Object out;
+    out.emplace("valid", json::Value{rect.valid});
+    out.emplace("x", json::Value{rect.x});
+    out.emplace("y", json::Value{rect.y});
+    out.emplace("w", json::Value{rect.w});
+    out.emplace("h", json::Value{rect.h});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value callback_id_to_json(std::optional<unsigned int> callback_id) {
+    if (!callback_id.has_value())
+        return json::Value{};
+    return json::Value{static_cast<std::int64_t>(*callback_id)};
+}
+
+inline json::Value input_debug_to_json(InputDebugSnapshot const& snapshot) {
+    json::Object out;
+    out.emplace("event", json::Value{snapshot.event});
+    out.emplace("source", json::Value{snapshot.source});
+    out.emplace("detail", json::Value{snapshot.detail});
+    out.emplace("result", json::Value{snapshot.result});
+    out.emplace("callback_id", json::Value{static_cast<std::int64_t>(snapshot.callback_id)});
+    out.emplace("role", json::Value{snapshot.role});
+    out.emplace("focused_id", json::Value{static_cast<std::int64_t>(snapshot.focused_id)});
+    out.emplace("focused_role", json::Value{snapshot.focused_role});
+    out.emplace("hovered_id", json::Value{static_cast<std::int64_t>(snapshot.hovered_id)});
+    out.emplace("scroll_y", json::Value{snapshot.scroll_y});
+    out.emplace("caret_pos", json::Value{static_cast<std::int64_t>(snapshot.caret_pos)});
+    out.emplace("caret_visible", json::Value{snapshot.caret_visible});
+    out.emplace("caret_renderer", json::Value{snapshot.caret_renderer});
+    out.emplace("caret_rect", rect_to_json(snapshot.caret_rect));
+    out.emplace("caret_draw_rect", rect_to_json(snapshot.caret_draw_rect));
+    out.emplace("caret_host_rect", rect_to_json(snapshot.caret_host_rect));
+    out.emplace("caret_screen_rect", rect_to_json(snapshot.caret_screen_rect));
+    out.emplace("caret_host_bounds", rect_to_json(snapshot.caret_host_bounds));
+    out.emplace("caret_host_flipped", json::Value{snapshot.caret_host_flipped});
+    out.emplace("caret_geometry_source", json::Value{snapshot.caret_geometry_source});
+    out.emplace("focused_is_input", json::Value{snapshot.focused_is_input});
+    out.emplace("composition_active", json::Value{snapshot.composition_active});
+    out.emplace("composition_text", json::Value{snapshot.composition_text});
+    out.emplace(
+        "composition_cursor",
+        json::Value{static_cast<std::int64_t>(snapshot.composition_cursor)});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value semantic_node_to_json(SemanticNodeSnapshot const& node) {
+    json::Object out;
+    out.emplace("callback_id", callback_id_to_json(node.callback_id));
+    out.emplace("role", json::Value{node.role});
+    out.emplace("label", json::Value{node.label});
+    out.emplace("bounds", rect_to_json(node.bounds));
+    out.emplace("visible", json::Value{node.visible});
+    out.emplace("enabled", json::Value{node.enabled});
+    out.emplace("focusable", json::Value{node.focusable});
+    out.emplace("focused", json::Value{node.focused});
+    out.emplace("scroll_container", json::Value{node.scroll_container});
+    json::Array children;
+    for (auto const& child : node.children)
+        children.push_back(semantic_node_to_json(child));
+    out.emplace("children", json::Value{std::move(children)});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value platform_capabilities_to_json(
+        PlatformCapabilitiesSnapshot const& capabilities) {
+    json::Object out;
+    out.emplace("platform", json::Value{capabilities.platform});
+    out.emplace("read_only", json::Value{capabilities.read_only});
+    out.emplace("snapshot_json", json::Value{capabilities.snapshot_json});
+    out.emplace("capture_frame_rgba", json::Value{capabilities.capture_frame_rgba});
+    out.emplace(
+        "write_artifact_bundle",
+        json::Value{capabilities.write_artifact_bundle});
+    out.emplace("semantic_tree", json::Value{capabilities.semantic_tree});
+    out.emplace("input_debug", json::Value{capabilities.input_debug});
+    out.emplace("platform_runtime", json::Value{capabilities.platform_runtime});
+    out.emplace("frame_image", json::Value{capabilities.frame_image});
+    out.emplace(
+        "platform_diagnostics",
+        json::Value{capabilities.platform_diagnostics});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value platform_runtime_to_json(
+        PlatformRuntimeSnapshot const& runtime) {
+    json::Object out;
+    out.emplace("platform", json::Value{runtime.platform});
+    out.emplace("backend", json::Value{runtime.backend});
+    out.emplace("viewport", rect_to_json(runtime.viewport));
+    out.emplace("scroll_y", json::Value{runtime.scroll_y});
+    out.emplace("content_height", json::Value{runtime.content_height});
+    out.emplace(
+        "focused_callback_id",
+        callback_id_to_json(runtime.focused_callback_id));
+    out.emplace(
+        "hovered_callback_id",
+        callback_id_to_json(runtime.hovered_callback_id));
+    out.emplace("details", runtime.details);
+    return json::Value{std::move(out)};
+}
+
+inline json::Value debug_plane_snapshot_to_json(
+        DebugPlaneSnapshot const& snapshot) {
+    json::Object out;
+    out.emplace(
+        "platform_capabilities",
+        platform_capabilities_to_json(snapshot.platform_capabilities));
+    out.emplace("input_debug", input_debug_to_json(snapshot.input_debug));
+    if (snapshot.semantic_tree.has_value()) {
+        out.emplace("semantic_tree", semantic_node_to_json(*snapshot.semantic_tree));
+    } else {
+        out.emplace("semantic_tree", json::Value{});
+    }
+    out.emplace(
+        "platform_runtime",
+        platform_runtime_to_json(snapshot.platform_runtime));
+    return json::Value{std::move(out)};
+}
+
 inline json::Value attributes_to_json(std::vector<metrics::Attribute> const& attrs) {
     json::Object out;
     for (auto const& a : attrs) out.emplace(a.key, json::Value{a.value});
@@ -692,6 +907,11 @@ inline json::Value build_snapshot() {
     root.emplace("counters",   json::Value{std::move(counters)});
     root.emplace("gauges",     json::Value{std::move(gauges)});
     root.emplace("histograms", json::Value{std::move(histograms)});
+    if (auto builder = detail::current_debug_payload_builder()) {
+        root.emplace("debug", builder());
+    } else {
+        root.emplace("debug", debug_plane_snapshot_to_json({}));
+    }
     return json::Value{std::move(root)};
 }
 

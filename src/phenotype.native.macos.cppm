@@ -47,6 +47,7 @@ import cppx.os;
 import cppx.os.system;
 import cppx.resource;
 import cppx.unicode;
+import json;
 import phenotype;
 import phenotype.commands;
 import phenotype.diag;
@@ -4294,10 +4295,75 @@ inline void clear_composition_for_tests() {}
 #endif
 } // namespace phenotype::native::macos_test
 
+namespace phenotype::native::detail {
+
+inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities() {
+    return {
+        "macos",
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+    };
+}
+
+inline json::Value macos_platform_runtime_details_json() {
+    return json::Value{json::Object{}};
+}
+
+inline std::string macos_snapshot_json() {
+    return ::phenotype::detail::serialize_diag_snapshot_with_debug(
+        macos_debug_capabilities(),
+        macos_platform_runtime_details_json());
+}
+
+inline std::optional<DebugFrameCapture> macos_capture_frame_rgba() {
+    return std::nullopt;
+}
+
+inline DebugArtifactBundleResult macos_write_artifact_bundle(
+        char const* directory,
+        char const*) {
+    DebugArtifactBundleResult result{};
+    result.directory = directory ? directory : "";
+
+    auto directory_path = std::filesystem::path{result.directory};
+    if (!::phenotype::native::detail::ensure_directory(directory_path, result.error))
+        return result;
+
+    auto snapshot_path = directory_path / "snapshot.json";
+    auto snapshot = macos_snapshot_json();
+    if (!::phenotype::native::detail::write_text_file(
+            snapshot_path,
+            snapshot,
+            result.error)) {
+        return result;
+    }
+
+    result.ok = true;
+    result.snapshot_json_path = snapshot_path.string();
+    return result;
+}
+
+inline void install_macos_debug_providers() {
+    ::phenotype::diag::detail::set_platform_capabilities_provider(
+        macos_debug_capabilities);
+    ::phenotype::diag::detail::set_platform_runtime_details_provider(
+        macos_platform_runtime_details_json);
+}
+
+} // namespace phenotype::native::detail
+
 export namespace phenotype::native {
 
 inline platform_api const& macos_platform() {
 #ifdef __APPLE__
+    detail::install_macos_debug_providers();
     static platform_api api{
         "macos",
         true,
@@ -4322,6 +4388,12 @@ inline platform_api const& macos_platform() {
             nullptr,
             detail::input_dismiss_transient,
             nullptr,
+        },
+        {
+            detail::macos_debug_capabilities,
+            detail::macos_snapshot_json,
+            detail::macos_capture_frame_rgba,
+            detail::macos_write_artifact_bundle,
         },
         [](char const* url, unsigned int len) {
             auto opened = cppx::os::system::open_url(std::string_view(url, len));

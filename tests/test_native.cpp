@@ -9,6 +9,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -30,6 +31,7 @@
 
 import phenotype.native;
 import phenotype.native.stub;
+import json;
 #ifdef __APPLE__
 import phenotype.native.macos;
 #endif
@@ -67,6 +69,23 @@ static void append_bytes(std::vector<unsigned char>& buf, char const* text, unsi
         std::memcpy(buf.data() + offset, text, len);
     while ((buf.size() & 3u) != 0)
         buf.push_back(0);
+}
+
+static std::filesystem::path make_debug_bundle_dir(std::string_view label) {
+    auto stamp = std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    auto path = std::filesystem::temp_directory_path()
+        / ("phenotype-debug-" + std::string(label) + "-" + stamp);
+    std::filesystem::remove_all(path);
+    return path;
+}
+
+static std::string read_text_file(std::filesystem::path const& path) {
+    std::ifstream in(path, std::ios::binary);
+    assert(in.is_open());
+    return std::string(
+        std::istreambuf_iterator<char>(in),
+        std::istreambuf_iterator<char>());
 }
 
 #ifdef _WIN32
@@ -335,6 +354,8 @@ static void reset_core_state() {
     app.caret_pos = phenotype::native::invalid_callback_id;
     app.caret_visible = true;
     app.last_paint_hash = 0;
+    app.debug_viewport_width = 0.0f;
+    app.debug_viewport_height = 0.0f;
     app.input_debug = {};
     app.arena.reset();
     app.prev_arena.reset();
@@ -1250,6 +1271,42 @@ struct MacInputHarness {
     }
 };
 
+static void test_macos_common_debug_contract_entry_points() {
+    MacInputHarness harness;
+
+    auto capabilities = phenotype::native::debug::capabilities();
+    assert(capabilities.platform == "macos");
+    assert(capabilities.read_only);
+    assert(capabilities.snapshot_json);
+    assert(!capabilities.capture_frame_rgba);
+    assert(capabilities.write_artifact_bundle);
+    assert(!capabilities.platform_diagnostics);
+
+    auto snapshot_json = phenotype::native::debug::snapshot_json();
+    auto snapshot = json::parse(snapshot_json);
+    auto const& debug_payload = snapshot.as_object().at("debug").as_object();
+    auto const& runtime = debug_payload.at("platform_runtime").as_object();
+    assert(runtime.at("platform").as_string() == "macos");
+    assert(runtime.contains("details"));
+
+    auto bundle_dir = make_debug_bundle_dir("macos");
+    auto bundle = phenotype::native::debug::write_artifact_bundle(
+        bundle_dir.string(),
+        "common-contract-test");
+    assert(bundle.ok);
+    assert(std::filesystem::exists(bundle_dir / "snapshot.json"));
+    assert(bundle.frame_image_path.empty());
+    assert(bundle.platform_files.empty());
+
+    auto bundle_snapshot = json::parse(read_text_file(bundle_dir / "snapshot.json"));
+    auto const& bundle_debug = bundle_snapshot.as_object().at("debug").as_object();
+    assert(bundle_debug.contains("platform_capabilities"));
+    assert(bundle_debug.contains("platform_runtime"));
+
+    std::filesystem::remove_all(bundle_dir);
+    std::puts("PASS: macOS common debug contract entry points");
+}
+
 static void test_macos_system_caret_indicator_tracks_focus_and_composition() {
     using namespace input_regression;
     using phenotype::native::macos_test::clear_composition_for_tests;
@@ -1936,6 +1993,54 @@ static void test_windows_renderer_enables_dred_under_warp_fixture() {
     std::puts("PASS: windows renderer enables DRED diagnostics under WARP");
 }
 
+static void test_windows_common_debug_contract_entry_points() {
+    WindowsInputHarness harness;
+
+    auto capabilities = phenotype::native::debug::capabilities();
+    assert(capabilities.platform == "windows");
+    assert(capabilities.read_only);
+    assert(capabilities.snapshot_json);
+    assert(!capabilities.capture_frame_rgba);
+    assert(capabilities.write_artifact_bundle);
+    assert(capabilities.semantic_tree);
+    assert(capabilities.input_debug);
+    assert(capabilities.platform_runtime);
+    assert(capabilities.platform_diagnostics);
+
+    auto snapshot_json = phenotype::native::debug::snapshot_json();
+    auto snapshot = json::parse(snapshot_json);
+    auto const& debug_payload = snapshot.as_object().at("debug").as_object();
+    auto const& runtime = debug_payload.at("platform_runtime").as_object();
+    assert(runtime.at("platform").as_string() == "windows");
+    auto const& details = runtime.at("details").as_object();
+    assert(details.contains("renderer"));
+    assert(details.contains("ime"));
+
+    auto bundle_dir = make_debug_bundle_dir("windows");
+    auto bundle = phenotype::native::debug::write_artifact_bundle(
+        bundle_dir.string(),
+        "common-contract-test");
+    assert(bundle.ok);
+    assert(std::filesystem::exists(bundle_dir / "snapshot.json"));
+    assert(std::filesystem::exists(bundle_dir / "platform" / "windows-runtime.json"));
+    assert(bundle.frame_image_path.empty());
+    assert(bundle.platform_files.size() == 1);
+
+    auto bundle_snapshot = json::parse(read_text_file(bundle_dir / "snapshot.json"));
+    auto const& bundle_debug = bundle_snapshot.as_object().at("debug").as_object();
+    assert(bundle_debug.contains("platform_capabilities"));
+    assert(bundle_debug.contains("semantic_tree"));
+
+    auto runtime_file = json::parse(
+        read_text_file(bundle_dir / "platform" / "windows-runtime.json"));
+    auto const& runtime_file_obj = runtime_file.as_object();
+    assert(runtime_file_obj.contains("renderer"));
+    assert(runtime_file_obj.contains("ime"));
+
+    std::filesystem::remove_all(bundle_dir);
+    std::puts("PASS: windows common debug contract entry points");
+}
+
 static void test_windows_renderer_fetches_remote_image_via_worker() {
     using phenotype::native::windows_test::remote_image_debug;
 
@@ -2612,6 +2717,7 @@ int main() {
     test_macos_system_caret_indicator_tracks_focus_and_composition();
     test_macos_fallback_caret_path_exposes_custom_debug_rect();
     test_macos_scroll_tracking_hides_caret_until_idle();
+    test_macos_common_debug_contract_entry_points();
     test_default_scroll_delta_fallback();
     test_text_measure_basic();
     test_text_measure_proportional();
@@ -2647,6 +2753,7 @@ int main() {
     test_windows_renderer_reinit_cycle();
     test_windows_renderer_uploads_local_image_texture();
     test_windows_renderer_enables_dred_under_warp_fixture();
+    test_windows_common_debug_contract_entry_points();
     test_windows_renderer_fetches_remote_image_via_worker();
     test_windows_renderer_fetches_remote_image_with_large_text_uploads();
     test_windows_renderer_processes_remote_image_completion();

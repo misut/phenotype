@@ -9,6 +9,7 @@
 #include <cstring>
 #include <string>
 #include <string_view>
+#include <variant>
 import phenotype;
 import json;
 
@@ -40,6 +41,42 @@ json::Object const* find_metric(json::Array const& arr, std::string_view name) {
         if (it->second.as_string() == name) return &obj;
     }
     return nullptr;
+}
+
+json::Object const* find_semantic_child(json::Array const& arr,
+                                        std::string_view role,
+                                        std::string_view label = {}) {
+    for (auto const& value : arr) {
+        if (!value.is_object())
+            continue;
+        auto const& obj = value.as_object();
+        auto role_it = obj.find("role");
+        if (role_it == obj.end() || !role_it->second.is_string())
+            continue;
+        if (role_it->second.as_string() != role)
+            continue;
+        if (label.empty())
+            return &obj;
+        auto label_it = obj.find("label");
+        if (label_it != obj.end() && label_it->second.is_string()
+            && label_it->second.as_string() == label) {
+            return &obj;
+        }
+    }
+    return nullptr;
+}
+
+int count_semantic_role(json::Array const& arr, std::string_view role) {
+    int count = 0;
+    for (auto const& value : arr) {
+        if (!value.is_object())
+            continue;
+        auto const& obj = value.as_object();
+        auto it = obj.find("role");
+        if (it != obj.end() && it->second.is_string() && it->second.as_string() == role)
+            ++count;
+    }
+    return count;
 }
 
 } // namespace
@@ -136,7 +173,7 @@ void test_snapshot_shape() {
         {{"platform", "macos"}, {"phase", "command_decode"}});
     log::info("test", "hello {}", 42);
 
-    auto json_str = diag::serialize_snapshot();
+    auto json_str = detail::serialize_diag_snapshot_with_debug();
     assert(!json_str.empty());
 
     auto v = json::parse(json_str);
@@ -147,6 +184,32 @@ void test_snapshot_shape() {
     assert(root.contains("counters"));
     assert(root.contains("gauges"));
     assert(root.contains("histograms"));
+    assert(root.contains("debug"));
+
+    auto const& debug = root.at("debug").as_object();
+    assert(debug.contains("platform_capabilities"));
+    assert(debug.contains("input_debug"));
+    assert(debug.contains("semantic_tree"));
+    assert(debug.contains("platform_runtime"));
+
+    auto const& capabilities = debug.at("platform_capabilities").as_object();
+    assert(capabilities.at("read_only").as_bool() == true);
+    assert(capabilities.at("snapshot_json").as_bool() == true);
+    assert(capabilities.at("input_debug").as_bool() == true);
+    assert(capabilities.at("semantic_tree").as_bool() == true);
+    assert(capabilities.at("platform_runtime").as_bool() == true);
+
+    auto const& input_debug = debug.at("input_debug").as_object();
+    assert(input_debug.contains("event"));
+    assert(input_debug.contains("caret_rect"));
+
+    auto const& runtime = debug.at("platform_runtime").as_object();
+#ifdef __wasi__
+    assert(runtime.at("backend").as_string() == "wasi");
+#else
+    assert(runtime.at("backend").as_string() == "native");
+#endif
+    assert(runtime.contains("viewport"));
 
     // Resource carries service.name + service.version.
     auto const& resource = root.at("resource").as_object();
@@ -219,6 +282,13 @@ void test_snapshot_shape() {
 // rebuild counter and the per-phase histogram with one record per phase.
 struct DiagState {};
 struct DiagMsg {};
+struct DebugPlaneNoop {};
+struct DebugPlaneTextChanged { std::string value; };
+using DebugPlaneMsg = std::variant<DebugPlaneNoop, DebugPlaneTextChanged>;
+
+static DebugPlaneMsg map_debug_plane_text(std::string value) {
+    return DebugPlaneTextChanged{std::move(value)};
+}
 
 void test_runner_records_phases() {
     metrics::reset_all();
@@ -244,6 +314,96 @@ void test_runner_records_phases() {
     assert(phase_points.size() == 5);
 }
 
+void test_debug_plane_semantic_tree_shape_and_stability() {
+    metrics::reset_all();
+    log::set_level(log::Severity::info);
+#ifndef __wasi__
+    run<DiagState, DebugPlaneMsg>(diag_host,
+#else
+    run<DiagState, DebugPlaneMsg>(
+#endif
+        [](DiagState const&) {
+            layout::column([&] {
+                widget::text("Heading");
+                widget::button<DebugPlaneMsg>("Run", DebugPlaneNoop{});
+                widget::link("Docs", "https://example.com/docs");
+                widget::checkbox<DebugPlaneMsg>("Subscribe", true, DebugPlaneNoop{});
+                widget::radio<DebugPlaneMsg>("Option A", true, DebugPlaneNoop{});
+                widget::text_field<DebugPlaneMsg>(
+                    "Type here",
+                    "",
+                    map_debug_plane_text);
+                widget::image("hero.png", 48.0f, 32.0f);
+            });
+        },
+        [](DiagState&, DebugPlaneMsg) {});
+
+    auto first = json::parse(detail::serialize_diag_snapshot_with_debug());
+    auto const& debug = first.as_object().at("debug").as_object();
+    auto const& semantic_tree = debug.at("semantic_tree").as_object();
+    assert(semantic_tree.at("role").as_string() == "root");
+    assert(semantic_tree.at("scroll_container").as_bool() == true);
+    assert(semantic_tree.at("visible").as_bool() == true);
+    auto const& root_bounds = semantic_tree.at("bounds").as_object();
+    assert(root_bounds.at("valid").as_bool() == true);
+
+    auto const& children = semantic_tree.at("children").as_array();
+    assert(children.size() == 7);
+    assert(count_semantic_role(children, "checkbox") == 1);
+    assert(count_semantic_role(children, "radio") == 1);
+    assert(count_semantic_role(children, "button") == 1);
+    assert(count_semantic_role(children, "link") == 1);
+    assert(count_semantic_role(children, "text") == 1);
+    assert(count_semantic_role(children, "text_field") == 1);
+    assert(count_semantic_role(children, "image") == 1);
+
+    auto const* checkbox = find_semantic_child(children, "checkbox", "Subscribe");
+    assert(checkbox != nullptr);
+    assert(checkbox->at("callback_id").as_integer() >= 0);
+    assert(checkbox->at("focusable").as_bool() == true);
+    assert(checkbox->at("enabled").as_bool() == true);
+    assert(checkbox->at("visible").as_bool() == true);
+
+    auto const* radio = find_semantic_child(children, "radio", "Option A");
+    assert(radio != nullptr);
+    assert(radio->at("callback_id").as_integer() >= 0);
+    assert(radio->at("focusable").as_bool() == true);
+
+    auto const* button = find_semantic_child(children, "button", "Run");
+    assert(button != nullptr);
+    assert(button->at("callback_id").as_integer() >= 0);
+
+    auto const* link = find_semantic_child(children, "link", "Docs");
+    assert(link != nullptr);
+    assert(link->at("callback_id").as_integer() >= 0);
+
+    auto const* text = find_semantic_child(children, "text", "Heading");
+    assert(text != nullptr);
+    assert(text->at("focusable").as_bool() == false);
+
+    auto const* text_field = find_semantic_child(children, "text_field", "Type here");
+    assert(text_field != nullptr);
+    assert(text_field->at("callback_id").as_integer() >= 0);
+    assert(text_field->at("focusable").as_bool() == true);
+
+    auto const* image = find_semantic_child(children, "image");
+    assert(image != nullptr);
+    assert(image->at("focusable").as_bool() == false);
+
+    auto const& runtime = debug.at("platform_runtime").as_object();
+    auto const& viewport = runtime.at("viewport").as_object();
+    assert(viewport.at("valid").as_bool() == true);
+    assert(viewport.contains("w"));
+    assert(viewport.contains("h"));
+
+    auto first_tree = json::emit(debug.at("semantic_tree"));
+    detail::trigger_rebuild();
+    auto second = json::parse(detail::serialize_diag_snapshot_with_debug());
+    auto second_tree =
+        json::emit(second.as_object().at("debug").as_object().at("semantic_tree"));
+    assert(first_tree == second_tree);
+}
+
 int main() {
     test_counter_add_and_total();
     std::printf("PASS: counter add + total\n");
@@ -261,6 +421,8 @@ int main() {
     std::printf("PASS: JSON snapshot shape\n");
     test_runner_records_phases();
     std::printf("PASS: runner records frame + phase histograms\n");
+    test_debug_plane_semantic_tree_shape_and_stability();
+    std::printf("PASS: debug plane semantic tree shape + stability\n");
     std::printf("\nAll diag tests passed.\n");
     return 0;
 }

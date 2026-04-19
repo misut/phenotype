@@ -66,6 +66,7 @@ import cppx.os;
 import cppx.os.system;
 import cppx.resource;
 import cppx.unicode;
+import json;
 import phenotype;
 import phenotype.commands;
 import phenotype.state;
@@ -4028,6 +4029,149 @@ inline bool windows_uses_shared_caret_blink() {
     return true;
 }
 
+inline ::phenotype::diag::PlatformCapabilitiesSnapshot windows_debug_capabilities() {
+    return {
+        "windows",
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        false,
+        true,
+    };
+}
+
+inline json::Value windows_platform_runtime_details_json() {
+#ifdef _WIN32
+    json::Object renderer;
+    renderer.emplace("initialized", json::Value{g_renderer.initialized});
+    renderer.emplace("debug_enabled", json::Value{g_renderer.debug_enabled});
+    renderer.emplace("warp_enabled", json::Value{g_renderer.warp_enabled});
+    renderer.emplace("dred_enabled", json::Value{g_renderer.dred_enabled});
+    renderer.emplace("lost", json::Value{g_renderer.lost});
+    renderer.emplace(
+        "last_failure_hr",
+        json::Value{static_cast<std::int64_t>(g_renderer.last_failure_hr)});
+    renderer.emplace(
+        "device_removed_reason",
+        json::Value{static_cast<std::int64_t>(g_renderer.device_removed_reason)});
+    renderer.emplace(
+        "last_close_hr",
+        json::Value{static_cast<std::int64_t>(g_renderer.last_close_hr)});
+    renderer.emplace(
+        "last_present_hr",
+        json::Value{static_cast<std::int64_t>(g_renderer.last_present_hr)});
+    renderer.emplace(
+        "last_signal_hr",
+        json::Value{static_cast<std::int64_t>(g_renderer.last_signal_hr)});
+    renderer.emplace(
+        "dred_device_state",
+        json::Value{static_cast<std::int64_t>(g_renderer.dred_device_state)});
+    renderer.emplace("failure_label", json::Value{g_renderer.last_failure_label});
+
+    json::Object ime;
+    ime.emplace("hwnd_attached", json::Value{g_ime.hwnd != nullptr});
+    ime.emplace("composition_active", json::Value{g_ime.composition_active});
+    ime.emplace(
+        "composition_text",
+        json::Value{
+            cppx::unicode::wide_to_utf8(g_ime.composition_text).value_or(std::string{})});
+    ime.emplace(
+        "composition_cursor",
+        json::Value{static_cast<std::int64_t>(g_ime.composition_cursor)});
+    ime.emplace(
+        "composition_anchor",
+        json::Value{static_cast<std::int64_t>(g_ime.composition_anchor)});
+    ime.emplace("overlay_visible", json::Value{g_ime.overlay.visible});
+    ime.emplace(
+        "sync_call_count",
+        json::Value{static_cast<std::int64_t>(g_ime.sync_call_count)});
+    ime.emplace(
+        "repaint_request_count",
+        json::Value{static_cast<std::int64_t>(g_ime.repaint_request_count)});
+    ime.emplace(
+        "deferred_repaint_count",
+        json::Value{static_cast<std::int64_t>(g_ime.deferred_repaint_count)});
+    ime.emplace("repaint_pending", json::Value{g_ime.repaint_pending});
+
+    json::Object runtime;
+    runtime.emplace("renderer", json::Value{std::move(renderer)});
+    runtime.emplace("ime", json::Value{std::move(ime)});
+    return json::Value{std::move(runtime)};
+#else
+    return json::Value{json::Object{}};
+#endif
+}
+
+inline std::string windows_snapshot_json() {
+    return ::phenotype::detail::serialize_diag_snapshot_with_debug(
+        windows_debug_capabilities(),
+        windows_platform_runtime_details_json());
+}
+
+inline std::optional<DebugFrameCapture> windows_capture_frame_rgba() {
+    return std::nullopt;
+}
+
+inline DebugArtifactBundleResult windows_write_artifact_bundle(
+        char const* directory,
+        char const*) {
+    DebugArtifactBundleResult result{};
+    result.directory = directory ? directory : "";
+
+    auto directory_path = std::filesystem::path{result.directory};
+    if (!::phenotype::native::detail::ensure_directory(directory_path, result.error))
+        return result;
+
+    auto snapshot_path = directory_path / "snapshot.json";
+    auto snapshot = windows_snapshot_json();
+    if (!::phenotype::native::detail::write_text_file(
+            snapshot_path,
+            snapshot,
+            result.error)) {
+        return result;
+    }
+
+    auto platform_directory = directory_path / "platform";
+    if (!::phenotype::native::detail::ensure_directory(platform_directory, result.error))
+        return result;
+
+    auto runtime_path = platform_directory / "windows-runtime.json";
+    auto runtime_json = json::emit(windows_platform_runtime_details_json());
+    if (!::phenotype::native::detail::write_text_file(
+            runtime_path,
+            runtime_json,
+            result.error)) {
+        return result;
+    }
+
+    if (auto frame = windows_capture_frame_rgba()) {
+        auto frame_path = directory_path / "frame.bmp";
+        if (!::phenotype::native::detail::write_bmp_rgba(
+                frame_path,
+                *frame,
+                result.error)) {
+            return result;
+        }
+        result.frame_image_path = frame_path.string();
+    }
+
+    result.ok = true;
+    result.snapshot_json_path = snapshot_path.string();
+    result.platform_files.push_back(runtime_path.string());
+    return result;
+}
+
+inline void install_windows_debug_providers() {
+    ::phenotype::diag::detail::set_platform_capabilities_provider(
+        windows_debug_capabilities);
+    ::phenotype::diag::detail::set_platform_runtime_details_provider(
+        windows_platform_runtime_details_json);
+}
+
 #endif
 
 } // namespace phenotype::native::detail
@@ -4036,6 +4180,7 @@ export namespace phenotype::native {
 
 inline platform_api const& windows_platform() {
 #ifdef _WIN32
+    detail::install_windows_debug_providers();
     static platform_api api{
         "windows",
         true,
@@ -4060,6 +4205,12 @@ inline platform_api const& windows_platform() {
             detail::input_handle_mouse_button,
             detail::input_dismiss_transient,
             detail::windows_scroll_delta_y,
+        },
+        {
+            detail::windows_debug_capabilities,
+            detail::windows_snapshot_json,
+            detail::windows_capture_frame_rgba,
+            detail::windows_write_artifact_bundle,
         },
         [](char const* url, unsigned int len) {
             if (!url || len == 0)

@@ -96,6 +96,8 @@ void reset_app() {
     app.caret_pos = 0xFFFFFFFF;
     app.caret_visible = true;
     app.last_paint_hash = 0;
+    app.debug_viewport_width = 0.0f;
+    app.debug_viewport_height = 0.0f;
     app.input_debug = {};
     app.arena.reset();
     app.prev_arena.reset();

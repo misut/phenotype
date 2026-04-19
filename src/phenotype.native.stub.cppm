@@ -1,6 +1,8 @@
 module;
 #ifndef __wasi__
+#include <filesystem>
 #include <optional>
+#include <string>
 #include <variant>
 #include <vector>
 
@@ -13,6 +15,7 @@ export module phenotype.native.stub;
 import phenotype;
 import phenotype.commands;
 import phenotype.native.platform;
+import json;
 
 namespace phenotype::native::detail {
 
@@ -101,6 +104,66 @@ inline std::optional<unsigned int> stub_renderer_hit_test(
 
 inline void stub_open_url(char const*, unsigned int) {}
 
+inline ::phenotype::diag::PlatformCapabilitiesSnapshot stub_debug_capabilities() {
+    return {
+        "desktop-stub",
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+    };
+}
+
+inline json::Value stub_platform_runtime_details_json() {
+    return json::Value{json::Object{}};
+}
+
+inline std::string stub_snapshot_json() {
+    return ::phenotype::detail::serialize_diag_snapshot_with_debug(
+        stub_debug_capabilities(),
+        stub_platform_runtime_details_json());
+}
+
+inline std::optional<DebugFrameCapture> stub_capture_frame_rgba() {
+    return std::nullopt;
+}
+
+inline DebugArtifactBundleResult stub_write_artifact_bundle(
+        char const* directory,
+        char const*) {
+    DebugArtifactBundleResult result{};
+    result.directory = directory ? directory : "";
+
+    auto directory_path = std::filesystem::path{result.directory};
+    if (!::phenotype::native::detail::ensure_directory(directory_path, result.error))
+        return result;
+
+    auto snapshot_path = directory_path / "snapshot.json";
+    auto snapshot = stub_snapshot_json();
+    if (!::phenotype::native::detail::write_text_file(
+            snapshot_path,
+            snapshot,
+            result.error)) {
+        return result;
+    }
+
+    result.ok = true;
+    result.snapshot_json_path = snapshot_path.string();
+    return result;
+}
+
+inline void install_stub_debug_providers() {
+    ::phenotype::diag::detail::set_platform_capabilities_provider(
+        stub_debug_capabilities);
+    ::phenotype::diag::detail::set_platform_runtime_details_provider(
+        stub_platform_runtime_details_json);
+}
+
 } // namespace phenotype::native::detail
 
 export namespace phenotype::native {
@@ -132,12 +195,19 @@ inline platform_api make_stub_platform(char const* name,
         nullptr,
         nullptr,
     };
+    api.debug = {
+        detail::stub_debug_capabilities,
+        detail::stub_snapshot_json,
+        detail::stub_capture_frame_rgba,
+        detail::stub_write_artifact_bundle,
+    };
     api.open_url = detail::stub_open_url;
     api.startup_message = startup_message;
     return api;
 }
 
 inline platform_api const& desktop_stub_platform() {
+    detail::install_stub_debug_providers();
     static platform_api api = make_stub_platform(
         "desktop-stub",
         "[phenotype-native] using stub desktop backend; native renderer/text are not implemented on this platform");

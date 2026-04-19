@@ -184,6 +184,8 @@ struct AppState {
     // caret because of the HTML overlay from PR #31). 0 sentinel means
     // "no previous frame yet" — the first paint always flushes.
     std::uint64_t last_paint_hash = 0;
+    float debug_viewport_width = 0.0f;
+    float debug_viewport_height = 0.0f;
     diag::InputDebugSnapshot input_debug;
 };
 
