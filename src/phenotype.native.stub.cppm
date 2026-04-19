@@ -1,12 +1,17 @@
 module;
 #ifndef __wasi__
-#include <GLFW/glfw3.h>
+#include <filesystem>
+#include <optional>
+#include <string>
+#include <variant>
+#include <vector>
+
+struct GLFWwindow;
 #endif
 
 export module phenotype.native.stub;
 
 #ifndef __wasi__
-import std;
 import phenotype;
 import phenotype.commands;
 import phenotype.native.platform;
