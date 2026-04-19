@@ -1323,6 +1323,55 @@ static void test_macos_renderer_uploads_image_texture() {
     std::puts("PASS: macOS renderer uploads local image texture");
 }
 
+static void test_macos_renderer_enqueues_remote_image_once_without_network() {
+    using phenotype::native::macos_test::remote_image_debug;
+    using phenotype::native::macos_test::reset_image_cache_for_tests;
+    using phenotype::native::macos_test::set_image_queue_only_for_tests;
+
+    constexpr int pending_state = 0;
+    MacRendererFixture fixture;
+
+    reset_image_cache_for_tests();
+    set_image_queue_only_for_tests(true);
+    metrics::inst::native_texture_upload_bytes.reset();
+
+    auto remote_url = std::string("https://example.com/showcase.bmp");
+    std::vector<unsigned char> commands;
+    append_u32(commands, static_cast<unsigned int>(Cmd::Clear));
+    append_u32(commands, Color{245, 245, 245, 255}.packed());
+    append_u32(commands, static_cast<unsigned int>(Cmd::DrawImage));
+    append_f32(commands, 16.0f);
+    append_f32(commands, 24.0f);
+    append_f32(commands, 320.0f);
+    append_f32(commands, 180.0f);
+    append_u32(commands, static_cast<unsigned int>(remote_url.size()));
+    append_bytes(
+        commands,
+        remote_url.data(),
+        static_cast<unsigned int>(remote_url.size()));
+
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto first = remote_image_debug(remote_url);
+    assert(first.entry_exists);
+    assert(first.entry_state == pending_state);
+    assert(first.pending_jobs == 1);
+    assert(first.completed_jobs == 0);
+    assert(!first.worker_started);
+    assert(metrics::inst::native_texture_upload_bytes.total() == 0);
+
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto second = remote_image_debug(remote_url);
+    assert(second.entry_exists);
+    assert(second.entry_state == pending_state);
+    assert(second.pending_jobs == 1);
+    assert(second.completed_jobs == 0);
+    assert(!second.worker_started);
+    assert(metrics::inst::native_texture_upload_bytes.total() == 0);
+    std::puts("PASS: macOS renderer enqueues remote image once without network");
+}
+
 // ============================================================
 // Stub backend contract tests
 // ============================================================
@@ -1957,6 +2006,7 @@ int main() {
     test_text_build_atlas_empty();
     test_text_init_shutdown_cycle();
     test_macos_renderer_uploads_image_texture();
+    test_macos_renderer_enqueues_remote_image_once_without_network();
     test_renderer_flush_empty();
     std::puts("\nAll native tests passed.");
 #elif defined(_WIN32)

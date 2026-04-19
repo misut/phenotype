@@ -1051,6 +1051,7 @@ struct ImageAtlasCache {
     std::thread worker;
     void (*request_repaint)() = nullptr;
     bool worker_started = false;
+    bool queue_only_for_tests = false;
     bool stop_worker = false;
     int cursor_x = 0;
     int cursor_y = 0;
@@ -1564,17 +1565,34 @@ inline bool decode_bmp_file(std::filesystem::path const& path, DecodedImage& out
 }
 
 inline void ensure_image_worker();
+inline bool store_decoded_image(DecodedImage decoded);
 
 inline void queue_image_load(std::string const& url) {
-    auto [it, inserted] = g_images.cache.try_emplace(url, ImageCacheEntry{});
-    if (!inserted)
-        return;
     ensure_image_worker();
     {
         std::lock_guard lock(g_images.mutex);
         g_images.pending_jobs.push_back(url);
     }
     g_images.cv.notify_one();
+}
+
+inline ImageCacheEntry const* ensure_image_cache_entry(std::string const& url) {
+    auto [it, inserted] = g_images.cache.try_emplace(url, ImageCacheEntry{});
+    if (!inserted)
+        return &it->second;
+
+    if (is_http_url(url)) {
+        queue_image_load(url);
+        return &it->second;
+    }
+
+    DecodedImage decoded;
+    decoded.url = url;
+    decoded.failed = !decode_bmp_file(resolve_image_path(url), decoded);
+    (void)store_decoded_image(std::move(decoded));
+
+    it = g_images.cache.find(url);
+    return it != g_images.cache.end() ? &it->second : nullptr;
 }
 
 inline bool store_decoded_image(DecodedImage decoded) {
@@ -1667,7 +1685,7 @@ inline void image_worker_main() {
 }
 
 inline void ensure_image_worker() {
-    if (g_images.worker_started)
+    if (g_images.worker_started || g_images.queue_only_for_tests)
         return;
     g_images.stop_worker = false;
     g_images.worker = std::thread(image_worker_main);
@@ -1684,6 +1702,29 @@ inline void shutdown_image_worker() {
     if (g_images.worker.joinable())
         g_images.worker.join();
     g_images.worker_started = false;
+}
+
+inline void reset_image_cache(bool preserve_request_repaint = false) {
+    shutdown_image_worker();
+    {
+        std::lock_guard lock(g_images.mutex);
+        g_images.pending_jobs.clear();
+        g_images.completed_jobs.clear();
+    }
+    g_images.cache.clear();
+    g_images.pixels.clear();
+    g_images.cursor_x = 0;
+    g_images.cursor_y = 0;
+    g_images.row_height = 0;
+    g_images.dirty = false;
+    g_images.dirty_min_x = ImageAtlasCache::atlas_size;
+    g_images.dirty_min_y = ImageAtlasCache::atlas_size;
+    g_images.dirty_max_x = 0;
+    g_images.dirty_max_y = 0;
+    g_images.queue_only_for_tests = false;
+    g_images.stop_worker = false;
+    if (!preserve_request_repaint)
+        g_images.request_repaint = nullptr;
 }
 
 inline void reset_text_cache(TextAtlasCache& cache) {
@@ -2330,36 +2371,22 @@ inline void prepare_image_instances(float scale) {
     scratch.image_instances.clear();
 
     for (auto const& image : scratch.images) {
-        auto it = g_images.cache.find(image.url);
-        if (it == g_images.cache.end()) {
-            it = g_images.cache.try_emplace(image.url, ImageCacheEntry{}).first;
-            if (is_http_url(image.url)) {
-                queue_image_load(image.url);
-            } else {
-                DecodedImage decoded;
-                decoded.url = image.url;
-                decoded.failed = !decode_bmp_file(resolve_image_path(image.url), decoded);
-                (void)store_decoded_image(std::move(decoded));
-            }
-            it = g_images.cache.find(image.url);
-        }
-
-        if (it != g_images.cache.end() && it->second.state == ImageEntryState::ready) {
+        auto const* entry = ensure_image_cache_entry(image.url);
+        if (entry && entry->state == ImageEntryState::ready) {
             append_image_instance(
                 scratch.image_instances,
                 snap_to_pixel_grid(image.x, scale),
                 snap_to_pixel_grid(image.y, scale),
                 image.w,
                 image.h,
-                it->second.u,
-                it->second.v,
-                it->second.uw,
-                it->second.vh);
+                entry->u,
+                entry->v,
+                entry->uw,
+                entry->vh);
             continue;
         }
 
-        bool failed = it != g_images.cache.end()
-            && it->second.state == ImageEntryState::failed;
+        bool failed = entry && entry->state == ImageEntryState::failed;
         float fill = failed ? 0.90f : 0.94f;
         float edge = failed ? 0.78f : 0.82f;
         append_color_instance(
@@ -3948,21 +3975,9 @@ inline void renderer_shutdown() {
     if (g_renderer.layer) { g_renderer.layer->release(); g_renderer.layer = nullptr; }
     if (g_renderer.queue) { g_renderer.queue->release(); g_renderer.queue = nullptr; }
     if (g_renderer.device) { g_renderer.device->release(); g_renderer.device = nullptr; }
-    shutdown_image_worker();
     g_renderer.hit_regions.clear();
     g_renderer.scratch.clear();
-    g_images.cache.clear();
-    g_images.completed_jobs.clear();
-    g_images.pixels.clear();
-    g_images.cursor_x = 0;
-    g_images.cursor_y = 0;
-    g_images.row_height = 0;
-    g_images.dirty = false;
-    g_images.dirty_min_x = ImageAtlasCache::atlas_size;
-    g_images.dirty_min_y = ImageAtlasCache::atlas_size;
-    g_images.dirty_max_x = 0;
-    g_images.dirty_max_y = 0;
-    g_images.request_repaint = nullptr;
+    reset_image_cache();
     g_renderer.text_cache.entries.clear();
     g_renderer.text_cache.pixels.clear();
     g_renderer.text_cache.cursor_x = 0;
@@ -4027,6 +4042,14 @@ struct SystemCaretDebug {
     ::phenotype::diag::RectSnapshot first_rect_screen{};
 };
 
+struct RemoteImageDebug {
+    bool entry_exists = false;
+    int entry_state = -1;
+    std::size_t pending_jobs = 0;
+    std::size_t completed_jobs = 0;
+    bool worker_started = false;
+};
+
 inline Utf8Range utf16_range_to_utf8(std::string const& text,
                                      unsigned long location,
                                      unsigned long length) {
@@ -4076,6 +4099,31 @@ inline void force_disable_system_caret(bool disabled) {
 
 inline void set_scroll_tracking_for_tests(bool active) {
     detail::g_ime.scroll_tracking_active = active;
+}
+
+inline void reset_image_cache_for_tests() {
+    detail::reset_image_cache(true);
+}
+
+inline void set_image_queue_only_for_tests(bool enabled) {
+    detail::g_images.queue_only_for_tests = enabled;
+    if (enabled)
+        detail::shutdown_image_worker();
+}
+
+inline RemoteImageDebug remote_image_debug(std::string const& url) {
+    RemoteImageDebug debug{};
+    if (auto it = detail::g_images.cache.find(url); it != detail::g_images.cache.end()) {
+        debug.entry_exists = true;
+        debug.entry_state = static_cast<int>(it->second.state);
+    }
+    {
+        std::lock_guard lock(detail::g_images.mutex);
+        debug.pending_jobs = detail::g_images.pending_jobs.size();
+        debug.completed_jobs = detail::g_images.completed_jobs.size();
+        debug.worker_started = detail::g_images.worker_started;
+    }
+    return debug;
 }
 
 inline SystemCaretDebug system_caret_debug() {
@@ -4194,6 +4242,14 @@ struct SystemCaretDebug {
     ::phenotype::diag::RectSnapshot first_rect_screen{};
 };
 
+struct RemoteImageDebug {
+    bool entry_exists = false;
+    int entry_state = -1;
+    std::size_t pending_jobs = 0;
+    std::size_t completed_jobs = 0;
+    bool worker_started = false;
+};
+
 inline Utf8Range utf16_range_to_utf8(std::string const&,
                                      unsigned long,
                                      unsigned long) {
@@ -4218,6 +4274,12 @@ inline CompositionVisualDebug build_visual_text(std::string const&,
 
 inline void force_disable_system_caret(bool) {}
 inline void set_scroll_tracking_for_tests(bool) {}
+inline void reset_image_cache_for_tests() {}
+inline void set_image_queue_only_for_tests(bool) {}
+
+inline RemoteImageDebug remote_image_debug(std::string const&) {
+    return {};
+}
 
 inline SystemCaretDebug system_caret_debug() {
     return {};
