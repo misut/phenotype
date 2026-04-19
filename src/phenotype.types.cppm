@@ -185,6 +185,11 @@ struct LayoutNode {
     unsigned int cursor_type = 0; // 0=default, 1=pointer
     bool focusable = true;        // false = clickable but skipped by Tab + no focus ring
     InteractionRole interaction_role = InteractionRole::None;
+    std::string debug_semantic_role;
+    std::string debug_semantic_label;
+    unsigned int debug_semantic_callback_id = 0xFFFFFFFFu;
+    bool debug_semantic_hidden = false;
+    bool debug_semantic_focusable = false;
 
     // Hover styles (alpha=0 means no hover override)
     Color hover_background = {0, 0, 0, 0};

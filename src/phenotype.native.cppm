@@ -2,6 +2,8 @@ module;
 #ifndef __wasi__
 #include <concepts>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <utility>
 
 struct GLFWwindow;
@@ -103,6 +105,52 @@ inline std::optional<unsigned int> hit_test(float x, float y, float scroll_y) {
 }
 
 } // namespace renderer
+
+namespace debug {
+
+inline ::phenotype::diag::PlatformCapabilitiesSnapshot capabilities() {
+    auto const& platform = current_platform();
+    if (platform.debug.capabilities)
+        return platform.debug.capabilities();
+    return {};
+}
+
+inline std::string snapshot_json() {
+    auto const& platform = current_platform();
+    if (platform.debug.snapshot_json)
+        return platform.debug.snapshot_json();
+    return ::phenotype::diag::serialize_snapshot();
+}
+
+inline std::optional<DebugFrameCapture> capture_frame_rgba() {
+    auto const& platform = current_platform();
+    if (!platform.debug.capture_frame_rgba)
+        return std::nullopt;
+    return platform.debug.capture_frame_rgba();
+}
+
+inline DebugArtifactBundleResult write_artifact_bundle(
+        std::string_view directory,
+        std::string_view reason) {
+    auto const& platform = current_platform();
+    if (!platform.debug.write_artifact_bundle) {
+        return {
+            false,
+            std::string(directory),
+            {},
+            {},
+            {},
+            "Current platform does not expose write_artifact_bundle()",
+        };
+    }
+    auto directory_copy = std::string(directory);
+    auto reason_copy = std::string(reason);
+    return platform.debug.write_artifact_bundle(
+        directory_copy.empty() ? nullptr : directory_copy.c_str(),
+        reason_copy.empty() ? nullptr : reason_copy.c_str());
+}
+
+} // namespace debug
 
 inline void shutdown() {
     renderer::shutdown();
