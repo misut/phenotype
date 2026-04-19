@@ -4,11 +4,14 @@ module;
 
 export module phenotype.wasm;
 
+#ifdef __wasi__
 import json;
 import phenotype.diag;
+#endif
 
 export namespace phenotype::wasi::detail {
 
+#ifdef __wasi__
 inline ::phenotype::diag::PlatformCapabilitiesSnapshot debug_capabilities() {
     return {
         "wasi",
@@ -55,5 +58,6 @@ inline ::phenotype::diag::detail::ArtifactBundleResult write_artifact_bundle(
         runtime_json,
         nullptr);
 }
+#endif
 
 } // namespace phenotype::wasi::detail
