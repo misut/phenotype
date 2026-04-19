@@ -7,7 +7,7 @@ standard = 23
 platforms = [{ os = "wasi" }]
 
 [dependencies]
-"github.com/misut/cppx" = "1.6.1"
+"github.com/misut/cppx" = "1.6.2"
 
 [dependencies.path]
 phenotype = ".."

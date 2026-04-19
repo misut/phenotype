@@ -33,11 +33,13 @@ import phenotype.native.stub;
 #ifdef __APPLE__
 import phenotype.native.macos;
 #endif
-#ifdef _WIN32
-import phenotype.native.windows;
+#if defined(__APPLE__) || defined(_WIN32)
 import cppx.http;
 import cppx.http.server;
 import cppx.http.system;
+#endif
+#ifdef _WIN32
+import phenotype.native.windows;
 #endif
 
 using namespace phenotype::native;
@@ -1103,6 +1105,81 @@ static void test_macos_scroll_paths_record_precise_and_line_details() {
     std::puts("PASS: macOS scroll paths record precise and line details");
 }
 
+static std::filesystem::path native_example_root() {
+    return std::filesystem::path(__FILE__).parent_path().parent_path()
+        / "examples" / "native";
+}
+
+static std::vector<unsigned char> make_draw_image_commands(std::string const& image_url) {
+    std::vector<unsigned char> commands;
+    append_u32(commands, static_cast<unsigned int>(Cmd::Clear));
+    append_u32(commands, Color{245, 245, 245, 255}.packed());
+    append_u32(commands, static_cast<unsigned int>(Cmd::DrawImage));
+    append_f32(commands, 16.0f);
+    append_f32(commands, 24.0f);
+    append_f32(commands, 320.0f);
+    append_f32(commands, 180.0f);
+    append_u32(commands, static_cast<unsigned int>(image_url.size()));
+    append_bytes(
+        commands,
+        image_url.data(),
+        static_cast<unsigned int>(image_url.size()));
+    return commands;
+}
+
+static std::uint16_t find_free_local_port() {
+    auto listener = cppx::http::system::listener::bind("127.0.0.1", 0);
+    assert(listener);
+    auto port = listener->local_port();
+    listener->close();
+    assert(port != 0);
+    return port;
+}
+
+struct MacStaticHttpServer {
+    std::uint16_t port = 0;
+    cppx::http::server<cppx::http::system::listener, cppx::http::system::stream> server;
+    std::thread thread;
+
+    explicit MacStaticHttpServer(std::filesystem::path root) {
+        port = find_free_local_port();
+        server.serve_static("/", std::move(root));
+        thread = std::thread([this] {
+            auto result = server.run("127.0.0.1", port);
+            assert(result);
+        });
+        wait_until_ready();
+    }
+
+    ~MacStaticHttpServer() {
+        server.stop();
+        (void)cppx::http::system::get(url("/__stop__"));
+        if (thread.joinable())
+            thread.join();
+    }
+
+    std::string url(std::string_view path) const {
+        std::string value = "http://127.0.0.1:";
+        value += std::to_string(port);
+        if (path.empty() || path.front() != '/')
+            value += '/';
+        value += path;
+        return value;
+    }
+
+    void wait_until_ready() const {
+        auto ready_url = url(std::string("/") + kRemoteExampleImageAsset);
+        auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(3);
+        while (std::chrono::steady_clock::now() < deadline) {
+            auto response = cppx::http::system::get(ready_url);
+            if (response && response->stat.code == 200)
+                return;
+            std::this_thread::sleep_for(std::chrono::milliseconds(25));
+        }
+        assert(false && "local HTTP server did not start in time");
+    }
+};
+
 struct MacRendererFixture {
     GLFWwindow* window = nullptr;
     native_host host{};
@@ -1621,6 +1698,60 @@ static void test_macos_renderer_enqueues_remote_image_once_without_network() {
     assert(!second.worker_started);
     assert(metrics::inst::native_texture_upload_bytes.total() == 0);
     std::puts("PASS: macOS renderer enqueues remote image once without network");
+}
+
+static auto wait_for_macos_remote_image_terminal_state(
+        std::vector<unsigned char> const& commands,
+        std::string const& remote_url)
+    -> phenotype::native::macos_test::RemoteImageDebug {
+    using phenotype::native::macos_test::remote_image_debug;
+
+    constexpr int ready_state = 1;
+    constexpr int failed_state = 2;
+    auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
+    while (std::chrono::steady_clock::now() < deadline) {
+        renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+        auto debug = remote_image_debug(remote_url);
+        if (debug.entry_exists
+            && (debug.entry_state == ready_state || debug.entry_state == failed_state)) {
+            return debug;
+        }
+        std::this_thread::sleep_for(std::chrono::milliseconds(25));
+    }
+    assert(false && "macOS remote image did not reach a terminal state in time");
+    return {};
+}
+
+static void test_macos_renderer_fetches_remote_image_via_worker() {
+    using phenotype::native::macos_test::remote_image_debug;
+    using phenotype::native::macos_test::reset_image_cache_for_tests;
+
+    constexpr int pending_state = 0;
+    constexpr int ready_state = 1;
+    MacRendererFixture fixture;
+    MacStaticHttpServer server(native_example_root() / "assets");
+
+    reset_image_cache_for_tests();
+    metrics::inst::native_texture_upload_bytes.reset();
+    auto remote_url = server.url(std::string("/") + kRemoteExampleImageAsset);
+    auto commands = make_draw_image_commands(remote_url);
+
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto first = remote_image_debug(remote_url);
+    assert(first.entry_exists);
+    assert(first.entry_state == pending_state);
+    assert(first.worker_started);
+    assert(metrics::inst::native_texture_upload_bytes.total() == 0);
+
+    auto final = wait_for_macos_remote_image_terminal_state(commands, remote_url);
+    assert(final.entry_exists);
+    assert(final.entry_state == ready_state);
+    assert(final.completed_jobs == 0);
+    assert(metrics::inst::native_texture_upload_bytes.total() > 0);
+
+    reset_image_cache_for_tests();
+    std::puts("PASS: macOS renderer fetches remote image via worker");
 }
 
 // ============================================================
@@ -2498,6 +2629,7 @@ int main() {
     test_text_init_shutdown_cycle();
     test_macos_renderer_uploads_image_texture();
     test_macos_renderer_enqueues_remote_image_once_without_network();
+    test_macos_renderer_fetches_remote_image_via_worker();
     test_renderer_flush_empty();
     std::puts("\nAll native tests passed.");
 #elif defined(_WIN32)
