@@ -17,7 +17,7 @@ cmake-in-root = false
 ldflags = ["-framework", "Security", "-Wl,-framework,CoreFoundation"]
 
 [dependencies]
-"github.com/misut/cppx" = "1.6.2"
+"github.com/misut/cppx" = "1.6.3"
 
 [dependencies.path]
 phenotype = "../.."
