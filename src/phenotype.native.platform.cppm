@@ -3,10 +3,10 @@ module;
 export module phenotype.native.platform;
 
 #ifndef __wasi__
-export struct GLFWwindow;
-
 import std;
 import phenotype.diag;
+
+export struct GLFWwindow;
 
 export namespace phenotype::native {
 
