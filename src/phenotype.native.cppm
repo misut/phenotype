@@ -1,17 +1,9 @@
 module;
-#ifndef __wasi__
-#include <concepts>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <utility>
-
-struct GLFWwindow;
-#endif
 
 export module phenotype.native;
 
 #ifndef __wasi__
+import std;
 export import phenotype;
 export import phenotype.native.platform;
 export import phenotype.native.shell;

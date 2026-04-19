@@ -1,19 +1,11 @@
 module;
-#ifndef __wasi__
-#include <filesystem>
-#include <fstream>
-#include <cstdint>
-#include <optional>
-#include <string>
-#include <string_view>
-#include <vector>
-
-struct GLFWwindow;
-#endif
 
 export module phenotype.native.platform;
 
 #ifndef __wasi__
+export struct GLFWwindow;
+
+import std;
 import phenotype.diag;
 
 export namespace phenotype::native {
@@ -24,7 +16,7 @@ struct TextQuad {
 };
 
 struct TextAtlas {
-    std::vector<uint8_t> pixels;
+    std::vector<std::uint8_t> pixels;
     int width = 0;
     int height = 0;
     std::vector<TextQuad> quads;
