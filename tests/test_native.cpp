@@ -88,12 +88,50 @@ static std::string read_text_file(std::filesystem::path const& path) {
         std::istreambuf_iterator<char>());
 }
 
+static bool file_exists_and_is_non_empty(std::filesystem::path const& path) {
+    return std::filesystem::exists(path) && std::filesystem::file_size(path) > 0;
+}
+
+static void assert_non_empty_frame_capture(DebugFrameCapture const& frame) {
+    assert(frame.width > 0);
+    assert(frame.height > 0);
+    assert(!frame.rgba.empty());
+    assert(frame.rgba.size()
+        == static_cast<std::size_t>(frame.width)
+            * static_cast<std::size_t>(frame.height) * 4u);
+    bool has_non_zero_channel = false;
+    for (auto byte : frame.rgba) {
+        if (byte != 0) {
+            has_non_zero_channel = true;
+            break;
+        }
+    }
+    assert(has_non_zero_channel);
+}
+
+static bool remote_image_entry_matches(
+        json::Object const& images,
+        std::string const& url,
+        std::string_view expected_state) {
+    auto const& entries = images.at("remote_entries").as_array();
+    for (auto const& value : entries) {
+        auto const& entry = value.as_object();
+        if (entry.at("url").as_string() != url)
+            continue;
+        if (!expected_state.empty())
+            assert(entry.at("state").as_string() == expected_state);
+        return true;
+    }
+    return false;
+}
+
 #ifdef _WIN32
 struct WindowsRendererFixture {
     GLFWwindow* window = nullptr;
     native_host host{};
 
     WindowsRendererFixture() {
+        _putenv_s("PHENOTYPE_WINDOWS_DEBUG", "0");
         _putenv_s("PHENOTYPE_DX12_WARP", "1");
         _putenv_s("PHENOTYPE_DX12_DEBUG", "0");
 
@@ -473,6 +511,7 @@ struct WindowsInputHarness {
     WindowsInputHarness() {
         input_regression::reset_core_state();
         phenotype::native::windows_test::reset_input_debug_counters();
+        _putenv_s("PHENOTYPE_WINDOWS_DEBUG", "0");
         _putenv_s("PHENOTYPE_DX12_WARP", "1");
         _putenv_s("PHENOTYPE_DX12_DEBUG", "0");
 
@@ -551,6 +590,7 @@ struct WindowsRemoteShellHarness {
     explicit WindowsRemoteShellHarness(std::string remote_url) {
         input_regression::reset_core_state();
         phenotype::native::windows_test::reset_input_debug_counters();
+        _putenv_s("PHENOTYPE_WINDOWS_DEBUG", "0");
         _putenv_s("PHENOTYPE_DX12_WARP", "1");
         _putenv_s("PHENOTYPE_DX12_DEBUG", "0");
 
@@ -1987,6 +2027,19 @@ static void test_windows_renderer_uploads_local_image_texture() {
     std::puts("PASS: windows renderer uploads local image texture");
 }
 
+static void test_windows_debug_capture_frame_from_rendered_frame() {
+    WindowsRendererFixture fixture;
+
+    auto commands = make_draw_image_commands(local_test_image_url());
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto frame = phenotype::native::debug::capture_frame_rgba();
+    assert(frame.has_value());
+    assert_non_empty_frame_capture(*frame);
+    assert_dx12_renderer_clean("frame capture from rendered frame");
+    std::puts("PASS: windows debug capture returns RGBA for a rendered frame");
+}
+
 static void test_windows_renderer_enables_dred_under_warp_fixture() {
     WindowsRendererFixture fixture;
     assert_dx12_renderer_clean("warp fixture initialization");
@@ -2000,11 +2053,12 @@ static void test_windows_common_debug_contract_entry_points() {
     assert(capabilities.platform == "windows");
     assert(capabilities.read_only);
     assert(capabilities.snapshot_json);
-    assert(!capabilities.capture_frame_rgba);
+    assert(capabilities.capture_frame_rgba);
     assert(capabilities.write_artifact_bundle);
     assert(capabilities.semantic_tree);
     assert(capabilities.input_debug);
     assert(capabilities.platform_runtime);
+    assert(capabilities.frame_image);
     assert(capabilities.platform_diagnostics);
 
     auto snapshot_json = phenotype::native::debug::snapshot_json();
@@ -2015,6 +2069,19 @@ static void test_windows_common_debug_contract_entry_points() {
     auto const& details = runtime.at("details").as_object();
     assert(details.contains("renderer"));
     assert(details.contains("ime"));
+    assert(details.contains("images"));
+    auto const& renderer_details = details.at("renderer").as_object();
+    assert(renderer_details.at("last_frame_available").as_bool());
+    assert(renderer_details.at("last_render_width").as_integer() > 0);
+    assert(renderer_details.at("last_render_height").as_integer() > 0);
+    auto const& images = details.at("images").as_object();
+    assert(images.at("pending_queue_count").as_integer() == 0);
+    assert(images.at("completed_queue_count").as_integer() == 0);
+    assert(images.at("remote_entry_count").as_integer() == 0);
+
+    auto frame = phenotype::native::debug::capture_frame_rgba();
+    assert(frame.has_value());
+    assert_non_empty_frame_capture(*frame);
 
     auto bundle_dir = make_debug_bundle_dir("windows");
     auto bundle = phenotype::native::debug::write_artifact_bundle(
@@ -2023,19 +2090,26 @@ static void test_windows_common_debug_contract_entry_points() {
     assert(bundle.ok);
     assert(std::filesystem::exists(bundle_dir / "snapshot.json"));
     assert(std::filesystem::exists(bundle_dir / "platform" / "windows-runtime.json"));
-    assert(bundle.frame_image_path.empty());
+    assert(std::filesystem::exists(bundle_dir / "frame.bmp"));
+    assert(!bundle.frame_image_path.empty());
     assert(bundle.platform_files.size() == 1);
+    assert(file_exists_and_is_non_empty(bundle_dir / "frame.bmp"));
 
     auto bundle_snapshot = json::parse(read_text_file(bundle_dir / "snapshot.json"));
     auto const& bundle_debug = bundle_snapshot.as_object().at("debug").as_object();
     assert(bundle_debug.contains("platform_capabilities"));
     assert(bundle_debug.contains("semantic_tree"));
+    auto const& bundle_details = bundle_debug.at("platform_runtime").as_object()
+        .at("details").as_object();
+    assert(bundle_details.contains("images"));
 
     auto runtime_file = json::parse(
         read_text_file(bundle_dir / "platform" / "windows-runtime.json"));
     auto const& runtime_file_obj = runtime_file.as_object();
     assert(runtime_file_obj.contains("renderer"));
     assert(runtime_file_obj.contains("ime"));
+    assert(runtime_file_obj.contains("images"));
+    assert(runtime_file_obj.at("artifact_reason").as_string() == "common-contract-test");
 
     std::filesystem::remove_all(bundle_dir);
     std::puts("PASS: windows common debug contract entry points");
@@ -2066,6 +2140,15 @@ static void test_windows_renderer_fetches_remote_image_via_worker() {
     assert(final.entry_state == ready_state);
     assert(final.completed_jobs == 0);
     assert(metrics::inst::native_texture_upload_bytes.total() > 0);
+    auto snapshot = json::parse(phenotype::native::debug::snapshot_json());
+    auto const& details = snapshot.as_object().at("debug").as_object()
+        .at("platform_runtime").as_object()
+        .at("details").as_object();
+    auto const& images = details.at("images").as_object();
+    assert(images.at("worker_started").as_bool());
+    assert(images.at("pending_queue_count").as_integer() >= 0);
+    assert(images.at("completed_queue_count").as_integer() >= 0);
+    assert(remote_image_entry_matches(images, remote_url, "ready"));
     assert_dx12_renderer_clean("remote image worker fetch");
     std::puts("PASS: windows renderer fetches remote image via worker");
 }
@@ -2284,6 +2367,25 @@ static void test_windows_shell_remote_image_scroll_path_survives_async_completio
     }
 
     assert_dx12_renderer_clean("shell remote scroll path");
+    auto bundle_dir = make_debug_bundle_dir("windows-remote-shell");
+    auto bundle = phenotype::native::debug::write_artifact_bundle(
+        bundle_dir.string(),
+        "remote-shell-scroll");
+    assert(bundle.ok);
+    assert(std::filesystem::exists(bundle_dir / "snapshot.json"));
+    assert(std::filesystem::exists(bundle_dir / "platform" / "windows-runtime.json"));
+    assert(std::filesystem::exists(bundle_dir / "frame.bmp"));
+    assert(!bundle.frame_image_path.empty());
+    assert(file_exists_and_is_non_empty(bundle_dir / "frame.bmp"));
+
+    auto bundle_snapshot = json::parse(read_text_file(bundle_dir / "snapshot.json"));
+    auto const& images = bundle_snapshot.as_object().at("debug").as_object()
+        .at("platform_runtime").as_object()
+        .at("details").as_object()
+        .at("images").as_object();
+    auto const expected_state = (final.entry_state == ready_state) ? "ready" : "failed";
+    assert(remote_image_entry_matches(images, remote_url, expected_state));
+    std::filesystem::remove_all(bundle_dir);
     std::puts("PASS: windows shell remote image scroll path survives async completion");
 }
 
@@ -2752,6 +2854,7 @@ int main() {
     test_renderer_flush_empty();
     test_windows_renderer_reinit_cycle();
     test_windows_renderer_uploads_local_image_texture();
+    test_windows_debug_capture_frame_from_rendered_frame();
     test_windows_renderer_enables_dred_under_warp_fixture();
     test_windows_common_debug_contract_entry_points();
     test_windows_renderer_fetches_remote_image_via_worker();
