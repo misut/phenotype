@@ -14,7 +14,7 @@ platforms = [
 
 [dependencies]
 "github.com/misut/jsoncpp" = "0.1.4"
-"github.com/misut/cppx" = "1.6.1"
+"github.com/misut/cppx" = "1.6.3"
 "github.com/misut/txn" = "0.6.2"
 
 [target.'cfg(not(os = "wasi"))'.dependencies.cmake.glfw]

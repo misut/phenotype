@@ -3,8 +3,8 @@
 [[package]]
 name = "github.com/misut/cppx"
 package = "cppx"
-version = "1.6.1"
-commit = "0e40b716a553ffc374f02ea8b639f276b7ba8114"
+version = "1.6.3"
+commit = "f9d562e0ff0c1724b2e8e57f6aa540e98172ea20"
 
 [[package]]
 name = "github.com/misut/jsoncpp"
