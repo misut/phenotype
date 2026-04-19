@@ -1,5 +1,9 @@
 module;
 
+#ifndef __wasi__
+#include <GLFW/glfw3.h>
+#endif
+
 export module phenotype.native;
 
 #ifndef __wasi__
