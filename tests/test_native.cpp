@@ -120,9 +120,35 @@ static bool remote_image_entry_matches(
             continue;
         if (!expected_state.empty())
             assert(entry.at("state").as_string() == expected_state);
+        assert(entry.contains("failure_reason"));
         return true;
     }
     return false;
+}
+
+static void assert_macos_runtime_sections(json::Object const& details) {
+    assert(details.contains("renderer"));
+    assert(details.contains("images"));
+    assert(details.contains("text_input"));
+
+    auto const& renderer = details.at("renderer").as_object();
+    assert(renderer.contains("initialized"));
+    assert(renderer.contains("drawable_width"));
+    assert(renderer.contains("drawable_height"));
+    assert(renderer.contains("last_frame_available"));
+    assert(renderer.contains("readback_texture_ready"));
+    assert(renderer.contains("readback_buffer_ready"));
+
+    auto const& images = details.at("images").as_object();
+    assert(images.contains("pending_queue_count"));
+    assert(images.contains("completed_queue_count"));
+    assert(images.contains("worker_started"));
+    assert(images.contains("remote_entry_count"));
+    assert(images.contains("remote_entries"));
+
+    auto const& text_input = details.at("text_input").as_object();
+    assert(text_input.contains("system_caret"));
+    assert(text_input.contains("composition"));
 }
 
 #ifdef _WIN32
@@ -1188,6 +1214,12 @@ static std::vector<unsigned char> make_draw_image_commands(std::string const& im
     return commands;
 }
 
+static std::string local_test_image_url() {
+    auto image_path = native_example_root() / "assets" / kLocalExampleImageAsset;
+    assert(std::filesystem::exists(image_path));
+    return image_path.string();
+}
+
 static std::uint16_t find_free_local_port() {
     auto listener = cppx::http::system::listener::bind("127.0.0.1", 0);
     assert(listener);
@@ -1312,22 +1344,55 @@ struct MacInputHarness {
 };
 
 static void test_macos_common_debug_contract_entry_points() {
+    using namespace input_regression;
+    using phenotype::native::macos_test::clear_composition_for_tests;
+    using phenotype::native::macos_test::set_composition_for_tests;
+
     MacInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+    set_composition_for_tests("im", 0, 0, 2);
 
     auto capabilities = phenotype::native::debug::capabilities();
     assert(capabilities.platform == "macos");
     assert(capabilities.read_only);
     assert(capabilities.snapshot_json);
-    assert(!capabilities.capture_frame_rgba);
+    assert(capabilities.capture_frame_rgba);
     assert(capabilities.write_artifact_bundle);
-    assert(!capabilities.platform_diagnostics);
+    assert(capabilities.semantic_tree);
+    assert(capabilities.input_debug);
+    assert(capabilities.platform_runtime);
+    assert(capabilities.frame_image);
+    assert(capabilities.platform_diagnostics);
 
     auto snapshot_json = phenotype::native::debug::snapshot_json();
     auto snapshot = json::parse(snapshot_json);
     auto const& debug_payload = snapshot.as_object().at("debug").as_object();
     auto const& runtime = debug_payload.at("platform_runtime").as_object();
     assert(runtime.at("platform").as_string() == "macos");
-    assert(runtime.contains("details"));
+    auto const& details = runtime.at("details").as_object();
+    assert_macos_runtime_sections(details);
+    auto const& renderer = details.at("renderer").as_object();
+    assert(renderer.at("initialized").as_bool());
+    assert(renderer.at("drawable_width").as_integer() > 0);
+    assert(renderer.at("drawable_height").as_integer() > 0);
+    auto const& images = details.at("images").as_object();
+    assert(images.at("pending_queue_count").as_integer() == 0);
+    assert(images.at("completed_queue_count").as_integer() == 0);
+    assert(images.at("remote_entry_count").as_integer() == 0);
+    auto const& text_input = details.at("text_input").as_object();
+    auto const& system_caret = text_input.at("system_caret").as_object();
+    assert(system_caret.contains("supported"));
+    assert(system_caret.contains("frame"));
+    auto const& composition = text_input.at("composition").as_object();
+    assert(composition.at("active").as_bool());
+    assert(composition.at("text").as_string() == "im");
+    assert(composition.at("cursor_bytes").as_integer() == 2);
 
     auto bundle_dir = make_debug_bundle_dir("macos");
     auto bundle = phenotype::native::debug::write_artifact_bundle(
@@ -1335,16 +1400,42 @@ static void test_macos_common_debug_contract_entry_points() {
         "common-contract-test");
     assert(bundle.ok);
     assert(std::filesystem::exists(bundle_dir / "snapshot.json"));
-    assert(bundle.frame_image_path.empty());
-    assert(bundle.platform_files.empty());
+    assert(std::filesystem::exists(bundle_dir / "platform" / "macos-runtime.json"));
+    assert(bundle.platform_files.size() == 1);
+    if (!bundle.frame_image_path.empty())
+        assert(file_exists_and_is_non_empty(bundle_dir / "frame.bmp"));
 
     auto bundle_snapshot = json::parse(read_text_file(bundle_dir / "snapshot.json"));
     auto const& bundle_debug = bundle_snapshot.as_object().at("debug").as_object();
     assert(bundle_debug.contains("platform_capabilities"));
     assert(bundle_debug.contains("platform_runtime"));
+    auto const& bundle_details = bundle_debug.at("platform_runtime").as_object()
+        .at("details").as_object();
+    assert_macos_runtime_sections(bundle_details);
+
+    auto runtime_file = json::parse(
+        read_text_file(bundle_dir / "platform" / "macos-runtime.json"));
+    auto const& runtime_file_obj = runtime_file.as_object();
+    assert(runtime_file_obj.contains("renderer"));
+    assert(runtime_file_obj.contains("images"));
+    assert(runtime_file_obj.contains("text_input"));
+    assert(runtime_file_obj.at("artifact_reason").as_string() == "common-contract-test");
 
     std::filesystem::remove_all(bundle_dir);
+    clear_composition_for_tests();
     std::puts("PASS: macOS common debug contract entry points");
+}
+
+static void test_macos_debug_capture_frame_from_rendered_frame() {
+    MacRendererFixture fixture;
+
+    auto commands = make_draw_image_commands(local_test_image_url());
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto frame = phenotype::native::debug::capture_frame_rgba();
+    assert(frame.has_value());
+    assert_non_empty_frame_capture(*frame);
+    std::puts("PASS: macOS debug capture returns RGBA for a rendered frame");
 }
 
 static void test_macos_system_caret_indicator_tracks_focus_and_composition() {
@@ -1846,6 +1937,15 @@ static void test_macos_renderer_fetches_remote_image_via_worker() {
     assert(final.entry_state == ready_state);
     assert(final.completed_jobs == 0);
     assert(metrics::inst::native_texture_upload_bytes.total() > 0);
+    auto snapshot = json::parse(phenotype::native::debug::snapshot_json());
+    auto const& details = snapshot.as_object().at("debug").as_object()
+        .at("platform_runtime").as_object()
+        .at("details").as_object();
+    auto const& images = details.at("images").as_object();
+    assert(images.at("worker_started").as_bool());
+    assert(images.at("pending_queue_count").as_integer() >= 0);
+    assert(images.at("completed_queue_count").as_integer() >= 0);
+    assert(remote_image_entry_matches(images, remote_url, "ready"));
 
     reset_image_cache_for_tests();
     std::puts("PASS: macOS renderer fetches remote image via worker");
@@ -2820,6 +2920,7 @@ int main() {
     test_macos_fallback_caret_path_exposes_custom_debug_rect();
     test_macos_scroll_tracking_hides_caret_until_idle();
     test_macos_common_debug_contract_entry_points();
+    test_macos_debug_capture_frame_from_rendered_frame();
     test_default_scroll_delta_fallback();
     test_text_measure_basic();
     test_text_measure_proportional();

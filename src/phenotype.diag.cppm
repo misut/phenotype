@@ -22,6 +22,8 @@ module;
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
+#include <filesystem>
+#include <fstream>
 #include <format>
 #include <limits>
 #include <map>
@@ -593,6 +595,21 @@ struct DebugPlaneSnapshot {
 };
 
 namespace detail {
+    struct ArtifactFrameCapture {
+        unsigned int width = 0;
+        unsigned int height = 0;
+        std::vector<std::uint8_t> rgba;
+    };
+
+    struct ArtifactBundleResult {
+        bool ok = false;
+        std::string directory;
+        std::string snapshot_json_path;
+        std::string frame_image_path;
+        std::vector<std::string> platform_files;
+        std::string error;
+    };
+
     using DebugPayloadBuilder = json::Value (*)();
     using PlatformCapabilitiesProvider = PlatformCapabilitiesSnapshot (*)();
     using PlatformRuntimeDetailsProvider = json::Value (*)();
@@ -638,6 +655,168 @@ namespace detail {
         if (auto provider = platform_runtime_details_provider_storage())
             return provider();
         return json::Value{json::Object{}};
+    }
+
+    inline void append_u16_le(std::vector<std::uint8_t>& out, std::uint16_t value) {
+        out.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+    }
+
+    inline void append_u32_le(std::vector<std::uint8_t>& out, std::uint32_t value) {
+        out.push_back(static_cast<std::uint8_t>(value & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((value >> 8) & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((value >> 16) & 0xFFu));
+        out.push_back(static_cast<std::uint8_t>((value >> 24) & 0xFFu));
+    }
+
+    inline bool ensure_artifact_directory(std::filesystem::path const& directory,
+                                          std::string& error) {
+        std::error_code ec;
+        if (directory.empty()) {
+            error = "Artifact directory is empty";
+            return false;
+        }
+        if (std::filesystem::create_directories(directory, ec)
+            || std::filesystem::exists(directory)) {
+            return true;
+        }
+        error = ec ? ec.message() : "Failed to create artifact directory";
+        return false;
+    }
+
+    inline bool write_artifact_text_file(std::filesystem::path const& path,
+                                         std::string_view contents,
+                                         std::string& error) {
+        auto parent = path.parent_path();
+        if (!parent.empty() && !ensure_artifact_directory(parent, error))
+            return false;
+
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            error = "Failed to open file for writing: " + path.string();
+            return false;
+        }
+        out.write(contents.data(), static_cast<std::streamsize>(contents.size()));
+        if (!out.good()) {
+            error = "Failed to write file: " + path.string();
+            return false;
+        }
+        return true;
+    }
+
+    inline bool write_artifact_bmp_rgba(std::filesystem::path const& path,
+                                        ArtifactFrameCapture const& frame,
+                                        std::string& error) {
+        if (frame.width == 0 || frame.height == 0) {
+            error = "Frame capture is empty";
+            return false;
+        }
+        auto expected_size =
+            static_cast<std::size_t>(frame.width)
+            * static_cast<std::size_t>(frame.height) * 4u;
+        if (frame.rgba.size() != expected_size) {
+            error = "Frame capture size does not match width/height";
+            return false;
+        }
+
+        std::vector<std::uint8_t> bytes;
+        bytes.reserve(14 + 40 + frame.rgba.size());
+
+        auto file_size = static_cast<std::uint32_t>(14 + 40 + frame.rgba.size());
+        auto pixel_offset = static_cast<std::uint32_t>(14 + 40);
+
+        bytes.push_back(static_cast<std::uint8_t>('B'));
+        bytes.push_back(static_cast<std::uint8_t>('M'));
+        append_u32_le(bytes, file_size);
+        append_u16_le(bytes, 0);
+        append_u16_le(bytes, 0);
+        append_u32_le(bytes, pixel_offset);
+
+        append_u32_le(bytes, 40);
+        append_u32_le(bytes, frame.width);
+        append_u32_le(bytes, frame.height);
+        append_u16_le(bytes, 1);
+        append_u16_le(bytes, 32);
+        append_u32_le(bytes, 0);
+        append_u32_le(bytes, static_cast<std::uint32_t>(frame.rgba.size()));
+        append_u32_le(bytes, 2835);
+        append_u32_le(bytes, 2835);
+        append_u32_le(bytes, 0);
+        append_u32_le(bytes, 0);
+
+        auto row_stride = static_cast<std::size_t>(frame.width) * 4u;
+        for (unsigned int y = 0; y < frame.height; ++y) {
+            auto src_y = frame.height - 1u - y;
+            auto const* src_row = frame.rgba.data()
+                + static_cast<std::size_t>(src_y) * row_stride;
+            for (unsigned int x = 0; x < frame.width; ++x) {
+                auto pixel_offset_bytes = static_cast<std::size_t>(x) * 4u;
+                bytes.push_back(src_row[pixel_offset_bytes + 2]);
+                bytes.push_back(src_row[pixel_offset_bytes + 1]);
+                bytes.push_back(src_row[pixel_offset_bytes + 0]);
+                bytes.push_back(src_row[pixel_offset_bytes + 3]);
+            }
+        }
+
+        std::ofstream out(path, std::ios::binary | std::ios::trunc);
+        if (!out) {
+            error = "Failed to open frame image for writing: " + path.string();
+            return false;
+        }
+        out.write(
+            reinterpret_cast<char const*>(bytes.data()),
+            static_cast<std::streamsize>(bytes.size()));
+        if (!out.good()) {
+            error = "Failed to write frame image: " + path.string();
+            return false;
+        }
+        return true;
+    }
+
+    inline ArtifactBundleResult write_debug_artifact_bundle(
+            std::string_view directory,
+            std::string_view platform,
+            std::string_view snapshot_json,
+            std::string_view platform_runtime_json = {},
+            ArtifactFrameCapture const* frame = nullptr) {
+        ArtifactBundleResult result{};
+        result.directory = std::string(directory);
+
+        auto directory_path = std::filesystem::path{result.directory};
+        if (!ensure_artifact_directory(directory_path, result.error))
+            return result;
+
+        auto snapshot_path = directory_path / "snapshot.json";
+        if (!write_artifact_text_file(snapshot_path, snapshot_json, result.error))
+            return result;
+
+        result.snapshot_json_path = snapshot_path.string();
+
+        if (!platform.empty() && !platform_runtime_json.empty()) {
+            auto platform_directory = directory_path / "platform";
+            if (!ensure_artifact_directory(platform_directory, result.error))
+                return result;
+
+            auto runtime_path =
+                platform_directory / (std::string(platform) + "-runtime.json");
+            if (!write_artifact_text_file(
+                    runtime_path,
+                    platform_runtime_json,
+                    result.error)) {
+                return result;
+            }
+            result.platform_files.push_back(runtime_path.string());
+        }
+
+        if (frame != nullptr) {
+            auto frame_path = directory_path / "frame.bmp";
+            if (!write_artifact_bmp_rgba(frame_path, *frame, result.error))
+                return result;
+            result.frame_image_path = frame_path.string();
+        }
+
+        result.ok = true;
+        return result;
     }
 } // namespace detail
 

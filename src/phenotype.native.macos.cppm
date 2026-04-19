@@ -42,6 +42,7 @@ module;
 export module phenotype.native.macos;
 
 #ifndef __wasi__
+import cppx.http;
 import cppx.http.system;
 import cppx.os;
 import cppx.os.system;
@@ -1024,6 +1025,7 @@ struct DecodedImage {
     int width = 0;
     int height = 0;
     bool failed = false;
+    std::string error_detail;
 };
 
 enum class ImageEntryState {
@@ -1032,12 +1034,26 @@ enum class ImageEntryState {
     failed,
 };
 
+inline char const* image_entry_state_name(ImageEntryState state) {
+    switch (state) {
+    case ImageEntryState::pending:
+        return "pending";
+    case ImageEntryState::ready:
+        return "ready";
+    case ImageEntryState::failed:
+        return "failed";
+    default:
+        return "unknown";
+    }
+}
+
 struct ImageCacheEntry {
     ImageEntryState state = ImageEntryState::pending;
     float u = 0.0f;
     float v = 0.0f;
     float uw = 0.0f;
     float vh = 0.0f;
+    std::string failure_reason;
 };
 
 struct ImageAtlasCache {
@@ -1469,6 +1485,21 @@ inline bool reserve_image_slot(ImageAtlasCache& cache, int width, int height,
     return true;
 }
 
+inline void clear_image_entry(ImageCacheEntry& entry) {
+    entry.u = 0.0f;
+    entry.v = 0.0f;
+    entry.uw = 0.0f;
+    entry.vh = 0.0f;
+    entry.failure_reason.clear();
+}
+
+inline void mark_image_entry_failed(ImageCacheEntry& entry,
+                                    std::string_view detail) {
+    entry.state = ImageEntryState::failed;
+    clear_image_entry(entry);
+    entry.failure_reason = std::string(detail);
+}
+
 inline std::uint16_t read_le16(std::uint8_t const* ptr) noexcept {
     return static_cast<std::uint16_t>(ptr[0])
         | (static_cast<std::uint16_t>(ptr[1]) << 8);
@@ -1590,6 +1621,8 @@ inline ImageCacheEntry const* ensure_image_cache_entry(std::string const& url) {
     DecodedImage decoded;
     decoded.url = url;
     decoded.failed = !decode_bmp_file(resolve_image_path(url), decoded);
+    if (decoded.failed)
+        decoded.error_detail = "Failed to decode local BMP image";
     (void)store_decoded_image(std::move(decoded));
 
     it = g_images.cache.find(url);
@@ -1601,10 +1634,16 @@ inline bool store_decoded_image(DecodedImage decoded) {
     if (!inserted && it->second.state == ImageEntryState::ready)
         return false;
 
+    clear_image_entry(it->second);
+
     if (decoded.failed || decoded.pixels.empty()
         || decoded.width <= 0 || decoded.height <= 0) {
         bool changed = it->second.state != ImageEntryState::failed;
-        it->second = ImageCacheEntry{.state = ImageEntryState::failed};
+        mark_image_entry_failed(
+            it->second,
+            decoded.error_detail.empty()
+                ? "Image decode failed"
+                : decoded.error_detail);
         return changed;
     }
 
@@ -1612,7 +1651,7 @@ inline bool store_decoded_image(DecodedImage decoded) {
     int slot_y = 0;
     if (!reserve_image_slot(g_images, decoded.width, decoded.height, slot_x, slot_y)) {
         bool changed = it->second.state != ImageEntryState::failed;
-        it->second = ImageCacheEntry{.state = ImageEntryState::failed};
+        mark_image_entry_failed(it->second, "Image atlas is full");
         return changed;
     }
 
@@ -1674,8 +1713,15 @@ inline void image_worker_main() {
             for (auto byte : response->body)
                 body.push_back(static_cast<std::uint8_t>(byte));
             decoded.failed = !decode_bmp_memory(body, decoded);
+            if (decoded.failed)
+                decoded.error_detail = "Remote BMP decode failed";
         } else {
             decoded.failed = true;
+            if (!response) {
+                decoded.error_detail = std::string(cppx::http::to_string(response.error()));
+            } else {
+                decoded.error_detail = "HTTP status " + std::to_string(response->stat.code);
+            }
         }
 
         {
@@ -2035,6 +2081,11 @@ struct RendererState {
     std::size_t image_instances_capacity = 0;
     MTL::Buffer* text_instances_buf = nullptr;
     std::size_t text_instances_capacity = 0;
+    MTL::Texture* debug_capture_texture = nullptr;
+    int debug_capture_width = 0;
+    int debug_capture_height = 0;
+    MTL::Buffer* frame_readback_buf = nullptr;
+    std::size_t frame_readback_capacity = 0;
     MTL::Texture* image_atlas_texture = nullptr;
     MTL::Texture* text_atlas_texture = nullptr;
     MTL::SamplerState* sampler = nullptr;
@@ -2044,6 +2095,9 @@ struct RendererState {
     GLFWwindow* window = nullptr;
     int drawable_width = 0;
     int drawable_height = 0;
+    int last_render_width = 0;
+    int last_render_height = 0;
+    bool last_frame_available = false;
     bool initialized = false;
 };
 
@@ -2153,6 +2207,61 @@ inline bool ensure_image_atlas_texture() {
     tex_desc->setUsage(MTL::TextureUsageShaderRead);
     g_renderer.image_atlas_texture = g_renderer.device->newTexture(tex_desc);
     return g_renderer.image_atlas_texture != nullptr;
+}
+
+inline bool ensure_debug_capture_texture(int width, int height) {
+    if (width <= 0 || height <= 0)
+        return false;
+    if (g_renderer.debug_capture_texture
+        && g_renderer.debug_capture_width == width
+        && g_renderer.debug_capture_height == height) {
+        return true;
+    }
+
+    if (g_renderer.debug_capture_texture) {
+        g_renderer.debug_capture_texture->release();
+        g_renderer.debug_capture_texture = nullptr;
+        g_renderer.debug_capture_width = 0;
+        g_renderer.debug_capture_height = 0;
+    }
+
+    auto* tex_desc = MTL::TextureDescriptor::texture2DDescriptor(
+        MTL::PixelFormatBGRA8Unorm,
+        NS::UInteger(width),
+        NS::UInteger(height),
+        false);
+    tex_desc->setUsage(MTL::TextureUsageShaderRead | MTL::TextureUsageRenderTarget);
+    g_renderer.debug_capture_texture = g_renderer.device->newTexture(tex_desc);
+    if (g_renderer.debug_capture_texture) {
+        g_renderer.debug_capture_width = width;
+        g_renderer.debug_capture_height = height;
+    }
+    return g_renderer.debug_capture_texture != nullptr;
+}
+
+inline bool ensure_frame_readback_buffer(std::size_t required) {
+    if (required == 0)
+        return false;
+    if (required <= g_renderer.frame_readback_capacity && g_renderer.frame_readback_buf)
+        return true;
+
+    std::size_t new_capacity = (g_renderer.frame_readback_capacity > 0)
+        ? g_renderer.frame_readback_capacity
+        : 4096;
+    while (new_capacity < required)
+        new_capacity *= 2;
+
+    auto* replacement = g_renderer.device->newBuffer(
+        NS::UInteger(new_capacity),
+        MTL::ResourceStorageModeShared);
+    if (!replacement)
+        return false;
+
+    if (g_renderer.frame_readback_buf)
+        g_renderer.frame_readback_buf->release();
+    g_renderer.frame_readback_buf = replacement;
+    g_renderer.frame_readback_capacity = new_capacity;
+    return true;
 }
 
 inline void sync_drawable_size(int fbw, int fbh) {
@@ -3711,6 +3820,7 @@ inline void renderer_init(GLFWwindow* window) {
     g_renderer.layer = CA::MetalLayer::layer()->retain();
     g_renderer.layer->setDevice(g_renderer.device);
     g_renderer.layer->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
+    g_renderer.layer->setFramebufferOnly(false);
 
     int fbw = 0;
     int fbh = 0;
@@ -3955,6 +4065,31 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
 
     encoder->endEncoding();
+    g_renderer.last_render_width = fbw;
+    g_renderer.last_render_height = fbh;
+    g_renderer.last_frame_available = false;
+    if (ensure_debug_capture_texture(fbw, fbh)) {
+        if (auto* blit = command_buffer->blitCommandEncoder()) {
+            MTL::Origin origin{0, 0, 0};
+            MTL::Size size{
+                NS::UInteger(fbw),
+                NS::UInteger(fbh),
+                NS::UInteger(1),
+            };
+            blit->copyFromTexture(
+                drawable->texture(),
+                NS::UInteger(0),
+                NS::UInteger(0),
+                origin,
+                size,
+                g_renderer.debug_capture_texture,
+                NS::UInteger(0),
+                NS::UInteger(0),
+                origin);
+            blit->endEncoding();
+            g_renderer.last_frame_available = true;
+        }
+    }
     command_buffer->presentDrawable(drawable);
     command_buffer->commit();
 
@@ -3963,6 +4098,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
 inline void renderer_shutdown() {
     if (g_renderer.sampler) { g_renderer.sampler->release(); g_renderer.sampler = nullptr; }
+    if (g_renderer.debug_capture_texture) { g_renderer.debug_capture_texture->release(); g_renderer.debug_capture_texture = nullptr; }
+    if (g_renderer.frame_readback_buf) { g_renderer.frame_readback_buf->release(); g_renderer.frame_readback_buf = nullptr; }
     if (g_renderer.image_atlas_texture) { g_renderer.image_atlas_texture->release(); g_renderer.image_atlas_texture = nullptr; }
     if (g_renderer.text_atlas_texture) { g_renderer.text_atlas_texture->release(); g_renderer.text_atlas_texture = nullptr; }
     if (g_renderer.image_instances_buf) { g_renderer.image_instances_buf->release(); g_renderer.image_instances_buf = nullptr; }
@@ -3994,8 +4131,14 @@ inline void renderer_shutdown() {
     g_renderer.overlay_color_instances_capacity = 0;
     g_renderer.image_instances_capacity = 0;
     g_renderer.text_instances_capacity = 0;
+    g_renderer.frame_readback_capacity = 0;
     g_renderer.drawable_width = 0;
     g_renderer.drawable_height = 0;
+    g_renderer.debug_capture_width = 0;
+    g_renderer.debug_capture_height = 0;
+    g_renderer.last_render_width = 0;
+    g_renderer.last_render_height = 0;
+    g_renderer.last_frame_available = false;
     g_renderer.window = nullptr;
     g_renderer.initialized = false;
 }
@@ -4046,6 +4189,7 @@ struct SystemCaretDebug {
 struct RemoteImageDebug {
     bool entry_exists = false;
     int entry_state = -1;
+    std::string failure_reason;
     std::size_t pending_jobs = 0;
     std::size_t completed_jobs = 0;
     bool worker_started = false;
@@ -4117,6 +4261,7 @@ inline RemoteImageDebug remote_image_debug(std::string const& url) {
     if (auto it = detail::g_images.cache.find(url); it != detail::g_images.cache.end()) {
         debug.entry_exists = true;
         debug.entry_state = static_cast<int>(it->second.state);
+        debug.failure_reason = it->second.failure_reason;
     }
     {
         std::lock_guard lock(detail::g_images.mutex);
@@ -4246,6 +4391,7 @@ struct SystemCaretDebug {
 struct RemoteImageDebug {
     bool entry_exists = false;
     int entry_state = -1;
+    std::string failure_reason;
     std::size_t pending_jobs = 0;
     std::size_t completed_jobs = 0;
     bool worker_started = false;
@@ -4295,6 +4441,7 @@ inline void clear_composition_for_tests() {}
 #endif
 } // namespace phenotype::native::macos_test
 
+#ifdef __APPLE__
 namespace phenotype::native::detail {
 
 inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities() {
@@ -4302,18 +4449,174 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities(
         "macos",
         true,
         true,
-        false,
         true,
         true,
         true,
         true,
-        false,
-        false,
+        true,
+        true,
+        true,
     };
 }
 
-inline json::Value macos_platform_runtime_details_json() {
+inline json::Object macos_renderer_runtime_json() {
+    json::Object renderer;
+    renderer.emplace("initialized", json::Value{g_renderer.initialized});
+    renderer.emplace(
+        "drawable_width",
+        json::Value{static_cast<std::int64_t>(g_renderer.drawable_width)});
+    renderer.emplace(
+        "drawable_height",
+        json::Value{static_cast<std::int64_t>(g_renderer.drawable_height)});
+    renderer.emplace(
+        "last_render_width",
+        json::Value{static_cast<std::int64_t>(g_renderer.last_render_width)});
+    renderer.emplace(
+        "last_render_height",
+        json::Value{static_cast<std::int64_t>(g_renderer.last_render_height)});
+    renderer.emplace(
+        "last_frame_available",
+        json::Value{g_renderer.last_frame_available});
+    renderer.emplace(
+        "readback_texture_ready",
+        json::Value{g_renderer.debug_capture_texture != nullptr});
+    renderer.emplace(
+        "readback_buffer_ready",
+        json::Value{g_renderer.frame_readback_buf != nullptr});
+    return renderer;
+}
+
+inline json::Object macos_images_runtime_json() {
+    std::size_t pending_jobs = 0;
+    std::size_t completed_jobs = 0;
+    bool worker_started = false;
+    {
+        std::lock_guard lock(g_images.mutex);
+        pending_jobs = g_images.pending_jobs.size();
+        completed_jobs = g_images.completed_jobs.size();
+        worker_started = g_images.worker_started;
+    }
+
+    json::Array remote_entries;
+    for (auto const& record : g_images.cache) {
+        if (!is_http_url(record.first))
+            continue;
+        json::Object entry;
+        entry.emplace("url", json::Value{record.first});
+        entry.emplace(
+            "state",
+            json::Value{image_entry_state_name(record.second.state)});
+        entry.emplace(
+            "failure_reason",
+            json::Value{record.second.failure_reason});
+        remote_entries.push_back(json::Value{std::move(entry)});
+    }
+
+    json::Object images;
+    images.emplace(
+        "pending_queue_count",
+        json::Value{static_cast<std::int64_t>(pending_jobs)});
+    images.emplace(
+        "completed_queue_count",
+        json::Value{static_cast<std::int64_t>(completed_jobs)});
+    images.emplace("worker_started", json::Value{worker_started});
+    images.emplace(
+        "remote_entry_count",
+        json::Value{static_cast<std::int64_t>(remote_entries.size())});
+    images.emplace("remote_entries", json::Value{std::move(remote_entries)});
+    return images;
+}
+
+inline json::Object macos_text_input_runtime_json() {
+    auto caret = ::phenotype::native::macos_test::system_caret_debug();
+    auto input_debug = ::phenotype::diag::input_debug_snapshot();
+    auto composition_active = g_ime.composition_active && !g_ime.marked_text.empty();
+
+    json::Object system_caret;
+    system_caret.emplace("supported", json::Value{caret.supported});
+    system_caret.emplace("attached", json::Value{caret.attached});
+    system_caret.emplace(
+        "display_mode",
+        json::Value{static_cast<std::int64_t>(caret.display_mode)});
+    system_caret.emplace(
+        "automatic_mode_options",
+        json::Value{static_cast<std::int64_t>(caret.automatic_mode_options)});
+    system_caret.emplace(
+        "scroll_tracking_active",
+        json::Value{caret.scroll_tracking_active});
+    system_caret.emplace("host_flipped", json::Value{caret.host_flipped});
+    system_caret.emplace("frame", ::phenotype::diag::rect_to_json(caret.frame));
+    system_caret.emplace("draw_rect", ::phenotype::diag::rect_to_json(caret.draw_rect));
+    system_caret.emplace("host_rect", ::phenotype::diag::rect_to_json(caret.host_rect));
+    system_caret.emplace(
+        "screen_rect",
+        ::phenotype::diag::rect_to_json(caret.screen_rect));
+    system_caret.emplace(
+        "host_bounds",
+        ::phenotype::diag::rect_to_json(caret.host_bounds));
+    system_caret.emplace(
+        "first_rect_screen",
+        ::phenotype::diag::rect_to_json(caret.first_rect_screen));
+
+    json::Object composition;
+    composition.emplace("active", json::Value{composition_active});
+    composition.emplace("text", json::Value{input_debug.composition_text});
+    composition.emplace(
+        "cursor_bytes",
+        json::Value{static_cast<std::int64_t>(
+            composition_active ? composition_cursor_bytes() : 0)});
+    composition.emplace(
+        "anchor",
+        json::Value{static_cast<std::int64_t>(g_ime.composition_anchor)});
+    composition.emplace(
+        "replacement_start",
+        json::Value{static_cast<std::int64_t>(g_ime.replacement_start)});
+    composition.emplace(
+        "replacement_end",
+        json::Value{static_cast<std::int64_t>(g_ime.replacement_end)});
+    composition.emplace(
+        "marked_selection_location_utf16",
+        json::Value{static_cast<std::int64_t>(g_ime.marked_selection.location)});
+    composition.emplace(
+        "marked_selection_length_utf16",
+        json::Value{static_cast<std::int64_t>(g_ime.marked_selection.length)});
+
+    json::Object text_input;
+    text_input.emplace(
+        "scroll_tracking_active",
+        json::Value{g_ime.scroll_tracking_active});
+    text_input.emplace(
+        "caret_renderer",
+        json::Value{input_debug.caret_renderer});
+    text_input.emplace(
+        "composition_active",
+        json::Value{input_debug.composition_active});
+    text_input.emplace("system_caret", json::Value{std::move(system_caret)});
+    text_input.emplace("composition", json::Value{std::move(composition)});
+    return text_input;
+}
+
+inline json::Value macos_platform_runtime_details_json_with_reason(
+        std::string_view artifact_reason) {
+#ifdef __APPLE__
+    json::Object runtime;
+    runtime.emplace("renderer", json::Value{macos_renderer_runtime_json()});
+    runtime.emplace("images", json::Value{macos_images_runtime_json()});
+    runtime.emplace("text_input", json::Value{macos_text_input_runtime_json()});
+    if (!artifact_reason.empty()) {
+        runtime.emplace(
+            "artifact_reason",
+            json::Value{std::string(artifact_reason)});
+    }
+    return json::Value{std::move(runtime)};
+#else
+    (void)artifact_reason;
     return json::Value{json::Object{}};
+#endif
+}
+
+inline json::Value macos_platform_runtime_details_json() {
+    return macos_platform_runtime_details_json_with_reason({});
 }
 
 inline std::string macos_snapshot_json() {
@@ -4323,31 +4626,106 @@ inline std::string macos_snapshot_json() {
 }
 
 inline std::optional<DebugFrameCapture> macos_capture_frame_rgba() {
+#ifdef __APPLE__
+    if (!g_renderer.initialized
+        || !g_renderer.last_frame_available
+        || !g_renderer.debug_capture_texture
+        || !g_renderer.device
+        || !g_renderer.queue) {
+        return std::nullopt;
+    }
+
+    auto width = g_renderer.last_render_width;
+    auto height = g_renderer.last_render_height;
+    if (width <= 0 || height <= 0)
+        return std::nullopt;
+
+    auto const bytes_per_row =
+        static_cast<std::size_t>(width) * sizeof(std::uint32_t);
+    auto const total_size = bytes_per_row * static_cast<std::size_t>(height);
+    if (!ensure_frame_readback_buffer(total_size))
+        return std::nullopt;
+
+    NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
+    auto* command_buffer = g_renderer.queue->commandBuffer();
+    if (!command_buffer) {
+        pool->release();
+        return std::nullopt;
+    }
+    auto* blit = command_buffer->blitCommandEncoder();
+    if (!blit) {
+        pool->release();
+        return std::nullopt;
+    }
+
+    MTL::Origin origin{0, 0, 0};
+    MTL::Size size{
+        NS::UInteger(width),
+        NS::UInteger(height),
+        NS::UInteger(1),
+    };
+    blit->copyFromTexture(
+        g_renderer.debug_capture_texture,
+        NS::UInteger(0),
+        NS::UInteger(0),
+        origin,
+        size,
+        g_renderer.frame_readback_buf,
+        NS::UInteger(0),
+        NS::UInteger(bytes_per_row),
+        NS::UInteger(total_size));
+    blit->endEncoding();
+
+    command_buffer->commit();
+    command_buffer->waitUntilCompleted();
+
+    auto const* mapped =
+        static_cast<std::uint8_t const*>(g_renderer.frame_readback_buf->contents());
+    if (!mapped) {
+        pool->release();
+        return std::nullopt;
+    }
+
+    DebugFrameCapture capture{};
+    capture.width = static_cast<unsigned int>(width);
+    capture.height = static_cast<unsigned int>(height);
+    capture.rgba.resize(total_size);
+
+    for (int y = 0; y < height; ++y) {
+        auto const* src_row = mapped + static_cast<std::size_t>(y) * bytes_per_row;
+        auto* dst_row =
+            capture.rgba.data()
+            + static_cast<std::size_t>(y) * bytes_per_row;
+        for (int x = 0; x < width; ++x) {
+            auto const pixel_offset = static_cast<std::size_t>(x) * 4u;
+            dst_row[pixel_offset + 0] = src_row[pixel_offset + 2];
+            dst_row[pixel_offset + 1] = src_row[pixel_offset + 1];
+            dst_row[pixel_offset + 2] = src_row[pixel_offset + 0];
+            dst_row[pixel_offset + 3] = src_row[pixel_offset + 3];
+        }
+    }
+
+    pool->release();
+    return capture;
+#else
     return std::nullopt;
+#endif
 }
 
 inline DebugArtifactBundleResult macos_write_artifact_bundle(
         char const* directory,
-        char const*) {
-    DebugArtifactBundleResult result{};
-    result.directory = directory ? directory : "";
-
-    auto directory_path = std::filesystem::path{result.directory};
-    if (!::phenotype::native::detail::ensure_directory(directory_path, result.error))
-        return result;
-
-    auto snapshot_path = directory_path / "snapshot.json";
+        char const* reason) {
     auto snapshot = macos_snapshot_json();
-    if (!::phenotype::native::detail::write_text_file(
-            snapshot_path,
-            snapshot,
-            result.error)) {
-        return result;
-    }
-
-    result.ok = true;
-    result.snapshot_json_path = snapshot_path.string();
-    return result;
+    auto runtime_json = json::emit(
+        macos_platform_runtime_details_json_with_reason(
+            reason ? std::string_view(reason) : std::string_view{}));
+    auto frame = macos_capture_frame_rgba();
+    return ::phenotype::diag::detail::write_debug_artifact_bundle(
+        directory ? std::string_view(directory) : std::string_view{},
+        "macos",
+        snapshot,
+        runtime_json,
+        frame ? &*frame : nullptr);
 }
 
 inline void install_macos_debug_providers() {
@@ -4358,6 +4736,7 @@ inline void install_macos_debug_providers() {
 }
 
 } // namespace phenotype::native::detail
+#endif
 
 export namespace phenotype::native {
 

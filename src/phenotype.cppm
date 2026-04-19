@@ -24,6 +24,9 @@ export import phenotype.theme_json;
 export import phenotype.host;
 
 import json;
+#ifdef __wasi__
+import phenotype.wasm;
+#endif
 
 export namespace phenotype {
 
@@ -1363,11 +1366,20 @@ inline char const* debug_backend_name() {
 #endif
 }
 
+inline bool is_empty_runtime_details(json::Value const& value) {
+    return value.is_object() && value.as_object().empty();
+}
+
 inline diag::PlatformCapabilitiesSnapshot build_platform_capabilities_snapshot(
         std::optional<diag::PlatformCapabilitiesSnapshot> platform_override = std::nullopt) {
     auto snapshot = platform_override.has_value()
         ? *platform_override
         : diag::detail::current_platform_capabilities();
+#ifdef __wasi__
+    if (!platform_override.has_value() && snapshot.platform.empty()) {
+        snapshot = ::phenotype::wasi::detail::debug_capabilities();
+    }
+#endif
     if (snapshot.platform.empty())
         snapshot.platform = default_debug_platform_name();
     snapshot.read_only = true;
@@ -1396,6 +1408,12 @@ inline diag::PlatformRuntimeSnapshot build_platform_runtime_snapshot(
     runtime.details = runtime_details_override.has_value()
         ? *runtime_details_override
         : diag::detail::current_platform_runtime_details();
+#ifdef __wasi__
+    if (!runtime_details_override.has_value()
+        && is_empty_runtime_details(runtime.details)) {
+        runtime.details = ::phenotype::wasi::detail::platform_runtime_details_json();
+    }
+#endif
     return runtime;
 }
 

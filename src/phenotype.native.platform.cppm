@@ -70,20 +70,8 @@ struct input_api {
                             float viewport_height) = nullptr;
 };
 
-struct DebugFrameCapture {
-    unsigned int width = 0;
-    unsigned int height = 0;
-    std::vector<std::uint8_t> rgba;
-};
-
-struct DebugArtifactBundleResult {
-    bool ok = false;
-    std::string directory;
-    std::string snapshot_json_path;
-    std::string frame_image_path;
-    std::vector<std::string> platform_files;
-    std::string error;
-};
+using DebugFrameCapture = ::phenotype::diag::detail::ArtifactFrameCapture;
+using DebugArtifactBundleResult = ::phenotype::diag::detail::ArtifactBundleResult;
 
 struct debug_api {
     ::phenotype::diag::PlatformCapabilitiesSnapshot (*capabilities)() = nullptr;

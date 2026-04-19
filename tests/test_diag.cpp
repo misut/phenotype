@@ -5,13 +5,19 @@
 // to verify the wire format that the JS-side adapter will consume.
 
 #include <cassert>
+#include <chrono>
 #include <cstdio>
 #include <cstring>
+#include <filesystem>
+#include <fstream>
 #include <string>
 #include <string_view>
 #include <variant>
 import phenotype;
 import json;
+#ifdef __wasi__
+import phenotype.wasm;
+#endif
 
 using namespace phenotype;
 
@@ -77,6 +83,22 @@ int count_semantic_role(json::Array const& arr, std::string_view role) {
             ++count;
     }
     return count;
+}
+
+std::filesystem::path make_debug_bundle_dir(std::string_view label) {
+    auto stamp = std::to_string(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    auto path = std::filesystem::path("phenotype-diag-" + std::string(label) + "-" + stamp);
+    std::filesystem::remove_all(path);
+    return path;
+}
+
+std::string read_text_file(std::filesystem::path const& path) {
+    std::ifstream in(path, std::ios::binary);
+    assert(in.is_open());
+    return std::string(
+        std::istreambuf_iterator<char>(in),
+        std::istreambuf_iterator<char>());
 }
 
 } // namespace
@@ -195,9 +217,13 @@ void test_snapshot_shape() {
     auto const& capabilities = debug.at("platform_capabilities").as_object();
     assert(capabilities.at("read_only").as_bool() == true);
     assert(capabilities.at("snapshot_json").as_bool() == true);
+    assert(capabilities.contains("capture_frame_rgba"));
+    assert(capabilities.contains("write_artifact_bundle"));
     assert(capabilities.at("input_debug").as_bool() == true);
     assert(capabilities.at("semantic_tree").as_bool() == true);
     assert(capabilities.at("platform_runtime").as_bool() == true);
+    assert(capabilities.contains("frame_image"));
+    assert(capabilities.contains("platform_diagnostics"));
 
     auto const& input_debug = debug.at("input_debug").as_object();
     assert(input_debug.contains("event"));
@@ -205,7 +231,15 @@ void test_snapshot_shape() {
 
     auto const& runtime = debug.at("platform_runtime").as_object();
 #ifdef __wasi__
+    assert(capabilities.at("platform").as_string() == "wasi");
+    assert(capabilities.at("capture_frame_rgba").as_bool() == false);
+    assert(capabilities.at("write_artifact_bundle").as_bool() == true);
+    assert(capabilities.at("frame_image").as_bool() == false);
+    assert(capabilities.at("platform_diagnostics").as_bool() == false);
     assert(runtime.at("backend").as_string() == "wasi");
+    auto const& runtime_details = runtime.at("details").as_object();
+    assert(runtime_details.at("host_model").as_string() == "wasi");
+    assert(runtime_details.at("frame_capture_supported").as_bool() == false);
 #else
     assert(runtime.at("backend").as_string() == "native");
 #endif
@@ -404,6 +438,43 @@ void test_debug_plane_semantic_tree_shape_and_stability() {
     assert(first_tree == second_tree);
 }
 
+#ifdef __wasi__
+void test_wasi_debug_artifact_bundle_contract() {
+    auto bundle_dir = make_debug_bundle_dir("wasi");
+    auto snapshot_json = detail::serialize_diag_snapshot_with_debug();
+    auto bundle = phenotype::wasi::detail::write_artifact_bundle(
+        bundle_dir.string(),
+        snapshot_json,
+        "wasi-common-contract-test");
+
+    if (!bundle.ok && bundle.error == "No such file or directory") {
+        std::puts("SKIP: WASI debug artifact bundle requires a writable preopened directory");
+        return;
+    }
+    assert(bundle.ok);
+    assert(bundle.frame_image_path.empty());
+    assert(bundle.platform_files.size() == 1);
+    assert(std::filesystem::exists(bundle_dir / "snapshot.json"));
+    assert(std::filesystem::exists(bundle_dir / "platform" / "wasi-runtime.json"));
+
+    auto bundle_snapshot = json::parse(read_text_file(bundle_dir / "snapshot.json"));
+    auto const& debug = bundle_snapshot.as_object().at("debug").as_object();
+    auto const& capabilities = debug.at("platform_capabilities").as_object();
+    assert(capabilities.at("platform").as_string() == "wasi");
+    assert(capabilities.at("write_artifact_bundle").as_bool() == true);
+    assert(capabilities.at("capture_frame_rgba").as_bool() == false);
+
+    auto runtime_file = json::parse(
+        read_text_file(bundle_dir / "platform" / "wasi-runtime.json"));
+    auto const& runtime_obj = runtime_file.as_object();
+    assert(runtime_obj.at("host_model").as_string() == "wasi");
+    assert(runtime_obj.at("frame_capture_supported").as_bool() == false);
+    assert(runtime_obj.at("artifact_reason").as_string() == "wasi-common-contract-test");
+
+    std::filesystem::remove_all(bundle_dir);
+}
+#endif
+
 int main() {
     test_counter_add_and_total();
     std::printf("PASS: counter add + total\n");
@@ -423,6 +494,10 @@ int main() {
     std::printf("PASS: runner records frame + phase histograms\n");
     test_debug_plane_semantic_tree_shape_and_stability();
     std::printf("PASS: debug plane semantic tree shape + stability\n");
+#ifdef __wasi__
+    test_wasi_debug_artifact_bundle_contract();
+    std::printf("PASS: WASI debug artifact bundle contract\n");
+#endif
     std::printf("\nAll diag tests passed.\n");
     return 0;
 }
