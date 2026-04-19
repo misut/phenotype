@@ -43,6 +43,9 @@ import cppx.http.system;
 using namespace phenotype::native;
 using namespace phenotype;
 
+static constexpr char kLocalExampleImageAsset[] = "showcase-local.bmp";
+static constexpr char kRemoteExampleImageAsset[] = "showcase.bmp";
+
 static void append_u32(std::vector<unsigned char>& buf, unsigned int value) {
     auto offset = buf.size();
     buf.resize(offset + 4);
@@ -99,9 +102,6 @@ static std::filesystem::path native_example_root() {
     return std::filesystem::path(__FILE__).parent_path().parent_path()
         / "examples" / "native";
 }
-
-static constexpr char kLocalExampleImageAsset[] = "showcase-local.bmp";
-static constexpr char kRemoteExampleImageAsset[] = "showcase.bmp";
 
 static std::vector<unsigned char> make_draw_image_commands(std::string const& image_url) {
     std::vector<unsigned char> commands;
