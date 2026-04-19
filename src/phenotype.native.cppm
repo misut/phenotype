@@ -2,6 +2,8 @@ module;
 #ifndef __wasi__
 #include <concepts>
 #include <optional>
+#include <string>
+#include <string_view>
 #include <utility>
 
 struct GLFWwindow;
