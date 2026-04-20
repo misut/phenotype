@@ -228,6 +228,40 @@ inline void flush_if_changed() { flush_if_changed(detail::g_wasi); }
 export namespace phenotype::detail {
 
 template <render_backend R, text_measurer M>
+void emit_focused_input_selection(R& r,
+                                  M const& measurer,
+                                  FocusedInputSnapshot const& snapshot,
+                                  float scroll_y) {
+    if (!snapshot.valid || !snapshot.selection_active || snapshot.value.empty())
+        return;
+
+    auto start = static_cast<std::size_t>(snapshot.selection_start);
+    auto end = static_cast<std::size_t>(snapshot.selection_end);
+    if (end <= start)
+        return;
+
+    float base_x = snapshot.x + snapshot.padding[3];
+    float draw_y = snapshot.y - scroll_y + snapshot.padding[0];
+    float start_x = base_x + measurer.measure_text(
+        snapshot.font_size,
+        snapshot.mono ? 1u : 0u,
+        snapshot.value.data(),
+        static_cast<unsigned int>(start));
+    float end_x = base_x + measurer.measure_text(
+        snapshot.font_size,
+        snapshot.mono ? 1u : 0u,
+        snapshot.value.data(),
+        static_cast<unsigned int>(end));
+    float width = end_x - start_x;
+    if (width <= 0.0f)
+        return;
+
+    auto color = snapshot.accent;
+    color.a = 72;
+    emit_fill_rect(r, start_x, draw_y, width, snapshot.line_height, color);
+}
+
+template <render_backend R, text_measurer M>
 void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 float ox, float oy, float scroll_y, float vp_height) {
     auto& node = node_at(node_h);
@@ -286,6 +320,11 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
 #endif
     Color tc = (is_hovered && node.hover_text_color.a > 0)
         ? node.hover_text_color : node.text_color;
+    if (!html_overlay_active && is_focused && node.is_input) {
+        auto snapshot = focused_input_snapshot();
+        if (snapshot.valid && snapshot.callback_id == node.callback_id)
+            emit_focused_input_selection(r, measurer, snapshot, scroll_y);
+    }
     if (!html_overlay_active && !node.text_lines.empty()) {
         float line_height = node.font_size * g_app.theme.line_height_ratio;
         float inner_width = node.width - node.style.padding[1] - node.style.padding[3];

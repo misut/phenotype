@@ -292,6 +292,11 @@ inline SEL sel_make_first_responder() {
     return sel;
 }
 
+inline SEL sel_modifier_flags() {
+    static auto sel = sel_registerName("modifierFlags");
+    return sel;
+}
+
 inline SEL sel_marked_range() {
     static auto sel = sel_registerName("markedRange");
     return sel;
@@ -307,8 +312,18 @@ inline SEL sel_move_left() {
     return sel;
 }
 
+inline SEL sel_move_left_and_modify_selection() {
+    static auto sel = sel_registerName("moveLeftAndModifySelection:");
+    return sel;
+}
+
 inline SEL sel_move_right() {
     static auto sel = sel_registerName("moveRight:");
+    return sel;
+}
+
+inline SEL sel_move_right_and_modify_selection() {
+    static auto sel = sel_registerName("moveRightAndModifySelection:");
     return sel;
 }
 
@@ -317,8 +332,18 @@ inline SEL sel_move_to_beginning() {
     return sel;
 }
 
+inline SEL sel_move_to_beginning_and_modify_selection() {
+    static auto sel = sel_registerName("moveToBeginningOfLineAndModifySelection:");
+    return sel;
+}
+
 inline SEL sel_move_to_end() {
     static auto sel = sel_registerName("moveToEndOfLine:");
+    return sel;
+}
+
+inline SEL sel_move_to_end_and_modify_selection() {
+    static auto sel = sel_registerName("moveToEndOfLineAndModifySelection:");
     return sel;
 }
 
@@ -367,6 +392,11 @@ inline SEL sel_release() {
     return sel;
 }
 
+inline SEL sel_perform_key_equivalent() {
+    static auto sel = sel_registerName("performKeyEquivalent:");
+    return sel;
+}
+
 inline SEL sel_remove_monitor() {
     static auto sel = sel_registerName("removeMonitor:");
     return sel;
@@ -379,6 +409,11 @@ inline SEL sel_remove_from_superview() {
 
 inline SEL sel_selected_range() {
     static auto sel = sel_registerName("selectedRange");
+    return sel;
+}
+
+inline SEL sel_select_all() {
+    static auto sel = sel_registerName("selectAll:");
     return sel;
 }
 
@@ -419,6 +454,11 @@ inline SEL sel_set_frame() {
 
 inline SEL sel_frame() {
     static auto sel = sel_registerName("frame");
+    return sel;
+}
+
+inline SEL sel_characters_ignoring_modifiers() {
+    static auto sel = sel_registerName("charactersIgnoringModifiers");
     return sel;
 }
 
@@ -518,7 +558,7 @@ inline LineBoxMetrics make_line_box(float logical_width,
                                     float ascent, float descent, float leading,
                                     float scale, int padding) {
     LineBoxMetrics box;
-    float natural_line_height = ascent + descent + leading;
+    float natural_line_height = (ascent + descent + leading) * sanitize_scale(scale);
     int text_width_px = logical_pixels(logical_width, scale, 0);
     int line_height_px = logical_pixels(logical_line_height, scale);
     int natural_height_px = static_cast<int>(std::ceil(natural_line_height));
@@ -536,7 +576,7 @@ inline LineBoxMetrics make_line_box(float logical_width,
     float extra_leading = static_cast<float>(box.render_height) - natural_line_height;
     if (extra_leading < 0.0f) extra_leading = 0.0f;
     box.baseline_y = static_cast<float>(box.render_top)
-        + extra_leading * 0.5f + ascent;
+        + extra_leading * 0.5f + ascent * sanitize_scale(scale);
     return box;
 }
 
@@ -616,7 +656,7 @@ inline CFGuard<CTLineRef> create_text_line(CTFontRef font,
     return CFGuard<CTLineRef>(CTLineCreateWithAttributedString(attr_text));
 }
 
-inline bool describe_text_line(CTLineRef line, float scale, TextLineMetrics& out) {
+inline bool describe_text_line(CTLineRef line, TextLineMetrics& out) {
     if (!line)
         return false;
 
@@ -627,7 +667,7 @@ inline bool describe_text_line(CTLineRef line, float scale, TextLineMetrics& out
     if (!std::isfinite(width))
         return false;
 
-    out.logical_width = static_cast<float>(width) / sanitize_scale(scale);
+    out.logical_width = static_cast<float>(width);
     out.ascent = static_cast<float>(ascent);
     out.descent = static_cast<float>(descent);
     out.leading = static_cast<float>(leading);
@@ -651,10 +691,13 @@ inline void expand_line_box_for_ink(LineBoxMetrics& box,
 
     float typographic_width_px = logical_width * sanitize_scale(scale);
     int left_overhang = 0;
-    if (glyph_bounds.origin.x < 0.0)
-        left_overhang = static_cast<int>(std::ceil(-glyph_bounds.origin.x));
+    float glyph_origin_x_px = static_cast<float>(glyph_bounds.origin.x)
+        * sanitize_scale(scale);
+    if (glyph_origin_x_px < 0.0f)
+        left_overhang = static_cast<int>(std::ceil(-glyph_origin_x_px));
 
-    float bounds_max_x = static_cast<float>(CGRectGetMaxX(glyph_bounds));
+    float bounds_max_x = static_cast<float>(CGRectGetMaxX(glyph_bounds))
+        * sanitize_scale(scale);
     int right_overhang = 0;
     if (std::isfinite(bounds_max_x) && bounds_max_x > typographic_width_px) {
         right_overhang = static_cast<int>(
@@ -667,11 +710,41 @@ inline void expand_line_box_for_ink(LineBoxMetrics& box,
     line_origin_x = padding + left_overhang;
 }
 
+struct LineRenderSpan {
+    int start_x = 0;
+    int end_x = 0;
+    int line_origin_x = 0;
+};
+
+inline LineRenderSpan compute_line_render_span(int ink_min_x,
+                                               int ink_max_x,
+                                               int line_origin_x,
+                                               float logical_width,
+                                               float scale) {
+    int logical_width_px = static_cast<int>(
+        std::ceil(logical_width * sanitize_scale(scale)));
+    if (logical_width_px < 1)
+        logical_width_px = 1;
+
+    int render_start_x = line_origin_x;
+    int render_end_x = line_origin_x + logical_width_px;
+    if (ink_max_x >= ink_min_x) {
+        if (ink_min_x < render_start_x)
+            render_start_x = ink_min_x;
+        if (ink_max_x + 1 > render_end_x)
+            render_end_x = ink_max_x + 1;
+    }
+    if (render_end_x <= render_start_x)
+        render_end_x = render_start_x + 1;
+    return {render_start_x, render_end_x, line_origin_x};
+}
+
 inline bool rasterize_line_alpha(CTLineRef line,
                                  int slot_width,
                                  int slot_height,
                                  int line_origin_x,
                                  float baseline_y,
+                                 float scale,
                                  std::vector<std::uint8_t>& slot_alpha,
                                  int& ink_min_x,
                                  int& ink_max_x) {
@@ -679,84 +752,43 @@ inline bool rasterize_line_alpha(CTLineRef line,
     ink_min_x = slot_width;
     ink_max_x = -1;
 
-    auto runs = CTLineGetGlyphRuns(line);
-    if (!runs)
+    auto* ctx = CGBitmapContextCreate(
+        slot_alpha.data(),
+        slot_width,
+        slot_height,
+        8,
+        slot_width,
+        nullptr,
+        kCGImageAlphaOnly);
+    if (!ctx)
         return false;
 
+    CGContextSetTextMatrix(ctx, CGAffineTransformIdentity);
+    CGContextSetGrayFillColor(ctx, 1.0, 1.0);
+    CGContextSetShouldAntialias(ctx, true);
+    CGContextScaleCTM(
+        ctx,
+        static_cast<CGFloat>(sanitize_scale(scale)),
+        static_cast<CGFloat>(sanitize_scale(scale)));
+    auto baseline_from_bottom = static_cast<CGFloat>(slot_height) - baseline_y;
+    CGContextSetTextPosition(
+        ctx,
+        static_cast<CGFloat>(line_origin_x) / sanitize_scale(scale),
+        baseline_from_bottom / sanitize_scale(scale));
+    CTLineDraw(line, ctx);
+    CGContextRelease(ctx);
+
     bool has_ink = false;
-    auto run_count = CFArrayGetCount(runs);
-    for (CFIndex run_index = 0; run_index < run_count; ++run_index) {
-        auto run = static_cast<CTRunRef>(CFArrayGetValueAtIndex(runs, run_index));
-        if (!run)
-            continue;
-
-        auto run_attrs = CTRunGetAttributes(run);
-        auto run_font = static_cast<CTFontRef>(
-            run_attrs ? CFDictionaryGetValue(run_attrs, kCTFontAttributeName) : nullptr);
-        if (!run_font)
-            continue;
-
-        auto glyph_count = CTRunGetGlyphCount(run);
-        if (glyph_count <= 0)
-            continue;
-
-        std::vector<CGGlyph> glyphs(static_cast<std::size_t>(glyph_count));
-        std::vector<CGPoint> positions(static_cast<std::size_t>(glyph_count));
-        CFRange full_range{0, 0};
-        CTRunGetGlyphs(run, full_range, glyphs.data());
-        CTRunGetPositions(run, full_range, positions.data());
-
-        for (CFIndex glyph_index = 0; glyph_index < glyph_count; ++glyph_index) {
-            auto glyph = glyphs[static_cast<std::size_t>(glyph_index)];
-            if (glyph == 0)
+    for (int row = 0; row < slot_height; ++row) {
+        for (int col = 0; col < slot_width; ++col) {
+            auto alpha = slot_alpha[static_cast<std::size_t>(row * slot_width + col)];
+            if (alpha == 0)
                 continue;
-
-            CGRect bbox;
-            CTFontGetBoundingRectsForGlyphs(
-                run_font, kCTFontOrientationHorizontal, &glyph, &bbox, 1);
-            int gw = static_cast<int>(std::ceil(bbox.size.width)) + 2;
-            int gh = static_cast<int>(std::ceil(bbox.size.height)) + 2;
-            if (gw <= 0 || gh <= 0)
-                continue;
-
-            std::vector<std::uint8_t> glyph_buf(static_cast<std::size_t>(gw * gh), 0);
-            auto* ctx = CGBitmapContextCreate(
-                glyph_buf.data(), gw, gh, 8, gw, nullptr, kCGImageAlphaOnly);
-            if (!ctx)
-                continue;
-
-            CGPoint pos{
-                .x = static_cast<CGFloat>(-bbox.origin.x + 1.0),
-                .y = static_cast<CGFloat>(-bbox.origin.y + 1.0),
-            };
-            CTFontDrawGlyphs(run_font, &glyph, &pos, 1, ctx);
-            CGContextRelease(ctx);
-
-            auto run_pos = positions[static_cast<std::size_t>(glyph_index)];
-            int gx = static_cast<int>(std::lround(
-                static_cast<float>(line_origin_x) + run_pos.x + bbox.origin.x));
-            int gy = static_cast<int>(std::lround(
-                baseline_y + run_pos.y - bbox.origin.y - bbox.size.height));
-
-            for (int row = 0; row < gh; ++row) {
-                for (int col = 0; col < gw; ++col) {
-                    int local_x = gx + col;
-                    int local_y = gy + row;
-                    if (local_x < 0 || local_x >= slot_width
-                        || local_y < 0 || local_y >= slot_height)
-                        continue;
-
-                    auto alpha = glyph_buf[static_cast<std::size_t>(row * gw + col)];
-                    if (alpha == 0)
-                        continue;
-
-                    has_ink = true;
-                    if (local_x < ink_min_x) ink_min_x = local_x;
-                    if (local_x > ink_max_x) ink_max_x = local_x;
-                    slot_alpha[static_cast<std::size_t>(
-                        local_y * slot_width + local_x)] = alpha;
-                }
-            }
+            has_ink = true;
+            if (col < ink_min_x)
+                ink_min_x = col;
+            if (col > ink_max_x)
+                ink_max_x = col;
         }
     }
 
@@ -840,14 +872,14 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
     for (auto const& entry : entries) {
         if (entry.text.empty()) continue;
 
-        auto font = copy_text_font(entry.font_size * scale, entry.mono);
+        auto font = copy_text_font(entry.font_size, entry.mono);
         if (!font) continue;
         auto line = create_text_line(
             font, entry.text.c_str(), static_cast<unsigned int>(entry.text.size()));
         if (!line) continue;
 
         TextLineMetrics line_metrics;
-        if (!describe_text_line(line, scale, line_metrics))
+        if (!describe_text_line(line, line_metrics))
             continue;
 
         float logical_line_height = entry.line_height > 0
@@ -889,6 +921,7 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
             box.slot_height,
             line_origin_x,
             box.baseline_y,
+            scale,
             slot_alpha,
             ink_min_x,
             ink_max_x);
@@ -917,15 +950,21 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
                 }
             }
 
-            int ink_w = ink_max_x - ink_min_x + 1;
+            auto span = compute_line_render_span(
+                ink_min_x,
+                ink_max_x,
+                line_origin_x,
+                line_metrics.logical_width,
+                scale);
+            int render_w = span.end_x - span.start_x;
             atlas.quads.push_back({
-                snapped_x + static_cast<float>(ink_min_x) / scale,
+                snapped_x + static_cast<float>(span.start_x - span.line_origin_x) / scale,
                 snapped_y,
-                static_cast<float>(ink_w) / scale,
+                static_cast<float>(render_w) / scale,
                 static_cast<float>(box.render_height) / scale,
-                static_cast<float>(ax + ink_min_x) / ATLAS_SIZE,
+                static_cast<float>(ax + span.start_x) / ATLAS_SIZE,
                 static_cast<float>(ay + box.render_top) / ATLAS_SIZE,
-                static_cast<float>(ink_w) / ATLAS_SIZE,
+                static_cast<float>(render_w) / ATLAS_SIZE,
                 static_cast<float>(box.render_height) / ATLAS_SIZE,
             });
         }
@@ -1572,6 +1611,36 @@ inline bool decode_bmp_memory(std::vector<std::uint8_t> const& bytes,
     return true;
 }
 
+inline float measure_utf8_line_offset(float font_size,
+                                      bool mono,
+                                      std::string const& text,
+                                      std::size_t bytes) {
+    bytes = ::phenotype::detail::clamp_utf8_boundary(text, bytes);
+    if (bytes == 0)
+        return 0.0f;
+
+    auto font = copy_text_font(font_size, mono);
+    if (!font)
+        return measure_utf8_prefix(font_size, mono, text, bytes);
+
+    auto line = create_text_line(
+        font,
+        text.data(),
+        static_cast<unsigned int>(text.size()));
+    if (!line)
+        return measure_utf8_prefix(font_size, mono, text, bytes);
+
+    auto utf16_offset = static_cast<CFIndex>(
+        utf16_length(std::string_view(text.data(), bytes)));
+    CGFloat secondary = 0.0;
+    auto primary = CTLineGetOffsetForStringIndex(line, utf16_offset, &secondary);
+    if (!std::isfinite(primary))
+        return measure_utf8_prefix(font_size, mono, text, bytes);
+    if (std::isfinite(secondary) && secondary > primary)
+        primary = secondary;
+    return static_cast<float>(primary);
+}
+
 inline bool decode_bmp_file(std::filesystem::path const& path, DecodedImage& out) {
     auto file = std::fopen(path.string().c_str(), "rb");
     if (!file)
@@ -1858,7 +1927,7 @@ inline bool rasterize_text_run(char const* text_ptr, unsigned int len,
     if (!g_text.initialized || len == 0)
         return false;
 
-    auto font = copy_text_font(font_size * scale, mono);
+    auto font = copy_text_font(font_size, mono);
     if (!font)
         return false;
     auto line = create_text_line(font, text_ptr, len);
@@ -1866,7 +1935,7 @@ inline bool rasterize_text_run(char const* text_ptr, unsigned int len,
         return false;
 
     TextLineMetrics line_metrics;
-    if (!describe_text_line(line, scale, line_metrics))
+    if (!describe_text_line(line, line_metrics))
         return false;
 
     int padding = static_cast<int>(std::ceil(scale)) + 1;
@@ -1898,6 +1967,7 @@ inline bool rasterize_text_run(char const* text_ptr, unsigned int len,
             box.slot_height,
             line_origin_x,
             box.baseline_y,
+            scale,
             slot_alpha,
             ink_min_x,
             ink_max_x)
@@ -1906,16 +1976,22 @@ inline bool rasterize_text_run(char const* text_ptr, unsigned int len,
     }
 
     out.has_ink = true;
-    out.pixel_width = ink_max_x - ink_min_x + 1;
+    auto span = compute_line_render_span(
+        ink_min_x,
+        ink_max_x,
+        line_origin_x,
+        line_metrics.logical_width,
+        scale);
+    out.pixel_width = span.end_x - span.start_x;
     out.pixel_height = box.render_height;
-    out.x_offset = static_cast<float>(ink_min_x) / scale;
+    out.x_offset = static_cast<float>(span.start_x - span.line_origin_x) / scale;
     out.width = static_cast<float>(out.pixel_width) / scale;
     out.height = static_cast<float>(out.pixel_height) / scale;
     out.alpha.resize(static_cast<std::size_t>(out.pixel_width * out.pixel_height), 0);
 
     for (int row = 0; row < out.pixel_height; ++row) {
         auto src = &slot_alpha[static_cast<std::size_t>(
-            (box.render_top + row) * box.slot_width + ink_min_x)];
+            (box.render_top + row) * box.slot_width + span.start_x)];
         auto* dst = out.alpha.data()
             + static_cast<std::size_t>(row * out.pixel_width);
         std::memcpy(dst, src, static_cast<std::size_t>(out.pixel_width));
@@ -2573,7 +2649,10 @@ inline ByteRange effective_replacement_range(
         return utf16_range_to_utf8_range(snapshot.value, replacement_range);
     if (g_ime.composition_active)
         return {g_ime.replacement_start, g_ime.replacement_end};
-    return caret_byte_range(snapshot);
+    return {
+        static_cast<std::size_t>(snapshot.selection_start),
+        static_cast<std::size_t>(snapshot.selection_end),
+    };
 }
 
 inline std::size_t composition_cursor_bytes() {
@@ -2785,7 +2864,7 @@ inline CaretVisualState current_text_caret_visual_state(bool require_visible = f
         ::phenotype::detail::get_scroll_y(),
         false,
         [](auto const& input, std::size_t bytes) {
-            return measure_utf8_prefix(
+            return measure_utf8_line_offset(
                 input.font_size,
                 input.mono,
                 input.value,
@@ -2832,18 +2911,18 @@ inline CompositionVisualState current_composition_visual_state() {
     visual.draw_y = visual.snapshot.y - scroll_y;
     visual.text_y = visual.draw_y + visual.snapshot.padding[0];
     visual.base_x = visual.snapshot.x + visual.snapshot.padding[3];
-    visual.underline_x = visual.base_x + measure_utf8_prefix(
+    visual.underline_x = visual.base_x + measure_utf8_line_offset(
         visual.snapshot.font_size,
         visual.snapshot.mono,
         visual.visible_text,
         visual.marked_start);
-    auto underline_end = visual.base_x + measure_utf8_prefix(
+    auto underline_end = visual.base_x + measure_utf8_line_offset(
         visual.snapshot.font_size,
         visual.snapshot.mono,
         visual.visible_text,
         visual.marked_end);
     visual.underline_width = underline_end - visual.underline_x;
-    visual.caret_x = visual.base_x + measure_utf8_prefix(
+    visual.caret_x = visual.base_x + measure_utf8_line_offset(
         visual.snapshot.font_size,
         visual.snapshot.mono,
         visual.visible_text,
@@ -2886,8 +2965,12 @@ inline CocoaRange current_selected_range() {
         return {cocoa_not_found, 0};
 
     if (!g_ime.composition_active || g_ime.marked_text.empty()) {
-        auto caret = clamp_snapshot_caret(snapshot);
-        return {utf16_length(std::string_view(snapshot.value.data(), caret)), 0};
+        auto start = static_cast<std::size_t>(snapshot.selection_start);
+        auto end = static_cast<std::size_t>(snapshot.selection_end);
+        return {
+            utf16_length(std::string_view(snapshot.value.data(), start)),
+            utf16_length(std::string_view(snapshot.value.data() + start, end - start)),
+        };
     }
 
     auto marked = current_marked_range();
@@ -3211,9 +3294,32 @@ inline void focus_editor_view() {
 }
 
 inline bool input_dismiss_transient();
+inline void editor_do_command_by_selector(id, SEL, SEL command);
 
 inline bool is_line_break_text(std::string_view text) {
     return text == "\n" || text == "\r" || text == "\r\n";
+}
+
+inline bool editor_handle_key_equivalent(
+        unsigned long long modifier_flags,
+        unsigned short key_code,
+        std::string_view characters_ignoring_modifiers) {
+    constexpr unsigned long long command_modifier = 1ull << 20;
+    if ((modifier_flags & command_modifier) == 0)
+        return false;
+    bool is_select_all = key_code == 0;
+    if (!is_select_all && characters_ignoring_modifiers.size() == 1) {
+        auto ch = characters_ignoring_modifiers.front();
+        is_select_all = ch == 'a' || ch == 'A';
+    }
+    if (is_select_all) {
+        editor_do_command_by_selector(
+            static_cast<id>(nullptr),
+            nullptr,
+            sel_select_all());
+        return true;
+    }
+    return false;
 }
 
 inline void editor_key_down(id self, SEL, id event) {
@@ -3222,6 +3328,18 @@ inline void editor_key_down(id self, SEL, id event) {
         sel_array_with_object(),
         event);
     objc_send<void>(self, sel_interpret_key_events(), events);
+}
+
+inline bool editor_perform_key_equivalent(id, SEL, id event) {
+    if (!event)
+        return false;
+    auto modifier_flags = objc_send<unsigned long long>(event, sel_modifier_flags());
+    auto key_code = objc_send<unsigned short>(event, sel_key_code());
+    auto characters = objc_send<id>(event, sel_characters_ignoring_modifiers());
+    return editor_handle_key_equivalent(
+        modifier_flags,
+        key_code,
+        text_object_to_utf8(characters));
 }
 
 inline bool editor_accepts_first_responder(id, SEL) {
@@ -3273,6 +3391,7 @@ inline void editor_set_marked_text(id, SEL, id value,
     g_ime.marked_selection = clamp_cocoa_range(
         selected_range,
         utf16_length(g_ime.marked_text));
+    ::phenotype::detail::set_focused_input_selection(bytes.start, bytes.start);
     sync_input_debug_composition_state();
     sync_input_context_geometry();
     request_window_repaint();
@@ -3315,22 +3434,49 @@ inline CGRect editor_first_rect_for_character_range(id,
                                                     SEL,
                                                     CocoaRange range,
                                                     CocoaRange* actual_range) {
+    auto visual = current_composition_visual_state();
+    auto snapshot = visual.valid
+        ? visual.snapshot
+        : ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid)
+        return CGRectNull;
+
+    auto const& document = visual.valid ? visual.visible_text : snapshot.value;
+    auto clamped = clamp_cocoa_range(range, utf16_length(document));
     if (actual_range)
-        *actual_range = range;
-    auto rect = current_caret_rect_screen();
+        *actual_range = clamped;
+
+    auto bytes = utf16_range_to_utf8_range(document, clamped);
+    auto scroll_y = ::phenotype::detail::get_scroll_y();
+    float base_x = snapshot.x + snapshot.padding[3];
+    float draw_y = snapshot.y - scroll_y + snapshot.padding[0];
+    float start_x = base_x + measure_utf8_line_offset(
+        snapshot.font_size,
+        snapshot.mono,
+        document,
+        bytes.start);
+    float end_x = base_x + measure_utf8_line_offset(
+        snapshot.font_size,
+        snapshot.mono,
+        document,
+        bytes.end);
+
+    CGRect draw_rect{};
+    draw_rect.origin.x = start_x;
+    draw_rect.origin.y = draw_y;
+    draw_rect.size.width = std::max(1.5f, end_x - start_x);
+    draw_rect.size.height = snapshot.line_height;
+
+    auto rect = draw_rect_to_screen(draw_rect);
     if (!CGRectIsNull(rect))
         return rect;
     if (!g_ime.content_view || !g_ime.ns_window)
         return CGRectNull;
 
-    CGRect content_rect{};
-    content_rect.origin = CGPointZero;
-    content_rect.size.width = 1.0;
-    content_rect.size.height = 1.0;
     auto window_rect = objc_send<CGRect>(
         g_ime.content_view,
         sel_convert_rect_to_view(),
-        content_rect,
+        draw_rect,
         static_cast<id>(nullptr));
     return objc_send<CGRect>(g_ime.ns_window, sel_convert_rect_to_screen(), window_rect);
 }
@@ -3369,19 +3515,41 @@ inline void editor_do_command_by_selector(id,
     bool handled = false;
     if (command == sel_delete_backward()) {
         handled = ::phenotype::detail::handle_key(
-            1, 0, "macos-ime", "deleteBackward:");
+            1, 0, false, "macos-ime", "deleteBackward:");
     } else if (command == sel_move_left()) {
         handled = ::phenotype::detail::handle_key(
-            2, 0, "macos-ime", "moveLeft:");
+            2, 0, false, "macos-ime", "moveLeft:");
+    } else if (command == sel_move_left_and_modify_selection()) {
+        handled = ::phenotype::detail::handle_key(
+            2, 0, true, "macos-ime", "moveLeftAndModifySelection:");
     } else if (command == sel_move_right()) {
         handled = ::phenotype::detail::handle_key(
-            3, 0, "macos-ime", "moveRight:");
+            3, 0, false, "macos-ime", "moveRight:");
+    } else if (command == sel_move_right_and_modify_selection()) {
+        handled = ::phenotype::detail::handle_key(
+            3, 0, true, "macos-ime", "moveRightAndModifySelection:");
     } else if (command == sel_move_to_beginning()) {
         handled = ::phenotype::detail::handle_key(
-            4, 0, "macos-ime", "moveToBeginningOfLine:");
+            4, 0, false, "macos-ime", "moveToBeginningOfLine:");
+    } else if (command == sel_move_to_beginning_and_modify_selection()) {
+        handled = ::phenotype::detail::handle_key(
+            4, 0, true, "macos-ime", "moveToBeginningOfLineAndModifySelection:");
     } else if (command == sel_move_to_end()) {
         handled = ::phenotype::detail::handle_key(
-            5, 0, "macos-ime", "moveToEndOfLine:");
+            5, 0, false, "macos-ime", "moveToEndOfLine:");
+    } else if (command == sel_move_to_end_and_modify_selection()) {
+        handled = ::phenotype::detail::handle_key(
+            5, 0, true, "macos-ime", "moveToEndOfLineAndModifySelection:");
+    } else if (command == sel_select_all()) {
+        handled = ::phenotype::detail::select_all_focused_input();
+        if (handled) {
+            ::phenotype::detail::note_input_event(
+                "key",
+                "macos-ime",
+                "selectAll:",
+                "handled",
+                ::phenotype::detail::get_focused_id());
+        }
     } else if (command == sel_insert_tab()) {
         handled = ::phenotype::detail::handle_tab(0, "macos-ime", "insertTab:");
     } else if (command == sel_insert_backtab()) {
@@ -3479,6 +3647,11 @@ inline Class ensure_editor_view_class() {
         sel_key_down(),
         reinterpret_cast<IMP>(editor_key_down),
         "v@:@");
+    class_addMethod(
+        subclass,
+        sel_perform_key_equivalent(),
+        reinterpret_cast<IMP>(editor_perform_key_equivalent),
+        "B@:@");
     class_addMethod(
         subclass,
         sel_has_marked_text(),
@@ -4171,6 +4344,11 @@ struct CompositionVisualDebug {
     std::size_t marked_end = 0;
 };
 
+struct SelectedRangeDebug {
+    unsigned long location_utf16 = 0;
+    unsigned long length_utf16 = 0;
+};
+
 struct SystemCaretDebug {
     bool supported = false;
     bool attached = false;
@@ -4193,6 +4371,20 @@ struct RemoteImageDebug {
     std::size_t pending_jobs = 0;
     std::size_t completed_jobs = 0;
     bool worker_started = false;
+};
+
+struct RasterizedTextRunDebug {
+    bool has_ink = false;
+    float logical_width = 0.0f;
+    float x_offset = 0.0f;
+    float width = 0.0f;
+    float draw_right = 0.0f;
+    float right_gap = 0.0f;
+    int first_ink_row = -1;
+    int last_ink_row = -1;
+    int pixel_height = 0;
+    std::uint64_t top_alpha = 0;
+    std::uint64_t bottom_alpha = 0;
 };
 
 inline Utf8Range utf16_range_to_utf8(std::string const& text,
@@ -4270,6 +4462,97 @@ inline RemoteImageDebug remote_image_debug(std::string const& url) {
         debug.worker_started = detail::g_images.worker_started;
     }
     return debug;
+}
+
+inline RasterizedTextRunDebug rasterized_text_run_debug(std::string const& text,
+                                                        float font_size,
+                                                        bool mono,
+                                                        float line_height,
+                                                        float scale) {
+    RasterizedTextRunDebug debug{};
+    debug.logical_width = detail::text_measure(
+        font_size,
+        mono,
+        text.data(),
+        static_cast<unsigned int>(text.size()));
+
+    detail::RasterizedTextRun rasterized;
+    if (!detail::rasterize_text_run(
+            text.data(),
+            static_cast<unsigned int>(text.size()),
+            font_size,
+            mono,
+            line_height,
+            scale,
+            rasterized)) {
+        return debug;
+    }
+
+    debug.has_ink = rasterized.has_ink;
+    debug.x_offset = rasterized.x_offset;
+    debug.width = rasterized.width;
+    debug.draw_right = rasterized.x_offset + rasterized.width;
+    debug.right_gap = debug.logical_width - debug.draw_right;
+    debug.pixel_height = rasterized.pixel_height;
+
+    int split = rasterized.pixel_height / 2;
+    for (int row = 0; row < rasterized.pixel_height; ++row) {
+        for (int col = 0; col < rasterized.pixel_width; ++col) {
+            auto alpha = rasterized.alpha[static_cast<std::size_t>(
+                row * rasterized.pixel_width + col)];
+            if (alpha != 0) {
+                if (debug.first_ink_row < 0)
+                    debug.first_ink_row = row;
+                debug.last_ink_row = row;
+            }
+            if (row < split) {
+                debug.top_alpha += alpha;
+            } else {
+                debug.bottom_alpha += alpha;
+            }
+        }
+    }
+    return debug;
+}
+
+inline SelectedRangeDebug selected_range_debug() {
+    auto range = detail::current_selected_range();
+    return {
+        range.location == detail::cocoa_not_found ? 0u : range.location,
+        range.location == detail::cocoa_not_found ? 0u : range.length,
+    };
+}
+
+inline ::phenotype::diag::RectSnapshot first_rect_for_range_debug(
+        unsigned long location_utf16,
+        unsigned long length_utf16) {
+    auto rect = detail::editor_first_rect_for_character_range(
+        static_cast<id>(nullptr),
+        nullptr,
+        {location_utf16, length_utf16},
+        nullptr);
+    return detail::rect_snapshot(rect);
+}
+
+inline void invoke_command_for_tests(char const* selector_name) {
+    if (!selector_name)
+        return;
+    detail::editor_do_command_by_selector(
+        static_cast<id>(nullptr),
+        nullptr,
+        sel_registerName(selector_name));
+}
+
+inline bool perform_key_equivalent_for_tests(
+        unsigned long long modifier_flags,
+        char const* characters_ignoring_modifiers,
+        unsigned short key_code = 0) {
+    return detail::editor_handle_key_equivalent(
+        modifier_flags,
+        key_code,
+        std::string_view{
+            characters_ignoring_modifiers ? characters_ignoring_modifiers : "",
+            characters_ignoring_modifiers ? std::strlen(characters_ignoring_modifiers) : 0u});
 }
 
 inline SystemCaretDebug system_caret_debug() {
@@ -4373,6 +4656,11 @@ struct CompositionVisualDebug {
     std::size_t marked_end = 0;
 };
 
+struct SelectedRangeDebug {
+    unsigned long location_utf16 = 0;
+    unsigned long length_utf16 = 0;
+};
+
 struct SystemCaretDebug {
     bool supported = false;
     bool attached = false;
@@ -4395,6 +4683,20 @@ struct RemoteImageDebug {
     std::size_t pending_jobs = 0;
     std::size_t completed_jobs = 0;
     bool worker_started = false;
+};
+
+struct RasterizedTextRunDebug {
+    bool has_ink = false;
+    float logical_width = 0.0f;
+    float x_offset = 0.0f;
+    float width = 0.0f;
+    float draw_right = 0.0f;
+    float right_gap = 0.0f;
+    int first_ink_row = -1;
+    int last_ink_row = -1;
+    int pixel_height = 0;
+    std::uint64_t top_alpha = 0;
+    std::uint64_t bottom_alpha = 0;
 };
 
 inline Utf8Range utf16_range_to_utf8(std::string const&,
@@ -4426,6 +4728,31 @@ inline void set_image_queue_only_for_tests(bool) {}
 
 inline RemoteImageDebug remote_image_debug(std::string const&) {
     return {};
+}
+
+inline RasterizedTextRunDebug rasterized_text_run_debug(
+        std::string const&,
+        float,
+        bool,
+        float,
+        float) {
+    return {};
+}
+
+inline SelectedRangeDebug selected_range_debug() {
+    return {};
+}
+
+inline ::phenotype::diag::RectSnapshot first_rect_for_range_debug(
+        unsigned long,
+        unsigned long) {
+    return {};
+}
+
+inline void invoke_command_for_tests(char const*) {}
+
+inline bool perform_key_equivalent_for_tests(unsigned long long, char const*, unsigned short = 0) {
+    return false;
 }
 
 inline SystemCaretDebug system_caret_debug() {

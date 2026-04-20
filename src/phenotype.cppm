@@ -782,11 +782,56 @@ inline unsigned int resolved_caret_pos(std::string const& value) {
         clamp_utf8_boundary(value, static_cast<std::size_t>(g_app.caret_pos)));
 }
 
-inline void sync_input_debug_caret_state() {
+inline unsigned int resolved_selection_anchor(std::string const& value) {
+    if (g_app.selection_anchor == 0xFFFFFFFFu)
+        return resolved_caret_pos(value);
+    return static_cast<unsigned int>(
+        clamp_utf8_boundary(value, static_cast<std::size_t>(g_app.selection_anchor)));
+}
+
+struct ResolvedSelectionState {
+    std::size_t anchor = 0;
+    std::size_t caret = 0;
+    std::size_t start = 0;
+    std::size_t end = 0;
+    bool active = false;
+};
+
+inline ResolvedSelectionState resolved_selection_state(std::string const& value) {
+    auto caret = static_cast<std::size_t>(resolved_caret_pos(value));
+    auto anchor = static_cast<std::size_t>(resolved_selection_anchor(value));
+    return {
+        anchor,
+        caret,
+        (anchor < caret) ? anchor : caret,
+        (anchor > caret) ? anchor : caret,
+        anchor != caret,
+    };
+}
+
+inline void sync_input_debug_selection_state(std::string const* value_override = nullptr) {
+    auto& snapshot = g_app.input_debug;
+    snapshot.selection_active = false;
+    snapshot.selection_start = 0xFFFFFFFFu;
+    snapshot.selection_end = 0xFFFFFFFFu;
+
+    auto* handler = find_input_handler(g_app.focused_id);
+    if (!handler)
+        return;
+
+    auto const& value = value_override ? *value_override : handler->current;
+    auto selection = resolved_selection_state(value);
+    snapshot.selection_active = selection.active;
+    snapshot.selection_start = static_cast<unsigned int>(selection.start);
+    snapshot.selection_end = static_cast<unsigned int>(selection.end);
+}
+
+inline void sync_input_debug_caret_state(std::string const* value_override = nullptr) {
     auto& snapshot = g_app.input_debug;
     snapshot.caret_pos = g_app.caret_pos;
     snapshot.caret_visible = g_app.caret_visible;
     snapshot.focused_is_input = find_input_handler(g_app.focused_id) != nullptr;
+    sync_input_debug_selection_state(value_override);
     if (!snapshot.focused_is_input) {
         snapshot.caret_renderer = "hidden";
         snapshot.caret_rect = {};
@@ -860,19 +905,28 @@ inline void clear_input_debug_caret_presentation(char const* renderer = "hidden"
 
 inline void clear_caret_state(bool visible = true) {
     g_app.caret_pos = 0xFFFFFFFFu;
+    g_app.selection_anchor = 0xFFFFFFFFu;
     g_app.caret_visible = visible;
     g_app.last_paint_hash = 0;
     sync_input_debug_caret_state();
 }
 
+inline unsigned int set_selection_state(std::string const& value,
+                                        std::size_t anchor,
+                                        std::size_t caret,
+                                        bool visible = true) {
+    g_app.selection_anchor = static_cast<unsigned int>(clamp_utf8_boundary(value, anchor));
+    g_app.caret_pos = static_cast<unsigned int>(clamp_utf8_boundary(value, caret));
+    g_app.caret_visible = visible;
+    g_app.last_paint_hash = 0;
+    sync_input_debug_caret_state(&value);
+    return g_app.caret_pos;
+}
+
 inline unsigned int set_caret_state(std::string const& value,
                                     std::size_t pos,
                                     bool visible = true) {
-    g_app.caret_pos = static_cast<unsigned int>(clamp_utf8_boundary(value, pos));
-    g_app.caret_visible = visible;
-    g_app.last_paint_hash = 0;
-    sync_input_debug_caret_state();
-    return g_app.caret_pos;
+    return set_selection_state(value, pos, pos, visible);
 }
 
 inline bool set_focused_input_caret_pos(std::size_t pos, bool visible = true) {
@@ -880,6 +934,24 @@ inline bool set_focused_input_caret_pos(std::size_t pos, bool visible = true) {
     if (!handler)
         return false;
     set_caret_state(handler->current, pos, visible);
+    return true;
+}
+
+inline bool set_focused_input_selection(std::size_t anchor,
+                                        std::size_t caret,
+                                        bool visible = true) {
+    auto* handler = find_input_handler(g_app.focused_id);
+    if (!handler)
+        return false;
+    set_selection_state(handler->current, anchor, caret, visible);
+    return true;
+}
+
+inline bool select_all_focused_input(bool visible = true) {
+    auto* handler = find_input_handler(g_app.focused_id);
+    if (!handler)
+        return false;
+    set_selection_state(handler->current, 0, handler->current.size(), visible);
     return true;
 }
 
@@ -931,6 +1003,7 @@ inline void note_input_event(char const* event,
     snapshot.caret_pos = g_app.caret_pos;
     snapshot.caret_visible = g_app.caret_visible;
     snapshot.focused_is_input = find_input_handler(g_app.focused_id) != nullptr;
+    sync_input_debug_selection_state();
     if (!snapshot.focused_is_input) {
         snapshot.caret_renderer = "hidden";
         snapshot.caret_rect = {};
@@ -1030,6 +1103,27 @@ inline void toggle_caret() {
     sync_input_debug_caret_state();
 }
 
+inline std::string encode_utf8_codepoint(unsigned int codepoint) {
+    char buf[4];
+    unsigned int len = 0;
+    if (codepoint < 0x80) {
+        buf[0] = static_cast<char>(codepoint); len = 1;
+    } else if (codepoint < 0x800) {
+        buf[0] = static_cast<char>(0xC0 | (codepoint >> 6));
+        buf[1] = static_cast<char>(0x80 | (codepoint & 0x3F)); len = 2;
+    } else if (codepoint < 0x10000) {
+        buf[0] = static_cast<char>(0xE0 | (codepoint >> 12));
+        buf[1] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+        buf[2] = static_cast<char>(0x80 | (codepoint & 0x3F)); len = 3;
+    } else {
+        buf[0] = static_cast<char>(0xF0 | (codepoint >> 18));
+        buf[1] = static_cast<char>(0x80 | ((codepoint >> 12) & 0x3F));
+        buf[2] = static_cast<char>(0x80 | ((codepoint >> 6) & 0x3F));
+        buf[3] = static_cast<char>(0x80 | (codepoint & 0x3F)); len = 4;
+    }
+    return {buf, buf + len};
+}
+
 inline bool apply_key_to_string(unsigned int key_type,
                                 unsigned int codepoint,
                                 std::string& value,
@@ -1117,8 +1211,11 @@ inline bool insert_focused_input_text(std::string_view replacement) {
     auto* handler = find_input_handler(g_app.focused_id);
     if (!handler)
         return false;
-    auto caret = static_cast<std::size_t>(resolved_caret_pos(handler->current));
-    return replace_focused_input_text(caret, caret, replacement);
+    auto selection = resolved_selection_state(handler->current);
+    return replace_focused_input_text(
+        selection.start,
+        selection.end,
+        replacement);
 }
 
 inline void set_input_composition_state(bool active,
@@ -1153,6 +1250,10 @@ inline diag::InputDebugSnapshot materialize_input_debug_snapshot() {
     snapshot.hovered_id = g_app.hovered_id;
     snapshot.scroll_y = g_app.scroll_y;
     snapshot.caret_pos = g_app.caret_pos;
+    sync_input_debug_selection_state();
+    snapshot.selection_active = g_app.input_debug.selection_active;
+    snapshot.selection_start = g_app.input_debug.selection_start;
+    snapshot.selection_end = g_app.input_debug.selection_end;
     snapshot.caret_visible = g_app.caret_visible;
     snapshot.focused_is_input = find_input_handler(g_app.focused_id) != nullptr;
     if (!snapshot.focused_is_input)
@@ -1161,6 +1262,7 @@ inline diag::InputDebugSnapshot materialize_input_debug_snapshot() {
 }
 
 inline bool handle_key(unsigned int key_type, unsigned int codepoint,
+                       bool extend_selection = false,
                        char const* source = "core",
                        char const* detail = nullptr) {
     auto detail_name = detail ? detail : input_key_detail_name(key_type);
@@ -1171,14 +1273,61 @@ inline bool handle_key(unsigned int key_type, unsigned int codepoint,
     }
 
     std::string value = handler->current;
-    std::size_t caret = resolved_caret_pos(value);
+    auto selection = resolved_selection_state(value);
+    auto previous_anchor = selection.anchor;
+    auto previous_caret = selection.caret;
+    std::size_t caret = selection.caret;
     bool text_changed = false;
-    if (!apply_key_to_string(key_type, codepoint, value, caret, text_changed)) {
-        note_input_event("key", source, detail_name, "ignored", g_app.focused_id);
-        return false;
+    if (key_type == 0 && selection.active) {
+        auto replacement = encode_utf8_codepoint(codepoint);
+        value.replace(
+            selection.start,
+            selection.end - selection.start,
+            replacement);
+        caret = selection.start + replacement.size();
+        text_changed = true;
+        set_caret_state(value, caret);
+    } else if (key_type == 1 && selection.active) {
+        value.erase(selection.start, selection.end - selection.start);
+        caret = selection.start;
+        text_changed = true;
+        set_caret_state(value, caret);
+    } else if (key_type >= 2 && key_type <= 5) {
+        if (selection.active && !extend_selection) {
+            std::size_t collapsed = selection.caret;
+            switch (key_type) {
+                case 2: collapsed = selection.start; break;
+                case 3: collapsed = selection.end; break;
+                case 4: collapsed = 0; break;
+                case 5: collapsed = value.size(); break;
+                default: break;
+            }
+            set_caret_state(value, collapsed);
+            if (previous_anchor == collapsed && previous_caret == collapsed) {
+                note_input_event("key", source, detail_name, "ignored", g_app.focused_id);
+                return false;
+            }
+            note_input_event("key", source, detail_name, "handled", g_app.focused_id);
+            return true;
+        }
+
+        if (!apply_key_to_string(key_type, codepoint, value, caret, text_changed)) {
+            note_input_event("key", source, detail_name, "ignored", g_app.focused_id);
+            return false;
+        }
+        if (extend_selection) {
+            set_selection_state(value, selection.anchor, caret);
+        } else {
+            set_caret_state(value, caret);
+        }
+    } else {
+        if (!apply_key_to_string(key_type, codepoint, value, caret, text_changed)) {
+            note_input_event("key", source, detail_name, "ignored", g_app.focused_id);
+            return false;
+        }
+        set_caret_state(value, caret);
     }
 
-    set_caret_state(value, caret);
     if (text_changed)
         handler->invoke(handler->state, std::move(value));
     note_input_event("key", source, detail_name, "handled", g_app.focused_id);
@@ -1479,6 +1628,29 @@ inline float get_scroll_y() {
 
 inline unsigned int get_caret_pos() {
     return g_app.caret_pos;
+}
+
+inline unsigned int get_selection_anchor() {
+    return g_app.selection_anchor;
+}
+
+inline bool selection_active() {
+    auto* handler = find_input_handler(g_app.focused_id);
+    return handler && resolved_selection_state(handler->current).active;
+}
+
+inline unsigned int selection_start() {
+    auto* handler = find_input_handler(g_app.focused_id);
+    if (!handler)
+        return 0xFFFFFFFFu;
+    return static_cast<unsigned int>(resolved_selection_state(handler->current).start);
+}
+
+inline unsigned int selection_end() {
+    auto* handler = find_input_handler(g_app.focused_id);
+    if (!handler)
+        return 0xFFFFFFFFu;
+    return static_cast<unsigned int>(resolved_selection_state(handler->current).end);
 }
 
 inline bool get_caret_visible() {

@@ -139,6 +139,10 @@ struct FocusedInputSnapshot {
     Color placeholder_color = {0, 0, 0, 255};
     Color accent = {0, 0, 0, 255};
     unsigned int caret_pos = 0xFFFFFFFFu;
+    unsigned int selection_anchor = 0xFFFFFFFFu;
+    bool selection_active = false;
+    unsigned int selection_start = 0xFFFFFFFFu;
+    unsigned int selection_end = 0xFFFFFFFFu;
     bool caret_visible = true;
     std::string value;
     std::string placeholder;
@@ -166,6 +170,7 @@ struct AppState {
     unsigned int hovered_id = 0xFFFFFFFF;
     unsigned int focused_id = 0xFFFFFFFF;
     unsigned int caret_pos = 0xFFFFFFFFu;
+    unsigned int selection_anchor = 0xFFFFFFFFu;
     bool caret_visible = true;
     // Click callbacks indexed by callback_id, registered by Button<Msg>.
     std::vector<std::function<void()>> callbacks;
@@ -331,9 +336,27 @@ namespace detail {
         snapshot.placeholder_color = g_app.theme.muted;
         snapshot.accent = g_app.theme.accent;
         snapshot.caret_pos = g_app.caret_pos;
+        snapshot.selection_anchor = g_app.selection_anchor;
         snapshot.caret_visible = g_app.caret_visible;
         snapshot.value = std::move(current_value);
         snapshot.placeholder = input->placeholder;
+        auto clamp_boundary = [](std::string const& value, std::size_t pos) {
+            if (pos > value.size())
+                pos = value.size();
+            while (pos > 0
+                   && pos < value.size()
+                   && (static_cast<unsigned char>(value[pos]) & 0xC0u) == 0x80u) {
+                --pos;
+            }
+            return pos;
+        };
+        auto caret = clamp_boundary(snapshot.value, snapshot.caret_pos);
+        auto anchor = (snapshot.selection_anchor == 0xFFFFFFFFu)
+            ? caret
+            : clamp_boundary(snapshot.value, snapshot.selection_anchor);
+        snapshot.selection_active = anchor != caret;
+        snapshot.selection_start = static_cast<unsigned int>((anchor < caret) ? anchor : caret);
+        snapshot.selection_end = static_cast<unsigned int>((anchor > caret) ? anchor : caret);
         return snapshot;
     }
 

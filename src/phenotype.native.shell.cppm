@@ -75,6 +75,8 @@ struct AppState {
     native_host* host = nullptr;
     float scroll_y = 0.0f;
     unsigned int hovered_id = invalid_callback_id;
+    bool drag_selecting = false;
+    unsigned int drag_selection_id = invalid_callback_id;
     std::chrono::steady_clock::time_point next_caret_blink{};
     bool caret_blink_armed = false;
     bool repaint_in_progress = false;
@@ -167,7 +169,17 @@ inline void repaint_current() {
 }
 
 inline void bind_host(native_host& host, float scroll_y = 0.0f) {
-    g_app_state = {&host, scroll_y, invalid_callback_id, {}, false, false, false};
+    g_app_state = {
+        &host,
+        scroll_y,
+        invalid_callback_id,
+        false,
+        invalid_callback_id,
+        {},
+        false,
+        false,
+        false,
+    };
     ::phenotype::detail::set_scroll_y(scroll_y);
     ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
 }
@@ -227,6 +239,42 @@ inline bool move_focused_caret_from_pointer_x(float pointer_x) {
     if (!::phenotype::detail::set_focused_input_caret_pos(next_caret, true))
         return false;
     return previous_caret != ::phenotype::detail::get_caret_pos() || !previous_visible;
+}
+
+inline bool move_focused_selection_from_pointer_x(float pointer_x, bool extend_selection) {
+    auto snapshot = ::phenotype::detail::focused_input_snapshot();
+    if (!snapshot.valid)
+        return false;
+
+    auto next_caret = caret_pos_from_pointer_x(snapshot, pointer_x);
+    auto previous_caret = ::phenotype::detail::get_caret_pos();
+    auto previous_anchor = ::phenotype::detail::get_selection_anchor();
+    auto previous_visible = ::phenotype::detail::get_caret_visible();
+
+    bool changed = false;
+    if (extend_selection) {
+        auto anchor = previous_anchor == invalid_callback_id
+            ? previous_caret
+            : previous_anchor;
+        if (!::phenotype::detail::set_focused_input_selection(anchor, next_caret, true))
+            return false;
+        changed = previous_anchor != ::phenotype::detail::get_selection_anchor()
+            || previous_caret != ::phenotype::detail::get_caret_pos();
+    } else {
+        if (!::phenotype::detail::set_focused_input_selection(next_caret, next_caret, true))
+            return false;
+        changed = previous_anchor != ::phenotype::detail::get_selection_anchor()
+            || previous_caret != ::phenotype::detail::get_caret_pos();
+    }
+    return changed || !previous_visible;
+}
+
+inline bool has_select_all_modifier(int mods) {
+#ifdef __APPLE__
+    return (mods & GLFW_MOD_SUPER) != 0;
+#else
+    return (mods & GLFW_MOD_CONTROL) != 0;
+#endif
 }
 
 inline void reset_caret_blink_timer() {
@@ -353,7 +401,26 @@ inline bool dispatch_mouse_button(float mx, float my,
         return true;
     }
 
-    if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS) {
+    if (button != GLFW_MOUSE_BUTTON_LEFT) {
+        ::phenotype::detail::note_input_event(
+            "click", "shell", "pointer-click", "ignored", invalid_callback_id);
+        return false;
+    }
+
+    if (action == GLFW_RELEASE) {
+        bool had_drag = g_app_state.drag_selecting;
+        g_app_state.drag_selecting = false;
+        g_app_state.drag_selection_id = invalid_callback_id;
+        ::phenotype::detail::note_input_event(
+            "click",
+            "shell",
+            "pointer-release",
+            had_drag ? "handled" : "ignored",
+            ::phenotype::detail::get_focused_id());
+        return had_drag;
+    }
+
+    if (action != GLFW_PRESS) {
         ::phenotype::detail::note_input_event(
             "click", "shell", "pointer-click", "ignored", invalid_callback_id);
         return false;
@@ -363,8 +430,15 @@ inline bool dispatch_mouse_button(float mx, float my,
         bool focus_changed = ::phenotype::detail::set_focus_id(
             *hit, "shell", "pointer-focus");
         bool caret_changed = false;
-        if (::phenotype::detail::focused_is_input() && ::phenotype::detail::get_focused_id() == *hit)
-            caret_changed = move_focused_caret_from_pointer_x(mx);
+        if (::phenotype::detail::focused_is_input()
+            && ::phenotype::detail::get_focused_id() == *hit) {
+            caret_changed = move_focused_selection_from_pointer_x(mx, false);
+            g_app_state.drag_selecting = true;
+            g_app_state.drag_selection_id = *hit;
+        } else {
+            g_app_state.drag_selecting = false;
+            g_app_state.drag_selection_id = invalid_callback_id;
+        }
         if (focus_changed || caret_changed)
             sync_platform_input();
         if (::phenotype::detail::focused_is_input())
@@ -376,6 +450,8 @@ inline bool dispatch_mouse_button(float mx, float my,
         return focus_changed || caret_changed || activated;
     }
 
+    g_app_state.drag_selecting = false;
+    g_app_state.drag_selection_id = invalid_callback_id;
     bool cleared = ::phenotype::detail::set_focus_id(
         invalid_callback_id, "shell", "pointer-clear");
     if (cleared)
@@ -399,6 +475,26 @@ inline bool dispatch_cursor_pos(float mx, float my,
         ::phenotype::detail::note_input_event(
             "hover", "shell", "pointer-move", "platform-consumed", invalid_callback_id);
         return true;
+    }
+
+    if (g_app_state.drag_selecting
+        && ::phenotype::detail::focused_is_input()
+        && ::phenotype::detail::get_focused_id() == g_app_state.drag_selection_id) {
+        auto hit = hit_test(mx, my, g_app_state.scroll_y);
+        auto hovered_id = hit.value_or(invalid_callback_id);
+        g_app_state.hovered_id = hovered_id;
+        ::phenotype::detail::set_hover_id_without_event(hovered_id);
+        bool handled = move_focused_selection_from_pointer_x(mx, true);
+        if (handled)
+            repaint_current();
+        update_cursor(window, hit.has_value());
+        ::phenotype::detail::note_input_event(
+            "click",
+            "shell",
+            "pointer-drag",
+            handled ? "handled" : "ignored",
+            g_app_state.drag_selection_id);
+        return handled;
     }
 
     auto hit = hit_test(mx, my, g_app_state.scroll_y);
@@ -461,15 +557,16 @@ inline char const* key_detail_name(int key, bool shift) {
         case GLFW_KEY_ENTER:
         case GLFW_KEY_KP_ENTER: return "enter";
         case GLFW_KEY_SPACE: return "space";
-        case GLFW_KEY_LEFT: return "arrow-left";
-        case GLFW_KEY_RIGHT: return "arrow-right";
+        case GLFW_KEY_LEFT: return shift ? "shift-arrow-left" : "arrow-left";
+        case GLFW_KEY_RIGHT: return shift ? "shift-arrow-right" : "arrow-right";
         case GLFW_KEY_UP: return "arrow-up";
         case GLFW_KEY_DOWN: return "arrow-down";
         case GLFW_KEY_PAGE_UP: return "page-up";
         case GLFW_KEY_PAGE_DOWN: return "page-down";
-        case GLFW_KEY_HOME: return "home";
-        case GLFW_KEY_END: return "end";
+        case GLFW_KEY_HOME: return shift ? "shift-home" : "home";
+        case GLFW_KEY_END: return shift ? "shift-end" : "end";
         case GLFW_KEY_ESCAPE: return "escape";
+        case GLFW_KEY_A: return "select-all";
         default: return "key";
     }
 }
@@ -497,6 +594,19 @@ inline bool dispatch_key(int key, int action, int mods) {
             "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
         return false;
     }
+    if (key == GLFW_KEY_A && action == GLFW_PRESS && has_select_all_modifier(mods)) {
+        if (!::phenotype::detail::focused_is_input()
+            || !::phenotype::detail::select_all_focused_input()) {
+            ::phenotype::detail::note_input_event(
+                "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
+            return false;
+        }
+        reset_caret_blink_timer();
+        repaint_current();
+        ::phenotype::detail::note_input_event(
+            "key", "shell", detail, "handled", ::phenotype::detail::get_focused_id());
+        return true;
+    }
 
     switch (key) {
         case GLFW_KEY_TAB:
@@ -508,7 +618,7 @@ inline bool dispatch_key(int key, int action, int mods) {
             }
             return false;
         case GLFW_KEY_BACKSPACE:
-            if (::phenotype::detail::handle_key(1, 0, "shell", detail)) {
+            if (::phenotype::detail::handle_key(1, 0, false, "shell", detail)) {
                 reset_caret_blink_timer();
                 repaint_current();
                 return true;
@@ -525,14 +635,14 @@ inline bool dispatch_key(int key, int action, int mods) {
             }
             return dispatch_activation(detail, false);
         case GLFW_KEY_LEFT:
-            if (::phenotype::detail::handle_key(2, 0, "shell", detail)) {
+            if (::phenotype::detail::handle_key(2, 0, shift, "shell", detail)) {
                 reset_caret_blink_timer();
                 repaint_current();
                 return true;
             }
             return false;
         case GLFW_KEY_RIGHT:
-            if (::phenotype::detail::handle_key(3, 0, "shell", detail)) {
+            if (::phenotype::detail::handle_key(3, 0, shift, "shell", detail)) {
                 reset_caret_blink_timer();
                 repaint_current();
                 return true;
@@ -566,7 +676,7 @@ inline bool dispatch_key(int key, int action, int mods) {
         }
         case GLFW_KEY_HOME:
             if (::phenotype::detail::focused_is_input()) {
-                if (::phenotype::detail::handle_key(4, 0, "shell", detail)) {
+                if (::phenotype::detail::handle_key(4, 0, shift, "shell", detail)) {
                     reset_caret_blink_timer();
                     repaint_current();
                     return true;
@@ -576,7 +686,7 @@ inline bool dispatch_key(int key, int action, int mods) {
             return set_scroll_position(0.0f, viewport_height(nullptr), detail);
         case GLFW_KEY_END:
             if (::phenotype::detail::focused_is_input()) {
-                if (::phenotype::detail::handle_key(5, 0, "shell", detail)) {
+                if (::phenotype::detail::handle_key(5, 0, shift, "shell", detail)) {
                     reset_caret_blink_timer();
                     repaint_current();
                     return true;
@@ -617,7 +727,7 @@ inline bool dispatch_char(unsigned int codepoint) {
             "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
         return false;
     }
-    if (::phenotype::detail::handle_key(0, codepoint, "shell", detail)) {
+    if (::phenotype::detail::handle_key(0, codepoint, false, "shell", detail)) {
         reset_caret_blink_timer();
         repaint_current();
         return true;
