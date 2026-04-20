@@ -535,6 +535,9 @@ struct InputDebugSnapshot {
     unsigned int hovered_id = 0xFFFFFFFFu;
     float scroll_y = 0.0f;
     unsigned int caret_pos = 0xFFFFFFFFu;
+    bool selection_active = false;
+    unsigned int selection_start = 0xFFFFFFFFu;
+    unsigned int selection_end = 0xFFFFFFFFu;
     bool caret_visible = true;
     std::string caret_renderer = "hidden";
     RectSnapshot caret_rect{};
@@ -849,6 +852,13 @@ inline json::Value input_debug_to_json(InputDebugSnapshot const& snapshot) {
     out.emplace("hovered_id", json::Value{static_cast<std::int64_t>(snapshot.hovered_id)});
     out.emplace("scroll_y", json::Value{snapshot.scroll_y});
     out.emplace("caret_pos", json::Value{static_cast<std::int64_t>(snapshot.caret_pos)});
+    out.emplace("selection_active", json::Value{snapshot.selection_active});
+    out.emplace(
+        "selection_start",
+        json::Value{static_cast<std::int64_t>(snapshot.selection_start)});
+    out.emplace(
+        "selection_end",
+        json::Value{static_cast<std::int64_t>(snapshot.selection_end)});
     out.emplace("caret_visible", json::Value{snapshot.caret_visible});
     out.emplace("caret_renderer", json::Value{snapshot.caret_renderer});
     out.emplace("caret_rect", rect_to_json(snapshot.caret_rect));

@@ -109,6 +109,91 @@ static void assert_non_empty_frame_capture(DebugFrameCapture const& frame) {
     assert(has_non_zero_channel);
 }
 
+static float backing_scale_for_window(GLFWwindow* window) {
+    assert(window != nullptr);
+    int fbw = 0;
+    int fbh = 0;
+    int winw = 0;
+    int winh = 0;
+    glfwGetFramebufferSize(window, &fbw, &fbh);
+    glfwGetWindowSize(window, &winw, &winh);
+    assert(fbw > 0);
+    assert(winw > 0);
+
+    auto sx = static_cast<float>(fbw) / static_cast<float>(winw);
+    auto sy = (winh > 0)
+        ? static_cast<float>(fbh) / static_cast<float>(winh)
+        : sx;
+    return (sx > sy) ? sx : sy;
+}
+
+static int find_rightmost_dark_pixel_x(DebugFrameCapture const& frame,
+                                       int min_x,
+                                       int max_x,
+                                       int min_y,
+                                       int max_y) {
+    min_x = std::max(0, min_x);
+    min_y = std::max(0, min_y);
+    max_x = std::min(static_cast<int>(frame.width), max_x);
+    max_y = std::min(static_cast<int>(frame.height), max_y);
+    if (max_x <= min_x || max_y <= min_y)
+        return -1;
+
+    int rightmost = -1;
+    for (int y = min_y; y < max_y; ++y) {
+        for (int x = min_x; x < max_x; ++x) {
+            auto idx = static_cast<std::size_t>(
+                (static_cast<unsigned int>(y) * frame.width
+                    + static_cast<unsigned int>(x)) * 4u);
+            auto r = frame.rgba[idx + 0];
+            auto g = frame.rgba[idx + 1];
+            auto b = frame.rgba[idx + 2];
+            auto a = frame.rgba[idx + 3];
+            if (a == 0)
+                continue;
+            if (r >= 170 || g >= 170 || b >= 170)
+                continue;
+            if (x > rightmost)
+                rightmost = x;
+        }
+    }
+    return rightmost;
+}
+
+static std::uint64_t sum_darkness(DebugFrameCapture const& frame,
+                                  int min_x,
+                                  int max_x,
+                                  int min_y,
+                                  int max_y) {
+    min_x = std::max(0, min_x);
+    min_y = std::max(0, min_y);
+    max_x = std::min(static_cast<int>(frame.width), max_x);
+    max_y = std::min(static_cast<int>(frame.height), max_y);
+    if (max_x <= min_x || max_y <= min_y)
+        return 0;
+
+    std::uint64_t total = 0;
+    for (int y = min_y; y < max_y; ++y) {
+        for (int x = min_x; x < max_x; ++x) {
+            auto idx = static_cast<std::size_t>(
+                (static_cast<unsigned int>(y) * frame.width
+                    + static_cast<unsigned int>(x)) * 4u);
+            auto r = frame.rgba[idx + 0];
+            auto g = frame.rgba[idx + 1];
+            auto b = frame.rgba[idx + 2];
+            auto a = frame.rgba[idx + 3];
+            if (a == 0)
+                continue;
+            if (r >= 170 || g >= 170 || b >= 170)
+                continue;
+            total += static_cast<std::uint64_t>(255 - r);
+            total += static_cast<std::uint64_t>(255 - g);
+            total += static_cast<std::uint64_t>(255 - b);
+        }
+    }
+    return total;
+}
+
 static bool remote_image_entry_matches(
         json::Object const& images,
         std::string const& url,
@@ -376,6 +461,14 @@ static void test_default_scroll_delta_fallback() {
     std::puts("PASS: default scroll delta fallback");
 }
 
+static int select_all_mods() {
+#ifdef __APPLE__
+    return GLFW_MOD_SUPER;
+#else
+    return GLFW_MOD_CONTROL;
+#endif
+}
+
 namespace input_regression {
 
 struct ActivateButton {};
@@ -416,6 +509,7 @@ static void reset_core_state() {
     app.hovered_id = phenotype::native::invalid_callback_id;
     app.focused_id = phenotype::native::invalid_callback_id;
     app.caret_pos = phenotype::native::invalid_callback_id;
+    app.selection_anchor = phenotype::native::invalid_callback_id;
     app.caret_visible = true;
     app.last_paint_hash = 0;
     app.debug_viewport_width = 0.0f;
@@ -830,6 +924,56 @@ static void test_shell_text_caret_navigation_and_backspace() {
     std::puts("PASS: shared shell text caret navigation and backspace");
 }
 
+static void test_shell_text_selection_shortcuts_and_replacement() {
+    using namespace input_regression;
+
+    Harness harness;
+
+    phenotype::detail::set_focus_id(text_field_id, "test", "setup");
+    assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>('A')));
+    assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>('B')));
+    assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>('C')));
+    assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>('D')));
+    assert(g_observed_state.text == "ABCD");
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_A, GLFW_PRESS, select_all_mods()));
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.detail == "select-all");
+    assert(debug.selection_active);
+    assert(debug.selection_start == 0);
+    assert(debug.selection_end == 4);
+
+    assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>('Z')));
+    assert(g_observed_state.text == "Z");
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(!debug.selection_active);
+    assert(debug.caret_pos == 1);
+
+    assert(phenotype::detail::replace_focused_input_text(0, g_observed_state.text.size(), "A가C"));
+    assert(g_observed_state.text == "A가C");
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_LEFT, GLFW_PRESS, GLFW_MOD_SHIFT));
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.selection_active);
+    assert(debug.selection_start == 4);
+    assert(debug.selection_end == 5);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_LEFT, GLFW_PRESS, GLFW_MOD_SHIFT));
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.selection_active);
+    assert(debug.selection_start == 1);
+    assert(debug.selection_end == 5);
+
+    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_BACKSPACE, GLFW_PRESS, 0));
+    assert(g_observed_state.text == "A");
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.detail == "backspace");
+    assert(debug.result == "handled");
+    assert(!debug.selection_active);
+    assert(debug.caret_pos == 1);
+    std::puts("PASS: shared shell text selection shortcuts and replacement");
+}
+
 static void test_shell_pointer_text_caret_placement_and_visibility_reset() {
     using namespace input_regression;
 
@@ -904,6 +1048,70 @@ static void test_shell_pointer_text_caret_placement_and_visibility_reset() {
     assert(debug.caret_pos == static_cast<unsigned int>(g_observed_state.text.size()));
     assert(debug.caret_visible);
     std::puts("PASS: shared shell pointer text caret placement and visibility reset");
+}
+
+static void test_shell_pointer_drag_selection_and_click_collapse() {
+    using namespace input_regression;
+
+    Harness harness;
+
+    phenotype::detail::set_focus_id(text_field_id, "test", "setup");
+    assert(phenotype::detail::replace_focused_input_text(0, 0, "ABCD"));
+
+    auto snapshot = phenotype::detail::focused_input_snapshot();
+    assert(snapshot.valid);
+    float y = snapshot.y + snapshot.height * 0.5f;
+    float base_x = snapshot.x + snapshot.padding[3];
+    auto prefix_width = [&](std::size_t bytes) {
+        return harness.host.measure_text(
+            snapshot.font_size,
+            snapshot.mono ? 1u : 0u,
+            snapshot.value.data(),
+            static_cast<unsigned int>(bytes));
+    };
+
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        base_x + 1.0f,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+    assert(phenotype::native::detail::dispatch_cursor_pos(
+        base_x + prefix_width(3) + 1.0f,
+        y));
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.detail == "pointer-drag");
+    assert(debug.selection_active);
+    assert(debug.selection_start == 0);
+    assert(debug.selection_end == 3);
+
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        base_x + prefix_width(3) + 1.0f,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_RELEASE,
+        0));
+
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        snapshot.x + snapshot.width - 1.0f,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(!debug.selection_active);
+    assert(debug.caret_pos == 4);
+
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        snapshot.x + snapshot.width + 40.0f,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.focused_id == phenotype::native::invalid_callback_id);
+    assert(!debug.selection_active);
+    std::puts("PASS: shared shell pointer drag selection and click collapse");
 }
 
 static void test_shared_caret_debug_rect_tracks_layout() {
@@ -1438,6 +1646,43 @@ static void test_macos_debug_capture_frame_from_rendered_frame() {
     std::puts("PASS: macOS debug capture returns RGBA for a rendered frame");
 }
 
+static void test_macos_rasterized_text_run_preserves_logical_end_for_latin_and_hangul() {
+    using phenotype::native::macos_test::rasterized_text_run_debug;
+
+    text::init();
+
+    auto latin = rasterized_text_run_debug(
+        "sadfasfasfasfasdfasdfasdfasdfasdfasdfa",
+        16.0f,
+        false,
+        16.0f * 1.6f,
+        2.0f);
+    assert(latin.has_ink);
+    assert(latin.x_offset < 0.25f);
+    assert(latin.x_offset > -1.25f);
+    assert(std::fabs(latin.right_gap) < 1.1f);
+    assert(latin.first_ink_row > 0);
+    assert(latin.last_ink_row >= latin.first_ink_row);
+    assert(latin.last_ink_row < latin.pixel_height - 1);
+
+    auto hangul = rasterized_text_run_debug(
+        "\xec\x95\x88\xeb\x85\x95\xed\x95\x98\xec\x84\xb8\xec\x9a\x94\xec\x95\x88\xeb\x85\x95\xed\x95\x98\xec\x84\xb8\xec\x9a\x94",
+        16.0f,
+        false,
+        16.0f * 1.6f,
+        2.0f);
+    assert(hangul.has_ink);
+    assert(hangul.x_offset < 0.25f);
+    assert(hangul.x_offset > -1.25f);
+    assert(std::fabs(hangul.right_gap) < 1.1f);
+    assert(hangul.first_ink_row > 0);
+    assert(hangul.last_ink_row >= hangul.first_ink_row);
+    assert(hangul.last_ink_row < hangul.pixel_height - 1);
+
+    text::shutdown();
+    std::puts("PASS: macOS rasterized text run preserves logical end for latin and hangul");
+}
+
 static void test_macos_system_caret_indicator_tracks_focus_and_composition() {
     using namespace input_regression;
     using phenotype::native::macos_test::clear_composition_for_tests;
@@ -1532,6 +1777,64 @@ static void test_macos_system_caret_indicator_tracks_focus_and_composition() {
     std::puts("PASS: macOS system caret indicator tracks focus and composition");
 }
 
+static void test_macos_selected_range_and_selector_commands() {
+    using namespace input_regression;
+    using phenotype::native::macos_test::first_rect_for_range_debug;
+    using phenotype::native::macos_test::invoke_command_for_tests;
+    using phenotype::native::macos_test::perform_key_equivalent_for_tests;
+    using phenotype::native::macos_test::selected_range_debug;
+
+    MacInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+
+    assert(phenotype::detail::replace_focused_input_text(0, 0, "ABCD"));
+    invoke_command_for_tests("moveLeftAndModifySelection:");
+    invoke_command_for_tests("moveLeftAndModifySelection:");
+
+    auto selected = selected_range_debug();
+    assert(selected.location_utf16 == 2);
+    assert(selected.length_utf16 == 2);
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.selection_active);
+    assert(debug.selection_start == 2);
+    assert(debug.selection_end == 4);
+
+    auto rect = first_rect_for_range_debug(selected.location_utf16, selected.length_utf16);
+    assert(rect.valid);
+    assert(rect.w >= 1.5f);
+
+    invoke_command_for_tests("moveLeft:");
+    selected = selected_range_debug();
+    assert(selected.location_utf16 == 2);
+    assert(selected.length_utf16 == 0);
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(!debug.selection_active);
+    assert(debug.caret_pos == 2);
+
+    assert(perform_key_equivalent_for_tests(1ull << 20, "a"));
+    selected = selected_range_debug();
+    assert(selected.location_utf16 == 0);
+    assert(selected.length_utf16 == 4);
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.selection_active);
+    assert(debug.selection_start == 0);
+    assert(debug.selection_end == 4);
+    assert(debug.detail == "selectAll:");
+
+    assert(phenotype::detail::set_focused_input_caret_pos(2));
+    assert(perform_key_equivalent_for_tests(1ull << 20, "\xe3\x85\x81", 0));
+    selected = selected_range_debug();
+    assert(selected.location_utf16 == 0);
+    assert(selected.length_utf16 == 4);
+    std::puts("PASS: macOS selected range and selector commands");
+}
+
 static void test_macos_fallback_caret_path_exposes_custom_debug_rect() {
     using namespace input_regression;
     using phenotype::native::macos_test::force_disable_system_caret;
@@ -1559,6 +1862,60 @@ static void test_macos_fallback_caret_path_exposes_custom_debug_rect() {
     assert(harness.host.platform->input.uses_shared_caret_blink());
 
     std::puts("PASS: macOS fallback caret path exposes custom debug rect");
+}
+
+static void test_macos_custom_caret_tracks_rightmost_text_pixel() {
+    using namespace input_regression;
+    using phenotype::native::macos_test::force_disable_system_caret;
+
+    force_disable_system_caret(true);
+    MacInputHarness harness;
+    auto [x, y] = harness.point_for(text_field_id);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x,
+        y,
+        GLFW_MOUSE_BUTTON_LEFT,
+        GLFW_PRESS,
+        0));
+
+    std::string sample = "sadfasfasfasfasdfasdfasdfasdfasdfasdfa";
+    assert(phenotype::detail::replace_focused_input_text(0, 0, sample));
+    phenotype::native::detail::repaint_current();
+
+    auto snapshot = phenotype::detail::focused_input_snapshot();
+    assert(snapshot.valid);
+    assert(snapshot.value == sample);
+
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.caret_renderer == "custom");
+    assert(debug.caret_draw_rect.valid);
+
+    auto frame = phenotype::native::debug::capture_frame_rgba();
+    assert(frame.has_value());
+    assert_non_empty_frame_capture(*frame);
+
+    float scale = backing_scale_for_window(harness.window);
+    int min_x = static_cast<int>(std::floor(
+        (snapshot.x + snapshot.padding[3]) * scale));
+    int max_x = static_cast<int>(std::ceil(
+        (snapshot.x + snapshot.width - snapshot.padding[1]) * scale));
+    int min_y = static_cast<int>(std::floor(
+        (snapshot.y + snapshot.padding[0]) * scale));
+    int max_y = static_cast<int>(std::ceil(
+        (snapshot.y + snapshot.padding[0] + snapshot.line_height) * scale));
+
+    auto rightmost_dark = find_rightmost_dark_pixel_x(
+        *frame,
+        min_x,
+        max_x,
+        min_y,
+        max_y);
+    assert(rightmost_dark >= 0);
+
+    float rightmost_text_x = static_cast<float>(rightmost_dark + 1) / scale;
+    assert(debug.caret_draw_rect.x + 0.75f >= rightmost_text_x);
+    assert(debug.caret_draw_rect.x - rightmost_text_x < 2.5f);
+    std::puts("PASS: macOS custom caret tracks rightmost text pixel");
 }
 
 static void test_macos_scroll_tracking_hides_caret_until_idle() {
@@ -1721,6 +2078,78 @@ static void test_text_build_atlas_scale_preserves_logical_bounds() {
 
     text::shutdown();
     std::puts("PASS: text build atlas scale preserves logical bounds");
+}
+
+static void test_macos_rendered_text_preserves_vertical_orientation() {
+    MacRendererFixture fixture;
+
+    std::vector<unsigned char> commands;
+    append_u32(commands, static_cast<unsigned int>(Cmd::Clear));
+    append_u32(commands, Color{255, 255, 255, 255}.packed());
+    append_u32(commands, static_cast<unsigned int>(Cmd::DrawText));
+    append_f32(commands, 24.0f);
+    append_f32(commands, 24.0f);
+    append_f32(commands, 96.0f);
+    append_u32(commands, 0u);
+    append_u32(commands, Color{0, 0, 0, 255}.packed());
+    append_u32(commands, 1u);
+    append_bytes(commands, "P", 1u);
+    renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
+
+    auto frame = phenotype::native::debug::capture_frame_rgba();
+    assert(frame.has_value());
+    assert_non_empty_frame_capture(*frame);
+
+    float scale = backing_scale_for_window(fixture.window);
+    int min_x = static_cast<int>(std::floor(24.0f * scale));
+    int max_x = static_cast<int>(std::ceil((24.0f + 140.0f) * scale));
+    int min_y = static_cast<int>(std::floor(24.0f * scale));
+    int max_y = static_cast<int>(std::ceil((24.0f + 140.0f) * scale));
+
+    int ink_min_x = max_x;
+    int ink_min_y = max_y;
+    int ink_max_x = -1;
+    int ink_max_y = -1;
+    for (int y = min_y; y < max_y; ++y) {
+        for (int x = min_x; x < max_x; ++x) {
+            auto idx = static_cast<std::size_t>(
+                (static_cast<unsigned int>(y) * frame->width
+                    + static_cast<unsigned int>(x)) * 4u);
+            auto r = frame->rgba[idx + 0];
+            auto g = frame->rgba[idx + 1];
+            auto b = frame->rgba[idx + 2];
+            auto a = frame->rgba[idx + 3];
+            if (a == 0)
+                continue;
+            if (r >= 170 || g >= 170 || b >= 170)
+                continue;
+            ink_min_x = std::min(ink_min_x, x);
+            ink_min_y = std::min(ink_min_y, y);
+            ink_max_x = std::max(ink_max_x, x);
+            ink_max_y = std::max(ink_max_y, y);
+        }
+    }
+
+    assert(ink_max_x > ink_min_x);
+    assert(ink_max_y > ink_min_y);
+
+    int right_half_start = ink_min_x + (ink_max_x - ink_min_x + 1) / 2;
+    int vertical_mid = ink_min_y + (ink_max_y - ink_min_y + 1) / 2;
+    auto top_right_darkness = sum_darkness(
+        *frame,
+        right_half_start,
+        ink_max_x + 1,
+        ink_min_y,
+        vertical_mid);
+    auto bottom_right_darkness = sum_darkness(
+        *frame,
+        right_half_start,
+        ink_max_x + 1,
+        vertical_mid,
+        ink_max_y + 1);
+    assert(top_right_darkness > bottom_right_darkness);
+
+    std::puts("PASS: macOS rendered text preserves vertical orientation");
 }
 
 static void test_text_build_atlas_mixed_fallback_scale_preserves_bounds() {
@@ -2663,7 +3092,7 @@ static void test_windows_ime_repaint_requests_are_deferred_until_sync() {
     std::puts("PASS: windows IME repaint requests are deferred until sync");
 }
 
-static void test_windows_ime_startcomposition_captures_current_caret_anchor() {
+static void test_windows_ime_startcomposition_captures_current_selection_range() {
     using namespace input_regression;
 
     WindowsInputHarness harness;
@@ -2675,30 +3104,31 @@ static void test_windows_ime_startcomposition_captures_current_caret_anchor() {
         GLFW_PRESS,
         0));
 
-    assert(phenotype::detail::replace_focused_input_text(0, 0, "가나"));
-    assert(phenotype::detail::set_focused_input_caret_pos(g_observed_state.text.size()));
+    assert(phenotype::detail::replace_focused_input_text(0, 0, "ABC"));
+    assert(phenotype::detail::set_focused_input_selection(1, 3));
 
     auto hwnd = phenotype::native::windows_test::attached_hwnd();
     assert(hwnd != nullptr);
 
     phenotype::native::windows_test::clear_composition_for_tests();
     SendMessageW(hwnd, WM_IME_STARTCOMPOSITION, 0, 0);
-    assert(phenotype::native::windows_test::composition_anchor() == g_observed_state.text.size());
+    assert(phenotype::native::windows_test::composition_anchor() == 1);
 
     phenotype::native::windows_test::set_composition_for_tests(
-        "다",
+        "Z",
         phenotype::native::windows_test::composition_anchor(),
-        1);
+        1,
+        3);
     auto visual = phenotype::native::windows_test::composition_visual_debug();
     assert(visual.valid);
-    assert(visual.visible_text == "가나다");
-    assert(visual.erase_text == "가나");
-    assert(visual.marked_start == std::string("가나").size());
-    assert(visual.marked_end == std::string("가나다").size());
-    assert(visual.caret_bytes == std::string("가나다").size());
+    assert(visual.visible_text == "AZ");
+    assert(visual.erase_text == "ABC");
+    assert(visual.marked_start == 1);
+    assert(visual.marked_end == 2);
+    assert(visual.caret_bytes == 2);
 
     phenotype::native::windows_test::clear_composition_for_tests();
-    std::puts("PASS: windows IME start composition captures current caret anchor");
+    std::puts("PASS: windows IME start composition captures current selection range");
 }
 
 static void test_windows_ime_composition_visual_replaces_placeholder() {
@@ -2905,7 +3335,9 @@ int main() {
     test_shell_activation_keys_respect_roles();
     test_shell_text_space_char_and_enter_behavior();
     test_shell_text_caret_navigation_and_backspace();
+    test_shell_text_selection_shortcuts_and_replacement();
     test_shell_pointer_text_caret_placement_and_visibility_reset();
+    test_shell_pointer_drag_selection_and_click_collapse();
     test_shared_caret_debug_rect_tracks_layout();
     test_caret_overlay_state_invalidates_cached_frame_hash();
     test_shared_text_replacement_helper();
@@ -2916,8 +3348,11 @@ int main() {
     test_macos_utf16_utf8_range_helpers();
     test_macos_scroll_delta_normalization();
     test_macos_scroll_paths_record_precise_and_line_details();
+    test_macos_rasterized_text_run_preserves_logical_end_for_latin_and_hangul();
     test_macos_system_caret_indicator_tracks_focus_and_composition();
+    test_macos_selected_range_and_selector_commands();
     test_macos_fallback_caret_path_exposes_custom_debug_rect();
+    test_macos_custom_caret_tracks_rightmost_text_pixel();
     test_macos_scroll_tracking_hides_caret_until_idle();
     test_macos_common_debug_contract_entry_points();
     test_macos_debug_capture_frame_from_rendered_frame();
@@ -2931,6 +3366,7 @@ int main() {
     test_text_build_atlas();
     test_text_build_atlas_crops_padding();
     test_text_build_atlas_scale_preserves_logical_bounds();
+    test_macos_rendered_text_preserves_vertical_orientation();
     test_text_build_atlas_mixed_fallback_scale_preserves_bounds();
     test_text_build_atlas_respects_line_box();
     test_text_build_atlas_keeps_line_box_stable();
@@ -2970,7 +3406,7 @@ int main() {
     test_windows_text_field_key_dispatch();
     test_windows_scroll_delta_uses_system_settings();
     test_windows_ime_repaint_requests_are_deferred_until_sync();
-    test_windows_ime_startcomposition_captures_current_caret_anchor();
+    test_windows_ime_startcomposition_captures_current_selection_range();
     test_windows_ime_composition_visual_replaces_placeholder();
     test_windows_ime_suppresses_base_placeholder_text_entry();
     test_windows_ime_overlay_text_omits_erase_pass();

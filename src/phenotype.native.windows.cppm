@@ -1027,6 +1027,8 @@ struct ImeState {
     std::wstring composition_text;
     LONG composition_cursor = 0;
     std::size_t composition_anchor = 0;
+    std::size_t replacement_start = 0;
+    std::size_t replacement_end = 0;
     bool candidate_open = false;
     std::vector<std::wstring> candidates;
     DWORD candidate_selection = 0;
@@ -1500,9 +1502,14 @@ inline CompositionVisualState current_composition_visual_state(
 
     auto anchor = ::phenotype::detail::clamp_utf8_boundary(
         snapshot.value,
-        g_ime.composition_anchor);
+        g_ime.replacement_start);
+    auto replacement_end = ::phenotype::detail::clamp_utf8_boundary(
+        snapshot.value,
+        g_ime.replacement_end);
+    if (replacement_end < anchor)
+        replacement_end = anchor;
     auto prefix = snapshot.value.substr(0, anchor);
-    auto suffix = snapshot.value.substr(anchor);
+    auto suffix = snapshot.value.substr(replacement_end);
 
     visual.valid = true;
     visual.snapshot = std::move(snapshot);
@@ -1602,7 +1609,12 @@ inline void capture_composition_anchor() {
     auto snapshot = ::phenotype::detail::focused_input_snapshot();
     if (!snapshot.valid)
         return;
-    g_ime.composition_anchor = snapshot_caret_byte_offset(snapshot);
+    g_ime.composition_anchor = snapshot.selection_start;
+    g_ime.replacement_start = snapshot.selection_start;
+    g_ime.replacement_end = snapshot.selection_end;
+    ::phenotype::detail::set_focused_input_selection(
+        g_ime.composition_anchor,
+        g_ime.composition_anchor);
 }
 
 inline bool is_http_url(std::string const& url) {
@@ -2024,6 +2036,8 @@ inline void clear_ime_state() {
     g_ime.composition_text.clear();
     g_ime.composition_cursor = 0;
     g_ime.composition_anchor = 0;
+    g_ime.replacement_start = 0;
+    g_ime.replacement_end = 0;
     g_ime.candidate_open = false;
     g_ime.candidates.clear();
     g_ime.candidate_selection = 0;
@@ -2041,11 +2055,13 @@ inline void commit_result_string(std::wstring_view result) {
     if (suffix.empty())
         return;
     if (!::phenotype::detail::replace_focused_input_text(
-            g_ime.composition_anchor,
-            g_ime.composition_anchor,
+            g_ime.replacement_start,
+            g_ime.replacement_end,
             suffix))
         return;
-    g_ime.composition_anchor += suffix.size();
+    g_ime.composition_anchor = g_ime.replacement_start + suffix.size();
+    g_ime.replacement_start = g_ime.composition_anchor;
+    g_ime.replacement_end = g_ime.composition_anchor;
 }
 
 inline void update_composition_state(HWND hwnd, LPARAM lparam) {
@@ -4541,10 +4557,22 @@ inline std::size_t composition_anchor() {
 inline void set_composition_for_tests(
         char const* text,
         std::size_t anchor,
-        LONG cursor_units) {
+        LONG cursor_units,
+        std::size_t replacement_end = static_cast<std::size_t>(-1)) {
     auto snapshot = ::phenotype::detail::focused_input_snapshot();
     if (snapshot.valid) {
         anchor = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, anchor);
+        if (replacement_end == static_cast<std::size_t>(-1)) {
+            replacement_end = anchor;
+        } else {
+            replacement_end = ::phenotype::detail::clamp_utf8_boundary(
+                snapshot.value,
+                replacement_end);
+        }
+        if (replacement_end < anchor)
+            replacement_end = anchor;
+    } else if (replacement_end == static_cast<std::size_t>(-1)) {
+        replacement_end = anchor;
     }
     detail::g_ime.composition_text = cppx::unicode::utf8_to_wide(
         std::string_view{text ? text : "",
@@ -4552,6 +4580,8 @@ inline void set_composition_for_tests(
                                          .value_or(std::wstring{});
     detail::g_ime.composition_active = !detail::g_ime.composition_text.empty();
     detail::g_ime.composition_anchor = anchor;
+    detail::g_ime.replacement_start = anchor;
+    detail::g_ime.replacement_end = replacement_end;
     detail::g_ime.composition_cursor = cursor_units;
     detail::sync_input_debug_composition_state();
 }
@@ -4561,6 +4591,8 @@ inline void clear_composition_for_tests() {
     detail::g_ime.composition_text.clear();
     detail::g_ime.composition_cursor = 0;
     detail::g_ime.composition_anchor = 0;
+    detail::g_ime.replacement_start = 0;
+    detail::g_ime.replacement_end = 0;
     detail::sync_input_debug_composition_state();
 }
 

@@ -141,6 +141,12 @@ static std::string input_debug_block(phenotype::diag::InputDebugSnapshot const& 
     block += std::to_string(debug.scroll_y);
     block += "\ntext caret: ";
     block += debug_caret_text(debug.caret_pos);
+    block += "\nselection active: ";
+    block += debug.selection_active ? "true" : "false";
+    block += "\nselection start: ";
+    block += debug_caret_text(debug.selection_start);
+    block += "\nselection end: ";
+    block += debug_caret_text(debug.selection_end);
     block += "\ncaret visible: ";
     block += debug.caret_visible ? "true" : "false";
     block += "\ncaret renderer: ";
@@ -214,7 +220,7 @@ void view(State const& state) {
             layout::spacer(8);
             widget::code(input_debug_block(input_debug));
             layout::spacer(8);
-            widget::text("Manual check: hover a control, click it, tab through the focus order, type into a field, then scroll with both wheel and keyboard and confirm the panel changes immediately.");
+            widget::text("Manual check: hover a control, click it, drag-select inside a field, try Cmd/Ctrl+A, type to replace the selection, then scroll with both wheel and keyboard and confirm the panel changes immediately.");
         });
 
         layout::spacer(12);
@@ -246,7 +252,7 @@ void view(State const& state) {
         layout::card([&] {
             widget::text("Text Input and IME");
             layout::spacer(6);
-            widget::text("The first field is a basic text input. The second one is reserved for native IME composition and platform-specific text system parity.");
+            widget::text("The first field is a basic text input. The second one is reserved for native IME composition and platform-specific text system parity, including shared drag selection and select-all behavior.");
             layout::spacer(8);
             widget::text_field<Msg>("Enter your name...", state.name, on_name_changed);
             if (!state.name.empty()) {
@@ -261,7 +267,7 @@ void view(State const& state) {
             layout::spacer(8);
             widget::text("Platform-specific status: caret, live marked text, and candidate overlays should feel attached to the focused field where that backend already supports native IME parity.");
             layout::spacer(8);
-            widget::code("Walkthrough: tab into each field, type plain text, then try native IME composition and keep the field focused while scrolling.");
+            widget::code("Walkthrough: tab into each field, drag a partial selection, try Cmd/Ctrl+A, type plain text to replace the selection, then try native IME composition and keep the field focused while scrolling.");
         });
 
         layout::spacer(12);
@@ -338,7 +344,7 @@ void view(State const& state) {
     },
         [] {
             widget::text("Manual Walkthrough");
-            widget::text("Tab through the controls, type in both fields, verify the selection state, inspect both image slots, then scroll and resize the window.");
+            widget::text("Tab through the controls, type in both fields, drag a partial selection, try Cmd/Ctrl+A, verify replacement and backspace over the selection, inspect both image slots, then scroll and resize the window.");
         }
     );
 }
