@@ -2,9 +2,14 @@
 
 Minimal Android application that boots phenotype's Vulkan backend inside a
 [GameActivity](https://developer.android.com/games/agdk/game-activity). As
-of Stage 2 it clears the surface to the active theme background on every
-frame and survives window-create / window-destroy / rotation lifecycles.
-Touch routing lands in Stage 6; text + image pipelines land in Stages 3–5.
+of Stage 3 it renders the color primitives (`Clear`, `FillRect`,
+`StrokeRect`, `RoundRect`, `DrawLine`) through an instanced Vulkan
+graphics pipeline and survives window-create / window-destroy / rotation
+lifecycles. When the C ABI receives a zero-length command buffer (the
+default today), the backend falls back to a built-in demo composition so
+the pipeline is exercised end-to-end without needing a real app
+bound to the example driver. Touch routing lands in Stage 6; text +
+image pipelines land in Stages 4 and 5.
 
 ```
 ┌──────────────────┐   prefab    ┌──────────────────────────┐
@@ -89,10 +94,28 @@ editing `app/build.gradle.kts`:
     -PphenotypeLibDir=/custom/exon/output/aarch64-linux-android/debug
 ```
 
+## Shaders
+
+The color pipeline's GLSL sources live in
+`src/phenotype.native.android.shaders/` (`color.vert` + `color.frag`) and
+are precompiled to SPIR-V ahead of time. The embedded `uint32_t` blobs
+that the Vulkan backend uploads at runtime live in
+`src/phenotype.native.android.shaders.inl`, which is checked in. Rerun
+the regen script after editing any `.vert` / `.frag`:
+
+```sh
+ANDROID_NDK_HOME=/path/to/android-ndk-r30+ \
+    ./tools/compile_android_shaders.sh
+```
+
+The script uses the host `glslc` bundled under
+`${ANDROID_NDK_HOME}/shader-tools/<host>/`, targets `--target-env=vulkan1.1`,
+and emits inline `uint32_t SPIRV_COLOR_VS[] / _FS[]` arrays.
+
 ## Extending
 
-- Swap the example `View` / `Update` / `AppState` once Stages 3–5 land
-  real color + text + image pipelines.
+- Swap the example `View` / `Update` / `AppState` once Stages 4–5 land
+  real text + image pipelines.
 - Replace the Kotlin `MainActivity` with your own subclass of
   `GameActivity` if you need to hook Java-side lifecycle events.
 - Gradle Prefab surfaces are declared in `app/build.gradle.kts`
