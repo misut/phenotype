@@ -1,6 +1,6 @@
 module;
 
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
 #include <filesystem>
 #include <fstream>
 #include <cstdint>
@@ -14,7 +14,7 @@ struct GLFWwindow;
 
 export module phenotype.native.platform;
 
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
 import phenotype.diag;
 
 export namespace phenotype::native {

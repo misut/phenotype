@@ -1,5 +1,5 @@
 module;
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -41,7 +41,7 @@ module;
 
 export module phenotype.native.macos;
 
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
 import cppx.http;
 import cppx.http.system;
 import cppx.os;
@@ -1779,8 +1779,9 @@ inline void image_worker_main() {
             response && response->stat.ok()) {
             std::vector<std::uint8_t> body;
             body.reserve(response->body.size());
-            for (auto byte : response->body)
-                body.push_back(static_cast<std::uint8_t>(byte));
+            auto const* body_data = response->body.data();
+            for (std::size_t i = 0, n = response->body.size(); i < n; ++i)
+                body.push_back(static_cast<std::uint8_t>(body_data[i]));
             decoded.failed = !decode_bmp_memory(body, decoded);
             if (decoded.failed)
                 decoded.error_detail = "Remote BMP decode failed";

@@ -8,7 +8,7 @@ import phenotype;
 
 using namespace phenotype;
 
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
 static null_host host;
 #define RUN_APP(S, M, V, U)              run<S, M>(host, V, U)
 #define LAYOUT_NODE(h, w)                detail::layout_node(host, h, w)

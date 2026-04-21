@@ -1,5 +1,5 @@
 module;
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
 #include <cstdio>
 #include <GLFW/glfw3.h>
 
@@ -38,7 +38,7 @@ module;
 
 export module phenotype.native.windows;
 
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
 import std;
 import cppx.http;
 import cppx.http.system;
@@ -2774,8 +2774,9 @@ inline void image_worker_main() {
                 } else {
                     std::vector<unsigned char> body;
                     body.reserve(response->body.size());
-                    for (auto byte : response->body)
-                        body.push_back(static_cast<unsigned char>(byte));
+                    auto const* body_data = response->body.data();
+                    for (std::size_t i = 0, n = response->body.size(); i < n; ++i)
+                        body.push_back(static_cast<unsigned char>(body_data[i]));
                     auto result = decode_image_memory(body);
                     if (result) {
                         decoded = std::move(*result);

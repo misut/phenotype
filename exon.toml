@@ -10,19 +10,34 @@ platforms = [
     { os = "wasi" },
     { os = "macos", arch = "aarch64" },
     { os = "windows", arch = "x86_64" },
+    { os = "android", arch = "aarch64" },
 ]
 
 [dependencies]
 "github.com/misut/jsoncpp" = "0.1.4"
-"github.com/misut/cppx" = "1.6.3"
+"github.com/misut/cppx" = "1.7.2"
 "github.com/misut/txn" = "0.6.2"
 
-[target.'cfg(not(os = "wasi"))'.dependencies.cmake.glfw]
+# GLFW is the desktop windowing shell. WASI and Android use their own
+# runtime (JS shim / GameActivity) and must not pull GLFW. exon's cfg
+# predicate doesn't support `any()`, so list the desktop platforms
+# explicitly rather than using a combined `not(...)` expression.
+[target.'cfg(os = "macos")'.dependencies.cmake.glfw]
 git = "https://github.com/glfw/glfw.git"
 tag = "3.4"
 targets = "glfw"
 
-[target.'cfg(not(os = "wasi"))'.dependencies.cmake.glfw.options]
+[target.'cfg(os = "macos")'.dependencies.cmake.glfw.options]
+GLFW_BUILD_DOCS = "OFF"
+GLFW_BUILD_TESTS = "OFF"
+GLFW_BUILD_EXAMPLES = "OFF"
+
+[target.'cfg(os = "windows")'.dependencies.cmake.glfw]
+git = "https://github.com/glfw/glfw.git"
+tag = "3.4"
+targets = "glfw"
+
+[target.'cfg(os = "windows")'.dependencies.cmake.glfw.options]
 GLFW_BUILD_DOCS = "OFF"
 GLFW_BUILD_TESTS = "OFF"
 GLFW_BUILD_EXAMPLES = "OFF"
@@ -32,6 +47,9 @@ metal-cpp = "libs/metal-cpp"
 
 [target.'cfg(os = "macos")'.build]
 ldflags = ["-framework", "Security", "-Wl,-framework,CoreFoundation"]
+
+[target.'cfg(os = "android")'.build]
+ldflags = ["-landroid", "-llog"]
 
 [sync]
 cmake-in-root = false
