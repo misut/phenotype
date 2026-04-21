@@ -16,7 +16,9 @@ export import phenotype.native.platform;
 export import phenotype.native.shell;
 import phenotype.native.stub;
 
-#if !defined(__ANDROID__)
+#if defined(__ANDROID__)
+import phenotype.native.android;
+#else
 export import phenotype.native.shell.glfw;
 import phenotype.native.macos;
 import phenotype.native.windows;
@@ -29,6 +31,8 @@ inline platform_api const& select_platform() {
     return macos_platform();
 #elif defined(_WIN32)
     return windows_platform();
+#elif defined(__ANDROID__)
+    return android_platform();
 #else
     return desktop_stub_platform();
 #endif
