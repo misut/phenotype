@@ -3787,7 +3787,9 @@ inline bool sync_scroll_tracking_state(unsigned long long phase,
 }
 
 inline float current_scroll_viewport_height() {
-    return viewport_height(g_ime.window);
+    // shell.cppm's viewport_height() reads from the active host's cached
+    // size, which is kept up to date by the GLFW driver's resize callback.
+    return viewport_height();
 }
 
 inline bool handle_local_scroll_event(id event) {

@@ -53,6 +53,7 @@ import phenotype.state;
 import phenotype.types;
 import phenotype.native.platform;
 import phenotype.native.shell;
+import phenotype.native.shell.glfw;
 import phenotype.native.stub;
 
 namespace phenotype::native::detail {
