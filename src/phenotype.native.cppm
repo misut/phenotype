@@ -1,6 +1,6 @@
 module;
 
-#if !defined(__wasi__) && !defined(__ANDROID__)
+#if !defined(__wasi__)
 #include <concepts>
 #include <optional>
 #include <string>
@@ -10,15 +10,17 @@ module;
 
 export module phenotype.native;
 
-#if !defined(__wasi__) && !defined(__ANDROID__)
+#if !defined(__wasi__)
 export import phenotype;
 export import phenotype.native.platform;
 export import phenotype.native.shell;
-export import phenotype.native.shell.glfw;
-
-import phenotype.native.macos;
 import phenotype.native.stub;
+
+#if !defined(__ANDROID__)
+export import phenotype.native.shell.glfw;
+import phenotype.native.macos;
 import phenotype.native.windows;
+#endif
 
 namespace phenotype::native::detail {
 
@@ -166,6 +168,10 @@ void run(native_host& host, View view, Update update) {
     detail::run_host<State, Msg>(host, std::move(view), std::move(update));
 }
 
+#if !defined(__ANDROID__)
+// run_app assumes a GLFW-style windowing driver. Android consumers write
+// their own android_main that pumps the GameActivity loop and calls
+// `run<State, Msg>` directly with a native_host bound to an ANativeWindow*.
 template<typename State, typename Msg, typename View, typename Update>
     requires std::invocable<View, State const&>
           && std::invocable<Update, State&, Msg>
@@ -174,6 +180,7 @@ int run_app(int width, int height, char const* title, View view, Update update) 
         current_platform(), width, height, title,
         std::move(view), std::move(update));
 }
+#endif
 
 } // namespace phenotype::native
 #endif
