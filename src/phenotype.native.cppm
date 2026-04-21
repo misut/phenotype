@@ -16,6 +16,7 @@ export module phenotype.native;
 export import phenotype;
 export import phenotype.native.platform;
 export import phenotype.native.shell;
+export import phenotype.native.shell.glfw;
 
 import phenotype.native.macos;
 import phenotype.native.stub;
