@@ -1,6 +1,6 @@
 module;
 
-#if !defined(__wasi__) && !defined(__ANDROID__)
+#if !defined(__wasi__)
 #include <filesystem>
 #include <fstream>
 #include <cstdint>
@@ -12,7 +12,7 @@ module;
 
 export module phenotype.native.platform;
 
-#if !defined(__wasi__) && !defined(__ANDROID__)
+#if !defined(__wasi__)
 import phenotype.diag;
 
 export namespace phenotype::native {

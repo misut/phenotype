@@ -1,5 +1,5 @@
 module;
-#if !defined(__wasi__) && !defined(__ANDROID__)
+#if !defined(__wasi__)
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -9,7 +9,7 @@ module;
 
 export module phenotype.native.stub;
 
-#if !defined(__wasi__) && !defined(__ANDROID__)
+#if !defined(__wasi__)
 import phenotype;
 import phenotype.commands;
 import phenotype.native.platform;

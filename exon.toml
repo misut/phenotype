@@ -49,7 +49,7 @@ metal-cpp = "libs/metal-cpp"
 ldflags = ["-framework", "Security", "-Wl,-framework,CoreFoundation"]
 
 [target.'cfg(os = "android")'.build]
-ldflags = ["-landroid", "-llog"]
+ldflags = ["-landroid", "-llog", "-lvulkan"]
 
 [sync]
 cmake-in-root = false
