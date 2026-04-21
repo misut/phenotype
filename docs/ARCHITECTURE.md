@@ -96,7 +96,7 @@ macOS / WASI extensions.
 
 - **macOS**: GLFW shell + CoreText text measurement/atlas + Metal renderer + native `DrawImage` for local files and async remote images
 - **Windows**: GLFW shell + DirectWrite text measurement/atlas + Direct3D 12 renderer + IME composition overlay + native `DrawImage` for local files and async remote images
-- **Android**: GameActivity-driven shell (`examples/android/`) + Vulkan renderer that clears the surface to `theme.background` each frame. Text / input / debug are stubs (Stage 4+ replace them with JNI-backed Paint and AMOTION_EVENT routing). Emits `libphenotype-modules.a` via exon; the example Gradle project packages it into an APK together with `androidx.games:games-activity:3.0.5`.
+- **Android**: GameActivity-driven shell (`examples/android/`) + Vulkan renderer with an instanced color pipeline (FillRect / StrokeRect / RoundRect / DrawLine / Clear — same `ColorInstance { rect; color; params }` layout and `params.z` draw-type dispatch as the macOS / Windows color pipelines). GLSL sources live at `src/phenotype.native.android.shaders/*.{vert,frag}` and are precompiled to SPIR-V via `tools/compile_android_shaders.sh` (NDK's bundled `glslc`) into `src/phenotype.native.android.shaders.inl`, which the native module includes directly. Text / input / debug are stubs (Stage 4+ replace them with JNI-backed Paint and AMOTION_EVENT routing). Emits `libphenotype-modules.a` via exon; the example Gradle project packages it into an APK together with `androidx.games:games-activity:3.0.5`.
 - **Linux / other desktop**: shared stub backend
 
 ### Modularity guarantee
@@ -128,7 +128,7 @@ This means Metal, Direct3D, Vulkan, Skia, software raster, or another future ren
 - [x] Shell core / GLFW driver split (`phenotype.native.shell` + `phenotype.native.shell.glfw`) to unblock non-GLFW shells
 - [x] `aarch64-linux-android` exon target with Android-stub platform (Stage 0)
 - [x] Android Vulkan clear-color backend + GameActivity example (Stage 2)
-- [ ] Android color primitives pipeline (`FillRect` / `StrokeRect` / `RoundRect` / `DrawLine`) — Stage 3
+- [x] Android color primitives pipeline (`FillRect` / `StrokeRect` / `RoundRect` / `DrawLine`) — Stage 3
 - [ ] Android text pipeline via JNI → `android.graphics.Paint` — Stage 4
 - [ ] Android image pipeline — Stage 5
 - [ ] Android touch / GameTextInput routing — Stage 6
