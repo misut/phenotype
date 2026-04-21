@@ -58,3 +58,6 @@ docs/phenotype.js
 
 # Claude Code
 CLAUDE.md
+
+# Local mise env overrides (e.g. ANDROID_NDK_HOME for the android target)
+.mise/
