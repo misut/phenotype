@@ -18,6 +18,84 @@ import phenotype.native.platform;
 
 export namespace phenotype::native {
 
+// Neutral input enums. Values mirror GLFW so the GLFW-side driver can
+// pass-through with `static_cast` while non-GLFW drivers (Android, future
+// iOS) translate their platform constants to these values. static_asserts
+// below catch drift at compile time.
+enum class KeyAction : int {
+    Release = 0,
+    Press   = 1,
+    Repeat  = 2,
+};
+
+enum class Modifier : int {
+    Shift   = 0x0001,
+    Control = 0x0002,
+    Alt     = 0x0004,
+    Super   = 0x0008,
+};
+
+enum class MouseButton : int {
+    Left   = 0,
+    Right  = 1,
+    Middle = 2,
+};
+
+// Only the keys the shell actually switches on. `Other` is used for keys
+// the shell does not care about, so drivers can safely funnel anything
+// unrecognised there without creating new enumerators.
+enum class Key : int {
+    Tab       = 258,
+    Backspace = 259,
+    Enter     = 257,
+    KpEnter   = 335,
+    Space     = 32,
+    Left      = 263,
+    Right     = 262,
+    Up        = 265,
+    Down      = 264,
+    PageUp    = 266,
+    PageDown  = 267,
+    Home      = 268,
+    End       = 269,
+    Escape    = 256,
+    A         = 65,
+    Other     = -1,
+};
+
+static_assert(static_cast<int>(KeyAction::Release) == GLFW_RELEASE);
+static_assert(static_cast<int>(KeyAction::Press)   == GLFW_PRESS);
+static_assert(static_cast<int>(KeyAction::Repeat)  == GLFW_REPEAT);
+
+static_assert(static_cast<int>(Modifier::Shift)   == GLFW_MOD_SHIFT);
+static_assert(static_cast<int>(Modifier::Control) == GLFW_MOD_CONTROL);
+static_assert(static_cast<int>(Modifier::Alt)     == GLFW_MOD_ALT);
+static_assert(static_cast<int>(Modifier::Super)   == GLFW_MOD_SUPER);
+
+static_assert(static_cast<int>(MouseButton::Left)   == GLFW_MOUSE_BUTTON_LEFT);
+static_assert(static_cast<int>(MouseButton::Right)  == GLFW_MOUSE_BUTTON_RIGHT);
+static_assert(static_cast<int>(MouseButton::Middle) == GLFW_MOUSE_BUTTON_MIDDLE);
+
+static_assert(static_cast<int>(Key::Tab)       == GLFW_KEY_TAB);
+static_assert(static_cast<int>(Key::Backspace) == GLFW_KEY_BACKSPACE);
+static_assert(static_cast<int>(Key::Enter)     == GLFW_KEY_ENTER);
+static_assert(static_cast<int>(Key::KpEnter)   == GLFW_KEY_KP_ENTER);
+static_assert(static_cast<int>(Key::Space)     == GLFW_KEY_SPACE);
+static_assert(static_cast<int>(Key::Left)      == GLFW_KEY_LEFT);
+static_assert(static_cast<int>(Key::Right)     == GLFW_KEY_RIGHT);
+static_assert(static_cast<int>(Key::Up)        == GLFW_KEY_UP);
+static_assert(static_cast<int>(Key::Down)      == GLFW_KEY_DOWN);
+static_assert(static_cast<int>(Key::PageUp)    == GLFW_KEY_PAGE_UP);
+static_assert(static_cast<int>(Key::PageDown)  == GLFW_KEY_PAGE_DOWN);
+static_assert(static_cast<int>(Key::Home)      == GLFW_KEY_HOME);
+static_assert(static_cast<int>(Key::End)       == GLFW_KEY_END);
+static_assert(static_cast<int>(Key::Escape)    == GLFW_KEY_ESCAPE);
+static_assert(static_cast<int>(Key::A)         == GLFW_KEY_A);
+
+} // namespace phenotype::native
+
+export namespace phenotype::native {
+
 struct native_host {
     GLFWwindow* window = nullptr;
     platform_api const* platform = nullptr;
