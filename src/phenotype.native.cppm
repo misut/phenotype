@@ -6,8 +6,6 @@ module;
 #include <string>
 #include <string_view>
 #include <utility>
-
-struct GLFWwindow;
 #endif
 
 export module phenotype.native;
@@ -82,10 +80,10 @@ inline TextAtlas build_atlas(std::vector<TextEntry> const& entries,
 
 namespace renderer {
 
-inline void init(GLFWwindow* window) {
+inline void init(native_surface_handle surface) {
     auto const& platform = current_platform();
     if (platform.renderer.init)
-        platform.renderer.init(window);
+        platform.renderer.init(surface);
 }
 
 inline void flush(unsigned char const* buf, unsigned int len) {

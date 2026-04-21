@@ -2404,7 +2404,8 @@ inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
     return CallWindowProcW(g_ime.prev_wndproc, hwnd, msg, wparam, lparam);
 }
 
-inline void input_attach(GLFWwindow* window, void (*request_repaint)()) {
+inline void input_attach(native_surface_handle handle, void (*request_repaint)()) {
+    auto* window = static_cast<GLFWwindow*>(handle);
     g_ime.window = window;
     g_ime.request_repaint = request_repaint;
     g_ime.hwnd = window ? glfwGetWin32Window(window) : nullptr;
@@ -3632,9 +3633,10 @@ inline void end_frame(FrameContext& frame) {
     }
 }
 
-inline void renderer_init(GLFWwindow* window) {
+inline void renderer_init(native_surface_handle handle) {
     install_process_diagnostics();
     if (g_renderer.initialized) return;
+    auto* window = static_cast<GLFWwindow*>(handle);
     g_renderer.window = window;
     g_renderer.debug_preset_enabled = env_enabled("PHENOTYPE_WINDOWS_DEBUG");
     g_renderer.debug_enabled = g_renderer.debug_preset_enabled

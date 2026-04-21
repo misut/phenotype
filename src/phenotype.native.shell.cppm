@@ -6,8 +6,6 @@ module;
 #include <cstdio>
 #include <optional>
 #include <utility>
-
-struct GLFWwindow;
 #endif
 
 export module phenotype.native.shell;
@@ -65,10 +63,11 @@ enum class Key : int {
 };
 
 struct native_host {
-    // Opaque native surface handle. Typed as GLFWwindow* today; commit 4
-    // of the shell-core-split series retypes it to void* alongside the
-    // platform_api flip.
-    GLFWwindow* window = nullptr;
+    // Opaque native surface handle. Carries a GLFWwindow* on macOS /
+    // Windows; an ANativeWindow* on Android; etc. The backend casts
+    // back to its own type on receipt from `platform_api::init` /
+    // `platform_api::attach`.
+    native_surface_handle window = nullptr;
     platform_api const* platform = nullptr;
 
     // Cached framebuffer size, populated by the driver layer (shell.glfw

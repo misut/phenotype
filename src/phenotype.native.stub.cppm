@@ -5,8 +5,6 @@ module;
 #include <string>
 #include <variant>
 #include <vector>
-
-struct GLFWwindow;
 #endif
 
 export module phenotype.native.stub;
@@ -35,9 +33,9 @@ inline TextAtlas stub_build_atlas(std::vector<TextEntry> const&, float) {
     return {};
 }
 
-inline void stub_renderer_init(GLFWwindow*) {}
+inline void stub_renderer_init(native_surface_handle) {}
 
-inline void stub_input_attach(GLFWwindow*, void (*)()) {}
+inline void stub_input_attach(native_surface_handle, void (*)()) {}
 
 inline void stub_input_detach() {}
 
