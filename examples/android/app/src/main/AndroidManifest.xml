@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!-- phenotype requires Vulkan 1.1. min-sdk 33 guarantees API coverage. -->
+    <uses-feature
+        android:name="android.hardware.vulkan.version"
+        android:version="0x401000"
+        android:required="true" />
+
+    <application
+        android:label="phenotype example"
+        android:hasCode="true"
+        android:allowBackup="false">
+
+        <activity
+            android:name="io.github.misut.phenotype.example.MainActivity"
+            android:exported="true"
+            android:theme="@android:style/Theme.NoTitleBar.Fullscreen"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|screenLayout|uiMode"
+            android:launchMode="singleTask">
+
+            <!-- GameActivity looks up the C entry point library by name. -->
+            <meta-data
+                android:name="android.app.lib_name"
+                android:value="phenotype_android_example" />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+        </activity>
+    </application>
+</manifest>
