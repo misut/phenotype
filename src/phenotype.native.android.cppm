@@ -1,8 +1,8 @@
-// Android (Vulkan) platform backend for phenotype. Stage 2 clears the
-// swapchain to the active theme background; Stage 3 brings the color
+// Android (Vulkan) platform backend for phenotype. Stage 2 cleared the
+// swapchain to the active theme background; Stage 3 renders the color
 // primitives (Clear / FillRect / StrokeRect / RoundRect / DrawLine)
-// online via a single instanced graphics pipeline that mirrors the
-// macOS / Windows color_pipeline design.
+// via a single instanced graphics pipeline that mirrors the macOS /
+// Windows color_pipeline design byte-for-byte.
 //
 // Vulkan state lives in `detail::g_renderer`; helpers in the detail
 // namespace keep the module interface unit short so the Clang module
@@ -57,6 +57,33 @@ struct ColorUniforms {
 static_assert(sizeof(ColorUniforms) == 16);
 
 inline constexpr std::size_t INITIAL_INSTANCE_CAPACITY = 256;
+
+// Per-frame CPU-side decode scratch. `has_clear` tracks whether the
+// frame contained an explicit Clear command; when false, renderer_flush
+// uses the active phenotype theme background instead.
+struct FrameScratch {
+    std::vector<ColorInstanceGPU> color_instances;
+    float clear_color[4]{0, 0, 0, 0};
+    bool has_clear = false;
+};
+
+// Minimal render_backend satisfying the phenotype::host::render_backend
+// concept so build_stage3_demo can drive phenotype::emit_* directly.
+// Fixed-size backing: the 5-command demo scene fits comfortably inside
+// 1 KiB. detail::ensure only flushes (resets buf_len) when the buffer
+// would overflow; as long as CAPACITY covers every command, we never
+// hit that path.
+struct DemoCmdBuffer {
+    static constexpr unsigned int CAPACITY = 1024;
+    std::array<unsigned char, CAPACITY> storage{};
+    unsigned int used = 0;
+
+    unsigned char* buf() { return storage.data(); }
+    unsigned int& buf_len() { return used; }
+    unsigned int buf_size() const { return CAPACITY; }
+    void ensure(unsigned int /*needed*/) { /* fixed capacity */ }
+    void flush() { /* no-op; decoder reads (buf, used) directly */ }
+};
 
 struct android_renderer {
     VkInstance instance;
@@ -595,10 +622,9 @@ inline bool create_swapchain() {
     ci.imageColorSpace = picked.colorSpace;
     ci.imageExtent = extent;
     ci.imageArrayLayers = 1;
-    // Stage 3 renders via a color attachment; keep TRANSFER_DST for the
-    // legacy clear path (commit 3 drops it once renderer_flush migrates).
-    ci.imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT
-                  | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
+    // Stage 3 renders through the color_pipeline render pass; the
+    // swapchain images only need the COLOR_ATTACHMENT usage.
+    ci.imageUsage = VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT;
     ci.imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
     ci.preTransform = caps.currentTransform;
     ci.compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR;
@@ -754,12 +780,111 @@ inline void renderer_init(native_surface_handle handle) {
                         g_renderer.swapchain_extent.height);
 }
 
-inline void renderer_flush(unsigned char const*, unsigned int) {
-    // Stage 2 path — kept behavior-neutral in this commit. The graphics
-    // pipeline / render pass / descriptor set / buffers are created by
-    // renderer_init but not yet recorded into the command buffer.
-    // Commit 3 swaps this body for a proper render-pass draw.
+// Normalises the 0..255 Color channels into the 0..1 RGBA linear
+// vec4 the GLSL shader expects.
+inline void normalize_color(::phenotype::Color const& c, float out[4]) {
+    out[0] = static_cast<float>(c.r) / 255.0f;
+    out[1] = static_cast<float>(c.g) / 255.0f;
+    out[2] = static_cast<float>(c.b) / 255.0f;
+    out[3] = static_cast<float>(c.a) / 255.0f;
+}
+
+inline void decode_android_color_commands(unsigned char const* buf,
+                                          unsigned int len,
+                                          FrameScratch& out) {
+    auto commands = ::phenotype::parse_commands(buf, len);
+    for (auto const& cmd : commands) {
+        std::visit([&](auto const& c) {
+            using T = std::decay_t<decltype(c)>;
+            if constexpr (std::same_as<T, ::phenotype::ClearCmd>) {
+                normalize_color(c.color, out.clear_color);
+                out.has_clear = true;
+            } else if constexpr (std::same_as<T, ::phenotype::FillRectCmd>) {
+                ColorInstanceGPU inst{};
+                inst.rect[0] = c.x; inst.rect[1] = c.y;
+                inst.rect[2] = c.w; inst.rect[3] = c.h;
+                normalize_color(c.color, inst.color);
+                // params = (0, 0, 0=Fill, 0)
+                out.color_instances.push_back(inst);
+            } else if constexpr (std::same_as<T, ::phenotype::StrokeRectCmd>) {
+                ColorInstanceGPU inst{};
+                inst.rect[0] = c.x; inst.rect[1] = c.y;
+                inst.rect[2] = c.w; inst.rect[3] = c.h;
+                normalize_color(c.color, inst.color);
+                inst.params[0] = 0.0f;
+                inst.params[1] = c.line_width;
+                inst.params[2] = 1.0f; // draw_type = Stroke
+                out.color_instances.push_back(inst);
+            } else if constexpr (std::same_as<T, ::phenotype::RoundRectCmd>) {
+                ColorInstanceGPU inst{};
+                inst.rect[0] = c.x; inst.rect[1] = c.y;
+                inst.rect[2] = c.w; inst.rect[3] = c.h;
+                normalize_color(c.color, inst.color);
+                inst.params[0] = c.radius;
+                inst.params[1] = 0.0f;
+                inst.params[2] = 2.0f; // draw_type = Round
+                out.color_instances.push_back(inst);
+            } else if constexpr (std::same_as<T, ::phenotype::DrawLineCmd>) {
+                // Thickened axis-aligned rect — preserves desktop
+                // backends' DrawLine behavior including the
+                // draw_type = 3 fall-through to the Fill code path.
+                float dx = c.x2 - c.x1;
+                float dy = c.y2 - c.y1;
+                float line_len = std::sqrt(dx * dx + dy * dy);
+                float w = (dy == 0.0f) ? line_len : c.thickness;
+                float h = (dx == 0.0f) ? line_len : c.thickness;
+                float x = (dx == 0.0f)
+                    ? c.x1 - c.thickness * 0.5f
+                    : std::min(c.x1, c.x2);
+                float y = (dy == 0.0f)
+                    ? c.y1 - c.thickness * 0.5f
+                    : std::min(c.y1, c.y2);
+                ColorInstanceGPU inst{};
+                inst.rect[0] = x; inst.rect[1] = y;
+                inst.rect[2] = w; inst.rect[3] = h;
+                normalize_color(c.color, inst.color);
+                inst.params[0] = 0.0f;
+                inst.params[1] = 0.0f;
+                inst.params[2] = 3.0f; // matches macOS / Windows
+                out.color_instances.push_back(inst);
+            }
+            // DrawText / DrawImage / HitRegion are ignored in Stage 3.
+        }, cmd);
+    }
+}
+
+// Stage 3 demo composition: emits all five color commands through the
+// public phenotype::emit_* API so the decoder above is exercised
+// end-to-end. Stage 6 replaces this with a real View / Update loop
+// bound to the example driver's State.
+inline void build_stage3_demo(FrameScratch& out) {
+    DemoCmdBuffer cmd;
+    auto const& theme = ::phenotype::current_theme();
+    ::phenotype::emit_clear(cmd, theme.background);
+    ::phenotype::emit_fill_rect(cmd, 40.0f, 160.0f, 420.0f, 220.0f,
+        ::phenotype::Color{220, 60, 80, 255});
+    ::phenotype::emit_stroke_rect(cmd, 500.0f, 160.0f, 540.0f, 220.0f, 8.0f,
+        ::phenotype::Color{60, 140, 220, 255});
+    ::phenotype::emit_round_rect(cmd, 40.0f, 440.0f, 1000.0f, 300.0f, 56.0f,
+        ::phenotype::Color{90, 170, 90, 255});
+    ::phenotype::emit_draw_line(cmd, 40.0f, 820.0f, 1040.0f, 820.0f, 6.0f,
+        ::phenotype::Color{40, 40, 40, 255});
+    decode_android_color_commands(cmd.buf(), cmd.buf_len(), out);
+}
+
+inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (!g_renderer.initialized) return;
+
+    FrameScratch scratch;
+    if (buf != nullptr && len > 0) {
+        decode_android_color_commands(buf, len, scratch);
+    } else {
+        build_stage3_demo(scratch);
+    }
+    if (!scratch.has_clear) {
+        auto const& theme = ::phenotype::current_theme();
+        normalize_color(theme.background, scratch.clear_color);
+    }
 
     vkWaitForFences(g_renderer.device, 1, &g_renderer.in_flight, VK_TRUE, UINT64_MAX);
 
@@ -775,46 +900,69 @@ inline void renderer_flush(unsigned char const*, unsigned int) {
     if (!vk_ok(r, "vkAcquireNextImageKHR")) return;
 
     vkResetFences(g_renderer.device, 1, &g_renderer.in_flight);
-    vkResetCommandBuffer(g_renderer.command_buffer, 0);
 
+    // Upload per-frame data — the fence wait above guarantees the
+    // previous frame is no longer reading these persistently-mapped
+    // buffers.
+    if (!scratch.color_instances.empty()) {
+        if (!ensure_instance_capacity(scratch.color_instances.size())) return;
+        std::memcpy(g_renderer.instance_mapped,
+                    scratch.color_instances.data(),
+                    scratch.color_instances.size() * sizeof(ColorInstanceGPU));
+    }
+    ColorUniforms uniforms{};
+    uniforms.viewport[0] = static_cast<float>(g_renderer.swapchain_extent.width);
+    uniforms.viewport[1] = static_cast<float>(g_renderer.swapchain_extent.height);
+    std::memcpy(g_renderer.uniform_mapped, &uniforms, sizeof uniforms);
+
+    // Record the render pass.
+    vkResetCommandBuffer(g_renderer.command_buffer, 0);
     VkCommandBufferBeginInfo bi{};
     bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(g_renderer.command_buffer, &bi);
 
-    VkImageMemoryBarrier b1{};
-    b1.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
-    b1.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-    b1.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    b1.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    b1.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
-    b1.image = g_renderer.swapchain_images[idx];
-    b1.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-    b1.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    vkCmdPipelineBarrier(g_renderer.command_buffer,
-        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
-        0, 0, nullptr, 0, nullptr, 1, &b1);
+    VkClearValue clear{};
+    std::memcpy(clear.color.float32, scratch.clear_color, sizeof scratch.clear_color);
 
-    auto const& theme = ::phenotype::current_theme();
-    VkClearColorValue clear{};
-    clear.float32[0] = static_cast<float>(theme.background.r) / 255.0f;
-    clear.float32[1] = static_cast<float>(theme.background.g) / 255.0f;
-    clear.float32[2] = static_cast<float>(theme.background.b) / 255.0f;
-    clear.float32[3] = static_cast<float>(theme.background.a) / 255.0f;
-    VkImageSubresourceRange range{ VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
-    vkCmdClearColorImage(g_renderer.command_buffer,
-        g_renderer.swapchain_images[idx],
-        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, &clear, 1, &range);
+    VkRenderPassBeginInfo rp{};
+    rp.sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO;
+    rp.renderPass = g_renderer.render_pass;
+    rp.framebuffer = g_renderer.framebuffers[idx];
+    rp.renderArea.offset = {0, 0};
+    rp.renderArea.extent = g_renderer.swapchain_extent;
+    rp.clearValueCount = 1;
+    rp.pClearValues = &clear;
+    vkCmdBeginRenderPass(g_renderer.command_buffer, &rp,
+                         VK_SUBPASS_CONTENTS_INLINE);
 
-    VkImageMemoryBarrier b2 = b1;
-    b2.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
-    b2.newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
-    b2.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
-    b2.dstAccessMask = 0;
-    vkCmdPipelineBarrier(g_renderer.command_buffer,
-        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT,
-        0, 0, nullptr, 0, nullptr, 1, &b2);
+    VkViewport vp{};
+    vp.x = 0.0f; vp.y = 0.0f;
+    vp.width = static_cast<float>(g_renderer.swapchain_extent.width);
+    vp.height = static_cast<float>(g_renderer.swapchain_extent.height);
+    vp.minDepth = 0.0f; vp.maxDepth = 1.0f;
+    vkCmdSetViewport(g_renderer.command_buffer, 0, 1, &vp);
 
+    VkRect2D scissor{};
+    scissor.offset = {0, 0};
+    scissor.extent = g_renderer.swapchain_extent;
+    vkCmdSetScissor(g_renderer.command_buffer, 0, 1, &scissor);
+
+    if (!scratch.color_instances.empty()) {
+        vkCmdBindPipeline(g_renderer.command_buffer,
+                          VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          g_renderer.color_pipeline);
+        vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                g_renderer.color_pipeline_layout,
+                                0, 1, &g_renderer.color_descriptor_set,
+                                0, nullptr);
+        vkCmdDraw(g_renderer.command_buffer, 6,
+                  static_cast<std::uint32_t>(scratch.color_instances.size()),
+                  0, 0);
+    }
+
+    vkCmdEndRenderPass(g_renderer.command_buffer);
     vkEndCommandBuffer(g_renderer.command_buffer);
 
     VkPipelineStageFlags wait = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -926,7 +1074,7 @@ inline void android_open_url(char const* url, unsigned int len) {
 inline platform_api build_android_platform() {
     auto api = make_stub_platform(
         "android",
-        "[phenotype-native] Android Vulkan backend (stage 2: clear-color only)");
+        "[phenotype-native] Android Vulkan backend (stage 3: color pipeline)");
     api.renderer = {
         renderer_init,
         renderer_flush,

@@ -39,7 +39,9 @@ void main() {
     float py = inst.rect.y + c.y * inst.rect.w;
 
     float cx = (px / viewport.x) * 2.0 - 1.0;
-    float cy = 1.0 - (py / viewport.y) * 2.0;
+    // Vulkan NDC has +Y pointing down (opposite of Metal/GL). Straight
+    // linear map from pixel Y (top-left origin) to clip Y (top-to-bottom).
+    float cy = (py / viewport.y) * 2.0 - 1.0;
 
     gl_Position = vec4(cx, cy, 0.0, 1.0);
     v_color     = inst.color;
