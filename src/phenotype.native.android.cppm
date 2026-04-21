@@ -24,6 +24,7 @@ export module phenotype.native.android;
 import std;
 import phenotype;
 import phenotype.native.platform;
+import phenotype.native.shell;
 import phenotype.native.stub;
 
 namespace phenotype::native::detail {
@@ -425,4 +426,64 @@ inline platform_api const& android_platform() {
 }
 
 } // namespace phenotype::native
+
+// C ABI for the examples/android GameActivity glue. Keeping this entry
+// surface as plain C avoids forcing the Gradle-built caller to import
+// the phenotype modules (which would require sharing exon's PCM output
+// across the split build). The static_host + bound platform match what
+// `phenotype::native::detail::run_host` would set up for a templated
+// app; Stage 3+ will swap in the full run_host once we have something
+// worth drawing beyond the clear color.
+
+namespace phenotype::native::detail {
+
+inline native_host g_android_host{};
+
+inline void bind_platform_once() {
+    if (!g_android_host.platform)
+        g_android_host.platform = &android_platform();
+}
+
+} // namespace phenotype::native::detail
+
+extern "C" {
+
+__attribute__((visibility("default")))
+void phenotype_android_attach_surface(void* native_window) {
+    namespace d = phenotype::native::detail;
+    d::bind_platform_once();
+    d::g_android_host.window = native_window;
+    if (d::g_android_host.platform->renderer.init)
+        d::g_android_host.platform->renderer.init(d::g_android_host.window);
+    if (d::g_android_host.platform->input.attach)
+        d::g_android_host.platform->input.attach(d::g_android_host.window, nullptr);
+}
+
+__attribute__((visibility("default")))
+void phenotype_android_detach_surface(void) {
+    namespace d = phenotype::native::detail;
+    if (!d::g_android_host.platform) return;
+    if (d::g_android_host.platform->input.detach)
+        d::g_android_host.platform->input.detach();
+    if (d::g_android_host.platform->renderer.shutdown)
+        d::g_android_host.platform->renderer.shutdown();
+    d::g_android_host.window = nullptr;
+}
+
+__attribute__((visibility("default")))
+void phenotype_android_draw_frame(void) {
+    namespace d = phenotype::native::detail;
+    if (!d::g_android_host.platform || !d::g_android_host.window) return;
+    if (d::g_android_host.platform->renderer.flush)
+        d::g_android_host.platform->renderer.flush(d::g_android_host.buffer, 0);
+}
+
+__attribute__((visibility("default")))
+char const* phenotype_android_startup_message(void) {
+    namespace d = phenotype::native::detail;
+    d::bind_platform_once();
+    return d::g_android_host.platform->startup_message;
+}
+
+} // extern "C"
 #endif
