@@ -51,7 +51,13 @@ target_link_libraries(phenotype_android_example PRIVATE
     phenotype_jsoncpp_static
     phenotype_cxx_std_static
     -Wl,--end-group
+    # GameActivity's JNI entry points (Java_com_google_androidgamesdk_*)
+    # are only referenced from Java, so without --whole-archive the
+    # linker strips them and the JVM throws UnsatisfiedLinkError at
+    # onCreate time.
+    -Wl,--whole-archive
     game-activity::game-activity_static
+    -Wl,--no-whole-archive
     vulkan
     android
     log)
