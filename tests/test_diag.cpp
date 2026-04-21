@@ -21,7 +21,7 @@ import phenotype.wasm;
 
 using namespace phenotype;
 
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
 static null_host diag_host;
 #else
 extern "C" {
@@ -327,7 +327,7 @@ static DebugPlaneMsg map_debug_plane_text(std::string value) {
 void test_runner_records_phases() {
     metrics::reset_all();
     log::set_level(log::Severity::info);
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
     run<DiagState, DiagMsg>(diag_host,
 #else
     run<DiagState, DiagMsg>(
@@ -351,7 +351,7 @@ void test_runner_records_phases() {
 void test_debug_plane_semantic_tree_shape_and_stability() {
     metrics::reset_all();
     log::set_level(log::Severity::info);
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
     run<DiagState, DebugPlaneMsg>(diag_host,
 #else
     run<DiagState, DebugPlaneMsg>(

@@ -16,7 +16,7 @@
 #include <variant>
 #include <vector>
 
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
 
 #include <GLFW/glfw3.h>
 

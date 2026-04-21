@@ -1,5 +1,5 @@
 module;
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
 #include <cmath>
 #include <chrono>
 #include <concepts>
@@ -12,7 +12,7 @@ module;
 
 export module phenotype.native.shell;
 
-#ifndef __wasi__
+#if !defined(__wasi__) && !defined(__ANDROID__)
 import phenotype;
 import phenotype.native.platform;
 
