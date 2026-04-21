@@ -3787,7 +3787,9 @@ inline bool sync_scroll_tracking_state(unsigned long long phase,
 }
 
 inline float current_scroll_viewport_height() {
-    return viewport_height(g_ime.window);
+    // shell.cppm's viewport_height() reads from the active host's cached
+    // size, which is kept up to date by the GLFW driver's resize callback.
+    return viewport_height();
 }
 
 inline bool handle_local_scroll_event(id event) {
@@ -3861,7 +3863,8 @@ inline void remove_local_scroll_monitor() {
     g_ime.scroll_monitor = nullptr;
 }
 
-inline void input_attach(GLFWwindow* window, void (*request_repaint)()) {
+inline void input_attach(native_surface_handle handle, void (*request_repaint)()) {
+    auto* window = static_cast<GLFWwindow*>(handle);
     g_images.request_repaint = request_repaint;
     g_ime.window = window;
     g_ime.request_repaint = request_repaint;
@@ -3973,8 +3976,9 @@ inline bool input_dismiss_transient() {
     return true;
 }
 
-inline void renderer_init(GLFWwindow* window) {
+inline void renderer_init(native_surface_handle handle) {
     if (g_renderer.initialized) return;
+    auto* window = static_cast<GLFWwindow*>(handle);
     g_renderer.window = window;
 
     g_renderer.device = MTL::CreateSystemDefaultDevice();

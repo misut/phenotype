@@ -8,8 +8,6 @@ module;
 #include <string>
 #include <string_view>
 #include <vector>
-
-struct GLFWwindow;
 #endif
 
 export module phenotype.native.platform;
@@ -48,8 +46,14 @@ struct text_api {
                              float backing_scale) = nullptr;
 };
 
+// Opaque native surface handle. Today this carries a GLFWwindow* on
+// macOS / Windows; the upcoming Android backend will carry an
+// ANativeWindow*. Platform backends cast back to their own type at
+// the single entry point where they need it.
+using native_surface_handle = void*;
+
 struct renderer_api {
-    void (*init)(GLFWwindow* window) = nullptr;
+    void (*init)(native_surface_handle surface) = nullptr;
     void (*flush)(unsigned char const* buf, unsigned int len) = nullptr;
     void (*shutdown)() = nullptr;
     std::optional<unsigned int> (*hit_test)(float x, float y,
@@ -57,7 +61,8 @@ struct renderer_api {
 };
 
 struct input_api {
-    void (*attach)(GLFWwindow* window, void (*request_repaint)()) = nullptr;
+    void (*attach)(native_surface_handle surface,
+                   void (*request_repaint)()) = nullptr;
     void (*detach)() = nullptr;
     void (*sync)() = nullptr;
     bool (*uses_shared_caret_blink)() = nullptr;

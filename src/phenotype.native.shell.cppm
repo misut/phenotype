@@ -6,8 +6,6 @@ module;
 #include <cstdio>
 #include <optional>
 #include <utility>
-
-#include <GLFW/glfw3.h>
 #endif
 
 export module phenotype.native.shell;
@@ -18,9 +16,71 @@ import phenotype.native.platform;
 
 export namespace phenotype::native {
 
+// Neutral input enums. Values mirror GLFW so the GLFW-side driver can
+// pass-through with `static_cast` while non-GLFW drivers (Android, future
+// iOS) translate their platform constants to these values. Compatibility
+// with GLFW is asserted from `phenotype.native.shell.glfw`, which can
+// include the GLFW headers.
+enum class KeyAction : int {
+    Release = 0,
+    Press   = 1,
+    Repeat  = 2,
+};
+
+enum class Modifier : int {
+    Shift   = 0x0001,
+    Control = 0x0002,
+    Alt     = 0x0004,
+    Super   = 0x0008,
+};
+
+enum class MouseButton : int {
+    Left   = 0,
+    Right  = 1,
+    Middle = 2,
+};
+
+// Only the keys the shell actually switches on. `Other` is used for keys
+// the shell does not care about, so drivers can safely funnel anything
+// unrecognised there without creating new enumerators.
+enum class Key : int {
+    Tab       = 258,
+    Backspace = 259,
+    Enter     = 257,
+    KpEnter   = 335,
+    Space     = 32,
+    Left      = 263,
+    Right     = 262,
+    Up        = 265,
+    Down      = 264,
+    PageUp    = 266,
+    PageDown  = 267,
+    Home      = 268,
+    End       = 269,
+    Escape    = 256,
+    A         = 65,
+    Other     = -1,
+};
+
 struct native_host {
-    GLFWwindow* window = nullptr;
+    // Opaque native surface handle. Carries a GLFWwindow* on macOS /
+    // Windows; an ANativeWindow* on Android; etc. The backend casts
+    // back to its own type on receipt from `platform_api::init` /
+    // `platform_api::attach`.
+    native_surface_handle window = nullptr;
     platform_api const* platform = nullptr;
+
+    // Cached framebuffer size, populated by the driver layer (shell.glfw
+    // or a future shell.android). Used by the host_platform concept so
+    // shell dispatch code never has to query the windowing toolkit
+    // directly.
+    int cached_width_px = 800;
+    int cached_height_px = 600;
+
+    // Optional driver hook for hardware-cursor updates. shell.glfw sets
+    // this to a GLFW-based cursor updater; other drivers leave it null
+    // (touch devices don't have a pointer cursor).
+    void (*set_hover_cursor)(bool pointing) = nullptr;
 
     float measure_text(float font_size, unsigned int mono,
                        char const* text, unsigned int len) const {
@@ -46,19 +106,11 @@ struct native_host {
     }
 
     float canvas_width() const {
-        if (!window) return 800.0f;
-        int w = 0;
-        int h = 0;
-        glfwGetWindowSize(window, &w, &h);
-        return static_cast<float>(w);
+        return (cached_width_px > 0) ? static_cast<float>(cached_width_px) : 800.0f;
     }
 
     float canvas_height() const {
-        if (!window) return 600.0f;
-        int w = 0;
-        int h = 0;
-        glfwGetWindowSize(window, &w, &h);
-        return static_cast<float>(h);
+        return (cached_height_px > 0) ? static_cast<float>(cached_height_px) : 600.0f;
     }
 
     void open_url(char const* url, unsigned int len) {
@@ -85,6 +137,10 @@ struct AppState {
 
 inline AppState g_app_state;
 inline native_host* g_active_host = nullptr;
+
+inline native_host* active_host() {
+    return g_active_host;
+}
 
 inline void open_url_bridge(char const* url, unsigned int len) {
     if (g_active_host)
@@ -128,27 +184,6 @@ inline float normalize_scroll_delta(platform_api const* platform,
     if (platform && platform->input.scroll_delta_y)
         return platform->input.scroll_delta_y(dy, line_height, viewport_height);
     return static_cast<float>(dy) * line_height * 3.0f;
-}
-
-inline float glfw_backing_scale(GLFWwindow* window) {
-    if (!window) return 1.0f;
-#if defined(GLFW_VERSION_MAJOR) \
-    && ((GLFW_VERSION_MAJOR > 3) || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3))
-    float sx = 1.0f;
-    float sy = 1.0f;
-    glfwGetWindowContentScale(window, &sx, &sy);
-#else
-    int fbw = 0;
-    int fbh = 0;
-    int winw = 0;
-    int winh = 0;
-    glfwGetFramebufferSize(window, &fbw, &fbh);
-    glfwGetWindowSize(window, &winw, &winh);
-    float sx = (winw > 0) ? static_cast<float>(fbw) / static_cast<float>(winw) : 1.0f;
-    float sy = (winh > 0) ? static_cast<float>(fbh) / static_cast<float>(winh) : 1.0f;
-#endif
-    float scale = (sx > sy) ? sx : sy;
-    return (scale > 0.0f && std::isfinite(scale)) ? scale : 1.0f;
 }
 
 inline void repaint_current() {
@@ -271,9 +306,9 @@ inline bool move_focused_selection_from_pointer_x(float pointer_x, bool extend_s
 
 inline bool has_select_all_modifier(int mods) {
 #ifdef __APPLE__
-    return (mods & GLFW_MOD_SUPER) != 0;
+    return (mods & static_cast<int>(Modifier::Super)) != 0;
 #else
-    return (mods & GLFW_MOD_CONTROL) != 0;
+    return (mods & static_cast<int>(Modifier::Control)) != 0;
 #endif
 }
 
@@ -311,23 +346,12 @@ inline void tick_caret_blink() {
     repaint_current();
 }
 
-inline void update_cursor(GLFWwindow* window, bool pointing) {
-    if (!window)
-        return;
-    static GLFWcursor* arrow = nullptr;
-    static GLFWcursor* hand = nullptr;
-    if (!arrow) arrow = glfwCreateStandardCursor(GLFW_ARROW_CURSOR);
-    if (!hand) hand = glfwCreateStandardCursor(GLFW_POINTING_HAND_CURSOR);
-    glfwSetCursor(window, pointing ? hand : arrow);
+inline void update_hover_cursor(bool pointing) {
+    if (g_app_state.host && g_app_state.host->set_hover_cursor)
+        g_app_state.host->set_hover_cursor(pointing);
 }
 
-inline float viewport_height(GLFWwindow* window) {
-    if (window) {
-        int w = 0;
-        int h = 0;
-        glfwGetWindowSize(window, &w, &h);
-        return (h > 0) ? static_cast<float>(h) : 1.0f;
-    }
+inline float viewport_height() {
     if (g_app_state.host)
         return g_app_state.host->canvas_height();
     return 600.0f;
@@ -389,25 +413,24 @@ inline bool dismiss_platform_transient() {
 }
 
 inline bool dispatch_mouse_button(float mx, float my,
-                                  int button, int action, int mods,
-                                  GLFWwindow* window = nullptr) {
+                                  MouseButton button, KeyAction action, int mods) {
     if (g_app_state.host && g_app_state.host->platform
         && g_app_state.host->platform->input.handle_mouse_button
         && g_app_state.host->platform->input.handle_mouse_button(
-            mx, my, button, action, mods)) {
+            mx, my, static_cast<int>(button), static_cast<int>(action), mods)) {
         repaint_current();
         ::phenotype::detail::note_input_event(
             "click", "shell", "pointer-click", "platform-consumed", invalid_callback_id);
         return true;
     }
 
-    if (button != GLFW_MOUSE_BUTTON_LEFT) {
+    if (button != MouseButton::Left) {
         ::phenotype::detail::note_input_event(
             "click", "shell", "pointer-click", "ignored", invalid_callback_id);
         return false;
     }
 
-    if (action == GLFW_RELEASE) {
+    if (action == KeyAction::Release) {
         bool had_drag = g_app_state.drag_selecting;
         g_app_state.drag_selecting = false;
         g_app_state.drag_selection_id = invalid_callback_id;
@@ -420,7 +443,7 @@ inline bool dispatch_mouse_button(float mx, float my,
         return had_drag;
     }
 
-    if (action != GLFW_PRESS) {
+    if (action != KeyAction::Press) {
         ::phenotype::detail::note_input_event(
             "click", "shell", "pointer-click", "ignored", invalid_callback_id);
         return false;
@@ -463,15 +486,14 @@ inline bool dispatch_mouse_button(float mx, float my,
     return cleared;
 }
 
-inline bool dispatch_cursor_pos(float mx, float my,
-                                GLFWwindow* window = nullptr) {
+inline bool dispatch_cursor_pos(float mx, float my) {
     if (g_app_state.host && g_app_state.host->platform
         && g_app_state.host->platform->input.handle_cursor_pos
         && g_app_state.host->platform->input.handle_cursor_pos(mx, my)) {
         g_app_state.hovered_id = invalid_callback_id;
         ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
         repaint_current();
-        update_cursor(window, false);
+        update_hover_cursor(false);
         ::phenotype::detail::note_input_event(
             "hover", "shell", "pointer-move", "platform-consumed", invalid_callback_id);
         return true;
@@ -487,7 +509,7 @@ inline bool dispatch_cursor_pos(float mx, float my,
         bool handled = move_focused_selection_from_pointer_x(mx, true);
         if (handled)
             repaint_current();
-        update_cursor(window, hit.has_value());
+        update_hover_cursor(hit.has_value());
         ::phenotype::detail::note_input_event(
             "click",
             "shell",
@@ -504,7 +526,7 @@ inline bool dispatch_cursor_pos(float mx, float my,
         hovered_id, "shell", "pointer-move");
     if (handled)
         repaint_current();
-    update_cursor(window, hit.has_value());
+    update_hover_cursor(hit.has_value());
     return handled;
 }
 
@@ -550,51 +572,52 @@ inline bool dispatch_activation(char const* detail, bool include_links) {
     return handled;
 }
 
-inline char const* key_detail_name(int key, bool shift) {
+inline char const* key_detail_name(Key key, bool shift) {
     switch (key) {
-        case GLFW_KEY_TAB: return shift ? "shift-tab" : "tab";
-        case GLFW_KEY_BACKSPACE: return "backspace";
-        case GLFW_KEY_ENTER:
-        case GLFW_KEY_KP_ENTER: return "enter";
-        case GLFW_KEY_SPACE: return "space";
-        case GLFW_KEY_LEFT: return shift ? "shift-arrow-left" : "arrow-left";
-        case GLFW_KEY_RIGHT: return shift ? "shift-arrow-right" : "arrow-right";
-        case GLFW_KEY_UP: return "arrow-up";
-        case GLFW_KEY_DOWN: return "arrow-down";
-        case GLFW_KEY_PAGE_UP: return "page-up";
-        case GLFW_KEY_PAGE_DOWN: return "page-down";
-        case GLFW_KEY_HOME: return shift ? "shift-home" : "home";
-        case GLFW_KEY_END: return shift ? "shift-end" : "end";
-        case GLFW_KEY_ESCAPE: return "escape";
-        case GLFW_KEY_A: return "select-all";
-        default: return "key";
+        case Key::Tab: return shift ? "shift-tab" : "tab";
+        case Key::Backspace: return "backspace";
+        case Key::Enter:
+        case Key::KpEnter: return "enter";
+        case Key::Space: return "space";
+        case Key::Left: return shift ? "shift-arrow-left" : "arrow-left";
+        case Key::Right: return shift ? "shift-arrow-right" : "arrow-right";
+        case Key::Up: return "arrow-up";
+        case Key::Down: return "arrow-down";
+        case Key::PageUp: return "page-up";
+        case Key::PageDown: return "page-down";
+        case Key::Home: return shift ? "shift-home" : "home";
+        case Key::End: return shift ? "shift-end" : "end";
+        case Key::Escape: return "escape";
+        case Key::A: return "select-all";
+        case Key::Other: return "key";
     }
+    return "key";
 }
 
-inline bool dispatch_key(int key, int action, int mods) {
-    bool shift = (mods & GLFW_MOD_SHIFT) != 0;
+inline bool dispatch_key(Key key, KeyAction action, int mods) {
+    bool shift = (mods & static_cast<int>(Modifier::Shift)) != 0;
     auto detail = key_detail_name(key, shift);
-    auto repeat_allowed = key == GLFW_KEY_BACKSPACE
-        || key == GLFW_KEY_LEFT
-        || key == GLFW_KEY_RIGHT
-        || key == GLFW_KEY_UP
-        || key == GLFW_KEY_DOWN
-        || key == GLFW_KEY_PAGE_UP
-        || key == GLFW_KEY_PAGE_DOWN
-        || key == GLFW_KEY_HOME
-        || key == GLFW_KEY_END;
+    auto repeat_allowed = key == Key::Backspace
+        || key == Key::Left
+        || key == Key::Right
+        || key == Key::Up
+        || key == Key::Down
+        || key == Key::PageUp
+        || key == Key::PageDown
+        || key == Key::Home
+        || key == Key::End;
 
-    if (action != GLFW_PRESS && action != GLFW_REPEAT) {
+    if (action != KeyAction::Press && action != KeyAction::Repeat) {
         ::phenotype::detail::note_input_event(
             "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
         return false;
     }
-    if (action == GLFW_REPEAT && !repeat_allowed) {
+    if (action == KeyAction::Repeat && !repeat_allowed) {
         ::phenotype::detail::note_input_event(
             "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
         return false;
     }
-    if (key == GLFW_KEY_A && action == GLFW_PRESS && has_select_all_modifier(mods)) {
+    if (key == Key::A && action == KeyAction::Press && has_select_all_modifier(mods)) {
         if (!::phenotype::detail::focused_is_input()
             || !::phenotype::detail::select_all_focused_input()) {
             ::phenotype::detail::note_input_event(
@@ -609,7 +632,7 @@ inline bool dispatch_key(int key, int action, int mods) {
     }
 
     switch (key) {
-        case GLFW_KEY_TAB:
+        case Key::Tab:
             if (::phenotype::detail::handle_tab(shift ? 1u : 0u, "shell", detail)) {
                 sync_platform_input();
                 reset_caret_blink_timer();
@@ -617,64 +640,64 @@ inline bool dispatch_key(int key, int action, int mods) {
                 return true;
             }
             return false;
-        case GLFW_KEY_BACKSPACE:
+        case Key::Backspace:
             if (::phenotype::detail::handle_key(1, 0, false, "shell", detail)) {
                 reset_caret_blink_timer();
                 repaint_current();
                 return true;
             }
             return false;
-        case GLFW_KEY_ENTER:
-        case GLFW_KEY_KP_ENTER:
+        case Key::Enter:
+        case Key::KpEnter:
             return dispatch_activation(detail, true);
-        case GLFW_KEY_SPACE:
+        case Key::Space:
             if (::phenotype::detail::focused_is_input()) {
                 ::phenotype::detail::note_input_event(
                     "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
                 return false;
             }
             return dispatch_activation(detail, false);
-        case GLFW_KEY_LEFT:
+        case Key::Left:
             if (::phenotype::detail::handle_key(2, 0, shift, "shell", detail)) {
                 reset_caret_blink_timer();
                 repaint_current();
                 return true;
             }
             return false;
-        case GLFW_KEY_RIGHT:
+        case Key::Right:
             if (::phenotype::detail::handle_key(3, 0, shift, "shell", detail)) {
                 reset_caret_blink_timer();
                 repaint_current();
                 return true;
             }
             return false;
-        case GLFW_KEY_UP:
+        case Key::Up:
             if (::phenotype::detail::focused_is_input()) {
                 ::phenotype::detail::note_input_event(
                     "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
                 return false;
             }
-            return scroll_by_pixels(-scroll_line_height(), viewport_height(nullptr), detail);
-        case GLFW_KEY_DOWN:
+            return scroll_by_pixels(-scroll_line_height(), viewport_height(), detail);
+        case Key::Down:
             if (::phenotype::detail::focused_is_input()) {
                 ::phenotype::detail::note_input_event(
                     "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
                 return false;
             }
-            return scroll_by_pixels(scroll_line_height(), viewport_height(nullptr), detail);
-        case GLFW_KEY_PAGE_UP: {
-            float page = viewport_height(nullptr) - scroll_line_height();
+            return scroll_by_pixels(scroll_line_height(), viewport_height(), detail);
+        case Key::PageUp: {
+            float page = viewport_height() - scroll_line_height();
             if (page < scroll_line_height())
                 page = scroll_line_height();
-            return scroll_by_pixels(-page, viewport_height(nullptr), detail);
+            return scroll_by_pixels(-page, viewport_height(), detail);
         }
-        case GLFW_KEY_PAGE_DOWN: {
-            float page = viewport_height(nullptr) - scroll_line_height();
+        case Key::PageDown: {
+            float page = viewport_height() - scroll_line_height();
             if (page < scroll_line_height())
                 page = scroll_line_height();
-            return scroll_by_pixels(page, viewport_height(nullptr), detail);
+            return scroll_by_pixels(page, viewport_height(), detail);
         }
-        case GLFW_KEY_HOME:
+        case Key::Home:
             if (::phenotype::detail::focused_is_input()) {
                 if (::phenotype::detail::handle_key(4, 0, shift, "shell", detail)) {
                     reset_caret_blink_timer();
@@ -683,8 +706,8 @@ inline bool dispatch_key(int key, int action, int mods) {
                 }
                 return false;
             }
-            return set_scroll_position(0.0f, viewport_height(nullptr), detail);
-        case GLFW_KEY_END:
+            return set_scroll_position(0.0f, viewport_height(), detail);
+        case Key::End:
             if (::phenotype::detail::focused_is_input()) {
                 if (::phenotype::detail::handle_key(5, 0, shift, "shell", detail)) {
                     reset_caret_blink_timer();
@@ -693,10 +716,10 @@ inline bool dispatch_key(int key, int action, int mods) {
                 }
                 return false;
             }
-            return set_scroll_position(max_scroll_for_viewport(viewport_height(nullptr)),
-                                       viewport_height(nullptr),
+            return set_scroll_position(max_scroll_for_viewport(viewport_height()),
+                                       viewport_height(),
                                        detail);
-        case GLFW_KEY_ESCAPE: {
+        case Key::Escape: {
             bool dismissed = dismiss_platform_transient();
             bool cleared = false;
             if (::phenotype::detail::get_focused_id() != invalid_callback_id)
@@ -713,6 +736,7 @@ inline bool dispatch_key(int key, int action, int mods) {
                 "key", "shell", detail, handled ? "handled" : "ignored", invalid_callback_id);
             return handled;
         }
+        case Key::Other:
         default:
             ::phenotype::detail::note_input_event(
                 "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
@@ -734,61 +758,6 @@ inline bool dispatch_char(unsigned int codepoint) {
     }
     return false;
 }
-
-inline void on_mouse_button(GLFWwindow* window, int button, int action, int mods) {
-    double mx = 0.0;
-    double my = 0.0;
-    glfwGetCursorPos(window, &mx, &my);
-    dispatch_mouse_button(static_cast<float>(mx),
-                          static_cast<float>(my),
-                          button,
-                          action,
-                          mods,
-                          window);
-}
-
-inline void on_cursor_pos(GLFWwindow* window, double mx, double my) {
-    dispatch_cursor_pos(static_cast<float>(mx),
-                        static_cast<float>(my),
-                        window);
-}
-
-inline void on_scroll(GLFWwindow* window, double, double dy) {
-    dispatch_scroll(dy, viewport_height(window));
-}
-
-inline void on_framebuffer_size(GLFWwindow*, int, int) {
-    repaint_current();
-}
-
-inline void on_window_content_scale(GLFWwindow*, float, float) {
-    repaint_current();
-}
-
-inline void on_key(GLFWwindow*, int key, int, int action, int mods) {
-    dispatch_key(key, action, mods);
-}
-
-inline void on_char(GLFWwindow*, unsigned int codepoint) {
-    dispatch_char(codepoint);
-}
-
-inline void install_callbacks(GLFWwindow* window) {
-    glfwSetMouseButtonCallback(window, on_mouse_button);
-    glfwSetCursorPosCallback(window, on_cursor_pos);
-    glfwSetScrollCallback(window, on_scroll);
-    glfwSetFramebufferSizeCallback(window, on_framebuffer_size);
-#if defined(GLFW_VERSION_MAJOR) \
-    && ((GLFW_VERSION_MAJOR > 3) || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3))
-    glfwSetWindowContentScaleCallback(window, on_window_content_scale);
-#endif
-    glfwSetKeyCallback(window, on_key);
-    glfwSetCharCallback(window, on_char);
-}
-
-} // namespace detail
-
-namespace detail {
 
 template<typename State, typename Msg, typename View, typename Update>
     requires std::invocable<View, State const&>
@@ -817,56 +786,6 @@ inline void shutdown_host(native_host& host) {
     ::phenotype::detail::g_open_url = nullptr;
     detail::g_active_host = nullptr;
     detail::g_app_state = {};
-}
-
-template<typename State, typename Msg, typename View, typename Update>
-    requires std::invocable<View, State const&>
-          && std::invocable<Update, State&, Msg>
-int run_app_with_platform(platform_api const& platform,
-                          int width, int height, char const* title,
-                          View view, Update update) {
-    if (!platform.enabled) {
-        std::fprintf(stderr, "Platform backend '%s' is disabled\n", platform.name);
-        return 1;
-    }
-
-    if (platform.startup_message)
-        std::fprintf(stderr, "%s\n", platform.startup_message);
-
-    if (!glfwInit()) {
-        std::fprintf(stderr, "Failed to initialize GLFW\n");
-        return 1;
-    }
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-#ifdef GLFW_SCALE_TO_MONITOR
-    glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
-#endif
-
-    auto* window = glfwCreateWindow(width, height, title, nullptr, nullptr);
-    if (!window) {
-        std::fprintf(stderr, "Failed to create GLFW window\n");
-        glfwTerminate();
-        return 1;
-    }
-
-    native_host host;
-    host.window = window;
-    host.platform = &platform;
-    detail::bind_host(host, 0.0f);
-    detail::install_callbacks(window);
-
-    run_host<State, Msg>(host, std::move(view), std::move(update));
-
-    while (!glfwWindowShouldClose(window)) {
-        glfwPollEvents();
-        tick_caret_blink();
-        sync_platform_input();
-    }
-
-    shutdown_host(host);
-    glfwDestroyWindow(window);
-    glfwTerminate();
-    return 0;
 }
 
 } // namespace detail
