@@ -2,22 +2,30 @@
 
 Minimal Android application that boots phenotype's Vulkan backend inside a
 [GameActivity](https://developer.android.com/games/agdk/game-activity). As
-of Stage 6 it runs a real `view(State) / update(State, Msg)` loop through
-phenotype's shell. The built-in counter demo exercises the full three-
-pipeline stack (color + text + image) plus touch + hardware-key input:
-tap the `−` / `+` buttons to mutate `State.count`, Tab to cycle focus,
-Enter / Space to trigger the focused button. Motion and key events drain
-from GameActivity's `android_input_buffer` every tick and forward to
-phenotype's shell via `phenotype_android_dispatch_{pointer,key,char}`;
-the Android renderer caches each flushed command buffer so
-`renderer.hit_test(x, y, scroll_y)` can replay the `HitRegionCmd` list
-without another view pass.
+of Stage 7 it runs a real `view(State) / update(State, Msg)` loop through
+phenotype's shell and exposes the full `debug_api` (capabilities,
+`snapshot_json`, `capture_frame_rgba`, `write_artifact_bundle`). The
+built-in counter demo exercises the full three-pipeline stack (color +
+text + image) plus touch + hardware-key + vertical-scroll input: tap the
+`−` / `+` buttons to mutate `State.count`, Tab to cycle focus, Enter /
+Space to trigger the focused button, mouse-wheel / trackpad / `adb shell
+input roll` to dispatch scroll deltas (touchscreen two-finger scroll
+stays Stage 8). Motion, key, and scroll events drain from GameActivity's
+`android_input_buffer` every tick and forward to phenotype's shell via
+`phenotype_android_dispatch_{pointer,key,char,scroll}`; the Android
+renderer caches each flushed command buffer so `renderer.hit_test(x, y,
+scroll_y)` can replay the `HitRegionCmd` list without another view
+pass. `renderer_flush` also snapshots the presented swapchain image
+into a persistent `debug_capture_image` so `capture_frame_rgba()`
+returns fresh pixels without re-rendering.
 
 The example survives window-create / window-destroy / rotation
-lifecycles. The first post-resume frame may flash blank briefly while
-Vulkan rebuilds the swapchain — the first new input or state change
-repaints the current view. Touch scroll and soft keyboard show/hide
-land in Stage 7.
+lifecycles. After Stage 7, the first post-resume frame repaints
+immediately — `phenotype_android_attach_surface` clears
+`last_paint_hash` and calls `trigger_rebuild()` so the shell re-flushes
+the current view against the fresh Vulkan state instead of short-
+circuiting via the unchanged-buffer fast path. Soft keyboard show/hide
+and IME composition remain follow-up work.
 
 The driver calls three bootstrap hooks at `android_main` startup:
 `phenotype_android_bind_jvm(app->activity->vm)` (text pipeline's JNI
