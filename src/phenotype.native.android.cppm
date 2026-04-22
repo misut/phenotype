@@ -33,8 +33,10 @@ export module phenotype.native.android;
 
 #if defined(__ANDROID__)
 import std;
+import json;
 import cppx.unicode;
 import phenotype;
+import phenotype.diag;
 import phenotype.native.platform;
 import phenotype.native.shell;
 import phenotype.native.stub;
@@ -3326,6 +3328,205 @@ inline void android_open_url(char const* url, unsigned int len) {
                         "open_url ignored: %.*s", static_cast<int>(len), url);
 }
 
+// ---- Stage 7 debug plane --------------------------------------------
+
+inline ::phenotype::diag::PlatformCapabilitiesSnapshot android_debug_capabilities() {
+    return {
+        /*platform=*/"android",
+        /*read_only=*/true,
+        /*snapshot_json=*/true,
+        /*capture_frame_rgba=*/true,
+        /*write_artifact_bundle=*/true,
+        /*semantic_tree=*/true,
+        /*input_debug=*/true,
+        /*platform_runtime=*/true,
+        /*frame_image=*/true,
+        /*platform_diagnostics=*/true,
+    };
+}
+
+inline ::json::Object android_renderer_runtime_json() {
+    ::json::Object r;
+    r.emplace("initialized", ::json::Value{g_renderer.initialized});
+    r.emplace("swapchain_width",
+        ::json::Value{static_cast<std::int64_t>(g_renderer.swapchain_extent.width)});
+    r.emplace("swapchain_height",
+        ::json::Value{static_cast<std::int64_t>(g_renderer.swapchain_extent.height)});
+    r.emplace("last_render_width",
+        ::json::Value{static_cast<std::int64_t>(g_renderer.last_render_width)});
+    r.emplace("last_render_height",
+        ::json::Value{static_cast<std::int64_t>(g_renderer.last_render_height)});
+    r.emplace("last_frame_available",
+        ::json::Value{g_renderer.last_frame_available});
+    r.emplace("debug_capture_ready",
+        ::json::Value{g_renderer.debug_capture_ready});
+    r.emplace("text_pipeline_ready",
+        ::json::Value{g_renderer.text_pipeline != VK_NULL_HANDLE});
+    r.emplace("image_pipeline_ready",
+        ::json::Value{g_renderer.image_pipeline != VK_NULL_HANDLE});
+    r.emplace("color_pipeline_ready",
+        ::json::Value{g_renderer.color_pipeline != VK_NULL_HANDLE});
+    return r;
+}
+
+inline ::json::Value android_platform_runtime_details_json_with_reason(
+        std::string_view reason) {
+    ::json::Object root;
+    root.emplace("backend", ::json::Value{std::string("vulkan")});
+    root.emplace("renderer",
+        ::json::Value{android_renderer_runtime_json()});
+    root.emplace("image_cache_size",
+        ::json::Value{static_cast<std::int64_t>(g_images.cache.size())});
+    root.emplace("text_jni_initialised",
+        ::json::Value{g_jni.initialised});
+    if (!reason.empty())
+        root.emplace("reason", ::json::Value{std::string(reason)});
+    return ::json::Value{std::move(root)};
+}
+
+inline ::json::Value android_platform_runtime_details_json() {
+    return android_platform_runtime_details_json_with_reason({});
+}
+
+inline std::string android_snapshot_json() {
+    return ::phenotype::detail::serialize_diag_snapshot_with_debug(
+        android_debug_capabilities(),
+        android_platform_runtime_details_json());
+}
+
+// Copies the persistent debug_capture_image into the host-visible
+// readback buffer on demand, then returns an RGBA8 DebugFrameCapture.
+// No re-render — relies on the per-frame copy that renderer_flush runs
+// right after each render pass.
+inline std::optional<DebugFrameCapture> android_capture_frame_rgba() {
+    if (!g_renderer.initialized
+        || !g_renderer.last_frame_available
+        || !g_renderer.debug_capture_ready
+        || g_renderer.last_render_width == 0
+        || g_renderer.last_render_height == 0
+        || g_renderer.device == VK_NULL_HANDLE
+        || g_renderer.queue == VK_NULL_HANDLE
+        || g_renderer.command_pool == VK_NULL_HANDLE)
+        return std::nullopt;
+
+    auto width  = g_renderer.last_render_width;
+    auto height = g_renderer.last_render_height;
+    VkDeviceSize const bytes_per_row =
+        static_cast<VkDeviceSize>(width) * 4;
+    VkDeviceSize const total = bytes_per_row * static_cast<VkDeviceSize>(height);
+    if (!ensure_debug_readback_capacity(total)) return std::nullopt;
+
+    // Ensure any pending frame submission has completed so the copy
+    // below sees the most recent debug_capture_image contents.
+    if (g_renderer.in_flight != VK_NULL_HANDLE)
+        vkWaitForFences(g_renderer.device, 1, &g_renderer.in_flight,
+                        VK_TRUE, UINT64_MAX);
+
+    VkCommandBufferAllocateInfo alloc{};
+    alloc.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
+    alloc.commandPool = g_renderer.command_pool;
+    alloc.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
+    alloc.commandBufferCount = 1;
+    VkCommandBuffer cmd = VK_NULL_HANDLE;
+    if (!vk_ok(vkAllocateCommandBuffers(g_renderer.device, &alloc, &cmd),
+              "vkAllocateCommandBuffers(debug_capture)"))
+        return std::nullopt;
+
+    VkCommandBufferBeginInfo bi{};
+    bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
+    bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
+    vkBeginCommandBuffer(cmd, &bi);
+
+    VkImageMemoryBarrier to_src{};
+    to_src.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    to_src.oldLayout = VK_IMAGE_LAYOUT_GENERAL;
+    to_src.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    to_src.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    to_src.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    to_src.image = g_renderer.debug_capture_image;
+    to_src.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    to_src.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    to_src.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &to_src);
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = width;
+    region.bufferImageHeight = height;
+    region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    region.imageOffset = { 0, 0, 0 };
+    region.imageExtent = { width, height, 1 };
+    vkCmdCopyImageToBuffer(cmd,
+        g_renderer.debug_capture_image,
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        g_renderer.debug_readback_buffer,
+        1, &region);
+
+    VkImageMemoryBarrier to_general{};
+    to_general = to_src;
+    to_general.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    to_general.newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    to_general.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    to_general.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &to_general);
+
+    vkEndCommandBuffer(cmd);
+
+    VkFence once = VK_NULL_HANDLE;
+    VkFenceCreateInfo fi{};
+    fi.sType = VK_STRUCTURE_TYPE_FENCE_CREATE_INFO;
+    if (!vk_ok(vkCreateFence(g_renderer.device, &fi, nullptr, &once),
+              "vkCreateFence(debug_capture)")) {
+        vkFreeCommandBuffers(g_renderer.device, g_renderer.command_pool,
+                             1, &cmd);
+        return std::nullopt;
+    }
+
+    VkSubmitInfo si{};
+    si.sType = VK_STRUCTURE_TYPE_SUBMIT_INFO;
+    si.commandBufferCount = 1;
+    si.pCommandBuffers = &cmd;
+    vkQueueSubmit(g_renderer.queue, 1, &si, once);
+    vkWaitForFences(g_renderer.device, 1, &once, VK_TRUE, UINT64_MAX);
+    vkDestroyFence(g_renderer.device, once, nullptr);
+    vkFreeCommandBuffers(g_renderer.device, g_renderer.command_pool,
+                         1, &cmd);
+
+    DebugFrameCapture cap{};
+    cap.width = width;
+    cap.height = height;
+    cap.rgba.resize(static_cast<std::size_t>(total));
+    std::memcpy(cap.rgba.data(), g_renderer.debug_readback_mapped,
+                static_cast<std::size_t>(total));
+    return cap;
+}
+
+inline DebugArtifactBundleResult android_write_artifact_bundle(
+        char const* directory, char const* reason) {
+    auto snapshot = android_snapshot_json();
+    auto runtime = ::json::emit(
+        android_platform_runtime_details_json_with_reason(
+            reason ? std::string_view{reason} : std::string_view{}));
+    auto frame = android_capture_frame_rgba();
+    return ::phenotype::diag::detail::write_debug_artifact_bundle(
+        directory ? std::string_view{directory} : std::string_view{},
+        "android",
+        snapshot,
+        runtime,
+        frame ? &*frame : nullptr);
+}
+
+inline void install_android_debug_providers() {
+    ::phenotype::diag::detail::set_platform_capabilities_provider(
+        android_debug_capabilities);
+    ::phenotype::diag::detail::set_platform_runtime_details_provider(
+        android_platform_runtime_details_json);
+}
+
 // ---- Stage 6 demo app ------------------------------------------------
 //
 // Bakes a minimal counter app (State + Msg + view + update) into the
@@ -3386,7 +3587,7 @@ inline platform_api build_android_platform() {
     auto api = make_stub_platform(
         "android",
         "[phenotype-native] Android Vulkan backend "
-        "(stage 6: color + text + image + input)");
+        "(stage 7: color + text + image + input + debug)");
     api.renderer = {
         renderer_init,
         renderer_flush,
@@ -3409,6 +3610,12 @@ inline platform_api build_android_platform() {
         android_input_dismiss_transient,
         android_input_scroll_delta_y,
     };
+    api.debug = {
+        android_debug_capabilities,
+        android_snapshot_json,
+        android_capture_frame_rgba,
+        android_write_artifact_bundle,
+    };
     api.open_url = android_open_url;
     return api;
 }
@@ -3418,6 +3625,7 @@ inline platform_api build_android_platform() {
 export namespace phenotype::native {
 
 inline platform_api const& android_platform() {
+    detail::install_android_debug_providers();
     static platform_api api = detail::build_android_platform();
     return api;
 }
