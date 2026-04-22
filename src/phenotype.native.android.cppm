@@ -1,8 +1,9 @@
 // Android (Vulkan) platform backend for phenotype. Stage 2 cleared the
-// swapchain to the active theme background; Stage 3 renders the color
+// swapchain to the active theme background; Stage 3 rendered the color
 // primitives (Clear / FillRect / StrokeRect / RoundRect / DrawLine)
-// via a single instanced graphics pipeline that mirrors the macOS /
-// Windows color_pipeline design byte-for-byte.
+// via an instanced graphics pipeline. Stage 4 adds the text pipeline:
+// measure glyph runs + rasterize them to an R8 atlas via JNI-backed
+// android.graphics.Paint / Canvas / Bitmap.
 //
 // Vulkan state lives in `detail::g_renderer`; helpers in the detail
 // namespace keep the module interface unit short so the Clang module
@@ -18,12 +19,15 @@ module;
 #include <vulkan/vulkan.h>
 #include <android/native_window.h>
 #include <android/log.h>
+#include <android/bitmap.h>
+#include <jni.h>
 #endif
 
 export module phenotype.native.android;
 
 #if defined(__ANDROID__)
 import std;
+import cppx.unicode;
 import phenotype;
 import phenotype.native.platform;
 import phenotype.native.shell;
@@ -49,6 +53,17 @@ struct ColorInstanceGPU {
 static_assert(sizeof(ColorInstanceGPU) == 48,
               "ColorInstance stride must match the GLSL SSBO layout");
 
+// TextInstance layout mirrored byte-for-byte with macOS
+// phenotype.native.macos.cppm's TextInstanceGPU (stride 48). The GLSL
+// `struct TextInstance` in text.vert reads the same layout.
+struct TextInstanceGPU {
+    float rect[4];
+    float uv_rect[4];
+    float color[4];
+};
+static_assert(sizeof(TextInstanceGPU) == 48,
+              "TextInstance stride must match the GLSL SSBO layout");
+
 // Uniforms block: std140-laid-out vec2 viewport + vec2 pad (= 16B).
 struct ColorUniforms {
     float viewport[2];
@@ -63,6 +78,8 @@ inline constexpr std::size_t INITIAL_INSTANCE_CAPACITY = 256;
 // uses the active phenotype theme background instead.
 struct FrameScratch {
     std::vector<ColorInstanceGPU> color_instances;
+    std::vector<::phenotype::native::TextEntry> text_entries;
+    std::vector<TextInstanceGPU> text_instances;
     float clear_color[4]{0, 0, 0, 0};
     bool has_clear = false;
 };
@@ -84,6 +101,507 @@ struct DemoCmdBuffer {
     void ensure(unsigned int /*needed*/) { /* fixed capacity */ }
     void flush() { /* no-op; decoder reads (buf, used) directly */ }
 };
+
+// ---- JNI text bridge --------------------------------------------------
+//
+// Stage 4 rasterizes glyph runs via android.graphics.Paint / Canvas /
+// Bitmap. All JNI references are cached on text_init() and released on
+// text_shutdown(). The GameActivity driver must call
+// `phenotype_android_bind_jvm(app->activity->vm)` once before
+// text_init runs — typically at the top of android_main.
+
+struct jni_refs {
+    JavaVM* vm = nullptr;
+
+    // Classes (global refs).
+    jclass paint_class         = nullptr;
+    jclass typeface_class      = nullptr;
+    jclass bitmap_class        = nullptr;
+    jclass canvas_class        = nullptr;
+    jclass bitmap_config_class = nullptr;
+
+    // Method IDs (no cleanup needed — tied to class lifetime).
+    jmethodID paint_ctor          = nullptr;
+    jmethodID paint_set_textsize  = nullptr;
+    jmethodID paint_set_typeface  = nullptr;
+    jmethodID paint_set_color     = nullptr;
+    jmethodID paint_set_antialias = nullptr;
+    jmethodID paint_measure_text  = nullptr;
+    jmethodID paint_ascent        = nullptr;
+    jmethodID paint_descent       = nullptr;
+
+    jmethodID bitmap_create      = nullptr;
+    jmethodID bitmap_erase_color = nullptr;
+
+    jmethodID canvas_ctor      = nullptr;
+    jmethodID canvas_draw_text = nullptr;
+
+    // Global refs to static final instances / enum values.
+    jobject typeface_default   = nullptr;
+    jobject typeface_monospace = nullptr;
+    jobject config_argb8888    = nullptr;
+
+    // Reusable Paint instances for the sans / mono families. Text color
+    // + size get reset per call; typeface + antialias are bound once.
+    jobject paint_sans = nullptr;
+    jobject paint_mono = nullptr;
+
+    bool initialised = false;
+};
+
+inline jni_refs g_jni{};
+
+// Scoped JNIEnv helper. On a thread that's already attached (the
+// GameActivity render thread is) `attached` stays false and Detach is
+// a no-op; on any other thread we attach for the duration.
+struct ScopedEnv {
+    JNIEnv* env = nullptr;
+    bool attached = false;
+
+    explicit ScopedEnv(JavaVM* vm) {
+        if (!vm) return;
+        auto status = vm->GetEnv(reinterpret_cast<void**>(&env),
+                                 JNI_VERSION_1_6);
+        if (status == JNI_EDETACHED) {
+            if (vm->AttachCurrentThread(&env, nullptr) == JNI_OK)
+                attached = true;
+            else
+                env = nullptr;
+        } else if (status != JNI_OK) {
+            env = nullptr;
+        }
+    }
+
+    ~ScopedEnv() {
+        if (attached && g_jni.vm)
+            g_jni.vm->DetachCurrentThread();
+    }
+
+    ScopedEnv(ScopedEnv const&) = delete;
+    ScopedEnv& operator=(ScopedEnv const&) = delete;
+
+    explicit operator bool() const { return env != nullptr; }
+};
+
+inline bool check_and_clear_exception(JNIEnv* env) {
+    if (env && env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        return true;
+    }
+    return false;
+}
+
+// Builds a java/lang/String from a UTF-8 byte range. Routes through
+// cppx::unicode::utf8_to_utf16 so Modified-UTF-8 null-byte gotchas
+// never touch JNI. On decode failure returns an empty string.
+inline jstring make_jstring_utf8(JNIEnv* env, char const* text,
+                                 unsigned int len) {
+    if (!env) return nullptr;
+    if (len == 0 || text == nullptr) return env->NewString(nullptr, 0);
+    auto u16 = ::cppx::unicode::utf8_to_utf16(
+        std::string_view{text, static_cast<std::size_t>(len)});
+    if (!u16) return env->NewString(nullptr, 0);
+    return env->NewString(
+        reinterpret_cast<jchar const*>(u16->data()),
+        static_cast<jsize>(u16->size()));
+}
+
+// Packs phenotype::Color (0..255 RGBA) into the 0xAARRGGBB int
+// android.graphics.Color uses.
+inline jint pack_android_color(float r, float g, float b, float a) {
+    auto clamp = [](float v) -> unsigned {
+        if (v < 0.0f) v = 0.0f;
+        if (v > 1.0f) v = 1.0f;
+        return static_cast<unsigned>(v * 255.0f + 0.5f);
+    };
+    return static_cast<jint>(
+        (clamp(a) << 24) | (clamp(r) << 16) | (clamp(g) << 8) | clamp(b));
+}
+
+inline void text_shutdown(); // forward decl
+
+inline bool init_jni_refs(JNIEnv* env) {
+    auto find_global = [&](char const* name) -> jclass {
+        jclass local = env->FindClass(name);
+        if (!local) {
+            check_and_clear_exception(env);
+            return nullptr;
+        }
+        auto g = reinterpret_cast<jclass>(env->NewGlobalRef(local));
+        env->DeleteLocalRef(local);
+        return g;
+    };
+
+    g_jni.paint_class         = find_global("android/graphics/Paint");
+    g_jni.typeface_class      = find_global("android/graphics/Typeface");
+    g_jni.bitmap_class        = find_global("android/graphics/Bitmap");
+    g_jni.canvas_class        = find_global("android/graphics/Canvas");
+    g_jni.bitmap_config_class = find_global("android/graphics/Bitmap$Config");
+    if (!g_jni.paint_class || !g_jni.typeface_class || !g_jni.bitmap_class
+        || !g_jni.canvas_class || !g_jni.bitmap_config_class) {
+        return false;
+    }
+
+    g_jni.paint_ctor = env->GetMethodID(g_jni.paint_class, "<init>", "()V");
+    g_jni.paint_set_textsize = env->GetMethodID(
+        g_jni.paint_class, "setTextSize", "(F)V");
+    g_jni.paint_set_typeface = env->GetMethodID(
+        g_jni.paint_class, "setTypeface",
+        "(Landroid/graphics/Typeface;)Landroid/graphics/Typeface;");
+    g_jni.paint_set_color = env->GetMethodID(
+        g_jni.paint_class, "setColor", "(I)V");
+    g_jni.paint_set_antialias = env->GetMethodID(
+        g_jni.paint_class, "setAntiAlias", "(Z)V");
+    g_jni.paint_measure_text = env->GetMethodID(
+        g_jni.paint_class, "measureText", "(Ljava/lang/String;)F");
+    g_jni.paint_ascent = env->GetMethodID(
+        g_jni.paint_class, "ascent", "()F");
+    g_jni.paint_descent = env->GetMethodID(
+        g_jni.paint_class, "descent", "()F");
+
+    g_jni.bitmap_create = env->GetStaticMethodID(
+        g_jni.bitmap_class, "createBitmap",
+        "(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;");
+    g_jni.bitmap_erase_color = env->GetMethodID(
+        g_jni.bitmap_class, "eraseColor", "(I)V");
+
+    g_jni.canvas_ctor = env->GetMethodID(
+        g_jni.canvas_class, "<init>", "(Landroid/graphics/Bitmap;)V");
+    g_jni.canvas_draw_text = env->GetMethodID(
+        g_jni.canvas_class, "drawText",
+        "(Ljava/lang/String;FFLandroid/graphics/Paint;)V");
+
+    if (check_and_clear_exception(env)) return false;
+    if (!g_jni.paint_ctor || !g_jni.paint_set_textsize
+        || !g_jni.paint_set_typeface || !g_jni.paint_set_color
+        || !g_jni.paint_set_antialias || !g_jni.paint_measure_text
+        || !g_jni.paint_ascent || !g_jni.paint_descent
+        || !g_jni.bitmap_create || !g_jni.bitmap_erase_color
+        || !g_jni.canvas_ctor || !g_jni.canvas_draw_text)
+        return false;
+
+    // Cache Typeface.DEFAULT / Typeface.MONOSPACE as global refs.
+    auto load_typeface = [&](char const* name) -> jobject {
+        jfieldID id = env->GetStaticFieldID(
+            g_jni.typeface_class, name, "Landroid/graphics/Typeface;");
+        if (!id) { check_and_clear_exception(env); return nullptr; }
+        jobject local = env->GetStaticObjectField(g_jni.typeface_class, id);
+        if (!local) { check_and_clear_exception(env); return nullptr; }
+        jobject g = env->NewGlobalRef(local);
+        env->DeleteLocalRef(local);
+        return g;
+    };
+    g_jni.typeface_default   = load_typeface("DEFAULT");
+    g_jni.typeface_monospace = load_typeface("MONOSPACE");
+    if (!g_jni.typeface_default || !g_jni.typeface_monospace) return false;
+
+    // Bitmap.Config.ARGB_8888 — static final enum instance.
+    {
+        jfieldID id = env->GetStaticFieldID(
+            g_jni.bitmap_config_class, "ARGB_8888",
+            "Landroid/graphics/Bitmap$Config;");
+        if (!id) { check_and_clear_exception(env); return false; }
+        jobject local = env->GetStaticObjectField(
+            g_jni.bitmap_config_class, id);
+        if (!local) { check_and_clear_exception(env); return false; }
+        g_jni.config_argb8888 = env->NewGlobalRef(local);
+        env->DeleteLocalRef(local);
+    }
+
+    // Build the two cached Paint instances (sans / mono). Antialias
+    // stays on for the lifetime; text color + size are set per call.
+    auto build_paint = [&](jobject typeface) -> jobject {
+        jobject local = env->NewObject(g_jni.paint_class, g_jni.paint_ctor);
+        if (!local) { check_and_clear_exception(env); return nullptr; }
+        env->CallVoidMethod(local, g_jni.paint_set_antialias, JNI_TRUE);
+        env->CallObjectMethod(local, g_jni.paint_set_typeface, typeface);
+        check_and_clear_exception(env);
+        jobject g = env->NewGlobalRef(local);
+        env->DeleteLocalRef(local);
+        return g;
+    };
+    g_jni.paint_sans = build_paint(g_jni.typeface_default);
+    g_jni.paint_mono = build_paint(g_jni.typeface_monospace);
+    if (!g_jni.paint_sans || !g_jni.paint_mono) return false;
+
+    return true;
+}
+
+inline void text_init() {
+    if (g_jni.initialised) return;
+    if (!g_jni.vm) {
+        __android_log_print(
+            ANDROID_LOG_WARN, ANDROID_LOG_TAG,
+            "text_init skipped — phenotype_android_bind_jvm not called yet");
+        return;
+    }
+    ScopedEnv e(g_jni.vm);
+    if (!e) {
+        __android_log_print(ANDROID_LOG_ERROR, ANDROID_LOG_TAG,
+                            "text_init: could not attach JNIEnv");
+        return;
+    }
+    if (init_jni_refs(e.env)) {
+        g_jni.initialised = true;
+    } else {
+        __android_log_print(ANDROID_LOG_ERROR, ANDROID_LOG_TAG,
+                            "text_init: JNI ref setup failed");
+        text_shutdown();
+    }
+}
+
+inline void text_shutdown() {
+    if (!g_jni.vm) { g_jni.initialised = false; return; }
+    ScopedEnv e(g_jni.vm);
+    if (!e) { g_jni.initialised = false; return; }
+    auto* env = e.env;
+    auto drop = [&](jobject& ref) {
+        if (ref) { env->DeleteGlobalRef(ref); ref = nullptr; }
+    };
+    drop(reinterpret_cast<jobject&>(g_jni.paint_class));
+    drop(reinterpret_cast<jobject&>(g_jni.typeface_class));
+    drop(reinterpret_cast<jobject&>(g_jni.bitmap_class));
+    drop(reinterpret_cast<jobject&>(g_jni.canvas_class));
+    drop(reinterpret_cast<jobject&>(g_jni.bitmap_config_class));
+    drop(g_jni.typeface_default);
+    drop(g_jni.typeface_monospace);
+    drop(g_jni.config_argb8888);
+    drop(g_jni.paint_sans);
+    drop(g_jni.paint_mono);
+    // Method IDs don't need cleanup — they die with the class ref.
+    g_jni.paint_ctor = nullptr;
+    g_jni.paint_set_textsize = nullptr;
+    g_jni.paint_set_typeface = nullptr;
+    g_jni.paint_set_color = nullptr;
+    g_jni.paint_set_antialias = nullptr;
+    g_jni.paint_measure_text = nullptr;
+    g_jni.paint_ascent = nullptr;
+    g_jni.paint_descent = nullptr;
+    g_jni.bitmap_create = nullptr;
+    g_jni.bitmap_erase_color = nullptr;
+    g_jni.canvas_ctor = nullptr;
+    g_jni.canvas_draw_text = nullptr;
+    g_jni.initialised = false;
+}
+
+inline float text_measure(float font_size, bool mono,
+                          char const* text_ptr, unsigned int len) {
+    if (!g_jni.initialised || len == 0 || text_ptr == nullptr) return 0.0f;
+    ScopedEnv e(g_jni.vm);
+    if (!e) return 0.0f;
+    auto* env = e.env;
+    jobject paint = mono ? g_jni.paint_mono : g_jni.paint_sans;
+    env->CallVoidMethod(paint, g_jni.paint_set_textsize,
+                        static_cast<jfloat>(font_size));
+    if (check_and_clear_exception(env)) return 0.0f;
+    jstring s = make_jstring_utf8(env, text_ptr, len);
+    if (!s) return 0.0f;
+    jfloat w = env->CallFloatMethod(paint, g_jni.paint_measure_text, s);
+    env->DeleteLocalRef(s);
+    if (check_and_clear_exception(env)) return 0.0f;
+    return static_cast<float>(w);
+}
+
+// ---- Text atlas builder ----------------------------------------------
+//
+// build_atlas strip-packs one slot per TextEntry into an ARGB_8888
+// Bitmap, calls Canvas.drawText at the slot baseline, and reads pixels
+// back via AndroidBitmap_lockPixels so we extract the alpha channel
+// into the R8 atlas the Vulkan text shader expects.
+
+inline constexpr int TEXT_ATLAS_MAX_WIDTH  = 2048;
+inline constexpr int TEXT_ATLAS_MAX_HEIGHT = 4096;
+
+// One entry's slot in the atlas prior to drawing.
+struct TextSlot {
+    int slot_x = 0;
+    int slot_y = 0;
+    int slot_w = 0;
+    int slot_h = 0;
+    float ascent  = 0.0f; // Paint.ascent(), negative
+    float descent = 0.0f; // Paint.descent(), positive
+    float pixel_width = 0.0f; // Paint.measureText() * scale, rounded up
+    bool skipped = false; // true if the slot didn't fit in the atlas
+};
+
+inline int iceil(float v) { return static_cast<int>(std::ceil(v)); }
+
+inline ::phenotype::native::TextAtlas text_build_atlas(
+        std::vector<::phenotype::native::TextEntry> const& entries,
+        float backing_scale) {
+    using ::phenotype::native::TextAtlas;
+    using ::phenotype::native::TextQuad;
+    if (!g_jni.initialised || entries.empty()) return {};
+
+    ScopedEnv e(g_jni.vm);
+    if (!e) return {};
+    auto* env = e.env;
+
+    float scale = backing_scale > 0.0f ? backing_scale : 1.0f;
+
+    // ---- pass 1: measure + layout ----
+    std::vector<TextSlot> slots(entries.size());
+    int cursor_x = 0;
+    int cursor_y = 0;
+    int row_h    = 0;
+    int atlas_w  = 0;
+    int atlas_h  = 0;
+
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        auto const& te = entries[i];
+        TextSlot& slot = slots[i];
+        jobject paint = te.mono ? g_jni.paint_mono : g_jni.paint_sans;
+        env->CallVoidMethod(paint, g_jni.paint_set_textsize,
+                            static_cast<jfloat>(te.font_size * scale));
+        if (check_and_clear_exception(env)) { slot.skipped = true; continue; }
+
+        slot.ascent  = env->CallFloatMethod(paint, g_jni.paint_ascent);
+        slot.descent = env->CallFloatMethod(paint, g_jni.paint_descent);
+        if (check_and_clear_exception(env)) { slot.skipped = true; continue; }
+
+        jstring s = make_jstring_utf8(env, te.text.data(),
+                                      static_cast<unsigned>(te.text.size()));
+        jfloat measured = 0.0f;
+        if (s) {
+            measured = env->CallFloatMethod(
+                paint, g_jni.paint_measure_text, s);
+            env->DeleteLocalRef(s);
+            if (check_and_clear_exception(env)) measured = 0.0f;
+        }
+        slot.pixel_width = measured;
+
+        int w = iceil(measured) + 2; // 1px padding on each side
+        int h = iceil(slot.descent - slot.ascent) + 2;
+        if (te.line_height > 0.0f) {
+            int lh = iceil(te.line_height * scale);
+            if (lh > h) h = lh;
+        }
+        slot.slot_w = w;
+        slot.slot_h = h;
+
+        if (w > TEXT_ATLAS_MAX_WIDTH) { slot.skipped = true; continue; }
+        if (cursor_x + w > TEXT_ATLAS_MAX_WIDTH) {
+            cursor_x = 0;
+            cursor_y += row_h;
+            row_h = 0;
+        }
+        if (cursor_y + h > TEXT_ATLAS_MAX_HEIGHT) {
+            __android_log_print(
+                ANDROID_LOG_WARN, ANDROID_LOG_TAG,
+                "text atlas exhausted at entry %zu (h=%d); dropping run", i, h);
+            slot.skipped = true;
+            continue;
+        }
+        slot.slot_x = cursor_x;
+        slot.slot_y = cursor_y;
+        cursor_x += w;
+        if (h > row_h) row_h = h;
+        if (cursor_x > atlas_w) atlas_w = cursor_x;
+        int bottom = cursor_y + row_h;
+        if (bottom > atlas_h) atlas_h = bottom;
+    }
+
+    if (atlas_w == 0 || atlas_h == 0) return {};
+
+    // Round width up to a multiple of 4 so the Vulkan transfer doesn't
+    // hit alignment issues with a 1-byte-per-texel R8 image.
+    atlas_w = (atlas_w + 3) & ~3;
+
+    // ---- pass 2: rasterize ----
+    jobject bitmap = env->CallStaticObjectMethod(
+        g_jni.bitmap_class, g_jni.bitmap_create,
+        atlas_w, atlas_h, g_jni.config_argb8888);
+    if (check_and_clear_exception(env) || !bitmap) return {};
+    env->CallVoidMethod(bitmap, g_jni.bitmap_erase_color, static_cast<jint>(0));
+
+    jobject canvas = env->NewObject(g_jni.canvas_class,
+                                    g_jni.canvas_ctor, bitmap);
+    if (check_and_clear_exception(env) || !canvas) {
+        env->DeleteLocalRef(bitmap);
+        return {};
+    }
+
+    std::vector<TextQuad> quads(entries.size());
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        auto const& te = entries[i];
+        auto& slot = slots[i];
+        if (slot.skipped) continue;
+
+        jobject paint = te.mono ? g_jni.paint_mono : g_jni.paint_sans;
+        env->CallVoidMethod(paint, g_jni.paint_set_textsize,
+                            static_cast<jfloat>(te.font_size * scale));
+        env->CallVoidMethod(paint, g_jni.paint_set_color,
+                            pack_android_color(te.r, te.g, te.b, te.a));
+        if (check_and_clear_exception(env)) continue;
+
+        jstring s = make_jstring_utf8(env, te.text.data(),
+                                      static_cast<unsigned>(te.text.size()));
+        if (!s) continue;
+
+        float baseline_y = static_cast<float>(slot.slot_y)
+                         + 1.0f                  // top padding
+                         + (-slot.ascent);       // ascent is negative
+        env->CallVoidMethod(canvas, g_jni.canvas_draw_text, s,
+                            static_cast<jfloat>(slot.slot_x + 1),
+                            baseline_y, paint);
+        env->DeleteLocalRef(s);
+        check_and_clear_exception(env);
+
+        // Emit the quad using entry.x / entry.y as the anchor; the
+        // desktop convention places (x,y) at the pixel where the atlas
+        // slot's top-left should land after downscaling.
+        TextQuad& q = quads[i];
+        q.x = te.x;
+        q.y = te.y;
+        q.w = static_cast<float>(slot.slot_w) / scale;
+        q.h = static_cast<float>(slot.slot_h) / scale;
+        q.u  = static_cast<float>(slot.slot_x) / static_cast<float>(atlas_w);
+        q.v  = static_cast<float>(slot.slot_y) / static_cast<float>(atlas_h);
+        q.uw = static_cast<float>(slot.slot_w) / static_cast<float>(atlas_w);
+        q.vh = static_cast<float>(slot.slot_h) / static_cast<float>(atlas_h);
+    }
+
+    // ---- pass 3: read back pixel alpha into R8 ----
+    AndroidBitmapInfo info{};
+    if (AndroidBitmap_getInfo(env, bitmap, &info) != ANDROID_BITMAP_RESULT_SUCCESS
+        || info.format != ANDROID_BITMAP_FORMAT_RGBA_8888) {
+        env->DeleteLocalRef(canvas);
+        env->DeleteLocalRef(bitmap);
+        return {};
+    }
+    void* pixel_addr = nullptr;
+    if (AndroidBitmap_lockPixels(env, bitmap, &pixel_addr)
+            != ANDROID_BITMAP_RESULT_SUCCESS
+        || !pixel_addr) {
+        env->DeleteLocalRef(canvas);
+        env->DeleteLocalRef(bitmap);
+        return {};
+    }
+
+    TextAtlas out;
+    out.width = atlas_w;
+    out.height = atlas_h;
+    out.pixels.resize(static_cast<std::size_t>(atlas_w)
+                    * static_cast<std::size_t>(atlas_h));
+    auto const* src = static_cast<std::uint8_t const*>(pixel_addr);
+    std::size_t stride = info.stride; // bytes per row, ARGB_8888 = 4 * w + padding
+    for (int y = 0; y < atlas_h; ++y) {
+        auto const* row = src + y * stride;
+        auto* dst = out.pixels.data() + static_cast<std::size_t>(y) * atlas_w;
+        for (int x = 0; x < atlas_w; ++x) {
+            // ANDROID_BITMAP_FORMAT_RGBA_8888 memory layout is R,G,B,A
+            // regardless of host endianness (per NDK bitmap.h contract).
+            dst[x] = row[x * 4 + 3];
+        }
+    }
+    AndroidBitmap_unlockPixels(env, bitmap);
+
+    out.quads = std::move(quads);
+    env->DeleteLocalRef(canvas);
+    env->DeleteLocalRef(bitmap);
+    return out;
+}
 
 struct android_renderer {
     VkInstance instance;
@@ -127,6 +645,31 @@ struct android_renderer {
     VkDeviceMemory instance_memory;
     void* instance_mapped;
     std::size_t instance_capacity; // in ColorInstanceGPU count
+
+    // Stage 4 text pipeline. Atlas image + view grow on demand;
+    // everything else is allocated once per device.
+    VkDescriptorSetLayout text_descriptor_set_layout;
+    VkPipelineLayout text_pipeline_layout;
+    VkPipeline text_pipeline;
+    VkDescriptorPool text_descriptor_pool;
+    VkDescriptorSet text_descriptor_set;
+    VkSampler text_sampler;
+
+    VkImage text_atlas_image;
+    VkDeviceMemory text_atlas_memory;
+    VkImageView text_atlas_view;
+    std::uint32_t text_atlas_width;
+    std::uint32_t text_atlas_height;
+
+    VkBuffer text_instance_buffer;
+    VkDeviceMemory text_instance_memory;
+    void* text_instance_mapped;
+    std::size_t text_instance_capacity; // in TextInstanceGPU count
+
+    VkBuffer text_staging_buffer;
+    VkDeviceMemory text_staging_memory;
+    void* text_staging_mapped;
+    VkDeviceSize text_staging_capacity;
 
     ANativeWindow* window;
     bool initialized;
@@ -513,6 +1056,470 @@ inline bool create_color_resources() {
     return true;
 }
 
+// ---- Stage 4 text pipeline Vulkan helpers ----------------------------
+
+inline constexpr std::size_t INITIAL_TEXT_INSTANCE_CAPACITY = 64;
+
+inline bool create_text_sampler() {
+    if (g_renderer.text_sampler != VK_NULL_HANDLE) return true;
+    VkSamplerCreateInfo ci{};
+    ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    ci.magFilter = VK_FILTER_LINEAR;
+    ci.minFilter = VK_FILTER_LINEAR;
+    ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    ci.unnormalizedCoordinates = VK_FALSE;
+    ci.minLod = 0.0f;
+    ci.maxLod = 0.0f;
+    ci.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+    return vk_ok(vkCreateSampler(g_renderer.device, &ci, nullptr,
+                                 &g_renderer.text_sampler),
+                "vkCreateSampler");
+}
+
+inline bool create_text_pipeline() {
+    if (g_renderer.text_pipeline != VK_NULL_HANDLE) return true;
+
+    VkDescriptorSetLayoutBinding bindings[3]{};
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[2].binding = 2;
+    bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[2].descriptorCount = 1;
+    bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo dslci{};
+    dslci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    dslci.bindingCount = 3;
+    dslci.pBindings = bindings;
+    if (!vk_ok(vkCreateDescriptorSetLayout(
+                  g_renderer.device, &dslci, nullptr,
+                  &g_renderer.text_descriptor_set_layout),
+              "vkCreateDescriptorSetLayout(text)"))
+        return false;
+
+    VkPipelineLayoutCreateInfo plci{};
+    plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    plci.setLayoutCount = 1;
+    plci.pSetLayouts = &g_renderer.text_descriptor_set_layout;
+    if (!vk_ok(vkCreatePipelineLayout(g_renderer.device, &plci, nullptr,
+                                      &g_renderer.text_pipeline_layout),
+              "vkCreatePipelineLayout(text)"))
+        return false;
+
+    auto vs = create_shader_module(shaders::SPIRV_TEXT_VS,
+                                   sizeof(shaders::SPIRV_TEXT_VS));
+    auto fs = create_shader_module(shaders::SPIRV_TEXT_FS,
+                                   sizeof(shaders::SPIRV_TEXT_FS));
+    if (vs == VK_NULL_HANDLE || fs == VK_NULL_HANDLE) return false;
+
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vs;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = fs;
+    stages[1].pName = "main";
+
+    VkPipelineVertexInputStateCreateInfo vi{};
+    vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+    VkPipelineInputAssemblyStateCreateInfo ia{};
+    ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkPipelineViewportStateCreateInfo vp{};
+    vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    vp.viewportCount = 1;
+    vp.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rs{};
+    rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rs.polygonMode = VK_POLYGON_MODE_FILL;
+    rs.cullMode = VK_CULL_MODE_NONE;
+    rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rs.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo ms{};
+    ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState cba{};
+    cba.blendEnable = VK_TRUE;
+    cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.colorBlendOp = VK_BLEND_OP_ADD;
+    cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.alphaBlendOp = VK_BLEND_OP_ADD;
+    cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                       | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo cb{};
+    cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    cb.attachmentCount = 1;
+    cb.pAttachments = &cba;
+
+    VkDynamicState dyn[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo ds{};
+    ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    ds.dynamicStateCount = 2;
+    ds.pDynamicStates = dyn;
+
+    VkGraphicsPipelineCreateInfo gci{};
+    gci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    gci.stageCount = 2;
+    gci.pStages = stages;
+    gci.pVertexInputState = &vi;
+    gci.pInputAssemblyState = &ia;
+    gci.pViewportState = &vp;
+    gci.pRasterizationState = &rs;
+    gci.pMultisampleState = &ms;
+    gci.pColorBlendState = &cb;
+    gci.pDynamicState = &ds;
+    gci.layout = g_renderer.text_pipeline_layout;
+    gci.renderPass = g_renderer.render_pass;
+    gci.subpass = 0;
+
+    bool ok = vk_ok(vkCreateGraphicsPipelines(
+                        g_renderer.device, VK_NULL_HANDLE, 1, &gci, nullptr,
+                        &g_renderer.text_pipeline),
+                   "vkCreateGraphicsPipelines(text)");
+
+    vkDestroyShaderModule(g_renderer.device, vs, nullptr);
+    vkDestroyShaderModule(g_renderer.device, fs, nullptr);
+    return ok;
+}
+
+inline bool create_text_descriptor_pool_and_set() {
+    if (g_renderer.text_descriptor_set != VK_NULL_HANDLE) return true;
+
+    VkDescriptorPoolSize sizes[3]{};
+    sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    sizes[0].descriptorCount = 1;
+    sizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    sizes[1].descriptorCount = 1;
+    sizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    sizes[2].descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo pci{};
+    pci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pci.maxSets = 1;
+    pci.poolSizeCount = 3;
+    pci.pPoolSizes = sizes;
+    if (!vk_ok(vkCreateDescriptorPool(g_renderer.device, &pci, nullptr,
+                                      &g_renderer.text_descriptor_pool),
+              "vkCreateDescriptorPool(text)"))
+        return false;
+
+    VkDescriptorSetAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    ai.descriptorPool = g_renderer.text_descriptor_pool;
+    ai.descriptorSetCount = 1;
+    ai.pSetLayouts = &g_renderer.text_descriptor_set_layout;
+    return vk_ok(vkAllocateDescriptorSets(g_renderer.device, &ai,
+                                          &g_renderer.text_descriptor_set),
+                "vkAllocateDescriptorSets(text)");
+}
+
+inline void destroy_text_atlas_image() {
+    if (g_renderer.text_atlas_view != VK_NULL_HANDLE) {
+        vkDestroyImageView(g_renderer.device, g_renderer.text_atlas_view,
+                           nullptr);
+        g_renderer.text_atlas_view = VK_NULL_HANDLE;
+    }
+    if (g_renderer.text_atlas_image != VK_NULL_HANDLE) {
+        vkDestroyImage(g_renderer.device, g_renderer.text_atlas_image,
+                       nullptr);
+        g_renderer.text_atlas_image = VK_NULL_HANDLE;
+    }
+    if (g_renderer.text_atlas_memory != VK_NULL_HANDLE) {
+        vkFreeMemory(g_renderer.device, g_renderer.text_atlas_memory,
+                     nullptr);
+        g_renderer.text_atlas_memory = VK_NULL_HANDLE;
+    }
+    g_renderer.text_atlas_width = 0;
+    g_renderer.text_atlas_height = 0;
+}
+
+inline bool create_or_resize_text_atlas_image(std::uint32_t w,
+                                              std::uint32_t h) {
+    if (w == 0 || h == 0) return true;
+    if (w == g_renderer.text_atlas_width
+        && h == g_renderer.text_atlas_height
+        && g_renderer.text_atlas_image != VK_NULL_HANDLE) {
+        return true;
+    }
+    destroy_text_atlas_image();
+
+    VkImageCreateInfo ici{};
+    ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    ici.imageType = VK_IMAGE_TYPE_2D;
+    ici.format = VK_FORMAT_R8_UNORM;
+    ici.extent = { w, h, 1 };
+    ici.mipLevels = 1;
+    ici.arrayLayers = 1;
+    ici.samples = VK_SAMPLE_COUNT_1_BIT;
+    ici.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ici.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    if (!vk_ok(vkCreateImage(g_renderer.device, &ici, nullptr,
+                             &g_renderer.text_atlas_image),
+              "vkCreateImage(text_atlas)"))
+        return false;
+
+    VkMemoryRequirements req{};
+    vkGetImageMemoryRequirements(g_renderer.device,
+                                 g_renderer.text_atlas_image, &req);
+    auto mt = find_memory_type(req.memoryTypeBits,
+                               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (!mt) return false;
+
+    VkMemoryAllocateInfo mai{};
+    mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    mai.allocationSize = req.size;
+    mai.memoryTypeIndex = *mt;
+    if (!vk_ok(vkAllocateMemory(g_renderer.device, &mai, nullptr,
+                                &g_renderer.text_atlas_memory),
+              "vkAllocateMemory(text_atlas)"))
+        return false;
+    if (!vk_ok(vkBindImageMemory(g_renderer.device,
+                                 g_renderer.text_atlas_image,
+                                 g_renderer.text_atlas_memory, 0),
+              "vkBindImageMemory(text_atlas)"))
+        return false;
+
+    VkImageViewCreateInfo vci{};
+    vci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    vci.image = g_renderer.text_atlas_image;
+    vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    vci.format = VK_FORMAT_R8_UNORM;
+    vci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    vci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    vci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    vci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    vci.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    if (!vk_ok(vkCreateImageView(g_renderer.device, &vci, nullptr,
+                                 &g_renderer.text_atlas_view),
+              "vkCreateImageView(text_atlas)"))
+        return false;
+
+    g_renderer.text_atlas_width = w;
+    g_renderer.text_atlas_height = h;
+    return true;
+}
+
+inline void write_text_descriptor_set() {
+    if (g_renderer.text_descriptor_set == VK_NULL_HANDLE) return;
+    if (g_renderer.uniform_buffer == VK_NULL_HANDLE
+        || g_renderer.text_instance_buffer == VK_NULL_HANDLE
+        || g_renderer.text_atlas_view == VK_NULL_HANDLE
+        || g_renderer.text_sampler == VK_NULL_HANDLE)
+        return;
+
+    VkDescriptorBufferInfo ubo{};
+    ubo.buffer = g_renderer.uniform_buffer;
+    ubo.offset = 0;
+    ubo.range = sizeof(ColorUniforms);
+
+    VkDescriptorBufferInfo ssbo{};
+    ssbo.buffer = g_renderer.text_instance_buffer;
+    ssbo.offset = 0;
+    ssbo.range = VK_WHOLE_SIZE;
+
+    VkDescriptorImageInfo img{};
+    img.sampler = g_renderer.text_sampler;
+    img.imageView = g_renderer.text_atlas_view;
+    img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkWriteDescriptorSet writes[3]{};
+    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[0].dstSet = g_renderer.text_descriptor_set;
+    writes[0].dstBinding = 0;
+    writes[0].descriptorCount = 1;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[0].pBufferInfo = &ubo;
+
+    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[1].dstSet = g_renderer.text_descriptor_set;
+    writes[1].dstBinding = 1;
+    writes[1].descriptorCount = 1;
+    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[1].pBufferInfo = &ssbo;
+
+    writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[2].dstSet = g_renderer.text_descriptor_set;
+    writes[2].dstBinding = 2;
+    writes[2].descriptorCount = 1;
+    writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[2].pImageInfo = &img;
+
+    vkUpdateDescriptorSets(g_renderer.device, 3, writes, 0, nullptr);
+}
+
+inline bool ensure_text_instance_capacity(std::size_t required) {
+    if (required <= g_renderer.text_instance_capacity) return true;
+    std::size_t cap = g_renderer.text_instance_capacity == 0
+                        ? INITIAL_TEXT_INSTANCE_CAPACITY
+                        : g_renderer.text_instance_capacity;
+    while (cap < required) cap *= 2;
+
+    destroy_host_buffer(g_renderer.text_instance_buffer,
+                        g_renderer.text_instance_memory,
+                        g_renderer.text_instance_mapped);
+    if (!create_host_buffer(cap * sizeof(TextInstanceGPU),
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                            g_renderer.text_instance_buffer,
+                            g_renderer.text_instance_memory,
+                            g_renderer.text_instance_mapped))
+        return false;
+    g_renderer.text_instance_capacity = cap;
+    write_text_descriptor_set();
+    return true;
+}
+
+inline bool ensure_text_staging_capacity(VkDeviceSize bytes) {
+    if (bytes <= g_renderer.text_staging_capacity
+        && g_renderer.text_staging_buffer != VK_NULL_HANDLE)
+        return true;
+    destroy_host_buffer(g_renderer.text_staging_buffer,
+                        g_renderer.text_staging_memory,
+                        g_renderer.text_staging_mapped);
+    VkDeviceSize cap = g_renderer.text_staging_capacity == 0
+                           ? 4096
+                           : g_renderer.text_staging_capacity;
+    while (cap < bytes) cap *= 2;
+    if (!create_host_buffer(cap, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                            g_renderer.text_staging_buffer,
+                            g_renderer.text_staging_memory,
+                            g_renderer.text_staging_mapped))
+        return false;
+    g_renderer.text_staging_capacity = cap;
+    return true;
+}
+
+inline bool create_text_resources() {
+    if (!create_text_sampler()) return false;
+    if (!create_text_pipeline()) return false;
+    if (g_renderer.text_instance_buffer == VK_NULL_HANDLE) {
+        if (!create_host_buffer(
+                INITIAL_TEXT_INSTANCE_CAPACITY * sizeof(TextInstanceGPU),
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                g_renderer.text_instance_buffer,
+                g_renderer.text_instance_memory,
+                g_renderer.text_instance_mapped))
+            return false;
+        g_renderer.text_instance_capacity = INITIAL_TEXT_INSTANCE_CAPACITY;
+    }
+    if (!create_text_descriptor_pool_and_set()) return false;
+    // Placeholder 1x1 atlas so the descriptor set is valid before the
+    // first real atlas upload. The sampler clamps to edge, so the
+    // single sample never ends up inside a glyph quad (quads bind real
+    // uv_rect values from build_atlas).
+    if (g_renderer.text_atlas_image == VK_NULL_HANDLE) {
+        if (!create_or_resize_text_atlas_image(1, 1)) return false;
+    }
+    write_text_descriptor_set();
+    return true;
+}
+
+inline void record_text_atlas_upload(VkCommandBuffer cmd,
+                                     unsigned char const* pixels,
+                                     std::uint32_t w, std::uint32_t h) {
+    VkImageMemoryBarrier to_transfer{};
+    to_transfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    to_transfer.oldLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    to_transfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    to_transfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    to_transfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    to_transfer.image = g_renderer.text_atlas_image;
+    to_transfer.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    to_transfer.srcAccessMask = 0;
+    to_transfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &to_transfer);
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = 0;
+    region.bufferImageHeight = 0;
+    region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    region.imageOffset = { 0, 0, 0 };
+    region.imageExtent = { w, h, 1 };
+    std::memcpy(g_renderer.text_staging_mapped, pixels,
+                static_cast<std::size_t>(w) * h);
+    vkCmdCopyBufferToImage(cmd, g_renderer.text_staging_buffer,
+                           g_renderer.text_atlas_image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                           1, &region);
+
+    VkImageMemoryBarrier to_shader{};
+    to_shader.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    to_shader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    to_shader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    to_shader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    to_shader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    to_shader.image = g_renderer.text_atlas_image;
+    to_shader.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    to_shader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    to_shader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &to_shader);
+}
+
+inline void destroy_text_pipeline_resources() {
+    if (g_renderer.text_descriptor_pool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(g_renderer.device,
+                                g_renderer.text_descriptor_pool, nullptr);
+        g_renderer.text_descriptor_pool = VK_NULL_HANDLE;
+        g_renderer.text_descriptor_set = VK_NULL_HANDLE;
+    }
+    destroy_host_buffer(g_renderer.text_staging_buffer,
+                        g_renderer.text_staging_memory,
+                        g_renderer.text_staging_mapped);
+    g_renderer.text_staging_capacity = 0;
+    destroy_host_buffer(g_renderer.text_instance_buffer,
+                        g_renderer.text_instance_memory,
+                        g_renderer.text_instance_mapped);
+    g_renderer.text_instance_capacity = 0;
+    destroy_text_atlas_image();
+    if (g_renderer.text_sampler != VK_NULL_HANDLE) {
+        vkDestroySampler(g_renderer.device, g_renderer.text_sampler, nullptr);
+        g_renderer.text_sampler = VK_NULL_HANDLE;
+    }
+    if (g_renderer.text_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(g_renderer.device, g_renderer.text_pipeline,
+                          nullptr);
+        g_renderer.text_pipeline = VK_NULL_HANDLE;
+    }
+    if (g_renderer.text_pipeline_layout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(g_renderer.device,
+                                g_renderer.text_pipeline_layout, nullptr);
+        g_renderer.text_pipeline_layout = VK_NULL_HANDLE;
+    }
+    if (g_renderer.text_descriptor_set_layout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(g_renderer.device,
+                                     g_renderer.text_descriptor_set_layout,
+                                     nullptr);
+        g_renderer.text_descriptor_set_layout = VK_NULL_HANDLE;
+    }
+}
+
 inline bool create_image_views_and_framebuffers() {
     g_renderer.swapchain_image_views.resize(g_renderer.swapchain_images.size());
     for (std::size_t i = 0; i < g_renderer.swapchain_images.size(); ++i) {
@@ -656,6 +1663,7 @@ inline bool create_swapchain() {
         return false;
 
     if (!create_color_resources()) return false;
+    if (!create_text_resources()) return false;
     if (!create_image_views_and_framebuffers()) return false;
     return true;
 }
@@ -847,28 +1855,53 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 inst.params[1] = 0.0f;
                 inst.params[2] = 3.0f; // matches macOS / Windows
                 out.color_instances.push_back(inst);
+            } else if constexpr (std::same_as<T, ::phenotype::DrawTextCmd>) {
+                ::phenotype::native::TextEntry entry{};
+                entry.x = c.x;
+                entry.y = c.y;
+                entry.font_size = c.font_size;
+                entry.mono = c.mono;
+                entry.r = c.color.r / 255.0f;
+                entry.g = c.color.g / 255.0f;
+                entry.b = c.color.b / 255.0f;
+                entry.a = c.color.a / 255.0f;
+                entry.text = c.text;
+                out.text_entries.push_back(std::move(entry));
             }
-            // DrawText / DrawImage / HitRegion are ignored in Stage 3.
+            // DrawImage / HitRegion are ignored before Stage 5.
         }, cmd);
     }
 }
 
-// Stage 3 demo composition: emits all five color commands through the
-// public phenotype::emit_* API so the decoder above is exercised
-// end-to-end. Stage 6 replaces this with a real View / Update loop
-// bound to the example driver's State.
-inline void build_stage3_demo(FrameScratch& out) {
+// Stage 4 demo composition: emits Stage 3's five color primitives plus
+// two DrawText labels (sans title above, mono caption below) through
+// the public phenotype::emit_* API so the decoder + atlas build paths
+// are exercised end-to-end. Stage 6 replaces this with a real View /
+// Update loop bound to the example driver's State.
+inline void build_stage4_demo(FrameScratch& out) {
     DemoCmdBuffer cmd;
     auto const& theme = ::phenotype::current_theme();
     ::phenotype::emit_clear(cmd, theme.background);
-    ::phenotype::emit_fill_rect(cmd, 40.0f, 160.0f, 420.0f, 220.0f,
+
+    constexpr char const* title = "phenotype · stage 4";
+    ::phenotype::emit_draw_text(cmd, 40.0f, 80.0f, 56.0f, /*mono=*/0u,
+        ::phenotype::Color{40, 40, 40, 255},
+        title, static_cast<unsigned>(std::strlen(title)));
+
+    ::phenotype::emit_fill_rect(cmd, 40.0f, 200.0f, 420.0f, 220.0f,
         ::phenotype::Color{220, 60, 80, 255});
-    ::phenotype::emit_stroke_rect(cmd, 500.0f, 160.0f, 540.0f, 220.0f, 8.0f,
+    ::phenotype::emit_stroke_rect(cmd, 500.0f, 200.0f, 540.0f, 220.0f, 8.0f,
         ::phenotype::Color{60, 140, 220, 255});
-    ::phenotype::emit_round_rect(cmd, 40.0f, 440.0f, 1000.0f, 300.0f, 56.0f,
+    ::phenotype::emit_round_rect(cmd, 40.0f, 480.0f, 1000.0f, 300.0f, 56.0f,
         ::phenotype::Color{90, 170, 90, 255});
-    ::phenotype::emit_draw_line(cmd, 40.0f, 820.0f, 1040.0f, 820.0f, 6.0f,
+    ::phenotype::emit_draw_line(cmd, 40.0f, 860.0f, 1040.0f, 860.0f, 6.0f,
         ::phenotype::Color{40, 40, 40, 255});
+
+    constexpr char const* caption = "vulkan + jni paint";
+    ::phenotype::emit_draw_text(cmd, 40.0f, 960.0f, 40.0f, /*mono=*/1u,
+        ::phenotype::Color{120, 120, 120, 255},
+        caption, static_cast<unsigned>(std::strlen(caption)));
+
     decode_android_color_commands(cmd.buf(), cmd.buf_len(), out);
 }
 
@@ -879,7 +1912,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (buf != nullptr && len > 0) {
         decode_android_color_commands(buf, len, scratch);
     } else {
-        build_stage3_demo(scratch);
+        build_stage4_demo(scratch);
     }
     if (!scratch.has_clear) {
         auto const& theme = ::phenotype::current_theme();
@@ -887,6 +1920,32 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
 
     vkWaitForFences(g_renderer.device, 1, &g_renderer.in_flight, VK_TRUE, UINT64_MAX);
+
+    // Build the text atlas on CPU (JNI) before acquiring the swapchain
+    // image so the Paint calls can take as long as they need without
+    // stalling image presentation. The previous frame's fence has been
+    // waited on, so the persistently-mapped text buffers are safe to
+    // touch once we start staging data below.
+    ::phenotype::native::TextAtlas atlas{};
+    if (!scratch.text_entries.empty()) {
+        atlas = text_build_atlas(scratch.text_entries, 1.0f);
+        scratch.text_instances.reserve(scratch.text_entries.size());
+        for (std::size_t i = 0;
+             i < scratch.text_entries.size() && i < atlas.quads.size();
+             ++i) {
+            auto const& entry = scratch.text_entries[i];
+            auto const& q = atlas.quads[i];
+            if (q.w <= 0.0f || q.h <= 0.0f) continue; // slot skipped
+            TextInstanceGPU inst{};
+            inst.rect[0] = q.x; inst.rect[1] = q.y;
+            inst.rect[2] = q.w; inst.rect[3] = q.h;
+            inst.uv_rect[0] = q.u;  inst.uv_rect[1] = q.v;
+            inst.uv_rect[2] = q.uw; inst.uv_rect[3] = q.vh;
+            inst.color[0] = entry.r; inst.color[1] = entry.g;
+            inst.color[2] = entry.b; inst.color[3] = entry.a;
+            scratch.text_instances.push_back(inst);
+        }
+    }
 
     std::uint32_t idx = 0;
     auto r = vkAcquireNextImageKHR(
@@ -910,6 +1969,29 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                     scratch.color_instances.data(),
                     scratch.color_instances.size() * sizeof(ColorInstanceGPU));
     }
+
+    bool have_text = !scratch.text_instances.empty()
+                   && !atlas.pixels.empty()
+                   && atlas.width > 0 && atlas.height > 0;
+    if (have_text) {
+        if (!ensure_text_instance_capacity(scratch.text_instances.size())
+            || !ensure_text_staging_capacity(
+                   static_cast<VkDeviceSize>(atlas.pixels.size()))
+            || !create_or_resize_text_atlas_image(
+                   static_cast<std::uint32_t>(atlas.width),
+                   static_cast<std::uint32_t>(atlas.height))) {
+            have_text = false;
+        } else {
+            std::memcpy(g_renderer.text_instance_mapped,
+                        scratch.text_instances.data(),
+                        scratch.text_instances.size() * sizeof(TextInstanceGPU));
+            // Atlas view may have been recreated; refresh all three
+            // descriptor bindings so the fragment shader sees the
+            // current VkImage + sampler pair.
+            write_text_descriptor_set();
+        }
+    }
+
     ColorUniforms uniforms{};
     uniforms.viewport[0] = static_cast<float>(g_renderer.swapchain_extent.width);
     uniforms.viewport[1] = static_cast<float>(g_renderer.swapchain_extent.height);
@@ -921,6 +2003,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     bi.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO;
     bi.flags = VK_COMMAND_BUFFER_USAGE_ONE_TIME_SUBMIT_BIT;
     vkBeginCommandBuffer(g_renderer.command_buffer, &bi);
+
+    // Atlas staging → VkImage copy must happen outside the render pass;
+    // layout transitions aren't legal while a render pass is active.
+    if (have_text) {
+        record_text_atlas_upload(g_renderer.command_buffer,
+                                 atlas.pixels.data(),
+                                 static_cast<std::uint32_t>(atlas.width),
+                                 static_cast<std::uint32_t>(atlas.height));
+    }
 
     VkClearValue clear{};
     std::memcpy(clear.color.float32, scratch.clear_color, sizeof scratch.clear_color);
@@ -959,6 +2050,20 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                                 0, nullptr);
         vkCmdDraw(g_renderer.command_buffer, 6,
                   static_cast<std::uint32_t>(scratch.color_instances.size()),
+                  0, 0);
+    }
+
+    if (have_text) {
+        vkCmdBindPipeline(g_renderer.command_buffer,
+                          VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          g_renderer.text_pipeline);
+        vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                g_renderer.text_pipeline_layout,
+                                0, 1, &g_renderer.text_descriptor_set,
+                                0, nullptr);
+        vkCmdDraw(g_renderer.command_buffer, 6,
+                  static_cast<std::uint32_t>(scratch.text_instances.size()),
                   0, 0);
     }
 
@@ -1029,6 +2134,7 @@ inline void destroy_color_resources() {
 inline void renderer_shutdown() {
     if (g_renderer.device != VK_NULL_HANDLE) vkDeviceWaitIdle(g_renderer.device);
     destroy_swapchain_resources();
+    destroy_text_pipeline_resources();
     destroy_color_resources();
     if (g_renderer.in_flight != VK_NULL_HANDLE) {
         vkDestroyFence(g_renderer.device, g_renderer.in_flight, nullptr);
@@ -1074,12 +2180,18 @@ inline void android_open_url(char const* url, unsigned int len) {
 inline platform_api build_android_platform() {
     auto api = make_stub_platform(
         "android",
-        "[phenotype-native] Android Vulkan backend (stage 3: color pipeline)");
+        "[phenotype-native] Android Vulkan backend (stage 4: color + text)");
     api.renderer = {
         renderer_init,
         renderer_flush,
         renderer_shutdown,
         renderer_hit_test,
+    };
+    api.text = {
+        text_init,
+        text_shutdown,
+        text_measure,
+        text_build_atlas,
     };
     api.open_url = android_open_url;
     return api;
@@ -1118,10 +2230,18 @@ inline void bind_platform_once() {
 extern "C" {
 
 __attribute__((visibility("default")))
+void phenotype_android_bind_jvm(void* jvm) {
+    namespace d = phenotype::native::detail;
+    d::g_jni.vm = static_cast<JavaVM*>(jvm);
+}
+
+__attribute__((visibility("default")))
 void phenotype_android_attach_surface(void* native_window) {
     namespace d = phenotype::native::detail;
     d::bind_platform_once();
     d::g_android_host.window = native_window;
+    if (d::g_android_host.platform->text.init)
+        d::g_android_host.platform->text.init();
     if (d::g_android_host.platform->renderer.init)
         d::g_android_host.platform->renderer.init(d::g_android_host.window);
     if (d::g_android_host.platform->input.attach)
@@ -1136,6 +2256,8 @@ void phenotype_android_detach_surface(void) {
         d::g_android_host.platform->input.detach();
     if (d::g_android_host.platform->renderer.shutdown)
         d::g_android_host.platform->renderer.shutdown();
+    if (d::g_android_host.platform->text.shutdown)
+        d::g_android_host.platform->text.shutdown();
     d::g_android_host.window = nullptr;
 }
 

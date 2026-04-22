@@ -60,4 +60,7 @@ target_link_libraries(phenotype_android_example PRIVATE
     -Wl,--no-whole-archive
     vulkan
     android
+    # Stage 4 text pipeline uses AndroidBitmap_* from libjnigraphics to
+    # read back Paint/Canvas rasterization output as R8 atlas pixels.
+    jnigraphics
     log)
