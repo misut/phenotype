@@ -96,7 +96,7 @@ macOS / WASI extensions.
 
 - **macOS**: GLFW shell + CoreText text measurement/atlas + Metal renderer + native `DrawImage` for local files and async remote images
 - **Windows**: GLFW shell + DirectWrite text measurement/atlas + Direct3D 12 renderer + IME composition overlay + native `DrawImage` for local files and async remote images
-- **Android**: GameActivity-driven shell (`examples/android/`) + Vulkan renderer with an instanced color pipeline (FillRect / StrokeRect / RoundRect / DrawLine / Clear — same `ColorInstance { rect; color; params }` layout and `params.z` draw-type dispatch as the macOS / Windows color pipelines) and a second Vulkan text pipeline that samples an R8 atlas rasterised via JNI into `android.graphics.Paint` / `Canvas` / `Bitmap`. UTF-8 text runs are converted to UTF-16 with `cppx::unicode::utf8_to_utf16` before `JNIEnv::NewString`. GLSL sources live at `src/phenotype.native.android.shaders/{color,text}.{vert,frag}` and are precompiled to SPIR-V via `tools/compile_android_shaders.sh` (NDK's bundled `glslc`) into `src/phenotype.native.android.shaders.inl`, which the native module includes directly. Input / debug are stubs (Stage 5+ replace them with AMOTION_EVENT routing). Emits `libphenotype-modules.a` via exon; the example Gradle project packages it into an APK together with `androidx.games:games-activity:3.0.5` and links `libjnigraphics.so` for `AndroidBitmap_*` zero-copy pixel reads.
+- **Android**: GameActivity-driven shell (`examples/android/`) + Vulkan renderer with three instanced pipelines: a color pipeline (FillRect / StrokeRect / RoundRect / DrawLine / Clear — same `ColorInstance { rect; color; params }` layout and `params.z` draw-type dispatch as the macOS / Windows color pipelines); a text pipeline that samples an R8 atlas rasterised via JNI into `android.graphics.Paint` / `Canvas` / `Bitmap` (UTF-8 → UTF-16 via `cppx::unicode::utf8_to_utf16` before `JNIEnv::NewString`); and an image pipeline that samples a persistent 2048² RGBA8 atlas strip-packed from images decoded via NDK's `AImageDecoder` (PNG / JPEG / WebP / GIF / HEIF). Image URLs resolve through `asset://path` (bundled assets via `AAssetManager`) or absolute filesystem paths (`file://` prefix stripped); `http(s)://` renders a placeholder until Stage 7. GLSL sources live at `src/phenotype.native.android.shaders/{color,text,image}.{vert,frag}` and are precompiled to SPIR-V via `tools/compile_android_shaders.sh` (NDK's bundled `glslc`) into `src/phenotype.native.android.shaders.inl`, which the native module includes directly. Input / debug are stubs (Stage 6+ replace them with AMOTION_EVENT routing). Emits `libphenotype-modules.a` via exon; the example Gradle project packages it into an APK together with `androidx.games:games-activity:3.0.5` and links `libjnigraphics.so` for both `AndroidBitmap_*` zero-copy pixel reads and the `AImageDecoder_*` family.
 - **Linux / other desktop**: shared stub backend
 
 ### Modularity guarantee
@@ -130,7 +130,7 @@ This means Metal, Direct3D, Vulkan, Skia, software raster, or another future ren
 - [x] Android Vulkan clear-color backend + GameActivity example (Stage 2)
 - [x] Android color primitives pipeline (`FillRect` / `StrokeRect` / `RoundRect` / `DrawLine`) — Stage 3
 - [x] Android text pipeline via JNI → `android.graphics.Paint` — Stage 4
-- [ ] Android image pipeline — Stage 5
+- [x] Android image pipeline — Stage 5
 - [ ] Android touch / GameTextInput routing — Stage 6
 - [ ] Android debug plane + device contract tests — Stage 7
 
