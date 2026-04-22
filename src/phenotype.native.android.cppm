@@ -2674,23 +2674,60 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 entry.a = c.color.a / 255.0f;
                 entry.text = c.text;
                 out.text_entries.push_back(std::move(entry));
+            } else if constexpr (std::same_as<T, ::phenotype::DrawImageCmd>) {
+                auto const* entry = ensure_image_cache_entry(c.url);
+                if (entry && entry->state == ImageState::Ready) {
+                    ImageInstanceGPU inst{};
+                    inst.rect[0] = c.x; inst.rect[1] = c.y;
+                    inst.rect[2] = c.w; inst.rect[3] = c.h;
+                    inst.uv_rect[0] = entry->u;
+                    inst.uv_rect[1] = entry->v;
+                    inst.uv_rect[2] = entry->uw;
+                    inst.uv_rect[3] = entry->vh;
+                    inst.color[0] = 1.0f; inst.color[1] = 1.0f;
+                    inst.color[2] = 1.0f; inst.color[3] = 1.0f;
+                    out.image_instances.push_back(inst);
+                } else {
+                    // Placeholder: light-gray fill + darker border,
+                    // matching macOS's image pending/failed rendering.
+                    bool failed = entry && entry->state == ImageState::Failed;
+                    float fill  = failed ? 0.90f : 0.94f;
+                    float edge  = failed ? 0.78f : 0.82f;
+                    ColorInstanceGPU inner{};
+                    inner.rect[0] = c.x; inner.rect[1] = c.y;
+                    inner.rect[2] = c.w; inner.rect[3] = c.h;
+                    inner.color[0] = fill; inner.color[1] = fill;
+                    inner.color[2] = fill; inner.color[3] = 1.0f;
+                    // params = (0,0,0,0) → plain fill
+                    out.color_instances.push_back(inner);
+                    ColorInstanceGPU outline{};
+                    outline.rect[0] = c.x; outline.rect[1] = c.y;
+                    outline.rect[2] = c.w; outline.rect[3] = c.h;
+                    outline.color[0] = edge; outline.color[1] = edge;
+                    outline.color[2] = edge; outline.color[3] = 1.0f;
+                    outline.params[0] = 0.0f;
+                    outline.params[1] = 2.0f; // 2-pixel stroke
+                    outline.params[2] = 1.0f; // draw_type = Stroke
+                    out.color_instances.push_back(outline);
+                }
             }
-            // DrawImage / HitRegion are ignored before Stage 5.
+            // HitRegion is ignored before Stage 6.
         }, cmd);
     }
 }
 
-// Stage 4 demo composition: emits Stage 3's five color primitives plus
-// two DrawText labels (sans title above, mono caption below) through
-// the public phenotype::emit_* API so the decoder + atlas build paths
-// are exercised end-to-end. Stage 6 replaces this with a real View /
+// Stage 5 demo composition: Stage 3's five color primitives + Stage 4's
+// two DrawText labels + one DrawImage against the APK-bundled
+// `stage5-demo.png` asset. Exercises the decoder + atlas build +
+// image-pipeline render path end-to-end through the public
+// phenotype::emit_* API. Stage 6 replaces this with a real View /
 // Update loop bound to the example driver's State.
-inline void build_stage4_demo(FrameScratch& out) {
+inline void build_stage5_demo(FrameScratch& out) {
     DemoCmdBuffer cmd;
     auto const& theme = ::phenotype::current_theme();
     ::phenotype::emit_clear(cmd, theme.background);
 
-    constexpr char const* title = "phenotype · stage 4";
+    constexpr char const* title = "phenotype · stage 5";
     ::phenotype::emit_draw_text(cmd, 40.0f, 80.0f, 56.0f, /*mono=*/0u,
         ::phenotype::Color{40, 40, 40, 255},
         title, static_cast<unsigned>(std::strlen(title)));
@@ -2704,10 +2741,15 @@ inline void build_stage4_demo(FrameScratch& out) {
     ::phenotype::emit_draw_line(cmd, 40.0f, 860.0f, 1040.0f, 860.0f, 6.0f,
         ::phenotype::Color{40, 40, 40, 255});
 
-    constexpr char const* caption = "vulkan + jni paint";
+    constexpr char const* caption = "vulkan + ndk imagedecoder";
     ::phenotype::emit_draw_text(cmd, 40.0f, 960.0f, 40.0f, /*mono=*/1u,
         ::phenotype::Color{120, 120, 120, 255},
         caption, static_cast<unsigned>(std::strlen(caption)));
+
+    constexpr char const* demo_image_url = "asset://stage5-demo.png";
+    ::phenotype::emit_draw_image(cmd, 720.0f, 1050.0f, 256.0f, 256.0f,
+        demo_image_url,
+        static_cast<unsigned>(std::strlen(demo_image_url)));
 
     decode_android_color_commands(cmd.buf(), cmd.buf_len(), out);
 }
@@ -2719,7 +2761,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (buf != nullptr && len > 0) {
         decode_android_color_commands(buf, len, scratch);
     } else {
-        build_stage4_demo(scratch);
+        build_stage5_demo(scratch);
     }
     if (!scratch.has_clear) {
         auto const& theme = ::phenotype::current_theme();
@@ -2799,6 +2841,21 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         }
     }
 
+    // Image pipeline: upload the instance SSBO (atlas pixels already
+    // live in g_images.pixels; record_image_atlas_upload below flushes
+    // any dirty region to the VkImage).
+    bool have_images = !scratch.image_instances.empty();
+    if (have_images) {
+        if (!ensure_image_instance_capacity(scratch.image_instances.size())) {
+            have_images = false;
+        } else {
+            std::memcpy(g_renderer.image_instance_mapped,
+                        scratch.image_instances.data(),
+                        scratch.image_instances.size()
+                            * sizeof(ImageInstanceGPU));
+        }
+    }
+
     ColorUniforms uniforms{};
     uniforms.viewport[0] = static_cast<float>(g_renderer.swapchain_extent.width);
     uniforms.viewport[1] = static_cast<float>(g_renderer.swapchain_extent.height);
@@ -2819,6 +2876,9 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                                  static_cast<std::uint32_t>(atlas.width),
                                  static_cast<std::uint32_t>(atlas.height));
     }
+    // Image atlas dirty-region upload: no-op if no images were decoded
+    // or the atlas view is already up to date.
+    record_image_atlas_upload(g_renderer.command_buffer);
 
     VkClearValue clear{};
     std::memcpy(clear.color.float32, scratch.clear_color, sizeof scratch.clear_color);
@@ -2871,6 +2931,20 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                                 0, nullptr);
         vkCmdDraw(g_renderer.command_buffer, 6,
                   static_cast<std::uint32_t>(scratch.text_instances.size()),
+                  0, 0);
+    }
+
+    if (have_images && g_renderer.image_atlas_initialised) {
+        vkCmdBindPipeline(g_renderer.command_buffer,
+                          VK_PIPELINE_BIND_POINT_GRAPHICS,
+                          g_renderer.image_pipeline);
+        vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                g_renderer.image_pipeline_layout,
+                                0, 1, &g_renderer.image_descriptor_set,
+                                0, nullptr);
+        vkCmdDraw(g_renderer.command_buffer, 6,
+                  static_cast<std::uint32_t>(scratch.image_instances.size()),
                   0, 0);
     }
 
