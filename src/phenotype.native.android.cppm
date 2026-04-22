@@ -3555,7 +3555,7 @@ inline void update(State& s, Msg m) {
 inline void view(State const& s) {
     ::phenotype::layout::scaffold(
         [] {
-            ::phenotype::widget::text("phenotype · stage 6");
+            ::phenotype::widget::text("phenotype · stage 7");
             ::phenotype::widget::text("touch + keyboard demo");
         },
         [&] {
@@ -3576,7 +3576,7 @@ inline void view(State const& s) {
         },
         [] {
             ::phenotype::widget::text(
-                "Stage 6: GameActivity input → phenotype shell.");
+                "Stage 7: debug plane + resume + scroll.");
         }
     );
 }
@@ -3731,6 +3731,19 @@ void phenotype_android_attach_surface(void* native_window) {
         if (pw > 0) d::g_android_host.cached_width_px = pw;
         if (ph > 0) d::g_android_host.cached_height_px = ph;
     }
+
+    // Stage 7: force a fresh view rebuild + full flush on every
+    // attach_surface so the first post-resume frame paints the current
+    // state instead of an empty swapchain. `flush_if_changed` hashes
+    // the command buffer and skips identical frames — great on desktop
+    // where the swapchain persists across idle, but catastrophic here
+    // because APP_CMD_TERM_WINDOW / _INIT_WINDOW destroys + recreates
+    // Vulkan while phenotype's view output is byte-identical. Clearing
+    // last_paint_hash forces the next trigger_rebuild to land a real
+    // flush. No-op before phenotype_android_start_app has installed an
+    // app runner (trigger_rebuild guards on app_runner).
+    ::phenotype::detail::g_app.last_paint_hash = 0;
+    ::phenotype::detail::trigger_rebuild();
 }
 
 __attribute__((visibility("default")))
@@ -3825,6 +3838,21 @@ void phenotype_android_dispatch_char(unsigned int codepoint) {
     namespace d = phenotype::native::detail;
     if (codepoint == 0) return;
     d::dispatch_char(codepoint);
+}
+
+__attribute__((visibility("default")))
+void phenotype_android_dispatch_scroll(double dy) {
+    // Stage 7: the example driver forwards AMOTION_EVENT_ACTION_SCROLL
+    // (connected mouse / trackpad / emulator `input roll`) via the
+    // vertical scroll axis. The shell pulls viewport height from the
+    // native_host's cached dimensions — already in sync after
+    // attach_surface.
+    namespace d = phenotype::native::detail;
+    if (dy == 0.0) return;
+    float vh = (d::g_android_host.cached_height_px > 0)
+                 ? static_cast<float>(d::g_android_host.cached_height_px)
+                 : 800.0f;
+    d::dispatch_scroll(dy, vh);
 }
 
 } // extern "C"
