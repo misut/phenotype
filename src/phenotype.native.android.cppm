@@ -961,6 +961,23 @@ struct android_renderer {
     // forcing a re-render on every pointer dispatch.
     std::vector<unsigned char> last_frame_buf;
 
+    // Stage 7: persistent debug-capture image. Each renderer_flush runs
+    // `vkCmdCopyImage` from the presented swapchain image into this
+    // target right after the render pass ends, so capture_frame_rgba()
+    // can read a fresh snapshot without re-rendering. Mirrors macOS's
+    // debug_capture_texture.
+    VkImage debug_capture_image;
+    VkDeviceMemory debug_capture_memory;
+    VkImageView debug_capture_view;
+    VkBuffer debug_readback_buffer;
+    VkDeviceMemory debug_readback_memory;
+    void* debug_readback_mapped;
+    VkDeviceSize debug_readback_capacity;
+    std::uint32_t last_render_width;
+    std::uint32_t last_render_height;
+    bool last_frame_available;
+    bool debug_capture_ready; // image has received at least one copy
+
     ANativeWindow* window;
     bool initialized;
 };
@@ -2315,6 +2332,207 @@ inline void reset_image_cache() {
     g_images.pixels.shrink_to_fit();
 }
 
+// ---- Stage 7 debug-capture image -------------------------------------
+//
+// Persistent RGBA8 copy target sized to the current swapchain extent.
+// Created alongside the swapchain (because extent drives the size) and
+// destroyed in destroy_swapchain_resources. Every renderer_flush copies
+// the just-presented swapchain image into this target after the render
+// pass ends; capture_frame_rgba() reads the target on demand via a
+// staging buffer.
+
+inline void destroy_debug_capture_image() {
+    if (g_renderer.debug_capture_view != VK_NULL_HANDLE) {
+        vkDestroyImageView(g_renderer.device, g_renderer.debug_capture_view,
+                           nullptr);
+        g_renderer.debug_capture_view = VK_NULL_HANDLE;
+    }
+    if (g_renderer.debug_capture_image != VK_NULL_HANDLE) {
+        vkDestroyImage(g_renderer.device, g_renderer.debug_capture_image,
+                       nullptr);
+        g_renderer.debug_capture_image = VK_NULL_HANDLE;
+    }
+    if (g_renderer.debug_capture_memory != VK_NULL_HANDLE) {
+        vkFreeMemory(g_renderer.device, g_renderer.debug_capture_memory,
+                     nullptr);
+        g_renderer.debug_capture_memory = VK_NULL_HANDLE;
+    }
+    g_renderer.debug_capture_ready = false;
+}
+
+inline bool create_debug_capture_image() {
+    destroy_debug_capture_image();
+    auto const& ext = g_renderer.swapchain_extent;
+    if (ext.width == 0 || ext.height == 0) return true;
+
+    VkImageCreateInfo ici{};
+    ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    ici.imageType = VK_IMAGE_TYPE_2D;
+    // Match the swapchain format so vkCmdCopyImage is valid (no
+    // conversion required). swapchain_format is set in create_swapchain
+    // to VK_FORMAT_R8G8B8A8_UNORM when available.
+    ici.format = g_renderer.swapchain_format;
+    ici.extent = { ext.width, ext.height, 1 };
+    ici.mipLevels = 1;
+    ici.arrayLayers = 1;
+    ici.samples = VK_SAMPLE_COUNT_1_BIT;
+    ici.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ici.usage = VK_IMAGE_USAGE_TRANSFER_DST_BIT
+              | VK_IMAGE_USAGE_TRANSFER_SRC_BIT;
+    ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    if (!vk_ok(vkCreateImage(g_renderer.device, &ici, nullptr,
+                             &g_renderer.debug_capture_image),
+              "vkCreateImage(debug_capture)"))
+        return false;
+
+    VkMemoryRequirements req{};
+    vkGetImageMemoryRequirements(g_renderer.device,
+                                 g_renderer.debug_capture_image, &req);
+    auto mt = find_memory_type(req.memoryTypeBits,
+                               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (!mt) return false;
+
+    VkMemoryAllocateInfo mai{};
+    mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    mai.allocationSize = req.size;
+    mai.memoryTypeIndex = *mt;
+    if (!vk_ok(vkAllocateMemory(g_renderer.device, &mai, nullptr,
+                                &g_renderer.debug_capture_memory),
+              "vkAllocateMemory(debug_capture)"))
+        return false;
+    if (!vk_ok(vkBindImageMemory(g_renderer.device,
+                                 g_renderer.debug_capture_image,
+                                 g_renderer.debug_capture_memory, 0),
+              "vkBindImageMemory(debug_capture)"))
+        return false;
+
+    VkImageViewCreateInfo vci{};
+    vci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    vci.image = g_renderer.debug_capture_image;
+    vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    vci.format = g_renderer.swapchain_format;
+    vci.components = { VK_COMPONENT_SWIZZLE_IDENTITY,
+                       VK_COMPONENT_SWIZZLE_IDENTITY,
+                       VK_COMPONENT_SWIZZLE_IDENTITY,
+                       VK_COMPONENT_SWIZZLE_IDENTITY };
+    vci.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    return vk_ok(vkCreateImageView(g_renderer.device, &vci, nullptr,
+                                   &g_renderer.debug_capture_view),
+                "vkCreateImageView(debug_capture)");
+}
+
+inline bool ensure_debug_readback_capacity(VkDeviceSize bytes) {
+    if (bytes <= g_renderer.debug_readback_capacity
+        && g_renderer.debug_readback_buffer != VK_NULL_HANDLE)
+        return true;
+    destroy_host_buffer(g_renderer.debug_readback_buffer,
+                        g_renderer.debug_readback_memory,
+                        g_renderer.debug_readback_mapped);
+    VkDeviceSize cap = g_renderer.debug_readback_capacity == 0
+                           ? 1024 * 1024 // 1 MiB starter
+                           : g_renderer.debug_readback_capacity;
+    while (cap < bytes) cap *= 2;
+    if (!create_host_buffer(cap, VK_BUFFER_USAGE_TRANSFER_DST_BIT,
+                            g_renderer.debug_readback_buffer,
+                            g_renderer.debug_readback_memory,
+                            g_renderer.debug_readback_mapped))
+        return false;
+    g_renderer.debug_readback_capacity = cap;
+    return true;
+}
+
+inline void destroy_debug_readback_buffer() {
+    destroy_host_buffer(g_renderer.debug_readback_buffer,
+                        g_renderer.debug_readback_memory,
+                        g_renderer.debug_readback_mapped);
+    g_renderer.debug_readback_capacity = 0;
+}
+
+// Records the per-frame copy from the just-presented swapchain image
+// into debug_capture_image. Must be called after vkCmdEndRenderPass
+// and before vkEndCommandBuffer. Leaves the swapchain image back in
+// PRESENT_SRC_KHR and debug_capture_image in GENERAL so the capture
+// submit path can transition it to TRANSFER_SRC on demand.
+inline void record_debug_capture_copy(VkCommandBuffer cmd,
+                                      std::uint32_t swapchain_index) {
+    if (g_renderer.debug_capture_image == VK_NULL_HANDLE) return;
+    auto const& ext = g_renderer.swapchain_extent;
+    if (ext.width == 0 || ext.height == 0) return;
+
+    VkImageMemoryBarrier pre[2]{};
+    // swapchain PRESENT_SRC -> TRANSFER_SRC
+    pre[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    pre[0].oldLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    pre[0].newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    pre[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    pre[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    pre[0].image = g_renderer.swapchain_images[swapchain_index];
+    pre[0].subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    pre[0].srcAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT;
+    pre[0].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    // capture GENERAL/UNDEFINED -> TRANSFER_DST
+    pre[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    pre[1].oldLayout = g_renderer.debug_capture_ready
+                        ? VK_IMAGE_LAYOUT_GENERAL
+                        : VK_IMAGE_LAYOUT_UNDEFINED;
+    pre[1].newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    pre[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    pre[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    pre[1].image = g_renderer.debug_capture_image;
+    pre[1].subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    pre[1].srcAccessMask = g_renderer.debug_capture_ready
+                            ? VK_ACCESS_TRANSFER_READ_BIT
+                            : 0;
+    pre[1].dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 0, nullptr, 2, pre);
+
+    VkImageCopy region{};
+    region.srcSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    region.dstSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    region.extent = { ext.width, ext.height, 1 };
+    vkCmdCopyImage(cmd,
+        g_renderer.swapchain_images[swapchain_index],
+        VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        g_renderer.debug_capture_image,
+        VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        1, &region);
+
+    VkImageMemoryBarrier post[2]{};
+    // swapchain TRANSFER_SRC -> PRESENT_SRC
+    post[0].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    post[0].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+    post[0].newLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+    post[0].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    post[0].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    post[0].image = g_renderer.swapchain_images[swapchain_index];
+    post[0].subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    post[0].srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    post[0].dstAccessMask = 0;
+    // capture TRANSFER_DST -> GENERAL (read-ready)
+    post[1].sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    post[1].oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    post[1].newLayout = VK_IMAGE_LAYOUT_GENERAL;
+    post[1].srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    post[1].dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    post[1].image = g_renderer.debug_capture_image;
+    post[1].subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    post[1].srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    post[1].dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT | VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 0, nullptr, 2, post);
+
+    g_renderer.debug_capture_ready = true;
+    g_renderer.last_render_width  = ext.width;
+    g_renderer.last_render_height = ext.height;
+    g_renderer.last_frame_available = true;
+}
+
 inline bool create_image_views_and_framebuffers() {
     g_renderer.swapchain_image_views.resize(g_renderer.swapchain_images.size());
     for (std::size_t i = 0; i < g_renderer.swapchain_images.size(); ++i) {
@@ -2355,6 +2573,10 @@ inline void destroy_swapchain_resources() {
     if (g_renderer.in_flight != VK_NULL_HANDLE)
         vkWaitForFences(g_renderer.device, 1, &g_renderer.in_flight, VK_TRUE, UINT64_MAX);
 
+    // Stage 7: the debug capture image is sized to the current
+    // swapchain extent, so its lifetime follows the swapchain.
+    destroy_debug_capture_image();
+
     for (auto fb : g_renderer.framebuffers) {
         if (fb != VK_NULL_HANDLE)
             vkDestroyFramebuffer(g_renderer.device, fb, nullptr);
@@ -2378,6 +2600,7 @@ inline void destroy_swapchain_resources() {
         g_renderer.swapchain = VK_NULL_HANDLE;
     }
     g_renderer.swapchain_images.clear();
+    g_renderer.last_frame_available = false;
 }
 
 inline bool create_swapchain() {
@@ -2461,6 +2684,7 @@ inline bool create_swapchain() {
     if (!create_text_resources()) return false;
     if (!create_image_resources()) return false;
     if (!create_image_views_and_framebuffers()) return false;
+    if (!create_debug_capture_image()) return false;
     return true;
 }
 
@@ -2918,6 +3142,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
 
     vkCmdEndRenderPass(g_renderer.command_buffer);
+
+    // Stage 7: snapshot the presented frame into debug_capture_image
+    // so capture_frame_rgba() has a fresh copy without re-rendering.
+    record_debug_capture_copy(g_renderer.command_buffer, idx);
+
     vkEndCommandBuffer(g_renderer.command_buffer);
 
     VkPipelineStageFlags wait = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT;
@@ -2984,6 +3213,7 @@ inline void destroy_color_resources() {
 inline void renderer_shutdown() {
     if (g_renderer.device != VK_NULL_HANDLE) vkDeviceWaitIdle(g_renderer.device);
     destroy_swapchain_resources();
+    destroy_debug_readback_buffer();
     destroy_image_pipeline_resources();
     reset_image_cache();
     destroy_text_pipeline_resources();
