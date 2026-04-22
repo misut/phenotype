@@ -96,24 +96,6 @@ struct FrameScratch {
     bool has_clear = false;
 };
 
-// Minimal render_backend satisfying the phenotype::host::render_backend
-// concept so build_stage3_demo can drive phenotype::emit_* directly.
-// Fixed-size backing: the 5-command demo scene fits comfortably inside
-// 1 KiB. detail::ensure only flushes (resets buf_len) when the buffer
-// would overflow; as long as CAPACITY covers every command, we never
-// hit that path.
-struct DemoCmdBuffer {
-    static constexpr unsigned int CAPACITY = 1024;
-    std::array<unsigned char, CAPACITY> storage{};
-    unsigned int used = 0;
-
-    unsigned char* buf() { return storage.data(); }
-    unsigned int& buf_len() { return used; }
-    unsigned int buf_size() const { return CAPACITY; }
-    void ensure(unsigned int /*needed*/) { /* fixed capacity */ }
-    void flush() { /* no-op; decoder reads (buf, used) directly */ }
-};
-
 // ---- JNI text bridge --------------------------------------------------
 //
 // Stage 4 rasterizes glyph runs via android.graphics.Paint / Canvas /
@@ -2729,51 +2711,27 @@ inline void decode_android_color_commands(unsigned char const* buf,
 // image-pipeline render path end-to-end through the public
 // phenotype::emit_* API. Stage 6 replaces this with a real View /
 // Update loop bound to the example driver's State.
-inline void build_stage5_demo(FrameScratch& out) {
-    DemoCmdBuffer cmd;
-    auto const& theme = ::phenotype::current_theme();
-    ::phenotype::emit_clear(cmd, theme.background);
-
-    constexpr char const* title = "phenotype · stage 5";
-    ::phenotype::emit_draw_text(cmd, 40.0f, 80.0f, 56.0f, /*mono=*/0u,
-        ::phenotype::Color{40, 40, 40, 255},
-        title, static_cast<unsigned>(std::strlen(title)));
-
-    ::phenotype::emit_fill_rect(cmd, 40.0f, 200.0f, 420.0f, 220.0f,
-        ::phenotype::Color{220, 60, 80, 255});
-    ::phenotype::emit_stroke_rect(cmd, 500.0f, 200.0f, 540.0f, 220.0f, 8.0f,
-        ::phenotype::Color{60, 140, 220, 255});
-    ::phenotype::emit_round_rect(cmd, 40.0f, 480.0f, 1000.0f, 300.0f, 56.0f,
-        ::phenotype::Color{90, 170, 90, 255});
-    ::phenotype::emit_draw_line(cmd, 40.0f, 860.0f, 1040.0f, 860.0f, 6.0f,
-        ::phenotype::Color{40, 40, 40, 255});
-
-    constexpr char const* caption = "vulkan + ndk imagedecoder";
-    ::phenotype::emit_draw_text(cmd, 40.0f, 960.0f, 40.0f, /*mono=*/1u,
-        ::phenotype::Color{120, 120, 120, 255},
-        caption, static_cast<unsigned>(std::strlen(caption)));
-
-    constexpr char const* demo_image_url = "asset://stage5-demo.png";
-    ::phenotype::emit_draw_image(cmd, 720.0f, 1050.0f, 256.0f, 256.0f,
-        demo_image_url,
-        static_cast<unsigned>(std::strlen(demo_image_url)));
-
-    decode_android_color_commands(cmd.buf(), cmd.buf_len(), out);
-}
+// Stage 6: the static build_stage5_demo path is retired. The render
+// loop is now driven by phenotype's view/update via `repaint_current`,
+// which lands a real command buffer in `host.buffer` before the shell
+// calls our renderer_flush(buf, len). The demo6::view function below
+// fills in for the static scene and pulls in color + text + image all
+// through the public `phenotype::widget::*` / `phenotype::layout::*`
+// API.
 
 inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (!g_renderer.initialized) return;
+    if (buf == nullptr || len == 0) {
+        g_renderer.last_frame_buf.clear();
+        return;
+    }
+
+    // Snapshot the caller's buffer so hit_test can replay it later
+    // without forcing another view() pass.
+    g_renderer.last_frame_buf.assign(buf, buf + len);
 
     FrameScratch scratch;
-    if (buf != nullptr && len > 0) {
-        // Stage 6: snapshot the caller's buffer so hit_test can replay
-        // it later without needing another view() pass.
-        g_renderer.last_frame_buf.assign(buf, buf + len);
-        decode_android_color_commands(buf, len, scratch);
-    } else {
-        g_renderer.last_frame_buf.clear();
-        build_stage5_demo(scratch);
-    }
+    decode_android_color_commands(buf, len, scratch);
     if (!scratch.has_clear) {
         auto const& theme = ::phenotype::current_theme();
         normalize_color(theme.background, scratch.clear_color);
@@ -3138,6 +3096,62 @@ inline void android_open_url(char const* url, unsigned int len) {
                         "open_url ignored: %.*s", static_cast<int>(len), url);
 }
 
+// ---- Stage 6 demo app ------------------------------------------------
+//
+// Bakes a minimal counter app (State + Msg + view + update) into the
+// phenotype library so the example driver can start a live view/update
+// loop via a C ABI hook. Stage 6 scope is interaction plumbing, not
+// app-level configurability — Stage 7+ will expose a generic
+// `phenotype_android_run<T, U>` mechanism once the template
+// instantiation story settles.
+
+namespace demo6 {
+
+struct Increment {};
+struct Decrement {};
+using Msg = std::variant<Increment, Decrement>;
+
+struct State { int count = 0; };
+
+inline void update(State& s, Msg m) {
+    std::visit([&](auto const& msg) {
+        using T = std::decay_t<decltype(msg)>;
+        if constexpr (std::same_as<T, Increment>) s.count += 1;
+        else if constexpr (std::same_as<T, Decrement>) s.count -= 1;
+    }, m);
+}
+
+inline void view(State const& s) {
+    ::phenotype::layout::scaffold(
+        [] {
+            ::phenotype::widget::text("phenotype · stage 6");
+            ::phenotype::widget::text("touch + keyboard demo");
+        },
+        [&] {
+            ::phenotype::layout::card([&] {
+                ::phenotype::widget::text("Core Widgets");
+                ::phenotype::layout::spacer(8);
+                ::phenotype::widget::text(
+                    std::string("Count: ") + std::to_string(s.count));
+                ::phenotype::layout::spacer(12);
+                ::phenotype::layout::row(
+                    [&] { ::phenotype::widget::button<Msg>("−", Decrement{}); },
+                    [&] { ::phenotype::widget::button<Msg>("+", Increment{}); }
+                );
+                ::phenotype::layout::spacer(12);
+                ::phenotype::widget::text(
+                    "Tap the buttons, or Tab to focus and press Enter / Space.");
+            });
+        },
+        [] {
+            ::phenotype::widget::text(
+                "Stage 6: GameActivity input → phenotype shell.");
+        }
+    );
+}
+
+} // namespace demo6
+
 inline platform_api build_android_platform() {
     auto api = make_stub_platform(
         "android",
@@ -3269,6 +3283,16 @@ void phenotype_android_attach_surface(void* native_window) {
         d::g_android_host.platform->renderer.init(d::g_android_host.window);
     if (d::g_android_host.platform->input.attach)
         d::g_android_host.platform->input.attach(d::g_android_host.window, nullptr);
+
+    // Stage 6: keep the native_host's cached framebuffer size in sync
+    // with the real surface so layout + hit-testing use pixel-accurate
+    // dimensions.
+    if (auto* w = static_cast<ANativeWindow*>(native_window)) {
+        auto pw = ANativeWindow_getWidth(w);
+        auto ph = ANativeWindow_getHeight(w);
+        if (pw > 0) d::g_android_host.cached_width_px = pw;
+        if (ph > 0) d::g_android_host.cached_height_px = ph;
+    }
 }
 
 __attribute__((visibility("default")))
@@ -3288,8 +3312,15 @@ __attribute__((visibility("default")))
 void phenotype_android_draw_frame(void) {
     namespace d = phenotype::native::detail;
     if (!d::g_android_host.platform || !d::g_android_host.window) return;
-    if (d::g_android_host.platform->renderer.flush)
-        d::g_android_host.platform->renderer.flush(d::g_android_host.buffer, 0);
+    // Stage 6: driver ticks call here every frame. Drive the standard
+    // caret-blink / IME-sync / repaint sequence the GLFW shell uses
+    // between glfwPollEvents calls. repaint_current is a no-op until
+    // phenotype_android_start_app wires the view/update loop; before
+    // that, the screen will simply not re-present (first frame after
+    // start_app will paint).
+    d::tick_caret_blink();
+    d::sync_platform_input();
+    d::repaint_current();
 }
 
 __attribute__((visibility("default")))
@@ -3303,11 +3334,13 @@ char const* phenotype_android_startup_message(void) {
 
 __attribute__((visibility("default")))
 void phenotype_android_start_app(void) {
-    // Stage 6 commit 2 swaps this placeholder for a real
-    // run_host<demo6::State, demo6::Msg>(...) call. For now the
-    // static build_stage5_demo scene keeps rendering; the symbol is
-    // exported early so the example driver can start calling it in
-    // commit 3 before the render flip lands.
+    namespace d = phenotype::native::detail;
+    d::bind_platform_once();
+    // Instantiate the baked-in counter demo's run_host. The shell's
+    // bind_host + phenotype::run<State, Msg> wire the view/update
+    // closures into global state and trigger an initial repaint.
+    d::run_host<d::demo6::State, d::demo6::Msg>(
+        d::g_android_host, d::demo6::view, d::demo6::update);
 }
 
 __attribute__((visibility("default")))

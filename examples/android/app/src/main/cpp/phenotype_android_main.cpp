@@ -14,11 +14,13 @@ extern "C" {
 // exposes it at app->activity->vm.
 // Stage 5 adds an AAssetManager-backed image loader for `asset://`
 // URLs; GameActivity exposes the manager at app->activity->assetManager.
+// Stage 6 adds the view/update loop + input dispatch.
 void phenotype_android_bind_jvm(void* jvm);
 void phenotype_android_bind_assets(void* asset_manager);
 void phenotype_android_attach_surface(void* native_window);
 void phenotype_android_detach_surface(void);
 void phenotype_android_draw_frame(void);
+void phenotype_android_start_app(void);
 char const* phenotype_android_startup_message(void);
 }
 
@@ -27,12 +29,20 @@ namespace {
 constexpr char const* TAG = "phenotype";
 
 bool g_surface_ready = false;
+bool g_app_started = false;
 
 void handle_cmd(android_app* app, int32_t cmd) {
     switch (cmd) {
     case APP_CMD_INIT_WINDOW:
         if (app->window) {
             phenotype_android_attach_surface(app->window);
+            if (!g_app_started) {
+                // Stage 6: phenotype_android_start_app calls the shell's
+                // run_host<demo6::State, demo6::Msg>. Once-per-process:
+                // subsequent INIT_WINDOW cycles reuse the same app state.
+                phenotype_android_start_app();
+                g_app_started = true;
+            }
             g_surface_ready = true;
             __android_log_print(ANDROID_LOG_INFO, TAG, "APP_CMD_INIT_WINDOW");
         }
