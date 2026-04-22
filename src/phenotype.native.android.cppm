@@ -22,6 +22,8 @@ module;
 #include <android/bitmap.h>
 #include <android/asset_manager.h>
 #include <android/imagedecoder.h>
+#include <android/input.h>
+#include <android/keycodes.h>
 #include <fcntl.h>
 #include <unistd.h>
 #include <jni.h>
@@ -92,24 +94,6 @@ struct FrameScratch {
     std::vector<ImageInstanceGPU> image_instances;
     float clear_color[4]{0, 0, 0, 0};
     bool has_clear = false;
-};
-
-// Minimal render_backend satisfying the phenotype::host::render_backend
-// concept so build_stage3_demo can drive phenotype::emit_* directly.
-// Fixed-size backing: the 5-command demo scene fits comfortably inside
-// 1 KiB. detail::ensure only flushes (resets buf_len) when the buffer
-// would overflow; as long as CAPACITY covers every command, we never
-// hit that path.
-struct DemoCmdBuffer {
-    static constexpr unsigned int CAPACITY = 1024;
-    std::array<unsigned char, CAPACITY> storage{};
-    unsigned int used = 0;
-
-    unsigned char* buf() { return storage.data(); }
-    unsigned int& buf_len() { return used; }
-    unsigned int buf_size() const { return CAPACITY; }
-    void ensure(unsigned int /*needed*/) { /* fixed capacity */ }
-    void flush() { /* no-op; decoder reads (buf, used) directly */ }
 };
 
 // ---- JNI text bridge --------------------------------------------------
@@ -971,6 +955,11 @@ struct android_renderer {
     VkDeviceMemory image_staging_memory;
     void* image_staging_mapped;
     VkDeviceSize image_staging_capacity;
+
+    // Stage 6: keep a copy of the last command buffer that renderer_flush
+    // submitted so hit_test can walk its HitRegionCmd list without
+    // forcing a re-render on every pointer dispatch.
+    std::vector<unsigned char> last_frame_buf;
 
     ANativeWindow* window;
     bool initialized;
@@ -2722,47 +2711,27 @@ inline void decode_android_color_commands(unsigned char const* buf,
 // image-pipeline render path end-to-end through the public
 // phenotype::emit_* API. Stage 6 replaces this with a real View /
 // Update loop bound to the example driver's State.
-inline void build_stage5_demo(FrameScratch& out) {
-    DemoCmdBuffer cmd;
-    auto const& theme = ::phenotype::current_theme();
-    ::phenotype::emit_clear(cmd, theme.background);
-
-    constexpr char const* title = "phenotype · stage 5";
-    ::phenotype::emit_draw_text(cmd, 40.0f, 80.0f, 56.0f, /*mono=*/0u,
-        ::phenotype::Color{40, 40, 40, 255},
-        title, static_cast<unsigned>(std::strlen(title)));
-
-    ::phenotype::emit_fill_rect(cmd, 40.0f, 200.0f, 420.0f, 220.0f,
-        ::phenotype::Color{220, 60, 80, 255});
-    ::phenotype::emit_stroke_rect(cmd, 500.0f, 200.0f, 540.0f, 220.0f, 8.0f,
-        ::phenotype::Color{60, 140, 220, 255});
-    ::phenotype::emit_round_rect(cmd, 40.0f, 480.0f, 1000.0f, 300.0f, 56.0f,
-        ::phenotype::Color{90, 170, 90, 255});
-    ::phenotype::emit_draw_line(cmd, 40.0f, 860.0f, 1040.0f, 860.0f, 6.0f,
-        ::phenotype::Color{40, 40, 40, 255});
-
-    constexpr char const* caption = "vulkan + ndk imagedecoder";
-    ::phenotype::emit_draw_text(cmd, 40.0f, 960.0f, 40.0f, /*mono=*/1u,
-        ::phenotype::Color{120, 120, 120, 255},
-        caption, static_cast<unsigned>(std::strlen(caption)));
-
-    constexpr char const* demo_image_url = "asset://stage5-demo.png";
-    ::phenotype::emit_draw_image(cmd, 720.0f, 1050.0f, 256.0f, 256.0f,
-        demo_image_url,
-        static_cast<unsigned>(std::strlen(demo_image_url)));
-
-    decode_android_color_commands(cmd.buf(), cmd.buf_len(), out);
-}
+// Stage 6: the static build_stage5_demo path is retired. The render
+// loop is now driven by phenotype's view/update via `repaint_current`,
+// which lands a real command buffer in `host.buffer` before the shell
+// calls our renderer_flush(buf, len). The demo6::view function below
+// fills in for the static scene and pulls in color + text + image all
+// through the public `phenotype::widget::*` / `phenotype::layout::*`
+// API.
 
 inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (!g_renderer.initialized) return;
+    if (buf == nullptr || len == 0) {
+        g_renderer.last_frame_buf.clear();
+        return;
+    }
+
+    // Snapshot the caller's buffer so hit_test can replay it later
+    // without forcing another view() pass.
+    g_renderer.last_frame_buf.assign(buf, buf + len);
 
     FrameScratch scratch;
-    if (buf != nullptr && len > 0) {
-        decode_android_color_commands(buf, len, scratch);
-    } else {
-        build_stage5_demo(scratch);
-    }
+    decode_android_color_commands(buf, len, scratch);
     if (!scratch.has_clear) {
         auto const& theme = ::phenotype::current_theme();
         normalize_color(theme.background, scratch.clear_color);
@@ -3051,8 +3020,75 @@ inline void renderer_shutdown() {
     g_renderer.initialized = false;
 }
 
-inline std::optional<unsigned int> renderer_hit_test(float, float, float) {
+inline std::optional<unsigned int> renderer_hit_test(float x, float y,
+                                                     float scroll_y) {
+    if (g_renderer.last_frame_buf.empty()) return std::nullopt;
+    auto commands = ::phenotype::parse_commands(
+        g_renderer.last_frame_buf.data(),
+        static_cast<unsigned int>(g_renderer.last_frame_buf.size()));
+    // Walk in reverse — last drawn = topmost in macOS / Windows model.
+    for (auto it = commands.rbegin(); it != commands.rend(); ++it) {
+        if (auto const* hr =
+                std::get_if<::phenotype::HitRegionCmd>(&*it)) {
+            float const y_adj = y + scroll_y;
+            if (x >= hr->x && x <= hr->x + hr->w
+                && y_adj >= hr->y && y_adj <= hr->y + hr->h) {
+                return hr->callback_id;
+            }
+        }
+    }
     return std::nullopt;
+}
+
+// ---- Stage 6 input_api: Android-specific slots ----------------------
+//
+// Stage 6 takes over the four stub slots (handle_cursor_pos,
+// handle_mouse_button, dismiss_transient, scroll_delta_y) and replaces
+// attach/detach/sync with Android-flavoured versions. The shell does
+// the actual work; these functions return false to signal "platform
+// didn't consume, let the shell do its hit-test/focus/repaint dance".
+
+inline void (*g_android_request_repaint)() = nullptr;
+
+inline void android_input_attach(native_surface_handle /*surface*/,
+                                 void (*request_repaint)()) {
+    // Stage 6: we render every tick from the Gradle driver's main loop,
+    // so request_repaint is a notification signal rather than a trigger.
+    // Stored for a future dirty-flag optimisation (Stage 7).
+    g_android_request_repaint = request_repaint;
+}
+
+inline void android_input_detach() {
+    g_android_request_repaint = nullptr;
+}
+
+inline void android_input_sync() {
+    // No Android-side IME composition in Stage 6. GameTextInput is Stage 7.
+}
+
+inline bool android_input_uses_shared_caret_blink() { return true; }
+
+inline bool android_input_handle_cursor_pos(float /*x*/, float /*y*/) {
+    return false; // let the shell update hover + focus
+}
+
+inline bool android_input_handle_mouse_button(float /*x*/, float /*y*/,
+                                              int /*button*/,
+                                              int /*action*/,
+                                              int /*mods*/) {
+    return false; // shell runs hit-test + callback dispatch
+}
+
+inline bool android_input_dismiss_transient() {
+    return false; // no transient overlay to dismiss until Stage 7
+}
+
+inline float android_input_scroll_delta_y(double dy, float line_height,
+                                          float /*viewport*/) {
+    // Stage 6 doesn't surface scroll events yet, but keep the math
+    // consistent with the desktop default so the hook is ready when
+    // we wire AMOTION_EVENT_ACTION_SCROLL in Stage 7.
+    return static_cast<float>(dy) * line_height * 3.0f;
 }
 
 inline void android_open_url(char const* url, unsigned int len) {
@@ -3060,10 +3096,67 @@ inline void android_open_url(char const* url, unsigned int len) {
                         "open_url ignored: %.*s", static_cast<int>(len), url);
 }
 
+// ---- Stage 6 demo app ------------------------------------------------
+//
+// Bakes a minimal counter app (State + Msg + view + update) into the
+// phenotype library so the example driver can start a live view/update
+// loop via a C ABI hook. Stage 6 scope is interaction plumbing, not
+// app-level configurability — Stage 7+ will expose a generic
+// `phenotype_android_run<T, U>` mechanism once the template
+// instantiation story settles.
+
+namespace demo6 {
+
+struct Increment {};
+struct Decrement {};
+using Msg = std::variant<Increment, Decrement>;
+
+struct State { int count = 0; };
+
+inline void update(State& s, Msg m) {
+    std::visit([&](auto const& msg) {
+        using T = std::decay_t<decltype(msg)>;
+        if constexpr (std::same_as<T, Increment>) s.count += 1;
+        else if constexpr (std::same_as<T, Decrement>) s.count -= 1;
+    }, m);
+}
+
+inline void view(State const& s) {
+    ::phenotype::layout::scaffold(
+        [] {
+            ::phenotype::widget::text("phenotype · stage 6");
+            ::phenotype::widget::text("touch + keyboard demo");
+        },
+        [&] {
+            ::phenotype::layout::card([&] {
+                ::phenotype::widget::text("Core Widgets");
+                ::phenotype::layout::spacer(8);
+                ::phenotype::widget::text(
+                    std::string("Count: ") + std::to_string(s.count));
+                ::phenotype::layout::spacer(12);
+                ::phenotype::layout::row(
+                    [&] { ::phenotype::widget::button<Msg>("−", Decrement{}); },
+                    [&] { ::phenotype::widget::button<Msg>("+", Increment{}); }
+                );
+                ::phenotype::layout::spacer(12);
+                ::phenotype::widget::text(
+                    "Tap the buttons, or Tab to focus and press Enter / Space.");
+            });
+        },
+        [] {
+            ::phenotype::widget::text(
+                "Stage 6: GameActivity input → phenotype shell.");
+        }
+    );
+}
+
+} // namespace demo6
+
 inline platform_api build_android_platform() {
     auto api = make_stub_platform(
         "android",
-        "[phenotype-native] Android Vulkan backend (stage 5: color + text + image)");
+        "[phenotype-native] Android Vulkan backend "
+        "(stage 6: color + text + image + input)");
     api.renderer = {
         renderer_init,
         renderer_flush,
@@ -3075,6 +3168,16 @@ inline platform_api build_android_platform() {
         text_shutdown,
         text_measure,
         text_build_atlas,
+    };
+    api.input = {
+        android_input_attach,
+        android_input_detach,
+        android_input_sync,
+        android_input_uses_shared_caret_blink,
+        android_input_handle_cursor_pos,
+        android_input_handle_mouse_button,
+        android_input_dismiss_transient,
+        android_input_scroll_delta_y,
     };
     api.open_url = android_open_url;
     return api;
@@ -3108,6 +3211,51 @@ inline void bind_platform_once() {
         g_android_host.platform = &android_platform();
 }
 
+// ---- Stage 6 input dispatch helpers ---------------------------------
+//
+// Android key codes are a disjoint enum from GLFW's (and therefore from
+// phenotype's neutral Key enum, which mirrors GLFW values so desktop
+// can cast-through). We only translate the keys that
+// shell::dispatch_key actually switches on — everything else maps to
+// Key::Other, which the shell already treats as "no semantic match".
+
+inline Key translate_android_keycode(int akc) {
+    // AKEYCODE_* constants are from <android/keycodes.h>; duplicated as
+    // int literals here to keep this helper includable in places that
+    // don't pull the header.
+    switch (akc) {
+    case AKEYCODE_TAB:             return Key::Tab;
+    case AKEYCODE_DEL:             return Key::Backspace; // named DEL, acts as BS
+    case AKEYCODE_ENTER:           return Key::Enter;
+    case AKEYCODE_NUMPAD_ENTER:    return Key::KpEnter;
+    case AKEYCODE_SPACE:           return Key::Space;
+    case AKEYCODE_DPAD_LEFT:       return Key::Left;
+    case AKEYCODE_DPAD_RIGHT:      return Key::Right;
+    case AKEYCODE_DPAD_UP:         return Key::Up;
+    case AKEYCODE_DPAD_DOWN:       return Key::Down;
+    case AKEYCODE_PAGE_UP:         return Key::PageUp;
+    case AKEYCODE_PAGE_DOWN:       return Key::PageDown;
+    case AKEYCODE_MOVE_HOME:       return Key::Home;
+    case AKEYCODE_MOVE_END:        return Key::End;
+    case AKEYCODE_ESCAPE:          return Key::Escape;
+    case AKEYCODE_A:               return Key::A;
+    default:                       return Key::Other;
+    }
+}
+
+// Translate Android's KeyEvent meta flags to phenotype's Modifier
+// bitmask. META_SHIFT_ON | META_CTRL_ON | META_ALT_ON | META_META_ON
+// (Super) are 1 / 0x1000 / 0x02 / 0x10000 respectively per
+// <android/input.h>; shift to match phenotype's GLFW-mirrored values.
+inline int translate_android_mods(int android_meta) {
+    int mods = 0;
+    if (android_meta & AMETA_SHIFT_ON) mods |= static_cast<int>(Modifier::Shift);
+    if (android_meta & AMETA_CTRL_ON)  mods |= static_cast<int>(Modifier::Control);
+    if (android_meta & AMETA_ALT_ON)   mods |= static_cast<int>(Modifier::Alt);
+    if (android_meta & AMETA_META_ON)  mods |= static_cast<int>(Modifier::Super);
+    return mods;
+}
+
 } // namespace phenotype::native::detail
 
 extern "C" {
@@ -3135,6 +3283,16 @@ void phenotype_android_attach_surface(void* native_window) {
         d::g_android_host.platform->renderer.init(d::g_android_host.window);
     if (d::g_android_host.platform->input.attach)
         d::g_android_host.platform->input.attach(d::g_android_host.window, nullptr);
+
+    // Stage 6: keep the native_host's cached framebuffer size in sync
+    // with the real surface so layout + hit-testing use pixel-accurate
+    // dimensions.
+    if (auto* w = static_cast<ANativeWindow*>(native_window)) {
+        auto pw = ANativeWindow_getWidth(w);
+        auto ph = ANativeWindow_getHeight(w);
+        if (pw > 0) d::g_android_host.cached_width_px = pw;
+        if (ph > 0) d::g_android_host.cached_height_px = ph;
+    }
 }
 
 __attribute__((visibility("default")))
@@ -3154,8 +3312,15 @@ __attribute__((visibility("default")))
 void phenotype_android_draw_frame(void) {
     namespace d = phenotype::native::detail;
     if (!d::g_android_host.platform || !d::g_android_host.window) return;
-    if (d::g_android_host.platform->renderer.flush)
-        d::g_android_host.platform->renderer.flush(d::g_android_host.buffer, 0);
+    // Stage 6: driver ticks call here every frame. Drive the standard
+    // caret-blink / IME-sync / repaint sequence the GLFW shell uses
+    // between glfwPollEvents calls. repaint_current is a no-op until
+    // phenotype_android_start_app wires the view/update loop; before
+    // that, the screen will simply not re-present (first frame after
+    // start_app will paint).
+    d::tick_caret_blink();
+    d::sync_platform_input();
+    d::repaint_current();
 }
 
 __attribute__((visibility("default")))
@@ -3163,6 +3328,65 @@ char const* phenotype_android_startup_message(void) {
     namespace d = phenotype::native::detail;
     d::bind_platform_once();
     return d::g_android_host.platform->startup_message;
+}
+
+// ---- Stage 6: app bootstrap + input dispatch ------------------------
+
+__attribute__((visibility("default")))
+void phenotype_android_start_app(void) {
+    namespace d = phenotype::native::detail;
+    d::bind_platform_once();
+    // Instantiate the baked-in counter demo's run_host. The shell's
+    // bind_host + phenotype::run<State, Msg> wire the view/update
+    // closures into global state and trigger an initial repaint.
+    d::run_host<d::demo6::State, d::demo6::Msg>(
+        d::g_android_host, d::demo6::view, d::demo6::update);
+}
+
+__attribute__((visibility("default")))
+void phenotype_android_dispatch_pointer(float x, float y, int action) {
+    namespace d = phenotype::native::detail;
+    using ::phenotype::native::MouseButton;
+    using ::phenotype::native::KeyAction;
+    switch (action) {
+    case 0: // DOWN
+        d::dispatch_mouse_button(x, y, MouseButton::Left,
+                                 KeyAction::Press, 0);
+        break;
+    case 1: // MOVE
+        d::dispatch_cursor_pos(x, y);
+        break;
+    case 2: // UP / CANCEL
+        d::dispatch_mouse_button(x, y, MouseButton::Left,
+                                 KeyAction::Release, 0);
+        break;
+    default:
+        break;
+    }
+}
+
+__attribute__((visibility("default")))
+void phenotype_android_dispatch_key(int android_keycode, int action,
+                                    int android_meta) {
+    namespace d = phenotype::native::detail;
+    using ::phenotype::native::KeyAction;
+    KeyAction ka;
+    switch (action) {
+    case 0: ka = KeyAction::Release; break;
+    case 1: ka = KeyAction::Press;   break;
+    case 2: ka = KeyAction::Repeat;  break;
+    default: return;
+    }
+    d::dispatch_key(d::translate_android_keycode(android_keycode),
+                    ka,
+                    d::translate_android_mods(android_meta));
+}
+
+__attribute__((visibility("default")))
+void phenotype_android_dispatch_char(unsigned int codepoint) {
+    namespace d = phenotype::native::detail;
+    if (codepoint == 0) return;
+    d::dispatch_char(codepoint);
 }
 
 } // extern "C"

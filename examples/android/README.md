@@ -2,26 +2,30 @@
 
 Minimal Android application that boots phenotype's Vulkan backend inside a
 [GameActivity](https://developer.android.com/games/agdk/game-activity). As
-of Stage 5 it renders the color primitives (`Clear`, `FillRect`,
-`StrokeRect`, `RoundRect`, `DrawLine`), text (`DrawText`), and images
-(`DrawImage`) through three instanced Vulkan graphics pipelines. Text is
-rasterised via JNI into `android.graphics.Paint` / `Canvas` / `Bitmap`
-and uploaded as an R8 alpha atlas; images are decoded via NDK's
-`AImageDecoder` (PNG / JPEG / WebP / GIF / HEIF) and strip-packed into a
-persistent 2048² RGBA8 atlas. The example survives window-create /
-window-destroy / rotation lifecycles. When the C ABI receives a
-zero-length command buffer (the default today), the backend falls back
-to a built-in demo composition (Stage 3's five shapes + Stage 4's two
-labels + the bundled `stage5-demo.png` asset) so the pipelines are
-exercised end-to-end without needing a real app bound to the example
-driver. Touch routing lands in Stage 6; remote HTTPS image fetch lands
-in Stage 7.
+of Stage 6 it runs a real `view(State) / update(State, Msg)` loop through
+phenotype's shell. The built-in counter demo exercises the full three-
+pipeline stack (color + text + image) plus touch + hardware-key input:
+tap the `−` / `+` buttons to mutate `State.count`, Tab to cycle focus,
+Enter / Space to trigger the focused button. Motion and key events drain
+from GameActivity's `android_input_buffer` every tick and forward to
+phenotype's shell via `phenotype_android_dispatch_{pointer,key,char}`;
+the Android renderer caches each flushed command buffer so
+`renderer.hit_test(x, y, scroll_y)` can replay the `HitRegionCmd` list
+without another view pass.
 
-The driver calls `phenotype_android_bind_jvm(app->activity->vm)` and
-`phenotype_android_bind_assets(app->activity->assetManager)` once at
-`android_main` startup so the text pipeline can attach JNI on the render
-thread and the image pipeline can resolve `asset://` URLs against the
-APK.
+The example survives window-create / window-destroy / rotation
+lifecycles. The first post-resume frame may flash blank briefly while
+Vulkan rebuilds the swapchain — the first new input or state change
+repaints the current view. Touch scroll and soft keyboard show/hide
+land in Stage 7.
+
+The driver calls three bootstrap hooks at `android_main` startup:
+`phenotype_android_bind_jvm(app->activity->vm)` (text pipeline's JNI
+attach), `phenotype_android_bind_assets(app->activity->assetManager)`
+(`asset://` URL resolver), and `phenotype_android_start_app()` on the
+first `APP_CMD_INIT_WINDOW` (instantiates the library-side
+`run_host<demo6::State, demo6::Msg>` so view + update wire into the
+shell).
 
 ## URL schemes supported by `DrawImage`
 
