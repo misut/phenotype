@@ -63,4 +63,8 @@ target_link_libraries(phenotype_android_example PRIVATE
     # Stage 4 text pipeline uses AndroidBitmap_* from libjnigraphics to
     # read back Paint/Canvas rasterization output as R8 atlas pixels.
     jnigraphics
+    # Stage 5 image pipeline decodes PNG / JPEG / WebP / GIF / HEIF via
+    # NDK's AImageDecoder, which ships as libjnigraphics's sibling
+    # libjnigraphics alias — the linker flag is -ljnigraphics already
+    # (AImageDecoder symbols live there since API 30).
     log)

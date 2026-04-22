@@ -20,6 +20,10 @@ module;
 #include <android/native_window.h>
 #include <android/log.h>
 #include <android/bitmap.h>
+#include <android/asset_manager.h>
+#include <android/imagedecoder.h>
+#include <fcntl.h>
+#include <unistd.h>
 #include <jni.h>
 #endif
 
@@ -64,6 +68,11 @@ struct TextInstanceGPU {
 static_assert(sizeof(TextInstanceGPU) == 48,
               "TextInstance stride must match the GLSL SSBO layout");
 
+// Stage 5 image instance. Layout is identical to TextInstanceGPU so
+// the text pipeline's SSBO plumbing generalises — we keep the name
+// distinct for readability.
+using ImageInstanceGPU = TextInstanceGPU;
+
 // Uniforms block: std140-laid-out vec2 viewport + vec2 pad (= 16B).
 struct ColorUniforms {
     float viewport[2];
@@ -80,6 +89,7 @@ struct FrameScratch {
     std::vector<ColorInstanceGPU> color_instances;
     std::vector<::phenotype::native::TextEntry> text_entries;
     std::vector<TextInstanceGPU> text_instances;
+    std::vector<ImageInstanceGPU> image_instances;
     float clear_color[4]{0, 0, 0, 0};
     bool has_clear = false;
 };
@@ -603,6 +613,273 @@ inline ::phenotype::native::TextAtlas text_build_atlas(
     return out;
 }
 
+// ---- Stage 5 image cache ---------------------------------------------
+//
+// Decodes `asset://` and absolute-path PNG / JPEG / WebP / GIF / HEIF
+// inputs via NDK's AImageDecoder (API 30+; phenotype min is API 33)
+// straight into an RGBA8 buffer, strip-packs each image into a single
+// persistent 2048² Vulkan atlas, and stores the UV rect in a URL-
+// keyed cache that never evicts. Matches macOS image_pipeline's
+// persistent-atlas + dirty-region model.
+
+enum class ImageState : unsigned char { Pending, Ready, Failed };
+
+struct ImageCacheEntry {
+    ImageState state = ImageState::Pending;
+    float u  = 0.0f;
+    float v  = 0.0f;
+    float uw = 0.0f;
+    float vh = 0.0f;
+    std::string failure_detail;
+};
+
+struct DecodedImage {
+    std::vector<std::uint8_t> pixels; // tightly packed RGBA8 * w * h
+    std::uint32_t width  = 0;
+    std::uint32_t height = 0;
+};
+
+struct ImageAtlas {
+    static constexpr std::uint32_t SIZE = 2048;
+    static constexpr std::uint32_t BYTES_PER_PIXEL = 4;
+
+    // Strip-pack cursors.
+    std::uint32_t cursor_x   = 0;
+    std::uint32_t cursor_y   = 0;
+    std::uint32_t row_height = 0;
+
+    // Dirty-rect tracking so each frame only copies what changed.
+    std::uint32_t dirty_min_x = SIZE, dirty_min_y = SIZE;
+    std::uint32_t dirty_max_x = 0,    dirty_max_y = 0;
+    bool has_dirty = false;
+
+    std::vector<std::uint8_t> pixels; // SIZE * SIZE * BYTES_PER_PIXEL, lazy
+    std::map<std::string, ImageCacheEntry> cache;
+};
+
+inline ImageAtlas    g_images{};
+inline AAssetManager* g_asset_mgr = nullptr;
+
+inline void mark_image_atlas_dirty(std::uint32_t x, std::uint32_t y,
+                                   std::uint32_t w, std::uint32_t h) {
+    if (w == 0 || h == 0) return;
+    if (x < g_images.dirty_min_x) g_images.dirty_min_x = x;
+    if (y < g_images.dirty_min_y) g_images.dirty_min_y = y;
+    if (x + w > g_images.dirty_max_x) g_images.dirty_max_x = x + w;
+    if (y + h > g_images.dirty_max_y) g_images.dirty_max_y = y + h;
+    g_images.has_dirty = true;
+}
+
+// URL resolver. Returns nullopt on reject (caller marks cache Failed).
+struct ResolvedImage {
+    enum class Kind : unsigned char { Asset, File };
+    Kind kind = Kind::File;
+    std::string detail; // asset path or absolute filesystem path
+};
+
+inline std::optional<ResolvedImage> resolve_android_image(
+        std::string const& url, std::string& reject_reason) {
+    constexpr std::string_view asset_prefix = "asset://";
+    constexpr std::string_view file_prefix  = "file://";
+    constexpr std::string_view http_prefix  = "http://";
+    constexpr std::string_view https_prefix = "https://";
+
+    if (url.starts_with(asset_prefix)) {
+        if (!g_asset_mgr) {
+            reject_reason = "no asset manager bound";
+            return std::nullopt;
+        }
+        ResolvedImage out;
+        out.kind = ResolvedImage::Kind::Asset;
+        out.detail = url.substr(asset_prefix.size());
+        return out;
+    }
+    if (url.starts_with(http_prefix) || url.starts_with(https_prefix)) {
+        reject_reason = "remote images not implemented (stage 7)";
+        return std::nullopt;
+    }
+    std::string path = url.starts_with(file_prefix)
+                         ? url.substr(file_prefix.size())
+                         : url;
+    if (path.empty() || path.front() != '/') {
+        reject_reason = "relative paths rejected on android";
+        return std::nullopt;
+    }
+    ResolvedImage out;
+    out.kind = ResolvedImage::Kind::File;
+    out.detail = std::move(path);
+    return out;
+}
+
+// Configures an AImageDecoder for straight-alpha RGBA8 output and
+// allocates the decoded pixel buffer. Returns nullopt on any error;
+// always deletes the decoder before returning.
+inline std::optional<DecodedImage> decode_with_decoder(AImageDecoder* dec) {
+    struct DecoderGuard {
+        AImageDecoder* d;
+        ~DecoderGuard() { if (d) AImageDecoder_delete(d); }
+    } guard{dec};
+    if (AImageDecoder_setAndroidBitmapFormat(
+            dec, ANDROID_BITMAP_FORMAT_RGBA_8888)
+        != ANDROID_IMAGE_DECODER_SUCCESS)
+        return std::nullopt;
+    if (AImageDecoder_setUnpremultipliedRequired(dec, true)
+        != ANDROID_IMAGE_DECODER_SUCCESS)
+        return std::nullopt;
+    auto const* info = AImageDecoder_getHeaderInfo(dec);
+    if (!info) return std::nullopt;
+    auto width  = AImageDecoderHeaderInfo_getWidth(info);
+    auto height = AImageDecoderHeaderInfo_getHeight(info);
+    if (width <= 0 || height <= 0) return std::nullopt;
+    if (static_cast<std::uint32_t>(width) > ImageAtlas::SIZE
+        || static_cast<std::uint32_t>(height) > ImageAtlas::SIZE)
+        return std::nullopt;
+    auto stride = AImageDecoder_getMinimumStride(dec);
+    if (stride == 0) return std::nullopt;
+
+    DecodedImage out;
+    out.width  = static_cast<std::uint32_t>(width);
+    out.height = static_cast<std::uint32_t>(height);
+    std::vector<std::uint8_t> scratch(stride * static_cast<std::size_t>(height));
+    auto rc = AImageDecoder_decodeImage(dec, scratch.data(), stride,
+                                        scratch.size());
+    if (rc != ANDROID_IMAGE_DECODER_SUCCESS) return std::nullopt;
+
+    // Pack into tight RGBA8 (strip any row padding).
+    std::size_t const row_bytes = static_cast<std::size_t>(width) * 4;
+    out.pixels.resize(row_bytes * static_cast<std::size_t>(height));
+    for (std::int32_t y = 0; y < height; ++y) {
+        std::memcpy(out.pixels.data() + y * row_bytes,
+                    scratch.data() + static_cast<std::size_t>(y) * stride,
+                    row_bytes);
+    }
+    return out;
+}
+
+inline std::optional<DecodedImage> decode_asset_image(
+        std::string const& asset_path) {
+    if (!g_asset_mgr) return std::nullopt;
+    AAsset* asset = AAssetManager_open(g_asset_mgr, asset_path.c_str(),
+                                       AASSET_MODE_BUFFER);
+    if (!asset) return std::nullopt;
+    struct AssetGuard {
+        AAsset* a;
+        ~AssetGuard() { if (a) AAsset_close(a); }
+    } guard{asset};
+    auto const* buf = AAsset_getBuffer(asset);
+    auto len = AAsset_getLength64(asset);
+    if (!buf || len <= 0) return std::nullopt;
+    AImageDecoder* dec = nullptr;
+    auto rc = AImageDecoder_createFromBuffer(
+        buf, static_cast<std::size_t>(len), &dec);
+    if (rc != ANDROID_IMAGE_DECODER_SUCCESS || !dec) return std::nullopt;
+    return decode_with_decoder(dec);
+}
+
+inline std::optional<DecodedImage> decode_file_image(
+        std::string const& path) {
+    int fd = ::open(path.c_str(), O_RDONLY);
+    if (fd < 0) return std::nullopt;
+    AImageDecoder* dec = nullptr;
+    auto rc = AImageDecoder_createFromFd(fd, &dec);
+    if (rc != ANDROID_IMAGE_DECODER_SUCCESS || !dec) {
+        ::close(fd);
+        return std::nullopt;
+    }
+    // createFromFd takes ownership of the fd; it's closed by delete.
+    return decode_with_decoder(dec);
+}
+
+// Strip-pack a fresh image into the atlas. Returns the slot rect in
+// atlas pixel coordinates; returns nullopt if the atlas is full.
+struct AtlasSlot { std::uint32_t x, y, w, h; };
+inline std::optional<AtlasSlot> reserve_image_slot(std::uint32_t w,
+                                                   std::uint32_t h) {
+    if (w == 0 || h == 0) return std::nullopt;
+    if (w > ImageAtlas::SIZE || h > ImageAtlas::SIZE) return std::nullopt;
+    if (g_images.cursor_x + w > ImageAtlas::SIZE) {
+        g_images.cursor_x = 0;
+        g_images.cursor_y += g_images.row_height;
+        g_images.row_height = 0;
+    }
+    if (g_images.cursor_y + h > ImageAtlas::SIZE) return std::nullopt;
+    AtlasSlot s{g_images.cursor_x, g_images.cursor_y, w, h};
+    g_images.cursor_x += w;
+    if (h > g_images.row_height) g_images.row_height = h;
+    return s;
+}
+
+inline void copy_into_image_atlas(DecodedImage const& img,
+                                  AtlasSlot const& slot) {
+    if (g_images.pixels.empty()) {
+        g_images.pixels.assign(
+            static_cast<std::size_t>(ImageAtlas::SIZE)
+            * ImageAtlas::SIZE * ImageAtlas::BYTES_PER_PIXEL,
+            0);
+    }
+    std::size_t const src_row = static_cast<std::size_t>(img.width) * 4;
+    std::size_t const dst_row = static_cast<std::size_t>(ImageAtlas::SIZE) * 4;
+    for (std::uint32_t y = 0; y < img.height; ++y) {
+        auto const* src = img.pixels.data() + y * src_row;
+        auto* dst = g_images.pixels.data()
+                  + (static_cast<std::size_t>(slot.y + y) * dst_row)
+                  + (static_cast<std::size_t>(slot.x) * 4);
+        std::memcpy(dst, src, src_row);
+    }
+    mark_image_atlas_dirty(slot.x, slot.y, img.width, img.height);
+}
+
+inline ImageCacheEntry const* ensure_image_cache_entry(std::string const& url) {
+    auto [it, inserted] = g_images.cache.try_emplace(url, ImageCacheEntry{});
+    ImageCacheEntry& entry = it->second;
+    if (!inserted) return &entry;
+
+    std::string reject_reason;
+    auto resolved = resolve_android_image(url, reject_reason);
+    if (!resolved) {
+        entry.state = ImageState::Failed;
+        entry.failure_detail = std::move(reject_reason);
+        __android_log_print(ANDROID_LOG_WARN, ANDROID_LOG_TAG,
+                            "image '%s' rejected: %s",
+                            url.c_str(), entry.failure_detail.c_str());
+        return &entry;
+    }
+
+    std::optional<DecodedImage> decoded;
+    switch (resolved->kind) {
+    case ResolvedImage::Kind::Asset:
+        decoded = decode_asset_image(resolved->detail);
+        break;
+    case ResolvedImage::Kind::File:
+        decoded = decode_file_image(resolved->detail);
+        break;
+    }
+    if (!decoded) {
+        entry.state = ImageState::Failed;
+        entry.failure_detail = "decode failed";
+        __android_log_print(ANDROID_LOG_WARN, ANDROID_LOG_TAG,
+                            "image '%s' decode failed", url.c_str());
+        return &entry;
+    }
+
+    auto slot = reserve_image_slot(decoded->width, decoded->height);
+    if (!slot) {
+        entry.state = ImageState::Failed;
+        entry.failure_detail = "atlas full";
+        __android_log_print(ANDROID_LOG_WARN, ANDROID_LOG_TAG,
+                            "image '%s' dropped: atlas full", url.c_str());
+        return &entry;
+    }
+
+    copy_into_image_atlas(*decoded, *slot);
+    entry.state = ImageState::Ready;
+    entry.u  = static_cast<float>(slot->x) / static_cast<float>(ImageAtlas::SIZE);
+    entry.v  = static_cast<float>(slot->y) / static_cast<float>(ImageAtlas::SIZE);
+    entry.uw = static_cast<float>(slot->w) / static_cast<float>(ImageAtlas::SIZE);
+    entry.vh = static_cast<float>(slot->h) / static_cast<float>(ImageAtlas::SIZE);
+    return &entry;
+}
+
 struct android_renderer {
     VkInstance instance;
     VkPhysicalDevice physical_device;
@@ -670,6 +947,30 @@ struct android_renderer {
     VkDeviceMemory text_staging_memory;
     void* text_staging_mapped;
     VkDeviceSize text_staging_capacity;
+
+    // Stage 5 image pipeline. Atlas is a fixed-size 2048² RGBA8 image;
+    // staging buffer grows on demand to fit the per-frame dirty rect.
+    VkDescriptorSetLayout image_descriptor_set_layout;
+    VkPipelineLayout image_pipeline_layout;
+    VkPipeline image_pipeline;
+    VkDescriptorPool image_descriptor_pool;
+    VkDescriptorSet image_descriptor_set;
+    VkSampler image_sampler;
+
+    VkImage image_atlas_image;
+    VkDeviceMemory image_atlas_memory;
+    VkImageView image_atlas_view;
+    bool image_atlas_initialised;
+
+    VkBuffer image_instance_buffer;
+    VkDeviceMemory image_instance_memory;
+    void* image_instance_mapped;
+    std::size_t image_instance_capacity; // in ImageInstanceGPU count
+
+    VkBuffer image_staging_buffer;
+    VkDeviceMemory image_staging_memory;
+    void* image_staging_mapped;
+    VkDeviceSize image_staging_capacity;
 
     ANativeWindow* window;
     bool initialized;
@@ -1520,6 +1821,511 @@ inline void destroy_text_pipeline_resources() {
     }
 }
 
+// ---- Stage 5 image pipeline Vulkan helpers ---------------------------
+
+inline constexpr std::size_t INITIAL_IMAGE_INSTANCE_CAPACITY = 32;
+
+inline bool create_image_sampler() {
+    if (g_renderer.image_sampler != VK_NULL_HANDLE) return true;
+    VkSamplerCreateInfo ci{};
+    ci.sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO;
+    ci.magFilter = VK_FILTER_LINEAR;
+    ci.minFilter = VK_FILTER_LINEAR;
+    ci.mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST;
+    ci.addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    ci.addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    ci.addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE;
+    ci.unnormalizedCoordinates = VK_FALSE;
+    ci.minLod = 0.0f;
+    ci.maxLod = 0.0f;
+    ci.borderColor = VK_BORDER_COLOR_FLOAT_TRANSPARENT_BLACK;
+    return vk_ok(vkCreateSampler(g_renderer.device, &ci, nullptr,
+                                 &g_renderer.image_sampler),
+                "vkCreateSampler(image)");
+}
+
+inline bool create_image_pipeline() {
+    if (g_renderer.image_pipeline != VK_NULL_HANDLE) return true;
+
+    VkDescriptorSetLayoutBinding bindings[3]{};
+    bindings[0].binding = 0;
+    bindings[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    bindings[0].descriptorCount = 1;
+    bindings[0].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[1].binding = 1;
+    bindings[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    bindings[1].descriptorCount = 1;
+    bindings[1].stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+    bindings[2].binding = 2;
+    bindings[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    bindings[2].descriptorCount = 1;
+    bindings[2].stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT;
+
+    VkDescriptorSetLayoutCreateInfo dslci{};
+    dslci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    dslci.bindingCount = 3;
+    dslci.pBindings = bindings;
+    if (!vk_ok(vkCreateDescriptorSetLayout(
+                  g_renderer.device, &dslci, nullptr,
+                  &g_renderer.image_descriptor_set_layout),
+              "vkCreateDescriptorSetLayout(image)"))
+        return false;
+
+    VkPipelineLayoutCreateInfo plci{};
+    plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    plci.setLayoutCount = 1;
+    plci.pSetLayouts = &g_renderer.image_descriptor_set_layout;
+    if (!vk_ok(vkCreatePipelineLayout(g_renderer.device, &plci, nullptr,
+                                      &g_renderer.image_pipeline_layout),
+              "vkCreatePipelineLayout(image)"))
+        return false;
+
+    auto vs = create_shader_module(shaders::SPIRV_IMAGE_VS,
+                                   sizeof(shaders::SPIRV_IMAGE_VS));
+    auto fs = create_shader_module(shaders::SPIRV_IMAGE_FS,
+                                   sizeof(shaders::SPIRV_IMAGE_FS));
+    if (vs == VK_NULL_HANDLE || fs == VK_NULL_HANDLE) return false;
+
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vs;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = fs;
+    stages[1].pName = "main";
+
+    VkPipelineVertexInputStateCreateInfo vi{};
+    vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+    VkPipelineInputAssemblyStateCreateInfo ia{};
+    ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkPipelineViewportStateCreateInfo vp{};
+    vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    vp.viewportCount = 1;
+    vp.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rs{};
+    rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rs.polygonMode = VK_POLYGON_MODE_FILL;
+    rs.cullMode = VK_CULL_MODE_NONE;
+    rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rs.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo ms{};
+    ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState cba{};
+    cba.blendEnable = VK_TRUE;
+    cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.colorBlendOp = VK_BLEND_OP_ADD;
+    cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.alphaBlendOp = VK_BLEND_OP_ADD;
+    cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                       | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo cb{};
+    cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    cb.attachmentCount = 1;
+    cb.pAttachments = &cba;
+
+    VkDynamicState dyn[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo ds{};
+    ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    ds.dynamicStateCount = 2;
+    ds.pDynamicStates = dyn;
+
+    VkGraphicsPipelineCreateInfo gci{};
+    gci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    gci.stageCount = 2;
+    gci.pStages = stages;
+    gci.pVertexInputState = &vi;
+    gci.pInputAssemblyState = &ia;
+    gci.pViewportState = &vp;
+    gci.pRasterizationState = &rs;
+    gci.pMultisampleState = &ms;
+    gci.pColorBlendState = &cb;
+    gci.pDynamicState = &ds;
+    gci.layout = g_renderer.image_pipeline_layout;
+    gci.renderPass = g_renderer.render_pass;
+    gci.subpass = 0;
+
+    bool ok = vk_ok(vkCreateGraphicsPipelines(
+                        g_renderer.device, VK_NULL_HANDLE, 1, &gci, nullptr,
+                        &g_renderer.image_pipeline),
+                   "vkCreateGraphicsPipelines(image)");
+    vkDestroyShaderModule(g_renderer.device, vs, nullptr);
+    vkDestroyShaderModule(g_renderer.device, fs, nullptr);
+    return ok;
+}
+
+inline bool create_image_descriptor_pool_and_set() {
+    if (g_renderer.image_descriptor_set != VK_NULL_HANDLE) return true;
+
+    VkDescriptorPoolSize sizes[3]{};
+    sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    sizes[0].descriptorCount = 1;
+    sizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    sizes[1].descriptorCount = 1;
+    sizes[2].type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    sizes[2].descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo pci{};
+    pci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pci.maxSets = 1;
+    pci.poolSizeCount = 3;
+    pci.pPoolSizes = sizes;
+    if (!vk_ok(vkCreateDescriptorPool(g_renderer.device, &pci, nullptr,
+                                      &g_renderer.image_descriptor_pool),
+              "vkCreateDescriptorPool(image)"))
+        return false;
+
+    VkDescriptorSetAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    ai.descriptorPool = g_renderer.image_descriptor_pool;
+    ai.descriptorSetCount = 1;
+    ai.pSetLayouts = &g_renderer.image_descriptor_set_layout;
+    return vk_ok(vkAllocateDescriptorSets(g_renderer.device, &ai,
+                                          &g_renderer.image_descriptor_set),
+                "vkAllocateDescriptorSets(image)");
+}
+
+inline bool create_image_atlas_image() {
+    if (g_renderer.image_atlas_image != VK_NULL_HANDLE) return true;
+
+    VkImageCreateInfo ici{};
+    ici.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
+    ici.imageType = VK_IMAGE_TYPE_2D;
+    ici.format = VK_FORMAT_R8G8B8A8_UNORM;
+    ici.extent = { ImageAtlas::SIZE, ImageAtlas::SIZE, 1 };
+    ici.mipLevels = 1;
+    ici.arrayLayers = 1;
+    ici.samples = VK_SAMPLE_COUNT_1_BIT;
+    ici.tiling = VK_IMAGE_TILING_OPTIMAL;
+    ici.usage = VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT;
+    ici.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
+    ici.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+    if (!vk_ok(vkCreateImage(g_renderer.device, &ici, nullptr,
+                             &g_renderer.image_atlas_image),
+              "vkCreateImage(image_atlas)"))
+        return false;
+
+    VkMemoryRequirements req{};
+    vkGetImageMemoryRequirements(g_renderer.device,
+                                 g_renderer.image_atlas_image, &req);
+    auto mt = find_memory_type(req.memoryTypeBits,
+                               VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT);
+    if (!mt) return false;
+
+    VkMemoryAllocateInfo mai{};
+    mai.sType = VK_STRUCTURE_TYPE_MEMORY_ALLOCATE_INFO;
+    mai.allocationSize = req.size;
+    mai.memoryTypeIndex = *mt;
+    if (!vk_ok(vkAllocateMemory(g_renderer.device, &mai, nullptr,
+                                &g_renderer.image_atlas_memory),
+              "vkAllocateMemory(image_atlas)"))
+        return false;
+    if (!vk_ok(vkBindImageMemory(g_renderer.device,
+                                 g_renderer.image_atlas_image,
+                                 g_renderer.image_atlas_memory, 0),
+              "vkBindImageMemory(image_atlas)"))
+        return false;
+
+    VkImageViewCreateInfo vci{};
+    vci.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
+    vci.image = g_renderer.image_atlas_image;
+    vci.viewType = VK_IMAGE_VIEW_TYPE_2D;
+    vci.format = VK_FORMAT_R8G8B8A8_UNORM;
+    vci.components.r = VK_COMPONENT_SWIZZLE_IDENTITY;
+    vci.components.g = VK_COMPONENT_SWIZZLE_IDENTITY;
+    vci.components.b = VK_COMPONENT_SWIZZLE_IDENTITY;
+    vci.components.a = VK_COMPONENT_SWIZZLE_IDENTITY;
+    vci.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    if (!vk_ok(vkCreateImageView(g_renderer.device, &vci, nullptr,
+                                 &g_renderer.image_atlas_view),
+              "vkCreateImageView(image_atlas)"))
+        return false;
+    g_renderer.image_atlas_initialised = false; // needs first upload
+    return true;
+}
+
+inline void write_image_descriptor_set() {
+    if (g_renderer.image_descriptor_set == VK_NULL_HANDLE) return;
+    if (g_renderer.uniform_buffer == VK_NULL_HANDLE
+        || g_renderer.image_instance_buffer == VK_NULL_HANDLE
+        || g_renderer.image_atlas_view == VK_NULL_HANDLE
+        || g_renderer.image_sampler == VK_NULL_HANDLE)
+        return;
+
+    VkDescriptorBufferInfo ubo{};
+    ubo.buffer = g_renderer.uniform_buffer;
+    ubo.offset = 0;
+    ubo.range = sizeof(ColorUniforms);
+
+    VkDescriptorBufferInfo ssbo{};
+    ssbo.buffer = g_renderer.image_instance_buffer;
+    ssbo.offset = 0;
+    ssbo.range = VK_WHOLE_SIZE;
+
+    VkDescriptorImageInfo img{};
+    img.sampler = g_renderer.image_sampler;
+    img.imageView = g_renderer.image_atlas_view;
+    img.imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+    VkWriteDescriptorSet writes[3]{};
+    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[0].dstSet = g_renderer.image_descriptor_set;
+    writes[0].dstBinding = 0;
+    writes[0].descriptorCount = 1;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[0].pBufferInfo = &ubo;
+    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[1].dstSet = g_renderer.image_descriptor_set;
+    writes[1].dstBinding = 1;
+    writes[1].descriptorCount = 1;
+    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[1].pBufferInfo = &ssbo;
+    writes[2].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[2].dstSet = g_renderer.image_descriptor_set;
+    writes[2].dstBinding = 2;
+    writes[2].descriptorCount = 1;
+    writes[2].descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER;
+    writes[2].pImageInfo = &img;
+
+    vkUpdateDescriptorSets(g_renderer.device, 3, writes, 0, nullptr);
+}
+
+inline bool ensure_image_instance_capacity(std::size_t required) {
+    if (required <= g_renderer.image_instance_capacity) return true;
+    std::size_t cap = g_renderer.image_instance_capacity == 0
+                        ? INITIAL_IMAGE_INSTANCE_CAPACITY
+                        : g_renderer.image_instance_capacity;
+    while (cap < required) cap *= 2;
+
+    destroy_host_buffer(g_renderer.image_instance_buffer,
+                        g_renderer.image_instance_memory,
+                        g_renderer.image_instance_mapped);
+    if (!create_host_buffer(cap * sizeof(ImageInstanceGPU),
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                            g_renderer.image_instance_buffer,
+                            g_renderer.image_instance_memory,
+                            g_renderer.image_instance_mapped))
+        return false;
+    g_renderer.image_instance_capacity = cap;
+    write_image_descriptor_set();
+    return true;
+}
+
+inline bool ensure_image_staging_capacity(VkDeviceSize bytes) {
+    if (bytes <= g_renderer.image_staging_capacity
+        && g_renderer.image_staging_buffer != VK_NULL_HANDLE)
+        return true;
+    destroy_host_buffer(g_renderer.image_staging_buffer,
+                        g_renderer.image_staging_memory,
+                        g_renderer.image_staging_mapped);
+    VkDeviceSize cap = g_renderer.image_staging_capacity == 0
+                           ? 64 * 1024
+                           : g_renderer.image_staging_capacity;
+    while (cap < bytes) cap *= 2;
+    if (!create_host_buffer(cap, VK_BUFFER_USAGE_TRANSFER_SRC_BIT,
+                            g_renderer.image_staging_buffer,
+                            g_renderer.image_staging_memory,
+                            g_renderer.image_staging_mapped))
+        return false;
+    g_renderer.image_staging_capacity = cap;
+    return true;
+}
+
+inline bool create_image_resources() {
+    if (!create_image_sampler()) return false;
+    if (!create_image_pipeline()) return false;
+    if (g_renderer.image_instance_buffer == VK_NULL_HANDLE) {
+        if (!create_host_buffer(
+                INITIAL_IMAGE_INSTANCE_CAPACITY * sizeof(ImageInstanceGPU),
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                g_renderer.image_instance_buffer,
+                g_renderer.image_instance_memory,
+                g_renderer.image_instance_mapped))
+            return false;
+        g_renderer.image_instance_capacity = INITIAL_IMAGE_INSTANCE_CAPACITY;
+    }
+    if (!create_image_descriptor_pool_and_set()) return false;
+    if (!create_image_atlas_image()) return false;
+    write_image_descriptor_set();
+    return true;
+}
+
+// Transitions the atlas image layout to TRANSFER_DST_OPTIMAL (from
+// UNDEFINED on first use, from SHADER_READ_ONLY_OPTIMAL otherwise),
+// records a buffer→image copy for the current dirty rect, and
+// transitions back to SHADER_READ_ONLY_OPTIMAL so the next frame's
+// fragment shader can sample it. Must be called outside any render
+// pass.
+inline void record_image_atlas_upload(VkCommandBuffer cmd) {
+    if (!g_images.has_dirty) return;
+    if (g_images.dirty_min_x >= g_images.dirty_max_x
+        || g_images.dirty_min_y >= g_images.dirty_max_y) {
+        g_images.has_dirty = false;
+        return;
+    }
+    std::uint32_t const dx = g_images.dirty_min_x;
+    std::uint32_t const dy = g_images.dirty_min_y;
+    std::uint32_t const dw = g_images.dirty_max_x - g_images.dirty_min_x;
+    std::uint32_t const dh = g_images.dirty_max_y - g_images.dirty_min_y;
+
+    // Pack the dirty rect tightly into the staging buffer so the
+    // upload isn't 16 MiB when only a few KB changed.
+    VkDeviceSize const needed = static_cast<VkDeviceSize>(dw)
+                              * dh * ImageAtlas::BYTES_PER_PIXEL;
+    if (!ensure_image_staging_capacity(needed)) {
+        g_images.has_dirty = false;
+        return;
+    }
+    auto* dst = static_cast<std::uint8_t*>(g_renderer.image_staging_mapped);
+    std::size_t const src_row =
+        static_cast<std::size_t>(ImageAtlas::SIZE) * ImageAtlas::BYTES_PER_PIXEL;
+    std::size_t const dst_row =
+        static_cast<std::size_t>(dw) * ImageAtlas::BYTES_PER_PIXEL;
+    for (std::uint32_t y = 0; y < dh; ++y) {
+        auto const* src = g_images.pixels.data()
+                        + static_cast<std::size_t>(dy + y) * src_row
+                        + static_cast<std::size_t>(dx) * ImageAtlas::BYTES_PER_PIXEL;
+        std::memcpy(dst + static_cast<std::size_t>(y) * dst_row, src, dst_row);
+    }
+
+    VkImageMemoryBarrier to_transfer{};
+    to_transfer.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    to_transfer.oldLayout = g_renderer.image_atlas_initialised
+                              ? VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL
+                              : VK_IMAGE_LAYOUT_UNDEFINED;
+    to_transfer.newLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    to_transfer.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    to_transfer.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    to_transfer.image = g_renderer.image_atlas_image;
+    to_transfer.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    to_transfer.srcAccessMask = g_renderer.image_atlas_initialised
+                                  ? VK_ACCESS_SHADER_READ_BIT
+                                  : 0;
+    to_transfer.dstAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    vkCmdPipelineBarrier(cmd,
+        g_renderer.image_atlas_initialised
+            ? VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT
+            : VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &to_transfer);
+
+    VkBufferImageCopy region{};
+    region.bufferOffset = 0;
+    region.bufferRowLength = dw;     // tightly packed inside staging
+    region.bufferImageHeight = dh;
+    region.imageSubresource = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 0, 1 };
+    region.imageOffset = { static_cast<std::int32_t>(dx),
+                           static_cast<std::int32_t>(dy), 0 };
+    region.imageExtent = { dw, dh, 1 };
+    vkCmdCopyBufferToImage(cmd, g_renderer.image_staging_buffer,
+                           g_renderer.image_atlas_image,
+                           VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                           1, &region);
+
+    VkImageMemoryBarrier to_shader{};
+    to_shader.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+    to_shader.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+    to_shader.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+    to_shader.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    to_shader.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+    to_shader.image = g_renderer.image_atlas_image;
+    to_shader.subresourceRange = { VK_IMAGE_ASPECT_COLOR_BIT, 0, 1, 0, 1 };
+    to_shader.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+    to_shader.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+    vkCmdPipelineBarrier(cmd,
+        VK_PIPELINE_STAGE_TRANSFER_BIT,
+        VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT,
+        0, 0, nullptr, 0, nullptr, 1, &to_shader);
+
+    g_renderer.image_atlas_initialised = true;
+    g_images.has_dirty = false;
+    g_images.dirty_min_x = ImageAtlas::SIZE;
+    g_images.dirty_min_y = ImageAtlas::SIZE;
+    g_images.dirty_max_x = 0;
+    g_images.dirty_max_y = 0;
+}
+
+inline void destroy_image_pipeline_resources() {
+    if (g_renderer.image_descriptor_pool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(g_renderer.device,
+                                g_renderer.image_descriptor_pool, nullptr);
+        g_renderer.image_descriptor_pool = VK_NULL_HANDLE;
+        g_renderer.image_descriptor_set = VK_NULL_HANDLE;
+    }
+    destroy_host_buffer(g_renderer.image_staging_buffer,
+                        g_renderer.image_staging_memory,
+                        g_renderer.image_staging_mapped);
+    g_renderer.image_staging_capacity = 0;
+    destroy_host_buffer(g_renderer.image_instance_buffer,
+                        g_renderer.image_instance_memory,
+                        g_renderer.image_instance_mapped);
+    g_renderer.image_instance_capacity = 0;
+    if (g_renderer.image_atlas_view != VK_NULL_HANDLE) {
+        vkDestroyImageView(g_renderer.device, g_renderer.image_atlas_view,
+                           nullptr);
+        g_renderer.image_atlas_view = VK_NULL_HANDLE;
+    }
+    if (g_renderer.image_atlas_image != VK_NULL_HANDLE) {
+        vkDestroyImage(g_renderer.device, g_renderer.image_atlas_image,
+                       nullptr);
+        g_renderer.image_atlas_image = VK_NULL_HANDLE;
+    }
+    if (g_renderer.image_atlas_memory != VK_NULL_HANDLE) {
+        vkFreeMemory(g_renderer.device, g_renderer.image_atlas_memory,
+                     nullptr);
+        g_renderer.image_atlas_memory = VK_NULL_HANDLE;
+    }
+    g_renderer.image_atlas_initialised = false;
+    if (g_renderer.image_sampler != VK_NULL_HANDLE) {
+        vkDestroySampler(g_renderer.device, g_renderer.image_sampler, nullptr);
+        g_renderer.image_sampler = VK_NULL_HANDLE;
+    }
+    if (g_renderer.image_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(g_renderer.device, g_renderer.image_pipeline,
+                          nullptr);
+        g_renderer.image_pipeline = VK_NULL_HANDLE;
+    }
+    if (g_renderer.image_pipeline_layout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(g_renderer.device,
+                                g_renderer.image_pipeline_layout, nullptr);
+        g_renderer.image_pipeline_layout = VK_NULL_HANDLE;
+    }
+    if (g_renderer.image_descriptor_set_layout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(g_renderer.device,
+                                     g_renderer.image_descriptor_set_layout,
+                                     nullptr);
+        g_renderer.image_descriptor_set_layout = VK_NULL_HANDLE;
+    }
+    // The CPU-side atlas survives shutdown so repeat attach_surface
+    // calls don't re-decode cached images; cache is drained on
+    // phenotype_android_detach_surface via a separate clear helper.
+}
+
+inline void reset_image_cache() {
+    g_images.cache.clear();
+    g_images.cursor_x = 0;
+    g_images.cursor_y = 0;
+    g_images.row_height = 0;
+    g_images.dirty_min_x = ImageAtlas::SIZE;
+    g_images.dirty_min_y = ImageAtlas::SIZE;
+    g_images.dirty_max_x = 0;
+    g_images.dirty_max_y = 0;
+    g_images.has_dirty = false;
+    g_images.pixels.clear();
+    g_images.pixels.shrink_to_fit();
+}
+
 inline bool create_image_views_and_framebuffers() {
     g_renderer.swapchain_image_views.resize(g_renderer.swapchain_images.size());
     for (std::size_t i = 0; i < g_renderer.swapchain_images.size(); ++i) {
@@ -1664,6 +2470,7 @@ inline bool create_swapchain() {
 
     if (!create_color_resources()) return false;
     if (!create_text_resources()) return false;
+    if (!create_image_resources()) return false;
     if (!create_image_views_and_framebuffers()) return false;
     return true;
 }
@@ -2134,6 +2941,8 @@ inline void destroy_color_resources() {
 inline void renderer_shutdown() {
     if (g_renderer.device != VK_NULL_HANDLE) vkDeviceWaitIdle(g_renderer.device);
     destroy_swapchain_resources();
+    destroy_image_pipeline_resources();
+    reset_image_cache();
     destroy_text_pipeline_resources();
     destroy_color_resources();
     if (g_renderer.in_flight != VK_NULL_HANDLE) {
@@ -2180,7 +2989,7 @@ inline void android_open_url(char const* url, unsigned int len) {
 inline platform_api build_android_platform() {
     auto api = make_stub_platform(
         "android",
-        "[phenotype-native] Android Vulkan backend (stage 4: color + text)");
+        "[phenotype-native] Android Vulkan backend (stage 5: color + text + image)");
     api.renderer = {
         renderer_init,
         renderer_flush,
@@ -2233,6 +3042,12 @@ __attribute__((visibility("default")))
 void phenotype_android_bind_jvm(void* jvm) {
     namespace d = phenotype::native::detail;
     d::g_jni.vm = static_cast<JavaVM*>(jvm);
+}
+
+__attribute__((visibility("default")))
+void phenotype_android_bind_assets(void* asset_manager) {
+    namespace d = phenotype::native::detail;
+    d::g_asset_mgr = static_cast<AAssetManager*>(asset_manager);
 }
 
 __attribute__((visibility("default")))
