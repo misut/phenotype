@@ -24,6 +24,7 @@ void phenotype_android_start_app(void);
 void phenotype_android_dispatch_pointer(float x, float y, int action);
 void phenotype_android_dispatch_key(int android_keycode, int action, int mods);
 void phenotype_android_dispatch_char(unsigned int codepoint);
+void phenotype_android_dispatch_scroll(double dy);
 char const* phenotype_android_startup_message(void);
 }
 
@@ -118,6 +119,17 @@ extern "C" void android_main(android_app* app) {
                         || masked == AMOTION_EVENT_ACTION_POINTER_UP
                         || masked == AMOTION_EVENT_ACTION_CANCEL) {
                     phenotype_android_dispatch_pointer(x, y, 2);
+                } else if (masked == AMOTION_EVENT_ACTION_SCROLL) {
+                    // Stage 7: Mouse wheel / trackpad / emulator
+                    // `input roll` events surface with a VSCROLL axis.
+                    // Touch-screen two-finger scroll doesn't generate
+                    // this — it's a future Stage 8 gesture story.
+                    float dy = GameActivityPointerAxes_getAxisValue(
+                        &ev.pointers[ptr], AMOTION_EVENT_AXIS_VSCROLL);
+                    if (dy != 0.0f) {
+                        phenotype_android_dispatch_scroll(
+                            static_cast<double>(dy));
+                    }
                 }
             }
             android_app_clear_motion_events(ib);
