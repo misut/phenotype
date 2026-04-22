@@ -9,6 +9,10 @@
 #include <android/log.h>
 
 extern "C" {
+// Stage 4 adds a JNI-backed text pipeline; phenotype needs the process
+// JavaVM* before text_init / text_build_atlas can run. GameActivity
+// exposes it at app->activity->vm.
+void phenotype_android_bind_jvm(void* jvm);
 void phenotype_android_attach_surface(void* native_window);
 void phenotype_android_detach_surface(void);
 void phenotype_android_draw_frame(void);
@@ -50,6 +54,11 @@ void handle_cmd(android_app* app, int32_t cmd) {
 
 extern "C" void android_main(android_app* app) {
     __android_log_print(ANDROID_LOG_INFO, TAG, "phenotype example starting");
+    // Hand phenotype the process-scope JavaVM before any attach_surface
+    // so the Stage 4 text pipeline can cache its JNI refs on first use.
+    if (app->activity) {
+        phenotype_android_bind_jvm(app->activity->vm);
+    }
     if (auto const* msg = phenotype_android_startup_message()) {
         __android_log_print(ANDROID_LOG_INFO, TAG, "%s", msg);
     }

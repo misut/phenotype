@@ -1,8 +1,9 @@
 // Android (Vulkan) platform backend for phenotype. Stage 2 cleared the
-// swapchain to the active theme background; Stage 3 renders the color
+// swapchain to the active theme background; Stage 3 rendered the color
 // primitives (Clear / FillRect / StrokeRect / RoundRect / DrawLine)
-// via a single instanced graphics pipeline that mirrors the macOS /
-// Windows color_pipeline design byte-for-byte.
+// via an instanced graphics pipeline. Stage 4 adds the text pipeline:
+// measure glyph runs + rasterize them to an R8 atlas via JNI-backed
+// android.graphics.Paint / Canvas / Bitmap.
 //
 // Vulkan state lives in `detail::g_renderer`; helpers in the detail
 // namespace keep the module interface unit short so the Clang module
@@ -18,12 +19,15 @@ module;
 #include <vulkan/vulkan.h>
 #include <android/native_window.h>
 #include <android/log.h>
+#include <android/bitmap.h>
+#include <jni.h>
 #endif
 
 export module phenotype.native.android;
 
 #if defined(__ANDROID__)
 import std;
+import cppx.unicode;
 import phenotype;
 import phenotype.native.platform;
 import phenotype.native.shell;
@@ -84,6 +88,512 @@ struct DemoCmdBuffer {
     void ensure(unsigned int /*needed*/) { /* fixed capacity */ }
     void flush() { /* no-op; decoder reads (buf, used) directly */ }
 };
+
+// ---- JNI text bridge --------------------------------------------------
+//
+// Stage 4 rasterizes glyph runs via android.graphics.Paint / Canvas /
+// Bitmap. All JNI references are cached on text_init() and released on
+// text_shutdown(). The GameActivity driver must call
+// `phenotype_android_bind_jvm(app->activity->vm)` once before
+// text_init runs — typically at the top of android_main.
+
+struct jni_refs {
+    JavaVM* vm = nullptr;
+
+    // Classes (global refs).
+    jclass paint_class         = nullptr;
+    jclass typeface_class      = nullptr;
+    jclass bitmap_class        = nullptr;
+    jclass canvas_class        = nullptr;
+    jclass bitmap_config_class = nullptr;
+
+    // Method IDs (no cleanup needed — tied to class lifetime).
+    jmethodID paint_ctor          = nullptr;
+    jmethodID paint_set_textsize  = nullptr;
+    jmethodID paint_set_typeface  = nullptr;
+    jmethodID paint_set_color     = nullptr;
+    jmethodID paint_set_antialias = nullptr;
+    jmethodID paint_measure_text  = nullptr;
+    jmethodID paint_ascent        = nullptr;
+    jmethodID paint_descent       = nullptr;
+
+    jmethodID bitmap_create      = nullptr;
+    jmethodID bitmap_erase_color = nullptr;
+
+    jmethodID canvas_ctor      = nullptr;
+    jmethodID canvas_draw_text = nullptr;
+
+    // Global refs to static final instances / enum values.
+    jobject typeface_default   = nullptr;
+    jobject typeface_monospace = nullptr;
+    jobject config_argb8888    = nullptr;
+
+    // Reusable Paint instances for the sans / mono families. Text color
+    // + size get reset per call; typeface + antialias are bound once.
+    jobject paint_sans = nullptr;
+    jobject paint_mono = nullptr;
+
+    bool initialised = false;
+};
+
+inline jni_refs g_jni{};
+
+// Scoped JNIEnv helper. On a thread that's already attached (the
+// GameActivity render thread is) `attached` stays false and Detach is
+// a no-op; on any other thread we attach for the duration.
+struct ScopedEnv {
+    JNIEnv* env = nullptr;
+    bool attached = false;
+
+    explicit ScopedEnv(JavaVM* vm) {
+        if (!vm) return;
+        auto status = vm->GetEnv(reinterpret_cast<void**>(&env),
+                                 JNI_VERSION_1_6);
+        if (status == JNI_EDETACHED) {
+            if (vm->AttachCurrentThread(&env, nullptr) == JNI_OK)
+                attached = true;
+            else
+                env = nullptr;
+        } else if (status != JNI_OK) {
+            env = nullptr;
+        }
+    }
+
+    ~ScopedEnv() {
+        if (attached && g_jni.vm)
+            g_jni.vm->DetachCurrentThread();
+    }
+
+    ScopedEnv(ScopedEnv const&) = delete;
+    ScopedEnv& operator=(ScopedEnv const&) = delete;
+
+    explicit operator bool() const { return env != nullptr; }
+};
+
+inline bool check_and_clear_exception(JNIEnv* env) {
+    if (env && env->ExceptionCheck()) {
+        env->ExceptionDescribe();
+        env->ExceptionClear();
+        return true;
+    }
+    return false;
+}
+
+// Builds a java/lang/String from a UTF-8 byte range. Routes through
+// cppx::unicode::utf8_to_utf16 so Modified-UTF-8 null-byte gotchas
+// never touch JNI. On decode failure returns an empty string.
+inline jstring make_jstring_utf8(JNIEnv* env, char const* text,
+                                 unsigned int len) {
+    if (!env) return nullptr;
+    if (len == 0 || text == nullptr) return env->NewString(nullptr, 0);
+    auto u16 = ::cppx::unicode::utf8_to_utf16(
+        std::string_view{text, static_cast<std::size_t>(len)});
+    if (!u16) return env->NewString(nullptr, 0);
+    return env->NewString(
+        reinterpret_cast<jchar const*>(u16->data()),
+        static_cast<jsize>(u16->size()));
+}
+
+// Packs phenotype::Color (0..255 RGBA) into the 0xAARRGGBB int
+// android.graphics.Color uses.
+inline jint pack_android_color(float r, float g, float b, float a) {
+    auto clamp = [](float v) -> unsigned {
+        if (v < 0.0f) v = 0.0f;
+        if (v > 1.0f) v = 1.0f;
+        return static_cast<unsigned>(v * 255.0f + 0.5f);
+    };
+    return static_cast<jint>(
+        (clamp(a) << 24) | (clamp(r) << 16) | (clamp(g) << 8) | clamp(b));
+}
+
+inline void text_shutdown(); // forward decl
+
+inline bool init_jni_refs(JNIEnv* env) {
+    auto find_global = [&](char const* name) -> jclass {
+        jclass local = env->FindClass(name);
+        if (!local) {
+            check_and_clear_exception(env);
+            return nullptr;
+        }
+        auto g = reinterpret_cast<jclass>(env->NewGlobalRef(local));
+        env->DeleteLocalRef(local);
+        return g;
+    };
+
+    g_jni.paint_class         = find_global("android/graphics/Paint");
+    g_jni.typeface_class      = find_global("android/graphics/Typeface");
+    g_jni.bitmap_class        = find_global("android/graphics/Bitmap");
+    g_jni.canvas_class        = find_global("android/graphics/Canvas");
+    g_jni.bitmap_config_class = find_global("android/graphics/Bitmap$Config");
+    if (!g_jni.paint_class || !g_jni.typeface_class || !g_jni.bitmap_class
+        || !g_jni.canvas_class || !g_jni.bitmap_config_class) {
+        return false;
+    }
+
+    g_jni.paint_ctor = env->GetMethodID(g_jni.paint_class, "<init>", "()V");
+    g_jni.paint_set_textsize = env->GetMethodID(
+        g_jni.paint_class, "setTextSize", "(F)V");
+    g_jni.paint_set_typeface = env->GetMethodID(
+        g_jni.paint_class, "setTypeface",
+        "(Landroid/graphics/Typeface;)Landroid/graphics/Typeface;");
+    g_jni.paint_set_color = env->GetMethodID(
+        g_jni.paint_class, "setColor", "(I)V");
+    g_jni.paint_set_antialias = env->GetMethodID(
+        g_jni.paint_class, "setAntiAlias", "(Z)V");
+    g_jni.paint_measure_text = env->GetMethodID(
+        g_jni.paint_class, "measureText", "(Ljava/lang/String;)F");
+    g_jni.paint_ascent = env->GetMethodID(
+        g_jni.paint_class, "ascent", "()F");
+    g_jni.paint_descent = env->GetMethodID(
+        g_jni.paint_class, "descent", "()F");
+
+    g_jni.bitmap_create = env->GetStaticMethodID(
+        g_jni.bitmap_class, "createBitmap",
+        "(IILandroid/graphics/Bitmap$Config;)Landroid/graphics/Bitmap;");
+    g_jni.bitmap_erase_color = env->GetMethodID(
+        g_jni.bitmap_class, "eraseColor", "(I)V");
+
+    g_jni.canvas_ctor = env->GetMethodID(
+        g_jni.canvas_class, "<init>", "(Landroid/graphics/Bitmap;)V");
+    g_jni.canvas_draw_text = env->GetMethodID(
+        g_jni.canvas_class, "drawText",
+        "(Ljava/lang/String;FFLandroid/graphics/Paint;)V");
+
+    if (check_and_clear_exception(env)) return false;
+    if (!g_jni.paint_ctor || !g_jni.paint_set_textsize
+        || !g_jni.paint_set_typeface || !g_jni.paint_set_color
+        || !g_jni.paint_set_antialias || !g_jni.paint_measure_text
+        || !g_jni.paint_ascent || !g_jni.paint_descent
+        || !g_jni.bitmap_create || !g_jni.bitmap_erase_color
+        || !g_jni.canvas_ctor || !g_jni.canvas_draw_text)
+        return false;
+
+    // Cache Typeface.DEFAULT / Typeface.MONOSPACE as global refs.
+    auto load_typeface = [&](char const* name) -> jobject {
+        jfieldID id = env->GetStaticFieldID(
+            g_jni.typeface_class, name, "Landroid/graphics/Typeface;");
+        if (!id) { check_and_clear_exception(env); return nullptr; }
+        jobject local = env->GetStaticObjectField(g_jni.typeface_class, id);
+        if (!local) { check_and_clear_exception(env); return nullptr; }
+        jobject g = env->NewGlobalRef(local);
+        env->DeleteLocalRef(local);
+        return g;
+    };
+    g_jni.typeface_default   = load_typeface("DEFAULT");
+    g_jni.typeface_monospace = load_typeface("MONOSPACE");
+    if (!g_jni.typeface_default || !g_jni.typeface_monospace) return false;
+
+    // Bitmap.Config.ARGB_8888 — static final enum instance.
+    {
+        jfieldID id = env->GetStaticFieldID(
+            g_jni.bitmap_config_class, "ARGB_8888",
+            "Landroid/graphics/Bitmap$Config;");
+        if (!id) { check_and_clear_exception(env); return false; }
+        jobject local = env->GetStaticObjectField(
+            g_jni.bitmap_config_class, id);
+        if (!local) { check_and_clear_exception(env); return false; }
+        g_jni.config_argb8888 = env->NewGlobalRef(local);
+        env->DeleteLocalRef(local);
+    }
+
+    // Build the two cached Paint instances (sans / mono). Antialias
+    // stays on for the lifetime; text color + size are set per call.
+    auto build_paint = [&](jobject typeface) -> jobject {
+        jobject local = env->NewObject(g_jni.paint_class, g_jni.paint_ctor);
+        if (!local) { check_and_clear_exception(env); return nullptr; }
+        env->CallVoidMethod(local, g_jni.paint_set_antialias, JNI_TRUE);
+        env->CallObjectMethod(local, g_jni.paint_set_typeface, typeface);
+        check_and_clear_exception(env);
+        jobject g = env->NewGlobalRef(local);
+        env->DeleteLocalRef(local);
+        return g;
+    };
+    g_jni.paint_sans = build_paint(g_jni.typeface_default);
+    g_jni.paint_mono = build_paint(g_jni.typeface_monospace);
+    if (!g_jni.paint_sans || !g_jni.paint_mono) return false;
+
+    return true;
+}
+
+inline void text_init() {
+    if (g_jni.initialised) return;
+    if (!g_jni.vm) {
+        __android_log_print(
+            ANDROID_LOG_WARN, ANDROID_LOG_TAG,
+            "text_init skipped — phenotype_android_bind_jvm not called yet");
+        return;
+    }
+    ScopedEnv e(g_jni.vm);
+    if (!e) {
+        __android_log_print(ANDROID_LOG_ERROR, ANDROID_LOG_TAG,
+                            "text_init: could not attach JNIEnv");
+        return;
+    }
+    if (init_jni_refs(e.env)) {
+        g_jni.initialised = true;
+        __android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG,
+                            "text_init: JNI refs cached (stage 4 debug)");
+    } else {
+        __android_log_print(ANDROID_LOG_ERROR, ANDROID_LOG_TAG,
+                            "text_init: JNI ref setup failed");
+        text_shutdown();
+    }
+}
+
+inline void text_shutdown() {
+    if (!g_jni.vm) { g_jni.initialised = false; return; }
+    ScopedEnv e(g_jni.vm);
+    if (!e) { g_jni.initialised = false; return; }
+    auto* env = e.env;
+    auto drop = [&](jobject& ref) {
+        if (ref) { env->DeleteGlobalRef(ref); ref = nullptr; }
+    };
+    drop(reinterpret_cast<jobject&>(g_jni.paint_class));
+    drop(reinterpret_cast<jobject&>(g_jni.typeface_class));
+    drop(reinterpret_cast<jobject&>(g_jni.bitmap_class));
+    drop(reinterpret_cast<jobject&>(g_jni.canvas_class));
+    drop(reinterpret_cast<jobject&>(g_jni.bitmap_config_class));
+    drop(g_jni.typeface_default);
+    drop(g_jni.typeface_monospace);
+    drop(g_jni.config_argb8888);
+    drop(g_jni.paint_sans);
+    drop(g_jni.paint_mono);
+    // Method IDs don't need cleanup — they die with the class ref.
+    g_jni.paint_ctor = nullptr;
+    g_jni.paint_set_textsize = nullptr;
+    g_jni.paint_set_typeface = nullptr;
+    g_jni.paint_set_color = nullptr;
+    g_jni.paint_set_antialias = nullptr;
+    g_jni.paint_measure_text = nullptr;
+    g_jni.paint_ascent = nullptr;
+    g_jni.paint_descent = nullptr;
+    g_jni.bitmap_create = nullptr;
+    g_jni.bitmap_erase_color = nullptr;
+    g_jni.canvas_ctor = nullptr;
+    g_jni.canvas_draw_text = nullptr;
+    g_jni.initialised = false;
+}
+
+inline float text_measure(float font_size, bool mono,
+                          char const* text_ptr, unsigned int len) {
+    if (!g_jni.initialised || len == 0 || text_ptr == nullptr) return 0.0f;
+    ScopedEnv e(g_jni.vm);
+    if (!e) return 0.0f;
+    auto* env = e.env;
+    jobject paint = mono ? g_jni.paint_mono : g_jni.paint_sans;
+    env->CallVoidMethod(paint, g_jni.paint_set_textsize,
+                        static_cast<jfloat>(font_size));
+    if (check_and_clear_exception(env)) return 0.0f;
+    jstring s = make_jstring_utf8(env, text_ptr, len);
+    if (!s) return 0.0f;
+    jfloat w = env->CallFloatMethod(paint, g_jni.paint_measure_text, s);
+    env->DeleteLocalRef(s);
+    if (check_and_clear_exception(env)) return 0.0f;
+    return static_cast<float>(w);
+}
+
+// ---- Text atlas builder ----------------------------------------------
+//
+// build_atlas strip-packs one slot per TextEntry into an ARGB_8888
+// Bitmap, calls Canvas.drawText at the slot baseline, and reads pixels
+// back via AndroidBitmap_lockPixels so we extract the alpha channel
+// into the R8 atlas the Vulkan text shader expects.
+
+inline constexpr int TEXT_ATLAS_MAX_WIDTH  = 2048;
+inline constexpr int TEXT_ATLAS_MAX_HEIGHT = 4096;
+
+// One entry's slot in the atlas prior to drawing.
+struct TextSlot {
+    int slot_x = 0;
+    int slot_y = 0;
+    int slot_w = 0;
+    int slot_h = 0;
+    float ascent  = 0.0f; // Paint.ascent(), negative
+    float descent = 0.0f; // Paint.descent(), positive
+    float pixel_width = 0.0f; // Paint.measureText() * scale, rounded up
+    bool skipped = false; // true if the slot didn't fit in the atlas
+};
+
+inline int iceil(float v) { return static_cast<int>(std::ceil(v)); }
+
+inline ::phenotype::native::TextAtlas text_build_atlas(
+        std::vector<::phenotype::native::TextEntry> const& entries,
+        float backing_scale) {
+    using ::phenotype::native::TextAtlas;
+    using ::phenotype::native::TextQuad;
+    if (!g_jni.initialised || entries.empty()) return {};
+
+    ScopedEnv e(g_jni.vm);
+    if (!e) return {};
+    auto* env = e.env;
+
+    float scale = backing_scale > 0.0f ? backing_scale : 1.0f;
+
+    // ---- pass 1: measure + layout ----
+    std::vector<TextSlot> slots(entries.size());
+    int cursor_x = 0;
+    int cursor_y = 0;
+    int row_h    = 0;
+    int atlas_w  = 0;
+    int atlas_h  = 0;
+
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        auto const& te = entries[i];
+        TextSlot& slot = slots[i];
+        jobject paint = te.mono ? g_jni.paint_mono : g_jni.paint_sans;
+        env->CallVoidMethod(paint, g_jni.paint_set_textsize,
+                            static_cast<jfloat>(te.font_size * scale));
+        if (check_and_clear_exception(env)) { slot.skipped = true; continue; }
+
+        slot.ascent  = env->CallFloatMethod(paint, g_jni.paint_ascent);
+        slot.descent = env->CallFloatMethod(paint, g_jni.paint_descent);
+        if (check_and_clear_exception(env)) { slot.skipped = true; continue; }
+
+        jstring s = make_jstring_utf8(env, te.text.data(),
+                                      static_cast<unsigned>(te.text.size()));
+        jfloat measured = 0.0f;
+        if (s) {
+            measured = env->CallFloatMethod(
+                paint, g_jni.paint_measure_text, s);
+            env->DeleteLocalRef(s);
+            if (check_and_clear_exception(env)) measured = 0.0f;
+        }
+        slot.pixel_width = measured;
+
+        int w = iceil(measured) + 2; // 1px padding on each side
+        int h = iceil(slot.descent - slot.ascent) + 2;
+        if (te.line_height > 0.0f) {
+            int lh = iceil(te.line_height * scale);
+            if (lh > h) h = lh;
+        }
+        slot.slot_w = w;
+        slot.slot_h = h;
+
+        if (w > TEXT_ATLAS_MAX_WIDTH) { slot.skipped = true; continue; }
+        if (cursor_x + w > TEXT_ATLAS_MAX_WIDTH) {
+            cursor_x = 0;
+            cursor_y += row_h;
+            row_h = 0;
+        }
+        if (cursor_y + h > TEXT_ATLAS_MAX_HEIGHT) {
+            __android_log_print(
+                ANDROID_LOG_WARN, ANDROID_LOG_TAG,
+                "text atlas exhausted at entry %zu (h=%d); dropping run", i, h);
+            slot.skipped = true;
+            continue;
+        }
+        slot.slot_x = cursor_x;
+        slot.slot_y = cursor_y;
+        cursor_x += w;
+        if (h > row_h) row_h = h;
+        if (cursor_x > atlas_w) atlas_w = cursor_x;
+        int bottom = cursor_y + row_h;
+        if (bottom > atlas_h) atlas_h = bottom;
+    }
+
+    if (atlas_w == 0 || atlas_h == 0) return {};
+
+    // Round width up to a multiple of 4 so the Vulkan transfer doesn't
+    // hit alignment issues with a 1-byte-per-texel R8 image.
+    atlas_w = (atlas_w + 3) & ~3;
+
+    // ---- pass 2: rasterize ----
+    jobject bitmap = env->CallStaticObjectMethod(
+        g_jni.bitmap_class, g_jni.bitmap_create,
+        atlas_w, atlas_h, g_jni.config_argb8888);
+    if (check_and_clear_exception(env) || !bitmap) return {};
+    env->CallVoidMethod(bitmap, g_jni.bitmap_erase_color, static_cast<jint>(0));
+
+    jobject canvas = env->NewObject(g_jni.canvas_class,
+                                    g_jni.canvas_ctor, bitmap);
+    if (check_and_clear_exception(env) || !canvas) {
+        env->DeleteLocalRef(bitmap);
+        return {};
+    }
+
+    std::vector<TextQuad> quads(entries.size());
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        auto const& te = entries[i];
+        auto& slot = slots[i];
+        if (slot.skipped) continue;
+
+        jobject paint = te.mono ? g_jni.paint_mono : g_jni.paint_sans;
+        env->CallVoidMethod(paint, g_jni.paint_set_textsize,
+                            static_cast<jfloat>(te.font_size * scale));
+        env->CallVoidMethod(paint, g_jni.paint_set_color,
+                            pack_android_color(te.r, te.g, te.b, te.a));
+        if (check_and_clear_exception(env)) continue;
+
+        jstring s = make_jstring_utf8(env, te.text.data(),
+                                      static_cast<unsigned>(te.text.size()));
+        if (!s) continue;
+
+        float baseline_y = static_cast<float>(slot.slot_y)
+                         + 1.0f                  // top padding
+                         + (-slot.ascent);       // ascent is negative
+        env->CallVoidMethod(canvas, g_jni.canvas_draw_text, s,
+                            static_cast<jfloat>(slot.slot_x + 1),
+                            baseline_y, paint);
+        env->DeleteLocalRef(s);
+        check_and_clear_exception(env);
+
+        // Emit the quad using entry.x / entry.y as the anchor; the
+        // desktop convention places (x,y) at the pixel where the atlas
+        // slot's top-left should land after downscaling.
+        TextQuad& q = quads[i];
+        q.x = te.x;
+        q.y = te.y;
+        q.w = static_cast<float>(slot.slot_w) / scale;
+        q.h = static_cast<float>(slot.slot_h) / scale;
+        q.u  = static_cast<float>(slot.slot_x) / static_cast<float>(atlas_w);
+        q.v  = static_cast<float>(slot.slot_y) / static_cast<float>(atlas_h);
+        q.uw = static_cast<float>(slot.slot_w) / static_cast<float>(atlas_w);
+        q.vh = static_cast<float>(slot.slot_h) / static_cast<float>(atlas_h);
+    }
+
+    // ---- pass 3: read back pixel alpha into R8 ----
+    AndroidBitmapInfo info{};
+    if (AndroidBitmap_getInfo(env, bitmap, &info) != ANDROID_BITMAP_RESULT_SUCCESS
+        || info.format != ANDROID_BITMAP_FORMAT_RGBA_8888) {
+        env->DeleteLocalRef(canvas);
+        env->DeleteLocalRef(bitmap);
+        return {};
+    }
+    void* pixel_addr = nullptr;
+    if (AndroidBitmap_lockPixels(env, bitmap, &pixel_addr)
+            != ANDROID_BITMAP_RESULT_SUCCESS
+        || !pixel_addr) {
+        env->DeleteLocalRef(canvas);
+        env->DeleteLocalRef(bitmap);
+        return {};
+    }
+
+    TextAtlas out;
+    out.width = atlas_w;
+    out.height = atlas_h;
+    out.pixels.resize(static_cast<std::size_t>(atlas_w)
+                    * static_cast<std::size_t>(atlas_h));
+    auto const* src = static_cast<std::uint8_t const*>(pixel_addr);
+    std::size_t stride = info.stride; // bytes per row, ARGB_8888 = 4 * w + padding
+    for (int y = 0; y < atlas_h; ++y) {
+        auto const* row = src + y * stride;
+        auto* dst = out.pixels.data() + static_cast<std::size_t>(y) * atlas_w;
+        for (int x = 0; x < atlas_w; ++x) {
+            // ANDROID_BITMAP_FORMAT_RGBA_8888 memory layout is R,G,B,A
+            // regardless of host endianness (per NDK bitmap.h contract).
+            dst[x] = row[x * 4 + 3];
+        }
+    }
+    AndroidBitmap_unlockPixels(env, bitmap);
+
+    out.quads = std::move(quads);
+    env->DeleteLocalRef(canvas);
+    env->DeleteLocalRef(bitmap);
+    __android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG,
+                        "text_build_atlas: %dx%d, %zu entries (stage 4 debug)",
+                        out.width, out.height, entries.size());
+    return out;
+}
 
 struct android_renderer {
     VkInstance instance;
@@ -1074,12 +1584,18 @@ inline void android_open_url(char const* url, unsigned int len) {
 inline platform_api build_android_platform() {
     auto api = make_stub_platform(
         "android",
-        "[phenotype-native] Android Vulkan backend (stage 3: color pipeline)");
+        "[phenotype-native] Android Vulkan backend (stage 4: color + text)");
     api.renderer = {
         renderer_init,
         renderer_flush,
         renderer_shutdown,
         renderer_hit_test,
+    };
+    api.text = {
+        text_init,
+        text_shutdown,
+        text_measure,
+        text_build_atlas,
     };
     api.open_url = android_open_url;
     return api;
@@ -1118,10 +1634,18 @@ inline void bind_platform_once() {
 extern "C" {
 
 __attribute__((visibility("default")))
+void phenotype_android_bind_jvm(void* jvm) {
+    namespace d = phenotype::native::detail;
+    d::g_jni.vm = static_cast<JavaVM*>(jvm);
+}
+
+__attribute__((visibility("default")))
 void phenotype_android_attach_surface(void* native_window) {
     namespace d = phenotype::native::detail;
     d::bind_platform_once();
     d::g_android_host.window = native_window;
+    if (d::g_android_host.platform->text.init)
+        d::g_android_host.platform->text.init();
     if (d::g_android_host.platform->renderer.init)
         d::g_android_host.platform->renderer.init(d::g_android_host.window);
     if (d::g_android_host.platform->input.attach)
@@ -1136,6 +1660,8 @@ void phenotype_android_detach_surface(void) {
         d::g_android_host.platform->input.detach();
     if (d::g_android_host.platform->renderer.shutdown)
         d::g_android_host.platform->renderer.shutdown();
+    if (d::g_android_host.platform->text.shutdown)
+        d::g_android_host.platform->text.shutdown();
     d::g_android_host.window = nullptr;
 }
 
