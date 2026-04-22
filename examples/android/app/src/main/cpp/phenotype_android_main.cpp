@@ -21,6 +21,9 @@ void phenotype_android_attach_surface(void* native_window);
 void phenotype_android_detach_surface(void);
 void phenotype_android_draw_frame(void);
 void phenotype_android_start_app(void);
+void phenotype_android_dispatch_pointer(float x, float y, int action);
+void phenotype_android_dispatch_key(int android_keycode, int action, int mods);
+void phenotype_android_dispatch_char(unsigned int codepoint);
 char const* phenotype_android_startup_message(void);
 }
 
@@ -91,7 +94,54 @@ extern "C" void android_main(android_app* app) {
             timeout = 0;
         }
 
-        if (g_surface_ready) phenotype_android_draw_frame();
+        if (!g_surface_ready) continue;
+
+        // Stage 6: drain GameActivity's input buffer every tick and
+        // forward each motion / key / char event to phenotype's input
+        // dispatch via the C ABI. All three dispatch entry points run
+        // on this same native_app_glue thread, so there's no cross-
+        // thread synchronization with the Vulkan render below.
+        if (android_input_buffer* ib = android_app_swap_input_buffers(app)) {
+            for (uint64_t i = 0; i < ib->motionEventsCount; ++i) {
+                GameActivityMotionEvent const& ev = ib->motionEvents[i];
+                int32_t masked = ev.action & AMOTION_EVENT_ACTION_MASK;
+                int ptr = (ev.action & AMOTION_EVENT_ACTION_POINTER_INDEX_MASK)
+                        >> AMOTION_EVENT_ACTION_POINTER_INDEX_SHIFT;
+                float x = GameActivityPointerAxes_getX(&ev.pointers[ptr]);
+                float y = GameActivityPointerAxes_getY(&ev.pointers[ptr]);
+                if (masked == AMOTION_EVENT_ACTION_DOWN
+                    || masked == AMOTION_EVENT_ACTION_POINTER_DOWN) {
+                    phenotype_android_dispatch_pointer(x, y, 0);
+                } else if (masked == AMOTION_EVENT_ACTION_MOVE) {
+                    phenotype_android_dispatch_pointer(x, y, 1);
+                } else if (masked == AMOTION_EVENT_ACTION_UP
+                        || masked == AMOTION_EVENT_ACTION_POINTER_UP
+                        || masked == AMOTION_EVENT_ACTION_CANCEL) {
+                    phenotype_android_dispatch_pointer(x, y, 2);
+                }
+            }
+            android_app_clear_motion_events(ib);
+
+            for (uint64_t i = 0; i < ib->keyEventsCount; ++i) {
+                GameActivityKeyEvent const& ev = ib->keyEvents[i];
+                int action;
+                if (ev.action == AKEY_EVENT_ACTION_DOWN) {
+                    action = (ev.repeatCount > 0) ? 2 : 1; // Repeat vs Press
+                } else if (ev.action == AKEY_EVENT_ACTION_UP) {
+                    action = 0; // Release
+                } else {
+                    continue;
+                }
+                phenotype_android_dispatch_key(ev.keyCode, action, ev.modifiers);
+                if (ev.unicodeChar > 0 && action != 0) {
+                    phenotype_android_dispatch_char(
+                        static_cast<unsigned int>(ev.unicodeChar));
+                }
+            }
+            android_app_clear_key_events(ib);
+        }
+
+        phenotype_android_draw_frame();
     }
 
     phenotype_android_detach_surface();
