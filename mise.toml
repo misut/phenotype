@@ -49,3 +49,32 @@ run = "tools/android/emu_start.sh"
 [tasks."android:emu:stop"]
 description = "Shut down the running emulator"
 run = "tools/android/emu_stop.sh"
+
+[tasks."android:install"]
+description = "adb install -r on $PHENOTYPE_ANDROID_APK"
+depends = ["android:apk"]
+run = "tools/android/install.sh"
+
+[tasks."android:launch"]
+description = "am start the phenotype example activity"
+run = "tools/android/launch.sh"
+
+[tasks."android:stop"]
+description = "am force-stop the phenotype example"
+run = "tools/android/stop.sh"
+
+[tasks."android:logs"]
+description = "adb logcat filtered to phenotype + crash categories (live tail)"
+run = "tools/android/logs.sh"
+
+[tasks."android:screencap"]
+description = "Grab a PNG screenshot; opens it on macOS"
+run = "tools/android/screencap.sh"
+
+[tasks."android:run"]
+description = "End-to-end: boot emu → build → apk → install → launch → log snapshot"
+run = "tools/android/run.sh"
+
+[tasks."android:clean"]
+description = "gradle clean + wipe exon aarch64-linux-android output + stop emulator"
+run = "tools/android/clean.sh"
