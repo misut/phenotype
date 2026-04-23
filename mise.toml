@@ -4,3 +4,36 @@ cmake = "latest"
 "vfox:misut/mise-exon" = "0.27.0"
 "vfox:misut/mise-intron" = "0.21.2"
 ninja = "latest"
+
+# Android developer workflow. Every task shells into tools/android/*.sh
+# so the logic stays readable outside mise. Env fallbacks live in
+# tools/android/_env.sh; override any of them locally via `.mise/config.toml`
+# or plain env vars before invoking `mise run`.
+#
+#   mise run android            # default alias -> android:run
+#   mise run android:doctor     # verify SDK / NDK / JDK / AVD setup
+#   mise run android:run        # emu:start → build → apk → install → launch
+#
+# Individual stages (build, apk, emu:start, install, launch, logs, ...)
+# are all runnable on their own.
+
+[tasks."android"]
+description = "Shortcut for android:run"
+depends = ["android:run"]
+
+[tasks."android:doctor"]
+description = "Report SDK / NDK / JDK / AVD status for the Android workflow"
+run = "tools/android/doctor.sh"
+
+[tasks."android:shaders"]
+description = "Recompile Android Vulkan shaders (.vert/.frag → SPIR-V .inl)"
+run = "tools/compile_android_shaders.sh"
+
+[tasks."android:build"]
+description = "Cross-compile phenotype static libraries for aarch64-linux-android"
+run = "mise exec -- exon build --target aarch64-linux-android"
+
+[tasks."android:apk"]
+description = "Gradle assembleDebug for examples/android"
+depends = ["android:build"]
+run = "tools/android/apk.sh"
