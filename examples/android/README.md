@@ -85,39 +85,50 @@ Rejected and failed URLs render a light-gray placeholder with a darker
 - A phenotype toolchain (`mise install && eval "$(intron env)"`) that can
   produce the `aarch64-linux-android` static libraries.
 
-## Build
+## Run
 
-1. Build phenotype for Android:
+From the phenotype repo root:
 
-   ```sh
-   cd ../../..  # phenotype repo root
-   ANDROID_NDK_HOME=/tmp/ndk-r30/android-ndk-r30-beta1 \
-     mise exec -- exon build --target aarch64-linux-android
-   ```
+```sh
+mise run android:doctor   # verify SDK / NDK / JDK / AVD are wired up
+mise run android          # boot emu -> build -> apk -> install -> launch
+mise run android:logs     # live-tail logcat filtered to phenotype
+```
 
-   This produces the `.a` archives under
-   `.exon/aarch64-linux-android/debug/`.
+`mise run android` is an alias for `mise run android:run`. Individual
+stages are independently runnable — see `mise tasks ls | grep android`
+for the full list. The pipeline and every single-step script live in
+[`tools/android/`](../../tools/android/); override defaults via these
+environment variables:
 
-2. Build + install the APK:
+| env | default | purpose |
+|---|---|---|
+| `ANDROID_HOME` | `~/Library/Android/sdk` (macOS), `~/Android/Sdk` (Linux) | SDK root |
+| `ANDROID_NDK_HOME` | `$ANDROID_HOME/ndk/30.0.14904198-beta1`, fallback `/tmp/ndk-r30/android-ndk-r30-beta1` | NDK r30+ |
+| `JAVA_HOME` | `/usr/libexec/java_home -v 17` on macOS | JDK 17 for AGP 8.7 |
+| `PHENOTYPE_ANDROID_AVD` | first entry of `emulator -list-avds` | emulator target |
+| `PHENOTYPE_ANDROID_PACKAGE` | `io.github.misut.phenotype.example` | `am` target |
+| `PHENOTYPE_ANDROID_APK` | `examples/android/app/build/outputs/apk/debug/app-debug.apk` | install target |
+| `PHENOTYPE_ANDROID_STATE_DIR` | `/tmp/phenotype-android` | emulator pid/log + screenshots |
 
-   ```sh
-   cd examples/android
-   export ANDROID_HOME=~/Library/Android/sdk
-   export JAVA_HOME=...JDK17...
-   ./gradlew assembleDebug
-   adb install -r app/build/outputs/apk/debug/app-debug.apk
-   ```
+The screen clears to the phenotype theme background
+(`{250,250,250,255}` off-white by default). Home → pull recents →
+reopen should not crash.
 
-3. Launch:
+### Manual fallback
 
-   ```sh
-   adb shell am start -n io.github.misut.phenotype.example/.MainActivity
-   adb logcat | grep phenotype
-   ```
+If you need to bypass the mise tasks (e.g. CI), the underlying commands are:
 
-   The screen should clear to the phenotype theme background
-   (`{250,250,250,255}` off-white by default). Home → pull recents →
-   reopen should not crash.
+```sh
+# 1. Static libs for aarch64-linux-android.
+mise exec -- exon build --target aarch64-linux-android
+# 2. APK.
+(cd examples/android && ./gradlew assembleDebug)
+# 3. Install + launch.
+adb install -r examples/android/app/build/outputs/apk/debug/app-debug.apk
+adb shell am start -n io.github.misut.phenotype.example/.MainActivity
+adb logcat | grep phenotype
+```
 
 ## Overrides
 
