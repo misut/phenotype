@@ -37,3 +37,15 @@ run = "mise exec -- exon build --target aarch64-linux-android"
 description = "Gradle assembleDebug for examples/android"
 depends = ["android:build"]
 run = "tools/android/apk.sh"
+
+[tasks."android:emu:list"]
+description = "List configured AVDs and currently-online adb devices"
+run = "tools/android/emu_list.sh"
+
+[tasks."android:emu:start"]
+description = "Boot $PHENOTYPE_ANDROID_AVD (or the first AVD) and wait for boot_completed"
+run = "tools/android/emu_start.sh"
+
+[tasks."android:emu:stop"]
+description = "Shut down the running emulator"
+run = "tools/android/emu_stop.sh"
