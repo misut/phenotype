@@ -1,6 +1,6 @@
 [package]
 name = "phenotype"
-version = "0.13.0"
+version = "0.14.0"
 description = "C++ cross-platform UI framework"
 authors = ["misut"]
 license = "MIT"

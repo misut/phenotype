@@ -58,6 +58,13 @@ int main() {
 </script>
 ```
 
+`mount(wasmUrl, rootElement?, extraImports?)` accepts an optional third
+argument — either an import-namespace object or a factory
+`({ getMemory }) => namespaces` — so downstream projects can plug in
+their own host APIs without forking the shim. See
+[codon](https://github.com/misut/codon) for an example that streams a
+generated `book.json` into the reader through this hook.
+
 ## Programming model
 
 phenotype follows the Iced/Elm pattern: state lives in one place, messages are
