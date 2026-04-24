@@ -1926,6 +1926,20 @@ inline bool decode_frame_commands(unsigned char const* buf,
             frame.images.push_back(std::move(image));
             break;
         }
+        case Cmd::Scissor: {
+            float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+            if (!reader.read_f32(x) || !reader.read_f32(y)
+                || !reader.read_f32(w) || !reader.read_f32(h))
+                return false;
+            // Decoded-and-skipped: D3D12 RSSetScissorRects needs to be
+            // interleaved between draw calls, but the current pipeline
+            // issues one instanced draw per bucket. Routing Scissor to
+            // the command list requires a batch split — deferred to a
+            // follow-up. Parsing is still required so paint_node can
+            // emit Scissor bytes without the backend erroring.
+            (void)x; (void)y; (void)w; (void)h;
+            break;
+        }
         default:
             return false;
         }

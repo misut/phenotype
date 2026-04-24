@@ -335,6 +335,10 @@ inline Counter& paint_bytes_blitted = *new Counter{
     "phenotype.runner.paint_bytes_blitted",
     "Command-buffer bytes copied from prev_cmd_buf by the subtree paint cache",
     "By"};
+inline Counter& scissor_emitted = *new Counter{
+    "phenotype.runner.scissor_emitted",
+    "Scissor command pairs emitted around dirty-root subtrees (excludes resets)",
+    "{scissor}"};
 inline Counter& native_text_cache_hits = *new Counter{
     "phenotype.native.text_cache_hits",
     "Native text atlas cache hits (attributes: platform)",
@@ -505,6 +509,7 @@ inline void reset_all() noexcept {
     inst::layout_nodes_computed.reset();
     inst::paint_subtrees_blitted.reset();
     inst::paint_bytes_blitted.reset();
+    inst::scissor_emitted.reset();
     inst::native_text_cache_hits.reset();
     inst::native_text_cache_misses.reset();
     inst::native_texture_upload_bytes.reset();
@@ -1087,6 +1092,7 @@ inline json::Value build_snapshot() {
     counters.push_back(counter_to_json(inst::layout_nodes_computed, now));
     counters.push_back(counter_to_json(inst::paint_subtrees_blitted, now));
     counters.push_back(counter_to_json(inst::paint_bytes_blitted, now));
+    counters.push_back(counter_to_json(inst::scissor_emitted, now));
     counters.push_back(counter_to_json(inst::native_text_cache_hits, now));
     counters.push_back(counter_to_json(inst::native_text_cache_misses, now));
     counters.push_back(counter_to_json(inst::native_texture_upload_bytes, now));

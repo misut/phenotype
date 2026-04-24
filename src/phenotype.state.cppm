@@ -217,6 +217,12 @@ struct AppState {
     // same bytes, so paint_node must suppress paint_valid for that
     // subtree. Ticked by the ensure() helper in phenotype.paint.
     std::uint64_t paint_flush_epoch = 0;
+    // Nested-scissor guard for paint_node. The four target graphics
+    // APIs (Metal, D3D12, Vulkan, WebGPU) do not support scissor
+    // nesting, so paint_node only emits a Scissor command when this
+    // depth is zero. Incremented around the wrapped walk, decremented
+    // after — always balanced within a single paint pass.
+    unsigned int paint_scissor_depth = 0;
 };
 
 namespace detail {

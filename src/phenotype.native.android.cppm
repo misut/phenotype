@@ -2926,6 +2926,11 @@ inline void decode_android_color_commands(unsigned char const* buf,
                     out.color_instances.push_back(outline);
                 }
             }
+            // ScissorCmd is decoded-and-skipped: applying the clip
+            // requires a batch split in the Vulkan pipeline and is
+            // deferred to a follow-up. Parsing is still required so
+            // paint_node can emit Scissor without the decoder
+            // erroring on an unknown opcode.
             // HitRegion is ignored before Stage 6.
         }, cmd);
     }
