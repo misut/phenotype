@@ -99,6 +99,8 @@ struct Snapshot {
     std::uint64_t arena_resets = 0;
     std::uint64_t measure_text_calls = 0;
     std::uint64_t measure_text_cache_hits = 0;
+    std::uint64_t paint_subtrees_blitted = 0;
+    std::uint64_t paint_bytes_blitted = 0;
 };
 
 Snapshot capture() {
@@ -113,6 +115,8 @@ Snapshot capture() {
         .arena_resets            = m::arena_resets.total(),
         .measure_text_calls      = m::measure_text_calls.total(),
         .measure_text_cache_hits = m::measure_text_cache_hits.total(),
+        .paint_subtrees_blitted  = m::paint_subtrees_blitted.total(),
+        .paint_bytes_blitted     = m::paint_bytes_blitted.total(),
     };
 }
 
@@ -127,6 +131,8 @@ Snapshot delta(Snapshot const& a, Snapshot const& b) {
         .arena_resets            = b.arena_resets - a.arena_resets,
         .measure_text_calls      = b.measure_text_calls - a.measure_text_calls,
         .measure_text_cache_hits = b.measure_text_cache_hits - a.measure_text_cache_hits,
+        .paint_subtrees_blitted  = b.paint_subtrees_blitted - a.paint_subtrees_blitted,
+        .paint_bytes_blitted     = b.paint_bytes_blitted - a.paint_bytes_blitted,
     };
 }
 
@@ -211,7 +217,9 @@ void emit_snapshot(std::string& out, Snapshot const& s, char const* indent) {
     out += indent; out += "\"alloc_nodes\": ";             out += std::to_string(s.alloc_nodes);             out += ",\n";
     out += indent; out += "\"arena_resets\": ";            out += std::to_string(s.arena_resets);            out += ",\n";
     out += indent; out += "\"measure_text_calls\": ";      out += std::to_string(s.measure_text_calls);      out += ",\n";
-    out += indent; out += "\"measure_text_cache_hits\": "; out += std::to_string(s.measure_text_cache_hits); out += "\n";
+    out += indent; out += "\"measure_text_cache_hits\": "; out += std::to_string(s.measure_text_cache_hits); out += ",\n";
+    out += indent; out += "\"paint_subtrees_blitted\": ";  out += std::to_string(s.paint_subtrees_blitted);  out += ",\n";
+    out += indent; out += "\"paint_bytes_blitted\": ";     out += std::to_string(s.paint_bytes_blitted);     out += "\n";
 }
 
 std::string render_report(std::vector<Report> const& reports) {

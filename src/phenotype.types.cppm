@@ -206,6 +206,24 @@ struct LayoutNode {
     // Cached text layout (filled during layout pass, reused in paint)
     std::vector<std::string> text_lines;
 
+    // Paint-cache state (subtree byte range in the previous cmd buffer).
+    // Populated by paint_node when it emits this subtree; copied by
+    // diff_and_copy_layout on match. When layout_valid and ambient paint
+    // inputs (absolute position, scroll_y, hover/focus) are unchanged,
+    // paint_node blits [paint_offset..paint_offset+paint_length) from
+    // g_app.prev_cmd_buf instead of re-walking this subtree.
+    //
+    // paint_callback_mask is a 64-bit bloom over the subtree's
+    // callback_ids (1ULL << (callback_id & 63)) so the blit guard can
+    // ask "does this subtree contain the hovered/focused id?" in O(1)
+    // without storing a full child-id vector per node.
+    std::uint32_t paint_offset = 0;
+    std::uint32_t paint_length = 0;
+    float         paint_ax = 0.0f;
+    float         paint_ay = 0.0f;
+    std::uint64_t paint_callback_mask = 0;
+    bool          paint_valid = false;
+
     // Tree — generational handles, validated via Arena::get/must_get
     NodeHandle parent = NodeHandle::null();
     std::vector<NodeHandle> children;

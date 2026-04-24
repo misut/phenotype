@@ -38,6 +38,12 @@ void ensure(R& r, unsigned int needed) {
     if (r.buf_len() + needed > r.buf_size()) {
         r.flush();
         r.buf_len() = 0;
+        // A mid-paint flush invalidates every paint_offset recorded so
+        // far this frame — those offsets referred to bytes that have
+        // been consumed and cleared from r.buf(). paint_node compares
+        // this epoch at entry and exit to know whether its recorded
+        // range is still trustworthy.
+        ++g_app.paint_flush_epoch;
     }
 }
 
@@ -201,8 +207,19 @@ void flush(R& r) {
 template <render_backend R>
 void flush_if_changed(R& r) {
     if (r.buf_len() == 0) return;
-    auto hash = detail::fnv1a_64(r.buf(), r.buf_len());
     auto& app = detail::g_app;
+
+    // Snapshot the current frame's byte stream before flush() resets
+    // buf_len. The subtree paint cache (see paint_node entry guard)
+    // blits ranges out of this snapshot on the next frame, so every
+    // frame — including flush-skipped ones — must keep prev_cmd_buf
+    // mirrored with the most recent "final" buffer contents.
+    auto len = r.buf_len();
+    if (len > AppState::PAINT_CACHE_BUF_SIZE) len = AppState::PAINT_CACHE_BUF_SIZE;
+    std::memcpy(app.prev_cmd_buf, r.buf(), len);
+    app.prev_cmd_len = len;
+
+    auto hash = detail::fnv1a_64(r.buf(), r.buf_len());
     if (hash == app.last_paint_hash) {
         r.buf_len() = 0;
         metrics::inst::frames_skipped.add();
@@ -261,6 +278,23 @@ void emit_focused_input_selection(R& r,
     emit_fill_rect(r, start_x, draw_y, width, snapshot.line_height, color);
 }
 
+// Collects callback_ids for focusable nodes in document order. Invoked
+// once per frame from the runner before paint so focus/Tab order is
+// preserved even when paint_node blits a subtree's cached bytes
+// (blit skips the tree walk and would otherwise skip the push_back).
+inline void collect_focusable_ids(NodeHandle node_h) {
+    auto& node = node_at(node_h);
+    if (node.callback_id != 0xFFFFFFFF && node.focusable)
+        g_app.focusable_ids.push_back(node.callback_id);
+    for (auto child_h : node.children)
+        collect_focusable_ids(child_h);
+}
+
+inline std::uint64_t callback_mask_bit(unsigned int callback_id) noexcept {
+    if (callback_id == 0xFFFFFFFFu) return 0;
+    return 1ULL << (callback_id & 63u);
+}
+
 template <render_backend R, text_measurer M>
 void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 float ox, float oy, float scroll_y, float vp_height) {
@@ -271,6 +305,49 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     if (node.children.empty()) {
         if (ay + node.height < scroll_y || ay > scroll_y + vp_height) return;
     }
+
+    // ---- Subtree paint cache blit guard ----------------------------
+    // If diff copied this subtree's layout AND every paint-ambient
+    // input is unchanged since the frame that emitted it, memcpy the
+    // saved byte range out of g_app.prev_cmd_buf instead of re-walking.
+    // Byte-exact reuse: the bytes were emitted with identical ax/ay/
+    // scroll_y and no intersecting hover/focus transition, so they are
+    // byte-for-byte what this walk would produce.
+    if (node.layout_valid && node.paint_valid
+        && ax == node.paint_ax
+        && ay == node.paint_ay
+        && scroll_y == g_app.prev_scroll_y
+        && (node.paint_callback_mask & g_app.paint_invalidation_mask) == 0
+        && node.paint_offset + node.paint_length <= g_app.prev_cmd_len
+        && node.paint_length > 0)
+    {
+        auto const entry_flush_epoch = g_app.paint_flush_epoch;
+        auto const len = node.paint_length;
+        auto const write_pos = r.buf_len();
+        ensure(r, len);
+        if (g_app.paint_flush_epoch == entry_flush_epoch
+            && r.buf_len() + len <= r.buf_size())
+        {
+            std::memcpy(&r.buf()[write_pos],
+                        &g_app.prev_cmd_buf[node.paint_offset], len);
+            r.buf_len() += len;
+            // Update paint_offset to this frame's *write* position so
+            // next frame's prev_cmd_buf — which captures the current
+            // buf verbatim — has this subtree's bytes at the offset we
+            // just stored. Without this, a sibling of a blitted node
+            // shifting (e.g. adding a focus border) would leave stale
+            // offsets pointing into unrelated bytes from the old layout.
+            node.paint_offset = write_pos;
+            metrics::inst::paint_subtrees_blitted.add();
+            metrics::inst::paint_bytes_blitted.add(len);
+            return;
+        }
+    }
+
+    // ---- Miss path: walk, emit, and record paint cache state -------
+    auto const before = r.buf_len();
+    auto const entry_flush_epoch = g_app.paint_flush_epoch;
+    std::uint64_t subtree_mask = callback_mask_bit(node.callback_id);
 
     float draw_y = ay - scroll_y;
 
@@ -353,16 +430,37 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                         static_cast<unsigned int>(node.image_url.size()));
     }
 
-    if (node.callback_id != 0xFFFFFFFF && node.focusable)
-        g_app.focusable_ids.push_back(node.callback_id);
-
     if (node.callback_id != 0xFFFFFFFF) {
         emit_hit_region(r, ax, ay, node.width, node.height,
                         node.callback_id, node.cursor_type);
     }
 
-    for (auto child_h : node.children)
+    for (auto child_h : node.children) {
         paint_node(r, measurer, child_h, ax, ay, scroll_y, vp_height);
+        // Fold child's cache mask into this subtree so the parent's
+        // blit guard sees the full id footprint.
+        subtree_mask |= node_at(child_h).paint_callback_mask;
+    }
+
+    // Record paint-cache state for the next frame's diff to copy and
+    // the next frame's paint_node entry guard to consult. If ensure()
+    // had to flush mid-walk (buf_len reset to 0), the recorded offset
+    // would be meaningless; skip caching in that case. Comparing
+    // paint_flush_epoch against entry_flush_epoch catches the case
+    // where a mid-walk flush was followed by enough re-emit to make
+    // after >= before numerically, which the `after >= before` check
+    // alone would silently accept as valid.
+    auto const after = r.buf_len();
+    if (after >= before && g_app.paint_flush_epoch == entry_flush_epoch) {
+        node.paint_offset = before;
+        node.paint_length = after - before;
+        node.paint_ax = ax;
+        node.paint_ay = ay;
+        node.paint_callback_mask = subtree_mask;
+        node.paint_valid = true;
+    } else {
+        node.paint_valid = false;
+    }
 }
 
 } // namespace phenotype::detail
