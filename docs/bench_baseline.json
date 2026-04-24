@@ -1,0 +1,84 @@
+{
+  "scenarios": [
+    {
+      "name": "uniform_static_1000",
+      "frames": 239,
+      "node_count": 1000,
+      "metrics": {
+        "rebuilds": 239,
+        "layout_nodes_skipped": 239,
+        "layout_nodes_computed": 0,
+        "frames_skipped": 239,
+        "flush_calls": 0,
+        "alloc_nodes": 239478,
+        "arena_resets": 239,
+        "measure_text_calls": 0,
+        "measure_text_cache_hits": 0
+      }
+    },
+    {
+      "name": "uniform_static_3000",
+      "frames": 239,
+      "node_count": 3000,
+      "metrics": {
+        "rebuilds": 239,
+        "layout_nodes_skipped": 239,
+        "layout_nodes_computed": 0,
+        "frames_skipped": 239,
+        "flush_calls": 0,
+        "alloc_nodes": 717478,
+        "arena_resets": 239,
+        "measure_text_calls": 0,
+        "measure_text_cache_hits": 0
+      }
+    },
+    {
+      "name": "list_churn_1000_5pct",
+      "frames": 239,
+      "node_count": 1000,
+      "metrics": {
+        "rebuilds": 239,
+        "layout_nodes_skipped": 3305,
+        "layout_nodes_computed": 236173,
+        "frames_skipped": 75,
+        "flush_calls": 164,
+        "alloc_nodes": 239478,
+        "arena_resets": 239,
+        "measure_text_calls": 11948,
+        "measure_text_cache_hits": 223747
+      }
+    },
+    {
+      "name": "scroll_only_1000",
+      "frames": 239,
+      "node_count": 1000,
+      "metrics": {
+        "rebuilds": 239,
+        "layout_nodes_skipped": 239,
+        "layout_nodes_computed": 0,
+        "frames_skipped": 0,
+        "flush_calls": 239,
+        "alloc_nodes": 239478,
+        "arena_resets": 239,
+        "measure_text_calls": 0,
+        "measure_text_cache_hits": 0
+      }
+    },
+    {
+      "name": "scroll_only_3000",
+      "frames": 239,
+      "node_count": 3000,
+      "metrics": {
+        "rebuilds": 239,
+        "layout_nodes_skipped": 239,
+        "layout_nodes_computed": 0,
+        "frames_skipped": 0,
+        "flush_calls": 239,
+        "alloc_nodes": 717478,
+        "arena_resets": 239,
+        "measure_text_calls": 0,
+        "measure_text_cache_hits": 0
+      }
+    }
+  ]
+}
