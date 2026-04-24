@@ -748,7 +748,29 @@ function parseCommands(instance) {
 
 // --- Loader ---
 
-export async function mount(wasmUrl, rootElement = document.body) {
+// mount(wasmUrl, rootElement?, extraImports?)
+//
+// extraImports lets callers plug additional WASM import namespaces into
+// the instantiation step — useful when a phenotype app needs a
+// project-specific host API (e.g. codon's shim passes book.json bytes
+// this way). It accepts either:
+//
+//   - an import-namespace object:
+//       { myns: { my_fn: (a, b) => ... } }
+//
+//   - a factory function receiving `{ getMemory }` and returning the
+//     same shape, so imports can reach into the instance's linear
+//     memory after instantiation:
+//       ({ getMemory }) => ({ myns: { write(ptr, len) {
+//         const m = new Uint8Array(getMemory().buffer, ptr, len);
+//         ...
+//       } } })
+//
+// Namespaces are merged into the core `wasi_snapshot_preview1` /
+// `phenotype` imports; a conflicting namespace in extraImports wins.
+// Keeping this contract stable means phenotype never has to grow
+// project-specific imports directly.
+export async function mount(wasmUrl, rootElement = document.body, extraImports = null) {
   try {
   // --- WebGPU init ---
   if (!navigator.gpu) {
@@ -895,11 +917,18 @@ export async function mount(wasmUrl, rootElement = document.body) {
   };
 
   // --- Instantiate WASM ---
+  let extras = {};
+  if (typeof extraImports === 'function') {
+    extras = extraImports({ getMemory }) || {};
+  } else if (extraImports && typeof extraImports === 'object') {
+    extras = extraImports;
+  }
   const result = await WebAssembly.instantiateStreaming(
     fetch(wasmUrl),
     {
       wasi_snapshot_preview1: wasiImports,
       phenotype: phenotypeImports,
+      ...extras,
     }
   );
   inst = result.instance;
