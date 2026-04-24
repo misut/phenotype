@@ -197,6 +197,26 @@ void emit_hit_region(R& r, float x, float y, float w, float h,
     detail::write_u32(r, cursor_type);
 }
 
+// Clips all subsequent draw commands to the given rect until the next
+// Scissor command. Backends (Metal, D3D12, Vulkan, WebGPU) do not
+// support nested scissor regions — emit a reset before the next
+// scope rather than a stack-push.
+template <render_backend R>
+void emit_scissor(R& r, float x, float y, float w, float h) {
+    detail::ensure(r, 20);
+    detail::write_u32(r, static_cast<unsigned int>(Cmd::Scissor));
+    detail::write_f32(r, x); detail::write_f32(r, y);
+    detail::write_f32(r, w); detail::write_f32(r, h);
+}
+
+// Zero-sized Scissor payload — backends read (w == 0 && h == 0) as
+// "restore full-viewport clipping." Paired with emit_scissor around a
+// dirty-root subtree.
+template <render_backend R>
+void emit_scissor_reset(R& r) {
+    emit_scissor(r, 0.0f, 0.0f, 0.0f, 0.0f);
+}
+
 template <render_backend R>
 void flush(R& r) {
     if (r.buf_len() == 0) return;
@@ -435,11 +455,42 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                         node.callback_id, node.cursor_type);
     }
 
+    // Dirty-root detection for scissor. A child is a dirty root when
+    // its own layout_valid is false but at least one sibling will blit
+    // (sibling.layout_valid == true) — i.e. the child is the sole
+    // delta inside an otherwise-clean parent.children set. Wrap each
+    // such child in a scissor so the backend's rasteriser only has to
+    // touch pixels that actually changed this frame. The four target
+    // graphics APIs do not support nested scissor regions, so we only
+    // wrap when not already inside one (tracked via the paint-cache's
+    // scissor_depth on g_app).
+    bool any_sibling_blits = false;
     for (auto child_h : node.children) {
+        if (node_at(child_h).layout_valid) { any_sibling_blits = true; break; }
+    }
+
+    for (auto child_h : node.children) {
+        auto const& child = node_at(child_h);
+        bool const child_is_dirty_root =
+            !child.layout_valid
+            && any_sibling_blits
+            && g_app.paint_scissor_depth == 0;
+
+        if (child_is_dirty_root) {
+            float cx = ax + child.x;
+            float cy = ay + child.y - scroll_y;
+            emit_scissor(r, cx, cy, child.width, child.height);
+            ++g_app.paint_scissor_depth;
+            metrics::inst::scissor_emitted.add();
+        }
+
         paint_node(r, measurer, child_h, ax, ay, scroll_y, vp_height);
-        // Fold child's cache mask into this subtree so the parent's
-        // blit guard sees the full id footprint.
         subtree_mask |= node_at(child_h).paint_callback_mask;
+
+        if (child_is_dirty_root) {
+            emit_scissor_reset(r);
+            --g_app.paint_scissor_depth;
+        }
     }
 
     // Record paint-cache state for the next frame's diff to copy and

@@ -101,6 +101,7 @@ struct Snapshot {
     std::uint64_t measure_text_cache_hits = 0;
     std::uint64_t paint_subtrees_blitted = 0;
     std::uint64_t paint_bytes_blitted = 0;
+    std::uint64_t scissor_emitted = 0;
 };
 
 Snapshot capture() {
@@ -117,6 +118,7 @@ Snapshot capture() {
         .measure_text_cache_hits = m::measure_text_cache_hits.total(),
         .paint_subtrees_blitted  = m::paint_subtrees_blitted.total(),
         .paint_bytes_blitted     = m::paint_bytes_blitted.total(),
+        .scissor_emitted         = m::scissor_emitted.total(),
     };
 }
 
@@ -133,6 +135,7 @@ Snapshot delta(Snapshot const& a, Snapshot const& b) {
         .measure_text_cache_hits = b.measure_text_cache_hits - a.measure_text_cache_hits,
         .paint_subtrees_blitted  = b.paint_subtrees_blitted - a.paint_subtrees_blitted,
         .paint_bytes_blitted     = b.paint_bytes_blitted - a.paint_bytes_blitted,
+        .scissor_emitted         = b.scissor_emitted - a.scissor_emitted,
     };
 }
 
@@ -219,7 +222,8 @@ void emit_snapshot(std::string& out, Snapshot const& s, char const* indent) {
     out += indent; out += "\"measure_text_calls\": ";      out += std::to_string(s.measure_text_calls);      out += ",\n";
     out += indent; out += "\"measure_text_cache_hits\": "; out += std::to_string(s.measure_text_cache_hits); out += ",\n";
     out += indent; out += "\"paint_subtrees_blitted\": ";  out += std::to_string(s.paint_subtrees_blitted);  out += ",\n";
-    out += indent; out += "\"paint_bytes_blitted\": ";     out += std::to_string(s.paint_bytes_blitted);     out += "\n";
+    out += indent; out += "\"paint_bytes_blitted\": ";     out += std::to_string(s.paint_bytes_blitted);     out += ",\n";
+    out += indent; out += "\"scissor_emitted\": ";         out += std::to_string(s.scissor_emitted);         out += "\n";
 }
 
 std::string render_report(std::vector<Report> const& reports) {

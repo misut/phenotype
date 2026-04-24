@@ -24,10 +24,14 @@ struct DrawTextCmd  { float x, y, font_size; bool mono; Color color; std::string
 struct DrawLineCmd  { float x1, y1, x2, y2; float thickness; Color color; };
 struct HitRegionCmd { float x, y, w, h; unsigned int callback_id; unsigned int cursor_type; };
 struct DrawImageCmd { float x, y, w, h; std::string url; };
+// ScissorCmd { w == 0 && h == 0 } resets the scissor to the full
+// viewport. A non-zero rect clips subsequent draw commands until the
+// next ScissorCmd (backends do not support nested scissor).
+struct ScissorCmd   { float x, y, w, h; };
 
 using DrawCommand = std::variant<
     ClearCmd, FillRectCmd, StrokeRectCmd, RoundRectCmd,
-    DrawTextCmd, DrawLineCmd, HitRegionCmd, DrawImageCmd>;
+    DrawTextCmd, DrawLineCmd, HitRegionCmd, DrawImageCmd, ScissorCmd>;
 
 // ---- Parser ----
 
@@ -116,6 +120,11 @@ inline std::vector<DrawCommand> parse_commands(
             pos += ulen;
             pos = (pos + 3) & ~3u;
             out.emplace_back(DrawImageCmd{x, y, w, h, std::move(url)});
+            break;
+        }
+        case Cmd::Scissor: {
+            float x = read_f32(), y = read_f32(), w = read_f32(), h = read_f32();
+            out.emplace_back(ScissorCmd{x, y, w, h});
             break;
         }
         default:

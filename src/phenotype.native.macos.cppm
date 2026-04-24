@@ -1478,6 +1478,22 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 scratch.images.push_back(std::move(image));
                 break;
             }
+            case Cmd::Scissor: {
+                float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+                if (!reader.read_f32(x) || !reader.read_f32(y)
+                    || !reader.read_f32(w) || !reader.read_f32(h))
+                    return false;
+                // Scissor is a state command, not an accumulator, and
+                // the macOS renderer currently issues one instanced
+                // draw per bucket (no interleaving possible). For now
+                // we decode-and-skip so the wire format stays valid
+                // and paint_node can emit Scissor without the backend
+                // erroring on an unknown opcode. Applying the clip
+                // rect to the Metal encoder needs a batch split and is
+                // deferred to a follow-up.
+                (void)x; (void)y; (void)w; (void)h;
+                break;
+            }
             default:
                 return false;
         }

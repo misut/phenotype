@@ -75,6 +75,17 @@ enum class Cmd : unsigned int {
     DrawLine   = 6,
     HitRegion  = 7,
     DrawImage  = 8,
+    // Scissor restricts subsequent draw commands to the given rect
+    // (backend-native primitive: Metal setScissorRect, D3D12
+    // RSSetScissorRects, Vulkan vkCmdSetScissor, WebGPU
+    // setScissorRect). Emitted around a "dirty root" subtree — one
+    // whose own layout_valid is false but whose parent already
+    // blitted cached bytes — so the GPU rasterises only the part of
+    // the viewport that actually changed this frame. A zero-sized
+    // payload (w == 0 && h == 0) resets to the full viewport. Nesting
+    // is not supported across the four target APIs; emit Scissor
+    // resets, not overlapping Scissor regions.
+    Scissor    = 9,
 };
 
 // ============================================================

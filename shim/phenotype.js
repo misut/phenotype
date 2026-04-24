@@ -14,6 +14,7 @@ const CMD_DRAW_TEXT  = 5;
 const CMD_DRAW_LINE  = 6;
 const CMD_HIT_REGION = 7;
 const CMD_DRAW_IMAGE = 8;
+const CMD_SCISSOR    = 9;
 
 // --- Color helpers ---
 
@@ -724,6 +725,16 @@ function parseCommands(instance) {
         const url = readStr(pos, len);
         pos = align4(pos + len);
         images.push({ x, y, w, h, url });
+        break;
+      }
+      case CMD_SCISSOR: {
+        // Scissor is decoded-and-skipped for now: the WebGPU renderer
+        // batches every quad/text/image bucket into a single draw
+        // call, so interleaving passEncoder.setScissorRect calls
+        // requires splitting draws. Parsing is still required so
+        // paint_node can emit Scissor without tripping the "unknown
+        // command" fallback below. Applying the clip is a follow-up.
+        pos += 16; // x, y, w, h
         break;
       }
       default:
