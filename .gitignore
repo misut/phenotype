@@ -50,6 +50,7 @@ exon.lock
 !/exon.lock
 /examples/*/exon.lock
 /libs/*/exon.lock
+/tools/*/exon.lock
 
 *.wasm
 
