@@ -235,6 +235,17 @@ struct LayoutNode {
     std::uint64_t paint_callback_mask = 0;
     bool          paint_valid = false;
 
+    // Keyed-list reconciliation — see phenotype::keyed in the DSL.
+    // `key` is set on a child by wrapping its builder in keyed(id, [&]{...}).
+    // `children_keyed` auto-flips when any direct child has a key; diff
+    // then runs a key-based salvage pass after structural diff so that
+    // reorder / insert / delete inside a list preserves individual
+    // children's layout_valid + paint_* state instead of invalidating
+    // every item past the first positional mismatch. 0xFFFFFFFFu = unkeyed.
+    static constexpr std::uint32_t unkeyed_key = 0xFFFFFFFFu;
+    std::uint32_t key = unkeyed_key;
+    bool          children_keyed = false;
+
     // Tree — generational handles, validated via Arena::get/must_get
     NodeHandle parent = NodeHandle::null();
     std::vector<NodeHandle> children;

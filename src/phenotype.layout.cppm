@@ -1,5 +1,6 @@
 module;
 #include <cstddef>
+#include <cstdint>
 #include <map>
 #include <string>
 #include <tuple>
@@ -195,6 +196,45 @@ inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
         && a.style.fixed_height == b.style.fixed_height;
 }
 
+inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
+                                 Arena& old_a, Arena& new_a);
+
+// Keyed-list salvage: after the structural diff has returned false for
+// a parent, look for any new child whose key matches a previous old
+// child anywhere in the sibling list. Recurse into matched pairs so
+// the child (and its entire subtree) can still set its own
+// layout_valid + paint_* state even though positional diff failed.
+//
+// Only runs when `new_n->children_keyed` is set. Children that already
+// matched structurally (layout_valid == true) are skipped — the map
+// lookup must not overwrite their already-validated state with a
+// different old node. Duplicate keys among siblings: first-seen wins
+// (later duplicates skip the lookup and miss the salvage). Using
+// std::map keyed by uint32_t avoids the wasi-sdk std::unordered_map
+// constraint called out above at measure_cache.
+inline void keyed_salvage(LayoutNode const& old_n, LayoutNode const& new_n,
+                          Arena& old_a, Arena& new_a) {
+    if (!new_n.children_keyed) return;
+    std::map<std::uint32_t, NodeHandle> old_by_key;
+    for (auto old_child_h : old_n.children) {
+        auto const* old_child = old_a.get(old_child_h);
+        if (!old_child || old_child->key == LayoutNode::unkeyed_key) continue;
+        old_by_key.emplace(old_child->key, old_child_h);
+    }
+    if (old_by_key.empty()) return;
+    metrics::inst::keyed_lists_matched.add();
+    for (auto new_child_h : new_n.children) {
+        auto* new_child = new_a.get(new_child_h);
+        if (!new_child) continue;
+        if (new_child->layout_valid) continue;       // already matched structurally
+        if (new_child->key == LayoutNode::unkeyed_key) continue;
+        auto it = old_by_key.find(new_child->key);
+        if (it == old_by_key.end()) continue;
+        if (diff_and_copy_layout(it->second, new_child_h, old_a, new_a))
+            metrics::inst::keyed_children_matched.add();
+    }
+}
+
 // Post-order subtree diff: returns true if the ENTIRE subtree matches.
 // When true, copies computed layout from old → new and sets
 // layout_valid = true so layout_node() skips the subtree.
@@ -206,14 +246,25 @@ inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
 // correctness at this level), but children below a non-matching
 // ancestor can still independently rescue layout + paint bytes from the
 // previous frame.
+//
+// For parents whose children carry keys (children_keyed == true), a
+// keyed salvage pass runs after any structural failure so that
+// reordering / insertion / deletion in a keyed list preserves per-item
+// layout_valid + paint_* state without requiring positional alignment.
 inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
                                  Arena& old_a, Arena& new_a) {
     auto* old_n = old_a.get(old_h);
     auto* new_n = new_a.get(new_h);
     if (!old_n || !new_n) return false;
 
-    if (!layout_props_equal(*old_n, *new_n)) return false;
-    if (old_n->children.size() != new_n->children.size()) return false;
+    if (!layout_props_equal(*old_n, *new_n)) {
+        keyed_salvage(*old_n, *new_n, old_a, new_a);
+        return false;
+    }
+    if (old_n->children.size() != new_n->children.size()) {
+        keyed_salvage(*old_n, *new_n, old_a, new_a);
+        return false;
+    }
 
     bool all_matched = true;
     for (std::size_t i = 0; i < new_n->children.size(); ++i) {
@@ -221,7 +272,10 @@ inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
                                   old_a, new_a))
             all_matched = false;
     }
-    if (!all_matched) return false;
+    if (!all_matched) {
+        keyed_salvage(*old_n, *new_n, old_a, new_a);
+        return false;
+    }
 
     new_n->x = old_n->x;
     new_n->y = old_n->y;
