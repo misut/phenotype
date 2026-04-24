@@ -4,10 +4,15 @@ on:
   pull_request:
     branches: [main]
     paths-ignore:
+      - "docs/**"
       - "*.md"
       - "LICENSE"
       - ".gitignore"
       - ".claude/**"
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
 
 jobs:
   test:
@@ -48,13 +53,13 @@ jobs:
           sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
 
       - name: Cache toolchains
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.intron/toolchains
           key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.intron.toml') }}
 
       - name: Cache build artifacts
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: |
             .exon
@@ -116,7 +121,7 @@ jobs:
           sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
 
       - name: Cache toolchains
-        uses: actions/cache@v4
+        uses: actions/cache@v5
         with:
           path: ~/.intron/toolchains
           key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.intron.toml') }}
@@ -163,9 +168,6 @@ jobs:
           sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
           sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
 
-      - name: Setup MSVC
-        uses: ilammy/msvc-dev-cmd@v1
-
       - name: Install intron
         shell: pwsh
         run: |
@@ -181,6 +183,8 @@ jobs:
       - name: Install toolchains
         shell: pwsh
         run: |
+          intron install msvc 2022
+          intron default msvc 2022
           intron install cmake 4.3.1
           intron install ninja 1.13.2
           echo "$env:USERPROFILE\.intron\toolchains\cmake\4.3.1\bin" >> $env:GITHUB_PATH
@@ -201,6 +205,7 @@ jobs:
       - name: Build
         shell: pwsh
         run: |
+          Invoke-Expression (& intron env | Out-String)
           $env:CC = "cl"
           $env:CXX = "cl"
           exon build
@@ -208,6 +213,7 @@ jobs:
       - name: Test
         shell: pwsh
         run: |
+          Invoke-Expression (& intron env | Out-String)
           $env:CC = "cl"
           $env:CXX = "cl"
           exon test
@@ -215,6 +221,7 @@ jobs:
       - name: Build native example
         shell: pwsh
         run: |
+          Invoke-Expression (& intron env | Out-String)
           $env:CC = "cl"
           $env:CXX = "cl"
           Set-Location examples/native
