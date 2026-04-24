@@ -192,6 +192,31 @@ struct AppState {
     float debug_viewport_width = 0.0f;
     float debug_viewport_height = 0.0f;
     diag::InputDebugSnapshot input_debug;
+
+    // Subtree paint cache — snapshot of the previous frame's command
+    // buffer, kept so paint_node can memcpy a clean subtree's byte range
+    // out of it instead of re-walking. Matches the 65536-byte buffer
+    // size used by the WASM `phenotype_cmd_buf` and the render_backend
+    // concept's `buf_size()`.
+    static constexpr std::uint32_t PAINT_CACHE_BUF_SIZE = 65536;
+    unsigned char prev_cmd_buf[PAINT_CACHE_BUF_SIZE]{};
+    std::uint32_t prev_cmd_len = 0;
+    float         prev_scroll_y = 0.0f;
+    unsigned int  prev_hovered_id = 0xFFFFFFFFu;
+    unsigned int  prev_focused_id = 0xFFFFFFFFu;
+    // Computed once per frame by the runner before paint; OR'd against
+    // each node's paint_callback_mask to decide whether a blit is safe.
+    // Non-zero bits correspond to callback_ids whose hover/focus state
+    // transitioned between prev and current frame — those subtrees must
+    // re-walk. Also includes the currently-focused input's id so text
+    // input caret/selection changes always re-walk that subtree.
+    std::uint64_t paint_invalidation_mask = 0;
+    // Monotonic count of times the command buffer was flushed mid-paint
+    // (buffer overflow inside emit_*). When this increments during a
+    // node's walk the recorded paint_offset no longer points at the
+    // same bytes, so paint_node must suppress paint_valid for that
+    // subtree. Ticked by the ensure() helper in phenotype.paint.
+    std::uint64_t paint_flush_epoch = 0;
 };
 
 namespace detail {

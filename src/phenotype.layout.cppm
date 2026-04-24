@@ -198,6 +198,14 @@ inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
 // Post-order subtree diff: returns true if the ENTIRE subtree matches.
 // When true, copies computed layout from old → new and sets
 // layout_valid = true so layout_node() skips the subtree.
+//
+// Siblings are diffed independently — a failure in one child does not
+// short-circuit the loop, so later siblings still get a chance to set
+// their own layout_valid / paint cache state. The parent's return value
+// still reflects whole-subtree match (required for paint-cache blit
+// correctness at this level), but children below a non-matching
+// ancestor can still independently rescue layout + paint bytes from the
+// previous frame.
 inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
                                  Arena& old_a, Arena& new_a) {
     auto* old_n = old_a.get(old_h);
@@ -207,17 +215,25 @@ inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
     if (!layout_props_equal(*old_n, *new_n)) return false;
     if (old_n->children.size() != new_n->children.size()) return false;
 
+    bool all_matched = true;
     for (std::size_t i = 0; i < new_n->children.size(); ++i) {
         if (!diff_and_copy_layout(old_n->children[i], new_n->children[i],
                                   old_a, new_a))
-            return false;
+            all_matched = false;
     }
+    if (!all_matched) return false;
 
     new_n->x = old_n->x;
     new_n->y = old_n->y;
     new_n->width = old_n->width;
     new_n->height = old_n->height;
     new_n->text_lines = std::move(old_n->text_lines);
+    new_n->paint_offset = old_n->paint_offset;
+    new_n->paint_length = old_n->paint_length;
+    new_n->paint_ax = old_n->paint_ax;
+    new_n->paint_ay = old_n->paint_ay;
+    new_n->paint_callback_mask = old_n->paint_callback_mask;
+    new_n->paint_valid = old_n->paint_valid;
     new_n->layout_valid = true;
     return true;
 }

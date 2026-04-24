@@ -459,6 +459,7 @@ void test_checkbox_and_radio_widgets() {
 
     CMD_LEN = 0;
     detail::g_app.focusable_ids.clear();
+    detail::collect_focusable_ids(root_h);
     PAINT_NODE(root_h, 0, 0, 0, 600.0f);
     int hit_regions = 0;
     for (unsigned int i = 0; i + 4 <= CMD_LEN; i += 4) {

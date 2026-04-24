@@ -355,7 +355,30 @@ void run(Host& host, View view, Update update) {
         auto t3 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t3 - t2, {{"phase", "layout"}});
 
+        // Paint-cache invalidation mask — subtrees whose callback_mask
+        // intersects this bitset must re-walk instead of blitting from
+        // prev_cmd_buf. We include both the old and new hover/focus ids
+        // so that the subtree that USED to be hovered/focused redraws
+        // without its hover background, and the subtree that is now
+        // hovered/focused redraws WITH it. The focused id is always
+        // included because focused inputs can receive caret/selection/
+        // text changes that alter emitted bytes without the id itself
+        // transitioning.
+        auto mask_bit = [](unsigned int id) -> std::uint64_t {
+            return id == 0xFFFFFFFFu ? 0ULL : (1ULL << (id & 63u));
+        };
+        std::uint64_t inv = 0;
+        if (app.hovered_id != app.prev_hovered_id) {
+            inv |= mask_bit(app.hovered_id) | mask_bit(app.prev_hovered_id);
+        }
+        if (app.focused_id != app.prev_focused_id) {
+            inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
+        }
+        inv |= mask_bit(app.focused_id);
+        app.paint_invalidation_mask = inv;
+
         app.focusable_ids.clear();
+        detail::collect_focusable_ids(root_h);
         emit_clear(host, app.theme.background);
         float vh = host.canvas_height();
         app.debug_viewport_width = cw;
@@ -367,6 +390,11 @@ void run(Host& host, View view, Update update) {
         flush_if_changed(host);
         auto t5 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t5 - t4, {{"phase", "flush"}});
+
+        // Persist the ambient paint inputs for next frame's blit guard.
+        app.prev_scroll_y   = app.scroll_y;
+        app.prev_hovered_id = app.hovered_id;
+        app.prev_focused_id = app.focused_id;
 
         auto total = t5 - t0;
         metrics::inst::frame_duration.record(total);
@@ -435,7 +463,23 @@ void run(View view, Update update) {
         auto t3 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t3 - t2, {{"phase", "layout"}});
 
+        // Paint-cache invalidation mask — see the native runner for a
+        // detailed explanation; the WASI path mirrors that logic.
+        auto mask_bit = [](unsigned int id) -> std::uint64_t {
+            return id == 0xFFFFFFFFu ? 0ULL : (1ULL << (id & 63u));
+        };
+        std::uint64_t inv = 0;
+        if (app.hovered_id != app.prev_hovered_id) {
+            inv |= mask_bit(app.hovered_id) | mask_bit(app.prev_hovered_id);
+        }
+        if (app.focused_id != app.prev_focused_id) {
+            inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
+        }
+        inv |= mask_bit(app.focused_id);
+        app.paint_invalidation_mask = inv;
+
         app.focusable_ids.clear();
+        detail::collect_focusable_ids(root_h);
         detail::wasi_emit_clear(app.theme.background);
         float vh = phenotype_get_canvas_height();
         app.debug_viewport_width = cw;
@@ -447,6 +491,11 @@ void run(View view, Update update) {
         detail::wasi_flush_if_changed();
         auto t5 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t5 - t4, {{"phase", "flush"}});
+
+        // Persist the ambient paint inputs for next frame's blit guard.
+        app.prev_scroll_y   = app.scroll_y;
+        app.prev_hovered_id = app.hovered_id;
+        app.prev_focused_id = app.focused_id;
 
         auto total = t5 - t0;
         metrics::inst::frame_duration.record(total);
@@ -1346,12 +1395,16 @@ void repaint(Host& host, float scroll_y) {
     if (cw != root_ptr->width)
         layout_node(host, app.root, cw);
     app.focusable_ids.clear();
+    collect_focusable_ids(app.root);
     emit_clear(host, app.theme.background);
     float vh = host.canvas_height();
     app.debug_viewport_width = cw;
     app.debug_viewport_height = vh;
     paint_node(host, host, app.root, 0, 0, scroll_y, vh);
     flush_if_changed(host);
+    app.prev_scroll_y   = app.scroll_y;
+    app.prev_hovered_id = app.hovered_id;
+    app.prev_focused_id = app.focused_id;
 }
 #else
 inline void repaint(float scroll_y) {
@@ -1364,12 +1417,16 @@ inline void repaint(float scroll_y) {
     if (cw != root_ptr->width)
         layout_node(app.root, cw);
     app.focusable_ids.clear();
+    collect_focusable_ids(app.root);
     wasi_emit_clear(app.theme.background);
     float vh = phenotype_get_canvas_height();
     app.debug_viewport_width = cw;
     app.debug_viewport_height = vh;
     wasi_paint_node(app.root, 0, 0, scroll_y, vh);
     wasi_flush_if_changed();
+    app.prev_scroll_y   = app.scroll_y;
+    app.prev_hovered_id = app.hovered_id;
+    app.prev_focused_id = app.focused_id;
 }
 #endif
 
