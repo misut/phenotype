@@ -37,11 +37,61 @@ inline void append_child(NodeHandle parent, NodeHandle child) {
     node_at(parent).children.push_back(child);
 }
 
+// Pending key for the next node to be attached to the current scope —
+// set by phenotype::keyed(id, builder), consumed (and cleared) by
+// attach_to_scope when that builder's root widget lands. If the key is
+// consumed on a child, the child's parent is flipped to
+// `children_keyed = true` so diff's keyed salvage pass runs on that
+// parent next frame.
+inline std::uint32_t& pending_child_key() {
+    static std::uint32_t k = LayoutNode::unkeyed_key;
+    return k;
+}
+
 inline void attach_to_scope(NodeHandle h) {
-    if (auto* s = Scope::current())
-        append_child(s->node, h);
+    auto* s = Scope::current();
+    if (!s) return;
+    auto& parent = node_at(s->node);
+    auto& child = node_at(h);
+    auto& pending = pending_child_key();
+    if (pending != LayoutNode::unkeyed_key) {
+        child.key = pending;
+        parent.children_keyed = true;
+        pending = LayoutNode::unkeyed_key;
+    }
+    append_child(s->node, h);
 }
 } // namespace detail
+
+// phenotype::keyed(id, builder) — opt in to keyed reconciliation for
+// the next widget emitted by `builder`. Typically used inside a list
+// loop so that rows survive reorder / insert / delete without losing
+// their per-row layout + paint cache:
+//
+//   layout::column([&] {
+//       for (auto const& item : items) {
+//           phenotype::keyed(item.id, [&] {
+//               widget::text(item.label);
+//           });
+//       }
+//   });
+//
+// Nested keyed() calls: the inner call overrides the outer until the
+// next attach. Duplicate keys among siblings: first attach wins; later
+// ones still get the key stored but the parent's keyed salvage map
+// only holds one entry per key. The DSL doesn't validate uniqueness —
+// that's on the caller, like React's `key` prop.
+template <typename F>
+    requires std::invocable<F>
+inline void keyed(std::uint32_t id, F&& builder) {
+    auto prev = detail::pending_child_key();
+    detail::pending_child_key() = id;
+    std::forward<F>(builder)();
+    // If the builder didn't attach anything (or attached multiple
+    // widgets and the first consumed the key), restore the prior
+    // pending key so an enclosing keyed() block isn't lost.
+    detail::pending_child_key() = prev;
+}
 
 // ============================================================
 // widget:: — leaf components (text, code, link, button, text_field)
@@ -59,8 +109,8 @@ inline void text(str content) {
 
     if (auto* s = Scope::current()) {
         node.style.text_align = detail::node_at(s->node).style.text_align;
-        detail::append_child(s->node, h);
     }
+    detail::attach_to_scope(h);
 }
 
 // link — clickable hyperlink. URL opening is dispatched via

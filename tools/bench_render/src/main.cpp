@@ -32,7 +32,7 @@ namespace {
 // Scenario configuration (global — phenotype::run<> resets State{}).
 // ============================================================
 
-enum class ScenarioKind { UniformStatic, ListChurn, ScrollOnly };
+enum class ScenarioKind { UniformStatic, ListChurn, ScrollOnly, ListReorder };
 
 struct ScenarioConfig {
     ScenarioKind kind = ScenarioKind::UniformStatic;
@@ -62,11 +62,26 @@ void update(State& state, Msg msg) {
 }
 
 // View: flat column of N text leaves. list_churn varies a fraction of
-// items per frame by appending a frame-dependent suffix to force the
-// diff's text-inequality branch.
+// items per frame; list_reorder emits stable keys and cyclically
+// rotates the visible order so the diff's keyed salvage pass is the
+// only route for items to keep their layout_valid state.
 void view(State const& state) {
     using namespace phenotype;
     layout::column([&] {
+        if (g_config.kind == ScenarioKind::ListReorder) {
+            int const n = g_config.node_count;
+            int const shift = state.frame % n;
+            std::string label;
+            for (int slot = 0; slot < n; ++slot) {
+                int const i = (slot + shift) % n;
+                label.assign("item-");
+                label.append(std::to_string(i));
+                phenotype::keyed(static_cast<std::uint32_t>(i), [&] {
+                    widget::text(str{label});
+                });
+            }
+            return;
+        }
         std::string label;
         for (int i = 0; i < g_config.node_count; ++i) {
             label.assign("item-");
@@ -102,6 +117,8 @@ struct Snapshot {
     std::uint64_t paint_subtrees_blitted = 0;
     std::uint64_t paint_bytes_blitted = 0;
     std::uint64_t scissor_emitted = 0;
+    std::uint64_t keyed_lists_matched = 0;
+    std::uint64_t keyed_children_matched = 0;
 };
 
 Snapshot capture() {
@@ -119,6 +136,8 @@ Snapshot capture() {
         .paint_subtrees_blitted  = m::paint_subtrees_blitted.total(),
         .paint_bytes_blitted     = m::paint_bytes_blitted.total(),
         .scissor_emitted         = m::scissor_emitted.total(),
+        .keyed_lists_matched     = m::keyed_lists_matched.total(),
+        .keyed_children_matched  = m::keyed_children_matched.total(),
     };
 }
 
@@ -136,6 +155,8 @@ Snapshot delta(Snapshot const& a, Snapshot const& b) {
         .paint_subtrees_blitted  = b.paint_subtrees_blitted - a.paint_subtrees_blitted,
         .paint_bytes_blitted     = b.paint_bytes_blitted - a.paint_bytes_blitted,
         .scissor_emitted         = b.scissor_emitted - a.scissor_emitted,
+        .keyed_lists_matched     = b.keyed_lists_matched - a.keyed_lists_matched,
+        .keyed_children_matched  = b.keyed_children_matched - a.keyed_children_matched,
     };
 }
 
@@ -223,7 +244,9 @@ void emit_snapshot(std::string& out, Snapshot const& s, char const* indent) {
     out += indent; out += "\"measure_text_cache_hits\": "; out += std::to_string(s.measure_text_cache_hits); out += ",\n";
     out += indent; out += "\"paint_subtrees_blitted\": ";  out += std::to_string(s.paint_subtrees_blitted);  out += ",\n";
     out += indent; out += "\"paint_bytes_blitted\": ";     out += std::to_string(s.paint_bytes_blitted);     out += ",\n";
-    out += indent; out += "\"scissor_emitted\": ";         out += std::to_string(s.scissor_emitted);         out += "\n";
+    out += indent; out += "\"scissor_emitted\": ";         out += std::to_string(s.scissor_emitted);         out += ",\n";
+    out += indent; out += "\"keyed_lists_matched\": ";     out += std::to_string(s.keyed_lists_matched);     out += ",\n";
+    out += indent; out += "\"keyed_children_matched\": ";  out += std::to_string(s.keyed_children_matched);  out += "\n";
 }
 
 std::string render_report(std::vector<Report> const& reports) {
@@ -295,6 +318,13 @@ int main(int argc, char** argv) {
     reports.push_back(run_scenario("scroll_only_3000", {
         .kind = ScenarioKind::ScrollOnly,
         .node_count = 3000,
+        .churn_bp = 0,
+        .frames = 240,
+    }));
+
+    reports.push_back(run_scenario("list_reorder_500", {
+        .kind = ScenarioKind::ListReorder,
+        .node_count = 500,
         .churn_bp = 0,
         .frames = 240,
     }));

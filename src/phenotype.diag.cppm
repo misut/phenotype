@@ -339,6 +339,14 @@ inline Counter& scissor_emitted = *new Counter{
     "phenotype.runner.scissor_emitted",
     "Scissor command pairs emitted around dirty-root subtrees (excludes resets)",
     "{scissor}"};
+inline Counter& keyed_lists_matched = *new Counter{
+    "phenotype.runner.keyed_lists_matched",
+    "Parents whose children_keyed salvage pass ran (at least one old-keyed child was available for matching)",
+    "{list}"};
+inline Counter& keyed_children_matched = *new Counter{
+    "phenotype.runner.keyed_children_matched",
+    "Children that had their layout + paint state recovered by the keyed salvage pass after a structural diff miss",
+    "{node}"};
 inline Counter& native_text_cache_hits = *new Counter{
     "phenotype.native.text_cache_hits",
     "Native text atlas cache hits (attributes: platform)",
@@ -510,6 +518,8 @@ inline void reset_all() noexcept {
     inst::paint_subtrees_blitted.reset();
     inst::paint_bytes_blitted.reset();
     inst::scissor_emitted.reset();
+    inst::keyed_lists_matched.reset();
+    inst::keyed_children_matched.reset();
     inst::native_text_cache_hits.reset();
     inst::native_text_cache_misses.reset();
     inst::native_texture_upload_bytes.reset();
@@ -1093,6 +1103,8 @@ inline json::Value build_snapshot() {
     counters.push_back(counter_to_json(inst::paint_subtrees_blitted, now));
     counters.push_back(counter_to_json(inst::paint_bytes_blitted, now));
     counters.push_back(counter_to_json(inst::scissor_emitted, now));
+    counters.push_back(counter_to_json(inst::keyed_lists_matched, now));
+    counters.push_back(counter_to_json(inst::keyed_children_matched, now));
     counters.push_back(counter_to_json(inst::native_text_cache_hits, now));
     counters.push_back(counter_to_json(inst::native_text_cache_misses, now));
     counters.push_back(counter_to_json(inst::native_texture_upload_bytes, now));
