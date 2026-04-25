@@ -3,12 +3,6 @@ name: CI
 on:
   pull_request:
     branches: [main]
-    paths-ignore:
-      - "docs/**"
-      - "*.md"
-      - "LICENSE"
-      - ".gitignore"
-      - ".claude/**"
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
