@@ -250,8 +250,8 @@ Status: **in progress**. Cross-repo plumbing is in place; the actual
 |---|---|---|
 | **M5-1** | `cppx::reflect`-based parity guard between phenotype's `Theme` struct and the `default` snapshot phenotype-web emits | [phenotype-web#8](https://github.com/misut/phenotype-web/pull/8), [phenotype#181](https://github.com/misut/phenotype/pull/181) |
 | **M5-3** | dark / warm / dense theme snapshots + round-trip + parity guard loop | [phenotype-web#9](https://github.com/misut/phenotype-web/pull/9), [phenotype#182](https://github.com/misut/phenotype/pull/182) |
-| **M5-2** | Handoff workflow documented (this PR + phenotype-web README) | (pending) |
-| **M5-4** | Bidirectional auto-sync — phenotype-web snapshot bump triggers a phenotype mirror PR automatically | (deferred, see below) |
+| **M5-2** | Handoff workflow documented (this PR + phenotype-web README) | [#183](https://github.com/misut/phenotype/pull/183) |
+| **M5-4** | One-shot phenotype-side sync script (`tools/sync_themes_from_phenotype_web.py`) — pulls all four snapshots from phenotype-web/main and rewrites both the fixture files and the matching raw-string literals in one command | (this PR) |
 | **M5-5** | First end-to-end run on `claude.ai/design` against `misut/phenotype-web` | (manual; user-triggered) |
 
 #### Handoff workflow today (manual but guarded)
@@ -265,11 +265,15 @@ Status: **in progress**. Cross-repo plumbing is in place; the actual
    files regenerate. If a Storybook visual changes, `mise run
    test:update` re-baselines the Playwright PNGs (Docker-only;
    bit-for-bit reproducible on CI).
-3. **phenotype PR follow-up** mirrors the new snapshot files into
-   `phenotype/tests/fixtures/themes/<theme>.theme.json` and updates
-   the matching raw-string literal in
-   `phenotype/tests/test_token_roundtrip.cpp` so wasm32-wasi targets
-   pick up the change without a filesystem preopen.
+3. **phenotype PR follow-up** runs
+   `python tools/sync_themes_from_phenotype_web.py` from the phenotype
+   repo root. The script pulls all four snapshots from
+   phenotype-web/main via `gh api`, rewrites
+   `tests/fixtures/themes/<theme>.theme.json`, and patches the matching
+   `<THEME>_THEME_JSON` raw-string literal in
+   `tests/test_token_roundtrip.cpp` so wasm32-wasi targets pick up
+   the change without a filesystem preopen. Re-running with no
+   upstream change exits cleanly without modifying anything.
 4. `test_token_vocabulary_parity` (M5-1) catches drift in either
    direction — extra `Theme` fields that the snapshot is missing,
    or unknown JSON keys that phenotype's `Theme` doesn't model.
@@ -277,8 +281,10 @@ Status: **in progress**. Cross-repo plumbing is in place; the actual
    into the exact value set the JSON declares.
 
 Done when: a design change initiated in Claude Design reaches the
-`phenotype` native build with no manual JSON editing. Today step 3
-is manual; M5-4 will automate it via cross-repo CI.
+`phenotype` native build with no manual JSON editing. Step 3 stays
+human-driven (the developer runs the script and opens the mirror PR);
+the script does the mechanical fixture + raw-string rewrite so there
+is nothing manual to mistype.
 
 ### Milestone 6 — Remaining widgets
 
