@@ -701,13 +701,38 @@ void render_one(Arg&& arg) {
 
 namespace layout {
 
+// Resolve a SpaceToken against the active Theme's spacing scale.
+inline float space_value(SpaceToken token) noexcept {
+    auto const& t = detail::g_app.theme;
+    switch (token) {
+        case SpaceToken::Xs:  return t.space_xs;
+        case SpaceToken::Sm:  return t.space_sm;
+        case SpaceToken::Md:  return t.space_md;
+        case SpaceToken::Lg:  return t.space_lg;
+        case SpaceToken::Xl:  return t.space_xl;
+        case SpaceToken::Xl2: return t.space_2xl;
+    }
+    return t.space_md;
+}
+
+// column — vertical flex container.
+//
+// Builder overload accepts gap / cross-axis / main-axis props that
+// mirror phenotype-web's <Column> attributes. The variadic overload
+// keeps its M0-3 behaviour (defaults only) so existing call sites stay
+// terse; pass a builder lambda when you need the props.
 template<typename F>
     requires std::is_invocable_v<F>
-void column(F&& builder) {
+void column(F&& builder,
+            SpaceToken gap = SpaceToken::Md,
+            CrossAxisAlignment cross = CrossAxisAlignment::Start,
+            MainAxisAlignment main = MainAxisAlignment::Start) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
-    node.style.gap = detail::g_app.theme.space_md;
+    node.style.gap = space_value(gap);
+    node.style.cross_align = cross;
+    node.style.main_align = main;
     detail::open_container(h, std::forward<F>(builder));
 }
 
@@ -727,14 +752,21 @@ void column(A&& a, B&& b, Rest&&... rest) {
     Scope::set_current(prev);
 }
 
+// row — horizontal flex container. Defaults match phenotype-web's
+// <Row> (gap=Sm, cross=Center). Builder overload exposes all three
+// props; the variadic overload keeps the defaults.
 template<typename F>
     requires std::is_invocable_v<F>
-void row(F&& builder) {
+void row(F&& builder,
+         SpaceToken gap = SpaceToken::Sm,
+         CrossAxisAlignment cross = CrossAxisAlignment::Center,
+         MainAxisAlignment main = MainAxisAlignment::Start) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Row;
-    node.style.cross_align = CrossAxisAlignment::Center;
-    node.style.gap = detail::g_app.theme.space_sm;
+    node.style.gap = space_value(gap);
+    node.style.cross_align = cross;
+    node.style.main_align = main;
     detail::open_container(h, std::forward<F>(builder));
 }
 

@@ -993,6 +993,94 @@ void test_text_inline_code_chrome() {
     std::puts("PASS: text(Code) inline chrome (mono + border + xs/sm padding)");
 }
 
+void test_space_value_resolves_each_token() {
+    auto const& t = detail::g_app.theme;
+    assert(layout::space_value(SpaceToken::Xs)  == t.space_xs);
+    assert(layout::space_value(SpaceToken::Sm)  == t.space_sm);
+    assert(layout::space_value(SpaceToken::Md)  == t.space_md);
+    assert(layout::space_value(SpaceToken::Lg)  == t.space_lg);
+    assert(layout::space_value(SpaceToken::Xl)  == t.space_xl);
+    assert(layout::space_value(SpaceToken::Xl2) == t.space_2xl);
+    std::puts("PASS: space_value resolves every SpaceToken rung");
+}
+
+void test_column_props_default_and_override() {
+    auto const& t = detail::g_app.theme;
+
+    // Default builder overload — gap=Md, cross=Start, main=Start.
+    {
+        detail::g_app.arena.reset();
+        auto root_h = detail::alloc_node();
+        Scope scope(root_h);
+        Scope::set_current(&scope);
+        layout::column([&]{});
+        Scope::set_current(nullptr);
+
+        auto& root = detail::node_at(root_h);
+        assert(root.children.size() == 1);
+        auto& col = detail::node_at(root.children[0]);
+        assert(col.style.flex_direction == FlexDirection::Column);
+        assert(col.style.gap == t.space_md);
+        assert(col.style.cross_align == CrossAxisAlignment::Start);
+        assert(col.style.main_align == MainAxisAlignment::Start);
+    }
+    // Explicit overrides.
+    {
+        detail::g_app.arena.reset();
+        auto root_h = detail::alloc_node();
+        Scope scope(root_h);
+        Scope::set_current(&scope);
+        layout::column([&]{}, SpaceToken::Lg, CrossAxisAlignment::Center,
+                       MainAxisAlignment::SpaceBetween);
+        Scope::set_current(nullptr);
+
+        auto& root = detail::node_at(root_h);
+        auto& col = detail::node_at(root.children[0]);
+        assert(col.style.gap == t.space_lg);
+        assert(col.style.cross_align == CrossAxisAlignment::Center);
+        assert(col.style.main_align == MainAxisAlignment::SpaceBetween);
+    }
+    std::puts("PASS: column props (default + override)");
+}
+
+void test_row_props_default_and_override() {
+    auto const& t = detail::g_app.theme;
+
+    // Default builder overload — gap=Sm, cross=Center, main=Start.
+    {
+        detail::g_app.arena.reset();
+        auto root_h = detail::alloc_node();
+        Scope scope(root_h);
+        Scope::set_current(&scope);
+        layout::row([&]{});
+        Scope::set_current(nullptr);
+
+        auto& root = detail::node_at(root_h);
+        auto& r = detail::node_at(root.children[0]);
+        assert(r.style.flex_direction == FlexDirection::Row);
+        assert(r.style.gap == t.space_sm);
+        assert(r.style.cross_align == CrossAxisAlignment::Center);
+        assert(r.style.main_align == MainAxisAlignment::Start);
+    }
+    // Explicit overrides.
+    {
+        detail::g_app.arena.reset();
+        auto root_h = detail::alloc_node();
+        Scope scope(root_h);
+        Scope::set_current(&scope);
+        layout::row([&]{}, SpaceToken::Xl, CrossAxisAlignment::Stretch,
+                    MainAxisAlignment::End);
+        Scope::set_current(nullptr);
+
+        auto& root = detail::node_at(root_h);
+        auto& r = detail::node_at(root.children[0]);
+        assert(r.style.gap == t.space_xl);
+        assert(r.style.cross_align == CrossAxisAlignment::Stretch);
+        assert(r.style.main_align == MainAxisAlignment::End);
+    }
+    std::puts("PASS: row props (default + override)");
+}
+
 // ============================================================
 // Runner
 // ============================================================
@@ -1028,6 +1116,9 @@ int main() {
     test_text_size_variants();
     test_text_color_variants();
     test_text_inline_code_chrome();
+    test_space_value_resolves_each_token();
+    test_column_props_default_and_override();
+    test_row_props_default_and_override();
     std::puts("\nAll tests passed.");
     return 0;
 }
