@@ -388,25 +388,25 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     }
 
     if (node.decoration != Decoration::None) {
-        Color white = {255, 255, 255, 255};
+        Color decoration_color = g_app.theme.surface;
         if (node.decoration == Decoration::Check) {
             float cx = ax + node.width * 0.5f;
             float cy = draw_y + node.height * 0.5f;
             float u  = node.width;
             emit_draw_line(r, cx - u * 0.25f, cy + u * 0.02f,
-                           cx - u * 0.05f, cy + u * 0.18f, 2.0f, white);
+                           cx - u * 0.05f, cy + u * 0.18f, 2.0f, decoration_color);
             emit_draw_line(r, cx - u * 0.05f, cy + u * 0.18f,
-                           cx + u * 0.28f, cy - u * 0.18f, 2.0f, white);
+                           cx + u * 0.28f, cy - u * 0.18f, 2.0f, decoration_color);
         } else {
             float dot = node.width * 0.4f;
             float dx  = ax + (node.width  - dot) * 0.5f;
             float dy  = draw_y + (node.height - dot) * 0.5f;
-            emit_round_rect(r, dx, dy, dot, dot, dot * 0.5f, white);
+            emit_round_rect(r, dx, dy, dot, dot, dot * 0.5f, decoration_color);
         }
     }
 
-    Color bc = is_focused ? g_app.theme.accent : node.border_color;
-    float bw = is_focused ? 2.0f : node.border_width;
+    Color bc = is_focused ? g_app.theme.state_focus_ring : node.border_color;
+    float bw = is_focused ? g_app.theme.state_focus_ring_width : node.border_width;
     if (bw > 0 && bc.a > 0) {
         emit_stroke_rect(r, ax, draw_y, node.width, node.height, bw, bc);
     }

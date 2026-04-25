@@ -41,17 +41,21 @@ struct Color {
 // ============================================================
 
 struct Theme {
-    Color background   = {250, 250, 250, 255}; // #fafafa
-    Color foreground   = { 26,  26,  26, 255}; // #1a1a1a
-    Color accent       = { 37,  99, 235, 255}; // #2563eb
-    Color muted        = {107, 114, 128, 255}; // #6b7280
-    Color border       = {229, 231, 235, 255}; // #e5e7eb
-    Color code_bg      = {243, 244, 246, 255}; // #f3f4f6
-    Color hero_bg      = { 30,  41,  59, 255}; // #1e293b
-    Color hero_fg      = {248, 250, 252, 255}; // #f8fafc
-    Color hero_muted   = {148, 163, 184, 255}; // #94a3b8
-    Color transparent  = {  0,   0,   0,   0};
+    // Color tokens
+    Color background    = {250, 250, 250, 255}; // #fafafa
+    Color foreground    = { 26,  26,  26, 255}; // #1a1a1a
+    Color accent        = { 10, 186, 181, 255}; // #0abab5 (Tiffany)
+    Color accent_strong = {  8, 128, 124, 255}; // #08807c
+    Color muted         = {107, 114, 128, 255}; // #6b7280
+    Color border        = {229, 231, 235, 255}; // #e5e7eb
+    Color surface       = {255, 255, 255, 255}; // #ffffff
+    Color code_bg       = {243, 244, 246, 255}; // #f3f4f6
+    Color hero_bg       = {244, 244, 245, 255}; // #f4f4f5
+    Color hero_fg       = { 24,  24,  27, 255}; // #18181b
+    Color hero_muted    = {113, 113, 122, 255}; // #71717a
+    Color transparent   = {  0,   0,   0,   0};
 
+    // Typography
     float body_font_size     = 16.0f;
     float heading_font_size  = 22.4f;  // 1.4rem
     float hero_title_size    = 40.0f;  // 2.5rem
@@ -59,7 +63,51 @@ struct Theme {
     float code_font_size     = 14.4f;  // 0.9em
     float small_font_size    = 14.4f;  // 0.9rem
     float line_height_ratio  = 1.6f;
+
+    // Layout
     float max_content_width  = 720.0f;
+
+    // Radius scale
+    float radius_sm   = 4.0f;
+    float radius_md   = 6.0f;
+    float radius_lg   = 8.0f;
+    float radius_full = 9999.0f;
+
+    // Spacing scale
+    float space_xs  = 4.0f;
+    float space_sm  = 8.0f;
+    float space_md  = 12.0f;
+    float space_lg  = 16.0f;
+    float space_xl  = 24.0f;
+    float space_2xl = 32.0f;
+
+    // State tokens
+    Color state_hover_bg          = {229, 231, 235, 255}; // = border
+    Color state_hover_fg          = { 26,  26,  26, 255}; // = foreground
+    Color state_active_bg         = {  8, 128, 124, 255}; // = accent_strong
+    Color state_active_fg         = {255, 255, 255, 255};
+    Color state_disabled_bg       = {243, 244, 246, 255};
+    Color state_disabled_fg       = {156, 163, 175, 255};
+    Color state_disabled_border   = {229, 231, 235, 255}; // = border
+    Color state_error_bg          = {254, 242, 242, 255};
+    Color state_error_fg          = {185,  28,  28, 255};
+    Color state_error_border      = {220,  38,  38, 255};
+    Color state_focus_ring        = { 10, 186, 181, 255}; // = accent (Tiffany)
+    float state_focus_ring_width  = 2.0f;
+
+    // Semantic colors (consumers TBD; mirror phenotype-web defaults)
+    Color semantic_success_bg     = {220, 252, 231, 255};
+    Color semantic_success_fg     = { 22, 101,  52, 255};
+    Color semantic_success_border = { 34, 197,  94, 255};
+    Color semantic_warning_bg     = {254, 243, 199, 255};
+    Color semantic_warning_fg     = {146,  64,  14, 255};
+    Color semantic_warning_border = {245, 158,  11, 255};
+    Color semantic_info_bg        = {219, 234, 254, 255};
+    Color semantic_info_fg        = { 30,  64, 175, 255};
+    Color semantic_info_border    = { 59, 130, 246, 255};
+    Color semantic_error_bg       = {254, 242, 242, 255}; // = state_error_bg
+    Color semantic_error_fg       = {185,  28,  28, 255}; // = state_error_fg
+    Color semantic_error_border   = {220,  38,  38, 255}; // = state_error_border
 };
 
 // ============================================================
