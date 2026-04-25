@@ -16,9 +16,14 @@
 
 #include <cassert>
 #include <cstdio>
+#include <set>
 #include <string>
+#include <utility>
+#include <vector>
 
 import phenotype;
+import json;
+import cppx.reflect;
 
 using namespace phenotype;
 
@@ -259,6 +264,7 @@ constexpr char const* DEFAULT_THEME_JSON = R"json({
   "code_font_size": 14.4,
   "small_font_size": 14.4,
   "max_content_width": 720,
+  "radius_xs": 3,
   "radius_sm": 2,
   "radius_md": 3,
   "radius_lg": 4,
@@ -269,6 +275,7 @@ constexpr char const* DEFAULT_THEME_JSON = R"json({
   "space_lg": 16,
   "space_xl": 24,
   "space_2xl": 32,
+  "space_3xl": 48,
   "state_focus_ring_width": 2,
   "line_height_ratio": 1.6
 }
@@ -289,23 +296,26 @@ void test_phenotype_web_default_theme_roundtrip() {
     assert(t.surface.r == 255 && t.surface.g == 255 && t.surface.b == 255);
     assert(t.transparent.a == 0);
 
-    // phenotype-web ships smaller "angular" radii than phenotype's
-    // own defaults — the JSON must override them rather than fall
-    // back to phenotype's defaults (4 / 6 / 8).
+    // phenotype-web's "angular" radius defaults — radius_xs (3) and
+    // radius_full (9999) match phenotype's defaults exactly; the
+    // sm / md / lg rungs are smaller (2/3/4 vs phenotype's earlier
+    // 4/6/8) and rely on the JSON override path.
+    assert(t.radius_xs == 3.0f);
     assert(t.radius_sm == 2.0f);
     assert(t.radius_md == 3.0f);
     assert(t.radius_lg == 4.0f);
     assert(t.radius_full == 9999.0f);
 
-    // Spacing scale: phenotype-web matches phenotype's defaults
-    // exactly here, so the assertion mostly guards against silently
-    // dropped fields.
+    // Spacing scale: phenotype-web mirrors phenotype's defaults
+    // exactly across all seven rungs, so the assertions mostly guard
+    // against silently dropped fields.
     assert(t.space_xs == 4.0f);
     assert(t.space_sm == 8.0f);
     assert(t.space_md == 12.0f);
     assert(t.space_lg == 16.0f);
     assert(t.space_xl == 24.0f);
     assert(t.space_2xl == 32.0f);
+    assert(t.space_3xl == 48.0f);
 
     // State tokens.
     assert(t.state_hover_bg.r == 229 && t.state_hover_bg.g == 231 && t.state_hover_bg.b == 235);
@@ -331,7 +341,55 @@ void test_phenotype_web_default_theme_roundtrip() {
     std::puts("PASS: phenotype-web default theme round-trip");
 }
 
+void test_token_vocabulary_parity() {
+    // The fixture is the JSON phenotype-web's themeToPhenotypeJson
+    // emits for the default theme. partial-mode deserialization would
+    // silently swallow drift between phenotype's Theme and the fixture
+    // (extra Theme fields fall back to C++ defaults, unknown JSON
+    // keys are ignored). This guard catches both directions explicitly.
+    auto value = json::parse(std::string{DEFAULT_THEME_JSON});
+    assert(value.is_object());
+
+    std::set<std::string> fixture_keys;
+    for (auto const& [name, _] : value.as_object()) {
+        fixture_keys.insert(name);
+    }
+
+    std::set<std::string> theme_fields;
+    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
+        (theme_fields.insert(std::string(cppx::reflect::name_of<Theme, Is>())), ...);
+    }(std::make_index_sequence<cppx::reflect::tuple_size_v<Theme>>{});
+
+    std::vector<std::string> missing_in_fixture;
+    std::vector<std::string> unknown_to_phenotype;
+    for (auto const& field : theme_fields) {
+        if (!fixture_keys.contains(field)) missing_in_fixture.push_back(field);
+    }
+    for (auto const& key : fixture_keys) {
+        if (!theme_fields.contains(key)) unknown_to_phenotype.push_back(key);
+    }
+
+    if (!missing_in_fixture.empty()) {
+        std::puts("Theme fields missing from phenotype-web fixture:");
+        for (auto const& f : missing_in_fixture) {
+            std::printf("  - %s\n", f.c_str());
+        }
+    }
+    if (!unknown_to_phenotype.empty()) {
+        std::puts("Fixture keys unknown to phenotype Theme:");
+        for (auto const& k : unknown_to_phenotype) {
+            std::printf("  - %s\n", k.c_str());
+        }
+    }
+    assert(missing_in_fixture.empty() && unknown_to_phenotype.empty() &&
+           "phenotype Theme and phenotype-web fixture have drifted");
+
+    std::printf("PASS: token vocabulary parity (%zu fields == %zu fixture keys)\n",
+                theme_fields.size(), fixture_keys.size());
+}
+
 int main() {
     test_phenotype_web_default_theme_roundtrip();
+    test_token_vocabulary_parity();
     return 0;
 }

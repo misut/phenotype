@@ -216,6 +216,7 @@
   "code_font_size": 14.4,
   "small_font_size": 14.4,
   "max_content_width": 720,
+  "radius_xs": 3,
   "radius_sm": 2,
   "radius_md": 3,
   "radius_lg": 4,
@@ -226,6 +227,7 @@
   "space_lg": 16,
   "space_xl": 24,
   "space_2xl": 32,
+  "space_3xl": 48,
   "state_focus_ring_width": 2,
   "line_height_ratio": 1.6
 }
