@@ -103,28 +103,66 @@ Divider / Spacer / Box / SizedBox / Surface`) follow in M6.
 
 ## 4. Prerequisite roadmap
 
-### Milestone 0 — Token foundation in `phenotype`
+### Milestone 0 — Token foundation in `phenotype` ✅
 
-This milestone happens **entirely in the C++ repo** and must land before
-the Core 6 port (M4) makes sense. It is the riskiest milestone because it
-touches nearly every widget.
+Status: **complete** (PRs [#160](https://github.com/misut/phenotype/pull/160)
+M0-2, [#163](https://github.com/misut/phenotype/pull/163) M0-3,
+[#164](https://github.com/misut/phenotype/pull/164) examples cppx pin
+follow-up).
 
-| ID | Task | Files | Done when |
+This milestone happened **entirely in the C++ repo** and was the
+prerequisite for the Core 6 port (M4). It touched nearly every widget.
+
+| ID | Task | Files | Status |
 |---|---|---|---|
-| **A1** | Allow partial overrides in `theme_from_json` — merge incoming JSON on top of defaults instead of requiring all fields | [`src/phenotype.theme_json.cppm`](../src/phenotype.theme_json.cppm), tests | A JSON with only `{"accent": …}` parses successfully and yields a Theme with `accent` overridden and all other fields at default |
-| **A2** | Accept color strings in Theme JSON alongside the `{r,g,b,a}` object form — support `"#rrggbb"`, `"#rrggbbaa"`, and `"rgba(r,g,b,a)"` | [`src/phenotype.theme_json.cppm`](../src/phenotype.theme_json.cppm) | Both forms round-trip; `theme_to_json` still emits the object form by default for backward compatibility |
-| **A3** | Introduce a radius scale on `Theme`: `radius_sm / radius_md / radius_lg / radius_full` (values TBD during M2, but hardcoded default set replaces the current literals exactly) | [`src/phenotype.types.cppm`](../src/phenotype.types.cppm), widget callsites in [`src/phenotype.cppm`](../src/phenotype.cppm) | All `widget::*` and `layout::card` calls reference `theme.radius_*`; no `border_radius` literals remain in widget source |
-| **A4** | Introduce a spacing scale on `Theme`: `space_xs / space_sm / space_md / space_lg / space_xl` with phenotype-current values captured as the defaults | [`src/phenotype.types.cppm`](../src/phenotype.types.cppm), widget callsites | `padding` / `gap` values in Core 6 widgets read `theme.space_*`; other widgets may continue to hardcode until M6 |
-| **A5** | Introduce state color tokens on `Theme`: hover/active/disabled/error pairs (`*_bg`, `*_fg`) derived from accent/foreground/border by default, overridable in JSON | [`src/phenotype.types.cppm`](../src/phenotype.types.cppm), paint layer ([`src/phenotype.paint.cppm`](../src/phenotype.paint.cppm)), widget emitters | `LayoutNode::hover_*` inline fields are assigned from `theme.hover_bg` / `theme.hover_fg` at widget emission time; `disabled` rendering path exists and covers Button and TextField |
+| **A1** | Allow partial overrides in `theme_from_json` — merge incoming JSON on top of defaults instead of requiring all fields | [`src/phenotype.theme_json.cppm`](../src/phenotype.theme_json.cppm), tests | ✅ M0-2: `txn::Mode::Partial` |
+| **A2** | Accept color strings in Theme JSON alongside the `{r,g,b,a}` object form — support `"#rrggbb"`, `"#rrggbbaa"`, and `"rgba(r,g,b,a)"` | [`src/phenotype.theme_json.cppm`](../src/phenotype.theme_json.cppm) | ✅ M0-2: ADL `txn_from_value` hook for `Color` |
+| **A3** | Introduce a radius scale on `Theme`: `radius_sm / radius_md / radius_lg / radius_full` | [`src/phenotype.types.cppm`](../src/phenotype.types.cppm), widget callsites in [`src/phenotype.cppm`](../src/phenotype.cppm) | ✅ M0-3: 4 new fields, widget literals replaced (button / text_field / code / card; checkbox=3 / radio=8 stay literal — see Out of scope) |
+| **A4** | Introduce a spacing scale on `Theme`: `space_xs / space_sm / space_md / space_lg / space_xl` (+ `space_2xl`) with phenotype-current values captured as the defaults | [`src/phenotype.types.cppm`](../src/phenotype.types.cppm), widget callsites | ✅ M0-3: 6 new fields, widget/layout literals replaced (column / row / scaffold / card / list_items / item / button padding_h / text_field padding) |
+| **A5** | Introduce state color tokens on `Theme`: hover/active/disabled/error pairs (`*_bg`, `*_fg`) derived from accent/foreground/border by default, overridable in JSON | [`src/phenotype.types.cppm`](../src/phenotype.types.cppm), paint layer ([`src/phenotype.paint.cppm`](../src/phenotype.paint.cppm)), widget emitters | ✅ M0-3: 12 new state fields incl. `state_focus_ring{,_width}` consumed by `paint.cppm`; button hover binds to `state_hover_bg`; `state_active_bg` defaults to `accent_strong`; disabled / error tokens shipped (no widget consumer yet) |
+| **A6** | Add semantic color tokens for downstream widgets (`semantic_{success,warning,info,error}_{bg,fg,border}`) | [`src/phenotype.types.cppm`](../src/phenotype.types.cppm) | ✅ M0-3: 12 new fields with phenotype-web defaults; no widget consumers yet, ready for Toast / Banner in a later milestone |
 
-Milestone 0 completion: `exon test` passes on all platforms; the `native`
-example renders identically to today; a JSON theme containing only
-`accent` and `space_md` overrides is accepted and reflected.
+Milestone 0 completion: `exon test` passes on five CI targets (macOS
+native, macOS wasi, ubuntu wasi, windows native, docs wasi); the
+`native`, `counter`, and `hello` examples render with the new default
+Tiffany palette (the `examples/native` `showcase_theme()` override was
+removed in M0-3 so the example tracks the default theme); a JSON theme
+containing only `{"accent": "#0abab5"}` (string form) or
+`{"radius_md": 6}` is accepted and merged on top of defaults.
 
-Risk: every widget touches the changed Theme structure. Mitigation: land
-A1 and A2 first (non-breaking), then A3/A4/A5 as a single PR with a
-mechanical migration and a "no visual regression" check using the debug
-snapshot contract from [`docs/DEBUG_WORKFLOW.md`](DEBUG_WORKFLOW.md).
+#### Tooling lift
+
+- `cppx` 1.7.3 → 1.9.0 ([cppx#101](https://github.com/misut/cppx/pull/101))
+  to extend `cppx::reflect::detail::to_tuple`'s field cap from 24 to 64.
+  Theme is now 54 fields, which the previous limit blocked.
+- `txn` `main` (PR [#68](https://github.com/misut/txn/pull/68)) added
+  partial-mode deserialization and the ADL customization hook.
+  phenotype consumed it via a temporary `[dependencies.path]
+  txn = "../txn"` declaration, switched back to a versioned dep in U-2
+  once `txn` v0.7.0 was released.
+
+#### Out of scope (deferred to later milestones)
+
+The following design tokens that exist in `phenotype-web` are
+intentionally **not** in M0. Each requires changes to the native render
+pipeline (new `Cmd` opcodes, font / animation infrastructure, layout
+DSL extensions) that are out of proportion with M0's "passive token
+plumbing" goal.
+
+| Token group | Why deferred |
+|---|---|
+| **Motion** (duration / easing / transition) | phenotype has no animation system; tween / interpolation infrastructure is its own milestone |
+| **Elevation / shadow** | Would need a new `Cmd::DrawShadow` opcode plus shader changes in all four backends (Metal / D3D12 / Vulkan / WebGPU) |
+| **Font weight scale** | CoreText / DirectWrite each need a weight-aware glyph cache; `Cmd` and `LayoutNode` would gain a weight field |
+| **Breakpoints** | The widget DSL has no responsive primitives today |
+| **Font family (Pretendard)** | Each native text stack needs a font-loading path; bundling the binary is its own conversation |
+| **Per-widget radius / spacing extras** | `widget::checkbox` (radius=3), `widget::radio` (radius=8), `layout::list_items` (gap=6), `widget::button` (padding_v=6), `layout::scaffold` (header padding_v=48) keep their literals; introducing one-off tokens (`radius_xs`, `space_3xs`, etc.) would inflate Theme without a clear reuse story |
+| **`themeToPhenotypeJson` round-trip CI** | phenotype-web side dump pipeline is a separate task; the manual round-trip works today |
+
+Risk: every widget touched the changed Theme structure. Mitigation
+applied: A1 and A2 landed first as non-breaking PRs, then A3-A6 went
+in as a single PR with mechanical token replacement and `exon test` on
+five CI targets as the regression gate.
 
 ## 5. Integration implementation roadmap
 
