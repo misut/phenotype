@@ -14,13 +14,13 @@
   "accent": {
     "r": 10,
     "g": 186,
-    "b": 181,
+    "b": 183,
     "a": 255
   },
   "accent_strong": {
     "r": 8,
     "g": 128,
-    "b": 124,
+    "b": 126,
     "a": 255
   },
   "muted": {
@@ -86,7 +86,7 @@
   "state_active_bg": {
     "r": 8,
     "g": 128,
-    "b": 124,
+    "b": 126,
     "a": 255
   },
   "state_active_fg": {
@@ -134,7 +134,7 @@
   "state_focus_ring": {
     "r": 10,
     "g": 186,
-    "b": 181,
+    "b": 183,
     "a": 255
   },
   "semantic_success_bg": {
