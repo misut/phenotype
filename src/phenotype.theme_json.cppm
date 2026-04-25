@@ -137,7 +137,7 @@ inline auto parse_color_string(std::string_view s) -> std::optional<Color> {
 
 } // namespace phenotype::detail
 
-namespace phenotype {
+export namespace phenotype {
 
 // txn ADL hook for Color: accept hex strings (#rgb / #rrggbb /
 // #rrggbbaa, plus the 4-digit shorthand), the CSS function form
@@ -145,6 +145,14 @@ namespace phenotype {
 // "transparent" alongside the default {r,g,b,a} object form. A string
 // that does not parse as a known color produces an explicit error
 // rather than falling through to the (would-fail) object path.
+//
+// Must be exported: txn's generic `convert_value` is instantiated
+// inside the `txn` module's reachable set, and MSVC's module-aware
+// ADL only considers exported names from the `phenotype` namespace
+// when resolving the customization-point call from that other module.
+// Non-exported hooks work on Clang/GCC but get silently skipped on
+// MSVC, which sends Color through the default reflected {r,g,b,a}
+// path and rejects string inputs with "expected table, got string".
 template<txn::ValueLike V>
 inline auto txn_from_value(txn::tag<Color>, V const& v,
                            std::string const& path)
