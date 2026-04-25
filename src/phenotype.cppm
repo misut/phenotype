@@ -100,12 +100,55 @@ inline void keyed(std::uint32_t id, F&& builder) {
 namespace widget {
 
 // text — single string label, inherits text_align from current scope.
-inline void text(str content) {
+//
+// `size` picks one of phenotype-web's typography rungs (Body / Heading /
+// Small / Code / HeroTitle / HeroSubtitle). `Code` additionally swaps
+// the node into the inline code-block chrome (mono font, code_bg
+// background, 1px border, radius_md, space_xs / space_sm padding) —
+// matches phenotype-web's <Text size="code">.
+//
+// `color` picks one of the foreground / muted / accent / hero color
+// tokens. Defaults to foreground.
+//
+// For block-level code with bigger padding, prefer widget::code below.
+inline void text(str content,
+                 TextSize size = TextSize::Body,
+                 TextColor color = TextColor::Default) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
+    auto const& t = detail::g_app.theme;
     node.text = std::string(content.data, content.len);
-    node.font_size = detail::g_app.theme.body_font_size;
-    node.text_color = detail::g_app.theme.foreground;
+
+    switch (size) {
+        case TextSize::Heading:      node.font_size = t.heading_font_size; break;
+        case TextSize::Small:        node.font_size = t.small_font_size; break;
+        case TextSize::Code:         node.font_size = t.code_font_size; node.mono = true; break;
+        case TextSize::HeroTitle:    node.font_size = t.hero_title_size; break;
+        case TextSize::HeroSubtitle: node.font_size = t.hero_subtitle_size; break;
+        case TextSize::Body:
+        default:                     node.font_size = t.body_font_size; break;
+    }
+
+    switch (color) {
+        case TextColor::Muted:     node.text_color = t.muted; break;
+        case TextColor::Accent:    node.text_color = t.accent; break;
+        case TextColor::HeroFg:    node.text_color = t.hero_fg; break;
+        case TextColor::HeroMuted: node.text_color = t.hero_muted; break;
+        case TextColor::Default:
+        default:                   node.text_color = t.foreground; break;
+    }
+
+    // Inline code chrome — matches phenotype-web's Text.css L17-24.
+    if (size == TextSize::Code) {
+        node.background = t.code_bg;
+        node.border_color = t.border;
+        node.border_width = 1;
+        node.border_radius = t.radius_md;
+        node.style.padding[0] = t.space_xs;
+        node.style.padding[1] = t.space_sm;
+        node.style.padding[2] = t.space_xs;
+        node.style.padding[3] = t.space_sm;
+    }
 
     if (auto* s = Scope::current()) {
         node.style.text_align = detail::node_at(s->node).style.text_align;

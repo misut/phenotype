@@ -212,6 +212,29 @@ enum class ButtonVariant {
     Primary,
 };
 
+// Text size variant. Mirrors phenotype-web's Text.tsx `size` prop.
+// Picks one of the typography scalars on Theme. `Code` additionally
+// applies the code-block chrome (mono font, code_bg background,
+// 1px border, radius_md, space_lg padding).
+enum class TextSize {
+    Body,
+    Heading,
+    Small,
+    Code,
+    HeroTitle,
+    HeroSubtitle,
+};
+
+// Text color variant. Mirrors phenotype-web's Text.tsx `color` prop.
+// Picks one of the foreground / muted / accent / hero color tokens.
+enum class TextColor {
+    Default,
+    Muted,
+    Accent,
+    HeroFg,
+    HeroMuted,
+};
+
 inline constexpr char const* interaction_role_name(InteractionRole role) noexcept {
     switch (role) {
         case InteractionRole::Link:      return "link";
