@@ -1,5 +1,7 @@
 # phenotype
 
+<!-- docs-only CI smoke check -->
+
 A cross-platform C++ UI framework with a declarative DSL inspired by Iced and
 Elm. Single source of truth, typed messages, pure-function view. Renders via
 WebGPU on the web today; native desktop support is split into a shared shell
