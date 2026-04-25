@@ -235,6 +235,19 @@ enum class TextColor {
     HeroMuted,
 };
 
+// Spacing-scale token. Mirrors phenotype-web's `SpaceToken` and the
+// six rungs phenotype-web exposes through `<Column gap=...>` /
+// `<Row gap=...>`. Resolved against the active Theme by
+// layout::space_value().
+enum class SpaceToken {
+    Xs,
+    Sm,
+    Md,
+    Lg,
+    Xl,
+    Xl2,
+};
+
 inline constexpr char const* interaction_role_name(InteractionRole role) noexcept {
     switch (role) {
         case InteractionRole::Link:      return "link";
