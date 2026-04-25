@@ -349,34 +349,8 @@ void view(State const& state) {
     );
 }
 
-// ---- Theme ----
-
-static phenotype::Theme showcase_theme() {
-    return phenotype::Theme{
-        .background = {244, 241, 234, 255},
-        .foreground = {25, 32, 45, 255},
-        .accent = {16, 110, 115, 255},
-        .muted = {96, 104, 118, 255},
-        .border = {212, 217, 223, 255},
-        .code_bg = {233, 238, 240, 255},
-        .hero_bg = {26, 66, 78, 255},
-        .hero_fg = {244, 247, 244, 255},
-        .hero_muted = {181, 202, 198, 255},
-        .transparent = {0, 0, 0, 0},
-        .body_font_size = 16.0f,
-        .heading_font_size = 23.0f,
-        .hero_title_size = 40.0f,
-        .hero_subtitle_size = 18.0f,
-        .code_font_size = 14.0f,
-        .small_font_size = 14.0f,
-        .line_height_ratio = 1.6f,
-        .max_content_width = 760.0f,
-    };
-}
-
 // ---- Entry point ----
 
 int main() {
-    phenotype::set_theme(showcase_theme());
     return phenotype::native::run_app<State, Msg>(480, 720, "phenotype", view, update);
 }

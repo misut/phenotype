@@ -155,9 +155,11 @@ inline void code(str content) {
     node.background = detail::g_app.theme.code_bg;
     node.border_color = detail::g_app.theme.border;
     node.border_width = 1;
-    node.border_radius = 6;
-    node.style.padding[0] = 16; node.style.padding[1] = 16;
-    node.style.padding[2] = 16; node.style.padding[3] = 16;
+    node.border_radius = detail::g_app.theme.radius_md;
+    node.style.padding[0] = detail::g_app.theme.space_lg;
+    node.style.padding[1] = detail::g_app.theme.space_lg;
+    node.style.padding[2] = detail::g_app.theme.space_lg;
+    node.style.padding[3] = detail::g_app.theme.space_lg;
 
     detail::attach_to_scope(h);
 }
@@ -171,10 +173,12 @@ inline void button(str label, Msg msg) {
     node.font_size = detail::g_app.theme.body_font_size;
     node.text_color = detail::g_app.theme.foreground;
     node.background = detail::g_app.theme.code_bg;
-    node.hover_background = detail::g_app.theme.border;
-    node.border_radius = 4;
-    node.style.padding[0] = 6; node.style.padding[1] = 12;
-    node.style.padding[2] = 6; node.style.padding[3] = 12;
+    node.hover_background = detail::g_app.theme.state_hover_bg;
+    node.border_radius = detail::g_app.theme.radius_sm;
+    node.style.padding[0] = 6;
+    node.style.padding[1] = detail::g_app.theme.space_md;
+    node.style.padding[2] = 6;
+    node.style.padding[3] = detail::g_app.theme.space_md;
     node.cursor_type = 1;
     node.interaction_role = InteractionRole::Button;
 
@@ -201,7 +205,7 @@ inline void toggle(str label, bool active, Msg msg,
         auto& row = ::phenotype::detail::node_at(row_h);
         row.style.flex_direction = FlexDirection::Row;
         row.style.cross_align    = CrossAxisAlignment::Center;
-        row.style.gap            = 8;
+        row.style.gap            = ::phenotype::detail::g_app.theme.space_sm;
         row.debug_semantic_role = interaction_role_name(role);
         row.debug_semantic_label = std::string(label.data, label.len);
         row.debug_semantic_callback_id = id;
@@ -230,7 +234,7 @@ inline void toggle(str label, bool active, Msg msg,
             box.border_color = ::phenotype::detail::g_app.theme.accent;
             box.decoration   = active_decoration;
         } else {
-            box.background   = {255, 255, 255, 255};
+            box.background   = ::phenotype::detail::g_app.theme.surface;
             box.border_color = ::phenotype::detail::g_app.theme.border;
         }
         box.border_width = 1;
@@ -280,12 +284,14 @@ inline void text_field(str hint, std::string const& current,
     node.font_size = detail::g_app.theme.body_font_size;
     node.text_color = current.empty() ? detail::g_app.theme.muted
                                       : detail::g_app.theme.foreground;
-    node.background = {255, 255, 255, 255};
+    node.background = detail::g_app.theme.surface;
     node.border_color = detail::g_app.theme.border;
     node.border_width = 1;
-    node.border_radius = 4;
-    node.style.padding[0] = 8; node.style.padding[1] = 12;
-    node.style.padding[2] = 8; node.style.padding[3] = 12;
+    node.border_radius = detail::g_app.theme.radius_sm;
+    node.style.padding[0] = detail::g_app.theme.space_sm;
+    node.style.padding[1] = detail::g_app.theme.space_md;
+    node.style.padding[2] = detail::g_app.theme.space_sm;
+    node.style.padding[3] = detail::g_app.theme.space_md;
     node.cursor_type = 1;
 
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
@@ -596,7 +602,7 @@ void column(F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
-    node.style.gap = 12;
+    node.style.gap = detail::g_app.theme.space_md;
     detail::open_container(h, std::forward<F>(builder));
 }
 
@@ -605,7 +611,7 @@ void column(A&& a, B&& b, Rest&&... rest) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
-    node.style.gap = 12;
+    node.style.gap = detail::g_app.theme.space_md;
     detail::attach_to_scope(h);
     Scope child_scope(h);
     auto* prev = Scope::current();
@@ -623,7 +629,7 @@ void row(F&& builder) {
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Row;
     node.style.cross_align = CrossAxisAlignment::Center;
-    node.style.gap = 8;
+    node.style.gap = detail::g_app.theme.space_sm;
     detail::open_container(h, std::forward<F>(builder));
 }
 
@@ -633,7 +639,7 @@ void row(A&& a, B&& b, Rest&&... rest) {
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Row;
     node.style.cross_align = CrossAxisAlignment::Center;
-    node.style.gap = 8;
+    node.style.gap = detail::g_app.theme.space_sm;
     detail::attach_to_scope(h);
     Scope child_scope(h);
     auto* prev = Scope::current();
@@ -680,12 +686,14 @@ inline void scaffold(std::function<void()> top_bar,
         {
             auto& header = detail::node_at(header_h);
             header.style.flex_direction = FlexDirection::Column;
-            header.style.gap = 8;
+            header.style.gap = detail::g_app.theme.space_sm;
             header.style.cross_align = CrossAxisAlignment::Center;
             header.style.text_align = TextAlign::Center;
             header.background = detail::g_app.theme.hero_bg;
-            header.style.padding[0] = 48; header.style.padding[1] = 24;
-            header.style.padding[2] = 48; header.style.padding[3] = 24;
+            header.style.padding[0] = 48;
+            header.style.padding[1] = detail::g_app.theme.space_xl;
+            header.style.padding[2] = 48;
+            header.style.padding[3] = detail::g_app.theme.space_xl;
         }
 
         detail::open_container(header_h, std::move(top_bar));
@@ -708,10 +716,12 @@ inline void scaffold(std::function<void()> top_bar,
         {
             auto& main = detail::node_at(main_h);
             main.style.flex_direction = FlexDirection::Column;
-            main.style.gap = 32;
+            main.style.gap = detail::g_app.theme.space_2xl;
             main.style.max_width = detail::g_app.theme.max_content_width;
-            main.style.padding[0] = 32; main.style.padding[1] = 24;
-            main.style.padding[2] = 32; main.style.padding[3] = 24;
+            main.style.padding[0] = detail::g_app.theme.space_2xl;
+            main.style.padding[1] = detail::g_app.theme.space_xl;
+            main.style.padding[2] = detail::g_app.theme.space_2xl;
+            main.style.padding[3] = detail::g_app.theme.space_xl;
         }
 
         detail::open_container(main_h, std::move(content));
@@ -725,8 +735,10 @@ inline void scaffold(std::function<void()> top_bar,
             footer.style.gap = 0;
             footer.style.main_align = MainAxisAlignment::Center;
             footer.style.cross_align = CrossAxisAlignment::Center;
-            footer.style.padding[0] = 32; footer.style.padding[1] = 24;
-            footer.style.padding[2] = 32; footer.style.padding[3] = 24;
+            footer.style.padding[0] = detail::g_app.theme.space_2xl;
+            footer.style.padding[1] = detail::g_app.theme.space_xl;
+            footer.style.padding[2] = detail::g_app.theme.space_2xl;
+            footer.style.padding[3] = detail::g_app.theme.space_xl;
             footer.border_color = detail::g_app.theme.border;
             footer.border_width = 1;
         }
@@ -753,10 +765,12 @@ template<typename F>
 void card(F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
-    node.border_radius = 8;
-    node.background = {255, 255, 255, 255};
-    node.style.padding[0] = 16; node.style.padding[1] = 16;
-    node.style.padding[2] = 16; node.style.padding[3] = 16;
+    node.border_radius = detail::g_app.theme.radius_lg;
+    node.background = detail::g_app.theme.surface;
+    node.style.padding[0] = detail::g_app.theme.space_lg;
+    node.style.padding[1] = detail::g_app.theme.space_lg;
+    node.style.padding[2] = detail::g_app.theme.space_lg;
+    node.style.padding[3] = detail::g_app.theme.space_lg;
     detail::open_container(h, std::forward<F>(builder));
 }
 
@@ -767,7 +781,7 @@ void list_items(F&& builder) {
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
     node.style.gap = 6;
-    node.style.padding[3] = 24;
+    node.style.padding[3] = detail::g_app.theme.space_xl;
     detail::open_container(h, std::forward<F>(builder));
 }
 
@@ -776,7 +790,7 @@ inline void item(str content) {
     {
         auto& row = detail::node_at(row_h);
         row.style.flex_direction = FlexDirection::Row;
-        row.style.gap = 8;
+        row.style.gap = detail::g_app.theme.space_sm;
     }
 
     auto bullet_h = detail::alloc_node();
