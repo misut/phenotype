@@ -260,14 +260,14 @@ inline void toggle(str label, bool active, Msg msg,
 template<typename Msg>
 inline void checkbox(str label, bool checked, Msg msg) {
     _impl::toggle(label, checked, std::move(msg),
-                  /*corner_radius=*/3.0f, Decoration::Check,
+                  detail::g_app.theme.radius_xs, Decoration::Check,
                   InteractionRole::Checkbox);
 }
 
 template<typename Msg>
 inline void radio(str label, bool selected, Msg msg) {
     _impl::toggle(label, selected, std::move(msg),
-                  /*corner_radius=*/8.0f, Decoration::Dot,
+                  detail::g_app.theme.radius_lg, Decoration::Dot,
                   InteractionRole::Radio);
 }
 
@@ -690,9 +690,9 @@ inline void scaffold(std::function<void()> top_bar,
             header.style.cross_align = CrossAxisAlignment::Center;
             header.style.text_align = TextAlign::Center;
             header.background = detail::g_app.theme.hero_bg;
-            header.style.padding[0] = 48;
+            header.style.padding[0] = detail::g_app.theme.space_3xl;
             header.style.padding[1] = detail::g_app.theme.space_xl;
-            header.style.padding[2] = 48;
+            header.style.padding[2] = detail::g_app.theme.space_3xl;
             header.style.padding[3] = detail::g_app.theme.space_xl;
         }
 
