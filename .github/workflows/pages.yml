@@ -46,6 +46,7 @@ jobs:
           repository: misut/txn
           ref: 67264b631d2d77c8dbb2bd31f0727b3127c8a2a7
           path: txn
+          fetch-depth: 0
 
       - name: Resolve tool versions
         id: tool-versions
