@@ -906,6 +906,93 @@ void test_text_field_disabled() {
     std::puts("PASS: text_field disabled state");
 }
 
+namespace text_variant_test {
+inline NodeHandle build_text(str content, TextSize size, TextColor color) {
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::text(content, size, color);
+    Scope::set_current(nullptr);
+
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    return root.children[0];
+}
+} // namespace text_variant_test
+
+void test_text_size_variants() {
+    auto const& t = detail::g_app.theme;
+    auto& body = detail::node_at(text_variant_test::build_text(
+        "body", TextSize::Body, TextColor::Default));
+    assert(body.font_size == t.body_font_size);
+    assert(body.mono == false);
+
+    auto& heading = detail::node_at(text_variant_test::build_text(
+        "heading", TextSize::Heading, TextColor::Default));
+    assert(heading.font_size == t.heading_font_size);
+
+    auto& small = detail::node_at(text_variant_test::build_text(
+        "small", TextSize::Small, TextColor::Default));
+    assert(small.font_size == t.small_font_size);
+
+    auto& hero_title = detail::node_at(text_variant_test::build_text(
+        "title", TextSize::HeroTitle, TextColor::Default));
+    assert(hero_title.font_size == t.hero_title_size);
+
+    auto& hero_sub = detail::node_at(text_variant_test::build_text(
+        "subtitle", TextSize::HeroSubtitle, TextColor::Default));
+    assert(hero_sub.font_size == t.hero_subtitle_size);
+
+    std::puts("PASS: text size variants pick the right typography token");
+}
+
+void test_text_color_variants() {
+    auto const& t = detail::g_app.theme;
+    auto& def = detail::node_at(text_variant_test::build_text(
+        "x", TextSize::Body, TextColor::Default));
+    assert(def.text_color.r == t.foreground.r);
+
+    auto& muted = detail::node_at(text_variant_test::build_text(
+        "x", TextSize::Body, TextColor::Muted));
+    assert(muted.text_color.r == t.muted.r);
+
+    auto& accent = detail::node_at(text_variant_test::build_text(
+        "x", TextSize::Body, TextColor::Accent));
+    assert(accent.text_color.r == t.accent.r);
+
+    auto& hero_fg = detail::node_at(text_variant_test::build_text(
+        "x", TextSize::Body, TextColor::HeroFg));
+    assert(hero_fg.text_color.r == t.hero_fg.r);
+
+    auto& hero_muted = detail::node_at(text_variant_test::build_text(
+        "x", TextSize::Body, TextColor::HeroMuted));
+    assert(hero_muted.text_color.r == t.hero_muted.r);
+
+    std::puts("PASS: text color variants pick the right color token");
+}
+
+void test_text_inline_code_chrome() {
+    auto const& t = detail::g_app.theme;
+    auto& code = detail::node_at(text_variant_test::build_text(
+        "fn()", TextSize::Code, TextColor::Default));
+    assert(code.font_size == t.code_font_size);
+    assert(code.mono == true);
+    assert(code.background.r == t.code_bg.r);
+    assert(code.border_color.r == t.border.r);
+    assert(code.border_width == 1);
+    assert(code.border_radius == t.radius_md);
+    assert(code.style.padding[0] == t.space_xs);
+    assert(code.style.padding[1] == t.space_sm);
+    assert(code.style.padding[2] == t.space_xs);
+    assert(code.style.padding[3] == t.space_sm);
+    std::puts("PASS: text(Code) inline chrome (mono + border + xs/sm padding)");
+}
+
 // ============================================================
 // Runner
 // ============================================================
@@ -938,6 +1025,9 @@ int main() {
     test_text_field_default_placeholder();
     test_text_field_error();
     test_text_field_disabled();
+    test_text_size_variants();
+    test_text_color_variants();
+    test_text_inline_code_chrome();
     std::puts("\nAll tests passed.");
     return 0;
 }
