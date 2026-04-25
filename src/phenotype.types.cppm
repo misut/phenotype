@@ -68,6 +68,7 @@ struct Theme {
     float max_content_width  = 720.0f;
 
     // Radius scale
+    float radius_xs   = 3.0f;
     float radius_sm   = 4.0f;
     float radius_md   = 6.0f;
     float radius_lg   = 8.0f;
@@ -80,6 +81,7 @@ struct Theme {
     float space_lg  = 16.0f;
     float space_xl  = 24.0f;
     float space_2xl = 32.0f;
+    float space_3xl = 48.0f;
 
     // State tokens
     Color state_hover_bg          = {229, 231, 235, 255}; // = border
