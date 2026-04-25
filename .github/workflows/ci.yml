@@ -1,11 +1,13 @@
 name: CI
 
 on:
+  push:
+    branches: [main]
   pull_request:
     branches: [main]
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -40,14 +42,16 @@ jobs:
           sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
           sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
 
-      - name: Cache toolchains
-        uses: actions/cache@v5
+      - name: Restore toolchains
+        id: toolchain-cache
+        uses: actions/cache/restore@v5
         with:
           path: ~/.intron/toolchains
-          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('.intron.toml') }}
+          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
 
-      - name: Cache build artifacts
-        uses: actions/cache@v5
+      - name: Restore build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v5
         with:
           path: |
             .exon
@@ -72,6 +76,13 @@ jobs:
           intron install wasmtime 43.0.1
           intron default wasmtime 43.0.1
 
+      - name: Save toolchains
+        if: github.ref == 'refs/heads/main' && matrix.target == 'native' && steps.toolchain-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.intron/toolchains
+          key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
+
       - name: Install exon
         run: |
           gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-${{ matrix.platform }}.tar.gz"
@@ -94,6 +105,15 @@ jobs:
         run: |
           eval "$(intron env)"
           exon test ${{ matrix.target_arg }}
+
+      - name: Save build artifacts
+        if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            .exon
+            ~/.exon/cache
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
   windows-native:
     name: test (windows-2022, native)
