@@ -72,13 +72,13 @@ constexpr char const* DEFAULT_THEME_JSON = R"json({
   "accent": {
     "r": 10,
     "g": 186,
-    "b": 181,
+    "b": 183,
     "a": 255
   },
   "accent_strong": {
     "r": 8,
     "g": 128,
-    "b": 124,
+    "b": 126,
     "a": 255
   },
   "muted": {
@@ -144,7 +144,7 @@ constexpr char const* DEFAULT_THEME_JSON = R"json({
   "state_active_bg": {
     "r": 8,
     "g": 128,
-    "b": 124,
+    "b": 126,
     "a": 255
   },
   "state_active_fg": {
@@ -192,7 +192,7 @@ constexpr char const* DEFAULT_THEME_JSON = R"json({
   "state_focus_ring": {
     "r": 10,
     "g": 186,
-    "b": 181,
+    "b": 183,
     "a": 255
   },
   "semantic_success_bg": {
@@ -777,13 +777,13 @@ constexpr char const* DENSE_THEME_JSON = R"json({
   "accent": {
     "r": 10,
     "g": 186,
-    "b": 181,
+    "b": 183,
     "a": 255
   },
   "accent_strong": {
     "r": 8,
     "g": 128,
-    "b": 124,
+    "b": 126,
     "a": 255
   },
   "muted": {
@@ -849,7 +849,7 @@ constexpr char const* DENSE_THEME_JSON = R"json({
   "state_active_bg": {
     "r": 8,
     "g": 128,
-    "b": 124,
+    "b": 126,
     "a": 255
   },
   "state_active_fg": {
@@ -897,7 +897,7 @@ constexpr char const* DENSE_THEME_JSON = R"json({
   "state_focus_ring": {
     "r": 10,
     "g": 186,
-    "b": 181,
+    "b": 183,
     "a": 255
   },
   "semantic_success_bg": {
@@ -1018,8 +1018,8 @@ void test_phenotype_web_default_theme_roundtrip() {
 
     // Base colors that match phenotype's own M0-3 default palette.
     assert(t.background.r == 250 && t.background.g == 250 && t.background.b == 250);
-    assert(t.accent.r == 10 && t.accent.g == 186 && t.accent.b == 181); // Tiffany
-    assert(t.accent_strong.r == 8 && t.accent_strong.g == 128 && t.accent_strong.b == 124);
+    assert(t.accent.r == 10 && t.accent.g == 186 && t.accent.b == 183); // Tiffany
+    assert(t.accent_strong.r == 8 && t.accent_strong.g == 128 && t.accent_strong.b == 126);
     assert(t.surface.r == 255 && t.surface.g == 255 && t.surface.b == 255);
     assert(t.transparent.a == 0);
 
@@ -1046,7 +1046,7 @@ void test_phenotype_web_default_theme_roundtrip() {
 
     // State tokens.
     assert(t.state_hover_bg.r == 229 && t.state_hover_bg.g == 231 && t.state_hover_bg.b == 235);
-    assert(t.state_active_bg.r == 8 && t.state_active_bg.g == 128 && t.state_active_bg.b == 124);
+    assert(t.state_active_bg.r == 8 && t.state_active_bg.g == 128 && t.state_active_bg.b == 126);
     assert(t.state_active_fg.r == 255 && t.state_active_fg.a == 255);
     assert(t.state_disabled_fg.r == 156);
     assert(t.state_focus_ring.r == 10 && t.state_focus_ring.g == 186);
@@ -1130,7 +1130,7 @@ void test_phenotype_web_dense_theme_roundtrip() {
 
     // Colors unchanged from default.
     assert(t.background.r == 250 && t.background.g == 250 && t.background.b == 250);
-    assert(t.accent.r == 10 && t.accent.g == 186 && t.accent.b == 181);
+    assert(t.accent.r == 10 && t.accent.g == 186 && t.accent.b == 183);
 
     // Tightened typography + spacing.
     assert(t.body_font_size == 14.0f);
