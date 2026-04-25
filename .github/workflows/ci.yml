@@ -42,24 +42,8 @@ jobs:
             cxxflags: -fsanitize=address,undefined -fno-sanitize-recover=all -fno-omit-frame-pointer -g -O1
             ldflags: -fsanitize=address,undefined
     runs-on: ${{ matrix.os }}
-    defaults:
-      run:
-        working-directory: phenotype
     steps:
       - uses: actions/checkout@v6
-        with:
-          path: phenotype
-
-      # Temporary for the M0 milestone: phenotype/exon.toml points
-      # `txn` at `../txn`, so check the txn repo out as a sibling
-      # directory inside the workspace. Removed in U-2 once txn 0.7.0
-      # is released and phenotype switches back to a versioned dep.
-      - uses: actions/checkout@v6
-        with:
-          repository: misut/txn
-          ref: 67264b68c677ad1c8f003778922bf3a78cfb30fb
-          path: txn
-          fetch-depth: 0
 
       - name: Resolve tool versions
         id: tool-versions
@@ -78,9 +62,9 @@ jobs:
         uses: actions/cache@v5
         with:
           path: |
-            phenotype/.exon
+            .exon
             ~/.exon/cache
-          key: build-${{ matrix.os }}-${{ matrix.target }}-${{ hashFiles('phenotype/mise.toml', 'phenotype/exon.toml', 'phenotype/exon.lock') }}
+          key: build-${{ matrix.os }}-${{ matrix.target }}-${{ hashFiles('mise.toml', 'exon.toml', 'exon.lock') }}
           restore-keys: |
             build-${{ matrix.os }}-${{ matrix.target }}-
 
@@ -126,21 +110,8 @@ jobs:
   docs:
     name: docs (ubuntu-24.04, wasm32-wasi)
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: phenotype
     steps:
       - uses: actions/checkout@v6
-        with:
-          path: phenotype
-
-      # Temporary for the M0 milestone — see the test job for context.
-      - uses: actions/checkout@v6
-        with:
-          repository: misut/txn
-          ref: 67264b68c677ad1c8f003778922bf3a78cfb30fb
-          path: txn
-          fetch-depth: 0
 
       - name: Resolve tool versions
         id: tool-versions
@@ -187,21 +158,8 @@ jobs:
   windows-native:
     name: test (windows-2022, native)
     runs-on: windows-2022
-    defaults:
-      run:
-        working-directory: phenotype
     steps:
       - uses: actions/checkout@v6
-        with:
-          path: phenotype
-
-      # Temporary for the M0 milestone — see the test job for context.
-      - uses: actions/checkout@v6
-        with:
-          repository: misut/txn
-          ref: 67264b68c677ad1c8f003778922bf3a78cfb30fb
-          path: txn
-          fetch-depth: 0
 
       - name: Resolve tool versions
         id: tool-versions
