@@ -742,6 +742,86 @@ void test_theme_json_mixed_overlay() {
     std::puts("PASS: theme JSON mixed overlay");
 }
 
+namespace button_test {
+struct Click {};
+using ButtonMsg = std::variant<Click>;
+
+inline NodeHandle build_button(ButtonVariant variant, bool disabled) {
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::button<ButtonMsg>("Click", Click{}, variant, disabled);
+    Scope::set_current(nullptr);
+
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    return root.children[0];
+}
+} // namespace button_test
+
+void test_button_default_variant() {
+    auto btn_h = button_test::build_button(ButtonVariant::Default, /*disabled=*/false);
+    auto& btn = detail::node_at(btn_h);
+    auto const& t = detail::g_app.theme;
+    assert(btn.background.r == t.surface.r &&
+           btn.background.g == t.surface.g &&
+           btn.background.b == t.surface.b);
+    assert(btn.text_color.r == t.foreground.r);
+    assert(btn.hover_background.r == t.state_hover_bg.r);
+    assert(btn.border_color.r == t.border.r);
+    assert(btn.border_width == 1);
+    assert(btn.border_radius == t.radius_sm);
+    assert(btn.cursor_type == 1);
+    assert(btn.focusable == true);
+    assert(btn.callback_id != 0xFFFFFFFFu);
+    assert(btn.interaction_role == InteractionRole::Button);
+    std::puts("PASS: button default variant");
+}
+
+void test_button_primary_variant() {
+    auto btn_h = button_test::build_button(ButtonVariant::Primary, /*disabled=*/false);
+    auto& btn = detail::node_at(btn_h);
+    auto const& t = detail::g_app.theme;
+    assert(btn.background.r == t.accent.r &&
+           btn.background.g == t.accent.g &&
+           btn.background.b == t.accent.b);
+    assert(btn.text_color.r == t.state_active_fg.r);
+    assert(btn.hover_background.r == t.accent_strong.r);
+    assert(btn.border_color.r == t.accent.r);
+    assert(btn.border_width == 1);
+    assert(btn.cursor_type == 1);
+    assert(btn.focusable == true);
+    assert(btn.callback_id != 0xFFFFFFFFu);
+    std::puts("PASS: button primary variant");
+}
+
+void test_button_disabled() {
+    for (auto variant : {ButtonVariant::Default, ButtonVariant::Primary}) {
+        auto btn_h = button_test::build_button(variant, /*disabled=*/true);
+        auto& btn = detail::node_at(btn_h);
+        auto const& t = detail::g_app.theme;
+        assert(btn.background.r == t.state_disabled_bg.r);
+        assert(btn.text_color.r == t.state_disabled_fg.r);
+        assert(btn.border_color.r == t.state_disabled_border.r);
+        assert(btn.border_width == 1);
+        assert(btn.cursor_type == 0);
+        assert(btn.focusable == false);
+        assert(btn.callback_id == 0xFFFFFFFFu);
+        // hover_background was never assigned, stays transparent so paint
+        // skips the hover overlay.
+        assert(btn.hover_background.a == 0);
+        // Disabled buttons keep the Button role for accessibility.
+        assert(btn.interaction_role == InteractionRole::Button);
+    }
+    std::puts("PASS: button disabled (both variants)");
+}
+
 // ============================================================
 // Runner
 // ============================================================
@@ -767,6 +847,9 @@ int main() {
     test_theme_json_color_string_forms();
     test_theme_json_color_object_back_compat();
     test_theme_json_mixed_overlay();
+    test_button_default_variant();
+    test_button_primary_variant();
+    test_button_disabled();
     std::puts("\nAll tests passed.");
     return 0;
 }

@@ -204,6 +204,14 @@ enum class InteractionRole {
     TextField,
 };
 
+// Button visual variant. Mirrors phenotype-web's Button.tsx prop.
+//   Default — code_bg / surface chrome with hover_bg fallback.
+//   Primary — accent-filled with white text; hover darkens to accent_strong.
+enum class ButtonVariant {
+    Default,
+    Primary,
+};
+
 inline constexpr char const* interaction_role_name(InteractionRole role) noexcept {
     switch (role) {
         case InteractionRole::Link:      return "link";
