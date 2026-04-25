@@ -191,45 +191,94 @@ Done when: the 6 Storybook stories pass Playwright snapshot tests across
 three themes (default, a "warm" variant, and a "dense" variant with
 tightened spacing).
 
-### Milestone 3 — Theme pipeline glue
+### Milestone 3 — Theme pipeline glue ✅
 
-- **B4**: In `phenotype-web`, ship `themeToPhenotypeJson(cssVars)` — a
-  pure TypeScript utility that reads computed CSS variables and emits a
-  JSON document compatible with `phenotype::theme_from_json` (post-A1/A2,
-  so partial and hex are OK).
-- **C1**: Set up CI in `phenotype-web` that runs the utility against each
-  Storybook theme, stores the JSON as an artifact, and posts it to
-  `phenotype` through a small `phenotype/tools/` consumer test that
-  asserts the JSON parses without error.
+Status: **complete** (PRs [phenotype-web#6](https://github.com/misut/phenotype-web/pull/6) B4 utility,
+[phenotype#170](https://github.com/misut/phenotype/pull/170) C1 consumer test).
 
-Done when: a pushed change to a CSS variable in `phenotype-web` produces
-a regenerated `tokens.json` artifact, and the `phenotype` consumer test
-confirms the file parses into a valid Theme.
+- **B4** ✅ — `phenotype-web/src/theme/themeToPhenotypeJson.ts`
+  exposes `themeToPhenotypeJson(cssVars)` and emits the 56-field JSON
+  that `phenotype::theme_from_json` consumes via `txn::Mode::Partial`.
+- **C1** ✅ — `phenotype/tests/test_token_roundtrip.cpp` parses a
+  committed snapshot (`tests/fixtures/themes/default.theme.json`) and
+  asserts every field deserializes to the value the JSON declares.
+  M5-3 extended this to the dark / warm / dense themes as well.
 
-### Milestone 4 — phenotype mirrors Core 6
+Verified: a pushed change to a `--ph-*` CSS variable in `phenotype-web`
+ships a new snapshot via the Vitest snapshot test; the matching
+phenotype PR mirrors the snapshot into
+`tests/fixtures/themes/<theme>.theme.json` and `test_token_roundtrip`
+confirms it parses into a valid Theme.
 
-- For each Core 6 widget, adjust the C++ implementation so that its
-  visual and API surface matches the React version established in M2.
-  In practice this is mostly a no-op for API (the React side was written
-  to match phenotype's existing API) and a mechanical adjustment for
-  visuals (pick up exact radius / spacing / state tokens from the React
-  theme defaults).
+### Milestone 4 — phenotype mirrors Core 6 ✅
 
-Done when: the `native` example renders each Core 6 widget in a state
-that visually matches its React Storybook story within pixel-diff
-tolerance. The comparison uses the native debug snapshot plus a
-browser-side Playwright snapshot.
+Status: **complete** (six PRs, M4-1 through M4-6).
 
-### Milestone 5 — Claude Design end-to-end
+| Step | What | PR |
+|---|---|---|
+| **M4-1** | radius defaults `4/6/8 → 2/3/4`, Button bg=surface + 1px border, Card 1px border | [#173](https://github.com/misut/phenotype/pull/173) |
+| **M4-2** | Button `variant=Primary` + `disabled` prop | [#175](https://github.com/misut/phenotype/pull/175) |
+| **M4-3** | Text `size` (Body/Heading/Small/Code/HeroTitle/HeroSubtitle) + `color` (Default/Muted/Accent/HeroFg/HeroMuted) variants | [#177](https://github.com/misut/phenotype/pull/177) |
+| **M4-4** | TextField `error` + `disabled` prop | [#176](https://github.com/misut/phenotype/pull/176) |
+| **M4-5** | Column / Row builder overload `gap` (SpaceToken) / `cross` / `main` props + `space_value()` helper | [#178](https://github.com/misut/phenotype/pull/178) |
+| **M4-6** | Core 6 default-state structural snapshot regression catch (`tests/test_widget_snapshots.cpp`) | [#179](https://github.com/misut/phenotype/pull/179) |
 
-- Link `misut/phenotype-web` to Claude Design (subdirectory link if the
-  repo has non-component content; otherwise repo root).
-- Run a full loop: describe a change in Claude Design → apply changes to
-  `phenotype-web` (via Claude Code handoff) → regenerate `tokens.json` →
-  verify `phenotype` picks up the new visuals.
+Every Core 6 widget now has a phenotype-side function whose signature
+and default visuals match the React `phenotype-web` reference within
+the constraints of the current renderer. New parameters land as
+trailing default-args so `examples/{native,counter,hello}` keep
+compiling unchanged.
+
+Out of scope (deferred):
+
+- **`:active` mouse-press tracking** — needs input-handler instrumentation
+- **`font-weight` and per-element `line-height` overrides** — need new
+  `LayoutNode` fields and native font-stack changes; lives with the
+  font-weight scale milestone (see §4 Out of scope above)
+- **Cross-tool pixel diff** (Storybook PNG ↔ native debug snapshot) —
+  font stack (CoreText vs Chromium), DPR, and sub-pixel positioning
+  differ; needs an image-diff library and viewport sync infra. Plain
+  text equality of structural output (M4-6) is the deliberate first
+  step in this repo.
+
+### Milestone 5 — Claude Design end-to-end 🚧
+
+Status: **in progress**. Cross-repo plumbing is in place; the actual
+`claude.ai/design` round-trip is the remaining manual step.
+
+| Step | What | PR |
+|---|---|---|
+| **M5-1** | `cppx::reflect`-based parity guard between phenotype's `Theme` struct and the `default` snapshot phenotype-web emits | [phenotype-web#8](https://github.com/misut/phenotype-web/pull/8), [phenotype#181](https://github.com/misut/phenotype/pull/181) |
+| **M5-3** | dark / warm / dense theme snapshots + round-trip + parity guard loop | [phenotype-web#9](https://github.com/misut/phenotype-web/pull/9), [phenotype#182](https://github.com/misut/phenotype/pull/182) |
+| **M5-2** | Handoff workflow documented (this PR + phenotype-web README) | (pending) |
+| **M5-4** | Bidirectional auto-sync — phenotype-web snapshot bump triggers a phenotype mirror PR automatically | (deferred, see below) |
+| **M5-5** | First end-to-end run on `claude.ai/design` against `misut/phenotype-web` | (manual; user-triggered) |
+
+#### Handoff workflow today (manual but guarded)
+
+1. **Design change initiated** — either inside `claude.ai/design`
+   (which edits phenotype-web's source via the Claude GitHub App) or
+   directly with a phenotype-web PR.
+2. **phenotype-web PR** updates `--ph-*` CSS variables, the
+   `themeToPhenotypeJson` map if the token set grew, and re-runs
+   `pnpm test:unit` so the affected `__snapshots__/<theme>.theme.json`
+   files regenerate. If a Storybook visual changes, `mise run
+   test:update` re-baselines the Playwright PNGs (Docker-only;
+   bit-for-bit reproducible on CI).
+3. **phenotype PR follow-up** mirrors the new snapshot files into
+   `phenotype/tests/fixtures/themes/<theme>.theme.json` and updates
+   the matching raw-string literal in
+   `phenotype/tests/test_token_roundtrip.cpp` so wasm32-wasi targets
+   pick up the change without a filesystem preopen.
+4. `test_token_vocabulary_parity` (M5-1) catches drift in either
+   direction — extra `Theme` fields that the snapshot is missing,
+   or unknown JSON keys that phenotype's `Theme` doesn't model.
+5. `test_token_roundtrip` (M3 + M5-3) confirms every theme parses
+   into the exact value set the JSON declares.
 
 Done when: a design change initiated in Claude Design reaches the
-`phenotype` native build with no manual JSON editing.
+`phenotype` native build with no manual JSON editing. Today step 3
+is manual; M5-4 will automate it via cross-repo CI.
 
 ### Milestone 6 — Remaining widgets
 
