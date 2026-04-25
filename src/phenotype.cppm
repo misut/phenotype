@@ -165,24 +165,57 @@ inline void code(str content) {
 }
 
 // button<Msg> — click posts a copy of `msg` and triggers a rebuild.
+//
+//   variant=Default  — surface chrome with hover_bg fallback.
+//   variant=Primary  — accent-filled, white text, hover darkens to accent_strong.
+//   disabled=true    — chrome switches to state_disabled_*, click and Tab focus
+//                      are suppressed (no callback registered, focusable=false).
 template<typename Msg>
-inline void button(str label, Msg msg) {
+inline void button(str label, Msg msg,
+                   ButtonVariant variant = ButtonVariant::Default,
+                   bool disabled = false) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
+    auto const& t = detail::g_app.theme;
     node.text = std::string(label.data, label.len);
-    node.font_size = detail::g_app.theme.body_font_size;
-    node.text_color = detail::g_app.theme.foreground;
-    node.background = detail::g_app.theme.surface;
-    node.hover_background = detail::g_app.theme.state_hover_bg;
-    node.border_color = detail::g_app.theme.border;
+    node.font_size = t.body_font_size;
     node.border_width = 1;
-    node.border_radius = detail::g_app.theme.radius_sm;
-    node.style.padding[0] = detail::g_app.theme.space_sm;
-    node.style.padding[1] = detail::g_app.theme.space_md;
-    node.style.padding[2] = detail::g_app.theme.space_sm;
-    node.style.padding[3] = detail::g_app.theme.space_md;
-    node.cursor_type = 1;
+    node.border_radius = t.radius_sm;
+    node.style.padding[0] = t.space_sm;
+    node.style.padding[1] = t.space_md;
+    node.style.padding[2] = t.space_sm;
+    node.style.padding[3] = t.space_md;
     node.interaction_role = InteractionRole::Button;
+
+    if (disabled) {
+        node.background = t.state_disabled_bg;
+        node.text_color = t.state_disabled_fg;
+        node.border_color = t.state_disabled_border;
+        node.cursor_type = 0;
+        node.focusable = false;
+        // No callback — the button is non-interactive. Skip the
+        // callback registration entirely so click dispatch finds
+        // node.callback_id == 0xFFFFFFFF and falls through.
+        detail::attach_to_scope(h);
+        return;
+    }
+
+    switch (variant) {
+        case ButtonVariant::Primary:
+            node.background = t.accent;
+            node.text_color = t.state_active_fg;
+            node.hover_background = t.accent_strong;
+            node.border_color = t.accent;
+            break;
+        case ButtonVariant::Default:
+        default:
+            node.background = t.surface;
+            node.text_color = t.foreground;
+            node.hover_background = t.state_hover_bg;
+            node.border_color = t.border;
+            break;
+    }
+    node.cursor_type = 1;
 
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
     detail::g_app.callbacks.push_back([msg = std::move(msg)] {
