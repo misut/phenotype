@@ -67,11 +67,11 @@ struct Theme {
     // Layout
     float max_content_width  = 720.0f;
 
-    // Radius scale
+    // Radius scale (mirrors phenotype-web's "angular over rounded" defaults)
     float radius_xs   = 3.0f;
-    float radius_sm   = 4.0f;
-    float radius_md   = 6.0f;
-    float radius_lg   = 8.0f;
+    float radius_sm   = 2.0f;
+    float radius_md   = 3.0f;
+    float radius_lg   = 4.0f;
     float radius_full = 9999.0f;
 
     // Spacing scale

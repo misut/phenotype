@@ -439,10 +439,10 @@ void test_checkbox_and_radio_widgets() {
         assert(lbl.focusable == false);
     };
 
-    check_widget(root.children[0], false, 3.0f, Decoration::Check);
-    check_widget(root.children[1], true,  3.0f, Decoration::Check);
-    check_widget(root.children[2], false, 8.0f, Decoration::Dot);
-    check_widget(root.children[3], true,  8.0f, Decoration::Dot);
+    check_widget(root.children[0], false, detail::g_app.theme.radius_xs, Decoration::Check);
+    check_widget(root.children[1], true,  detail::g_app.theme.radius_xs, Decoration::Check);
+    check_widget(root.children[2], false, detail::g_app.theme.radius_lg, Decoration::Dot);
+    check_widget(root.children[3], true,  detail::g_app.theme.radius_lg, Decoration::Dot);
 
     auto cb_id_a = detail::node_at(detail::node_at(root.children[0]).children[0]).callback_id;
     detail::g_app.callbacks[cb_id_a]();

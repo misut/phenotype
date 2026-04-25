@@ -172,12 +172,14 @@ inline void button(str label, Msg msg) {
     node.text = std::string(label.data, label.len);
     node.font_size = detail::g_app.theme.body_font_size;
     node.text_color = detail::g_app.theme.foreground;
-    node.background = detail::g_app.theme.code_bg;
+    node.background = detail::g_app.theme.surface;
     node.hover_background = detail::g_app.theme.state_hover_bg;
+    node.border_color = detail::g_app.theme.border;
+    node.border_width = 1;
     node.border_radius = detail::g_app.theme.radius_sm;
-    node.style.padding[0] = 6;
+    node.style.padding[0] = detail::g_app.theme.space_sm;
     node.style.padding[1] = detail::g_app.theme.space_md;
-    node.style.padding[2] = 6;
+    node.style.padding[2] = detail::g_app.theme.space_sm;
     node.style.padding[3] = detail::g_app.theme.space_md;
     node.cursor_type = 1;
     node.interaction_role = InteractionRole::Button;
@@ -767,6 +769,8 @@ void card(F&& builder) {
     auto& node = detail::node_at(h);
     node.border_radius = detail::g_app.theme.radius_lg;
     node.background = detail::g_app.theme.surface;
+    node.border_color = detail::g_app.theme.border;
+    node.border_width = 1;
     node.style.padding[0] = detail::g_app.theme.space_lg;
     node.style.padding[1] = detail::g_app.theme.space_lg;
     node.style.padding[2] = detail::g_app.theme.space_lg;
