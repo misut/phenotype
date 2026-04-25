@@ -16,7 +16,16 @@ platforms = [
 [dependencies]
 "github.com/misut/jsoncpp" = "0.1.4"
 "github.com/misut/cppx" = "1.7.3"
-"github.com/misut/txn" = "0.6.2"
+
+# Temporary path dep for the M0 token-expansion milestone. The plan
+# (PR #68 in misut/txn introduced partial deserialization mode and the
+# ADL customization hook on `main`; v0.7.0 will be tagged after the
+# phenotype-side M0 work stabilizes) requires consuming txn's `main`
+# while M0 PRs land. Switched back to a versioned dep in the U-2 PR
+# right after M0-3 merges. CI checks out `misut/txn` next to phenotype
+# so the relative path resolves identically in CI and local dev.
+[dependencies.path]
+txn = "../txn"
 
 # GLFW is the desktop windowing shell. WASI and Android use their own
 # runtime (JS shim / GameActivity) and must not pull GLFW. exon's cfg

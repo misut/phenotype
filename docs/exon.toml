@@ -7,7 +7,11 @@ standard = 23
 platforms = [{ os = "wasi" }]
 
 [dependencies]
-"github.com/misut/cppx" = "1.6.3"
+# Pinned to 1.7.3 to match phenotype's transitive cppx pin. cppx 1.8.0
+# unconditionally references the POSIX `winsize` / `TIOCGWINSZ` types
+# in cppx.terminal.system.cppm, which fails to compile against the
+# wasi-sdk libc. Bump in lockstep with phenotype/exon.toml.
+"github.com/misut/cppx" = "1.7.3"
 
 [dependencies.path]
 phenotype = ".."
