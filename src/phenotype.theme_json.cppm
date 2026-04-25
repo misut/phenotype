@@ -1,5 +1,6 @@
 module;
 #include <charconv>
+#include <cstdlib>
 #include <expected>
 #include <optional>
 #include <string>
@@ -68,9 +69,15 @@ inline auto parse_int_in_range(std::string_view s, int lo, int hi)
 }
 
 inline auto parse_unit_float(std::string_view s) -> std::optional<double> {
-    double value = 0.0;
-    auto [ptr, ec] = std::from_chars(s.data(), s.data() + s.size(), value);
-    if (ec != std::errc{} || ptr != s.data() + s.size()) return std::nullopt;
+    // Use strtod via a null-terminated copy: macOS libc++ ships integer
+    // std::from_chars but not the floating-point overload (Apple SDK
+    // libc++ omits it as of Xcode 16), and the wasi-sdk libc++ matches
+    // that gap. strtod is in C and works everywhere.
+    std::string buf{s};
+    char const* begin = buf.c_str();
+    char* end = nullptr;
+    double value = std::strtod(begin, &end);
+    if (end != begin + buf.size()) return std::nullopt;
     if (value < 0.0 || value > 1.0) return std::nullopt;
     return value;
 }
