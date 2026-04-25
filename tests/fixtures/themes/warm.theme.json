@@ -1,0 +1,233 @@
+{
+  "background": {
+    "r": 255,
+    "g": 250,
+    "b": 243,
+    "a": 255
+  },
+  "foreground": {
+    "r": 28,
+    "g": 25,
+    "b": 23,
+    "a": 255
+  },
+  "accent": {
+    "r": 234,
+    "g": 88,
+    "b": 12,
+    "a": 255
+  },
+  "accent_strong": {
+    "r": 194,
+    "g": 65,
+    "b": 12,
+    "a": 255
+  },
+  "muted": {
+    "r": 120,
+    "g": 113,
+    "b": 108,
+    "a": 255
+  },
+  "border": {
+    "r": 231,
+    "g": 229,
+    "b": 228,
+    "a": 255
+  },
+  "surface": {
+    "r": 255,
+    "g": 255,
+    "b": 255,
+    "a": 255
+  },
+  "code_bg": {
+    "r": 245,
+    "g": 245,
+    "b": 244,
+    "a": 255
+  },
+  "hero_bg": {
+    "r": 67,
+    "g": 20,
+    "b": 7,
+    "a": 255
+  },
+  "hero_fg": {
+    "r": 255,
+    "g": 247,
+    "b": 237,
+    "a": 255
+  },
+  "hero_muted": {
+    "r": 253,
+    "g": 186,
+    "b": 116,
+    "a": 255
+  },
+  "transparent": {
+    "r": 0,
+    "g": 0,
+    "b": 0,
+    "a": 0
+  },
+  "state_hover_bg": {
+    "r": 231,
+    "g": 229,
+    "b": 228,
+    "a": 255
+  },
+  "state_hover_fg": {
+    "r": 28,
+    "g": 25,
+    "b": 23,
+    "a": 255
+  },
+  "state_active_bg": {
+    "r": 194,
+    "g": 65,
+    "b": 12,
+    "a": 255
+  },
+  "state_active_fg": {
+    "r": 255,
+    "g": 255,
+    "b": 255,
+    "a": 255
+  },
+  "state_disabled_bg": {
+    "r": 243,
+    "g": 244,
+    "b": 246,
+    "a": 255
+  },
+  "state_disabled_fg": {
+    "r": 156,
+    "g": 163,
+    "b": 175,
+    "a": 255
+  },
+  "state_disabled_border": {
+    "r": 229,
+    "g": 231,
+    "b": 235,
+    "a": 255
+  },
+  "state_error_bg": {
+    "r": 254,
+    "g": 242,
+    "b": 242,
+    "a": 255
+  },
+  "state_error_fg": {
+    "r": 185,
+    "g": 28,
+    "b": 28,
+    "a": 255
+  },
+  "state_error_border": {
+    "r": 220,
+    "g": 38,
+    "b": 38,
+    "a": 255
+  },
+  "state_focus_ring": {
+    "r": 234,
+    "g": 88,
+    "b": 12,
+    "a": 255
+  },
+  "semantic_success_bg": {
+    "r": 236,
+    "g": 253,
+    "b": 245,
+    "a": 255
+  },
+  "semantic_success_fg": {
+    "r": 4,
+    "g": 120,
+    "b": 87,
+    "a": 255
+  },
+  "semantic_success_border": {
+    "r": 16,
+    "g": 185,
+    "b": 129,
+    "a": 255
+  },
+  "semantic_warning_bg": {
+    "r": 255,
+    "g": 251,
+    "b": 235,
+    "a": 255
+  },
+  "semantic_warning_fg": {
+    "r": 180,
+    "g": 83,
+    "b": 9,
+    "a": 255
+  },
+  "semantic_warning_border": {
+    "r": 245,
+    "g": 158,
+    "b": 11,
+    "a": 255
+  },
+  "semantic_info_bg": {
+    "r": 239,
+    "g": 246,
+    "b": 255,
+    "a": 255
+  },
+  "semantic_info_fg": {
+    "r": 29,
+    "g": 78,
+    "b": 216,
+    "a": 255
+  },
+  "semantic_info_border": {
+    "r": 59,
+    "g": 130,
+    "b": 246,
+    "a": 255
+  },
+  "semantic_error_bg": {
+    "r": 254,
+    "g": 242,
+    "b": 242,
+    "a": 255
+  },
+  "semantic_error_fg": {
+    "r": 185,
+    "g": 28,
+    "b": 28,
+    "a": 255
+  },
+  "semantic_error_border": {
+    "r": 220,
+    "g": 38,
+    "b": 38,
+    "a": 255
+  },
+  "body_font_size": 16,
+  "heading_font_size": 22.4,
+  "hero_title_size": 40,
+  "hero_subtitle_size": 18.4,
+  "code_font_size": 14.4,
+  "small_font_size": 14.4,
+  "max_content_width": 720,
+  "radius_xs": 3,
+  "radius_sm": 2,
+  "radius_md": 3,
+  "radius_lg": 4,
+  "radius_full": 9999,
+  "space_xs": 4,
+  "space_sm": 8,
+  "space_md": 12,
+  "space_lg": 16,
+  "space_xl": 24,
+  "space_2xl": 32,
+  "space_3xl": 48,
+  "state_focus_ring_width": 2,
+  "line_height_ratio": 1.6
+}
