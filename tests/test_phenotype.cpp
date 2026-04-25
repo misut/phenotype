@@ -554,10 +554,192 @@ void test_theme_json_roundtrip() {
     assert(parsed->line_height_ratio == original.line_height_ratio);
     assert(parsed->max_content_width == original.max_content_width);
 
-    auto bad = theme_from_json(R"({"background":{"r":0,"g":0,"b":0,"a":255}})");
+    std::puts("PASS: theme JSON roundtrip");
+}
+
+void test_theme_json_partial_keeps_defaults() {
+    Theme defaults{};
+    auto parsed = theme_from_json(R"({"accent":{"r":10,"g":186,"b":181,"a":255}})");
+    assert(parsed.has_value());
+
+    // Overridden field reflects the JSON.
+    assert(parsed->accent.r == 10);
+    assert(parsed->accent.g == 186);
+    assert(parsed->accent.b == 181);
+    assert(parsed->accent.a == 255);
+
+    // Every other field falls back to the C++ default.
+    assert(parsed->background.r == defaults.background.r);
+    assert(parsed->foreground.r == defaults.foreground.r);
+    assert(parsed->muted.r       == defaults.muted.r);
+    assert(parsed->border.r      == defaults.border.r);
+    assert(parsed->code_bg.r     == defaults.code_bg.r);
+    assert(parsed->hero_bg.r     == defaults.hero_bg.r);
+    assert(parsed->body_font_size    == defaults.body_font_size);
+    assert(parsed->heading_font_size == defaults.heading_font_size);
+    assert(parsed->line_height_ratio == defaults.line_height_ratio);
+    assert(parsed->max_content_width == defaults.max_content_width);
+
+    // An empty overlay yields the unmodified Theme defaults.
+    auto empty_overlay = theme_from_json("{}");
+    assert(empty_overlay.has_value());
+    assert(empty_overlay->accent.r == defaults.accent.r);
+    assert(empty_overlay->background.r == defaults.background.r);
+    assert(empty_overlay->body_font_size == defaults.body_font_size);
+
+    std::puts("PASS: theme JSON partial keeps defaults");
+}
+
+void test_theme_json_color_string_forms() {
+    // 6-digit hex (Tiffany).
+    {
+        auto parsed = theme_from_json(R"({"accent":"#0abab5"})");
+        assert(parsed.has_value());
+        assert(parsed->accent.r == 0x0a);
+        assert(parsed->accent.g == 0xba);
+        assert(parsed->accent.b == 0xb5);
+        assert(parsed->accent.a == 0xff);
+    }
+    // 3-digit hex shorthand (#fff -> 0xff 0xff 0xff).
+    {
+        auto parsed = theme_from_json(R"({"background":"#fff"})");
+        assert(parsed.has_value());
+        assert(parsed->background.r == 0xff);
+        assert(parsed->background.g == 0xff);
+        assert(parsed->background.b == 0xff);
+        assert(parsed->background.a == 0xff);
+    }
+    // 4-digit hex shorthand with alpha (#0a0f -> r=0,g=0xaa,b=0,a=0xff).
+    {
+        auto parsed = theme_from_json(R"({"foreground":"#0a0f"})");
+        assert(parsed.has_value());
+        assert(parsed->foreground.r == 0x00);
+        assert(parsed->foreground.g == 0xaa);
+        assert(parsed->foreground.b == 0x00);
+        assert(parsed->foreground.a == 0xff);
+    }
+    // 8-digit hex with alpha.
+    {
+        auto parsed = theme_from_json(R"({"foreground":"#11223344"})");
+        assert(parsed.has_value());
+        assert(parsed->foreground.r == 0x11);
+        assert(parsed->foreground.g == 0x22);
+        assert(parsed->foreground.b == 0x33);
+        assert(parsed->foreground.a == 0x44);
+    }
+    // Uppercase hex digits.
+    {
+        auto parsed = theme_from_json(R"({"accent":"#ABCDEF"})");
+        assert(parsed.has_value());
+        assert(parsed->accent.r == 0xab);
+        assert(parsed->accent.g == 0xcd);
+        assert(parsed->accent.b == 0xef);
+    }
+    // CSS rgb() function.
+    {
+        auto parsed = theme_from_json(R"json({"accent":"rgb(10, 186, 181)"})json");
+        assert(parsed.has_value());
+        assert(parsed->accent.r == 10);
+        assert(parsed->accent.g == 186);
+        assert(parsed->accent.b == 181);
+        assert(parsed->accent.a == 255);
+    }
+    // CSS rgba() function with fractional alpha.
+    {
+        auto parsed = theme_from_json(R"json({"accent":"rgba(255, 0, 0, 0.5)"})json");
+        assert(parsed.has_value());
+        assert(parsed->accent.r == 255);
+        assert(parsed->accent.g == 0);
+        assert(parsed->accent.b == 0);
+        // 0.5 * 255 = 127.5 -> 128 (round-to-nearest).
+        assert(parsed->accent.a == 128);
+    }
+    // "transparent" keyword.
+    {
+        auto parsed = theme_from_json(R"({"accent":"transparent"})");
+        assert(parsed.has_value());
+        assert(parsed->accent.r == 0);
+        assert(parsed->accent.g == 0);
+        assert(parsed->accent.b == 0);
+        assert(parsed->accent.a == 0);
+    }
+    // Invalid color string -> error reports the offending value and field.
+    {
+        auto parsed = theme_from_json(R"({"accent":"not-a-color"})");
+        assert(!parsed.has_value());
+        assert(parsed.error().find("accent") != std::string::npos);
+        assert(parsed.error().find("not-a-color") != std::string::npos);
+    }
+    // Out-of-range rgb component -> error.
+    {
+        auto parsed = theme_from_json(R"json({"accent":"rgb(999, 0, 0)"})json");
+        assert(!parsed.has_value());
+    }
+    // Hex with non-hex digits -> error.
+    {
+        auto parsed = theme_from_json(R"({"accent":"#zzzzzz"})");
+        assert(!parsed.has_value());
+    }
+    std::puts("PASS: theme JSON color string forms");
+}
+
+void test_theme_json_color_object_back_compat() {
+    auto parsed = theme_from_json(
+        R"({"accent":{"r":10,"g":186,"b":181,"a":255}})");
+    assert(parsed.has_value());
+    assert(parsed->accent.r == 10);
+    assert(parsed->accent.g == 186);
+    assert(parsed->accent.b == 181);
+    assert(parsed->accent.a == 255);
+
+    // theme_to_json emits the object form, and that output round-trips
+    // through theme_from_json — covering JSON files that were written
+    // by an older phenotype build before the string forms existed.
+    Theme original{};
+    original.accent = {12, 34, 56, 78};
+    auto reparsed = theme_from_json(theme_to_json(original));
+    assert(reparsed.has_value());
+    assert(reparsed->accent.r == 12);
+    assert(reparsed->accent.g == 34);
+    assert(reparsed->accent.b == 56);
+    assert(reparsed->accent.a == 78);
+
+    // A Color object with a wrong field type still errors.
+    auto bad = theme_from_json(
+        R"({"accent":{"r":"oops","g":0,"b":0,"a":0}})");
     assert(!bad.has_value());
 
-    std::puts("PASS: theme JSON roundtrip");
+    std::puts("PASS: theme JSON Color object back-compat");
+}
+
+void test_theme_json_mixed_overlay() {
+    Theme defaults{};
+    auto parsed = theme_from_json(R"({
+        "accent": "#0abab5",
+        "background": {"r":244,"g":244,"b":245,"a":255},
+        "body_font_size": 18.0,
+        "max_content_width": 960
+    })");
+    assert(parsed.has_value());
+
+    // String form for accent.
+    assert(parsed->accent.r == 0x0a);
+    assert(parsed->accent.g == 0xba);
+    assert(parsed->accent.b == 0xb5);
+    assert(parsed->accent.a == 0xff);
+    // Object form for background.
+    assert(parsed->background.r == 244);
+    assert(parsed->background.g == 244);
+    assert(parsed->background.b == 245);
+    assert(parsed->background.a == 255);
+    // Float overrides.
+    assert(parsed->body_font_size == 18.0f);
+    assert(parsed->max_content_width == 960.0f);
+    // Untouched fields still hold defaults.
+    assert(parsed->foreground.r == defaults.foreground.r);
+    assert(parsed->heading_font_size == defaults.heading_font_size);
+
+    std::puts("PASS: theme JSON mixed overlay");
 }
 
 // ============================================================
@@ -581,6 +763,10 @@ int main() {
     test_frame_skip_on_identical_cmd_buffer();
     test_row_cross_align_center_default();
     test_theme_json_roundtrip();
+    test_theme_json_partial_keeps_defaults();
+    test_theme_json_color_string_forms();
+    test_theme_json_color_object_back_compat();
+    test_theme_json_mixed_overlay();
     std::puts("\nAll tests passed.");
     return 0;
 }
