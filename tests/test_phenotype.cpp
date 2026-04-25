@@ -822,6 +822,90 @@ void test_button_disabled() {
     std::puts("PASS: button disabled (both variants)");
 }
 
+namespace text_field_test {
+struct Changed { std::string text; };
+using TfMsg = std::variant<Changed>;
+inline TfMsg make_changed(std::string s) { return Changed{std::move(s)}; }
+
+inline NodeHandle build_text_field(std::string const& current,
+                                   bool error, bool disabled) {
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.input_handlers.clear();
+    detail::g_app.input_nodes.clear();
+    detail::msg_queue().clear();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::text_field<TfMsg>("Name", current, &make_changed, error, disabled);
+    Scope::set_current(nullptr);
+
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    return root.children[0];
+}
+} // namespace text_field_test
+
+void test_text_field_default() {
+    auto h = text_field_test::build_text_field("hello", /*error=*/false, /*disabled=*/false);
+    auto& f = detail::node_at(h);
+    auto const& t = detail::g_app.theme;
+    assert(f.background.r == t.surface.r);
+    assert(f.text_color.r == t.foreground.r); // current non-empty -> foreground
+    assert(f.border_color.r == t.border.r);
+    assert(f.border_width == 1);
+    assert(f.border_radius == t.radius_sm);
+    assert(f.cursor_type == 1);
+    assert(f.focusable == true);
+    assert(f.is_input == true);
+    assert(f.callback_id != 0xFFFFFFFFu);
+    assert(f.interaction_role == InteractionRole::TextField);
+    assert(detail::g_app.input_handlers.size() == 1);
+    std::puts("PASS: text_field default state");
+}
+
+void test_text_field_default_placeholder() {
+    auto h = text_field_test::build_text_field("", /*error=*/false, /*disabled=*/false);
+    auto& f = detail::node_at(h);
+    auto const& t = detail::g_app.theme;
+    assert(f.text_color.r == t.muted.r); // empty -> muted placeholder color
+    assert(f.text == f.placeholder);
+    std::puts("PASS: text_field default placeholder color");
+}
+
+void test_text_field_error() {
+    auto h = text_field_test::build_text_field("oops", /*error=*/true, /*disabled=*/false);
+    auto& f = detail::node_at(h);
+    auto const& t = detail::g_app.theme;
+    assert(f.background.r == t.state_error_bg.r);
+    assert(f.text_color.r == t.state_error_fg.r);
+    assert(f.border_color.r == t.state_error_border.r);
+    assert(f.is_input == true);     // error stays interactive
+    assert(f.focusable == true);
+    assert(f.cursor_type == 1);
+    assert(f.callback_id != 0xFFFFFFFFu);
+    std::puts("PASS: text_field error state");
+}
+
+void test_text_field_disabled() {
+    auto h = text_field_test::build_text_field("anything", /*error=*/false, /*disabled=*/true);
+    auto& f = detail::node_at(h);
+    auto const& t = detail::g_app.theme;
+    assert(f.background.r == t.state_disabled_bg.r);
+    assert(f.text_color.r == t.state_disabled_fg.r);
+    assert(f.border_color.r == t.state_disabled_border.r);
+    assert(f.is_input == false);
+    assert(f.focusable == false);
+    assert(f.cursor_type == 0);
+    assert(f.callback_id == 0xFFFFFFFFu);
+    // Disabled fields skip the input-handler registration entirely.
+    assert(detail::g_app.input_handlers.empty());
+    std::puts("PASS: text_field disabled state");
+}
+
 // ============================================================
 // Runner
 // ============================================================
@@ -850,6 +934,10 @@ int main() {
     test_button_default_variant();
     test_button_primary_variant();
     test_button_disabled();
+    test_text_field_default();
+    test_text_field_default_placeholder();
+    test_text_field_error();
+    test_text_field_disabled();
     std::puts("\nAll tests passed.");
     return 0;
 }

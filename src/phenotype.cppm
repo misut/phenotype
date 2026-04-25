@@ -306,27 +306,54 @@ inline void radio(str label, bool selected, Msg msg) {
                   InteractionRole::Radio);
 }
 
+// text_field<Msg> — single-line text input.
+//
+//   error=true     — chrome switches to state_error_* (border / bg / fg).
+//                    The field stays interactive; users can keep editing
+//                    while the error sits.
+//   disabled=true  — chrome switches to state_disabled_*. is_input,
+//                    cursor, focus, and the input-handler registration
+//                    all turn off; typing is dropped.
 template<typename Msg>
 inline void text_field(str hint, std::string const& current,
-                       Msg(*mapper)(std::string)) {
+                       Msg(*mapper)(std::string),
+                       bool error = false, bool disabled = false) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
-    node.is_input = true;
+    auto const& t = detail::g_app.theme;
     node.interaction_role = InteractionRole::TextField;
     node.placeholder = std::string(hint.data, hint.len);
-
     node.text = current.empty() ? node.placeholder : current;
-    node.font_size = detail::g_app.theme.body_font_size;
-    node.text_color = current.empty() ? detail::g_app.theme.muted
-                                      : detail::g_app.theme.foreground;
-    node.background = detail::g_app.theme.surface;
-    node.border_color = detail::g_app.theme.border;
+    node.font_size = t.body_font_size;
     node.border_width = 1;
-    node.border_radius = detail::g_app.theme.radius_sm;
-    node.style.padding[0] = detail::g_app.theme.space_sm;
-    node.style.padding[1] = detail::g_app.theme.space_md;
-    node.style.padding[2] = detail::g_app.theme.space_sm;
-    node.style.padding[3] = detail::g_app.theme.space_md;
+    node.border_radius = t.radius_sm;
+    node.style.padding[0] = t.space_sm;
+    node.style.padding[1] = t.space_md;
+    node.style.padding[2] = t.space_sm;
+    node.style.padding[3] = t.space_md;
+
+    if (disabled) {
+        node.is_input = false;
+        node.background = t.state_disabled_bg;
+        node.text_color = t.state_disabled_fg;
+        node.border_color = t.state_disabled_border;
+        node.cursor_type = 0;
+        node.focusable = false;
+        // No callback / input handler — the field is non-interactive.
+        detail::attach_to_scope(h);
+        return;
+    }
+
+    node.is_input = true;
+    if (error) {
+        node.background = t.state_error_bg;
+        node.text_color = current.empty() ? t.muted : t.state_error_fg;
+        node.border_color = t.state_error_border;
+    } else {
+        node.background = t.surface;
+        node.text_color = current.empty() ? t.muted : t.foreground;
+        node.border_color = t.border;
+    }
     node.cursor_type = 1;
 
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
