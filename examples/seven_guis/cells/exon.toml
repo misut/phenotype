@@ -6,6 +6,9 @@ type = "bin"
 standard = 23
 platforms = [{ os = "wasi" }]
 
+[sync]
+cmake-in-root = false
+
 [dependencies]
 "github.com/misut/cppx" = "1.9.0"
 
