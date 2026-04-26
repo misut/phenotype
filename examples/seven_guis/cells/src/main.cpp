@@ -1,6 +1,7 @@
 #include <string>
 #include <variant>
 import phenotype;
+import phenotype.native;
 
 // 7GUIs task #7 (Cells) — M8-1 skeleton.
 //
@@ -63,6 +64,5 @@ void view(State const&) {
 }
 
 int main() {
-    phenotype::run<State, Msg>(view, update);
-    return 0;
+    return phenotype::native::run_app<State, Msg>(800, 600, "7GUIs Cells", view, update);
 }
