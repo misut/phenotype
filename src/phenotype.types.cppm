@@ -304,6 +304,15 @@ struct LayoutNode {
     bool is_input = false;
     std::string placeholder;
 
+    // Grid container — set by layout::grid. When `is_grid_container` is
+    // true, the layout pass walks `children` in row-major order and
+    // assigns each child a fixed cell from the `grid_columns` track list
+    // and `grid_row_height` (0 → derive height from content per row).
+    // `style.gap` doubles as both column-gap and row-gap.
+    bool is_grid_container = false;
+    std::vector<float> grid_columns;
+    float grid_row_height = 0;
+
     // Computed layout
     float x = 0, y = 0, width = 0, height = 0;
     bool layout_valid = false; // true = copied from prev frame by diff, layout_node skips

@@ -193,7 +193,10 @@ inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
         && a.style.padding[2] == b.style.padding[2]
         && a.style.padding[3] == b.style.padding[3]
         && a.style.max_width == b.style.max_width
-        && a.style.fixed_height == b.style.fixed_height;
+        && a.style.fixed_height == b.style.fixed_height
+        && a.is_grid_container == b.is_grid_container
+        && a.grid_row_height == b.grid_row_height
+        && a.grid_columns == b.grid_columns;
 }
 
 inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
@@ -329,6 +332,78 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
     // Auto-center nodes with max_width
     if (s.max_width > 0 && content_width < available_width) {
         node.x += (available_width - content_width) / 2;
+    }
+
+    // Grid container — rigid track layout (no flex distribution).
+    // Children are placed row-major into a fixed `grid_columns × n_rows`
+    // matrix with `style.gap` between tracks in both directions.
+    if (node.is_grid_container) {
+        unsigned int n_cols = static_cast<unsigned int>(node.grid_columns.size());
+        unsigned int n_children = static_cast<unsigned int>(node.children.size());
+        if (n_cols == 0 || n_children == 0) {
+            node.height = s.padding[0] + s.padding[2];
+            return;
+        }
+        unsigned int n_rows = (n_children + n_cols - 1) / n_cols;
+        float gap = s.gap;
+
+        // Per-column x offsets (within inner content area).
+        std::vector<float> col_x;
+        col_x.reserve(n_cols);
+        {
+            float x = s.padding[3];
+            for (unsigned int c = 0; c < n_cols; ++c) {
+                col_x.push_back(x);
+                x += node.grid_columns[c] + gap;
+            }
+        }
+
+        // First pass: lay out each child with its track width, then
+        // collect per-row heights (either grid_row_height when set, or
+        // the tallest measured child in that row).
+        std::vector<float> row_heights(n_rows,
+            node.grid_row_height > 0 ? node.grid_row_height : 0);
+        for (unsigned int i = 0; i < n_children; ++i) {
+            unsigned int col = i % n_cols;
+            unsigned int row = i / n_cols;
+            layout_node(measurer, node.children[i], node.grid_columns[col]);
+            auto& child = node_at(node.children[i]);
+            child.width = node.grid_columns[col];
+            if (node.grid_row_height > 0) {
+                child.height = node.grid_row_height;
+            } else if (child.height > row_heights[row]) {
+                row_heights[row] = child.height;
+            }
+        }
+
+        // Second pass: compute y per row and position each child.
+        std::vector<float> row_y;
+        row_y.reserve(n_rows);
+        {
+            float y = s.padding[0];
+            for (unsigned int r = 0; r < n_rows; ++r) {
+                row_y.push_back(y);
+                y += row_heights[r] + gap;
+            }
+        }
+        for (unsigned int i = 0; i < n_children; ++i) {
+            unsigned int col = i % n_cols;
+            unsigned int row = i / n_cols;
+            auto& child = node_at(node.children[i]);
+            child.x = col_x[col];
+            child.y = row_y[row];
+            if (node.grid_row_height <= 0) {
+                // Auto-row mode: align all cells in the row to its tallest.
+                child.height = row_heights[row];
+            }
+        }
+
+        // Container height = sum of row heights + gaps + vertical padding.
+        float total_h = 0;
+        for (float h : row_heights) total_h += h;
+        if (n_rows > 1) total_h += static_cast<float>(n_rows - 1) * gap;
+        node.height = total_h + s.padding[0] + s.padding[2];
+        return;
     }
 
     // Container layout

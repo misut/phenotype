@@ -1,21 +1,21 @@
 #include <string>
 #include <variant>
+#include <vector>
 import phenotype;
 import phenotype.native;
 
-// 7GUIs task #7 (Cells) — M8-2 with the new widget::cell.
+// 7GUIs task #7 (Cells) — M8-2 with the new widget::cell + layout::grid.
 //
 // Mirrors phenotype-web/stories/SevenGuis/Cells.stories.tsx. Renders an
 // A–Z × 0–99 spreadsheet skeleton with bordered cells. Selection (M8-3),
 // edit-in-place (M8-4), formula evaluation (M8-5), dependency graph
 // (M8-6), and viewport virtualization (M8-7) are still pending.
 //
-// Layout note: the React mirror lays the grid out via CSS Grid, which
-// gives every column a fixed width regardless of the row's available
-// width. Native phenotype currently exposes only flex layout, so the
-// last cell of each row may stretch when the window is wider than the
-// grid's natural width — a fidelity gap M8-N may close with either a
-// `min_width` Style field or a real `layout::grid` primitive.
+// Layout: a single `layout::grid` with a fixed column-track template
+// (36 px header + 26 × 60 px data) handles the entire spreadsheet, so
+// every row sits on the same column boundaries regardless of the
+// window's outer width. Borders touch (gap = 0) the way the React
+// mirror's CSS Grid renders them.
 
 struct State {};
 
@@ -30,40 +30,42 @@ void view(State const&) {
     constexpr int ROWS = 100;
     constexpr float kCellWidth = 60.0f;
     constexpr float kCellHeight = 24.0f;
-    constexpr float kHeaderWidth = 36.0f;
+    constexpr float kHeaderWidth = 48.0f;
 
-    layout::column([&] {
+    std::vector<float> cols;
+    cols.reserve(COLS + 1);
+    cols.push_back(kHeaderWidth);
+    for (int c = 0; c < COLS; c++) cols.push_back(kCellWidth);
+
+    layout::padded(SpaceToken::Lg, [&] { layout::column([&] {
         widget::text("Cells", TextSize::Heading);
         widget::text(
-            "7GUIs task #7 — M8-2 with widget::cell. A–Z × 0–99 grid. "
+            "7GUIs task #7 — M8-2 with widget::cell + layout::grid. A–Z × 0–99 grid. "
             "Selection, editing, formulas, dependency propagation, and "
             "viewport virtualization land in M8-3 and beyond.",
             TextSize::Small,
             TextColor::Muted);
 
-        // Header row: blank corner + A..Z column letters.
-        layout::row([&] {
+        layout::grid(std::move(cols), kCellHeight, [&] {
+            // Row 0: blank corner + A..Z column letters.
             widget::cell("", /*header=*/true, kHeaderWidth, kCellHeight);
             for (int c = 0; c < COLS; c++) {
                 widget::cell(std::string(1, static_cast<char>('A' + c)),
                              /*header=*/true, kCellWidth, kCellHeight);
             }
-        }, SpaceToken::Xs);
-
-        // Data rows: row number header + 26 empty data cells.
-        for (int r = 0; r < ROWS; r++) {
-            layout::row([&] {
+            // Rows 1..ROWS: row label + 26 empty data cells.
+            for (int r = 0; r < ROWS; r++) {
                 widget::cell(std::to_string(r), /*header=*/true,
                              kHeaderWidth, kCellHeight);
                 for (int c = 0; c < COLS; c++) {
                     (void)c;
                     widget::cell("", /*header=*/false, kCellWidth, kCellHeight);
                 }
-            }, SpaceToken::Xs);
-        }
-    }, SpaceToken::Xs);
+            }
+        }, /*gap=*/0.0f);
+    }, SpaceToken::Sm); });
 }
 
 int main() {
-    return phenotype::native::run_app<State, Msg>(800, 600, "7GUIs Cells", view, update);
+    return phenotype::native::run_app<State, Msg>(900, 700, "7GUIs Cells", view, update);
 }
