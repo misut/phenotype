@@ -558,6 +558,7 @@ struct InputDebugSnapshot {
     unsigned int focused_id = 0xFFFFFFFFu;
     std::string focused_role = "none";
     unsigned int hovered_id = 0xFFFFFFFFu;
+    float scroll_x = 0.0f;
     float scroll_y = 0.0f;
     unsigned int caret_pos = 0xFFFFFFFFu;
     bool selection_active = false;
@@ -608,6 +609,7 @@ struct PlatformRuntimeSnapshot {
     std::string platform;
     std::string backend;
     RectSnapshot viewport{};
+    float scroll_x = 0.0f;
     float scroll_y = 0.0f;
     float content_height = 0.0f;
     std::optional<unsigned int> focused_callback_id;
@@ -875,6 +877,7 @@ inline json::Value input_debug_to_json(InputDebugSnapshot const& snapshot) {
     out.emplace("focused_id", json::Value{static_cast<std::int64_t>(snapshot.focused_id)});
     out.emplace("focused_role", json::Value{snapshot.focused_role});
     out.emplace("hovered_id", json::Value{static_cast<std::int64_t>(snapshot.hovered_id)});
+    out.emplace("scroll_x", json::Value{snapshot.scroll_x});
     out.emplace("scroll_y", json::Value{snapshot.scroll_y});
     out.emplace("caret_pos", json::Value{static_cast<std::int64_t>(snapshot.caret_pos)});
     out.emplace("selection_active", json::Value{snapshot.selection_active});
@@ -946,6 +949,7 @@ inline json::Value platform_runtime_to_json(
     out.emplace("platform", json::Value{runtime.platform});
     out.emplace("backend", json::Value{runtime.backend});
     out.emplace("viewport", rect_to_json(runtime.viewport));
+    out.emplace("scroll_x", json::Value{runtime.scroll_x});
     out.emplace("scroll_y", json::Value{runtime.scroll_y});
     out.emplace("content_height", json::Value{runtime.content_height});
     out.emplace(

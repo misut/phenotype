@@ -577,7 +577,8 @@ void run(Host& host, View view, Update update) {
         float vh = host.canvas_height();
         app.debug_viewport_width = cw;
         app.debug_viewport_height = vh;
-        detail::paint_node(host, host, root_h, 0, 0, app.scroll_y, vh);
+        detail::paint_node(host, host, root_h, 0, 0,
+                           app.scroll_x, app.scroll_y, cw, vh);
         auto t4 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t4 - t3, {{"phase", "paint"}});
 
@@ -586,6 +587,7 @@ void run(Host& host, View view, Update update) {
         metrics::inst::phase_duration.record(t5 - t4, {{"phase", "flush"}});
 
         // Persist the ambient paint inputs for next frame's blit guard.
+        app.prev_scroll_x   = app.scroll_x;
         app.prev_scroll_y   = app.scroll_y;
         app.prev_hovered_id = app.hovered_id;
         app.prev_focused_id = app.focused_id;
@@ -678,7 +680,8 @@ void run(View view, Update update) {
         float vh = phenotype_get_canvas_height();
         app.debug_viewport_width = cw;
         app.debug_viewport_height = vh;
-        detail::wasi_paint_node(root_h, 0, 0, app.scroll_y, vh);
+        detail::wasi_paint_node(root_h, 0, 0,
+                                app.scroll_x, app.scroll_y, cw, vh);
         auto t4 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t4 - t3, {{"phase", "paint"}});
 
@@ -687,6 +690,7 @@ void run(View view, Update update) {
         metrics::inst::phase_duration.record(t5 - t4, {{"phase", "flush"}});
 
         // Persist the ambient paint inputs for next frame's blit guard.
+        app.prev_scroll_x   = app.scroll_x;
         app.prev_scroll_y   = app.scroll_y;
         app.prev_hovered_id = app.hovered_id;
         app.prev_focused_id = app.focused_id;
@@ -1319,6 +1323,7 @@ inline void note_input_event(char const* event,
     snapshot.focused_id = g_app.focused_id;
     snapshot.focused_role = interaction_role_name(focused_role);
     snapshot.hovered_id = g_app.hovered_id;
+    snapshot.scroll_x = g_app.scroll_x;
     snapshot.scroll_y = g_app.scroll_y;
     snapshot.caret_pos = g_app.caret_pos;
     snapshot.caret_visible = g_app.caret_visible;
@@ -1393,6 +1398,37 @@ inline float get_total_height() {
     if (auto* root_ptr = g_app.arena.get(g_app.root))
         return root_ptr->height;
     return 0;
+}
+
+// Recursively compute max(node.x + node.width) across the subtree, in
+// the layout coordinate space rooted at `origin_x`. Used by get_total_width
+// so a layout::grid (or anything else) wider than its parent's available
+// width still reports the correct horizontal extent for scroll-x clamping.
+//
+// When a descendant overflows its container's own right edge, the
+// container's right padding is added back so that scrolling fully right
+// still leaves the same breathing room the user sees on the left.
+inline float subtree_right_extent(NodeHandle h, float origin_x) {
+    auto* np = g_app.arena.get(h);
+    if (!np) return origin_x;
+    float self_right = origin_x + np->x + np->width;
+    float max_right = self_right;
+    for (auto child_h : np->children) {
+        float child_right = subtree_right_extent(child_h, origin_x + np->x);
+        if (child_right > max_right) max_right = child_right;
+    }
+    if (max_right > self_right && np->style.padding[1] > 0) {
+        max_right += np->style.padding[1];
+    }
+    return max_right;
+}
+
+inline float get_total_width() {
+    auto* root_ptr = g_app.arena.get(g_app.root);
+    if (!root_ptr) return 0;
+    float root_right = root_ptr->width;
+    float subtree_right = subtree_right_extent(g_app.root, 0.0f);
+    return (subtree_right > root_right) ? subtree_right : root_right;
 }
 
 inline bool handle_tab(unsigned int reverse,
@@ -1568,6 +1604,7 @@ inline diag::InputDebugSnapshot materialize_input_debug_snapshot() {
     snapshot.focused_id = g_app.focused_id;
     snapshot.focused_role = interaction_role_name(callback_role(g_app.focused_id));
     snapshot.hovered_id = g_app.hovered_id;
+    snapshot.scroll_x = g_app.scroll_x;
     snapshot.scroll_y = g_app.scroll_y;
     snapshot.caret_pos = g_app.caret_pos;
     sync_input_debug_selection_state();
@@ -1656,8 +1693,9 @@ inline bool handle_key(unsigned int key_type, unsigned int codepoint,
 
 #ifndef __wasi__
 template<host_platform Host>
-void repaint(Host& host, float scroll_y) {
+void repaint(Host& host, float scroll_x, float scroll_y) {
     auto& app = g_app;
+    app.scroll_x = scroll_x;
     app.scroll_y = scroll_y;
     if (!app.root.valid()) return;
     auto* root_ptr = app.arena.get(app.root);
@@ -1671,15 +1709,17 @@ void repaint(Host& host, float scroll_y) {
     float vh = host.canvas_height();
     app.debug_viewport_width = cw;
     app.debug_viewport_height = vh;
-    paint_node(host, host, app.root, 0, 0, scroll_y, vh);
+    paint_node(host, host, app.root, 0, 0, scroll_x, scroll_y, cw, vh);
     flush_if_changed(host);
+    app.prev_scroll_x   = app.scroll_x;
     app.prev_scroll_y   = app.scroll_y;
     app.prev_hovered_id = app.hovered_id;
     app.prev_focused_id = app.focused_id;
 }
 #else
-inline void repaint(float scroll_y) {
+inline void repaint(float scroll_x, float scroll_y) {
     auto& app = g_app;
+    app.scroll_x = scroll_x;
     app.scroll_y = scroll_y;
     if (!app.root.valid()) return;
     auto* root_ptr = app.arena.get(app.root);
@@ -1693,8 +1733,9 @@ inline void repaint(float scroll_y) {
     float vh = phenotype_get_canvas_height();
     app.debug_viewport_width = cw;
     app.debug_viewport_height = vh;
-    wasi_paint_node(app.root, 0, 0, scroll_y, vh);
+    wasi_paint_node(app.root, 0, 0, scroll_x, scroll_y, cw, vh);
     wasi_flush_if_changed();
+    app.prev_scroll_x   = app.scroll_x;
     app.prev_scroll_y   = app.scroll_y;
     app.prev_hovered_id = app.hovered_id;
     app.prev_focused_id = app.focused_id;
@@ -1729,7 +1770,9 @@ inline bool rect_intersects_viewport(diag::RectSnapshot const& rect) {
     auto viewport_height = g_app.debug_viewport_height;
     if (viewport_width <= 0.0f || viewport_height <= 0.0f)
         return false;
-    if (rect.x + rect.w <= 0.0f || rect.x >= viewport_width)
+    float viewport_left  = g_app.scroll_x;
+    float viewport_right = g_app.scroll_x + viewport_width;
+    if (rect.x + rect.w <= viewport_left || rect.x >= viewport_right)
         return false;
     float viewport_top = g_app.scroll_y;
     float viewport_bottom = g_app.scroll_y + viewport_height;
@@ -1878,6 +1921,7 @@ inline diag::PlatformRuntimeSnapshot build_platform_runtime_snapshot(
         0.0f,
         g_app.debug_viewport_width,
         g_app.debug_viewport_height);
+    runtime.scroll_x = g_app.scroll_x;
     runtime.scroll_y = g_app.scroll_y;
     runtime.content_height = get_total_height();
     runtime.focused_callback_id = optional_callback_id(g_app.focused_id);
@@ -1950,6 +1994,10 @@ inline unsigned int get_hovered_id() {
     return g_app.hovered_id;
 }
 
+inline float get_scroll_x() {
+    return g_app.scroll_x;
+}
+
 inline float get_scroll_y() {
     return g_app.scroll_y;
 }
@@ -1983,6 +2031,10 @@ inline unsigned int selection_end() {
 
 inline bool get_caret_visible() {
     return g_app.caret_visible;
+}
+
+inline void set_scroll_x(float scroll_x) {
+    g_app.scroll_x = scroll_x;
 }
 
 inline void set_scroll_y(float scroll_y) {
@@ -2021,7 +2073,7 @@ inline InputDebugSnapshot input_debug_snapshot() {
 extern "C" {
     __attribute__((export_name("phenotype_repaint")))
     void phenotype_repaint(float scroll_y) {
-        phenotype::detail::repaint(scroll_y);
+        phenotype::detail::repaint(phenotype::detail::g_app.scroll_x, scroll_y);
     }
 
     __attribute__((export_name("phenotype_get_total_height")))

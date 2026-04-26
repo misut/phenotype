@@ -612,7 +612,9 @@ struct Harness {
         for (float y = 0.0f; y <= 640.0f; y += 2.0f) {
             for (float x = 0.0f; x <= 360.0f; x += 2.0f) {
                 auto hit = phenotype::native::detail::hit_test(
-                    x, y, phenotype::detail::get_scroll_y());
+                    x, y,
+                    phenotype::detail::get_scroll_x(),
+                    phenotype::detail::get_scroll_y());
                 if (hit.has_value() && *hit == callback_id)
                     return {x, y};
             }
@@ -664,7 +666,9 @@ struct WindowsInputHarness {
         for (float y = 0.0f; y <= 740.0f; y += 2.0f) {
             for (float x = 0.0f; x <= 360.0f; x += 2.0f) {
                 auto hit = renderer::hit_test(
-                    x, y, phenotype::detail::get_scroll_y());
+                    x, y,
+                    phenotype::detail::get_scroll_x(),
+                    phenotype::detail::get_scroll_y());
                 if (hit.has_value() && *hit == callback_id)
                     return {x, y};
             }
@@ -1542,7 +1546,9 @@ struct MacInputHarness {
         for (float y = 0.0f; y <= 740.0f; y += 2.0f) {
             for (float x = 0.0f; x <= 360.0f; x += 2.0f) {
                 auto hit = renderer::hit_test(
-                    x, y, phenotype::detail::get_scroll_y());
+                    x, y,
+                    phenotype::detail::get_scroll_x(),
+                    phenotype::detail::get_scroll_y());
                 if (hit.has_value() && *hit == callback_id)
                     return {x, y};
             }
@@ -2931,15 +2937,15 @@ static void test_windows_renderer_hit_test_and_smoke() {
     emit_hit_region(fixture.host, 124.0f, 16.0f, 92.0f, 36.0f, 84u, 1u);
     fixture.host.flush();
 
-    auto first = renderer::hit_test(32.0f, 30.0f, 0.0f);
+    auto first = renderer::hit_test(32.0f, 30.0f, 0.0f, 0.0f);
     assert(first.has_value());
     assert(*first == 42u);
 
-    auto second = renderer::hit_test(150.0f, 30.0f, 0.0f);
+    auto second = renderer::hit_test(150.0f, 30.0f, 0.0f, 0.0f);
     assert(second.has_value());
     assert(*second == 84u);
 
-    auto miss = renderer::hit_test(5.0f, 5.0f, 0.0f);
+    auto miss = renderer::hit_test(5.0f, 5.0f, 0.0f, 0.0f);
     assert(!miss.has_value());
 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
@@ -2970,7 +2976,7 @@ static void test_windows_renderer_rejects_truncated_hit_region() {
     emit_hit_region(fixture.host, 20.0f, 20.0f, 100.0f, 40.0f, 77u, 1u);
     fixture.host.flush();
 
-    auto before = renderer::hit_test(50.0f, 40.0f, 0.0f);
+    auto before = renderer::hit_test(50.0f, 40.0f, 0.0f, 0.0f);
     assert(before.has_value());
     assert(*before == 77u);
 
@@ -2983,7 +2989,7 @@ static void test_windows_renderer_rejects_truncated_hit_region() {
     append_u32(broken, 99u);
     renderer::flush(broken.data(), static_cast<unsigned int>(broken.size()));
 
-    auto after = renderer::hit_test(50.0f, 40.0f, 0.0f);
+    auto after = renderer::hit_test(50.0f, 40.0f, 0.0f, 0.0f);
     assert(after.has_value());
     assert(*after == 77u);
     std::puts("PASS: windows renderer rejects truncated hit region");
@@ -2996,7 +3002,7 @@ static void test_windows_renderer_rejects_truncated_text_payload() {
     emit_hit_region(fixture.host, 24.0f, 24.0f, 96.0f, 32.0f, 55u, 1u);
     fixture.host.flush();
 
-    auto before = renderer::hit_test(40.0f, 40.0f, 0.0f);
+    auto before = renderer::hit_test(40.0f, 40.0f, 0.0f, 0.0f);
     assert(before.has_value());
     assert(*before == 55u);
 
@@ -3011,7 +3017,7 @@ static void test_windows_renderer_rejects_truncated_text_payload() {
     append_bytes(broken, "Hi", 2);
     renderer::flush(broken.data(), static_cast<unsigned int>(broken.size()));
 
-    auto after = renderer::hit_test(40.0f, 40.0f, 0.0f);
+    auto after = renderer::hit_test(40.0f, 40.0f, 0.0f, 0.0f);
     assert(after.has_value());
     assert(*after == 55u);
     std::puts("PASS: windows renderer rejects truncated text payload");
@@ -3318,11 +3324,11 @@ static void test_stub_renderer_hit_test() {
     emit_hit_region(host, 10.0f, 20.0f, 50.0f, 30.0f, 42u, 0u);
     host.flush();
 
-    auto hit = renderer::hit_test(20.0f, 30.0f, 0.0f);
+    auto hit = renderer::hit_test(20.0f, 30.0f, 0.0f, 0.0f);
     assert(hit.has_value());
     assert(*hit == 42u);
 
-    auto miss = renderer::hit_test(5.0f, 5.0f, 0.0f);
+    auto miss = renderer::hit_test(5.0f, 5.0f, 0.0f, 0.0f);
     assert(!miss.has_value());
 
     renderer::shutdown();

@@ -89,12 +89,13 @@ inline void stub_renderer_shutdown() {
 }
 
 inline std::optional<unsigned int> stub_renderer_hit_test(
-        float x, float y, float scroll_y) {
+        float x, float y, float scroll_x, float scroll_y) {
+    float wx = x + scroll_x;
     float wy = y + scroll_y;
     auto& regions = stub_hit_regions();
     for (int i = static_cast<int>(regions.size()) - 1; i >= 0; --i) {
         auto const& hr = regions[static_cast<std::size_t>(i)];
-        if (x >= hr.x && x <= hr.x + hr.w && wy >= hr.y && wy <= hr.y + hr.h)
+        if (wx >= hr.x && wx <= hr.x + hr.w && wy >= hr.y && wy <= hr.y + hr.h)
             return hr.callback_id;
     }
     return std::nullopt;

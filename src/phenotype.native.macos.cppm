@@ -422,6 +422,11 @@ inline SEL sel_scrolling_delta_y() {
     return sel;
 }
 
+inline SEL sel_scrolling_delta_x() {
+    static auto sel = sel_registerName("scrollingDeltaX");
+    return sel;
+}
+
 inline SEL sel_set_marked_text() {
     static auto sel = sel_registerName("setMarkedText:selectedRange:replacementRange:");
     return sel;
@@ -3808,6 +3813,10 @@ inline float current_scroll_viewport_height() {
     return viewport_height();
 }
 
+inline float current_scroll_viewport_width() {
+    return viewport_width();
+}
+
 inline bool handle_local_scroll_event(id event) {
     if (!event || !g_ime.window || !g_ime.ns_window)
         return false;
@@ -3819,6 +3828,7 @@ inline bool handle_local_scroll_event(id event) {
     bool has_precise_scrolling_deltas =
         objc_send<bool>(event, sel_has_precise_scrolling_deltas());
     double scrolling_delta_y = objc_send<double>(event, sel_scrolling_delta_y());
+    double scrolling_delta_x = objc_send<double>(event, sel_scrolling_delta_x());
     auto phase = objc_send<unsigned long long>(event, sel_phase());
     auto momentum_phase = objc_send<unsigned long long>(event, sel_momentum_phase());
     bool scroll_tracking_changed = sync_scroll_tracking_state(phase, momentum_phase);
@@ -3826,7 +3836,12 @@ inline bool handle_local_scroll_event(id event) {
         scrolling_delta_y,
         has_precise_scrolling_deltas,
         scroll_line_height());
+    float normalized_delta_x = macos_normalize_scroll_delta(
+        scrolling_delta_x,
+        has_precise_scrolling_deltas,
+        scroll_line_height());
     float viewport_height_value = current_scroll_viewport_height();
+    float viewport_width_value = current_scroll_viewport_width();
     bool handled = false;
     if (normalized_delta != 0.0f) {
         handled = has_precise_scrolling_deltas
@@ -3837,10 +3852,24 @@ inline bool handle_local_scroll_event(id event) {
                                     viewport_height_value,
                                     "wheel-line");
     }
-    if (scroll_tracking_changed && normalized_delta == 0.0f && g_ime.request_repaint)
+    if (normalized_delta_x != 0.0f) {
+        bool handled_x = has_precise_scrolling_deltas
+            ? dispatch_scroll_pixels_x(normalized_delta_x,
+                                       viewport_width_value,
+                                       "wheel-precise-x")
+            : dispatch_scroll_lines_x(scrolling_delta_x,
+                                      viewport_width_value,
+                                      "wheel-line-x");
+        handled = handled || handled_x;
+    }
+    if (scroll_tracking_changed
+        && normalized_delta == 0.0f
+        && normalized_delta_x == 0.0f
+        && g_ime.request_repaint)
         g_ime.request_repaint();
     return handled
         || normalized_delta != 0.0f
+        || normalized_delta_x != 0.0f
         || scroll_tracking_changed
         || scroll_phase_active(phase)
         || scroll_phase_active(momentum_phase);
@@ -4338,11 +4367,13 @@ inline void renderer_shutdown() {
 }
 
 inline std::optional<unsigned int> renderer_hit_test(float x, float y,
+                                                     float scroll_x,
                                                      float scroll_y) {
+    float wx = x + scroll_x;
     float wy = y + scroll_y;
     for (int i = static_cast<int>(g_renderer.hit_regions.size()) - 1; i >= 0; --i) {
         auto const& hr = g_renderer.hit_regions[static_cast<std::size_t>(i)];
-        if (x >= hr.x && x <= hr.x + hr.w && wy >= hr.y && wy <= hr.y + hr.h)
+        if (wx >= hr.x && wx <= hr.x + hr.w && wy >= hr.y && wy <= hr.y + hr.h)
             return hr.callback_id;
     }
     return std::nullopt;

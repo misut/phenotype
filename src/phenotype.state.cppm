@@ -166,6 +166,7 @@ struct AppState {
     Arena prev_arena;       // previous frame's tree, kept alive for diff
     NodeHandle root = NodeHandle::null();
     NodeHandle prev_root = NodeHandle::null();
+    float scroll_x = 0;
     float scroll_y = 0;
     unsigned int hovered_id = 0xFFFFFFFF;
     unsigned int focused_id = 0xFFFFFFFF;
@@ -201,6 +202,7 @@ struct AppState {
     static constexpr std::uint32_t PAINT_CACHE_BUF_SIZE = 65536;
     unsigned char prev_cmd_buf[PAINT_CACHE_BUF_SIZE]{};
     std::uint32_t prev_cmd_len = 0;
+    float         prev_scroll_x = 0.0f;
     float         prev_scroll_y = 0.0f;
     unsigned int  prev_hovered_id = 0xFFFFFFFFu;
     unsigned int  prev_focused_id = 0xFFFFFFFFu;

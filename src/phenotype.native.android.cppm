@@ -3258,6 +3258,7 @@ inline void renderer_shutdown() {
 }
 
 inline std::optional<unsigned int> renderer_hit_test(float x, float y,
+                                                     float scroll_x,
                                                      float scroll_y) {
     if (g_renderer.last_frame_buf.empty()) return std::nullopt;
     auto commands = ::phenotype::parse_commands(
@@ -3267,8 +3268,9 @@ inline std::optional<unsigned int> renderer_hit_test(float x, float y,
     for (auto it = commands.rbegin(); it != commands.rend(); ++it) {
         if (auto const* hr =
                 std::get_if<::phenotype::HitRegionCmd>(&*it)) {
+            float const x_adj = x + scroll_x;
             float const y_adj = y + scroll_y;
-            if (x >= hr->x && x <= hr->x + hr->w
+            if (x_adj >= hr->x && x_adj <= hr->x + hr->w
                 && y_adj >= hr->y && y_adj <= hr->y + hr->h) {
                 return hr->callback_id;
             }
