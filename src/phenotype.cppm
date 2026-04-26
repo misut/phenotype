@@ -467,6 +467,26 @@ inline void image(str url, float width, float height) {
     detail::attach_to_scope(h);
 }
 
+// canvas — fixed-size leaf for arbitrary 2D drawing. The paint pass
+// hands the registered Painter a coordinate system whose origin is the
+// canvas's resolved top-left; the callback emits lines (and, in time,
+// rects / arcs / text) directly. Used by apps that need positions
+// outside the layout-tree model — CAD plans, charts, custom widgets.
+//
+// The paint cache is bypassed for canvas nodes (paint_fn is opaque to
+// the layout-prop diff), so each frame re-runs the callback. Apps with
+// expensive per-frame paint should pre-compute geometry in update()
+// and capture by reference into the lambda.
+inline void canvas(float width, float height,
+                   std::function<void(Painter&)> paint_fn) {
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    node.style.max_width = width;
+    node.style.fixed_height = height;
+    node.paint_fn = std::move(paint_fn);
+    detail::attach_to_scope(h);
+}
+
 } // namespace widget
 
 // ============================================================

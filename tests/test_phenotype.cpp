@@ -379,6 +379,48 @@ void test_image_widget_layout_and_emit() {
     std::puts("PASS: widget::image lays out and emits DrawImage");
 }
 
+void test_canvas_widget_invokes_painter() {
+    detail::g_app.arena.reset();
+
+    auto root_h = detail::alloc_node();
+    auto& root = detail::node_at(root_h);
+    root.style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    int paint_calls = 0;
+    widget::canvas(200.0f, 100.0f, [&paint_calls](Painter& p) {
+        ++paint_calls;
+        p.line(10.0f, 20.0f, 60.0f, 70.0f, 1.0f, Color{255, 0, 0, 255});
+    });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 400.0f);
+
+    assert(root.children.size() == 1);
+    auto& cv = detail::node_at(root.children[0]);
+    assert(cv.width == 200.0f);
+    assert(cv.height == 100.0f);
+    assert(cv.paint_fn);
+
+    CMD_LEN = 0;
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+    assert(paint_calls == 1);
+
+    bool found_line = false;
+    for (unsigned int i = 0; i + 4 <= CMD_LEN; i += 4) {
+        unsigned int word;
+        std::memcpy(&word, &CMD_BUF[i], 4);
+        if (word == static_cast<unsigned int>(Cmd::DrawLine)) {
+            found_line = true;
+            break;
+        }
+    }
+    assert(found_line);
+
+    std::puts("PASS: widget::canvas invokes painter and emits DrawLine");
+}
+
 void test_checkbox_and_radio_widgets() {
     struct ToggleA {};
     struct PickB { int idx; };
@@ -1098,6 +1140,7 @@ int main() {
     test_set_theme_updates_and_invalidates_cache();
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();
+    test_canvas_widget_invokes_painter();
     test_checkbox_and_radio_widgets();
     test_frame_skip_on_identical_cmd_buffer();
     test_row_cross_align_center_default();
