@@ -3,16 +3,13 @@
 import phenotype;
 import phenotype.native;
 
-// 7GUIs task #7 (Cells) — M8-1 skeleton.
+// 7GUIs task #7 (Cells) — M8-2 with the new widget::cell.
 //
-// First step of the 7GUIs ladder (backward pass) on the native side.
-// Renders an A–Z × 0–99 placeholder grid using only existing widgets.
-// No state, no editing, no formulas, no dependency tracking.
-//
-// The current native widget set has no Box-with-border primitive, so
-// data cells render as plain `·` labels rather than visibly bordered
-// boxes — a fidelity gap deliberately left for M8-2 to close with a
-// dedicated Cell widget.
+// Replaces the M8-1 plain-text placeholders with the new bordered
+// `widget::cell`, mirroring phenotype-web's <Cell>. Each data slot is
+// now a visibly bordered box; the corner / column / row labels are the
+// header variant. Selection (M8-3) and edit-in-place (M8-4) are still
+// pending.
 
 struct State {};
 
@@ -25,40 +22,43 @@ void view(State const&) {
     using namespace phenotype;
     constexpr int COLS = 26;
     constexpr int ROWS = 100;
+    constexpr float kCellWidth = 60.0f;
+    constexpr float kCellHeight = 24.0f;
+    constexpr float kHeaderWidth = 36.0f;
 
     layout::scaffold(
         [] {
             widget::text("Cells");
             widget::text(
-                "7GUIs task #7 — M8-1 skeleton. A–Z columns, 0–99 rows. "
-                "Editing, formulas, dependency propagation, and viewport "
-                "virtualization land in M8-2 and beyond.");
+                "7GUIs task #7 — M8-2 with widget::cell. A–Z × 0–99 grid. "
+                "Selection, editing, formulas, dependency propagation, and "
+                "viewport virtualization land in M8-3 and beyond.");
         },
         [&] {
             // Header row: blank corner + A..Z column letters.
             layout::row([&] {
-                widget::text("   ");
+                widget::cell("", /*header=*/true, kHeaderWidth, kCellHeight);
                 for (int c = 0; c < COLS; c++) {
-                    widget::text(std::string(1, static_cast<char>('A' + c)));
+                    widget::cell(std::string(1, static_cast<char>('A' + c)),
+                                 /*header=*/true, kCellWidth, kCellHeight);
                 }
             });
-            // Data rows: row number + 26 placeholder cells.
+            // Data rows: row number header + 26 empty data cells.
             for (int r = 0; r < ROWS; r++) {
                 layout::row([&] {
-                    widget::text(std::to_string(r));
+                    widget::cell(std::to_string(r), /*header=*/true,
+                                 kHeaderWidth, kCellHeight);
                     for (int c = 0; c < COLS; c++) {
                         (void)c;
-                        widget::text("·");
+                        widget::cell("", /*header=*/false, kCellWidth, kCellHeight);
                     }
                 });
             }
         },
         [] {
             widget::text(
-                "Cell borders, selection, and editing arrive with the Cell "
-                "widget in M8-2. The current native widget set has no "
-                "Box-with-border primitive, so the skeleton renders as "
-                "plain labeled rows.");
+                "Selection, edit-in-place, formula evaluation, dependency "
+                "propagation, and viewport virtualization arrive in M8-3..M8-7.");
         }
     );
 }

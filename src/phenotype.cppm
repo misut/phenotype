@@ -207,6 +207,39 @@ inline void code(str content) {
     detail::attach_to_scope(h);
 }
 
+// cell — compact bordered grid slot for a single piece of content.
+//
+// Mirrors phenotype-web's <Cell> widget. The first concrete spreadsheet
+// primitive used by examples/seven_guis/cells. Header variant flips the
+// background to code_bg and centers content — used for column letters
+// and row numbers. Width / height default to 0 / -1 (no cap), so the
+// caller is responsible for uniform sizing if a true grid alignment
+// is needed (currently a fidelity gap; M8-3 closes it).
+inline void cell(str content,
+                 bool header = false,
+                 float width = 0,
+                 float height = -1) {
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    auto const& t = detail::g_app.theme;
+    node.text = std::string(content.data, content.len);
+    node.font_size = t.small_font_size;
+    node.text_color = header ? t.muted : t.foreground;
+    node.background = header ? t.code_bg : t.surface;
+    node.border_color = t.border;
+    node.border_width = 1;
+    node.style.padding[0] = 0;
+    node.style.padding[1] = t.space_xs;
+    node.style.padding[2] = 0;
+    node.style.padding[3] = t.space_xs;
+    node.style.max_width = width;
+    node.style.fixed_height = height;
+    if (header) {
+        node.style.text_align = TextAlign::Center;
+    }
+    detail::attach_to_scope(h);
+}
+
 // button<Msg> — click posts a copy of `msg` and triggers a rebuild.
 //
 //   variant=Default  — surface chrome with hover_bg fallback.
