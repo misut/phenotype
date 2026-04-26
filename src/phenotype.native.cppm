@@ -104,10 +104,11 @@ inline void shutdown() {
         platform.renderer.shutdown();
 }
 
-inline std::optional<unsigned int> hit_test(float x, float y, float scroll_y) {
+inline std::optional<unsigned int> hit_test(float x, float y,
+                                            float scroll_x, float scroll_y) {
     auto const& platform = current_platform();
     if (!platform.renderer.hit_test) return std::nullopt;
-    return platform.renderer.hit_test(x, y, scroll_y);
+    return platform.renderer.hit_test(x, y, scroll_x, scroll_y);
 }
 
 } // namespace renderer

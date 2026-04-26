@@ -20,7 +20,7 @@ using namespace phenotype;
 #if !defined(__wasi__) && !defined(__ANDROID__)
 static null_host host;
 #define RUN_APP(S, M, V, U) phenotype::run<S, M>(host, V, U)
-#define REPAINT(sy) detail::repaint(host, sy)
+#define REPAINT(sy) detail::repaint(host, 0.0f, sy)
 #else
 extern "C" {
     void phenotype_flush() {}
@@ -32,7 +32,7 @@ extern "C" {
     void phenotype_open_url(char const*, unsigned int) {}
 }
 #define RUN_APP(S, M, V, U) phenotype::run<S, M>(V, U)
-#define REPAINT(sy) detail::repaint(sy)
+#define REPAINT(sy) detail::repaint(0.0f, sy)
 #endif
 
 // ============================================================

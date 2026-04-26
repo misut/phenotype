@@ -169,12 +169,13 @@ inline void on_cursor_pos(GLFWwindow* /*window*/, double mx, double my) {
         static_cast<float>(my));
 }
 
-inline void on_scroll(GLFWwindow* window, double, double dy) {
+inline void on_scroll(GLFWwindow* window, double dx, double dy) {
     int w = 0;
     int h = 0;
     glfwGetWindowSize(window, &w, &h);
-    float viewport = (h > 0) ? static_cast<float>(h) : 1.0f;
-    ::phenotype::native::detail::dispatch_scroll(dy, viewport);
+    float vw = (w > 0) ? static_cast<float>(w) : 1.0f;
+    float vh = (h > 0) ? static_cast<float>(h) : 1.0f;
+    ::phenotype::native::detail::dispatch_scroll_xy(dx, dy, vw, vh);
 }
 
 inline void on_framebuffer_size(GLFWwindow* /*window*/, int w, int h) {

@@ -12,7 +12,7 @@ using namespace phenotype;
 static null_host host;
 #define RUN_APP(S, M, V, U)              run<S, M>(host, V, U)
 #define LAYOUT_NODE(h, w)                detail::layout_node(host, h, w)
-#define PAINT_NODE(h, ox, oy, sy, vh)    detail::paint_node(host, host, h, ox, oy, sy, vh)
+#define PAINT_NODE(h, ox, oy, sy, vh)    detail::paint_node(host, host, h, ox, oy, 0.0f, sy, 800.0f, vh)
 #define CMD_BUF                          host.buf()
 #define CMD_LEN                          host.buf_len()
 #else
@@ -30,7 +30,7 @@ extern "C" {
 }
 #define RUN_APP(S, M, V, U)              run<S, M>(V, U)
 #define LAYOUT_NODE(h, w)                detail::layout_node(h, w)
-#define PAINT_NODE(h, ox, oy, sy, vh)    detail::wasi_paint_node(h, ox, oy, sy, vh)
+#define PAINT_NODE(h, ox, oy, sy, vh)    detail::wasi_paint_node(h, ox, oy, 0.0f, sy, 800.0f, vh)
 #define CMD_BUF                          phenotype_cmd_buf
 #define CMD_LEN                          phenotype_cmd_len
 #endif

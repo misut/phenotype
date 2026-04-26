@@ -57,6 +57,7 @@ struct renderer_api {
     void (*flush)(unsigned char const* buf, unsigned int len) = nullptr;
     void (*shutdown)() = nullptr;
     std::optional<unsigned int> (*hit_test)(float x, float y,
+                                            float scroll_x,
                                             float scroll_y) = nullptr;
 };
 

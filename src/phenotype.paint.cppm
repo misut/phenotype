@@ -268,6 +268,7 @@ template <render_backend R, text_measurer M>
 void emit_focused_input_selection(R& r,
                                   M const& measurer,
                                   FocusedInputSnapshot const& snapshot,
+                                  float scroll_x,
                                   float scroll_y) {
     if (!snapshot.valid || !snapshot.selection_active || snapshot.value.empty())
         return;
@@ -277,7 +278,7 @@ void emit_focused_input_selection(R& r,
     if (end <= start)
         return;
 
-    float base_x = snapshot.x + snapshot.padding[3];
+    float base_x = snapshot.x + snapshot.padding[3] - scroll_x;
     float draw_y = snapshot.y - scroll_y + snapshot.padding[0];
     float start_x = base_x + measurer.measure_text(
         snapshot.font_size,
@@ -317,13 +318,16 @@ inline std::uint64_t callback_mask_bit(unsigned int callback_id) noexcept {
 
 template <render_backend R, text_measurer M>
 void paint_node(R& r, M const& measurer, NodeHandle node_h,
-                float ox, float oy, float scroll_y, float vp_height) {
+                float ox, float oy,
+                float scroll_x, float scroll_y,
+                float vp_width, float vp_height) {
     auto& node = node_at(node_h);
     float ax = ox + node.x;
     float ay = oy + node.y;
 
     if (node.children.empty()) {
         if (ay + node.height < scroll_y || ay > scroll_y + vp_height) return;
+        if (ax + node.width  < scroll_x || ax > scroll_x + vp_width)  return;
     }
 
     // ---- Subtree paint cache blit guard ----------------------------
@@ -331,11 +335,12 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     // input is unchanged since the frame that emitted it, memcpy the
     // saved byte range out of g_app.prev_cmd_buf instead of re-walking.
     // Byte-exact reuse: the bytes were emitted with identical ax/ay/
-    // scroll_y and no intersecting hover/focus transition, so they are
-    // byte-for-byte what this walk would produce.
+    // scroll_x/scroll_y and no intersecting hover/focus transition, so
+    // they are byte-for-byte what this walk would produce.
     if (node.layout_valid && node.paint_valid
         && ax == node.paint_ax
         && ay == node.paint_ay
+        && scroll_x == g_app.prev_scroll_x
         && scroll_y == g_app.prev_scroll_y
         && (node.paint_callback_mask & g_app.paint_invalidation_mask) == 0
         && node.paint_offset + node.paint_length <= g_app.prev_cmd_len
@@ -369,6 +374,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     auto const entry_flush_epoch = g_app.paint_flush_epoch;
     std::uint64_t subtree_mask = callback_mask_bit(node.callback_id);
 
+    float draw_x = ax - scroll_x;
     float draw_y = ay - scroll_y;
 
     bool is_hovered = (node.callback_id != 0xFFFFFFFF &&
@@ -381,16 +387,16 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         ? node.hover_background : node.background;
     if (bg.a > 0) {
         if (node.border_radius > 0)
-            emit_round_rect(r, ax, draw_y, node.width, node.height,
+            emit_round_rect(r, draw_x, draw_y, node.width, node.height,
                             node.border_radius, bg);
         else
-            emit_fill_rect(r, ax, draw_y, node.width, node.height, bg);
+            emit_fill_rect(r, draw_x, draw_y, node.width, node.height, bg);
     }
 
     if (node.decoration != Decoration::None) {
         Color decoration_color = g_app.theme.surface;
         if (node.decoration == Decoration::Check) {
-            float cx = ax + node.width * 0.5f;
+            float cx = draw_x + node.width * 0.5f;
             float cy = draw_y + node.height * 0.5f;
             float u  = node.width;
             emit_draw_line(r, cx - u * 0.25f, cy + u * 0.02f,
@@ -399,7 +405,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                            cx + u * 0.28f, cy - u * 0.18f, 2.0f, decoration_color);
         } else {
             float dot = node.width * 0.4f;
-            float dx  = ax + (node.width  - dot) * 0.5f;
+            float dx  = draw_x + (node.width  - dot) * 0.5f;
             float dy  = draw_y + (node.height - dot) * 0.5f;
             emit_round_rect(r, dx, dy, dot, dot, dot * 0.5f, decoration_color);
         }
@@ -408,7 +414,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     Color bc = is_focused ? g_app.theme.state_focus_ring : node.border_color;
     float bw = is_focused ? g_app.theme.state_focus_ring_width : node.border_width;
     if (bw > 0 && bc.a > 0) {
-        emit_stroke_rect(r, ax, draw_y, node.width, node.height, bw, bc);
+        emit_stroke_rect(r, draw_x, draw_y, node.width, node.height, bw, bc);
     }
 
     bool html_overlay_active = false;
@@ -420,7 +426,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     if (!html_overlay_active && is_focused && node.is_input) {
         auto snapshot = focused_input_snapshot();
         if (snapshot.valid && snapshot.callback_id == node.callback_id)
-            emit_focused_input_selection(r, measurer, snapshot, scroll_y);
+            emit_focused_input_selection(r, measurer, snapshot, scroll_x, scroll_y);
     }
     if (!html_overlay_active && !node.text_lines.empty()) {
         float line_height = node.font_size * g_app.theme.line_height_ratio;
@@ -431,7 +437,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 float line_w = measurer.measure_text(
                     node.font_size, node.mono ? 1 : 0,
                     line.c_str(), static_cast<unsigned int>(line.size()));
-                float tx = ax + node.style.padding[3];
+                float tx = draw_x + node.style.padding[3];
                 if (node.style.text_align == TextAlign::Center)
                     tx += (inner_width - line_w) / 2;
                 else if (node.style.text_align == TextAlign::End)
@@ -445,7 +451,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     }
 
     if (!node.image_url.empty()) {
-        emit_draw_image(r, ax, draw_y, node.width, node.height,
+        emit_draw_image(r, draw_x, draw_y, node.width, node.height,
                         node.image_url.c_str(),
                         static_cast<unsigned int>(node.image_url.size()));
     }
@@ -477,14 +483,15 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             && g_app.paint_scissor_depth == 0;
 
         if (child_is_dirty_root) {
-            float cx = ax + child.x;
+            float cx = ax + child.x - scroll_x;
             float cy = ay + child.y - scroll_y;
             emit_scissor(r, cx, cy, child.width, child.height);
             ++g_app.paint_scissor_depth;
             metrics::inst::scissor_emitted.add();
         }
 
-        paint_node(r, measurer, child_h, ax, ay, scroll_y, vp_height);
+        paint_node(r, measurer, child_h, ax, ay,
+                   scroll_x, scroll_y, vp_width, vp_height);
         subtree_mask |= node_at(child_h).paint_callback_mask;
 
         if (child_is_dirty_root) {
@@ -520,8 +527,9 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
 export namespace phenotype::detail {
 inline void wasi_emit_clear(Color c) { emit_clear(g_wasi, c); }
 inline void wasi_flush_if_changed() { flush_if_changed(g_wasi); }
-inline void wasi_paint_node(NodeHandle h, float ox, float oy, float sy, float vh) {
-    paint_node(g_wasi, g_wasi, h, ox, oy, sy, vh);
+inline void wasi_paint_node(NodeHandle h, float ox, float oy,
+                            float sx, float sy, float vw, float vh) {
+    paint_node(g_wasi, g_wasi, h, ox, oy, sx, sy, vw, vh);
 }
 }
 #endif

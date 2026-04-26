@@ -4081,11 +4081,13 @@ inline void renderer_shutdown() {
 }
 
 inline std::optional<unsigned int> renderer_hit_test(float x, float y,
+                                                     float scroll_x,
                                                      float scroll_y) {
+    float wx = x + scroll_x;
     float wy = y + scroll_y;
     for (int i = static_cast<int>(g_renderer.hit_regions.size()) - 1; i >= 0; --i) {
         auto const& hr = g_renderer.hit_regions[static_cast<std::size_t>(i)];
-        if (x >= hr.x && x <= hr.x + hr.w && wy >= hr.y && wy <= hr.y + hr.h)
+        if (wx >= hr.x && wx <= hr.x + hr.w && wy >= hr.y && wy <= hr.y + hr.h)
             return hr.callback_id;
     }
     return std::nullopt;
