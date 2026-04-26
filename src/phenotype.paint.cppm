@@ -474,6 +474,14 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                                origin_x + x2, origin_y + y2,
                                thickness, color);
             }
+            void text(float x, float y,
+                      char const* str, unsigned int len,
+                      float font_size, Color color) override {
+                emit_draw_text(r,
+                               origin_x + x, origin_y + y,
+                               font_size, /*mono=*/0u,
+                               color, str, len);
+            }
         };
         PainterImpl painter(r, draw_x, draw_y);
         node.paint_fn(painter);

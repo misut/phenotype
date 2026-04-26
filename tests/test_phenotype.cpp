@@ -389,9 +389,11 @@ void test_canvas_widget_invokes_painter() {
     Scope scope(root_h);
     Scope::set_current(&scope);
     int paint_calls = 0;
-    widget::canvas(200.0f, 100.0f, [&paint_calls](Painter& p) {
+    char const* sample_text = "cad++";
+    widget::canvas(200.0f, 100.0f, [&paint_calls, sample_text](Painter& p) {
         ++paint_calls;
         p.line(10.0f, 20.0f, 60.0f, 70.0f, 1.0f, Color{255, 0, 0, 255});
+        p.text(80.0f, 30.0f, sample_text, 5u, 14.0f, Color{0, 0, 0, 255});
     });
     Scope::set_current(nullptr);
 
@@ -408,17 +410,26 @@ void test_canvas_widget_invokes_painter() {
     assert(paint_calls == 1);
 
     bool found_line = false;
+    bool found_text = false;
     for (unsigned int i = 0; i + 4 <= CMD_LEN; i += 4) {
         unsigned int word;
         std::memcpy(&word, &CMD_BUF[i], 4);
-        if (word == static_cast<unsigned int>(Cmd::DrawLine)) {
-            found_line = true;
+        if (word == static_cast<unsigned int>(Cmd::DrawLine)) found_line = true;
+        if (word == static_cast<unsigned int>(Cmd::DrawText)) found_text = true;
+    }
+    assert(found_line);
+    assert(found_text);
+
+    bool found_text_payload = false;
+    for (unsigned int i = 0; i + 5 <= CMD_LEN; ++i) {
+        if (std::memcmp(&CMD_BUF[i], "cad++", 5) == 0) {
+            found_text_payload = true;
             break;
         }
     }
-    assert(found_line);
+    assert(found_text_payload);
 
-    std::puts("PASS: widget::canvas invokes painter and emits DrawLine");
+    std::puts("PASS: widget::canvas invokes painter and emits DrawLine + DrawText");
 }
 
 void test_checkbox_and_radio_widgets() {
