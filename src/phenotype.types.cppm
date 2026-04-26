@@ -280,6 +280,12 @@ public:
     virtual ~Painter() = default;
     virtual void line(float x1, float y1, float x2, float y2,
                       float thickness, Color color) = 0;
+    // Text — `(x, y)` is the top-left of the text's font-size box, in
+    // the canvas's local coordinate system. Mirrors the existing text
+    // path used by widget::text. `font_size` is in pixels.
+    virtual void text(float x, float y,
+                      char const* str, unsigned int len,
+                      float font_size, Color color) = 0;
 };
 
 struct LayoutNode {
