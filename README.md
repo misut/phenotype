@@ -54,7 +54,7 @@ int main() {
 ```html
 <script type="module">
     import { mount } from './phenotype.js';
-    mount('counter.wasm');
+    mount('app.wasm');
 </script>
 ```
 
@@ -208,15 +208,14 @@ phenotype::run<State, Msg>(view, update)
 ## Quick start
 
 ```bash
-cd examples/hello
-exon build --target wasm32-wasi
-cp .exon/wasm32-wasi/debug/hello hello.wasm
-python3 -m http.server 8080
-# Open http://localhost:8080
+cd examples/native
+exon run
 ```
 
-The `examples/counter` directory has the same structure but renders the
-`Counter` example from the top of this README.
+`examples/native` is the desktop widget showcase — a non-trivial composition
+of every shared widget rendered via the GLFW shell + Metal (macOS) or
+Direct3D 12 (Windows) backend. The 7GUIs ladder will land additional
+examples under `examples/seven_guis/` as the widget set grows.
 
 As an exon dependency:
 
