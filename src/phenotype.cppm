@@ -848,6 +848,41 @@ void sized_box(float max_width, F&& builder) {
     detail::open_container(h, std::forward<F>(builder));
 }
 
+// padded — uniform-padding container. Useful as a window-edge gutter
+// when the root view should breathe inside the native shell instead
+// of butting up against the window borders.
+template<typename F>
+    requires std::is_invocable_v<F>
+void padded(SpaceToken padding, F&& builder) {
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    float p = space_value(padding);
+    node.style.padding[0] = p;
+    node.style.padding[1] = p;
+    node.style.padding[2] = p;
+    node.style.padding[3] = p;
+    detail::open_container(h, std::forward<F>(builder));
+}
+
+// grid — rigid track container. Mirrors CSS Grid's
+// `grid-template-columns: <fixed widths>` + `grid-auto-rows: <h>` for
+// the common spreadsheet / table case. Children are placed row-major
+// into a fixed `columns × n_rows` matrix, with `gap` separating tracks
+// in both directions. Pass `row_height = 0` to let each row size to
+// its tallest child.
+template<typename F>
+    requires std::is_invocable_v<F>
+void grid(std::vector<float> columns, float row_height, F&& builder,
+          float gap = 0.0f) {
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    node.is_grid_container = true;
+    node.grid_columns = std::move(columns);
+    node.grid_row_height = row_height;
+    node.style.gap = gap;
+    detail::open_container(h, std::forward<F>(builder));
+}
+
 inline void scaffold(std::function<void()> top_bar,
                      std::function<void()> content,
                      std::function<void()> bottom_bar = {}) {
