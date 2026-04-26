@@ -1,0 +1,16 @@
+[package]
+name = "seven_guis_cells"
+version = "0.1.0"
+description = "phenotype 7GUIs Cells skeleton (M8-1)"
+type = "bin"
+standard = 23
+platforms = [{ os = "wasi" }]
+
+[sync]
+cmake-in-root = false
+
+[dependencies]
+"github.com/misut/cppx" = "1.9.0"
+
+[dependencies.path]
+phenotype = "../../.."
