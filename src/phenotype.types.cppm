@@ -270,6 +270,18 @@ struct Style {
     float fixed_height = -1;
 };
 
+// Painter — immediate-mode drawing surface handed to a `widget::canvas`
+// callback during the paint pass. Coordinates are local to the canvas
+// (origin at the canvas's top-left, x extends right, y extends down).
+// Used by apps that need to render arbitrary 2D geometry — CAD plans,
+// charts, custom widgets — that doesn't fit the layout-tree model.
+class Painter {
+public:
+    virtual ~Painter() = default;
+    virtual void line(float x1, float y1, float x2, float y2,
+                      float thickness, Color color) = 0;
+};
+
 struct LayoutNode {
     // Style
     Style style;
@@ -312,6 +324,12 @@ struct LayoutNode {
     bool is_grid_container = false;
     std::vector<float> grid_columns;
     float grid_row_height = 0;
+
+    // Immediate-mode paint hook — set by widget::canvas. When non-null,
+    // the paint pass invokes paint_fn with a Painter bound to the
+    // node's resolved (x, y) and the active scroll. layout-tree
+    // children are still painted normally afterwards.
+    std::function<void(Painter&)> paint_fn;
 
     // Computed layout
     float x = 0, y = 0, width = 0, height = 0;

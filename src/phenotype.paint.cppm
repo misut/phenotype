@@ -456,6 +456,29 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                         static_cast<unsigned int>(node.image_url.size()));
     }
 
+    // Immediate-mode paint hook (widget::canvas). The Painter sees a
+    // local coordinate system whose origin sits at this node's
+    // resolved (x, y); it forwards each call to emit_draw_line in
+    // absolute screen coords (already accounting for scroll).
+    if (node.paint_fn) {
+        struct PainterImpl : public Painter {
+            R& r;
+            float origin_x;
+            float origin_y;
+            PainterImpl(R& r_in, float ox, float oy)
+                : r(r_in), origin_x(ox), origin_y(oy) {}
+            void line(float x1, float y1, float x2, float y2,
+                      float thickness, Color color) override {
+                emit_draw_line(r,
+                               origin_x + x1, origin_y + y1,
+                               origin_x + x2, origin_y + y2,
+                               thickness, color);
+            }
+        };
+        PainterImpl painter(r, draw_x, draw_y);
+        node.paint_fn(painter);
+    }
+
     if (node.callback_id != 0xFFFFFFFF) {
         emit_hit_region(r, ax, ay, node.width, node.height,
                         node.callback_id, node.cursor_type);
