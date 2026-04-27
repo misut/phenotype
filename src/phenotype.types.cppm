@@ -142,6 +142,30 @@ enum class Cmd : unsigned int {
     // / mathematical convention; pass `start_angle = 0`,
     // `end_angle = 2π` for a full circle.
     DrawArc    = 10,
+    // Variable-length stroked path — a sequence of `PathVerb`s
+    // (MoveTo, LineTo, QuadTo, CubicTo, ArcTo, Close). Curves are
+    // CPU-flattened by the backend and re-dispatched onto the
+    // existing line / arc instance buffers (no new pipeline). Layout:
+    // opcode + thickness (f32) + packed RGBA + verb_count (u32) +
+    // verb_count × (verb_tag + N × f32 inline).
+    Path       = 11,
+    // Variable-length filled path — same verb stream, no thickness.
+    // Tessellated to a triangle list on the CPU and dispatched onto
+    // the fill_tri pipeline. Layout: opcode + packed RGBA + verb_count
+    // + inline verbs.
+    FillPath   = 12,
+};
+
+// Verb tags inside a Cmd::Path / Cmd::FillPath payload. Numeric values
+// are part of the wire format — never reorder existing entries; append
+// only.
+enum class PathVerb : unsigned int {
+    MoveTo  = 0,  // 2 f32: x, y
+    LineTo  = 1,  // 2 f32: x, y
+    QuadTo  = 2,  // 4 f32: cx, cy, x, y     (quadratic Bézier control + endpoint)
+    CubicTo = 3,  // 6 f32: c1x, c1y, c2x, c2y, x, y
+    ArcTo   = 4,  // 5 f32: cx, cy, radius, start_angle, end_angle (CCW math/AutoCAD)
+    Close   = 5,  // 0 f32 — closes the current subpath with a straight segment.
 };
 
 // ============================================================

@@ -2,6 +2,7 @@ module;
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <vector>
 #ifdef __wasi__
 #include "phenotype_host.h"
 #endif
@@ -201,6 +202,108 @@ void emit_draw_arc(R& r, float cx, float cy, float radius,
     detail::write_f32(r, start_angle); detail::write_f32(r, end_angle);
     detail::write_f32(r, thickness);
     detail::write_u32(r, c.packed());
+}
+
+// ============================================================
+// Path — variable-length verb stream
+// ============================================================
+//
+// A `PathBuilder` accumulates verbs into a packed buffer (tag +
+// inline f32s, both as u32 words) so emit can memcpy the buffer
+// directly into the command stream. Match the wire format documented
+// on `Cmd::Path` / `Cmd::FillPath`.
+//
+// Coordinate convention: canvas-local pixels for points, CCW math /
+// AutoCAD radians for `arc_to` angles. `close()` synthesises a
+// straight segment to the current subpath's start when the backend
+// strokes / fills it.
+
+struct PathBuilder {
+    // Packed verb stream: each verb is `[tag u32]` followed by N
+    // f32-as-u32 words (N depends on the tag). One word per push,
+    // appended in order — the same byte stream a backend will see in
+    // `Cmd::Path` / `Cmd::FillPath` payload.
+    std::vector<unsigned int> verbs;
+    unsigned int verb_count = 0;
+
+    void clear() { verbs.clear(); verb_count = 0; }
+
+    void move_to(float x, float y) {
+        push_verb(PathVerb::MoveTo);
+        push_f32(x); push_f32(y);
+    }
+    void line_to(float x, float y) {
+        push_verb(PathVerb::LineTo);
+        push_f32(x); push_f32(y);
+    }
+    void quad_to(float cx, float cy, float x, float y) {
+        push_verb(PathVerb::QuadTo);
+        push_f32(cx); push_f32(cy);
+        push_f32(x); push_f32(y);
+    }
+    void cubic_to(float c1x, float c1y, float c2x, float c2y,
+                  float x, float y) {
+        push_verb(PathVerb::CubicTo);
+        push_f32(c1x); push_f32(c1y);
+        push_f32(c2x); push_f32(c2y);
+        push_f32(x); push_f32(y);
+    }
+    // Arc segment in centre form. `start_angle` to `end_angle` are
+    // radians, CCW per the math/AutoCAD convention (matches Painter::arc
+    // and Cmd::DrawArc).
+    void arc_to(float cx, float cy, float radius,
+                float start_angle, float end_angle) {
+        push_verb(PathVerb::ArcTo);
+        push_f32(cx); push_f32(cy);
+        push_f32(radius);
+        push_f32(start_angle); push_f32(end_angle);
+    }
+    void close() {
+        push_verb(PathVerb::Close);
+    }
+
+    bool empty() const { return verb_count == 0; }
+
+private:
+    void push_verb(PathVerb v) {
+        verbs.push_back(static_cast<unsigned int>(v));
+        ++verb_count;
+    }
+    void push_f32(float v) {
+        unsigned int bits;
+        std::memcpy(&bits, &v, 4);
+        verbs.push_back(bits);
+    }
+};
+
+// Stroked path. Backends CPU-flatten curve segments into the existing
+// line / arc instance buffers (no new pipeline). Layout: opcode +
+// thickness (f32) + packed RGBA + verb_count (u32) + verb_count
+// inline verbs (each `verbs[i]` is one u32 word, see `PathBuilder`).
+template <render_backend R>
+void emit_stroke_path(R& r, PathBuilder const& path,
+                      float thickness, Color c) {
+    auto const words = static_cast<unsigned int>(path.verbs.size());
+    detail::ensure(r, 16 + words * 4);
+    detail::write_u32(r, static_cast<unsigned int>(Cmd::Path));
+    detail::write_f32(r, thickness);
+    detail::write_u32(r, c.packed());
+    detail::write_u32(r, path.verb_count);
+    for (auto w : path.verbs) detail::write_u32(r, w);
+}
+
+// Filled path. Single closed loop only — self-intersection / multi-
+// loop / hole semantics are out of scope for this slab and land with
+// HATCH support later. Layout: opcode + packed RGBA + verb_count +
+// inline verbs (no thickness slot).
+template <render_backend R>
+void emit_fill_path(R& r, PathBuilder const& path, Color c) {
+    auto const words = static_cast<unsigned int>(path.verbs.size());
+    detail::ensure(r, 12 + words * 4);
+    detail::write_u32(r, static_cast<unsigned int>(Cmd::FillPath));
+    detail::write_u32(r, c.packed());
+    detail::write_u32(r, path.verb_count);
+    for (auto w : path.verbs) detail::write_u32(r, w);
 }
 
 template <render_backend R>
