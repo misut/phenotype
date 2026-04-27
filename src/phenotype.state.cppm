@@ -176,6 +176,22 @@ struct AppState {
     // Click callbacks indexed by callback_id, registered by Button<Msg>.
     std::vector<std::function<void()>> callbacks;
     std::vector<InteractionRole> callback_roles;
+    // Gesture callbacks indexed by gesture_callback_id, registered by
+    // widget::canvas when the builder passes an `on_gesture` lambda.
+    // Cleared and repopulated each frame in lockstep with `callbacks`.
+    std::vector<std::function<void(::phenotype::GestureEvent const&)>> gesture_callbacks;
+    // Active gesture target — set by paint_node when it walks a canvas
+    // node whose `gesture_callback_id` is valid. The shell reads these
+    // during `dispatch_gesture` to (a) reject events whose focal point
+    // falls outside the canvas bounds, and (b) translate from absolute
+    // surface coords into canvas-local coords before invoking the
+    // registered callback. `id == 0xFFFFFFFFu` means no canvas
+    // currently exposes a gesture handler.
+    unsigned int gesture_target_id = 0xFFFFFFFFu;
+    float        gesture_target_x  = 0.0f;
+    float        gesture_target_y  = 0.0f;
+    float        gesture_target_w  = 0.0f;
+    float        gesture_target_h  = 0.0f;
     std::vector<unsigned int> focusable_ids;
     // Tracks input nodes by callback_id for focus / handle_key lookup.
     std::vector<std::pair<unsigned int, NodeHandle>> input_nodes;

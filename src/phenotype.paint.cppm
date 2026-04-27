@@ -501,6 +501,22 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                         node.callback_id, node.cursor_type);
     }
 
+    // Register this canvas as the active gesture target — the shell
+    // looks at `g_app.gesture_target_*` to route platform pinch / pan
+    // events. Last canvas painted wins on the rare apps that have
+    // multiple gesture-aware canvases on screen at once; that policy
+    // matches z-order intuition for nested canvases (the inner one
+    // paints last). `ax` / `ay` are the canvas's top-left in
+    // post-scroll surface coords, matching what `dispatch_gesture`
+    // receives from the input backend.
+    if (node.gesture_callback_id != 0xFFFFFFFFu) {
+        g_app.gesture_target_id = node.gesture_callback_id;
+        g_app.gesture_target_x  = ax;
+        g_app.gesture_target_y  = ay;
+        g_app.gesture_target_w  = node.width;
+        g_app.gesture_target_h  = node.height;
+    }
+
     // Dirty-root detection for scissor. A child is a dirty root when
     // its own layout_valid is false but at least one sibling will blit
     // (sibling.layout_valid == true) — i.e. the child is the sole

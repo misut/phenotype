@@ -297,6 +297,24 @@ inline SEL sel_modifier_flags() {
     return sel;
 }
 
+// Used by the canvas gesture pipeline (Stage 8). `magnification`
+// returns NSEvent's CGFloat magnify delta; `locationInWindow` lets
+// us translate the gesture's focal point into content-view pixels.
+inline SEL sel_magnification() {
+    static auto sel = sel_registerName("magnification");
+    return sel;
+}
+
+inline SEL sel_location_in_window() {
+    static auto sel = sel_registerName("locationInWindow");
+    return sel;
+}
+
+inline SEL sel_convert_point_from_view() {
+    static auto sel = sel_registerName("convertPoint:fromView:");
+    return sel;
+}
+
 inline SEL sel_marked_range() {
     static auto sel = sel_registerName("markedRange");
     return sel;
@@ -1132,6 +1150,13 @@ inline constexpr long long insertion_indicator_display_mode_visible = 2;
 inline constexpr long long insertion_indicator_automatic_mode_show_effects = 1 << 0;
 inline constexpr long long insertion_indicator_automatic_mode_show_while_tracking = 1 << 1;
 inline constexpr unsigned long long ns_event_mask_scroll_wheel = 1ull << 22;
+// AppKit's `NSEventMaskMagnify`. Stage-8 canvas gestures install a
+// parallel local-event monitor so trackpad pinch (`magnifyWithEvent:`)
+// shows up here even when the focused content view does not directly
+// override the selector.
+inline constexpr unsigned long long ns_event_mask_magnify     = 1ull << 30;
+// `NSEventModifierFlagCommand` for Cmd+scroll-wheel zoom routing.
+inline constexpr unsigned long long ns_event_modifier_command = 1ull << 20;
 inline constexpr unsigned long long ns_event_phase_none = 0;
 inline constexpr unsigned long long ns_event_phase_began = 1ull << 0;
 inline constexpr unsigned long long ns_event_phase_stationary = 1ull << 1;
@@ -1150,6 +1175,7 @@ struct ImeState {
     id caret_host_view = nullptr;
     id insertion_indicator = nullptr;
     id scroll_monitor = nullptr;
+    id magnify_monitor = nullptr;  // Stage-8 trackpad-pinch gesture monitor
     Class editor_class = Nil;
     Class caret_host_class = Nil;
     void (*request_repaint)() = nullptr;
@@ -3848,6 +3874,20 @@ inline float current_scroll_viewport_width() {
     return viewport_width();
 }
 
+// Read the cursor's content-area position via GLFW, which already
+// returns top-down logical pixels matching phenotype's paint coords.
+// Returns false when the window is unbound. Forward-declared here
+// because both `handle_local_scroll_event` (Stage-8 canvas pan/zoom
+// branch) and the magnify handler below need it.
+inline bool glfw_cursor_position(float& out_x, float& out_y) {
+    if (!g_ime.window) return false;
+    double cx = 0.0, cy = 0.0;
+    glfwGetCursorPos(g_ime.window, &cx, &cy);
+    out_x = static_cast<float>(cx);
+    out_y = static_cast<float>(cy);
+    return true;
+}
+
 inline bool handle_local_scroll_event(id event) {
     if (!event || !g_ime.window || !g_ime.ns_window)
         return false;
@@ -3860,6 +3900,37 @@ inline bool handle_local_scroll_event(id event) {
         objc_send<bool>(event, sel_has_precise_scrolling_deltas());
     double scrolling_delta_y = objc_send<double>(event, sel_scrolling_delta_y());
     double scrolling_delta_x = objc_send<double>(event, sel_scrolling_delta_x());
+
+    // Stage-8 canvas-gesture path: when an on-screen `widget::canvas`
+    // has registered an `on_gesture` handler and the cursor sits
+    // inside its bounds, a precise (trackpad) two-finger drag becomes
+    // a Pan gesture, and Cmd+scroll becomes a ScrollZoom. Falls
+    // through to the layout-tree scroll path below otherwise.
+    if (has_precise_scrolling_deltas
+        && (scrolling_delta_x != 0.0 || scrolling_delta_y != 0.0)
+        && ::phenotype::detail::g_app.gesture_target_id != 0xFFFFFFFFu) {
+        float cursor_x = 0.0f, cursor_y = 0.0f;
+        if (glfw_cursor_position(cursor_x, cursor_y)) {
+            auto modifier_flags =
+                objc_send<unsigned long long>(event, sel_modifier_flags());
+            bool cmd_held = (modifier_flags & ns_event_modifier_command) != 0;
+            ::phenotype::GestureEvent gev{};
+            gev.focus_x = cursor_x;
+            gev.focus_y = cursor_y;
+            if (cmd_held) {
+                gev.kind = ::phenotype::GestureKind::ScrollZoom;
+                gev.dy   = static_cast<float>(scrolling_delta_y);
+                gev.pinch_scale = std::exp(
+                    static_cast<float>(scrolling_delta_y) * 0.005f);
+            } else {
+                gev.kind = ::phenotype::GestureKind::Pan;
+                gev.dx   = static_cast<float>(scrolling_delta_x);
+                gev.dy   = static_cast<float>(scrolling_delta_y);
+            }
+            if (::phenotype::native::detail::dispatch_gesture(gev))
+                return true;
+        }
+    }
     auto phase = objc_send<unsigned long long>(event, sel_phase());
     auto momentum_phase = objc_send<unsigned long long>(event, sel_momentum_phase());
     bool scroll_tracking_changed = sync_scroll_tracking_state(phase, momentum_phase);
@@ -3904,6 +3975,66 @@ inline bool handle_local_scroll_event(id event) {
         || scroll_tracking_changed
         || scroll_phase_active(phase)
         || scroll_phase_active(momentum_phase);
+}
+
+// Translate macOS trackpad pinch into a `Pinch` gesture on whichever
+// canvas registered an `on_gesture` handler this frame. NSEvent's
+// `magnification` is the additive delta (∼0.0 + per-event change), so
+// `1.0 + magnification` becomes the multiplicative scale factor we
+// expose in `GestureEvent::pinch_scale`.
+inline bool handle_local_magnify_event(id event) {
+    if (!event || !g_ime.window || !g_ime.ns_window)
+        return false;
+
+    auto event_window = objc_send<id>(event, sel_window());
+    if (event_window != g_ime.ns_window)
+        return false;
+
+    double magnification = objc_send<double>(event, sel_magnification());
+    if (magnification == 0.0)
+        return false;
+
+    float cursor_x = 0.0f, cursor_y = 0.0f;
+    if (!glfw_cursor_position(cursor_x, cursor_y))
+        return false;
+
+    ::phenotype::GestureEvent ev{};
+    ev.kind        = ::phenotype::GestureKind::Pinch;
+    ev.pinch_scale = 1.0f + static_cast<float>(magnification);
+    ev.focus_x     = cursor_x;
+    ev.focus_y     = cursor_y;
+    return ::phenotype::native::detail::dispatch_gesture(ev);
+}
+
+inline void install_local_magnify_monitor() {
+    if (g_ime.magnify_monitor)
+        return;
+
+    auto event_class = static_cast<Class>(objc_getClass("NSEvent"));
+    if (!event_class)
+        return;
+
+    g_ime.magnify_monitor = objc_send<id>(
+        class_as_id(event_class),
+        sel_add_local_monitor_for_events_matching_mask_handler(),
+        ns_event_mask_magnify,
+        ^id(id event) {
+            return handle_local_magnify_event(event)
+                ? static_cast<id>(nullptr)
+                : event;
+        });
+}
+
+inline void remove_local_magnify_monitor() {
+    if (!g_ime.magnify_monitor)
+        return;
+
+    if (auto event_class = static_cast<Class>(objc_getClass("NSEvent")))
+        objc_send<void>(
+            class_as_id(event_class),
+            sel_remove_monitor(),
+            g_ime.magnify_monitor);
+    g_ime.magnify_monitor = nullptr;
 }
 
 inline void install_local_scroll_monitor() {
@@ -3962,11 +4093,13 @@ inline void input_attach(native_surface_handle handle, void (*request_repaint)()
     ensure_editor_view();
     ensure_system_insertion_indicator();
     install_local_scroll_monitor();
+    install_local_magnify_monitor();
     ::phenotype::detail::clear_input_debug_caret_presentation();
     restore_content_view_first_responder();
 }
 
 inline void input_detach() {
+    remove_local_magnify_monitor();
     remove_local_scroll_monitor();
     discard_marked_text_from_system();
     clear_ime_state();

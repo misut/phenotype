@@ -3765,6 +3765,168 @@ inline void open_file(char const* filter_extensions,
 
 } // namespace dialog
 
+// ---- Stage 8: multi-pointer gesture state machine ------------------
+//
+// Single-touch drag becomes a `Pan` gesture; two simultaneous pointers
+// become a `Pinch` whose `pinch_scale` is the ratio of current to
+// previous inter-pointer distance and whose focal point is the
+// midpoint. The tracker rebases its "previous" position when the
+// pointer count changes (e.g. one finger lifts during a pinch) so
+// the next dispatch never sees a sudden phantom delta.
+//
+// Driven from `phenotype_android_dispatch_touch(pointer_id, action,
+// x, y)`. The consumer's NDK glue is expected to call us once per
+// distinct pointer movement — for ACTION_MOVE that means iterating
+// the GameActivityMotionEvent's `pointers[]` array, not just the
+// indexed pointer that triggered the event.
+
+namespace touch {
+
+constexpr int    kMaxPointers = 4;     // tablet edge case
+constexpr size_t kMaxSlots    = static_cast<size_t>(kMaxPointers);
+
+struct Pointer {
+    int   id    = -1;       // Android-supplied stable id; -1 = empty slot
+    float x     = 0.0f;
+    float y     = 0.0f;
+    float prev_x = 0.0f;
+    float prev_y = 0.0f;
+};
+
+inline Pointer g_pointers[kMaxSlots];
+inline int     g_active_count = 0;
+
+inline Pointer* find_slot(int pointer_id) {
+    for (auto& p : g_pointers)
+        if (p.id == pointer_id) return &p;
+    return nullptr;
+}
+
+inline Pointer* alloc_slot(int pointer_id) {
+    for (auto& p : g_pointers) {
+        if (p.id == -1) {
+            p.id = pointer_id;
+            return &p;
+        }
+    }
+    return nullptr;
+}
+
+inline void free_slot(Pointer* p) {
+    if (!p) return;
+    p->id = -1;
+}
+
+// Rebase every active pointer's previous-position to its current —
+// used when the pointer count changes so the next move event yields
+// a delta starting from the rebound state instead of jumping by the
+// position of the (now-removed) finger.
+inline void rebase_previous() {
+    for (auto& p : g_pointers) {
+        if (p.id != -1) {
+            p.prev_x = p.x;
+            p.prev_y = p.y;
+        }
+    }
+}
+
+inline float distance(Pointer const& a, Pointer const& b) {
+    float dx = a.x - b.x;
+    float dy = a.y - b.y;
+    float d2 = dx*dx + dy*dy;
+    // `__builtin_sqrtf` instead of `std::sqrt` because the latter
+    // crashed the Android NDK r30-beta1 clang-21 PCM emitter at <eof>
+    // — same shape of bug as the std::mutex / std::atomic restriction
+    // documented in the project's memory notes.
+    return d2 > 0.0f ? __builtin_sqrtf(d2) : 0.0f;
+}
+
+inline void dispatch_after_move() {
+    if (g_active_count == 1) {
+        // Single pointer drag → Pan gesture.
+        Pointer* p = nullptr;
+        for (auto& slot : g_pointers) {
+            if (slot.id != -1) { p = &slot; break; }
+        }
+        if (!p) return;
+        float dx = p->x - p->prev_x;
+        float dy = p->y - p->prev_y;
+        if (dx == 0.0f && dy == 0.0f) return;
+        ::phenotype::GestureEvent ev{};
+        ev.kind    = ::phenotype::GestureKind::Pan;
+        ev.dx      = dx;
+        ev.dy      = dy;
+        ev.focus_x = p->x;
+        ev.focus_y = p->y;
+        ::phenotype::native::detail::dispatch_gesture(ev);
+        p->prev_x = p->x;
+        p->prev_y = p->y;
+    } else if (g_active_count >= 2) {
+        // Two-finger pinch → Pinch gesture (scale + midpoint).
+        Pointer *a = nullptr, *b = nullptr;
+        for (auto& slot : g_pointers) {
+            if (slot.id == -1) continue;
+            if (!a) { a = &slot; continue; }
+            if (!b) { b = &slot; break; }
+        }
+        if (!a || !b) return;
+        Pointer prev_a{*a}, prev_b{*b};
+        prev_a.x = a->prev_x; prev_a.y = a->prev_y;
+        prev_b.x = b->prev_x; prev_b.y = b->prev_y;
+        float prev_d = distance(prev_a, prev_b);
+        float cur_d  = distance(*a, *b);
+        if (prev_d > 0.0f && cur_d > 0.0f) {
+            ::phenotype::GestureEvent ev{};
+            ev.kind        = ::phenotype::GestureKind::Pinch;
+            ev.pinch_scale = cur_d / prev_d;
+            ev.focus_x     = (a->x + b->x) * 0.5f;
+            ev.focus_y     = (a->y + b->y) * 0.5f;
+            ::phenotype::native::detail::dispatch_gesture(ev);
+        }
+        a->prev_x = a->x; a->prev_y = a->y;
+        b->prev_x = b->x; b->prev_y = b->y;
+    }
+}
+
+// Action codes match the consumer-facing C ABI exactly:
+//   0 = DOWN / POINTER_DOWN
+//   1 = MOVE
+//   2 = UP / POINTER_UP / CANCEL
+inline void on_touch_event(int pointer_id, int action, float x, float y) {
+    switch (action) {
+    case 0: {  // DOWN
+        if (auto* slot = alloc_slot(pointer_id)) {
+            slot->x = x;       slot->y = y;
+            slot->prev_x = x;  slot->prev_y = y;
+            ++g_active_count;
+            rebase_previous();
+        }
+        break;
+    }
+    case 1: {  // MOVE
+        if (auto* slot = find_slot(pointer_id)) {
+            slot->x = x;
+            slot->y = y;
+        }
+        dispatch_after_move();
+        break;
+    }
+    case 2: {  // UP / CANCEL
+        if (auto* slot = find_slot(pointer_id)) {
+            free_slot(slot);
+            --g_active_count;
+            if (g_active_count < 0) g_active_count = 0;
+            rebase_previous();
+        }
+        break;
+    }
+    default:
+        break;
+    }
+}
+
+} // namespace touch
+
 inline platform_api build_android_platform() {
     auto api = make_stub_platform(
         "android",
@@ -4197,6 +4359,19 @@ void phenotype_android_dispatch_char(unsigned int codepoint) {
     namespace d = phenotype::native::detail;
     if (codepoint == 0) return;
     d::dispatch_char(codepoint);
+}
+
+__attribute__((visibility("default")))
+void phenotype_android_dispatch_touch(int pointer_id, int action,
+                                      float x, float y) {
+    // Stage-8 multi-pointer entry. The consumer's NDK glue is expected
+    // to call this once per distinct pointer movement — for ACTION_MOVE
+    // that means iterating GameActivityMotionEvent::pointers[] rather
+    // than dispatching only the indexed pointer that triggered the
+    // event. Existing single-touch consumers can keep calling
+    // `phenotype_android_dispatch_pointer`; both paths coexist.
+    namespace d = phenotype::native::detail;
+    d::touch::on_touch_event(pointer_id, action, x, y);
 }
 
 __attribute__((visibility("default")))

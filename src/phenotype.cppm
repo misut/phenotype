@@ -478,12 +478,19 @@ inline void image(str url, float width, float height) {
 // expensive per-frame paint should pre-compute geometry in update()
 // and capture by reference into the lambda.
 inline void canvas(float width, float height,
-                   std::function<void(Painter&)> paint_fn) {
+                   std::function<void(Painter&)> paint_fn,
+                   std::function<void(GestureEvent const&)> on_gesture = {}) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.max_width = width;
     node.style.fixed_height = height;
     node.paint_fn = std::move(paint_fn);
+    if (on_gesture) {
+        auto gid = static_cast<unsigned int>(
+            detail::g_app.gesture_callbacks.size());
+        detail::g_app.gesture_callbacks.push_back(std::move(on_gesture));
+        node.gesture_callback_id = gid;
+    }
     detail::attach_to_scope(h);
 }
 
@@ -542,6 +549,8 @@ void run(Host& host, View view, Update update) {
         app.arena.reset();
         app.callbacks.clear();
         app.callback_roles.clear();
+        app.gesture_callbacks.clear();
+        app.gesture_target_id = 0xFFFFFFFFu;
         app.input_handlers.clear();
         app.input_nodes.clear();
 
@@ -652,6 +661,8 @@ void run(View view, Update update) {
         app.arena.reset();
         app.callbacks.clear();
         app.callback_roles.clear();
+        app.gesture_callbacks.clear();
+        app.gesture_target_id = 0xFFFFFFFFu;
         app.input_handlers.clear();
         app.input_nodes.clear();
 
