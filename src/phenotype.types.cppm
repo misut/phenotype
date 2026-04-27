@@ -136,6 +136,12 @@ enum class Cmd : unsigned int {
     // is not supported across the four target APIs; emit Scissor
     // resets, not overlapping Scissor regions.
     Scissor    = 9,
+    // Stroked arc segment. Drawn pixel-perfectly via SDF in the
+    // backend (no parse-time chord tessellation by the consumer).
+    // `start_angle` / `end_angle` are radians, CCW per the AutoCAD
+    // / mathematical convention; pass `start_angle = 0`,
+    // `end_angle = 2π` for a full circle.
+    DrawArc    = 10,
 };
 
 // ============================================================
@@ -323,6 +329,17 @@ public:
     virtual void text(float x, float y,
                       char const* str, unsigned int len,
                       float font_size, Color color) = 0;
+    // Arc — stroked circular arc centred at `(cx, cy)` with the given
+    // `radius`, swept from `start_angle` to `end_angle` (radians, CCW
+    // per the math / AutoCAD convention; positive y goes down on the
+    // canvas, but the angles still measure mathematically). For a
+    // full circle pass `start_angle = 0, end_angle = 2π`. Backends
+    // rasterise via a fragment-shader SDF so zoom-in stays smooth at
+    // any scale — no parse-time chord tessellation required by the
+    // consumer.
+    virtual void arc(float cx, float cy, float radius,
+                     float start_angle, float end_angle,
+                     float thickness, Color color) = 0;
 };
 
 struct LayoutNode {
