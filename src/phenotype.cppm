@@ -227,7 +227,7 @@ inline void cell(str content,
     node.text_color = header ? t.muted : t.foreground;
     node.background = header ? t.code_bg : t.surface;
     node.border_color = t.border;
-    node.border_width = 1;
+    node.border_width = 0.5f;
     node.style.padding[0] = 0;
     node.style.padding[1] = t.space_xs;
     node.style.padding[2] = 0;

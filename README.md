@@ -214,8 +214,17 @@ exon run
 
 `examples/native` is the desktop widget showcase — a non-trivial composition
 of every shared widget rendered via the GLFW shell + Metal (macOS) or
-Direct3D 12 (Windows) backend. The 7GUIs ladder will land additional
-examples under `examples/seven_guis/` as the widget set grows.
+Direct3D 12 (Windows) backend.
+
+```bash
+cd examples/workbook
+exon run
+```
+
+`examples/workbook` is a product-style revenue forecast workbook. It combines
+fixed-grid layout, keyed cells, text input, formula validation, dependency
+recompute, selected-cell editing, audit state, and a canvas trend chart in one
+runnable native example.
 
 As an exon dependency:
 

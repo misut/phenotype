@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <string>
@@ -379,6 +380,49 @@ void test_image_widget_layout_and_emit() {
     std::puts("PASS: widget::image lays out and emits DrawImage");
 }
 
+void test_grid_cell_text_is_vertically_centered() {
+    detail::g_app.arena.reset();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::grid({80.0f}, 40.0f, [] {
+        widget::cell("A", true, 80.0f, 40.0f);
+    }, 0.0f);
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 200.0f);
+    auto const& grid = detail::node_at(detail::node_at(root_h).children[0]);
+    auto const& cell = detail::node_at(grid.children[0]);
+    assert(cell.height == 40.0f);
+
+    CMD_LEN = 0;
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    bool found_text = false;
+    float text_y = 0.0f;
+    for (unsigned int i = 0; i + 28 <= CMD_LEN;) {
+        unsigned int op;
+        std::memcpy(&op, &CMD_BUF[i], 4);
+        if (op == static_cast<unsigned int>(Cmd::DrawText)) {
+            std::memcpy(&text_y, &CMD_BUF[i + 8], 4);
+            found_text = true;
+            break;
+        }
+        i += 4;
+    }
+    assert(found_text);
+
+    auto line_height = cell.font_size * detail::g_app.theme.line_height_ratio;
+    auto expected_y = (cell.height - line_height) / 2.0f;
+    assert(text_y > 0.0f);
+    assert(std::fabs(text_y - expected_y) < 0.01f);
+
+    std::puts("PASS: grid cell text is vertically centered");
+}
+
 void test_canvas_widget_invokes_painter() {
     detail::g_app.arena.reset();
 
@@ -430,6 +474,64 @@ void test_canvas_widget_invokes_painter() {
     assert(found_text_payload);
 
     std::puts("PASS: widget::canvas invokes painter and emits DrawLine + DrawText");
+}
+
+void test_canvas_bypasses_paint_cache_after_diff() {
+    auto make_canvas_tree = [](int& paint_calls, Color color, bool paint) {
+        auto root_h = detail::alloc_node();
+        detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+        Scope scope(root_h);
+        Scope::set_current(&scope);
+        widget::canvas(200.0f, 100.0f, [&paint_calls, color](Painter& p) {
+            ++paint_calls;
+            p.line(10.0f, 20.0f, 60.0f, 70.0f, 1.0f, color);
+        });
+        Scope::set_current(nullptr);
+
+        if (paint) {
+            LAYOUT_NODE(root_h, 400.0f);
+            CMD_LEN = 0;
+            PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+            std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, CMD_LEN);
+            detail::g_app.prev_cmd_len = CMD_LEN;
+        }
+        return root_h;
+    };
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.prev_cmd_len = 0;
+
+    int old_calls = 0;
+    auto old_root = make_canvas_tree(old_calls, Color{255, 0, 0, 255}, true);
+    assert(old_calls == 1);
+    assert(detail::node_at(old_root).paint_dynamic);
+    assert(!detail::node_at(old_root).paint_valid);
+
+    detail::g_app.prev_root = old_root;
+    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+
+    int new_calls = 0;
+    auto new_root = make_canvas_tree(new_calls, Color{0, 0, 255, 255}, false);
+    auto matched = detail::diff_and_copy_layout(
+        detail::g_app.prev_root,
+        new_root,
+        detail::g_app.prev_arena,
+        detail::g_app.arena);
+    assert(matched);
+
+    LAYOUT_NODE(new_root, 400.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(new_root, 0, 0, 0, 600.0f);
+    assert(new_calls == 1);
+    assert(detail::node_at(new_root).paint_dynamic);
+    assert(!detail::node_at(new_root).paint_valid);
+
+    std::puts("PASS: widget::canvas bypasses paint cache after diff");
 }
 
 void test_checkbox_and_radio_widgets() {
@@ -552,6 +654,50 @@ void test_frame_skip_on_identical_cmd_buffer() {
     assert(metrics::inst::frames_skipped.total() == initial_skips + 2);
 
     std::puts("PASS: frame skip when cmd buffer is identical");
+}
+
+void test_paint_only_props_invalidate_diff_cache() {
+    auto make_radio_tree = [](bool selected, bool paint) {
+        auto root_h = detail::alloc_node();
+        detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+        Scope scope(root_h);
+        Scope::set_current(&scope);
+        widget::radio<int>("Base", selected, 1);
+        Scope::set_current(nullptr);
+        if (paint) {
+            LAYOUT_NODE(root_h, 400.0f);
+            PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+        }
+        return root_h;
+    };
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+    auto old_root = make_radio_tree(true, true);
+
+    detail::g_app.prev_root = old_root;
+    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+    auto new_root = make_radio_tree(false, false);
+
+    auto matched = detail::diff_and_copy_layout(
+        detail::g_app.prev_root,
+        new_root,
+        detail::g_app.prev_arena,
+        detail::g_app.arena);
+
+    assert(!matched);
+    auto const& radio_row = detail::node_at(detail::node_at(new_root).children[0]);
+    auto const& radio_box = detail::node_at(radio_row.children[0]);
+    assert(radio_box.decoration == Decoration::None);
+    assert(!radio_box.layout_valid);
+    assert(!radio_box.paint_valid);
+
+    std::puts("PASS: paint-only prop changes invalidate diff/paint cache");
 }
 
 void test_row_cross_align_center_default() {
@@ -1151,9 +1297,12 @@ int main() {
     test_set_theme_updates_and_invalidates_cache();
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();
+    test_grid_cell_text_is_vertically_centered();
     test_canvas_widget_invokes_painter();
+    test_canvas_bypasses_paint_cache_after_diff();
     test_checkbox_and_radio_widgets();
     test_frame_skip_on_identical_cmd_buffer();
+    test_paint_only_props_invalidate_diff_cache();
     test_row_cross_align_center_default();
     test_theme_json_roundtrip();
     test_theme_json_partial_keeps_defaults();
