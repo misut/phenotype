@@ -3862,7 +3862,15 @@ inline void dispatch_after_move() {
         p->prev_x = p->x;
         p->prev_y = p->y;
     } else if (g_active_count >= 2) {
-        // Two-finger pinch → Pinch gesture (scale + midpoint).
+        // Two-finger gesture: emit a midpoint Pan and (only when the
+        // spread ratio escapes a small dead-zone) a Pinch. Dispatching
+        // both means a steady two-finger drag pans naturally even
+        // though sub-pixel finger jitter makes `cur_d / prev_d`
+        // fluctuate around 1.0 — the Pan tracks the midpoint and the
+        // Pinch ratio sits inside the dead-zone and is suppressed.
+        // Without the dead-zone, that jitter compounded an unwanted
+        // slow zoom on every MOVE during a constant-spread drag —
+        // surfaced on the Galaxy S25 Ultra real-device test.
         Pointer *a = nullptr, *b = nullptr;
         for (auto& slot : g_pointers) {
             if (slot.id == -1) continue;
@@ -3870,19 +3878,48 @@ inline void dispatch_after_move() {
             if (!b) { b = &slot; break; }
         }
         if (!a || !b) return;
-        Pointer prev_a{*a}, prev_b{*b};
-        prev_a.x = a->prev_x; prev_a.y = a->prev_y;
-        prev_b.x = b->prev_x; prev_b.y = b->prev_y;
-        float prev_d = distance(prev_a, prev_b);
-        float cur_d  = distance(*a, *b);
-        if (prev_d > 0.0f && cur_d > 0.0f) {
-            ::phenotype::GestureEvent ev{};
-            ev.kind        = ::phenotype::GestureKind::Pinch;
-            ev.pinch_scale = cur_d / prev_d;
-            ev.focus_x     = (a->x + b->x) * 0.5f;
-            ev.focus_y     = (a->y + b->y) * 0.5f;
-            ::phenotype::native::detail::dispatch_gesture(ev);
+
+        float prev_mid_x = (a->prev_x + b->prev_x) * 0.5f;
+        float prev_mid_y = (a->prev_y + b->prev_y) * 0.5f;
+        float cur_mid_x  = (a->x + b->x) * 0.5f;
+        float cur_mid_y  = (a->y + b->y) * 0.5f;
+        float pan_dx = cur_mid_x - prev_mid_x;
+        float pan_dy = cur_mid_y - prev_mid_y;
+
+        if (pan_dx != 0.0f || pan_dy != 0.0f) {
+            ::phenotype::GestureEvent pev{};
+            pev.kind    = ::phenotype::GestureKind::Pan;
+            pev.dx      = pan_dx;
+            pev.dy      = pan_dy;
+            pev.focus_x = cur_mid_x;
+            pev.focus_y = cur_mid_y;
+            ::phenotype::native::detail::dispatch_gesture(pev);
         }
+
+        auto dist_xy = [](float ax, float ay, float bx, float by) {
+            float dx = ax - bx;
+            float dy = ay - by;
+            float d2 = dx*dx + dy*dy;
+            return d2 > 0.0f ? __builtin_sqrtf(d2) : 0.0f;
+        };
+        float prev_d = dist_xy(a->prev_x, a->prev_y, b->prev_x, b->prev_y);
+        float cur_d  = dist_xy(a->x,      a->y,      b->x,      b->y);
+        if (prev_d > 0.0f && cur_d > 0.0f) {
+            float ratio = cur_d / prev_d;
+            // ±1% — a deliberate pinch easily clears this; typical
+            // sub-pixel finger jitter sits well below it.
+            constexpr float kPinchDeadZone = 0.01f;
+            float diff = ratio > 1.0f ? ratio - 1.0f : 1.0f - ratio;
+            if (diff > kPinchDeadZone) {
+                ::phenotype::GestureEvent zev{};
+                zev.kind        = ::phenotype::GestureKind::Pinch;
+                zev.pinch_scale = ratio;
+                zev.focus_x     = cur_mid_x;
+                zev.focus_y     = cur_mid_y;
+                ::phenotype::native::detail::dispatch_gesture(zev);
+            }
+        }
+
         a->prev_x = a->x; a->prev_y = a->y;
         b->prev_x = b->x; b->prev_y = b->y;
     }
