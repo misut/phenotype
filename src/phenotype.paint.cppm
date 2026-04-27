@@ -582,17 +582,29 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                       char const* str, unsigned int len,
                       float font_size, Color color) override {
                 // Coarse bbox: assume each character is ~0.6×font_size
-                // wide. Drops runs whose advance box is completely off
-                // the canvas; partial overlap still emits.
+                // wide. Strict containment check — emit only when the
+                // approximated bbox lies entirely inside the canvas.
+                // Lenient overlap testing was visibly broken: a run
+                // whose top edge sat above the canvas (panned-up
+                // case) still cleared the "fully outside" gate and
+                // rasterised glyphs above the canvas border. Backends
+                // would clip pixel-perfectly via real `setScissorRect`
+                // / `vkCmdSetScissor`, but those calls are still on
+                // the deferred TODO list, so for now we err on the
+                // side of dropping text the moment any of its edges
+                // cross the canvas boundary. Once the backend-side
+                // scissor lands, this check can relax back to
+                // "any overlap" — real per-pixel clipping handles
+                // the partials.
                 float ax = origin_x + x;
                 float ay = origin_y + y;
                 float approx_w = font_size *
                                  static_cast<float>(len) * 0.6f;
                 float approx_h = font_size;
-                if (ax >= clip_x1
-                    || ax + approx_w <= clip_x0
-                    || ay >= clip_y1
-                    || ay + approx_h <= clip_y0) {
+                if (ax           < clip_x0
+                    || ay        < clip_y0
+                    || ax + approx_w > clip_x1
+                    || ay + approx_h > clip_y1) {
                     return;
                 }
                 emit_draw_text(r,
