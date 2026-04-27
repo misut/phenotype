@@ -66,6 +66,17 @@ struct ColorInstanceGPU {
 static_assert(sizeof(ColorInstanceGPU) == 48,
               "ColorInstance stride must match the GLSL SSBO layout");
 
+// ArcInstance layout — mirrored byte-for-byte with macOS
+// phenotype.native.macos.cppm's ArcInstanceGPU (stride 48). The GLSL
+// `struct ArcInstance` in arc.vert / arc.frag reads the same layout.
+struct ArcInstanceGPU {
+    float center_radius_thickness[4];   // cx, cy, radius, thickness
+    float angles[4];                    // start, end, _, _
+    float color[4];                     // linear RGBA, straight alpha
+};
+static_assert(sizeof(ArcInstanceGPU) == 48,
+              "ArcInstance stride must match the GLSL SSBO layout");
+
 // TextInstance layout mirrored byte-for-byte with macOS
 // phenotype.native.macos.cppm's TextInstanceGPU (stride 48). The GLSL
 // `struct TextInstance` in text.vert reads the same layout.
@@ -100,11 +111,13 @@ inline constexpr std::size_t INITIAL_INSTANCE_CAPACITY = 256;
 struct ScissorBatch {
     float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
     std::vector<ColorInstanceGPU> colors;
+    std::vector<ArcInstanceGPU>   arcs;
     std::vector<ImageInstanceGPU> images;
-    std::vector<TextInstanceGPU> texts;
+    std::vector<TextInstanceGPU>  texts;
     std::uint32_t color_first = 0;
+    std::uint32_t arc_first   = 0;
     std::uint32_t image_first = 0;
-    std::uint32_t text_first = 0;
+    std::uint32_t text_first  = 0;
 };
 
 // Per-frame CPU-side decode scratch. `has_clear` tracks whether the
@@ -119,7 +132,8 @@ struct FrameScratch {
     // by finalize_batches() — direct decode-time pushes go to per-batch
     // locals above.
     std::vector<ColorInstanceGPU> color_instances;
-    std::vector<TextInstanceGPU> text_instances;
+    std::vector<ArcInstanceGPU>   arc_instances;
+    std::vector<TextInstanceGPU>  text_instances;
     std::vector<ImageInstanceGPU> image_instances;
 
     std::vector<::phenotype::native::TextEntry> text_entries;
@@ -135,7 +149,8 @@ struct FrameScratch {
 inline void open_scissor_batch(FrameScratch& s,
                                float x, float y, float w, float h) {
     auto& cur = s.batches.back();
-    if (cur.colors.empty() && cur.images.empty() && cur.texts.empty()) {
+    if (cur.colors.empty() && cur.arcs.empty()
+        && cur.images.empty() && cur.texts.empty()) {
         cur.x = x; cur.y = y; cur.w = w; cur.h = h;
         return;
     }
@@ -146,14 +161,18 @@ inline void open_scissor_batch(FrameScratch& s,
 
 inline void finalize_batches(FrameScratch& s) {
     s.color_instances.clear();
+    s.arc_instances.clear();
     s.image_instances.clear();
     s.text_instances.clear();
     for (auto& b : s.batches) {
         b.color_first = static_cast<std::uint32_t>(s.color_instances.size());
+        b.arc_first   = static_cast<std::uint32_t>(s.arc_instances.size());
         b.image_first = static_cast<std::uint32_t>(s.image_instances.size());
         b.text_first  = static_cast<std::uint32_t>(s.text_instances.size());
         s.color_instances.insert(s.color_instances.end(),
                                  b.colors.begin(), b.colors.end());
+        s.arc_instances.insert(s.arc_instances.end(),
+                               b.arcs.begin(), b.arcs.end());
         s.image_instances.insert(s.image_instances.end(),
                                  b.images.begin(), b.images.end());
         s.text_instances.insert(s.text_instances.end(),
@@ -999,6 +1018,20 @@ struct android_renderer {
     void* instance_mapped;
     std::size_t instance_capacity; // in ColorInstanceGPU count
 
+    // SDF arc pipeline (Slab 2.b). Re-uses color_descriptor_set_layout
+    // and color_pipeline_layout (same UBO + SSBO bindings) but binds a
+    // separate SSBO sized for ArcInstanceGPU. The pipeline differs from
+    // color only in shader modules — both blend, viewport, scissor, and
+    // render-pass settings are identical.
+    VkPipeline arc_pipeline;
+    VkDescriptorPool arc_descriptor_pool;
+    VkDescriptorSet arc_descriptor_set;
+
+    VkBuffer arc_instance_buffer;
+    VkDeviceMemory arc_instance_memory;
+    void* arc_instance_mapped;
+    std::size_t arc_instance_capacity; // in ArcInstanceGPU count
+
     // Stage 4 text pipeline. Atlas image + view grow on demand;
     // everything else is allocated once per device.
     VkDescriptorSetLayout text_descriptor_set_layout;
@@ -1215,6 +1248,62 @@ inline bool ensure_instance_capacity(std::size_t required) {
     return true;
 }
 
+// Mirror of write_color_descriptor_set for the arc pipeline's separate
+// SSBO. Same UBO at binding 0 (shared with color), arc instance buffer
+// at binding 1.
+inline void write_arc_descriptor_set() {
+    if (g_renderer.arc_descriptor_set == VK_NULL_HANDLE) return;
+    VkDescriptorBufferInfo ubo{};
+    ubo.buffer = g_renderer.uniform_buffer;
+    ubo.offset = 0;
+    ubo.range = sizeof(ColorUniforms);
+
+    VkDescriptorBufferInfo ssbo{};
+    ssbo.buffer = g_renderer.arc_instance_buffer;
+    ssbo.offset = 0;
+    ssbo.range = VK_WHOLE_SIZE;
+
+    VkWriteDescriptorSet writes[2]{};
+    writes[0].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[0].dstSet = g_renderer.arc_descriptor_set;
+    writes[0].dstBinding = 0;
+    writes[0].descriptorCount = 1;
+    writes[0].descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    writes[0].pBufferInfo = &ubo;
+
+    writes[1].sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    writes[1].dstSet = g_renderer.arc_descriptor_set;
+    writes[1].dstBinding = 1;
+    writes[1].descriptorCount = 1;
+    writes[1].descriptorType = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    writes[1].pBufferInfo = &ssbo;
+
+    vkUpdateDescriptorSets(g_renderer.device, 2, writes, 0, nullptr);
+}
+
+// Mirror of ensure_instance_capacity for ArcInstanceGPU.
+inline bool ensure_arc_instance_capacity(std::size_t required) {
+    if (required <= g_renderer.arc_instance_capacity) return true;
+    std::size_t cap = g_renderer.arc_instance_capacity == 0
+                        ? INITIAL_INSTANCE_CAPACITY
+                        : g_renderer.arc_instance_capacity;
+    while (cap < required) cap *= 2;
+
+    destroy_host_buffer(g_renderer.arc_instance_buffer,
+                        g_renderer.arc_instance_memory,
+                        g_renderer.arc_instance_mapped);
+
+    if (!create_host_buffer(cap * sizeof(ArcInstanceGPU),
+                            VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                            g_renderer.arc_instance_buffer,
+                            g_renderer.arc_instance_memory,
+                            g_renderer.arc_instance_mapped))
+        return false;
+    g_renderer.arc_instance_capacity = cap;
+    write_arc_descriptor_set();
+    return true;
+}
+
 inline VkShaderModule create_shader_module(uint32_t const* code,
                                            std::size_t size_bytes) {
     VkShaderModuleCreateInfo ci{};
@@ -1426,12 +1515,138 @@ inline bool create_descriptor_pool_and_set() {
     return true;
 }
 
+inline bool create_arc_pipeline() {
+    if (g_renderer.arc_pipeline != VK_NULL_HANDLE) return true;
+
+    auto vs = create_shader_module(shaders::SPIRV_ARC_VS,
+                                   sizeof(shaders::SPIRV_ARC_VS));
+    auto fs = create_shader_module(shaders::SPIRV_ARC_FS,
+                                   sizeof(shaders::SPIRV_ARC_FS));
+    if (vs == VK_NULL_HANDLE || fs == VK_NULL_HANDLE) return false;
+
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vs;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = fs;
+    stages[1].pName = "main";
+
+    VkPipelineVertexInputStateCreateInfo vi{};
+    vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+
+    VkPipelineInputAssemblyStateCreateInfo ia{};
+    ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkPipelineViewportStateCreateInfo vp{};
+    vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    vp.viewportCount = 1;
+    vp.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rs{};
+    rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rs.polygonMode = VK_POLYGON_MODE_FILL;
+    rs.cullMode = VK_CULL_MODE_NONE;
+    rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rs.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo ms{};
+    ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState cba{};
+    cba.blendEnable = VK_TRUE;
+    cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.colorBlendOp = VK_BLEND_OP_ADD;
+    cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.alphaBlendOp = VK_BLEND_OP_ADD;
+    cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                       | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo cb{};
+    cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    cb.attachmentCount = 1;
+    cb.pAttachments = &cba;
+
+    VkDynamicState dyn[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo ds{};
+    ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    ds.dynamicStateCount = 2;
+    ds.pDynamicStates = dyn;
+
+    VkGraphicsPipelineCreateInfo gci{};
+    gci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    gci.stageCount = 2;
+    gci.pStages = stages;
+    gci.pVertexInputState = &vi;
+    gci.pInputAssemblyState = &ia;
+    gci.pViewportState = &vp;
+    gci.pRasterizationState = &rs;
+    gci.pMultisampleState = &ms;
+    gci.pColorBlendState = &cb;
+    gci.pDynamicState = &ds;
+    // Re-use the color descriptor set layout + pipeline layout — same
+    // UBO-binding-0 + SSBO-binding-1 signature. Only the SSBO contents
+    // differ (ArcInstanceGPU vs ColorInstanceGPU), and that's bound at
+    // descriptor-set time, not at pipeline-layout time.
+    gci.layout = g_renderer.color_pipeline_layout;
+    gci.renderPass = g_renderer.render_pass;
+    gci.subpass = 0;
+
+    bool ok = vk_ok(vkCreateGraphicsPipelines(
+                        g_renderer.device, VK_NULL_HANDLE, 1, &gci, nullptr,
+                        &g_renderer.arc_pipeline),
+                   "vkCreateGraphicsPipelines (arc)");
+
+    vkDestroyShaderModule(g_renderer.device, vs, nullptr);
+    vkDestroyShaderModule(g_renderer.device, fs, nullptr);
+    return ok;
+}
+
+inline bool create_arc_descriptor_pool_and_set() {
+    if (g_renderer.arc_descriptor_set != VK_NULL_HANDLE) return true;
+
+    VkDescriptorPoolSize sizes[2]{};
+    sizes[0].type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    sizes[0].descriptorCount = 1;
+    sizes[1].type = VK_DESCRIPTOR_TYPE_STORAGE_BUFFER;
+    sizes[1].descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo pci{};
+    pci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pci.maxSets = 1;
+    pci.poolSizeCount = 2;
+    pci.pPoolSizes = sizes;
+    if (!vk_ok(vkCreateDescriptorPool(g_renderer.device, &pci, nullptr,
+                                      &g_renderer.arc_descriptor_pool),
+              "vkCreateDescriptorPool (arc)"))
+        return false;
+
+    VkDescriptorSetAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    ai.descriptorPool = g_renderer.arc_descriptor_pool;
+    ai.descriptorSetCount = 1;
+    ai.pSetLayouts = &g_renderer.color_descriptor_set_layout;
+    if (!vk_ok(vkAllocateDescriptorSets(g_renderer.device, &ai,
+                                        &g_renderer.arc_descriptor_set),
+              "vkAllocateDescriptorSets (arc)"))
+        return false;
+    write_arc_descriptor_set();
+    return true;
+}
+
 inline bool create_color_resources() {
     // Idempotent: first swapchain creation does the full build; later
     // swapchain recreates reuse render_pass / pipeline / buffers and
     // only rebuild the image views + framebuffers.
     if (!create_render_pass()) return false;
     if (!create_color_pipeline()) return false;
+    if (!create_arc_pipeline()) return false;
 
     if (g_renderer.uniform_buffer == VK_NULL_HANDLE) {
         if (!create_host_buffer(sizeof(ColorUniforms),
@@ -1451,7 +1666,18 @@ inline bool create_color_resources() {
             return false;
         g_renderer.instance_capacity = INITIAL_INSTANCE_CAPACITY;
     }
+    if (g_renderer.arc_instance_buffer == VK_NULL_HANDLE) {
+        if (!create_host_buffer(
+                INITIAL_INSTANCE_CAPACITY * sizeof(ArcInstanceGPU),
+                VK_BUFFER_USAGE_STORAGE_BUFFER_BIT,
+                g_renderer.arc_instance_buffer,
+                g_renderer.arc_instance_memory,
+                g_renderer.arc_instance_mapped))
+            return false;
+        g_renderer.arc_instance_capacity = INITIAL_INSTANCE_CAPACITY;
+    }
     if (!create_descriptor_pool_and_set()) return false;
+    if (!create_arc_descriptor_pool_and_set()) return false;
     return true;
 }
 
@@ -3025,6 +3251,17 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 }
             } else if constexpr (std::same_as<T, ::phenotype::ScissorCmd>) {
                 open_scissor_batch(out, c.x, c.y, c.w, c.h);
+            } else if constexpr (std::same_as<T, ::phenotype::DrawArcCmd>) {
+                if (c.radius <= 0.0f) return;
+                ArcInstanceGPU inst{};
+                inst.center_radius_thickness[0] = c.cx;
+                inst.center_radius_thickness[1] = c.cy;
+                inst.center_radius_thickness[2] = c.radius;
+                inst.center_radius_thickness[3] = c.thickness;
+                inst.angles[0] = c.start_angle;
+                inst.angles[1] = c.end_angle;
+                normalize_color(c.color, inst.color);
+                out.batches.back().arcs.push_back(inst);
             }
             // HitRegion is ignored before Stage 6.
         }, cmd);
@@ -3117,6 +3354,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                     scratch.color_instances.data(),
                     scratch.color_instances.size() * sizeof(ColorInstanceGPU));
     }
+    if (!scratch.arc_instances.empty()) {
+        if (!ensure_arc_instance_capacity(scratch.arc_instances.size())) return;
+        std::memcpy(g_renderer.arc_instance_mapped,
+                    scratch.arc_instances.data(),
+                    scratch.arc_instances.size() * sizeof(ArcInstanceGPU));
+    }
 
     bool have_text = !scratch.text_instances.empty()
                    && !atlas.pixels.empty()
@@ -3206,11 +3449,14 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     for (auto const& batch : scratch.batches) {
         auto const batch_color_count =
             static_cast<std::uint32_t>(batch.colors.size());
+        auto const batch_arc_count =
+            static_cast<std::uint32_t>(batch.arcs.size());
         auto const batch_image_count =
             static_cast<std::uint32_t>(batch.images.size());
         auto const batch_text_count =
             static_cast<std::uint32_t>(batch.texts.size());
-        if (batch_color_count + batch_image_count + batch_text_count == 0)
+        if (batch_color_count + batch_arc_count
+            + batch_image_count + batch_text_count == 0)
             continue;
         VkRect2D scissor =
             compute_vk_scissor(batch, g_renderer.swapchain_extent);
@@ -3229,6 +3475,18 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                                     0, nullptr);
             vkCmdDraw(g_renderer.command_buffer, 6,
                       batch_color_count, 0, batch.color_first);
+        }
+        if (batch_arc_count > 0) {
+            vkCmdBindPipeline(g_renderer.command_buffer,
+                              VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              g_renderer.arc_pipeline);
+            vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    g_renderer.color_pipeline_layout,
+                                    0, 1, &g_renderer.arc_descriptor_set,
+                                    0, nullptr);
+            vkCmdDraw(g_renderer.command_buffer, 6,
+                      batch_arc_count, 0, batch.arc_first);
         }
         if (have_text && batch_text_count > 0) {
             vkCmdBindPipeline(g_renderer.command_buffer,
@@ -3292,6 +3550,20 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 }
 
 inline void destroy_color_resources() {
+    if (g_renderer.arc_descriptor_pool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(g_renderer.device,
+                                g_renderer.arc_descriptor_pool, nullptr);
+        g_renderer.arc_descriptor_pool = VK_NULL_HANDLE;
+        g_renderer.arc_descriptor_set = VK_NULL_HANDLE;
+    }
+    destroy_host_buffer(g_renderer.arc_instance_buffer,
+                        g_renderer.arc_instance_memory,
+                        g_renderer.arc_instance_mapped);
+    g_renderer.arc_instance_capacity = 0;
+    if (g_renderer.arc_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(g_renderer.device, g_renderer.arc_pipeline, nullptr);
+        g_renderer.arc_pipeline = VK_NULL_HANDLE;
+    }
     if (g_renderer.color_descriptor_pool != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(g_renderer.device,
                                 g_renderer.color_descriptor_pool, nullptr);
@@ -3900,6 +4172,28 @@ struct Pointer {
 inline Pointer g_pointers[kMaxSlots];
 inline int     g_active_count = 0;
 
+// Frame-coalesce dispatch_after_move. The Android driver hands us
+// each pointer in a multi-pointer MotionEvent with a separate
+// `phenotype_android_dispatch_touch` call; running the gesture
+// dispatcher per call meant view rebuilds fired N times per
+// MotionEvent (N pointers × 1 dispatch_after_move × up to 2
+// gesture events each). On a Galaxy S25 Ultra two-finger pinch
+// the resulting ~4 view-rebuilds per frame visibly lagged the
+// CPU side. With this flag, on_touch_event MOVE only updates
+// pointer positions; the actual gesture dispatch happens once
+// per frame from `phenotype_android_draw_frame` via
+// `process_pending_touch_dispatch`.
+inline bool g_touch_dispatch_pending = false;
+
+// Two-finger pinch baseline distance. Persists across MOVE events so a
+// slow steady pinch accumulates spread ratio across frames instead of
+// measuring each frame's sub-pixel delta against the dead-zone (which
+// reads as a "stepped" zoom on the device — thanks Galaxy S25 Ultra).
+// Reset to 0 whenever the active pointer count changes (rebase_previous
+// is called there), then snapped to the current inter-pointer distance
+// on the first dispatch_after_move that observes it as 0.
+inline float g_pinch_baseline_d = 0.0f;
+
 inline Pointer* find_slot(int pointer_id) {
     for (auto& p : g_pointers)
         if (p.id == pointer_id) return &p;
@@ -3932,6 +4226,11 @@ inline void rebase_previous() {
             p.prev_y = p.y;
         }
     }
+    // Pointer count changed (DOWN / POINTER_DOWN / POINTER_UP / UP /
+    // CANCEL) — drop the cached pinch baseline so the next two-finger
+    // dispatch_after_move re-snaps it to the new inter-pointer
+    // distance instead of measuring against a stale anchor.
+    g_pinch_baseline_d = 0.0f;
 }
 
 inline float distance(Pointer const& a, Pointer const& b) {
@@ -3966,15 +4265,12 @@ inline void dispatch_after_move() {
         p->prev_x = p->x;
         p->prev_y = p->y;
     } else if (g_active_count >= 2) {
-        // Two-finger gesture: emit a midpoint Pan and (only when the
-        // spread ratio escapes a small dead-zone) a Pinch. Dispatching
-        // both means a steady two-finger drag pans naturally even
-        // though sub-pixel finger jitter makes `cur_d / prev_d`
-        // fluctuate around 1.0 — the Pan tracks the midpoint and the
-        // Pinch ratio sits inside the dead-zone and is suppressed.
-        // Without the dead-zone, that jitter compounded an unwanted
-        // slow zoom on every MOVE during a constant-spread drag —
-        // surfaced on the Galaxy S25 Ultra real-device test.
+        // Two-finger gesture. Pan (midpoint translation) and Pinch
+        // (spread ratio) are folded into a single `GestureEvent` with
+        // kind = Pinch — `dx/dy` carry the midpoint pan, `pinch_scale`
+        // carries the (dead-zone-gated) spread. Consumer-side
+        // dispatching one event per MOVE rather than two cuts the
+        // view-rebuild rate in half on multi-pointer scrolls.
         Pointer *a = nullptr, *b = nullptr;
         for (auto& slot : g_pointers) {
             if (slot.id == -1) continue;
@@ -3990,43 +4286,53 @@ inline void dispatch_after_move() {
         float pan_dx = cur_mid_x - prev_mid_x;
         float pan_dy = cur_mid_y - prev_mid_y;
 
-        if (pan_dx != 0.0f || pan_dy != 0.0f) {
-            ::phenotype::GestureEvent pev{};
-            pev.kind    = ::phenotype::GestureKind::Pan;
-            pev.dx      = pan_dx;
-            pev.dy      = pan_dy;
-            pev.focus_x = cur_mid_x;
-            pev.focus_y = cur_mid_y;
-            ::phenotype::native::detail::dispatch_gesture(pev);
-        }
-
         auto dist_xy = [](float ax, float ay, float bx, float by) {
             float dx = ax - bx;
             float dy = ay - by;
             float d2 = dx*dx + dy*dy;
             return d2 > 0.0f ? __builtin_sqrtf(d2) : 0.0f;
         };
-        float prev_d = dist_xy(a->prev_x, a->prev_y, b->prev_x, b->prev_y);
-        float cur_d  = dist_xy(a->x,      a->y,      b->x,      b->y);
-        if (prev_d > 0.0f && cur_d > 0.0f) {
-            float ratio = cur_d / prev_d;
-            // ±1% — a deliberate pinch easily clears this; typical
-            // sub-pixel finger jitter sits well below it.
-            constexpr float kPinchDeadZone = 0.01f;
+        float cur_d = dist_xy(a->x, a->y, b->x, b->y);
+        if (g_pinch_baseline_d <= 0.0f) g_pinch_baseline_d = cur_d;
+
+        float pinch_scale = 1.0f;  // sentinel: no zoom this frame
+        if (cur_d > 0.0f && g_pinch_baseline_d > 0.0f) {
+            float ratio = cur_d / g_pinch_baseline_d;
+            // ±0.5% dead-zone. Steady two-finger drag jitter sits
+            // well under this, so a non-zoom drag stays at scale = 1.
+            constexpr float kPinchDeadZone = 0.005f;
             float diff = ratio > 1.0f ? ratio - 1.0f : 1.0f - ratio;
             if (diff > kPinchDeadZone) {
-                ::phenotype::GestureEvent zev{};
-                zev.kind        = ::phenotype::GestureKind::Pinch;
-                zev.pinch_scale = ratio;
-                zev.focus_x     = cur_mid_x;
-                zev.focus_y     = cur_mid_y;
-                ::phenotype::native::detail::dispatch_gesture(zev);
+                pinch_scale = ratio;
+                g_pinch_baseline_d = cur_d;  // re-anchor
             }
+        }
+
+        if (pan_dx != 0.0f || pan_dy != 0.0f || pinch_scale != 1.0f) {
+            ::phenotype::GestureEvent ev{};
+            ev.kind        = ::phenotype::GestureKind::Pinch;
+            ev.dx          = pan_dx;
+            ev.dy          = pan_dy;
+            ev.pinch_scale = pinch_scale;
+            ev.focus_x     = cur_mid_x;
+            ev.focus_y     = cur_mid_y;
+            ::phenotype::native::detail::dispatch_gesture(ev);
         }
 
         a->prev_x = a->x; a->prev_y = a->y;
         b->prev_x = b->x; b->prev_y = b->y;
     }
+}
+
+// Drain the pending-MOVE flag set by `on_touch_event`, run the
+// gesture dispatcher once. Called by `phenotype_android_draw_frame`
+// at the top of each frame so multi-pointer MotionEvents collapse
+// into a single dispatch_after_move per frame instead of one per
+// pointer.
+inline void process_pending_touch_dispatch() {
+    if (!g_touch_dispatch_pending) return;
+    g_touch_dispatch_pending = false;
+    dispatch_after_move();
 }
 
 // Action codes match the consumer-facing C ABI exactly:
@@ -4049,7 +4355,12 @@ inline void on_touch_event(int pointer_id, int action, float x, float y) {
             slot->x = x;
             slot->y = y;
         }
-        dispatch_after_move();
+        // Defer the gesture dispatch — multi-pointer MotionEvents
+        // call us once per pointer. process_pending_touch_dispatch()
+        // (invoked from phenotype_android_draw_frame) runs the
+        // dispatcher exactly once per frame regardless of pointer
+        // count, halving the view-rebuild rate for two-finger pinch.
+        g_touch_dispatch_pending = true;
         break;
     }
     case 2: {  // UP / CANCEL
@@ -4286,6 +4597,12 @@ void phenotype_android_draw_frame(void) {
     // UI thread) over to this render thread, so the dialog::open_file
     // contract — "callback runs on the same thread that pumps the
     // view/update loop" — holds on Android too.
+    // Coalesce any MOVE events that landed since the last frame into
+    // a single gesture dispatch. on_touch_event MOVE only marks the
+    // pending flag; multi-pointer MotionEvents call dispatch_touch
+    // once per pointer, so doing this here means one dispatch per
+    // frame instead of N.
+    d::touch::process_pending_touch_dispatch();
     d::dialog::drain_deferred_results();
     d::tick_caret_blink();
     d::sync_platform_input();

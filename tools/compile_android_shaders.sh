@@ -54,6 +54,8 @@ emit_blob() {
     printf '\n'
     emit_blob SPIRV_COLOR_VS vertex   "$SRC/color.vert"
     emit_blob SPIRV_COLOR_FS fragment "$SRC/color.frag"
+    emit_blob SPIRV_ARC_VS   vertex   "$SRC/arc.vert"
+    emit_blob SPIRV_ARC_FS   fragment "$SRC/arc.frag"
     emit_blob SPIRV_TEXT_VS  vertex   "$SRC/text.vert"
     emit_blob SPIRV_TEXT_FS  fragment "$SRC/text.frag"
     emit_blob SPIRV_IMAGE_VS vertex   "$SRC/image.vert"

@@ -1005,6 +1005,17 @@ struct ColorInstanceGPU {
     float params[4]{};
 };
 
+// Per-arc instance for the SDF arc pipeline. Layout matches the
+// shader's `ArcInstance` struct exactly (3 × float4 = 48 bytes).
+//   center_radius_thickness = (cx, cy, radius, thickness)
+//   angles                  = (start_angle, end_angle, _, _)
+//   color                   = (r, g, b, a) linear, 0..1
+struct ArcInstanceGPU {
+    float center_radius_thickness[4]{};
+    float angles[4]{};
+    float color[4]{};
+};
+
 struct TextInstanceGPU {
     float rect[4]{};
     float uv_rect[4]{};
@@ -1220,11 +1231,13 @@ inline ImeState g_ime;
 struct ScissorBatch {
     float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
     std::vector<ColorInstanceGPU> colors;
+    std::vector<ArcInstanceGPU>   arcs;
     std::vector<ImageInstanceGPU> images;
-    std::vector<TextInstanceGPU> texts;
+    std::vector<TextInstanceGPU>  texts;
     std::uint32_t color_first = 0;
+    std::uint32_t arc_first   = 0;
     std::uint32_t image_first = 0;
-    std::uint32_t text_first = 0;
+    std::uint32_t text_first  = 0;
 };
 
 struct FrameScratch {
@@ -1236,6 +1249,7 @@ struct FrameScratch {
     // by finalize_batches() — direct decode/prepare pushes go to the
     // per-batch locals above.
     std::vector<ColorInstanceGPU> color_instances;
+    std::vector<ArcInstanceGPU>   arc_instances;
     std::vector<ImageInstanceGPU> image_instances;
     std::vector<TextInstanceGPU> text_instances;
 
@@ -1260,6 +1274,7 @@ struct FrameScratch {
         batches.clear();
         batches.push_back(ScissorBatch{});  // sentinel: full viewport
         color_instances.clear();
+        arc_instances.clear();
         overlay_color_instances.clear();
         text_runs.clear();
         images.clear();
@@ -1275,7 +1290,8 @@ struct FrameScratch {
 inline void open_scissor_batch(FrameScratch& s,
                                float x, float y, float w, float h) {
     auto& cur = s.batches.back();
-    if (cur.colors.empty() && cur.images.empty() && cur.texts.empty()) {
+    if (cur.colors.empty() && cur.arcs.empty()
+        && cur.images.empty() && cur.texts.empty()) {
         cur.x = x; cur.y = y; cur.w = w; cur.h = h;
         return;
     }
@@ -1286,14 +1302,18 @@ inline void open_scissor_batch(FrameScratch& s,
 
 inline void finalize_batches(FrameScratch& s) {
     s.color_instances.clear();
+    s.arc_instances.clear();
     s.image_instances.clear();
     s.text_instances.clear();
     for (auto& b : s.batches) {
         b.color_first = static_cast<std::uint32_t>(s.color_instances.size());
+        b.arc_first   = static_cast<std::uint32_t>(s.arc_instances.size());
         b.image_first = static_cast<std::uint32_t>(s.image_instances.size());
         b.text_first  = static_cast<std::uint32_t>(s.text_instances.size());
         s.color_instances.insert(s.color_instances.end(),
                                  b.colors.begin(), b.colors.end());
+        s.arc_instances.insert(s.arc_instances.end(),
+                               b.arcs.begin(), b.arcs.end());
         s.image_instances.insert(s.image_instances.end(),
                                  b.images.begin(), b.images.end());
         s.text_instances.insert(s.text_instances.end(),
@@ -1669,6 +1689,32 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     || !reader.read_f32(w) || !reader.read_f32(h))
                     return false;
                 open_scissor_batch(scratch, x, y, w, h);
+                break;
+            }
+            case Cmd::DrawArc: {
+                float cx = 0.0f, cy = 0.0f, r = 0.0f;
+                float sa = 0.0f, ea = 0.0f, th = 0.0f;
+                unsigned int packed = 0;
+                if (!reader.read_f32(cx) || !reader.read_f32(cy)
+                    || !reader.read_f32(r)
+                    || !reader.read_f32(sa) || !reader.read_f32(ea)
+                    || !reader.read_f32(th)
+                    || !reader.read_u32(packed))
+                    return false;
+                if (r <= 0.0f) break;
+                auto color = unpack_color(packed);
+                ArcInstanceGPU inst{};
+                inst.center_radius_thickness[0] = cx;
+                inst.center_radius_thickness[1] = cy;
+                inst.center_radius_thickness[2] = r;
+                inst.center_radius_thickness[3] = th;
+                inst.angles[0] = sa;
+                inst.angles[1] = ea;
+                inst.color[0]  = color.r / 255.0f;
+                inst.color[1]  = color.g / 255.0f;
+                inst.color[2]  = color.b / 255.0f;
+                inst.color[3]  = color.a / 255.0f;
+                scratch.batches.back().arcs.push_back(inst);
                 break;
             }
             default:
@@ -2333,6 +2379,88 @@ fragment float4 fs_image(
     if (sample.a < 0.01) discard_fragment();
     return sample * in.color;
 }
+
+// ---- SDF arc pipeline -----------------------------------------------
+// Stroked arc primitive — `Cmd::DrawArc`. Vertex stage emits a six-vertex
+// quad sized to the arc's stroke bbox (radius + half thickness + 1.5 px
+// AA margin). Fragment stage runs an SDF: discard everything outside
+// `|dist - radius| <= thickness/2` (with a smoothstep AA band) and
+// outside the [start_angle, end_angle] sweep.
+struct ArcInstance {
+    float4 center_radius_thickness;  // cx, cy, radius, thickness
+    float4 angles;                    // start, end, _, _
+    float4 color;                     // linear RGBA, premultiply none
+};
+
+struct ArcVsOut {
+    float4 pos [[position]];
+    float2 canvas_pos;                // logical-pixel canvas coord
+    float2 center;
+    float2 radius_thickness;
+    float2 angles;
+    float4 color;
+};
+
+vertex ArcVsOut vs_arc(
+    uint vi [[vertex_id]],
+    uint ii [[instance_id]],
+    constant Uniforms& u [[buffer(0)]],
+    const device ArcInstance* instances [[buffer(1)]]
+) {
+    constexpr float2 corners[] = {
+        float2(0,0), float2(1,0), float2(0,1),
+        float2(1,0), float2(1,1), float2(0,1),
+    };
+    float2 c = corners[vi];
+    ArcInstance inst = instances[ii];
+    float2 cen = inst.center_radius_thickness.xy;
+    float  r   = inst.center_radius_thickness.z;
+    float  th  = inst.center_radius_thickness.w;
+    float  pad = r + th * 0.5 + 1.5;
+
+    float2 px = cen - float2(pad, pad) + c * (2.0 * pad);
+    float ndcx = (px.x / u.viewport.x) * 2.0 - 1.0;
+    float ndcy = 1.0 - (px.y / u.viewport.y) * 2.0;
+
+    ArcVsOut out;
+    out.pos              = float4(ndcx, ndcy, 0, 1);
+    out.canvas_pos       = px;
+    out.center           = cen;
+    out.radius_thickness = float2(r, th);
+    out.angles           = inst.angles.xy;
+    out.color            = inst.color;
+    return out;
+}
+
+fragment float4 fs_arc(ArcVsOut in [[stage_in]]) {
+    constexpr float kTwoPi = 6.28318530717958647692;
+    float2 d      = in.canvas_pos - in.center;
+    float  dist   = length(d);
+    float  r      = in.radius_thickness.x;
+    float  th     = in.radius_thickness.y;
+    float  radial = fabs(dist - r);
+    float  aa     = max(fwidth(radial), 1e-3) * 0.5;
+    float  alpha_r = 1.0 - smoothstep(th * 0.5 - aa, th * 0.5 + aa, radial);
+    if (alpha_r <= 0.0) discard_fragment();
+
+    float start = in.angles.x;
+    float end   = in.angles.y;
+    float sweep = end - start;
+    if (sweep <= 0.0)  sweep += kTwoPi;
+    if (sweep > kTwoPi) sweep = kTwoPi;
+
+    // Full-circle fast path. CIRCLE entities (sweep ≈ 2π) dominate
+    // cad++ DWG rendering and their angle test is tautological — skip
+    // the atan / floor / branch entirely on the common path.
+    if (sweep < kTwoPi - 1e-3) {
+        float angle = atan2(d.y, d.x);
+        float relative = angle - start;
+        relative = relative - kTwoPi * floor(relative / kTwoPi);
+        if (relative > sweep) discard_fragment();
+    }
+
+    return float4(in.color.rgb, in.color.a * alpha_r);
+}
 )";
 
 struct RendererState {
@@ -2340,11 +2468,14 @@ struct RendererState {
     MTL::CommandQueue* queue = nullptr;
     CA::MetalLayer* layer = nullptr;
     MTL::RenderPipelineState* color_pipeline = nullptr;
+    MTL::RenderPipelineState* arc_pipeline = nullptr;
     MTL::RenderPipelineState* image_pipeline = nullptr;
     MTL::RenderPipelineState* text_pipeline = nullptr;
     MTL::Buffer* uniform_buf = nullptr;
     MTL::Buffer* color_instances_buf = nullptr;
     std::size_t color_instances_capacity = 0;
+    MTL::Buffer* arc_instances_buf = nullptr;
+    std::size_t arc_instances_capacity = 0;
     MTL::Buffer* overlay_color_instances_buf = nullptr;
     std::size_t overlay_color_instances_capacity = 0;
     MTL::Buffer* image_instances_buf = nullptr;
@@ -4357,10 +4488,12 @@ inline void renderer_init(native_surface_handle handle) {
     }
 
     g_renderer.color_pipeline = create_pipeline(g_renderer.device, lib, "vs_color", "fs_color");
+    g_renderer.arc_pipeline   = create_pipeline(g_renderer.device, lib, "vs_arc",   "fs_arc");
     g_renderer.image_pipeline = create_pipeline(g_renderer.device, lib, "vs_image", "fs_image");
     g_renderer.text_pipeline = create_pipeline(g_renderer.device, lib, "vs_text", "fs_text");
     lib->release();
-    if (!g_renderer.color_pipeline || !g_renderer.image_pipeline || !g_renderer.text_pipeline) {
+    if (!g_renderer.color_pipeline || !g_renderer.arc_pipeline
+        || !g_renderer.image_pipeline || !g_renderer.text_pipeline) {
         std::fprintf(stderr, "[metal] failed to create render pipelines\n");
         return;
     }
@@ -4502,6 +4635,25 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         color_uploaded = true;
     }
 
+    auto const arc_bytes = scratch.arc_instances.size() * sizeof(ArcInstanceGPU);
+    bool arc_uploaded = false;
+    if (!scratch.arc_instances.empty()) {
+        if (!ensure_instance_buffer(
+                g_renderer.arc_instances_buf,
+                g_renderer.arc_instances_capacity,
+                arc_bytes,
+                "arc_instances")) {
+            encoder->endEncoding();
+            pool->release();
+            return;
+        }
+        std::memcpy(
+            g_renderer.arc_instances_buf->contents(),
+            scratch.arc_instances.data(),
+            arc_bytes);
+        arc_uploaded = true;
+    }
+
     auto const image_bytes = scratch.image_instances.size() * sizeof(ImageInstanceGPU);
     bool image_uploaded = false;
     if (!scratch.image_instances.empty() && g_renderer.image_atlas_texture) {
@@ -4547,11 +4699,14 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     for (auto const& batch : scratch.batches) {
         auto const batch_color_count =
             static_cast<std::uint32_t>(batch.colors.size());
+        auto const batch_arc_count =
+            static_cast<std::uint32_t>(batch.arcs.size());
         auto const batch_image_count =
             static_cast<std::uint32_t>(batch.images.size());
         auto const batch_text_count =
             static_cast<std::uint32_t>(batch.texts.size());
-        if (batch_color_count + batch_image_count + batch_text_count == 0)
+        if (batch_color_count + batch_arc_count
+            + batch_image_count + batch_text_count == 0)
             continue;
         auto const sr = compute_metal_scissor(
             batch, scissor_scale,
@@ -4570,6 +4725,16 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 NS::UInteger(0), 6,
                 NS::UInteger(batch_color_count),
                 NS::UInteger(batch.color_first));
+        }
+        if (arc_uploaded && batch_arc_count > 0) {
+            encoder->setRenderPipelineState(g_renderer.arc_pipeline);
+            encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+            encoder->setVertexBuffer(g_renderer.arc_instances_buf, 0, 1);
+            encoder->drawPrimitives(
+                MTL::PrimitiveTypeTriangle,
+                NS::UInteger(0), 6,
+                NS::UInteger(batch_arc_count),
+                NS::UInteger(batch.arc_first));
         }
         if (image_uploaded && batch_image_count > 0) {
             encoder->setRenderPipelineState(g_renderer.image_pipeline);
@@ -4684,10 +4849,12 @@ inline void renderer_shutdown() {
     if (g_renderer.image_instances_buf) { g_renderer.image_instances_buf->release(); g_renderer.image_instances_buf = nullptr; }
     if (g_renderer.text_instances_buf) { g_renderer.text_instances_buf->release(); g_renderer.text_instances_buf = nullptr; }
     if (g_renderer.color_instances_buf) { g_renderer.color_instances_buf->release(); g_renderer.color_instances_buf = nullptr; }
+    if (g_renderer.arc_instances_buf) { g_renderer.arc_instances_buf->release(); g_renderer.arc_instances_buf = nullptr; }
     if (g_renderer.overlay_color_instances_buf) { g_renderer.overlay_color_instances_buf->release(); g_renderer.overlay_color_instances_buf = nullptr; }
     if (g_renderer.uniform_buf) { g_renderer.uniform_buf->release(); g_renderer.uniform_buf = nullptr; }
     if (g_renderer.image_pipeline) { g_renderer.image_pipeline->release(); g_renderer.image_pipeline = nullptr; }
     if (g_renderer.text_pipeline) { g_renderer.text_pipeline->release(); g_renderer.text_pipeline = nullptr; }
+    if (g_renderer.arc_pipeline) { g_renderer.arc_pipeline->release(); g_renderer.arc_pipeline = nullptr; }
     if (g_renderer.color_pipeline) { g_renderer.color_pipeline->release(); g_renderer.color_pipeline = nullptr; }
     if (g_renderer.layer) { g_renderer.layer->release(); g_renderer.layer = nullptr; }
     if (g_renderer.queue) { g_renderer.queue->release(); g_renderer.queue = nullptr; }
