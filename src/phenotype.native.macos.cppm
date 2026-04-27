@@ -1717,6 +1717,247 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 scratch.batches.back().arcs.push_back(inst);
                 break;
             }
+            case Cmd::Path: {
+                // Walk the verb stream and dispatch each segment onto
+                // the existing instance buffers — LineTo / flattened
+                // QuadTo / flattened CubicTo go through the same
+                // `colors` instance vector that `Cmd::DrawLine` fills,
+                // and ArcTo pushes an `ArcInstanceGPU` directly. No
+                // new pipeline is introduced; stroke rendering reuses
+                // the color and arc SDF backends already in flight.
+                float thickness = 0.0f;
+                unsigned int packed = 0;
+                unsigned int verb_count = 0;
+                if (!reader.read_f32(thickness)
+                    || !reader.read_u32(packed)
+                    || !reader.read_u32(verb_count))
+                    return false;
+                auto color = unpack_color(packed);
+                float const cr = color.r / 255.0f;
+                float const cg = color.g / 255.0f;
+                float const cb = color.b / 255.0f;
+                float const ca = color.a / 255.0f;
+
+                float pen_x = 0.0f, pen_y = 0.0f;
+                float sub_x = 0.0f, sub_y = 0.0f;
+                bool has_pen = false;
+
+                // Same logic as `Cmd::DrawLine` — axis-aligned single
+                // instance, diagonal decomposed into overlapping dots.
+                auto emit_segment = [&](float x1, float y1,
+                                        float x2, float y2) {
+                    float dx = x2 - x1;
+                    float dy = y2 - y1;
+                    if (dx == 0.0f && dy == 0.0f) return;
+                    if (dx == 0.0f || dy == 0.0f) {
+                        float line_len = std::sqrt(dx * dx + dy * dy);
+                        float w = (dy == 0.0f) ? line_len : thickness;
+                        float h = (dx == 0.0f) ? line_len : thickness;
+                        float x = (dx == 0.0f)
+                            ? x1 - thickness / 2.0f
+                            : (x1 < x2 ? x1 : x2);
+                        float y = (dy == 0.0f)
+                            ? y1 - thickness / 2.0f
+                            : (y1 < y2 ? y1 : y2);
+                        append_color_instance(
+                            scratch.batches.back().colors,
+                            x, y, w, h, cr, cg, cb, ca,
+                            0.0f, 0.0f, 3.0f);
+                    } else {
+                        float line_len = std::sqrt(dx * dx + dy * dy);
+                        float step = thickness * 0.5f;
+                        if (step < 0.5f) step = 0.5f;
+                        int n_steps = static_cast<int>(
+                            std::ceil(line_len / step));
+                        if (n_steps < 1) n_steps = 1;
+                        float half_th = thickness * 0.5f;
+                        auto& dst = scratch.batches.back().colors;
+                        for (int i = 0; i <= n_steps; ++i) {
+                            float t = static_cast<float>(i)
+                                      / static_cast<float>(n_steps);
+                            float ccx = x1 + dx * t;
+                            float ccy = y1 + dy * t;
+                            append_color_instance(
+                                dst,
+                                ccx - half_th, ccy - half_th,
+                                thickness, thickness,
+                                cr, cg, cb, ca, 0.0f, 0.0f, 0.0f);
+                        }
+                    }
+                };
+
+                // Recursive De Casteljau flatten — split until each
+                // control point sits within `flatness = 0.5px` of the
+                // chord, or until depth runs out (cap at 16 levels =
+                // up to 65 536 segments per curve, which is far more
+                // than any visible CAD input requires).
+                constexpr float flatness2 = 0.25f;  // (0.5px)^2
+                constexpr int max_depth = 16;
+
+                auto flatten_quad = [&](auto& self,
+                                        float p0x, float p0y,
+                                        float p1x, float p1y,
+                                        float p2x, float p2y,
+                                        int depth) -> void {
+                    float lx = p2x - p0x;
+                    float ly = p2y - p0y;
+                    float llen2 = lx * lx + ly * ly;
+                    bool flat = (depth == 0);
+                    if (!flat && llen2 > 1e-6f) {
+                        float d = (p1x - p0x) * ly - (p1y - p0y) * lx;
+                        if (d * d < flatness2 * llen2) flat = true;
+                    }
+                    if (flat || llen2 < 1e-6f) {
+                        emit_segment(p0x, p0y, p2x, p2y);
+                        return;
+                    }
+                    float a0x = (p0x + p1x) * 0.5f;
+                    float a0y = (p0y + p1y) * 0.5f;
+                    float a1x = (p1x + p2x) * 0.5f;
+                    float a1y = (p1y + p2y) * 0.5f;
+                    float midx = (a0x + a1x) * 0.5f;
+                    float midy = (a0y + a1y) * 0.5f;
+                    self(self, p0x, p0y, a0x, a0y, midx, midy, depth - 1);
+                    self(self, midx, midy, a1x, a1y, p2x, p2y, depth - 1);
+                };
+
+                auto flatten_cubic = [&](auto& self,
+                                         float p0x, float p0y,
+                                         float p1x, float p1y,
+                                         float p2x, float p2y,
+                                         float p3x, float p3y,
+                                         int depth) -> void {
+                    float lx = p3x - p0x;
+                    float ly = p3y - p0y;
+                    float llen2 = lx * lx + ly * ly;
+                    bool flat = (depth == 0);
+                    if (!flat && llen2 > 1e-6f) {
+                        float d1 = (p1x - p0x) * ly - (p1y - p0y) * lx;
+                        float d2 = (p2x - p0x) * ly - (p2y - p0y) * lx;
+                        if (d1 * d1 < flatness2 * llen2
+                            && d2 * d2 < flatness2 * llen2) {
+                            flat = true;
+                        }
+                    }
+                    if (flat || llen2 < 1e-6f) {
+                        emit_segment(p0x, p0y, p3x, p3y);
+                        return;
+                    }
+                    float a01x = (p0x + p1x) * 0.5f;
+                    float a01y = (p0y + p1y) * 0.5f;
+                    float a12x = (p1x + p2x) * 0.5f;
+                    float a12y = (p1y + p2y) * 0.5f;
+                    float a23x = (p2x + p3x) * 0.5f;
+                    float a23y = (p2y + p3y) * 0.5f;
+                    float b01x = (a01x + a12x) * 0.5f;
+                    float b01y = (a01y + a12y) * 0.5f;
+                    float b12x = (a12x + a23x) * 0.5f;
+                    float b12y = (a12y + a23y) * 0.5f;
+                    float midx = (b01x + b12x) * 0.5f;
+                    float midy = (b01y + b12y) * 0.5f;
+                    self(self,
+                         p0x, p0y, a01x, a01y, b01x, b01y, midx, midy,
+                         depth - 1);
+                    self(self,
+                         midx, midy, b12x, b12y, a23x, a23y, p3x, p3y,
+                         depth - 1);
+                };
+
+                for (unsigned int i = 0; i < verb_count; ++i) {
+                    unsigned int verb = 0;
+                    if (!reader.read_u32(verb)) return false;
+                    switch (static_cast<PathVerb>(verb)) {
+                    case PathVerb::MoveTo: {
+                        float x = 0.0f, y = 0.0f;
+                        if (!reader.read_f32(x) || !reader.read_f32(y))
+                            return false;
+                        pen_x = x; pen_y = y;
+                        sub_x = x; sub_y = y;
+                        has_pen = true;
+                        break;
+                    }
+                    case PathVerb::LineTo: {
+                        float x = 0.0f, y = 0.0f;
+                        if (!reader.read_f32(x) || !reader.read_f32(y))
+                            return false;
+                        if (has_pen) emit_segment(pen_x, pen_y, x, y);
+                        pen_x = x; pen_y = y;
+                        has_pen = true;
+                        break;
+                    }
+                    case PathVerb::QuadTo: {
+                        float c1x = 0.0f, c1y = 0.0f;
+                        float x = 0.0f, y = 0.0f;
+                        if (!reader.read_f32(c1x) || !reader.read_f32(c1y)
+                            || !reader.read_f32(x) || !reader.read_f32(y))
+                            return false;
+                        if (has_pen) {
+                            flatten_quad(flatten_quad,
+                                         pen_x, pen_y, c1x, c1y, x, y,
+                                         max_depth);
+                        }
+                        pen_x = x; pen_y = y;
+                        has_pen = true;
+                        break;
+                    }
+                    case PathVerb::CubicTo: {
+                        float c1x = 0.0f, c1y = 0.0f;
+                        float c2x = 0.0f, c2y = 0.0f;
+                        float x = 0.0f, y = 0.0f;
+                        if (!reader.read_f32(c1x) || !reader.read_f32(c1y)
+                            || !reader.read_f32(c2x) || !reader.read_f32(c2y)
+                            || !reader.read_f32(x) || !reader.read_f32(y))
+                            return false;
+                        if (has_pen) {
+                            flatten_cubic(flatten_cubic,
+                                          pen_x, pen_y, c1x, c1y,
+                                          c2x, c2y, x, y, max_depth);
+                        }
+                        pen_x = x; pen_y = y;
+                        has_pen = true;
+                        break;
+                    }
+                    case PathVerb::ArcTo: {
+                        float acx = 0.0f, acy = 0.0f, ar = 0.0f;
+                        float asa = 0.0f, aea = 0.0f;
+                        if (!reader.read_f32(acx) || !reader.read_f32(acy)
+                            || !reader.read_f32(ar)
+                            || !reader.read_f32(asa) || !reader.read_f32(aea))
+                            return false;
+                        if (ar > 0.0f) {
+                            ArcInstanceGPU inst{};
+                            inst.center_radius_thickness[0] = acx;
+                            inst.center_radius_thickness[1] = acy;
+                            inst.center_radius_thickness[2] = ar;
+                            inst.center_radius_thickness[3] = thickness;
+                            inst.angles[0] = asa;
+                            inst.angles[1] = aea;
+                            inst.color[0] = cr;
+                            inst.color[1] = cg;
+                            inst.color[2] = cb;
+                            inst.color[3] = ca;
+                            scratch.batches.back().arcs.push_back(inst);
+                        }
+                        // Path-spec semantics for the pen after an ArcTo
+                        // are out of scope here — cad++ chains ArcTo
+                        // segments via explicit MoveTo/LineTo when
+                        // continuity matters. Leave the pen position
+                        // unchanged; future PRs can refine.
+                        break;
+                    }
+                    case PathVerb::Close: {
+                        if (has_pen)
+                            emit_segment(pen_x, pen_y, sub_x, sub_y);
+                        pen_x = sub_x;
+                        pen_y = sub_y;
+                        break;
+                    }
+                    default:
+                        return false;
+                    }
+                }
+                break;
+            }
             default:
                 return false;
         }
