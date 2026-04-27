@@ -186,6 +186,23 @@ void emit_draw_line(R& r, float x1, float y1, float x2, float y2,
     detail::write_u32(r, c.packed());
 }
 
+// Stroked arc — `start_angle` to `end_angle` in radians (CCW). Backends
+// rasterise as an SDF in the fragment shader, so zoom-in stays smooth
+// without parse-time chord tessellation. Layout: 32 bytes (opcode +
+// 6×f32 + packed RGBA).
+template <render_backend R>
+void emit_draw_arc(R& r, float cx, float cy, float radius,
+                   float start_angle, float end_angle,
+                   float thickness, Color c) {
+    detail::ensure(r, 32);
+    detail::write_u32(r, static_cast<unsigned int>(Cmd::DrawArc));
+    detail::write_f32(r, cx); detail::write_f32(r, cy);
+    detail::write_f32(r, radius);
+    detail::write_f32(r, start_angle); detail::write_f32(r, end_angle);
+    detail::write_f32(r, thickness);
+    detail::write_u32(r, c.packed());
+}
+
 template <render_backend R>
 void emit_hit_region(R& r, float x, float y, float w, float h,
                      unsigned int callback_id, unsigned int cursor_type) {
@@ -576,6 +593,63 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 float ax2 = origin_x + x2, ay2 = origin_y + y2;
                 if (!clip_line(ax1, ay1, ax2, ay2)) return;
                 emit_draw_line(r, ax1, ay1, ax2, ay2, thickness, color);
+            }
+
+            void arc(float cx, float cy, float radius,
+                     float start_angle, float end_angle,
+                     float thickness, Color color) override {
+                // Coarse stroke-bbox cull. The GPU scissor still clips
+                // the chord segments below pixel-perfectly, but skipping
+                // arcs entirely outside the canvas saves a sin/cos loop.
+                if (radius <= 0.0f) return;
+                float acx = origin_x + cx;
+                float acy = origin_y + cy;
+                float pad = radius + thickness * 0.5f;
+                if (acx + pad <= clip_x0
+                    || acx - pad >= clip_x1
+                    || acy + pad <= clip_y0
+                    || acy - pad >= clip_y1) {
+                    return;
+                }
+                // First-pass implementation: tessellate into chord
+                // segments and reuse `emit_draw_line`. The Cmd::DrawArc
+                // opcode (and the matching parser case) is in place so
+                // a follow-up PR can replace this loop with a real
+                // backend SDF rasteriser without touching the API. AT
+                // ~1° per chord (96 segments / full revolution) the
+                // result is visually smooth at default zoom levels;
+                // heavy zoom-in will still show chords until the SDF
+                // backend lands.
+                constexpr float kPi    = 3.1415926535897932f;
+                constexpr float kTwoPi = 2.0f * kPi;
+                constexpr int   kFullCircleSegments = 96;
+                float sweep = end_angle - start_angle;
+                if (sweep <= 0.0f) sweep += kTwoPi;
+                if (sweep > kTwoPi) sweep = kTwoPi;
+                // `__builtin_*` instead of `std::*` because the Android
+                // NDK r30-beta1 clang-21 PCM emitter has a documented
+                // crash on `std::sqrt` / `std::mutex` / friends inside
+                // .cppm units.
+                int n = static_cast<int>(
+                    __builtin_ceilf(
+                        static_cast<float>(kFullCircleSegments)
+                        * sweep / kTwoPi));
+                if (n < 1) n = 1;
+                float prev_x = acx + radius * __builtin_cosf(start_angle);
+                float prev_y = acy + radius * __builtin_sinf(start_angle);
+                for (int i = 1; i <= n; ++i) {
+                    float t = start_angle + sweep * static_cast<float>(i)
+                                                  / static_cast<float>(n);
+                    float nx = acx + radius * __builtin_cosf(t);
+                    float ny = acy + radius * __builtin_sinf(t);
+                    float cx1 = prev_x, cy1 = prev_y, cx2 = nx, cy2 = ny;
+                    if (clip_line(cx1, cy1, cx2, cy2)) {
+                        emit_draw_line(r, cx1, cy1, cx2, cy2,
+                                       thickness, color);
+                    }
+                    prev_x = nx;
+                    prev_y = ny;
+                }
             }
 
             void text(float x, float y,

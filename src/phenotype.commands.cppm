@@ -28,10 +28,15 @@ struct DrawImageCmd { float x, y, w, h; std::string url; };
 // viewport. A non-zero rect clips subsequent draw commands until the
 // next ScissorCmd (backends do not support nested scissor).
 struct ScissorCmd   { float x, y, w, h; };
+// Arc swept CCW from `start_angle` to `end_angle` (radians, math /
+// AutoCAD convention) around `(cx, cy)` at `radius`, stroked at
+// `thickness`. Full circle: `start_angle = 0, end_angle = 2π`.
+struct DrawArcCmd   { float cx, cy, radius, start_angle, end_angle, thickness; Color color; };
 
 using DrawCommand = std::variant<
     ClearCmd, FillRectCmd, StrokeRectCmd, RoundRectCmd,
-    DrawTextCmd, DrawLineCmd, HitRegionCmd, DrawImageCmd, ScissorCmd>;
+    DrawTextCmd, DrawLineCmd, HitRegionCmd, DrawImageCmd, ScissorCmd,
+    DrawArcCmd>;
 
 // ---- Parser ----
 
@@ -125,6 +130,12 @@ inline std::vector<DrawCommand> parse_commands(
         case Cmd::Scissor: {
             float x = read_f32(), y = read_f32(), w = read_f32(), h = read_f32();
             out.emplace_back(ScissorCmd{x, y, w, h});
+            break;
+        }
+        case Cmd::DrawArc: {
+            float cx = read_f32(), cy = read_f32(), r = read_f32();
+            float sa = read_f32(), ea = read_f32(), th = read_f32();
+            out.emplace_back(DrawArcCmd{cx, cy, r, sa, ea, th, unpack(read_u32())});
             break;
         }
         default:
