@@ -1,6 +1,7 @@
 module;
 #include <cstdint>
 #include <cstring>
+#include <math.h>     // cosf / sinf / ceilf — portable across MSVC, clang, GCC and NDK
 #include <string>
 #ifdef __wasi__
 #include "phenotype_host.h"
@@ -626,22 +627,24 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 float sweep = end_angle - start_angle;
                 if (sweep <= 0.0f) sweep += kTwoPi;
                 if (sweep > kTwoPi) sweep = kTwoPi;
-                // `__builtin_*` instead of `std::*` because the Android
-                // NDK r30-beta1 clang-21 PCM emitter has a documented
-                // crash on `std::sqrt` / `std::mutex` / friends inside
-                // .cppm units.
+                // Plain C `cosf` / `sinf` / `ceilf` (via `<math.h>`)
+                // rather than `std::*`: the Android NDK r30-beta1
+                // clang-21 PCM emitter has a documented crash on
+                // `std::sqrt` / `std::mutex` / friends inside .cppm
+                // units, while `__builtin_*` is rejected by MSVC. The
+                // C-runtime forms are portable across all three.
                 int n = static_cast<int>(
-                    __builtin_ceilf(
+                    ceilf(
                         static_cast<float>(kFullCircleSegments)
                         * sweep / kTwoPi));
                 if (n < 1) n = 1;
-                float prev_x = acx + radius * __builtin_cosf(start_angle);
-                float prev_y = acy + radius * __builtin_sinf(start_angle);
+                float prev_x = acx + radius * cosf(start_angle);
+                float prev_y = acy + radius * sinf(start_angle);
                 for (int i = 1; i <= n; ++i) {
                     float t = start_angle + sweep * static_cast<float>(i)
                                                   / static_cast<float>(n);
-                    float nx = acx + radius * __builtin_cosf(t);
-                    float ny = acy + radius * __builtin_sinf(t);
+                    float nx = acx + radius * cosf(t);
+                    float ny = acy + radius * sinf(t);
                     float cx1 = prev_x, cy1 = prev_y, cx2 = nx, cy2 = ny;
                     if (clip_line(cx1, cy1, cx2, cy2)) {
                         emit_draw_line(r, cx1, cy1, cx2, cy2,
