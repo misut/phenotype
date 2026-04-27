@@ -159,6 +159,24 @@ inline DebugArtifactBundleResult write_artifact_bundle(
 
 } // namespace debug
 
+namespace dialog {
+
+// Thin wrapper over `platform_api::dialog.open_file`. Backends that
+// have not implemented file picking yet (Windows, Android stub) leave
+// the function pointer null — in that case we synthesise a "cancel"
+// outcome so callers don't have to special-case unsupported platforms.
+inline void open_file(char const* filter_extensions,
+                      void (*callback)(char const* path)) {
+    auto const& platform = current_platform();
+    if (platform.dialog.open_file) {
+        platform.dialog.open_file(filter_extensions, callback);
+    } else if (callback) {
+        callback(nullptr);
+    }
+}
+
+} // namespace dialog
+
 inline void shutdown() {
     renderer::shutdown();
     text::shutdown();

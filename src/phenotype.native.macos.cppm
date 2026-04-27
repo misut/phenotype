@@ -5145,6 +5145,147 @@ inline void install_macos_debug_providers() {
         macos_platform_runtime_details_json);
 }
 
+// ----- file-open dialog --------------------------------------------------
+//
+// Selectors for `[NSOpenPanel openPanel]` and friends. Inlined here
+// rather than next to the alphabetised selector block above so the
+// dialog implementation stays in one contiguous diff — they're only
+// referenced from `macos_dialog_open_file` below.
+
+inline SEL sel_open_panel() {
+    static auto sel = sel_registerName("openPanel");
+    return sel;
+}
+inline SEL sel_set_can_choose_files() {
+    static auto sel = sel_registerName("setCanChooseFiles:");
+    return sel;
+}
+inline SEL sel_set_can_choose_directories() {
+    static auto sel = sel_registerName("setCanChooseDirectories:");
+    return sel;
+}
+inline SEL sel_set_allows_multiple_selection() {
+    static auto sel = sel_registerName("setAllowsMultipleSelection:");
+    return sel;
+}
+inline SEL sel_set_allowed_file_types() {
+    static auto sel = sel_registerName("setAllowedFileTypes:");
+    return sel;
+}
+inline SEL sel_run_modal() {
+    static auto sel = sel_registerName("runModal");
+    return sel;
+}
+inline SEL sel_url() {
+    static auto sel = sel_registerName("URL");
+    return sel;
+}
+inline SEL sel_path() {
+    static auto sel = sel_registerName("path");
+    return sel;
+}
+inline SEL sel_string_with_utf8_string() {
+    static auto sel = sel_registerName("stringWithUTF8String:");
+    return sel;
+}
+inline SEL sel_add_object() {
+    static auto sel = sel_registerName("addObject:");
+    return sel;
+}
+
+// Forward declare the autorelease-pool entry points from the Objective-C
+// runtime — `<objc/runtime.h>` doesn't expose them via the headers shipped
+// with the intron toolchain, so we link to the dyld export directly.
+extern "C" void* objc_autoreleasePoolPush(void);
+extern "C" void  objc_autoreleasePoolPop(void* pool);
+
+// `phenotype::native::dialog::open_file` macOS backend. Modally runs
+// NSOpenPanel and synthesises the `(char const*)` callback contract:
+// the panel returns control with NSModalResponseOK / Cancel; we hand
+// the picked file's POSIX path to the caller, or null on cancel.
+//
+// `setAllowedFileTypes:` is technically deprecated in favour of
+// `setAllowedContentTypes:` (UTType-based) on macOS 12+, but the older
+// API is still functional and avoids dragging UniformTypeIdentifiers
+// into phenotype's link surface for what is (today) the only consumer.
+inline void macos_dialog_open_file(char const* filter_extensions,
+                                   void (*callback)(char const* path)) {
+    if (!callback)
+        return;
+
+    void* pool = objc_autoreleasePoolPush();
+    char const* result_path = nullptr;
+    std::string path_storage;
+
+    auto open_panel_class =
+        static_cast<Class>(objc_getClass("NSOpenPanel"));
+    if (open_panel_class) {
+        id panel = objc_send<id>(class_as_id(open_panel_class), sel_open_panel());
+        if (panel) {
+            objc_send<void>(panel, sel_set_can_choose_files(),
+                            static_cast<bool>(true));
+            objc_send<void>(panel, sel_set_can_choose_directories(),
+                            static_cast<bool>(false));
+            objc_send<void>(panel, sel_set_allows_multiple_selection(),
+                            static_cast<bool>(false));
+
+            if (filter_extensions != nullptr && filter_extensions[0] != '\0') {
+                auto ns_string_class =
+                    static_cast<Class>(objc_getClass("NSString"));
+                auto mutable_array_class =
+                    static_cast<Class>(objc_getClass("NSMutableArray"));
+                if (ns_string_class && mutable_array_class) {
+                    id ext_arr = objc_send<id>(
+                        class_as_id(mutable_array_class), sel_array());
+                    if (ext_arr) {
+                        std::string ext_buf;
+                        for (char const* p = filter_extensions; ; ++p) {
+                            if (*p == ';' || *p == '\0') {
+                                if (!ext_buf.empty()) {
+                                    id ext_str = objc_send<id>(
+                                        class_as_id(ns_string_class),
+                                        sel_string_with_utf8_string(),
+                                        ext_buf.c_str());
+                                    if (ext_str)
+                                        objc_send<void>(ext_arr,
+                                                        sel_add_object(),
+                                                        ext_str);
+                                    ext_buf.clear();
+                                }
+                                if (*p == '\0') break;
+                            } else {
+                                ext_buf.push_back(*p);
+                            }
+                        }
+                        objc_send<void>(panel, sel_set_allowed_file_types(),
+                                        ext_arr);
+                    }
+                }
+            }
+
+            // NSModalResponseOK == 1.
+            long modal_response = objc_send<long>(panel, sel_run_modal());
+            if (modal_response == 1) {
+                id url = objc_send<id>(panel, sel_url());
+                if (url) {
+                    id path_str = objc_send<id>(url, sel_path());
+                    if (path_str) {
+                        char const* utf8 = objc_send<char const*>(
+                            path_str, sel_utf8_string());
+                        if (utf8) {
+                            path_storage = utf8;
+                            result_path = path_storage.c_str();
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    callback(result_path);
+    objc_autoreleasePoolPop(pool);
+}
+
 } // namespace phenotype::native::detail
 #endif
 
@@ -5197,6 +5338,9 @@ inline platform_api const& macos_platform() {
             }
         },
         nullptr,
+        {
+            detail::macos_dialog_open_file,
+        },
     };
     return api;
 #else
