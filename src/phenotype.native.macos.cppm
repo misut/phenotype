@@ -1023,6 +1023,10 @@ struct ParsedTextRun {
     float line_height = 0.0f;
     char const* text = nullptr;
     unsigned int len = 0;
+    // Index into FrameScratch::batches that owns this run, or UINT32_MAX
+    // for overlay runs (IME composition / generic caret) that always
+    // render full-viewport above scissored scene content.
+    std::uint32_t batch_idx = 0;
 };
 
 struct RasterizedTextRun {
@@ -1073,6 +1077,12 @@ struct PendingImageCmd {
     float w = 0.0f;
     float h = 0.0f;
     std::string url;
+    // Index into FrameScratch::batches that owns this image. The lazy
+    // image-cache resolution in prepare_image_instances pushes the
+    // resolved instance (or placeholder colors) into the matching
+    // batch's per-pipeline vector so scissor clipping survives the
+    // decode → resolve split.
+    std::uint32_t batch_idx = 0;
 };
 
 struct ImageInstanceGPU {
@@ -1197,25 +1207,134 @@ struct ImeState {
 
 inline ImeState g_ime;
 
+// Cmd::Scissor splits each frame into ordered batches. Within a batch
+// instances are pushed in decode order; render time issues one
+// vkCmdSetScissor / setScissorRect: per batch and per-pipeline draws
+// using firstInstance / baseInstance offsets from the flat staging
+// vectors that finalize_batches assembles.
+//
+// Sentinel rect (x=y=w=h=0.0) means "full drawable" — paint emits this
+// to reset clipping (emit_scissor_reset). The first batch of every
+// frame is initialized to this sentinel so any draw before a Scissor
+// command renders unclipped.
+struct ScissorBatch {
+    float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+    std::vector<ColorInstanceGPU> colors;
+    std::vector<ImageInstanceGPU> images;
+    std::vector<TextInstanceGPU> texts;
+    std::uint32_t color_first = 0;
+    std::uint32_t image_first = 0;
+    std::uint32_t text_first = 0;
+};
+
 struct FrameScratch {
+    // Per-batch local accumulators. Concatenated into the flat
+    // *_instances vectors below by finalize_batches().
+    std::vector<ScissorBatch> batches;
+
+    // Flat staging vectors uploaded to GPU instance buffers. Populated
+    // by finalize_batches() — direct decode/prepare pushes go to the
+    // per-batch locals above.
     std::vector<ColorInstanceGPU> color_instances;
-    std::vector<ColorInstanceGPU> overlay_color_instances;
-    std::vector<ParsedTextRun> text_runs;
-    std::vector<PendingImageCmd> images;
     std::vector<ImageInstanceGPU> image_instances;
     std::vector<TextInstanceGPU> text_instances;
+
+    // Overlays (IME caret/underline + composition text) are Z-above
+    // scene content and always render full-viewport, outside the
+    // batch loop.
+    std::vector<ColorInstanceGPU> overlay_color_instances;
+    std::vector<TextInstanceGPU> overlay_text_instances;
+
+    std::vector<ParsedTextRun> text_runs;
+    std::vector<PendingImageCmd> images;
     std::vector<std::string> overlay_text_storage;
 
+    // Slice within `text_instances` that contains overlay text. Set by
+    // finalize_batches() — overlay texts are appended after all batched
+    // scene texts so a single instance buffer holds both. Drawn after
+    // the batch loop with full-viewport scissor.
+    std::uint32_t overlay_text_first = 0;
+    std::uint32_t overlay_text_count = 0;
+
     void clear() {
+        batches.clear();
+        batches.push_back(ScissorBatch{});  // sentinel: full viewport
         color_instances.clear();
         overlay_color_instances.clear();
         text_runs.clear();
         images.clear();
         image_instances.clear();
         text_instances.clear();
+        overlay_text_instances.clear();
         overlay_text_storage.clear();
+        overlay_text_first = 0;
+        overlay_text_count = 0;
     }
 };
+
+inline void open_scissor_batch(FrameScratch& s,
+                               float x, float y, float w, float h) {
+    auto& cur = s.batches.back();
+    if (cur.colors.empty() && cur.images.empty() && cur.texts.empty()) {
+        cur.x = x; cur.y = y; cur.w = w; cur.h = h;
+        return;
+    }
+    ScissorBatch next;
+    next.x = x; next.y = y; next.w = w; next.h = h;
+    s.batches.push_back(std::move(next));
+}
+
+inline void finalize_batches(FrameScratch& s) {
+    s.color_instances.clear();
+    s.image_instances.clear();
+    s.text_instances.clear();
+    for (auto& b : s.batches) {
+        b.color_first = static_cast<std::uint32_t>(s.color_instances.size());
+        b.image_first = static_cast<std::uint32_t>(s.image_instances.size());
+        b.text_first  = static_cast<std::uint32_t>(s.text_instances.size());
+        s.color_instances.insert(s.color_instances.end(),
+                                 b.colors.begin(), b.colors.end());
+        s.image_instances.insert(s.image_instances.end(),
+                                 b.images.begin(), b.images.end());
+        s.text_instances.insert(s.text_instances.end(),
+                                b.texts.begin(), b.texts.end());
+    }
+    s.overlay_text_first =
+        static_cast<std::uint32_t>(s.text_instances.size());
+    s.overlay_text_count =
+        static_cast<std::uint32_t>(s.overlay_text_instances.size());
+    s.text_instances.insert(s.text_instances.end(),
+                            s.overlay_text_instances.begin(),
+                            s.overlay_text_instances.end());
+}
+
+// Convert a batch's logical-pixel scissor rect into a Metal scissor in
+// physical pixels, clamped to the drawable bounds. Returns a zero-sized
+// rect when the intersection is empty so the caller can skip draws.
+// Sentinel (w==0 && h==0) means "full drawable" — emitted by
+// emit_scissor_reset and used for the initial pre-Scissor state.
+inline MTL::ScissorRect compute_metal_scissor(ScissorBatch const& b,
+                                              float scale,
+                                              std::uint32_t drawable_w,
+                                              std::uint32_t drawable_h) {
+    if (b.w == 0.0f && b.h == 0.0f)
+        return MTL::ScissorRect{0, 0, drawable_w, drawable_h};
+    float fx = std::floor(b.x * scale);
+    float fy = std::floor(b.y * scale);
+    float fr = std::ceil((b.x + b.w) * scale);
+    float fb = std::ceil((b.y + b.h) * scale);
+    long long x = std::max<long long>(0, static_cast<long long>(fx));
+    long long y = std::max<long long>(0, static_cast<long long>(fy));
+    long long r = std::min<long long>(static_cast<long long>(drawable_w),
+                                       static_cast<long long>(fr));
+    long long btm = std::min<long long>(static_cast<long long>(drawable_h),
+                                         static_cast<long long>(fb));
+    if (r <= x || btm <= y)
+        return MTL::ScissorRect{0, 0, 0, 0};
+    return MTL::ScissorRect{
+        NS::UInteger(x), NS::UInteger(y),
+        NS::UInteger(r - x), NS::UInteger(btm - y)};
+}
 
 inline Color unpack_color(unsigned int packed) noexcept {
     return {
@@ -1389,7 +1508,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     return false;
                 auto color = unpack_color(packed);
                 append_color_instance(
-                    scratch.color_instances,
+                    scratch.batches.back().colors,
                     x, y, w, h,
                     color.r / 255.0f, color.g / 255.0f,
                     color.b / 255.0f, color.a / 255.0f);
@@ -1405,7 +1524,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     return false;
                 auto color = unpack_color(packed);
                 append_color_instance(
-                    scratch.color_instances,
+                    scratch.batches.back().colors,
                     x, y, w, h,
                     color.r / 255.0f, color.g / 255.0f,
                     color.b / 255.0f, color.a / 255.0f,
@@ -1422,7 +1541,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     return false;
                 auto color = unpack_color(packed);
                 append_color_instance(
-                    scratch.color_instances,
+                    scratch.batches.back().colors,
                     x, y, w, h,
                     color.r / 255.0f, color.g / 255.0f,
                     color.b / 255.0f, color.a / 255.0f,
@@ -1453,6 +1572,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     font_size * line_height_ratio,
                     text,
                     text_len,
+                    static_cast<std::uint32_t>(scratch.batches.size() - 1),
                 });
                 break;
             }
@@ -1479,7 +1599,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                         ? y1 - thickness / 2.0f
                         : (y1 < y2 ? y1 : y2);
                     append_color_instance(
-                        scratch.color_instances,
+                        scratch.batches.back().colors,
                         x, y, w, h,
                         color.r / 255.0f, color.g / 255.0f,
                         color.b / 255.0f, color.a / 255.0f,
@@ -1499,13 +1619,14 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     int n_steps = static_cast<int>(std::ceil(line_len / step));
                     if (n_steps < 1) n_steps = 1;
                     float half_th = thickness * 0.5f;
+                    auto& dst = scratch.batches.back().colors;
                     for (int i = 0; i <= n_steps; ++i) {
                         float t = static_cast<float>(i)
                                   / static_cast<float>(n_steps);
                         float cx = x1 + dx * t;
                         float cy = y1 + dy * t;
                         append_color_instance(
-                            scratch.color_instances,
+                            dst,
                             cx - half_th, cy - half_th,
                             thickness, thickness,
                             color.r / 255.0f, color.g / 255.0f,
@@ -1537,6 +1658,8 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     || !reader.read_text(url, url_len))
                     return false;
                 image.url.assign(url ? url : "", url_len);
+                image.batch_idx =
+                    static_cast<std::uint32_t>(scratch.batches.size() - 1);
                 scratch.images.push_back(std::move(image));
                 break;
             }
@@ -1545,15 +1668,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 if (!reader.read_f32(x) || !reader.read_f32(y)
                     || !reader.read_f32(w) || !reader.read_f32(h))
                     return false;
-                // Scissor is a state command, not an accumulator, and
-                // the macOS renderer currently issues one instanced
-                // draw per bucket (no interleaving possible). For now
-                // we decode-and-skip so the wire format stays valid
-                // and paint_node can emit Scissor without the backend
-                // erroring on an unknown opcode. Applying the clip
-                // rect to the Metal encoder needs a batch split and is
-                // deferred to a follow-up.
-                (void)x; (void)y; (void)w; (void)h;
+                open_scissor_batch(scratch, x, y, w, h);
                 break;
             }
             default:
@@ -2519,7 +2634,9 @@ inline bool upload_image_cache() {
 
 inline bool prepare_text_instances(float scale) {
     auto& scratch = g_renderer.scratch;
-    scratch.text_instances.clear();
+    for (auto& batch : scratch.batches)
+        batch.texts.clear();
+    scratch.overlay_text_instances.clear();
     if (scratch.text_runs.empty())
         return true;
 
@@ -2536,7 +2653,9 @@ inline bool prepare_text_instances(float scale) {
     bool retried_after_reset = false;
     while (true) {
         bool restart = false;
-        scratch.text_instances.clear();
+        for (auto& batch : scratch.batches)
+            batch.texts.clear();
+        scratch.overlay_text_instances.clear();
 
         for (auto const& run : scratch.text_runs) {
             if (!run.text || run.len == 0)
@@ -2610,8 +2729,14 @@ inline bool prepare_text_instances(float scale) {
             if (!entry || !entry->has_ink)
                 continue;
 
+            // Overlay runs (IME composition / generic caret) carry the
+            // sentinel batch_idx == UINT32_MAX and render Z-above scene
+            // content with full-viewport scissor.
+            auto& dst = (run.batch_idx == std::numeric_limits<std::uint32_t>::max())
+                ? scratch.overlay_text_instances
+                : scratch.batches[run.batch_idx].texts;
             append_text_instance(
-                scratch.text_instances,
+                dst,
                 snap_to_pixel_grid(run.x, scale) + entry->x_offset,
                 snap_to_pixel_grid(run.y, scale),
                 entry->width,
@@ -2633,13 +2758,15 @@ inline bool prepare_text_instances(float scale) {
 
 inline void prepare_image_instances(float scale) {
     auto& scratch = g_renderer.scratch;
-    scratch.image_instances.clear();
+    for (auto& batch : scratch.batches)
+        batch.images.clear();
 
     for (auto const& image : scratch.images) {
+        auto& batch = scratch.batches[image.batch_idx];
         auto const* entry = ensure_image_cache_entry(image.url);
         if (entry && entry->state == ImageEntryState::ready) {
             append_image_instance(
-                scratch.image_instances,
+                batch.images,
                 snap_to_pixel_grid(image.x, scale),
                 snap_to_pixel_grid(image.y, scale),
                 image.w,
@@ -2654,13 +2781,15 @@ inline void prepare_image_instances(float scale) {
         bool failed = entry && entry->state == ImageEntryState::failed;
         float fill = failed ? 0.90f : 0.94f;
         float edge = failed ? 0.78f : 0.82f;
+        // Placeholder colors render in the SAME scissor batch as the
+        // original DrawImage so they inherit canvas/dirty-root clipping.
         append_color_instance(
-            scratch.color_instances,
+            batch.colors,
             image.x, image.y, image.w, image.h,
             fill, fill, fill, 1.0f,
             6.0f, 0.0f, 2.0f);
         append_color_instance(
-            scratch.color_instances,
+            batch.colors,
             image.x, image.y, image.w, image.h,
             edge, edge, edge, 1.0f,
             0.0f, 1.0f, 1.0f);
@@ -3109,6 +3238,7 @@ inline void append_overlay_text(FrameScratch& scratch,
         line_height,
         stored.c_str(),
         static_cast<unsigned int>(stored.size()),
+        std::numeric_limits<std::uint32_t>::max(),  // overlay sentinel
     });
 }
 
@@ -4306,6 +4436,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         metrics::detail::now_ns() - text_started,
         native_attrs("text_prepare"));
 
+    finalize_batches(g_renderer.scratch);
+
     int winw = 0;
     int winh = 0;
     glfwGetWindowSize(g_renderer.window, &winw, &winh);
@@ -4352,8 +4484,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     auto& scratch = g_renderer.scratch;
     auto const color_bytes = scratch.color_instances.size() * sizeof(ColorInstanceGPU);
-    uint32_t color_count = static_cast<uint32_t>(scratch.color_instances.size());
-    if (color_count > 0) {
+    bool color_uploaded = false;
+    if (!scratch.color_instances.empty()) {
         if (!ensure_instance_buffer(
                 g_renderer.color_instances_buf,
                 g_renderer.color_instances_capacity,
@@ -4367,14 +4499,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             g_renderer.color_instances_buf->contents(),
             scratch.color_instances.data(),
             color_bytes);
-        encoder->setRenderPipelineState(g_renderer.color_pipeline);
-        encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-        encoder->setVertexBuffer(g_renderer.color_instances_buf, 0, 1);
-        encoder->drawPrimitives(MTL::PrimitiveTypeTriangle,
-                                NS::UInteger(0), 6, NS::UInteger(color_count));
+        color_uploaded = true;
     }
 
     auto const image_bytes = scratch.image_instances.size() * sizeof(ImageInstanceGPU);
+    bool image_uploaded = false;
     if (!scratch.image_instances.empty() && g_renderer.image_atlas_texture) {
         if (!ensure_instance_buffer(
                 g_renderer.image_instances_buf,
@@ -4389,17 +4518,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             g_renderer.image_instances_buf->contents(),
             scratch.image_instances.data(),
             image_bytes);
-        encoder->setRenderPipelineState(g_renderer.image_pipeline);
-        encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-        encoder->setVertexBuffer(g_renderer.image_instances_buf, 0, 1);
-        encoder->setFragmentTexture(g_renderer.image_atlas_texture, 0);
-        encoder->setFragmentSamplerState(g_renderer.sampler, 0);
-        encoder->drawPrimitives(
-            MTL::PrimitiveTypeTriangle,
-            NS::UInteger(0), 6, NS::UInteger(scratch.image_instances.size()));
+        image_uploaded = true;
     }
 
     auto const text_bytes = scratch.text_instances.size() * sizeof(TextInstanceGPU);
+    bool text_uploaded = false;
     if (!scratch.text_instances.empty() && g_renderer.text_atlas_texture) {
         if (!ensure_instance_buffer(
                 g_renderer.text_instances_buf,
@@ -4414,16 +4537,72 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             g_renderer.text_instances_buf->contents(),
             scratch.text_instances.data(),
             text_bytes);
-
-        encoder->setRenderPipelineState(g_renderer.text_pipeline);
-        encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-        encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
-        encoder->setFragmentTexture(g_renderer.text_atlas_texture, 0);
-        encoder->setFragmentSamplerState(g_renderer.sampler, 0);
-        encoder->drawPrimitives(
-            MTL::PrimitiveTypeTriangle,
-            NS::UInteger(0), 6, NS::UInteger(scratch.text_instances.size()));
+        text_uploaded = true;
     }
+
+    // Per-batch scissor + draws. Each batch's instance ranges live
+    // contiguously in the flat *_instances vectors thanks to
+    // finalize_batches; we use baseInstance to point at them.
+    float const scissor_scale = current_backing_scale(g_renderer.window);
+    for (auto const& batch : scratch.batches) {
+        auto const batch_color_count =
+            static_cast<std::uint32_t>(batch.colors.size());
+        auto const batch_image_count =
+            static_cast<std::uint32_t>(batch.images.size());
+        auto const batch_text_count =
+            static_cast<std::uint32_t>(batch.texts.size());
+        if (batch_color_count + batch_image_count + batch_text_count == 0)
+            continue;
+        auto const sr = compute_metal_scissor(
+            batch, scissor_scale,
+            static_cast<std::uint32_t>(g_renderer.drawable_width),
+            static_cast<std::uint32_t>(g_renderer.drawable_height));
+        if (sr.width == 0 || sr.height == 0)
+            continue;
+        encoder->setScissorRect(sr);
+
+        if (color_uploaded && batch_color_count > 0) {
+            encoder->setRenderPipelineState(g_renderer.color_pipeline);
+            encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+            encoder->setVertexBuffer(g_renderer.color_instances_buf, 0, 1);
+            encoder->drawPrimitives(
+                MTL::PrimitiveTypeTriangle,
+                NS::UInteger(0), 6,
+                NS::UInteger(batch_color_count),
+                NS::UInteger(batch.color_first));
+        }
+        if (image_uploaded && batch_image_count > 0) {
+            encoder->setRenderPipelineState(g_renderer.image_pipeline);
+            encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+            encoder->setVertexBuffer(g_renderer.image_instances_buf, 0, 1);
+            encoder->setFragmentTexture(g_renderer.image_atlas_texture, 0);
+            encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+            encoder->drawPrimitives(
+                MTL::PrimitiveTypeTriangle,
+                NS::UInteger(0), 6,
+                NS::UInteger(batch_image_count),
+                NS::UInteger(batch.image_first));
+        }
+        if (text_uploaded && batch_text_count > 0) {
+            encoder->setRenderPipelineState(g_renderer.text_pipeline);
+            encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+            encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
+            encoder->setFragmentTexture(g_renderer.text_atlas_texture, 0);
+            encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+            encoder->drawPrimitives(
+                MTL::PrimitiveTypeTriangle,
+                NS::UInteger(0), 6,
+                NS::UInteger(batch_text_count),
+                NS::UInteger(batch.text_first));
+        }
+    }
+
+    // Overlays render Z-above the batched scene with full-drawable
+    // scissor so the last batch's clip rect doesn't leak into them.
+    encoder->setScissorRect(MTL::ScissorRect{
+        0, 0,
+        static_cast<NS::UInteger>(g_renderer.drawable_width),
+        static_cast<NS::UInteger>(g_renderer.drawable_height)});
 
     auto const overlay_color_bytes =
         scratch.overlay_color_instances.size() * sizeof(ColorInstanceGPU);
@@ -4449,6 +4628,19 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         encoder->drawPrimitives(
             MTL::PrimitiveTypeTriangle,
             NS::UInteger(0), 6, NS::UInteger(overlay_color_count));
+    }
+
+    if (text_uploaded && scratch.overlay_text_count > 0) {
+        encoder->setRenderPipelineState(g_renderer.text_pipeline);
+        encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+        encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
+        encoder->setFragmentTexture(g_renderer.text_atlas_texture, 0);
+        encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+        encoder->drawPrimitives(
+            MTL::PrimitiveTypeTriangle,
+            NS::UInteger(0), 6,
+            NS::UInteger(scratch.overlay_text_count),
+            NS::UInteger(scratch.overlay_text_first));
     }
 
     encoder->endEncoding();
