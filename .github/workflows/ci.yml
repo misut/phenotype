@@ -24,11 +24,7 @@ jobs:
             target_arg: --target wasm32-wasi
             cxxflags: -fsanitize=undefined -fsanitize-trap=undefined -g
             ldflags: ""
-          # Native: macOS only. Windows native is intentionally
-          # un-targeted — phenotype's downstream consumers ship on
-          # macOS / Android / WASM, and the MSVC C++23 modules path
-          # has been a recurring CI hazard with no caller waiting on
-          # the green check.
+          # Native: macOS is covered here. Windows native runs in the dedicated job below.
           - os: macos-15
             platform: aarch64-apple-darwin
             target: native
@@ -118,3 +114,75 @@ jobs:
             .exon
             ~/.exon/cache
           key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
+  windows-native:
+    name: test (windows-2022, native)
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve tool versions
+        id: tool-versions
+        shell: bash
+        run: |
+          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+
+      - name: Install intron
+        shell: pwsh
+        run: |
+          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-x86_64-pc-windows-msvc.zip"
+          Expand-Archive -Path intron-*.zip -DestinationPath .
+          Remove-Item intron-*.zip
+          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.intron\bin" | Out-Null
+          Move-Item -Path intron.exe -Destination "$env:USERPROFILE\.intron\bin\intron.exe"
+          echo "$env:USERPROFILE\.intron\bin" >> $env:GITHUB_PATH
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install toolchains
+        shell: pwsh
+        run: |
+          intron install msvc 2022
+          intron default msvc 2022
+          intron install cmake 4.3.1
+          intron install ninja 1.13.2
+          echo "$env:USERPROFILE\.intron\toolchains\cmake\4.3.1\bin" >> $env:GITHUB_PATH
+          echo "$env:USERPROFILE\.intron\toolchains\ninja\1.13.2" >> $env:GITHUB_PATH
+
+      - name: Install exon
+        shell: pwsh
+        run: |
+          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-x86_64-pc-windows-msvc.zip"
+          Expand-Archive -Path exon-*.zip -DestinationPath .
+          Remove-Item exon-*.zip
+          New-Item -ItemType Directory -Force -Path "$env:USERPROFILE\.exon\bin" | Out-Null
+          Move-Item -Path exon.exe -Destination "$env:USERPROFILE\.exon\bin\exon.exe"
+          echo "$env:USERPROFILE\.exon\bin" >> $env:GITHUB_PATH
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build
+        shell: pwsh
+        run: |
+          Invoke-Expression (& intron env | Out-String)
+          $env:CC = "cl"
+          $env:CXX = "cl"
+          exon build
+
+      - name: Test
+        shell: pwsh
+        run: |
+          Invoke-Expression (& intron env | Out-String)
+          $env:CC = "cl"
+          $env:CXX = "cl"
+          exon test
+
+      - name: Build native example
+        shell: pwsh
+        run: |
+          Invoke-Expression (& intron env | Out-String)
+          $env:CC = "cl"
+          $env:CXX = "cl"
+          Set-Location examples/native
+          exon build
