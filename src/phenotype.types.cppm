@@ -1,5 +1,6 @@
 module;
 #include <cstdint>
+#include <cstring>
 #include <functional>
 #include <string>
 #include <vector>
@@ -166,6 +167,138 @@ enum class PathVerb : unsigned int {
     CubicTo = 3,  // 6 f32: c1x, c1y, c2x, c2y, x, y
     ArcTo   = 4,  // 5 f32: cx, cy, radius, start_angle, end_angle (CCW math/AutoCAD)
     Close   = 5,  // 0 f32 — closes the current subpath with a straight segment.
+};
+
+// PathBuilder — accumulates verbs into a packed buffer (tag + inline
+// f32-as-u32 words) so emit can memcpy the buffer directly into the
+// command stream. Lives next to `Painter` because `Painter::stroke_path`
+// takes it by reference.
+//
+// Coordinate convention: canvas-local pixels for points, CCW math /
+// AutoCAD radians for `arc_to` angles. `close()` synthesises a
+// straight segment to the current subpath's start when the backend
+// strokes / fills it.
+struct PathBuilder {
+    // Packed verb stream: each verb is `[tag u32]` followed by N
+    // f32-as-u32 words (N depends on the tag). One word per push,
+    // appended in order — the same byte stream a backend will see in
+    // `Cmd::Path` / `Cmd::FillPath` payload.
+    std::vector<unsigned int> verbs;
+    unsigned int verb_count = 0;
+
+    void clear() { verbs.clear(); verb_count = 0; }
+
+    void move_to(float x, float y) {
+        push_verb(PathVerb::MoveTo);
+        push_f32(x); push_f32(y);
+    }
+    void line_to(float x, float y) {
+        push_verb(PathVerb::LineTo);
+        push_f32(x); push_f32(y);
+    }
+    void quad_to(float cx, float cy, float x, float y) {
+        push_verb(PathVerb::QuadTo);
+        push_f32(cx); push_f32(cy);
+        push_f32(x); push_f32(y);
+    }
+    void cubic_to(float c1x, float c1y, float c2x, float c2y,
+                  float x, float y) {
+        push_verb(PathVerb::CubicTo);
+        push_f32(c1x); push_f32(c1y);
+        push_f32(c2x); push_f32(c2y);
+        push_f32(x); push_f32(y);
+    }
+    // Arc segment in centre form. `start_angle` to `end_angle` are
+    // radians, CCW per the math/AutoCAD convention (matches Painter::arc
+    // and Cmd::DrawArc).
+    void arc_to(float cx, float cy, float radius,
+                float start_angle, float end_angle) {
+        push_verb(PathVerb::ArcTo);
+        push_f32(cx); push_f32(cy);
+        push_f32(radius);
+        push_f32(start_angle); push_f32(end_angle);
+    }
+    void close() {
+        push_verb(PathVerb::Close);
+    }
+
+    bool empty() const { return verb_count == 0; }
+
+    // Returns a copy with every coordinate word offset by `(dx, dy)`.
+    // Magnitude / angle words (radius, start_angle, end_angle on
+    // ArcTo) pass through unchanged. Used by `Painter::stroke_path`
+    // adapters to convert canvas-local verb streams into surface-local
+    // ones at emit time, mirroring how `line()` / `arc()` translate
+    // their absolute coords with `origin_x / origin_y`. An unknown
+    // verb tag terminates the walk and the rest of the buffer is
+    // copied through verbatim.
+    PathBuilder translated(float dx, float dy) const {
+        PathBuilder out;
+        out.verb_count = verb_count;
+        out.verbs.reserve(verbs.size());
+
+        unsigned int i = 0;
+        auto translate_xy = [&]() {
+            float x, y;
+            unsigned int xb = verbs[i], yb = verbs[i + 1];
+            std::memcpy(&x, &xb, 4);
+            std::memcpy(&y, &yb, 4);
+            x += dx; y += dy;
+            std::memcpy(&xb, &x, 4);
+            std::memcpy(&yb, &y, 4);
+            out.verbs.push_back(xb);
+            out.verbs.push_back(yb);
+            i += 2;
+        };
+        auto passthrough = [&](unsigned int n) {
+            for (unsigned int k = 0; k < n; ++k) {
+                out.verbs.push_back(verbs[i]);
+                ++i;
+            }
+        };
+
+        while (i < verbs.size()) {
+            unsigned int tag = verbs[i++];
+            out.verbs.push_back(tag);
+            switch (static_cast<PathVerb>(tag)) {
+            case PathVerb::MoveTo:
+            case PathVerb::LineTo:
+                translate_xy();
+                break;
+            case PathVerb::QuadTo:
+                translate_xy();
+                translate_xy();
+                break;
+            case PathVerb::CubicTo:
+                translate_xy();
+                translate_xy();
+                translate_xy();
+                break;
+            case PathVerb::ArcTo:
+                translate_xy();
+                passthrough(3);  // radius, start_angle, end_angle
+                break;
+            case PathVerb::Close:
+                break;
+            default:
+                while (i < verbs.size())
+                    out.verbs.push_back(verbs[i++]);
+                return out;
+            }
+        }
+        return out;
+    }
+
+private:
+    void push_verb(PathVerb v) {
+        verbs.push_back(static_cast<unsigned int>(v));
+        ++verb_count;
+    }
+    void push_f32(float v) {
+        unsigned int bits;
+        std::memcpy(&bits, &v, 4);
+        verbs.push_back(bits);
+    }
 };
 
 // ============================================================
@@ -364,6 +497,14 @@ public:
     virtual void arc(float cx, float cy, float radius,
                      float start_angle, float end_angle,
                      float thickness, Color color) = 0;
+    // Stroked path — a sequence of `PathVerb`s expressed via a
+    // `PathBuilder`. The path's coordinates are canvas-local; the
+    // adapter translates them to surface-local before emitting the
+    // wire-format `Cmd::Path` payload. Backends CPU-flatten curve
+    // segments into the existing line / arc instance buffers so no
+    // new pipeline is required for stroke rendering.
+    virtual void stroke_path(PathBuilder const& path,
+                             float thickness, Color color) = 0;
 };
 
 struct LayoutNode {
