@@ -11,41 +11,25 @@
 
 #include <cassert>
 #include <cstdio>
+
+// Native-only contract test. WASI / Android consume the same wire
+// format but reach it through different paths (the JS shim parses
+// commands itself; Android tests don't ship test binaries), so the
+// backend batching contract this test pins is only meaningful where
+// the host can drive emit_* directly via a render_backend instance.
+#if !defined(__wasi__) && !defined(__ANDROID__)
+
 #include <variant>
 #include <vector>
 import phenotype;
 
 using namespace phenotype;
 
-#if !defined(__wasi__) && !defined(__ANDROID__)
-static null_host host;
-#define CMD_BUF host.buf()
-#define CMD_LEN host.buf_len()
-#else
-extern "C" {
-    extern unsigned char phenotype_cmd_buf[];
-    extern unsigned int phenotype_cmd_len;
-    void phenotype_flush() {}
-    float phenotype_measure_text(float fs, unsigned int, char const*, unsigned int len) {
-        return static_cast<float>(len) * fs * 0.6f;
-    }
-    float phenotype_get_canvas_width() { return 800.0f; }
-    float phenotype_get_canvas_height() { return 600.0f; }
-    void phenotype_open_url(char const*, unsigned int) {}
-}
-#define CMD_BUF phenotype_cmd_buf
-#define CMD_LEN phenotype_cmd_len
-#endif
-
 namespace {
 
-void reset_buffer() {
-#if !defined(__wasi__) && !defined(__ANDROID__)
-    host.flush();
-#else
-    phenotype_cmd_len = 0;
-#endif
-}
+null_host host;
+
+void reset_buffer() { host.flush(); }
 
 Color const red{255, 0, 0, 255};
 
@@ -55,12 +39,8 @@ Color const red{255, 0, 0, 255};
 
 void test_scissor_emits_with_exact_coords() {
     reset_buffer();
-#if !defined(__wasi__) && !defined(__ANDROID__)
     emit_scissor(host, 50.0f, 60.0f, 200.0f, 100.0f);
-#else
-    emit_scissor(50.0f, 60.0f, 200.0f, 100.0f);
-#endif
-    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    auto cmds = parse_commands(host.buf(), host.buf_len());
     assert(cmds.size() == 1);
     auto const* sc = std::get_if<ScissorCmd>(&cmds[0]);
     assert(sc != nullptr);
@@ -72,12 +52,8 @@ void test_scissor_emits_with_exact_coords() {
 
 void test_scissor_reset_uses_zero_sentinel() {
     reset_buffer();
-#if !defined(__wasi__) && !defined(__ANDROID__)
     emit_scissor_reset(host);
-#else
-    emit_scissor_reset();
-#endif
-    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    auto cmds = parse_commands(host.buf(), host.buf_len());
     assert(cmds.size() == 1);
     auto const* sc = std::get_if<ScissorCmd>(&cmds[0]);
     assert(sc != nullptr);
@@ -97,23 +73,14 @@ void test_scissor_reset_uses_zero_sentinel() {
 
 void test_scissor_interleaving_preserves_order() {
     reset_buffer();
-#if !defined(__wasi__) && !defined(__ANDROID__)
     emit_fill_rect(host, 0.0f, 0.0f, 10.0f, 10.0f, red);
     emit_scissor(host, 50.0f, 50.0f, 200.0f, 200.0f);
     emit_fill_rect(host, 60.0f, 60.0f, 20.0f, 20.0f, red);
     emit_fill_rect(host, 70.0f, 70.0f, 20.0f, 20.0f, red);
     emit_scissor_reset(host);
     emit_fill_rect(host, 100.0f, 100.0f, 30.0f, 30.0f, red);
-#else
-    emit_fill_rect(0.0f, 0.0f, 10.0f, 10.0f, red);
-    emit_scissor(50.0f, 50.0f, 200.0f, 200.0f);
-    emit_fill_rect(60.0f, 60.0f, 20.0f, 20.0f, red);
-    emit_fill_rect(70.0f, 70.0f, 20.0f, 20.0f, red);
-    emit_scissor_reset();
-    emit_fill_rect(100.0f, 100.0f, 30.0f, 30.0f, red);
-#endif
 
-    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    auto cmds = parse_commands(host.buf(), host.buf_len());
     assert(cmds.size() == 6);
 
     assert(std::holds_alternative<FillRectCmd>(cmds[0]));
@@ -137,19 +104,12 @@ void test_scissor_interleaving_preserves_order() {
 // both back-to-back Scissors verbatim.
 void test_back_to_back_scissors_are_both_emitted() {
     reset_buffer();
-#if !defined(__wasi__) && !defined(__ANDROID__)
     emit_fill_rect(host, 0.0f, 0.0f, 10.0f, 10.0f, red);
     emit_scissor(host, 50.0f, 50.0f, 200.0f, 200.0f);
     emit_scissor(host, 10.0f, 10.0f, 100.0f, 100.0f);
     emit_fill_rect(host, 20.0f, 20.0f, 30.0f, 30.0f, red);
-#else
-    emit_fill_rect(0.0f, 0.0f, 10.0f, 10.0f, red);
-    emit_scissor(50.0f, 50.0f, 200.0f, 200.0f);
-    emit_scissor(10.0f, 10.0f, 100.0f, 100.0f);
-    emit_fill_rect(20.0f, 20.0f, 30.0f, 30.0f, red);
-#endif
 
-    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    auto cmds = parse_commands(host.buf(), host.buf_len());
     assert(cmds.size() == 4);
     assert(std::holds_alternative<FillRectCmd>(cmds[0]));
     auto const* s1 = std::get_if<ScissorCmd>(&cmds[1]);
@@ -169,3 +129,9 @@ int main() {
     std::puts("\nAll scissor batch wire-format tests passed.");
     return 0;
 }
+
+#else  // __wasi__ || __ANDROID__
+
+int main() { return 0; }
+
+#endif
