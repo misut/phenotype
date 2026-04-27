@@ -91,17 +91,102 @@ static_assert(sizeof(ColorUniforms) == 16);
 
 inline constexpr std::size_t INITIAL_INSTANCE_CAPACITY = 256;
 
+// Cmd::Scissor splits each frame into ordered batches. Within a batch
+// instances are pushed in decode order; render-time issues one
+// vkCmdSetScissor per batch and per-pipeline vkCmdDraw with
+// firstInstance offsets into the flat *_instances vectors that
+// finalize_batches assembles. Sentinel rect (x=y=w=h=0) means
+// "full swapchain" — paint emits this to reset clipping.
+struct ScissorBatch {
+    float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+    std::vector<ColorInstanceGPU> colors;
+    std::vector<ImageInstanceGPU> images;
+    std::vector<TextInstanceGPU> texts;
+    std::uint32_t color_first = 0;
+    std::uint32_t image_first = 0;
+    std::uint32_t text_first = 0;
+};
+
 // Per-frame CPU-side decode scratch. `has_clear` tracks whether the
 // frame contained an explicit Clear command; when false, renderer_flush
 // uses the active phenotype theme background instead.
 struct FrameScratch {
+    // Per-batch local accumulators. Concatenated into the flat
+    // *_instances vectors below by finalize_batches().
+    std::vector<ScissorBatch> batches;
+
+    // Flat staging vectors uploaded to GPU instance buffers. Populated
+    // by finalize_batches() — direct decode-time pushes go to per-batch
+    // locals above.
     std::vector<ColorInstanceGPU> color_instances;
-    std::vector<::phenotype::native::TextEntry> text_entries;
     std::vector<TextInstanceGPU> text_instances;
     std::vector<ImageInstanceGPU> image_instances;
+
+    std::vector<::phenotype::native::TextEntry> text_entries;
+    // Parallel to text_entries: which batch each entry belongs to. Set
+    // during decode, consumed during the post-decode text-atlas pass to
+    // attribute glyph instances to the correct batch.
+    std::vector<std::uint32_t> text_entries_batch_idx;
+
     float clear_color[4]{0, 0, 0, 0};
     bool has_clear = false;
 };
+
+inline void open_scissor_batch(FrameScratch& s,
+                               float x, float y, float w, float h) {
+    auto& cur = s.batches.back();
+    if (cur.colors.empty() && cur.images.empty() && cur.texts.empty()) {
+        cur.x = x; cur.y = y; cur.w = w; cur.h = h;
+        return;
+    }
+    ScissorBatch next;
+    next.x = x; next.y = y; next.w = w; next.h = h;
+    s.batches.push_back(std::move(next));
+}
+
+inline void finalize_batches(FrameScratch& s) {
+    s.color_instances.clear();
+    s.image_instances.clear();
+    s.text_instances.clear();
+    for (auto& b : s.batches) {
+        b.color_first = static_cast<std::uint32_t>(s.color_instances.size());
+        b.image_first = static_cast<std::uint32_t>(s.image_instances.size());
+        b.text_first  = static_cast<std::uint32_t>(s.text_instances.size());
+        s.color_instances.insert(s.color_instances.end(),
+                                 b.colors.begin(), b.colors.end());
+        s.image_instances.insert(s.image_instances.end(),
+                                 b.images.begin(), b.images.end());
+        s.text_instances.insert(s.text_instances.end(),
+                                b.texts.begin(), b.texts.end());
+    }
+}
+
+// Convert a batch's logical-pixel scissor rect into a Vulkan scissor in
+// physical pixels, clamped to the swapchain extent. Android uses 1:1
+// logical-to-physical, so no scale step. Returns a zero-extent rect
+// when the intersection is empty — caller skips draws to avoid VL
+// errors. Sentinel (w==0 && h==0) means "full swapchain".
+inline VkRect2D compute_vk_scissor(ScissorBatch const& b,
+                                   VkExtent2D ext) {
+    if (b.w == 0.0f && b.h == 0.0f)
+        return VkRect2D{{0, 0}, ext};
+    long long x = std::max<long long>(
+        0, static_cast<long long>(std::floor(b.x)));
+    long long y = std::max<long long>(
+        0, static_cast<long long>(std::floor(b.y)));
+    long long r = std::min<long long>(
+        static_cast<long long>(ext.width),
+        static_cast<long long>(std::ceil(b.x + b.w)));
+    long long btm = std::min<long long>(
+        static_cast<long long>(ext.height),
+        static_cast<long long>(std::ceil(b.y + b.h)));
+    if (r <= x || btm <= y)
+        return VkRect2D{{0, 0}, {0, 0}};
+    return VkRect2D{
+        {static_cast<std::int32_t>(x), static_cast<std::int32_t>(y)},
+        {static_cast<std::uint32_t>(r - x),
+         static_cast<std::uint32_t>(btm - y)}};
+}
 
 // ---- JNI text bridge --------------------------------------------------
 //
@@ -2827,6 +2912,9 @@ inline void normalize_color(::phenotype::Color const& c, float out[4]) {
 inline void decode_android_color_commands(unsigned char const* buf,
                                           unsigned int len,
                                           FrameScratch& out) {
+    // First batch is a sentinel (full swapchain) so any draw before a
+    // Cmd::Scissor renders unclipped.
+    out.batches.push_back(ScissorBatch{});
     auto commands = ::phenotype::parse_commands(buf, len);
     for (auto const& cmd : commands) {
         std::visit([&](auto const& c) {
@@ -2840,7 +2928,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 inst.rect[2] = c.w; inst.rect[3] = c.h;
                 normalize_color(c.color, inst.color);
                 // params = (0, 0, 0=Fill, 0)
-                out.color_instances.push_back(inst);
+                out.batches.back().colors.push_back(inst);
             } else if constexpr (std::same_as<T, ::phenotype::StrokeRectCmd>) {
                 ColorInstanceGPU inst{};
                 inst.rect[0] = c.x; inst.rect[1] = c.y;
@@ -2849,7 +2937,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 inst.params[0] = 0.0f;
                 inst.params[1] = c.line_width;
                 inst.params[2] = 1.0f; // draw_type = Stroke
-                out.color_instances.push_back(inst);
+                out.batches.back().colors.push_back(inst);
             } else if constexpr (std::same_as<T, ::phenotype::RoundRectCmd>) {
                 ColorInstanceGPU inst{};
                 inst.rect[0] = c.x; inst.rect[1] = c.y;
@@ -2858,7 +2946,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 inst.params[0] = c.radius;
                 inst.params[1] = 0.0f;
                 inst.params[2] = 2.0f; // draw_type = Round
-                out.color_instances.push_back(inst);
+                out.batches.back().colors.push_back(inst);
             } else if constexpr (std::same_as<T, ::phenotype::DrawLineCmd>) {
                 // Thickened axis-aligned rect — preserves desktop
                 // backends' DrawLine behavior including the
@@ -2881,7 +2969,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 inst.params[0] = 0.0f;
                 inst.params[1] = 0.0f;
                 inst.params[2] = 3.0f; // matches macOS / Windows
-                out.color_instances.push_back(inst);
+                out.batches.back().colors.push_back(inst);
             } else if constexpr (std::same_as<T, ::phenotype::DrawTextCmd>) {
                 ::phenotype::native::TextEntry entry{};
                 entry.x = c.x;
@@ -2894,7 +2982,10 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 entry.a = c.color.a / 255.0f;
                 entry.text = c.text;
                 out.text_entries.push_back(std::move(entry));
+                out.text_entries_batch_idx.push_back(
+                    static_cast<std::uint32_t>(out.batches.size() - 1));
             } else if constexpr (std::same_as<T, ::phenotype::DrawImageCmd>) {
+                auto& batch = out.batches.back();
                 auto const* entry = ensure_image_cache_entry(c.url);
                 if (entry && entry->state == ImageState::Ready) {
                     ImageInstanceGPU inst{};
@@ -2906,10 +2997,12 @@ inline void decode_android_color_commands(unsigned char const* buf,
                     inst.uv_rect[3] = entry->vh;
                     inst.color[0] = 1.0f; inst.color[1] = 1.0f;
                     inst.color[2] = 1.0f; inst.color[3] = 1.0f;
-                    out.image_instances.push_back(inst);
+                    batch.images.push_back(inst);
                 } else {
                     // Placeholder: light-gray fill + darker border,
                     // matching macOS's image pending/failed rendering.
+                    // Same scissor batch as the original DrawImage so
+                    // canvas/dirty-root clipping survives.
                     bool failed = entry && entry->state == ImageState::Failed;
                     float fill  = failed ? 0.90f : 0.94f;
                     float edge  = failed ? 0.78f : 0.82f;
@@ -2919,7 +3012,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                     inner.color[0] = fill; inner.color[1] = fill;
                     inner.color[2] = fill; inner.color[3] = 1.0f;
                     // params = (0,0,0,0) → plain fill
-                    out.color_instances.push_back(inner);
+                    batch.colors.push_back(inner);
                     ColorInstanceGPU outline{};
                     outline.rect[0] = c.x; outline.rect[1] = c.y;
                     outline.rect[2] = c.w; outline.rect[3] = c.h;
@@ -2928,14 +3021,11 @@ inline void decode_android_color_commands(unsigned char const* buf,
                     outline.params[0] = 0.0f;
                     outline.params[1] = 2.0f; // 2-pixel stroke
                     outline.params[2] = 1.0f; // draw_type = Stroke
-                    out.color_instances.push_back(outline);
+                    batch.colors.push_back(outline);
                 }
+            } else if constexpr (std::same_as<T, ::phenotype::ScissorCmd>) {
+                open_scissor_batch(out, c.x, c.y, c.w, c.h);
             }
-            // ScissorCmd is decoded-and-skipped: applying the clip
-            // requires a batch split in the Vulkan pipeline and is
-            // deferred to a follow-up. Parsing is still required so
-            // paint_node can emit Scissor without the decoder
-            // erroring on an unknown opcode.
             // HitRegion is ignored before Stage 6.
         }, cmd);
     }
@@ -2983,7 +3073,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     ::phenotype::native::TextAtlas atlas{};
     if (!scratch.text_entries.empty()) {
         atlas = text_build_atlas(scratch.text_entries, 1.0f);
-        scratch.text_instances.reserve(scratch.text_entries.size());
         for (std::size_t i = 0;
              i < scratch.text_entries.size() && i < atlas.quads.size();
              ++i) {
@@ -2997,9 +3086,14 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             inst.uv_rect[2] = q.uw; inst.uv_rect[3] = q.vh;
             inst.color[0] = entry.r; inst.color[1] = entry.g;
             inst.color[2] = entry.b; inst.color[3] = entry.a;
-            scratch.text_instances.push_back(inst);
+            auto const batch_idx =
+                (i < scratch.text_entries_batch_idx.size())
+                    ? scratch.text_entries_batch_idx[i]
+                    : 0u;
+            scratch.batches[batch_idx].texts.push_back(inst);
         }
     }
+    finalize_batches(scratch);
 
     std::uint32_t idx = 0;
     auto r = vkAcquireNextImageKHR(
@@ -3106,51 +3200,61 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     vp.minDepth = 0.0f; vp.maxDepth = 1.0f;
     vkCmdSetViewport(g_renderer.command_buffer, 0, 1, &vp);
 
-    VkRect2D scissor{};
-    scissor.offset = {0, 0};
-    scissor.extent = g_renderer.swapchain_extent;
-    vkCmdSetScissor(g_renderer.command_buffer, 0, 1, &scissor);
+    // Per-batch scissor + draws. Each batch's instance ranges live
+    // contiguously in the flat *_instances vectors thanks to
+    // finalize_batches; firstInstance points at them.
+    for (auto const& batch : scratch.batches) {
+        auto const batch_color_count =
+            static_cast<std::uint32_t>(batch.colors.size());
+        auto const batch_image_count =
+            static_cast<std::uint32_t>(batch.images.size());
+        auto const batch_text_count =
+            static_cast<std::uint32_t>(batch.texts.size());
+        if (batch_color_count + batch_image_count + batch_text_count == 0)
+            continue;
+        VkRect2D scissor =
+            compute_vk_scissor(batch, g_renderer.swapchain_extent);
+        if (scissor.extent.width == 0 || scissor.extent.height == 0)
+            continue;
+        vkCmdSetScissor(g_renderer.command_buffer, 0, 1, &scissor);
 
-    if (!scratch.color_instances.empty()) {
-        vkCmdBindPipeline(g_renderer.command_buffer,
-                          VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          g_renderer.color_pipeline);
-        vkCmdBindDescriptorSets(g_renderer.command_buffer,
-                                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                g_renderer.color_pipeline_layout,
-                                0, 1, &g_renderer.color_descriptor_set,
-                                0, nullptr);
-        vkCmdDraw(g_renderer.command_buffer, 6,
-                  static_cast<std::uint32_t>(scratch.color_instances.size()),
-                  0, 0);
-    }
-
-    if (have_text) {
-        vkCmdBindPipeline(g_renderer.command_buffer,
-                          VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          g_renderer.text_pipeline);
-        vkCmdBindDescriptorSets(g_renderer.command_buffer,
-                                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                g_renderer.text_pipeline_layout,
-                                0, 1, &g_renderer.text_descriptor_set,
-                                0, nullptr);
-        vkCmdDraw(g_renderer.command_buffer, 6,
-                  static_cast<std::uint32_t>(scratch.text_instances.size()),
-                  0, 0);
-    }
-
-    if (have_images && g_renderer.image_atlas_initialised) {
-        vkCmdBindPipeline(g_renderer.command_buffer,
-                          VK_PIPELINE_BIND_POINT_GRAPHICS,
-                          g_renderer.image_pipeline);
-        vkCmdBindDescriptorSets(g_renderer.command_buffer,
-                                VK_PIPELINE_BIND_POINT_GRAPHICS,
-                                g_renderer.image_pipeline_layout,
-                                0, 1, &g_renderer.image_descriptor_set,
-                                0, nullptr);
-        vkCmdDraw(g_renderer.command_buffer, 6,
-                  static_cast<std::uint32_t>(scratch.image_instances.size()),
-                  0, 0);
+        if (batch_color_count > 0) {
+            vkCmdBindPipeline(g_renderer.command_buffer,
+                              VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              g_renderer.color_pipeline);
+            vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    g_renderer.color_pipeline_layout,
+                                    0, 1, &g_renderer.color_descriptor_set,
+                                    0, nullptr);
+            vkCmdDraw(g_renderer.command_buffer, 6,
+                      batch_color_count, 0, batch.color_first);
+        }
+        if (have_text && batch_text_count > 0) {
+            vkCmdBindPipeline(g_renderer.command_buffer,
+                              VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              g_renderer.text_pipeline);
+            vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    g_renderer.text_pipeline_layout,
+                                    0, 1, &g_renderer.text_descriptor_set,
+                                    0, nullptr);
+            vkCmdDraw(g_renderer.command_buffer, 6,
+                      batch_text_count, 0, batch.text_first);
+        }
+        if (have_images && g_renderer.image_atlas_initialised
+            && batch_image_count > 0) {
+            vkCmdBindPipeline(g_renderer.command_buffer,
+                              VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              g_renderer.image_pipeline);
+            vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    g_renderer.image_pipeline_layout,
+                                    0, 1, &g_renderer.image_descriptor_set,
+                                    0, nullptr);
+            vkCmdDraw(g_renderer.command_buffer, 6,
+                      batch_image_count, 0, batch.image_first);
+        }
     }
 
     vkCmdEndRenderPass(g_renderer.command_buffer);
