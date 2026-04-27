@@ -3703,6 +3703,31 @@ inline int translate_android_mods(int android_meta) {
 
 } // namespace phenotype::native::detail
 
+// Public templated entry for Android consumers that link in their own
+// State / Msg / view / update via a static archive. Counterpart to
+// `phenotype::native::run_app` for the GLFW shell.
+//
+// Apps that build their own `lib<app>-modules.a` (via exon for
+// aarch64-linux-android) and link it into the GameActivity NDK target
+// can declare a small `extern "C" void <app>_android_run()` wrapper
+// that calls this template, then install the wrapper from the NDK
+// glue via `phenotype_android_install_runner` so the Stage 6
+// `phenotype_android_start_app` calls into the user's State/Msg
+// instead of the bundled demo.
+export namespace phenotype::native::android {
+
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+inline void run_app(View view, Update update) {
+    namespace d = phenotype::native::detail;
+    d::bind_platform_once();
+    d::run_host<State, Msg>(d::g_android_host,
+                            std::move(view), std::move(update));
+}
+
+} // namespace phenotype::native::android
+
 extern "C" {
 
 __attribute__((visibility("default")))
@@ -3789,14 +3814,34 @@ char const* phenotype_android_startup_message(void) {
 }
 
 // ---- Stage 6: app bootstrap + input dispatch ------------------------
+//
+// `g_android_app_runner` is a downstream-app customisation hook. When
+// non-null, `phenotype_android_start_app` calls it in place of the
+// bundled demo6 counter. The runner is installed via the C ABI
+// `phenotype_android_install_runner` (declared further down inside the
+// same extern "C" block as the other phenotype_android_* exports).
+namespace phenotype::native::detail {
+inline void (*g_android_app_runner)() = nullptr;
+}
+
+__attribute__((visibility("default")))
+void phenotype_android_install_runner(void (*runner)(void)) {
+    phenotype::native::detail::g_android_app_runner = runner;
+}
 
 __attribute__((visibility("default")))
 void phenotype_android_start_app(void) {
     namespace d = phenotype::native::detail;
     d::bind_platform_once();
-    // Instantiate the baked-in counter demo's run_host. The shell's
-    // bind_host + phenotype::run<State, Msg> wire the view/update
-    // closures into global state and trigger an initial repaint.
+    if (d::g_android_app_runner) {
+        // Downstream app installed its own runner — yields control to it.
+        d::g_android_app_runner();
+        return;
+    }
+    // No runner installed → fall back to the bundled demo6 counter.
+    // The shell's bind_host + phenotype::run<State, Msg> wire the
+    // view/update closures into global state and trigger an initial
+    // repaint.
     d::run_host<d::demo6::State, d::demo6::Msg>(
         d::g_android_host, d::demo6::view, d::demo6::update);
 }
