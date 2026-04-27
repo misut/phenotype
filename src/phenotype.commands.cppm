@@ -33,10 +33,37 @@ struct ScissorCmd   { float x, y, w, h; };
 // `thickness`. Full circle: `start_angle = 0, end_angle = 2π`.
 struct DrawArcCmd   { float cx, cy, radius, start_angle, end_angle, thickness; Color color; };
 
+// ---- Path verb segments (used by DrawPathCmd / FillPathCmd) ----
+//
+// One PathSegment per emitted PathVerb. Backends visit the variant
+// and dispatch onto the existing line / arc instance buffers (stroke)
+// or feed a CPU ear-clip (fill). Coordinate convention follows the
+// rest of the wire format — canvas-local pixels for `(x, y)` /
+// control points, CCW math/AutoCAD radians for `ArcTo` angles.
+struct PathMoveTo  { float x, y; };
+struct PathLineTo  { float x, y; };
+struct PathQuadTo  { float cx, cy, x, y; };
+struct PathCubicTo { float c1x, c1y, c2x, c2y, x, y; };
+struct PathArcTo   { float cx, cy, radius, start_angle, end_angle; };
+struct PathClose   {};
+
+using PathSegment = std::variant<
+    PathMoveTo, PathLineTo, PathQuadTo, PathCubicTo, PathArcTo, PathClose>;
+
+// Stroked path. `thickness` applies to every flattened line segment
+// and to ArcTo segments (which the backend dispatches onto the
+// existing arc SDF pipeline at the same width).
+struct DrawPathCmd { float thickness; Color color; std::vector<PathSegment> segs; };
+
+// Filled path. Single closed loop only — self-intersection / multi-
+// loop / hole semantics are out of scope for this slab and land with
+// HATCH support in a later slab.
+struct FillPathCmd { Color color; std::vector<PathSegment> segs; };
+
 using DrawCommand = std::variant<
     ClearCmd, FillRectCmd, StrokeRectCmd, RoundRectCmd,
     DrawTextCmd, DrawLineCmd, HitRegionCmd, DrawImageCmd, ScissorCmd,
-    DrawArcCmd>;
+    DrawArcCmd, DrawPathCmd, FillPathCmd>;
 
 // ---- Parser ----
 
@@ -136,6 +163,105 @@ inline std::vector<DrawCommand> parse_commands(
             float cx = read_f32(), cy = read_f32(), r = read_f32();
             float sa = read_f32(), ea = read_f32(), th = read_f32();
             out.emplace_back(DrawArcCmd{cx, cy, r, sa, ea, th, unpack(read_u32())});
+            break;
+        }
+        case Cmd::Path: {
+            float th = read_f32();
+            Color c = unpack(read_u32());
+            unsigned int n = read_u32();
+            std::vector<PathSegment> segs;
+            segs.reserve(n);
+            for (unsigned int i = 0; i < n; ++i) {
+                auto verb = static_cast<PathVerb>(read_u32());
+                switch (verb) {
+                case PathVerb::MoveTo: {
+                    float x = read_f32(), y = read_f32();
+                    segs.emplace_back(PathMoveTo{x, y});
+                    break;
+                }
+                case PathVerb::LineTo: {
+                    float x = read_f32(), y = read_f32();
+                    segs.emplace_back(PathLineTo{x, y});
+                    break;
+                }
+                case PathVerb::QuadTo: {
+                    float cx = read_f32(), cy = read_f32();
+                    float x = read_f32(), y = read_f32();
+                    segs.emplace_back(PathQuadTo{cx, cy, x, y});
+                    break;
+                }
+                case PathVerb::CubicTo: {
+                    float c1x = read_f32(), c1y = read_f32();
+                    float c2x = read_f32(), c2y = read_f32();
+                    float x = read_f32(), y = read_f32();
+                    segs.emplace_back(PathCubicTo{c1x, c1y, c2x, c2y, x, y});
+                    break;
+                }
+                case PathVerb::ArcTo: {
+                    float cx = read_f32(), cy = read_f32();
+                    float r = read_f32();
+                    float sa = read_f32(), ea = read_f32();
+                    segs.emplace_back(PathArcTo{cx, cy, r, sa, ea});
+                    break;
+                }
+                case PathVerb::Close:
+                    segs.emplace_back(PathClose{});
+                    break;
+                default:
+                    // Unknown verb — abort decoding the rest of the
+                    // buffer (same policy as Cmd `default:` below).
+                    return out;
+                }
+            }
+            out.emplace_back(DrawPathCmd{th, c, std::move(segs)});
+            break;
+        }
+        case Cmd::FillPath: {
+            Color c = unpack(read_u32());
+            unsigned int n = read_u32();
+            std::vector<PathSegment> segs;
+            segs.reserve(n);
+            for (unsigned int i = 0; i < n; ++i) {
+                auto verb = static_cast<PathVerb>(read_u32());
+                switch (verb) {
+                case PathVerb::MoveTo: {
+                    float x = read_f32(), y = read_f32();
+                    segs.emplace_back(PathMoveTo{x, y});
+                    break;
+                }
+                case PathVerb::LineTo: {
+                    float x = read_f32(), y = read_f32();
+                    segs.emplace_back(PathLineTo{x, y});
+                    break;
+                }
+                case PathVerb::QuadTo: {
+                    float cx = read_f32(), cy = read_f32();
+                    float x = read_f32(), y = read_f32();
+                    segs.emplace_back(PathQuadTo{cx, cy, x, y});
+                    break;
+                }
+                case PathVerb::CubicTo: {
+                    float c1x = read_f32(), c1y = read_f32();
+                    float c2x = read_f32(), c2y = read_f32();
+                    float x = read_f32(), y = read_f32();
+                    segs.emplace_back(PathCubicTo{c1x, c1y, c2x, c2y, x, y});
+                    break;
+                }
+                case PathVerb::ArcTo: {
+                    float cx = read_f32(), cy = read_f32();
+                    float r = read_f32();
+                    float sa = read_f32(), ea = read_f32();
+                    segs.emplace_back(PathArcTo{cx, cy, r, sa, ea});
+                    break;
+                }
+                case PathVerb::Close:
+                    segs.emplace_back(PathClose{});
+                    break;
+                default:
+                    return out;
+                }
+            }
+            out.emplace_back(FillPathCmd{c, std::move(segs)});
             break;
         }
         default:
