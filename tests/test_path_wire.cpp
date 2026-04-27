@@ -185,6 +185,52 @@ void test_path_interleaves_with_scissor_and_line() {
     assert(std::holds_alternative<DrawLineCmd>(cmds[6]));
 }
 
+// PathBuilder::translated offsets every coordinate word by (dx, dy)
+// and passes through magnitude / angle words on ArcTo. Used by
+// `Painter::stroke_path` adapters to convert canvas-local verbs into
+// surface-local ones at emit time.
+void test_translated_offsets_coordinates_only() {
+    PathBuilder p;
+    p.move_to(1.0f, 2.0f);
+    p.line_to(3.0f, 4.0f);
+    p.quad_to(5.0f, 6.0f, 7.0f, 8.0f);
+    p.cubic_to(9.0f, 10.0f, 11.0f, 12.0f, 13.0f, 14.0f);
+    p.arc_to(15.0f, 16.0f, 5.0f, 0.0f, kPi);
+    p.close();
+
+    auto t = p.translated(100.0f, 200.0f);
+
+    // Round-trip via the wire format to inspect typed segments.
+    reset_buffer();
+    emit_stroke_path(host, t, 1.0f, red);
+    auto cmds = parse_commands(host.buf(), host.buf_len());
+    assert(cmds.size() == 1);
+    auto const* sp = std::get_if<DrawPathCmd>(&cmds[0]);
+    assert(sp != nullptr);
+    assert(sp->segs.size() == 6);
+
+    auto const* mv = std::get_if<PathMoveTo>(&sp->segs[0]);
+    assert(mv && mv->x == 101.0f && mv->y == 202.0f);
+    auto const* ln = std::get_if<PathLineTo>(&sp->segs[1]);
+    assert(ln && ln->x == 103.0f && ln->y == 204.0f);
+    auto const* qd = std::get_if<PathQuadTo>(&sp->segs[2]);
+    assert(qd && qd->cx == 105.0f && qd->cy == 206.0f
+           && qd->x == 107.0f && qd->y == 208.0f);
+    auto const* cb = std::get_if<PathCubicTo>(&sp->segs[3]);
+    assert(cb && cb->c1x == 109.0f && cb->c1y == 210.0f
+           && cb->c2x == 111.0f && cb->c2y == 212.0f
+           && cb->x == 113.0f && cb->y == 214.0f);
+    auto const* ar = std::get_if<PathArcTo>(&sp->segs[4]);
+    assert(ar && ar->cx == 115.0f && ar->cy == 216.0f);
+    // Radius and angles must NOT be translated.
+    assert(ar->radius == 5.0f);
+    assert(ar->start_angle == 0.0f && ar->end_angle == kPi);
+    assert(std::holds_alternative<PathClose>(sp->segs[5]));
+
+    // The original PathBuilder is unchanged.
+    assert(p.verb_count == 6);
+}
+
 // Unknown verb tags abort decoding gracefully (consistent with the
 // `Cmd default:` early-exit). Backends never see partially-parsed
 // path commands.
@@ -212,6 +258,7 @@ int main() {
     test_mixed_path_round_trips_all_verbs();
     test_fill_path_distinct_from_stroke_path();
     test_path_interleaves_with_scissor_and_line();
+    test_translated_offsets_coordinates_only();
     test_unknown_verb_aborts_decode();
     std::puts("\nAll path wire-format tests passed.");
     return 0;

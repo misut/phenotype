@@ -208,73 +208,10 @@ void emit_draw_arc(R& r, float cx, float cy, float radius,
 // Path — variable-length verb stream
 // ============================================================
 //
-// A `PathBuilder` accumulates verbs into a packed buffer (tag +
-// inline f32s, both as u32 words) so emit can memcpy the buffer
-// directly into the command stream. Match the wire format documented
-// on `Cmd::Path` / `Cmd::FillPath`.
-//
-// Coordinate convention: canvas-local pixels for points, CCW math /
-// AutoCAD radians for `arc_to` angles. `close()` synthesises a
-// straight segment to the current subpath's start when the backend
-// strokes / fills it.
-
-struct PathBuilder {
-    // Packed verb stream: each verb is `[tag u32]` followed by N
-    // f32-as-u32 words (N depends on the tag). One word per push,
-    // appended in order — the same byte stream a backend will see in
-    // `Cmd::Path` / `Cmd::FillPath` payload.
-    std::vector<unsigned int> verbs;
-    unsigned int verb_count = 0;
-
-    void clear() { verbs.clear(); verb_count = 0; }
-
-    void move_to(float x, float y) {
-        push_verb(PathVerb::MoveTo);
-        push_f32(x); push_f32(y);
-    }
-    void line_to(float x, float y) {
-        push_verb(PathVerb::LineTo);
-        push_f32(x); push_f32(y);
-    }
-    void quad_to(float cx, float cy, float x, float y) {
-        push_verb(PathVerb::QuadTo);
-        push_f32(cx); push_f32(cy);
-        push_f32(x); push_f32(y);
-    }
-    void cubic_to(float c1x, float c1y, float c2x, float c2y,
-                  float x, float y) {
-        push_verb(PathVerb::CubicTo);
-        push_f32(c1x); push_f32(c1y);
-        push_f32(c2x); push_f32(c2y);
-        push_f32(x); push_f32(y);
-    }
-    // Arc segment in centre form. `start_angle` to `end_angle` are
-    // radians, CCW per the math/AutoCAD convention (matches Painter::arc
-    // and Cmd::DrawArc).
-    void arc_to(float cx, float cy, float radius,
-                float start_angle, float end_angle) {
-        push_verb(PathVerb::ArcTo);
-        push_f32(cx); push_f32(cy);
-        push_f32(radius);
-        push_f32(start_angle); push_f32(end_angle);
-    }
-    void close() {
-        push_verb(PathVerb::Close);
-    }
-
-    bool empty() const { return verb_count == 0; }
-
-private:
-    void push_verb(PathVerb v) {
-        verbs.push_back(static_cast<unsigned int>(v));
-        ++verb_count;
-    }
-    void push_f32(float v) {
-        unsigned int bits;
-        std::memcpy(&bits, &v, 4);
-        verbs.push_back(bits);
-    }
-};
+// `PathBuilder` lives in `phenotype.types` (alongside `Painter`).
+// The emit functions below memcpy its packed verb words straight
+// into the command buffer. See `Cmd::Path` / `Cmd::FillPath` for the
+// wire layout.
 
 // Stroked path. Backends CPU-flatten curve segments into the existing
 // line / arc instance buffers (no new pipeline). Layout: opcode +
@@ -718,6 +655,22 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 }
                 emit_draw_arc(r, acx, acy, radius,
                               start_angle, end_angle, thickness, color);
+            }
+
+            void stroke_path(PathBuilder const& path,
+                             float thickness, Color color) override {
+                if (path.empty()) return;
+                // PathBuilder coordinates are canvas-local; translate
+                // them to surface-local with the same `origin_x /
+                // origin_y` the line / arc paths apply. Bbox cull is
+                // out of scope for now — the surrounding `Cmd::Scissor`
+                // (emitted around every canvas's paint_fn) clips
+                // anything outside the canvas rect pixel-perfectly,
+                // and CAD paths are dominated by visible-on-screen
+                // entities so a cheap walk-once cull will only pay for
+                // itself once paint becomes a profile hotspot.
+                auto translated = path.translated(origin_x, origin_y);
+                emit_stroke_path(r, translated, thickness, color);
             }
 
             void text(float x, float y,
