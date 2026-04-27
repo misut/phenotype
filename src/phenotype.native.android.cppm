@@ -27,6 +27,11 @@ module;
 #include <fcntl.h>
 #include <unistd.h>
 #include <jni.h>
+// POSIX threading primitives. Used by the SAF dialog bridge below in
+// place of `std::mutex` / `std::atomic`, both of which crashed the
+// Android NDK clang-21 PCM emitter at <eof> when introduced into this
+// module unit (see the dialog block in the first detail namespace).
+#include <pthread.h>
 #endif
 
 export module phenotype.native.android;
@@ -3590,6 +3595,176 @@ inline void view(State const& s) {
 
 } // namespace demo6
 
+// ---- Stage 8: file-open dialog via SAF ------------------------------
+//
+// platform_api::dialog::open_file is asynchronous on Android because the
+// only sane file source is `Intent.ACTION_OPEN_DOCUMENT` (Storage Access
+// Framework), and the system picker only delivers its result through
+// the activity's onActivityResult — long after the C++ side that
+// initiated it has returned. Bridging it cleanly:
+//
+//   1. The consumer ships a Kotlin class with two static methods:
+//        - `openFileDialog(cookie: Int, filterExt: String)`   regular
+//        - `onFileDialogResult(cookie: Int, path: String?)`   external
+//      and calls `phenotype_android_install_file_dialog_handler` once
+//      after `phenotype_android_bind_jvm`. The install hook caches a
+//      global ref to the class, the static methodID for openFileDialog,
+//      and binds onFileDialogResult to a phenotype-internal native
+//      function via JNI RegisterNatives — so the Kotlin glue does not
+//      need any phenotype-specific package path.
+//   2. open_file allocates a cookie, parks the C callback in
+//      `dialog::pending`, and CallStaticVoidMethods openFileDialog with
+//      the cookie + extension filter. Control returns immediately.
+//   3. Kotlin launches the SAF intent on the UI thread, copies the
+//      picked content URI to the app's cache dir, then invokes the
+//      registered onFileDialogResult — which routes back into the
+//      JNI native function below. That happens on the UI thread, NOT
+//      the GameActivity render thread.
+//   4. The native callback parks the result in `dialog::deferred`
+//      (under a mutex) and returns. `phenotype_android_draw_frame`
+//      drains the deferred queue every tick, looks up the matching
+//      cookie's saved C callback, and invokes it on the render thread.
+//      Consumers see the same "callback runs on the view/update
+//      thread" contract the macOS backend already guarantees.
+
+namespace dialog {
+
+struct PendingCallback {
+    int cookie;
+    void (*callback)(char const*);
+};
+
+struct DeferredResult {
+    int  cookie;
+    bool has_path;       // false ↔ user cancelled / error
+    std::string path;    // valid only when has_path
+};
+
+struct HandlerState {
+    jclass    handler_class  = nullptr;   // GlobalRef to the Kotlin class
+    jmethodID request_method = nullptr;   // openFileDialog(I, String)V
+};
+
+inline HandlerState g_handler{};
+
+// Synchronisation uses raw pthread primitives instead of `std::mutex`
+// / `std::atomic` because dropping either of those into this module
+// unit currently crashes the Android NDK clang-21 PCM emitter at
+// <eof>. The C-level types compile cleanly, give us identical
+// guarantees for the modest amount of state involved, and never need
+// dynamic destruction (PTHREAD_MUTEX_INITIALIZER is constexpr-init).
+
+inline pthread_mutex_t g_pending_mutex  = PTHREAD_MUTEX_INITIALIZER;
+inline pthread_mutex_t g_deferred_mutex = PTHREAD_MUTEX_INITIALIZER;
+
+// Cookie counter is read/incremented under g_pending_mutex so the
+// rare contention case is correct without pulling in std::atomic.
+inline int g_next_cookie = 1;
+
+inline std::vector<PendingCallback>& pending_locked() {
+    static std::vector<PendingCallback> v;
+    return v;
+}
+inline std::vector<DeferredResult>& deferred_locked() {
+    static std::vector<DeferredResult> v;
+    return v;
+}
+
+inline void enqueue_deferred(int cookie, char const* path) {
+    DeferredResult r;
+    r.cookie = cookie;
+    r.has_path = (path != nullptr);
+    if (r.has_path) r.path = path;
+    pthread_mutex_lock(&g_deferred_mutex);
+    deferred_locked().push_back(std::move(r));
+    pthread_mutex_unlock(&g_deferred_mutex);
+}
+
+// Called from the render thread (phenotype_android_draw_frame) every
+// tick. Drains any results parked by the JNI native callback and
+// dispatches the consumer's saved C callback synchronously here, so
+// the application observes a single thread for both the request and
+// the result paths.
+inline void drain_deferred_results() {
+    std::vector<DeferredResult> snapshot;
+    pthread_mutex_lock(&g_deferred_mutex);
+    {
+        auto& q = deferred_locked();
+        if (!q.empty()) snapshot.swap(q);
+    }
+    pthread_mutex_unlock(&g_deferred_mutex);
+    if (snapshot.empty()) return;
+
+    for (auto& r : snapshot) {
+        void (*cb)(char const*) = nullptr;
+        pthread_mutex_lock(&g_pending_mutex);
+        {
+            auto& p = pending_locked();
+            for (auto it = p.begin(); it != p.end(); ++it) {
+                if (it->cookie == r.cookie) {
+                    cb = it->callback;
+                    p.erase(it);
+                    break;
+                }
+            }
+        }
+        pthread_mutex_unlock(&g_pending_mutex);
+        if (cb) cb(r.has_path ? r.path.c_str() : nullptr);
+    }
+}
+
+inline void drop_pending(int cookie) {
+    pthread_mutex_lock(&g_pending_mutex);
+    auto& p = pending_locked();
+    for (auto it = p.begin(); it != p.end(); ++it) {
+        if (it->cookie == cookie) { p.erase(it); break; }
+    }
+    pthread_mutex_unlock(&g_pending_mutex);
+}
+
+// platform_api::dialog::open_file implementation. Returns synchronously
+// after the JNI handoff; the actual result lands later through
+// drain_deferred_results.
+inline void open_file(char const* filter_extensions,
+                      void (*callback)(char const* path)) {
+    if (!callback) return;
+    if (g_handler.handler_class == nullptr ||
+        g_handler.request_method == nullptr) {
+        callback(nullptr);
+        return;
+    }
+
+    int cookie;
+    pthread_mutex_lock(&g_pending_mutex);
+    cookie = g_next_cookie++;
+    pending_locked().push_back(PendingCallback{cookie, callback});
+    pthread_mutex_unlock(&g_pending_mutex);
+
+    ScopedEnv senv(g_jni.vm);
+    if (!senv) {
+        drop_pending(cookie);
+        callback(nullptr);
+        return;
+    }
+    JNIEnv* env = senv.env;
+
+    jstring filter_jstr = env->NewStringUTF(
+        filter_extensions ? filter_extensions : "");
+    env->CallStaticVoidMethod(
+        g_handler.handler_class,
+        g_handler.request_method,
+        static_cast<jint>(cookie),
+        filter_jstr);
+    if (filter_jstr) env->DeleteLocalRef(filter_jstr);
+
+    if (check_and_clear_exception(env)) {
+        drop_pending(cookie);
+        callback(nullptr);
+    }
+}
+
+} // namespace dialog
+
 inline platform_api build_android_platform() {
     auto api = make_stub_platform(
         "android",
@@ -3624,6 +3799,7 @@ inline platform_api build_android_platform() {
         android_write_artifact_bundle,
     };
     api.open_url = android_open_url;
+    api.dialog.open_file = dialog::open_file;
     return api;
 }
 
@@ -3801,6 +3977,13 @@ void phenotype_android_draw_frame(void) {
     // phenotype_android_start_app wires the view/update loop; before
     // that, the screen will simply not re-present (first frame after
     // start_app will paint).
+    //
+    // Stage 8: dialog::drain_deferred_results pulls any SAF picker
+    // results parked by the JNI native callback (which runs on the
+    // UI thread) over to this render thread, so the dialog::open_file
+    // contract — "callback runs on the same thread that pumps the
+    // view/update loop" — holds on Android too.
+    d::dialog::drain_deferred_results();
     d::tick_caret_blink();
     d::sync_platform_input();
     d::repaint_current();
@@ -3827,6 +4010,130 @@ inline void (*g_android_app_runner)() = nullptr;
 __attribute__((visibility("default")))
 void phenotype_android_install_runner(void (*runner)(void)) {
     phenotype::native::detail::g_android_app_runner = runner;
+}
+
+// JNI native bound by `phenotype_android_install_file_dialog_handler`
+// to the consumer's `onFileDialogResult` (or whatever name they pass)
+// via JNI RegisterNatives. Runs on the UI thread because Kotlin's
+// onActivityResult dispatches there — defer to the render thread via
+// the deferred queue, then return so the JVM call completes quickly.
+__attribute__((visibility("default")))
+void phenotype_android_dialog_native_on_result(
+        JNIEnv* env, jclass /*clazz*/, jint cookie, jstring path_jstr) {
+    namespace d = phenotype::native::detail;
+    if (!env) return;
+    if (path_jstr == nullptr) {
+        d::dialog::enqueue_deferred(static_cast<int>(cookie), nullptr);
+        return;
+    }
+    char const* utf8 = env->GetStringUTFChars(path_jstr, nullptr);
+    if (!utf8) {
+        env->ExceptionClear();
+        d::dialog::enqueue_deferred(static_cast<int>(cookie), nullptr);
+        return;
+    }
+    std::string path(utf8);
+    env->ReleaseStringUTFChars(path_jstr, utf8);
+    d::dialog::enqueue_deferred(
+        static_cast<int>(cookie),
+        path.empty() ? nullptr : path.c_str());
+}
+
+// One-time install of the SAF bridge. `jactivity` is the GameActivity
+// java instance — typically `app->activity->javaGameActivity` — used
+// to acquire the consumer's class loader so app-internal classes
+// resolve correctly from the native thread (the default classloader
+// on a non-JVM-spawned thread only sees the system classpath).
+// `class_name` is in JNI internal form
+// (`io/github/misut/cadpp/MainActivity`); both methods take
+// `(int, java.lang.String)` and return void. The caller's Kotlin side
+// declares `onFileDialogResult` as `external` — RegisterNatives binds
+// it to phenotype_android_dialog_native_on_result above.
+//
+// Must be called *after* `phenotype_android_bind_jvm` so the cached
+// JavaVM* is ready, and before any consumer-side code that opens a
+// dialog. Idempotent: a second call replaces the handler.
+__attribute__((visibility("default")))
+void phenotype_android_install_file_dialog_handler(
+        void* jactivity_raw,
+        char const* class_name,
+        char const* request_method,
+        char const* result_method) {
+    namespace d = phenotype::native::detail;
+    if (!jactivity_raw || !class_name || !request_method || !result_method) return;
+    if (!d::g_jni.vm) return;
+
+    d::ScopedEnv senv(d::g_jni.vm);
+    if (!senv) return;
+    JNIEnv* env = senv.env;
+
+    jobject jactivity = static_cast<jobject>(jactivity_raw);
+
+    // Walk Activity → ClassLoader → loadClass(dottedName) so the
+    // native lookup sees the app's dex, not just the system classpath.
+    jclass activity_cls = env->GetObjectClass(jactivity);
+    if (!activity_cls || d::check_and_clear_exception(env)) {
+        if (activity_cls) env->DeleteLocalRef(activity_cls);
+        return;
+    }
+    jmethodID get_class_loader = env->GetMethodID(
+        activity_cls, "getClassLoader", "()Ljava/lang/ClassLoader;");
+    if (!get_class_loader || d::check_and_clear_exception(env)) {
+        env->DeleteLocalRef(activity_cls);
+        return;
+    }
+    jobject classloader = env->CallObjectMethod(jactivity, get_class_loader);
+    env->DeleteLocalRef(activity_cls);
+    if (!classloader || d::check_and_clear_exception(env)) {
+        if (classloader) env->DeleteLocalRef(classloader);
+        return;
+    }
+
+    jclass classloader_cls = env->FindClass("java/lang/ClassLoader");
+    jmethodID load_class = classloader_cls
+        ? env->GetMethodID(classloader_cls, "loadClass",
+                           "(Ljava/lang/String;)Ljava/lang/Class;")
+        : nullptr;
+    if (classloader_cls) env->DeleteLocalRef(classloader_cls);
+    if (!load_class || d::check_and_clear_exception(env)) {
+        env->DeleteLocalRef(classloader);
+        return;
+    }
+
+    // ClassLoader.loadClass wants dot-separated names ("a.b.C"), while
+    // the rest of the JNI surface uses slash-separated ("a/b/C"). Translate.
+    std::string dotted(class_name);
+    for (auto& c : dotted) if (c == '/') c = '.';
+    jstring jname = env->NewStringUTF(dotted.c_str());
+    jclass local = static_cast<jclass>(
+        env->CallObjectMethod(classloader, load_class, jname));
+    env->DeleteLocalRef(jname);
+    env->DeleteLocalRef(classloader);
+    if (!local || d::check_and_clear_exception(env)) {
+        if (local) env->DeleteLocalRef(local);
+        return;
+    }
+
+    if (d::dialog::g_handler.handler_class) {
+        env->DeleteGlobalRef(d::dialog::g_handler.handler_class);
+        d::dialog::g_handler.handler_class = nullptr;
+    }
+    d::dialog::g_handler.handler_class =
+        static_cast<jclass>(env->NewGlobalRef(local));
+    d::dialog::g_handler.request_method = env->GetStaticMethodID(
+        local, request_method, "(ILjava/lang/String;)V");
+    d::check_and_clear_exception(env);
+
+    JNINativeMethod native{
+        const_cast<char*>(result_method),
+        const_cast<char*>("(ILjava/lang/String;)V"),
+        reinterpret_cast<void*>(
+            &phenotype_android_dialog_native_on_result),
+    };
+    env->RegisterNatives(local, &native, 1);
+    d::check_and_clear_exception(env);
+
+    env->DeleteLocalRef(local);
 }
 
 __attribute__((visibility("default")))

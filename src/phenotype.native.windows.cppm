@@ -4499,6 +4499,9 @@ inline platform_api const& windows_platform() {
             }
         },
         nullptr,
+        // dialog: file picker not yet implemented on Windows; the
+        // wrapper synthesises a "user cancelled" outcome.
+        {},
     };
     return api;
 #else

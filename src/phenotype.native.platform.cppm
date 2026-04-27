@@ -88,6 +88,26 @@ struct debug_api {
         char const* reason) = nullptr;
 };
 
+struct dialog_api {
+    // Open a native file-open dialog. `filter_extensions` is a
+    // semicolon-separated list of extensions without leading dots
+    // (e.g. "dwg" or "dwg;dxf"), or null to accept any file. The
+    // backend invokes `callback` on the same thread that pumps the
+    // view/update loop, so it is safe to dispatch a Msg from inside it:
+    //   * `path` is null when the user cancels.
+    //   * Otherwise `path` is a NUL-terminated UTF-8 filesystem path.
+    //     For backends where the user's pick is not a filesystem entry
+    //     (Android SAF returns a content:// URI) the backend stages
+    //     the bytes to a temporary file in the app's cache directory
+    //     and returns that path instead, so callers can hand it
+    //     straight to file-based libraries like LibreDWG.
+    // Modal backends (macOS NSOpenPanel.runModal) deliver the callback
+    // synchronously inside this call; asynchronous backends (Android
+    // SAF) return immediately and post the result later.
+    void (*open_file)(char const* filter_extensions,
+                      void (*callback)(char const* path)) = nullptr;
+};
+
 struct platform_api {
     char const* name = "stub";
     bool enabled = true;
@@ -97,6 +117,7 @@ struct platform_api {
     debug_api debug{};
     void (*open_url)(char const* url, unsigned int len) = nullptr;
     char const* startup_message = nullptr;
+    dialog_api dialog{};
 };
 
 inline constexpr unsigned int invalid_callback_id = 0xFFFFFFFFu;
