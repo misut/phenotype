@@ -1,7 +1,6 @@
 module;
 #include <cstdint>
 #include <cstring>
-#include <math.h>     // cosf / sinf / ceilf — portable across MSVC, clang, GCC and NDK
 #include <string>
 #ifdef __wasi__
 #include "phenotype_host.h"
@@ -599,9 +598,11 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             void arc(float cx, float cy, float radius,
                      float start_angle, float end_angle,
                      float thickness, Color color) override {
-                // Coarse stroke-bbox cull. The GPU scissor still clips
-                // the chord segments below pixel-perfectly, but skipping
-                // arcs entirely outside the canvas saves a sin/cos loop.
+                // Drop arcs whose stroke bbox lies entirely outside the
+                // canvas — the backend's SDF fragment shader clips
+                // partials at the scissor rect pixel-perfectly.
+                // Half-thickness padding handles the outer edge of the
+                // stroke spilling past `radius`.
                 if (radius <= 0.0f) return;
                 float acx = origin_x + cx;
                 float acy = origin_y + cy;
@@ -612,47 +613,8 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                     || acy - pad >= clip_y1) {
                     return;
                 }
-                // First-pass implementation: tessellate into chord
-                // segments and reuse `emit_draw_line`. The Cmd::DrawArc
-                // opcode (and the matching parser case) is in place so
-                // a follow-up PR can replace this loop with a real
-                // backend SDF rasteriser without touching the API. AT
-                // ~1° per chord (96 segments / full revolution) the
-                // result is visually smooth at default zoom levels;
-                // heavy zoom-in will still show chords until the SDF
-                // backend lands.
-                constexpr float kPi    = 3.1415926535897932f;
-                constexpr float kTwoPi = 2.0f * kPi;
-                constexpr int   kFullCircleSegments = 96;
-                float sweep = end_angle - start_angle;
-                if (sweep <= 0.0f) sweep += kTwoPi;
-                if (sweep > kTwoPi) sweep = kTwoPi;
-                // Plain C `cosf` / `sinf` / `ceilf` (via `<math.h>`)
-                // rather than `std::*`: the Android NDK r30-beta1
-                // clang-21 PCM emitter has a documented crash on
-                // `std::sqrt` / `std::mutex` / friends inside .cppm
-                // units, while `__builtin_*` is rejected by MSVC. The
-                // C-runtime forms are portable across all three.
-                int n = static_cast<int>(
-                    ceilf(
-                        static_cast<float>(kFullCircleSegments)
-                        * sweep / kTwoPi));
-                if (n < 1) n = 1;
-                float prev_x = acx + radius * cosf(start_angle);
-                float prev_y = acy + radius * sinf(start_angle);
-                for (int i = 1; i <= n; ++i) {
-                    float t = start_angle + sweep * static_cast<float>(i)
-                                                  / static_cast<float>(n);
-                    float nx = acx + radius * cosf(t);
-                    float ny = acy + radius * sinf(t);
-                    float cx1 = prev_x, cy1 = prev_y, cx2 = nx, cy2 = ny;
-                    if (clip_line(cx1, cy1, cx2, cy2)) {
-                        emit_draw_line(r, cx1, cy1, cx2, cy2,
-                                       thickness, color);
-                    }
-                    prev_x = nx;
-                    prev_y = ny;
-                }
+                emit_draw_arc(r, acx, acy, radius,
+                              start_angle, end_angle, thickness, color);
             }
 
             void text(float x, float y,
