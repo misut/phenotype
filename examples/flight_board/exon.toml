@@ -1,0 +1,22 @@
+[package]
+name = "flight_board"
+version = "0.1.0"
+description = "Flight operations board example"
+type = "bin"
+standard = 23
+platforms = [
+    { os = "macos", arch = "aarch64" },
+    { os = "windows", arch = "x86_64" },
+]
+
+[sync]
+cmake-in-root = false
+
+[target.'cfg(os = "macos")'.build]
+ldflags = ["-framework", "Security", "-Wl,-framework,CoreFoundation"]
+
+[dependencies]
+"github.com/misut/cppx" = "1.9.0"
+
+[dependencies.path]
+phenotype = "../.."

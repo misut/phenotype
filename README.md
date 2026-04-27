@@ -226,6 +226,16 @@ fixed-grid layout, keyed cells, text input, formula validation, dependency
 recompute, selected-cell editing, audit state, and a canvas trend chart in one
 runnable native example.
 
+```bash
+cd examples/flight_board
+exon run
+```
+
+`examples/flight_board` is a visual flight operations dashboard. It validates
+canvas route motion, generated media-like destination visuals, compact status
+icons, state transitions, selected-flight synchronization, activity-feed
+updates, and timeline progress in one runnable native example.
+
 As an exon dependency:
 
 ```toml
