@@ -175,14 +175,31 @@ TextLayout layout_text(M const& measurer, std::string const& text,
     return result;
 }
 
-// Compare the fields that affect layout output. If all match AND child
-// count is the same, the subtree's layout can be reused from the
-// previous frame.
+// Compare the fields that affect layout or cached paint output. If all
+// match AND child count is the same, the subtree can safely reuse the
+// previous frame's layout and paint byte range.
+inline bool color_equal(Color const& a, Color const& b) noexcept {
+    return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
+}
+
 inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
     return a.text == b.text
         && a.font_size == b.font_size
         && a.mono == b.mono
         && a.image_url == b.image_url
+        && color_equal(a.background, b.background)
+        && color_equal(a.text_color, b.text_color)
+        && a.border_radius == b.border_radius
+        && color_equal(a.border_color, b.border_color)
+        && a.border_width == b.border_width
+        && a.decoration == b.decoration
+        && a.cursor_type == b.cursor_type
+        && a.focusable == b.focusable
+        && a.interaction_role == b.interaction_role
+        && color_equal(a.hover_background, b.hover_background)
+        && color_equal(a.hover_text_color, b.hover_text_color)
+        && a.is_input == b.is_input
+        && a.placeholder == b.placeholder
         && a.style.flex_direction == b.style.flex_direction
         && a.style.main_align == b.style.main_align
         && a.style.cross_align == b.style.cross_align
@@ -290,6 +307,7 @@ inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
     new_n->paint_ax = old_n->paint_ax;
     new_n->paint_ay = old_n->paint_ay;
     new_n->paint_callback_mask = old_n->paint_callback_mask;
+    new_n->paint_dynamic = old_n->paint_dynamic || static_cast<bool>(new_n->paint_fn);
     new_n->paint_valid = old_n->paint_valid;
     new_n->layout_valid = true;
     return true;

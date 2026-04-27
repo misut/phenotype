@@ -1,7 +1,7 @@
 [package]
-name = "seven_guis_cells"
+name = "revenue_workbook"
 version = "0.1.0"
-description = "phenotype 7GUIs Cells skeleton (M8-1)"
+description = "Revenue forecast workbook example"
 type = "bin"
 standard = 23
 platforms = [
@@ -19,4 +19,4 @@ ldflags = ["-framework", "Security", "-Wl,-framework,CoreFoundation"]
 "github.com/misut/cppx" = "1.9.0"
 
 [dependencies.path]
-phenotype = "../../.."
+phenotype = "../.."

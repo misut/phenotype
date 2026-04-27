@@ -338,6 +338,8 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     // scroll_x/scroll_y and no intersecting hover/focus transition, so
     // they are byte-for-byte what this walk would produce.
     if (node.layout_valid && node.paint_valid
+        && !node.paint_fn
+        && !node.paint_dynamic
         && ax == node.paint_ax
         && ay == node.paint_ay
         && scroll_x == g_app.prev_scroll_x
@@ -373,6 +375,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     auto const before = r.buf_len();
     auto const entry_flush_epoch = g_app.paint_flush_epoch;
     std::uint64_t subtree_mask = callback_mask_bit(node.callback_id);
+    bool subtree_dynamic = static_cast<bool>(node.paint_fn);
 
     float draw_x = ax - scroll_x;
     float draw_y = ay - scroll_y;
@@ -431,7 +434,13 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     if (!html_overlay_active && !node.text_lines.empty()) {
         float line_height = node.font_size * g_app.theme.line_height_ratio;
         float inner_width = node.width - node.style.padding[1] - node.style.padding[3];
-        float ty = draw_y + node.style.padding[0];
+        float inner_height = node.height - node.style.padding[0] - node.style.padding[2];
+        float text_block_height = line_height
+            * static_cast<float>(node.text_lines.size());
+        float vertical_offset = 0.0f;
+        if (inner_height > text_block_height)
+            vertical_offset = (inner_height - text_block_height) / 2.0f;
+        float ty = draw_y + node.style.padding[0] + vertical_offset;
         for (auto const& line : node.text_lines) {
             if (!line.empty()) {
                 float line_w = measurer.measure_text(
@@ -524,6 +533,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         paint_node(r, measurer, child_h, ax, ay,
                    scroll_x, scroll_y, vp_width, vp_height);
         subtree_mask |= node_at(child_h).paint_callback_mask;
+        subtree_dynamic = subtree_dynamic || node_at(child_h).paint_dynamic;
 
         if (child_is_dirty_root) {
             emit_scissor_reset(r);
@@ -540,7 +550,9 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     // after >= before numerically, which the `after >= before` check
     // alone would silently accept as valid.
     auto const after = r.buf_len();
-    if (after >= before && g_app.paint_flush_epoch == entry_flush_epoch) {
+    node.paint_dynamic = subtree_dynamic;
+    if (!subtree_dynamic && after >= before
+        && g_app.paint_flush_epoch == entry_flush_epoch) {
         node.paint_offset = before;
         node.paint_length = after - before;
         node.paint_ax = ax;

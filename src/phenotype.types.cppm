@@ -355,11 +355,16 @@ struct LayoutNode {
     // callback_ids (1ULL << (callback_id & 63)) so the blit guard can
     // ask "does this subtree contain the hovered/focused id?" in O(1)
     // without storing a full child-id vector per node.
+    //
+    // paint_dynamic marks a subtree containing widget::canvas paint_fn.
+    // Those callbacks are opaque app code and may capture changing state
+    // without changing layout props, so the subtree must be repainted.
     std::uint32_t paint_offset = 0;
     std::uint32_t paint_length = 0;
     float         paint_ax = 0.0f;
     float         paint_ay = 0.0f;
     std::uint64_t paint_callback_mask = 0;
+    bool          paint_dynamic = false;
     bool          paint_valid = false;
 
     // Keyed-list reconciliation — see phenotype::keyed in the DSL.
