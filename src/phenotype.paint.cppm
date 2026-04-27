@@ -582,29 +582,29 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                       char const* str, unsigned int len,
                       float font_size, Color color) override {
                 // Coarse bbox: assume each character is ~0.6×font_size
-                // wide. Strict containment check — emit only when the
-                // approximated bbox lies entirely inside the canvas.
-                // Lenient overlap testing was visibly broken: a run
-                // whose top edge sat above the canvas (panned-up
-                // case) still cleared the "fully outside" gate and
-                // rasterised glyphs above the canvas border. Backends
-                // would clip pixel-perfectly via real `setScissorRect`
-                // / `vkCmdSetScissor`, but those calls are still on
-                // the deferred TODO list, so for now we err on the
-                // side of dropping text the moment any of its edges
-                // cross the canvas boundary. Once the backend-side
-                // scissor lands, this check can relax back to
-                // "any overlap" — real per-pixel clipping handles
-                // the partials.
+                // wide. Drop runs whose approximated advance box lies
+                // entirely outside the canvas; partials still emit and
+                // the backend's `setScissorRect` / `vkCmdSetScissor`
+                // call (Cmd::Scissor, applied since phenotype#202)
+                // clips them pixel-perfectly at draw time.
+                //
+                // (Earlier this gate had to use strict containment as
+                // a stop-gap, because the Cmd::Scissor opcode was
+                // decode-and-skip on every backend — so partial runs
+                // would rasterise glyphs across the canvas boundary.
+                // With real backend scissor in place that workaround
+                // is no longer needed, and the strict check would
+                // visibly drop legitimate text the instant any edge
+                // crossed the boundary.)
                 float ax = origin_x + x;
                 float ay = origin_y + y;
                 float approx_w = font_size *
                                  static_cast<float>(len) * 0.6f;
                 float approx_h = font_size;
-                if (ax           < clip_x0
-                    || ay        < clip_y0
-                    || ax + approx_w > clip_x1
-                    || ay + approx_h > clip_y1) {
+                if (ax           >= clip_x1
+                    || ax + approx_w <= clip_x0
+                    || ay            >= clip_y1
+                    || ay + approx_h <= clip_y0) {
                     return;
                 }
                 emit_draw_text(r,
