@@ -3262,6 +3262,205 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 inst.angles[1] = c.end_angle;
                 normalize_color(c.color, inst.color);
                 out.batches.back().arcs.push_back(inst);
+            } else if constexpr (std::same_as<T, ::phenotype::DrawPathCmd>) {
+                // Walk the typed verb stream and dispatch each segment
+                // onto the existing instance buffers — straight + flat-
+                // tened curves go through the color pipeline (draw_type
+                // = 3), arc segments push onto the arc SDF pipeline.
+                // No new shader / pipeline is required for stroke
+                // rendering; the macOS path mirrors this exactly.
+                float const thickness = c.thickness;
+                float color4[4];
+                normalize_color(c.color, color4);
+
+                float pen_x = 0.0f, pen_y = 0.0f;
+                float sub_x = 0.0f, sub_y = 0.0f;
+                bool has_pen = false;
+
+                // Diagonal lines need to be decomposed into a chain of
+                // axis-aligned thickness×thickness dots — the color
+                // shader (color.frag) only renders rectangles, not
+                // arbitrary segments. macOS does the same in its
+                // Cmd::Path case; the existing DrawLineCmd path on
+                // Android is axis-aligned-only and is a separate issue.
+                auto emit_segment = [&](float x1, float y1,
+                                        float x2, float y2) {
+                    float dx = x2 - x1;
+                    float dy = y2 - y1;
+                    if (dx == 0.0f && dy == 0.0f) return;
+                    auto& dst = out.batches.back().colors;
+                    if (dx == 0.0f || dy == 0.0f) {
+                        float line_len = std::sqrt(dx * dx + dy * dy);
+                        float w = (dy == 0.0f) ? line_len : thickness;
+                        float h = (dx == 0.0f) ? line_len : thickness;
+                        float x = (dx == 0.0f)
+                            ? x1 - thickness * 0.5f
+                            : std::min(x1, x2);
+                        float y = (dy == 0.0f)
+                            ? y1 - thickness * 0.5f
+                            : std::min(y1, y2);
+                        ColorInstanceGPU inst{};
+                        inst.rect[0] = x; inst.rect[1] = y;
+                        inst.rect[2] = w; inst.rect[3] = h;
+                        inst.color[0] = color4[0]; inst.color[1] = color4[1];
+                        inst.color[2] = color4[2]; inst.color[3] = color4[3];
+                        inst.params[0] = 0.0f;
+                        inst.params[1] = 0.0f;
+                        inst.params[2] = 3.0f;  // matches macOS / Windows
+                        dst.push_back(inst);
+                    } else {
+                        float line_len = std::sqrt(dx * dx + dy * dy);
+                        float step = thickness * 0.5f;
+                        if (step < 0.5f) step = 0.5f;
+                        int n_steps = static_cast<int>(
+                            std::ceil(line_len / step));
+                        if (n_steps < 1) n_steps = 1;
+                        float half_th = thickness * 0.5f;
+                        for (int i = 0; i <= n_steps; ++i) {
+                            float t = static_cast<float>(i)
+                                      / static_cast<float>(n_steps);
+                            float ccx = x1 + dx * t;
+                            float ccy = y1 + dy * t;
+                            ColorInstanceGPU inst{};
+                            inst.rect[0] = ccx - half_th;
+                            inst.rect[1] = ccy - half_th;
+                            inst.rect[2] = thickness;
+                            inst.rect[3] = thickness;
+                            inst.color[0] = color4[0]; inst.color[1] = color4[1];
+                            inst.color[2] = color4[2]; inst.color[3] = color4[3];
+                            inst.params[0] = 0.0f;
+                            inst.params[1] = 0.0f;
+                            inst.params[2] = 0.0f;
+                            dst.push_back(inst);
+                        }
+                    }
+                };
+
+                constexpr float flatness2 = 0.25f;  // (0.5px)^2
+                constexpr int max_depth = 16;
+
+                auto flatten_quad = [&](auto& self,
+                                        float p0x, float p0y,
+                                        float p1x, float p1y,
+                                        float p2x, float p2y,
+                                        int depth) -> void {
+                    float lx = p2x - p0x;
+                    float ly = p2y - p0y;
+                    float llen2 = lx * lx + ly * ly;
+                    bool flat = (depth == 0);
+                    if (!flat && llen2 > 1e-6f) {
+                        float d = (p1x - p0x) * ly - (p1y - p0y) * lx;
+                        if (d * d < flatness2 * llen2) flat = true;
+                    }
+                    if (flat || llen2 < 1e-6f) {
+                        emit_segment(p0x, p0y, p2x, p2y);
+                        return;
+                    }
+                    float a0x = (p0x + p1x) * 0.5f;
+                    float a0y = (p0y + p1y) * 0.5f;
+                    float a1x = (p1x + p2x) * 0.5f;
+                    float a1y = (p1y + p2y) * 0.5f;
+                    float midx = (a0x + a1x) * 0.5f;
+                    float midy = (a0y + a1y) * 0.5f;
+                    self(self, p0x, p0y, a0x, a0y, midx, midy, depth - 1);
+                    self(self, midx, midy, a1x, a1y, p2x, p2y, depth - 1);
+                };
+
+                auto flatten_cubic = [&](auto& self,
+                                         float p0x, float p0y,
+                                         float p1x, float p1y,
+                                         float p2x, float p2y,
+                                         float p3x, float p3y,
+                                         int depth) -> void {
+                    float lx = p3x - p0x;
+                    float ly = p3y - p0y;
+                    float llen2 = lx * lx + ly * ly;
+                    bool flat = (depth == 0);
+                    if (!flat && llen2 > 1e-6f) {
+                        float d1 = (p1x - p0x) * ly - (p1y - p0y) * lx;
+                        float d2 = (p2x - p0x) * ly - (p2y - p0y) * lx;
+                        if (d1 * d1 < flatness2 * llen2
+                            && d2 * d2 < flatness2 * llen2) {
+                            flat = true;
+                        }
+                    }
+                    if (flat || llen2 < 1e-6f) {
+                        emit_segment(p0x, p0y, p3x, p3y);
+                        return;
+                    }
+                    float a01x = (p0x + p1x) * 0.5f;
+                    float a01y = (p0y + p1y) * 0.5f;
+                    float a12x = (p1x + p2x) * 0.5f;
+                    float a12y = (p1y + p2y) * 0.5f;
+                    float a23x = (p2x + p3x) * 0.5f;
+                    float a23y = (p2y + p3y) * 0.5f;
+                    float b01x = (a01x + a12x) * 0.5f;
+                    float b01y = (a01y + a12y) * 0.5f;
+                    float b12x = (a12x + a23x) * 0.5f;
+                    float b12y = (a12y + a23y) * 0.5f;
+                    float midx = (b01x + b12x) * 0.5f;
+                    float midy = (b01y + b12y) * 0.5f;
+                    self(self,
+                         p0x, p0y, a01x, a01y, b01x, b01y, midx, midy,
+                         depth - 1);
+                    self(self,
+                         midx, midy, b12x, b12y, a23x, a23y, p3x, p3y,
+                         depth - 1);
+                };
+
+                for (auto const& seg : c.segs) {
+                    std::visit([&](auto const& s) {
+                        using S = std::decay_t<decltype(s)>;
+                        if constexpr (std::same_as<S, ::phenotype::PathMoveTo>) {
+                            pen_x = s.x; pen_y = s.y;
+                            sub_x = s.x; sub_y = s.y;
+                            has_pen = true;
+                        } else if constexpr (std::same_as<S, ::phenotype::PathLineTo>) {
+                            if (has_pen) emit_segment(pen_x, pen_y, s.x, s.y);
+                            pen_x = s.x; pen_y = s.y;
+                            has_pen = true;
+                        } else if constexpr (std::same_as<S, ::phenotype::PathQuadTo>) {
+                            if (has_pen) {
+                                flatten_quad(flatten_quad,
+                                             pen_x, pen_y, s.cx, s.cy,
+                                             s.x, s.y, max_depth);
+                            }
+                            pen_x = s.x; pen_y = s.y;
+                            has_pen = true;
+                        } else if constexpr (std::same_as<S, ::phenotype::PathCubicTo>) {
+                            if (has_pen) {
+                                flatten_cubic(flatten_cubic,
+                                              pen_x, pen_y, s.c1x, s.c1y,
+                                              s.c2x, s.c2y, s.x, s.y,
+                                              max_depth);
+                            }
+                            pen_x = s.x; pen_y = s.y;
+                            has_pen = true;
+                        } else if constexpr (std::same_as<S, ::phenotype::PathArcTo>) {
+                            if (s.radius > 0.0f) {
+                                ArcInstanceGPU inst{};
+                                inst.center_radius_thickness[0] = s.cx;
+                                inst.center_radius_thickness[1] = s.cy;
+                                inst.center_radius_thickness[2] = s.radius;
+                                inst.center_radius_thickness[3] = thickness;
+                                inst.angles[0] = s.start_angle;
+                                inst.angles[1] = s.end_angle;
+                                inst.color[0] = color4[0];
+                                inst.color[1] = color4[1];
+                                inst.color[2] = color4[2];
+                                inst.color[3] = color4[3];
+                                out.batches.back().arcs.push_back(inst);
+                            }
+                            // Pen position is left unchanged on ArcTo;
+                            // see the macOS Cmd::Path note for rationale.
+                        } else if constexpr (std::same_as<S, ::phenotype::PathClose>) {
+                            if (has_pen)
+                                emit_segment(pen_x, pen_y, sub_x, sub_y);
+                            pen_x = sub_x;
+                            pen_y = sub_y;
+                        }
+                    }, seg);
+                }
             }
             // HitRegion is ignored before Stage 6.
         }, cmd);
