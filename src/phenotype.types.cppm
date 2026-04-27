@@ -270,6 +270,43 @@ struct Style {
     float fixed_height = -1;
 };
 
+// GestureEvent — pan / pinch / scroll-zoom dispatched to a
+// `widget::canvas` whose builder passed an `on_gesture` callback.
+// Platform backends translate native input (macOS magnifyWithEvent +
+// scrollWheel, Android multi-pointer MotionEvents) to this neutral
+// shape; the shell delivers it in canvas-local coordinates so app
+// code never has to know the canvas's outer (x, y) on screen.
+//
+//   * Pan        — `dx` / `dy` are pixel deltas since the previous
+//                  event. `pinch_scale` stays 1.0.
+//   * Pinch      — `pinch_scale` is the multiplicative zoom delta
+//                  since the previous event (1.0 ≡ no change).
+//                  `focus_x` / `focus_y` are canvas-local coords of
+//                  the midpoint between fingers.
+//   * ScrollZoom — modifier-augmented scroll (macOS Cmd+scroll).
+//                  `pinch_scale` is the platform-derived multiplier
+//                  so simple consumers can treat Pinch + ScrollZoom
+//                  uniformly. `dy` carries the raw wheel delta for
+//                  consumers that want to roll their own response
+//                  curve. `focus_x` / `focus_y` mark the cursor.
+//
+// A gesture whose focal point falls outside the canvas bounds is
+// dropped by the shell — apps don't see fragmented streams.
+enum class GestureKind : int {
+    Pan        = 0,
+    Pinch      = 1,
+    ScrollZoom = 2,
+};
+
+struct GestureEvent {
+    GestureKind kind = GestureKind::Pan;
+    float       dx = 0.0f;
+    float       dy = 0.0f;
+    float       pinch_scale = 1.0f;
+    float       focus_x = 0.0f;
+    float       focus_y = 0.0f;
+};
+
 // Painter — immediate-mode drawing surface handed to a `widget::canvas`
 // callback during the paint pass. Coordinates are local to the canvas
 // (origin at the canvas's top-left, x extends right, y extends down).
@@ -336,6 +373,12 @@ struct LayoutNode {
     // node's resolved (x, y) and the active scroll. layout-tree
     // children are still painted normally afterwards.
     std::function<void(Painter&)> paint_fn;
+
+    // Index into `g_app.gesture_callbacks` — set by widget::canvas when
+    // the consumer passes an `on_gesture` lambda. 0xFFFFFFFFu = no
+    // gesture handler on this node. Platform input backends look up
+    // the active canvas's bounds via this id at dispatch time.
+    unsigned int gesture_callback_id = 0xFFFFFFFFu;
 
     // Computed layout
     float x = 0, y = 0, width = 0, height = 0;

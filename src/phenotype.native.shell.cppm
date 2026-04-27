@@ -40,6 +40,10 @@ enum class MouseButton : int {
     Middle = 2,
 };
 
+// `GestureEvent` and `GestureKind` are exported from the core
+// `phenotype` module — see phenotype.types.cppm — so apps can take
+// them as parameters without depending on the shell.
+
 // Only the keys the shell actually switches on. `Other` is used for keys
 // the shell does not care about, so drivers can safely funnel anything
 // unrecognised there without creating new enumerators.
@@ -465,6 +469,35 @@ inline bool dismiss_platform_transient() {
     auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
     return platform && platform->input.dismiss_transient
         && platform->input.dismiss_transient();
+}
+
+// Dispatch a translated gesture event from the platform input layer.
+// `focus_x` / `focus_y` are absolute surface coords (post-scroll); the
+// shell translates to canvas-local before invoking the registered
+// callback, and rejects events whose focal point falls outside the
+// active canvas's painted bounds. Returns true when the event was
+// consumed by a canvas.
+inline bool dispatch_gesture(::phenotype::GestureEvent ev) {
+    using ::phenotype::detail::g_app;
+    auto id = g_app.gesture_target_id;
+    if (id == 0xFFFFFFFFu) return false;
+    if (id >= g_app.gesture_callbacks.size()) return false;
+
+    float lx = ev.focus_x - g_app.gesture_target_x;
+    float ly = ev.focus_y - g_app.gesture_target_y;
+    if (lx < 0.0f || ly < 0.0f
+        || lx > g_app.gesture_target_w
+        || ly > g_app.gesture_target_h) {
+        return false;
+    }
+    ev.focus_x = lx;
+    ev.focus_y = ly;
+
+    auto const& fn = g_app.gesture_callbacks[id];
+    if (!fn) return false;
+    fn(ev);
+    repaint_current();
+    return true;
 }
 
 inline bool dispatch_mouse_button(float mx, float my,

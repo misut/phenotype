@@ -470,35 +470,184 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     // resolved (x, y); it forwards each call to emit_draw_line in
     // absolute screen coords (already accounting for scroll).
     if (node.paint_fn) {
+        // CPU-side clipping for everything the canvas emits — apps
+        // doing pan / zoom inside the canvas (cad++, charts, custom
+        // viewports) routinely have geometry that lives outside the
+        // visible region, and without clipping those draws bleed onto
+        // the rest of the layout tree. The renderer's `Cmd::Scissor`
+        // opcode is currently decode-and-skip on both Metal and
+        // Vulkan backends (a follow-up will issue actual
+        // setScissorRect / vkCmdSetScissor between batches), so we
+        // also do the clipping right here at emit time:
+        //   * lines  → Cohen–Sutherland against the canvas's
+        //              absolute bounds; segments entirely outside are
+        //              suppressed, partially-out segments are
+        //              shortened to their visible extent before
+        //              `emit_draw_line` writes them into the cmd
+        //              buffer.
+        //   * text   → coarse bbox suppression. Text is rasterised as
+        //              a textured quad whose width depends on font
+        //              metrics we don't replicate at this layer, so
+        //              partial-out runs still emit and render with
+        //              their original full extent. Fully-out runs
+        //              are dropped, which handles the common
+        //              "panned-far-away" case.
+        // The companion `emit_scissor` call before the paint_fn keeps
+        // the wire format honest and lets a future renderer-side
+        // implementation kick in automatically — the CPU pass below
+        // will simply become a fast-path filter at that point.
         struct PainterImpl : public Painter {
             R& r;
             float origin_x;
             float origin_y;
-            PainterImpl(R& r_in, float ox, float oy)
-                : r(r_in), origin_x(ox), origin_y(oy) {}
+            float clip_x0, clip_y0, clip_x1, clip_y1;
+
+            PainterImpl(R& r_in, float ox, float oy,
+                        float cx, float cy, float cw, float ch)
+                : r(r_in), origin_x(ox), origin_y(oy),
+                  clip_x0(cx), clip_y0(cy),
+                  clip_x1(cx + cw), clip_y1(cy + ch) {}
+
+            // Cohen-Sutherland outcode bits — `top` bit means y is
+            // SMALLER than y-min in our top-down coordinate system,
+            // so the names match the user's mental model rather than
+            // textbook math conventions. Plain enum (not
+            // `static constexpr int`) because PainterImpl is a
+            // function-local struct, where C++ disallows static data
+            // members.
+            enum : int {
+                CS_INSIDE = 0,
+                CS_LEFT   = 1,
+                CS_RIGHT  = 2,
+                CS_TOP    = 4,
+                CS_BOTTOM = 8,
+            };
+
+            int outcode(float x, float y) const {
+                int code = CS_INSIDE;
+                if (x < clip_x0) code |= CS_LEFT;
+                else if (x > clip_x1) code |= CS_RIGHT;
+                if (y < clip_y0) code |= CS_TOP;
+                else if (y > clip_y1) code |= CS_BOTTOM;
+                return code;
+            }
+
+            // Cohen–Sutherland clip; trims (x1, y1)–(x2, y2) to lie
+            // inside the canvas rect. Returns false when the whole
+            // line is on the same outside half-plane (trivial reject)
+            // or degenerated to a sub-pixel after clipping.
+            bool clip_line(float& x1, float& y1,
+                           float& x2, float& y2) const {
+                int c1 = outcode(x1, y1);
+                int c2 = outcode(x2, y2);
+                while (true) {
+                    if ((c1 | c2) == 0) return true;
+                    if ((c1 & c2) != 0) return false;
+                    int co = c1 ? c1 : c2;
+                    float x = 0.0f, y = 0.0f;
+                    if (co & CS_TOP) {
+                        if (y2 == y1) return false;
+                        x = x1 + (x2 - x1) * (clip_y0 - y1) / (y2 - y1);
+                        y = clip_y0;
+                    } else if (co & CS_BOTTOM) {
+                        if (y2 == y1) return false;
+                        x = x1 + (x2 - x1) * (clip_y1 - y1) / (y2 - y1);
+                        y = clip_y1;
+                    } else if (co & CS_RIGHT) {
+                        if (x2 == x1) return false;
+                        y = y1 + (y2 - y1) * (clip_x1 - x1) / (x2 - x1);
+                        x = clip_x1;
+                    } else { // CS_LEFT
+                        if (x2 == x1) return false;
+                        y = y1 + (y2 - y1) * (clip_x0 - x1) / (x2 - x1);
+                        x = clip_x0;
+                    }
+                    if (co == c1) {
+                        x1 = x; y1 = y; c1 = outcode(x1, y1);
+                    } else {
+                        x2 = x; y2 = y; c2 = outcode(x2, y2);
+                    }
+                }
+            }
+
             void line(float x1, float y1, float x2, float y2,
                       float thickness, Color color) override {
-                emit_draw_line(r,
-                               origin_x + x1, origin_y + y1,
-                               origin_x + x2, origin_y + y2,
-                               thickness, color);
+                float ax1 = origin_x + x1, ay1 = origin_y + y1;
+                float ax2 = origin_x + x2, ay2 = origin_y + y2;
+                if (!clip_line(ax1, ay1, ax2, ay2)) return;
+                emit_draw_line(r, ax1, ay1, ax2, ay2, thickness, color);
             }
+
             void text(float x, float y,
                       char const* str, unsigned int len,
                       float font_size, Color color) override {
+                // Coarse bbox: assume each character is ~0.6×font_size
+                // wide. Strict containment check — emit only when the
+                // approximated bbox lies entirely inside the canvas.
+                // Lenient overlap testing was visibly broken: a run
+                // whose top edge sat above the canvas (panned-up
+                // case) still cleared the "fully outside" gate and
+                // rasterised glyphs above the canvas border. Backends
+                // would clip pixel-perfectly via real `setScissorRect`
+                // / `vkCmdSetScissor`, but those calls are still on
+                // the deferred TODO list, so for now we err on the
+                // side of dropping text the moment any of its edges
+                // cross the canvas boundary. Once the backend-side
+                // scissor lands, this check can relax back to
+                // "any overlap" — real per-pixel clipping handles
+                // the partials.
+                float ax = origin_x + x;
+                float ay = origin_y + y;
+                float approx_w = font_size *
+                                 static_cast<float>(len) * 0.6f;
+                float approx_h = font_size;
+                if (ax           < clip_x0
+                    || ay        < clip_y0
+                    || ax + approx_w > clip_x1
+                    || ay + approx_h > clip_y1) {
+                    return;
+                }
                 emit_draw_text(r,
                                origin_x + x, origin_y + y,
                                font_size, /*mono=*/0u,
                                color, str, len);
             }
         };
-        PainterImpl painter(r, draw_x, draw_y);
+
+        bool emit_canvas_scissor = (g_app.paint_scissor_depth == 0);
+        if (emit_canvas_scissor) {
+            emit_scissor(r, ax, ay, node.width, node.height);
+            ++g_app.paint_scissor_depth;
+            metrics::inst::scissor_emitted.add();
+        }
+        PainterImpl painter(r, draw_x, draw_y, ax, ay,
+                            node.width, node.height);
         node.paint_fn(painter);
+        if (emit_canvas_scissor) {
+            emit_scissor_reset(r);
+            --g_app.paint_scissor_depth;
+        }
     }
 
     if (node.callback_id != 0xFFFFFFFF) {
         emit_hit_region(r, ax, ay, node.width, node.height,
                         node.callback_id, node.cursor_type);
+    }
+
+    // Register this canvas as the active gesture target — the shell
+    // looks at `g_app.gesture_target_*` to route platform pinch / pan
+    // events. Last canvas painted wins on the rare apps that have
+    // multiple gesture-aware canvases on screen at once; that policy
+    // matches z-order intuition for nested canvases (the inner one
+    // paints last). `ax` / `ay` are the canvas's top-left in
+    // post-scroll surface coords, matching what `dispatch_gesture`
+    // receives from the input backend.
+    if (node.gesture_callback_id != 0xFFFFFFFFu) {
+        g_app.gesture_target_id = node.gesture_callback_id;
+        g_app.gesture_target_x  = ax;
+        g_app.gesture_target_y  = ay;
+        g_app.gesture_target_w  = node.width;
+        g_app.gesture_target_h  = node.height;
     }
 
     // Dirty-root detection for scissor. A child is a dirty root when
