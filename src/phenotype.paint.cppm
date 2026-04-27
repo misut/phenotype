@@ -673,6 +673,16 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 emit_stroke_path(r, translated, thickness, color);
             }
 
+            void fill_path(PathBuilder const& path,
+                           Color color) override {
+                if (path.empty()) return;
+                // Same translation pattern as `stroke_path`. The
+                // backend ear-clips and rasterises into the existing
+                // colour pipeline at decode time — no thickness here.
+                auto translated = path.translated(origin_x, origin_y);
+                emit_fill_path(r, translated, color);
+            }
+
             void text(float x, float y,
                       char const* str, unsigned int len,
                       float font_size, Color color) override {

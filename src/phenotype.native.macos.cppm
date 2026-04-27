@@ -1402,6 +1402,149 @@ inline void append_color_instance(std::vector<ColorInstanceGPU>& out,
     out.push_back(inst);
 }
 
+// FillPath helpers (Slab 5). Walk a flat polygon (vertex list with an
+// implicit close), ear-clip into a triangle list, then rasterise each
+// triangle into 1-pixel-tall axis-aligned strips dispatched onto the
+// existing colour pipeline (`draw_type = 0`). No new pipeline /
+// shader. The strips approach trades a few hundred extra
+// `ColorInstanceGPU` entries per fill for zero shader churn — fine
+// for typical CAD HATCH content (≤ 100 boundary verts, < 1000 px
+// fill area).
+inline bool point_in_triangle(float px, float py,
+                              float ax, float ay,
+                              float bx, float by,
+                              float cx, float cy) {
+    // Sign-of-cross-products test. CCW polygon = all three crosses
+    // share the same sign for an interior point.
+    float const d1 = (px - bx) * (ay - by) - (ax - bx) * (py - by);
+    float const d2 = (px - cx) * (by - cy) - (bx - cx) * (py - cy);
+    float const d3 = (px - ax) * (cy - ay) - (cx - ax) * (py - ay);
+    bool const has_neg = (d1 < 0) || (d2 < 0) || (d3 < 0);
+    bool const has_pos = (d1 > 0) || (d2 > 0) || (d3 > 0);
+    return !(has_neg && has_pos);
+}
+
+// Ear-clip triangulation. Output is a flat float array of 6 floats
+// per triangle (v0x, v0y, v1x, v1y, v2x, v2y). Polygon is taken as
+// (x, y) interleaved; vertices are NOT consumed (the input vector is
+// passed by value and the caller still owns its copy if needed).
+inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
+    std::vector<float> tris;
+    if (poly.size() < 6) return tris;  // need ≥ 3 vertices
+
+    std::size_t const n0 = poly.size() / 2;
+
+    // Signed area × 2 to detect orientation. CCW > 0; CW < 0.
+    double area2 = 0.0;
+    for (std::size_t i = 0; i < n0; ++i) {
+        std::size_t const j = (i + 1) % n0;
+        area2 += static_cast<double>(poly[2 * i])     * poly[2 * j + 1]
+              -  static_cast<double>(poly[2 * j])     * poly[2 * i + 1];
+    }
+    if (std::fabs(area2) < 1e-9) return tris;
+
+    // Normalise to CCW so the convex-vertex test below has a stable sign.
+    if (area2 < 0.0) {
+        for (std::size_t i = 0; i < n0 / 2; ++i) {
+            std::swap(poly[2 * i],     poly[2 * (n0 - 1 - i)]);
+            std::swap(poly[2 * i + 1], poly[2 * (n0 - 1 - i) + 1]);
+        }
+    }
+
+    // Indices into `poly` (vertex indices, not float offsets).
+    std::vector<std::size_t> remain(n0);
+    for (std::size_t i = 0; i < n0; ++i) remain[i] = i;
+
+    // Safety bound: at most n triangles for n vertices, but loop more
+    // generously to tolerate near-degenerate ears.
+    int safety = static_cast<int>(n0) * 3 + 1;
+    while (remain.size() >= 3 && safety-- > 0) {
+        bool found = false;
+        std::size_t const m = remain.size();
+        for (std::size_t i = 0; i < m; ++i) {
+            std::size_t const ip = remain[(i + m - 1) % m];
+            std::size_t const ic = remain[i];
+            std::size_t const in = remain[(i + 1) % m];
+            float const ax = poly[2 * ip], ay = poly[2 * ip + 1];
+            float const bx = poly[2 * ic], by = poly[2 * ic + 1];
+            float const cx = poly[2 * in], cy = poly[2 * in + 1];
+            // Convex (CCW) test: cross > 0.
+            float const cross = (bx - ax) * (cy - ay)
+                              - (by - ay) * (cx - ax);
+            if (cross <= 0.0f) continue;  // reflex / colinear
+            // Empty test: no other remaining vertex strictly inside abc.
+            bool empty = true;
+            for (std::size_t k : remain) {
+                if (k == ip || k == ic || k == in) continue;
+                float const px = poly[2 * k], py = poly[2 * k + 1];
+                if (point_in_triangle(px, py, ax, ay, bx, by, cx, cy)) {
+                    empty = false; break;
+                }
+            }
+            if (!empty) continue;
+            tris.push_back(ax); tris.push_back(ay);
+            tris.push_back(bx); tris.push_back(by);
+            tris.push_back(cx); tris.push_back(cy);
+            remain.erase(remain.begin() + static_cast<long>(i));
+            found = true;
+            break;
+        }
+        if (!found) break;  // self-intersecting / degenerate polygon
+    }
+    return tris;
+}
+
+// Rasterise one triangle into 1-px-tall horizontal strips. Each strip
+// becomes one `ColorInstanceGPU` with `draw_type = 0` (Fill).
+inline void rasterize_triangle_to_color(
+        float v0x, float v0y, float v1x, float v1y, float v2x, float v2y,
+        float r, float g, float b, float a,
+        std::vector<ColorInstanceGPU>& out) {
+    float vx[3] = {v0x, v1x, v2x};
+    float vy[3] = {v0y, v1y, v2y};
+    // Sort by y ascending.
+    auto sort_pair = [&](int i, int j) {
+        if (vy[i] > vy[j]) {
+            std::swap(vy[i], vy[j]);
+            std::swap(vx[i], vx[j]);
+        }
+    };
+    sort_pair(0, 1); sort_pair(1, 2); sort_pair(0, 1);
+
+    float const top_y = vy[0];
+    float const mid_y = vy[1];
+    float const bot_y = vy[2];
+    if (bot_y - top_y < 1e-3f) return;  // zero-height degenerate
+
+    auto interp_x = [](float y, float ya, float xa, float yb, float xb) {
+        if (yb - ya < 1e-6f) return xa;
+        return xa + (xb - xa) * (y - ya) / (yb - ya);
+    };
+
+    int const y_start = static_cast<int>(std::floor(top_y));
+    int const y_end   = static_cast<int>(std::ceil(bot_y));
+    for (int y = y_start; y < y_end; ++y) {
+        float const yc = static_cast<float>(y) + 0.5f;
+        if (yc < top_y || yc > bot_y) continue;
+        float xa, xb;
+        if (yc < mid_y) {
+            xa = interp_x(yc, top_y, vx[0], bot_y, vx[2]);
+            xb = interp_x(yc, top_y, vx[0], mid_y, vx[1]);
+        } else {
+            xa = interp_x(yc, top_y, vx[0], bot_y, vx[2]);
+            xb = interp_x(yc, mid_y, vx[1], bot_y, vx[2]);
+        }
+        float const x_left  = std::min(xa, xb);
+        float const x_right = std::max(xa, xb);
+        float const w = x_right - x_left;
+        if (w < 0.5f) continue;  // sub-pixel strip
+        append_color_instance(out, x_left, static_cast<float>(y),
+                              w, 1.0f,
+                              r, g, b, a,
+                              0.0f, 0.0f, 0.0f);  // draw_type = 0 (Fill)
+    }
+}
+
 inline void append_text_instance(std::vector<TextInstanceGPU>& out,
                                  float x, float y, float w, float h,
                                  float u, float v, float uw, float vh,
@@ -1955,6 +2098,190 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     default:
                         return false;
                     }
+                }
+                break;
+            }
+            case Cmd::FillPath: {
+                // Walk the verb stream into a flat polygon, ear-clip
+                // it into triangles, then rasterise each triangle as
+                // 1-px-tall axis-aligned strips on the existing colour
+                // pipeline. No new shader / pipeline.
+                //
+                // Single closed loop only. Self-intersection / multi-
+                // loop / hole semantics are out of scope; cad++ HATCH
+                // emits one boundary loop per `Painter::fill_path`
+                // call so this matches the use case.
+                unsigned int packed = 0;
+                unsigned int verb_count = 0;
+                if (!reader.read_u32(packed)
+                    || !reader.read_u32(verb_count))
+                    return false;
+                auto color = unpack_color(packed);
+                float const cr = color.r / 255.0f;
+                float const cg = color.g / 255.0f;
+                float const cb = color.b / 255.0f;
+                float const ca = color.a / 255.0f;
+
+                std::vector<float> polygon;
+                polygon.reserve(verb_count * 2);
+                auto append = [&](float x, float y) {
+                    polygon.push_back(x);
+                    polygon.push_back(y);
+                };
+
+                constexpr float flatness2 = 0.25f;  // (0.5 px)^2
+                constexpr int max_depth = 16;
+                auto flatten_quad = [&](auto& self,
+                                        float p0x, float p0y,
+                                        float p1x, float p1y,
+                                        float p2x, float p2y,
+                                        int depth) -> void {
+                    float lx = p2x - p0x, ly = p2y - p0y;
+                    float llen2 = lx * lx + ly * ly;
+                    bool flat = (depth == 0);
+                    if (!flat && llen2 > 1e-6f) {
+                        float d = (p1x - p0x) * ly - (p1y - p0y) * lx;
+                        if (d * d < flatness2 * llen2) flat = true;
+                    }
+                    if (flat || llen2 < 1e-6f) {
+                        append(p2x, p2y); return;
+                    }
+                    float a0x = (p0x + p1x) * 0.5f, a0y = (p0y + p1y) * 0.5f;
+                    float a1x = (p1x + p2x) * 0.5f, a1y = (p1y + p2y) * 0.5f;
+                    float mx  = (a0x + a1x) * 0.5f, my  = (a0y + a1y) * 0.5f;
+                    self(self, p0x, p0y, a0x, a0y, mx, my, depth - 1);
+                    self(self, mx, my, a1x, a1y, p2x, p2y, depth - 1);
+                };
+                auto flatten_cubic = [&](auto& self,
+                                         float p0x, float p0y,
+                                         float p1x, float p1y,
+                                         float p2x, float p2y,
+                                         float p3x, float p3y,
+                                         int depth) -> void {
+                    float lx = p3x - p0x, ly = p3y - p0y;
+                    float llen2 = lx * lx + ly * ly;
+                    bool flat = (depth == 0);
+                    if (!flat && llen2 > 1e-6f) {
+                        float d1 = (p1x - p0x) * ly - (p1y - p0y) * lx;
+                        float d2 = (p2x - p0x) * ly - (p2y - p0y) * lx;
+                        if (d1 * d1 < flatness2 * llen2
+                            && d2 * d2 < flatness2 * llen2) flat = true;
+                    }
+                    if (flat || llen2 < 1e-6f) {
+                        append(p3x, p3y); return;
+                    }
+                    float a01x = (p0x + p1x) * 0.5f, a01y = (p0y + p1y) * 0.5f;
+                    float a12x = (p1x + p2x) * 0.5f, a12y = (p1y + p2y) * 0.5f;
+                    float a23x = (p2x + p3x) * 0.5f, a23y = (p2y + p3y) * 0.5f;
+                    float b01x = (a01x + a12x) * 0.5f, b01y = (a01y + a12y) * 0.5f;
+                    float b12x = (a12x + a23x) * 0.5f, b12y = (a12y + a23y) * 0.5f;
+                    float mx   = (b01x + b12x) * 0.5f, my   = (b01y + b12y) * 0.5f;
+                    self(self, p0x, p0y, a01x, a01y, b01x, b01y, mx, my, depth - 1);
+                    self(self, mx, my, b12x, b12y, a23x, a23y, p3x, p3y, depth - 1);
+                };
+
+                // ArcTo discretiser. Fixed 32 segments — adaptive step
+                // by radius could refine later; for HATCH-scale arcs
+                // (typically ≤ a few hundred pixels) 32 is smooth.
+                auto arc_segments = [&](float cx, float cy, float r,
+                                        float sa, float ea) {
+                    constexpr int N = 32;
+                    float sweep = ea - sa;
+                    if (sweep <= 0.0f) sweep += 6.2831853f;
+                    if (sweep > 6.2831853f) sweep = 6.2831853f;
+                    for (int i = 1; i <= N; ++i) {
+                        float t = sa + sweep
+                                  * static_cast<float>(i)
+                                  / static_cast<float>(N);
+                        append(cx + r * std::cos(t),
+                               cy + r * std::sin(t));
+                    }
+                };
+
+                bool started = false;
+                for (unsigned int i = 0; i < verb_count; ++i) {
+                    unsigned int verb = 0;
+                    if (!reader.read_u32(verb)) return false;
+                    switch (static_cast<PathVerb>(verb)) {
+                    case PathVerb::MoveTo: {
+                        float x = 0, y = 0;
+                        if (!reader.read_f32(x) || !reader.read_f32(y))
+                            return false;
+                        if (!started) {
+                            append(x, y);
+                            started = true;
+                        }
+                        // else: ignore subsequent MoveTos (single-loop
+                        // fill only — multi-loop / hole semantics are
+                        // out of scope for now).
+                        break;
+                    }
+                    case PathVerb::LineTo: {
+                        float x = 0, y = 0;
+                        if (!reader.read_f32(x) || !reader.read_f32(y))
+                            return false;
+                        append(x, y);
+                        if (!started) started = true;
+                        break;
+                    }
+                    case PathVerb::QuadTo: {
+                        float c1x = 0, c1y = 0, x = 0, y = 0;
+                        if (!reader.read_f32(c1x) || !reader.read_f32(c1y)
+                            || !reader.read_f32(x) || !reader.read_f32(y))
+                            return false;
+                        if (!polygon.empty()) {
+                            float p0x = polygon[polygon.size() - 2];
+                            float p0y = polygon[polygon.size() - 1];
+                            flatten_quad(flatten_quad, p0x, p0y,
+                                         c1x, c1y, x, y, max_depth);
+                        }
+                        break;
+                    }
+                    case PathVerb::CubicTo: {
+                        float c1x = 0, c1y = 0, c2x = 0, c2y = 0;
+                        float x = 0, y = 0;
+                        if (!reader.read_f32(c1x) || !reader.read_f32(c1y)
+                            || !reader.read_f32(c2x) || !reader.read_f32(c2y)
+                            || !reader.read_f32(x) || !reader.read_f32(y))
+                            return false;
+                        if (!polygon.empty()) {
+                            float p0x = polygon[polygon.size() - 2];
+                            float p0y = polygon[polygon.size() - 1];
+                            flatten_cubic(flatten_cubic, p0x, p0y,
+                                          c1x, c1y, c2x, c2y,
+                                          x, y, max_depth);
+                        }
+                        break;
+                    }
+                    case PathVerb::ArcTo: {
+                        float acx = 0, acy = 0, ar = 0;
+                        float asa = 0, aea = 0;
+                        if (!reader.read_f32(acx) || !reader.read_f32(acy)
+                            || !reader.read_f32(ar)
+                            || !reader.read_f32(asa) || !reader.read_f32(aea))
+                            return false;
+                        if (ar > 0.0f) arc_segments(acx, acy, ar, asa, aea);
+                        break;
+                    }
+                    case PathVerb::Close:
+                        // Close is implicit on a fill — the polygon
+                        // wraps to its first vertex automatically.
+                        break;
+                    default:
+                        return false;
+                    }
+                }
+
+                if (polygon.size() < 6) break;  // < 3 vertices
+                auto tris = polygon_ear_clip(std::move(polygon));
+                auto& dst = scratch.batches.back().colors;
+                for (std::size_t t = 0; t + 5 < tris.size(); t += 6) {
+                    rasterize_triangle_to_color(
+                        tris[t],     tris[t + 1],
+                        tris[t + 2], tris[t + 3],
+                        tris[t + 4], tris[t + 5],
+                        cr, cg, cb, ca,
+                        dst);
                 }
                 break;
             }

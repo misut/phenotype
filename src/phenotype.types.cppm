@@ -505,6 +505,14 @@ public:
     // new pipeline is required for stroke rendering.
     virtual void stroke_path(PathBuilder const& path,
                              float thickness, Color color) = 0;
+    // Filled path — same verb stream, no thickness. The adapter
+    // emits a `Cmd::FillPath` payload; backends flatten the verbs
+    // into a polygon, ear-clip it into a triangle list, then
+    // rasterise each triangle into horizontal axis-aligned strips
+    // dispatched onto the existing colour pipeline (no new shader,
+    // no new pipeline). Single closed loop only — self-intersection
+    // and multi-loop / hole semantics are out of scope for now.
+    virtual void fill_path(PathBuilder const& path, Color color) = 0;
 };
 
 struct LayoutNode {
