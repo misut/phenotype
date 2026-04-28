@@ -17,6 +17,7 @@ struct NameChanged { std::string text; };
 struct ImeChanged { std::string text; };
 struct ToggleAgreed {};
 struct SetChoice { int value; };
+struct Resized { int width; int height; float scale; };
 
 using Msg = std::variant<
     Increment,
@@ -24,7 +25,8 @@ using Msg = std::variant<
     NameChanged,
     ImeChanged,
     ToggleAgreed,
-    SetChoice>;
+    SetChoice,
+    Resized>;
 
 // ---- State ----
 
@@ -34,6 +36,10 @@ struct State {
     std::string ime_sample;
     bool agreed = false;
     int choice = 0;
+    int viewport_width = 0;
+    int viewport_height = 0;
+    float viewport_scale = 1.0f;
+    bool size_limits_applied = false;
 };
 
 // ---- Update ----
@@ -47,6 +53,20 @@ void update(State& state, Msg msg) {
         else if constexpr (std::same_as<T, ImeChanged>) state.ime_sample = m.text;
         else if constexpr (std::same_as<T, ToggleAgreed>) state.agreed = !state.agreed;
         else if constexpr (std::same_as<T, SetChoice>)  state.choice = m.value;
+        else if constexpr (std::same_as<T, Resized>) {
+            state.viewport_width = m.width;
+            state.viewport_height = m.height;
+            state.viewport_scale = m.scale;
+            // Apply window-size constraints once the GLFW window is up;
+            // the first Resized message is the earliest safe moment.
+            if (!state.size_limits_applied) {
+                phenotype::native::set_window_size_limits(
+                    320, 480,
+                    phenotype::native::window_unbounded,
+                    phenotype::native::window_unbounded);
+                state.size_limits_applied = true;
+            }
+        }
     }, msg);
 }
 
@@ -352,5 +372,10 @@ void view(State const& state) {
 // ---- Entry point ----
 
 int main() {
-    return phenotype::native::run_app<State, Msg>(480, 720, "phenotype", view, update);
+    return phenotype::native::run_app<State, Msg>(
+        480, 720, "phenotype",
+        view, update,
+        [](int w, int h, float scale) -> Msg {
+            return Resized{w, h, scale};
+        });
 }

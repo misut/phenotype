@@ -11,6 +11,7 @@ module;
 #include <chrono>
 #include <concepts>
 #include <cstdio>
+#include <functional>
 #include <utility>
 
 #include <GLFW/glfw3.h>
@@ -128,6 +129,7 @@ inline void refresh_cached_canvas_size(::phenotype::native::native_host& host,
     glfwGetWindowSize(window, &w, &h);
     host.cached_width_px = w;
     host.cached_height_px = h;
+    host.cached_content_scale = glfw_backing_scale(window);
 }
 
 // Backward-compatible int-typed dispatch adapters so test fixtures and any
@@ -178,15 +180,46 @@ inline void on_scroll(GLFWwindow* window, double dx, double dy) {
     ::phenotype::native::detail::dispatch_scroll_xy(dx, dy, vw, vh);
 }
 
-inline void on_framebuffer_size(GLFWwindow* /*window*/, int w, int h) {
-    if (auto* host = ::phenotype::native::detail::active_host()) {
-        host->cached_width_px = w;
-        host->cached_height_px = h;
+inline void on_framebuffer_size(GLFWwindow* window, int /*fb_w*/, int /*fb_h*/) {
+    // GLFW delivers framebuffer pixel counts here, but the rest of the
+    // shell + layout layer operates in LOGICAL window units (so the same
+    // styles work on Retina and non-Retina displays). Re-query the
+    // logical window size from GLFW directly so cached_*_px stays in the
+    // same unit as the startup priming done by refresh_cached_canvas_size.
+    auto* host = ::phenotype::native::detail::active_host();
+    if (host) {
+        int win_w = 0;
+        int win_h = 0;
+        glfwGetWindowSize(window, &win_w, &win_h);
+        host->cached_width_px = win_w;
+        host->cached_height_px = win_h;
+        host->cached_content_scale = glfw_backing_scale(window);
+        ::phenotype::native::detail::notify_viewport_changed(
+            host, win_w, win_h, host->cached_content_scale);
     }
     ::phenotype::native::detail::repaint_current();
 }
 
-inline void on_window_content_scale(GLFWwindow*, float, float) {
+inline void on_window_content_scale(GLFWwindow*, float sx, float sy) {
+    auto* host = ::phenotype::native::detail::active_host();
+    if (host) {
+        float scale = (sx > sy) ? sx : sy;
+        if (!(scale > 0.0f) || !std::isfinite(scale))
+            scale = 1.0f;
+        host->cached_content_scale = scale;
+        ::phenotype::native::detail::notify_viewport_changed(
+            host,
+            host->cached_width_px,
+            host->cached_height_px,
+            scale);
+    }
+    ::phenotype::native::detail::repaint_current();
+}
+
+inline void on_window_refresh(GLFWwindow*) {
+    // Belt-and-suspenders repaint trigger for cases where Cocoa posts a
+    // refresh request without a fresh framebuffer-size event (zoom-button
+    // animations, occlusion changes).
     ::phenotype::native::detail::repaint_current();
 }
 
@@ -206,6 +239,7 @@ inline void install_callbacks(GLFWwindow* window) {
     glfwSetCursorPosCallback(window, on_cursor_pos);
     glfwSetScrollCallback(window, on_scroll);
     glfwSetFramebufferSizeCallback(window, on_framebuffer_size);
+    glfwSetWindowRefreshCallback(window, on_window_refresh);
 #if defined(GLFW_VERSION_MAJOR) \
     && ((GLFW_VERSION_MAJOR > 3) || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3))
     glfwSetWindowContentScaleCallback(window, on_window_content_scale);
@@ -219,7 +253,8 @@ template<typename State, typename Msg, typename View, typename Update>
           && std::invocable<Update, State&, Msg>
 int run_app_with_platform(platform_api const& platform,
                           int width, int height, char const* title,
-                          View view, Update update) {
+                          View view, Update update,
+                          std::function<void(int, int, float)> on_viewport = {}) {
     if (!platform.enabled) {
         std::fprintf(stderr, "Platform backend '%s' is disabled\n", platform.name);
         return 1;
@@ -248,11 +283,21 @@ int run_app_with_platform(platform_api const& platform,
     host.window = window;
     host.platform = &platform;
     host.set_hover_cursor = &glfw_set_hover_cursor;
+    host.on_viewport_changed = std::move(on_viewport);
     g_active_glfw_window = window;
     refresh_cached_canvas_size(host, window);
 
     ::phenotype::native::detail::bind_host(host, 0.0f);
     install_callbacks(window);
+
+    // Emit a startup viewport notification so apps that opt in via the
+    // 6-arg run_app see the initial size before the first view() call.
+    // run_host's phenotype::run() drains the queue on its first rebuild.
+    ::phenotype::native::detail::notify_viewport_changed(
+        &host,
+        host.cached_width_px,
+        host.cached_height_px,
+        host.cached_content_scale);
 
     ::phenotype::native::detail::run_host<State, Msg>(host, std::move(view), std::move(update));
 
@@ -270,6 +315,47 @@ int run_app_with_platform(platform_api const& platform,
 }
 
 } // namespace detail
+
+// ----------------------------------------------------------------------
+// Window-constraint helpers (callable from app `update` lambdas).
+// Each thunks to GLFW against the currently-active host window. Calls
+// before run_app or after shutdown are no-ops.
+// ----------------------------------------------------------------------
+
+// Sentinel for "no constraint on this side" — matches GLFW_DONT_CARE.
+// Re-exposed here because GLFW's macro lives in the module's global
+// fragment and is not visible to importers.
+inline constexpr int window_unbounded = -1;
+
+inline void set_window_size_limits(int min_w, int min_h,
+                                   int max_w, int max_h) {
+    auto* host = ::phenotype::native::detail::active_host();
+    if (!host || !host->window)
+        return;
+    glfwSetWindowSizeLimits(static_cast<GLFWwindow*>(host->window),
+                            min_w, min_h, max_w, max_h);
+}
+
+inline void set_window_aspect_ratio(int numerator, int denominator) {
+    auto* host = ::phenotype::native::detail::active_host();
+    if (!host || !host->window)
+        return;
+    glfwSetWindowAspectRatio(static_cast<GLFWwindow*>(host->window),
+                             numerator, denominator);
+}
+
+inline void clear_window_aspect_ratio() {
+    auto* host = ::phenotype::native::detail::active_host();
+    if (!host || !host->window)
+        return;
+    glfwSetWindowAspectRatio(static_cast<GLFWwindow*>(host->window),
+                             GLFW_DONT_CARE, GLFW_DONT_CARE);
+}
+
+inline float content_scale() {
+    auto* host = ::phenotype::native::detail::active_host();
+    return host ? host->cached_content_scale : 1.0f;
+}
 
 } // namespace phenotype::native
 #endif

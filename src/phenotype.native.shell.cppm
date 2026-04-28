@@ -4,6 +4,7 @@ module;
 #include <chrono>
 #include <concepts>
 #include <cstdio>
+#include <functional>
 #include <optional>
 #include <utility>
 #endif
@@ -81,6 +82,20 @@ struct native_host {
     int cached_width_px = 800;
     int cached_height_px = 600;
 
+    // Cached HiDPI scale (framebuffer_pixels / window_points). Driver
+    // updates this from `glfwGetWindowContentScale` at startup and on
+    // every framebuffer_size / content_scale callback so renderers can
+    // read it without polling the windowing toolkit each frame.
+    float cached_content_scale = 1.0f;
+
+    // Type-erased viewport-change hook installed by the templated
+    // `run_app` overload. Called by the driver after cached_*_px /
+    // cached_content_scale are updated; its body is a captured lambda
+    // that posts the user-supplied Msg into the global queue. Stays
+    // empty when the app uses the 5-arg run_app entry point.
+    std::function<void(int /*w*/, int /*h*/, float /*scale*/)>
+        on_viewport_changed;
+
     // Optional driver hook for hardware-cursor updates. shell.glfw sets
     // this to a GLFW-based cursor updater; other drivers leave it null
     // (touch devices don't have a pointer cursor).
@@ -145,6 +160,13 @@ inline native_host* g_active_host = nullptr;
 
 inline native_host* active_host() {
     return g_active_host;
+}
+
+inline void notify_viewport_changed(native_host* host,
+                                    int width_px, int height_px,
+                                    float content_scale) {
+    if (host && host->on_viewport_changed)
+        host->on_viewport_changed(width_px, height_px, content_scale);
 }
 
 inline void open_url_bridge(char const* url, unsigned int len) {
