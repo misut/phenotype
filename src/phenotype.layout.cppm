@@ -316,16 +316,24 @@ inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
 template <text_measurer M>
 void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
     auto& node = node_at(node_h);
-    if (node.layout_valid) {
-        metrics::inst::layout_nodes_skipped.add();
-        return;
-    }
-    metrics::inst::layout_nodes_computed.add();
     auto const& s = node.style;
     float content_width = available_width;
 
     if (s.max_width > 0 && content_width > s.max_width)
         content_width = s.max_width;
+
+    // Cache shortcut: a node copied verbatim from the previous frame
+    // (diff_and_copy_layout) has layout_valid==true with its previously
+    // computed width. Reusing it is only safe when the available width
+    // (capped by max_width) hasn't changed — otherwise the cached width
+    // is stale, e.g. after a window resize where the parent now passes
+    // a different content area to the same subtree.
+    if (node.layout_valid && node.width == content_width) {
+        metrics::inst::layout_nodes_skipped.add();
+        return;
+    }
+    node.layout_valid = false;
+    metrics::inst::layout_nodes_computed.add();
 
     node.width = content_width;
 
