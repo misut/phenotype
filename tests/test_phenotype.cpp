@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
@@ -1355,11 +1356,11 @@ void test_row_props_default_and_override() {
 // ============================================================
 
 void test_draw_text_roundtrip_with_fontspec() {
-    // null_host carries a 64 KB cmd buffer — keep one on the stack, not
-    // two (wasm32-wasi default stack is 64 KB, two host buffers would
-    // blow it). Reuse the same host for the wire round-trip and the
-    // cache-separation check.
-    null_host h;
+    // null_host carries a 64 KB cmd buffer — even one instance on the
+    // stack overflows the default 64 KB wasm32-wasi stack. Allocate on
+    // the heap so the same test runs on both native and wasm targets.
+    auto host_owned = std::make_unique<null_host>();
+    auto& h = *host_owned;
     h.flush();
 
     // Three calls: bare default, mono+bold+italic with named family,
