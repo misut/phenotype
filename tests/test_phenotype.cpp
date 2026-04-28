@@ -1355,6 +1355,10 @@ void test_row_props_default_and_override() {
 // ============================================================
 
 void test_draw_text_roundtrip_with_fontspec() {
+    // null_host carries a 64 KB cmd buffer — keep one on the stack, not
+    // two (wasm32-wasi default stack is 64 KB, two host buffers would
+    // blow it). Reuse the same host for the wire round-trip and the
+    // cache-separation check.
     null_host h;
     h.flush();
 
@@ -1407,14 +1411,13 @@ void test_draw_text_roundtrip_with_fontspec() {
 
     // Cache key separates by FontSpec — same text + size at Regular vs
     // Bold must miss each other.
-    null_host m;
     detail::clear_measure_cache();
     auto base = metrics::inst::measure_text_calls.total();
     FontSpec const reg{};
     FontSpec const bold{ {}, FontWeight::Bold, FontStyle::Upright, false };
-    detail::measure_text_cached(m, 16.0f, reg,  "abc", 3u);
-    detail::measure_text_cached(m, 16.0f, bold, "abc", 3u);
-    detail::measure_text_cached(m, 16.0f, reg,  "abc", 3u); // cache hit
+    detail::measure_text_cached(h, 16.0f, reg,  "abc", 3u);
+    detail::measure_text_cached(h, 16.0f, bold, "abc", 3u);
+    detail::measure_text_cached(h, 16.0f, reg,  "abc", 3u); // cache hit
     auto delta = metrics::inst::measure_text_calls.total() - base;
     assert(delta == 2);  // bold + first reg miss; second reg is a hit
 
