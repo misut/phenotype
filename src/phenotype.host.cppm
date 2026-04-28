@@ -13,15 +13,22 @@ module;
 #include <concepts>
 export module phenotype.host;
 
+import phenotype.types;
+
 export namespace phenotype {
 
 // ---- Capability concepts ----
 
+// `text_measurer` returns a pixel width for a UTF-8 byte run rendered
+// at `font_size` with the given `FontSpec`. Hosts that cannot resolve
+// the named family fall back to the platform default (Core Text best
+// match, DWrite IDWriteFontFallback, Android Typeface.create silent
+// fallback) — measurements stay platform-consistent regardless.
 template <class T>
 concept text_measurer = requires(T const& t, float font_size,
-                                  unsigned int mono, char const* text,
+                                  FontSpec font, char const* text,
                                   unsigned int len) {
-    { t.measure_text(font_size, mono, text, len) } -> std::same_as<float>;
+    { t.measure_text(font_size, font, text, len) } -> std::same_as<float>;
 };
 
 template <class T>
@@ -52,7 +59,7 @@ concept host_platform = text_measurer<T> && render_backend<T>
 
 struct null_host {
     // text_measurer
-    float measure_text(float font_size, unsigned int /*mono*/,
+    float measure_text(float font_size, FontSpec /*font*/,
                        char const* /*text*/, unsigned int len) const {
         return static_cast<float>(len) * font_size * 0.6f;
     }

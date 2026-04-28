@@ -3,6 +3,7 @@ module;
 #include <cstring>
 #include <functional>
 #include <string>
+#include <string_view>
 #include <vector>
 export module phenotype.types;
 
@@ -470,6 +471,29 @@ struct GestureEvent {
     float       focus_y = 0.0f;
 };
 
+// Font specification for `Painter::text` and `Painter::measure_text`.
+// `family` is a string view: empty (or "system") means the backend's
+// platform default font; non-empty is a TTF/OTF family name (e.g.
+// "Arial", "Helvetica Neue"). Backends that cannot resolve the name
+// fall back to their default family silently — matching the platform
+// font stack (DWrite IDWriteFontFallback, Android Typeface.create,
+// Core Text best-match). `mono` selects a monospace default family
+// when `family` is empty (Consolas / SF Mono / Typeface.MONOSPACE).
+//
+// The default-constructed `FontSpec{}` reproduces the pre-FontSpec
+// behaviour: system sans, Regular, Upright — so existing callers that
+// pass `Painter::text(...)` with no font argument keep rendering the
+// same glyphs they always did.
+enum class FontWeight : unsigned char { Regular = 0, Bold = 1 };
+enum class FontStyle  : unsigned char { Upright = 0, Italic = 1 };
+
+struct FontSpec {
+    std::string_view family{};
+    FontWeight       weight = FontWeight::Regular;
+    FontStyle        style  = FontStyle::Upright;
+    bool             mono   = false;
+};
+
 // Painter — immediate-mode drawing surface handed to a `widget::canvas`
 // callback during the paint pass. Coordinates are local to the canvas
 // (origin at the canvas's top-left, x extends right, y extends down).
@@ -482,10 +506,20 @@ public:
                       float thickness, Color color) = 0;
     // Text — `(x, y)` is the top-left of the text's font-size box, in
     // the canvas's local coordinate system. Mirrors the existing text
-    // path used by widget::text. `font_size` is in pixels.
+    // path used by widget::text. `font_size` is in pixels. `font`
+    // selects family / weight / italic / mono; default-constructed is
+    // the backend's platform sans Regular Upright.
     virtual void text(float x, float y,
                       char const* str, unsigned int len,
-                      float font_size, Color color) = 0;
+                      float font_size, Color color,
+                      FontSpec font = {}) = 0;
+    // Pixel width of `[str, str+len)` rendered at `font_size` with
+    // `font`. Returns 0 when the canvas's host has no measurement
+    // capability — consumers that need a guaranteed non-zero width
+    // should fall back to a heuristic in that case.
+    virtual float measure_text(char const* str, unsigned int len,
+                               float font_size,
+                               FontSpec font = {}) const = 0;
     // Arc — stroked circular arc centred at `(cx, cy)` with the given
     // `radius`, swept from `start_angle` to `end_angle` (radians, CCW
     // per the math / AutoCAD convention; positive y goes down on the

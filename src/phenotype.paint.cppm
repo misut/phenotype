@@ -2,6 +2,7 @@ module;
 #include <cstdint>
 #include <cstring>
 #include <string>
+#include <string_view>
 #include <vector>
 #ifdef __wasi__
 #include "phenotype_host.h"
@@ -86,9 +87,17 @@ inline std::uint64_t fnv1a_64(unsigned char const* data, unsigned int len) noexc
 // ---- WASM: host type using global cmd buffer + phenotype_host.h ----
 #ifdef __wasi__
 struct wasi_paint_host {
-    float measure_text(float fs, unsigned int m,
+    float measure_text(float fs, FontSpec font,
                        char const* t, unsigned int l) const {
-        return phenotype_measure_text(fs, m, t, l);
+        unsigned int flags =
+            (font.mono ? 1u : 0u)
+            | (font.weight == FontWeight::Bold  ? 2u : 0u)
+            | (font.style  == FontStyle::Italic ? 4u : 0u);
+        return phenotype_measure_text(
+            fs, flags,
+            font.family.data(),
+            static_cast<unsigned int>(font.family.size()),
+            t, l);
     }
     unsigned char* buf() { return phenotype_cmd_buf; }
     unsigned int& buf_len() { return phenotype_cmd_len; }
@@ -152,17 +161,46 @@ void emit_round_rect(R& r, float x, float y, float w, float h, float radius, Col
     detail::write_u32(r, c.packed());
 }
 
+// Pack a FontSpec's mono / weight / italic bits into the wire-format
+// `flags` u32. Bit 0 = mono, bit 1 = bold, bit 2 = italic, bits 3..31
+// reserved (must be zero on emit, ignored on decode). Layout matches
+// the `parseCommands` decoder in shim/phenotype.js so wasm + native
+// agree byte-for-byte.
+constexpr unsigned int pack_font_flags(FontSpec const& f) noexcept {
+    return (f.mono ? 1u : 0u)
+        | (f.weight == FontWeight::Bold  ? 2u : 0u)
+        | (f.style  == FontStyle::Italic ? 4u : 0u);
+}
+
+// Emit a `Cmd::DrawText` payload. Wire layout (all little-endian):
+//   u32  opcode = 5
+//   f32  x
+//   f32  y
+//   f32  font_size
+//   u32  flags          // bit0=mono, bit1=bold, bit2=italic
+//   u32  color (RGBA packed)
+//   u32  family_len     // 0 = backend default family
+//   u8[] family bytes (padded up to 4)
+//   u32  text_len
+//   u8[] text bytes (padded up to 4)
+//
+// Fixed overhead = 32 bytes. Family + text payloads each pad up to a
+// 4-byte boundary independently so the next opcode starts aligned.
 template <render_backend R>
-void emit_draw_text(R& r, float x, float y, float font_size, unsigned int mono,
-                    Color c, char const* text, unsigned int len) {
-    detail::ensure(r, 28 + detail::padded(len));
+void emit_draw_text(R& r, float x, float y, float font_size, unsigned int flags,
+                    Color c, std::string_view family,
+                    char const* text, unsigned int text_len) {
+    auto const family_len = static_cast<unsigned int>(family.size());
+    detail::ensure(r, 32 + detail::padded(family_len) + detail::padded(text_len));
     detail::write_u32(r, static_cast<unsigned int>(Cmd::DrawText));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, font_size);
-    detail::write_u32(r, mono);
+    detail::write_u32(r, flags);
     detail::write_u32(r, c.packed());
-    detail::write_u32(r, len);
-    detail::write_bytes(r, text, len);
+    detail::write_u32(r, family_len);
+    detail::write_bytes(r, family.data(), family_len);
+    detail::write_u32(r, text_len);
+    detail::write_bytes(r, text, text_len);
 }
 
 template <render_backend R>
@@ -337,14 +375,14 @@ void emit_focused_input_selection(R& r,
 
     float base_x = snapshot.x + snapshot.padding[3] - scroll_x;
     float draw_y = snapshot.y - scroll_y + snapshot.padding[0];
+    FontSpec const input_font{ {}, FontWeight::Regular, FontStyle::Upright,
+                               snapshot.mono };
     float start_x = base_x + measurer.measure_text(
-        snapshot.font_size,
-        snapshot.mono ? 1u : 0u,
+        snapshot.font_size, input_font,
         snapshot.value.data(),
         static_cast<unsigned int>(start));
     float end_x = base_x + measurer.measure_text(
-        snapshot.font_size,
-        snapshot.mono ? 1u : 0u,
+        snapshot.font_size, input_font,
         snapshot.value.data(),
         static_cast<unsigned int>(end));
     float width = end_x - start_x;
@@ -498,18 +536,21 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         if (inner_height > text_block_height)
             vertical_offset = (inner_height - text_block_height) / 2.0f;
         float ty = draw_y + node.style.padding[0] + vertical_offset;
+        FontSpec const node_font{ {}, FontWeight::Regular, FontStyle::Upright,
+                                  node.mono };
+        unsigned int const node_flags = pack_font_flags(node_font);
         for (auto const& line : node.text_lines) {
             if (!line.empty()) {
                 float line_w = measurer.measure_text(
-                    node.font_size, node.mono ? 1 : 0,
+                    node.font_size, node_font,
                     line.c_str(), static_cast<unsigned int>(line.size()));
                 float tx = draw_x + node.style.padding[3];
                 if (node.style.text_align == TextAlign::Center)
                     tx += (inner_width - line_w) / 2;
                 else if (node.style.text_align == TextAlign::End)
                     tx += inner_width - line_w;
-                emit_draw_text(r, tx, ty, node.font_size, node.mono ? 1 : 0,
-                               tc, line.c_str(),
+                emit_draw_text(r, tx, ty, node.font_size, node_flags,
+                               tc, node_font.family, line.c_str(),
                                static_cast<unsigned int>(line.size()));
             }
             ty += line_height;
@@ -555,13 +596,15 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         // will simply become a fast-path filter at that point.
         struct PainterImpl : public Painter {
             R& r;
+            M const& measurer;
             float origin_x;
             float origin_y;
             float clip_x0, clip_y0, clip_x1, clip_y1;
 
-            PainterImpl(R& r_in, float ox, float oy,
+            PainterImpl(R& r_in, M const& m_in, float ox, float oy,
                         float cx, float cy, float cw, float ch)
-                : r(r_in), origin_x(ox), origin_y(oy),
+                : r(r_in), measurer(m_in),
+                  origin_x(ox), origin_y(oy),
                   clip_x0(cx), clip_y0(cy),
                   clip_x1(cx + cw), clip_y1(cy + ch) {}
 
@@ -685,7 +728,8 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
 
             void text(float x, float y,
                       char const* str, unsigned int len,
-                      float font_size, Color color) override {
+                      float font_size, Color color,
+                      FontSpec font = {}) override {
                 // Coarse bbox: assume each character is ~0.6×font_size
                 // wide. Drop runs whose approximated advance box lies
                 // entirely outside the canvas; partials still emit and
@@ -714,8 +758,20 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 }
                 emit_draw_text(r,
                                origin_x + x, origin_y + y,
-                               font_size, /*mono=*/0u,
-                               color, str, len);
+                               font_size, pack_font_flags(font),
+                               color, font.family, str, len);
+            }
+
+            float measure_text(char const* str, unsigned int len,
+                               float font_size,
+                               FontSpec font = {}) const override {
+                if (len == 0) return 0.0f;
+                // Bypass measure_text_cached (layout's TU-private cache).
+                // Painter consumers like cadpp drive their own
+                // measurement loop and typically maintain their own
+                // FontSpec→width cache; calling the host directly is
+                // consistent with that pattern.
+                return measurer.measure_text(font_size, font, str, len);
             }
         };
 
@@ -725,7 +781,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             ++g_app.paint_scissor_depth;
             metrics::inst::scissor_emitted.add();
         }
-        PainterImpl painter(r, draw_x, draw_y, ax, ay,
+        PainterImpl painter(r, measurer, draw_x, draw_y, ax, ay,
                             node.width, node.height);
         node.paint_fn(painter);
         if (emit_canvas_scissor) {

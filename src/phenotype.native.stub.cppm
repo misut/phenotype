@@ -25,7 +25,9 @@ inline std::vector<HitRegionCmd>& stub_hit_regions() {
 inline void stub_text_init() {}
 inline void stub_text_shutdown() {}
 
-inline float stub_measure(float font_size, bool, char const*, unsigned int len) {
+inline float stub_measure(float font_size, unsigned int /*flags*/,
+                          char const* /*font_family*/, unsigned int /*family_len*/,
+                          char const* /*text*/, unsigned int len) {
     return static_cast<float>(len) * font_size * 0.6f;
 }
 
@@ -60,7 +62,8 @@ inline void stub_input_sync() {
                 return 0.0f;
             return stub_measure(
                 input.font_size,
-                input.mono,
+                input.mono ? 1u : 0u,
+                nullptr, 0u,
                 input.value.data(),
                 static_cast<unsigned int>(bytes));
         });
