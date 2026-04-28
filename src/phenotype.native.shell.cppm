@@ -101,10 +101,18 @@ struct native_host {
     // (touch devices don't have a pointer cursor).
     void (*set_hover_cursor)(bool pointing) = nullptr;
 
-    float measure_text(float font_size, unsigned int mono,
+    float measure_text(float font_size, ::phenotype::FontSpec font,
                        char const* text, unsigned int len) const {
         if (!platform || !platform->text.measure) return 0.0f;
-        return platform->text.measure(font_size, mono != 0, text, len);
+        unsigned int flags =
+            (font.mono ? 1u : 0u)
+            | (font.weight == ::phenotype::FontWeight::Bold  ? 2u : 0u)
+            | (font.style  == ::phenotype::FontStyle::Italic ? 4u : 0u);
+        return platform->text.measure(
+            font_size, flags,
+            font.family.data(),
+            static_cast<unsigned int>(font.family.size()),
+            text, len);
     }
 
     static constexpr unsigned int BUF_SIZE = 65536;
@@ -260,9 +268,11 @@ inline float measure_utf8_prefix(::phenotype::FocusedInputSnapshot const& snapsh
     if (!g_app_state.host)
         return 0.0f;
     bytes = ::phenotype::detail::clamp_utf8_boundary(snapshot.value, bytes);
+    ::phenotype::FontSpec const font{
+        {}, ::phenotype::FontWeight::Regular,
+        ::phenotype::FontStyle::Upright, snapshot.mono };
     return g_app_state.host->measure_text(
-        snapshot.font_size,
-        snapshot.mono ? 1u : 0u,
+        snapshot.font_size, font,
         snapshot.value.data(),
         static_cast<unsigned int>(bytes));
 }

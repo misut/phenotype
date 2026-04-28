@@ -23,8 +23,15 @@ extern "C" {
 PHENOTYPE_IMPORT("phenotype", "flush")
 void phenotype_flush(void);
 
+// Measure the rendered pixel width of `text[0..len]` at `font_size`
+// using a platform font resolved from `font_family[0..family_len]`
+// (empty = backend default) plus the `flags` bits — bit 0 = mono,
+// bit 1 = bold, bit 2 = italic. Mirrors phenotype::FontSpec /
+// pack_font_flags so wasm + native + JS all agree on the wire.
 PHENOTYPE_IMPORT("phenotype", "measure_text")
-float phenotype_measure_text(float font_size, unsigned int mono,
+float phenotype_measure_text(float font_size, unsigned int flags,
+                             char const* font_family,
+                             unsigned int family_len,
                              char const* text, unsigned int len);
 
 PHENOTYPE_IMPORT("phenotype", "get_canvas_width")

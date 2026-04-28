@@ -31,13 +31,17 @@ namespace phenotype::detail {
 // caller produces unbounded text strings (e.g. echoing user input
 // into a measured leaf), revisit with an LRU.
 
-// Cache key is just a (font_size, mono, text) tuple. std::map is used
-// instead of std::unordered_map because clang 22's libc++ unordered_map
-// references __hash_memory, which wasn't in the macOS system libc++
-// the test binaries link against. std::map keeps lookup O(log n) but
-// the cache has on the order of a few hundred entries — log n is
-// dwarfed by the host call cost we're avoiding.
-using MeasureKey = std::tuple<float, unsigned int, std::string>;
+// Cache key is (font_size, family, packed flags, text). std::map is
+// used instead of std::unordered_map because clang 22's libc++
+// unordered_map references __hash_memory, which wasn't in the macOS
+// system libc++ the test binaries link against. std::map keeps lookup
+// O(log n) but the cache has on the order of a few hundred entries —
+// log n is dwarfed by the host call cost we're avoiding.
+//
+// `flags` packs FontSpec.mono / weight / style identically to the
+// wire format (bit0=mono, bit1=bold, bit2=italic) so two FontSpecs
+// that emit the same DrawText payload map to the same cache slot.
+using MeasureKey = std::tuple<float, std::string, unsigned char, std::string>;
 
 struct MeasureKeyLess {
     bool operator()(MeasureKey const& lhs, MeasureKey const& rhs) const noexcept {
@@ -45,7 +49,9 @@ struct MeasureKeyLess {
         if (std::get<0>(rhs) < std::get<0>(lhs)) return false;
         if (std::get<1>(lhs) < std::get<1>(rhs)) return true;
         if (std::get<1>(rhs) < std::get<1>(lhs)) return false;
-        return std::get<2>(lhs) < std::get<2>(rhs);
+        if (std::get<2>(lhs) < std::get<2>(rhs)) return true;
+        if (std::get<2>(rhs) < std::get<2>(lhs)) return false;
+        return std::get<3>(lhs) < std::get<3>(rhs);
     }
 };
 
@@ -59,19 +65,29 @@ inline std::map<MeasureKey, float, MeasureKeyLess>& measure_cache() {
     return m;
 }
 
+inline unsigned char fontspec_flags(FontSpec const& f) noexcept {
+    return static_cast<unsigned char>(
+        (f.mono ? 1u : 0u)
+        | (f.weight == FontWeight::Bold  ? 2u : 0u)
+        | (f.style  == FontStyle::Italic ? 4u : 0u));
+}
+
 // Non-template cache helpers — compiled once in this TU to avoid
 // wasi-sdk's cross-module operator new ambiguity with std::map.
-inline float* cache_find(float fs, unsigned int mono,
+inline float* cache_find(float fs, FontSpec const& font,
                          char const* text, unsigned int len) {
     auto& cache = measure_cache();
-    MeasureKey key{fs, mono, std::string(text, len)};
+    MeasureKey key{fs, std::string(font.family),
+                   fontspec_flags(font), std::string(text, len)};
     auto it = cache.find(key);
     return it != cache.end() ? &it->second : nullptr;
 }
 
-inline void cache_insert(float fs, unsigned int mono,
+inline void cache_insert(float fs, FontSpec const& font,
                          char const* text, unsigned int len, float w) {
-    measure_cache().insert({MeasureKey{fs, mono, std::string(text, len)}, w});
+    measure_cache().insert({
+        MeasureKey{fs, std::string(font.family),
+                   fontspec_flags(font), std::string(text, len)}, w});
 }
 
 } // namespace phenotype::detail
@@ -80,15 +96,15 @@ export namespace phenotype::detail {
 
 template <text_measurer M>
 float measure_text_cached(M const& measurer, float font_size,
-                          unsigned int mono, char const* text,
+                          FontSpec const& font, char const* text,
                           unsigned int len) {
-    if (auto* cached = cache_find(font_size, mono, text, len)) {
+    if (auto* cached = cache_find(font_size, font, text, len)) {
         metrics::inst::measure_text_cache_hits.add();
         return *cached;
     }
     metrics::inst::measure_text_calls.add();
-    float w = measurer.measure_text(font_size, mono, text, len);
-    cache_insert(font_size, mono, text, len, w);
+    float w = measurer.measure_text(font_size, font, text, len);
+    cache_insert(font_size, font, text, len, w);
     return w;
 }
 
@@ -104,7 +120,8 @@ struct TextLayout {
 
 template <text_measurer M>
 float measure(M const& measurer, str text, float font_size, bool mono) {
-    return measure_text_cached(measurer, font_size, mono ? 1 : 0, text.data, text.len);
+    FontSpec const font{ {}, FontWeight::Regular, FontStyle::Upright, mono };
+    return measure_text_cached(measurer, font_size, font, text.data, text.len);
 }
 
 template <text_measurer M>
@@ -126,6 +143,7 @@ TextLayout layout_text(M const& measurer, std::string const& text,
         }
     }
 
+    FontSpec const lt_font{ {}, FontWeight::Regular, FontStyle::Upright, mono };
     for (auto const& para : paragraphs) {
         if (para.empty()) {
             result.lines.push_back("");
@@ -146,9 +164,9 @@ TextLayout layout_text(M const& measurer, std::string const& text,
             while (i < para.size() && para[i] == ' ') ++i;
 
             float space_width = current_line.empty() ? 0
-                : measure_text_cached(measurer, font_size, mono ? 1 : 0, " ", 1);
+                : measure_text_cached(measurer, font_size, lt_font, " ", 1);
             float word_width = measure_text_cached(
-                measurer, font_size, mono ? 1 : 0, word.c_str(),
+                measurer, font_size, lt_font, word.c_str(),
                 static_cast<unsigned int>(word.size()));
 
             if (!current_line.empty() && current_width + space_width + word_width > max_width) {
@@ -486,8 +504,10 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
             bool is_text_leaf = !child.text.empty() && child.children.empty();
             bool has_max_width = child.style.max_width > 0;
             if (is_text_leaf) {
+                FontSpec const child_font{ {}, FontWeight::Regular,
+                                           FontStyle::Upright, child.mono };
                 float measured = measure_text_cached(
-                    measurer, child.font_size, child.mono ? 1 : 0,
+                    measurer, child.font_size, child_font,
                     child.text.c_str(), static_cast<unsigned int>(child.text.size()));
                 float w = measured + child.style.padding[1] + child.style.padding[3];
                 child.width = w;
@@ -572,9 +592,14 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
 #ifdef __wasi__
 namespace phenotype::detail {
     struct wasi_measurer {
-        float measure_text(float fs, unsigned int m,
+        float measure_text(float fs, FontSpec font,
                            char const* t, unsigned int l) const {
-            return phenotype_measure_text(fs, m, t, l);
+            unsigned int flags = static_cast<unsigned int>(fontspec_flags(font));
+            return phenotype_measure_text(
+                fs, flags,
+                font.family.data(),
+                static_cast<unsigned int>(font.family.size()),
+                t, l);
         }
     };
     inline wasi_measurer g_wasi_measurer;
@@ -583,7 +608,8 @@ namespace phenotype::detail {
 export namespace phenotype::detail {
 
 inline float measure(str text, float font_size, bool mono) {
-    return measure_text_cached(g_wasi_measurer, font_size, mono ? 1 : 0,
+    FontSpec const font{ {}, FontWeight::Regular, FontStyle::Upright, mono };
+    return measure_text_cached(g_wasi_measurer, font_size, font,
                                text.data, text.len);
 }
 

@@ -150,12 +150,31 @@ inline DXGI_ADAPTER_DESC1 describe_adapter(IDXGIAdapter1* adapter) {
     return desc;
 }
 
+struct DWriteCacheKey {
+    std::wstring family;
+    DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL;
+    DWRITE_FONT_STYLE  style  = DWRITE_FONT_STYLE_NORMAL;
+    bool               mono   = false;
+};
+
+struct DWriteCacheKeyLess {
+    bool operator()(DWriteCacheKey const& l, DWriteCacheKey const& r) const noexcept {
+        if (l.family != r.family) return l.family < r.family;
+        if (l.weight != r.weight) return l.weight < r.weight;
+        if (l.style  != r.style)  return l.style  < r.style;
+        return static_cast<unsigned char>(l.mono)
+             < static_cast<unsigned char>(r.mono);
+    }
+};
+
 struct TextState {
     ComPtr<IDWriteFactory> factory;
     ComPtr<IDWriteGdiInterop> gdi_interop;
     ComPtr<IDWriteRenderingParams> rendering_params;
-    ComPtr<IDWriteTextFormat> sans_format;
-    ComPtr<IDWriteTextFormat> mono_format;
+    // Cached IDWriteTextFormat per (family, weight, style, mono)
+    // — DWrite's native font-fallback chain handles unresolved
+    // family names silently, so we never need to log misses.
+    std::map<DWriteCacheKey, ComPtr<IDWriteTextFormat>, DWriteCacheKeyLess> formats;
     bool initialized = false;
 };
 
@@ -163,12 +182,14 @@ static TextState g_text;
 
 inline HRESULT create_text_format(
         wchar_t const* family_name,
+        DWRITE_FONT_WEIGHT weight,
+        DWRITE_FONT_STYLE  style,
         ComPtr<IDWriteTextFormat>& format) {
     auto hr = g_text.factory->CreateTextFormat(
         family_name,
         nullptr,
-        DWRITE_FONT_WEIGHT_NORMAL,
-        DWRITE_FONT_STYLE_NORMAL,
+        weight,
+        style,
         DWRITE_FONT_STRETCH_NORMAL,
         16.0f,
         L"en-us",
@@ -178,6 +199,41 @@ inline HRESULT create_text_format(
     format->SetTextAlignment(DWRITE_TEXT_ALIGNMENT_LEADING);
     format->SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR);
     return S_OK;
+}
+
+inline DWriteCacheKey dwrite_key_from(::phenotype::FontSpec const& font) {
+    DWriteCacheKey key{};
+    if (!font.family.empty()) {
+        // utf8 → wide (Windows uses UTF-16 wstring; cppx::unicode::utf8_to_wide
+        // does the conversion). Empty → use the platform default below.
+        auto wide = cppx::unicode::utf8_to_wide(
+            std::string_view{font.family.data(),
+                             static_cast<size_t>(font.family.size())});
+        if (wide.has_value()) key.family = std::move(*wide);
+    }
+    key.weight = (font.weight == ::phenotype::FontWeight::Bold)
+        ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL;
+    key.style  = (font.style == ::phenotype::FontStyle::Italic)
+        ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL;
+    key.mono = font.mono;
+    return key;
+}
+
+inline IDWriteTextFormat* acquire_text_format(DWriteCacheKey const& key) {
+    if (!g_text.initialized) return nullptr;
+    auto it = g_text.formats.find(key);
+    if (it != g_text.formats.end()) return it->second.Get();
+
+    wchar_t const* family = key.family.empty()
+        ? (key.mono ? L"Consolas" : L"Segoe UI")
+        : key.family.c_str();
+
+    ComPtr<IDWriteTextFormat> format;
+    if (FAILED(create_text_format(family, key.weight, key.style, format)))
+        return nullptr;
+    auto* raw = format.Get();
+    g_text.formats.emplace(key, std::move(format));
+    return raw;
 }
 
 inline void text_init() {
@@ -206,21 +262,20 @@ inline void text_init() {
         return;
     }
 
-    hr = create_text_format(L"Segoe UI", g_text.sans_format);
-    if (FAILED(hr)) {
-        log_hresult("CreateTextFormat(Segoe UI)", hr);
-        g_text = {};
-        return;
-    }
-
-    hr = create_text_format(L"Consolas", g_text.mono_format);
-    if (FAILED(hr)) {
-        log_hresult("CreateTextFormat(Consolas)", hr);
-        g_text = {};
-        return;
-    }
-
     g_text.initialized = true;
+
+    // Pre-warm the two platform defaults — the empty-family /
+    // empty-family+mono fast path. Named families resolve lazily on
+    // first use through acquire_text_format.
+    {
+        DWriteCacheKey sans{}; sans.mono = false;
+        DWriteCacheKey mono{}; mono.mono = true;
+        if (!acquire_text_format(sans) || !acquire_text_format(mono)) {
+            log_hresult("CreateTextFormat(default)", E_FAIL);
+            g_text = {};
+            return;
+        }
+    }
 }
 
 inline void text_shutdown() {
@@ -230,16 +285,17 @@ inline void text_shutdown() {
 inline HRESULT make_text_layout(
         std::wstring const& text,
         float font_size,
-        bool mono,
+        DWriteCacheKey const& key,
         float max_width,
         float max_height,
         ComPtr<IDWriteTextLayout>& layout) {
     if (!g_text.initialized) return E_FAIL;
-    auto const& format = mono ? g_text.mono_format : g_text.sans_format;
+    auto* format = acquire_text_format(key);
+    if (!format) return E_FAIL;
     auto hr = g_text.factory->CreateTextLayout(
         text.c_str(),
         static_cast<UINT32>(text.size()),
-        format.Get(),
+        format,
         max_width,
         max_height,
         &layout);
@@ -250,7 +306,19 @@ inline HRESULT make_text_layout(
     return S_OK;
 }
 
-inline float text_measure(float font_size, bool mono,
+inline HRESULT make_text_layout(
+        std::wstring const& text,
+        float font_size,
+        bool mono,
+        float max_width,
+        float max_height,
+        ComPtr<IDWriteTextLayout>& layout) {
+    DWriteCacheKey key{};
+    key.mono = mono;
+    return make_text_layout(text, font_size, key, max_width, max_height, layout);
+}
+
+inline float text_measure(float font_size, DWriteCacheKey const& key,
                           char const* text_ptr, unsigned int len) {
     if (!g_text.initialized || len == 0) return 0.0f;
 
@@ -260,7 +328,7 @@ inline float text_measure(float font_size, bool mono,
 
     ComPtr<IDWriteTextLayout> layout;
     auto hr = make_text_layout(
-        wide, font_size, mono,
+        wide, font_size, key,
         16384.0f, font_size * 4.0f + 32.0f,
         layout);
     if (FAILED(hr)) {
@@ -275,6 +343,29 @@ inline float text_measure(float font_size, bool mono,
         return 0.0f;
     }
     return metrics.widthIncludingTrailingWhitespace;
+}
+
+inline float text_measure(float font_size, bool mono,
+                          char const* text_ptr, unsigned int len) {
+    DWriteCacheKey key{};
+    key.mono = mono;
+    return text_measure(font_size, key, text_ptr, len);
+}
+
+// platform_api::text.measure entry point.
+inline float text_measure_api(float font_size, unsigned int flags,
+                              char const* font_family, unsigned int family_len,
+                              char const* text, unsigned int len) {
+    DWriteCacheKey key{};
+    if (font_family && family_len > 0) {
+        auto wide = cppx::unicode::utf8_to_wide(
+            std::string_view{font_family, family_len});
+        if (wide.has_value()) key.family = std::move(*wide);
+    }
+    key.weight = (flags & 2u) ? DWRITE_FONT_WEIGHT_BOLD   : DWRITE_FONT_WEIGHT_NORMAL;
+    key.style  = (flags & 4u) ? DWRITE_FONT_STYLE_ITALIC  : DWRITE_FONT_STYLE_NORMAL;
+    key.mono   = (flags & 1u) != 0;
+    return text_measure(font_size, key, text, len);
 }
 
 class GlyphBitmapRenderer final : public IDWriteTextRenderer {
@@ -461,11 +552,22 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
         auto wide = cppx::unicode::utf8_to_wide(entry.text).value_or(std::wstring{});
         if (wide.empty()) continue;
 
+        DWriteCacheKey entry_key{};
+        if (!entry.family.empty()) {
+            auto fwide = cppx::unicode::utf8_to_wide(entry.family);
+            if (fwide.has_value()) entry_key.family = std::move(*fwide);
+        }
+        entry_key.weight = (entry.weight == ::phenotype::FontWeight::Bold)
+            ? DWRITE_FONT_WEIGHT_BOLD : DWRITE_FONT_WEIGHT_NORMAL;
+        entry_key.style  = (entry.style == ::phenotype::FontStyle::Italic)
+            ? DWRITE_FONT_STYLE_ITALIC : DWRITE_FONT_STYLE_NORMAL;
+        entry_key.mono = entry.mono;
+
         ComPtr<IDWriteTextLayout> metrics_layout;
         auto hr = make_text_layout(
             wide,
             entry.font_size,
-            entry.mono,
+            entry_key,
             16384.0f,
             entry.font_size * 4.0f + 64.0f,
             metrics_layout);
@@ -511,7 +613,7 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
         hr = make_text_layout(
             wide,
             entry.font_size,
-            entry.mono,
+            entry_key,
             static_cast<float>(box.slot_width - padding * 2) / scale,
             static_cast<float>(box.render_height) / scale,
             draw_layout);
@@ -1850,30 +1952,41 @@ inline bool decode_frame_commands(unsigned char const* buf,
         }
         case Cmd::DrawText: {
             float x = 0.0f, y = 0.0f, font_size = 0.0f;
-            unsigned int mono = 0;
+            unsigned int flags = 0;
             unsigned int packed = 0;
+            unsigned int family_len = 0;
+            std::string family;
             unsigned int text_len = 0;
             std::string text;
             if (!reader.read_f32(x) || !reader.read_f32(y)
                 || !reader.read_f32(font_size)
-                || !reader.read_u32(mono)
+                || !reader.read_u32(flags)
                 || !reader.read_u32(packed)
+                || !reader.read_u32(family_len)
+                || !reader.read_string(family, family_len)
                 || !reader.read_u32(text_len)
                 || !reader.read_string(text, text_len))
                 return false;
             auto color = unpack_color(packed);
-            frame.text_entries.push_back({
-                x,
-                y,
-                font_size,
-                mono != 0,
-                color.r / 255.0f,
-                color.g / 255.0f,
-                color.b / 255.0f,
-                color.a / 255.0f,
-                std::move(text),
-                font_size * line_height_ratio,
-            });
+            ::phenotype::native::TextEntry entry{};
+            entry.x = x;
+            entry.y = y;
+            entry.font_size = font_size;
+            entry.mono = (flags & 1u) != 0;
+            entry.r = color.r / 255.0f;
+            entry.g = color.g / 255.0f;
+            entry.b = color.b / 255.0f;
+            entry.a = color.a / 255.0f;
+            entry.text = std::move(text);
+            entry.line_height = font_size * line_height_ratio;
+            entry.family = std::move(family);
+            entry.weight = (flags & 2u)
+                ? ::phenotype::FontWeight::Bold
+                : ::phenotype::FontWeight::Regular;
+            entry.style  = (flags & 4u)
+                ? ::phenotype::FontStyle::Italic
+                : ::phenotype::FontStyle::Upright;
+            frame.text_entries.push_back(std::move(entry));
             break;
         }
         case Cmd::DrawLine: {
@@ -3759,18 +3872,18 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                                    Color color, std::string text, float line_height) {
         if (text.empty())
             return;
-        decoded.text_entries.push_back({
-            x,
-            y,
-            font_size,
-            mono,
-            color.r / 255.0f,
-            color.g / 255.0f,
-            color.b / 255.0f,
-            color.a / 255.0f,
-            std::move(text),
-            line_height,
-        });
+        ::phenotype::native::TextEntry entry{};
+        entry.x = x;
+        entry.y = y;
+        entry.font_size = font_size;
+        entry.mono = mono;
+        entry.r = color.r / 255.0f;
+        entry.g = color.g / 255.0f;
+        entry.b = color.b / 255.0f;
+        entry.a = color.a / 255.0f;
+        entry.text = std::move(text);
+        entry.line_height = line_height;
+        decoded.text_entries.push_back(std::move(entry));
     };
 
     auto layout = current_windows_caret_layout();
@@ -4458,7 +4571,7 @@ inline platform_api const& windows_platform() {
         {
             detail::text_init,
             detail::text_shutdown,
-            detail::text_measure,
+            detail::text_measure_api,
             detail::text_build_atlas,
         },
         {
