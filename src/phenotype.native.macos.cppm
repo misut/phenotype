@@ -5043,6 +5043,12 @@ inline void renderer_init(native_surface_handle handle) {
     glfwGetFramebufferSize(window, &fbw, &fbh);
     sync_drawable_size(fbw, fbh);
 
+    // Prime the host's cached content scale even when the host bypassed
+    // refresh_cached_canvas_size (e.g. test harnesses that wire the
+    // host directly instead of going through run_app_with_platform).
+    if (auto* host = ::phenotype::native::detail::active_host())
+        host->cached_content_scale = current_backing_scale(window);
+
     reinterpret_cast<void(*)(void*, SEL, void*)>(objc_msgSend)(
         view, sel_sl, static_cast<void*>(g_renderer.layer));
 
@@ -5089,7 +5095,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (len == 0 || !g_renderer.initialized) return;
 
     NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
-    float text_scale = current_backing_scale(g_renderer.window);
+    // Read the host-cached HiDPI scale so we don't poll GLFW twice per
+    // frame. The shell keeps cached_content_scale in sync with the
+    // framebuffer_size and content_scale callbacks.
+    float frame_scale = 1.0f;
+    if (auto* host = ::phenotype::native::detail::active_host())
+        frame_scale = host->cached_content_scale;
+    if (!(frame_scale > 0.0f))
+        frame_scale = current_backing_scale(g_renderer.window);
+    float text_scale = frame_scale;
     float line_height_ratio = ::phenotype::detail::g_app.theme.line_height_ratio;
 
     double cr = 0.98;
@@ -5263,7 +5277,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     // Per-batch scissor + draws. Each batch's instance ranges live
     // contiguously in the flat *_instances vectors thanks to
     // finalize_batches; we use baseInstance to point at them.
-    float const scissor_scale = current_backing_scale(g_renderer.window);
+    float const scissor_scale = frame_scale;
     for (auto const& batch : scratch.batches) {
         auto const batch_color_count =
             static_cast<std::uint32_t>(batch.colors.size());

@@ -534,6 +534,74 @@ void test_canvas_bypasses_paint_cache_after_diff() {
     std::puts("PASS: widget::canvas bypasses paint cache after diff");
 }
 
+// Regression: after diff_and_copy_layout marks a subtree layout_valid,
+// re-running layout with a different available_width must NOT short-
+// circuit on the cached width. Otherwise window resize leaves the tree
+// at the previous-frame width and content collapses to one corner.
+void test_layout_relayout_when_available_width_changes() {
+    auto build_tree = [](float canvas_w) {
+        detail::g_app.arena.reset();
+        auto root_h = detail::alloc_node();
+        auto& root = detail::node_at(root_h);
+        root.style.flex_direction = FlexDirection::Column;
+
+        auto child_h = detail::alloc_node();
+        auto& child = detail::node_at(child_h);
+        child.style.flex_direction = FlexDirection::Column;
+        child.style.cross_align = CrossAxisAlignment::Center;
+        child.text = "";
+        root.children.push_back(child_h);
+
+        auto leaf_h = detail::alloc_node();
+        auto& leaf = detail::node_at(leaf_h);
+        leaf.text = "hi";
+        leaf.font_size = 16.0f;
+        leaf.style.text_align = TextAlign::Center;
+        child.children.push_back(leaf_h);
+
+        LAYOUT_NODE(root_h, canvas_w);
+        return root_h;
+    };
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+
+    // Frame 1 at narrow width.
+    auto old_root = build_tree(400.0f);
+    assert(detail::node_at(old_root).width == 400.0f);
+
+    // Hand the tree off as the previous frame.
+    detail::g_app.prev_root = old_root;
+    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+
+    // Frame 2 at wider width — diff/copy will mark layout_valid.
+    auto new_root = build_tree(400.0f);  // builds a structurally-identical tree
+    auto matched = detail::diff_and_copy_layout(
+        detail::g_app.prev_root, new_root,
+        detail::g_app.prev_arena, detail::g_app.arena);
+    assert(matched);
+    assert(detail::node_at(new_root).layout_valid);
+
+    // Re-layout at a wider canvas — this is what the runner does on
+    // window resize. Without the fix, layout_node sees layout_valid==
+    // true and returns immediately with width=400.
+    LAYOUT_NODE(new_root, 1500.0f);
+    assert(detail::node_at(new_root).width == 1500.0f);
+
+    auto const& root = detail::node_at(new_root);
+    assert(root.children.size() == 1);
+    auto const& middle = detail::node_at(root.children[0]);
+    assert(middle.width == 1500.0f);
+    assert(middle.children.size() == 1);
+    auto const& leaf = detail::node_at(middle.children[0]);
+    assert(leaf.width == 1500.0f);
+
+    std::puts("PASS: relayout invalidates cached width on viewport resize");
+}
+
 void test_checkbox_and_radio_widgets() {
     struct ToggleA {};
     struct PickB { int idx; };
@@ -1300,6 +1368,7 @@ int main() {
     test_grid_cell_text_is_vertically_centered();
     test_canvas_widget_invokes_painter();
     test_canvas_bypasses_paint_cache_after_diff();
+    test_layout_relayout_when_available_width_changes();
     test_checkbox_and_radio_widgets();
     test_frame_skip_on_identical_cmd_buffer();
     test_paint_only_props_invalidate_diff_cache();
