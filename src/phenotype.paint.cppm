@@ -810,12 +810,25 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             float origin_y;
             float clip_x0, clip_y0, clip_x1, clip_y1;
 
+            // Clip stack for nested push_clip / pop_clip. The bottom
+            // entry is the canvas's outer rect (set in the
+            // constructor); each push intersects with the current top
+            // and emits `Cmd::Scissor` so macOS / Android backends
+            // narrow their setScissorRect / vkCmdSetScissor between
+            // draws. The CPU-side cull paths (line clip_line, arc bbox
+            // reject, text bbox reject) read from clip_x0..clip_y1
+            // which always tracks the top of the stack.
+            struct ClipRect { float x0, y0, x1, y1; };
+            std::vector<ClipRect> clip_stack;
+
             PainterImpl(R& r_in, M const& m_in, float ox, float oy,
                         float cx, float cy, float cw, float ch)
                 : r(r_in), measurer(m_in),
                   origin_x(ox), origin_y(oy),
                   clip_x0(cx), clip_y0(cy),
-                  clip_x1(cx + cw), clip_y1(cy + ch) {}
+                  clip_x1(cx + cw), clip_y1(cy + ch) {
+                clip_stack.push_back({clip_x0, clip_y0, clip_x1, clip_y1});
+            }
 
             // Cohen-Sutherland outcode bits — `top` bit means y is
             // SMALLER than y-min in our top-down coordinate system,
@@ -981,6 +994,49 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 // FontSpec→width cache; calling the host directly is
                 // consistent with that pattern.
                 return measurer.measure_text(font_size, font, str, len);
+            }
+
+            void push_clip(float x, float y,
+                           float w, float h) override {
+                // Translate the canvas-local rect to surface-local then
+                // intersect with the current clip top so a nested push
+                // never widens the visible region.
+                float nx0 = origin_x + x;
+                float ny0 = origin_y + y;
+                float nx1 = nx0 + w;
+                float ny1 = ny0 + h;
+                ClipRect const& top = clip_stack.back();
+                ClipRect inter{
+                    std::max(top.x0, nx0),
+                    std::max(top.y0, ny0),
+                    std::min(top.x1, nx1),
+                    std::min(top.y1, ny1),
+                };
+                clip_stack.push_back(inter);
+                clip_x0 = inter.x0; clip_y0 = inter.y0;
+                clip_x1 = inter.x1; clip_y1 = inter.y1;
+                // Empty intersection still emits a degenerate scissor;
+                // the backend's `vkCmdSetScissor` / `setScissorRect`
+                // accepts (w == 0 || h == 0) as a "draw nothing" rect
+                // which matches the CPU cull behaviour above.
+                float ew = std::max(0.0f, inter.x1 - inter.x0);
+                float eh = std::max(0.0f, inter.y1 - inter.y0);
+                emit_scissor(r, inter.x0, inter.y0, ew, eh);
+            }
+
+            void pop_clip() override {
+                // Defensive: a stray pop without a matching push would
+                // underflow the stack and re-emit a (0,0,0,0) reset
+                // that drops the canvas's own outer scissor for the
+                // remainder of paint_fn. Keep the bottom entry pinned.
+                if (clip_stack.size() <= 1) return;
+                clip_stack.pop_back();
+                ClipRect const& top = clip_stack.back();
+                clip_x0 = top.x0; clip_y0 = top.y0;
+                clip_x1 = top.x1; clip_y1 = top.y1;
+                float ew = std::max(0.0f, top.x1 - top.x0);
+                float eh = std::max(0.0f, top.y1 - top.y0);
+                emit_scissor(r, top.x0, top.y0, ew, eh);
             }
         };
 

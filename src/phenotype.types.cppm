@@ -563,6 +563,20 @@ public:
     // no new pipeline). Single closed loop only — self-intersection
     // and multi-loop / hole semantics are out of scope for now.
     virtual void fill_path(PathBuilder const& path, Color color) = 0;
+    // Push / pop a rectangular clip region. The rect is canvas-local
+    // (same coordinate system as `line` / `arc` / `stroke_path`); the
+    // adapter intersects it with the current clip and applies the
+    // result to both the CPU-side line / text cull path and the
+    // backend's `Cmd::Scissor` opcode. Pop restores the previous clip
+    // (the canvas's outer rect at the bottom of the stack). Default
+    // implementation is no-op for derivations that do not care about
+    // sub-canvas clipping; the widget::canvas adapter's `PainterImpl`
+    // overrides both. Used by cad++ to clip per-VIEWPORT model-space
+    // walks to their paper-space rect.
+    virtual void push_clip(float x, float y, float w, float h) {
+        (void)x; (void)y; (void)w; (void)h;
+    }
+    virtual void pop_clip() {}
 };
 
 // ScrollState — `layout::scroll_view`'s persistent state, kept in the
