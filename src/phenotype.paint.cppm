@@ -411,6 +411,22 @@ inline std::uint64_t callback_mask_bit(unsigned int callback_id) noexcept {
     return 1ULL << (callback_id & 63u);
 }
 
+// After a subtree blit, descendants' paint_offset values still point
+// into prev_cmd_buf positions that reflect the *previous* layout — the
+// blit replaced their bytes wholesale without rewriting per-descendant
+// offsets. Invalidate them so a later frame's blit guard takes the
+// miss-path walk for any descendant whose own diff fails while the
+// ancestor's blit eligibility lapses. The descendant will re-record
+// fresh paint state on that walk and become cache-eligible again.
+inline void invalidate_descendant_paint_cache(NodeHandle node_h) {
+    auto& node = node_at(node_h);
+    for (auto child_h : node.children) {
+        auto& child = node_at(child_h);
+        child.paint_valid = false;
+        invalidate_descendant_paint_cache(child_h);
+    }
+}
+
 template <render_backend R, text_measurer M>
 void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 float ox, float oy,
@@ -460,6 +476,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             // shifting (e.g. adding a focus border) would leave stale
             // offsets pointing into unrelated bytes from the old layout.
             node.paint_offset = write_pos;
+            invalidate_descendant_paint_cache(node_h);
             metrics::inst::paint_subtrees_blitted.add();
             metrics::inst::paint_bytes_blitted.add(len);
             return;
