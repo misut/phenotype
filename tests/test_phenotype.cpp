@@ -801,6 +801,128 @@ void test_paint_only_props_invalidate_diff_cache() {
     std::puts("PASS: paint-only prop changes invalidate diff/paint cache");
 }
 
+// Regression: when a subtree (here widget::radio's row) keeps blitting
+// as a chunk frame after frame, descendants' paint_offset values stay
+// frozen at whatever frame last walked them. Pre-fix, the moment a
+// sibling-only diff failure forces the row to walk while a leaf inside
+// still matches structurally, that leaf's blit guard fires with a
+// paint_offset pointing into long-stale prev_cmd_buf bytes and memcpys
+// garbage into the live cmd buffer.
+//
+// Repro mirrors the cad++ view-selector that surfaced this in PR #21:
+// a 3-radio group cycled A → B → A → C. C.row blits across frames 1+2;
+// in frame 3 C.box's diff fails (decoration None→Dot) cascading C.row
+// to walk, but C.label.diff still succeeds because its text is
+// unchanged. C.label must NOT take the blit path in that frame.
+void test_radio_paint_cache_stale_descendant_after_subtree_blit() {
+    using Msg = int;
+
+    auto build_radios = [](bool a, bool b, bool c) {
+        auto root_h = detail::alloc_node();
+        detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+        Scope scope(root_h);
+        Scope::set_current(&scope);
+        widget::radio<Msg>("Option A", a, 0);
+        widget::radio<Msg>("Option B", b, 1);
+        widget::radio<Msg>("Option C", c, 2);
+        Scope::set_current(nullptr);
+        return root_h;
+    };
+
+    auto mirror_cmd_to_prev = []() {
+        auto len = CMD_LEN;
+        if (len > AppState::PAINT_CACHE_BUF_SIZE) len = AppState::PAINT_CACHE_BUF_SIZE;
+        std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, len);
+        detail::g_app.prev_cmd_len = len;
+    };
+
+    auto next_frame = []() {
+        std::swap(detail::g_app.arena, detail::g_app.prev_arena);
+        detail::g_app.arena.reset();
+        detail::g_app.callbacks.clear();
+        detail::msg_queue().clear();
+    };
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+    detail::g_app.paint_invalidation_mask = 0;
+    detail::g_app.prev_scroll_x = 0;
+    detail::g_app.prev_scroll_y = 0;
+    metrics::reset_all();
+
+    // Frame 0: A selected, initial walk seeds the cache.
+    auto root_0 = build_radios(true, false, false);
+    LAYOUT_NODE(root_0, 400.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(root_0, 0, 0, 0, 600.0f);
+    mirror_cmd_to_prev();
+    detail::g_app.prev_root = root_0;
+
+    // Frame 1: click B. A and B flip; C unchanged so C.row blits as a
+    // chunk and C's descendant offsets stay at frame-0 positions.
+    next_frame();
+    auto root_1 = build_radios(false, true, false);
+    detail::diff_and_copy_layout(detail::g_app.prev_root, root_1,
+                                 detail::g_app.prev_arena, detail::g_app.arena);
+    LAYOUT_NODE(root_1, 400.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(root_1, 0, 0, 0, 600.0f);
+    mirror_cmd_to_prev();
+    detail::g_app.prev_root = root_1;
+
+    // Frame 2: click A. C.row blits again. prev_cmd_buf is rewritten
+    // each frame, so C.label's frame-0 offset now points to whatever
+    // bytes happen to occupy that position in frame 2's emit.
+    next_frame();
+    auto root_2 = build_radios(true, false, false);
+    detail::diff_and_copy_layout(detail::g_app.prev_root, root_2,
+                                 detail::g_app.prev_arena, detail::g_app.arena);
+    LAYOUT_NODE(root_2, 400.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(root_2, 0, 0, 0, 600.0f);
+    mirror_cmd_to_prev();
+    detail::g_app.prev_root = root_2;
+
+    // Frame 3: click C. C.box decoration None→Dot fails diff and
+    // cascades C.row to walk. C.label.diff still succeeds (text
+    // unchanged) — its blit guard would fire with the stale frame-0
+    // offset without the descendant invalidation.
+    next_frame();
+    auto root_3 = build_radios(false, false, true);
+    detail::diff_and_copy_layout(detail::g_app.prev_root, root_3,
+                                 detail::g_app.prev_arena, detail::g_app.arena);
+    LAYOUT_NODE(root_3, 400.0f);
+
+    auto blits_before = metrics::inst::paint_subtrees_blitted.total();
+    CMD_LEN = 0;
+    PAINT_NODE(root_3, 0, 0, 0, 600.0f);
+    auto blits_during = metrics::inst::paint_subtrees_blitted.total() - blits_before;
+
+    // Frame 3 legitimate blits: A.label (text unchanged across f2→f3,
+    // offset stayed fresh because A.row was walked every frame and
+    // therefore recursed into A.label) and B.row (B fully unchanged
+    // f2→f3, so the whole row blits). C.label MUST take the miss-path
+    // walk: its inherited paint_offset is from a long-defunct buffer
+    // position because C.row chunk-blitted across frames 1+2 without
+    // ever recursing into C.label to refresh it. Pre-fix: 3 blits
+    // (extra stale C.label blit corrupts the cmd buffer). Post-fix: 2.
+    assert(blits_during == 2);
+
+    // Sanity: C.box walked and emitted active visuals.
+    auto& column = detail::node_at(root_3);
+    assert(column.children.size() == 3);
+    auto& c_row = detail::node_at(column.children[2]);
+    assert(c_row.children.size() == 2);
+    auto& c_box = detail::node_at(c_row.children[0]);
+    assert(c_box.decoration == Decoration::Dot);
+    assert(!c_box.layout_valid);
+    assert(c_box.paint_valid);
+
+    std::puts("PASS: radio paint cache survives stale-descendant blit propagation");
+}
+
 void test_row_cross_align_center_default() {
     detail::g_app.arena.reset();
     auto root_h = detail::alloc_node();
@@ -1479,6 +1601,7 @@ int main() {
     test_checkbox_and_radio_widgets();
     test_frame_skip_on_identical_cmd_buffer();
     test_paint_only_props_invalidate_diff_cache();
+    test_radio_paint_cache_stale_descendant_after_subtree_blit();
     test_row_cross_align_center_default();
     test_theme_json_roundtrip();
     test_theme_json_partial_keeps_defaults();
