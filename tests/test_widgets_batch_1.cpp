@@ -102,10 +102,13 @@ void test_progress_clamps_value() {
 
 // switch_("on", true) puts the thumb on the right edge of the track
 // and uses theme.accent for the track; switch_("off", false) flips
-// both. The flip is via row main_align, so layout's existing
-// Start/End maths positions the thumb correctly.
+// both. The thumb position is driven by an animated leading spacer
+// (children[0]); the thumb sits at children[1]. On the first frame
+// `animate_float` snaps to its target, so the assertions below test
+// the steady-state geometry without timing concerns.
 void test_switch_on_state_alignment() {
     enum Msg { Toggle };
+    detail::local_store().clear();
     auto root_h = build([&] {
         widget::switch_<Msg>("toggled", true, Toggle);
     });
@@ -114,20 +117,22 @@ void test_switch_on_state_alignment() {
     auto& root = detail::node_at(root_h);
     auto& row = detail::node_at(root.children[0]);
     auto& track = detail::node_at(row.children[0]);
-    auto& thumb = detail::node_at(track.children[0]);
+    auto& spacer = detail::node_at(track.children[0]);
+    auto& thumb  = detail::node_at(track.children[1]);
     auto const& theme = current_theme();
     // Track adopts accent when on.
     assert(track.background.r == theme.accent.r);
     assert(track.background.g == theme.accent.g);
     assert(track.background.b == theme.accent.b);
-    // Thumb pinned right: padding 2 + (28 - 14) = 16 from the track's
-    // left edge.
+    // Spacer pushed to its full 14px → thumb sits at padding 2 + 14 = 16.
+    assert(nearly(spacer.width, 14.0f));
     assert(nearly(thumb.x, 16.0f));
     std::puts("PASS: switch_ on-state moves thumb to right edge");
 }
 
 void test_switch_off_state_alignment() {
     enum Msg { Toggle };
+    detail::local_store().clear();
     auto root_h = build([&] {
         widget::switch_<Msg>("untoggled", false, Toggle);
     });
@@ -136,12 +141,16 @@ void test_switch_off_state_alignment() {
     auto& root = detail::node_at(root_h);
     auto& row = detail::node_at(root.children[0]);
     auto& track = detail::node_at(row.children[0]);
-    auto& thumb = detail::node_at(track.children[0]);
+    auto& spacer = detail::node_at(track.children[0]);
+    auto& thumb  = detail::node_at(track.children[1]);
     auto const& theme = current_theme();
     // Track adopts border colour when off.
     assert(track.background.r == theme.border.r);
-    // Thumb pinned to padding[3] = 2 (left edge).
-    assert(nearly(thumb.x, 2.0f));
+    // Spacer collapses to a sub-pixel positive width (we keep it >0 so
+    // the row layout treats it as a fixed slot rather than an
+    // unspecified flex child).
+    assert(spacer.width < 1.0f);
+    assert(nearly(thumb.x, 2.0f, /*eps=*/1.0f));
     std::puts("PASS: switch_ off-state pins thumb to left edge");
 }
 
