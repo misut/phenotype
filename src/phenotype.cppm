@@ -495,6 +495,127 @@ inline void canvas(float width, float height,
     detail::attach_to_scope(h);
 }
 
+// progress — horizontal determinate progress bar. `value` is clamped
+// to [0, 1] and drives the filled portion's width as a fraction of
+// `max_width`. Track is theme.border, fill is theme.accent. Both pieces
+// share the same rounded-pill chrome so partial fills look correct.
+//
+// Indeterminate (looping) progress is intentionally deferred — without
+// the animation auto-tick (follow-up PR), a continuous loop would
+// freeze whenever the runner stops rebuilding.
+inline void progress(float value, float max_width = 200.0f) {
+    if (value < 0.0f) value = 0.0f;
+    if (value > 1.0f) value = 1.0f;
+    auto const& t = detail::g_app.theme;
+
+    auto outer_h = detail::alloc_node();
+    {
+        auto& outer = detail::node_at(outer_h);
+        outer.style.flex_direction = FlexDirection::Row;
+        outer.style.cross_align = CrossAxisAlignment::Center;
+        outer.style.max_width = max_width;
+        outer.style.fixed_height = 6.0f;
+        outer.background = t.border;
+        outer.border_radius = 3.0f;
+    }
+    detail::attach_to_scope(outer_h);
+
+    if (value > 0.0f) {
+        auto bar_h = detail::alloc_node();
+        auto& bar = detail::node_at(bar_h);
+        bar.style.max_width = max_width * value;
+        bar.style.fixed_height = 6.0f;
+        bar.background = t.accent;
+        bar.border_radius = 3.0f;
+        detail::append_child(outer_h, bar_h);
+    }
+}
+
+// switch_ — labelled on/off toggle rendered as a track + sliding
+// thumb. The trailing underscore avoids the C++ `switch` keyword.
+// Click posts `msg` and triggers a rebuild, same contract as
+// checkbox / radio. Track colour shifts between theme.border (off)
+// and theme.accent (on); the thumb hops between the left and right
+// ends via row main_align — there's no slide animation yet because
+// without the animation auto-tick a half-completed slide would
+// freeze if the next input is far off. The slide will be a one-line
+// upgrade once auto-tick lands.
+template<typename Msg>
+inline void switch_(str label, bool on, Msg msg) {
+    auto const& t = detail::g_app.theme;
+    auto id = static_cast<unsigned int>(
+        detail::g_app.callbacks.size());
+
+    auto row_h = detail::alloc_node();
+    {
+        auto& row = detail::node_at(row_h);
+        row.style.flex_direction = FlexDirection::Row;
+        row.style.cross_align = CrossAxisAlignment::Center;
+        row.style.gap = t.space_sm;
+        row.cursor_type = 1;
+        row.callback_id = id;
+        row.interaction_role = InteractionRole::Checkbox;
+        row.focusable = true;
+        row.debug_semantic_role = "switch";
+        row.debug_semantic_label = std::string(label.data, label.len);
+        row.debug_semantic_callback_id = id;
+        row.debug_semantic_focusable = true;
+    }
+    detail::attach_to_scope(row_h);
+
+    detail::g_app.callbacks.push_back([msg = std::move(msg)] {
+        detail::post<Msg>(msg);
+        detail::trigger_rebuild();
+    });
+    detail::g_app.callback_roles.push_back(InteractionRole::Checkbox);
+
+    // Track (the row's first child) — flex Row whose `main_align`
+    // pins the thumb to either edge, with 2px padding so the thumb
+    // doesn't kiss the rounded border on either side.
+    auto track_h = detail::alloc_node();
+    {
+        auto& tr = detail::node_at(track_h);
+        tr.style.flex_direction = FlexDirection::Row;
+        tr.style.cross_align = CrossAxisAlignment::Center;
+        tr.style.main_align = on
+            ? MainAxisAlignment::End
+            : MainAxisAlignment::Start;
+        tr.style.max_width = 32.0f;
+        tr.style.fixed_height = 18.0f;
+        tr.style.padding[0] = 2.0f;
+        tr.style.padding[1] = 2.0f;
+        tr.style.padding[2] = 2.0f;
+        tr.style.padding[3] = 2.0f;
+        tr.background = on ? t.accent : t.border;
+        tr.border_radius = 9.0f;
+        tr.debug_semantic_hidden = true;
+    }
+    detail::append_child(row_h, track_h);
+
+    // Thumb (the only track child) — circular by virtue of the
+    // border_radius matching its half-size.
+    {
+        auto thumb_h = detail::alloc_node();
+        auto& th = detail::node_at(thumb_h);
+        th.style.max_width = 14.0f;
+        th.style.fixed_height = 14.0f;
+        th.background = t.surface;
+        th.border_radius = 7.0f;
+        detail::append_child(track_h, thumb_h);
+    }
+
+    {
+        auto lbl_h = detail::alloc_node();
+        auto& lbl = detail::node_at(lbl_h);
+        lbl.text = std::string(label.data, label.len);
+        lbl.font_size = t.body_font_size;
+        lbl.text_color = t.foreground;
+        lbl.focusable = false;
+        lbl.debug_semantic_hidden = true;
+        detail::append_child(row_h, lbl_h);
+    }
+}
+
 } // namespace widget
 
 // ============================================================
