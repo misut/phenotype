@@ -561,10 +561,18 @@ void run(Host& host, View view, Update update) {
         }
         app.root = root_h;
 
+        // Tag this frame's framework_local accesses so prune can drop
+        // entries that disappeared from the view tree. Bumped before
+        // saved_view runs; entries written/read during view stamp the
+        // current generation; prune erases anything still on the prior
+        // generation.
+        detail::bump_local_gen();
+
         Scope scope(root_h);
         Scope::set_current(&scope);
         saved_view(state);
         Scope::set_current(nullptr);
+        detail::prune_local_store();
         auto t2 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t2 - t1, {{"phase", "view"}});
 
@@ -673,10 +681,14 @@ void run(View view, Update update) {
         }
         app.root = root_h;
 
+        // See native runner — framework_local generation handling.
+        detail::bump_local_gen();
+
         Scope scope(root_h);
         Scope::set_current(&scope);
         saved_view(state);
         Scope::set_current(nullptr);
+        detail::prune_local_store();
         auto t2 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t2 - t1, {{"phase", "view"}});
 
