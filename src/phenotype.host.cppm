@@ -31,12 +31,16 @@ concept text_measurer = requires(T const& t, float font_size,
     { t.measure_text(font_size, font, text, len) } -> std::same_as<float>;
 };
 
+// `render_backend` exposes a fixed-byte command-stream buffer plus
+// flush(). Overflow is detected and surfaced by `phenotype::detail::
+// ensure` in phenotype.paint — backends do NOT define their own
+// `ensure(needed)` member, since a parallel implementation would
+// silently bypass the diagnostic path.
 template <class T>
-concept render_backend = requires(T& t, unsigned int needed) {
+concept render_backend = requires(T& t) {
     { t.buf()      } -> std::same_as<unsigned char*>;
     { t.buf_len()  } -> std::same_as<unsigned int&>;
     { t.buf_size() } -> std::same_as<unsigned int>;
-    { t.ensure(needed) };
     { t.flush()    };
 };
 
@@ -72,9 +76,6 @@ struct null_host {
     unsigned char* buf() { return buffer; }
     unsigned int& buf_len() { return len_; }
     unsigned int buf_size() { return SIZE; }
-    void ensure(unsigned int needed) {
-        if (len_ + needed > SIZE) flush();
-    }
     void flush() { len_ = 0; }
 
     // canvas_source
