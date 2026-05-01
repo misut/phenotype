@@ -22,6 +22,7 @@ export module phenotype.native.shell.glfw;
 #if !defined(__wasi__) && !defined(__ANDROID__)
 export import phenotype.native.shell;
 import phenotype.native.platform;
+import phenotype.state;
 
 export namespace phenotype::native {
 
@@ -301,10 +302,27 @@ int run_app_with_platform(platform_api const& platform,
 
     ::phenotype::native::detail::run_host<State, Msg>(host, std::move(view), std::move(update));
 
+    auto last_animation_tick = std::chrono::steady_clock::now();
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
         ::phenotype::native::detail::tick_caret_blink();
         ::phenotype::native::detail::sync_platform_input();
+
+        // Animation auto-tick. `animate_value` sets the flag during
+        // view whenever an interpolation is still in flight; we drive
+        // another paint at ~60Hz to keep the fade advancing without
+        // waiting on input. The runner clears the flag at the start
+        // of every view and re-sets it if any animation is still
+        // unfinished, so the loop self-throttles once everything
+        // converges.
+        if (::phenotype::detail::g_app.has_active_animations) {
+            auto now = std::chrono::steady_clock::now();
+            if (now - last_animation_tick
+                >= std::chrono::milliseconds(16)) {
+                ::phenotype::native::detail::repaint_current();
+                last_animation_tick = now;
+            }
+        }
     }
 
     ::phenotype::native::detail::shutdown_host(host);

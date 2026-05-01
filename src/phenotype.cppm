@@ -698,6 +698,14 @@ T animate_value(T target, int duration_ms,
         / static_cast<float>(duration_ms));
     T current = detail::anim_lerp(s.start_value, s.target, progress);
 
+    // Signal to the host loop that we still want another frame so
+    // the interpolation keeps advancing without needing input. The
+    // runner clears the flag at the start of every view; native
+    // shells re-enter `repaint_current` while it stays set.
+    if (progress < 1.0f) {
+        detail::g_app.has_active_animations = true;
+    }
+
     if (!(s.target == target)) {
         // Target shifted mid-flight — capture the current interpolated
         // value as the new starting point so the new fade picks up
@@ -705,6 +713,9 @@ T animate_value(T target, int duration_ms,
         s.start_value = current;
         s.target = target;
         s.start_time = now;
+        // A new fade has just started, so it's definitionally
+        // unfinished and we want another tick.
+        detail::g_app.has_active_animations = true;
         return current;
     }
     return current;
@@ -796,6 +807,9 @@ void run(Host& host, View view, Update update) {
         // current generation; prune erases anything still on the prior
         // generation.
         detail::bump_local_gen();
+        // Reset the auto-tick flag — animate_value re-sets it during
+        // view if any interpolation is still in flight.
+        app.has_active_animations = false;
 
         Scope scope(root_h);
         Scope::set_current(&scope);
@@ -925,6 +939,7 @@ void run(View view, Update update) {
 
         // See native runner — framework_local generation handling.
         detail::bump_local_gen();
+        app.has_active_animations = false;
 
         Scope scope(root_h);
         Scope::set_current(&scope);
