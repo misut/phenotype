@@ -213,6 +213,15 @@ struct AppState {
         float        content_height = 0.0f;
     };
     std::vector<ScrollTarget> scroll_targets;
+    // Root-level alternates rendered after the main tree finishes. Each
+    // entry is a NodeHandle from the same per-frame arena that the
+    // root tree uses, but the overlay's subtree is *not* attached to
+    // root.children — the runner walks `overlays` in declaration order
+    // for layout and paint after the main pass, which puts overlay
+    // HitRegions last in the cmd buffer (so reverse-iteration hit_test
+    // finds them first) and lets overlays render on top of the main
+    // content. Cleared at the start of every view rebuild.
+    std::vector<NodeHandle> overlays;
     std::vector<unsigned int> focusable_ids;
     // Tracks input nodes by callback_id for focus / handle_key lookup.
     std::vector<std::pair<unsigned int, NodeHandle>> input_nodes;
