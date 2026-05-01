@@ -1270,6 +1270,130 @@ void dialog(F&& builder,
     });
 }
 
+// accordion — collapsible section with a clickable header. Persists
+// its expanded/collapsed state in `framework_local<bool>` keyed by
+// the call site, so neither the user `State` nor a `Msg` round-trip
+// is required to remember whether each accordion is open. The click
+// handler captures a pointer into the framework_local store and
+// flips the boolean directly — the runner's existing trigger_rebuild
+// hook is what turns the change into a re-render. Two accordions in
+// one view get independent state via the same per-call-site counter
+// that disambiguates sibling scroll_views.
+//
+// Visual chrome: a 1px-bordered surface row for the header (chevron
+// glyph + title text), with the body's content rendered below in a
+// padded column when expanded. The body is emitted only on expanded
+// frames so collapsed accordions cost a single header row.
+//
+// Snap-only for now — animated height collapse waits on the
+// animation auto-tick PR (see `animate_value`'s known limitation).
+template<typename F>
+    requires std::is_invocable_v<F>
+void accordion(str title, F&& builder) {
+    auto& expanded = framework_local<bool>(false);
+    auto const& t = detail::g_app.theme;
+
+    auto col_h = detail::alloc_node();
+    detail::node_at(col_h).style.flex_direction = FlexDirection::Column;
+    detail::node_at(col_h).style.gap = t.space_xs;
+    detail::attach_to_scope(col_h);
+
+    Scope col_scope(col_h);
+    auto* prev = Scope::current();
+    Scope::set_current(&col_scope);
+
+    // ---- Header row ----------------------------------------------
+    {
+        auto id = static_cast<unsigned int>(
+            detail::g_app.callbacks.size());
+
+        auto header_h = detail::alloc_node();
+        {
+            auto& hd = detail::node_at(header_h);
+            hd.style.flex_direction = FlexDirection::Row;
+            hd.style.cross_align = CrossAxisAlignment::Center;
+            hd.style.gap = t.space_sm;
+            hd.style.padding[0] = t.space_sm;
+            hd.style.padding[1] = t.space_md;
+            hd.style.padding[2] = t.space_sm;
+            hd.style.padding[3] = t.space_md;
+            hd.cursor_type = 1;
+            hd.callback_id = id;
+            hd.interaction_role = InteractionRole::Button;
+            hd.focusable = true;
+            hd.background = t.surface;
+            hd.hover_background = t.state_hover_bg;
+            hd.border_color = t.border;
+            hd.border_width = 1;
+            hd.border_radius = t.radius_sm;
+            hd.debug_semantic_role = "accordion-header";
+            hd.debug_semantic_label = std::string(title.data, title.len);
+            hd.debug_semantic_callback_id = id;
+            hd.debug_semantic_focusable = true;
+        }
+        detail::attach_to_scope(header_h);
+
+        // Capture the framework_local entry's heap pointer (stable
+        // across frames as long as the entry isn't pruned) and flip
+        // the value when the click fires. trigger_rebuild then re-
+        // runs view, which sees the new value.
+        bool* exp_ptr = &expanded;
+        detail::g_app.callbacks.push_back([exp_ptr] {
+            *exp_ptr = !*exp_ptr;
+            detail::trigger_rebuild();
+        });
+        detail::g_app.callback_roles.push_back(InteractionRole::Button);
+
+        // Chevron glyph — UTF-8 right-pointing triangle when collapsed,
+        // down-pointing when expanded. Rotation animation lands with
+        // the auto-tick.
+        {
+            auto chev_h = detail::alloc_node();
+            auto& ch = detail::node_at(chev_h);
+            // U+25BC ▼ = "\xE2\x96\xBC", U+25B6 ▶ = "\xE2\x96\xB6"
+            ch.text = expanded ? "\xE2\x96\xBC" : "\xE2\x96\xB6";
+            ch.font_size = t.small_font_size;
+            ch.text_color = t.muted;
+            ch.focusable = false;
+            ch.debug_semantic_hidden = true;
+            detail::append_child(header_h, chev_h);
+        }
+
+        // Title text
+        {
+            auto title_h = detail::alloc_node();
+            auto& tn = detail::node_at(title_h);
+            tn.text = std::string(title.data, title.len);
+            tn.font_size = t.body_font_size;
+            tn.text_color = t.foreground;
+            tn.focusable = false;
+            tn.debug_semantic_hidden = true;
+            detail::append_child(header_h, title_h);
+        }
+    }
+
+    // ---- Body (only when expanded) -------------------------------
+    if (expanded) {
+        auto body_h = detail::alloc_node();
+        {
+            auto& body = detail::node_at(body_h);
+            body.style.flex_direction = FlexDirection::Column;
+            body.style.gap = t.space_sm;
+            body.style.padding[0] = t.space_sm;
+            body.style.padding[1] = t.space_md;
+            body.style.padding[2] = t.space_md;
+            body.style.padding[3] = t.space_md;
+        }
+        detail::attach_to_scope(body_h);
+
+        Scope body_scope(body_h);
+        Scope::set_current(&body_scope);
+        std::forward<F>(builder)();
+    }
+
+    Scope::set_current(prev);
+}
+
 // scroll_view — fixed-height vertical viewport whose contents scroll
 // when their natural total exceeds the viewport. The scroll offset is
 // kept in framework_local keyed by this call site, so each view rebuild
