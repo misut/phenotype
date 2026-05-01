@@ -14,7 +14,7 @@ linking a specific subdirectory rather than a large monorepo ([Claude
 Help Center][cd-help]).
 
 phenotype is a C++23 cross-platform UI framework. Its rendering stack (WebGPU
-via Dawn, native Metal/D3D12/Vulkan) and Iced/Elm-style application model
+via Dawn, native Metal/D3D12/Vulkan) and message-driven application model
 (`Msg`, `State`, `update`, `view`) are deliberately isolated from any web
 ecosystem. As a direct consequence, Claude Design has no natural way to
 ingest phenotype today: there is no React component tree to read, no CSS
@@ -87,7 +87,7 @@ Alternatives considered and rejected for now:
 
 - `misut/phenotype-web` (new): React + TypeScript + CSS variables. Uses
   conventional React patterns (hooks, state); internals are not mirrored
-  from the C++ Iced/Elm model. Only **widget API shape and visual
+  from the C++ message-driven model. Only **widget API shape and visual
   output** must match `phenotype`. Tech stack: Vite + React 18 + TypeScript
   + Storybook + Playwright.
 - `misut/phenotype` (this repo): downstream. Every widget change follows

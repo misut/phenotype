@@ -96,7 +96,7 @@ void view(State const& state) {
                     layout::item("Shared native shell with platform-specific text and renderer adapters");
                     layout::item("Compose-style declarative DSL (column, row, scaffold, card)");
                     layout::item("Flexbox layout engine with alignment (main/cross axis)");
-                    layout::item("Pure-function view with typed messages (Iced/Elm pattern)");
+                    layout::item("Pure-function view with typed messages");
                     layout::item("Hover states and keyboard navigation (Tab/Enter)");
                     layout::item("Text input (text_field) with caret and placeholder");
                     layout::item("Theme system with design tokens");
