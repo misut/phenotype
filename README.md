@@ -1,7 +1,7 @@
 # phenotype
 
-A cross-platform C++ UI framework with a declarative DSL inspired by Iced and
-Elm. Single source of truth, typed messages, pure-function view. Renders via
+A cross-platform C++ UI framework with a declarative DSL built on a single
+source of truth, typed messages, and a pure-function view. Renders via
 WebGPU on the web today; native desktop support is split into a shared shell
 plus platform-specific text / renderer adapters so macOS and Windows can
 evolve independently without changing the core.
@@ -67,9 +67,9 @@ generated `book.json` into the reader through this hook.
 
 ## Programming model
 
-phenotype follows the Iced/Elm pattern: state lives in one place, messages are
-the only way to mutate it, the view function is pure, and the framework owns
-the rebuild loop.
+phenotype follows a message-driven model: application state lives in one
+place, messages are the only way to mutate it, the view function is pure, and
+the framework owns the rebuild loop.
 
 | Step | Role |
 |---|---|
@@ -187,7 +187,7 @@ phenotype::run<State, Msg>(view, update)
 
 ### Design principles
 
-- **Iced/Elm message DSL** — single source of truth, typed messages, pure
+- **Message-driven DSL** — single source of truth, typed messages, pure
   view, pure update. No reactive primitives, no observer chains.
 - **No external libraries** — layout, rendering, event handling, JSON, and
   diagnostics are all implemented from scratch.
@@ -255,7 +255,7 @@ unified debug workflow and cross-platform snapshot contract.
 ### Done
 
 - [x] WebGPU renderer (WGSL shaders, instanced draws, text atlas)
-- [x] Iced/Elm message-based declarative DSL
+- [x] Message-based declarative DSL
 - [x] Layout engine (flexbox subset: column / row / gap / padding / max-width / alignment)
 - [x] Text wrapping (word-wrap + newline support)
 - [x] Theme system (design tokens for colors, fonts, spacing)
