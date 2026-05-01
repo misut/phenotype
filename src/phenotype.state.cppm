@@ -280,6 +280,24 @@ struct AppState {
     // depth is zero. Incremented around the wrapped walk, decremented
     // after — always balanced within a single paint pass.
     unsigned int paint_scissor_depth = 0;
+
+    // Currently-painting node context, snapshotted on paint_node entry
+    // and restored on exit by an RAII guard inside phenotype.paint.
+    // Read by report_paint_overflow so the stderr line identifies which
+    // canvas / widget triggered the drop. Sentinel callback_id ==
+    // 0xFFFFFFFFu means "no paint pass active" (emit_* called outside
+    // the tree walk).
+    unsigned int current_paint_callback_id = 0xFFFFFFFFu;
+    float        current_paint_ax = 0.0f;
+    float        current_paint_ay = 0.0f;
+    float        current_paint_w  = 0.0f;
+    float        current_paint_h  = 0.0f;
+
+    // Test-only escape hatch: flips std::abort() inside
+    // report_paint_overflow off in debug builds so a regression test
+    // can verify the no-abort recovery path. Production code never
+    // touches this — default true in debug, ignored in release.
+    bool diag_abort_on_paint_overflow = true;
 };
 
 namespace detail {
