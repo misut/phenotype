@@ -4977,11 +4977,24 @@ inline void process_pending_touch_dispatch() {
     dispatch_after_move();
 }
 
+// Tracks whether a single-pointer "press" is currently in flight on
+// the mouse pipeline. on_touch_event drives the mouse pipeline only
+// while exactly one finger is down so widget hit-tests (button,
+// checkbox, link, ...) fire on tap; a second finger arriving cancels
+// the pending press by emitting a synthetic Release at off-screen
+// coords so any armed widget de-arms cleanly before pinch/pan takes
+// over.
+inline bool g_single_pointer_press = false;
+
 // Action codes match the consumer-facing C ABI exactly:
 //   0 = DOWN / POINTER_DOWN
 //   1 = MOVE
 //   2 = UP / POINTER_UP / CANCEL
 inline void on_touch_event(int pointer_id, int action, float x, float y) {
+    using ::phenotype::native::MouseButton;
+    using ::phenotype::native::KeyAction;
+    namespace d = ::phenotype::native::detail;
+
     switch (action) {
     case 0: {  // DOWN
         if (auto* slot = alloc_slot(pointer_id)) {
@@ -4989,6 +5002,22 @@ inline void on_touch_event(int pointer_id, int action, float x, float y) {
             slot->prev_x = x;  slot->prev_y = y;
             ++g_active_count;
             rebase_previous();
+            if (g_active_count == 1) {
+                // First finger: drive the cursor + mouse-button pipeline
+                // so widget hit-tests fire. The touch pipeline by itself
+                // only handles canvas pan / pinch.
+                d::dispatch_cursor_pos(x, y);
+                d::dispatch_mouse_button(x, y, MouseButton::Left,
+                                         KeyAction::Press, 0);
+                g_single_pointer_press = true;
+            } else if (g_single_pointer_press) {
+                // Second finger joined; cancel the pending click before
+                // the gesture state machine takes over so a button
+                // doesn't fire when the user actually meant to pinch.
+                d::dispatch_mouse_button(-1.0f, -1.0f, MouseButton::Left,
+                                         KeyAction::Release, 0);
+                g_single_pointer_press = false;
+            }
         }
         break;
     }
@@ -4996,6 +5025,10 @@ inline void on_touch_event(int pointer_id, int action, float x, float y) {
         if (auto* slot = find_slot(pointer_id)) {
             slot->x = x;
             slot->y = y;
+        }
+        if (g_single_pointer_press && g_active_count == 1) {
+            // Track cursor position so widgets can de-arm on drag.
+            d::dispatch_cursor_pos(x, y);
         }
         // Defer the gesture dispatch — multi-pointer MotionEvents
         // call us once per pointer. process_pending_touch_dispatch()
@@ -5011,6 +5044,14 @@ inline void on_touch_event(int pointer_id, int action, float x, float y) {
             --g_active_count;
             if (g_active_count < 0) g_active_count = 0;
             rebase_previous();
+            if (g_active_count == 0 && g_single_pointer_press) {
+                // Last finger released while still in single-pointer
+                // mode — fire the matching mouse Release so the widget
+                // sees a proper click pair and runs its callback.
+                d::dispatch_mouse_button(x, y, MouseButton::Left,
+                                         KeyAction::Release, 0);
+                g_single_pointer_press = false;
+            }
         }
         break;
     }
