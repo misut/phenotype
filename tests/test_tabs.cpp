@@ -56,7 +56,14 @@ void test_tabs_renders_one_button_per_item() {
     };
 
     auto root_h = build([&] {
-        std::vector<str> items{ str("Home"), str("Posts"), str("About") };
+        // Use the runtime (ptr, len) ctor — MSVC rejects calling the
+        // consteval string-literal ctor inside a vector initializer
+        // list as "not a constant expression", even though the call
+        // would in fact evaluate at compile time.
+        std::vector<str> items;
+        items.emplace_back("Home", 4u);
+        items.emplace_back("Posts", 5u);
+        items.emplace_back("About", 5u);
         widget::tabs<Msg>(items, /*selected=*/1, on_select);
     });
     LAYOUT_NODE(root_h, 600.0f);
@@ -86,7 +93,9 @@ void test_tabs_registers_per_tab_callback() {
     };
 
     build([&] {
-        std::vector<str> items{ str("a"), str("b") };
+        std::vector<str> items;
+        items.emplace_back("a", 1u);
+        items.emplace_back("b", 1u);
         widget::tabs<Msg>(items, /*selected=*/0, on_select);
     });
     auto& app = detail::g_app;
@@ -103,7 +112,10 @@ void test_tabs_focusable_in_order() {
     auto on_select = [](std::size_t) -> Msg { return Msg::Sel; };
 
     auto root_h = build([&] {
-        std::vector<str> items{ str("a"), str("b"), str("c") };
+        std::vector<str> items;
+        items.emplace_back("a", 1u);
+        items.emplace_back("b", 1u);
+        items.emplace_back("c", 1u);
         widget::tabs<Msg>(items, 0, on_select);
     });
 
