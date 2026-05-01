@@ -437,6 +437,15 @@ struct Style {
     float padding[4] = {}; // top, right, bottom, left
     float max_width = 0;   // 0 = no limit
     float fixed_height = -1;
+    // Proportional share of remaining main-axis space inside a flex
+    // parent. 0 (the default) opts out — the child takes its intrinsic
+    // / max_width size and the parent's existing implicit "last
+    // unspecified child fills the rest" rule still applies. When any
+    // sibling has flex_grow > 0, those children split the remaining
+    // space in proportion to their values and the implicit fallback is
+    // suppressed. Currently honoured by row layout only; column flex
+    // distribution waits on a bounded-height story.
+    float flex_grow = 0;
 };
 
 // GestureEvent — pan / pinch / scroll-zoom dispatched to a

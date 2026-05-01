@@ -229,6 +229,7 @@ inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
         && a.style.padding[3] == b.style.padding[3]
         && a.style.max_width == b.style.max_width
         && a.style.fixed_height == b.style.fixed_height
+        && a.style.flex_grow == b.style.flex_grow
         && a.is_grid_container == b.is_grid_container
         && a.grid_row_height == b.grid_row_height
         && a.grid_columns == b.grid_columns
@@ -522,10 +523,18 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
         int flex_index = -1;
         int wrap_text_index = -1;
         float wrap_text_width = 0;
+        // Sum of explicit flex_grow values across direct children. When
+        // non-zero we distribute the row's leftover width proportionally
+        // and skip the implicit "last unspecified child fills" rule —
+        // multiple weighted siblings want a deterministic split, not
+        // a single grow slot.
+        float total_explicit_grow = 0;
         for (unsigned int i = 0; i < n; ++i) {
             auto& child = node_at(node.children[i]);
             bool is_text_leaf = !child.text.empty() && child.children.empty();
             bool has_max_width = child.style.max_width > 0;
+            if (child.style.flex_grow > 0)
+                total_explicit_grow += child.style.flex_grow;
             if (is_text_leaf) {
                 FontSpec const child_font{ {}, FontWeight::Regular,
                                            FontStyle::Upright, child.mono };
@@ -540,17 +549,23 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
             } else if (has_max_width) {
                 child.width = child.style.max_width;
                 used += child.width;
+            } else if (child.style.flex_grow > 0) {
+                // Explicit weighted child — width comes from the
+                // proportional split below; nothing to add to `used`.
             } else {
                 flex_index = static_cast<int>(i);
             }
         }
         bool flex_is_wrap_text = false;
-        if (flex_index < 0 && wrap_text_index >= 0) {
-            flex_index = wrap_text_index;
-            used -= wrap_text_width;
-            flex_is_wrap_text = true;
+        bool use_explicit_grow = total_explicit_grow > 0;
+        if (!use_explicit_grow) {
+            if (flex_index < 0 && wrap_text_index >= 0) {
+                flex_index = wrap_text_index;
+                used -= wrap_text_width;
+                flex_is_wrap_text = true;
+            }
+            if (flex_index < 0) flex_index = static_cast<int>(n) - 1;
         }
-        if (flex_index < 0) flex_index = static_cast<int>(n) - 1;
 
         float remaining = inner_width - used;
         if (remaining < 0) remaining = 0;
@@ -561,7 +576,11 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
             auto child_h = node.children[i];
             auto& child = node_at(child_h);
             float cw = child.width;
-            if (static_cast<int>(i) == flex_index) {
+            if (use_explicit_grow && child.style.flex_grow > 0) {
+                cw = remaining * (child.style.flex_grow / total_explicit_grow);
+                if (cw < 0) cw = 0;
+            } else if (!use_explicit_grow
+                       && static_cast<int>(i) == flex_index) {
                 if (flex_is_wrap_text) {
                     cw = remaining;
                     if (child.width < cw) cw = child.width;
