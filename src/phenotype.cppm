@@ -95,6 +95,19 @@ inline void keyed(std::uint32_t id, F&& builder) {
     detail::pending_child_key() = prev;
 }
 
+// Forward declarations so widgets defined below can call into the
+// view-time animation primitives (`animate_color` / `animate_float`)
+// whose full definitions live further down. Default arguments must
+// sit on the first declaration that's visible at each call site,
+// so they live here; the definitions below repeat the parameters
+// without defaults.
+inline float animate_float(float target, int duration_ms,
+                           std::source_location loc =
+                               std::source_location::current());
+inline Color animate_color(Color target, int duration_ms,
+                           std::source_location loc =
+                               std::source_location::current());
+
 // ============================================================
 // widget:: — leaf components (text, code, link, button, text_field)
 // ============================================================
@@ -534,12 +547,15 @@ inline void progress(float value, float max_width = 200.0f) {
 // switch_ — labelled on/off toggle rendered as a track + sliding
 // thumb. The trailing underscore avoids the C++ `switch` keyword.
 // Click posts `msg` and triggers a rebuild, same contract as
-// checkbox / radio. Track colour shifts between theme.border (off)
-// and theme.accent (on); the thumb hops between the left and right
-// ends via row main_align — there's no slide animation yet because
-// without the animation auto-tick a half-completed slide would
-// freeze if the next input is far off. The slide will be a one-line
-// upgrade once auto-tick lands.
+// checkbox / radio.
+//
+// The thumb's x-offset and the track background colour both go
+// through `animate_value`, so toggling slides the thumb (~150ms)
+// and cross-fades the track between theme.border and theme.accent.
+// The runner's auto-tick keeps the fade running between input
+// events. Per-call-site widget ids let two switches in one view
+// animate independently — see the framework_local sibling-counter
+// mechanism.
 template<typename Msg>
 inline void switch_(str label, bool on, Msg msg) {
     auto const& t = detail::g_app.theme;
@@ -569,31 +585,46 @@ inline void switch_(str label, bool on, Msg msg) {
     });
     detail::g_app.callback_roles.push_back(InteractionRole::Checkbox);
 
-    // Track (the row's first child) — flex Row whose `main_align`
-    // pins the thumb to either edge, with 2px padding so the thumb
-    // doesn't kiss the rounded border on either side.
+    // Track (the row's first child). Always Row + Start aligned;
+    // the thumb's position is driven by an animated leading spacer
+    // rather than by `main_align`, so it can stop at any sub-pixel
+    // offset between the two ends mid-fade.
     auto track_h = detail::alloc_node();
     {
         auto& tr = detail::node_at(track_h);
         tr.style.flex_direction = FlexDirection::Row;
         tr.style.cross_align = CrossAxisAlignment::Center;
-        tr.style.main_align = on
-            ? MainAxisAlignment::End
-            : MainAxisAlignment::Start;
+        tr.style.main_align = MainAxisAlignment::Start;
         tr.style.max_width = 32.0f;
         tr.style.fixed_height = 18.0f;
         tr.style.padding[0] = 2.0f;
         tr.style.padding[1] = 2.0f;
         tr.style.padding[2] = 2.0f;
         tr.style.padding[3] = 2.0f;
-        tr.background = on ? t.accent : t.border;
+        tr.background = animate_color(on ? t.accent : t.border, 150);
         tr.border_radius = 9.0f;
         tr.debug_semantic_hidden = true;
     }
     detail::append_child(row_h, track_h);
 
-    // Thumb (the only track child) — circular by virtue of the
-    // border_radius matching its half-size.
+    // Leading spacer — its max_width animates between 0 (off) and
+    // (track_inner − thumb) = 14 (on), pushing the thumb across.
+    // We clamp the lower bound to a sub-pixel positive value so the
+    // row layout still treats it as a fixed-width child rather than
+    // a zero-width unspecified node (the existing flex pipeline
+    // treats `max_width <= 0` as "no limit").
+    {
+        float thumb_offset = animate_float(on ? 14.0f : 0.0f, 150);
+        if (thumb_offset < 0.001f) thumb_offset = 0.001f;
+        auto sp_h = detail::alloc_node();
+        auto& sp = detail::node_at(sp_h);
+        sp.style.max_width = thumb_offset;
+        sp.style.fixed_height = 14.0f;
+        detail::append_child(track_h, sp_h);
+    }
+
+    // Thumb — circular by virtue of the border_radius matching half
+    // its size.
     {
         auto thumb_h = detail::alloc_node();
         auto& th = detail::node_at(thumb_h);
@@ -722,14 +753,24 @@ inline void tabs(std::vector<str> const& items,
 
 namespace detail {
 
+// Steady-clock milliseconds-since-epoch. Defined non-inline so the
+// `<chrono>` types stay inside this module's translation unit —
+// consumers that instantiate `animate_value<T>` (e.g. inside a
+// widget template) only see an `std::int64_t` interface and don't
+// need to import chrono themselves. MSVC enforces module type
+// reachability strictly enough to surface this; Clang was lenient.
+std::int64_t steady_ms();
+
 // Per-call-site animation state, kept alive across frames by
 // `framework_local`. `initialized` distinguishes the very first call
-// (where we just snap to target, no animation) from later ones.
+// (where we just snap to target, no animation) from later ones. The
+// timestamp is plain int64 milliseconds for the same reachability
+// reason as `steady_ms` above.
 template <typename T>
 struct AnimationState {
     T start_value{};
     T target{};
-    std::chrono::steady_clock::time_point start_time{};
+    std::int64_t start_time_ms = 0;
     bool initialized = false;
 };
 
@@ -754,7 +795,7 @@ T animate_value(T target, int duration_ms,
                 std::source_location loc = std::source_location::current()) {
     auto& s = framework_local<detail::AnimationState<T>>(
         detail::AnimationState<T>{}, 0, loc);
-    auto now = std::chrono::steady_clock::now();
+    auto now_ms = detail::steady_ms();
 
     if (!s.initialized || duration_ms <= 0) {
         // First call, or "instant" mode — snap to target without
@@ -763,13 +804,13 @@ T animate_value(T target, int duration_ms,
         // the bookkeeping consistent with start_value == target.
         s.start_value = target;
         s.target = target;
-        s.start_time = now;
+        s.start_time_ms = now_ms;
         s.initialized = true;
         return target;
     }
 
-    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        now - s.start_time).count();
+    auto elapsed_ms = now_ms - s.start_time_ms;
+    if (elapsed_ms < 0) elapsed_ms = 0;
     float progress = std::min(1.0f,
         static_cast<float>(elapsed_ms)
         / static_cast<float>(duration_ms));
@@ -789,7 +830,7 @@ T animate_value(T target, int duration_ms,
         // where the old one was, instead of snapping.
         s.start_value = current;
         s.target = target;
-        s.start_time = now;
+        s.start_time_ms = now_ms;
         // A new fade has just started, so it's definitionally
         // unfinished and we want another tick.
         detail::g_app.has_active_animations = true;
@@ -799,15 +840,24 @@ T animate_value(T target, int duration_ms,
 }
 
 inline float animate_float(float target, int duration_ms,
-                           std::source_location loc =
-                               std::source_location::current()) {
+                           std::source_location loc) {
     return animate_value<float>(target, duration_ms, loc);
 }
 
 inline Color animate_color(Color target, int duration_ms,
-                           std::source_location loc =
-                               std::source_location::current()) {
+                           std::source_location loc) {
     return animate_value<Color>(target, duration_ms, loc);
+}
+
+namespace detail {
+// Out-of-line definition keeps `<chrono>` away from `animate_value`'s
+// template body. Consumers that instantiate the template (any widget
+// using animate_*) only see the `std::int64_t` return type and don't
+// need to import / include chrono themselves.
+std::int64_t steady_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 }
 
 // ============================================================
