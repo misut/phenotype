@@ -74,28 +74,31 @@ void test_zero_duration_skips_interpolation() {
 }
 
 // Mid-flight target reads return a value strictly between start and
-// target — confirming the time-based lerp actually progresses.
+// target — confirming the time-based lerp actually progresses. The
+// duration is generous so a slow CI runner that takes much longer
+// than the requested sleep doesn't overshoot the fade entirely.
 void test_color_interpolates_mid_flight() {
     reset();
     detail::bump_local_gen();
     Color start{0, 0, 0, 255};
     Color end{200, 200, 200, 255};
-    anim_color_helper(start, 200);     // initialise to black
+    anim_color_helper(start, 2000);    // initialise to black, long fade
     detail::prune_local_store();
 
     detail::bump_local_gen();
-    anim_color_helper(end, 200);       // start fade toward grey
+    anim_color_helper(end, 2000);      // start fade toward grey
     detail::prune_local_store();
 
     std::this_thread::sleep_for(std::chrono::milliseconds(50));
 
     detail::bump_local_gen();
-    auto mid = anim_color_helper(end, 200);
+    auto mid = anim_color_helper(end, 2000);
     detail::prune_local_store();
 
-    // After ~50ms of a 200ms fade we expect the channel value to be
-    // somewhere strictly between 0 and 200 — wide tolerance because
-    // sleep_for is best-effort.
+    // After ~50ms of a 2000ms fade the channel should sit strictly
+    // between 0 and 200 (typically near 5). Wide tolerance because
+    // sleep_for is best-effort, and even a 10× CI slowdown still
+    // leaves the lerp well below the target.
     assert(mid.r > 0);
     assert(mid.r < 200);
     assert(mid.g > 0 && mid.g < 200);

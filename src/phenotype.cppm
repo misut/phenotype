@@ -676,14 +676,24 @@ inline void switch_(str label, bool on, Msg msg) {
 
 namespace detail {
 
+// Steady-clock milliseconds-since-epoch. Defined non-inline so the
+// `<chrono>` types stay inside this module's translation unit —
+// consumers that instantiate `animate_value<T>` (e.g. inside a
+// widget template) only see an `std::int64_t` interface and don't
+// need to import chrono themselves. MSVC enforces module type
+// reachability strictly enough to surface this; Clang was lenient.
+std::int64_t steady_ms();
+
 // Per-call-site animation state, kept alive across frames by
 // `framework_local`. `initialized` distinguishes the very first call
-// (where we just snap to target, no animation) from later ones.
+// (where we just snap to target, no animation) from later ones. The
+// timestamp is plain int64 milliseconds for the same reachability
+// reason as `steady_ms` above.
 template <typename T>
 struct AnimationState {
     T start_value{};
     T target{};
-    std::chrono::steady_clock::time_point start_time{};
+    std::int64_t start_time_ms = 0;
     bool initialized = false;
 };
 
@@ -708,7 +718,7 @@ T animate_value(T target, int duration_ms,
                 std::source_location loc = std::source_location::current()) {
     auto& s = framework_local<detail::AnimationState<T>>(
         detail::AnimationState<T>{}, 0, loc);
-    auto now = std::chrono::steady_clock::now();
+    auto now_ms = detail::steady_ms();
 
     if (!s.initialized || duration_ms <= 0) {
         // First call, or "instant" mode — snap to target without
@@ -717,13 +727,13 @@ T animate_value(T target, int duration_ms,
         // the bookkeeping consistent with start_value == target.
         s.start_value = target;
         s.target = target;
-        s.start_time = now;
+        s.start_time_ms = now_ms;
         s.initialized = true;
         return target;
     }
 
-    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
-        now - s.start_time).count();
+    auto elapsed_ms = now_ms - s.start_time_ms;
+    if (elapsed_ms < 0) elapsed_ms = 0;
     float progress = std::min(1.0f,
         static_cast<float>(elapsed_ms)
         / static_cast<float>(duration_ms));
@@ -743,7 +753,7 @@ T animate_value(T target, int duration_ms,
         // where the old one was, instead of snapping.
         s.start_value = current;
         s.target = target;
-        s.start_time = now;
+        s.start_time_ms = now_ms;
         // A new fade has just started, so it's definitionally
         // unfinished and we want another tick.
         detail::g_app.has_active_animations = true;
@@ -760,6 +770,17 @@ inline float animate_float(float target, int duration_ms,
 inline Color animate_color(Color target, int duration_ms,
                            std::source_location loc) {
     return animate_value<Color>(target, duration_ms, loc);
+}
+
+namespace detail {
+// Out-of-line definition keeps `<chrono>` away from `animate_value`'s
+// template body. Consumers that instantiate the template (any widget
+// using animate_*) only see the `std::int64_t` return type and don't
+// need to import / include chrono themselves.
+std::int64_t steady_ms() {
+    return std::chrono::duration_cast<std::chrono::milliseconds>(
+        std::chrono::steady_clock::now().time_since_epoch()).count();
+}
 }
 
 // ============================================================
