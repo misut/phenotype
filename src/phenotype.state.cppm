@@ -195,6 +195,24 @@ struct AppState {
     float        gesture_target_y  = 0.0f;
     float        gesture_target_w  = 0.0f;
     float        gesture_target_h  = 0.0f;
+    // Scroll targets — populated by paint_node when it walks a node
+    // whose `is_scroll_container` is set. Each entry records the
+    // viewport's absolute rect (post all parent scrolls) and the
+    // pointer back into framework_local where the offset lives. The
+    // shell's wheel dispatcher walks this list in reverse (last entry
+    // = innermost scroll_view in paint order) and routes the delta
+    // into the topmost target whose rect contains the cursor.
+    // Cleared at the start of every view rebuild so stale entries from
+    // a prior frame can't catch a wheel event.
+    struct ScrollTarget {
+        float        x = 0.0f;
+        float        y = 0.0f;
+        float        w = 0.0f;
+        float        h = 0.0f;
+        ScrollState* state = nullptr;
+        float        content_height = 0.0f;
+    };
+    std::vector<ScrollTarget> scroll_targets;
     std::vector<unsigned int> focusable_ids;
     // Tracks input nodes by callback_id for focus / handle_key lookup.
     std::vector<std::pair<unsigned int, NodeHandle>> input_nodes;

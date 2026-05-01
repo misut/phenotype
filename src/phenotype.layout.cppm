@@ -231,7 +231,14 @@ inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
         && a.style.fixed_height == b.style.fixed_height
         && a.is_grid_container == b.is_grid_container
         && a.grid_row_height == b.grid_row_height
-        && a.grid_columns == b.grid_columns;
+        && a.grid_columns == b.grid_columns
+        // is_scroll_container drives a structural layout branch
+        // (fixed-height viewport + content_height bookkeeping) so a
+        // toggle must invalidate the cached layout. scroll_offset_y is
+        // intentionally excluded — it shifts paint output but leaves
+        // the layout tree untouched, and the paint cache is bypassed
+        // for scroll-container subtrees anyway.
+        && a.is_scroll_container == b.is_scroll_container;
 }
 
 inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
@@ -320,6 +327,12 @@ inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
     new_n->width = old_n->width;
     new_n->height = old_n->height;
     new_n->text_lines = std::move(old_n->text_lines);
+    // content_height is computed by layout from children's natural
+    // sizes, so when the layout cache hits (no relayout happens) the
+    // new node would otherwise be left at the default zero — copy it
+    // forward so the wheel dispatcher's clamp keeps working frame to
+    // frame even on stable scroll views.
+    new_n->content_height = old_n->content_height;
     new_n->paint_offset = old_n->paint_offset;
     new_n->paint_length = old_n->paint_length;
     new_n->paint_ax = old_n->paint_ax;
@@ -489,7 +502,17 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
             y += child.height;
             if (i + 1 < nc) y += effective_gap;
         }
-        node.height = y + s.padding[2];
+        // For a scroll_view the children's natural total is the content
+        // height that scrolls inside the viewport — recorded so the
+        // wheel dispatcher can clamp the offset — and the node's own
+        // height stays pinned to the user-supplied `fixed_height` so
+        // the viewport doesn't grow with its content.
+        if (node.is_scroll_container && s.fixed_height >= 0) {
+            node.content_height = y + s.padding[2];
+            node.height = s.fixed_height + s.padding[0] + s.padding[2];
+        } else {
+            node.height = y + s.padding[2];
+        }
     } else {
         // Row
         unsigned int n = static_cast<unsigned int>(node.children.size());
