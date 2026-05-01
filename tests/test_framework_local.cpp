@@ -5,6 +5,27 @@ import phenotype;
 
 using namespace phenotype;
 
+// On wasm32-wasi the test binary links against phenotype.wasm, which
+// declares a handful of host imports that the JS shim normally
+// supplies. wasmtime (exon's test runner for the wasi target) has no
+// JS shim, so the test main has to satisfy them with no-op stubs —
+// these tests do not exercise paint, measure, URL, or canvas size,
+// they just want the runtime to instantiate.
+#if defined(__wasi__)
+extern "C" {
+    void phenotype_flush() {}
+    float phenotype_measure_text(float fs, unsigned int /*flags*/,
+                                  char const* /*family*/,
+                                  unsigned int /*family_len*/,
+                                  char const* /*text*/, unsigned int len) {
+        return static_cast<float>(len) * fs * 0.6f;
+    }
+    float phenotype_get_canvas_width() { return 800.0f; }
+    float phenotype_get_canvas_height() { return 600.0f; }
+    void phenotype_open_url(char const*, unsigned int) {}
+}
+#endif
+
 // ============================================================
 // framework_local — call-site-positional widget state
 // ============================================================
