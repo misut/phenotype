@@ -63,24 +63,24 @@ void test_accordion_starts_collapsed() {
 // boolean, so the next rebuild renders both the header and the body.
 void test_accordion_click_expands_body() {
     detail::local_store().clear();
-    auto first_root = build([&] {
+    // Reuse one lambda for both builds — lifts the accordion's call
+    // site to a single line of source code, so MSVC and Clang agree on
+    // `std::source_location::current()` even if their default-arg
+    // call-site reporting differs at the lambda definition site.
+    auto run = [] {
         layout::accordion("section", [&] {
             widget::text("body");
         });
-    });
-    (void)first_root;
+    };
 
+    build(run);
     // Simulate the click that the shell would post on the header's
     // callback — this is exactly what `dispatch_mouse_button` does
     // when it routes a hit into the registered slot.
     assert(detail::g_app.callbacks.size() == 1);
     detail::g_app.callbacks[0]();   // toggle expanded → true
 
-    auto root_h = build([&] {
-        layout::accordion("section", [&] {
-            widget::text("body");
-        });
-    });
+    auto root_h = build(run);
 
     auto& root = detail::node_at(root_h);
     auto& col = detail::node_at(root.children[0]);
