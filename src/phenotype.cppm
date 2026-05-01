@@ -1,9 +1,11 @@
 module;
 #include <algorithm>
+#include <chrono>
 #include <concepts>
 #include <cstring>
 #include <functional>
 #include <optional>
+#include <source_location>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -494,6 +496,110 @@ inline void canvas(float width, float height,
 }
 
 } // namespace widget
+
+// ============================================================
+// View-time animation
+// ============================================================
+//
+// `animate_color` / `animate_float` (and `animate_value<T>`) interpolate
+// from a stored start value toward a `target` over `duration_ms`. The
+// per-call-site state lives in `framework_local`, so a hover transition
+// reads as:
+//
+//   node.background = animate_color(
+//       hovered ? theme.accent : theme.surface, 150);
+//
+// Each call records `(start_value, target, start_time)` and returns the
+// time-interpolated value. When the target changes between frames the
+// current interpolated value is captured as the new start, so an
+// interruption mid-fade slides smoothly into the new direction rather
+// than snapping.
+//
+// Limitation: the interpolation only advances when the runner actually
+// rebuilds — usually whenever an input event triggers a repaint. Mouse
+// movement during a hover transition keeps it animating, but a pure
+// time-based fade with no input will freeze once the input that
+// triggered it stops. A follow-up PR will wire a shell timer that
+// schedules another paint while any animation is in progress.
+
+namespace detail {
+
+// Per-call-site animation state, kept alive across frames by
+// `framework_local`. `initialized` distinguishes the very first call
+// (where we just snap to target, no animation) from later ones.
+template <typename T>
+struct AnimationState {
+    T start_value{};
+    T target{};
+    std::chrono::steady_clock::time_point start_time{};
+    bool initialized = false;
+};
+
+inline float anim_lerp(float a, float b, float t) noexcept {
+    return a + (b - a) * t;
+}
+
+inline Color anim_lerp(Color a, Color b, float t) noexcept {
+    auto mix = [t](unsigned char x, unsigned char y) -> unsigned char {
+        float v = anim_lerp(static_cast<float>(x), static_cast<float>(y), t);
+        if (v < 0.0f) v = 0.0f;
+        if (v > 255.0f) v = 255.0f;
+        return static_cast<unsigned char>(v + 0.5f);
+    };
+    return Color{ mix(a.r, b.r), mix(a.g, b.g), mix(a.b, b.b), mix(a.a, b.a) };
+}
+
+}  // namespace detail
+
+template <typename T>
+T animate_value(T target, int duration_ms,
+                std::source_location loc = std::source_location::current()) {
+    auto& s = framework_local<detail::AnimationState<T>>(
+        detail::AnimationState<T>{}, 0, loc);
+    auto now = std::chrono::steady_clock::now();
+
+    if (!s.initialized || duration_ms <= 0) {
+        // First call, or "instant" mode — snap to target without
+        // interpolating. `duration_ms <= 0` is also the way callers
+        // turn animation off entirely for a given site, so we keep
+        // the bookkeeping consistent with start_value == target.
+        s.start_value = target;
+        s.target = target;
+        s.start_time = now;
+        s.initialized = true;
+        return target;
+    }
+
+    auto elapsed_ms = std::chrono::duration_cast<std::chrono::milliseconds>(
+        now - s.start_time).count();
+    float progress = std::min(1.0f,
+        static_cast<float>(elapsed_ms)
+        / static_cast<float>(duration_ms));
+    T current = detail::anim_lerp(s.start_value, s.target, progress);
+
+    if (!(s.target == target)) {
+        // Target shifted mid-flight — capture the current interpolated
+        // value as the new starting point so the new fade picks up
+        // where the old one was, instead of snapping.
+        s.start_value = current;
+        s.target = target;
+        s.start_time = now;
+        return current;
+    }
+    return current;
+}
+
+inline float animate_float(float target, int duration_ms,
+                           std::source_location loc =
+                               std::source_location::current()) {
+    return animate_value<float>(target, duration_ms, loc);
+}
+
+inline Color animate_color(Color target, int duration_ms,
+                           std::source_location loc =
+                               std::source_location::current()) {
+    return animate_value<Color>(target, duration_ms, loc);
+}
 
 // ============================================================
 // Theme
