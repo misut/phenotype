@@ -122,9 +122,6 @@ struct native_host {
     unsigned char* buf() { return buffer; }
     unsigned int& buf_len() { return len_; }
     unsigned int buf_size() { return BUF_SIZE; }
-    void ensure(unsigned int needed) {
-        if (len_ + needed > BUF_SIZE) flush();
-    }
     void flush() {
         if (len_ == 0) return;
         if (platform && platform->renderer.flush)

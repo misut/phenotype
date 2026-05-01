@@ -326,6 +326,49 @@ static DebugPlaneMsg map_debug_plane_text(std::string value) {
     return DebugPlaneTextChanged{std::move(value)};
 }
 
+#if !defined(__wasi__) && !defined(__ANDROID__)
+// Regression: a single emit_* whose payload exceeds BUF_SIZE used to
+// silently walk past the end of the fixed buffer (memory corruption).
+// detail::ensure now detects the post-flush shortfall, ticks the
+// `phenotype.paint.buffer_overflow` Counter with the opcode attribute,
+// emits an [ERROR phenotype.paint] line, and drops the command. The
+// test toggles `diag_abort_on_paint_overflow` off so the debug-build
+// abort branch is suppressed; production code never touches that flag.
+void test_paint_buffer_overflow_records_metric_and_drops_command() {
+    metrics::reset_all();
+    detail::g_app.diag_abort_on_paint_overflow = false;
+
+    null_host host;
+    PathBuilder p;
+    p.move_to(0.0f, 0.0f);
+    // FillPath fixed overhead = 12 bytes; each line_to emits 3 verb
+    // words = 12 bytes. 6000 line_to → ~72 KB > 65536 (BUF_SIZE).
+    // Single command so a mid-paint flush cannot make room.
+    for (int i = 1; i < 6000; ++i)
+        p.line_to(static_cast<float>(i), static_cast<float>(i));
+
+    Color const red{255, 0, 0, 255};
+    emit_fill_path(host, p, red);
+
+    // No buffer overrun — the emit early-returned instead of writing
+    // past the end of the fixed array.
+    assert(host.buf_len() <= host.buf_size());
+    // Counter ticked with the opcode attribute.
+    assert(metrics::inst::paint_buffer_overflow.total() >= 1);
+    auto const& dps = metrics::inst::paint_buffer_overflow.data_points();
+    bool found_fillpath = false;
+    for (auto const& dp : dps) {
+        for (auto const& attr : dp.attributes) {
+            if (attr.key == "opcode" && attr.value == "FillPath")
+                found_fillpath = true;
+        }
+    }
+    assert(found_fillpath);
+
+    detail::g_app.diag_abort_on_paint_overflow = true;
+}
+#endif
+
 void test_runner_records_phases() {
     metrics::reset_all();
     log::set_level(log::Severity::info);
@@ -492,6 +535,10 @@ int main() {
     std::printf("PASS: log ring buffer wraps at capacity\n");
     test_snapshot_shape();
     std::printf("PASS: JSON snapshot shape\n");
+#if !defined(__wasi__) && !defined(__ANDROID__)
+    test_paint_buffer_overflow_records_metric_and_drops_command();
+    std::printf("PASS: paint overflow records metric + drops command\n");
+#endif
     test_runner_records_phases();
     std::printf("PASS: runner records frame + phase histograms\n");
     test_debug_plane_semantic_tree_shape_and_stability();

@@ -339,6 +339,14 @@ inline Counter& scissor_emitted = *new Counter{
     "phenotype.runner.scissor_emitted",
     "Scissor command pairs emitted around dirty-root subtrees (excludes resets)",
     "{scissor}"};
+inline Counter& paint_buffer_flushes = *new Counter{
+    "phenotype.paint.buffer_flushes",
+    "Mid-paint command-buffer flushes — incremented when an emit_* would overflow the fixed buffer and forces an early flush. A non-zero value is a leading indicator, not a drop on its own.",
+    "{flush}"};
+inline Counter& paint_buffer_overflow = *new Counter{
+    "phenotype.paint.buffer_overflow",
+    "Paint emit_* writes that exceeded the buffer even after a mid-paint flush; the command was dropped (attribute: opcode).",
+    "{overflow}"};
 inline Counter& keyed_lists_matched = *new Counter{
     "phenotype.runner.keyed_lists_matched",
     "Parents whose children_keyed salvage pass ran (at least one old-keyed child was available for matching)",
@@ -518,6 +526,8 @@ inline void reset_all() noexcept {
     inst::paint_subtrees_blitted.reset();
     inst::paint_bytes_blitted.reset();
     inst::scissor_emitted.reset();
+    inst::paint_buffer_flushes.reset();
+    inst::paint_buffer_overflow.reset();
     inst::keyed_lists_matched.reset();
     inst::keyed_children_matched.reset();
     inst::native_text_cache_hits.reset();

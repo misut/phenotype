@@ -1,5 +1,7 @@
 module;
 #include <cstdint>
+#include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <string>
 #include <string_view>
@@ -35,8 +37,67 @@ namespace phenotype::detail {
 
 // ---- Buffer write helpers (templated on render_backend) ----
 
+inline char const* opcode_name(Cmd c) noexcept {
+    switch (c) {
+        case Cmd::Clear:      return "Clear";
+        case Cmd::FillRect:   return "FillRect";
+        case Cmd::StrokeRect: return "StrokeRect";
+        case Cmd::RoundRect:  return "RoundRect";
+        case Cmd::DrawText:   return "DrawText";
+        case Cmd::DrawLine:   return "DrawLine";
+        case Cmd::HitRegion:  return "HitRegion";
+        case Cmd::DrawImage:  return "DrawImage";
+        case Cmd::Scissor:    return "Scissor";
+        case Cmd::DrawArc:    return "DrawArc";
+        case Cmd::Path:       return "Path";
+        case Cmd::FillPath:   return "FillPath";
+    }
+    return "Unknown";
+}
+
+// Surface a true buffer overflow (single command exceeds the entire
+// fixed buffer even after a mid-paint flush). Currently the buffer is
+// `unsigned char buffer[BUF_SIZE]` with BUF_SIZE = 65536 across every
+// host (null_host, native_host, wasi_paint_host). Without this guard,
+// the subsequent write_u32 / write_bytes inside the calling emit_*
+// would walk past the end of the fixed array — silent memory
+// corruption. Caller drops the command instead.
+//
+// Bumping `paint_flush_epoch` is load-bearing: the cache-recording
+// block at the bottom of paint_node compares the entry epoch against
+// the current one to decide whether to mark `paint_valid = true`. If
+// we did not bump on overflow, a partial byte range (everything
+// emitted up to the dropped command) would be cached and reused next
+// frame, masking the regression visually.
+inline void report_paint_overflow(Cmd opcode, unsigned int needed,
+                                   unsigned int buf_len,
+                                   unsigned int buf_size) noexcept {
+    auto const op_name = opcode_name(opcode);
+    metrics::inst::paint_buffer_overflow.add(
+        1, {{"opcode", op_name}});
+    log::error("phenotype.paint",
+        "command stream overflow: opcode={} ({}) needed={} buf_len={} "
+        "buf_size={} canvas={{cb={}, ax={}, ay={}, w={}, h={}}}",
+        static_cast<unsigned int>(opcode), op_name,
+        needed, buf_len, buf_size,
+        g_app.current_paint_callback_id,
+        g_app.current_paint_ax, g_app.current_paint_ay,
+        g_app.current_paint_w,  g_app.current_paint_h);
+    ++g_app.paint_flush_epoch;
+#ifndef NDEBUG
+    if (g_app.diag_abort_on_paint_overflow) {
+        // Flush every open stream so the [ERROR] line above survives
+        // the abort under shell-redirected stderr (where libc may
+        // block-buffer instead of line-buffering). Without this, the
+        // diagnostic line that tells the user what crashed disappears.
+        std::fflush(nullptr);
+        std::abort();
+    }
+#endif
+}
+
 template <render_backend R>
-void ensure(R& r, unsigned int needed) {
+[[nodiscard]] bool ensure(R& r, unsigned int needed, Cmd opcode) noexcept {
     if (r.buf_len() + needed > r.buf_size()) {
         r.flush();
         r.buf_len() = 0;
@@ -46,8 +107,68 @@ void ensure(R& r, unsigned int needed) {
         // this epoch at entry and exit to know whether its recorded
         // range is still trustworthy.
         ++g_app.paint_flush_epoch;
+        metrics::inst::paint_buffer_flushes.add();
     }
+    if (r.buf_len() + needed > r.buf_size()) {
+        report_paint_overflow(opcode, needed, r.buf_len(), r.buf_size());
+        return false;
+    }
+    return true;
 }
+
+// Cache-blit overload — the bytes being written are a memcpy of a
+// previously-recorded subtree, not a single typed command, so there
+// is no opcode to report. Returns whether the blit fits; the caller
+// at paint_node already has a fall-through to the miss-path walk
+// when this returns false (or when paint_flush_epoch advances mid-
+// blit), so we deliberately do NOT emit an overflow log here.
+template <render_backend R>
+[[nodiscard]] bool ensure_blit(R& r, unsigned int needed) noexcept {
+    if (r.buf_len() + needed > r.buf_size()) {
+        r.flush();
+        r.buf_len() = 0;
+        ++g_app.paint_flush_epoch;
+        metrics::inst::paint_buffer_flushes.add();
+    }
+    return r.buf_len() + needed <= r.buf_size();
+}
+
+// RAII guard that pushes the currently-painting node's identity into
+// `g_app.current_paint_*` on entry and restores the previous value on
+// exit. paint_node is recursive, so the snapshot/restore lets the log
+// line in report_paint_overflow always name the *deepest* node being
+// processed when the overflow happens — which is the canvas / widget
+// the user actually has on screen.
+struct PaintCtxGuard {
+    unsigned int prev_cb;
+    float        prev_ax, prev_ay, prev_w, prev_h;
+
+    PaintCtxGuard(unsigned int cb, float ax, float ay,
+                   float w, float h) noexcept
+        : prev_cb{g_app.current_paint_callback_id},
+          prev_ax{g_app.current_paint_ax},
+          prev_ay{g_app.current_paint_ay},
+          prev_w {g_app.current_paint_w},
+          prev_h {g_app.current_paint_h}
+    {
+        g_app.current_paint_callback_id = cb;
+        g_app.current_paint_ax = ax;
+        g_app.current_paint_ay = ay;
+        g_app.current_paint_w  = w;
+        g_app.current_paint_h  = h;
+    }
+
+    ~PaintCtxGuard() {
+        g_app.current_paint_callback_id = prev_cb;
+        g_app.current_paint_ax = prev_ax;
+        g_app.current_paint_ay = prev_ay;
+        g_app.current_paint_w  = prev_w;
+        g_app.current_paint_h  = prev_h;
+    }
+
+    PaintCtxGuard(PaintCtxGuard const&) = delete;
+    PaintCtxGuard& operator=(PaintCtxGuard const&) = delete;
+};
 
 template <render_backend R>
 void write_u32(R& r, unsigned int value) {
@@ -102,11 +223,6 @@ struct wasi_paint_host {
     unsigned char* buf() { return phenotype_cmd_buf; }
     unsigned int& buf_len() { return phenotype_cmd_len; }
     unsigned int buf_size() { return BUF_SIZE; }
-    void ensure(unsigned int n) {
-        if (phenotype_cmd_len + n > BUF_SIZE) {
-            phenotype_flush(); phenotype_cmd_len = 0;
-        }
-    }
     void flush() {
         if (phenotype_cmd_len > 0) {
             phenotype_flush(); phenotype_cmd_len = 0;
@@ -127,14 +243,14 @@ export namespace phenotype {
 
 template <render_backend R>
 void emit_clear(R& r, Color c) {
-    detail::ensure(r, 8);
+    if (!detail::ensure(r, 8, Cmd::Clear)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::Clear));
     detail::write_u32(r, c.packed());
 }
 
 template <render_backend R>
 void emit_fill_rect(R& r, float x, float y, float w, float h, Color c) {
-    detail::ensure(r, 24);
+    if (!detail::ensure(r, 24, Cmd::FillRect)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::FillRect));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, w); detail::write_f32(r, h);
@@ -143,7 +259,7 @@ void emit_fill_rect(R& r, float x, float y, float w, float h, Color c) {
 
 template <render_backend R>
 void emit_stroke_rect(R& r, float x, float y, float w, float h, float lw, Color c) {
-    detail::ensure(r, 28);
+    if (!detail::ensure(r, 28, Cmd::StrokeRect)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::StrokeRect));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, w); detail::write_f32(r, h);
@@ -153,7 +269,7 @@ void emit_stroke_rect(R& r, float x, float y, float w, float h, float lw, Color 
 
 template <render_backend R>
 void emit_round_rect(R& r, float x, float y, float w, float h, float radius, Color c) {
-    detail::ensure(r, 28);
+    if (!detail::ensure(r, 28, Cmd::RoundRect)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::RoundRect));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, w); detail::write_f32(r, h);
@@ -191,7 +307,8 @@ void emit_draw_text(R& r, float x, float y, float font_size, unsigned int flags,
                     Color c, std::string_view family,
                     char const* text, unsigned int text_len) {
     auto const family_len = static_cast<unsigned int>(family.size());
-    detail::ensure(r, 32 + detail::padded(family_len) + detail::padded(text_len));
+    if (!detail::ensure(r, 32 + detail::padded(family_len) + detail::padded(text_len),
+                        Cmd::DrawText)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::DrawText));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, font_size);
@@ -206,7 +323,7 @@ void emit_draw_text(R& r, float x, float y, float font_size, unsigned int flags,
 template <render_backend R>
 void emit_draw_image(R& r, float x, float y, float w, float h,
                      char const* url, unsigned int len) {
-    detail::ensure(r, 24 + detail::padded(len));
+    if (!detail::ensure(r, 24 + detail::padded(len), Cmd::DrawImage)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::DrawImage));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, w); detail::write_f32(r, h);
@@ -217,7 +334,7 @@ void emit_draw_image(R& r, float x, float y, float w, float h,
 template <render_backend R>
 void emit_draw_line(R& r, float x1, float y1, float x2, float y2,
                     float thickness, Color c) {
-    detail::ensure(r, 28);
+    if (!detail::ensure(r, 28, Cmd::DrawLine)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::DrawLine));
     detail::write_f32(r, x1); detail::write_f32(r, y1);
     detail::write_f32(r, x2); detail::write_f32(r, y2);
@@ -233,7 +350,7 @@ template <render_backend R>
 void emit_draw_arc(R& r, float cx, float cy, float radius,
                    float start_angle, float end_angle,
                    float thickness, Color c) {
-    detail::ensure(r, 32);
+    if (!detail::ensure(r, 32, Cmd::DrawArc)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::DrawArc));
     detail::write_f32(r, cx); detail::write_f32(r, cy);
     detail::write_f32(r, radius);
@@ -259,7 +376,7 @@ template <render_backend R>
 void emit_stroke_path(R& r, PathBuilder const& path,
                       float thickness, Color c) {
     auto const words = static_cast<unsigned int>(path.verbs.size());
-    detail::ensure(r, 16 + words * 4);
+    if (!detail::ensure(r, 16 + words * 4, Cmd::Path)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::Path));
     detail::write_f32(r, thickness);
     detail::write_u32(r, c.packed());
@@ -274,7 +391,7 @@ void emit_stroke_path(R& r, PathBuilder const& path,
 template <render_backend R>
 void emit_fill_path(R& r, PathBuilder const& path, Color c) {
     auto const words = static_cast<unsigned int>(path.verbs.size());
-    detail::ensure(r, 12 + words * 4);
+    if (!detail::ensure(r, 12 + words * 4, Cmd::FillPath)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::FillPath));
     detail::write_u32(r, c.packed());
     detail::write_u32(r, path.verb_count);
@@ -284,7 +401,7 @@ void emit_fill_path(R& r, PathBuilder const& path, Color c) {
 template <render_backend R>
 void emit_hit_region(R& r, float x, float y, float w, float h,
                      unsigned int callback_id, unsigned int cursor_type) {
-    detail::ensure(r, 28);
+    if (!detail::ensure(r, 28, Cmd::HitRegion)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::HitRegion));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, w); detail::write_f32(r, h);
@@ -298,7 +415,7 @@ void emit_hit_region(R& r, float x, float y, float w, float h,
 // scope rather than a stack-push.
 template <render_backend R>
 void emit_scissor(R& r, float x, float y, float w, float h) {
-    detail::ensure(r, 20);
+    if (!detail::ensure(r, 20, Cmd::Scissor)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::Scissor));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, w); detail::write_f32(r, h);
@@ -437,6 +554,11 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     float ax = ox + node.x;
     float ay = oy + node.y;
 
+    // Stash this node's identity for report_paint_overflow. RAII so the
+    // early-cull return below and any future early returns naturally
+    // restore the parent's context on unwind.
+    PaintCtxGuard _ctx_guard(node.callback_id, ax, ay, node.width, node.height);
+
     // A subtree rooted at (or under) a scroll_view is recorded with
     // local-ambient scroll values that don't match `g_app.prev_scroll_y`
     // (which only tracks the root). Skip the cache for such subtrees
@@ -473,7 +595,11 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         auto const entry_flush_epoch = g_app.paint_flush_epoch;
         auto const len = node.paint_length;
         auto const write_pos = r.buf_len();
-        ensure(r, len);
+        // Discard return — the (epoch_changed || not_enough_room) check
+        // below already routes around a failed blit by falling through
+        // to the miss-path walk. Treating ensure_blit's false return as
+        // an early return here would leave the subtree blank.
+        (void)ensure_blit(r, len);
         if (g_app.paint_flush_epoch == entry_flush_epoch
             && r.buf_len() + len <= r.buf_size())
         {
