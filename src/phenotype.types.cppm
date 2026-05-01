@@ -36,6 +36,8 @@ struct Color {
                (static_cast<unsigned int>(b) << 8)  |
                static_cast<unsigned int>(a);
     }
+
+    constexpr bool operator==(Color const&) const = default;
 };
 
 // ============================================================
