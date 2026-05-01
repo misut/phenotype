@@ -155,15 +155,10 @@ struct DWriteCacheKey {
     DWRITE_FONT_WEIGHT weight = DWRITE_FONT_WEIGHT_NORMAL;
     DWRITE_FONT_STYLE  style  = DWRITE_FONT_STYLE_NORMAL;
     bool               mono   = false;
-};
 
-struct DWriteCacheKeyLess {
-    bool operator()(DWriteCacheKey const& l, DWriteCacheKey const& r) const noexcept {
-        if (l.family != r.family) return l.family < r.family;
-        if (l.weight != r.weight) return l.weight < r.weight;
-        if (l.style  != r.style)  return l.style  < r.style;
-        return static_cast<unsigned char>(l.mono)
-             < static_cast<unsigned char>(r.mono);
+    bool operator==(DWriteCacheKey const& o) const noexcept {
+        return mono == o.mono && weight == o.weight
+            && style == o.style && family == o.family;
     }
 };
 
@@ -171,10 +166,14 @@ struct TextState {
     ComPtr<IDWriteFactory> factory;
     ComPtr<IDWriteGdiInterop> gdi_interop;
     ComPtr<IDWriteRenderingParams> rendering_params;
-    // Cached IDWriteTextFormat per (family, weight, style, mono)
-    // — DWrite's native font-fallback chain handles unresolved
-    // family names silently, so we never need to log misses.
-    std::map<DWriteCacheKey, ComPtr<IDWriteTextFormat>, DWriteCacheKeyLess> formats;
+    // Cached IDWriteTextFormat per (family, weight, style, mono).
+    // Linear-scan vector instead of std::map: under MSVC + `import std`
+    // the first emplace into a `std::map<KeyWithWstring, ComPtr<...>>`
+    // access-violates inside the tree, so we sidestep the bug while
+    // keeping lookup cheap for the small N (≲ 10) we ever populate.
+    // DWrite's native font-fallback chain handles unresolved family
+    // names silently, so we never need to log misses.
+    std::vector<std::pair<DWriteCacheKey, ComPtr<IDWriteTextFormat>>> formats;
     bool initialized = false;
 };
 
@@ -221,8 +220,9 @@ inline DWriteCacheKey dwrite_key_from(::phenotype::FontSpec const& font) {
 
 inline IDWriteTextFormat* acquire_text_format(DWriteCacheKey const& key) {
     if (!g_text.initialized) return nullptr;
-    auto it = g_text.formats.find(key);
-    if (it != g_text.formats.end()) return it->second.Get();
+    for (auto const& slot : g_text.formats) {
+        if (slot.first == key) return slot.second.Get();
+    }
 
     wchar_t const* family = key.family.empty()
         ? (key.mono ? L"Consolas" : L"Segoe UI")
@@ -232,7 +232,7 @@ inline IDWriteTextFormat* acquire_text_format(DWriteCacheKey const& key) {
     if (FAILED(create_text_format(family, key.weight, key.style, format)))
         return nullptr;
     auto* raw = format.Get();
-    g_text.formats.emplace(key, std::move(format));
+    g_text.formats.emplace_back(key, std::move(format));
     return raw;
 }
 
