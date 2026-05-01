@@ -303,8 +303,9 @@ static void append_draw_text_command(
     append_f32(commands, x);
     append_f32(commands, y);
     append_f32(commands, font_size);
-    append_u32(commands, mono ? 1u : 0u);
+    append_u32(commands, mono ? 1u : 0u);     // flags: bit0=mono only
     append_u32(commands, color.packed());
+    append_u32(commands, 0u);                 // family_len = 0 (default family)
     append_u32(commands, static_cast<unsigned int>(text.size()));
     append_bytes(
         commands,
@@ -1003,7 +1004,9 @@ static void test_shell_pointer_text_caret_placement_and_visibility_reset() {
         auto snapshot = phenotype::detail::focused_input_snapshot();
         return harness.host.measure_text(
             snapshot.font_size,
-            snapshot.mono ? 1u : 0u,
+            phenotype::FontSpec{ {}, phenotype::FontWeight::Regular,
+                                 phenotype::FontStyle::Upright,
+                                 snapshot.mono },
             value.data(),
             static_cast<unsigned int>(bytes));
     };
@@ -1070,7 +1073,9 @@ static void test_shell_pointer_drag_selection_and_click_collapse() {
     auto prefix_width = [&](std::size_t bytes) {
         return harness.host.measure_text(
             snapshot.font_size,
-            snapshot.mono ? 1u : 0u,
+            phenotype::FontSpec{ {}, phenotype::FontWeight::Regular,
+                                 phenotype::FontStyle::Upright,
+                                 snapshot.mono },
             snapshot.value.data(),
             static_cast<unsigned int>(bytes));
     };
@@ -1133,7 +1138,9 @@ static void test_shared_caret_debug_rect_tracks_layout() {
     auto prefix_width = [&](std::size_t bytes) {
         return harness.host.measure_text(
             snapshot.font_size,
-            snapshot.mono ? 1u : 0u,
+            phenotype::FontSpec{ {}, phenotype::FontWeight::Regular,
+                                 phenotype::FontStyle::Upright,
+                                 snapshot.mono },
             snapshot.value.data(),
             static_cast<unsigned int>(bytes));
     };
@@ -2097,9 +2104,10 @@ static void test_macos_rendered_text_preserves_vertical_orientation() {
     append_f32(commands, 24.0f);
     append_f32(commands, 24.0f);
     append_f32(commands, 96.0f);
-    append_u32(commands, 0u);
+    append_u32(commands, 0u);                   // flags (mono=0, regular)
     append_u32(commands, Color{0, 0, 0, 255}.packed());
-    append_u32(commands, 1u);
+    append_u32(commands, 0u);                   // family_len = 0
+    append_u32(commands, 1u);                   // text_len
     append_bytes(commands, "P", 1u);
     renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
 
@@ -2930,10 +2938,10 @@ static void test_windows_renderer_hit_test_and_smoke() {
 
     emit_clear(fixture.host, {240, 240, 240, 255});
     emit_round_rect(fixture.host, 16.0f, 16.0f, 92.0f, 36.0f, 8.0f, {0, 102, 204, 255});
-    emit_draw_text(fixture.host, 40.0f, 26.0f, 16.0f, 0u, {255, 255, 255, 255}, "Primary", 7);
+    emit_draw_text(fixture.host, 40.0f, 26.0f, 16.0f, 0u, {255, 255, 255, 255}, std::string_view{}, "Primary", 7);
     emit_hit_region(fixture.host, 16.0f, 16.0f, 92.0f, 36.0f, 42u, 1u);
     emit_round_rect(fixture.host, 124.0f, 16.0f, 92.0f, 36.0f, 8.0f, {236, 72, 153, 255});
-    emit_draw_text(fixture.host, 150.0f, 26.0f, 16.0f, 0u, {255, 255, 255, 255}, "Action", 6);
+    emit_draw_text(fixture.host, 150.0f, 26.0f, 16.0f, 0u, {255, 255, 255, 255}, std::string_view{}, "Action", 6);
     emit_hit_region(fixture.host, 124.0f, 16.0f, 92.0f, 36.0f, 84u, 1u);
     fixture.host.flush();
 
@@ -2972,7 +2980,7 @@ static void test_windows_renderer_rejects_truncated_hit_region() {
 
     emit_clear(fixture.host, {245, 245, 245, 255});
     emit_round_rect(fixture.host, 20.0f, 20.0f, 100.0f, 40.0f, 8.0f, {37, 99, 235, 255});
-    emit_draw_text(fixture.host, 45.0f, 31.0f, 16.0f, 0u, {255, 255, 255, 255}, "Button", 6);
+    emit_draw_text(fixture.host, 45.0f, 31.0f, 16.0f, 0u, {255, 255, 255, 255}, std::string_view{}, "Button", 6);
     emit_hit_region(fixture.host, 20.0f, 20.0f, 100.0f, 40.0f, 77u, 1u);
     fixture.host.flush();
 

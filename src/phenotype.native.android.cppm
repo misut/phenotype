@@ -215,6 +215,30 @@ inline VkRect2D compute_vk_scissor(ScissorBatch const& b,
 // `phenotype_android_bind_jvm(app->activity->vm)` once before
 // text_init runs — typically at the top of android_main.
 
+// FontPaintKey selects a Paint object keyed on FontSpec components.
+// The `mono` bit picks the monospace default when family is empty;
+// otherwise family is resolved through Typeface.create(name, style).
+struct FontPaintKey {
+    std::string family;
+    ::phenotype::FontWeight weight = ::phenotype::FontWeight::Regular;
+    ::phenotype::FontStyle  style  = ::phenotype::FontStyle::Upright;
+    bool                     mono   = false;
+};
+
+struct FontPaintKeyLess {
+    bool operator()(FontPaintKey const& l, FontPaintKey const& r) const noexcept {
+        if (l.family != r.family) return l.family < r.family;
+        if (l.weight != r.weight)
+            return static_cast<unsigned char>(l.weight)
+                 < static_cast<unsigned char>(r.weight);
+        if (l.style != r.style)
+            return static_cast<unsigned char>(l.style)
+                 < static_cast<unsigned char>(r.style);
+        return static_cast<unsigned char>(l.mono)
+             < static_cast<unsigned char>(r.mono);
+    }
+};
+
 struct jni_refs {
     JavaVM* vm = nullptr;
 
@@ -241,15 +265,33 @@ struct jni_refs {
     jmethodID canvas_ctor      = nullptr;
     jmethodID canvas_draw_text = nullptr;
 
+    // Typeface.create(String family, int style) and
+    // Typeface.create(Typeface family, int style) — both yield a
+    // Typeface for the (family, BOLD/ITALIC) tuple. Style bits are
+    // taken from the integer constants pulled below.
+    jmethodID typeface_create_string   = nullptr;
+    jmethodID typeface_create_typeface = nullptr;
+
+    // Cached Typeface style-bit constants.
+    int typeface_normal      = 0;
+    int typeface_bold        = 1;
+    int typeface_italic      = 2;
+    int typeface_bold_italic = 3;
+
     // Global refs to static final instances / enum values.
     jobject typeface_default   = nullptr;
     jobject typeface_monospace = nullptr;
     jobject config_argb8888    = nullptr;
 
-    // Reusable Paint instances for the sans / mono families. Text color
-    // + size get reset per call; typeface + antialias are bound once.
-    jobject paint_sans = nullptr;
-    jobject paint_mono = nullptr;
+    // Paint cache keyed on (family, weight, style, mono). Each value
+    // is a global ref owned by g_jni; cleared in text_shutdown.
+    // Single-threaded (render thread only) — no locking needed.
+    std::map<FontPaintKey, jobject, FontPaintKeyLess> paints;
+
+    // One-shot log dedupe — family names that already failed to
+    // resolve (Typeface.create returned the platform default) get
+    // logged once and never re-warned.
+    std::set<std::string> missing_logged;
 
     bool initialised = false;
 };
@@ -377,13 +419,31 @@ inline bool init_jni_refs(JNIEnv* env) {
         g_jni.canvas_class, "drawText",
         "(Ljava/lang/String;FFLandroid/graphics/Paint;)V");
 
+    g_jni.typeface_create_string = env->GetStaticMethodID(
+        g_jni.typeface_class, "create",
+        "(Ljava/lang/String;I)Landroid/graphics/Typeface;");
+    g_jni.typeface_create_typeface = env->GetStaticMethodID(
+        g_jni.typeface_class, "create",
+        "(Landroid/graphics/Typeface;I)Landroid/graphics/Typeface;");
+
+    auto load_typeface_int = [&](char const* name, int fallback) -> int {
+        jfieldID id = env->GetStaticFieldID(g_jni.typeface_class, name, "I");
+        if (!id) { check_and_clear_exception(env); return fallback; }
+        return env->GetStaticIntField(g_jni.typeface_class, id);
+    };
+    g_jni.typeface_normal      = load_typeface_int("NORMAL", 0);
+    g_jni.typeface_bold        = load_typeface_int("BOLD", 1);
+    g_jni.typeface_italic      = load_typeface_int("ITALIC", 2);
+    g_jni.typeface_bold_italic = load_typeface_int("BOLD_ITALIC", 3);
+
     if (check_and_clear_exception(env)) return false;
     if (!g_jni.paint_ctor || !g_jni.paint_set_textsize
         || !g_jni.paint_set_typeface || !g_jni.paint_set_color
         || !g_jni.paint_set_antialias || !g_jni.paint_measure_text
         || !g_jni.paint_ascent || !g_jni.paint_descent
         || !g_jni.bitmap_create || !g_jni.bitmap_erase_color
-        || !g_jni.canvas_ctor || !g_jni.canvas_draw_text)
+        || !g_jni.canvas_ctor || !g_jni.canvas_draw_text
+        || !g_jni.typeface_create_string || !g_jni.typeface_create_typeface)
         return false;
 
     // Cache Typeface.DEFAULT / Typeface.MONOSPACE as global refs.
@@ -414,23 +474,97 @@ inline bool init_jni_refs(JNIEnv* env) {
         env->DeleteLocalRef(local);
     }
 
-    // Build the two cached Paint instances (sans / mono). Antialias
-    // stays on for the lifetime; text color + size are set per call.
-    auto build_paint = [&](jobject typeface) -> jobject {
-        jobject local = env->NewObject(g_jni.paint_class, g_jni.paint_ctor);
-        if (!local) { check_and_clear_exception(env); return nullptr; }
-        env->CallVoidMethod(local, g_jni.paint_set_antialias, JNI_TRUE);
-        env->CallObjectMethod(local, g_jni.paint_set_typeface, typeface);
-        check_and_clear_exception(env);
-        jobject g = env->NewGlobalRef(local);
-        env->DeleteLocalRef(local);
-        return g;
-    };
-    g_jni.paint_sans = build_paint(g_jni.typeface_default);
-    g_jni.paint_mono = build_paint(g_jni.typeface_monospace);
-    if (!g_jni.paint_sans || !g_jni.paint_mono) return false;
-
     return true;
+}
+
+// Pick the Typeface style int for a FontPaintKey.
+inline int typeface_style_for(FontPaintKey const& key) {
+    bool bold = (key.weight == ::phenotype::FontWeight::Bold);
+    bool italic = (key.style  == ::phenotype::FontStyle::Italic);
+    if (bold && italic) return g_jni.typeface_bold_italic;
+    if (bold)           return g_jni.typeface_bold;
+    if (italic)         return g_jni.typeface_italic;
+    return g_jni.typeface_normal;
+}
+
+// Resolve and cache a Paint for `key`. Caller must hold a JNIEnv;
+// returned jobject is a global ref owned by g_jni.paints — caller must
+// NOT DeleteGlobalRef. Single render-thread access pattern, no locking.
+inline jobject acquire_paint(JNIEnv* env, FontPaintKey const& key) {
+    if (!g_jni.initialised) return nullptr;
+    auto it = g_jni.paints.find(key);
+    if (it != g_jni.paints.end()) return it->second;
+
+    int style_bits = typeface_style_for(key);
+    jobject typeface_local = nullptr;
+
+    if (key.family.empty()) {
+        // Empty family → default sans (typeface_default) or default mono
+        // (typeface_monospace) as the base; apply BOLD/ITALIC bits.
+        jobject base = key.mono ? g_jni.typeface_monospace
+                                : g_jni.typeface_default;
+        if (style_bits == g_jni.typeface_normal) {
+            typeface_local = env->NewLocalRef(base);
+        } else {
+            typeface_local = env->CallStaticObjectMethod(
+                g_jni.typeface_class,
+                g_jni.typeface_create_typeface,
+                base, style_bits);
+            if (check_and_clear_exception(env))
+                typeface_local = nullptr;
+        }
+    } else {
+        jstring jname = make_jstring_utf8(env, key.family.data(),
+            static_cast<unsigned int>(key.family.size()));
+        if (jname) {
+            typeface_local = env->CallStaticObjectMethod(
+                g_jni.typeface_class,
+                g_jni.typeface_create_string,
+                jname, style_bits);
+            env->DeleteLocalRef(jname);
+            if (check_and_clear_exception(env))
+                typeface_local = nullptr;
+            // `Typeface.create(String, int)` returns DEFAULT when the
+            // family cannot be resolved — that's the platform's silent
+            // fallback policy. Log once per family.
+            if (g_jni.missing_logged.insert(key.family).second) {
+                __android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG,
+                    "text: requested font family '%s'; using Typeface.create result",
+                    key.family.c_str());
+            }
+        }
+    }
+    if (!typeface_local) {
+        // Last-resort fallback to default.
+        typeface_local = env->NewLocalRef(g_jni.typeface_default);
+    }
+
+    jobject paint_local = env->NewObject(g_jni.paint_class, g_jni.paint_ctor);
+    if (!paint_local) {
+        check_and_clear_exception(env);
+        env->DeleteLocalRef(typeface_local);
+        return nullptr;
+    }
+    env->CallVoidMethod(paint_local, g_jni.paint_set_antialias, JNI_TRUE);
+    env->CallObjectMethod(paint_local, g_jni.paint_set_typeface, typeface_local);
+    check_and_clear_exception(env);
+
+    jobject paint_global = env->NewGlobalRef(paint_local);
+    env->DeleteLocalRef(paint_local);
+    env->DeleteLocalRef(typeface_local);
+    if (!paint_global) return nullptr;
+
+    g_jni.paints.emplace(key, paint_global);
+    return paint_global;
+}
+
+inline jobject acquire_paint(JNIEnv* env, ::phenotype::FontSpec const& font) {
+    FontPaintKey key{};
+    key.family.assign(font.family);
+    key.weight = font.weight;
+    key.style  = font.style;
+    key.mono   = font.mono;
+    return acquire_paint(env, key);
 }
 
 inline void text_init() {
@@ -457,13 +591,28 @@ inline void text_init() {
 }
 
 inline void text_shutdown() {
-    if (!g_jni.vm) { g_jni.initialised = false; return; }
+    if (!g_jni.vm) {
+        g_jni.paints.clear();
+        g_jni.missing_logged.clear();
+        g_jni.initialised = false;
+        return;
+    }
     ScopedEnv e(g_jni.vm);
-    if (!e) { g_jni.initialised = false; return; }
+    if (!e) {
+        g_jni.paints.clear();
+        g_jni.missing_logged.clear();
+        g_jni.initialised = false;
+        return;
+    }
     auto* env = e.env;
     auto drop = [&](jobject& ref) {
         if (ref) { env->DeleteGlobalRef(ref); ref = nullptr; }
     };
+    for (auto& [_, ref] : g_jni.paints) {
+        if (ref) env->DeleteGlobalRef(ref);
+    }
+    g_jni.paints.clear();
+    g_jni.missing_logged.clear();
     drop(reinterpret_cast<jobject&>(g_jni.paint_class));
     drop(reinterpret_cast<jobject&>(g_jni.typeface_class));
     drop(reinterpret_cast<jobject&>(g_jni.bitmap_class));
@@ -472,8 +621,6 @@ inline void text_shutdown() {
     drop(g_jni.typeface_default);
     drop(g_jni.typeface_monospace);
     drop(g_jni.config_argb8888);
-    drop(g_jni.paint_sans);
-    drop(g_jni.paint_mono);
     // Method IDs don't need cleanup — they die with the class ref.
     g_jni.paint_ctor = nullptr;
     g_jni.paint_set_textsize = nullptr;
@@ -487,16 +634,19 @@ inline void text_shutdown() {
     g_jni.bitmap_erase_color = nullptr;
     g_jni.canvas_ctor = nullptr;
     g_jni.canvas_draw_text = nullptr;
+    g_jni.typeface_create_string = nullptr;
+    g_jni.typeface_create_typeface = nullptr;
     g_jni.initialised = false;
 }
 
-inline float text_measure(float font_size, bool mono,
+inline float text_measure(float font_size, FontPaintKey const& key,
                           char const* text_ptr, unsigned int len) {
     if (!g_jni.initialised || len == 0 || text_ptr == nullptr) return 0.0f;
     ScopedEnv e(g_jni.vm);
     if (!e) return 0.0f;
     auto* env = e.env;
-    jobject paint = mono ? g_jni.paint_mono : g_jni.paint_sans;
+    jobject paint = acquire_paint(env, key);
+    if (!paint) return 0.0f;
     env->CallVoidMethod(paint, g_jni.paint_set_textsize,
                         static_cast<jfloat>(font_size));
     if (check_and_clear_exception(env)) return 0.0f;
@@ -506,6 +656,27 @@ inline float text_measure(float font_size, bool mono,
     env->DeleteLocalRef(s);
     if (check_and_clear_exception(env)) return 0.0f;
     return static_cast<float>(w);
+}
+
+// Convenience overload covering the legacy bool-mono call sites.
+inline float text_measure(float font_size, bool mono,
+                          char const* text_ptr, unsigned int len) {
+    FontPaintKey key{};
+    key.mono = mono;
+    return text_measure(font_size, key, text_ptr, len);
+}
+
+// platform_api::text.measure entry point.
+inline float text_measure_api(float font_size, unsigned int flags,
+                              char const* font_family, unsigned int family_len,
+                              char const* text, unsigned int len) {
+    FontPaintKey key{};
+    if (font_family && family_len > 0)
+        key.family.assign(font_family, family_len);
+    key.weight = (flags & 2u) ? ::phenotype::FontWeight::Bold   : ::phenotype::FontWeight::Regular;
+    key.style  = (flags & 4u) ? ::phenotype::FontStyle::Italic  : ::phenotype::FontStyle::Upright;
+    key.mono   = (flags & 1u) != 0;
+    return text_measure(font_size, key, text, len);
 }
 
 // ---- Text atlas builder ----------------------------------------------
@@ -556,7 +727,13 @@ inline ::phenotype::native::TextAtlas text_build_atlas(
     for (std::size_t i = 0; i < entries.size(); ++i) {
         auto const& te = entries[i];
         TextSlot& slot = slots[i];
-        jobject paint = te.mono ? g_jni.paint_mono : g_jni.paint_sans;
+        FontPaintKey key{};
+        key.family = te.family;
+        key.weight = te.weight;
+        key.style  = te.style;
+        key.mono   = te.mono;
+        jobject paint = acquire_paint(env, key);
+        if (!paint) { slot.skipped = true; continue; }
         env->CallVoidMethod(paint, g_jni.paint_set_textsize,
                             static_cast<jfloat>(te.font_size * scale));
         if (check_and_clear_exception(env)) { slot.skipped = true; continue; }
@@ -633,7 +810,13 @@ inline ::phenotype::native::TextAtlas text_build_atlas(
         auto& slot = slots[i];
         if (slot.skipped) continue;
 
-        jobject paint = te.mono ? g_jni.paint_mono : g_jni.paint_sans;
+        FontPaintKey key{};
+        key.family = te.family;
+        key.weight = te.weight;
+        key.style  = te.style;
+        key.mono   = te.mono;
+        jobject paint = acquire_paint(env, key);
+        if (!paint) continue;
         env->CallVoidMethod(paint, g_jni.paint_set_textsize,
                             static_cast<jfloat>(te.font_size * scale));
         env->CallVoidMethod(paint, g_jni.paint_set_color,
@@ -3334,6 +3517,9 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 entry.b = c.color.b / 255.0f;
                 entry.a = c.color.a / 255.0f;
                 entry.text = c.text;
+                entry.family = c.family;
+                entry.weight = c.weight;
+                entry.style  = c.style;
                 out.text_entries.push_back(std::move(entry));
                 out.text_entries_batch_idx.push_back(
                     static_cast<std::uint32_t>(out.batches.size() - 1));
@@ -4849,7 +5035,7 @@ inline platform_api build_android_platform() {
     api.text = {
         text_init,
         text_shutdown,
-        text_measure,
+        text_measure_api,
         text_build_atlas,
     };
     api.input = {

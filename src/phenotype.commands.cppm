@@ -20,7 +20,21 @@ struct ClearCmd     { Color color; };
 struct FillRectCmd  { float x, y, w, h; Color color; };
 struct StrokeRectCmd{ float x, y, w, h; float line_width; Color color; };
 struct RoundRectCmd { float x, y, w, h; float radius; Color color; };
-struct DrawTextCmd  { float x, y, font_size; bool mono; Color color; std::string text; };
+// DrawTextCmd carries the decoded `Cmd::DrawText` payload. `mono`
+// stays as a convenience boolean (still derived from flags bit 0)
+// so existing pre-FontSpec consumers compile unchanged. New consumers
+// read `family` / `weight` / `style` directly. Default-constructed
+// values (empty family + Regular + Upright) reproduce the pre-
+// FontSpec wire encoding bit-for-bit.
+struct DrawTextCmd  {
+    float x, y, font_size;
+    bool mono;
+    Color color;
+    std::string text;
+    std::string family;
+    FontWeight weight = FontWeight::Regular;
+    FontStyle  style  = FontStyle::Upright;
+};
 struct DrawLineCmd  { float x1, y1, x2, y2; float thickness; Color color; };
 struct HitRegionCmd { float x, y, w, h; unsigned int callback_id; unsigned int cursor_type; };
 struct DrawImageCmd { float x, y, w, h; std::string url; };
@@ -123,13 +137,25 @@ inline std::vector<DrawCommand> parse_commands(
         }
         case Cmd::DrawText: {
             float x = read_f32(), y = read_f32(), fs = read_f32();
-            unsigned int mono = read_u32();
+            unsigned int flags = read_u32();
             Color c = unpack(read_u32());
+            unsigned int flen = read_u32();
+            std::string family(reinterpret_cast<char const*>(&buf[pos]), flen);
+            pos += flen;
+            pos = (pos + 3) & ~3u;
             unsigned int tlen = read_u32();
             std::string text(reinterpret_cast<char const*>(&buf[pos]), tlen);
             pos += tlen;
             pos = (pos + 3) & ~3u;
-            out.emplace_back(DrawTextCmd{x, y, fs, mono != 0, c, std::move(text)});
+            DrawTextCmd cmd{};
+            cmd.x = x; cmd.y = y; cmd.font_size = fs;
+            cmd.mono = (flags & 1u) != 0;
+            cmd.color = c;
+            cmd.text = std::move(text);
+            cmd.family = std::move(family);
+            cmd.weight = (flags & 2u) ? FontWeight::Bold   : FontWeight::Regular;
+            cmd.style  = (flags & 4u) ? FontStyle::Italic  : FontStyle::Upright;
+            out.emplace_back(std::move(cmd));
             break;
         }
         case Cmd::DrawLine: {

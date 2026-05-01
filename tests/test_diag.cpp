@@ -26,7 +26,9 @@ static null_host diag_host;
 #else
 extern "C" {
     void phenotype_flush() {}
-    float phenotype_measure_text(float fs, unsigned int, char const*, unsigned int len) {
+    float phenotype_measure_text(float fs, unsigned int /*flags*/,
+                                  char const* /*family*/, unsigned int /*family_len*/,
+                                  char const* /*text*/, unsigned int len) {
         return static_cast<float>(len) * fs * 0.6f;
     }
     float phenotype_get_canvas_width() { return 800.0f; }

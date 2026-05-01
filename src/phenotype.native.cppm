@@ -69,11 +69,23 @@ inline void shutdown() {
         platform.text.shutdown();
 }
 
+inline float measure(float font_size, unsigned int flags,
+                     char const* font_family, unsigned int family_len,
+                     char const* text, unsigned int len) {
+    auto const& platform = current_platform();
+    if (!platform.text.measure) return 0.0f;
+    return platform.text.measure(font_size, flags,
+                                 font_family, family_len, text, len);
+}
+
+// Convenience overload for the common widget::text path that does not
+// carry a font family — selects mono-default when `mono` is true.
 inline float measure(float font_size, bool mono,
                      char const* text, unsigned int len) {
     auto const& platform = current_platform();
     if (!platform.text.measure) return 0.0f;
-    return platform.text.measure(font_size, mono, text, len);
+    return platform.text.measure(font_size, mono ? 1u : 0u,
+                                 nullptr, 0u, text, len);
 }
 
 inline TextAtlas build_atlas(std::vector<TextEntry> const& entries,

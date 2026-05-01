@@ -13,6 +13,7 @@ module;
 #include <map>
 #include <mutex>
 #include <optional>
+#include <set>
 #include <string>
 #include <string_view>
 #include <thread>
@@ -71,13 +72,56 @@ struct CFGuard {
     explicit operator bool() const { return ref != nullptr; }
 };
 
+// Font cache: keyed by (family, weight, style, mono). Each slot owns
+// a base 16pt CTFontRef; per-call sizing is layered on top via
+// CTFontCreateCopyWithAttributes (matches the pre-FontSpec sans/mono
+// pattern). Empty family + mono=false → system sans;
+// empty family + mono=true → user fixed-pitch.
+struct FontCacheKey {
+    std::string family;
+    ::phenotype::FontWeight weight = ::phenotype::FontWeight::Regular;
+    ::phenotype::FontStyle  style  = ::phenotype::FontStyle::Upright;
+    bool                     mono   = false;
+};
+
+struct FontCacheKeyLess {
+    bool operator()(FontCacheKey const& l, FontCacheKey const& r) const noexcept {
+        if (l.family != r.family) return l.family < r.family;
+        if (l.weight != r.weight)
+            return static_cast<unsigned char>(l.weight)
+                 < static_cast<unsigned char>(r.weight);
+        if (l.style != r.style)
+            return static_cast<unsigned char>(l.style)
+                 < static_cast<unsigned char>(r.style);
+        return static_cast<unsigned char>(l.mono)
+             < static_cast<unsigned char>(r.mono);
+    }
+};
+
 struct TextState {
+    // Pre-warmed system defaults — kept for the empty-family fast path
+    // (most widget::text calls don't carry a custom family).
     CTFontRef sans = nullptr;
     CTFontRef mono = nullptr;
+    // Resolved base 16pt fonts keyed by FontCacheKey. CFRetained so the
+    // map owns the references; cleaned up on text_shutdown.
+    std::map<FontCacheKey, CTFontRef, FontCacheKeyLess> cache;
+    // Family names that previously failed to resolve — logged once each
+    // and never re-attempted (the lookup is expensive on Core Text).
+    std::set<std::string> missing_logged;
     bool initialized = false;
 };
 
 inline TextState g_text;
+
+inline FontCacheKey font_key_from_spec(::phenotype::FontSpec const& font) {
+    return FontCacheKey{
+        std::string(font.family),
+        font.weight,
+        font.style,
+        font.mono,
+    };
+}
 
 struct CocoaRange {
     unsigned long location = 0;
@@ -530,8 +574,15 @@ inline bool objc_responds_to(id obj, SEL sel) {
     return obj && objc_send<bool>(obj, sel_responds_to_selector(), sel);
 }
 
-inline float text_measure(float font_size, bool mono,
+inline float text_measure(float font_size, FontCacheKey const& key,
                           char const* text_ptr, unsigned int len);
+
+inline float text_measure(float font_size, bool mono,
+                          char const* text_ptr, unsigned int len) {
+    FontCacheKey key{};
+    key.mono = mono;
+    return text_measure(font_size, key, text_ptr, len);
+}
 
 inline float sanitize_scale(float scale) {
     return (scale > 0.0f && std::isfinite(scale)) ? scale : 1.0f;
@@ -619,7 +670,79 @@ inline void text_init() {
 inline void text_shutdown() {
     if (g_text.sans) { CFRelease(g_text.sans); g_text.sans = nullptr; }
     if (g_text.mono) { CFRelease(g_text.mono); g_text.mono = nullptr; }
+    for (auto& [_, ref] : g_text.cache) {
+        if (ref) CFRelease(ref);
+    }
+    g_text.cache.clear();
+    g_text.missing_logged.clear();
     g_text.initialized = false;
+}
+
+// Resolve a base 16pt CTFontRef for `key`. Empty family resolves to
+// the system sans / monospace default; named family is resolved via
+// CTFontCreateWithName, then weight + italic traits are applied via
+// CTFontCreateCopyWithSymbolicTraits. Failures fall back to the
+// system default with a one-shot stderr log keyed on family name.
+//
+// The returned reference is owned by `g_text.cache`; callers must NOT
+// CFRelease it. Pass to CTFontCreateCopyWithAttributes() to obtain a
+// per-call sized copy (which the caller does own).
+inline CTFontRef acquire_base_font(FontCacheKey const& key) {
+    if (!g_text.initialized) text_init();
+    auto it = g_text.cache.find(key);
+    if (it != g_text.cache.end()) return it->second;
+
+    auto fallback = [&](char const* reason) -> CTFontRef {
+        if (!key.family.empty()
+            && g_text.missing_logged.insert(key.family).second) {
+            std::fprintf(stderr,
+                "[text] font '%s' (%s) not resolved (%s); using system default\n",
+                key.family.c_str(),
+                key.weight == ::phenotype::FontWeight::Bold ? "Bold" : "Regular",
+                reason);
+        }
+        return key.mono ? g_text.mono : g_text.sans;
+    };
+
+    CTFontRef base = nullptr;
+    if (key.family.empty()) {
+        base = key.mono ? g_text.mono : g_text.sans;
+        if (base) base = static_cast<CTFontRef>(CFRetain(base));
+    } else {
+        auto cf_name = CFGuard<CFStringRef>(CFStringCreateWithBytes(
+            kCFAllocatorDefault,
+            reinterpret_cast<UInt8 const*>(key.family.data()),
+            static_cast<CFIndex>(key.family.size()),
+            kCFStringEncodingUTF8,
+            false));
+        if (!cf_name) {
+            CTFontRef fb = fallback("CFString create failed");
+            if (fb) g_text.cache.emplace(key, static_cast<CTFontRef>(CFRetain(fb)));
+            return fb;
+        }
+        base = CTFontCreateWithName(cf_name, 16.0, nullptr);
+    }
+    if (!base) {
+        CTFontRef fb = fallback("CTFontCreateWithName returned null");
+        if (fb) g_text.cache.emplace(key, static_cast<CTFontRef>(CFRetain(fb)));
+        return fb;
+    }
+
+    // Apply Bold / Italic via symbolic traits.
+    CTFontSymbolicTraits desired = 0;
+    if (key.weight == ::phenotype::FontWeight::Bold)   desired |= kCTFontTraitBold;
+    if (key.style  == ::phenotype::FontStyle::Italic)  desired |= kCTFontTraitItalic;
+    if (desired != 0) {
+        CTFontRef styled = CTFontCreateCopyWithSymbolicTraits(
+            base, 16.0, nullptr, desired,
+            kCTFontTraitBold | kCTFontTraitItalic);
+        if (styled) {
+            CFRelease(base);
+            base = styled;
+        }
+    }
+    g_text.cache.emplace(key, base);
+    return base;
 }
 
 struct TextLineMetrics {
@@ -630,10 +753,16 @@ struct TextLineMetrics {
     CGRect glyph_bounds = CGRectNull;
 };
 
-inline CFGuard<CTFontRef> copy_text_font(float font_size, bool mono) {
-    CTFontRef base = mono ? g_text.mono : g_text.sans;
+inline CFGuard<CTFontRef> copy_text_font(float font_size, FontCacheKey const& key) {
+    CTFontRef base = acquire_base_font(key);
     return CFGuard<CTFontRef>(
         base ? CTFontCreateCopyWithAttributes(base, font_size, nullptr, nullptr) : nullptr);
+}
+
+inline CFGuard<CTFontRef> copy_text_font(float font_size, bool mono) {
+    FontCacheKey key{};
+    key.mono = mono;
+    return copy_text_font(font_size, key);
 }
 
 inline CFGuard<CFStringRef> create_text_cf_string(char const* text_ptr,
@@ -818,12 +947,13 @@ inline bool rasterize_line_alpha(CTLineRef line,
     return has_ink;
 }
 
-inline float text_measure(float font_size, bool mono,
+inline float text_measure(float font_size, FontCacheKey const& key,
                           char const* text_ptr, unsigned int len) {
-    if (!g_text.initialized || len == 0)
-        return 0.0f;
+    if (len == 0) return 0.0f;
+    if (!g_text.initialized) text_init();
+    if (!g_text.initialized) return 0.0f;
 
-    auto font = copy_text_font(font_size, mono);
+    auto font = copy_text_font(font_size, key);
     if (!font)
         return 0.0f;
 
@@ -833,6 +963,20 @@ inline float text_measure(float font_size, bool mono,
 
     double width = CTLineGetTypographicBounds(line, nullptr, nullptr, nullptr);
     return std::isfinite(width) ? static_cast<float>(width) : 0.0f;
+}
+
+// platform_api::text.measure entry point. Constructs the FontCacheKey
+// from the wire-format flags + family bytes and delegates.
+inline float text_measure_api(float font_size, unsigned int flags,
+                              char const* font_family, unsigned int family_len,
+                              char const* text, unsigned int len) {
+    FontCacheKey key{};
+    if (font_family && family_len > 0)
+        key.family.assign(font_family, family_len);
+    key.weight = (flags & 2u) ? ::phenotype::FontWeight::Bold   : ::phenotype::FontWeight::Regular;
+    key.style  = (flags & 4u) ? ::phenotype::FontStyle::Italic  : ::phenotype::FontStyle::Upright;
+    key.mono   = (flags & 1u) != 0;
+    return text_measure(font_size, key, text, len);
 }
 
 inline unsigned long utf16_length(std::string_view utf8) {
@@ -895,7 +1039,12 @@ inline TextAtlas text_build_atlas(std::vector<TextEntry> const& entries,
     for (auto const& entry : entries) {
         if (entry.text.empty()) continue;
 
-        auto font = copy_text_font(entry.font_size, entry.mono);
+        FontCacheKey key{};
+        key.family = entry.family;
+        key.weight = entry.weight;
+        key.style  = entry.style;
+        key.mono   = entry.mono;
+        auto font = copy_text_font(entry.font_size, key);
         if (!font) continue;
         auto line = create_text_line(
             font, entry.text.c_str(), static_cast<unsigned int>(entry.text.size()));
@@ -1038,6 +1187,9 @@ struct ParsedTextRun {
     // for overlay runs (IME composition / generic caret) that always
     // render full-viewport above scissored scene content.
     std::uint32_t batch_idx = 0;
+    // Resolved FontCacheKey (family / weight / style / mono); driven
+    // by the wire-format flags + family bytes at decode time.
+    FontCacheKey font_key{};
 };
 
 struct RasterizedTextRun {
@@ -1052,7 +1204,7 @@ struct RasterizedTextRun {
 
 struct TextCacheEntry {
     std::string text;
-    int font_key = 0;
+    int font_size_key = 0;
     int line_height_key = 0;
     int scale_key = 0;
     bool mono = false;
@@ -1064,6 +1216,7 @@ struct TextCacheEntry {
     float uw = 0.0f;
     float vh = 0.0f;
     bool has_ink = false;
+    FontCacheKey font_key{};
 };
 
 struct TextAtlasCache {
@@ -1713,30 +1866,43 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
             }
             case Cmd::DrawText: {
                 float x = 0.0f, y = 0.0f, font_size = 0.0f;
-                unsigned int mono = 0;
+                unsigned int flags = 0;
                 unsigned int packed = 0;
+                unsigned int family_len = 0;
                 unsigned int text_len = 0;
+                char const* family = nullptr;
                 char const* text = nullptr;
                 if (!reader.read_f32(x) || !reader.read_f32(y)
-                    || !reader.read_f32(font_size) || !reader.read_u32(mono)
-                    || !reader.read_u32(packed) || !reader.read_u32(text_len)
+                    || !reader.read_f32(font_size) || !reader.read_u32(flags)
+                    || !reader.read_u32(packed) || !reader.read_u32(family_len)
+                    || !reader.read_text(family, family_len)
+                    || !reader.read_u32(text_len)
                     || !reader.read_text(text, text_len))
                     return false;
                 auto color = unpack_color(packed);
-                scratch.text_runs.push_back({
-                    x,
-                    y,
-                    font_size,
-                    mono != 0,
-                    color.r / 255.0f,
-                    color.g / 255.0f,
-                    color.b / 255.0f,
-                    color.a / 255.0f,
-                    font_size * line_height_ratio,
-                    text,
-                    text_len,
-                    static_cast<std::uint32_t>(scratch.batches.size() - 1),
-                });
+                ParsedTextRun run{};
+                run.x = x;
+                run.y = y;
+                run.font_size = font_size;
+                run.mono = (flags & 1u) != 0;
+                run.r = color.r / 255.0f;
+                run.g = color.g / 255.0f;
+                run.b = color.b / 255.0f;
+                run.a = color.a / 255.0f;
+                run.line_height = font_size * line_height_ratio;
+                run.text = text;
+                run.len = text_len;
+                run.batch_idx = static_cast<std::uint32_t>(scratch.batches.size() - 1);
+                if (family && family_len > 0)
+                    run.font_key.family.assign(family, family_len);
+                run.font_key.weight = (flags & 2u)
+                    ? ::phenotype::FontWeight::Bold
+                    : ::phenotype::FontWeight::Regular;
+                run.font_key.style  = (flags & 4u)
+                    ? ::phenotype::FontStyle::Italic
+                    : ::phenotype::FontStyle::Upright;
+                run.font_key.mono = run.mono;
+                scratch.text_runs.push_back(std::move(run));
                 break;
             }
             case Cmd::DrawLine: {
@@ -2702,40 +2868,46 @@ inline bool reserve_text_slot(TextAtlasCache& cache, int width, int height,
     return true;
 }
 
+inline bool font_keys_equal(FontCacheKey const& a, FontCacheKey const& b) noexcept {
+    return a.family == b.family && a.weight == b.weight
+        && a.style  == b.style  && a.mono   == b.mono;
+}
+
 inline bool text_cache_matches(TextCacheEntry const& entry,
                                ParsedTextRun const& run,
-                               int font_key,
+                               int font_size_key,
                                int line_height_key,
                                int scale_key) {
-    return entry.font_key == font_key
+    return entry.font_size_key == font_size_key
         && entry.line_height_key == line_height_key
         && entry.scale_key == scale_key
         && entry.mono == run.mono
+        && font_keys_equal(entry.font_key, run.font_key)
         && entry.text.size() == run.len
         && std::memcmp(entry.text.data(), run.text, run.len) == 0;
 }
 
 inline TextCacheEntry* find_text_cache_entry(TextAtlasCache& cache,
                                              ParsedTextRun const& run,
-                                             int font_key,
+                                             int font_size_key,
                                              int line_height_key,
                                              int scale_key) {
     for (auto& entry : cache.entries) {
-        if (text_cache_matches(entry, run, font_key, line_height_key, scale_key))
+        if (text_cache_matches(entry, run, font_size_key, line_height_key, scale_key))
             return &entry;
     }
     return nullptr;
 }
 
 inline bool rasterize_text_run(char const* text_ptr, unsigned int len,
-                               float font_size, bool mono,
+                               float font_size, FontCacheKey const& font_key,
                                float line_height, float scale,
                                RasterizedTextRun& out) {
     out = {};
     if (!g_text.initialized || len == 0)
         return false;
 
-    auto font = copy_text_font(font_size, mono);
+    auto font = copy_text_font(font_size, font_key);
     if (!font)
         return false;
     auto line = create_text_line(font, text_ptr, len);
@@ -3360,17 +3532,17 @@ inline bool prepare_text_instances(float scale) {
             if (!run.text || run.len == 0)
                 continue;
 
-            int font_key = quantize_metric(run.font_size);
+            int font_size_key = quantize_metric(run.font_size);
             int line_height_key = quantize_metric(run.line_height);
             auto* entry = find_text_cache_entry(
-                cache, run, font_key, line_height_key, scale_key);
+                cache, run, font_size_key, line_height_key, scale_key);
 
             if (entry) {
                 metrics::inst::native_text_cache_hits.add(1, native_platform_attrs());
             } else {
                 RasterizedTextRun rasterized;
                 if (!rasterize_text_run(
-                        run.text, run.len, run.font_size, run.mono,
+                        run.text, run.len, run.font_size, run.font_key,
                         run.line_height, scale, rasterized)) {
                     metrics::inst::native_text_cache_misses.add(1, native_platform_attrs());
                     continue;
@@ -3406,21 +3578,22 @@ inline bool prepare_text_instances(float scale) {
                 mark_text_cache_dirty(
                     cache, slot_x, slot_y, rasterized.pixel_width, rasterized.pixel_height);
 
-                cache.entries.push_back({
-                    std::string(run.text, run.len),
-                    font_key,
-                    line_height_key,
-                    scale_key,
-                    run.mono,
-                    rasterized.x_offset,
-                    rasterized.width,
-                    rasterized.height,
-                    static_cast<float>(slot_x) / TextAtlasCache::atlas_size,
-                    static_cast<float>(slot_y) / TextAtlasCache::atlas_size,
-                    static_cast<float>(rasterized.pixel_width) / TextAtlasCache::atlas_size,
-                    static_cast<float>(rasterized.pixel_height) / TextAtlasCache::atlas_size,
-                    rasterized.has_ink,
-                });
+                TextCacheEntry new_entry{};
+                new_entry.text.assign(run.text, run.len);
+                new_entry.font_size_key = font_size_key;
+                new_entry.line_height_key = line_height_key;
+                new_entry.scale_key = scale_key;
+                new_entry.mono = run.mono;
+                new_entry.x_offset = rasterized.x_offset;
+                new_entry.width = rasterized.width;
+                new_entry.height = rasterized.height;
+                new_entry.u = static_cast<float>(slot_x) / TextAtlasCache::atlas_size;
+                new_entry.v = static_cast<float>(slot_y) / TextAtlasCache::atlas_size;
+                new_entry.uw = static_cast<float>(rasterized.pixel_width) / TextAtlasCache::atlas_size;
+                new_entry.vh = static_cast<float>(rasterized.pixel_height) / TextAtlasCache::atlas_size;
+                new_entry.has_ink = rasterized.has_ink;
+                new_entry.font_key = run.font_key;
+                cache.entries.push_back(std::move(new_entry));
                 entry = &cache.entries.back();
                 metrics::inst::native_text_cache_misses.add(1, native_platform_attrs());
             }
@@ -5634,11 +5807,13 @@ inline RasterizedTextRunDebug rasterized_text_run_debug(std::string const& text,
         static_cast<unsigned int>(text.size()));
 
     detail::RasterizedTextRun rasterized;
+    detail::FontCacheKey key{};
+    key.mono = mono;
     if (!detail::rasterize_text_run(
             text.data(),
             static_cast<unsigned int>(text.size()),
             font_size,
-            mono,
+            key,
             line_height,
             scale,
             rasterized)) {
@@ -6374,7 +6549,7 @@ inline platform_api const& macos_platform() {
         {
             detail::text_init,
             detail::text_shutdown,
-            detail::text_measure,
+            detail::text_measure_api,
             detail::text_build_atlas,
         },
         {

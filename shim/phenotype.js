@@ -35,8 +35,23 @@ const measureCtx = measureCanvas.getContext('2d');
 const FONT_SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const FONT_MONO = '"SF Mono", "Fira Code", "Cascadia Code", monospace';
 
-function fontString(size, mono) {
-  return `${size}px ${mono ? FONT_MONO : FONT_SANS}`;
+// Build a CSS font string from FontSpec components. `family` is a
+// browser-side font family name (or empty / "system" for the default
+// stack). The `mono` flag selects a monospace default when family is
+// empty. `weight`/`italic` are booleans matching the wire-format flags
+// (bit 1 / bit 2 of the DrawText flags u32).
+function fontString(size, mono, weight, italic, family) {
+  const stylePart = italic ? 'italic ' : '';
+  const weightPart = weight ? 'bold ' : '';
+  let stack;
+  if (family && family.length > 0 && family !== 'system') {
+    // Quote the user-supplied family to keep names with spaces working.
+    const quoted = `"${family.replace(/"/g, '\\"')}"`;
+    stack = `${quoted}, ${mono ? FONT_MONO : FONT_SANS}`;
+  } else {
+    stack = mono ? FONT_MONO : FONT_SANS;
+  }
+  return `${stylePart}${weightPart}${size}px ${stack}`;
 }
 
 // --- WGSL Shaders ---
@@ -394,7 +409,10 @@ function createRenderer(device, context, canvas, format) {
         const padding = 2;
 
         for (const t of textEntries) {
-          const font = fontString(t.fontSize * dpr, t.mono);
+          const font = fontString(
+            t.fontSize * dpr, t.mono,
+            t.bold === true, t.italic === true,
+            t.family || '');
           atlasCtx.font = font;
           const metrics = atlasCtx.measureText(t.text);
           const tw = Math.ceil(metrics.width) + padding * 2;
@@ -674,13 +692,19 @@ function parseCommands(instance) {
         const x = view.getFloat32(pos, true); pos += 4;
         const y = view.getFloat32(pos, true); pos += 4;
         const fontSize = view.getFloat32(pos, true); pos += 4;
-        const mono = view.getUint32(pos, true); pos += 4;
+        const flags = view.getUint32(pos, true); pos += 4;
         const rgba = view.getUint32(pos, true); pos += 4;
+        const familyLen = view.getUint32(pos, true); pos += 4;
+        const family = familyLen > 0 ? readStr(pos, familyLen) : '';
+        pos = align4(pos + familyLen);
         const len = view.getUint32(pos, true); pos += 4;
         const text = readStr(pos, len);
         pos = align4(pos + len);
         const c = unpackColor(rgba);
-        texts.push({ x, y, fontSize, mono: !!mono, text, color: c });
+        const mono   = (flags & 1) !== 0;
+        const bold   = (flags & 2) !== 0;
+        const italic = (flags & 4) !== 0;
+        texts.push({ x, y, fontSize, mono, bold, italic, family, text, color: c });
         break;
       }
       case CMD_DRAW_LINE: {
@@ -894,10 +918,16 @@ export async function mount(wasmUrl, rootElement = document.body, extraImports =
   const phenotypeImports = {
     flush() { doFlush(); },
 
-    measure_text(fontSize, mono, textPtr, textLen) {
+    measure_text(fontSize, flags, familyPtr, familyLen, textPtr, textLen) {
       const bytes = new Uint8Array(getMemory().buffer);
       const text = new TextDecoder().decode(bytes.slice(textPtr, textPtr + textLen));
-      measureCtx.font = fontString(fontSize, mono);
+      const family = familyLen > 0
+        ? new TextDecoder().decode(bytes.slice(familyPtr, familyPtr + familyLen))
+        : '';
+      const mono   = (flags & 1) !== 0;
+      const bold   = (flags & 2) !== 0;
+      const italic = (flags & 4) !== 0;
+      measureCtx.font = fontString(fontSize, mono, bold, italic, family);
       return measureCtx.measureText(text).width;
     },
 

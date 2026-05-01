@@ -14,6 +14,7 @@ export module phenotype.native.platform;
 
 #if !defined(__wasi__)
 import phenotype.diag;
+import phenotype.types;
 
 export namespace phenotype::native {
 
@@ -29,18 +30,29 @@ struct TextAtlas {
     std::vector<TextQuad> quads;
 };
 
+// `family`, `weight`, `italic` track FontSpec for the rasterisation
+// pass; `mono` is retained as a quick monospace-default selector for
+// the common widget::text path that doesn't carry a family. Backends
+// merge family-based and mono-based defaults at acquire time.
 struct TextEntry {
     float x, y, font_size;
     bool mono;
     float r, g, b, a;
     std::string text;
     float line_height = 0;
+    std::string family;
+    FontWeight weight = FontWeight::Regular;
+    FontStyle  style  = FontStyle::Upright;
 };
 
 struct text_api {
     void (*init)() = nullptr;
     void (*shutdown)() = nullptr;
-    float (*measure)(float font_size, bool mono,
+    // Pixel width measurement. `flags` is bit0=mono, bit1=bold,
+    // bit2=italic — matches the wire format. `font_family` is a
+    // UTF-8 bytes/length pair (length 0 → backend default family).
+    float (*measure)(float font_size, unsigned int flags,
+                     char const* font_family, unsigned int family_len,
                      char const* text, unsigned int len) = nullptr;
     TextAtlas (*build_atlas)(std::vector<TextEntry> const& entries,
                              float backing_scale) = nullptr;

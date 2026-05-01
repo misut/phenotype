@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
@@ -22,7 +23,9 @@ extern "C" {
     extern unsigned int phenotype_cmd_len;
     // Stubs for WASM host imports — wasmtime has no JS shim.
     void phenotype_flush() {}
-    float phenotype_measure_text(float fs, unsigned int, char const*, unsigned int len) {
+    float phenotype_measure_text(float fs, unsigned int /*flags*/,
+                                  char const* /*family*/, unsigned int /*family_len*/,
+                                  char const* /*text*/, unsigned int len) {
         return static_cast<float>(len) * fs * 0.6f;
     }
     float phenotype_get_canvas_width() { return 800.0f; }
@@ -1349,6 +1352,80 @@ void test_row_props_default_and_override() {
 }
 
 // ============================================================
+// FontSpec wire-format round-trip
+// ============================================================
+
+void test_draw_text_roundtrip_with_fontspec() {
+    // null_host carries a 64 KB cmd buffer — even one instance on the
+    // stack overflows the default 64 KB wasm32-wasi stack. Allocate on
+    // the heap so the same test runs on both native and wasm targets.
+    auto host_owned = std::make_unique<null_host>();
+    auto& h = *host_owned;
+    h.flush();
+
+    // Three calls: bare default, mono+bold+italic with named family,
+    // and an empty-family Bold-only run.
+    emit_draw_text(h, 12.5f, 24.0f, 18.0f, /*flags=*/0u,
+                   Color{10, 20, 30, 255},
+                   std::string_view{}, "Hi", 2u);
+    emit_draw_text(h, 100.0f, 200.0f, 24.0f,
+                   /*flags=*/0b111u,                        // mono+bold+italic
+                   Color{200, 100, 50, 128},
+                   std::string_view{"Arial Black"},
+                   "World", 5u);
+    emit_draw_text(h, 0.0f, 0.0f, 16.0f,
+                   /*flags=*/0b010u,                        // bold only
+                   Color{255, 255, 255, 255},
+                   std::string_view{},
+                   "Bold", 4u);
+
+    auto cmds = parse_commands(h.buf(), h.buf_len());
+    assert(cmds.size() == 3);
+
+    auto const* a = std::get_if<DrawTextCmd>(&cmds[0]);
+    assert(a);
+    assert(a->x == 12.5f && a->y == 24.0f && a->font_size == 18.0f);
+    assert(!a->mono);
+    assert(a->weight == FontWeight::Regular);
+    assert(a->style  == FontStyle::Upright);
+    assert(a->family.empty());
+    assert(a->text == "Hi");
+    assert(a->color.r == 10 && a->color.g == 20 && a->color.b == 30 && a->color.a == 255);
+
+    auto const* b = std::get_if<DrawTextCmd>(&cmds[1]);
+    assert(b);
+    assert(b->x == 100.0f && b->y == 200.0f && b->font_size == 24.0f);
+    assert(b->mono);
+    assert(b->weight == FontWeight::Bold);
+    assert(b->style  == FontStyle::Italic);
+    assert(b->family == "Arial Black");
+    assert(b->text == "World");
+    assert(b->color.a == 128);
+
+    auto const* c = std::get_if<DrawTextCmd>(&cmds[2]);
+    assert(c);
+    assert(!c->mono);
+    assert(c->weight == FontWeight::Bold);
+    assert(c->style  == FontStyle::Upright);
+    assert(c->family.empty());
+    assert(c->text == "Bold");
+
+    // Cache key separates by FontSpec — same text + size at Regular vs
+    // Bold must miss each other.
+    detail::clear_measure_cache();
+    auto base = metrics::inst::measure_text_calls.total();
+    FontSpec const reg{};
+    FontSpec const bold{ {}, FontWeight::Bold, FontStyle::Upright, false };
+    detail::measure_text_cached(h, 16.0f, reg,  "abc", 3u);
+    detail::measure_text_cached(h, 16.0f, bold, "abc", 3u);
+    detail::measure_text_cached(h, 16.0f, reg,  "abc", 3u); // cache hit
+    auto delta = metrics::inst::measure_text_calls.total() - base;
+    assert(delta == 2);  // bold + first reg miss; second reg is a hit
+
+    std::puts("PASS: DrawText round-trips with FontSpec");
+}
+
+// ============================================================
 // Runner
 // ============================================================
 
@@ -1391,6 +1468,7 @@ int main() {
     test_space_value_resolves_each_token();
     test_column_props_default_and_override();
     test_row_props_default_and_override();
+    test_draw_text_roundtrip_with_fontspec();
     std::puts("\nAll tests passed.");
     return 0;
 }
