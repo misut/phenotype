@@ -431,10 +431,20 @@ template <render_backend R, text_measurer M>
 void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 float ox, float oy,
                 float scroll_x, float scroll_y,
-                float vp_width, float vp_height) {
+                float vp_width, float vp_height,
+                bool inside_scroll_container = false) {
     auto& node = node_at(node_h);
     float ax = ox + node.x;
     float ay = oy + node.y;
+
+    // A subtree rooted at (or under) a scroll_view is recorded with
+    // local-ambient scroll values that don't match `g_app.prev_scroll_y`
+    // (which only tracks the root). Skip the cache for such subtrees
+    // and never record paint_valid for their nodes — re-walk every
+    // frame. The blit cache for nodes outside scroll views still works
+    // unchanged.
+    bool const effective_inside =
+        inside_scroll_container || node.is_scroll_container;
 
     if (node.children.empty()) {
         if (ay + node.height < scroll_y || ay > scroll_y + vp_height) return;
@@ -448,7 +458,8 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     // Byte-exact reuse: the bytes were emitted with identical ax/ay/
     // scroll_x/scroll_y and no intersecting hover/focus transition, so
     // they are byte-for-byte what this walk would produce.
-    if (node.layout_valid && node.paint_valid
+    if (!effective_inside
+        && node.layout_valid && node.paint_valid
         && !node.paint_fn
         && !node.paint_dynamic
         && ax == node.paint_ax
@@ -809,7 +820,18 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     }
 
     if (node.callback_id != 0xFFFFFFFF) {
-        emit_hit_region(r, ax, ay, node.width, node.height,
+        // hit_test compares the cursor against HitRegion rects after
+        // adding the *global* scroll back, so a child of a scroll_view
+        // whose region was emitted at raw layout coords would miss
+        // when its container is scrolled. Subtract just the *inner*
+        // scroll (ambient minus global) so the rect lines up with the
+        // visual position once hit_test re-applies global. Root
+        // children always have inner == 0 and so emit at the
+        // unchanged (ax, ay).
+        float inner_scroll_x = scroll_x - g_app.scroll_x;
+        float inner_scroll_y = scroll_y - g_app.scroll_y;
+        emit_hit_region(r, ax - inner_scroll_x, ay - inner_scroll_y,
+                        node.width, node.height,
                         node.callback_id, node.cursor_type);
     }
 
@@ -827,6 +849,48 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         g_app.gesture_target_y  = ay;
         g_app.gesture_target_w  = node.width;
         g_app.gesture_target_h  = node.height;
+    }
+
+    // Scroll viewport setup. Clamp the offset against this frame's
+    // measured content_height so a layout shrink (or a wheel write
+    // that didn't see the latest content) can't leave the viewport
+    // pointing past its content. The clamped value also feeds the
+    // child-scroll passed into the recursion below; we write back
+    // through `node.scroll_state` so the next wheel event reads from
+    // the same clamped value.
+    float child_scroll_x = scroll_x;
+    float child_scroll_y = scroll_y;
+    bool emit_scroll_scissor = false;
+    if (node.is_scroll_container && node.scroll_state) {
+        float max_off = std::max(0.0f, node.content_height - node.height);
+        float& off = node.scroll_state->offset_y;
+        if (off < 0.0f) off = 0.0f;
+        if (off > max_off) off = max_off;
+        node.scroll_offset_y = off;
+        child_scroll_y = scroll_y + off;
+
+        AppState::ScrollTarget tgt;
+        tgt.x = ax - scroll_x;
+        tgt.y = ay - scroll_y;
+        tgt.w = node.width;
+        tgt.h = node.height;
+        tgt.state = node.scroll_state;
+        tgt.content_height = node.content_height;
+        g_app.scroll_targets.push_back(tgt);
+
+        // Scissor the viewport so children that scroll past the rect
+        // get clipped. Skip when already nested in another scissor —
+        // backends can't stack regions; the outer one wins. Inner
+        // scroll_views that lose the scissor still scroll correctly,
+        // they just visually bleed past the inner viewport's edges
+        // (rare in practice; documented limitation).
+        if (g_app.paint_scissor_depth == 0) {
+            emit_scissor(r, ax - scroll_x, ay - scroll_y,
+                         node.width, node.height);
+            ++g_app.paint_scissor_depth;
+            emit_scroll_scissor = true;
+            metrics::inst::scissor_emitted.add();
+        }
     }
 
     // Dirty-root detection for scissor. A child is a dirty root when
@@ -851,15 +915,16 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             && g_app.paint_scissor_depth == 0;
 
         if (child_is_dirty_root) {
-            float cx = ax + child.x - scroll_x;
-            float cy = ay + child.y - scroll_y;
+            float cx = ax + child.x - child_scroll_x;
+            float cy = ay + child.y - child_scroll_y;
             emit_scissor(r, cx, cy, child.width, child.height);
             ++g_app.paint_scissor_depth;
             metrics::inst::scissor_emitted.add();
         }
 
         paint_node(r, measurer, child_h, ax, ay,
-                   scroll_x, scroll_y, vp_width, vp_height);
+                   child_scroll_x, child_scroll_y, vp_width, vp_height,
+                   effective_inside);
         subtree_mask |= node_at(child_h).paint_callback_mask;
         subtree_dynamic = subtree_dynamic || node_at(child_h).paint_dynamic;
 
@@ -867,6 +932,11 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             emit_scissor_reset(r);
             --g_app.paint_scissor_depth;
         }
+    }
+
+    if (emit_scroll_scissor) {
+        emit_scissor_reset(r);
+        --g_app.paint_scissor_depth;
     }
 
     // Record paint-cache state for the next frame's diff to copy and
@@ -877,9 +947,15 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     // where a mid-walk flush was followed by enough re-emit to make
     // after >= before numerically, which the `after >= before` check
     // alone would silently accept as valid.
+    //
+    // Subtrees inside (or rooting) a scroll_view never record paint
+    // state — the cache invariant doesn't track per-node ambient
+    // scroll, so a blit on a later frame with a different scroll
+    // offset would render stale draw positions.
     auto const after = r.buf_len();
     node.paint_dynamic = subtree_dynamic;
-    if (!subtree_dynamic && after >= before
+    if (!effective_inside
+        && !subtree_dynamic && after >= before
         && g_app.paint_flush_epoch == entry_flush_epoch) {
         node.paint_offset = before;
         node.paint_length = after - before;

@@ -554,6 +554,19 @@ public:
     virtual void fill_path(PathBuilder const& path, Color color) = 0;
 };
 
+// ScrollState — `layout::scroll_view`'s persistent state, kept in the
+// framework_local store keyed by the scroll_view's call site. Wheel
+// dispatch writes `offset_y` (clamped to [0, content_height -
+// container_height]); paint reads it to translate children. Storing
+// pointers from the framework_local store directly on LayoutNode is
+// safe within one frame — the heap-allocated payload outlives prune
+// for any widget visited that frame, and view re-runs on every frame
+// so the ptr is freshly resolved before paint reads it.
+struct ScrollState {
+    float offset_x = 0;
+    float offset_y = 0;
+};
+
 struct LayoutNode {
     // Style
     Style style;
@@ -608,6 +621,19 @@ struct LayoutNode {
     // gesture handler on this node. Platform input backends look up
     // the active canvas's bounds via this id at dispatch time.
     unsigned int gesture_callback_id = 0xFFFFFFFFu;
+
+    // Scroll container — set by `layout::scroll_view`. Children lay out
+    // at the container's inner width (no shrink-to-fit) but their total
+    // height is recorded in `content_height` rather than expanding the
+    // node, so `style.fixed_height` defines a viewport that clips the
+    // overflow. Paint translates children by `scroll_offset_y` and
+    // emits a Scissor for the viewport rect; wheel dispatch routes
+    // deltas into `scroll_state` (a pointer into framework_local) and
+    // clamps to [0, content_height - height].
+    bool         is_scroll_container = false;
+    float        content_height      = 0.0f;
+    float        scroll_offset_y     = 0.0f;
+    ScrollState* scroll_state        = nullptr;
 
     // Computed layout
     float x = 0, y = 0, width = 0, height = 0;

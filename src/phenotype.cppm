@@ -550,6 +550,7 @@ void run(Host& host, View view, Update update) {
         app.callback_roles.clear();
         app.gesture_callbacks.clear();
         app.gesture_target_id = 0xFFFFFFFFu;
+        app.scroll_targets.clear();
         app.input_handlers.clear();
         app.input_nodes.clear();
 
@@ -670,6 +671,7 @@ void run(View view, Update update) {
         app.callback_roles.clear();
         app.gesture_callbacks.clear();
         app.gesture_target_id = 0xFFFFFFFFu;
+        app.scroll_targets.clear();
         app.input_handlers.clear();
         app.input_nodes.clear();
 
@@ -907,6 +909,45 @@ void padded(SpaceToken padding, F&& builder) {
     node.style.padding[1] = p;
     node.style.padding[2] = p;
     node.style.padding[3] = p;
+    detail::open_container(h, std::forward<F>(builder));
+}
+
+// scroll_view — fixed-height vertical viewport whose contents scroll
+// when their natural total exceeds the viewport. The scroll offset is
+// kept in framework_local keyed by this call site, so each view rebuild
+// reads back the same offset and persistence is automatic. Wheel
+// events with the cursor over the viewport route here (clamped to
+// [0, content_height - height]); wheel events outside fall back to
+// the root scroll. Padding is applied inside the viewport and counts
+// toward the viewport's total height — `fixed_height` measures the
+// inner content area, matching the rest of the DSL's `style.fixed_height`
+// convention.
+//
+// Limitations (deferred to follow-up PRs):
+//   * vertical only — horizontal wheel/x scroll is not propagated yet.
+//   * Nested scroll_views work for hit-test routing but the inner one
+//     loses its scissor when an outer scissor is already active
+//     (graphics backends don't stack scissor regions).
+//   * Keyboard-driven scroll (PageUp/Down, arrow keys) targets only
+//     the root document; per-viewport keyboard scroll lands later.
+template<typename F>
+    requires std::is_invocable_v<F>
+void scroll_view(float fixed_height, F&& builder,
+                 SpaceToken gap = SpaceToken::Md) {
+    // Reading framework_local in the *parent* scope (before
+    // open_container pushes a new one) lets sibling scroll_views at
+    // the same source_location disambiguate via the parent's
+    // per-call-site counter, the same way sibling button/text would.
+    auto& state = framework_local<ScrollState>();
+
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    node.style.flex_direction = FlexDirection::Column;
+    node.style.gap = space_value(gap);
+    node.style.fixed_height = fixed_height;
+    node.is_scroll_container = true;
+    node.scroll_state = &state;
+    node.scroll_offset_y = state.offset_y;
     detail::open_container(h, std::forward<F>(builder));
 }
 

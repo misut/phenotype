@@ -154,6 +154,12 @@ struct AppState {
     native_host* host = nullptr;
     float scroll_x = 0.0f;
     float scroll_y = 0.0f;
+    // Last cursor position seen by `dispatch_cursor_pos` — wheel events
+    // arrive without an attached cursor location, so the scroll
+    // dispatcher uses these to hit-test against `g_app.scroll_targets`
+    // before falling back to the root document scroll.
+    float last_mouse_x = 0.0f;
+    float last_mouse_y = 0.0f;
     unsigned int hovered_id = invalid_callback_id;
     bool drag_selecting = false;
     unsigned int drag_selection_id = invalid_callback_id;
@@ -248,6 +254,8 @@ inline void bind_host(native_host& host,
         &host,
         scroll_x,
         scroll_y,
+        0.0f,                     // last_mouse_x
+        0.0f,                     // last_mouse_y
         invalid_callback_id,
         false,
         invalid_callback_id,
@@ -607,6 +615,8 @@ inline bool dispatch_mouse_button(float mx, float my,
 }
 
 inline bool dispatch_cursor_pos(float mx, float my) {
+    g_app_state.last_mouse_x = mx;
+    g_app_state.last_mouse_y = my;
     if (g_app_state.host && g_app_state.host->platform
         && g_app_state.host->platform->input.handle_cursor_pos
         && g_app_state.host->platform->input.handle_cursor_pos(mx, my)) {
@@ -650,6 +660,45 @@ inline bool dispatch_cursor_pos(float mx, float my) {
     return handled;
 }
 
+// Try to route `delta_pixels` into the topmost scroll_view whose
+// painted rect contains the cursor. Walk in reverse because paint_node
+// pushes scroll_targets in z-order ascending (innermost / latest =
+// last entry), so the reverse pass picks the visually-frontmost one
+// first. Returns true when a scroll_view consumed the delta — the
+// caller suppresses the root-scroll fallback in that case.
+inline bool dispatch_scroll_in_view(float mx, float my, float delta_pixels) {
+    auto& targets = ::phenotype::detail::g_app.scroll_targets;
+    if (targets.empty() || delta_pixels == 0.0f) return false;
+    for (std::size_t i = targets.size(); i-- > 0; ) {
+        auto& tgt = targets[i];
+        if (mx < tgt.x || mx > tgt.x + tgt.w
+            || my < tgt.y || my > tgt.y + tgt.h)
+            continue;
+        if (!tgt.state) continue;
+        float max_off = tgt.content_height - tgt.h;
+        if (max_off < 0.0f) max_off = 0.0f;
+        float prev = tgt.state->offset_y;
+        // Sign convention mirrors `dispatch_scroll_pixels` for the
+        // root scroll: a positive `delta_pixels` (wheel rolled forward,
+        // platform-normalised) moves us toward the top, so the offset
+        // decreases.
+        float next = prev - delta_pixels;
+        if (next < 0.0f) next = 0.0f;
+        if (next > max_off) next = max_off;
+        if (next == prev) {
+            ::phenotype::detail::note_input_event(
+                "scroll", "shell", "wheel-view", "ignored", invalid_callback_id);
+            return true;
+        }
+        tgt.state->offset_y = next;
+        repaint_current();
+        ::phenotype::detail::note_input_event(
+            "scroll", "shell", "wheel-view", "handled", invalid_callback_id);
+        return true;
+    }
+    return false;
+}
+
 inline bool dispatch_scroll(double dy, float viewport_height_value) {
     auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
     float scroll_delta = normalize_scroll_delta(
@@ -661,6 +710,11 @@ inline bool dispatch_scroll(double dy, float viewport_height_value) {
         ::phenotype::detail::note_input_event(
             "scroll", "shell", "wheel", "ignored", invalid_callback_id);
         return false;
+    }
+    if (dispatch_scroll_in_view(g_app_state.last_mouse_x,
+                                g_app_state.last_mouse_y,
+                                scroll_delta)) {
+        return true;
     }
     return dispatch_scroll_pixels(scroll_delta,
                                   viewport_height_value,
