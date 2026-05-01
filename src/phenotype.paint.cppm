@@ -497,10 +497,11 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             float cx = draw_x + node.width * 0.5f;
             float cy = draw_y + node.height * 0.5f;
             float u  = node.width;
+            float stroke = std::max(u * 0.125f, 1.0f);
             emit_draw_line(r, cx - u * 0.25f, cy + u * 0.02f,
-                           cx - u * 0.05f, cy + u * 0.18f, 2.0f, decoration_color);
+                           cx - u * 0.05f, cy + u * 0.18f, stroke, decoration_color);
             emit_draw_line(r, cx - u * 0.05f, cy + u * 0.18f,
-                           cx + u * 0.28f, cy - u * 0.18f, 2.0f, decoration_color);
+                           cx + u * 0.28f, cy - u * 0.18f, stroke, decoration_color);
         } else {
             float dot = node.width * 0.4f;
             float dx  = draw_x + (node.width  - dot) * 0.5f;

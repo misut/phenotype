@@ -631,19 +631,23 @@ void test_checkbox_and_radio_widgets() {
     assert(root.children.size() == 4);
 
     auto check_widget = [](NodeHandle row_h, bool active, float radius,
-                           Decoration expected_decoration) {
+                           Decoration expected_decoration,
+                           InteractionRole expected_role) {
         auto& row = detail::node_at(row_h);
         assert(row.style.flex_direction == FlexDirection::Row);
-        assert(row.callback_id == 0xFFFFFFFF);
+        assert(row.callback_id != 0xFFFFFFFF);
+        assert(row.cursor_type == 1);
+        assert(row.focusable == true);
+        assert(row.interaction_role == expected_role);
         assert(row.children.size() == 2);
 
         auto& box = detail::node_at(row.children[0]);
         assert(box.style.max_width == 16.0f);
         assert(box.style.fixed_height == 16.0f);
         assert(box.border_radius == radius);
-        assert(box.callback_id != 0xFFFFFFFF);
-        assert(box.cursor_type == 1);
-        assert(box.focusable == true);
+        assert(box.callback_id == 0xFFFFFFFF);
+        assert(box.cursor_type == 0);
+        assert(box.interaction_role == InteractionRole::None);
         if (active) {
             assert(box.background.r == detail::g_app.theme.accent.r);
             assert(box.background.g == detail::g_app.theme.accent.g);
@@ -660,24 +664,28 @@ void test_checkbox_and_radio_widgets() {
 
         auto& lbl = detail::node_at(row.children[1]);
         assert(!lbl.text.empty());
-        assert(lbl.callback_id == box.callback_id);
-        assert(lbl.cursor_type == 1);
+        assert(lbl.callback_id == 0xFFFFFFFF);
+        assert(lbl.cursor_type == 0);
         assert(lbl.focusable == false);
     };
 
-    check_widget(root.children[0], false, detail::g_app.theme.radius_xs, Decoration::Check);
-    check_widget(root.children[1], true,  detail::g_app.theme.radius_xs, Decoration::Check);
-    check_widget(root.children[2], false, detail::g_app.theme.radius_lg, Decoration::Dot);
-    check_widget(root.children[3], true,  detail::g_app.theme.radius_lg, Decoration::Dot);
+    check_widget(root.children[0], false, detail::g_app.theme.radius_xs,
+                 Decoration::Check, InteractionRole::Checkbox);
+    check_widget(root.children[1], true,  detail::g_app.theme.radius_xs,
+                 Decoration::Check, InteractionRole::Checkbox);
+    check_widget(root.children[2], false, detail::g_app.theme.radius_lg,
+                 Decoration::Dot,   InteractionRole::Radio);
+    check_widget(root.children[3], true,  detail::g_app.theme.radius_lg,
+                 Decoration::Dot,   InteractionRole::Radio);
 
-    auto cb_id_a = detail::node_at(detail::node_at(root.children[0]).children[0]).callback_id;
+    auto cb_id_a = detail::node_at(root.children[0]).callback_id;
     detail::g_app.callbacks[cb_id_a]();
     auto msgs = detail::drain<Msg>();
     assert(msgs.size() == 1);
     assert(std::holds_alternative<ToggleA>(msgs[0]));
 
-    auto lbl_id_b = detail::node_at(detail::node_at(root.children[3]).children[1]).callback_id;
-    detail::g_app.callbacks[lbl_id_b]();
+    auto cb_id_b = detail::node_at(root.children[3]).callback_id;
+    detail::g_app.callbacks[cb_id_b]();
     auto msgs2 = detail::drain<Msg>();
     assert(msgs2.size() == 1);
     assert(std::holds_alternative<PickB>(msgs2[0]));
@@ -693,8 +701,30 @@ void test_checkbox_and_radio_widgets() {
         std::memcpy(&word, &CMD_BUF[i], 4);
         if (word == static_cast<unsigned int>(Cmd::HitRegion)) ++hit_regions;
     }
-    assert(hit_regions == 8);
+    assert(hit_regions == 4);
     assert(detail::g_app.focusable_ids.size() == 4);
+
+    // theme.toggle_box_size drives the box visual size. Override to a
+    // touch-friendly 44 dp and confirm the laid-out box picks it up.
+    float saved_size = detail::g_app.theme.toggle_box_size;
+    detail::g_app.theme.toggle_box_size = 44.0f;
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+    auto root2_h = detail::alloc_node();
+    detail::node_at(root2_h).style.flex_direction = FlexDirection::Column;
+    {
+        Scope scope2(root2_h);
+        Scope::set_current(&scope2);
+        widget::checkbox<Msg>("Touch", false, ToggleA{});
+        Scope::set_current(nullptr);
+    }
+    LAYOUT_NODE(root2_h, 400.0f);
+    auto& touch_row = detail::node_at(detail::node_at(root2_h).children[0]);
+    auto& touch_box = detail::node_at(touch_row.children[0]);
+    assert(touch_box.style.max_width == 44.0f);
+    assert(touch_box.style.fixed_height == 44.0f);
+    detail::g_app.theme.toggle_box_size = saved_size;
 
     std::puts("PASS: checkbox + radio widgets");
 }
