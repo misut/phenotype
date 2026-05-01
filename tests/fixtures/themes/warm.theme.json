@@ -216,6 +216,7 @@
   "code_font_size": 14.4,
   "small_font_size": 14.4,
   "max_content_width": 720,
+  "toggle_box_size": 16,
   "radius_xs": 3,
   "radius_sm": 2,
   "radius_md": 3,

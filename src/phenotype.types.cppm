@@ -69,6 +69,11 @@ struct Theme {
     // Layout
     float max_content_width  = 720.0f;
 
+    // Box visual size for widget::checkbox / widget::radio. 16 dp default
+    // matches the desktop look; touch-first hosts (Android) bump this to
+    // 44 dp at app startup via phenotype::set_theme.
+    float toggle_box_size    = 16.0f;
+
     // Radius scale (mirrors phenotype-web's "angular over rounded" defaults)
     float radius_xs   = 3.0f;
     float radius_sm   = 2.0f;

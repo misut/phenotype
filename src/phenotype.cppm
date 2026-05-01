@@ -317,6 +317,10 @@ inline void toggle(str label, bool active, Msg msg,
         row.style.flex_direction = FlexDirection::Row;
         row.style.cross_align    = CrossAxisAlignment::Center;
         row.style.gap            = ::phenotype::detail::g_app.theme.space_sm;
+        row.cursor_type          = 1;
+        row.callback_id          = id;
+        row.interaction_role     = role;
+        row.focusable            = true;
         row.debug_semantic_role = interaction_role_name(role);
         row.debug_semantic_label = std::string(label.data, label.len);
         row.debug_semantic_callback_id = id;
@@ -333,12 +337,10 @@ inline void toggle(str label, bool active, Msg msg,
     {
         auto box_h = ::phenotype::detail::alloc_node();
         auto& box  = ::phenotype::detail::node_at(box_h);
-        box.style.max_width    = 16;
-        box.style.fixed_height = 16;
+        float box_size = ::phenotype::detail::g_app.theme.toggle_box_size;
+        box.style.max_width    = box_size;
+        box.style.fixed_height = box_size;
         box.border_radius      = corner_radius;
-        box.cursor_type        = 1;
-        box.callback_id        = id;
-        box.interaction_role   = role;
         box.debug_semantic_hidden = true;
         if (active) {
             box.background   = ::phenotype::detail::g_app.theme.accent;
@@ -358,10 +360,7 @@ inline void toggle(str label, bool active, Msg msg,
         lbl.text        = std::string(label.data, label.len);
         lbl.font_size   = ::phenotype::detail::g_app.theme.body_font_size;
         lbl.text_color  = ::phenotype::detail::g_app.theme.foreground;
-        lbl.cursor_type = 1;
-        lbl.callback_id = id;
         lbl.focusable   = false;
-        lbl.interaction_role = role;
         lbl.debug_semantic_hidden = true;
         ::phenotype::detail::append_child(row_h, lbl_h);
     }
