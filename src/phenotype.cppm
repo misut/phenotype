@@ -1096,6 +1096,59 @@ void overlay(F&& builder) {
     Scope::set_current(prev);
 }
 
+// dialog — modal helper built on top of `overlay`. Pushes a top-
+// padding spacer, then a row whose `MainAxisAlignment::Center`
+// horizontally centres a `max_width`-bounded card hosting the
+// builder's content. The card chrome (rounded corners, surface
+// background, subtle border, generous inner padding) matches the
+// rest of the design system's surface treatment.
+//
+// Visibility is the caller's call: invoke `layout::dialog(...)`
+// when your `State` says the dialog is open, skip it when it's
+// closed. The Esc key already drops focus through the existing
+// shell handler — wiring "Esc closes the dialog" still belongs in
+// the user's `update`, but it's a one-line `Msg::Close` post.
+//
+// Backdrop / dismiss-on-backdrop-click waits on the animation
+// auto-tick and per-overlay click handlers — a follow-up PR will
+// layer those features under the same `dialog` name without
+// breaking this signature.
+template<typename F>
+    requires std::is_invocable_v<F>
+void dialog(F&& builder,
+            float max_width = 360.0f,
+            unsigned int top_padding = 96) {
+    overlay([&] {
+        // Inline spacer — `layout::spacer` is defined later in the
+        // file and unqualified lookup at template-parse time can't
+        // see it from here.
+        {
+            auto sp_h = detail::alloc_node();
+            detail::node_at(sp_h).style.fixed_height
+                = static_cast<float>(top_padding);
+            detail::attach_to_scope(sp_h);
+        }
+        row([&] {
+            sized_box(max_width, [&] {
+                auto card_h = detail::alloc_node();
+                auto& card = detail::node_at(card_h);
+                auto const& t = detail::g_app.theme;
+                card.style.flex_direction = FlexDirection::Column;
+                card.style.gap = t.space_md;
+                card.style.padding[0] = t.space_lg;
+                card.style.padding[1] = t.space_lg;
+                card.style.padding[2] = t.space_lg;
+                card.style.padding[3] = t.space_lg;
+                card.background = t.surface;
+                card.border_color = t.border;
+                card.border_width = 1;
+                card.border_radius = t.radius_lg;
+                detail::open_container(card_h, std::forward<F>(builder));
+            });
+        }, SpaceToken::Md, CrossAxisAlignment::Start, MainAxisAlignment::Center);
+    });
+}
+
 // scroll_view — fixed-height vertical viewport whose contents scroll
 // when their natural total exceeds the viewport. The scroll offset is
 // kept in framework_local keyed by this call site, so each view rebuild
