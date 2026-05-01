@@ -745,8 +745,14 @@ T& framework_local(T initial = T{},
         e.storage = p;
         e.deleter = [](void* ptr) { delete static_cast<T*>(ptr); };
         e.type_id = tag;
-        auto [iter, _] = store.emplace(widget_id, std::move(e));
-        return *static_cast<T*>(iter->second.storage);
+        // MSVC's modules implementation requires the tuple-like
+        // specialisations for std::pair to be reachable from the
+        // template's instantiation TU before structured bindings
+        // are accepted; explicit `.first` member access dodges the
+        // requirement so widget consumers don't transitively need
+        // to import <utility>.
+        auto result = store.emplace(widget_id, std::move(e));
+        return *static_cast<T*>(result.first->second.storage);
     }
     if (it->second.type_id != tag) {
         log::error("phenotype.framework_local",
