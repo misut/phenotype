@@ -551,6 +551,7 @@ void run(Host& host, View view, Update update) {
         app.gesture_callbacks.clear();
         app.gesture_target_id = 0xFFFFFFFFu;
         app.scroll_targets.clear();
+        app.overlays.clear();
         app.input_handlers.clear();
         app.input_nodes.clear();
 
@@ -583,6 +584,8 @@ void run(Host& host, View view, Update update) {
 
         float cw = host.canvas_width();
         detail::layout_node(host, root_h, cw);
+        for (auto overlay_h : app.overlays)
+            detail::layout_node(host, overlay_h, cw);
         auto t3 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t3 - t2, {{"phase", "layout"}});
 
@@ -610,12 +613,21 @@ void run(Host& host, View view, Update update) {
 
         app.focusable_ids.clear();
         detail::collect_focusable_ids(root_h);
+        for (auto overlay_h : app.overlays)
+            detail::collect_focusable_ids(overlay_h);
         emit_clear(host, app.theme.background);
         float vh = host.canvas_height();
         app.debug_viewport_width = cw;
         app.debug_viewport_height = vh;
         detail::paint_node(host, host, root_h, 0, 0,
                            app.scroll_x, app.scroll_y, cw, vh);
+        // Overlays paint after the main tree with no ambient scroll
+        // applied — they sit on top of everything and stay fixed when
+        // the document scrolls underneath.
+        for (auto overlay_h : app.overlays) {
+            detail::paint_node(host, host, overlay_h, 0, 0,
+                               0.0f, 0.0f, cw, vh);
+        }
         auto t4 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t4 - t3, {{"phase", "paint"}});
 
@@ -672,6 +684,7 @@ void run(View view, Update update) {
         app.gesture_callbacks.clear();
         app.gesture_target_id = 0xFFFFFFFFu;
         app.scroll_targets.clear();
+        app.overlays.clear();
         app.input_handlers.clear();
         app.input_nodes.clear();
 
@@ -700,6 +713,8 @@ void run(View view, Update update) {
 
         float cw = phenotype_get_canvas_width();
         detail::layout_node(root_h, cw);
+        for (auto overlay_h : app.overlays)
+            detail::layout_node(overlay_h, cw);
         auto t3 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t3 - t2, {{"phase", "layout"}});
 
@@ -720,12 +735,20 @@ void run(View view, Update update) {
 
         app.focusable_ids.clear();
         detail::collect_focusable_ids(root_h);
+        for (auto overlay_h : app.overlays)
+            detail::collect_focusable_ids(overlay_h);
         detail::wasi_emit_clear(app.theme.background);
         float vh = phenotype_get_canvas_height();
         app.debug_viewport_width = cw;
         app.debug_viewport_height = vh;
         detail::wasi_paint_node(root_h, 0, 0,
                                 app.scroll_x, app.scroll_y, cw, vh);
+        // Overlays paint on top of the main tree with no ambient
+        // scroll — see native runner for the same logic.
+        for (auto overlay_h : app.overlays) {
+            detail::wasi_paint_node(overlay_h, 0, 0,
+                                    0.0f, 0.0f, cw, vh);
+        }
         auto t4 = metrics::detail::now_ns();
         metrics::inst::phase_duration.record(t4 - t3, {{"phase", "paint"}});
 
@@ -931,6 +954,40 @@ void weighted(float grow, F&& builder) {
     auto& node = detail::node_at(h);
     node.style.flex_grow = grow;
     detail::open_container(h, std::forward<F>(builder));
+}
+
+// overlay — render `builder`'s contents above the main tree, after
+// the rest of the UI has been laid out and painted. The overlay is
+// the foundation for dialogs, popovers, tooltips, snackbars, and
+// dropdowns: HitRegions emitted from inside it land last in the
+// command buffer so reverse-iteration hit_test finds them first
+// (clicks on the overlay are not stolen by underlying widgets), and
+// draw commands paint over the main content.
+//
+// Overlays are *not* attached to the parent scope — they're root-
+// level alternates collected on `g_app.overlays`. The runner lays
+// each one out at the canvas width and paints them with no scroll
+// applied, so an overlay stays fixed on screen even when the root
+// document is scrolled.
+//
+// Positioning is up to the caller for now: an overlay starts at
+// (0, 0) with the canvas width and lays out its children in column
+// order. Higher-level wrappers (`layout::dialog`,
+// `layout::tooltip`, `layout::snackbar`) for the common positioning
+// patterns will land in follow-up PRs once the foundation here is
+// exercised.
+template<typename F>
+    requires std::is_invocable_v<F>
+void overlay(F&& builder) {
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    node.style.flex_direction = FlexDirection::Column;
+    detail::g_app.overlays.push_back(h);
+    Scope scope(h);
+    auto* prev = Scope::current();
+    Scope::set_current(&scope);
+    builder();
+    Scope::set_current(prev);
 }
 
 // scroll_view — fixed-height vertical viewport whose contents scroll
