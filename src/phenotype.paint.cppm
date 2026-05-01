@@ -984,13 +984,26 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             }
         };
 
+        // Use the scroll-adjusted `draw_x/y` (not the layout-frame
+        // `ax/ay`) for both the wire-format scissor and the
+        // PainterImpl's clip rect. Backends rasterise into the
+        // framebuffer's surface space — `setScissorRect` /
+        // `vkCmdSetScissor` need post-scroll pixel coords, and the
+        // CPU-side cull paths must match the same space the painter
+        // draws into (`origin_x/y == draw_x/y`). Earlier code passed
+        // `ax/ay` here, which left the clip pinned to the canvas's
+        // unscrolled position — once the user scrolled, the painter's
+        // emit positions slid up by `scroll_y` while the clip stayed
+        // at the canvas's original top, masking the top of the
+        // drawing and leaking a horizontal band of "frozen" content.
         bool emit_canvas_scissor = (g_app.paint_scissor_depth == 0);
         if (emit_canvas_scissor) {
-            emit_scissor(r, ax, ay, node.width, node.height);
+            emit_scissor(r, draw_x, draw_y, node.width, node.height);
             ++g_app.paint_scissor_depth;
             metrics::inst::scissor_emitted.add();
         }
-        PainterImpl painter(r, measurer, draw_x, draw_y, ax, ay,
+        PainterImpl painter(r, measurer, draw_x, draw_y,
+                            draw_x, draw_y,
                             node.width, node.height);
         node.paint_fn(painter);
         if (emit_canvas_scissor) {
