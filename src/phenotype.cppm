@@ -647,6 +647,83 @@ inline void switch_(str label, bool on, Msg msg) {
     }
 }
 
+// tabs — segmented row of buttons that posts `on_select(i)` when the
+// user picks tab `i`. The currently-selected index is supplied by the
+// caller (typically lifted into user `State`), so the widget itself
+// stays stateless — `Msg`/`update` round-trip is the source of truth.
+//
+// Visual chrome is the design system's "pill" treatment: a code_bg-
+// filled outer row with rounded corners; the selected button paints
+// in `theme.accent` with `theme.state_active_fg` text, unselected
+// buttons stay transparent with muted text and a hover background.
+//
+// Each tab is focusable, so Tab/Enter cycling lands on a tab and
+// activates it via the same handler the pointer click fires. The
+// callback is a stateless lambda that decays to a function pointer
+// so the `Msg(*)(std::size_t)` signature stays terse at the call
+// site.
+template<typename Msg>
+inline void tabs(std::vector<str> const& items,
+                 std::size_t selected,
+                 Msg (*on_select)(std::size_t)) {
+    auto const& t = detail::g_app.theme;
+
+    auto row_h = detail::alloc_node();
+    {
+        auto& row = detail::node_at(row_h);
+        row.style.flex_direction = FlexDirection::Row;
+        row.style.gap = t.space_xs;
+        row.background = t.code_bg;
+        row.border_radius = t.radius_md;
+        row.style.padding[0] = t.space_xs;
+        row.style.padding[1] = t.space_xs;
+        row.style.padding[2] = t.space_xs;
+        row.style.padding[3] = t.space_xs;
+    }
+    detail::attach_to_scope(row_h);
+
+    for (std::size_t i = 0; i < items.size(); ++i) {
+        bool is_selected = (i == selected);
+        auto id = static_cast<unsigned int>(
+            detail::g_app.callbacks.size());
+
+        auto btn_h = detail::alloc_node();
+        {
+            auto& btn = detail::node_at(btn_h);
+            btn.text = std::string(items[i].data, items[i].len);
+            btn.font_size = t.body_font_size;
+            btn.text_color = is_selected
+                ? t.state_active_fg
+                : t.muted;
+            btn.background = is_selected ? t.accent : t.transparent;
+            btn.hover_background = is_selected
+                ? t.accent
+                : t.state_hover_bg;
+            btn.border_radius = t.radius_sm;
+            btn.style.padding[0] = t.space_xs;
+            btn.style.padding[1] = t.space_md;
+            btn.style.padding[2] = t.space_xs;
+            btn.style.padding[3] = t.space_md;
+            btn.cursor_type = 1;
+            btn.callback_id = id;
+            btn.interaction_role = InteractionRole::Button;
+            btn.focusable = true;
+            btn.debug_semantic_role = "tab";
+            btn.debug_semantic_label =
+                std::string(items[i].data, items[i].len);
+            btn.debug_semantic_callback_id = id;
+            btn.debug_semantic_focusable = true;
+        }
+        detail::append_child(row_h, btn_h);
+
+        detail::g_app.callbacks.push_back([on_select, idx = i] {
+            detail::post<Msg>(on_select(idx));
+            detail::trigger_rebuild();
+        });
+        detail::g_app.callback_roles.push_back(InteractionRole::Button);
+    }
+}
+
 } // namespace widget
 
 // ============================================================
