@@ -1,9 +1,12 @@
 module;
+#include <cstddef>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
 #include <functional>
+#include <map>
 #include <new>
+#include <source_location>
 #include <string>
 #include <utility>
 #include <vector>
@@ -325,6 +328,133 @@ namespace detail {
         if (g_app.app_runner) g_app.app_runner();
     }
 
+    // ============================================================
+    // framework_local — call-site-positional widget state store
+    // ============================================================
+    //
+    // Supplies a per-widget escape hatch from the single-AppState rule.
+    // Use cases like a ScrollView's scroll offset, an Accordion's open
+    // flag, a Tooltip's hover-delay timer, or a Dropdown's menu state
+    // are properties of the *widget* rather than the *application*, so
+    // forcing them into the user's `State` (and the Msg/update cycle
+    // that mutates it) hurts ergonomics for no architectural gain. This
+    // store keeps such state alive across frames keyed by the call site
+    // of the `framework_local<T>()` invocation, in the same way React
+    // fibers / Compose `currentCompositeKeyHash` do.
+    //
+    // Lifetime: entries are tagged with `local_gen()` at every access;
+    // `prune_local_store()` (called by the runner after each `view`)
+    // drops entries whose tag is stale, so leaving a widget out of the
+    // tree implicitly destroys its local state. `bump_local_gen()`
+    // monotonically advances the tag at frame start.
+    //
+    // Storage uses std::map keyed by widget_id rather than
+    // std::unordered_map for the same reason `measure_cache` does —
+    // libc++'s unordered_map's __hash_memory symbol is missing on
+    // wasi-sdk's clang-22 link line. log(n) over a few dozen widget
+    // states is dwarfed by the host-call savings the store enables.
+
+    struct LocalEntry {
+        std::uint32_t last_seen_gen = 0;
+        void* storage = nullptr;
+        void (*deleter)(void*) = nullptr;
+        // Identity tag of the type T this entry was created for.
+        // Compared on subsequent access to catch the "same call site,
+        // different T" footgun (e.g. an in-place edit that changes
+        // `framework_local<int>(0)` to `framework_local<float>(0)` —
+        // raw reinterpret_cast would silently produce UB otherwise).
+        void const* type_id = nullptr;
+
+        LocalEntry() = default;
+        LocalEntry(LocalEntry&& o) noexcept
+            : last_seen_gen(o.last_seen_gen),
+              storage(o.storage),
+              deleter(o.deleter),
+              type_id(o.type_id) {
+            o.storage = nullptr;
+            o.deleter = nullptr;
+            o.type_id = nullptr;
+        }
+        LocalEntry& operator=(LocalEntry&& o) noexcept {
+            if (this != &o) {
+                if (deleter && storage) deleter(storage);
+                last_seen_gen = o.last_seen_gen;
+                storage = o.storage;
+                deleter = o.deleter;
+                type_id = o.type_id;
+                o.storage = nullptr;
+                o.deleter = nullptr;
+                o.type_id = nullptr;
+            }
+            return *this;
+        }
+        ~LocalEntry() { if (deleter && storage) deleter(storage); }
+        LocalEntry(LocalEntry const&) = delete;
+        LocalEntry& operator=(LocalEntry const&) = delete;
+    };
+
+    // Heap-bound for the same wasi-sdk __cxa_finalize reason as
+    // measure_cache and g_app — keep alive past _start() exit so JS-
+    // driven rebuilds after termination still see consistent state.
+    inline std::map<std::size_t, LocalEntry>& local_store() {
+        static std::map<std::size_t, LocalEntry>& m
+            = *new std::map<std::size_t, LocalEntry>();
+        return m;
+    }
+
+    inline std::uint32_t& local_gen() {
+        static std::uint32_t g = 1;
+        return g;
+    }
+
+    inline void bump_local_gen() {
+        auto& g = local_gen();
+        ++g;
+        if (g == 0) g = 1;  // skip zero, used as "uninitialised" sentinel
+    }
+
+    inline void prune_local_store() {
+        auto cur = local_gen();
+        auto& m = local_store();
+        for (auto it = m.begin(); it != m.end(); ) {
+            if (it->second.last_seen_gen != cur)
+                it = m.erase(it);
+            else
+                ++it;
+        }
+    }
+
+    // Splittable hash mixer (Boost-style). Used for widget_id derivation
+    // from (parent seed, source_location, key, sibling counter). The
+    // exact mix isn't load-bearing — collision-resistance just needs to
+    // be good enough that distinct call paths land in distinct std::map
+    // buckets in practice.
+    inline std::size_t hash_combine(std::size_t a, std::size_t b) noexcept {
+        a ^= b + 0x9e3779b97f4a7c15ULL + (a << 6) + (a >> 2);
+        return a;
+    }
+
+    inline std::size_t hash_source_location(
+            std::source_location const& loc) noexcept {
+        // file_name is a string literal whose pointer value is stable
+        // for the program's lifetime — hashing the pointer is cheaper
+        // than hashing the bytes and just as discriminating in practice.
+        std::size_t h = reinterpret_cast<std::size_t>(loc.file_name());
+        h = hash_combine(h, static_cast<std::size_t>(loc.line()));
+        h = hash_combine(h, static_cast<std::size_t>(loc.column()));
+        return h;
+    }
+
+    // Returns the type-identity tag for T. Address of a function-local
+    // static is unique per template instantiation and stable across TUs
+    // that include the same module, which is all framework_local needs
+    // to detect "same id, different T" misuses.
+    template <typename T>
+    inline void const* type_tag() noexcept {
+        static char tag = 0;
+        return &tag;
+    }
+
     // Function pointer for URL opening — set by the backend module
     // (phenotype.wasm or phenotype.native) at initialization time.
     // Keeps widget::link non-templated.
@@ -460,10 +590,30 @@ namespace detail {
 // Scope — implicit parent tracking for nested DSL builders.
 // Used by attach_to_scope/open_container to thread NodeHandles through
 // Column/Row/Box/Scaffold/Card builder lambdas without explicit args.
+//
+// `call_counters` keeps a small flat list of (call_site_hash, count)
+// pairs visited during this scope's lifetime so framework_local<T>()
+// invocations at the same source_location can resolve to distinct
+// widget_ids without the caller having to thread an explicit key —
+// covers the common "same line repeated twice in this builder" case.
+// The vector is expected to hold a handful of entries per scope; if
+// profiling ever shows it dominates, swap for std::map.
+//
+// `widget_id_seed` is reserved for future container-driven seeding so
+// that two columns at the same source_location nested in different
+// parents can produce non-colliding widget_ids without explicit keys.
+// Today every container constructs its Scope with seed=0, so cross-
+// scope collisions are still possible — callers that need to resolve
+// them should pass an explicit key to framework_local<T>() (typically
+// the loop index when iterating).
 struct Scope {
     NodeHandle node;
+    std::size_t widget_id_seed = 0;
+    std::vector<std::pair<std::size_t, std::uint32_t>> call_counters;
 
     Scope(NodeHandle n) : node(n) {}
+    Scope(NodeHandle n, std::size_t seed)
+        : node(n), widget_id_seed(seed) {}
 
     static Scope*& current() {
         static Scope* s = nullptr;
@@ -471,6 +621,89 @@ struct Scope {
     }
 
     static void set_current(Scope* s) { current() = s; }
+
+    // Returns the next sibling counter for `call_site_hash` within this
+    // scope, then increments the stored count so the next call at the
+    // same site sees a different value.
+    std::uint32_t next_call_counter(std::size_t call_site_hash) {
+        for (auto& [h, c] : call_counters) {
+            if (h == call_site_hash) {
+                auto v = c;
+                ++c;
+                return v;
+            }
+        }
+        call_counters.push_back({call_site_hash, 1});
+        return 0;
+    }
 };
+
+// ============================================================
+// framework_local<T> — call-site-positional widget state
+// ============================================================
+//
+// Returns a reference to a T whose lifetime spans frames, identified by
+// the call site of this invocation. Use for state that belongs to the
+// widget tree position rather than the application — scroll offsets,
+// open/close flags, hover-delay timers, animation progress that will
+// eventually back the view-time animator.
+//
+// Identity derivation:
+//   * `loc` (defaulted via std::source_location::current()) seeds the
+//     base id from file pointer + line + column.
+//   * `key` lets the caller disambiguate sibling iterations of the
+//     same source_location (typically the loop index).
+//   * The current Scope's per-call-site counter disambiguates
+//     repeated calls at the same source_location within one scope
+//     without requiring an explicit key.
+//
+// Limitation: two scopes constructed with seed=0 (the default for
+// every container today) cannot distinguish framework_local calls at
+// the same source_location nested in each. Pass an explicit key
+// in such cases (e.g. `framework_local<int>(0, item_id)` inside a
+// keyed list). A future PR will thread parent_id through Scope
+// construction so the seed is non-zero by default.
+//
+// Type safety: each call site pins to a single T; reusing the same
+// site with a different T will std::abort with a clear diagnostic
+// rather than silently UB-cast the storage.
+template <typename T>
+T& framework_local(T initial = T{},
+                   std::size_t key = 0,
+                   std::source_location loc = std::source_location::current()) {
+    auto* s = Scope::current();
+    std::size_t base = detail::hash_combine(
+        detail::hash_source_location(loc), key);
+    std::uint32_t counter = s ? s->next_call_counter(base) : 0;
+    std::size_t scope_seed = s ? s->widget_id_seed : 0;
+    std::size_t widget_id = detail::hash_combine(
+        scope_seed, detail::hash_combine(base, counter));
+
+    auto& store = detail::local_store();
+    auto cur = detail::local_gen();
+    auto* tag = detail::type_tag<T>();
+
+    auto it = store.find(widget_id);
+    if (it == store.end()) {
+        T* p = new T(std::move(initial));
+        detail::LocalEntry e;
+        e.last_seen_gen = cur;
+        e.storage = p;
+        e.deleter = [](void* ptr) { delete static_cast<T*>(ptr); };
+        e.type_id = tag;
+        auto [iter, _] = store.emplace(widget_id, std::move(e));
+        return *static_cast<T*>(iter->second.storage);
+    }
+    if (it->second.type_id != tag) {
+        log::error("phenotype.framework_local",
+            "type mismatch at {}:{} — same widget_id reused with a "
+            "different T. Add an explicit key or move the call to a "
+            "distinct source location.",
+            loc.file_name(), loc.line());
+        std::abort();
+    }
+    it->second.last_seen_gen = cur;
+    return *static_cast<T*>(it->second.storage);
+}
 
 } // namespace phenotype
