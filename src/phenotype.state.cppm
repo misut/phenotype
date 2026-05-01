@@ -240,6 +240,15 @@ struct AppState {
     float debug_viewport_height = 0.0f;
     diag::InputDebugSnapshot input_debug;
 
+    // Set during view by `animate_value` whenever an interpolation
+    // hasn't reached its target yet, cleared at the start of every
+    // view. Native shells read this after each rebuild and schedule
+    // another paint on a ~16ms cadence while it stays true, so a
+    // hover fade or accordion slide keeps advancing without needing
+    // input events. The runner does not read it — it's purely a
+    // "wake me up next frame" signal for the host loop.
+    bool has_active_animations = false;
+
     // Subtree paint cache — snapshot of the previous frame's command
     // buffer, kept so paint_node can memcpy a clean subtree's byte range
     // out of it instead of re-walking. Matches the 65536-byte buffer
