@@ -1169,16 +1169,18 @@ struct Click {};
 using ButtonMsg = std::variant<Click>;
 
 inline NodeHandle build_button(ButtonVariant variant, bool disabled,
-                               unsigned int hovered_id = 0xFFFFFFFFu) {
+                               unsigned int hovered_id = 0xFFFFFFFFu,
+                               unsigned int focused_id = 0xFFFFFFFFu) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::msg_queue().clear();
-    // Wipe per-call-site animation state so the first `animate_color`
-    // inside `widget::button` snaps to its target instead of inheriting
-    // the previous test's interpolation.
+    // Wipe per-call-site animation state so the first `animate_color` /
+    // `animate_float` inside `widget::button` snaps to its target
+    // instead of inheriting the previous test's interpolation.
     detail::local_store().clear();
     detail::bump_local_gen();
     detail::g_app.hovered_id = hovered_id;
+    detail::g_app.focused_id = focused_id;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -1262,6 +1264,33 @@ void test_button_primary_hovered_snaps_to_hover_bg() {
            btn.background.b == t.accent_strong.b);
     detail::g_app.hovered_id = 0xFFFFFFFFu;
     std::puts("PASS: button primary snaps to accent_strong when hovered");
+}
+
+// Focus ring smoke test: pre-set `g_app.focused_id` to the id button is
+// about to claim, then assert the first frame snaps the animated
+// border_width to `state_focus_ring_width`. Mirrors the hover-snap pair
+// — same reasoning, exercised on the focus-ring animate_float wiring.
+void test_button_focused_snaps_to_focus_ring_width() {
+    auto btn_h = button_test::build_button(
+        ButtonVariant::Default, /*disabled=*/false,
+        /*hovered_id=*/0xFFFFFFFFu, /*focused_id=*/0u);
+    auto& btn = detail::node_at(btn_h);
+    auto const& t = detail::g_app.theme;
+    assert(btn.callback_id == 0u);
+    assert(btn.border_width == t.state_focus_ring_width);
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    std::puts("PASS: button border_width snaps to focus ring width when focused");
+}
+
+// Defocused (resting) border_width is the variant's natural 1px — not
+// the focus-ring upgrade. Pairs with the focused test above so a
+// regression that pins the value to either side stands out.
+void test_button_defocused_resting_border_width() {
+    auto btn_h = button_test::build_button(
+        ButtonVariant::Default, /*disabled=*/false);
+    auto& btn = detail::node_at(btn_h);
+    assert(btn.border_width == 1);
+    std::puts("PASS: button defocused border_width snaps to resting 1px");
 }
 
 void test_button_disabled() {
@@ -1653,6 +1682,8 @@ int main() {
     test_button_primary_variant();
     test_button_default_hovered_snaps_to_hover_bg();
     test_button_primary_hovered_snaps_to_hover_bg();
+    test_button_focused_snaps_to_focus_ring_width();
+    test_button_defocused_resting_border_width();
     test_button_disabled();
     test_text_field_default();
     test_text_field_default_placeholder();
