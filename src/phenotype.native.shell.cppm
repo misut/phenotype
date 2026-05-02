@@ -651,8 +651,12 @@ inline bool dispatch_cursor_pos(float mx, float my) {
     g_app_state.hovered_id = hovered_id;
     bool handled = ::phenotype::detail::set_hover_id(
         hovered_id, "shell", "pointer-move");
+    // Hover transitions are now view-time animations (animate_color in
+    // widget::button etc.), so the new hovered_id has to feed back into
+    // the next view rebuild — `repaint_current` alone leaves the arena
+    // showing the previous frame's hover sample.
     if (handled)
-        repaint_current();
+        ::phenotype::detail::trigger_rebuild();
     update_hover_cursor(hit.has_value());
     return handled;
 }
