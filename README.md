@@ -92,8 +92,15 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 | `column(builder)` / `column(a, b, ...)` | Vertical flex container |
 | `row(builder)` / `row(a, b, ...)` | Horizontal flex container, defaults to centered cross-axis so inline children share a baseline |
 | `box(builder)` / `box(a, b, ...)` | Generic single-purpose wrapper, no direction or gap |
+| `sized_box(max_width, builder)` | Fixed-width wrapper for layout slots that need an explicit cell width |
+| `weighted(grow, builder)` | Row child that claims `grow / Σgrow` of the leftover width — multiple `weighted` siblings get a deterministic proportional split |
+| `grid(columns, row_height, builder)` | Rigid `columns × N` grid; children are placed row-major into fixed tracks |
 | `scaffold(top, content, bottom)` | Page layout with hero header, max-width content, and footer |
 | `card(builder)` | Rounded white container with padding |
+| `scroll_view(fixed_height, builder)` | Per-node scroll viewport that catches wheel events inside its bounds |
+| `overlay(builder)` | Top-of-stack layer that paints after the main tree (foundation for dialogs, popovers, tooltips) |
+| `dialog(builder, max_width=360, top_padding=96)` | Centered modal card on top of an `overlay` |
+| `accordion(title, builder)` | Collapsible section; expand state lives in `framework_local<bool>` keyed to the call site |
 | `list_items(builder)` + `item(str)` | Bulleted list |
 | `divider()` | 1px horizontal rule |
 | `spacer(px)` | Fixed-height vertical gap |
@@ -104,9 +111,16 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 |---|---|
 | `text(str)` | Plain text label |
 | `code(str)` | Monospaced block with background, border, and padding |
-| `link(label, href)` | Hyperlink that opens via the host JS shim |
-| `button<Msg>(label, msg)` | Clickable button that posts `msg` on click |
-| `text_field<Msg>(hint, current, mapper)` | Text input that maps each new value through `mapper` to a `Msg` |
+| `link(label, href)` | Hyperlink that opens via the host shim — text colour cross-fades on hover |
+| `image(url, width, height)` | Async image; the JS shim or native backend keeps a persistent atlas |
+| `canvas(width, height, paint, on_gesture?)` | Fixed-size leaf for arbitrary 2D drawing via a `Painter` callback |
+| `button<Msg>(label, msg, variant?, disabled?)` | Clickable button that posts `msg` on click; background and focus ring fade on hover / focus |
+| `checkbox<Msg>(label, checked, msg)` / `radio<Msg>(label, selected, msg)` | Selection controls with a hover highlight on the row and a halo on focus |
+| `switch_<Msg>(label, on, msg)` | Labelled on/off toggle; the thumb slides and the track cross-fades on flip |
+| `tabs<Msg>(items, selected, on_select)` | Segmented row with a 2 px sliding indicator under the selected tab |
+| `progress(value, max_width?)` | Determinate progress bar |
+| `progress_indeterminate(max_width?)` | Looping progress bar — a slug oscillates left↔right while the widget is on screen |
+| `text_field<Msg>(hint, current, mapper, error?, disabled?)` | Text input that maps each new value through `mapper` to a `Msg` |
 
 ### Application entry (`namespace phenotype`)
 
@@ -156,6 +170,55 @@ from a non-message path (timer, external event), post a no-op
 `phenotype::current_theme()` reads the active theme from inside your
 view function when you need to compute a derived color or pass a
 palette to a helper.
+
+## Animations
+
+Visual transitions go through a small set of view-time primitives. They
+take a `target` value plus a duration and return the current
+interpolated value to bind into a node property:
+
+```cpp
+node.background  = animate_color(is_hovered ? hover_bg : base_bg, 150);
+node.border_width = animate_float(is_focused ? 2.0f : 1.0f, 150);
+```
+
+Per-call-site state (the previous value, the active target, the start
+timestamp) lives in `framework_local`, keyed off
+`std::source_location` plus a per-Scope sibling counter, so two
+buttons in the same row animate independently with no boilerplate.
+When a target changes mid-flight the current interpolated value is
+captured as the new start, so an interruption slides smoothly into
+the new direction instead of snapping.
+
+While any interpolation is still in progress the runner sets
+`g_app.has_active_animations`. The host loop reads the flag and
+schedules another `trigger_rebuild` ~16 ms later, which re-runs view
+so `animate_*` advances. The flag self-clears every view, so the
+loop drops back to its idle wait once everything converges.
+
+The interactions wired through this pipeline:
+
+- Hover background / text colour fades on `button`, `link`,
+  `checkbox`, `radio`.
+- Focus ring grow / fade across every focusable widget — the width
+  expands to `theme.state_focus_ring_width` and the colour fades
+  between the resting border and `theme.state_focus_ring`.
+- `switch_` thumb slide + track cross-fade.
+- `tabs` 2 px indicator that slides under the selected tab.
+- `progress_indeterminate` looping slug.
+
+Hover, focus, and scroll dispatches in the GLFW shell route through
+`trigger_rebuild` (instead of just `repaint_current`) so each
+transition is observed at view time. Scroll stays on the cheaper
+paint-only path while no animation is running, then promotes to a
+rebuild while the auto-tick is asking for ticks.
+
+For the per-call-site keying mechanics, the cross-scope collision
+caveat (sibling scopes today seed `widget_id_seed = 0`, so two
+widgets at the same call counter inside different parent scopes
+share state), and the paint-cache invalidation that lets fade-outs
+finish, see the **View-time animation** section in
+[docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
 
 ## Architecture
 
@@ -261,9 +324,13 @@ unified debug workflow and cross-platform snapshot contract.
 - [x] Theme system (design tokens for colors, fonts, spacing)
 - [x] Event handling (click, hover, pointer cursor)
 - [x] Scroll and resize support with viewport culling
-- [x] Hover states (visual feedback on `widget::button` and `widget::link`)
+- [x] Hover states with view-time colour fades (`widget::button`, `widget::link`, `widget::checkbox`, `widget::radio`, `widget::tabs`)
 - [x] Text input (`widget::text_field` with caret, placeholder, native OS IME composition)
-- [x] Keyboard navigation (Tab/Enter, focus ring)
+- [x] Keyboard navigation (Tab/Enter, animated focus ring grow/fade across every focusable widget)
+- [x] View-time animation primitives (`animate_color`, `animate_float`, `animate_value<T>`) backed by `framework_local` per-call-site state
+- [x] Animation auto-tick — host loop schedules ~16 ms `trigger_rebuild` callbacks while `g_app.has_active_animations` is set; paint subtree cache invalidates whenever a view-time interpolation is in flight so fade-outs finish
+- [x] Animated widgets — `widget::switch_` thumb slide + track cross-fade, `widget::tabs` sliding indicator with a raised-slot active style, `widget::progress_indeterminate` looping slug
+- [x] Layout primitives (`overlay`, `dialog`, `scroll_view`, `accordion`, `weighted`, `sized_box`, `grid`)
 - [x] OpenTelemetry-shaped logs and metrics (`phenotype.diag`)
 - [x] Host `measure_text` cache (cross-rebuild memoization keyed by font size + content)
 - [x] Custom theming API (runtime-configurable `Theme` via `phenotype::set_theme` / `current_theme`)
@@ -297,8 +364,10 @@ unified debug workflow and cross-platform snapshot contract.
 
 ### Later
 
-- [ ] Animation system (transitions, easings, animated layout values) — best tackled after keyed diff and frame scheduling needs are clearer
-- [ ] More widgets (slider, dropdown, modal/dialog, tooltip)
+- [ ] Animation easings beyond linear interpolation (cubic / spring / overshoot) and animated layout values like Column gap / row main_align
+- [ ] `framework_local` Scope seeding — thread `parent_id` into `Scope` construction so siblings in different parent scopes stop colliding at `widget_id_seed = 0`
+- [ ] Accordion body height-clip animation + chevron rotation
+- [ ] More widgets (slider, dropdown, tooltip)
 - [ ] Linux native renderer / text stack — useful after the Windows path proves out the current platform contracts
 - [ ] Android / iOS
 

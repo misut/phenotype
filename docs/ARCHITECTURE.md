@@ -37,6 +37,94 @@ Backend consumes the cmd buffer:
   └── Native: phenotype::parse_commands() → platform renderer
 ```
 
+## View-time animation
+
+Visual transitions are bound at view time, not paint time. A widget
+asks for a value via `animate_color` / `animate_float` /
+`animate_value<T>` (all in `phenotype.cppm`); the call returns the
+current interpolated value to drop into a `LayoutNode` field, and the
+runtime advances the interpolation automatically across rebuilds:
+
+```cpp
+node.background  = animate_color(is_hovered ? hover : base, 150);
+node.border_width = animate_float(is_focused ? 2.0f : 1.0f, 150);
+```
+
+### Per-call-site state via `framework_local`
+
+The interpolation's previous value, active target, and start timestamp
+live in `framework_local<AnimationState<T>>`, keyed off:
+
+```
+widget_id = hash(scope_seed,
+                 hash(hash_source_location(loc),
+                      hash(extra_key, per_scope_sibling_counter)))
+```
+
+- `loc` defaults to `std::source_location::current()` at the
+  `animate_*` call site.
+- `extra_key` is the `key` argument that propagates through to
+  `framework_local` (most widgets pass `0`); it lets a caller
+  disambiguate keyed list iterations or other repeats it can't avoid.
+- `per_scope_sibling_counter` lives on the active `Scope`. Each new
+  call at a given `loc` increments the counter, so two `widget::button`
+  invocations in the same row pick distinct widget ids without any
+  manual key.
+- `scope_seed` is reserved for parent-driven seeding so distinct
+  containers can produce non-colliding ids. **Today every container
+  constructs its `Scope` with `widget_id_seed = 0`**, which means two
+  widgets at the same call counter inside different parent scopes
+  (e.g. the first button in two separate cards) currently share state.
+  The same caveat applies to every other `framework_local` consumer
+  (scroll offsets, accordion expand state, etc.). A future PR will
+  thread the parent's id into the seed to remove the collision; until
+  then, callers that need to avoid it pass an explicit `key` (typically
+  the loop index when iterating).
+
+When `target` changes mid-flight, `animate_value` captures the current
+interpolated value as the new `start_value` so the new fade picks up
+where the previous one was. That makes interrupting Tab cycles or
+hover entry/exit feel continuous instead of snapping.
+
+A non-inline `detail::steady_ms()` wraps the only `<chrono>` call, so
+widget templates that instantiate `animate_value<T>` see a plain
+`std::int64_t` interface without pulling chrono into their
+translation unit (MSVC enforces module type reachability strictly
+enough for this to matter; Clang was lenient).
+
+### Auto-tick + the `has_active_animations` flag
+
+While any interpolation has `progress < 1.0`, `animate_value` sets
+`g_app.has_active_animations = true`. The runner clears the flag at
+the start of every view, so it reads as "did this frame's view
+request another tick?". The GLFW shell's main loop polls the flag and
+re-enters `trigger_rebuild()` on a ~16 ms cadence whenever it stays
+set; once everything converges the flag stays false and the loop
+drops back to its idle wait. Other shells (Android, wasm) inherit the
+flag mechanism via the runner; their host loops grow their own
+auto-tick path as a follow-up.
+
+`trigger_rebuild` (not `repaint_current`) is the load-bearing
+choice — repaint just walks the existing arena, so without rebuilding
+the view the baked-in interpolated value would freeze at the start of
+the fade. The shell's hover, focus, and scroll dispatches all promote
+to `trigger_rebuild` whenever a transition is in flight (scroll stays
+on the cheaper paint-only path while idle so the steady-state cost is
+unchanged).
+
+### Paint cache invalidation while animating
+
+`paint_invalidation_mask` normally only includes the callback ids
+whose hover / focus state changed since the previous frame, so paint
+can blit cached subtree bytes for everything else. That falls down
+during a fade-out: the widget that just lost focus or hover is no
+longer in the diff, but its `node.border_width` /
+`node.background` are still interpolating each frame. The runner
+forces `paint_invalidation_mask = ~0ULL` whenever
+`has_active_animations` is set during view, so every cached subtree
+re-walks until the animation lands. The flag self-clears, so the
+diff-driven cache returns the moment everything converges.
+
 ## Host interface
 
 `src/phenotype_host.h` declares 5 `extern "C"` functions that every backend implements:
