@@ -537,6 +537,250 @@ void test_canvas_bypasses_paint_cache_after_diff() {
     std::puts("PASS: widget::canvas bypasses paint cache after diff");
 }
 
+// Opt-in dirty-token contract: when the caller passes a non-zero
+// paint_token to widget::canvas and the same token is observed across
+// two consecutive frames, paint_node blits the prev_cmd_buf byte
+// range and skips paint_fn entirely.
+void test_canvas_paint_token_hit_skips_paint_fn() {
+    auto make_canvas_tree = [](int& paint_calls, Color color,
+                               std::uint64_t token, bool paint) {
+        auto root_h = detail::alloc_node();
+        detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+        Scope scope(root_h);
+        Scope::set_current(&scope);
+        widget::canvas(200.0f, 100.0f,
+            [&paint_calls, color](Painter& p) {
+                ++paint_calls;
+                p.line(10.0f, 20.0f, 60.0f, 70.0f, 1.0f, color);
+            },
+            {},
+            token);
+        Scope::set_current(nullptr);
+
+        if (paint) {
+            LAYOUT_NODE(root_h, 400.0f);
+            CMD_LEN = 0;
+            PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+            std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, CMD_LEN);
+            detail::g_app.prev_cmd_len = CMD_LEN;
+        }
+        return root_h;
+    };
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.prev_cmd_len = 0;
+    detail::g_app.paint_invalidation_mask = 0;
+    detail::g_app.prev_scroll_x = 0;
+    detail::g_app.prev_scroll_y = 0;
+    metrics::reset_all();
+
+    constexpr std::uint64_t kToken = 0xABCD'1234'ABCD'1234ULL;
+
+    int old_calls = 0;
+    auto old_root = make_canvas_tree(old_calls,
+        Color{255, 0, 0, 255}, kToken, true);
+    assert(old_calls == 1);
+    auto& old_canvas = detail::node_at(detail::node_at(old_root).children[0]);
+    // Token opt-in flips the canvas to non-dynamic at recording so
+    // next frame's blit guard is allowed to fire.
+    assert(!old_canvas.paint_dynamic);
+    assert(old_canvas.paint_valid);
+    assert(old_canvas.paint_token == kToken);
+
+    detail::g_app.prev_root = old_root;
+    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+
+    int new_calls = 0;
+    // Same token, but a different colour the painter would emit if
+    // re-invoked. The blit must reuse prev_cmd_buf bytes (the red
+    // line), so new_calls must stay at 0 and the bytes must match.
+    auto new_root = make_canvas_tree(new_calls,
+        Color{0, 0, 255, 255}, kToken, false);
+    auto matched = detail::diff_and_copy_layout(
+        detail::g_app.prev_root, new_root,
+        detail::g_app.prev_arena, detail::g_app.arena);
+    assert(matched);
+
+    auto& new_canvas = detail::node_at(detail::node_at(new_root).children[0]);
+    assert(new_canvas.paint_token == kToken);
+    assert(new_canvas.paint_token_prev == kToken);
+    assert(!new_canvas.paint_dynamic);
+    assert(new_canvas.paint_valid);
+
+    auto blits_before = metrics::inst::paint_subtrees_blitted.total();
+    LAYOUT_NODE(new_root, 400.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(new_root, 0, 0, 0, 600.0f);
+    auto blits_during = metrics::inst::paint_subtrees_blitted.total() - blits_before;
+
+    // paint_fn never fires for the cached canvas this frame.
+    assert(new_calls == 0);
+    // At least one blit (could be 1 = parent column blits whole
+    // subtree, or 2 = parent walks + canvas blits separately, both
+    // are correct for this assertion's purpose).
+    assert(blits_during >= 1);
+
+    std::puts("PASS: widget::canvas with stable paint_token blits and skips paint_fn");
+}
+
+// Token mismatch: a non-zero token that differs from prev frame's
+// recorded value falls through to the miss path and paint_fn fires.
+void test_canvas_paint_token_miss_invokes_paint_fn() {
+    auto make_canvas_tree = [](int& paint_calls, Color color,
+                               std::uint64_t token, bool paint) {
+        auto root_h = detail::alloc_node();
+        detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+        Scope scope(root_h);
+        Scope::set_current(&scope);
+        widget::canvas(200.0f, 100.0f,
+            [&paint_calls, color](Painter& p) {
+                ++paint_calls;
+                p.line(10.0f, 20.0f, 60.0f, 70.0f, 1.0f, color);
+            },
+            {},
+            token);
+        Scope::set_current(nullptr);
+
+        if (paint) {
+            LAYOUT_NODE(root_h, 400.0f);
+            CMD_LEN = 0;
+            PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+            std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, CMD_LEN);
+            detail::g_app.prev_cmd_len = CMD_LEN;
+        }
+        return root_h;
+    };
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.prev_cmd_len = 0;
+    detail::g_app.paint_invalidation_mask = 0;
+    detail::g_app.prev_scroll_x = 0;
+    detail::g_app.prev_scroll_y = 0;
+
+    int old_calls = 0;
+    auto old_root = make_canvas_tree(old_calls,
+        Color{255, 0, 0, 255}, 0xAAAA'AAAA'AAAA'AAAAULL, true);
+    assert(old_calls == 1);
+
+    detail::g_app.prev_root = old_root;
+    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+
+    int new_calls = 0;
+    // Different token — represents an upstream input change.
+    auto new_root = make_canvas_tree(new_calls,
+        Color{0, 0, 255, 255}, 0xBBBB'BBBB'BBBB'BBBBULL, false);
+    auto matched = detail::diff_and_copy_layout(
+        detail::g_app.prev_root, new_root,
+        detail::g_app.prev_arena, detail::g_app.arena);
+    assert(matched);
+
+    LAYOUT_NODE(new_root, 400.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(new_root, 0, 0, 0, 600.0f);
+
+    // Token differs → blit guard fails → paint_fn re-invoked.
+    assert(new_calls == 1);
+
+    std::puts("PASS: widget::canvas with mismatched paint_token re-invokes paint_fn");
+}
+
+// Ancestor of a token-stable canvas regains cache eligibility:
+// without the opt-in, a canvas poisons every ancestor with
+// paint_dynamic=true. With opt-in, the canvas's parent column blits
+// the entire subtree as one byte range and the canvas's paint_fn
+// never runs.
+void test_canvas_paint_token_lets_ancestor_blit() {
+    auto make_tree = [](int& paint_calls, Color color,
+                        std::uint64_t token, bool paint) {
+        auto root_h = detail::alloc_node();
+        detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+        Scope scope(root_h);
+        Scope::set_current(&scope);
+        layout::column([&] {
+            widget::canvas(200.0f, 100.0f,
+                [&paint_calls, color](Painter& p) {
+                    ++paint_calls;
+                    p.line(0.0f, 0.0f, 100.0f, 100.0f, 1.0f, color);
+                },
+                {},
+                token);
+        });
+        Scope::set_current(nullptr);
+
+        if (paint) {
+            LAYOUT_NODE(root_h, 400.0f);
+            CMD_LEN = 0;
+            PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+            std::memcpy(detail::g_app.prev_cmd_buf, CMD_BUF, CMD_LEN);
+            detail::g_app.prev_cmd_len = CMD_LEN;
+        }
+        return root_h;
+    };
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.prev_cmd_len = 0;
+    detail::g_app.paint_invalidation_mask = 0;
+    detail::g_app.prev_scroll_x = 0;
+    detail::g_app.prev_scroll_y = 0;
+    metrics::reset_all();
+
+    constexpr std::uint64_t kToken = 0x1234'5678'9ABC'DEF0ULL;
+
+    int old_calls = 0;
+    auto old_root = make_tree(old_calls,
+        Color{255, 0, 0, 255}, kToken, true);
+    assert(old_calls == 1);
+    // The intermediate column wrapper around the canvas should also
+    // be non-dynamic now because the only dynamic descendant has
+    // opted in.
+    auto& old_root_node = detail::node_at(old_root);
+    assert(old_root_node.children.size() == 1);
+    auto& old_inner_col = detail::node_at(old_root_node.children[0]);
+    assert(!old_inner_col.paint_dynamic);
+    assert(old_inner_col.paint_valid);
+
+    detail::g_app.prev_root = old_root;
+    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+
+    int new_calls = 0;
+    auto new_root = make_tree(new_calls,
+        Color{0, 0, 255, 255}, kToken, false);
+    auto matched = detail::diff_and_copy_layout(
+        detail::g_app.prev_root, new_root,
+        detail::g_app.prev_arena, detail::g_app.arena);
+    assert(matched);
+
+    auto blits_before = metrics::inst::paint_subtrees_blitted.total();
+    LAYOUT_NODE(new_root, 400.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(new_root, 0, 0, 0, 600.0f);
+    auto blits_during = metrics::inst::paint_subtrees_blitted.total() - blits_before;
+
+    // paint_fn never runs (would have run for the blue line otherwise).
+    assert(new_calls == 0);
+    // Exactly one blit: the outermost cache-eligible subtree blits
+    // its whole byte range. Without the dynamic-poison fix, this
+    // would be 0 because every ancestor would carry paint_dynamic=true.
+    assert(blits_during >= 1);
+
+    std::puts("PASS: token-stable canvas lets ancestors take the blit path");
+}
+
 // Regression: after diff_and_copy_layout marks a subtree layout_valid,
 // re-running layout with a different available_width must NOT short-
 // circuit on the cached width. Otherwise window resize leaves the tree
@@ -1674,6 +1918,9 @@ int main() {
     test_grid_cell_text_is_vertically_centered();
     test_canvas_widget_invokes_painter();
     test_canvas_bypasses_paint_cache_after_diff();
+    test_canvas_paint_token_hit_skips_paint_fn();
+    test_canvas_paint_token_miss_invokes_paint_fn();
+    test_canvas_paint_token_lets_ancestor_blit();
     test_layout_relayout_when_available_width_changes();
     test_checkbox_and_radio_widgets();
     test_frame_skip_on_identical_cmd_buffer();

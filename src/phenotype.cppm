@@ -573,18 +573,38 @@ inline void image(str url, float width, float height) {
 // rects / arcs / text) directly. Used by apps that need positions
 // outside the layout-tree model — CAD plans, charts, custom widgets.
 //
-// The paint cache is bypassed for canvas nodes (paint_fn is opaque to
-// the layout-prop diff), so each frame re-runs the callback. Apps with
-// expensive per-frame paint should pre-compute geometry in update()
-// and capture by reference into the lambda.
+// By default the paint cache is bypassed for canvas nodes (paint_fn is
+// opaque to the layout-prop diff), so each frame re-runs the callback.
+// Apps with expensive per-frame paint should either pre-compute
+// geometry in update() and capture by reference into the lambda, or
+// opt into the token cache below.
+//
+// `paint_token` (optional) — caller-supplied uint64 dirty hint. When
+// the canvas's emitted bytes are a pure function of inputs the caller
+// already tracks (entity buffer pointer, transform, layer visibility,
+// selected layout, etc.), hash those inputs into a single uint64 and
+// pass it here. phenotype records the value after each emit; on the
+// next frame, if the recorded token still matches, the canvas blits
+// its prev_cmd_buf byte range and skips paint_fn entirely — and the
+// canvas's ancestors regain cache eligibility too (a token-stable
+// canvas no longer poisons its parents with paint_dynamic).
+//
+// Sentinel `0` = "no token / always-dirty": preserves the pre-token
+// behaviour and is the default for every existing call site. WARNING:
+// any callback whose output depends on state outside the token (e.g.
+// `std::chrono::now()` for an animating canvas) MUST either pass `0`
+// or mix a time bucket into the token, otherwise the canvas freezes
+// at last-emitted bytes for as long as the token stays equal.
 inline void canvas(float width, float height,
                    std::function<void(Painter&)> paint_fn,
-                   std::function<void(GestureEvent const&)> on_gesture = {}) {
+                   std::function<void(GestureEvent const&)> on_gesture = {},
+                   std::uint64_t paint_token = 0) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.max_width = width;
     node.style.fixed_height = height;
     node.paint_fn = std::move(paint_fn);
+    node.paint_token = paint_token;
     if (on_gesture) {
         auto gid = static_cast<unsigned int>(
             detail::g_app.gesture_callbacks.size());

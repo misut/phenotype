@@ -119,11 +119,22 @@ struct native_host {
     // Growable command stream. Initial capacity matches the legacy
     // fixed-size buffer (65 536 bytes) so single-canvas apps stay on
     // the same allocation profile they had before. `reserve()`
-    // doubles past that, capped at MAX_BUF_SIZE (4 MiB) so a runaway
-    // emit_* still trips the diagnostic overflow path instead of
-    // exhausting RSS on a dense scene.
+    // doubles past that, capped at MAX_BUF_SIZE so a runaway emit_*
+    // still trips the diagnostic overflow path instead of exhausting
+    // RSS on a dense scene.
+    //
+    // Cap raised from 4 MiB → 64 MiB after `cad++`'s VIEWPORT-driven
+    // sheet renderer started multiplying model entities by the
+    // viewport count (each paper-space VIEWPORT walks the full model
+    // BLOCK_HEADER under its own affine). colorwh.dwg's True Color
+    // sheet has 3 content viewports × 36 095 HATCHes ≈ 6.5 MiB of
+    // cmd bytes before cap; under 4 MiB the buffer hit cap mid-paint
+    // and the auto-flush dropped the surrounding UI (heading,
+    // sidebar) from the visible frame. Modern desktops handle 64 MiB
+    // comfortably and dense CAD frames now stay in one contiguous
+    // buffer end-to-end.
     static constexpr unsigned int INIT_BUF_SIZE = 65536;
-    static constexpr unsigned int MAX_BUF_SIZE  = 4 * 1024 * 1024;
+    static constexpr unsigned int MAX_BUF_SIZE  = 64 * 1024 * 1024;
     std::vector<unsigned char> buffer_ = std::vector<unsigned char>(INIT_BUF_SIZE);
     unsigned int len_ = 0;
 

@@ -339,7 +339,33 @@ inline bool diff_and_copy_layout(NodeHandle old_h, NodeHandle new_h,
     new_n->paint_ax = old_n->paint_ax;
     new_n->paint_ay = old_n->paint_ay;
     new_n->paint_callback_mask = old_n->paint_callback_mask;
-    new_n->paint_dynamic = old_n->paint_dynamic || static_cast<bool>(new_n->paint_fn);
+    // paint_token_prev carries last frame's recorded token forward so
+    // paint_node's blit guard can compare it against the
+    // freshly-rebuilt new_n->paint_token.
+    //
+    // paint_dynamic at diff time reflects "does this subtree need a
+    // re-walk THIS frame?". A canvas opted into the token contract
+    // and presenting a token equal to last frame's recorded value is
+    // non-dynamic — its ancestors can blit cleanly. A canvas with a
+    // mismatched token IS dynamic (it must re-emit, and any ancestor
+    // whose byte range covers it must also re-emit, otherwise
+    // ancestor blits would replay last frame's stale bytes).
+    //
+    // Recursion order matters: children are diffed before we compute
+    // new_n->paint_dynamic here, so each child's paint_dynamic
+    // already reflects this frame's match/mismatch state.
+    new_n->paint_token_prev = old_n->paint_token;
+    bool const canvas_token_match = static_cast<bool>(new_n->paint_fn)
+        && new_n->paint_token != 0
+        && new_n->paint_token == old_n->paint_token;
+    bool any_child_dynamic = false;
+    for (auto child_h : new_n->children) {
+        auto* c = new_a.get(child_h);
+        if (c && c->paint_dynamic) { any_child_dynamic = true; break; }
+    }
+    new_n->paint_dynamic =
+        (static_cast<bool>(new_n->paint_fn) && !canvas_token_match)
+        || any_child_dynamic;
     new_n->paint_valid = old_n->paint_valid;
     new_n->layout_valid = true;
     return true;

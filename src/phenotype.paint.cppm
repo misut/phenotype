@@ -609,9 +609,20 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     // Byte-exact reuse: the bytes were emitted with identical ax/ay/
     // scroll_x/scroll_y and no intersecting hover/focus transition, so
     // they are byte-for-byte what this walk would produce.
+    //
+    // A widget::canvas paint_fn is normally opaque (forces re-walk),
+    // but when the caller opts in via a non-zero paint_token AND the
+    // diff carried forward an equal paint_token_prev, the canvas's
+    // emitted bytes are declared a pure function of unchanged inputs.
+    // We then treat it like a static subtree and blit; paint_fn is
+    // not invoked and the byte range (including the canvas-scoped
+    // scissor pair) is reused verbatim.
+    bool const canvas_token_hit = static_cast<bool>(node.paint_fn)
+        && node.paint_token != 0
+        && node.paint_token == node.paint_token_prev;
     if (!effective_inside
         && node.layout_valid && node.paint_valid
-        && !node.paint_fn
+        && (!node.paint_fn || canvas_token_hit)
         && !node.paint_dynamic
         && ax == node.paint_ax
         && ay == node.paint_ay
@@ -653,7 +664,17 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     auto const before = r.buf_len();
     auto const entry_flush_epoch = g_app.paint_flush_epoch;
     std::uint64_t subtree_mask = callback_mask_bit(node.callback_id);
-    bool subtree_dynamic = static_cast<bool>(node.paint_fn);
+    // A canvas paint_fn is dynamic UNLESS the caller opted into the
+    // dirty-token contract by passing a non-zero paint_token. The
+    // contract says "my emitted bytes are a pure function of this
+    // token", so the bytes recorded on this miss-path frame are a
+    // legitimate cache for any later frame that produces the same
+    // token — even though *this* frame's blit guard already failed
+    // (e.g. first frame, token transition, position drift). We mark
+    // such subtrees non-dynamic so paint_valid gets recorded below
+    // and the next frame's diff/blit can hit.
+    bool subtree_dynamic =
+        static_cast<bool>(node.paint_fn) && node.paint_token == 0;
 
     float draw_x = ax - scroll_x;
     float draw_y = ay - scroll_y;
@@ -789,12 +810,25 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             float origin_y;
             float clip_x0, clip_y0, clip_x1, clip_y1;
 
+            // Clip stack for nested push_clip / pop_clip. The bottom
+            // entry is the canvas's outer rect (set in the
+            // constructor); each push intersects with the current top
+            // and emits `Cmd::Scissor` so macOS / Android backends
+            // narrow their setScissorRect / vkCmdSetScissor between
+            // draws. The CPU-side cull paths (line clip_line, arc bbox
+            // reject, text bbox reject) read from clip_x0..clip_y1
+            // which always tracks the top of the stack.
+            struct ClipRect { float x0, y0, x1, y1; };
+            std::vector<ClipRect> clip_stack;
+
             PainterImpl(R& r_in, M const& m_in, float ox, float oy,
                         float cx, float cy, float cw, float ch)
                 : r(r_in), measurer(m_in),
                   origin_x(ox), origin_y(oy),
                   clip_x0(cx), clip_y0(cy),
-                  clip_x1(cx + cw), clip_y1(cy + ch) {}
+                  clip_x1(cx + cw), clip_y1(cy + ch) {
+                clip_stack.push_back({clip_x0, clip_y0, clip_x1, clip_y1});
+            }
 
             // Cohen-Sutherland outcode bits — `top` bit means y is
             // SMALLER than y-min in our top-down coordinate system,
@@ -961,15 +995,71 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 // consistent with that pattern.
                 return measurer.measure_text(font_size, font, str, len);
             }
+
+            void push_clip(float x, float y,
+                           float w, float h) override {
+                // Translate the canvas-local rect to surface-local then
+                // intersect with the current clip top so a nested push
+                // never widens the visible region.
+                float nx0 = origin_x + x;
+                float ny0 = origin_y + y;
+                float nx1 = nx0 + w;
+                float ny1 = ny0 + h;
+                ClipRect const& top = clip_stack.back();
+                ClipRect inter{
+                    std::max(top.x0, nx0),
+                    std::max(top.y0, ny0),
+                    std::min(top.x1, nx1),
+                    std::min(top.y1, ny1),
+                };
+                clip_stack.push_back(inter);
+                clip_x0 = inter.x0; clip_y0 = inter.y0;
+                clip_x1 = inter.x1; clip_y1 = inter.y1;
+                // Empty intersection still emits a degenerate scissor;
+                // the backend's `vkCmdSetScissor` / `setScissorRect`
+                // accepts (w == 0 || h == 0) as a "draw nothing" rect
+                // which matches the CPU cull behaviour above.
+                float ew = std::max(0.0f, inter.x1 - inter.x0);
+                float eh = std::max(0.0f, inter.y1 - inter.y0);
+                emit_scissor(r, inter.x0, inter.y0, ew, eh);
+            }
+
+            void pop_clip() override {
+                // Defensive: a stray pop without a matching push would
+                // underflow the stack and re-emit a (0,0,0,0) reset
+                // that drops the canvas's own outer scissor for the
+                // remainder of paint_fn. Keep the bottom entry pinned.
+                if (clip_stack.size() <= 1) return;
+                clip_stack.pop_back();
+                ClipRect const& top = clip_stack.back();
+                clip_x0 = top.x0; clip_y0 = top.y0;
+                clip_x1 = top.x1; clip_y1 = top.y1;
+                float ew = std::max(0.0f, top.x1 - top.x0);
+                float eh = std::max(0.0f, top.y1 - top.y0);
+                emit_scissor(r, top.x0, top.y0, ew, eh);
+            }
         };
 
+        // Use the scroll-adjusted `draw_x/y` (not the layout-frame
+        // `ax/ay`) for both the wire-format scissor and the
+        // PainterImpl's clip rect. Backends rasterise into the
+        // framebuffer's surface space — `setScissorRect` /
+        // `vkCmdSetScissor` need post-scroll pixel coords, and the
+        // CPU-side cull paths must match the same space the painter
+        // draws into (`origin_x/y == draw_x/y`). Earlier code passed
+        // `ax/ay` here, which left the clip pinned to the canvas's
+        // unscrolled position — once the user scrolled, the painter's
+        // emit positions slid up by `scroll_y` while the clip stayed
+        // at the canvas's original top, masking the top of the
+        // drawing and leaking a horizontal band of "frozen" content.
         bool emit_canvas_scissor = (g_app.paint_scissor_depth == 0);
         if (emit_canvas_scissor) {
-            emit_scissor(r, ax, ay, node.width, node.height);
+            emit_scissor(r, draw_x, draw_y, node.width, node.height);
             ++g_app.paint_scissor_depth;
             metrics::inst::scissor_emitted.add();
         }
-        PainterImpl painter(r, measurer, draw_x, draw_y, ax, ay,
+        PainterImpl painter(r, measurer, draw_x, draw_y,
+                            draw_x, draw_y,
                             node.width, node.height);
         node.paint_fn(painter);
         if (emit_canvas_scissor) {
