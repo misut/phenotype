@@ -2977,9 +2977,18 @@ struct Uniforms { float2 viewport; float2 _pad; };
 // rasterisation gives pixel-perfect coverage on shared edges, fixing
 // the sub-pixel gaps the previous CPU scanline path produced for slim
 // HATCH slivers (e.g. colorwh.dwg's inner-radius wedge tips).
+//
+// `packed_*` types disable MSL's default 16-byte float4 alignment so
+// the shader-side struct matches C++ TriVertexGPU's 24-byte layout
+// (8 bytes pos + 16 bytes colour, no inter-field padding). With
+// non-packed float4, Metal would insert 8 bytes of pad between pos
+// and colour and `verts[vi]` would stride by 32 bytes, reading
+// colour from the WRONG offset on every vertex — every triangle
+// would be drawn with arbitrary colour bits and the result would
+// look like the old broken render with extra glitches.
 struct TriVertex {
-    float2 pos;
-    float4 color;
+    packed_float2 pos;
+    packed_float4 color;
 };
 
 struct TriVsOut {
@@ -2992,12 +3001,13 @@ vertex TriVsOut vs_tri(
     constant Uniforms& u [[buffer(0)]],
     const device TriVertex* verts [[buffer(1)]]
 ) {
-    TriVertex v = verts[vi];
-    float cx = (v.pos.x / u.viewport.x) * 2.0 - 1.0;
-    float cy = 1.0 - (v.pos.y / u.viewport.y) * 2.0;
+    float2 p = float2(verts[vi].pos);
+    float4 c = float4(verts[vi].color);
+    float cx = (p.x / u.viewport.x) * 2.0 - 1.0;
+    float cy = 1.0 - (p.y / u.viewport.y) * 2.0;
     TriVsOut out;
     out.pos = float4(cx, cy, 0, 1);
-    out.color = v.color;
+    out.color = c;
     return out;
 }
 
@@ -5519,13 +5529,25 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         // Triangles render first within the batch so filled regions
         // (HATCH solids) sit beneath any FillRect / DrawLine quads
         // emitted later in the same canvas frame.
+        //
+        // Bind the vertex buffer with a per-batch byte offset so the
+        // shader's [[vertex_id]] starts at 0 for verts[0] = this
+        // batch's first vertex. We deliberately do NOT pass tri_first
+        // as drawPrimitives' vertexStart — that path is ambiguous
+        // across Metal versions about whether [[vertex_id]] is
+        // absolute or relative to vertexStart, so non-zero start
+        // batches would silently read the wrong slice on platforms
+        // that report vertex_id relative to 0.
         if (tri_uploaded && batch_tri_count > 0) {
             encoder->setRenderPipelineState(g_renderer.tri_pipeline);
             encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
-            encoder->setVertexBuffer(g_renderer.tri_vertices_buf, 0, 1);
+            encoder->setVertexBuffer(
+                g_renderer.tri_vertices_buf,
+                NS::UInteger(batch.tri_first * sizeof(TriVertexGPU)),
+                1);
             encoder->drawPrimitives(
                 MTL::PrimitiveTypeTriangle,
-                NS::UInteger(batch.tri_first),
+                NS::UInteger(0),
                 NS::UInteger(batch_tri_count));
         }
 
