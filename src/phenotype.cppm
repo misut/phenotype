@@ -176,9 +176,10 @@ inline void text(str content,
 inline void link(str label, str href) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
+    auto const& t = detail::g_app.theme;
     node.text = std::string(label.data, label.len);
-    node.font_size = detail::g_app.theme.small_font_size;
-    node.text_color = detail::g_app.theme.accent;
+    node.font_size = t.small_font_size;
+    node.text_color = t.accent;
     node.hover_text_color = {29, 78, 216, 255};
     node.url = std::string(href.data, href.len);
     node.cursor_type = 1;
@@ -186,6 +187,13 @@ inline void link(str label, str href) {
 
     auto url_copy = node.url;
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
+    bool const is_focused = (id == detail::g_app.focused_id);
+    // Focus ring grows from no border to `state_focus_ring_width` and
+    // back. Link's resting border is zero so the ring appears entirely
+    // because of focus.
+    node.border_width = animate_float(
+        is_focused ? t.state_focus_ring_width : 0.0f, 150);
+
     detail::g_app.callbacks.push_back([url_copy] {
     #ifdef __wasi__
         phenotype_open_url(url_copy.c_str(),
@@ -276,7 +284,6 @@ inline void button(str label, Msg msg,
     auto const& t = detail::g_app.theme;
     node.text = std::string(label.data, label.len);
     node.font_size = t.body_font_size;
-    node.border_width = 1;
     node.border_radius = t.radius_sm;
     node.style.padding[0] = t.space_sm;
     node.style.padding[1] = t.space_md;
@@ -288,6 +295,7 @@ inline void button(str label, Msg msg,
         node.background = t.state_disabled_bg;
         node.text_color = t.state_disabled_fg;
         node.border_color = t.state_disabled_border;
+        node.border_width = 1;
         node.cursor_type = 0;
         node.focusable = false;
         // No callback — the button is non-interactive. Skip the
@@ -297,11 +305,13 @@ inline void button(str label, Msg msg,
         return;
     }
 
-    // Predict the callback id we're about to push so the hover sample
-    // mirrors paint's own check (phenotype.paint.cppm:632) at view time.
+    // Predict the callback id we're about to push so the hover/focus
+    // samples mirror paint's own checks (phenotype.paint.cppm:632-636)
+    // at view time.
     auto const id = static_cast<unsigned int>(
         detail::g_app.callbacks.size());
     bool const is_hovered = (id == detail::g_app.hovered_id);
+    bool const is_focused = (id == detail::g_app.focused_id);
 
     Color base_bg, hover_bg;
     switch (variant) {
@@ -323,6 +333,11 @@ inline void button(str label, Msg msg,
     // `(is_hovered && hover_background.a > 0)` guard falls through to
     // the animated `node.background` we just produced.
     node.background = animate_color(is_hovered ? hover_bg : base_bg, 150);
+    // View-time focus ring: grow border_width from the resting 1px to
+    // theme.state_focus_ring_width on focus and back. Paint reads
+    // node.border_width directly now.
+    node.border_width = animate_float(
+        is_focused ? t.state_focus_ring_width : 1.0f, 150);
     node.cursor_type = 1;
 
     detail::g_app.callbacks.push_back([msg = std::move(msg)] {
@@ -340,18 +355,25 @@ template<typename Msg>
 inline void toggle(str label, bool active, Msg msg,
                    float corner_radius, Decoration active_decoration,
                    InteractionRole role) {
+    auto const& t = ::phenotype::detail::g_app.theme;
     auto id = static_cast<unsigned int>(
         ::phenotype::detail::g_app.callbacks.size());
+    bool const is_focused = (id == ::phenotype::detail::g_app.focused_id);
     auto row_h = ::phenotype::detail::alloc_node();
     {
         auto& row = ::phenotype::detail::node_at(row_h);
         row.style.flex_direction = FlexDirection::Row;
         row.style.cross_align    = CrossAxisAlignment::Center;
-        row.style.gap            = ::phenotype::detail::g_app.theme.space_sm;
+        row.style.gap            = t.space_sm;
         row.cursor_type          = 1;
         row.callback_id          = id;
         row.interaction_role     = role;
         row.focusable            = true;
+        // Focus chrome on the row: ring grows from 0 to
+        // `state_focus_ring_width` so checkbox/radio gain a halo
+        // around the box+label without any resting border.
+        row.border_width = ::phenotype::animate_float(
+            is_focused ? t.state_focus_ring_width : 0.0f, 150);
         row.debug_semantic_role = interaction_role_name(role);
         row.debug_semantic_label = std::string(label.data, label.len);
         row.debug_semantic_callback_id = id;
@@ -431,7 +453,6 @@ inline void text_field(str hint, std::string const& current,
     node.placeholder = std::string(hint.data, hint.len);
     node.text = current.empty() ? node.placeholder : current;
     node.font_size = t.body_font_size;
-    node.border_width = 1;
     node.border_radius = t.radius_sm;
     node.style.padding[0] = t.space_sm;
     node.style.padding[1] = t.space_md;
@@ -443,6 +464,7 @@ inline void text_field(str hint, std::string const& current,
         node.background = t.state_disabled_bg;
         node.text_color = t.state_disabled_fg;
         node.border_color = t.state_disabled_border;
+        node.border_width = 1;
         node.cursor_type = 0;
         node.focusable = false;
         // No callback / input handler — the field is non-interactive.
@@ -463,6 +485,11 @@ inline void text_field(str hint, std::string const& current,
     node.cursor_type = 1;
 
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
+    bool const is_focused = (id == detail::g_app.focused_id);
+    // View-time focus ring: grow border_width from the resting 1px to
+    // `state_focus_ring_width` on focus and back.
+    node.border_width = animate_float(
+        is_focused ? t.state_focus_ring_width : 1.0f, 150);
     detail::g_app.callbacks.push_back([] {});
     detail::g_app.callback_roles.push_back(InteractionRole::TextField);
     using MapperFn = Msg(*)(std::string);
@@ -577,6 +604,7 @@ inline void switch_(str label, bool on, Msg msg) {
     auto const& t = detail::g_app.theme;
     auto id = static_cast<unsigned int>(
         detail::g_app.callbacks.size());
+    bool const is_focused = (id == detail::g_app.focused_id);
 
     auto row_h = detail::alloc_node();
     {
@@ -588,6 +616,10 @@ inline void switch_(str label, bool on, Msg msg) {
         row.callback_id = id;
         row.interaction_role = InteractionRole::Checkbox;
         row.focusable = true;
+        // Focus chrome on the outer row so the ring wraps around
+        // track + label, not just the track.
+        row.border_width = animate_float(
+            is_focused ? t.state_focus_ring_width : 0.0f, 150);
         row.debug_semantic_role = "switch";
         row.debug_semantic_label = std::string(label.data, label.len);
         row.debug_semantic_callback_id = id;
@@ -702,6 +734,7 @@ inline void tabs(std::vector<str> const& items,
         bool is_selected = (i == selected);
         auto id = static_cast<unsigned int>(
             detail::g_app.callbacks.size());
+        bool const is_focused = (id == detail::g_app.focused_id);
 
         auto btn_h = detail::alloc_node();
         {
@@ -716,6 +749,11 @@ inline void tabs(std::vector<str> const& items,
                 ? t.accent
                 : t.state_hover_bg;
             btn.border_radius = t.radius_sm;
+            // Focus ring grows from no border to
+            // `state_focus_ring_width` and back, matching the rest of
+            // the focusable widget set.
+            btn.border_width = animate_float(
+                is_focused ? t.state_focus_ring_width : 0.0f, 150);
             btn.style.padding[0] = t.space_xs;
             btn.style.padding[1] = t.space_md;
             btn.style.padding[2] = t.space_xs;
@@ -993,6 +1031,16 @@ void run(Host& host, View view, Update update) {
             inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
         }
         inv |= mask_bit(app.focused_id);
+        // While any view-time interpolation is still advancing, the
+        // animated `node.*` values change every frame without the
+        // owning callback_id appearing in the diff above (e.g. a
+        // widget that just lost focus is no longer in `focused_id`,
+        // but its border_width is still fading out). Force-invalidate
+        // every cached subtree until everything converges; the flag
+        // self-clears at the start of the next view.
+        if (app.has_active_animations) {
+            inv = ~static_cast<std::uint64_t>(0);
+        }
         app.paint_invalidation_mask = inv;
 
         app.focusable_ids.clear();
@@ -1116,6 +1164,16 @@ void run(View view, Update update) {
             inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
         }
         inv |= mask_bit(app.focused_id);
+        // While any view-time interpolation is still advancing, the
+        // animated `node.*` values change every frame without the
+        // owning callback_id appearing in the diff above (e.g. a
+        // widget that just lost focus is no longer in `focused_id`,
+        // but its border_width is still fading out). Force-invalidate
+        // every cached subtree until everything converges; the flag
+        // self-clears at the start of the next view.
+        if (app.has_active_animations) {
+            inv = ~static_cast<std::uint64_t>(0);
+        }
         app.paint_invalidation_mask = inv;
 
         app.focusable_ids.clear();
@@ -1464,6 +1522,7 @@ void accordion(str title, F&& builder) {
     {
         auto id = static_cast<unsigned int>(
             detail::g_app.callbacks.size());
+        bool const is_focused = (id == detail::g_app.focused_id);
 
         auto header_h = detail::alloc_node();
         {
@@ -1482,7 +1541,10 @@ void accordion(str title, F&& builder) {
             hd.background = t.surface;
             hd.hover_background = t.state_hover_bg;
             hd.border_color = t.border;
-            hd.border_width = 1;
+            // Focus ring grows from the resting 1px to
+            // `state_focus_ring_width`.
+            hd.border_width = animate_float(
+                is_focused ? t.state_focus_ring_width : 1.0f, 150);
             hd.border_radius = t.radius_sm;
             hd.debug_semantic_role = "accordion-header";
             hd.debug_semantic_label = std::string(title.data, title.len);

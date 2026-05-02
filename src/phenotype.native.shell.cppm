@@ -612,7 +612,17 @@ inline bool dispatch_mouse_button(float mx, float my,
             reset_caret_blink_timer();
         bool activated = ::phenotype::detail::handle_event(
             *hit, "shell", "pointer-click");
-        if (focus_changed || caret_changed || activated)
+        // Focus changes feed view-time animations (the focus ring
+        // grow/fade in widget::*); take the rebuild path so the next
+        // view evaluates `is_focused` for the new id. Activation
+        // already triggers its own rebuild from inside the registered
+        // callback, but routing focus through trigger_rebuild here
+        // keeps the no-callback paths (text_field click) animated.
+        // Caret-only updates stay on `repaint_current` since the caret
+        // is drawn at paint time.
+        if (focus_changed || activated)
+            ::phenotype::detail::trigger_rebuild();
+        else if (caret_changed)
             repaint_current();
         return focus_changed || caret_changed || activated;
     }
@@ -626,7 +636,7 @@ inline bool dispatch_mouse_button(float mx, float my,
     if (cleared)
         reset_caret_blink_timer();
     if (cleared)
-        repaint_current();
+        ::phenotype::detail::trigger_rebuild();
     return cleared;
 }
 
@@ -850,7 +860,10 @@ inline bool dispatch_key(Key key, KeyAction action, int mods) {
             if (::phenotype::detail::handle_tab(shift ? 1u : 0u, "shell", detail)) {
                 sync_platform_input();
                 reset_caret_blink_timer();
-                repaint_current();
+                // Tab moves focus, which kicks off the focus-ring
+                // animation; rebuild so the new focused widget's view
+                // body samples `is_focused == true`.
+                ::phenotype::detail::trigger_rebuild();
                 return true;
             }
             return false;
@@ -944,7 +957,9 @@ inline bool dispatch_key(Key key, KeyAction action, int mods) {
             if (cleared)
                 reset_caret_blink_timer();
             bool handled = dismissed || cleared;
-            if (handled)
+            if (cleared)
+                ::phenotype::detail::trigger_rebuild();
+            else if (handled)
                 repaint_current();
             ::phenotype::detail::note_input_event(
                 "key", "shell", detail, handled ? "handled" : "ignored", invalid_callback_id);

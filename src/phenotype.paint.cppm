@@ -693,10 +693,15 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         }
     }
 
+    // Focus chrome width is now view-driven. Each focusable widget
+    // animates its own `border_width` between 0/1 and
+    // `theme.state_focus_ring_width` via `animate_float`, so paint just
+    // reads the current value. The colour override stays here for now —
+    // a follow-up will move it onto the same view-time path.
     Color bc = is_focused ? g_app.theme.state_focus_ring : node.border_color;
-    float bw = is_focused ? g_app.theme.state_focus_ring_width : node.border_width;
-    if (bw > 0 && bc.a > 0) {
-        emit_stroke_rect(r, draw_x, draw_y, node.width, node.height, bw, bc);
+    if (node.border_width > 0 && bc.a > 0) {
+        emit_stroke_rect(r, draw_x, draw_y, node.width, node.height,
+                         node.border_width, bc);
     }
 
     bool html_overlay_active = false;
