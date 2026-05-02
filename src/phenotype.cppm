@@ -108,6 +108,14 @@ inline Color animate_color(Color target, int duration_ms,
                            std::source_location loc =
                                std::source_location::current());
 
+namespace detail {
+// Forward decl mirrors the definition further down so widgets can
+// read the wall clock without pulling `<chrono>` into their TU
+// (looping animations like `widget::progress_indeterminate` compute
+// phase directly from this value).
+std::int64_t steady_ms();
+}
+
 // ============================================================
 // widget:: — leaf components (text, code, link, button, text_field)
 // ============================================================
@@ -590,10 +598,6 @@ inline void canvas(float width, float height,
 // to [0, 1] and drives the filled portion's width as a fraction of
 // `max_width`. Track is theme.border, fill is theme.accent. Both pieces
 // share the same rounded-pill chrome so partial fills look correct.
-//
-// Indeterminate (looping) progress is intentionally deferred — without
-// the animation auto-tick (follow-up PR), a continuous loop would
-// freeze whenever the runner stops rebuilding.
 inline void progress(float value, float max_width = 200.0f) {
     if (value < 0.0f) value = 0.0f;
     if (value > 1.0f) value = 1.0f;
@@ -620,6 +624,72 @@ inline void progress(float value, float max_width = 200.0f) {
         bar.border_radius = 3.0f;
         detail::append_child(outer_h, bar_h);
     }
+}
+
+// progress_indeterminate — looping bar for "we're working but the
+// total isn't known". A small accent slug oscillates left↔right
+// inside the same chrome `progress` uses. The slug position is
+// computed directly from `steady_ms()` rather than from a finite
+// `animate_value`, so the loop runs forever; raising the auto-tick
+// flag (`has_active_animations = true`) every view keeps the host
+// loop scheduling repaints at ~60 Hz, the same mechanism the
+// determinate animations rely on.
+//
+// Pure view-time read of the wall clock — no `framework_local`
+// state — so two indeterminate bars in the same view stay in
+// lockstep, which reads as intentional uniformity in a list of
+// pending operations rather than visual noise.
+inline void progress_indeterminate(float max_width = 200.0f) {
+    auto const& t = detail::g_app.theme;
+
+    auto outer_h = detail::alloc_node();
+    {
+        auto& outer = detail::node_at(outer_h);
+        outer.style.flex_direction = FlexDirection::Row;
+        outer.style.cross_align = CrossAxisAlignment::Center;
+        outer.style.main_align = MainAxisAlignment::Start;
+        outer.style.max_width = max_width;
+        outer.style.fixed_height = 6.0f;
+        outer.background = t.border;
+        outer.border_radius = 3.0f;
+    }
+    detail::attach_to_scope(outer_h);
+
+    constexpr int cycle_ms = 1500;
+    constexpr float bar_fraction = 0.35f;
+    auto const now_ms = detail::steady_ms();
+    auto const phase_ms = now_ms % cycle_ms;
+    float phase = static_cast<float>(phase_ms)
+                  / static_cast<float>(cycle_ms);
+    // Triangular oscillation — slug travels left→right in the first
+    // half of the cycle and right→left in the second so the motion
+    // is continuous with no reset jump.
+    float pos = phase < 0.5f ? phase * 2.0f : (1.0f - phase) * 2.0f;
+    float lead = (max_width * (1.0f - bar_fraction)) * pos;
+    // Flex layout treats `max_width <= 0` as "no limit"; clamp to a
+    // sub-pixel positive value so the leading spacer always reads
+    // as a fixed-width slot. (Same trick `widget::switch_` uses.)
+    if (lead < 0.001f) lead = 0.001f;
+    {
+        auto sp_h = detail::alloc_node();
+        auto& sp = detail::node_at(sp_h);
+        sp.style.max_width = lead;
+        sp.style.fixed_height = 6.0f;
+        detail::append_child(outer_h, sp_h);
+    }
+    {
+        auto bar_h = detail::alloc_node();
+        auto& bar = detail::node_at(bar_h);
+        bar.style.max_width = max_width * bar_fraction;
+        bar.style.fixed_height = 6.0f;
+        bar.background = t.accent;
+        bar.border_radius = 3.0f;
+        detail::append_child(outer_h, bar_h);
+    }
+
+    // Keep the auto-tick alive so the host loop keeps repainting and
+    // the slug advances frame to frame.
+    detail::g_app.has_active_animations = true;
 }
 
 // switch_ — labelled on/off toggle rendered as a track + sliding
