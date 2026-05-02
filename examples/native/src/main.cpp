@@ -18,6 +18,7 @@ struct ImeChanged { std::string text; };
 struct ToggleAgreed {};
 struct ToggleNotifications {};
 struct SetChoice { int value; };
+struct SelectTab { std::size_t value; };
 struct Resized { int width; int height; float scale; };
 
 using Msg = std::variant<
@@ -28,6 +29,7 @@ using Msg = std::variant<
     ToggleAgreed,
     ToggleNotifications,
     SetChoice,
+    SelectTab,
     Resized>;
 
 // ---- State ----
@@ -39,6 +41,7 @@ struct State {
     bool agreed = false;
     bool notifications = false;
     int choice = 0;
+    std::size_t selected_tab = 0;
     int viewport_width = 0;
     int viewport_height = 0;
     float viewport_scale = 1.0f;
@@ -57,6 +60,7 @@ void update(State& state, Msg msg) {
         else if constexpr (std::same_as<T, ToggleAgreed>) state.agreed = !state.agreed;
         else if constexpr (std::same_as<T, ToggleNotifications>) state.notifications = !state.notifications;
         else if constexpr (std::same_as<T, SetChoice>)  state.choice = m.value;
+        else if constexpr (std::same_as<T, SelectTab>)  state.selected_tab = m.value;
         else if constexpr (std::same_as<T, Resized>) {
             state.viewport_width = m.width;
             state.viewport_height = m.height;
@@ -314,6 +318,17 @@ void view(State const& state) {
             widget::text(std::string("Notifications: ") + (state.notifications ? "on" : "off"));
             layout::spacer(4);
             widget::text(std::string("Selected plan: ") + selected_choice_label(state.choice));
+            layout::spacer(12);
+            widget::text("Tabs (sliding indicator)");
+            layout::spacer(6);
+            {
+                std::vector<phenotype::str> tab_items;
+                tab_items.emplace_back("Overview", 8u);
+                tab_items.emplace_back("Settings", 8u);
+                tab_items.emplace_back("Activity", 8u);
+                widget::tabs<Msg>(tab_items, state.selected_tab,
+                    [](std::size_t i) -> Msg { return SelectTab{i}; });
+            }
         });
 
         layout::spacer(12);

@@ -69,18 +69,40 @@ void test_tabs_renders_one_button_per_item() {
     LAYOUT_NODE(root_h, 600.0f);
 
     auto& root = detail::node_at(root_h);
-    auto& bar = detail::node_at(root.children[0]);
+    // tabs is now a pill column wrapping (a) the tab row and
+    // (b) the sliding-indicator track.
+    auto& pill = detail::node_at(root.children[0]);
+    assert(pill.children.size() == 2);
+    auto& bar = detail::node_at(pill.children[0]);
     assert(bar.children.size() == 3);
 
     auto const& theme = current_theme();
     auto& selected = detail::node_at(bar.children[1]);
     auto& other_a  = detail::node_at(bar.children[0]);
     auto& other_b  = detail::node_at(bar.children[2]);
-    assert(selected.background.r == theme.accent.r);
-    assert(selected.background.g == theme.accent.g);
-    assert(selected.background.b == theme.accent.b);
+    // Active tab now reads as a raised slot in `theme.surface`; the
+    // accent colour lives on the indicator track below and on the
+    // active label.
+    assert(selected.background.r == theme.surface.r);
+    assert(selected.background.g == theme.surface.g);
+    assert(selected.background.b == theme.surface.b);
     assert(other_a.background.a == 0);   // transparent
     assert(other_b.background.a == 0);
+
+    // Sliding-indicator track sits below the tab row with three
+    // children: leading spacer, indicator line, trailing spacer.
+    // With selected=1 of 3 the leading spacer should hold flex_grow=1
+    // and the trailing spacer flex_grow=1 so the indicator centres
+    // under the middle tab.
+    auto& track = detail::node_at(pill.children[1]);
+    assert(track.children.size() == 3);
+    auto& lead = detail::node_at(track.children[0]);
+    auto& line = detail::node_at(track.children[1]);
+    auto& trail = detail::node_at(track.children[2]);
+    assert(lead.style.flex_grow == 1.0f);
+    assert(line.style.flex_grow == 1.0f);
+    assert(trail.style.flex_grow == 1.0f);
+    assert(line.background.r == theme.accent.r);
     std::puts("PASS: tabs renders one button per item with accent on selected");
 }
 

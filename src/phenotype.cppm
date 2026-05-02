@@ -741,9 +741,19 @@ inline void switch_(str label, bool on, Msg msg) {
 // stays stateless — `Msg`/`update` round-trip is the source of truth.
 //
 // Visual chrome is the design system's "pill" treatment: a code_bg-
-// filled outer row with rounded corners; the selected button paints
-// in `theme.accent` with `theme.state_active_fg` text, unselected
-// buttons stay transparent with muted text and a hover background.
+// filled outer container with rounded corners. The pill is now a
+// Column wrapping (a) the row of tabs and (b) a sliding 2-pixel
+// indicator track. Tabs use `flex_grow = 1` and `gap = 0` so each
+// occupies exactly `inner_width / N` — the indicator track divides
+// the same inner width into a leading spacer + 1-unit indicator +
+// trailing spacer, with the spacer grows interpolated by
+// `animate_float` so the indicator slides under the new tab when
+// `selected` changes.
+//
+// The selected button still paints in `theme.accent` with
+// `theme.state_active_fg` text, unselected buttons stay transparent
+// with muted text and a hover background — adding the indicator
+// supplements the pill highlight rather than replacing it.
 //
 // Each tab is focusable, so Tab/Enter cycling lands on a tab and
 // activates it via the same handler the pointer click fires. The
@@ -756,19 +766,27 @@ inline void tabs(std::vector<str> const& items,
                  Msg (*on_select)(std::size_t)) {
     auto const& t = detail::g_app.theme;
 
+    auto pill_h = detail::alloc_node();
+    {
+        auto& pill = detail::node_at(pill_h);
+        pill.style.flex_direction = FlexDirection::Column;
+        pill.style.gap = 0;
+        pill.background = t.code_bg;
+        pill.border_radius = t.radius_md;
+        pill.style.padding[0] = t.space_xs;
+        pill.style.padding[1] = t.space_xs;
+        pill.style.padding[2] = t.space_xs;
+        pill.style.padding[3] = t.space_xs;
+    }
+    detail::attach_to_scope(pill_h);
+
     auto row_h = detail::alloc_node();
     {
         auto& row = detail::node_at(row_h);
         row.style.flex_direction = FlexDirection::Row;
-        row.style.gap = t.space_xs;
-        row.background = t.code_bg;
-        row.border_radius = t.radius_md;
-        row.style.padding[0] = t.space_xs;
-        row.style.padding[1] = t.space_xs;
-        row.style.padding[2] = t.space_xs;
-        row.style.padding[3] = t.space_xs;
+        row.style.gap = 0;
     }
-    detail::attach_to_scope(row_h);
+    detail::append_child(pill_h, row_h);
 
     Color const ring_off{t.state_focus_ring.r, t.state_focus_ring.g,
                          t.state_focus_ring.b, 0};
@@ -781,16 +799,24 @@ inline void tabs(std::vector<str> const& items,
         auto btn_h = detail::alloc_node();
         {
             auto& btn = detail::node_at(btn_h);
-            btn.text = std::string(items[i].data, items[i].len);
-            btn.font_size = t.body_font_size;
-            btn.text_color = is_selected
-                ? t.state_active_fg
-                : t.muted;
-            btn.background = is_selected ? t.accent : t.transparent;
+            // Tab label lives on a child node (below) so this btn is
+            // a flex container, not a text leaf — the flex_grow
+            // distribution the indicator track relies on only fires
+            // for non-text children (the row layout's text-leaf
+            // branch always pins the natural measured width).
+            // Active tab gets a `t.surface` bg over the pill's
+            // `t.code_bg` so the selected tab reads as a raised slot;
+            // the accent indicator underneath is the colour cue. The
+            // active tab's hover_bg matches its resting bg so the
+            // hover state doesn't visually fight the indicator.
+            btn.background = is_selected ? t.surface : t.transparent;
             btn.hover_background = is_selected
-                ? t.accent
+                ? t.surface
                 : t.state_hover_bg;
             btn.border_radius = t.radius_sm;
+            btn.style.flex_grow = 1.0f;
+            btn.style.flex_direction = FlexDirection::Column;
+            btn.style.cross_align = CrossAxisAlignment::Center;
             // Focus ring grows from no border to
             // `state_focus_ring_width` and back, matching the rest of
             // the focusable widget set; colour fades in/out via alpha.
@@ -799,9 +825,9 @@ inline void tabs(std::vector<str> const& items,
             btn.border_color = animate_color(
                 is_focused ? t.state_focus_ring : ring_off, 150);
             btn.style.padding[0] = t.space_xs;
-            btn.style.padding[1] = t.space_md;
+            btn.style.padding[1] = t.space_sm;
             btn.style.padding[2] = t.space_xs;
-            btn.style.padding[3] = t.space_md;
+            btn.style.padding[3] = t.space_sm;
             btn.cursor_type = 1;
             btn.callback_id = id;
             btn.interaction_role = InteractionRole::Button;
@@ -814,11 +840,70 @@ inline void tabs(std::vector<str> const& items,
         }
         detail::append_child(row_h, btn_h);
 
+        {
+            auto lbl_h = detail::alloc_node();
+            auto& lbl = detail::node_at(lbl_h);
+            lbl.text = std::string(items[i].data, items[i].len);
+            lbl.font_size = t.body_font_size;
+            // Active label colour matches the indicator below so the
+            // accent reads as the single selection cue.
+            lbl.text_color = is_selected ? t.accent : t.muted;
+            lbl.focusable = false;
+            lbl.debug_semantic_hidden = true;
+            detail::append_child(btn_h, lbl_h);
+        }
+
         detail::g_app.callbacks.push_back([on_select, idx = i] {
             detail::post<Msg>(on_select(idx));
             detail::trigger_rebuild();
         });
         detail::g_app.callback_roles.push_back(InteractionRole::Button);
+    }
+
+    // Sliding indicator track. Children: leading spacer, 1-unit
+    // indicator, trailing spacer. The leading and trailing
+    // `flex_grow` values interpolate over ~150ms whenever `selected`
+    // changes, so the indicator slides under the new tab while every
+    // tab keeps its `1/N` slot.
+    auto track_h = detail::alloc_node();
+    {
+        auto& tr = detail::node_at(track_h);
+        tr.style.flex_direction = FlexDirection::Row;
+        tr.style.gap = 0;
+    }
+    detail::append_child(pill_h, track_h);
+
+    {
+        float lead = animate_float(static_cast<float>(selected), 150);
+        if (lead < 0.0f) lead = 0.0f;
+        auto sp_h = detail::alloc_node();
+        auto& sp = detail::node_at(sp_h);
+        sp.style.flex_grow = lead;
+        sp.style.fixed_height = 2.0f;
+        detail::append_child(track_h, sp_h);
+    }
+    {
+        auto line_h = detail::alloc_node();
+        auto& ln = detail::node_at(line_h);
+        ln.style.flex_grow = 1.0f;
+        // `fixed_height` lives on the leaf so the row layout's
+        // text-leaf branch picks it up; setting it on the parent
+        // track wouldn't apply because that node has children.
+        ln.style.fixed_height = 2.0f;
+        ln.background = t.accent;
+        detail::append_child(track_h, line_h);
+    }
+    {
+        float trail = animate_float(
+            static_cast<float>(items.size() - 1) -
+            static_cast<float>(selected),
+            150);
+        if (trail < 0.0f) trail = 0.0f;
+        auto sp_h = detail::alloc_node();
+        auto& sp = detail::node_at(sp_h);
+        sp.style.flex_grow = trail;
+        sp.style.fixed_height = 2.0f;
+        detail::append_child(track_h, sp_h);
     }
 }
 
