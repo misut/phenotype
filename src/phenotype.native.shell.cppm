@@ -443,6 +443,28 @@ inline float max_scroll_x_for_viewport(float viewport_width) {
     return (max_scroll > 0.0f) ? max_scroll : 0.0f;
 }
 
+// Scroll dispatch usually only needs a paint pass — the layout tree
+// is unchanged and just `scroll_y/x` shifts. While a view-time
+// animation is in flight (e.g. `progress_indeterminate`), though,
+// each scroll event lands between auto-tick rebuilds and would
+// otherwise repaint the same stale slug position before the next
+// tick rebuilds the view; that reads as a visible stutter on the
+// animation. Promote scroll to a rebuild while the runner is asking
+// for ticks so the animation advances in lockstep with scroll
+// repaints.
+inline void schedule_post_scroll_paint() {
+    // The runner reads `g_app.scroll_*` directly during paint; in the
+    // paint-only path `repaint_current` mirrors `g_app_state.scroll_*`
+    // onto it as a side effect. The rebuild path bypasses that mirror,
+    // so propagate explicitly here before either branch fires.
+    ::phenotype::detail::set_scroll_x(g_app_state.scroll_x);
+    ::phenotype::detail::set_scroll_y(g_app_state.scroll_y);
+    if (::phenotype::detail::g_app.has_active_animations)
+        ::phenotype::detail::trigger_rebuild();
+    else
+        repaint_current();
+}
+
 inline bool set_scroll_position(float next_scroll,
                                 float viewport_height,
                                 char const* detail) {
@@ -455,7 +477,7 @@ inline bool set_scroll_position(float next_scroll,
         return false;
     }
     g_app_state.scroll_y = next_scroll;
-    repaint_current();
+    schedule_post_scroll_paint();
     ::phenotype::detail::note_input_event(
         "scroll", "shell", detail, "handled", invalid_callback_id);
     return true;
@@ -473,7 +495,7 @@ inline bool set_scroll_position_x(float next_scroll,
         return false;
     }
     g_app_state.scroll_x = next_scroll;
-    repaint_current();
+    schedule_post_scroll_paint();
     ::phenotype::detail::note_input_event(
         "scroll", "shell", detail, "handled", invalid_callback_id);
     return true;
@@ -721,7 +743,7 @@ inline bool dispatch_scroll_in_view(float mx, float my, float delta_pixels) {
             return true;
         }
         tgt.state->offset_y = next;
-        repaint_current();
+        schedule_post_scroll_paint();
         ::phenotype::detail::note_input_event(
             "scroll", "shell", "wheel-view", "handled", invalid_callback_id);
         return true;

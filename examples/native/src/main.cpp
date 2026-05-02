@@ -329,6 +329,10 @@ void view(State const& state) {
                 widget::tabs<Msg>(tab_items, state.selected_tab,
                     [](std::size_t i) -> Msg { return SelectTab{i}; });
             }
+            layout::spacer(12);
+            widget::text("Indeterminate progress");
+            layout::spacer(6);
+            widget::progress_indeterminate(280.0f);
         });
 
         layout::spacer(12);
