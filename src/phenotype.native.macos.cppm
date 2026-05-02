@@ -1436,6 +1436,16 @@ struct FrameScratch {
     std::vector<PendingImageCmd> images;
     std::vector<std::string> overlay_text_storage;
 
+    // Per-FillPath scratch buffers, reused across every Cmd::FillPath
+    // decode in a single frame. CAD HATCH-heavy content (e.g.
+    // colorwh.dwg with 36 095 fills) used to default-construct these
+    // three std::vectors inside the case block, costing ~100k heap
+    // allocations per frame. Hoisting them out keeps allocator
+    // pressure flat as the canvas count scales.
+    std::vector<float>       fill_polygon;
+    std::vector<float>       fill_tris;
+    std::vector<std::size_t> fill_ear_remain;
+
     // Slice within `text_instances` that contains overlay text. Set by
     // finalize_batches() — overlay texts are appended after all batched
     // scene texts so a single instance buffer holds both. Drawn after
@@ -1607,13 +1617,17 @@ inline bool point_in_triangle(float px, float py,
     return !(has_neg && has_pos);
 }
 
-// Ear-clip triangulation. Output is a flat float array of 6 floats
-// per triangle (v0x, v0y, v1x, v1y, v2x, v2y). Polygon is taken as
-// (x, y) interleaved; vertices are NOT consumed (the input vector is
-// passed by value and the caller still owns its copy if needed).
-inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
-    std::vector<float> tris;
-    if (poly.size() < 6) return tris;  // need ≥ 3 vertices
+// Ear-clip triangulation. Writes 6 floats per triangle (v0x, v0y,
+// v1x, v1y, v2x, v2y) appended to `tris`; the caller is responsible
+// for any reset / size-tracking. `poly` is taken by reference and
+// MAY be reordered in place (orientation normalisation). `remain` is
+// caller-owned scratch space — passing it in avoids a per-call
+// std::vector allocation that becomes 36k+ allocs/frame on
+// HATCH-heavy DWGs (colorwh.dwg).
+inline void polygon_ear_clip(std::vector<float>& poly,
+                             std::vector<float>& tris,
+                             std::vector<std::size_t>& remain) {
+    if (poly.size() < 6) return;  // need ≥ 3 vertices
 
     std::size_t const n0 = poly.size() / 2;
 
@@ -1624,7 +1638,7 @@ inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
         area2 += static_cast<double>(poly[2 * i])     * poly[2 * j + 1]
               -  static_cast<double>(poly[2 * j])     * poly[2 * i + 1];
     }
-    if (std::fabs(area2) < 1e-9) return tris;
+    if (std::fabs(area2) < 1e-9) return;
 
     // Normalise to CCW so the convex-vertex test below has a stable sign.
     if (area2 < 0.0) {
@@ -1635,8 +1649,37 @@ inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
     }
 
     // Indices into `poly` (vertex indices, not float offsets).
-    std::vector<std::size_t> remain(n0);
-    for (std::size_t i = 0; i < n0; ++i) remain[i] = i;
+    remain.clear();
+    remain.reserve(n0);
+    for (std::size_t i = 0; i < n0; ++i) remain.push_back(i);
+
+    // Convex fast path: triangle-fan from vertex 0. Most CAD HATCH
+    // boundaries (wedges, rectangles, regular polygons) are convex,
+    // and the dominant colorwh.dwg case fits this. Skip the
+    // O(N²) ear search when no reflex vertex exists.
+    bool convex = true;
+    for (std::size_t i = 0; i < n0 && convex; ++i) {
+        std::size_t const ip = (i + n0 - 1) % n0;
+        std::size_t const ic = i;
+        std::size_t const in = (i + 1) % n0;
+        float const ax = poly[2 * ip], ay = poly[2 * ip + 1];
+        float const bx = poly[2 * ic], by = poly[2 * ic + 1];
+        float const cx = poly[2 * in], cy = poly[2 * in + 1];
+        float const cross = (bx - ax) * (cy - ay)
+                          - (by - ay) * (cx - ax);
+        if (cross < 0.0f) convex = false;
+    }
+    if (convex) {
+        float const ax = poly[0], ay = poly[1];
+        for (std::size_t i = 1; i + 1 < n0; ++i) {
+            float const bx = poly[2 * i],     by = poly[2 * i + 1];
+            float const cx = poly[2 * (i+1)], cy = poly[2 * (i+1) + 1];
+            tris.push_back(ax); tris.push_back(ay);
+            tris.push_back(bx); tris.push_back(by);
+            tris.push_back(cx); tris.push_back(cy);
+        }
+        return;
+    }
 
     // Safety bound: at most n triangles for n vertices, but loop more
     // generously to tolerate near-degenerate ears.
@@ -1674,7 +1717,6 @@ inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
         }
         if (!found) break;  // self-intersecting / degenerate polygon
     }
-    return tris;
 }
 
 
@@ -2249,9 +2291,13 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
             }
             case Cmd::FillPath: {
                 // Walk the verb stream into a flat polygon, ear-clip
-                // it into triangles, then rasterise each triangle as
-                // 1-px-tall axis-aligned strips on the existing colour
-                // pipeline. No new shader / pipeline.
+                // it into triangles, then push 3 raw vertices per
+                // triangle into the batch's tri_vertices for the
+                // dedicated triangle pipeline. Polygon and triangle
+                // scratch buffers live on FrameScratch and are
+                // cleared (not destroyed) per FillPath, so a frame
+                // with 36 095 HATCHes pays for the buffer's high-
+                // water mark once instead of allocating 100k+ vectors.
                 //
                 // Single closed loop only. Self-intersection / multi-
                 // loop / hole semantics are out of scope; cad++ HATCH
@@ -2268,7 +2314,8 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 float const cb = color.b / 255.0f;
                 float const ca = color.a / 255.0f;
 
-                std::vector<float> polygon;
+                auto& polygon = scratch.fill_polygon;
+                polygon.clear();
                 polygon.reserve(verb_count * 2);
                 auto append = [&](float x, float y) {
                     polygon.push_back(x);
@@ -2419,7 +2466,9 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 }
 
                 if (polygon.size() < 6) break;  // < 3 vertices
-                auto tris = polygon_ear_clip(std::move(polygon));
+                auto& tris = scratch.fill_tris;
+                tris.clear();
+                polygon_ear_clip(polygon, tris, scratch.fill_ear_remain);
                 auto& dst = scratch.batches.back().tri_vertices;
                 dst.reserve(dst.size() + tris.size() / 2);  // 2 floats / vertex
                 for (std::size_t t = 0; t + 5 < tris.size(); t += 6) {
