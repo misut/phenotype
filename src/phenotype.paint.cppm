@@ -99,13 +99,31 @@ inline void report_paint_overflow(Cmd opcode, unsigned int needed,
 template <render_backend R>
 [[nodiscard]] bool ensure(R& r, unsigned int needed, Cmd opcode) noexcept {
     if (r.buf_len() + needed > r.buf_size()) {
+        // Prefer grow over mid-paint flush. Empirically, a single
+        // backend frame that ends up split across multiple flushes
+        // loses every command emitted before the last flush — for
+        // example, cad++ loading colorwh.dwg renders the wheel
+        // (last hatch batch) but every preceding widget (heading,
+        // summary card, sidebar) disappears, even though the host
+        // returned success on every flush call. Keeping the whole
+        // frame in one contiguous buffer until end-of-paint sidesteps
+        // that whole class of backend-state corruption.
+        if (r.reserve(r.buf_len() + needed)) {
+            // Successful grow may have moved r.buf() — every emit_*
+            // in this file calls r.buf() per-write, so cached
+            // pointers in the caller are not a concern.
+            return true;
+        }
+        // Grow refused (cap exceeded). Fall through to the legacy
+        // mid-paint flush path; some backends will recover, the
+        // overflow case at least gets logged loudly.
         r.flush();
         r.buf_len() = 0;
-        // A mid-paint flush invalidates every paint_offset recorded so
-        // far this frame — those offsets referred to bytes that have
-        // been consumed and cleared from r.buf(). paint_node compares
-        // this epoch at entry and exit to know whether its recorded
-        // range is still trustworthy.
+        // A mid-paint flush invalidates every paint_offset recorded
+        // so far this frame — those offsets referred to bytes that
+        // have been consumed and cleared from r.buf(). paint_node
+        // compares this epoch at entry and exit to know whether its
+        // recorded range is still trustworthy.
         ++g_app.paint_flush_epoch;
         metrics::inst::paint_buffer_flushes.add();
     }
@@ -125,6 +143,7 @@ template <render_backend R>
 template <render_backend R>
 [[nodiscard]] bool ensure_blit(R& r, unsigned int needed) noexcept {
     if (r.buf_len() + needed > r.buf_size()) {
+        if (r.reserve(r.buf_len() + needed)) return true;
         r.flush();
         r.buf_len() = 0;
         ++g_app.paint_flush_epoch;
@@ -227,6 +246,16 @@ struct wasi_paint_host {
         if (phenotype_cmd_len > 0) {
             phenotype_flush(); phenotype_cmd_len = 0;
         }
+    }
+    // wasm host can't grow — `phenotype_cmd_buf` is a known global
+    // address shared with the JS reader, and the JS side reads
+    // BUF_SIZE bytes per flush. Future protocol change (e.g. a
+    // growable shared-memory region or a per-flush size export)
+    // would unlock this; until then, a single emit_* whose payload
+    // exceeds BUF_SIZE on web hits the existing overflow-report
+    // path instead of growing.
+    [[nodiscard]] bool reserve(unsigned int needed) {
+        return needed <= BUF_SIZE;
     }
     float canvas_width() const { return phenotype_get_canvas_width(); }
     float canvas_height() const { return phenotype_get_canvas_height(); }
