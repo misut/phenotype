@@ -667,7 +667,9 @@ struct LayoutNode {
     //
     // paint_dynamic marks a subtree containing widget::canvas paint_fn.
     // Those callbacks are opaque app code and may capture changing state
-    // without changing layout props, so the subtree must be repainted.
+    // without changing layout props, so the subtree must be repainted —
+    // unless the canvas opts in via paint_token (see below) and its
+    // token matches the value recorded last frame.
     std::uint32_t paint_offset = 0;
     std::uint32_t paint_length = 0;
     float         paint_ax = 0.0f;
@@ -675,6 +677,18 @@ struct LayoutNode {
     std::uint64_t paint_callback_mask = 0;
     bool          paint_dynamic = false;
     bool          paint_valid = false;
+
+    // Optional dirty-token cache for widget::canvas paint_fn nodes.
+    // Caller-supplied uint64; sentinel 0 = always-dirty (preserves the
+    // pre-token behaviour for every existing call site). When
+    // `paint_token != 0 && paint_token == paint_token_prev` after the
+    // layout diff, paint_node treats the canvas subtree as cache-eligible
+    // exactly like a static subtree: blits the prev_cmd_buf byte range
+    // and skips the paint_fn callback entirely. paint_token_prev is
+    // populated by diff_and_copy_layout from the matched old node's
+    // recorded paint_token.
+    std::uint64_t paint_token      = 0;
+    std::uint64_t paint_token_prev = 0;
 
     // Keyed-list reconciliation — see phenotype::keyed in the DSL.
     // `key` is set on a child by wrapping its builder in keyed(id, [&]{...}).

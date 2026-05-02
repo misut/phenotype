@@ -609,9 +609,20 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     // Byte-exact reuse: the bytes were emitted with identical ax/ay/
     // scroll_x/scroll_y and no intersecting hover/focus transition, so
     // they are byte-for-byte what this walk would produce.
+    //
+    // A widget::canvas paint_fn is normally opaque (forces re-walk),
+    // but when the caller opts in via a non-zero paint_token AND the
+    // diff carried forward an equal paint_token_prev, the canvas's
+    // emitted bytes are declared a pure function of unchanged inputs.
+    // We then treat it like a static subtree and blit; paint_fn is
+    // not invoked and the byte range (including the canvas-scoped
+    // scissor pair) is reused verbatim.
+    bool const canvas_token_hit = static_cast<bool>(node.paint_fn)
+        && node.paint_token != 0
+        && node.paint_token == node.paint_token_prev;
     if (!effective_inside
         && node.layout_valid && node.paint_valid
-        && !node.paint_fn
+        && (!node.paint_fn || canvas_token_hit)
         && !node.paint_dynamic
         && ax == node.paint_ax
         && ay == node.paint_ay
@@ -653,7 +664,17 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
     auto const before = r.buf_len();
     auto const entry_flush_epoch = g_app.paint_flush_epoch;
     std::uint64_t subtree_mask = callback_mask_bit(node.callback_id);
-    bool subtree_dynamic = static_cast<bool>(node.paint_fn);
+    // A canvas paint_fn is dynamic UNLESS the caller opted into the
+    // dirty-token contract by passing a non-zero paint_token. The
+    // contract says "my emitted bytes are a pure function of this
+    // token", so the bytes recorded on this miss-path frame are a
+    // legitimate cache for any later frame that produces the same
+    // token — even though *this* frame's blit guard already failed
+    // (e.g. first frame, token transition, position drift). We mark
+    // such subtrees non-dynamic so paint_valid gets recorded below
+    // and the next frame's diff/blit can hit.
+    bool subtree_dynamic =
+        static_cast<bool>(node.paint_fn) && node.paint_token == 0;
 
     float draw_x = ax - scroll_x;
     float draw_y = ay - scroll_y;
