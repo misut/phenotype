@@ -1326,6 +1326,13 @@ inline NodeHandle build_text_field(std::string const& current,
     detail::g_app.input_handlers.clear();
     detail::g_app.input_nodes.clear();
     detail::msg_queue().clear();
+    // Wipe per-call-site animation state so the first `animate_float`
+    // / `animate_color` inside `widget::text_field` snaps to its
+    // target instead of inheriting the previous test's interpolation
+    // (default → error swap would otherwise return mid-fade colours).
+    detail::local_store().clear();
+    detail::bump_local_gen();
+    detail::g_app.focused_id = 0xFFFFFFFFu;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
