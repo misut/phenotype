@@ -327,43 +327,74 @@ static DebugPlaneMsg map_debug_plane_text(std::string value) {
 }
 
 #if !defined(__wasi__) && !defined(__ANDROID__)
-// Regression: a single emit_* whose payload exceeds BUF_SIZE used to
-// silently walk past the end of the fixed buffer (memory corruption).
-// detail::ensure now detects the post-flush shortfall, ticks the
-// `phenotype.paint.buffer_overflow` Counter with the opcode attribute,
-// emits an [ERROR phenotype.paint] line, and drops the command. The
-// test toggles `diag_abort_on_paint_overflow` off so the debug-build
-// abort branch is suppressed; production code never touches that flag.
+// Single emit_* whose payload exceeds the backend's *initial* capacity
+// (INIT_SIZE = 65 536) used to silently walk past the end of the
+// fixed-size buffer (memory corruption). PR #220 turned that into a
+// loud overflow + drop. The dynamic-grow follow-up (this slab) goes
+// further: when the host can grow its backing store, the emit succeeds
+// and no overflow metric ticks. This test covers both branches.
+//
+// `diag_abort_on_paint_overflow` is toggled off so the debug-build
+// abort branch in `report_paint_overflow` is suppressed inside the
+// cap-exceeded part; production code never touches that flag.
 void test_paint_buffer_overflow_records_metric_and_drops_command() {
-    metrics::reset_all();
     detail::g_app.diag_abort_on_paint_overflow = false;
 
-    null_host host;
-    PathBuilder p;
-    p.move_to(0.0f, 0.0f);
-    // FillPath fixed overhead = 12 bytes; each line_to emits 3 verb
-    // words = 12 bytes. 6000 line_to → ~72 KB > 65536 (BUF_SIZE).
-    // Single command so a mid-paint flush cannot make room.
-    for (int i = 1; i < 6000; ++i)
-        p.line_to(static_cast<float>(i), static_cast<float>(i));
+    // ---- Part 1: emit > INIT_SIZE but < MAX_SIZE.
+    // The host's `reserve()` should grow `buffer_` past INIT_SIZE and
+    // the emit should land — overflow metric must NOT tick.
+    {
+        metrics::reset_all();
+        null_host host;
+        PathBuilder p;
+        p.move_to(0.0f, 0.0f);
+        // FillPath header = 12 bytes; each line_to emits 3 verb words
+        // = 12 bytes. 6000 line_to → ~72 KB > INIT_SIZE 65536, well
+        // below MAX_SIZE 4 MiB. Single command so the pre-flush
+        // shortcut can't help — only `reserve` can.
+        for (int i = 1; i < 6000; ++i)
+            p.line_to(static_cast<float>(i), static_cast<float>(i));
 
-    Color const red{255, 0, 0, 255};
-    emit_fill_path(host, p, red);
+        Color const red{255, 0, 0, 255};
+        emit_fill_path(host, p, red);
 
-    // No buffer overrun — the emit early-returned instead of writing
-    // past the end of the fixed array.
-    assert(host.buf_len() <= host.buf_size());
-    // Counter ticked with the opcode attribute.
-    assert(metrics::inst::paint_buffer_overflow.total() >= 1);
-    auto const& dps = metrics::inst::paint_buffer_overflow.data_points();
-    bool found_fillpath = false;
-    for (auto const& dp : dps) {
-        for (auto const& attr : dp.attributes) {
-            if (attr.key == "opcode" && attr.value == "FillPath")
-                found_fillpath = true;
-        }
+        // Buffer grew past INIT_SIZE, emit landed in full, no overflow.
+        assert(host.buf_size() > null_host::INIT_SIZE);
+        assert(host.buf_len() > null_host::INIT_SIZE);
+        assert(metrics::inst::paint_buffer_overflow.total() == 0);
     }
-    assert(found_fillpath);
+
+    // ---- Part 2: emit > MAX_SIZE.
+    // `reserve()` refuses past the cap; `ensure()` falls through to
+    // the existing report-overflow + drop path with the opcode
+    // attribute on the metric.
+    {
+        metrics::reset_all();
+        null_host host;
+        PathBuilder p;
+        p.move_to(0.0f, 0.0f);
+        // null_host::MAX_SIZE = 4 MiB. 12 bytes per line_to verb →
+        // ≥ 349 526 line_to to exceed; round to 400 000 so the
+        // FillPath header + closing alignment also clear the cap.
+        for (int i = 1; i < 400000; ++i)
+            p.line_to(static_cast<float>(i), static_cast<float>(i));
+
+        Color const red{255, 0, 0, 255};
+        emit_fill_path(host, p, red);
+
+        // Buffer maxed out at MAX_SIZE, write dropped, metric ticked.
+        assert(host.buf_size() <= null_host::MAX_SIZE);
+        assert(metrics::inst::paint_buffer_overflow.total() >= 1);
+        auto const& dps = metrics::inst::paint_buffer_overflow.data_points();
+        bool found_fillpath = false;
+        for (auto const& dp : dps) {
+            for (auto const& attr : dp.attributes) {
+                if (attr.key == "opcode" && attr.value == "FillPath")
+                    found_fillpath = true;
+            }
+        }
+        assert(found_fillpath);
+    }
 
     detail::g_app.diag_abort_on_paint_overflow = true;
 }

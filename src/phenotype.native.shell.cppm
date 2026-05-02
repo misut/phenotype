@@ -7,6 +7,7 @@ module;
 #include <functional>
 #include <optional>
 #include <utility>
+#include <vector>
 #endif
 
 export module phenotype.native.shell;
@@ -115,18 +116,36 @@ struct native_host {
             text, len);
     }
 
-    static constexpr unsigned int BUF_SIZE = 65536;
-    alignas(4) unsigned char buffer[BUF_SIZE]{};
+    // Growable command stream. Initial capacity matches the legacy
+    // fixed-size buffer (65 536 bytes) so single-canvas apps stay on
+    // the same allocation profile they had before. `reserve()`
+    // doubles past that, capped at MAX_BUF_SIZE (4 MiB) so a runaway
+    // emit_* still trips the diagnostic overflow path instead of
+    // exhausting RSS on a dense scene.
+    static constexpr unsigned int INIT_BUF_SIZE = 65536;
+    static constexpr unsigned int MAX_BUF_SIZE  = 4 * 1024 * 1024;
+    std::vector<unsigned char> buffer_ = std::vector<unsigned char>(INIT_BUF_SIZE);
     unsigned int len_ = 0;
 
-    unsigned char* buf() { return buffer; }
+    unsigned char* buf() { return buffer_.data(); }
     unsigned int& buf_len() { return len_; }
-    unsigned int buf_size() { return BUF_SIZE; }
+    unsigned int buf_size() {
+        return static_cast<unsigned int>(buffer_.size());
+    }
     void flush() {
         if (len_ == 0) return;
         if (platform && platform->renderer.flush)
-            platform->renderer.flush(buffer, len_);
+            platform->renderer.flush(buffer_.data(), len_);
         len_ = 0;
+    }
+    [[nodiscard]] bool reserve(unsigned int needed) {
+        if (needed > MAX_BUF_SIZE) return false;
+        if (needed <= buffer_.size()) return true;
+        std::size_t new_size = buffer_.size();
+        while (new_size < needed) new_size *= 2;
+        if (new_size > MAX_BUF_SIZE) new_size = MAX_BUF_SIZE;
+        buffer_.resize(new_size);
+        return needed <= buffer_.size();
     }
 
     float canvas_width() const {

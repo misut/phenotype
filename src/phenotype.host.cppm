@@ -11,6 +11,7 @@
 
 module;
 #include <concepts>
+#include <vector>
 export module phenotype.host;
 
 import phenotype.types;
@@ -31,17 +32,29 @@ concept text_measurer = requires(T const& t, float font_size,
     { t.measure_text(font_size, font, text, len) } -> std::same_as<float>;
 };
 
-// `render_backend` exposes a fixed-byte command-stream buffer plus
-// flush(). Overflow is detected and surfaced by `phenotype::detail::
-// ensure` in phenotype.paint — backends do NOT define their own
-// `ensure(needed)` member, since a parallel implementation would
-// silently bypass the diagnostic path.
+// `render_backend` exposes a command-stream buffer plus flush(). The
+// buffer may be either fixed-size (wasm: a known global address shared
+// with the JS reader) or growable (native hosts: a vector that
+// `reserve()` extends on demand so single emits whose payload exceeds
+// the current capacity don't have to be dropped). Overflow is detected
+// and surfaced by `phenotype::detail::ensure` in phenotype.paint —
+// backends do NOT define their own `ensure(needed)` member, since a
+// parallel implementation would silently bypass the diagnostic path.
+//
+// `reserve(needed)` should grow the backing store so `buf_size()`
+// returns at least `needed`; returns false when the host refuses to
+// grow (wasm fixed buffer, or native cap exceeded). `ensure` falls
+// through to the existing overflow-report path on false. Note that a
+// successful `reserve` may invalidate any previously-cached `buf()`
+// pointer — every emit_* in phenotype.paint already calls `r.buf()`
+// per write, so this is safe in current call sites.
 template <class T>
-concept render_backend = requires(T& t) {
-    { t.buf()      } -> std::same_as<unsigned char*>;
-    { t.buf_len()  } -> std::same_as<unsigned int&>;
-    { t.buf_size() } -> std::same_as<unsigned int>;
-    { t.flush()    };
+concept render_backend = requires(T& t, unsigned int needed) {
+    { t.buf()             } -> std::same_as<unsigned char*>;
+    { t.buf_len()         } -> std::same_as<unsigned int&>;
+    { t.buf_size()        } -> std::same_as<unsigned int>;
+    { t.flush()           };
+    { t.reserve(needed)   } -> std::same_as<bool>;
 };
 
 template <class T>
@@ -68,15 +81,29 @@ struct null_host {
         return static_cast<float>(len) * font_size * 0.6f;
     }
 
-    // render_backend
-    static constexpr unsigned int SIZE = 65536;
-    alignas(4) unsigned char buffer[SIZE]{};
+    // render_backend — growable command stream. Initial capacity
+    // matches the legacy fixed-size buffer (65 536 bytes) so any
+    // existing test that emits ≤ 65 536 bytes stays on the hot path
+    // without reserve() ever firing. `reserve()` doubles past that,
+    // capped at MAX_SIZE so a runaway emit can't blow up RSS.
+    static constexpr unsigned int INIT_SIZE = 65536;
+    static constexpr unsigned int MAX_SIZE  = 4 * 1024 * 1024;  // 4 MiB
+    std::vector<unsigned char> buffer_ = std::vector<unsigned char>(INIT_SIZE);
     unsigned int len_ = 0;
 
-    unsigned char* buf() { return buffer; }
+    unsigned char* buf() { return buffer_.data(); }
     unsigned int& buf_len() { return len_; }
-    unsigned int buf_size() { return SIZE; }
+    unsigned int buf_size() { return static_cast<unsigned int>(buffer_.size()); }
     void flush() { len_ = 0; }
+    [[nodiscard]] bool reserve(unsigned int needed) {
+        if (needed > MAX_SIZE) return false;
+        if (needed <= buffer_.size()) return true;
+        std::size_t new_size = buffer_.size();
+        while (new_size < needed) new_size *= 2;
+        if (new_size > MAX_SIZE) new_size = MAX_SIZE;
+        buffer_.resize(new_size);
+        return needed <= buffer_.size();
+    }
 
     // canvas_source
     float canvas_width() const { return 800.0f; }
