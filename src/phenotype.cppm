@@ -179,15 +179,21 @@ inline void link(str label, str href) {
     auto const& t = detail::g_app.theme;
     node.text = std::string(label.data, label.len);
     node.font_size = t.small_font_size;
-    node.text_color = t.accent;
-    node.hover_text_color = {29, 78, 216, 255};
     node.url = std::string(href.data, href.len);
     node.cursor_type = 1;
     node.interaction_role = InteractionRole::Link;
 
     auto url_copy = node.url;
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
+    bool const is_hovered = (id == detail::g_app.hovered_id);
     bool const is_focused = (id == detail::g_app.focused_id);
+    // View-time hover fade between accent and the deeper hover blue.
+    // `node.hover_text_color` stays unset so paint's
+    // `(is_hovered && hover_text_color.a > 0)` guard falls through to
+    // the animated `node.text_color`.
+    Color const link_hover_color{29, 78, 216, 255};
+    node.text_color = animate_color(
+        is_hovered ? link_hover_color : t.accent, 150);
     // Focus ring grows from no border to `state_focus_ring_width` and
     // back. Link's resting border is zero so the ring appears entirely
     // because of focus. The colour interpolates from the focus-ring
@@ -367,6 +373,7 @@ inline void toggle(str label, bool active, Msg msg,
     auto const& t = ::phenotype::detail::g_app.theme;
     auto id = static_cast<unsigned int>(
         ::phenotype::detail::g_app.callbacks.size());
+    bool const is_hovered = (id == ::phenotype::detail::g_app.hovered_id);
     bool const is_focused = (id == ::phenotype::detail::g_app.focused_id);
     Color const ring_off{t.state_focus_ring.r, t.state_focus_ring.g,
                          t.state_focus_ring.b, 0};
@@ -380,6 +387,16 @@ inline void toggle(str label, bool active, Msg msg,
         row.callback_id          = id;
         row.interaction_role     = role;
         row.focusable            = true;
+        // Hover highlight: cross-fade between the surrounding card
+        // surface and the hover-bg tint, both fully opaque, so the
+        // RGB transition is monotonic. Earlier draft used an
+        // alpha-only fade (state_hover_bg RGB at alpha 0/255) but
+        // intermediate alphas combined with the rounded-corner
+        // anti-aliasing read as a visible "deep darken" mid-fade.
+        // `border_radius` keeps the highlight rounded.
+        row.background = ::phenotype::animate_color(
+            is_hovered ? t.state_hover_bg : t.surface, 150);
+        row.border_radius = t.radius_sm;
         // Focus chrome on the row: width grows from 0 to
         // `state_focus_ring_width`, colour fades from the focus-ring
         // RGB at alpha 0 (invisible) to full alpha so checkbox/radio
