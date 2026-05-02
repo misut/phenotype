@@ -16,6 +16,7 @@ struct Decrement {};
 struct NameChanged { std::string text; };
 struct ImeChanged { std::string text; };
 struct ToggleAgreed {};
+struct ToggleNotifications {};
 struct SetChoice { int value; };
 struct Resized { int width; int height; float scale; };
 
@@ -25,6 +26,7 @@ using Msg = std::variant<
     NameChanged,
     ImeChanged,
     ToggleAgreed,
+    ToggleNotifications,
     SetChoice,
     Resized>;
 
@@ -35,6 +37,7 @@ struct State {
     std::string name;
     std::string ime_sample;
     bool agreed = false;
+    bool notifications = false;
     int choice = 0;
     int viewport_width = 0;
     int viewport_height = 0;
@@ -52,6 +55,7 @@ void update(State& state, Msg msg) {
         else if constexpr (std::same_as<T, NameChanged>) state.name = m.text;
         else if constexpr (std::same_as<T, ImeChanged>) state.ime_sample = m.text;
         else if constexpr (std::same_as<T, ToggleAgreed>) state.agreed = !state.agreed;
+        else if constexpr (std::same_as<T, ToggleNotifications>) state.notifications = !state.notifications;
         else if constexpr (std::same_as<T, SetChoice>)  state.choice = m.value;
         else if constexpr (std::same_as<T, Resized>) {
             state.viewport_width = m.width;
@@ -299,11 +303,15 @@ void view(State const& state) {
             layout::spacer(8);
             widget::checkbox<Msg>("I agree to the terms", state.agreed, ToggleAgreed{});
             layout::spacer(6);
+            widget::switch_<Msg>("Email notifications", state.notifications, ToggleNotifications{});
+            layout::spacer(6);
             widget::radio<Msg>("Option A", state.choice == 0, SetChoice{0});
             widget::radio<Msg>("Option B", state.choice == 1, SetChoice{1});
             widget::radio<Msg>("Option C", state.choice == 2, SetChoice{2});
             layout::spacer(10);
             widget::text(std::string("Agreement: ") + (state.agreed ? "enabled" : "disabled"));
+            layout::spacer(4);
+            widget::text(std::string("Notifications: ") + (state.notifications ? "on" : "off"));
             layout::spacer(4);
             widget::text(std::string("Selected plan: ") + selected_choice_label(state.choice));
         });

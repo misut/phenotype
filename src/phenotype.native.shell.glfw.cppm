@@ -310,16 +310,18 @@ int run_app_with_platform(platform_api const& platform,
 
         // Animation auto-tick. `animate_value` sets the flag during
         // view whenever an interpolation is still in flight; we drive
-        // another paint at ~60Hz to keep the fade advancing without
-        // waiting on input. The runner clears the flag at the start
+        // a full rebuild at ~60Hz so the view function re-evaluates
+        // `animate_value` and the new interpolated value reaches the
+        // arena before paint. The runner clears the flag at the start
         // of every view and re-sets it if any animation is still
         // unfinished, so the loop self-throttles once everything
-        // converges.
+        // converges. (`repaint_current` alone only re-paints the
+        // arena, leaving the baked-in start-of-fade colour frozen.)
         if (::phenotype::detail::g_app.has_active_animations) {
             auto now = std::chrono::steady_clock::now();
             if (now - last_animation_tick
                 >= std::chrono::milliseconds(16)) {
-                ::phenotype::native::detail::repaint_current();
+                ::phenotype::detail::trigger_rebuild();
                 last_animation_tick = now;
             }
         }
