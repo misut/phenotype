@@ -1154,6 +1154,19 @@ struct ColorInstanceGPU {
     float params[4]{};
 };
 
+// Per-vertex GPU layout for the triangle pipeline (FillPath fast path).
+// Each ear-clipped triangle pushes 3 of these into the batch's triangle
+// vertex buffer; the GPU rasterises with hardware coverage rules so
+// adjacent triangles tile pixel-perfectly without sub-pixel gaps. 24
+// bytes/vertex × 3 vertices/triangle = 72 bytes/triangle, vs. ~50
+// scanlines × 48 bytes/ColorInstance = ~2.4 KB/triangle under the old
+// CPU scanline path. A 36k-hatch DWG (colorwh.dwg) drops from millions
+// of fill_rect instances to ~70k vertices in one drawPrimitives call.
+struct TriVertexGPU {
+    float pos[2]{};
+    float color[4]{};
+};
+
 // Per-arc instance for the SDF arc pipeline. Layout matches the
 // shader's `ArcInstance` struct exactly (3 × float4 = 48 bytes).
 //   center_radius_thickness = (cx, cy, radius, thickness)
@@ -1383,10 +1396,16 @@ inline ImeState g_ime;
 // command renders unclipped.
 struct ScissorBatch {
     float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+    // tri_vertices holds raw triangle-list vertices (3 per triangle)
+    // accumulated from FillPath ear-clip output. Drawn before colors
+    // in the same batch so filled regions sit beneath any subsequent
+    // FillRect / DrawLine quads emitted in the same canvas.
+    std::vector<TriVertexGPU>     tri_vertices;
     std::vector<ColorInstanceGPU> colors;
     std::vector<ArcInstanceGPU>   arcs;
     std::vector<ImageInstanceGPU> images;
     std::vector<TextInstanceGPU>  texts;
+    std::uint32_t tri_first   = 0;
     std::uint32_t color_first = 0;
     std::uint32_t arc_first   = 0;
     std::uint32_t image_first = 0;
@@ -1401,6 +1420,7 @@ struct FrameScratch {
     // Flat staging vectors uploaded to GPU instance buffers. Populated
     // by finalize_batches() — direct decode/prepare pushes go to the
     // per-batch locals above.
+    std::vector<TriVertexGPU>     tri_vertices;
     std::vector<ColorInstanceGPU> color_instances;
     std::vector<ArcInstanceGPU>   arc_instances;
     std::vector<ImageInstanceGPU> image_instances;
@@ -1426,6 +1446,7 @@ struct FrameScratch {
     void clear() {
         batches.clear();
         batches.push_back(ScissorBatch{});  // sentinel: full viewport
+        tri_vertices.clear();
         color_instances.clear();
         arc_instances.clear();
         overlay_color_instances.clear();
@@ -1443,7 +1464,7 @@ struct FrameScratch {
 inline void open_scissor_batch(FrameScratch& s,
                                float x, float y, float w, float h) {
     auto& cur = s.batches.back();
-    if (cur.colors.empty() && cur.arcs.empty()
+    if (cur.tri_vertices.empty() && cur.colors.empty() && cur.arcs.empty()
         && cur.images.empty() && cur.texts.empty()) {
         cur.x = x; cur.y = y; cur.w = w; cur.h = h;
         return;
@@ -1454,15 +1475,19 @@ inline void open_scissor_batch(FrameScratch& s,
 }
 
 inline void finalize_batches(FrameScratch& s) {
+    s.tri_vertices.clear();
     s.color_instances.clear();
     s.arc_instances.clear();
     s.image_instances.clear();
     s.text_instances.clear();
     for (auto& b : s.batches) {
+        b.tri_first   = static_cast<std::uint32_t>(s.tri_vertices.size());
         b.color_first = static_cast<std::uint32_t>(s.color_instances.size());
         b.arc_first   = static_cast<std::uint32_t>(s.arc_instances.size());
         b.image_first = static_cast<std::uint32_t>(s.image_instances.size());
         b.text_first  = static_cast<std::uint32_t>(s.text_instances.size());
+        s.tri_vertices.insert(s.tri_vertices.end(),
+                              b.tri_vertices.begin(), b.tri_vertices.end());
         s.color_instances.insert(s.color_instances.end(),
                                  b.colors.begin(), b.colors.end());
         s.arc_instances.insert(s.arc_instances.end(),
@@ -1555,14 +1580,19 @@ inline void append_color_instance(std::vector<ColorInstanceGPU>& out,
     out.push_back(inst);
 }
 
-// FillPath helpers (Slab 5). Walk a flat polygon (vertex list with an
-// implicit close), ear-clip into a triangle list, then rasterise each
-// triangle into 1-pixel-tall axis-aligned strips dispatched onto the
-// existing colour pipeline (`draw_type = 0`). No new pipeline /
-// shader. The strips approach trades a few hundred extra
-// `ColorInstanceGPU` entries per fill for zero shader churn — fine
-// for typical CAD HATCH content (≤ 100 boundary verts, < 1000 px
-// fill area).
+// FillPath helpers. Walk a flat polygon (vertex list with an implicit
+// close) and ear-clip it into a triangle list. The triangles are then
+// fed into the dedicated triangle pipeline (`vs_tri` / `fs_tri`) as
+// raw 3-vertex tuples — hardware rasterisation gives pixel-perfect
+// coverage on shared edges and collapses tens of thousands of HATCH
+// fills (e.g. colorwh.dwg's 36 095 boundary loops) into a single
+// drawPrimitives call.
+//
+// The earlier CPU scanline path emitted one ColorInstance per
+// 1-pixel-tall horizontal strip per triangle, which both (a) produced
+// sub-pixel gaps at slim hatch tips when the strip width fell below
+// 0.5 px and the strip was dropped, and (b) ballooned the colour
+// instance buffer past tens of MB on dense CAD content.
 inline bool point_in_triangle(float px, float py,
                               float ax, float ay,
                               float bx, float by,
@@ -1647,56 +1677,6 @@ inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
     return tris;
 }
 
-// Rasterise one triangle into 1-px-tall horizontal strips. Each strip
-// becomes one `ColorInstanceGPU` with `draw_type = 0` (Fill).
-inline void rasterize_triangle_to_color(
-        float v0x, float v0y, float v1x, float v1y, float v2x, float v2y,
-        float r, float g, float b, float a,
-        std::vector<ColorInstanceGPU>& out) {
-    float vx[3] = {v0x, v1x, v2x};
-    float vy[3] = {v0y, v1y, v2y};
-    // Sort by y ascending.
-    auto sort_pair = [&](int i, int j) {
-        if (vy[i] > vy[j]) {
-            std::swap(vy[i], vy[j]);
-            std::swap(vx[i], vx[j]);
-        }
-    };
-    sort_pair(0, 1); sort_pair(1, 2); sort_pair(0, 1);
-
-    float const top_y = vy[0];
-    float const mid_y = vy[1];
-    float const bot_y = vy[2];
-    if (bot_y - top_y < 1e-3f) return;  // zero-height degenerate
-
-    auto interp_x = [](float y, float ya, float xa, float yb, float xb) {
-        if (yb - ya < 1e-6f) return xa;
-        return xa + (xb - xa) * (y - ya) / (yb - ya);
-    };
-
-    int const y_start = static_cast<int>(std::floor(top_y));
-    int const y_end   = static_cast<int>(std::ceil(bot_y));
-    for (int y = y_start; y < y_end; ++y) {
-        float const yc = static_cast<float>(y) + 0.5f;
-        if (yc < top_y || yc > bot_y) continue;
-        float xa, xb;
-        if (yc < mid_y) {
-            xa = interp_x(yc, top_y, vx[0], bot_y, vx[2]);
-            xb = interp_x(yc, top_y, vx[0], mid_y, vx[1]);
-        } else {
-            xa = interp_x(yc, top_y, vx[0], bot_y, vx[2]);
-            xb = interp_x(yc, mid_y, vx[1], bot_y, vx[2]);
-        }
-        float const x_left  = std::min(xa, xb);
-        float const x_right = std::max(xa, xb);
-        float const w = x_right - x_left;
-        if (w < 0.5f) continue;  // sub-pixel strip
-        append_color_instance(out, x_left, static_cast<float>(y),
-                              w, 1.0f,
-                              r, g, b, a,
-                              0.0f, 0.0f, 0.0f);  // draw_type = 0 (Fill)
-    }
-}
 
 inline void append_text_instance(std::vector<TextInstanceGPU>& out,
                                  float x, float y, float w, float h,
@@ -2440,14 +2420,20 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
 
                 if (polygon.size() < 6) break;  // < 3 vertices
                 auto tris = polygon_ear_clip(std::move(polygon));
-                auto& dst = scratch.batches.back().colors;
+                auto& dst = scratch.batches.back().tri_vertices;
+                dst.reserve(dst.size() + tris.size() / 2);  // 2 floats / vertex
                 for (std::size_t t = 0; t + 5 < tris.size(); t += 6) {
-                    rasterize_triangle_to_color(
-                        tris[t],     tris[t + 1],
-                        tris[t + 2], tris[t + 3],
-                        tris[t + 4], tris[t + 5],
-                        cr, cg, cb, ca,
-                        dst);
+                    // Push three vertices for this triangle. Hardware
+                    // rasterisation handles edge coverage exactly so
+                    // adjacent triangles tile pixel-perfectly without
+                    // the sub-pixel gaps the previous CPU scanline
+                    // path produced for slim hatch slivers.
+                    TriVertexGPU v;
+                    v.color[0] = cr; v.color[1] = cg;
+                    v.color[2] = cb; v.color[3] = ca;
+                    v.pos[0] = tris[t];     v.pos[1] = tris[t + 1]; dst.push_back(v);
+                    v.pos[0] = tris[t + 2]; v.pos[1] = tris[t + 3]; dst.push_back(v);
+                    v.pos[0] = tris[t + 4]; v.pos[1] = tris[t + 5]; dst.push_back(v);
                 }
                 break;
             }
@@ -2986,6 +2972,39 @@ using namespace metal;
 
 struct Uniforms { float2 viewport; float2 _pad; };
 
+// Triangle pipeline — raw 3-vertex triangle list with per-vertex
+// colour. Used by Cmd::FillPath after CPU ear-clipping. Hardware
+// rasterisation gives pixel-perfect coverage on shared edges, fixing
+// the sub-pixel gaps the previous CPU scanline path produced for slim
+// HATCH slivers (e.g. colorwh.dwg's inner-radius wedge tips).
+struct TriVertex {
+    float2 pos;
+    float4 color;
+};
+
+struct TriVsOut {
+    float4 pos [[position]];
+    float4 color;
+};
+
+vertex TriVsOut vs_tri(
+    uint vi [[vertex_id]],
+    constant Uniforms& u [[buffer(0)]],
+    const device TriVertex* verts [[buffer(1)]]
+) {
+    TriVertex v = verts[vi];
+    float cx = (v.pos.x / u.viewport.x) * 2.0 - 1.0;
+    float cy = 1.0 - (v.pos.y / u.viewport.y) * 2.0;
+    TriVsOut out;
+    out.pos = float4(cx, cy, 0, 1);
+    out.color = v.color;
+    return out;
+}
+
+fragment float4 fs_tri(TriVsOut in [[stage_in]]) {
+    return in.color;
+}
+
 struct ColorVsOut {
     float4 pos       [[position]];
     float4 color;
@@ -3207,11 +3226,14 @@ struct RendererState {
     MTL::Device* device = nullptr;
     MTL::CommandQueue* queue = nullptr;
     CA::MetalLayer* layer = nullptr;
+    MTL::RenderPipelineState* tri_pipeline = nullptr;
     MTL::RenderPipelineState* color_pipeline = nullptr;
     MTL::RenderPipelineState* arc_pipeline = nullptr;
     MTL::RenderPipelineState* image_pipeline = nullptr;
     MTL::RenderPipelineState* text_pipeline = nullptr;
     MTL::Buffer* uniform_buf = nullptr;
+    MTL::Buffer* tri_vertices_buf = nullptr;
+    std::size_t tri_vertices_capacity = 0;
     MTL::Buffer* color_instances_buf = nullptr;
     std::size_t color_instances_capacity = 0;
     MTL::Buffer* arc_instances_buf = nullptr;
@@ -5234,12 +5256,14 @@ inline void renderer_init(native_surface_handle handle) {
         return;
     }
 
+    g_renderer.tri_pipeline   = create_pipeline(g_renderer.device, lib, "vs_tri",   "fs_tri");
     g_renderer.color_pipeline = create_pipeline(g_renderer.device, lib, "vs_color", "fs_color");
     g_renderer.arc_pipeline   = create_pipeline(g_renderer.device, lib, "vs_arc",   "fs_arc");
     g_renderer.image_pipeline = create_pipeline(g_renderer.device, lib, "vs_image", "fs_image");
     g_renderer.text_pipeline = create_pipeline(g_renderer.device, lib, "vs_text", "fs_text");
     lib->release();
-    if (!g_renderer.color_pipeline || !g_renderer.arc_pipeline
+    if (!g_renderer.tri_pipeline || !g_renderer.color_pipeline
+        || !g_renderer.arc_pipeline
         || !g_renderer.image_pipeline || !g_renderer.text_pipeline) {
         std::fprintf(stderr, "[metal] failed to create render pipelines\n");
         return;
@@ -5371,6 +5395,25 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     auto* encoder = command_buffer->renderCommandEncoder(pass);
 
     auto& scratch = g_renderer.scratch;
+    auto const tri_bytes = scratch.tri_vertices.size() * sizeof(TriVertexGPU);
+    bool tri_uploaded = false;
+    if (!scratch.tri_vertices.empty()) {
+        if (!ensure_instance_buffer(
+                g_renderer.tri_vertices_buf,
+                g_renderer.tri_vertices_capacity,
+                tri_bytes,
+                "tri_vertices")) {
+            encoder->endEncoding();
+            pool->release();
+            return;
+        }
+        std::memcpy(
+            g_renderer.tri_vertices_buf->contents(),
+            scratch.tri_vertices.data(),
+            tri_bytes);
+        tri_uploaded = true;
+    }
+
     auto const color_bytes = scratch.color_instances.size() * sizeof(ColorInstanceGPU);
     bool color_uploaded = false;
     if (!scratch.color_instances.empty()) {
@@ -5452,6 +5495,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     // finalize_batches; we use baseInstance to point at them.
     float const scissor_scale = frame_scale;
     for (auto const& batch : scratch.batches) {
+        auto const batch_tri_count =
+            static_cast<std::uint32_t>(batch.tri_vertices.size());
         auto const batch_color_count =
             static_cast<std::uint32_t>(batch.colors.size());
         auto const batch_arc_count =
@@ -5460,7 +5505,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             static_cast<std::uint32_t>(batch.images.size());
         auto const batch_text_count =
             static_cast<std::uint32_t>(batch.texts.size());
-        if (batch_color_count + batch_arc_count
+        if (batch_tri_count + batch_color_count + batch_arc_count
             + batch_image_count + batch_text_count == 0)
             continue;
         auto const sr = compute_metal_scissor(
@@ -5470,6 +5515,19 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         if (sr.width == 0 || sr.height == 0)
             continue;
         encoder->setScissorRect(sr);
+
+        // Triangles render first within the batch so filled regions
+        // (HATCH solids) sit beneath any FillRect / DrawLine quads
+        // emitted later in the same canvas frame.
+        if (tri_uploaded && batch_tri_count > 0) {
+            encoder->setRenderPipelineState(g_renderer.tri_pipeline);
+            encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+            encoder->setVertexBuffer(g_renderer.tri_vertices_buf, 0, 1);
+            encoder->drawPrimitives(
+                MTL::PrimitiveTypeTriangle,
+                NS::UInteger(batch.tri_first),
+                NS::UInteger(batch_tri_count));
+        }
 
         if (color_uploaded && batch_color_count > 0) {
             encoder->setRenderPipelineState(g_renderer.color_pipeline);
@@ -5604,6 +5662,7 @@ inline void renderer_shutdown() {
     if (g_renderer.image_instances_buf) { g_renderer.image_instances_buf->release(); g_renderer.image_instances_buf = nullptr; }
     if (g_renderer.text_instances_buf) { g_renderer.text_instances_buf->release(); g_renderer.text_instances_buf = nullptr; }
     if (g_renderer.color_instances_buf) { g_renderer.color_instances_buf->release(); g_renderer.color_instances_buf = nullptr; }
+    if (g_renderer.tri_vertices_buf) { g_renderer.tri_vertices_buf->release(); g_renderer.tri_vertices_buf = nullptr; }
     if (g_renderer.arc_instances_buf) { g_renderer.arc_instances_buf->release(); g_renderer.arc_instances_buf = nullptr; }
     if (g_renderer.overlay_color_instances_buf) { g_renderer.overlay_color_instances_buf->release(); g_renderer.overlay_color_instances_buf = nullptr; }
     if (g_renderer.uniform_buf) { g_renderer.uniform_buf->release(); g_renderer.uniform_buf = nullptr; }
@@ -5611,6 +5670,7 @@ inline void renderer_shutdown() {
     if (g_renderer.text_pipeline) { g_renderer.text_pipeline->release(); g_renderer.text_pipeline = nullptr; }
     if (g_renderer.arc_pipeline) { g_renderer.arc_pipeline->release(); g_renderer.arc_pipeline = nullptr; }
     if (g_renderer.color_pipeline) { g_renderer.color_pipeline->release(); g_renderer.color_pipeline = nullptr; }
+    if (g_renderer.tri_pipeline) { g_renderer.tri_pipeline->release(); g_renderer.tri_pipeline = nullptr; }
     if (g_renderer.layer) { g_renderer.layer->release(); g_renderer.layer = nullptr; }
     if (g_renderer.queue) { g_renderer.queue->release(); g_renderer.queue = nullptr; }
     if (g_renderer.device) { g_renderer.device->release(); g_renderer.device = nullptr; }
@@ -5628,6 +5688,7 @@ inline void renderer_shutdown() {
     g_renderer.text_cache.dirty_max_x = 0;
     g_renderer.text_cache.dirty_max_y = 0;
     g_renderer.text_cache.active_scale_key = 0;
+    g_renderer.tri_vertices_capacity = 0;
     g_renderer.color_instances_capacity = 0;
     g_renderer.overlay_color_instances_capacity = 0;
     g_renderer.image_instances_capacity = 0;
