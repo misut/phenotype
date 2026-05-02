@@ -257,10 +257,16 @@ inline void cell(str content,
 
 // button<Msg> — click posts a copy of `msg` and triggers a rebuild.
 //
-//   variant=Default  — surface chrome with hover_bg fallback.
+//   variant=Default  — surface chrome that fades to state_hover_bg on hover.
 //   variant=Primary  — accent-filled, white text, hover darkens to accent_strong.
 //   disabled=true    — chrome switches to state_disabled_*, click and Tab focus
 //                      are suppressed (no callback registered, focusable=false).
+//
+// Hover is a view-time fade rather than a paint-time branch: the
+// background colour interpolates over ~150ms via `animate_color`, which
+// reads the same pattern as `widget::switch_`. Paint's hover_background
+// fallback stays available for widgets (tabs, link) that haven't been
+// migrated yet.
 template<typename Msg>
 inline void button(str label, Msg msg,
                    ButtonVariant variant = ButtonVariant::Default,
@@ -291,24 +297,34 @@ inline void button(str label, Msg msg,
         return;
     }
 
+    // Predict the callback id we're about to push so the hover sample
+    // mirrors paint's own check (phenotype.paint.cppm:632) at view time.
+    auto const id = static_cast<unsigned int>(
+        detail::g_app.callbacks.size());
+    bool const is_hovered = (id == detail::g_app.hovered_id);
+
+    Color base_bg, hover_bg;
     switch (variant) {
         case ButtonVariant::Primary:
-            node.background = t.accent;
+            base_bg = t.accent;
+            hover_bg = t.accent_strong;
             node.text_color = t.state_active_fg;
-            node.hover_background = t.accent_strong;
             node.border_color = t.accent;
             break;
         case ButtonVariant::Default:
         default:
-            node.background = t.surface;
+            base_bg = t.surface;
+            hover_bg = t.state_hover_bg;
             node.text_color = t.foreground;
-            node.hover_background = t.state_hover_bg;
             node.border_color = t.border;
             break;
     }
+    // `node.hover_background` stays unset so paint's
+    // `(is_hovered && hover_background.a > 0)` guard falls through to
+    // the animated `node.background` we just produced.
+    node.background = animate_color(is_hovered ? hover_bg : base_bg, 150);
     node.cursor_type = 1;
 
-    auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
     detail::g_app.callbacks.push_back([msg = std::move(msg)] {
         detail::post<Msg>(msg);
         detail::trigger_rebuild();
