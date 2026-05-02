@@ -2469,8 +2469,15 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 auto& tris = scratch.fill_tris;
                 tris.clear();
                 polygon_ear_clip(polygon, tris, scratch.fill_ear_remain);
+                // Append vertices via push_back so the vector's own
+                // amortised doubling growth applies. A naive
+                // dst.reserve(dst.size() + small_delta) here is a
+                // performance trap: libc++'s reserve allocates
+                // EXACTLY the requested capacity, so calling it once
+                // per HATCH with a small delta forces a realloc-and-
+                // copy on every fill — O(N²) cumulative on dense
+                // CAD content (36 095 fills × growing buffer ≈ 2 s).
                 auto& dst = scratch.batches.back().tri_vertices;
-                dst.reserve(dst.size() + tris.size() / 2);  // 2 floats / vertex
                 for (std::size_t t = 0; t + 5 < tris.size(); t += 6) {
                     // Push three vertices for this triangle. Hardware
                     // rasterisation handles edge coverage exactly so
