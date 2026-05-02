@@ -1168,10 +1168,17 @@ namespace button_test {
 struct Click {};
 using ButtonMsg = std::variant<Click>;
 
-inline NodeHandle build_button(ButtonVariant variant, bool disabled) {
+inline NodeHandle build_button(ButtonVariant variant, bool disabled,
+                               unsigned int hovered_id = 0xFFFFFFFFu) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::msg_queue().clear();
+    // Wipe per-call-site animation state so the first `animate_color`
+    // inside `widget::button` snaps to its target instead of inheriting
+    // the previous test's interpolation.
+    detail::local_store().clear();
+    detail::bump_local_gen();
+    detail::g_app.hovered_id = hovered_id;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -1195,7 +1202,10 @@ void test_button_default_variant() {
            btn.background.g == t.surface.g &&
            btn.background.b == t.surface.b);
     assert(btn.text_color.r == t.foreground.r);
-    assert(btn.hover_background.r == t.state_hover_bg.r);
+    // Hover is now driven by view-time animate_color; the static
+    // `hover_background` field is no longer set so paint's fallback
+    // branch falls through to the animated `background`.
+    assert(btn.hover_background.a == 0);
     assert(btn.border_color.r == t.border.r);
     assert(btn.border_width == 1);
     assert(btn.border_radius == t.radius_sm);
@@ -1214,13 +1224,44 @@ void test_button_primary_variant() {
            btn.background.g == t.accent.g &&
            btn.background.b == t.accent.b);
     assert(btn.text_color.r == t.state_active_fg.r);
-    assert(btn.hover_background.r == t.accent_strong.r);
+    assert(btn.hover_background.a == 0);
     assert(btn.border_color.r == t.accent.r);
     assert(btn.border_width == 1);
     assert(btn.cursor_type == 1);
     assert(btn.focusable == true);
     assert(btn.callback_id != 0xFFFFFFFFu);
     std::puts("PASS: button primary variant");
+}
+
+// Hover smoke test: build a button with `g_app.hovered_id` pre-set to
+// the id we know the button will land on. animate_color's first call
+// snaps to its target (initialised=false), so the resulting node
+// background must equal the variant's hover colour exactly. This wires
+// up the view-time check without needing to advance time.
+void test_button_default_hovered_snaps_to_hover_bg() {
+    auto btn_h = button_test::build_button(
+        ButtonVariant::Default, /*disabled=*/false, /*hovered_id=*/0u);
+    auto& btn = detail::node_at(btn_h);
+    auto const& t = detail::g_app.theme;
+    assert(btn.callback_id == 0u);
+    assert(btn.background.r == t.state_hover_bg.r &&
+           btn.background.g == t.state_hover_bg.g &&
+           btn.background.b == t.state_hover_bg.b);
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    std::puts("PASS: button default snaps to hover bg when hovered");
+}
+
+void test_button_primary_hovered_snaps_to_hover_bg() {
+    auto btn_h = button_test::build_button(
+        ButtonVariant::Primary, /*disabled=*/false, /*hovered_id=*/0u);
+    auto& btn = detail::node_at(btn_h);
+    auto const& t = detail::g_app.theme;
+    assert(btn.callback_id == 0u);
+    assert(btn.background.r == t.accent_strong.r &&
+           btn.background.g == t.accent_strong.g &&
+           btn.background.b == t.accent_strong.b);
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    std::puts("PASS: button primary snaps to accent_strong when hovered");
 }
 
 void test_button_disabled() {
@@ -1610,6 +1651,8 @@ int main() {
     test_theme_json_mixed_overlay();
     test_button_default_variant();
     test_button_primary_variant();
+    test_button_default_hovered_snaps_to_hover_bg();
+    test_button_primary_hovered_snaps_to_hover_bg();
     test_button_disabled();
     test_text_field_default();
     test_text_field_default_placeholder();

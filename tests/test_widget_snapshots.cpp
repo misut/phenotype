@@ -188,7 +188,7 @@ bool test_button_default_snapshot() {
   "cursor_type": 1,
   "focusable": true,
   "is_input": false,
-  "hover_background": "#e5e7ebff",
+  "hover_background": "#00000000",
   "hover_text_color": "#00000000",
   "callback_registered": true
 })snap";
