@@ -1443,9 +1443,29 @@ void run(View view, Update update) {
 
 namespace detail {
 
+// Mix the parent scope's widget_id_seed with the container node's
+// arena index so each container gets a stable, parent-aware seed —
+// what makes `framework_local` calls inside sibling containers (e.g.
+// two `column`s in the same parent) hash to distinct widget_ids
+// instead of all colliding at seed=0. NodeHandle.index is sequential
+// within a frame and reproduces frame to frame as long as the tree
+// shape is stable, so animation slots persist across frames.
+//
+// Without this, every framework_local at counter=0 inside a sibling
+// scope shared the same slot — the colorwh.dwg view picker showed
+// the symptom (Open / AutoCAD Color Index / 2D View buttons all
+// hovered together, and a stale Primary background leaked into the
+// Color Index button's animated fade). Documented limitation in
+// phenotype.state.cppm:714 was the same root cause.
+inline std::size_t derived_scope_seed(NodeHandle h) noexcept {
+    auto* prev = Scope::current();
+    std::size_t parent_seed = prev ? prev->widget_id_seed : 0;
+    return hash_combine(parent_seed, static_cast<std::size_t>(h.index));
+}
+
 inline void open_container(NodeHandle container, std::function<void()> builder) {
     attach_to_scope(container);
-    Scope scope(container);
+    Scope scope(container, derived_scope_seed(container));
     auto* prev = Scope::current();
     Scope::set_current(&scope);
     builder();
@@ -1509,8 +1529,8 @@ void column(A&& a, B&& b, Rest&&... rest) {
     node.style.flex_direction = FlexDirection::Column;
     node.style.gap = detail::g_app.theme.space_md;
     detail::attach_to_scope(h);
-    Scope child_scope(h);
     auto* prev = Scope::current();
+    Scope child_scope(h, detail::derived_scope_seed(h));
     Scope::set_current(&child_scope);
     (detail::render_one(std::forward<A>(a)),
      detail::render_one(std::forward<B>(b)),
@@ -1544,8 +1564,8 @@ void row(A&& a, B&& b, Rest&&... rest) {
     node.style.cross_align = CrossAxisAlignment::Center;
     node.style.gap = detail::g_app.theme.space_sm;
     detail::attach_to_scope(h);
-    Scope child_scope(h);
     auto* prev = Scope::current();
+    Scope child_scope(h, detail::derived_scope_seed(h));
     Scope::set_current(&child_scope);
     (detail::render_one(std::forward<A>(a)),
      detail::render_one(std::forward<B>(b)),
@@ -1564,8 +1584,8 @@ template<typename A, typename B, typename... Rest>
 void box(A&& a, B&& b, Rest&&... rest) {
     auto h = detail::alloc_node();
     detail::attach_to_scope(h);
-    Scope child_scope(h);
     auto* prev = Scope::current();
+    Scope child_scope(h, detail::derived_scope_seed(h));
     Scope::set_current(&child_scope);
     (detail::render_one(std::forward<A>(a)),
      detail::render_one(std::forward<B>(b)),
@@ -1645,8 +1665,8 @@ void overlay(F&& builder) {
     auto& node = detail::node_at(h);
     node.style.flex_direction = FlexDirection::Column;
     detail::g_app.overlays.push_back(h);
-    Scope scope(h);
     auto* prev = Scope::current();
+    Scope scope(h, detail::derived_scope_seed(h));
     Scope::set_current(&scope);
     builder();
     Scope::set_current(prev);
