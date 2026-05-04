@@ -95,6 +95,31 @@ inline TextAtlas build_atlas(std::vector<TextEntry> const& entries,
     return platform.text.build_atlas(entries, backing_scale);
 }
 
+// Register a TTF / OTF / TTC font file with the active platform's font
+// manager and bind it to `family_alias`. Subsequent FontSpec lookups
+// for the same alias resolve to the registered face. Returns false
+// when the file is missing, unsupported, or the platform backend has
+// no runtime registration entry point — callers should treat that as
+// "the alias is unknown" and fall back to their default-font path
+// (the existing measure / atlas paths already do that for unknown
+// families). Idempotent: re-registering an alias replaces the prior
+// binding.
+//
+// Backend status: macOS uses CTFontManagerRegisterFontsForURL with
+// process scope. Windows / Android / stub backends currently return
+// false (file-loading registration is tracked as a follow-up).
+inline bool register_font_file(std::string_view family_alias,
+                               std::string_view path) {
+    auto const& platform = current_platform();
+    if (!platform.text.register_font_file) return false;
+    if (family_alias.empty() || path.empty()) return false;
+    return platform.text.register_font_file(
+        family_alias.data(),
+        static_cast<unsigned int>(family_alias.size()),
+        path.data(),
+        static_cast<unsigned int>(path.size()));
+}
+
 } // namespace text
 
 namespace renderer {
