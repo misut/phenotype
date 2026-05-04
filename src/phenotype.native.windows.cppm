@@ -179,14 +179,46 @@ struct TextState {
 
 static TextState g_text;
 
+// Custom font collection plumbing. The single virtual collection
+// rebuilt on each `register_font_file` call lives in
+// `g_fonts.collection` — DirectWrite caches collections by key bytes,
+// so bumping `g_fonts.generation` is what forces a rebuild from
+// `g_fonts.paths`. The loaders are held by their DirectWrite interface
+// type rather than the concrete CustomFontFileLoader /
+// CustomFontCollectionLoader (which are defined later, alongside the
+// other COM helpers below GlyphBitmapRenderer) so the ComPtr
+// destructors can be instantiated here without the concrete types
+// being complete.
+struct FontAlias {
+    std::wstring alias;        // matches DWriteCacheKey::family form
+    std::wstring family_name;  // canonical name from the registered face
+};
+
+struct FontRegistry {
+    ComPtr<IDWriteFontFileLoader>          file_loader;
+    ComPtr<IDWriteFontCollectionLoader>    collection_loader;
+    // Linear-scan vector mirroring the rationale on TextState::formats —
+    // never more than a handful of DWG STYLE-derived aliases, and the
+    // MSVC + `import std` `std::map` AV trigger documented in CLAUDE.md
+    // applies to wstring-key + non-trivial-value module-static maps.
+    std::vector<FontAlias>             aliases;
+    std::vector<std::wstring>          paths;
+    ComPtr<IDWriteFontCollection>      collection;
+    std::uint64_t                      generation = 0;
+    bool                               loaders_registered = false;
+};
+
+static FontRegistry g_fonts;
+
 inline HRESULT create_text_format(
         wchar_t const* family_name,
+        IDWriteFontCollection* collection,
         DWRITE_FONT_WEIGHT weight,
         DWRITE_FONT_STYLE  style,
         ComPtr<IDWriteTextFormat>& format) {
     auto hr = g_text.factory->CreateTextFormat(
         family_name,
-        nullptr,
+        collection,
         weight,
         style,
         DWRITE_FONT_STRETCH_NORMAL,
@@ -224,12 +256,31 @@ inline IDWriteTextFormat* acquire_text_format(DWriteCacheKey const& key) {
         if (slot.first == key) return slot.second.Get();
     }
 
-    wchar_t const* family = key.family.empty()
-        ? (key.mono ? L"Consolas" : L"Segoe UI")
-        : key.family.c_str();
+    // Resolve through the runtime alias map first — a caller that ran
+    // `register_font_file("MyAlias", "C:\\fonts\\swisski.ttf")` expects
+    // FontSpec{family="MyAlias"} to render with the registered face's
+    // canonical family rather than DirectWrite's silent system fallback.
+    IDWriteFontCollection* collection = nullptr;
+    wchar_t const* family = nullptr;
+    if (!key.family.empty()) {
+        for (auto const& a : g_fonts.aliases) {
+            if (a.alias == key.family) {
+                family     = a.family_name.c_str();
+                collection = g_fonts.collection.Get();
+                break;
+            }
+        }
+    }
+    if (family == nullptr) {
+        family = key.family.empty()
+            ? (key.mono ? L"Consolas" : L"Segoe UI")
+            : key.family.c_str();
+        // collection stays null — system collection path.
+    }
 
     ComPtr<IDWriteTextFormat> format;
-    if (FAILED(create_text_format(family, key.weight, key.style, format)))
+    if (FAILED(create_text_format(family, collection,
+                                  key.weight, key.style, format)))
         return nullptr;
     auto* raw = format.Get();
     g_text.formats.emplace_back(key, std::move(format));
@@ -279,7 +330,22 @@ inline void text_init() {
 }
 
 inline void text_shutdown() {
-    g_text = {};
+    // Unregister the custom DirectWrite loaders before tearing down the
+    // factory. ComPtr Release in g_fonts runs after the unregister calls
+    // so any IDWriteFontCollection still held elsewhere keeps the
+    // loaders alive via COM ref count for its remaining lifetime.
+    if (g_fonts.loaders_registered && g_text.factory) {
+        if (g_fonts.collection_loader) {
+            g_text.factory->UnregisterFontCollectionLoader(
+                g_fonts.collection_loader.Get());
+        }
+        if (g_fonts.file_loader) {
+            g_text.factory->UnregisterFontFileLoader(
+                g_fonts.file_loader.Get());
+        }
+    }
+    g_fonts = {};
+    g_text  = {};
 }
 
 inline HRESULT make_text_layout(
@@ -488,6 +554,455 @@ private:
     COLORREF text_color_ = RGB(255, 255, 255);
     float pixels_per_dip_ = 1.0f;
 };
+
+// ---- Custom DirectWrite font collection plumbing -----------------------
+//
+// Pairs with `g_fonts` and `text_register_font_file` to expose runtime-
+// loaded TTF / OTF / TTC files through DirectWrite's
+// IDWriteFontCollection abstraction. Mirrors the macOS backend's
+// process-scope CTFontManagerRegisterFontsForURL contract.
+//
+// Key shape across the loaders: the UTF-16 path bytes act as the file-
+// loader key. The collection-loader's key is the `g_fonts.generation`
+// counter — its value isn't read, only used by DirectWrite's collection
+// cache to dedupe by-key, so bumping the counter forces a fresh build.
+
+class CustomFontFileStream final : public IDWriteFontFileStream {
+public:
+    static HRESULT create(std::wstring const& path,
+                          ComPtr<CustomFontFileStream>& out) {
+        HANDLE handle = CreateFileW(
+            path.c_str(),
+            GENERIC_READ,
+            FILE_SHARE_READ,
+            nullptr,
+            OPEN_EXISTING,
+            FILE_ATTRIBUTE_NORMAL,
+            nullptr);
+        if (handle == INVALID_HANDLE_VALUE)
+            return HRESULT_FROM_WIN32(GetLastError());
+
+        LARGE_INTEGER size{};
+        if (!GetFileSizeEx(handle, &size)) {
+            HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
+            CloseHandle(handle);
+            return hr;
+        }
+        if (size.QuadPart < 0 || size.QuadPart > 0x7FFFFFFF) {
+            CloseHandle(handle);
+            return E_FAIL;
+        }
+        auto bytes = static_cast<std::size_t>(size.QuadPart);
+        auto buffer = std::unique_ptr<unsigned char[]>(
+            new unsigned char[bytes]);
+        DWORD remaining = static_cast<DWORD>(bytes);
+        unsigned char* dst = buffer.get();
+        while (remaining > 0) {
+            DWORD got = 0;
+            if (!ReadFile(handle, dst, remaining, &got, nullptr)
+                || got == 0) {
+                HRESULT hr = HRESULT_FROM_WIN32(GetLastError());
+                CloseHandle(handle);
+                return FAILED(hr) ? hr : E_FAIL;
+            }
+            dst += got;
+            remaining -= got;
+        }
+        CloseHandle(handle);
+
+        out.Attach(new CustomFontFileStream(std::move(buffer), bytes));
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(
+            REFIID riid, void** object) override {
+        if (!object) return E_POINTER;
+        *object = nullptr;
+        if (riid == __uuidof(IUnknown)
+            || riid == __uuidof(IDWriteFontFileStream)) {
+            *object = static_cast<IDWriteFontFileStream*>(this);
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return static_cast<ULONG>(++refs_);
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        auto count = static_cast<ULONG>(--refs_);
+        if (count == 0) delete this;
+        return count;
+    }
+
+    HRESULT STDMETHODCALLTYPE ReadFileFragment(
+            void const** start,
+            UINT64 offset,
+            UINT64 size,
+            void** ctx) override {
+        if (!start || !ctx) return E_POINTER;
+        *start = nullptr;
+        *ctx = nullptr;
+        if (offset > size_ || size > size_ - offset) return E_FAIL;
+        *start = bytes_.get() + offset;
+        return S_OK;
+    }
+
+    void STDMETHODCALLTYPE ReleaseFileFragment(void*) override {}
+
+    HRESULT STDMETHODCALLTYPE GetFileSize(UINT64* out) override {
+        if (!out) return E_POINTER;
+        *out = size_;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetLastWriteTime(UINT64* out) override {
+        if (!out) return E_POINTER;
+        // Zero is acceptable for collections we never share across
+        // processes — DirectWrite uses this only for cross-process
+        // cache invalidation.
+        *out = 0;
+        return S_OK;
+    }
+
+private:
+    CustomFontFileStream(std::unique_ptr<unsigned char[]> bytes,
+                         std::size_t size)
+        : refs_(1), bytes_(std::move(bytes)), size_(size) {}
+
+    std::atomic_ulong refs_;
+    std::unique_ptr<unsigned char[]> bytes_;
+    std::size_t size_ = 0;
+};
+
+class CustomFontFileLoader final : public IDWriteFontFileLoader {
+public:
+    CustomFontFileLoader() : refs_(1) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(
+            REFIID riid, void** object) override {
+        if (!object) return E_POINTER;
+        *object = nullptr;
+        if (riid == __uuidof(IUnknown)
+            || riid == __uuidof(IDWriteFontFileLoader)) {
+            *object = static_cast<IDWriteFontFileLoader*>(this);
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return static_cast<ULONG>(++refs_);
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        auto count = static_cast<ULONG>(--refs_);
+        if (count == 0) delete this;
+        return count;
+    }
+
+    HRESULT STDMETHODCALLTYPE CreateStreamFromKey(
+            void const* key,
+            UINT32 key_size,
+            IDWriteFontFileStream** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        if (!key || key_size == 0
+            || (key_size % sizeof(wchar_t)) != 0) return E_INVALIDARG;
+        std::wstring path(static_cast<wchar_t const*>(key),
+                          key_size / sizeof(wchar_t));
+        ComPtr<CustomFontFileStream> stream;
+        HRESULT hr = CustomFontFileStream::create(path, stream);
+        if (FAILED(hr)) return hr;
+        *out = stream.Detach();
+        return S_OK;
+    }
+
+private:
+    std::atomic_ulong refs_;
+};
+
+class MasterEnumerator final : public IDWriteFontFileEnumerator {
+public:
+    MasterEnumerator(ComPtr<IDWriteFactory> factory,
+                     std::vector<std::wstring> paths)
+        : refs_(1),
+          factory_(std::move(factory)),
+          paths_(std::move(paths)) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(
+            REFIID riid, void** object) override {
+        if (!object) return E_POINTER;
+        *object = nullptr;
+        if (riid == __uuidof(IUnknown)
+            || riid == __uuidof(IDWriteFontFileEnumerator)) {
+            *object = static_cast<IDWriteFontFileEnumerator*>(this);
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return static_cast<ULONG>(++refs_);
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        auto count = static_cast<ULONG>(--refs_);
+        if (count == 0) delete this;
+        return count;
+    }
+
+    HRESULT STDMETHODCALLTYPE MoveNext(BOOL* has) override {
+        if (!has) return E_POINTER;
+        ++index_;
+        *has = (index_ <= paths_.size()) ? TRUE : FALSE;
+        return S_OK;
+    }
+
+    HRESULT STDMETHODCALLTYPE GetCurrentFontFile(
+            IDWriteFontFile** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        if (index_ == 0 || index_ > paths_.size()) return E_FAIL;
+        auto const& path = paths_[index_ - 1];
+        return factory_->CreateCustomFontFileReference(
+            path.data(),
+            static_cast<UINT32>(path.size() * sizeof(wchar_t)),
+            g_fonts.file_loader.Get(),
+            out);
+    }
+
+private:
+    std::atomic_ulong refs_;
+    ComPtr<IDWriteFactory> factory_;
+    std::vector<std::wstring> paths_;
+    std::size_t index_ = 0;
+};
+
+class CustomFontCollectionLoader final
+        : public IDWriteFontCollectionLoader {
+public:
+    CustomFontCollectionLoader() : refs_(1) {}
+
+    HRESULT STDMETHODCALLTYPE QueryInterface(
+            REFIID riid, void** object) override {
+        if (!object) return E_POINTER;
+        *object = nullptr;
+        if (riid == __uuidof(IUnknown)
+            || riid == __uuidof(IDWriteFontCollectionLoader)) {
+            *object = static_cast<IDWriteFontCollectionLoader*>(this);
+            AddRef();
+            return S_OK;
+        }
+        return E_NOINTERFACE;
+    }
+
+    ULONG STDMETHODCALLTYPE AddRef() override {
+        return static_cast<ULONG>(++refs_);
+    }
+
+    ULONG STDMETHODCALLTYPE Release() override {
+        auto count = static_cast<ULONG>(--refs_);
+        if (count == 0) delete this;
+        return count;
+    }
+
+    HRESULT STDMETHODCALLTYPE CreateEnumeratorFromKey(
+            IDWriteFactory* factory,
+            void const* key,
+            UINT32 key_size,
+            IDWriteFontFileEnumerator** out) override {
+        if (!out) return E_POINTER;
+        *out = nullptr;
+        if (!factory || key_size != sizeof(std::uint64_t))
+            return E_INVALIDARG;
+        // The key value isn't read — DirectWrite caches collections by
+        // key bytes, so bumping g_fonts.generation is what produces a
+        // fresh collection. Snapshot g_fonts.paths by value into the
+        // enumerator so a concurrent registration doesn't disturb
+        // iteration.
+        (void)key;
+        ComPtr<IDWriteFactory> factory_ptr(factory);
+        auto* enumerator = new MasterEnumerator(
+            std::move(factory_ptr), g_fonts.paths);
+        *out = enumerator;
+        return S_OK;
+    }
+
+private:
+    std::atomic_ulong refs_;
+};
+
+// platform_api::text.register_font_file entry. Registers `path` as a
+// DirectWrite custom font file and binds it to `family_alias` so
+// subsequent FontSpec lookups for the alias resolve to the registered
+// face's canonical family. Returns false on any failure (file missing,
+// unsupported format, registration rejected) so callers can fall back
+// to their default-font path. On re-registration of an existing alias
+// the prior binding is replaced and any cached IDWriteTextFormats keyed
+// on that alias are evicted so the next render picks up the new face.
+inline bool text_register_font_file(char const* family_alias,
+                                    unsigned int alias_len,
+                                    char const* path,
+                                    unsigned int path_len) {
+    if (!g_text.initialized) text_init();
+    if (!g_text.factory) return false;
+    if (family_alias == nullptr || alias_len == 0
+        || path == nullptr || path_len == 0) return false;
+
+    auto wide_path = cppx::unicode::utf8_to_wide(
+        std::string_view{path, path_len}).value_or(std::wstring{});
+    if (wide_path.empty()) return false;
+    auto wide_alias = cppx::unicode::utf8_to_wide(
+        std::string_view{family_alias, alias_len})
+            .value_or(std::wstring{});
+    if (wide_alias.empty()) return false;
+
+    if (!g_fonts.loaders_registered) {
+        ComPtr<IDWriteFontFileLoader> file_loader;
+        ComPtr<IDWriteFontCollectionLoader> coll_loader;
+        file_loader.Attach(new CustomFontFileLoader{});
+        coll_loader.Attach(new CustomFontCollectionLoader{});
+
+        HRESULT hr = g_text.factory->RegisterFontFileLoader(
+            file_loader.Get());
+        if (FAILED(hr)) {
+            log_hresult("RegisterFontFileLoader", hr);
+            return false;
+        }
+        hr = g_text.factory->RegisterFontCollectionLoader(
+            coll_loader.Get());
+        if (FAILED(hr)) {
+            log_hresult("RegisterFontCollectionLoader", hr);
+            g_text.factory->UnregisterFontFileLoader(file_loader.Get());
+            return false;
+        }
+        g_fonts.file_loader        = std::move(file_loader);
+        g_fonts.collection_loader  = std::move(coll_loader);
+        g_fonts.loaders_registered = true;
+    }
+
+    UINT32 const path_bytes =
+        static_cast<UINT32>(wide_path.size() * sizeof(wchar_t));
+
+    // Probe the file before mutating g_fonts.paths so a bad input
+    // doesn't leave a phantom path in the master collection.
+    ComPtr<IDWriteFontFile> probe;
+    HRESULT hr = g_text.factory->CreateCustomFontFileReference(
+        wide_path.data(), path_bytes,
+        g_fonts.file_loader.Get(),
+        &probe);
+    if (FAILED(hr)) return false;
+    BOOL supported = FALSE;
+    DWRITE_FONT_FILE_TYPE file_type{};
+    DWRITE_FONT_FACE_TYPE face_type{};
+    UINT32 num_faces = 0;
+    hr = probe->Analyze(&supported, &file_type, &face_type, &num_faces);
+    if (FAILED(hr) || !supported) return false;
+
+    bool path_was_new = true;
+    for (auto const& p : g_fonts.paths) {
+        if (p == wide_path) { path_was_new = false; break; }
+    }
+    if (path_was_new) g_fonts.paths.push_back(wide_path);
+
+    ++g_fonts.generation;
+    ComPtr<IDWriteFontCollection> new_collection;
+    hr = g_text.factory->CreateCustomFontCollection(
+        g_fonts.collection_loader.Get(),
+        &g_fonts.generation,
+        sizeof(g_fonts.generation),
+        &new_collection);
+    if (FAILED(hr) || !new_collection) {
+        if (path_was_new) g_fonts.paths.pop_back();
+        return false;
+    }
+
+    // Find the family in the new collection whose face references our
+    // path, using IDWriteFontFile::GetReferenceKey to compare bytes.
+    std::wstring family_name;
+    UINT32 family_count = new_collection->GetFontFamilyCount();
+    for (UINT32 fi = 0; fi < family_count && family_name.empty(); ++fi) {
+        ComPtr<IDWriteFontFamily> family;
+        if (FAILED(new_collection->GetFontFamily(fi, &family))) continue;
+        UINT32 font_count = family->GetFontCount();
+        bool matched = false;
+        for (UINT32 fj = 0; fj < font_count && !matched; ++fj) {
+            ComPtr<IDWriteFont> font;
+            if (FAILED(family->GetFont(fj, &font))) continue;
+            ComPtr<IDWriteFontFace> face;
+            if (FAILED(font->CreateFontFace(&face))) continue;
+            UINT32 file_count = 0;
+            if (FAILED(face->GetFiles(&file_count, nullptr))
+                || file_count == 0) continue;
+            std::vector<IDWriteFontFile*> files(file_count, nullptr);
+            if (FAILED(face->GetFiles(&file_count, files.data()))) {
+                for (auto* f : files) if (f) f->Release();
+                continue;
+            }
+            for (UINT32 fk = 0; fk < file_count && !matched; ++fk) {
+                if (!files[fk]) continue;
+                void const* k_ptr = nullptr;
+                UINT32 k_sz = 0;
+                if (SUCCEEDED(files[fk]->GetReferenceKey(&k_ptr, &k_sz))
+                    && k_sz == path_bytes
+                    && std::memcmp(k_ptr, wide_path.data(),
+                                   path_bytes) == 0) {
+                    matched = true;
+                }
+            }
+            for (auto* f : files) if (f) f->Release();
+            if (matched) {
+                ComPtr<IDWriteLocalizedStrings> names;
+                if (FAILED(family->GetFamilyNames(&names))) break;
+                UINT32 idx = 0;
+                BOOL exists = FALSE;
+                if (FAILED(names->FindLocaleName(L"en-us", &idx, &exists))
+                    || !exists) idx = 0;
+                UINT32 length = 0;
+                if (FAILED(names->GetStringLength(idx, &length))) break;
+                family_name.resize(length);
+                if (FAILED(names->GetString(idx, family_name.data(),
+                                            length + 1))) {
+                    family_name.clear();
+                }
+            }
+        }
+    }
+    if (family_name.empty()) {
+        if (path_was_new) g_fonts.paths.pop_back();
+        return false;
+    }
+
+    bool replaced = false;
+    for (auto& slot : g_fonts.aliases) {
+        if (slot.alias == wide_alias) {
+            slot.family_name = family_name;
+            replaced = true;
+            break;
+        }
+    }
+    if (!replaced) {
+        g_fonts.aliases.push_back({ wide_alias, family_name });
+    }
+
+    g_fonts.collection = std::move(new_collection);
+
+    // Drop cached IDWriteTextFormats keyed on this alias so the next
+    // acquire_text_format re-resolves through the new binding.
+    g_text.formats.erase(
+        std::remove_if(g_text.formats.begin(), g_text.formats.end(),
+            [&](auto const& slot) {
+                return slot.first.family == wide_alias;
+            }),
+        g_text.formats.end());
+
+    return true;
+}
 
 struct BitmapSectionView {
     DIBSECTION dib{};
@@ -4573,6 +5088,7 @@ inline platform_api const& windows_platform() {
             detail::text_shutdown,
             detail::text_measure_api,
             detail::text_build_atlas,
+            detail::text_register_font_file,
         },
         {
             detail::renderer_init,
