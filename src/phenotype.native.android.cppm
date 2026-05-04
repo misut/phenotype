@@ -271,6 +271,9 @@ struct jni_refs {
     // taken from the integer constants pulled below.
     jmethodID typeface_create_string   = nullptr;
     jmethodID typeface_create_typeface = nullptr;
+    // Typeface.createFromFile(String path) — used by
+    // text_register_font_file to bind a TTF/OTF/TTC at runtime.
+    jmethodID typeface_create_from_file = nullptr;
 
     // Cached Typeface style-bit constants.
     int typeface_normal      = 0;
@@ -287,6 +290,11 @@ struct jni_refs {
     // is a global ref owned by g_jni; cleared in text_shutdown.
     // Single-threaded (render thread only) — no locking needed.
     std::map<FontPaintKey, jobject, FontPaintKeyLess> paints;
+
+    // Registered font files: alias → Typeface global ref. Each value
+    // is a global ref owned by g_jni; DeleteGlobalRef'd in
+    // text_shutdown. Render-thread only; no locking.
+    std::map<std::string, jobject> registered_aliases;
 
     // One-shot log dedupe — family names that already failed to
     // resolve (Typeface.create returned the platform default) get
@@ -425,6 +433,9 @@ inline bool init_jni_refs(JNIEnv* env) {
     g_jni.typeface_create_typeface = env->GetStaticMethodID(
         g_jni.typeface_class, "create",
         "(Landroid/graphics/Typeface;I)Landroid/graphics/Typeface;");
+    g_jni.typeface_create_from_file = env->GetStaticMethodID(
+        g_jni.typeface_class, "createFromFile",
+        "(Ljava/lang/String;)Landroid/graphics/Typeface;");
 
     auto load_typeface_int = [&](char const* name, int fallback) -> int {
         jfieldID id = env->GetStaticFieldID(g_jni.typeface_class, name, "I");
@@ -443,7 +454,8 @@ inline bool init_jni_refs(JNIEnv* env) {
         || !g_jni.paint_ascent || !g_jni.paint_descent
         || !g_jni.bitmap_create || !g_jni.bitmap_erase_color
         || !g_jni.canvas_ctor || !g_jni.canvas_draw_text
-        || !g_jni.typeface_create_string || !g_jni.typeface_create_typeface)
+        || !g_jni.typeface_create_string || !g_jni.typeface_create_typeface
+        || !g_jni.typeface_create_from_file)
         return false;
 
     // Cache Typeface.DEFAULT / Typeface.MONOSPACE as global refs.
@@ -514,23 +526,43 @@ inline jobject acquire_paint(JNIEnv* env, FontPaintKey const& key) {
                 typeface_local = nullptr;
         }
     } else {
-        jstring jname = make_jstring_utf8(env, key.family.data(),
-            static_cast<unsigned int>(key.family.size()));
-        if (jname) {
-            typeface_local = env->CallStaticObjectMethod(
-                g_jni.typeface_class,
-                g_jni.typeface_create_string,
-                jname, style_bits);
-            env->DeleteLocalRef(jname);
-            if (check_and_clear_exception(env))
-                typeface_local = nullptr;
-            // `Typeface.create(String, int)` returns DEFAULT when the
-            // family cannot be resolved — that's the platform's silent
-            // fallback policy. Log once per family.
-            if (g_jni.missing_logged.insert(key.family).second) {
-                __android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG,
-                    "text: requested font family '%s'; using Typeface.create result",
-                    key.family.c_str());
+        // Runtime-registered face? text_register_font_file populates
+        // registered_aliases with a Typeface global per alias. Apply
+        // BOLD/ITALIC bits via Typeface.create(Typeface, int) — same
+        // shape as the empty-family branch above.
+        auto reg_it = g_jni.registered_aliases.find(key.family);
+        if (reg_it != g_jni.registered_aliases.end()) {
+            jobject base = reg_it->second;
+            if (style_bits == g_jni.typeface_normal) {
+                typeface_local = env->NewLocalRef(base);
+            } else {
+                typeface_local = env->CallStaticObjectMethod(
+                    g_jni.typeface_class,
+                    g_jni.typeface_create_typeface,
+                    base, style_bits);
+                if (check_and_clear_exception(env))
+                    typeface_local = nullptr;
+            }
+        } else {
+            jstring jname = make_jstring_utf8(env, key.family.data(),
+                static_cast<unsigned int>(key.family.size()));
+            if (jname) {
+                typeface_local = env->CallStaticObjectMethod(
+                    g_jni.typeface_class,
+                    g_jni.typeface_create_string,
+                    jname, style_bits);
+                env->DeleteLocalRef(jname);
+                if (check_and_clear_exception(env))
+                    typeface_local = nullptr;
+                // `Typeface.create(String, int)` returns DEFAULT when
+                // the family cannot be resolved — that's the
+                // platform's silent fallback policy. Log once per
+                // family.
+                if (g_jni.missing_logged.insert(key.family).second) {
+                    __android_log_print(ANDROID_LOG_INFO, ANDROID_LOG_TAG,
+                        "text: requested font family '%s'; using Typeface.create result",
+                        key.family.c_str());
+                }
             }
         }
     }
@@ -593,6 +625,9 @@ inline void text_init() {
 inline void text_shutdown() {
     if (!g_jni.vm) {
         g_jni.paints.clear();
+        // No JVM to DeleteGlobalRef against — Typeface globals leak,
+        // matching the existing paints-leak behaviour on JVM teardown.
+        g_jni.registered_aliases.clear();
         g_jni.missing_logged.clear();
         g_jni.initialised = false;
         return;
@@ -600,6 +635,7 @@ inline void text_shutdown() {
     ScopedEnv e(g_jni.vm);
     if (!e) {
         g_jni.paints.clear();
+        g_jni.registered_aliases.clear();
         g_jni.missing_logged.clear();
         g_jni.initialised = false;
         return;
@@ -612,6 +648,10 @@ inline void text_shutdown() {
         if (ref) env->DeleteGlobalRef(ref);
     }
     g_jni.paints.clear();
+    for (auto& [_, ref] : g_jni.registered_aliases) {
+        if (ref) env->DeleteGlobalRef(ref);
+    }
+    g_jni.registered_aliases.clear();
     g_jni.missing_logged.clear();
     drop(reinterpret_cast<jobject&>(g_jni.paint_class));
     drop(reinterpret_cast<jobject&>(g_jni.typeface_class));
@@ -636,7 +676,75 @@ inline void text_shutdown() {
     g_jni.canvas_draw_text = nullptr;
     g_jni.typeface_create_string = nullptr;
     g_jni.typeface_create_typeface = nullptr;
+    g_jni.typeface_create_from_file = nullptr;
     g_jni.initialised = false;
+}
+
+// platform_api::text.register_font_file entry. Binds `path` to
+// `family_alias` via Typeface.createFromFile; subsequent acquire_paint
+// calls with the matching family use the registered face instead of
+// Typeface.create(String, int)'s silent default fallback. Returns
+// false on validation failure, missing JNIEnv, or createFromFile
+// rejection (file missing / unparseable). Idempotent: re-registering
+// an alias releases the prior global ref and overwrites.
+inline bool text_register_font_file(char const* family_alias,
+                                    unsigned int alias_len,
+                                    char const* path,
+                                    unsigned int path_len) {
+    if (!g_jni.initialised) text_init();
+    if (!g_jni.initialised) return false;
+    if (family_alias == nullptr || alias_len == 0
+        || path == nullptr || path_len == 0) return false;
+
+    ScopedEnv e(g_jni.vm);
+    if (!e) return false;
+    auto* env = e.env;
+
+    jstring jpath = make_jstring_utf8(env, path, path_len);
+    if (!jpath) {
+        check_and_clear_exception(env);
+        return false;
+    }
+
+    jobject tf_local = env->CallStaticObjectMethod(
+        g_jni.typeface_class,
+        g_jni.typeface_create_from_file,
+        jpath);
+    env->DeleteLocalRef(jpath);
+    if (check_and_clear_exception(env) || tf_local == nullptr) {
+        if (tf_local) env->DeleteLocalRef(tf_local);
+        return false;
+    }
+
+    jobject tf_global = env->NewGlobalRef(tf_local);
+    env->DeleteLocalRef(tf_local);
+    if (!tf_global) {
+        check_and_clear_exception(env);
+        return false;
+    }
+
+    std::string alias{family_alias, alias_len};
+    if (auto it = g_jni.registered_aliases.find(alias);
+        it != g_jni.registered_aliases.end()) {
+        if (it->second) env->DeleteGlobalRef(it->second);
+        it->second = tf_global;
+    } else {
+        g_jni.registered_aliases.emplace(alias, tf_global);
+    }
+
+    // Evict any cached Paint built against the old (alias unresolved)
+    // typeface so the next acquire_paint re-resolves through the new
+    // mapping. Mirrors the macos backend's cache invalidation.
+    for (auto cit = g_jni.paints.begin(); cit != g_jni.paints.end(); ) {
+        if (cit->first.family == alias) {
+            if (cit->second) env->DeleteGlobalRef(cit->second);
+            cit = g_jni.paints.erase(cit);
+        } else {
+            ++cit;
+        }
+    }
+    g_jni.missing_logged.erase(alias);
+    return true;
 }
 
 inline float text_measure(float font_size, FontPaintKey const& key,
@@ -5102,6 +5210,7 @@ inline platform_api build_android_platform() {
         text_shutdown,
         text_measure_api,
         text_build_atlas,
+        text_register_font_file,
     };
     api.input = {
         android_input_attach,
