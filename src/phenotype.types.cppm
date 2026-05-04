@@ -40,6 +40,24 @@ struct Color {
     constexpr bool operator==(Color const&) const = default;
 };
 
+// A solid convex quadrilateral in canvas-local coordinates. Intended
+// for CAD / chart workloads that need to emit thousands of already-
+// tessellated fills without paying PathBuilder + FillPath decode cost
+// per primitive.
+struct PaintQuad {
+    float x0, y0;
+    float x1, y1;
+    float x2, y2;
+    float x3, y3;
+    Color color;
+};
+
+struct PaintRect {
+    float x, y;
+    float w, h;
+    Color color;
+};
+
 // ============================================================
 // Theme — design tokens (matches exon docs CSS variables)
 // ============================================================
@@ -163,6 +181,17 @@ enum class Cmd : unsigned int {
     // the fill_tri pipeline. Layout: opcode + packed RGBA + verb_count
     // + inline verbs.
     FillPath   = 12,
+    // Batched solid convex quadrilaterals. Layout: opcode +
+    // quad_count + quad_count × (packed RGBA + 8×f32 points).
+    // Backends expand each quad directly to two triangles or their
+    // platform's equivalent fill primitive, bypassing Path / FillPath
+    // flattening and ear clipping.
+    FillQuads  = 13,
+    // Batched axis-aligned rectangles. Layout: opcode + rect_count +
+    // rect_count × (x, y, w, h, packed RGBA). Backends may route this
+    // to an instanced rectangle path or expand it to triangles when
+    // that is needed to preserve fill ordering.
+    FillRects  = 14,
 };
 
 // Verb tags inside a Cmd::Path / Cmd::FillPath payload. Numeric values
@@ -563,6 +592,15 @@ public:
     // no new pipeline). Single closed loop only — self-intersection
     // and multi-loop / hole semantics are out of scope for now.
     virtual void fill_path(PathBuilder const& path, Color color) = 0;
+    // Batched convex quad fills. Default no-op preserves source
+    // compatibility for external Painter derivations that only support
+    // the older primitive set.
+    virtual void fill_quads(PaintQuad const* quads, unsigned int count) {
+        (void)quads; (void)count;
+    }
+    virtual void fill_rects(PaintRect const* rects, unsigned int count) {
+        (void)rects; (void)count;
+    }
     // Push / pop a rectangular clip region. The rect is canvas-local
     // (same coordinate system as `line` / `arc` / `stroke_path`); the
     // adapter intersects it with the current clip and applies the

@@ -250,6 +250,92 @@ void test_unknown_verb_aborts_decode() {
     assert(cmds.empty());
 }
 
+void test_fill_quads_round_trips() {
+    reset_buffer();
+    PaintQuad quads[2] = {
+        {0.0f, 0.0f, 10.0f, 0.0f, 10.0f, 10.0f, 0.0f, 10.0f, red},
+        {20.0f, 1.0f, 30.0f, 2.0f, 29.0f, 12.0f, 19.0f, 11.0f, blue},
+    };
+    emit_fill_quads(host, quads, 2);
+
+    auto cmds = parse_commands(host.buf(), host.buf_len());
+    assert(cmds.size() == 1);
+    auto const* fq = std::get_if<FillQuadsCmd>(&cmds[0]);
+    assert(fq != nullptr);
+    assert(fq->quads.size() == 2);
+    assert(fq->quads[0].x0 == 0.0f && fq->quads[0].y0 == 0.0f);
+    assert(fq->quads[0].x2 == 10.0f && fq->quads[0].y2 == 10.0f);
+    assert(fq->quads[0].color == red);
+    assert(fq->quads[1].x0 == 20.0f && fq->quads[1].y0 == 1.0f);
+    assert(fq->quads[1].x3 == 19.0f && fq->quads[1].y3 == 11.0f);
+    assert(fq->quads[1].color == blue);
+}
+
+void test_fill_quads_chunks_large_batches() {
+    reset_buffer();
+    std::vector<PaintQuad> quads;
+    quads.reserve(1025);
+    for (unsigned int i = 0; i < 1025; ++i) {
+        float x = static_cast<float>(i);
+        quads.push_back(PaintQuad{
+            x, 0.0f,
+            x + 1.0f, 0.0f,
+            x + 1.0f, 1.0f,
+            x, 1.0f,
+            (i == 1024) ? blue : red});
+    }
+
+    emit_fill_quads(host, quads.data(), static_cast<unsigned int>(quads.size()));
+
+    auto cmds = parse_commands(host.buf(), host.buf_len());
+    assert(cmds.size() == 2);
+    auto const* first = std::get_if<FillQuadsCmd>(&cmds[0]);
+    auto const* second = std::get_if<FillQuadsCmd>(&cmds[1]);
+    assert(first != nullptr && second != nullptr);
+    assert(first->quads.size() == 1024);
+    assert(second->quads.size() == 1);
+    assert(first->quads.back().x0 == 1023.0f);
+    assert(second->quads[0].x0 == 1024.0f);
+    assert(second->quads[0].color == blue);
+}
+
+void test_fill_quads_interleaves_with_scissor() {
+    reset_buffer();
+    emit_scissor(host, 5.0f, 5.0f, 50.0f, 50.0f);
+    PaintQuad quad{6.0f, 6.0f, 16.0f, 6.0f, 16.0f, 16.0f, 6.0f, 16.0f, red};
+    emit_fill_quads(host, &quad, 1);
+    emit_scissor_reset(host);
+    emit_draw_line(host, 0.0f, 0.0f, 10.0f, 0.0f, 1.0f, blue);
+
+    auto cmds = parse_commands(host.buf(), host.buf_len());
+    assert(cmds.size() == 4);
+    assert(std::holds_alternative<ScissorCmd>(cmds[0]));
+    assert(std::holds_alternative<FillQuadsCmd>(cmds[1]));
+    auto const* reset = std::get_if<ScissorCmd>(&cmds[2]);
+    assert(reset != nullptr);
+    assert(reset->w == 0.0f && reset->h == 0.0f);
+    assert(std::holds_alternative<DrawLineCmd>(cmds[3]));
+}
+
+void test_fill_rects_round_trips() {
+    reset_buffer();
+    PaintRect rects[2] = {
+        {1.0f, 2.0f, 3.0f, 4.0f, red},
+        {5.0f, 6.0f, 7.0f, 8.0f, blue},
+    };
+    emit_fill_rects(host, rects, 2);
+
+    auto cmds = parse_commands(host.buf(), host.buf_len());
+    assert(cmds.size() == 1);
+    auto const* fr = std::get_if<FillRectsCmd>(&cmds[0]);
+    assert(fr != nullptr);
+    assert(fr->rects.size() == 2);
+    assert(fr->rects[0].x == 1.0f && fr->rects[0].h == 4.0f);
+    assert(fr->rects[0].color == red);
+    assert(fr->rects[1].y == 6.0f && fr->rects[1].w == 7.0f);
+    assert(fr->rects[1].color == blue);
+}
+
 } // namespace
 
 int main() {
@@ -260,6 +346,10 @@ int main() {
     test_path_interleaves_with_scissor_and_line();
     test_translated_offsets_coordinates_only();
     test_unknown_verb_aborts_decode();
+    test_fill_quads_round_trips();
+    test_fill_quads_chunks_large_batches();
+    test_fill_quads_interleaves_with_scissor();
+    test_fill_rects_round_trips();
     std::puts("\nAll path wire-format tests passed.");
     return 0;
 }

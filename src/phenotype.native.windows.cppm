@@ -1234,6 +1234,29 @@ struct ColorVsOut {
     float4 params : TEXCOORD2;
 };
 
+struct TriVertex {
+    float2 pos : POSITION;
+    float4 color : COLOR;
+};
+
+struct TriVsOut {
+    float4 pos : SV_POSITION;
+    float4 color : COLOR0;
+};
+
+TriVsOut vs_tri(TriVertex v) {
+    TriVsOut o;
+    float cx = (v.pos.x / viewport.x) * 2.0f - 1.0f;
+    float cy = 1.0f - (v.pos.y / viewport.y) * 2.0f;
+    o.pos = float4(cx, cy, 0, 1);
+    o.color = v.color;
+    return o;
+}
+
+float4 fs_tri(TriVsOut input) : SV_TARGET {
+    return input.color;
+}
+
 ColorVsOut vs_color(uint vertex_id : SV_VertexID, ColorInstance inst) {
     static const float2 corners[6] = {
         float2(0,0), float2(1,0), float2(0,1),
@@ -1352,6 +1375,7 @@ struct RendererState {
     ComPtr<ID3D12DescriptorHeap> rtv_heap;
     ComPtr<ID3D12DescriptorHeap> srv_heap;
     ComPtr<ID3D12RootSignature> root_signature;
+    ComPtr<ID3D12PipelineState> tri_pipeline;
     ComPtr<ID3D12PipelineState> color_pipeline;
     ComPtr<ID3D12PipelineState> image_pipeline;
     ComPtr<ID3D12PipelineState> text_pipeline;
@@ -2325,6 +2349,15 @@ inline void append_color_instance(std::vector<float>& color_data,
     });
 }
 
+inline void append_tri_vertex(std::vector<float>& tri_data,
+                              float x, float y, Color color) {
+    tri_data.insert(tri_data.end(), {
+        x, y,
+        color.r / 255.0f, color.g / 255.0f,
+        color.b / 255.0f, color.a / 255.0f,
+    });
+}
+
 inline void append_textured_quad(std::vector<float>& quad_data,
                                  float x, float y, float w, float h,
                                  float u, float v, float uw, float vh) {
@@ -2383,6 +2416,7 @@ struct DecodedFrame {
     double clear_g = 0.98;
     double clear_b = 0.98;
     double clear_a = 1.0;
+    std::vector<float> tri_data;
     std::vector<float> color_data;
     std::vector<float> overlay_color_data;
     std::vector<float> image_data;
@@ -2566,6 +2600,52 @@ inline bool decode_frame_commands(unsigned char const* buf,
             // follow-up. Parsing is still required so paint_node can
             // emit Scissor bytes without the backend erroring.
             (void)x; (void)y; (void)w; (void)h;
+            break;
+        }
+        case Cmd::FillQuads: {
+            unsigned int count = 0;
+            if (!reader.read_u32(count))
+                return false;
+            for (unsigned int i = 0; i < count; ++i) {
+                unsigned int packed = 0;
+                float x0 = 0.0f, y0 = 0.0f;
+                float x1 = 0.0f, y1 = 0.0f;
+                float x2 = 0.0f, y2 = 0.0f;
+                float x3 = 0.0f, y3 = 0.0f;
+                if (!reader.read_u32(packed)
+                    || !reader.read_f32(x0) || !reader.read_f32(y0)
+                    || !reader.read_f32(x1) || !reader.read_f32(y1)
+                    || !reader.read_f32(x2) || !reader.read_f32(y2)
+                    || !reader.read_f32(x3) || !reader.read_f32(y3))
+                    return false;
+                auto color = unpack_color(packed);
+                append_tri_vertex(frame.tri_data, x0, y0, color);
+                append_tri_vertex(frame.tri_data, x1, y1, color);
+                append_tri_vertex(frame.tri_data, x2, y2, color);
+                append_tri_vertex(frame.tri_data, x0, y0, color);
+                append_tri_vertex(frame.tri_data, x2, y2, color);
+                append_tri_vertex(frame.tri_data, x3, y3, color);
+            }
+            break;
+        }
+        case Cmd::FillRects: {
+            unsigned int count = 0;
+            if (!reader.read_u32(count))
+                return false;
+            for (unsigned int i = 0; i < count; ++i) {
+                float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+                unsigned int packed = 0;
+                if (!reader.read_f32(x) || !reader.read_f32(y)
+                    || !reader.read_f32(w) || !reader.read_f32(h)
+                    || !reader.read_u32(packed))
+                    return false;
+                auto color = unpack_color(packed);
+                append_color_instance(
+                    frame.color_data,
+                    x, y, w, h,
+                    color.r / 255.0f, color.g / 255.0f,
+                    color.b / 255.0f, color.a / 255.0f);
+            }
             break;
         }
         default:
@@ -3660,11 +3740,15 @@ inline HRESULT create_root_signature() {
 }
 
 inline HRESULT create_pipelines() {
+    ComPtr<ID3DBlob> tri_vs;
+    ComPtr<ID3DBlob> tri_ps;
     ComPtr<ID3DBlob> color_vs;
     ComPtr<ID3DBlob> color_ps;
     ComPtr<ID3DBlob> text_vs;
     ComPtr<ID3DBlob> image_ps;
     ComPtr<ID3DBlob> text_ps;
+    if (FAILED(compile_shader("vs_tri", "vs_5_0", tri_vs))) return E_FAIL;
+    if (FAILED(compile_shader("fs_tri", "ps_5_0", tri_ps))) return E_FAIL;
     if (FAILED(compile_shader("vs_color", "vs_5_0", color_vs))) return E_FAIL;
     if (FAILED(compile_shader("fs_color", "ps_5_0", color_ps))) return E_FAIL;
     if (FAILED(compile_shader("vs_text", "vs_5_0", text_vs))) return E_FAIL;
@@ -3705,6 +3789,20 @@ inline HRESULT create_pipelines() {
     base.RTVFormats[0] = DXGI_FORMAT_B8G8R8A8_UNORM;
     base.SampleDesc.Count = 1;
 
+    D3D12_INPUT_ELEMENT_DESC tri_layout[] = {
+        {"POSITION", 0, DXGI_FORMAT_R32G32_FLOAT, 0, 0,
+         D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+        {"COLOR", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 8,
+         D3D12_INPUT_CLASSIFICATION_PER_VERTEX_DATA, 0},
+    };
+    auto tri_desc = base;
+    tri_desc.InputLayout = {tri_layout, static_cast<UINT>(std::size(tri_layout))};
+    tri_desc.VS = {tri_vs->GetBufferPointer(), tri_vs->GetBufferSize()};
+    tri_desc.PS = {tri_ps->GetBufferPointer(), tri_ps->GetBufferSize()};
+    auto hr = g_renderer.device->CreateGraphicsPipelineState(
+        &tri_desc, IID_PPV_ARGS(&g_renderer.tri_pipeline));
+    if (FAILED(hr)) return hr;
+
     D3D12_INPUT_ELEMENT_DESC color_layout[] = {
         {"RECT", 0, DXGI_FORMAT_R32G32B32A32_FLOAT, 0, 0,
          D3D12_INPUT_CLASSIFICATION_PER_INSTANCE_DATA, 1},
@@ -3717,7 +3815,7 @@ inline HRESULT create_pipelines() {
     color_desc.InputLayout = {color_layout, static_cast<UINT>(std::size(color_layout))};
     color_desc.VS = {color_vs->GetBufferPointer(), color_vs->GetBufferSize()};
     color_desc.PS = {color_ps->GetBufferPointer(), color_ps->GetBufferSize()};
-    auto hr = g_renderer.device->CreateGraphicsPipelineState(
+    hr = g_renderer.device->CreateGraphicsPipelineState(
         &color_desc, IID_PPV_ARGS(&g_renderer.color_pipeline));
     if (FAILED(hr)) return hr;
 
@@ -4574,6 +4672,22 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     };
     g_renderer.command_list->SetGraphicsRoot32BitConstants(0, 4, uniforms, 0);
     g_renderer.command_list->IASetPrimitiveTopology(D3D_PRIMITIVE_TOPOLOGY_TRIANGLELIST);
+
+    UINT tri_vertex_count = static_cast<UINT>(decoded.tri_data.size() / 6);
+    if (tri_vertex_count > 0) {
+        UINT64 bytes = static_cast<UINT64>(decoded.tri_data.size() * sizeof(float));
+        auto [mapped, offset] = upload_alloc(bytes, 16);
+        if (mapped) {
+            std::memcpy(mapped, decoded.tri_data.data(), static_cast<std::size_t>(bytes));
+            D3D12_VERTEX_BUFFER_VIEW vbv{};
+            vbv.BufferLocation = g_renderer.upload.resource->GetGPUVirtualAddress() + offset;
+            vbv.SizeInBytes = static_cast<UINT>(bytes);
+            vbv.StrideInBytes = 24;
+            g_renderer.command_list->SetPipelineState(g_renderer.tri_pipeline.Get());
+            g_renderer.command_list->IASetVertexBuffers(0, 1, &vbv);
+            g_renderer.command_list->DrawInstanced(tri_vertex_count, 1, 0, 0);
+        }
+    }
 
     UINT color_count = static_cast<UINT>(decoded.color_data.size() / 12);
     if (color_count > 0) {

@@ -74,10 +74,16 @@ struct DrawPathCmd { float thickness; Color color; std::vector<PathSegment> segs
 // HATCH support in a later slab.
 struct FillPathCmd { Color color; std::vector<PathSegment> segs; };
 
+// Batched solid convex quadrilaterals. Each quad carries its own
+// colour so CAD-style true-colour meshes can stay in one opcode while
+// preserving per-primitive fill.
+struct FillQuadsCmd { std::vector<PaintQuad> quads; };
+struct FillRectsCmd { std::vector<PaintRect> rects; };
+
 using DrawCommand = std::variant<
     ClearCmd, FillRectCmd, StrokeRectCmd, RoundRectCmd,
     DrawTextCmd, DrawLineCmd, HitRegionCmd, DrawImageCmd, ScissorCmd,
-    DrawArcCmd, DrawPathCmd, FillPathCmd>;
+    DrawArcCmd, DrawPathCmd, FillPathCmd, FillQuadsCmd, FillRectsCmd>;
 
 // ---- Parser ----
 
@@ -288,6 +294,35 @@ inline std::vector<DrawCommand> parse_commands(
                 }
             }
             out.emplace_back(FillPathCmd{c, std::move(segs)});
+            break;
+        }
+        case Cmd::FillQuads: {
+            unsigned int n = read_u32();
+            std::vector<PaintQuad> quads;
+            quads.reserve(n);
+            for (unsigned int i = 0; i < n; ++i) {
+                Color c = unpack(read_u32());
+                float x0 = read_f32(), y0 = read_f32();
+                float x1 = read_f32(), y1 = read_f32();
+                float x2 = read_f32(), y2 = read_f32();
+                float x3 = read_f32(), y3 = read_f32();
+                quads.emplace_back(PaintQuad{
+                    x0, y0, x1, y1, x2, y2, x3, y3, c});
+            }
+            out.emplace_back(FillQuadsCmd{std::move(quads)});
+            break;
+        }
+        case Cmd::FillRects: {
+            unsigned int n = read_u32();
+            std::vector<PaintRect> rects;
+            rects.reserve(n);
+            for (unsigned int i = 0; i < n; ++i) {
+                float x = read_f32(), y = read_f32();
+                float w = read_f32(), h = read_f32();
+                Color c = unpack(read_u32());
+                rects.emplace_back(PaintRect{x, y, w, h, c});
+            }
+            out.emplace_back(FillRectsCmd{std::move(rects)});
             break;
         }
         default:

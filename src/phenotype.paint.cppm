@@ -1,4 +1,5 @@
 module;
+#include <algorithm>
 #include <cstdint>
 #include <cstdio>
 #include <cstdlib>
@@ -35,6 +36,15 @@ extern "C" {
 
 namespace phenotype::detail {
 
+struct FillRectWire {
+    float x;
+    float y;
+    float w;
+    float h;
+    unsigned int color;
+};
+static_assert(sizeof(FillRectWire) == 20);
+
 // ---- Buffer write helpers (templated on render_backend) ----
 
 inline char const* opcode_name(Cmd c) noexcept {
@@ -51,6 +61,8 @@ inline char const* opcode_name(Cmd c) noexcept {
         case Cmd::DrawArc:    return "DrawArc";
         case Cmd::Path:       return "Path";
         case Cmd::FillPath:   return "FillPath";
+        case Cmd::FillQuads:  return "FillQuads";
+        case Cmd::FillRects:  return "FillRects";
     }
     return "Unknown";
 }
@@ -425,6 +437,113 @@ void emit_fill_path(R& r, PathBuilder const& path, Color c) {
     detail::write_u32(r, c.packed());
     detail::write_u32(r, path.verb_count);
     for (auto w : path.verbs) detail::write_u32(r, w);
+}
+
+template <render_backend R>
+void emit_fill_quads(R& r, PaintQuad const* quads, unsigned int count) {
+    if (!quads || count == 0) return;
+
+    constexpr unsigned int max_quads_per_command = 1024;
+    unsigned int offset = 0;
+    while (offset < count) {
+        unsigned int n = count - offset;
+        if (n > max_quads_per_command) n = max_quads_per_command;
+        if (!detail::ensure(r, 8 + n * 36, Cmd::FillQuads)) return;
+        detail::write_u32(r, static_cast<unsigned int>(Cmd::FillQuads));
+        detail::write_u32(r, n);
+        for (unsigned int i = 0; i < n; ++i) {
+            auto const& q = quads[offset + i];
+            detail::write_u32(r, q.color.packed());
+            detail::write_f32(r, q.x0); detail::write_f32(r, q.y0);
+            detail::write_f32(r, q.x1); detail::write_f32(r, q.y1);
+            detail::write_f32(r, q.x2); detail::write_f32(r, q.y2);
+            detail::write_f32(r, q.x3); detail::write_f32(r, q.y3);
+        }
+        offset += n;
+    }
+}
+
+template <render_backend R>
+void emit_fill_quads_translated(R& r, PaintQuad const* quads,
+                                unsigned int count,
+                                float origin_x, float origin_y) {
+    if (!quads || count == 0) return;
+
+    constexpr unsigned int max_quads_per_command = 1024;
+    unsigned int offset = 0;
+    while (offset < count) {
+        unsigned int n = count - offset;
+        if (n > max_quads_per_command) n = max_quads_per_command;
+        if (!detail::ensure(r, 8 + n * 36, Cmd::FillQuads)) return;
+        detail::write_u32(r, static_cast<unsigned int>(Cmd::FillQuads));
+        detail::write_u32(r, n);
+        for (unsigned int i = 0; i < n; ++i) {
+            auto const& q = quads[offset + i];
+            detail::write_u32(r, q.color.packed());
+            detail::write_f32(r, origin_x + q.x0);
+            detail::write_f32(r, origin_y + q.y0);
+            detail::write_f32(r, origin_x + q.x1);
+            detail::write_f32(r, origin_y + q.y1);
+            detail::write_f32(r, origin_x + q.x2);
+            detail::write_f32(r, origin_y + q.y2);
+            detail::write_f32(r, origin_x + q.x3);
+            detail::write_f32(r, origin_y + q.y3);
+        }
+        offset += n;
+    }
+}
+
+template <render_backend R>
+void emit_fill_rects(R& r, PaintRect const* rects, unsigned int count) {
+    if (!rects || count == 0) return;
+
+    constexpr unsigned int max_rects_per_command = 1536;
+    unsigned int offset = 0;
+    while (offset < count) {
+        unsigned int n = count - offset;
+        if (n > max_rects_per_command) n = max_rects_per_command;
+        if (!detail::ensure(r, 8 + n * 20, Cmd::FillRects)) return;
+        detail::write_u32(r, static_cast<unsigned int>(Cmd::FillRects));
+        detail::write_u32(r, n);
+        for (unsigned int i = 0; i < n; ++i) {
+            auto const& rect = rects[offset + i];
+            detail::FillRectWire wire{
+                rect.x, rect.y, rect.w, rect.h, rect.color.packed()};
+            std::memcpy(&r.buf()[r.buf_len()], &wire, sizeof(wire));
+            r.buf_len() += static_cast<unsigned int>(sizeof(wire));
+        }
+        offset += n;
+    }
+}
+
+template <render_backend R>
+void emit_fill_rects_translated(R& r, PaintRect const* rects,
+                                unsigned int count,
+                                float origin_x, float origin_y) {
+    if (!rects || count == 0) return;
+
+    constexpr unsigned int max_rects_per_command = 1536;
+    unsigned int offset = 0;
+    while (offset < count) {
+        unsigned int n = count - offset;
+        if (n > max_rects_per_command) n = max_rects_per_command;
+        if (!detail::ensure(r, 8 + n * 20, Cmd::FillRects)) return;
+        detail::write_u32(r, static_cast<unsigned int>(Cmd::FillRects));
+        detail::write_u32(r, n);
+        for (unsigned int i = 0; i < n; ++i) {
+            auto const& rect = rects[offset + i];
+            float x = origin_x + rect.x;
+            float y = origin_y + rect.y;
+            float w = rect.w;
+            float h = rect.h;
+            if (w < 0.0f) { x += w; w = -w; }
+            if (h < 0.0f) { y += h; h = -h; }
+            detail::FillRectWire wire{x, y, w, h, rect.color.packed()};
+            std::memcpy(&r.buf()[r.buf_len()], &wire, sizeof(wire));
+            r.buf_len() += static_cast<unsigned int>(sizeof(wire));
+        }
+        offset += n;
+    }
 }
 
 template <render_backend R>
@@ -946,6 +1065,20 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 // colour pipeline at decode time — no thickness here.
                 auto translated = path.translated(origin_x, origin_y);
                 emit_fill_path(r, translated, color);
+            }
+
+            void fill_quads(PaintQuad const* quads,
+                            unsigned int count) override {
+                if (!quads || count == 0) return;
+                emit_fill_quads_translated(r, quads, count,
+                                           origin_x, origin_y);
+            }
+
+            void fill_rects(PaintRect const* rects,
+                            unsigned int count) override {
+                if (!rects || count == 0) return;
+                emit_fill_rects_translated(r, rects, count,
+                                           origin_x, origin_y);
             }
 
             void text(float x, float y,
