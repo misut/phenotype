@@ -56,6 +56,20 @@ struct text_api {
                      char const* text, unsigned int len) = nullptr;
     TextAtlas (*build_atlas)(std::vector<TextEntry> const& entries,
                              float backing_scale) = nullptr;
+    // Register a TTF / OTF / TTC file with the process's font manager
+    // and bind it to the given alias. Subsequent `FontSpec::family`
+    // lookups for `family_alias` resolve to the registered face. Both
+    // `family_alias` and `path` are UTF-8 byte / length pairs (length
+    // 0 forbidden for either). Returns true on success; false when
+    // the file is missing, malformed, or the backend lacks runtime
+    // registration support — caller should treat that as "fall back
+    // to the platform default" (the existing `measure` /
+    // `build_atlas` paths already do that for unknown families).
+    // Idempotent: re-registering an alias replaces the prior binding.
+    bool (*register_font_file)(char const* family_alias,
+                               unsigned int alias_len,
+                               char const* path,
+                               unsigned int path_len) = nullptr;
 };
 
 // Opaque native surface handle. Today this carries a GLFWwindow* on

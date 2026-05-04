@@ -109,6 +109,13 @@ struct TextState {
     // Family names that previously failed to resolve — logged once each
     // and never re-attempted (the lookup is expensive on Core Text).
     std::set<std::string> missing_logged;
+    // Process-registered TTF/OTF/TTC files — alias name → resolved
+    // PostScript name. Populated by `register_font_file_macos`; consulted
+    // by `acquire_base_font` BEFORE handing the raw FontSpec family to
+    // CTFontCreateWithName, so callers can register a font under a
+    // friendly alias and continue addressing it by that alias from
+    // FontSpec.
+    std::map<std::string, std::string> registered_aliases;
     bool initialized = false;
 };
 
@@ -709,10 +716,21 @@ inline CTFontRef acquire_base_font(FontCacheKey const& key) {
         base = key.mono ? g_text.mono : g_text.sans;
         if (base) base = static_cast<CTFontRef>(CFRetain(base));
     } else {
+        // Look up via process-registered alias first — a caller that
+        // ran `register_font_file_macos("MyAlias", "/path/to/face.ttf")`
+        // expects FontSpec{family="MyAlias"} to resolve to the
+        // registered face's actual PostScript name (which is what
+        // CTFontCreateWithName actually accepts after the registration
+        // step).
+        std::string lookup_name = key.family;
+        if (auto it = g_text.registered_aliases.find(key.family);
+            it != g_text.registered_aliases.end()) {
+            lookup_name = it->second;
+        }
         auto cf_name = CFGuard<CFStringRef>(CFStringCreateWithBytes(
             kCFAllocatorDefault,
-            reinterpret_cast<UInt8 const*>(key.family.data()),
-            static_cast<CFIndex>(key.family.size()),
+            reinterpret_cast<UInt8 const*>(lookup_name.data()),
+            static_cast<CFIndex>(lookup_name.size()),
             kCFStringEncodingUTF8,
             false));
         if (!cf_name) {
@@ -743,6 +761,93 @@ inline CTFontRef acquire_base_font(FontCacheKey const& key) {
     }
     g_text.cache.emplace(key, base);
     return base;
+}
+
+// platform_api::text.register_font_file entry. Registers `path` with
+// CoreText (process-scope) and stashes `family_alias → resolved
+// PostScript name` in the alias map so subsequent FontSpec lookups by
+// `family_alias` route to the registered face. Returns false on any
+// failure (file missing, unsupported format, registration rejected) so
+// the caller can fall back to its default-font path; on success any
+// previously cached resolution for the same alias is invalidated so
+// the next render picks up the newly registered face.
+inline bool text_register_font_file(char const* family_alias,
+                                    unsigned int alias_len,
+                                    char const* path,
+                                    unsigned int path_len) {
+    if (!g_text.initialized) text_init();
+    if (family_alias == nullptr || alias_len == 0
+        || path == nullptr || path_len == 0) return false;
+
+    auto cf_path = CFGuard<CFStringRef>(CFStringCreateWithBytes(
+        kCFAllocatorDefault,
+        reinterpret_cast<UInt8 const*>(path),
+        static_cast<CFIndex>(path_len),
+        kCFStringEncodingUTF8,
+        false));
+    if (!cf_path) return false;
+    auto cf_url = CFGuard<CFURLRef>(CFURLCreateWithFileSystemPath(
+        kCFAllocatorDefault, cf_path, kCFURLPOSIXPathStyle, false));
+    if (!cf_url) return false;
+
+    CFErrorRef err = nullptr;
+    Boolean const ok = CTFontManagerRegisterFontsForURL(
+        cf_url, kCTFontManagerScopeProcess, &err);
+    if (!ok) {
+        // Already-registered (kCTFontManagerErrorAlreadyRegistered = 105)
+        // is fine — the file can ship in multiple STYLE entries; treat
+        // it as a successful no-op so we still record the alias below.
+        bool already = false;
+        if (err != nullptr) {
+            if (CFErrorGetCode(err) == 105) already = true;
+            CFRelease(err);
+        }
+        if (!already) return false;
+    }
+
+    // Read the resolved PostScript name from the registered face — that
+    // is the string CTFontCreateWithName actually accepts post-register.
+    CFArrayRef descs = CTFontManagerCreateFontDescriptorsFromURL(cf_url);
+    if (descs == nullptr || CFArrayGetCount(descs) == 0) {
+        if (descs) CFRelease(descs);
+        return false;
+    }
+    CTFontDescriptorRef desc = static_cast<CTFontDescriptorRef>(
+        CFArrayGetValueAtIndex(descs, 0));
+    auto cf_psname = CFGuard<CFStringRef>(static_cast<CFStringRef>(
+        CTFontDescriptorCopyAttribute(desc, kCTFontNameAttribute)));
+    CFRelease(descs);
+    if (!cf_psname) return false;
+
+    // CFStringRef → std::string (UTF-8).
+    CFIndex const ps_chars = CFStringGetLength(cf_psname);
+    CFIndex const ps_max = CFStringGetMaximumSizeForEncoding(
+        ps_chars, kCFStringEncodingUTF8);
+    std::string ps_name;
+    ps_name.resize(static_cast<std::size_t>(ps_max + 1), '\0');
+    if (!CFStringGetCString(cf_psname, ps_name.data(),
+                            ps_max + 1, kCFStringEncodingUTF8)) {
+        return false;
+    }
+    ps_name.resize(std::strlen(ps_name.c_str()));
+
+    std::string const alias{family_alias, alias_len};
+    auto [it, inserted] = g_text.registered_aliases.insert_or_assign(
+        alias, std::move(ps_name));
+    (void)it; (void)inserted;
+
+    // Drop any cached base-font entries that match this alias so the
+    // next acquire_base_font re-resolves through the new mapping.
+    for (auto cit = g_text.cache.begin(); cit != g_text.cache.end(); ) {
+        if (cit->first.family == alias) {
+            if (cit->second) CFRelease(cit->second);
+            cit = g_text.cache.erase(cit);
+        } else {
+            ++cit;
+        }
+    }
+    g_text.missing_logged.erase(alias);
+    return true;
 }
 
 struct TextLineMetrics {
@@ -6690,6 +6795,7 @@ inline platform_api const& macos_platform() {
             detail::text_shutdown,
             detail::text_measure_api,
             detail::text_build_atlas,
+            detail::text_register_font_file,
         },
         {
             detail::renderer_init,
