@@ -3904,6 +3904,30 @@ inline void decode_android_color_commands(unsigned char const* buf,
                             dst);
                     }
                 }
+            } else if constexpr (std::same_as<T, ::phenotype::FillQuadsCmd>) {
+                auto& dst = out.batches.back().colors;
+                for (auto const& q : c.quads) {
+                    float color4[4];
+                    normalize_color(q.color, color4);
+                    rasterize_triangle_to_color(
+                        q.x0, q.y0, q.x1, q.y1, q.x2, q.y2,
+                        color4[0], color4[1], color4[2], color4[3],
+                        dst);
+                    rasterize_triangle_to_color(
+                        q.x0, q.y0, q.x2, q.y2, q.x3, q.y3,
+                        color4[0], color4[1], color4[2], color4[3],
+                        dst);
+                }
+            } else if constexpr (std::same_as<T, ::phenotype::FillRectsCmd>) {
+                auto& dst = out.batches.back().colors;
+                dst.reserve(dst.size() + c.rects.size());
+                for (auto const& r : c.rects) {
+                    ColorInstanceGPU inst{};
+                    inst.rect[0] = r.x; inst.rect[1] = r.y;
+                    inst.rect[2] = r.w; inst.rect[3] = r.h;
+                    normalize_color(r.color, inst.color);
+                    dst.push_back(inst);
+                }
             }
             // HitRegion is ignored before Stage 6.
         }, cmd);

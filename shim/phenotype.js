@@ -15,6 +15,8 @@ const CMD_DRAW_LINE  = 6;
 const CMD_HIT_REGION = 7;
 const CMD_DRAW_IMAGE = 8;
 const CMD_SCISSOR    = 9;
+const CMD_FILL_QUADS = 13;
+const CMD_FILL_RECTS = 14;
 
 // --- Color helpers ---
 
@@ -759,6 +761,43 @@ function parseCommands(instance) {
         // paint_node can emit Scissor without tripping the "unknown
         // command" fallback below. Applying the clip is a follow-up.
         pos += 16; // x, y, w, h
+        break;
+      }
+      case CMD_FILL_QUADS: {
+        const count = view.getUint32(pos, true); pos += 4;
+        for (let i = 0; i < count; ++i) {
+          const rgba = view.getUint32(pos, true); pos += 4;
+          const x0 = view.getFloat32(pos, true); pos += 4;
+          const y0 = view.getFloat32(pos, true); pos += 4;
+          const x1 = view.getFloat32(pos, true); pos += 4;
+          const y1 = view.getFloat32(pos, true); pos += 4;
+          const x2 = view.getFloat32(pos, true); pos += 4;
+          const y2 = view.getFloat32(pos, true); pos += 4;
+          const x3 = view.getFloat32(pos, true); pos += 4;
+          const y3 = view.getFloat32(pos, true); pos += 4;
+          const c = unpackColor(rgba);
+          const minX = Math.min(x0, x1, x2, x3);
+          const maxX = Math.max(x0, x1, x2, x3);
+          const minY = Math.min(y0, y1, y2, y3);
+          const maxY = Math.max(y0, y1, y2, y3);
+          quads.push({
+            x: minX, y: minY, w: maxX - minX, h: maxY - minY,
+            r: c.r, g: c.g, b: c.b, a: c.a, type: 0
+          });
+        }
+        break;
+      }
+      case CMD_FILL_RECTS: {
+        const count = view.getUint32(pos, true); pos += 4;
+        for (let i = 0; i < count; ++i) {
+          const x = view.getFloat32(pos, true); pos += 4;
+          const y = view.getFloat32(pos, true); pos += 4;
+          const w = view.getFloat32(pos, true); pos += 4;
+          const h = view.getFloat32(pos, true); pos += 4;
+          const rgba = view.getUint32(pos, true); pos += 4;
+          const c = unpackColor(rgba);
+          quads.push({ x, y, w, h, r: c.r, g: c.g, b: c.b, a: c.a, type: 0 });
+        }
         break;
       }
       default:

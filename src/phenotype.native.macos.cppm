@@ -1502,9 +1502,9 @@ inline ImeState g_ime;
 struct ScissorBatch {
     float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
     // tri_vertices holds raw triangle-list vertices (3 per triangle)
-    // accumulated from FillPath ear-clip output. Drawn before colors
-    // in the same batch so filled regions sit beneath any subsequent
-    // FillRect / DrawLine quads emitted in the same canvas.
+    // accumulated from FillPath / FillQuads output. Drawn before colors
+    // in the same batch; the decoder opens a same-scissor batch when a
+    // later triangle primitive must appear above prior color instances.
     std::vector<TriVertexGPU>     tri_vertices;
     std::vector<ColorInstanceGPU> colors;
     std::vector<ArcInstanceGPU>   arcs;
@@ -1587,6 +1587,19 @@ inline void open_scissor_batch(FrameScratch& s,
     ScissorBatch next;
     next.x = x; next.y = y; next.w = w; next.h = h;
     s.batches.push_back(std::move(next));
+}
+
+inline void open_same_scissor_batch(FrameScratch& s) {
+    auto const& cur = s.batches.back();
+    open_scissor_batch(s, cur.x, cur.y, cur.w, cur.h);
+}
+
+inline void ensure_triangle_order_batch(FrameScratch& s) {
+    auto const& cur = s.batches.back();
+    if (!cur.colors.empty() || !cur.arcs.empty()
+        || !cur.images.empty() || !cur.texts.empty()) {
+        open_same_scissor_batch(s);
+    }
 }
 
 inline void finalize_batches(FrameScratch& s) {
@@ -2582,6 +2595,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 // per HATCH with a small delta forces a realloc-and-
                 // copy on every fill — O(N²) cumulative on dense
                 // CAD content (36 095 fills × growing buffer ≈ 2 s).
+                ensure_triangle_order_batch(scratch);
                 auto& dst = scratch.batches.back().tri_vertices;
                 for (std::size_t t = 0; t + 5 < tris.size(); t += 6) {
                     // Push three vertices for this triangle. Hardware
@@ -2595,6 +2609,61 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     v.pos[0] = tris[t];     v.pos[1] = tris[t + 1]; dst.push_back(v);
                     v.pos[0] = tris[t + 2]; v.pos[1] = tris[t + 3]; dst.push_back(v);
                     v.pos[0] = tris[t + 4]; v.pos[1] = tris[t + 5]; dst.push_back(v);
+                }
+                break;
+            }
+            case Cmd::FillQuads: {
+                unsigned int count = 0;
+                if (!reader.read_u32(count))
+                    return false;
+                ensure_triangle_order_batch(scratch);
+                auto& dst = scratch.batches.back().tri_vertices;
+                dst.reserve(dst.size() + static_cast<std::size_t>(count) * 6);
+                for (unsigned int i = 0; i < count; ++i) {
+                    unsigned int packed = 0;
+                    float x0 = 0.0f, y0 = 0.0f;
+                    float x1 = 0.0f, y1 = 0.0f;
+                    float x2 = 0.0f, y2 = 0.0f;
+                    float x3 = 0.0f, y3 = 0.0f;
+                    if (!reader.read_u32(packed)
+                        || !reader.read_f32(x0) || !reader.read_f32(y0)
+                        || !reader.read_f32(x1) || !reader.read_f32(y1)
+                        || !reader.read_f32(x2) || !reader.read_f32(y2)
+                        || !reader.read_f32(x3) || !reader.read_f32(y3))
+                        return false;
+                    auto color = unpack_color(packed);
+                    TriVertexGPU v;
+                    v.color[0] = color.r / 255.0f;
+                    v.color[1] = color.g / 255.0f;
+                    v.color[2] = color.b / 255.0f;
+                    v.color[3] = color.a / 255.0f;
+                    v.pos[0] = x0; v.pos[1] = y0; dst.push_back(v);
+                    v.pos[0] = x1; v.pos[1] = y1; dst.push_back(v);
+                    v.pos[0] = x2; v.pos[1] = y2; dst.push_back(v);
+                    v.pos[0] = x0; v.pos[1] = y0; dst.push_back(v);
+                    v.pos[0] = x2; v.pos[1] = y2; dst.push_back(v);
+                    v.pos[0] = x3; v.pos[1] = y3; dst.push_back(v);
+                }
+                break;
+            }
+            case Cmd::FillRects: {
+                unsigned int count = 0;
+                if (!reader.read_u32(count))
+                    return false;
+                for (unsigned int i = 0; i < count; ++i) {
+                    float x = 0.0f, y = 0.0f;
+                    float w = 0.0f, h = 0.0f;
+                    unsigned int packed = 0;
+                    if (!reader.read_f32(x) || !reader.read_f32(y)
+                        || !reader.read_f32(w) || !reader.read_f32(h)
+                        || !reader.read_u32(packed))
+                        return false;
+                    auto color = unpack_color(packed);
+                    append_color_instance(
+                        scratch.batches.back().colors,
+                        x, y, w, h,
+                        color.r / 255.0f, color.g / 255.0f,
+                        color.b / 255.0f, color.a / 255.0f);
                 }
                 break;
             }
