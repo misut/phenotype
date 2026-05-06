@@ -1406,6 +1406,27 @@ struct android_renderer {
     void* tri_vertex_mapped;
     std::size_t tri_vertex_capacity; // in TriVertexGPU count
 
+    // Frame-skip cache: if the binary cmd buffer hashes to the same
+    // value as last frame, the decoded scratch (and all GPU-side
+    // SSBO/vertex contents) are still valid. We skip decode +
+    // text_build_atlas + finalize + uploads and only re-record draws.
+    std::uint64_t last_buf_hash = 0;
+    FrameScratch  last_scratch;
+    ::phenotype::native::TextAtlas last_atlas;
+    bool          last_have_text = false;
+    bool          last_have_images = false;
+    bool          last_scratch_valid = false;
+    // Lightweight perf counters: every kPerfFrames frames we emit a
+    // single logcat line summarising decode / upload / record / total
+    // ms and skip rate. Drop into __android_log so std::cerr's lack of
+    // logcat routing isn't a blocker.
+    unsigned long long perf_frame_count = 0;
+    unsigned long long perf_skip_count = 0;
+    double perf_decode_ms_sum = 0.0;
+    double perf_upload_ms_sum = 0.0;
+    double perf_record_ms_sum = 0.0;
+    double perf_total_ms_sum  = 0.0;
+
     // Stage 4 text pipeline. Atlas image + view grow on demand;
     // everything else is allocated once per device.
     VkDescriptorSetLayout text_descriptor_set_layout;
@@ -4413,23 +4434,59 @@ inline void decode_android_color_commands(unsigned char const* buf,
 // through the public `phenotype::widget::*` / `phenotype::layout::*`
 // API.
 
+inline std::uint64_t fnv1a_hash(unsigned char const* data,
+                                unsigned int len) noexcept {
+    std::uint64_t h = 0xCBF29CE484222325ULL;
+    for (unsigned int i = 0; i < len; ++i) {
+        h ^= static_cast<std::uint64_t>(data[i]);
+        h *= 0x100000001B3ULL;
+    }
+    return h == 0 ? 1ULL : h;
+}
+
 inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (!g_renderer.initialized) return;
     if (buf == nullptr || len == 0) {
         g_renderer.last_frame_buf.clear();
+        g_renderer.last_buf_hash = 0;
+        g_renderer.last_scratch_valid = false;
         return;
     }
+
+    auto const t_start = std::chrono::steady_clock::now();
 
     // Snapshot the caller's buffer so hit_test can replay it later
     // without forcing another view() pass.
     g_renderer.last_frame_buf.assign(buf, buf + len);
 
-    FrameScratch scratch;
-    decode_android_color_commands(buf, len, scratch);
-    if (!scratch.has_clear) {
-        auto const& theme = ::phenotype::current_theme();
-        normalize_color(theme.background, scratch.clear_color);
+    // Decode-skip path: if the binary cmd buffer matches the previous
+    // frame's bit-for-bit, the decoded FrameScratch + GPU SSBOs +
+    // vertex buffers are still valid. We bypass the entire CPU
+    // decode + text rasterise + finalise + upload pipeline and only
+    // re-record draws against the cached scratch. On colorwh.dwg's
+    // True Color sheet this is the difference between rebuilding
+    // hundreds of thousands of TriVertexGPU per frame and a few
+    // hundred microseconds of vkCmd recording.
+    std::uint64_t const cur_hash = fnv1a_hash(buf, len);
+    bool const can_skip_decode =
+        g_renderer.last_scratch_valid
+        && g_renderer.last_buf_hash != 0
+        && g_renderer.last_buf_hash == cur_hash;
+
+    auto t_decode_end = t_start;
+    FrameScratch local_scratch;
+    FrameScratch& scratch =
+        can_skip_decode ? g_renderer.last_scratch : local_scratch;
+    ::phenotype::native::TextAtlas atlas{};
+
+    if (!can_skip_decode) {
+        decode_android_color_commands(buf, len, scratch);
+        if (!scratch.has_clear) {
+            auto const& theme = ::phenotype::current_theme();
+            normalize_color(theme.background, scratch.clear_color);
+        }
     }
+    t_decode_end = std::chrono::steady_clock::now();
 
     vkWaitForFences(g_renderer.device, 1, &g_renderer.in_flight, VK_TRUE, UINT64_MAX);
 
@@ -4438,8 +4495,9 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     // stalling image presentation. The previous frame's fence has been
     // waited on, so the persistently-mapped text buffers are safe to
     // touch once we start staging data below.
-    ::phenotype::native::TextAtlas atlas{};
-    if (!scratch.text_entries.empty()) {
+    if (can_skip_decode) {
+        atlas = g_renderer.last_atlas;
+    } else if (!scratch.text_entries.empty()) {
         atlas = text_build_atlas(scratch.text_entries, 1.0f);
         for (std::size_t i = 0;
              i < scratch.text_entries.size() && i < atlas.quads.size();
@@ -4461,7 +4519,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             scratch.batches[batch_idx].texts.push_back(inst);
         }
     }
-    finalize_batches(scratch);
+    if (!can_skip_decode) finalize_batches(scratch);
 
     std::uint32_t idx = 0;
     auto r = vkAcquireNextImageKHR(
@@ -4470,75 +4528,94 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) {
         destroy_swapchain_resources();
         create_swapchain();
+        // Swapchain rebuild invalidates the cached scratch — next
+        // frame must re-decode.
+        g_renderer.last_buf_hash = 0;
+        g_renderer.last_scratch_valid = false;
         return;
     }
     if (!vk_ok(r, "vkAcquireNextImageKHR")) return;
 
     vkResetFences(g_renderer.device, 1, &g_renderer.in_flight);
 
-    // Upload per-frame data — the fence wait above guarantees the
-    // previous frame is no longer reading these persistently-mapped
-    // buffers.
-    if (!scratch.color_instances.empty()) {
-        if (!ensure_instance_capacity(scratch.color_instances.size())) return;
-        std::memcpy(g_renderer.instance_mapped,
-                    scratch.color_instances.data(),
-                    scratch.color_instances.size() * sizeof(ColorInstanceGPU));
-    }
-    if (!scratch.arc_instances.empty()) {
-        if (!ensure_arc_instance_capacity(scratch.arc_instances.size())) return;
-        std::memcpy(g_renderer.arc_instance_mapped,
-                    scratch.arc_instances.data(),
-                    scratch.arc_instances.size() * sizeof(ArcInstanceGPU));
-    }
-    if (!scratch.tri_vertices.empty()) {
-        if (!ensure_tri_vertex_capacity(scratch.tri_vertices.size())) return;
-        std::memcpy(g_renderer.tri_vertex_mapped,
-                    scratch.tri_vertices.data(),
-                    scratch.tri_vertices.size() * sizeof(TriVertexGPU));
-    }
+    auto const t_upload_start = std::chrono::steady_clock::now();
+    bool have_text = false;
+    bool have_images = false;
+    if (can_skip_decode) {
+        // SSBO/vertex contents are unchanged from last frame; reuse
+        // the cached have_text / have_images flags. The image atlas
+        // dirty region may still need a flush for async-loaded
+        // images — record_image_atlas_upload below handles that.
+        have_text = g_renderer.last_have_text;
+        have_images = g_renderer.last_have_images;
+    } else {
+        // Upload per-frame data — the fence wait above guarantees the
+        // previous frame is no longer reading these persistently-mapped
+        // buffers.
+        if (!scratch.color_instances.empty()) {
+            if (!ensure_instance_capacity(scratch.color_instances.size())) return;
+            std::memcpy(g_renderer.instance_mapped,
+                        scratch.color_instances.data(),
+                        scratch.color_instances.size() * sizeof(ColorInstanceGPU));
+        }
+        if (!scratch.arc_instances.empty()) {
+            if (!ensure_arc_instance_capacity(scratch.arc_instances.size())) return;
+            std::memcpy(g_renderer.arc_instance_mapped,
+                        scratch.arc_instances.data(),
+                        scratch.arc_instances.size() * sizeof(ArcInstanceGPU));
+        }
+        if (!scratch.tri_vertices.empty()) {
+            if (!ensure_tri_vertex_capacity(scratch.tri_vertices.size())) return;
+            std::memcpy(g_renderer.tri_vertex_mapped,
+                        scratch.tri_vertices.data(),
+                        scratch.tri_vertices.size() * sizeof(TriVertexGPU));
+        }
 
-    bool have_text = !scratch.text_instances.empty()
-                   && !atlas.pixels.empty()
-                   && atlas.width > 0 && atlas.height > 0;
-    if (have_text) {
-        if (!ensure_text_instance_capacity(scratch.text_instances.size())
-            || !ensure_text_staging_capacity(
-                   static_cast<VkDeviceSize>(atlas.pixels.size()))
-            || !create_or_resize_text_atlas_image(
-                   static_cast<std::uint32_t>(atlas.width),
-                   static_cast<std::uint32_t>(atlas.height))) {
-            have_text = false;
-        } else {
-            std::memcpy(g_renderer.text_instance_mapped,
-                        scratch.text_instances.data(),
-                        scratch.text_instances.size() * sizeof(TextInstanceGPU));
-            // Atlas view may have been recreated; refresh all three
-            // descriptor bindings so the fragment shader sees the
-            // current VkImage + sampler pair.
-            write_text_descriptor_set();
+        have_text = !scratch.text_instances.empty()
+                       && !atlas.pixels.empty()
+                       && atlas.width > 0 && atlas.height > 0;
+        if (have_text) {
+            if (!ensure_text_instance_capacity(scratch.text_instances.size())
+                || !ensure_text_staging_capacity(
+                       static_cast<VkDeviceSize>(atlas.pixels.size()))
+                || !create_or_resize_text_atlas_image(
+                       static_cast<std::uint32_t>(atlas.width),
+                       static_cast<std::uint32_t>(atlas.height))) {
+                have_text = false;
+            } else {
+                std::memcpy(g_renderer.text_instance_mapped,
+                            scratch.text_instances.data(),
+                            scratch.text_instances.size() * sizeof(TextInstanceGPU));
+                // Atlas view may have been recreated; refresh all three
+                // descriptor bindings so the fragment shader sees the
+                // current VkImage + sampler pair.
+                write_text_descriptor_set();
+            }
+        }
+
+        // Image pipeline: upload the instance SSBO (atlas pixels already
+        // live in g_images.pixels; record_image_atlas_upload below flushes
+        // any dirty region to the VkImage).
+        have_images = !scratch.image_instances.empty();
+        if (have_images) {
+            if (!ensure_image_instance_capacity(scratch.image_instances.size())) {
+                have_images = false;
+            } else {
+                std::memcpy(g_renderer.image_instance_mapped,
+                            scratch.image_instances.data(),
+                            scratch.image_instances.size()
+                                * sizeof(ImageInstanceGPU));
+            }
         }
     }
-
-    // Image pipeline: upload the instance SSBO (atlas pixels already
-    // live in g_images.pixels; record_image_atlas_upload below flushes
-    // any dirty region to the VkImage).
-    bool have_images = !scratch.image_instances.empty();
-    if (have_images) {
-        if (!ensure_image_instance_capacity(scratch.image_instances.size())) {
-            have_images = false;
-        } else {
-            std::memcpy(g_renderer.image_instance_mapped,
-                        scratch.image_instances.data(),
-                        scratch.image_instances.size()
-                            * sizeof(ImageInstanceGPU));
-        }
-    }
+    auto const t_upload_end = std::chrono::steady_clock::now();
 
     ColorUniforms uniforms{};
     uniforms.viewport[0] = static_cast<float>(g_renderer.swapchain_extent.width);
     uniforms.viewport[1] = static_cast<float>(g_renderer.swapchain_extent.height);
     std::memcpy(g_renderer.uniform_mapped, &uniforms, sizeof uniforms);
+
+    auto const t_record_start = std::chrono::steady_clock::now();
 
     // Record the render pass.
     vkResetCommandBuffer(g_renderer.command_buffer, 0);
@@ -4710,6 +4787,60 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR) {
         destroy_swapchain_resources();
         create_swapchain();
+        g_renderer.last_buf_hash = 0;
+        g_renderer.last_scratch_valid = false;
+    }
+
+    auto const t_end = std::chrono::steady_clock::now();
+
+    // Save scratch + atlas for next frame's potential decode-skip. We
+    // do this only on the heavy path (decode actually ran) — the skip
+    // path leaves last_* untouched since they already match cur_hash.
+    if (!can_skip_decode) {
+        // Move local scratch into the persistent slot. The next frame
+        // sees `&g_renderer.last_scratch` aliased to `scratch`, so any
+        // accumulated batches/instances live across frames as long as
+        // the hash matches. local_scratch is destroyed on return.
+        g_renderer.last_scratch = std::move(local_scratch);
+        g_renderer.last_atlas = std::move(atlas);
+        g_renderer.last_have_text = have_text;
+        g_renderer.last_have_images = have_images;
+        g_renderer.last_scratch_valid = true;
+    }
+    g_renderer.last_buf_hash = cur_hash;
+
+    // Per-frame timings, averaged + emitted to logcat every kPerfFrames.
+    using ms = std::chrono::duration<double, std::milli>;
+    constexpr unsigned long long kPerfFrames = 60;
+    g_renderer.perf_decode_ms_sum +=
+        ms(t_decode_end - t_start).count();
+    g_renderer.perf_upload_ms_sum +=
+        ms(t_upload_end - t_upload_start).count();
+    g_renderer.perf_record_ms_sum +=
+        ms(t_end - t_record_start).count();
+    g_renderer.perf_total_ms_sum +=
+        ms(t_end - t_start).count();
+    if (can_skip_decode) ++g_renderer.perf_skip_count;
+    if (++g_renderer.perf_frame_count >= kPerfFrames) {
+        double const f =
+            static_cast<double>(g_renderer.perf_frame_count);
+        __android_log_print(
+            ANDROID_LOG_INFO, ANDROID_LOG_TAG,
+            "[perf] avg decode=%.2fms upload=%.2fms record=%.2fms "
+            "total=%.2fms skip=%llu/%llu over %llu frames",
+            g_renderer.perf_decode_ms_sum / f,
+            g_renderer.perf_upload_ms_sum / f,
+            g_renderer.perf_record_ms_sum / f,
+            g_renderer.perf_total_ms_sum / f,
+            g_renderer.perf_skip_count,
+            g_renderer.perf_frame_count,
+            g_renderer.perf_frame_count);
+        g_renderer.perf_decode_ms_sum = 0;
+        g_renderer.perf_upload_ms_sum = 0;
+        g_renderer.perf_record_ms_sum = 0;
+        g_renderer.perf_total_ms_sum  = 0;
+        g_renderer.perf_skip_count = 0;
+        g_renderer.perf_frame_count = 0;
     }
 }
 
