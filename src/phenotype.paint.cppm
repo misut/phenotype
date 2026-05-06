@@ -624,6 +624,12 @@ inline void flush_if_changed() { flush_if_changed(detail::g_wasi); }
 
 export namespace phenotype::detail {
 
+template <render_backend R>
+void reset_paint_scissor_boundary(R& r) {
+    g_app.paint_scissor_depth = 0;
+    emit_scissor_reset(r);
+}
+
 template <render_backend R, text_measurer M>
 void emit_focused_input_selection(R& r,
                                   M const& measurer,
@@ -689,6 +695,53 @@ inline void invalidate_descendant_paint_cache(NodeHandle node_h) {
         auto& child = node_at(child_h);
         child.paint_valid = false;
         invalidate_descendant_paint_cache(child_h);
+    }
+}
+
+// Subtree blits reuse byte ranges from prev_cmd_buf and skip the normal
+// paint walk. Command-buffer side effects like HitRegion are already
+// inside the copied bytes, but shell-side routing state (gesture target
+// and scroll target lists) lives only in AppState and must be rebuilt
+// every frame even when the visual bytes are cached.
+inline void register_cached_paint_side_effects(NodeHandle node_h,
+                                               float ox, float oy,
+                                               float scroll_x,
+                                               float scroll_y) {
+    auto& node = node_at(node_h);
+    float ax = ox + node.x;
+    float ay = oy + node.y;
+
+    if (node.gesture_callback_id != 0xFFFFFFFFu) {
+        g_app.gesture_target_id = node.gesture_callback_id;
+        g_app.gesture_target_x  = ax;
+        g_app.gesture_target_y  = ay;
+        g_app.gesture_target_w  = node.width;
+        g_app.gesture_target_h  = node.height;
+    }
+
+    float child_scroll_x = scroll_x;
+    float child_scroll_y = scroll_y;
+    if (node.is_scroll_container && node.scroll_state) {
+        float max_off = std::max(0.0f, node.content_height - node.height);
+        float& off = node.scroll_state->offset_y;
+        if (off < 0.0f) off = 0.0f;
+        if (off > max_off) off = max_off;
+        node.scroll_offset_y = off;
+        child_scroll_y = scroll_y + off;
+
+        AppState::ScrollTarget tgt;
+        tgt.x = ax - scroll_x;
+        tgt.y = ay - scroll_y;
+        tgt.w = node.width;
+        tgt.h = node.height;
+        tgt.state = node.scroll_state;
+        tgt.content_height = node.content_height;
+        g_app.scroll_targets.push_back(tgt);
+    }
+
+    for (auto child_h : node.children) {
+        register_cached_paint_side_effects(child_h, ax, ay,
+                                           child_scroll_x, child_scroll_y);
     }
 }
 
@@ -773,6 +826,8 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             // offsets pointing into unrelated bytes from the old layout.
             node.paint_offset = write_pos;
             invalidate_descendant_paint_cache(node_h);
+            register_cached_paint_side_effects(node_h, ox, oy,
+                                               scroll_x, scroll_y);
             metrics::inst::paint_subtrees_blitted.add();
             metrics::inst::paint_bytes_blitted.add(len);
             return;
@@ -1356,6 +1411,9 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
 export namespace phenotype::detail {
 inline void wasi_emit_clear(Color c) { emit_clear(g_wasi, c); }
 inline void wasi_flush_if_changed() { flush_if_changed(g_wasi); }
+inline void wasi_reset_paint_scissor_boundary() {
+    reset_paint_scissor_boundary(g_wasi);
+}
 inline void wasi_paint_node(NodeHandle h, float ox, float oy,
                             float sx, float sy, float vw, float vh) {
     paint_node(g_wasi, g_wasi, h, ox, oy, sx, sy, vw, vh);

@@ -114,6 +114,8 @@ struct ScissorBatch {
     std::vector<ArcInstanceGPU>   arcs;
     std::vector<ImageInstanceGPU> images;
     std::vector<TextInstanceGPU>  texts;
+    bool has_draws = false;
+    int max_pipeline_rank = -1;
     std::uint32_t color_first = 0;
     std::uint32_t arc_first   = 0;
     std::uint32_t image_first = 0;
@@ -146,17 +148,37 @@ struct FrameScratch {
     bool has_clear = false;
 };
 
+inline bool scissor_batch_empty(ScissorBatch const& b) {
+    return !b.has_draws
+        && b.colors.empty() && b.arcs.empty()
+        && b.images.empty() && b.texts.empty();
+}
+
 inline void open_scissor_batch(FrameScratch& s,
                                float x, float y, float w, float h) {
     auto& cur = s.batches.back();
-    if (cur.colors.empty() && cur.arcs.empty()
-        && cur.images.empty() && cur.texts.empty()) {
+    if (scissor_batch_empty(cur)) {
         cur.x = x; cur.y = y; cur.w = w; cur.h = h;
+        cur.max_pipeline_rank = -1;
         return;
     }
     ScissorBatch next;
     next.x = x; next.y = y; next.w = w; next.h = h;
     s.batches.push_back(std::move(next));
+}
+
+inline void prepare_batch_for_pipeline(FrameScratch& s, int pipeline_rank) {
+    auto& cur = s.batches.back();
+    if (!scissor_batch_empty(cur) && cur.max_pipeline_rank > pipeline_rank) {
+        ScissorBatch next;
+        next.x = cur.x; next.y = cur.y;
+        next.w = cur.w; next.h = cur.h;
+        s.batches.push_back(std::move(next));
+    }
+    auto& dst = s.batches.back();
+    dst.has_draws = true;
+    if (dst.max_pipeline_rank < pipeline_rank)
+        dst.max_pipeline_rank = pipeline_rank;
 }
 
 inline void finalize_batches(FrameScratch& s) {
@@ -3567,6 +3589,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 normalize_color(c.color, out.clear_color);
                 out.has_clear = true;
             } else if constexpr (std::same_as<T, ::phenotype::FillRectCmd>) {
+                prepare_batch_for_pipeline(out, 0);
                 ColorInstanceGPU inst{};
                 inst.rect[0] = c.x; inst.rect[1] = c.y;
                 inst.rect[2] = c.w; inst.rect[3] = c.h;
@@ -3574,6 +3597,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 // params = (0, 0, 0=Fill, 0)
                 out.batches.back().colors.push_back(inst);
             } else if constexpr (std::same_as<T, ::phenotype::StrokeRectCmd>) {
+                prepare_batch_for_pipeline(out, 0);
                 ColorInstanceGPU inst{};
                 inst.rect[0] = c.x; inst.rect[1] = c.y;
                 inst.rect[2] = c.w; inst.rect[3] = c.h;
@@ -3583,6 +3607,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 inst.params[2] = 1.0f; // draw_type = Stroke
                 out.batches.back().colors.push_back(inst);
             } else if constexpr (std::same_as<T, ::phenotype::RoundRectCmd>) {
+                prepare_batch_for_pipeline(out, 0);
                 ColorInstanceGPU inst{};
                 inst.rect[0] = c.x; inst.rect[1] = c.y;
                 inst.rect[2] = c.w; inst.rect[3] = c.h;
@@ -3592,6 +3617,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 inst.params[2] = 2.0f; // draw_type = Round
                 out.batches.back().colors.push_back(inst);
             } else if constexpr (std::same_as<T, ::phenotype::DrawLineCmd>) {
+                prepare_batch_for_pipeline(out, 0);
                 // Thickened axis-aligned rect — preserves desktop
                 // backends' DrawLine behavior including the
                 // draw_type = 3 fall-through to the Fill code path.
@@ -3615,6 +3641,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 inst.params[2] = 3.0f; // matches macOS / Windows
                 out.batches.back().colors.push_back(inst);
             } else if constexpr (std::same_as<T, ::phenotype::DrawTextCmd>) {
+                prepare_batch_for_pipeline(out, 2);
                 ::phenotype::native::TextEntry entry{};
                 entry.x = c.x;
                 entry.y = c.y;
@@ -3632,9 +3659,10 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 out.text_entries_batch_idx.push_back(
                     static_cast<std::uint32_t>(out.batches.size() - 1));
             } else if constexpr (std::same_as<T, ::phenotype::DrawImageCmd>) {
-                auto& batch = out.batches.back();
                 auto const* entry = ensure_image_cache_entry(c.url);
                 if (entry && entry->state == ImageState::Ready) {
+                    prepare_batch_for_pipeline(out, 3);
+                    auto& batch = out.batches.back();
                     ImageInstanceGPU inst{};
                     inst.rect[0] = c.x; inst.rect[1] = c.y;
                     inst.rect[2] = c.w; inst.rect[3] = c.h;
@@ -3646,6 +3674,8 @@ inline void decode_android_color_commands(unsigned char const* buf,
                     inst.color[2] = 1.0f; inst.color[3] = 1.0f;
                     batch.images.push_back(inst);
                 } else {
+                    prepare_batch_for_pipeline(out, 0);
+                    auto& batch = out.batches.back();
                     // Placeholder: light-gray fill + darker border,
                     // matching macOS's image pending/failed rendering.
                     // Same scissor batch as the original DrawImage so
@@ -3674,6 +3704,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 open_scissor_batch(out, c.x, c.y, c.w, c.h);
             } else if constexpr (std::same_as<T, ::phenotype::DrawArcCmd>) {
                 if (c.radius <= 0.0f) return;
+                prepare_batch_for_pipeline(out, 1);
                 ArcInstanceGPU inst{};
                 inst.center_radius_thickness[0] = c.cx;
                 inst.center_radius_thickness[1] = c.cy;
@@ -3709,6 +3740,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                     float dx = x2 - x1;
                     float dy = y2 - y1;
                     if (dx == 0.0f && dy == 0.0f) return;
+                    prepare_batch_for_pipeline(out, 0);
                     auto& dst = out.batches.back().colors;
                     if (dx == 0.0f || dy == 0.0f) {
                         float line_len = std::sqrt(dx * dx + dy * dy);
@@ -3859,6 +3891,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                             has_pen = true;
                         } else if constexpr (std::same_as<S, ::phenotype::PathArcTo>) {
                             if (s.radius > 0.0f) {
+                                prepare_batch_for_pipeline(out, 1);
                                 ArcInstanceGPU inst{};
                                 inst.center_radius_thickness[0] = s.cx;
                                 inst.center_radius_thickness[1] = s.cy;
@@ -4002,6 +4035,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
 
                 if (polygon.size() >= 6) {
                     auto tris = polygon_ear_clip(std::move(polygon));
+                    prepare_batch_for_pipeline(out, 0);
                     auto& dst = out.batches.back().colors;
                     for (std::size_t t = 0; t + 5 < tris.size(); t += 6) {
                         rasterize_triangle_to_color(
@@ -4013,6 +4047,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                     }
                 }
             } else if constexpr (std::same_as<T, ::phenotype::FillQuadsCmd>) {
+                prepare_batch_for_pipeline(out, 0);
                 auto& dst = out.batches.back().colors;
                 for (auto const& q : c.quads) {
                     float color4[4];
@@ -4027,6 +4062,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
                         dst);
                 }
             } else if constexpr (std::same_as<T, ::phenotype::FillRectsCmd>) {
+                prepare_batch_for_pipeline(out, 0);
                 auto& dst = out.batches.back().colors;
                 dst.reserve(dst.size() + c.rects.size());
                 for (auto const& r : c.rects) {
@@ -5129,6 +5165,11 @@ inline void on_touch_event(int pointer_id, int action, float x, float y) {
 
     switch (action) {
     case 0: {  // DOWN
+        // MOVE dispatch is frame-coalesced, but Android may deliver a
+        // MOVE and the following POINTER_DOWN in the same input buffer.
+        // Flush the old pointer set before changing active_count, or the
+        // pending gesture would be measured against a rebased state.
+        process_pending_touch_dispatch();
         if (auto* slot = alloc_slot(pointer_id)) {
             slot->x = x;       slot->y = y;
             slot->prev_x = x;  slot->prev_y = y;
@@ -5172,6 +5213,14 @@ inline void on_touch_event(int pointer_id, int action, float x, float y) {
     }
     case 2: {  // UP / CANCEL
         if (auto* slot = find_slot(pointer_id)) {
+            // Same coalescing edge as POINTER_DOWN, plus the final UP
+            // coordinates can carry the last bit of finger travel. Keep
+            // that movement before removing the pointer.
+            slot->x = x;
+            slot->y = y;
+            if (slot->x != slot->prev_x || slot->y != slot->prev_y)
+                g_touch_dispatch_pending = true;
+            process_pending_touch_dispatch();
             free_slot(slot);
             --g_active_count;
             if (g_active_count < 0) g_active_count = 0;
@@ -5422,7 +5471,14 @@ void phenotype_android_draw_frame(void) {
     d::dialog::drain_deferred_results();
     d::tick_caret_blink();
     d::sync_platform_input();
-    d::repaint_current();
+    // View-time animations update their node values during view rebuild,
+    // not during a paint-only replay. Android draws every frame already,
+    // so promote animation frames to rebuilds while an interpolation is
+    // active; the flag self-clears once animate_value reaches its target.
+    if (::phenotype::detail::g_app.has_active_animations)
+        ::phenotype::detail::trigger_rebuild();
+    else
+        d::repaint_current();
 }
 
 __attribute__((visibility("default")))

@@ -64,6 +64,20 @@ void test_scissor_reset_uses_zero_sentinel() {
     assert(sc->h == 0.0f);
 }
 
+void test_paint_scissor_boundary_clears_stale_depth() {
+    reset_buffer();
+    detail::g_app.paint_scissor_depth = 3;
+    detail::reset_paint_scissor_boundary(host);
+
+    assert(detail::g_app.paint_scissor_depth == 0);
+    auto cmds = parse_commands(host.buf(), host.buf_len());
+    assert(cmds.size() == 1);
+    auto const* sc = std::get_if<ScissorCmd>(&cmds[0]);
+    assert(sc != nullptr);
+    assert(sc->x == 0.0f && sc->y == 0.0f);
+    assert(sc->w == 0.0f && sc->h == 0.0f);
+}
+
 // ============================================================
 // Batch-split contract: an interleaved Fill -> Scissor -> Fill ->
 // Fill -> Reset -> Fill stream parses with stable positions for
@@ -124,6 +138,7 @@ void test_back_to_back_scissors_are_both_emitted() {
 int main() {
     test_scissor_emits_with_exact_coords();
     test_scissor_reset_uses_zero_sentinel();
+    test_paint_scissor_boundary_clears_stale_depth();
     test_scissor_interleaving_preserves_order();
     test_back_to_back_scissors_are_both_emitted();
     std::puts("\nAll scissor batch wire-format tests passed.");
