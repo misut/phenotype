@@ -1210,6 +1210,10 @@ void run(Host& host, View view, Update update) {
         // Reset the auto-tick flag — animate_value re-sets it during
         // view if any interpolation is still in flight.
         app.has_active_animations = false;
+        float cw = host.canvas_width();
+        float vh = host.canvas_height();
+        app.debug_viewport_width = cw;
+        app.debug_viewport_height = vh;
 
         Scope scope(root_h);
         Scope::set_current(&scope);
@@ -1223,7 +1227,6 @@ void run(Host& host, View view, Update update) {
             detail::diff_and_copy_layout(app.prev_root, root_h,
                                          app.prev_arena, app.arena);
 
-        float cw = host.canvas_width();
         detail::layout_node(host, root_h, cw);
         for (auto overlay_h : app.overlays)
             detail::layout_node(host, overlay_h, cw);
@@ -1266,12 +1269,11 @@ void run(Host& host, View view, Update update) {
         detail::collect_focusable_ids(root_h);
         for (auto overlay_h : app.overlays)
             detail::collect_focusable_ids(overlay_h);
+        app.paint_scissor_depth = 0;
         emit_clear(host, app.theme.background);
-        float vh = host.canvas_height();
-        app.debug_viewport_width = cw;
-        app.debug_viewport_height = vh;
         detail::paint_node(host, host, root_h, 0, 0,
                            app.scroll_x, app.scroll_y, cw, vh);
+        detail::reset_paint_scissor_boundary(host);
         // Overlays paint after the main tree with no ambient scroll
         // applied — they sit on top of everything and stay fixed when
         // the document scrolls underneath.
@@ -1350,6 +1352,10 @@ void run(View view, Update update) {
         // See native runner — framework_local generation handling.
         detail::bump_local_gen();
         app.has_active_animations = false;
+        float cw = phenotype_get_canvas_width();
+        float vh = phenotype_get_canvas_height();
+        app.debug_viewport_width = cw;
+        app.debug_viewport_height = vh;
 
         Scope scope(root_h);
         Scope::set_current(&scope);
@@ -1363,7 +1369,6 @@ void run(View view, Update update) {
             detail::diff_and_copy_layout(app.prev_root, root_h,
                                          app.prev_arena, app.arena);
 
-        float cw = phenotype_get_canvas_width();
         detail::layout_node(root_h, cw);
         for (auto overlay_h : app.overlays)
             detail::layout_node(overlay_h, cw);
@@ -1399,12 +1404,11 @@ void run(View view, Update update) {
         detail::collect_focusable_ids(root_h);
         for (auto overlay_h : app.overlays)
             detail::collect_focusable_ids(overlay_h);
+        app.paint_scissor_depth = 0;
         detail::wasi_emit_clear(app.theme.background);
-        float vh = phenotype_get_canvas_height();
-        app.debug_viewport_width = cw;
-        app.debug_viewport_height = vh;
         detail::wasi_paint_node(root_h, 0, 0,
                                 app.scroll_x, app.scroll_y, cw, vh);
+        detail::wasi_reset_paint_scissor_boundary();
         // Overlays paint on top of the main tree with no ambient
         // scroll — see native runner for the same logic.
         for (auto overlay_h : app.overlays) {
@@ -2727,15 +2731,24 @@ void repaint(Host& host, float scroll_x, float scroll_y) {
     auto* root_ptr = app.arena.get(app.root);
     if (!root_ptr) return;
     float cw = host.canvas_width();
-    if (cw != root_ptr->width)
+    if (cw != root_ptr->width) {
         layout_node(host, app.root, cw);
+        for (auto overlay_h : app.overlays)
+            layout_node(host, overlay_h, cw);
+    }
     app.focusable_ids.clear();
     collect_focusable_ids(app.root);
+    for (auto overlay_h : app.overlays)
+        collect_focusable_ids(overlay_h);
+    app.paint_scissor_depth = 0;
     emit_clear(host, app.theme.background);
     float vh = host.canvas_height();
     app.debug_viewport_width = cw;
     app.debug_viewport_height = vh;
     paint_node(host, host, app.root, 0, 0, scroll_x, scroll_y, cw, vh);
+    reset_paint_scissor_boundary(host);
+    for (auto overlay_h : app.overlays)
+        paint_node(host, host, overlay_h, 0, 0, 0.0f, 0.0f, cw, vh);
     flush_if_changed(host);
     app.prev_scroll_x   = app.scroll_x;
     app.prev_scroll_y   = app.scroll_y;
@@ -2751,15 +2764,24 @@ inline void repaint(float scroll_x, float scroll_y) {
     auto* root_ptr = app.arena.get(app.root);
     if (!root_ptr) return;
     float cw = phenotype_get_canvas_width();
-    if (cw != root_ptr->width)
+    if (cw != root_ptr->width) {
         layout_node(app.root, cw);
+        for (auto overlay_h : app.overlays)
+            layout_node(overlay_h, cw);
+    }
     app.focusable_ids.clear();
     collect_focusable_ids(app.root);
+    for (auto overlay_h : app.overlays)
+        collect_focusable_ids(overlay_h);
+    app.paint_scissor_depth = 0;
     wasi_emit_clear(app.theme.background);
     float vh = phenotype_get_canvas_height();
     app.debug_viewport_width = cw;
     app.debug_viewport_height = vh;
     wasi_paint_node(app.root, 0, 0, scroll_x, scroll_y, cw, vh);
+    wasi_reset_paint_scissor_boundary();
+    for (auto overlay_h : app.overlays)
+        wasi_paint_node(overlay_h, 0, 0, 0.0f, 0.0f, cw, vh);
     wasi_flush_if_changed();
     app.prev_scroll_x   = app.scroll_x;
     app.prev_scroll_y   = app.scroll_y;
