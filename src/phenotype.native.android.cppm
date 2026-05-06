@@ -93,6 +93,23 @@ static_assert(sizeof(TextInstanceGPU) == 48,
 // distinct for readability.
 using ImageInstanceGPU = TextInstanceGPU;
 
+// Per-vertex GPU layout for the triangle pipeline (FillPath / FillQuads
+// fast path). Each ear-clipped triangle pushes 3 of these into the
+// batch's triangle vertex buffer; the GPU rasterises with hardware
+// coverage rules so adjacent triangles tile pixel-perfectly without
+// sub-pixel gaps. 24 bytes/vertex * 3 vertices/triangle = 72 bytes/tri,
+// vs. ~50 scanlines * 48 bytes/ColorInstance = ~2.4 KB/tri under the
+// old CPU scanline path. A wedge-heavy DWG (colorwh.dwg True Color)
+// drops from millions of fill_rect instances to ~70k vertices in one
+// vkCmdDraw call. Layout matches macOS phenotype.native.macos.cppm's
+// TriVertexGPU exactly so command-buffer math is platform-stable.
+struct TriVertexGPU {
+    float pos[2];
+    float color[4];
+};
+static_assert(sizeof(TriVertexGPU) == 24,
+              "TriVertexGPU stride must match the GLSL vertex layout");
+
 // Uniforms block: std140-laid-out vec2 viewport + vec2 pad (= 16B).
 struct ColorUniforms {
     float viewport[2];
@@ -110,12 +127,18 @@ inline constexpr std::size_t INITIAL_INSTANCE_CAPACITY = 256;
 // "full swapchain" — paint emits this to reset clipping.
 struct ScissorBatch {
     float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+    // tri_vertices holds raw triangle-list vertices (3 per triangle)
+    // accumulated from FillPath / FillQuads output. Drawn before colors
+    // in the same batch; the decoder opens a same-scissor batch when a
+    // later triangle primitive must appear above prior color instances.
+    std::vector<TriVertexGPU>     tri_vertices;
     std::vector<ColorInstanceGPU> colors;
     std::vector<ArcInstanceGPU>   arcs;
     std::vector<ImageInstanceGPU> images;
     std::vector<TextInstanceGPU>  texts;
     bool has_draws = false;
     int max_pipeline_rank = -1;
+    std::uint32_t tri_first   = 0;
     std::uint32_t color_first = 0;
     std::uint32_t arc_first   = 0;
     std::uint32_t image_first = 0;
@@ -133,6 +156,7 @@ struct FrameScratch {
     // Flat staging vectors uploaded to GPU instance buffers. Populated
     // by finalize_batches() — direct decode-time pushes go to per-batch
     // locals above.
+    std::vector<TriVertexGPU>     tri_vertices;
     std::vector<ColorInstanceGPU> color_instances;
     std::vector<ArcInstanceGPU>   arc_instances;
     std::vector<TextInstanceGPU>  text_instances;
@@ -144,12 +168,23 @@ struct FrameScratch {
     // attribute glyph instances to the correct batch.
     std::vector<std::uint32_t> text_entries_batch_idx;
 
+    // Per-FillPath scratch buffers, reused across every Cmd::FillPath
+    // decode in a single frame. CAD HATCH-heavy content (e.g.
+    // colorwh.dwg with thousands of fills) used to default-construct
+    // these inside the case block, costing tens of thousands of heap
+    // allocations per frame. Hoisting them out keeps allocator pressure
+    // flat as the canvas count scales.
+    std::vector<float>       fill_polygon;
+    std::vector<float>       fill_tris;
+    std::vector<std::size_t> fill_ear_remain;
+
     float clear_color[4]{0, 0, 0, 0};
     bool has_clear = false;
 };
 
 inline bool scissor_batch_empty(ScissorBatch const& b) {
     return !b.has_draws
+        && b.tri_vertices.empty()
         && b.colors.empty() && b.arcs.empty()
         && b.images.empty() && b.texts.empty();
 }
@@ -167,6 +202,13 @@ inline void open_scissor_batch(FrameScratch& s,
     s.batches.push_back(std::move(next));
 }
 
+// Generic pipeline-rank ordering hook: when a primitive arrives whose
+// pipeline must draw "below" something already in the current batch
+// (i.e. its rank is lower than max_pipeline_rank), open a fresh
+// same-scissor batch so the new primitive paints in front of nothing
+// it shouldn't sit above. Triangles share rank 0 with FillRect / line
+// / FillPath colors; the within-batch tri-then-color emit order in
+// renderer_flush keeps fills under strokes within one batch.
 inline void prepare_batch_for_pipeline(FrameScratch& s, int pipeline_rank) {
     auto& cur = s.batches.back();
     if (!scissor_batch_empty(cur) && cur.max_pipeline_rank > pipeline_rank) {
@@ -182,15 +224,19 @@ inline void prepare_batch_for_pipeline(FrameScratch& s, int pipeline_rank) {
 }
 
 inline void finalize_batches(FrameScratch& s) {
+    s.tri_vertices.clear();
     s.color_instances.clear();
     s.arc_instances.clear();
     s.image_instances.clear();
     s.text_instances.clear();
     for (auto& b : s.batches) {
+        b.tri_first   = static_cast<std::uint32_t>(s.tri_vertices.size());
         b.color_first = static_cast<std::uint32_t>(s.color_instances.size());
         b.arc_first   = static_cast<std::uint32_t>(s.arc_instances.size());
         b.image_first = static_cast<std::uint32_t>(s.image_instances.size());
         b.text_first  = static_cast<std::uint32_t>(s.text_instances.size());
+        s.tri_vertices.insert(s.tri_vertices.end(),
+                              b.tri_vertices.begin(), b.tri_vertices.end());
         s.color_instances.insert(s.color_instances.end(),
                                  b.colors.begin(), b.colors.end());
         s.arc_instances.insert(s.arc_instances.end(),
@@ -1345,6 +1391,42 @@ struct android_renderer {
     void* arc_instance_mapped;
     std::size_t arc_instance_capacity; // in ArcInstanceGPU count
 
+    // Triangle pipeline (Slab: android tri). Dedicated 1-binding layout
+    // (UBO at binding 0 only) — no SSBO. Vertex data comes through a
+    // real vertex buffer bound at draw time via vkCmdBindVertexBuffers
+    // (host-visible, persistently mapped, doubles on overflow).
+    VkDescriptorSetLayout tri_descriptor_set_layout;
+    VkPipelineLayout tri_pipeline_layout;
+    VkPipeline tri_pipeline;
+    VkDescriptorPool tri_descriptor_pool;
+    VkDescriptorSet tri_descriptor_set;
+
+    VkBuffer tri_vertex_buffer;
+    VkDeviceMemory tri_vertex_memory;
+    void* tri_vertex_mapped;
+    std::size_t tri_vertex_capacity; // in TriVertexGPU count
+
+    // Frame-skip cache: if the binary cmd buffer hashes to the same
+    // value as last frame, the decoded scratch (and all GPU-side
+    // SSBO/vertex contents) are still valid. We skip decode +
+    // text_build_atlas + finalize + uploads and only re-record draws.
+    std::uint64_t last_buf_hash = 0;
+    FrameScratch  last_scratch;
+    ::phenotype::native::TextAtlas last_atlas;
+    bool          last_have_text = false;
+    bool          last_have_images = false;
+    bool          last_scratch_valid = false;
+    // Lightweight perf counters: every kPerfFrames frames we emit a
+    // single logcat line summarising decode / upload / record / total
+    // ms and skip rate. Drop into __android_log so std::cerr's lack of
+    // logcat routing isn't a blocker.
+    unsigned long long perf_frame_count = 0;
+    unsigned long long perf_skip_count = 0;
+    double perf_decode_ms_sum = 0.0;
+    double perf_upload_ms_sum = 0.0;
+    double perf_record_ms_sum = 0.0;
+    double perf_total_ms_sum  = 0.0;
+
     // Stage 4 text pipeline. Atlas image + view grow on demand;
     // everything else is allocated once per device.
     VkDescriptorSetLayout text_descriptor_set_layout;
@@ -1921,6 +2003,230 @@ inline bool create_arc_pipeline() {
     return ok;
 }
 
+// ---- Triangle pipeline helpers --------------------------------------
+//
+// Dedicated 1-binding descriptor set layout (UBO at binding 0). No SSBO
+// — vertex data is bound at draw time via vkCmdBindVertexBuffers, with
+// per-vertex (a_pos, a_color) attributes consumed directly by tri.vert.
+
+inline constexpr std::size_t INITIAL_TRI_VERTEX_CAPACITY = 4096;
+
+inline bool ensure_tri_vertex_capacity(std::size_t required) {
+    if (required <= g_renderer.tri_vertex_capacity) return true;
+    // Hard upper bound: 64 MB worth of vertices ≈ 2.79M verts. Bail
+    // gracefully rather than OOM the device on pathological content.
+    constexpr std::size_t kHardCap =
+        (64ull * 1024ull * 1024ull) / sizeof(TriVertexGPU);
+    if (required > kHardCap) {
+        __android_log_print(ANDROID_LOG_ERROR, ANDROID_LOG_TAG,
+                            "tri vertex demand %zu exceeds hard cap %zu",
+                            required, kHardCap);
+        return false;
+    }
+    std::size_t cap = g_renderer.tri_vertex_capacity == 0
+                        ? INITIAL_TRI_VERTEX_CAPACITY
+                        : g_renderer.tri_vertex_capacity;
+    while (cap < required) cap *= 2;
+    if (cap > kHardCap) cap = kHardCap;
+
+    destroy_host_buffer(g_renderer.tri_vertex_buffer,
+                        g_renderer.tri_vertex_memory,
+                        g_renderer.tri_vertex_mapped);
+    if (!create_host_buffer(cap * sizeof(TriVertexGPU),
+                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                            g_renderer.tri_vertex_buffer,
+                            g_renderer.tri_vertex_memory,
+                            g_renderer.tri_vertex_mapped))
+        return false;
+    g_renderer.tri_vertex_capacity = cap;
+    // Vertex buffer is bound at draw time, not descriptor-set time —
+    // no descriptor rewrite needed on grow.
+    return true;
+}
+
+inline void write_tri_descriptor_set() {
+    if (g_renderer.tri_descriptor_set == VK_NULL_HANDLE) return;
+    VkDescriptorBufferInfo ubo{};
+    ubo.buffer = g_renderer.uniform_buffer;
+    ubo.offset = 0;
+    ubo.range = sizeof(ColorUniforms);
+
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = g_renderer.tri_descriptor_set;
+    write.dstBinding = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write.pBufferInfo = &ubo;
+    vkUpdateDescriptorSets(g_renderer.device, 1, &write, 0, nullptr);
+}
+
+inline bool create_tri_pipeline() {
+    if (g_renderer.tri_pipeline != VK_NULL_HANDLE) return true;
+
+    // Dedicated descriptor set layout: UBO at binding 0 only. No SSBO,
+    // no atlas — keeps validation clean and avoids tying the tri
+    // pipeline's lifetime to color_descriptor_set_layout.
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = 0;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    binding.descriptorCount = 1;
+    binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo dslci{};
+    dslci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    dslci.bindingCount = 1;
+    dslci.pBindings = &binding;
+    if (!vk_ok(vkCreateDescriptorSetLayout(
+                  g_renderer.device, &dslci, nullptr,
+                  &g_renderer.tri_descriptor_set_layout),
+              "vkCreateDescriptorSetLayout(tri)"))
+        return false;
+
+    VkPipelineLayoutCreateInfo plci{};
+    plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    plci.setLayoutCount = 1;
+    plci.pSetLayouts = &g_renderer.tri_descriptor_set_layout;
+    if (!vk_ok(vkCreatePipelineLayout(g_renderer.device, &plci, nullptr,
+                                      &g_renderer.tri_pipeline_layout),
+              "vkCreatePipelineLayout(tri)"))
+        return false;
+
+    auto vs = create_shader_module(shaders::SPIRV_TRI_VS,
+                                   sizeof(shaders::SPIRV_TRI_VS));
+    auto fs = create_shader_module(shaders::SPIRV_TRI_FS,
+                                   sizeof(shaders::SPIRV_TRI_FS));
+    if (vs == VK_NULL_HANDLE || fs == VK_NULL_HANDLE) return false;
+
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vs;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = fs;
+    stages[1].pName = "main";
+
+    VkVertexInputBindingDescription vbb{};
+    vbb.binding = 0;
+    vbb.stride = sizeof(TriVertexGPU);
+    vbb.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    VkVertexInputAttributeDescription vba[2]{};
+    vba[0].binding = 0;
+    vba[0].location = 0;
+    vba[0].format = VK_FORMAT_R32G32_SFLOAT;
+    vba[0].offset = offsetof(TriVertexGPU, pos);
+    vba[1].binding = 0;
+    vba[1].location = 1;
+    vba[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    vba[1].offset = offsetof(TriVertexGPU, color);
+
+    VkPipelineVertexInputStateCreateInfo vi{};
+    vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vi.vertexBindingDescriptionCount = 1;
+    vi.pVertexBindingDescriptions = &vbb;
+    vi.vertexAttributeDescriptionCount = 2;
+    vi.pVertexAttributeDescriptions = vba;
+
+    VkPipelineInputAssemblyStateCreateInfo ia{};
+    ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkPipelineViewportStateCreateInfo vp{};
+    vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    vp.viewportCount = 1;
+    vp.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rs{};
+    rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rs.polygonMode = VK_POLYGON_MODE_FILL;
+    rs.cullMode = VK_CULL_MODE_NONE;
+    rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rs.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo ms{};
+    ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState cba{};
+    cba.blendEnable = VK_TRUE;
+    cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.colorBlendOp = VK_BLEND_OP_ADD;
+    cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.alphaBlendOp = VK_BLEND_OP_ADD;
+    cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                       | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo cb{};
+    cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    cb.attachmentCount = 1;
+    cb.pAttachments = &cba;
+
+    VkDynamicState dyn[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo ds{};
+    ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    ds.dynamicStateCount = 2;
+    ds.pDynamicStates = dyn;
+
+    VkGraphicsPipelineCreateInfo gci{};
+    gci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    gci.stageCount = 2;
+    gci.pStages = stages;
+    gci.pVertexInputState = &vi;
+    gci.pInputAssemblyState = &ia;
+    gci.pViewportState = &vp;
+    gci.pRasterizationState = &rs;
+    gci.pMultisampleState = &ms;
+    gci.pColorBlendState = &cb;
+    gci.pDynamicState = &ds;
+    gci.layout = g_renderer.tri_pipeline_layout;
+    gci.renderPass = g_renderer.render_pass;
+    gci.subpass = 0;
+
+    bool ok = vk_ok(vkCreateGraphicsPipelines(
+                        g_renderer.device, VK_NULL_HANDLE, 1, &gci, nullptr,
+                        &g_renderer.tri_pipeline),
+                   "vkCreateGraphicsPipelines (tri)");
+
+    vkDestroyShaderModule(g_renderer.device, vs, nullptr);
+    vkDestroyShaderModule(g_renderer.device, fs, nullptr);
+    return ok;
+}
+
+inline bool create_tri_descriptor_pool_and_set() {
+    if (g_renderer.tri_descriptor_set != VK_NULL_HANDLE) return true;
+
+    VkDescriptorPoolSize size{};
+    size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    size.descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo pci{};
+    pci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pci.maxSets = 1;
+    pci.poolSizeCount = 1;
+    pci.pPoolSizes = &size;
+    if (!vk_ok(vkCreateDescriptorPool(g_renderer.device, &pci, nullptr,
+                                      &g_renderer.tri_descriptor_pool),
+              "vkCreateDescriptorPool (tri)"))
+        return false;
+
+    VkDescriptorSetAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    ai.descriptorPool = g_renderer.tri_descriptor_pool;
+    ai.descriptorSetCount = 1;
+    ai.pSetLayouts = &g_renderer.tri_descriptor_set_layout;
+    if (!vk_ok(vkAllocateDescriptorSets(g_renderer.device, &ai,
+                                        &g_renderer.tri_descriptor_set),
+              "vkAllocateDescriptorSets (tri)"))
+        return false;
+    write_tri_descriptor_set();
+    return true;
+}
+
 inline bool create_arc_descriptor_pool_and_set() {
     if (g_renderer.arc_descriptor_set != VK_NULL_HANDLE) return true;
 
@@ -1960,6 +2266,7 @@ inline bool create_color_resources() {
     if (!create_render_pass()) return false;
     if (!create_color_pipeline()) return false;
     if (!create_arc_pipeline()) return false;
+    if (!create_tri_pipeline()) return false;
 
     if (g_renderer.uniform_buffer == VK_NULL_HANDLE) {
         if (!create_host_buffer(sizeof(ColorUniforms),
@@ -1989,8 +2296,19 @@ inline bool create_color_resources() {
             return false;
         g_renderer.arc_instance_capacity = INITIAL_INSTANCE_CAPACITY;
     }
+    if (g_renderer.tri_vertex_buffer == VK_NULL_HANDLE) {
+        if (!create_host_buffer(
+                INITIAL_TRI_VERTEX_CAPACITY * sizeof(TriVertexGPU),
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                g_renderer.tri_vertex_buffer,
+                g_renderer.tri_vertex_memory,
+                g_renderer.tri_vertex_mapped))
+            return false;
+        g_renderer.tri_vertex_capacity = INITIAL_TRI_VERTEX_CAPACITY;
+    }
     if (!create_descriptor_pool_and_set()) return false;
     if (!create_arc_descriptor_pool_and_set()) return false;
+    if (!create_tri_descriptor_pool_and_set()) return false;
     return true;
 }
 
@@ -3448,12 +3766,15 @@ inline void normalize_color(::phenotype::Color const& c, float out[4]) {
     out[3] = static_cast<float>(c.a) / 255.0f;
 }
 
-// FillPath helpers (Slab 5). Mirror of the macOS backend's polygon
-// ear-clip + scanline rasterizer. The Vulkan backend has no fill-
-// triangle pipeline of its own — fills are dispatched onto the
-// existing `color_pipeline` (`draw_type = 0`) as 1-px-tall axis-
-// aligned strips, one `ColorInstanceGPU` per scanline. No new shader
-// / pipeline / `.shaders.inl` regen is required for FillPath.
+// FillPath / FillQuads helpers — direct port of macOS
+// phenotype.native.macos.cppm's polygon ear-clipper. The triangle list
+// is fed into the dedicated tri_pipeline (`tri.vert` / `tri.frag`) as
+// raw 3-vertex tuples; hardware rasterisation gives pixel-perfect
+// coverage on shared edges and collapses what the prior CPU scanline
+// path emitted as millions of 1-px-tall ColorInstanceGPU strips into a
+// few vkCmdDraw calls. The earlier path also dropped sub-pixel slim-
+// hatch slivers when row width fell below 0.5 px — fixed implicitly
+// by handing rasterisation back to the hardware.
 inline bool point_in_triangle(float px, float py,
                               float ax, float ay,
                               float bx, float by,
@@ -3466,9 +3787,16 @@ inline bool point_in_triangle(float px, float py,
     return !(has_neg && has_pos);
 }
 
-inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
-    std::vector<float> tris;
-    if (poly.size() < 6) return tris;
+// Ear-clip triangulation. Writes 6 floats per triangle (v0x, v0y, v1x,
+// v1y, v2x, v2y) appended to `tris`; the caller is responsible for
+// any reset / size-tracking. `poly` MAY be reordered in place
+// (orientation normalisation). `remain` is caller-owned scratch space
+// — passing it in avoids a per-call std::vector allocation that
+// becomes tens of thousands of allocs/frame on HATCH-heavy DWGs.
+inline void polygon_ear_clip(std::vector<float>& poly,
+                             std::vector<float>& tris,
+                             std::vector<std::size_t>& remain) {
+    if (poly.size() < 6) return;
     std::size_t const n0 = poly.size() / 2;
 
     double area2 = 0.0;
@@ -3477,7 +3805,7 @@ inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
         area2 += static_cast<double>(poly[2 * i])     * poly[2 * j + 1]
               -  static_cast<double>(poly[2 * j])     * poly[2 * i + 1];
     }
-    if (std::fabs(area2) < 1e-9) return tris;
+    if (std::fabs(area2) < 1e-9) return;
     if (area2 < 0.0) {
         for (std::size_t i = 0; i < n0 / 2; ++i) {
             std::swap(poly[2 * i],     poly[2 * (n0 - 1 - i)]);
@@ -3485,8 +3813,37 @@ inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
         }
     }
 
-    std::vector<std::size_t> remain(n0);
-    for (std::size_t i = 0; i < n0; ++i) remain[i] = i;
+    remain.clear();
+    remain.reserve(n0);
+    for (std::size_t i = 0; i < n0; ++i) remain.push_back(i);
+
+    // Convex fast path: triangle-fan from vertex 0. Most CAD HATCH
+    // boundaries (wedges, rectangles, regular polygons) are convex,
+    // and the dominant colorwh.dwg case fits this. Skip the O(N^2)
+    // ear search when no reflex vertex exists.
+    bool convex = true;
+    for (std::size_t i = 0; i < n0 && convex; ++i) {
+        std::size_t const ip = (i + n0 - 1) % n0;
+        std::size_t const ic = i;
+        std::size_t const in = (i + 1) % n0;
+        float const ax = poly[2 * ip], ay = poly[2 * ip + 1];
+        float const bx = poly[2 * ic], by = poly[2 * ic + 1];
+        float const cx = poly[2 * in], cy = poly[2 * in + 1];
+        float const cross = (bx - ax) * (cy - ay)
+                          - (by - ay) * (cx - ax);
+        if (cross < 0.0f) convex = false;
+    }
+    if (convex) {
+        float const ax = poly[0], ay = poly[1];
+        for (std::size_t i = 1; i + 1 < n0; ++i) {
+            float const bx = poly[2 * i],     by = poly[2 * i + 1];
+            float const cx = poly[2 * (i+1)], cy = poly[2 * (i+1) + 1];
+            tris.push_back(ax); tris.push_back(ay);
+            tris.push_back(bx); tris.push_back(by);
+            tris.push_back(cx); tris.push_back(cy);
+        }
+        return;
+    }
 
     int safety = static_cast<int>(n0) * 3 + 1;
     while (remain.size() >= 3 && safety-- > 0) {
@@ -3519,67 +3876,624 @@ inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
         }
         if (!found) break;
     }
-    return tris;
 }
 
-inline void rasterize_triangle_to_color(
-        float v0x, float v0y, float v1x, float v1y, float v2x, float v2y,
-        float r, float g, float b, float a,
-        std::vector<ColorInstanceGPU>& out) {
-    float vx[3] = {v0x, v1x, v2x};
-    float vy[3] = {v0y, v1y, v2y};
-    auto sort_pair = [&](int i, int j) {
-        if (vy[i] > vy[j]) {
-            std::swap(vy[i], vy[j]);
-            std::swap(vx[i], vx[j]);
-        }
-    };
-    sort_pair(0, 1); sort_pair(1, 2); sort_pair(0, 1);
-
-    float const top_y = vy[0];
-    float const mid_y = vy[1];
-    float const bot_y = vy[2];
-    if (bot_y - top_y < 1e-3f) return;
-
-    auto interp_x = [](float y, float ya, float xa, float yb, float xb) {
-        if (yb - ya < 1e-6f) return xa;
-        return xa + (xb - xa) * (y - ya) / (yb - ya);
-    };
-
-    int const y_start = static_cast<int>(std::floor(top_y));
-    int const y_end   = static_cast<int>(std::ceil(bot_y));
-    for (int y = y_start; y < y_end; ++y) {
-        float const yc = static_cast<float>(y) + 0.5f;
-        if (yc < top_y || yc > bot_y) continue;
-        float xa, xb;
-        if (yc < mid_y) {
-            xa = interp_x(yc, top_y, vx[0], bot_y, vx[2]);
-            xb = interp_x(yc, top_y, vx[0], mid_y, vx[1]);
-        } else {
-            xa = interp_x(yc, top_y, vx[0], bot_y, vx[2]);
-            xb = interp_x(yc, mid_y, vx[1], bot_y, vx[2]);
-        }
-        float const x_left  = std::min(xa, xb);
-        float const x_right = std::max(xa, xb);
-        float const w = x_right - x_left;
-        if (w < 0.5f) continue;
-        ColorInstanceGPU inst{};
-        inst.rect[0] = x_left;
-        inst.rect[1] = static_cast<float>(y);
-        inst.rect[2] = w;
-        inst.rect[3] = 1.0f;
-        inst.color[0] = r; inst.color[1] = g;
-        inst.color[2] = b; inst.color[3] = a;
-        // params = (0, 0, 0, 0) → draw_type = 0 (Fill)
-        out.push_back(inst);
-    }
-}
+// rasterize_triangle_to_color was removed in the tri_pipeline slab.
+// Filled triangles now go through the dedicated tri_pipeline as raw
+// TriVertexGPU triples; the CPU scanline path produced
+// O(triangle_height) ColorInstanceGPU per triangle and exploded to
+// millions of GPU instances per frame for True-Color colorwh.dwg on
+// Android. See git history for the prior implementation.
 
 inline void decode_android_color_commands(unsigned char const* buf,
                                           unsigned int len,
                                           FrameScratch& out) {
     // First batch is a sentinel (full swapchain) so any draw before a
     // Cmd::Scissor renders unclipped.
+    out.batches.push_back(ScissorBatch{});
+
+    // Streaming decoder: walks the wire format directly into FrameScratch
+    // without building the intermediate std::vector<DrawCommand> +
+    // std::vector<PaintQuad> / std::vector<PathSegment> the generic
+    // phenotype::parse_commands constructs. On True-Color colorwh.dwg
+    // (~70k SOLID quads → ~68 FillQuadsCmd + 70k PaintQuad allocations
+    // per frame) this collapsed total decode time from 28 ms to a few
+    // ms on Galaxy S25 Ultra. Wire format mirrors phenotype.commands
+    // and phenotype.paint exactly — keep both sides in lockstep when
+    // adding/changing opcodes.
+    unsigned int pos = 0;
+    auto read_u32 = [&]() -> std::uint32_t {
+        if (pos + 4 > len) { pos = len; return 0; }
+        std::uint32_t v;
+        std::memcpy(&v, &buf[pos], 4);
+        pos += 4;
+        return v;
+    };
+    auto read_f32 = [&]() -> float {
+        std::uint32_t bits = read_u32();
+        float v;
+        std::memcpy(&v, &bits, 4);
+        return v;
+    };
+    auto unpack = [](std::uint32_t packed) -> ::phenotype::Color {
+        return {
+            static_cast<unsigned char>((packed >> 24) & 0xFF),
+            static_cast<unsigned char>((packed >> 16) & 0xFF),
+            static_cast<unsigned char>((packed >>  8) & 0xFF),
+            static_cast<unsigned char>( packed        & 0xFF),
+        };
+    };
+    auto skip_str = [&](unsigned int slen) {
+        if (pos + slen > len) { pos = len; return; }
+        pos += slen;
+        // wire format pads strings to a 4-byte boundary
+        pos = (pos + 3) & ~3u;
+    };
+
+    while (pos + 4 <= len) {
+        auto cmd = static_cast<::phenotype::Cmd>(read_u32());
+
+        // Opcode-by-opcode handlers: identical semantics to the
+        // previous parse + visit dispatch but skipping every
+        // intermediate allocation.
+        if (cmd == ::phenotype::Cmd::Clear) {
+            normalize_color(unpack(read_u32()), out.clear_color);
+            out.has_clear = true;
+        } else if (cmd == ::phenotype::Cmd::FillRect) {
+            float x = read_f32(), y = read_f32();
+            float w = read_f32(), h = read_f32();
+            ::phenotype::Color cc = unpack(read_u32());
+            prepare_batch_for_pipeline(out, 0);
+            ColorInstanceGPU inst{};
+            inst.rect[0] = x; inst.rect[1] = y;
+            inst.rect[2] = w; inst.rect[3] = h;
+            normalize_color(cc, inst.color);
+            out.batches.back().colors.push_back(inst);
+        } else if (cmd == ::phenotype::Cmd::StrokeRect) {
+            float x = read_f32(), y = read_f32();
+            float w = read_f32(), h = read_f32();
+            float lw = read_f32();
+            ::phenotype::Color cc = unpack(read_u32());
+            prepare_batch_for_pipeline(out, 0);
+            ColorInstanceGPU inst{};
+            inst.rect[0] = x; inst.rect[1] = y;
+            inst.rect[2] = w; inst.rect[3] = h;
+            normalize_color(cc, inst.color);
+            inst.params[0] = 0.0f;
+            inst.params[1] = lw;
+            inst.params[2] = 1.0f; // Stroke
+            out.batches.back().colors.push_back(inst);
+        } else if (cmd == ::phenotype::Cmd::RoundRect) {
+            float x = read_f32(), y = read_f32();
+            float w = read_f32(), h = read_f32();
+            float r = read_f32();
+            ::phenotype::Color cc = unpack(read_u32());
+            prepare_batch_for_pipeline(out, 0);
+            ColorInstanceGPU inst{};
+            inst.rect[0] = x; inst.rect[1] = y;
+            inst.rect[2] = w; inst.rect[3] = h;
+            normalize_color(cc, inst.color);
+            inst.params[0] = r;
+            inst.params[1] = 0.0f;
+            inst.params[2] = 2.0f; // Round
+            out.batches.back().colors.push_back(inst);
+        } else if (cmd == ::phenotype::Cmd::DrawLine) {
+            float x1 = read_f32(), y1 = read_f32();
+            float x2 = read_f32(), y2 = read_f32();
+            float th = read_f32();
+            ::phenotype::Color cc = unpack(read_u32());
+            prepare_batch_for_pipeline(out, 0);
+            float dx = x2 - x1;
+            float dy = y2 - y1;
+            float line_len = std::sqrt(dx * dx + dy * dy);
+            float w = (dy == 0.0f) ? line_len : th;
+            float h = (dx == 0.0f) ? line_len : th;
+            float x = (dx == 0.0f) ? x1 - th * 0.5f : std::min(x1, x2);
+            float y = (dy == 0.0f) ? y1 - th * 0.5f : std::min(y1, y2);
+            ColorInstanceGPU inst{};
+            inst.rect[0] = x; inst.rect[1] = y;
+            inst.rect[2] = w; inst.rect[3] = h;
+            normalize_color(cc, inst.color);
+            inst.params[2] = 3.0f;
+            out.batches.back().colors.push_back(inst);
+        } else if (cmd == ::phenotype::Cmd::DrawText) {
+            float x = read_f32(), y = read_f32();
+            float fs = read_f32();
+            std::uint32_t flags = read_u32();
+            ::phenotype::Color cc = unpack(read_u32());
+            std::uint32_t flen = read_u32();
+            std::string family(
+                reinterpret_cast<char const*>(&buf[std::min(pos, len)]),
+                std::min(flen, len > pos ? len - pos : 0u));
+            skip_str(flen);
+            std::uint32_t tlen = read_u32();
+            std::string text(
+                reinterpret_cast<char const*>(&buf[std::min(pos, len)]),
+                std::min(tlen, len > pos ? len - pos : 0u));
+            skip_str(tlen);
+            prepare_batch_for_pipeline(out, 2);
+            ::phenotype::native::TextEntry entry{};
+            entry.x = x; entry.y = y;
+            entry.font_size = fs;
+            entry.mono = (flags & 1u) != 0;
+            entry.r = cc.r / 255.0f;
+            entry.g = cc.g / 255.0f;
+            entry.b = cc.b / 255.0f;
+            entry.a = cc.a / 255.0f;
+            entry.text = std::move(text);
+            entry.family = std::move(family);
+            entry.weight = (flags & 2u)
+                ? ::phenotype::FontWeight::Bold
+                : ::phenotype::FontWeight::Regular;
+            entry.style = (flags & 4u)
+                ? ::phenotype::FontStyle::Italic
+                : ::phenotype::FontStyle::Upright;
+            out.text_entries.push_back(std::move(entry));
+            out.text_entries_batch_idx.push_back(
+                static_cast<std::uint32_t>(out.batches.size() - 1));
+        } else if (cmd == ::phenotype::Cmd::HitRegion) {
+            // Ignored at decode (replayed by hit_test on the snapshot).
+            (void)read_f32(); (void)read_f32();
+            (void)read_f32(); (void)read_f32();
+            (void)read_u32(); (void)read_u32();
+        } else if (cmd == ::phenotype::Cmd::DrawImage) {
+            float x = read_f32(), y = read_f32();
+            float w = read_f32(), h = read_f32();
+            std::uint32_t ulen = read_u32();
+            std::string url(
+                reinterpret_cast<char const*>(&buf[std::min(pos, len)]),
+                std::min(ulen, len > pos ? len - pos : 0u));
+            skip_str(ulen);
+            auto const* entry = ensure_image_cache_entry(url);
+            if (entry && entry->state == ImageState::Ready) {
+                prepare_batch_for_pipeline(out, 3);
+                auto& batch = out.batches.back();
+                ImageInstanceGPU inst{};
+                inst.rect[0] = x; inst.rect[1] = y;
+                inst.rect[2] = w; inst.rect[3] = h;
+                inst.uv_rect[0] = entry->u;
+                inst.uv_rect[1] = entry->v;
+                inst.uv_rect[2] = entry->uw;
+                inst.uv_rect[3] = entry->vh;
+                inst.color[0] = 1.0f; inst.color[1] = 1.0f;
+                inst.color[2] = 1.0f; inst.color[3] = 1.0f;
+                batch.images.push_back(inst);
+            } else {
+                prepare_batch_for_pipeline(out, 0);
+                auto& batch = out.batches.back();
+                bool failed = entry && entry->state == ImageState::Failed;
+                float fill = failed ? 0.90f : 0.94f;
+                float edge = failed ? 0.78f : 0.82f;
+                ColorInstanceGPU inner{};
+                inner.rect[0] = x; inner.rect[1] = y;
+                inner.rect[2] = w; inner.rect[3] = h;
+                inner.color[0] = fill; inner.color[1] = fill;
+                inner.color[2] = fill; inner.color[3] = 1.0f;
+                batch.colors.push_back(inner);
+                ColorInstanceGPU outline{};
+                outline.rect[0] = x; outline.rect[1] = y;
+                outline.rect[2] = w; outline.rect[3] = h;
+                outline.color[0] = edge; outline.color[1] = edge;
+                outline.color[2] = edge; outline.color[3] = 1.0f;
+                outline.params[1] = 2.0f;
+                outline.params[2] = 1.0f;
+                batch.colors.push_back(outline);
+            }
+        } else if (cmd == ::phenotype::Cmd::Scissor) {
+            float x = read_f32(), y = read_f32();
+            float w = read_f32(), h = read_f32();
+            open_scissor_batch(out, x, y, w, h);
+        } else if (cmd == ::phenotype::Cmd::DrawArc) {
+            float cx = read_f32(), cy = read_f32();
+            float rad = read_f32();
+            float sa = read_f32(), ea = read_f32();
+            float th = read_f32();
+            ::phenotype::Color cc = unpack(read_u32());
+            if (rad > 0.0f) {
+                prepare_batch_for_pipeline(out, 1);
+                ArcInstanceGPU inst{};
+                inst.center_radius_thickness[0] = cx;
+                inst.center_radius_thickness[1] = cy;
+                inst.center_radius_thickness[2] = rad;
+                inst.center_radius_thickness[3] = th;
+                inst.angles[0] = sa;
+                inst.angles[1] = ea;
+                normalize_color(cc, inst.color);
+                out.batches.back().arcs.push_back(inst);
+            }
+        } else if (cmd == ::phenotype::Cmd::FillQuads) {
+            std::uint32_t n = read_u32();
+            // Bail if the wire stream truncated mid-FillQuads.
+            if (pos + n * 36u > len) { pos = len; break; }
+            prepare_batch_for_pipeline(out, 0);
+            auto& dst = out.batches.back().tri_vertices;
+            // Bulk-read each quad's 36 bytes (color u32 + 8 floats) in
+            // ONE memcpy instead of 9 lambda-dispatched reads. Single
+            // biggest win in the decoder: 70k quads × 9 reads → 70k
+            // memcpys, each amortising bounds-check + pos-advance once
+            // per quad instead of once per field.
+            std::size_t const base = dst.size();
+            dst.resize(base + static_cast<std::size_t>(n) * 6);
+            // Pre-fill a vertex template with color so per-vertex stores
+            // only touch pos[0]/pos[1] — saves 4 redundant color stores
+            // per vertex × 6 vertices × 70k quads.
+            for (std::uint32_t i = 0; i < n; ++i) {
+                struct WireQuad {
+                    std::uint32_t color_packed;
+                    float x0, y0, x1, y1, x2, y2, x3, y3;
+                } wq;
+                static_assert(sizeof(WireQuad) == 36);
+                std::memcpy(&wq, &buf[pos], 36);
+                pos += 36;
+
+                ::phenotype::Color cc = unpack(wq.color_packed);
+                TriVertexGPU tmpl;
+                tmpl.color[0] = static_cast<float>(cc.r) * (1.0f / 255.0f);
+                tmpl.color[1] = static_cast<float>(cc.g) * (1.0f / 255.0f);
+                tmpl.color[2] = static_cast<float>(cc.b) * (1.0f / 255.0f);
+                tmpl.color[3] = static_cast<float>(cc.a) * (1.0f / 255.0f);
+
+                std::size_t const k = base + static_cast<std::size_t>(i) * 6;
+                tmpl.pos[0] = wq.x0; tmpl.pos[1] = wq.y0; dst[k+0] = tmpl;
+                tmpl.pos[0] = wq.x1; tmpl.pos[1] = wq.y1; dst[k+1] = tmpl;
+                tmpl.pos[0] = wq.x2; tmpl.pos[1] = wq.y2; dst[k+2] = tmpl;
+                tmpl.pos[0] = wq.x0; tmpl.pos[1] = wq.y0; dst[k+3] = tmpl;
+                tmpl.pos[0] = wq.x2; tmpl.pos[1] = wq.y2; dst[k+4] = tmpl;
+                tmpl.pos[0] = wq.x3; tmpl.pos[1] = wq.y3; dst[k+5] = tmpl;
+            }
+        } else if (cmd == ::phenotype::Cmd::FillRects) {
+            std::uint32_t n = read_u32();
+            if (pos + n * 20u > len) { pos = len; break; }
+            prepare_batch_for_pipeline(out, 0);
+            auto& dst = out.batches.back().colors;
+            std::size_t const base = dst.size();
+            dst.resize(base + n);
+            // Same bulk-read trick — 20 bytes per rect (4 floats + u32).
+            for (std::uint32_t i = 0; i < n; ++i) {
+                struct WireRect {
+                    float x, y, w, h;
+                    std::uint32_t color_packed;
+                } wr;
+                static_assert(sizeof(WireRect) == 20);
+                std::memcpy(&wr, &buf[pos], 20);
+                pos += 20;
+                ::phenotype::Color cc = unpack(wr.color_packed);
+                auto& inst = dst[base + i];
+                inst = ColorInstanceGPU{};
+                inst.rect[0] = wr.x; inst.rect[1] = wr.y;
+                inst.rect[2] = wr.w; inst.rect[3] = wr.h;
+                inst.color[0] = static_cast<float>(cc.r) * (1.0f/255.0f);
+                inst.color[1] = static_cast<float>(cc.g) * (1.0f/255.0f);
+                inst.color[2] = static_cast<float>(cc.b) * (1.0f/255.0f);
+                inst.color[3] = static_cast<float>(cc.a) * (1.0f/255.0f);
+            }
+        } else if (cmd == ::phenotype::Cmd::Path
+                   || cmd == ::phenotype::Cmd::FillPath) {
+            // Fall back to the existing typed handler for paths — the
+            // verb-stream walk + flattener is already complex and the
+            // hot CAD content paths don't dominate parse time the way
+            // FillQuads does. Decode just this one command via the
+            // shared parser, then call the typed visit branch below.
+            // We construct a minimal one-element command vector to
+            // keep the fallback small.
+            unsigned int const start = pos - 4; // include opcode byte
+            (void)start;
+            // Reset pos to start of this command and let parse_commands
+            // consume only this single command — simplest is to
+            // restore the opcode byte and run parse on the remainder.
+            // parse_commands is allocation-cheap relative to the rest
+            // of the path-flatten work, so this is fine.
+            pos -= 4;
+            // Walk a single command via parse_commands by slicing.
+            // parse_commands is robust against truncation, so even if
+            // we hand it the rest of the buffer it's safe — but to
+            // avoid double-processing later commands we need to bound
+            // its scope. Calculate the byte length of just this one
+            // command and slice.
+            //
+            // Faster: re-decode using a local typed dispatch. Path's
+            // segs are bounded by the verb count, which we read here
+            // and skip over to advance pos. The actual instance
+            // emission happens via the helper below.
+            std::uint32_t cmd_op = read_u32();
+            (void)cmd_op;
+            float thickness = 0.0f;
+            ::phenotype::Color cc{};
+            if (cmd == ::phenotype::Cmd::Path) {
+                thickness = read_f32();
+                cc = unpack(read_u32());
+            } else {
+                cc = unpack(read_u32());
+            }
+            std::uint32_t n_segs = read_u32();
+            float color4[4];
+            normalize_color(cc, color4);
+
+            // For stroke (Path), reuse the segment + curve-flatten
+            // logic from the previous implementation.
+            float pen_x = 0.0f, pen_y = 0.0f;
+            float sub_x = 0.0f, sub_y = 0.0f;
+            bool has_pen = false;
+            // Filled polygon scratch
+            auto& polygon = out.fill_polygon;
+            polygon.clear();
+            bool started = false;
+            auto poly_append = [&](float x, float y) {
+                polygon.push_back(x);
+                polygon.push_back(y);
+            };
+
+            constexpr float flatness2 = 0.25f;
+            constexpr int max_depth = 16;
+
+            auto emit_segment = [&](float x1, float y1,
+                                    float x2, float y2) {
+                float dx = x2 - x1;
+                float dy = y2 - y1;
+                if (dx == 0.0f && dy == 0.0f) return;
+                prepare_batch_for_pipeline(out, 0);
+                auto& dst = out.batches.back().colors;
+                if (dx == 0.0f || dy == 0.0f) {
+                    float line_len = std::sqrt(dx * dx + dy * dy);
+                    float w = (dy == 0.0f) ? line_len : thickness;
+                    float h = (dx == 0.0f) ? line_len : thickness;
+                    float x = (dx == 0.0f) ? x1 - thickness * 0.5f
+                                           : std::min(x1, x2);
+                    float y = (dy == 0.0f) ? y1 - thickness * 0.5f
+                                           : std::min(y1, y2);
+                    ColorInstanceGPU inst{};
+                    inst.rect[0] = x; inst.rect[1] = y;
+                    inst.rect[2] = w; inst.rect[3] = h;
+                    inst.color[0] = color4[0]; inst.color[1] = color4[1];
+                    inst.color[2] = color4[2]; inst.color[3] = color4[3];
+                    inst.params[2] = 3.0f;
+                    dst.push_back(inst);
+                } else {
+                    float line_len = std::sqrt(dx * dx + dy * dy);
+                    float step = thickness * 0.5f;
+                    if (step < 0.5f) step = 0.5f;
+                    int n_steps = static_cast<int>(std::ceil(line_len / step));
+                    if (n_steps < 1) n_steps = 1;
+                    float half_th = thickness * 0.5f;
+                    for (int j = 0; j <= n_steps; ++j) {
+                        float t = static_cast<float>(j)
+                                  / static_cast<float>(n_steps);
+                        float ccx = x1 + dx * t;
+                        float ccy = y1 + dy * t;
+                        ColorInstanceGPU inst{};
+                        inst.rect[0] = ccx - half_th;
+                        inst.rect[1] = ccy - half_th;
+                        inst.rect[2] = thickness;
+                        inst.rect[3] = thickness;
+                        inst.color[0] = color4[0]; inst.color[1] = color4[1];
+                        inst.color[2] = color4[2]; inst.color[3] = color4[3];
+                        dst.push_back(inst);
+                    }
+                }
+            };
+
+            auto flatten_quad = [&](auto& self,
+                                    float p0x, float p0y,
+                                    float p1x, float p1y,
+                                    float p2x, float p2y,
+                                    int depth) -> void {
+                float lx = p2x - p0x, ly = p2y - p0y;
+                float llen2 = lx * lx + ly * ly;
+                bool flat = (depth == 0);
+                if (!flat && llen2 > 1e-6f) {
+                    float d = (p1x - p0x) * ly - (p1y - p0y) * lx;
+                    if (d * d < flatness2 * llen2) flat = true;
+                }
+                if (flat || llen2 < 1e-6f) {
+                    if (cmd == ::phenotype::Cmd::FillPath) {
+                        poly_append(p2x, p2y);
+                    } else {
+                        emit_segment(p0x, p0y, p2x, p2y);
+                    }
+                    return;
+                }
+                float a0x = (p0x + p1x) * 0.5f, a0y = (p0y + p1y) * 0.5f;
+                float a1x = (p1x + p2x) * 0.5f, a1y = (p1y + p2y) * 0.5f;
+                float mx  = (a0x + a1x) * 0.5f, my  = (a0y + a1y) * 0.5f;
+                self(self, p0x, p0y, a0x, a0y, mx, my, depth - 1);
+                self(self, mx, my, a1x, a1y, p2x, p2y, depth - 1);
+            };
+
+            auto flatten_cubic = [&](auto& self,
+                                     float p0x, float p0y,
+                                     float p1x, float p1y,
+                                     float p2x, float p2y,
+                                     float p3x, float p3y,
+                                     int depth) -> void {
+                float lx = p3x - p0x, ly = p3y - p0y;
+                float llen2 = lx * lx + ly * ly;
+                bool flat = (depth == 0);
+                if (!flat && llen2 > 1e-6f) {
+                    float d1 = (p1x - p0x) * ly - (p1y - p0y) * lx;
+                    float d2 = (p2x - p0x) * ly - (p2y - p0y) * lx;
+                    if (d1 * d1 < flatness2 * llen2
+                        && d2 * d2 < flatness2 * llen2) flat = true;
+                }
+                if (flat || llen2 < 1e-6f) {
+                    if (cmd == ::phenotype::Cmd::FillPath) {
+                        poly_append(p3x, p3y);
+                    } else {
+                        emit_segment(p0x, p0y, p3x, p3y);
+                    }
+                    return;
+                }
+                float a01x = (p0x + p1x) * 0.5f, a01y = (p0y + p1y) * 0.5f;
+                float a12x = (p1x + p2x) * 0.5f, a12y = (p1y + p2y) * 0.5f;
+                float a23x = (p2x + p3x) * 0.5f, a23y = (p2y + p3y) * 0.5f;
+                float b01x = (a01x + a12x) * 0.5f, b01y = (a01y + a12y) * 0.5f;
+                float b12x = (a12x + a23x) * 0.5f, b12y = (a12y + a23y) * 0.5f;
+                float mx   = (b01x + b12x) * 0.5f, my   = (b01y + b12y) * 0.5f;
+                self(self, p0x, p0y, a01x, a01y, b01x, b01y, mx, my, depth - 1);
+                self(self, mx, my, b12x, b12y, a23x, a23y, p3x, p3y, depth - 1);
+            };
+
+            auto fill_arc = [&](float cx, float cy, float r,
+                                float sa, float ea) {
+                constexpr int N = 32;
+                float sweep = ea - sa;
+                if (sweep <= 0.0f) sweep += 6.2831853f;
+                if (sweep > 6.2831853f) sweep = 6.2831853f;
+                for (int j = 1; j <= N; ++j) {
+                    float t = sa + sweep
+                              * static_cast<float>(j)
+                              / static_cast<float>(N);
+                    poly_append(cx + r * std::cos(t),
+                                cy + r * std::sin(t));
+                }
+            };
+
+            for (std::uint32_t i = 0; i < n_segs; ++i) {
+                auto verb = static_cast<::phenotype::PathVerb>(read_u32());
+                switch (verb) {
+                case ::phenotype::PathVerb::MoveTo: {
+                    float x = read_f32(), y = read_f32();
+                    if (cmd == ::phenotype::Cmd::FillPath) {
+                        if (!started) { poly_append(x, y); started = true; }
+                    } else {
+                        pen_x = x; pen_y = y;
+                        sub_x = x; sub_y = y;
+                        has_pen = true;
+                    }
+                    break;
+                }
+                case ::phenotype::PathVerb::LineTo: {
+                    float x = read_f32(), y = read_f32();
+                    if (cmd == ::phenotype::Cmd::FillPath) {
+                        poly_append(x, y);
+                        if (!started) started = true;
+                    } else {
+                        if (has_pen) emit_segment(pen_x, pen_y, x, y);
+                        pen_x = x; pen_y = y;
+                        has_pen = true;
+                    }
+                    break;
+                }
+                case ::phenotype::PathVerb::QuadTo: {
+                    float cxv = read_f32(), cyv = read_f32();
+                    float x = read_f32(), y = read_f32();
+                    if (cmd == ::phenotype::Cmd::FillPath) {
+                        if (!polygon.empty()) {
+                            float p0x = polygon[polygon.size() - 2];
+                            float p0y = polygon[polygon.size() - 1];
+                            flatten_quad(flatten_quad, p0x, p0y,
+                                         cxv, cyv, x, y, max_depth);
+                        }
+                    } else {
+                        if (has_pen) {
+                            flatten_quad(flatten_quad, pen_x, pen_y,
+                                         cxv, cyv, x, y, max_depth);
+                        }
+                        pen_x = x; pen_y = y;
+                        has_pen = true;
+                    }
+                    break;
+                }
+                case ::phenotype::PathVerb::CubicTo: {
+                    float c1x = read_f32(), c1y = read_f32();
+                    float c2x = read_f32(), c2y = read_f32();
+                    float x = read_f32(), y = read_f32();
+                    if (cmd == ::phenotype::Cmd::FillPath) {
+                        if (!polygon.empty()) {
+                            float p0x = polygon[polygon.size() - 2];
+                            float p0y = polygon[polygon.size() - 1];
+                            flatten_cubic(flatten_cubic, p0x, p0y,
+                                          c1x, c1y, c2x, c2y, x, y,
+                                          max_depth);
+                        }
+                    } else {
+                        if (has_pen) {
+                            flatten_cubic(flatten_cubic, pen_x, pen_y,
+                                          c1x, c1y, c2x, c2y, x, y,
+                                          max_depth);
+                        }
+                        pen_x = x; pen_y = y;
+                        has_pen = true;
+                    }
+                    break;
+                }
+                case ::phenotype::PathVerb::ArcTo: {
+                    float cxv = read_f32(), cyv = read_f32();
+                    float rv = read_f32();
+                    float sa = read_f32(), ea = read_f32();
+                    if (rv > 0.0f) {
+                        if (cmd == ::phenotype::Cmd::FillPath) {
+                            fill_arc(cxv, cyv, rv, sa, ea);
+                        } else {
+                            prepare_batch_for_pipeline(out, 1);
+                            ArcInstanceGPU inst{};
+                            inst.center_radius_thickness[0] = cxv;
+                            inst.center_radius_thickness[1] = cyv;
+                            inst.center_radius_thickness[2] = rv;
+                            inst.center_radius_thickness[3] = thickness;
+                            inst.angles[0] = sa;
+                            inst.angles[1] = ea;
+                            inst.color[0] = color4[0];
+                            inst.color[1] = color4[1];
+                            inst.color[2] = color4[2];
+                            inst.color[3] = color4[3];
+                            out.batches.back().arcs.push_back(inst);
+                        }
+                    }
+                    break;
+                }
+                case ::phenotype::PathVerb::Close:
+                    if (cmd == ::phenotype::Cmd::Path && has_pen) {
+                        emit_segment(pen_x, pen_y, sub_x, sub_y);
+                        pen_x = sub_x;
+                        pen_y = sub_y;
+                    }
+                    // Filled paths get an implicit close.
+                    break;
+                default:
+                    pos = len; // unknown verb — abort safely
+                    break;
+                }
+            }
+
+            if (cmd == ::phenotype::Cmd::FillPath && polygon.size() >= 6) {
+                auto& tris = out.fill_tris;
+                tris.clear();
+                polygon_ear_clip(polygon, tris, out.fill_ear_remain);
+                if (!tris.empty()) {
+                    prepare_batch_for_pipeline(out, 0);
+                    auto& dst = out.batches.back().tri_vertices;
+                    std::size_t const base = dst.size();
+                    dst.resize(base + tris.size() / 2);
+                    std::size_t k = base;
+                    for (std::size_t t = 0; t + 5 < tris.size(); t += 6) {
+                        TriVertexGPU v;
+                        v.color[0] = color4[0]; v.color[1] = color4[1];
+                        v.color[2] = color4[2]; v.color[3] = color4[3];
+                        v.pos[0] = tris[t];     v.pos[1] = tris[t + 1];
+                        dst[k++] = v;
+                        v.pos[0] = tris[t + 2]; v.pos[1] = tris[t + 3];
+                        dst[k++] = v;
+                        v.pos[0] = tris[t + 4]; v.pos[1] = tris[t + 5];
+                        dst[k++] = v;
+                    }
+                }
+            }
+        } else {
+            // Unknown opcode — bail out of decode safely. The
+            // remaining bytes may be from a future wire-format
+            // version; logging once would be ideal but the renderer
+            // hot path keeps quiet.
+            pos = len;
+        }
+    }
+}
+
+// Legacy variant-based decoder retained so any non-render-loop callers
+// (e.g. one-off command-stream tests) can still depend on the typed
+// dispatch shape. The render loop uses the streaming version above.
+inline void decode_android_color_commands_legacy(unsigned char const* buf,
+                                                 unsigned int len,
+                                                 FrameScratch& out) {
     out.batches.push_back(ScissorBatch{});
     auto commands = ::phenotype::parse_commands(buf, len);
     for (auto const& cmd : commands) {
@@ -3917,15 +4831,20 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 }
             } else if constexpr (std::same_as<T, ::phenotype::FillPathCmd>) {
                 // FillPath — flatten the verb stream into a polygon,
-                // ear-clip into triangles, and rasterise each triangle
-                // as 1-px-tall axis-aligned strips dispatched onto
-                // the existing colour pipeline. Single closed loop
+                // ear-clip into triangles, and emit the triangle list
+                // through the dedicated tri_pipeline (vkCmdDraw on a
+                // vertex buffer of TriVertexGPU). Single closed loop
                 // only; matches cad++ HATCH semantics where each
                 // boundary loop is one `Painter::fill_path` call.
+                //
+                // The polygon / tris / ear-remain buffers are reused
+                // across every FillPath in the frame — see
+                // FrameScratch::fill_polygon comment for why.
                 float color4[4];
                 normalize_color(c.color, color4);
 
-                std::vector<float> polygon;
+                auto& polygon = out.fill_polygon;
+                polygon.clear();
                 polygon.reserve(c.segs.size() * 2);
                 auto append = [&](float x, float y) {
                     polygon.push_back(x);
@@ -4034,32 +4953,59 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 }
 
                 if (polygon.size() >= 6) {
-                    auto tris = polygon_ear_clip(std::move(polygon));
-                    prepare_batch_for_pipeline(out, 0);
-                    auto& dst = out.batches.back().colors;
-                    for (std::size_t t = 0; t + 5 < tris.size(); t += 6) {
-                        rasterize_triangle_to_color(
-                            tris[t],     tris[t + 1],
-                            tris[t + 2], tris[t + 3],
-                            tris[t + 4], tris[t + 5],
-                            color4[0], color4[1], color4[2], color4[3],
-                            dst);
+                    auto& tris = out.fill_tris;
+                    tris.clear();
+                    polygon_ear_clip(polygon, tris, out.fill_ear_remain);
+                    if (!tris.empty()) {
+                        prepare_batch_for_pipeline(out, 0);
+                        auto& dst = out.batches.back().tri_vertices;
+                        // Single bulk reserve; libc++ reserve allocates
+                        // the exact requested size, so per-triangle
+                        // reserves degenerate to O(N^2).
+                        dst.reserve(dst.size() + tris.size() / 2);
+                        for (std::size_t t = 0; t + 5 < tris.size(); t += 6) {
+                            TriVertexGPU v;
+                            v.color[0] = color4[0];
+                            v.color[1] = color4[1];
+                            v.color[2] = color4[2];
+                            v.color[3] = color4[3];
+                            v.pos[0] = tris[t];     v.pos[1] = tris[t + 1];
+                            dst.push_back(v);
+                            v.pos[0] = tris[t + 2]; v.pos[1] = tris[t + 3];
+                            dst.push_back(v);
+                            v.pos[0] = tris[t + 4]; v.pos[1] = tris[t + 5];
+                            dst.push_back(v);
+                        }
                     }
                 }
             } else if constexpr (std::same_as<T, ::phenotype::FillQuadsCmd>) {
+                // Each quad becomes 6 vertices (two triangles, winding
+                // (0,1,2) + (0,2,3)) consumed by the tri_pipeline. The
+                // CPU scanline rasteriser this replaces produced
+                // O(quad_height) ColorInstanceGPU per quad — millions
+                // of instances/frame on the True-Color colorwh.dwg
+                // hue ring. Mirrors phenotype.native.macos.cppm's
+                // FillQuads case (line ~2615). Pipeline rank 0 — same
+                // as fills/lines so triangles share batches with the
+                // color pipeline; intra-batch order in renderer_flush
+                // emits tri before color.
                 prepare_batch_for_pipeline(out, 0);
-                auto& dst = out.batches.back().colors;
+                auto& dst = out.batches.back().tri_vertices;
+                dst.reserve(dst.size() + c.quads.size() * 6);
                 for (auto const& q : c.quads) {
                     float color4[4];
                     normalize_color(q.color, color4);
-                    rasterize_triangle_to_color(
-                        q.x0, q.y0, q.x1, q.y1, q.x2, q.y2,
-                        color4[0], color4[1], color4[2], color4[3],
-                        dst);
-                    rasterize_triangle_to_color(
-                        q.x0, q.y0, q.x2, q.y2, q.x3, q.y3,
-                        color4[0], color4[1], color4[2], color4[3],
-                        dst);
+                    TriVertexGPU v;
+                    v.color[0] = color4[0];
+                    v.color[1] = color4[1];
+                    v.color[2] = color4[2];
+                    v.color[3] = color4[3];
+                    v.pos[0] = q.x0; v.pos[1] = q.y0; dst.push_back(v);
+                    v.pos[0] = q.x1; v.pos[1] = q.y1; dst.push_back(v);
+                    v.pos[0] = q.x2; v.pos[1] = q.y2; dst.push_back(v);
+                    v.pos[0] = q.x0; v.pos[1] = q.y0; dst.push_back(v);
+                    v.pos[0] = q.x2; v.pos[1] = q.y2; dst.push_back(v);
+                    v.pos[0] = q.x3; v.pos[1] = q.y3; dst.push_back(v);
                 }
             } else if constexpr (std::same_as<T, ::phenotype::FillRectsCmd>) {
                 prepare_batch_for_pipeline(out, 0);
@@ -4092,23 +5038,59 @@ inline void decode_android_color_commands(unsigned char const* buf,
 // through the public `phenotype::widget::*` / `phenotype::layout::*`
 // API.
 
+inline std::uint64_t fnv1a_hash(unsigned char const* data,
+                                unsigned int len) noexcept {
+    std::uint64_t h = 0xCBF29CE484222325ULL;
+    for (unsigned int i = 0; i < len; ++i) {
+        h ^= static_cast<std::uint64_t>(data[i]);
+        h *= 0x100000001B3ULL;
+    }
+    return h == 0 ? 1ULL : h;
+}
+
 inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (!g_renderer.initialized) return;
     if (buf == nullptr || len == 0) {
         g_renderer.last_frame_buf.clear();
+        g_renderer.last_buf_hash = 0;
+        g_renderer.last_scratch_valid = false;
         return;
     }
+
+    auto const t_start = std::chrono::steady_clock::now();
 
     // Snapshot the caller's buffer so hit_test can replay it later
     // without forcing another view() pass.
     g_renderer.last_frame_buf.assign(buf, buf + len);
 
-    FrameScratch scratch;
-    decode_android_color_commands(buf, len, scratch);
-    if (!scratch.has_clear) {
-        auto const& theme = ::phenotype::current_theme();
-        normalize_color(theme.background, scratch.clear_color);
+    // Decode-skip path: if the binary cmd buffer matches the previous
+    // frame's bit-for-bit, the decoded FrameScratch + GPU SSBOs +
+    // vertex buffers are still valid. We bypass the entire CPU
+    // decode + text rasterise + finalise + upload pipeline and only
+    // re-record draws against the cached scratch. On colorwh.dwg's
+    // True Color sheet this is the difference between rebuilding
+    // hundreds of thousands of TriVertexGPU per frame and a few
+    // hundred microseconds of vkCmd recording.
+    std::uint64_t const cur_hash = fnv1a_hash(buf, len);
+    bool const can_skip_decode =
+        g_renderer.last_scratch_valid
+        && g_renderer.last_buf_hash != 0
+        && g_renderer.last_buf_hash == cur_hash;
+
+    auto t_decode_end = t_start;
+    FrameScratch local_scratch;
+    FrameScratch& scratch =
+        can_skip_decode ? g_renderer.last_scratch : local_scratch;
+    ::phenotype::native::TextAtlas atlas{};
+
+    if (!can_skip_decode) {
+        decode_android_color_commands(buf, len, scratch);
+        if (!scratch.has_clear) {
+            auto const& theme = ::phenotype::current_theme();
+            normalize_color(theme.background, scratch.clear_color);
+        }
     }
+    t_decode_end = std::chrono::steady_clock::now();
 
     vkWaitForFences(g_renderer.device, 1, &g_renderer.in_flight, VK_TRUE, UINT64_MAX);
 
@@ -4117,8 +5099,9 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     // stalling image presentation. The previous frame's fence has been
     // waited on, so the persistently-mapped text buffers are safe to
     // touch once we start staging data below.
-    ::phenotype::native::TextAtlas atlas{};
-    if (!scratch.text_entries.empty()) {
+    if (can_skip_decode) {
+        atlas = g_renderer.last_atlas;
+    } else if (!scratch.text_entries.empty()) {
         atlas = text_build_atlas(scratch.text_entries, 1.0f);
         for (std::size_t i = 0;
              i < scratch.text_entries.size() && i < atlas.quads.size();
@@ -4140,7 +5123,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             scratch.batches[batch_idx].texts.push_back(inst);
         }
     }
-    finalize_batches(scratch);
+    if (!can_skip_decode) finalize_batches(scratch);
 
     std::uint32_t idx = 0;
     auto r = vkAcquireNextImageKHR(
@@ -4149,69 +5132,94 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (r == VK_ERROR_OUT_OF_DATE_KHR || r == VK_SUBOPTIMAL_KHR) {
         destroy_swapchain_resources();
         create_swapchain();
+        // Swapchain rebuild invalidates the cached scratch — next
+        // frame must re-decode.
+        g_renderer.last_buf_hash = 0;
+        g_renderer.last_scratch_valid = false;
         return;
     }
     if (!vk_ok(r, "vkAcquireNextImageKHR")) return;
 
     vkResetFences(g_renderer.device, 1, &g_renderer.in_flight);
 
-    // Upload per-frame data — the fence wait above guarantees the
-    // previous frame is no longer reading these persistently-mapped
-    // buffers.
-    if (!scratch.color_instances.empty()) {
-        if (!ensure_instance_capacity(scratch.color_instances.size())) return;
-        std::memcpy(g_renderer.instance_mapped,
-                    scratch.color_instances.data(),
-                    scratch.color_instances.size() * sizeof(ColorInstanceGPU));
-    }
-    if (!scratch.arc_instances.empty()) {
-        if (!ensure_arc_instance_capacity(scratch.arc_instances.size())) return;
-        std::memcpy(g_renderer.arc_instance_mapped,
-                    scratch.arc_instances.data(),
-                    scratch.arc_instances.size() * sizeof(ArcInstanceGPU));
-    }
+    auto const t_upload_start = std::chrono::steady_clock::now();
+    bool have_text = false;
+    bool have_images = false;
+    if (can_skip_decode) {
+        // SSBO/vertex contents are unchanged from last frame; reuse
+        // the cached have_text / have_images flags. The image atlas
+        // dirty region may still need a flush for async-loaded
+        // images — record_image_atlas_upload below handles that.
+        have_text = g_renderer.last_have_text;
+        have_images = g_renderer.last_have_images;
+    } else {
+        // Upload per-frame data — the fence wait above guarantees the
+        // previous frame is no longer reading these persistently-mapped
+        // buffers.
+        if (!scratch.color_instances.empty()) {
+            if (!ensure_instance_capacity(scratch.color_instances.size())) return;
+            std::memcpy(g_renderer.instance_mapped,
+                        scratch.color_instances.data(),
+                        scratch.color_instances.size() * sizeof(ColorInstanceGPU));
+        }
+        if (!scratch.arc_instances.empty()) {
+            if (!ensure_arc_instance_capacity(scratch.arc_instances.size())) return;
+            std::memcpy(g_renderer.arc_instance_mapped,
+                        scratch.arc_instances.data(),
+                        scratch.arc_instances.size() * sizeof(ArcInstanceGPU));
+        }
+        if (!scratch.tri_vertices.empty()) {
+            if (!ensure_tri_vertex_capacity(scratch.tri_vertices.size())) return;
+            std::memcpy(g_renderer.tri_vertex_mapped,
+                        scratch.tri_vertices.data(),
+                        scratch.tri_vertices.size() * sizeof(TriVertexGPU));
+        }
 
-    bool have_text = !scratch.text_instances.empty()
-                   && !atlas.pixels.empty()
-                   && atlas.width > 0 && atlas.height > 0;
-    if (have_text) {
-        if (!ensure_text_instance_capacity(scratch.text_instances.size())
-            || !ensure_text_staging_capacity(
-                   static_cast<VkDeviceSize>(atlas.pixels.size()))
-            || !create_or_resize_text_atlas_image(
-                   static_cast<std::uint32_t>(atlas.width),
-                   static_cast<std::uint32_t>(atlas.height))) {
-            have_text = false;
-        } else {
-            std::memcpy(g_renderer.text_instance_mapped,
-                        scratch.text_instances.data(),
-                        scratch.text_instances.size() * sizeof(TextInstanceGPU));
-            // Atlas view may have been recreated; refresh all three
-            // descriptor bindings so the fragment shader sees the
-            // current VkImage + sampler pair.
-            write_text_descriptor_set();
+        have_text = !scratch.text_instances.empty()
+                       && !atlas.pixels.empty()
+                       && atlas.width > 0 && atlas.height > 0;
+        if (have_text) {
+            if (!ensure_text_instance_capacity(scratch.text_instances.size())
+                || !ensure_text_staging_capacity(
+                       static_cast<VkDeviceSize>(atlas.pixels.size()))
+                || !create_or_resize_text_atlas_image(
+                       static_cast<std::uint32_t>(atlas.width),
+                       static_cast<std::uint32_t>(atlas.height))) {
+                have_text = false;
+            } else {
+                std::memcpy(g_renderer.text_instance_mapped,
+                            scratch.text_instances.data(),
+                            scratch.text_instances.size() * sizeof(TextInstanceGPU));
+                // Atlas view may have been recreated; refresh all three
+                // descriptor bindings so the fragment shader sees the
+                // current VkImage + sampler pair.
+                write_text_descriptor_set();
+            }
+        }
+
+        // Image pipeline: upload the instance SSBO (atlas pixels already
+        // live in g_images.pixels; record_image_atlas_upload below flushes
+        // any dirty region to the VkImage).
+        have_images = !scratch.image_instances.empty();
+        if (have_images) {
+            if (!ensure_image_instance_capacity(scratch.image_instances.size())) {
+                have_images = false;
+            } else {
+                std::memcpy(g_renderer.image_instance_mapped,
+                            scratch.image_instances.data(),
+                            scratch.image_instances.size()
+                                * sizeof(ImageInstanceGPU));
+            }
         }
     }
-
-    // Image pipeline: upload the instance SSBO (atlas pixels already
-    // live in g_images.pixels; record_image_atlas_upload below flushes
-    // any dirty region to the VkImage).
-    bool have_images = !scratch.image_instances.empty();
-    if (have_images) {
-        if (!ensure_image_instance_capacity(scratch.image_instances.size())) {
-            have_images = false;
-        } else {
-            std::memcpy(g_renderer.image_instance_mapped,
-                        scratch.image_instances.data(),
-                        scratch.image_instances.size()
-                            * sizeof(ImageInstanceGPU));
-        }
-    }
+    auto const t_upload_end = std::chrono::steady_clock::now();
 
     ColorUniforms uniforms{};
     uniforms.viewport[0] = static_cast<float>(g_renderer.swapchain_extent.width);
     uniforms.viewport[1] = static_cast<float>(g_renderer.swapchain_extent.height);
     std::memcpy(g_renderer.uniform_mapped, &uniforms, sizeof uniforms);
+
+    auto const t_record_start = std::chrono::steady_clock::now();
 
     // Record the render pass.
     vkResetCommandBuffer(g_renderer.command_buffer, 0);
@@ -4259,13 +5267,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     for (auto const& batch : scratch.batches) {
         auto const batch_color_count =
             static_cast<std::uint32_t>(batch.colors.size());
+        auto const batch_tri_count =
+            static_cast<std::uint32_t>(batch.tri_vertices.size());
         auto const batch_arc_count =
             static_cast<std::uint32_t>(batch.arcs.size());
         auto const batch_image_count =
             static_cast<std::uint32_t>(batch.images.size());
         auto const batch_text_count =
             static_cast<std::uint32_t>(batch.texts.size());
-        if (batch_color_count + batch_arc_count
+        if (batch_tri_count + batch_color_count + batch_arc_count
             + batch_image_count + batch_text_count == 0)
             continue;
         VkRect2D scissor =
@@ -4274,6 +5284,31 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             continue;
         vkCmdSetScissor(g_renderer.command_buffer, 0, 1, &scissor);
 
+        // Triangles paint first within a batch so colors / arcs / text
+        // overlay them naturally, matching macOS draw order at
+        // phenotype.native.macos.cppm:5759-5782 and cadpp's "fills
+        // first, strokes / text later" convention. The decoder's
+        // ensure_triangle_order_batch helper guarantees this ordering
+        // is correct even when a triangle primitive arrives after a
+        // color in the command stream within the same scissor.
+        if (batch_tri_count > 0) {
+            vkCmdBindPipeline(g_renderer.command_buffer,
+                              VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              g_renderer.tri_pipeline);
+            vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    g_renderer.tri_pipeline_layout,
+                                    0, 1, &g_renderer.tri_descriptor_set,
+                                    0, nullptr);
+            VkDeviceSize const tri_offset =
+                static_cast<VkDeviceSize>(batch.tri_first)
+                * sizeof(TriVertexGPU);
+            vkCmdBindVertexBuffers(g_renderer.command_buffer, 0, 1,
+                                   &g_renderer.tri_vertex_buffer,
+                                   &tri_offset);
+            vkCmdDraw(g_renderer.command_buffer,
+                      batch_tri_count, 1, 0, 0);
+        }
         if (batch_color_count > 0) {
             vkCmdBindPipeline(g_renderer.command_buffer,
                               VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -4356,10 +5391,93 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (pr == VK_ERROR_OUT_OF_DATE_KHR || pr == VK_SUBOPTIMAL_KHR) {
         destroy_swapchain_resources();
         create_swapchain();
+        g_renderer.last_buf_hash = 0;
+        g_renderer.last_scratch_valid = false;
+    }
+
+    auto const t_end = std::chrono::steady_clock::now();
+
+    // Save scratch + atlas for next frame's potential decode-skip. We
+    // do this only on the heavy path (decode actually ran) — the skip
+    // path leaves last_* untouched since they already match cur_hash.
+    if (!can_skip_decode) {
+        // Move local scratch into the persistent slot. The next frame
+        // sees `&g_renderer.last_scratch` aliased to `scratch`, so any
+        // accumulated batches/instances live across frames as long as
+        // the hash matches. local_scratch is destroyed on return.
+        g_renderer.last_scratch = std::move(local_scratch);
+        g_renderer.last_atlas = std::move(atlas);
+        g_renderer.last_have_text = have_text;
+        g_renderer.last_have_images = have_images;
+        g_renderer.last_scratch_valid = true;
+    }
+    g_renderer.last_buf_hash = cur_hash;
+
+    // Per-frame timings, averaged + emitted to logcat every kPerfFrames.
+    using ms = std::chrono::duration<double, std::milli>;
+    constexpr unsigned long long kPerfFrames = 60;
+    g_renderer.perf_decode_ms_sum +=
+        ms(t_decode_end - t_start).count();
+    g_renderer.perf_upload_ms_sum +=
+        ms(t_upload_end - t_upload_start).count();
+    g_renderer.perf_record_ms_sum +=
+        ms(t_end - t_record_start).count();
+    g_renderer.perf_total_ms_sum +=
+        ms(t_end - t_start).count();
+    if (can_skip_decode) ++g_renderer.perf_skip_count;
+    if (++g_renderer.perf_frame_count >= kPerfFrames) {
+        double const f =
+            static_cast<double>(g_renderer.perf_frame_count);
+        __android_log_print(
+            ANDROID_LOG_INFO, ANDROID_LOG_TAG,
+            "[perf] avg decode=%.2fms upload=%.2fms record=%.2fms "
+            "total=%.2fms skip=%llu/%llu over %llu frames",
+            g_renderer.perf_decode_ms_sum / f,
+            g_renderer.perf_upload_ms_sum / f,
+            g_renderer.perf_record_ms_sum / f,
+            g_renderer.perf_total_ms_sum / f,
+            g_renderer.perf_skip_count,
+            g_renderer.perf_frame_count,
+            g_renderer.perf_frame_count);
+        g_renderer.perf_decode_ms_sum = 0;
+        g_renderer.perf_upload_ms_sum = 0;
+        g_renderer.perf_record_ms_sum = 0;
+        g_renderer.perf_total_ms_sum  = 0;
+        g_renderer.perf_skip_count = 0;
+        g_renderer.perf_frame_count = 0;
     }
 }
 
 inline void destroy_color_resources() {
+    // Tri pipeline: own descriptor pool + set layout + pipeline layout
+    // (no shared layout with color/arc), plus its host-visible vertex
+    // buffer. Tear down before color/arc since the tri pipeline depends
+    // on g_renderer.uniform_buffer remaining valid.
+    if (g_renderer.tri_descriptor_pool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(g_renderer.device,
+                                g_renderer.tri_descriptor_pool, nullptr);
+        g_renderer.tri_descriptor_pool = VK_NULL_HANDLE;
+        g_renderer.tri_descriptor_set = VK_NULL_HANDLE;
+    }
+    destroy_host_buffer(g_renderer.tri_vertex_buffer,
+                        g_renderer.tri_vertex_memory,
+                        g_renderer.tri_vertex_mapped);
+    g_renderer.tri_vertex_capacity = 0;
+    if (g_renderer.tri_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(g_renderer.device, g_renderer.tri_pipeline, nullptr);
+        g_renderer.tri_pipeline = VK_NULL_HANDLE;
+    }
+    if (g_renderer.tri_pipeline_layout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(g_renderer.device,
+                                g_renderer.tri_pipeline_layout, nullptr);
+        g_renderer.tri_pipeline_layout = VK_NULL_HANDLE;
+    }
+    if (g_renderer.tri_descriptor_set_layout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(g_renderer.device,
+                                     g_renderer.tri_descriptor_set_layout,
+                                     nullptr);
+        g_renderer.tri_descriptor_set_layout = VK_NULL_HANDLE;
+    }
     if (g_renderer.arc_descriptor_pool != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(g_renderer.device,
                                 g_renderer.arc_descriptor_pool, nullptr);
@@ -4564,6 +5682,8 @@ inline ::json::Object android_renderer_runtime_json() {
         ::json::Value{g_renderer.image_pipeline != VK_NULL_HANDLE});
     r.emplace("color_pipeline_ready",
         ::json::Value{g_renderer.color_pipeline != VK_NULL_HANDLE});
+    r.emplace("tri_pipeline_ready",
+        ::json::Value{g_renderer.tri_pipeline != VK_NULL_HANDLE});
     return r;
 }
 
