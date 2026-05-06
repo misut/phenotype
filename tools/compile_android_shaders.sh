@@ -60,6 +60,8 @@ emit_blob() {
     emit_blob SPIRV_TEXT_FS  fragment "$SRC/text.frag"
     emit_blob SPIRV_IMAGE_VS vertex   "$SRC/image.vert"
     emit_blob SPIRV_IMAGE_FS fragment "$SRC/image.frag"
+    emit_blob SPIRV_TRI_VS   vertex   "$SRC/tri.vert"
+    emit_blob SPIRV_TRI_FS   fragment "$SRC/tri.frag"
 } > "$OUT"
 
 echo "wrote $OUT"

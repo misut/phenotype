@@ -93,6 +93,23 @@ static_assert(sizeof(TextInstanceGPU) == 48,
 // distinct for readability.
 using ImageInstanceGPU = TextInstanceGPU;
 
+// Per-vertex GPU layout for the triangle pipeline (FillPath / FillQuads
+// fast path). Each ear-clipped triangle pushes 3 of these into the
+// batch's triangle vertex buffer; the GPU rasterises with hardware
+// coverage rules so adjacent triangles tile pixel-perfectly without
+// sub-pixel gaps. 24 bytes/vertex * 3 vertices/triangle = 72 bytes/tri,
+// vs. ~50 scanlines * 48 bytes/ColorInstance = ~2.4 KB/tri under the
+// old CPU scanline path. A wedge-heavy DWG (colorwh.dwg True Color)
+// drops from millions of fill_rect instances to ~70k vertices in one
+// vkCmdDraw call. Layout matches macOS phenotype.native.macos.cppm's
+// TriVertexGPU exactly so command-buffer math is platform-stable.
+struct TriVertexGPU {
+    float pos[2];
+    float color[4];
+};
+static_assert(sizeof(TriVertexGPU) == 24,
+              "TriVertexGPU stride must match the GLSL vertex layout");
+
 // Uniforms block: std140-laid-out vec2 viewport + vec2 pad (= 16B).
 struct ColorUniforms {
     float viewport[2];
@@ -110,12 +127,18 @@ inline constexpr std::size_t INITIAL_INSTANCE_CAPACITY = 256;
 // "full swapchain" — paint emits this to reset clipping.
 struct ScissorBatch {
     float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+    // tri_vertices holds raw triangle-list vertices (3 per triangle)
+    // accumulated from FillPath / FillQuads output. Drawn before colors
+    // in the same batch; the decoder opens a same-scissor batch when a
+    // later triangle primitive must appear above prior color instances.
+    std::vector<TriVertexGPU>     tri_vertices;
     std::vector<ColorInstanceGPU> colors;
     std::vector<ArcInstanceGPU>   arcs;
     std::vector<ImageInstanceGPU> images;
     std::vector<TextInstanceGPU>  texts;
     bool has_draws = false;
     int max_pipeline_rank = -1;
+    std::uint32_t tri_first   = 0;
     std::uint32_t color_first = 0;
     std::uint32_t arc_first   = 0;
     std::uint32_t image_first = 0;
@@ -133,6 +156,7 @@ struct FrameScratch {
     // Flat staging vectors uploaded to GPU instance buffers. Populated
     // by finalize_batches() — direct decode-time pushes go to per-batch
     // locals above.
+    std::vector<TriVertexGPU>     tri_vertices;
     std::vector<ColorInstanceGPU> color_instances;
     std::vector<ArcInstanceGPU>   arc_instances;
     std::vector<TextInstanceGPU>  text_instances;
@@ -144,12 +168,23 @@ struct FrameScratch {
     // attribute glyph instances to the correct batch.
     std::vector<std::uint32_t> text_entries_batch_idx;
 
+    // Per-FillPath scratch buffers, reused across every Cmd::FillPath
+    // decode in a single frame. CAD HATCH-heavy content (e.g.
+    // colorwh.dwg with thousands of fills) used to default-construct
+    // these inside the case block, costing tens of thousands of heap
+    // allocations per frame. Hoisting them out keeps allocator pressure
+    // flat as the canvas count scales.
+    std::vector<float>       fill_polygon;
+    std::vector<float>       fill_tris;
+    std::vector<std::size_t> fill_ear_remain;
+
     float clear_color[4]{0, 0, 0, 0};
     bool has_clear = false;
 };
 
 inline bool scissor_batch_empty(ScissorBatch const& b) {
     return !b.has_draws
+        && b.tri_vertices.empty()
         && b.colors.empty() && b.arcs.empty()
         && b.images.empty() && b.texts.empty();
 }
@@ -167,6 +202,13 @@ inline void open_scissor_batch(FrameScratch& s,
     s.batches.push_back(std::move(next));
 }
 
+// Generic pipeline-rank ordering hook: when a primitive arrives whose
+// pipeline must draw "below" something already in the current batch
+// (i.e. its rank is lower than max_pipeline_rank), open a fresh
+// same-scissor batch so the new primitive paints in front of nothing
+// it shouldn't sit above. Triangles share rank 0 with FillRect / line
+// / FillPath colors; the within-batch tri-then-color emit order in
+// renderer_flush keeps fills under strokes within one batch.
 inline void prepare_batch_for_pipeline(FrameScratch& s, int pipeline_rank) {
     auto& cur = s.batches.back();
     if (!scissor_batch_empty(cur) && cur.max_pipeline_rank > pipeline_rank) {
@@ -182,15 +224,19 @@ inline void prepare_batch_for_pipeline(FrameScratch& s, int pipeline_rank) {
 }
 
 inline void finalize_batches(FrameScratch& s) {
+    s.tri_vertices.clear();
     s.color_instances.clear();
     s.arc_instances.clear();
     s.image_instances.clear();
     s.text_instances.clear();
     for (auto& b : s.batches) {
+        b.tri_first   = static_cast<std::uint32_t>(s.tri_vertices.size());
         b.color_first = static_cast<std::uint32_t>(s.color_instances.size());
         b.arc_first   = static_cast<std::uint32_t>(s.arc_instances.size());
         b.image_first = static_cast<std::uint32_t>(s.image_instances.size());
         b.text_first  = static_cast<std::uint32_t>(s.text_instances.size());
+        s.tri_vertices.insert(s.tri_vertices.end(),
+                              b.tri_vertices.begin(), b.tri_vertices.end());
         s.color_instances.insert(s.color_instances.end(),
                                  b.colors.begin(), b.colors.end());
         s.arc_instances.insert(s.arc_instances.end(),
@@ -1345,6 +1391,21 @@ struct android_renderer {
     void* arc_instance_mapped;
     std::size_t arc_instance_capacity; // in ArcInstanceGPU count
 
+    // Triangle pipeline (Slab: android tri). Dedicated 1-binding layout
+    // (UBO at binding 0 only) — no SSBO. Vertex data comes through a
+    // real vertex buffer bound at draw time via vkCmdBindVertexBuffers
+    // (host-visible, persistently mapped, doubles on overflow).
+    VkDescriptorSetLayout tri_descriptor_set_layout;
+    VkPipelineLayout tri_pipeline_layout;
+    VkPipeline tri_pipeline;
+    VkDescriptorPool tri_descriptor_pool;
+    VkDescriptorSet tri_descriptor_set;
+
+    VkBuffer tri_vertex_buffer;
+    VkDeviceMemory tri_vertex_memory;
+    void* tri_vertex_mapped;
+    std::size_t tri_vertex_capacity; // in TriVertexGPU count
+
     // Stage 4 text pipeline. Atlas image + view grow on demand;
     // everything else is allocated once per device.
     VkDescriptorSetLayout text_descriptor_set_layout;
@@ -1921,6 +1982,230 @@ inline bool create_arc_pipeline() {
     return ok;
 }
 
+// ---- Triangle pipeline helpers --------------------------------------
+//
+// Dedicated 1-binding descriptor set layout (UBO at binding 0). No SSBO
+// — vertex data is bound at draw time via vkCmdBindVertexBuffers, with
+// per-vertex (a_pos, a_color) attributes consumed directly by tri.vert.
+
+inline constexpr std::size_t INITIAL_TRI_VERTEX_CAPACITY = 4096;
+
+inline bool ensure_tri_vertex_capacity(std::size_t required) {
+    if (required <= g_renderer.tri_vertex_capacity) return true;
+    // Hard upper bound: 64 MB worth of vertices ≈ 2.79M verts. Bail
+    // gracefully rather than OOM the device on pathological content.
+    constexpr std::size_t kHardCap =
+        (64ull * 1024ull * 1024ull) / sizeof(TriVertexGPU);
+    if (required > kHardCap) {
+        __android_log_print(ANDROID_LOG_ERROR, ANDROID_LOG_TAG,
+                            "tri vertex demand %zu exceeds hard cap %zu",
+                            required, kHardCap);
+        return false;
+    }
+    std::size_t cap = g_renderer.tri_vertex_capacity == 0
+                        ? INITIAL_TRI_VERTEX_CAPACITY
+                        : g_renderer.tri_vertex_capacity;
+    while (cap < required) cap *= 2;
+    if (cap > kHardCap) cap = kHardCap;
+
+    destroy_host_buffer(g_renderer.tri_vertex_buffer,
+                        g_renderer.tri_vertex_memory,
+                        g_renderer.tri_vertex_mapped);
+    if (!create_host_buffer(cap * sizeof(TriVertexGPU),
+                            VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                            g_renderer.tri_vertex_buffer,
+                            g_renderer.tri_vertex_memory,
+                            g_renderer.tri_vertex_mapped))
+        return false;
+    g_renderer.tri_vertex_capacity = cap;
+    // Vertex buffer is bound at draw time, not descriptor-set time —
+    // no descriptor rewrite needed on grow.
+    return true;
+}
+
+inline void write_tri_descriptor_set() {
+    if (g_renderer.tri_descriptor_set == VK_NULL_HANDLE) return;
+    VkDescriptorBufferInfo ubo{};
+    ubo.buffer = g_renderer.uniform_buffer;
+    ubo.offset = 0;
+    ubo.range = sizeof(ColorUniforms);
+
+    VkWriteDescriptorSet write{};
+    write.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+    write.dstSet = g_renderer.tri_descriptor_set;
+    write.dstBinding = 0;
+    write.descriptorCount = 1;
+    write.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    write.pBufferInfo = &ubo;
+    vkUpdateDescriptorSets(g_renderer.device, 1, &write, 0, nullptr);
+}
+
+inline bool create_tri_pipeline() {
+    if (g_renderer.tri_pipeline != VK_NULL_HANDLE) return true;
+
+    // Dedicated descriptor set layout: UBO at binding 0 only. No SSBO,
+    // no atlas — keeps validation clean and avoids tying the tri
+    // pipeline's lifetime to color_descriptor_set_layout.
+    VkDescriptorSetLayoutBinding binding{};
+    binding.binding = 0;
+    binding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    binding.descriptorCount = 1;
+    binding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+
+    VkDescriptorSetLayoutCreateInfo dslci{};
+    dslci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+    dslci.bindingCount = 1;
+    dslci.pBindings = &binding;
+    if (!vk_ok(vkCreateDescriptorSetLayout(
+                  g_renderer.device, &dslci, nullptr,
+                  &g_renderer.tri_descriptor_set_layout),
+              "vkCreateDescriptorSetLayout(tri)"))
+        return false;
+
+    VkPipelineLayoutCreateInfo plci{};
+    plci.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
+    plci.setLayoutCount = 1;
+    plci.pSetLayouts = &g_renderer.tri_descriptor_set_layout;
+    if (!vk_ok(vkCreatePipelineLayout(g_renderer.device, &plci, nullptr,
+                                      &g_renderer.tri_pipeline_layout),
+              "vkCreatePipelineLayout(tri)"))
+        return false;
+
+    auto vs = create_shader_module(shaders::SPIRV_TRI_VS,
+                                   sizeof(shaders::SPIRV_TRI_VS));
+    auto fs = create_shader_module(shaders::SPIRV_TRI_FS,
+                                   sizeof(shaders::SPIRV_TRI_FS));
+    if (vs == VK_NULL_HANDLE || fs == VK_NULL_HANDLE) return false;
+
+    VkPipelineShaderStageCreateInfo stages[2]{};
+    stages[0].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[0].stage = VK_SHADER_STAGE_VERTEX_BIT;
+    stages[0].module = vs;
+    stages[0].pName = "main";
+    stages[1].sType = VK_STRUCTURE_TYPE_PIPELINE_SHADER_STAGE_CREATE_INFO;
+    stages[1].stage = VK_SHADER_STAGE_FRAGMENT_BIT;
+    stages[1].module = fs;
+    stages[1].pName = "main";
+
+    VkVertexInputBindingDescription vbb{};
+    vbb.binding = 0;
+    vbb.stride = sizeof(TriVertexGPU);
+    vbb.inputRate = VK_VERTEX_INPUT_RATE_VERTEX;
+
+    VkVertexInputAttributeDescription vba[2]{};
+    vba[0].binding = 0;
+    vba[0].location = 0;
+    vba[0].format = VK_FORMAT_R32G32_SFLOAT;
+    vba[0].offset = offsetof(TriVertexGPU, pos);
+    vba[1].binding = 0;
+    vba[1].location = 1;
+    vba[1].format = VK_FORMAT_R32G32B32A32_SFLOAT;
+    vba[1].offset = offsetof(TriVertexGPU, color);
+
+    VkPipelineVertexInputStateCreateInfo vi{};
+    vi.sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO;
+    vi.vertexBindingDescriptionCount = 1;
+    vi.pVertexBindingDescriptions = &vbb;
+    vi.vertexAttributeDescriptionCount = 2;
+    vi.pVertexAttributeDescriptions = vba;
+
+    VkPipelineInputAssemblyStateCreateInfo ia{};
+    ia.sType = VK_STRUCTURE_TYPE_PIPELINE_INPUT_ASSEMBLY_STATE_CREATE_INFO;
+    ia.topology = VK_PRIMITIVE_TOPOLOGY_TRIANGLE_LIST;
+
+    VkPipelineViewportStateCreateInfo vp{};
+    vp.sType = VK_STRUCTURE_TYPE_PIPELINE_VIEWPORT_STATE_CREATE_INFO;
+    vp.viewportCount = 1;
+    vp.scissorCount = 1;
+
+    VkPipelineRasterizationStateCreateInfo rs{};
+    rs.sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO;
+    rs.polygonMode = VK_POLYGON_MODE_FILL;
+    rs.cullMode = VK_CULL_MODE_NONE;
+    rs.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
+    rs.lineWidth = 1.0f;
+
+    VkPipelineMultisampleStateCreateInfo ms{};
+    ms.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
+    ms.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+
+    VkPipelineColorBlendAttachmentState cba{};
+    cba.blendEnable = VK_TRUE;
+    cba.srcColorBlendFactor = VK_BLEND_FACTOR_SRC_ALPHA;
+    cba.dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.colorBlendOp = VK_BLEND_OP_ADD;
+    cba.srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE;
+    cba.dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA;
+    cba.alphaBlendOp = VK_BLEND_OP_ADD;
+    cba.colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT
+                       | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT;
+
+    VkPipelineColorBlendStateCreateInfo cb{};
+    cb.sType = VK_STRUCTURE_TYPE_PIPELINE_COLOR_BLEND_STATE_CREATE_INFO;
+    cb.attachmentCount = 1;
+    cb.pAttachments = &cba;
+
+    VkDynamicState dyn[2] = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+    VkPipelineDynamicStateCreateInfo ds{};
+    ds.sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO;
+    ds.dynamicStateCount = 2;
+    ds.pDynamicStates = dyn;
+
+    VkGraphicsPipelineCreateInfo gci{};
+    gci.sType = VK_STRUCTURE_TYPE_GRAPHICS_PIPELINE_CREATE_INFO;
+    gci.stageCount = 2;
+    gci.pStages = stages;
+    gci.pVertexInputState = &vi;
+    gci.pInputAssemblyState = &ia;
+    gci.pViewportState = &vp;
+    gci.pRasterizationState = &rs;
+    gci.pMultisampleState = &ms;
+    gci.pColorBlendState = &cb;
+    gci.pDynamicState = &ds;
+    gci.layout = g_renderer.tri_pipeline_layout;
+    gci.renderPass = g_renderer.render_pass;
+    gci.subpass = 0;
+
+    bool ok = vk_ok(vkCreateGraphicsPipelines(
+                        g_renderer.device, VK_NULL_HANDLE, 1, &gci, nullptr,
+                        &g_renderer.tri_pipeline),
+                   "vkCreateGraphicsPipelines (tri)");
+
+    vkDestroyShaderModule(g_renderer.device, vs, nullptr);
+    vkDestroyShaderModule(g_renderer.device, fs, nullptr);
+    return ok;
+}
+
+inline bool create_tri_descriptor_pool_and_set() {
+    if (g_renderer.tri_descriptor_set != VK_NULL_HANDLE) return true;
+
+    VkDescriptorPoolSize size{};
+    size.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+    size.descriptorCount = 1;
+
+    VkDescriptorPoolCreateInfo pci{};
+    pci.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+    pci.maxSets = 1;
+    pci.poolSizeCount = 1;
+    pci.pPoolSizes = &size;
+    if (!vk_ok(vkCreateDescriptorPool(g_renderer.device, &pci, nullptr,
+                                      &g_renderer.tri_descriptor_pool),
+              "vkCreateDescriptorPool (tri)"))
+        return false;
+
+    VkDescriptorSetAllocateInfo ai{};
+    ai.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+    ai.descriptorPool = g_renderer.tri_descriptor_pool;
+    ai.descriptorSetCount = 1;
+    ai.pSetLayouts = &g_renderer.tri_descriptor_set_layout;
+    if (!vk_ok(vkAllocateDescriptorSets(g_renderer.device, &ai,
+                                        &g_renderer.tri_descriptor_set),
+              "vkAllocateDescriptorSets (tri)"))
+        return false;
+    write_tri_descriptor_set();
+    return true;
+}
+
 inline bool create_arc_descriptor_pool_and_set() {
     if (g_renderer.arc_descriptor_set != VK_NULL_HANDLE) return true;
 
@@ -1960,6 +2245,7 @@ inline bool create_color_resources() {
     if (!create_render_pass()) return false;
     if (!create_color_pipeline()) return false;
     if (!create_arc_pipeline()) return false;
+    if (!create_tri_pipeline()) return false;
 
     if (g_renderer.uniform_buffer == VK_NULL_HANDLE) {
         if (!create_host_buffer(sizeof(ColorUniforms),
@@ -1989,8 +2275,19 @@ inline bool create_color_resources() {
             return false;
         g_renderer.arc_instance_capacity = INITIAL_INSTANCE_CAPACITY;
     }
+    if (g_renderer.tri_vertex_buffer == VK_NULL_HANDLE) {
+        if (!create_host_buffer(
+                INITIAL_TRI_VERTEX_CAPACITY * sizeof(TriVertexGPU),
+                VK_BUFFER_USAGE_VERTEX_BUFFER_BIT,
+                g_renderer.tri_vertex_buffer,
+                g_renderer.tri_vertex_memory,
+                g_renderer.tri_vertex_mapped))
+            return false;
+        g_renderer.tri_vertex_capacity = INITIAL_TRI_VERTEX_CAPACITY;
+    }
     if (!create_descriptor_pool_and_set()) return false;
     if (!create_arc_descriptor_pool_and_set()) return false;
+    if (!create_tri_descriptor_pool_and_set()) return false;
     return true;
 }
 
@@ -3448,12 +3745,15 @@ inline void normalize_color(::phenotype::Color const& c, float out[4]) {
     out[3] = static_cast<float>(c.a) / 255.0f;
 }
 
-// FillPath helpers (Slab 5). Mirror of the macOS backend's polygon
-// ear-clip + scanline rasterizer. The Vulkan backend has no fill-
-// triangle pipeline of its own — fills are dispatched onto the
-// existing `color_pipeline` (`draw_type = 0`) as 1-px-tall axis-
-// aligned strips, one `ColorInstanceGPU` per scanline. No new shader
-// / pipeline / `.shaders.inl` regen is required for FillPath.
+// FillPath / FillQuads helpers — direct port of macOS
+// phenotype.native.macos.cppm's polygon ear-clipper. The triangle list
+// is fed into the dedicated tri_pipeline (`tri.vert` / `tri.frag`) as
+// raw 3-vertex tuples; hardware rasterisation gives pixel-perfect
+// coverage on shared edges and collapses what the prior CPU scanline
+// path emitted as millions of 1-px-tall ColorInstanceGPU strips into a
+// few vkCmdDraw calls. The earlier path also dropped sub-pixel slim-
+// hatch slivers when row width fell below 0.5 px — fixed implicitly
+// by handing rasterisation back to the hardware.
 inline bool point_in_triangle(float px, float py,
                               float ax, float ay,
                               float bx, float by,
@@ -3466,9 +3766,16 @@ inline bool point_in_triangle(float px, float py,
     return !(has_neg && has_pos);
 }
 
-inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
-    std::vector<float> tris;
-    if (poly.size() < 6) return tris;
+// Ear-clip triangulation. Writes 6 floats per triangle (v0x, v0y, v1x,
+// v1y, v2x, v2y) appended to `tris`; the caller is responsible for
+// any reset / size-tracking. `poly` MAY be reordered in place
+// (orientation normalisation). `remain` is caller-owned scratch space
+// — passing it in avoids a per-call std::vector allocation that
+// becomes tens of thousands of allocs/frame on HATCH-heavy DWGs.
+inline void polygon_ear_clip(std::vector<float>& poly,
+                             std::vector<float>& tris,
+                             std::vector<std::size_t>& remain) {
+    if (poly.size() < 6) return;
     std::size_t const n0 = poly.size() / 2;
 
     double area2 = 0.0;
@@ -3477,7 +3784,7 @@ inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
         area2 += static_cast<double>(poly[2 * i])     * poly[2 * j + 1]
               -  static_cast<double>(poly[2 * j])     * poly[2 * i + 1];
     }
-    if (std::fabs(area2) < 1e-9) return tris;
+    if (std::fabs(area2) < 1e-9) return;
     if (area2 < 0.0) {
         for (std::size_t i = 0; i < n0 / 2; ++i) {
             std::swap(poly[2 * i],     poly[2 * (n0 - 1 - i)]);
@@ -3485,8 +3792,37 @@ inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
         }
     }
 
-    std::vector<std::size_t> remain(n0);
-    for (std::size_t i = 0; i < n0; ++i) remain[i] = i;
+    remain.clear();
+    remain.reserve(n0);
+    for (std::size_t i = 0; i < n0; ++i) remain.push_back(i);
+
+    // Convex fast path: triangle-fan from vertex 0. Most CAD HATCH
+    // boundaries (wedges, rectangles, regular polygons) are convex,
+    // and the dominant colorwh.dwg case fits this. Skip the O(N^2)
+    // ear search when no reflex vertex exists.
+    bool convex = true;
+    for (std::size_t i = 0; i < n0 && convex; ++i) {
+        std::size_t const ip = (i + n0 - 1) % n0;
+        std::size_t const ic = i;
+        std::size_t const in = (i + 1) % n0;
+        float const ax = poly[2 * ip], ay = poly[2 * ip + 1];
+        float const bx = poly[2 * ic], by = poly[2 * ic + 1];
+        float const cx = poly[2 * in], cy = poly[2 * in + 1];
+        float const cross = (bx - ax) * (cy - ay)
+                          - (by - ay) * (cx - ax);
+        if (cross < 0.0f) convex = false;
+    }
+    if (convex) {
+        float const ax = poly[0], ay = poly[1];
+        for (std::size_t i = 1; i + 1 < n0; ++i) {
+            float const bx = poly[2 * i],     by = poly[2 * i + 1];
+            float const cx = poly[2 * (i+1)], cy = poly[2 * (i+1) + 1];
+            tris.push_back(ax); tris.push_back(ay);
+            tris.push_back(bx); tris.push_back(by);
+            tris.push_back(cx); tris.push_back(cy);
+        }
+        return;
+    }
 
     int safety = static_cast<int>(n0) * 3 + 1;
     while (remain.size() >= 3 && safety-- > 0) {
@@ -3519,61 +3855,14 @@ inline std::vector<float> polygon_ear_clip(std::vector<float> poly) {
         }
         if (!found) break;
     }
-    return tris;
 }
 
-inline void rasterize_triangle_to_color(
-        float v0x, float v0y, float v1x, float v1y, float v2x, float v2y,
-        float r, float g, float b, float a,
-        std::vector<ColorInstanceGPU>& out) {
-    float vx[3] = {v0x, v1x, v2x};
-    float vy[3] = {v0y, v1y, v2y};
-    auto sort_pair = [&](int i, int j) {
-        if (vy[i] > vy[j]) {
-            std::swap(vy[i], vy[j]);
-            std::swap(vx[i], vx[j]);
-        }
-    };
-    sort_pair(0, 1); sort_pair(1, 2); sort_pair(0, 1);
-
-    float const top_y = vy[0];
-    float const mid_y = vy[1];
-    float const bot_y = vy[2];
-    if (bot_y - top_y < 1e-3f) return;
-
-    auto interp_x = [](float y, float ya, float xa, float yb, float xb) {
-        if (yb - ya < 1e-6f) return xa;
-        return xa + (xb - xa) * (y - ya) / (yb - ya);
-    };
-
-    int const y_start = static_cast<int>(std::floor(top_y));
-    int const y_end   = static_cast<int>(std::ceil(bot_y));
-    for (int y = y_start; y < y_end; ++y) {
-        float const yc = static_cast<float>(y) + 0.5f;
-        if (yc < top_y || yc > bot_y) continue;
-        float xa, xb;
-        if (yc < mid_y) {
-            xa = interp_x(yc, top_y, vx[0], bot_y, vx[2]);
-            xb = interp_x(yc, top_y, vx[0], mid_y, vx[1]);
-        } else {
-            xa = interp_x(yc, top_y, vx[0], bot_y, vx[2]);
-            xb = interp_x(yc, mid_y, vx[1], bot_y, vx[2]);
-        }
-        float const x_left  = std::min(xa, xb);
-        float const x_right = std::max(xa, xb);
-        float const w = x_right - x_left;
-        if (w < 0.5f) continue;
-        ColorInstanceGPU inst{};
-        inst.rect[0] = x_left;
-        inst.rect[1] = static_cast<float>(y);
-        inst.rect[2] = w;
-        inst.rect[3] = 1.0f;
-        inst.color[0] = r; inst.color[1] = g;
-        inst.color[2] = b; inst.color[3] = a;
-        // params = (0, 0, 0, 0) → draw_type = 0 (Fill)
-        out.push_back(inst);
-    }
-}
+// rasterize_triangle_to_color was removed in the tri_pipeline slab.
+// Filled triangles now go through the dedicated tri_pipeline as raw
+// TriVertexGPU triples; the CPU scanline path produced
+// O(triangle_height) ColorInstanceGPU per triangle and exploded to
+// millions of GPU instances per frame for True-Color colorwh.dwg on
+// Android. See git history for the prior implementation.
 
 inline void decode_android_color_commands(unsigned char const* buf,
                                           unsigned int len,
@@ -3917,15 +4206,20 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 }
             } else if constexpr (std::same_as<T, ::phenotype::FillPathCmd>) {
                 // FillPath — flatten the verb stream into a polygon,
-                // ear-clip into triangles, and rasterise each triangle
-                // as 1-px-tall axis-aligned strips dispatched onto
-                // the existing colour pipeline. Single closed loop
+                // ear-clip into triangles, and emit the triangle list
+                // through the dedicated tri_pipeline (vkCmdDraw on a
+                // vertex buffer of TriVertexGPU). Single closed loop
                 // only; matches cad++ HATCH semantics where each
                 // boundary loop is one `Painter::fill_path` call.
+                //
+                // The polygon / tris / ear-remain buffers are reused
+                // across every FillPath in the frame — see
+                // FrameScratch::fill_polygon comment for why.
                 float color4[4];
                 normalize_color(c.color, color4);
 
-                std::vector<float> polygon;
+                auto& polygon = out.fill_polygon;
+                polygon.clear();
                 polygon.reserve(c.segs.size() * 2);
                 auto append = [&](float x, float y) {
                     polygon.push_back(x);
@@ -4034,32 +4328,59 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 }
 
                 if (polygon.size() >= 6) {
-                    auto tris = polygon_ear_clip(std::move(polygon));
-                    prepare_batch_for_pipeline(out, 0);
-                    auto& dst = out.batches.back().colors;
-                    for (std::size_t t = 0; t + 5 < tris.size(); t += 6) {
-                        rasterize_triangle_to_color(
-                            tris[t],     tris[t + 1],
-                            tris[t + 2], tris[t + 3],
-                            tris[t + 4], tris[t + 5],
-                            color4[0], color4[1], color4[2], color4[3],
-                            dst);
+                    auto& tris = out.fill_tris;
+                    tris.clear();
+                    polygon_ear_clip(polygon, tris, out.fill_ear_remain);
+                    if (!tris.empty()) {
+                        prepare_batch_for_pipeline(out, 0);
+                        auto& dst = out.batches.back().tri_vertices;
+                        // Single bulk reserve; libc++ reserve allocates
+                        // the exact requested size, so per-triangle
+                        // reserves degenerate to O(N^2).
+                        dst.reserve(dst.size() + tris.size() / 2);
+                        for (std::size_t t = 0; t + 5 < tris.size(); t += 6) {
+                            TriVertexGPU v;
+                            v.color[0] = color4[0];
+                            v.color[1] = color4[1];
+                            v.color[2] = color4[2];
+                            v.color[3] = color4[3];
+                            v.pos[0] = tris[t];     v.pos[1] = tris[t + 1];
+                            dst.push_back(v);
+                            v.pos[0] = tris[t + 2]; v.pos[1] = tris[t + 3];
+                            dst.push_back(v);
+                            v.pos[0] = tris[t + 4]; v.pos[1] = tris[t + 5];
+                            dst.push_back(v);
+                        }
                     }
                 }
             } else if constexpr (std::same_as<T, ::phenotype::FillQuadsCmd>) {
+                // Each quad becomes 6 vertices (two triangles, winding
+                // (0,1,2) + (0,2,3)) consumed by the tri_pipeline. The
+                // CPU scanline rasteriser this replaces produced
+                // O(quad_height) ColorInstanceGPU per quad — millions
+                // of instances/frame on the True-Color colorwh.dwg
+                // hue ring. Mirrors phenotype.native.macos.cppm's
+                // FillQuads case (line ~2615). Pipeline rank 0 — same
+                // as fills/lines so triangles share batches with the
+                // color pipeline; intra-batch order in renderer_flush
+                // emits tri before color.
                 prepare_batch_for_pipeline(out, 0);
-                auto& dst = out.batches.back().colors;
+                auto& dst = out.batches.back().tri_vertices;
+                dst.reserve(dst.size() + c.quads.size() * 6);
                 for (auto const& q : c.quads) {
                     float color4[4];
                     normalize_color(q.color, color4);
-                    rasterize_triangle_to_color(
-                        q.x0, q.y0, q.x1, q.y1, q.x2, q.y2,
-                        color4[0], color4[1], color4[2], color4[3],
-                        dst);
-                    rasterize_triangle_to_color(
-                        q.x0, q.y0, q.x2, q.y2, q.x3, q.y3,
-                        color4[0], color4[1], color4[2], color4[3],
-                        dst);
+                    TriVertexGPU v;
+                    v.color[0] = color4[0];
+                    v.color[1] = color4[1];
+                    v.color[2] = color4[2];
+                    v.color[3] = color4[3];
+                    v.pos[0] = q.x0; v.pos[1] = q.y0; dst.push_back(v);
+                    v.pos[0] = q.x1; v.pos[1] = q.y1; dst.push_back(v);
+                    v.pos[0] = q.x2; v.pos[1] = q.y2; dst.push_back(v);
+                    v.pos[0] = q.x0; v.pos[1] = q.y0; dst.push_back(v);
+                    v.pos[0] = q.x2; v.pos[1] = q.y2; dst.push_back(v);
+                    v.pos[0] = q.x3; v.pos[1] = q.y3; dst.push_back(v);
                 }
             } else if constexpr (std::same_as<T, ::phenotype::FillRectsCmd>) {
                 prepare_batch_for_pipeline(out, 0);
@@ -4170,6 +4491,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                     scratch.arc_instances.data(),
                     scratch.arc_instances.size() * sizeof(ArcInstanceGPU));
     }
+    if (!scratch.tri_vertices.empty()) {
+        if (!ensure_tri_vertex_capacity(scratch.tri_vertices.size())) return;
+        std::memcpy(g_renderer.tri_vertex_mapped,
+                    scratch.tri_vertices.data(),
+                    scratch.tri_vertices.size() * sizeof(TriVertexGPU));
+    }
 
     bool have_text = !scratch.text_instances.empty()
                    && !atlas.pixels.empty()
@@ -4259,13 +4586,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     for (auto const& batch : scratch.batches) {
         auto const batch_color_count =
             static_cast<std::uint32_t>(batch.colors.size());
+        auto const batch_tri_count =
+            static_cast<std::uint32_t>(batch.tri_vertices.size());
         auto const batch_arc_count =
             static_cast<std::uint32_t>(batch.arcs.size());
         auto const batch_image_count =
             static_cast<std::uint32_t>(batch.images.size());
         auto const batch_text_count =
             static_cast<std::uint32_t>(batch.texts.size());
-        if (batch_color_count + batch_arc_count
+        if (batch_tri_count + batch_color_count + batch_arc_count
             + batch_image_count + batch_text_count == 0)
             continue;
         VkRect2D scissor =
@@ -4274,6 +4603,31 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             continue;
         vkCmdSetScissor(g_renderer.command_buffer, 0, 1, &scissor);
 
+        // Triangles paint first within a batch so colors / arcs / text
+        // overlay them naturally, matching macOS draw order at
+        // phenotype.native.macos.cppm:5759-5782 and cadpp's "fills
+        // first, strokes / text later" convention. The decoder's
+        // ensure_triangle_order_batch helper guarantees this ordering
+        // is correct even when a triangle primitive arrives after a
+        // color in the command stream within the same scissor.
+        if (batch_tri_count > 0) {
+            vkCmdBindPipeline(g_renderer.command_buffer,
+                              VK_PIPELINE_BIND_POINT_GRAPHICS,
+                              g_renderer.tri_pipeline);
+            vkCmdBindDescriptorSets(g_renderer.command_buffer,
+                                    VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                    g_renderer.tri_pipeline_layout,
+                                    0, 1, &g_renderer.tri_descriptor_set,
+                                    0, nullptr);
+            VkDeviceSize const tri_offset =
+                static_cast<VkDeviceSize>(batch.tri_first)
+                * sizeof(TriVertexGPU);
+            vkCmdBindVertexBuffers(g_renderer.command_buffer, 0, 1,
+                                   &g_renderer.tri_vertex_buffer,
+                                   &tri_offset);
+            vkCmdDraw(g_renderer.command_buffer,
+                      batch_tri_count, 1, 0, 0);
+        }
         if (batch_color_count > 0) {
             vkCmdBindPipeline(g_renderer.command_buffer,
                               VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -4360,6 +4714,35 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 }
 
 inline void destroy_color_resources() {
+    // Tri pipeline: own descriptor pool + set layout + pipeline layout
+    // (no shared layout with color/arc), plus its host-visible vertex
+    // buffer. Tear down before color/arc since the tri pipeline depends
+    // on g_renderer.uniform_buffer remaining valid.
+    if (g_renderer.tri_descriptor_pool != VK_NULL_HANDLE) {
+        vkDestroyDescriptorPool(g_renderer.device,
+                                g_renderer.tri_descriptor_pool, nullptr);
+        g_renderer.tri_descriptor_pool = VK_NULL_HANDLE;
+        g_renderer.tri_descriptor_set = VK_NULL_HANDLE;
+    }
+    destroy_host_buffer(g_renderer.tri_vertex_buffer,
+                        g_renderer.tri_vertex_memory,
+                        g_renderer.tri_vertex_mapped);
+    g_renderer.tri_vertex_capacity = 0;
+    if (g_renderer.tri_pipeline != VK_NULL_HANDLE) {
+        vkDestroyPipeline(g_renderer.device, g_renderer.tri_pipeline, nullptr);
+        g_renderer.tri_pipeline = VK_NULL_HANDLE;
+    }
+    if (g_renderer.tri_pipeline_layout != VK_NULL_HANDLE) {
+        vkDestroyPipelineLayout(g_renderer.device,
+                                g_renderer.tri_pipeline_layout, nullptr);
+        g_renderer.tri_pipeline_layout = VK_NULL_HANDLE;
+    }
+    if (g_renderer.tri_descriptor_set_layout != VK_NULL_HANDLE) {
+        vkDestroyDescriptorSetLayout(g_renderer.device,
+                                     g_renderer.tri_descriptor_set_layout,
+                                     nullptr);
+        g_renderer.tri_descriptor_set_layout = VK_NULL_HANDLE;
+    }
     if (g_renderer.arc_descriptor_pool != VK_NULL_HANDLE) {
         vkDestroyDescriptorPool(g_renderer.device,
                                 g_renderer.arc_descriptor_pool, nullptr);
@@ -4564,6 +4947,8 @@ inline ::json::Object android_renderer_runtime_json() {
         ::json::Value{g_renderer.image_pipeline != VK_NULL_HANDLE});
     r.emplace("color_pipeline_ready",
         ::json::Value{g_renderer.color_pipeline != VK_NULL_HANDLE});
+    r.emplace("tri_pipeline_ready",
+        ::json::Value{g_renderer.tri_pipeline != VK_NULL_HANDLE});
     return r;
 }
 
