@@ -334,6 +334,7 @@ constexpr unsigned int pack_font_flags(FontSpec const& f) noexcept {
 //   f32  x
 //   f32  y
 //   f32  font_size
+//   f32  rotation       // radians, CCW about pivot `(x, y)`; 0 = upright
 //   u32  flags          // bit0=mono, bit1=bold, bit2=italic
 //   u32  color (RGBA packed)
 //   u32  family_len     // 0 = backend default family
@@ -341,18 +342,22 @@ constexpr unsigned int pack_font_flags(FontSpec const& f) noexcept {
 //   u32  text_len
 //   u8[] text bytes (padded up to 4)
 //
-// Fixed overhead = 32 bytes. Family + text payloads each pad up to a
-// 4-byte boundary independently so the next opcode starts aligned.
+// Fixed overhead = 36 bytes (was 32 — `rotation` is the new f32 slot
+// after `font_size`; default-zero round-trips the pre-rotation
+// behaviour). Family + text payloads each pad up to a 4-byte boundary
+// independently so the next opcode starts aligned.
 template <render_backend R>
-void emit_draw_text(R& r, float x, float y, float font_size, unsigned int flags,
+void emit_draw_text(R& r, float x, float y, float font_size, float rotation,
+                    unsigned int flags,
                     Color c, std::string_view family,
                     char const* text, unsigned int text_len) {
     auto const family_len = static_cast<unsigned int>(family.size());
-    if (!detail::ensure(r, 32 + detail::padded(family_len) + detail::padded(text_len),
+    if (!detail::ensure(r, 36 + detail::padded(family_len) + detail::padded(text_len),
                         Cmd::DrawText)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::DrawText));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, font_size);
+    detail::write_f32(r, rotation);
     detail::write_u32(r, flags);
     detail::write_u32(r, c.packed());
     detail::write_u32(r, family_len);
@@ -932,7 +937,11 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                     tx += (inner_width - line_w) / 2;
                 else if (node.style.text_align == TextAlign::End)
                     tx += inner_width - line_w;
-                emit_draw_text(r, tx, ty, node.font_size, node_flags,
+                // Widget-tree text never rotates; pass 0.0f rotation
+                // so the wire format stays consistent with rotated
+                // canvas draws.
+                emit_draw_text(r, tx, ty, node.font_size, /*rotation=*/0.0f,
+                               node_flags,
                                tc, node_font.family, line.c_str(),
                                static_cast<unsigned int>(line.size()));
             }
@@ -1139,7 +1148,8 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
             void text(float x, float y,
                       char const* str, unsigned int len,
                       float font_size, Color color,
-                      FontSpec font = {}) override {
+                      FontSpec font = {},
+                      float rotation = 0.0f) override {
                 // Coarse bbox: assume each character is ~0.6×font_size
                 // wide. Drop runs whose approximated advance box lies
                 // entirely outside the canvas; partials still emit and
@@ -1160,15 +1170,28 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 float approx_w = font_size *
                                  static_cast<float>(len) * 0.6f;
                 float approx_h = font_size;
-                if (ax           >= clip_x1
-                    || ax + approx_w <= clip_x0
-                    || ay            >= clip_y1
-                    || ay + approx_h <= clip_y0) {
-                    return;
+                // Rotated runs may extend in any direction from the
+                // pivot; widen the cull bbox to a circle of radius
+                // `approx_w` (the longest extent under any rotation).
+                // For axis-aligned runs the original tight bbox still
+                // applies — early-out keeps offscreen text cheap.
+                if (rotation == 0.0f) {
+                    if (ax           >= clip_x1
+                        || ax + approx_w <= clip_x0
+                        || ay            >= clip_y1
+                        || ay + approx_h <= clip_y0) {
+                        return;
+                    }
+                } else {
+                    float const rad = approx_w;
+                    if (ax + rad <= clip_x0 || ax - rad >= clip_x1
+                        || ay + rad <= clip_y0 || ay - rad >= clip_y1) {
+                        return;
+                    }
                 }
                 emit_draw_text(r,
                                origin_x + x, origin_y + y,
-                               font_size, pack_font_flags(font),
+                               font_size, rotation, pack_font_flags(font),
                                color, font.family, str, len);
             }
 

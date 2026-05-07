@@ -1837,16 +1837,21 @@ void test_draw_text_roundtrip_with_fontspec() {
     h.flush();
 
     // Three calls: bare default, mono+bold+italic with named family,
-    // and an empty-family Bold-only run.
-    emit_draw_text(h, 12.5f, 24.0f, 18.0f, /*flags=*/0u,
+    // and an empty-family Bold-only run. The new `rotation` slot
+    // (radians, CCW about pivot `(x, y)`) goes between `font_size`
+    // and `flags` — pass 0.0f everywhere here to keep the FontSpec
+    // assertions below unchanged; rotation round-trip is exercised
+    // by the dedicated test further down.
+    emit_draw_text(h, 12.5f, 24.0f, 18.0f, /*rotation=*/0.0f,
+                   /*flags=*/0u,
                    Color{10, 20, 30, 255},
                    std::string_view{}, "Hi", 2u);
-    emit_draw_text(h, 100.0f, 200.0f, 24.0f,
+    emit_draw_text(h, 100.0f, 200.0f, 24.0f, /*rotation=*/0.0f,
                    /*flags=*/0b111u,                        // mono+bold+italic
                    Color{200, 100, 50, 128},
                    std::string_view{"Arial Black"},
                    "World", 5u);
-    emit_draw_text(h, 0.0f, 0.0f, 16.0f,
+    emit_draw_text(h, 0.0f, 0.0f, 16.0f, /*rotation=*/0.0f,
                    /*flags=*/0b010u,                        // bold only
                    Color{255, 255, 255, 255},
                    std::string_view{},

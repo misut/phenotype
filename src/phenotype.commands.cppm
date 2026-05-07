@@ -34,6 +34,9 @@ struct DrawTextCmd  {
     std::string family;
     FontWeight weight = FontWeight::Regular;
     FontStyle  style  = FontStyle::Upright;
+    // Radians, CCW about the canvas +Z axis, pivot at `(x, y)`.
+    // Default 0.0f reproduces the pre-rotation wire encoding.
+    float rotation = 0.0f;
 };
 struct DrawLineCmd  { float x1, y1, x2, y2; float thickness; Color color; };
 struct HitRegionCmd { float x, y, w, h; unsigned int callback_id; unsigned int cursor_type; };
@@ -143,6 +146,7 @@ inline std::vector<DrawCommand> parse_commands(
         }
         case Cmd::DrawText: {
             float x = read_f32(), y = read_f32(), fs = read_f32();
+            float rot = read_f32();
             unsigned int flags = read_u32();
             Color c = unpack(read_u32());
             unsigned int flen = read_u32();
@@ -155,6 +159,7 @@ inline std::vector<DrawCommand> parse_commands(
             pos = (pos + 3) & ~3u;
             DrawTextCmd cmd{};
             cmd.x = x; cmd.y = y; cmd.font_size = fs;
+            cmd.rotation = rot;
             cmd.mono = (flags & 1u) != 0;
             cmd.color = c;
             cmd.text = std::move(text);

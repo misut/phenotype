@@ -1287,12 +1287,22 @@ struct TextInstanceGPU {
     float rect[4]{};
     float uv_rect[4]{};
     float color[4]{};
+    // Per-instance rigid-body rotation: `(pivot_x, pivot_y, cos, sin)`.
+    // The shader rotates each glyph quad's pre-rotation pixel position
+    // around `(pivot_x, pivot_y)` by the angle whose cosine and sine
+    // are stored here. Default `(0,0,1,0)` is identity — packs the
+    // axis-aligned glyph instance bit-for-bit the way it always did.
+    float rot[4]{0.0f, 0.0f, 1.0f, 0.0f};
 };
 
 struct ParsedTextRun {
     float x = 0.0f;
     float y = 0.0f;
     float font_size = 0.0f;
+    // Radians, CCW about pivot `(x, y)`. Default 0.0f reproduces
+    // the unrotated glyph atlas path; nonzero passes through to the
+    // text vertex shader via TextInstanceGPU::rot.
+    float rotation = 0.0f;
     bool mono = false;
     float r = 0.0f;
     float g = 0.0f;
@@ -1841,7 +1851,9 @@ inline void polygon_ear_clip(std::vector<float>& poly,
 inline void append_text_instance(std::vector<TextInstanceGPU>& out,
                                  float x, float y, float w, float h,
                                  float u, float v, float uw, float vh,
-                                 float r, float g, float b, float a) {
+                                 float r, float g, float b, float a,
+                                 float pivot_x = 0.0f, float pivot_y = 0.0f,
+                                 float cos_t = 1.0f, float sin_t = 0.0f) {
     TextInstanceGPU inst{};
     inst.rect[0] = x;
     inst.rect[1] = y;
@@ -1855,6 +1867,10 @@ inline void append_text_instance(std::vector<TextInstanceGPU>& out,
     inst.color[1] = g;
     inst.color[2] = b;
     inst.color[3] = a;
+    inst.rot[0] = pivot_x;
+    inst.rot[1] = pivot_y;
+    inst.rot[2] = cos_t;
+    inst.rot[3] = sin_t;
     out.push_back(inst);
 }
 
@@ -2005,7 +2021,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 break;
             }
             case Cmd::DrawText: {
-                float x = 0.0f, y = 0.0f, font_size = 0.0f;
+                float x = 0.0f, y = 0.0f, font_size = 0.0f, rotation = 0.0f;
                 unsigned int flags = 0;
                 unsigned int packed = 0;
                 unsigned int family_len = 0;
@@ -2013,7 +2029,9 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 char const* family = nullptr;
                 char const* text = nullptr;
                 if (!reader.read_f32(x) || !reader.read_f32(y)
-                    || !reader.read_f32(font_size) || !reader.read_u32(flags)
+                    || !reader.read_f32(font_size)
+                    || !reader.read_f32(rotation)
+                    || !reader.read_u32(flags)
                     || !reader.read_u32(packed) || !reader.read_u32(family_len)
                     || !reader.read_text(family, family_len)
                     || !reader.read_u32(text_len)
@@ -2024,6 +2042,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 run.x = x;
                 run.y = y;
                 run.font_size = font_size;
+                run.rotation = rotation;
                 run.mono = (flags & 1u) != 0;
                 run.r = color.r / 255.0f;
                 run.g = color.g / 255.0f;
@@ -3316,6 +3335,12 @@ struct TextInstance {
     float4 rect;
     float4 uv_rect;
     float4 color;
+    // (pivot_x, pivot_y, cos, sin) — rigid-body rotation around the
+    // run's pivot. Identity packs as (any, any, 1, 0) and the
+    // rotate-around-pivot expression collapses to the original
+    // axis-aligned position, so untouched call sites still emit
+    // pixel-identical output.
+    float4 rot;
 };
 
 inline TextVsOut make_textured_vs(
@@ -3332,6 +3357,14 @@ inline TextVsOut make_textured_vs(
     TextInstance inst = instances[ii];
     float px = inst.rect.x + c.x * inst.rect.z;
     float py = inst.rect.y + c.y * inst.rect.w;
+    // Apply the rigid rotation: subtract pivot, rotate by (cos, sin),
+    // re-add pivot. Identity (cos=1, sin=0) leaves (px, py) intact.
+    float dx = px - inst.rot.x;
+    float dy = py - inst.rot.y;
+    float rx = dx * inst.rot.z - dy * inst.rot.w;
+    float ry = dx * inst.rot.w + dy * inst.rot.z;
+    px = rx + inst.rot.x;
+    py = ry + inst.rot.y;
     float cx = (px / u.viewport.x) * 2.0 - 1.0;
     float cy = 1.0 - (py / u.viewport.y) * 2.0;
     TextVsOut out;
@@ -3360,13 +3393,37 @@ fragment float4 fs_text(
     return float4(in.color.rgb, in.color.a * coverage);
 }
 
+// Image instances ride a smaller GPU struct (rect / uv_rect / color
+// only — no rotation slot) so their stride stays at 48 bytes. The
+// text path's `make_textured_vs` reads `inst.rot.*`, which would
+// over-read the image buffer if shared. Keep them separate.
+struct ImageInstance {
+    float4 rect;
+    float4 uv_rect;
+    float4 color;
+};
+
 vertex TextVsOut vs_image(
     uint vi [[vertex_id]],
     uint ii [[instance_id]],
     constant Uniforms& u [[buffer(0)]],
-    const device TextInstance* instances [[buffer(1)]]
+    const device ImageInstance* instances [[buffer(1)]]
 ) {
-    return make_textured_vs(vi, ii, u, instances);
+    constexpr float2 corners[] = {
+        float2(0,0), float2(1,0), float2(0,1),
+        float2(1,0), float2(1,1), float2(0,1),
+    };
+    float2 c = corners[vi];
+    ImageInstance inst = instances[ii];
+    float px = inst.rect.x + c.x * inst.rect.z;
+    float py = inst.rect.y + c.y * inst.rect.w;
+    float cx = (px / u.viewport.x) * 2.0 - 1.0;
+    float cy = 1.0 - (py / u.viewport.y) * 2.0;
+    TextVsOut out;
+    out.pos = float4(cx, cy, 0, 1);
+    out.uv = inst.uv_rect.xy + c * inst.uv_rect.zw;
+    out.color = inst.color;
+    return out;
 }
 
 fragment float4 fs_image(
@@ -3869,10 +3926,26 @@ inline bool prepare_text_instances(float scale) {
             auto& dst = (run.batch_idx == std::numeric_limits<std::uint32_t>::max())
                 ? scratch.overlay_text_instances
                 : scratch.batches[run.batch_idx].texts;
+            // Pivot for rigid rotation is the run's anchor; each
+            // glyph instance carries it so the shader can rotate
+            // every quad by the same angle around the same point.
+            // Skip pixel-snapping the pivot — snapping introduces
+            // sub-pixel mismatch between glyph offsets that breaks
+            // the rigid-body invariant under rotation.
+            float const pivot_x = run.rotation == 0.0f
+                ? snap_to_pixel_grid(run.x, scale)
+                : run.x;
+            float const pivot_y = run.rotation == 0.0f
+                ? snap_to_pixel_grid(run.y, scale)
+                : run.y;
+            float const cos_t = run.rotation == 0.0f
+                ? 1.0f : std::cos(run.rotation);
+            float const sin_t = run.rotation == 0.0f
+                ? 0.0f : std::sin(run.rotation);
             append_text_instance(
                 dst,
-                snap_to_pixel_grid(run.x, scale) + entry->x_offset,
-                snap_to_pixel_grid(run.y, scale),
+                pivot_x + entry->x_offset,
+                pivot_y,
                 entry->width,
                 entry->height,
                 entry->u,
@@ -3882,7 +3955,11 @@ inline bool prepare_text_instances(float scale) {
                 run.r,
                 run.g,
                 run.b,
-                run.a);
+                run.a,
+                pivot_x,
+                pivot_y,
+                cos_t,
+                sin_t);
         }
 
         if (!restart)
@@ -4360,10 +4437,14 @@ inline void append_overlay_text(FrameScratch& scratch,
         return;
     scratch.overlay_text_storage.push_back(std::move(text));
     auto const& stored = scratch.overlay_text_storage.back();
+    // Overlay (IME composition) runs are always axis-aligned —
+    // pass `rotation = 0.0f` after `font_size` to match the new
+    // ParsedTextRun layout introduced for canvas-side rotated text.
     scratch.text_runs.push_back({
         x,
         y,
         font_size,
+        0.0f,                                            // rotation
         mono,
         color.r / 255.0f,
         color.g / 255.0f,
