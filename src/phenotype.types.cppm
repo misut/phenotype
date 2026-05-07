@@ -553,15 +553,24 @@ public:
     // the canvas's local coordinate system. Mirrors the existing text
     // path used by widget::text. `font_size` is in pixels. `font`
     // selects family / weight / italic / mono; default-constructed is
-    // the backend's platform sans Regular Upright.
+    // the backend's platform sans Regular Upright. `rotation` is in
+    // radians, CCW about the canvas's +Z axis (y-down screen, so a
+    // positive angle rotates text counter-clockwise on screen). The
+    // pivot is `(x, y)` — the top-left of the font-size box — so
+    // each glyph's quad rotates around the run's anchor as a rigid
+    // body. Default 0.0f preserves the pre-rotation behaviour. Only
+    // the macOS backend renders rotation today; Windows / Android
+    // round-trip the wire field but draw axis-aligned until their
+    // respective backend slabs land.
     virtual void text(float x, float y,
                       char const* str, unsigned int len,
                       float font_size, Color color,
-                      FontSpec font = {}) = 0;
+                      FontSpec font = {},
+                      float rotation = 0.0f) = 0;
     // Pixel width of `[str, str+len)` rendered at `font_size` with
-    // `font`. Returns 0 when the canvas's host has no measurement
-    // capability — consumers that need a guaranteed non-zero width
-    // should fall back to a heuristic in that case.
+    // `font`. Independent of `rotation` — callers needing a rotated
+    // bbox compose their own corners after rotation. Returns 0 when
+    // the canvas's host has no measurement capability.
     virtual float measure_text(char const* str, unsigned int len,
                                float font_size,
                                FontSpec font = {}) const = 0;
