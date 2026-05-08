@@ -1843,15 +1843,18 @@ void test_draw_text_roundtrip_with_fontspec() {
     // assertions below unchanged; rotation round-trip is exercised
     // by the dedicated test further down.
     emit_draw_text(h, 12.5f, 24.0f, 18.0f, /*rotation=*/0.0f,
+                   /*width_factor=*/1.0f,
                    /*flags=*/0u,
                    Color{10, 20, 30, 255},
                    std::string_view{}, "Hi", 2u);
     emit_draw_text(h, 100.0f, 200.0f, 24.0f, /*rotation=*/0.0f,
+                   /*width_factor=*/1.0f,
                    /*flags=*/0b111u,                        // mono+bold+italic
                    Color{200, 100, 50, 128},
                    std::string_view{"Arial Black"},
                    "World", 5u);
     emit_draw_text(h, 0.0f, 0.0f, 16.0f, /*rotation=*/0.0f,
+                   /*width_factor=*/1.0f,
                    /*flags=*/0b010u,                        // bold only
                    Color{255, 255, 255, 255},
                    std::string_view{},

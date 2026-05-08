@@ -304,6 +304,7 @@ static void append_draw_text_command(
     append_f32(commands, y);
     append_f32(commands, font_size);
     append_f32(commands, 0.0f);               // rotation (radians, CCW)
+    append_f32(commands, 1.0f);               // width_factor (1 = native)
     append_u32(commands, mono ? 1u : 0u);     // flags: bit0=mono only
     append_u32(commands, color.packed());
     append_u32(commands, 0u);                 // family_len = 0 (default family)
@@ -2106,6 +2107,7 @@ static void test_macos_rendered_text_preserves_vertical_orientation() {
     append_f32(commands, 24.0f);
     append_f32(commands, 96.0f);
     append_f32(commands, 0.0f);                 // rotation (radians, CCW)
+    append_f32(commands, 1.0f);                 // width_factor (1 = native)
     append_u32(commands, 0u);                   // flags (mono=0, regular)
     append_u32(commands, Color{0, 0, 0, 255}.packed());
     append_u32(commands, 0u);                   // family_len = 0
@@ -2940,10 +2942,10 @@ static void test_windows_renderer_hit_test_and_smoke() {
 
     emit_clear(fixture.host, {240, 240, 240, 255});
     emit_round_rect(fixture.host, 16.0f, 16.0f, 92.0f, 36.0f, 8.0f, {0, 102, 204, 255});
-    emit_draw_text(fixture.host, 40.0f, 26.0f, 16.0f, /*rotation=*/0.0f, 0u, {255, 255, 255, 255}, std::string_view{}, "Primary", 7);
+    emit_draw_text(fixture.host, 40.0f, 26.0f, 16.0f, /*rotation=*/0.0f, /*width_factor=*/1.0f, 0u, {255, 255, 255, 255}, std::string_view{}, "Primary", 7);
     emit_hit_region(fixture.host, 16.0f, 16.0f, 92.0f, 36.0f, 42u, 1u);
     emit_round_rect(fixture.host, 124.0f, 16.0f, 92.0f, 36.0f, 8.0f, {236, 72, 153, 255});
-    emit_draw_text(fixture.host, 150.0f, 26.0f, 16.0f, /*rotation=*/0.0f, 0u, {255, 255, 255, 255}, std::string_view{}, "Action", 6);
+    emit_draw_text(fixture.host, 150.0f, 26.0f, 16.0f, /*rotation=*/0.0f, /*width_factor=*/1.0f, 0u, {255, 255, 255, 255}, std::string_view{}, "Action", 6);
     emit_hit_region(fixture.host, 124.0f, 16.0f, 92.0f, 36.0f, 84u, 1u);
     fixture.host.flush();
 
@@ -2982,7 +2984,7 @@ static void test_windows_renderer_rejects_truncated_hit_region() {
 
     emit_clear(fixture.host, {245, 245, 245, 255});
     emit_round_rect(fixture.host, 20.0f, 20.0f, 100.0f, 40.0f, 8.0f, {37, 99, 235, 255});
-    emit_draw_text(fixture.host, 45.0f, 31.0f, 16.0f, /*rotation=*/0.0f, 0u, {255, 255, 255, 255}, std::string_view{}, "Button", 6);
+    emit_draw_text(fixture.host, 45.0f, 31.0f, 16.0f, /*rotation=*/0.0f, /*width_factor=*/1.0f, 0u, {255, 255, 255, 255}, std::string_view{}, "Button", 6);
     emit_hit_region(fixture.host, 20.0f, 20.0f, 100.0f, 40.0f, 77u, 1u);
     fixture.host.flush();
 
@@ -3022,6 +3024,7 @@ static void test_windows_renderer_rejects_truncated_text_payload() {
     append_f32(broken, 48.0f);
     append_f32(broken, 16.0f);
     append_f32(broken, 0.0f);                  // rotation
+    append_f32(broken, 1.0f);                  // width_factor
     append_u32(broken, 0u);                    // flags
     append_u32(broken, Color{0, 0, 0, 255}.packed());
     append_u32(broken, 5u);                    // family_len = 5 but only…

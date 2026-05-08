@@ -537,6 +537,20 @@ struct FontSpec {
     FontWeight       weight = FontWeight::Regular;
     FontStyle        style  = FontStyle::Upright;
     bool             mono   = false;
+    // Horizontal glyph width multiplier. 1.0 = the font's native
+    // advance; values > 1 stretch each glyph along the run's local
+    // X axis (so a single character is visibly wider AND the run
+    // takes more space), values < 1 condense them. AutoCAD's
+    // STYLE/TEXT/ATTRIB DXF-41 width factor is the immediate
+    // motivating use — `blocks_and_tables_-_imperial.dwg` saves an
+    // ATTRIB stretching "ADDA" 6.54× across the title-block column.
+    // The macOS backend applies it via the Core Text font matrix
+    // so glyphs draw stretched in place; Windows / Android consume
+    // the wire field but render axis-natural until their respective
+    // backend slabs land. `measure_text` multiplies the host-
+    // measured width by this factor, so layout cursors and bounding
+    // boxes stay consistent with the rendered glyphs.
+    float            width_factor = 1.0f;
 };
 
 // Painter — immediate-mode drawing surface handed to a `widget::canvas`

@@ -41,7 +41,11 @@ namespace phenotype::detail {
 // `flags` packs FontSpec.mono / weight / style identically to the
 // wire format (bit0=mono, bit1=bold, bit2=italic) so two FontSpecs
 // that emit the same DrawText payload map to the same cache slot.
-using MeasureKey = std::tuple<float, std::string, unsigned char, std::string>;
+// The trailing `float` is FontSpec.width_factor — runs that look the
+// same in every other dimension still collapse to different visual
+// widths when the X stretch differs, so they must occupy different
+// slots.
+using MeasureKey = std::tuple<float, std::string, unsigned char, float, std::string>;
 
 struct MeasureKeyLess {
     bool operator()(MeasureKey const& lhs, MeasureKey const& rhs) const noexcept {
@@ -51,7 +55,9 @@ struct MeasureKeyLess {
         if (std::get<1>(rhs) < std::get<1>(lhs)) return false;
         if (std::get<2>(lhs) < std::get<2>(rhs)) return true;
         if (std::get<2>(rhs) < std::get<2>(lhs)) return false;
-        return std::get<3>(lhs) < std::get<3>(rhs);
+        if (std::get<3>(lhs) < std::get<3>(rhs)) return true;
+        if (std::get<3>(rhs) < std::get<3>(lhs)) return false;
+        return std::get<4>(lhs) < std::get<4>(rhs);
     }
 };
 
@@ -78,7 +84,8 @@ inline float* cache_find(float fs, FontSpec const& font,
                          char const* text, unsigned int len) {
     auto& cache = measure_cache();
     MeasureKey key{fs, std::string(font.family),
-                   fontspec_flags(font), std::string(text, len)};
+                   fontspec_flags(font), font.width_factor,
+                   std::string(text, len)};
     auto it = cache.find(key);
     return it != cache.end() ? &it->second : nullptr;
 }
@@ -87,7 +94,8 @@ inline void cache_insert(float fs, FontSpec const& font,
                          char const* text, unsigned int len, float w) {
     measure_cache().insert({
         MeasureKey{fs, std::string(font.family),
-                   fontspec_flags(font), std::string(text, len)}, w});
+                   fontspec_flags(font), font.width_factor,
+                   std::string(text, len)}, w});
 }
 
 } // namespace phenotype::detail

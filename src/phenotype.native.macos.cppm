@@ -858,10 +858,25 @@ struct TextLineMetrics {
     CGRect glyph_bounds = CGRectNull;
 };
 
-inline CFGuard<CTFontRef> copy_text_font(float font_size, FontCacheKey const& key) {
+inline CFGuard<CTFontRef> copy_text_font(float font_size, FontCacheKey const& key,
+                                         float width_factor = 1.0f) {
     CTFontRef base = acquire_base_font(key);
+    if (!base) return CFGuard<CTFontRef>(nullptr);
+    // Apply the FontSpec width-factor as a font matrix: scaling X by
+    // `width_factor` and leaving Y at 1.0 stretches each glyph along
+    // the run's horizontal axis without changing baseline metrics or
+    // line height. CTFontCreateCopyWithAttributes accepts a matrix
+    // pointer; passing the identity (factor == 1.0) is the same as
+    // passing nullptr and round-trips the pre-stretch behaviour
+    // bit-for-bit.
+    if (width_factor == 1.0f) {
+        return CFGuard<CTFontRef>(
+            CTFontCreateCopyWithAttributes(base, font_size, nullptr, nullptr));
+    }
+    CGAffineTransform const m = CGAffineTransformMakeScale(
+        static_cast<CGFloat>(width_factor), CGFloat{1.0});
     return CFGuard<CTFontRef>(
-        base ? CTFontCreateCopyWithAttributes(base, font_size, nullptr, nullptr) : nullptr);
+        CTFontCreateCopyWithAttributes(base, font_size, &m, nullptr));
 }
 
 inline CFGuard<CTFontRef> copy_text_font(float font_size, bool mono) {
@@ -1303,6 +1318,12 @@ struct ParsedTextRun {
     // the unrotated glyph atlas path; nonzero passes through to the
     // text vertex shader via TextInstanceGPU::rot.
     float rotation = 0.0f;
+    // Horizontal glyph stretch — see `FontSpec::width_factor`. We
+    // multiply each glyph's pixel-space horizontal advance and width
+    // by this when prepare_text_instances lays the run out, so the
+    // glyphs end up rendered wider/narrower in place along the run's
+    // local X axis. Default 1.0f keeps the atlas-native advance.
+    float width_factor = 1.0f;
     bool mono = false;
     float r = 0.0f;
     float g = 0.0f;
@@ -1335,6 +1356,12 @@ struct TextCacheEntry {
     int font_size_key = 0;
     int line_height_key = 0;
     int scale_key = 0;
+    // Quantised FontSpec.width_factor — different stretches need
+    // different rasterised glyphs (the matrix bakes the X scale into
+    // the atlas alpha pixels), so a single (text + font + size)
+    // tuple can occupy multiple atlas entries when the same caller
+    // draws the same string at different stretches.
+    int width_factor_key = 0;
     bool mono = false;
     float x_offset = 0.0f;
     float width = 0.0f;
@@ -2022,6 +2049,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
             }
             case Cmd::DrawText: {
                 float x = 0.0f, y = 0.0f, font_size = 0.0f, rotation = 0.0f;
+                float width_factor = 1.0f;
                 unsigned int flags = 0;
                 unsigned int packed = 0;
                 unsigned int family_len = 0;
@@ -2031,6 +2059,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 if (!reader.read_f32(x) || !reader.read_f32(y)
                     || !reader.read_f32(font_size)
                     || !reader.read_f32(rotation)
+                    || !reader.read_f32(width_factor)
                     || !reader.read_u32(flags)
                     || !reader.read_u32(packed) || !reader.read_u32(family_len)
                     || !reader.read_text(family, family_len)
@@ -2043,6 +2072,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 run.y = y;
                 run.font_size = font_size;
                 run.rotation = rotation;
+                run.width_factor = width_factor;
                 run.mono = (flags & 1u) != 0;
                 run.r = color.r / 255.0f;
                 run.g = color.g / 255.0f;
@@ -3112,10 +3142,12 @@ inline bool text_cache_matches(TextCacheEntry const& entry,
                                ParsedTextRun const& run,
                                int font_size_key,
                                int line_height_key,
-                               int scale_key) {
+                               int scale_key,
+                               int width_factor_key) {
     return entry.font_size_key == font_size_key
         && entry.line_height_key == line_height_key
         && entry.scale_key == scale_key
+        && entry.width_factor_key == width_factor_key
         && entry.mono == run.mono
         && font_keys_equal(entry.font_key, run.font_key)
         && entry.text.size() == run.len
@@ -3126,9 +3158,11 @@ inline TextCacheEntry* find_text_cache_entry(TextAtlasCache& cache,
                                              ParsedTextRun const& run,
                                              int font_size_key,
                                              int line_height_key,
-                                             int scale_key) {
+                                             int scale_key,
+                                             int width_factor_key) {
     for (auto& entry : cache.entries) {
-        if (text_cache_matches(entry, run, font_size_key, line_height_key, scale_key))
+        if (text_cache_matches(entry, run, font_size_key, line_height_key,
+                               scale_key, width_factor_key))
             return &entry;
     }
     return nullptr;
@@ -3137,12 +3171,13 @@ inline TextCacheEntry* find_text_cache_entry(TextAtlasCache& cache,
 inline bool rasterize_text_run(char const* text_ptr, unsigned int len,
                                float font_size, FontCacheKey const& font_key,
                                float line_height, float scale,
+                               float width_factor,
                                RasterizedTextRun& out) {
     out = {};
     if (!g_text.initialized || len == 0)
         return false;
 
-    auto font = copy_text_font(font_size, font_key);
+    auto font = copy_text_font(font_size, font_key, width_factor);
     if (!font)
         return false;
     auto line = create_text_line(font, text_ptr, len);
@@ -3853,8 +3888,10 @@ inline bool prepare_text_instances(float scale) {
 
             int font_size_key = quantize_metric(run.font_size);
             int line_height_key = quantize_metric(run.line_height);
+            int width_factor_key = quantize_metric(run.width_factor);
             auto* entry = find_text_cache_entry(
-                cache, run, font_size_key, line_height_key, scale_key);
+                cache, run, font_size_key, line_height_key, scale_key,
+                width_factor_key);
 
             if (entry) {
                 metrics::inst::native_text_cache_hits.add(1, native_platform_attrs());
@@ -3862,7 +3899,7 @@ inline bool prepare_text_instances(float scale) {
                 RasterizedTextRun rasterized;
                 if (!rasterize_text_run(
                         run.text, run.len, run.font_size, run.font_key,
-                        run.line_height, scale, rasterized)) {
+                        run.line_height, scale, run.width_factor, rasterized)) {
                     metrics::inst::native_text_cache_misses.add(1, native_platform_attrs());
                     continue;
                 }
@@ -3902,6 +3939,7 @@ inline bool prepare_text_instances(float scale) {
                 new_entry.font_size_key = font_size_key;
                 new_entry.line_height_key = line_height_key;
                 new_entry.scale_key = scale_key;
+                new_entry.width_factor_key = width_factor_key;
                 new_entry.mono = run.mono;
                 new_entry.x_offset = rasterized.x_offset;
                 new_entry.width = rasterized.width;
@@ -4437,14 +4475,16 @@ inline void append_overlay_text(FrameScratch& scratch,
         return;
     scratch.overlay_text_storage.push_back(std::move(text));
     auto const& stored = scratch.overlay_text_storage.back();
-    // Overlay (IME composition) runs are always axis-aligned —
-    // pass `rotation = 0.0f` after `font_size` to match the new
-    // ParsedTextRun layout introduced for canvas-side rotated text.
+    // Overlay (IME composition) runs are always axis-aligned and
+    // unstretched — pass `rotation = 0.0f` and `width_factor = 1.0f`
+    // after `font_size` to match the ParsedTextRun layout introduced
+    // for canvas-side rotated / stretched text.
     scratch.text_runs.push_back({
         x,
         y,
         font_size,
         0.0f,                                            // rotation
+        1.0f,                                            // width_factor
         mono,
         color.r / 255.0f,
         color.g / 255.0f,
@@ -6210,6 +6250,7 @@ inline RasterizedTextRunDebug rasterized_text_run_debug(std::string const& text,
             key,
             line_height,
             scale,
+            /*width_factor=*/1.0f,
             rasterized)) {
         return debug;
     }

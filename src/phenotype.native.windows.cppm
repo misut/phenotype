@@ -2501,6 +2501,7 @@ inline bool decode_frame_commands(unsigned char const* buf,
         }
         case Cmd::DrawText: {
             float x = 0.0f, y = 0.0f, font_size = 0.0f, rotation = 0.0f;
+            float width_factor = 1.0f;
             unsigned int flags = 0;
             unsigned int packed = 0;
             unsigned int family_len = 0;
@@ -2508,13 +2509,16 @@ inline bool decode_frame_commands(unsigned char const* buf,
             unsigned int text_len = 0;
             std::string text;
             // Wire format carries `rotation` (radians, CCW about
-            // pivot `(x, y)`) right after `font_size`. The Windows
-            // backend doesn't yet render rotated text — read and
-            // discard so the rest of the payload aligns; rotated
-            // rendering ships in a follow-up slab.
+            // pivot `(x, y)`) and `width_factor` (horizontal glyph
+            // stretch, 1.0 = native advance) right after `font_size`.
+            // The Windows backend doesn't yet render rotated or
+            // stretched text — read both and discard so the rest of
+            // the payload aligns; the proper rendering ships in a
+            // follow-up slab.
             if (!reader.read_f32(x) || !reader.read_f32(y)
                 || !reader.read_f32(font_size)
                 || !reader.read_f32(rotation)
+                || !reader.read_f32(width_factor)
                 || !reader.read_u32(flags)
                 || !reader.read_u32(packed)
                 || !reader.read_u32(family_len)
@@ -2523,6 +2527,7 @@ inline bool decode_frame_commands(unsigned char const* buf,
                 || !reader.read_string(text, text_len))
                 return false;
             (void)rotation;
+            (void)width_factor;
             auto color = unpack_color(packed);
             ::phenotype::native::TextEntry entry{};
             entry.x = x;

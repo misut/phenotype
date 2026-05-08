@@ -335,6 +335,7 @@ constexpr unsigned int pack_font_flags(FontSpec const& f) noexcept {
 //   f32  y
 //   f32  font_size
 //   f32  rotation       // radians, CCW about pivot `(x, y)`; 0 = upright
+//   f32  width_factor   // horizontal glyph stretch; 1 = native advance
 //   u32  flags          // bit0=mono, bit1=bold, bit2=italic
 //   u32  color (RGBA packed)
 //   u32  family_len     // 0 = backend default family
@@ -342,22 +343,25 @@ constexpr unsigned int pack_font_flags(FontSpec const& f) noexcept {
 //   u32  text_len
 //   u8[] text bytes (padded up to 4)
 //
-// Fixed overhead = 36 bytes (was 32 — `rotation` is the new f32 slot
-// after `font_size`; default-zero round-trips the pre-rotation
-// behaviour). Family + text payloads each pad up to a 4-byte boundary
-// independently so the next opcode starts aligned.
+// Fixed overhead = 40 bytes (was 36 — `width_factor` is the new f32
+// slot after `rotation`; default-1.0 round-trips the pre-stretch
+// rendering for callers that still pass FontSpec without setting it).
+// Family + text payloads each pad up to a 4-byte boundary independently
+// so the next opcode starts aligned.
 template <render_backend R>
 void emit_draw_text(R& r, float x, float y, float font_size, float rotation,
+                    float width_factor,
                     unsigned int flags,
                     Color c, std::string_view family,
                     char const* text, unsigned int text_len) {
     auto const family_len = static_cast<unsigned int>(family.size());
-    if (!detail::ensure(r, 36 + detail::padded(family_len) + detail::padded(text_len),
+    if (!detail::ensure(r, 40 + detail::padded(family_len) + detail::padded(text_len),
                         Cmd::DrawText)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::DrawText));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, font_size);
     detail::write_f32(r, rotation);
+    detail::write_f32(r, width_factor);
     detail::write_u32(r, flags);
     detail::write_u32(r, c.packed());
     detail::write_u32(r, family_len);
@@ -937,10 +941,12 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                     tx += (inner_width - line_w) / 2;
                 else if (node.style.text_align == TextAlign::End)
                     tx += inner_width - line_w;
-                // Widget-tree text never rotates; pass 0.0f rotation
-                // so the wire format stays consistent with rotated
-                // canvas draws.
+                // Widget-tree text never rotates and uses the native
+                // glyph advance; pass 0.0f rotation and 1.0f width
+                // factor so the wire format stays consistent with
+                // rotated / stretched canvas draws.
                 emit_draw_text(r, tx, ty, node.font_size, /*rotation=*/0.0f,
+                               /*width_factor=*/1.0f,
                                node_flags,
                                tc, node_font.family, line.c_str(),
                                static_cast<unsigned int>(line.size()));
@@ -1191,7 +1197,8 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 }
                 emit_draw_text(r,
                                origin_x + x, origin_y + y,
-                               font_size, rotation, pack_font_flags(font),
+                               font_size, rotation, font.width_factor,
+                               pack_font_flags(font),
                                color, font.family, str, len);
             }
 
@@ -1204,7 +1211,16 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 // measurement loop and typically maintain their own
                 // FontSpec→width cache; calling the host directly is
                 // consistent with that pattern.
-                return measurer.measure_text(font_size, font, str, len);
+                //
+                // FontSpec::width_factor scales each glyph's advance,
+                // so multiply the host's natural-font measurement here
+                // — the rendered glyphs land at proportionally wider /
+                // narrower x positions and the cursor / centring math
+                // upstream (canvas painters, MTEXT wrap decisions in
+                // cadpp) stays in lockstep with what's drawn.
+                float const natural =
+                    measurer.measure_text(font_size, font, str, len);
+                return natural * font.width_factor;
             }
 
             void push_clip(float x, float y,

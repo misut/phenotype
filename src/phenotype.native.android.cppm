@@ -3999,6 +3999,13 @@ inline void decode_android_color_commands(unsigned char const* buf,
         } else if (cmd == ::phenotype::Cmd::DrawText) {
             float x = read_f32(), y = read_f32();
             float fs = read_f32();
+            // Wire format carries `rotation` (radians) and
+            // `width_factor` (horizontal stretch) right after
+            // `font_size`. Android's text path currently renders
+            // axis-natural and unstretched; read both fields so the
+            // remaining payload aligns and drop them on the floor.
+            (void)read_f32();  // rotation
+            (void)read_f32();  // width_factor
             std::uint32_t flags = read_u32();
             ::phenotype::Color cc = unpack(read_u32());
             std::uint32_t flen = read_u32();
