@@ -1099,6 +1099,49 @@ inline float text_measure_api(float font_size, unsigned int flags,
     return text_measure(font_size, key, text, len);
 }
 
+// Pull ascent / descent / leading for the resolved face at
+// `font_size`. CoreText reports these on `CTFontRef` directly, so
+// there's no need to build a CTLine. `width_factor` doesn't affect
+// vertical metrics — the font matrix only scales X — so we always
+// measure with the natural matrix.
+inline bool text_metrics(float font_size, FontCacheKey const& key,
+                         float& out_ascent, float& out_descent,
+                         float& out_leading) {
+    out_ascent = 0.0f;
+    out_descent = 0.0f;
+    out_leading = 0.0f;
+    if (!g_text.initialized) text_init();
+    if (!g_text.initialized) return false;
+    auto font = copy_text_font(font_size, key);
+    if (!font) return false;
+    out_ascent  = static_cast<float>(CTFontGetAscent(font.ref));
+    out_descent = static_cast<float>(CTFontGetDescent(font.ref));
+    out_leading = static_cast<float>(CTFontGetLeading(font.ref));
+    return true;
+}
+
+// platform_api::text.metrics entry point. Mirrors `text_measure_api`'s
+// flag / family decoding.
+inline void text_metrics_api(float font_size, unsigned int flags,
+                             char const* font_family, unsigned int family_len,
+                             float* out_ascent, float* out_descent,
+                             float* out_leading) {
+    if (out_ascent)  *out_ascent  = 0.0f;
+    if (out_descent) *out_descent = 0.0f;
+    if (out_leading) *out_leading = 0.0f;
+    FontCacheKey key{};
+    if (font_family && family_len > 0)
+        key.family.assign(font_family, family_len);
+    key.weight = (flags & 2u) ? ::phenotype::FontWeight::Bold   : ::phenotype::FontWeight::Regular;
+    key.style  = (flags & 4u) ? ::phenotype::FontStyle::Italic  : ::phenotype::FontStyle::Upright;
+    key.mono   = (flags & 1u) != 0;
+    float a = 0.0f, d = 0.0f, l = 0.0f;
+    if (!text_metrics(font_size, key, a, d, l)) return;
+    if (out_ascent)  *out_ascent  = a;
+    if (out_descent) *out_descent = d;
+    if (out_leading) *out_leading = l;
+}
+
 inline unsigned long utf16_length(std::string_view utf8) {
     return static_cast<unsigned long>(cppx::unicode::utf16_length(utf8));
 }
@@ -6985,6 +7028,7 @@ inline platform_api const& macos_platform() {
             detail::text_init,
             detail::text_shutdown,
             detail::text_measure_api,
+            detail::text_metrics_api,
             detail::text_build_atlas,
             detail::text_register_font_file,
         },

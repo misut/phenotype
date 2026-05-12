@@ -116,6 +116,25 @@ struct native_host {
             text, len);
     }
 
+    // Vertical metrics for the resolved face at `font_size`. Backends
+    // without metric support return a zero `FontMetrics{}` — caller
+    // falls back to a `font_size`-based heuristic.
+    ::phenotype::FontMetrics font_metrics(
+            float font_size, ::phenotype::FontSpec font) const {
+        ::phenotype::FontMetrics out{};
+        if (!platform || !platform->text.metrics) return out;
+        unsigned int flags =
+            (font.mono ? 1u : 0u)
+            | (font.weight == ::phenotype::FontWeight::Bold  ? 2u : 0u)
+            | (font.style  == ::phenotype::FontStyle::Italic ? 4u : 0u);
+        platform->text.metrics(
+            font_size, flags,
+            font.family.data(),
+            static_cast<unsigned int>(font.family.size()),
+            &out.ascent, &out.descent, &out.leading);
+        return out;
+    }
+
     // Growable command stream. Initial capacity matches the legacy
     // fixed-size buffer (65 536 bytes) so single-canvas apps stay on
     // the same allocation profile they had before. `reserve()`

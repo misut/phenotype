@@ -677,6 +677,13 @@ namespace phenotype::detail {
                 static_cast<unsigned int>(font.family.size()),
                 t, l);
         }
+        // No per-face metric host on wasm yet — layout consumers there
+        // (widget::text, focused-input math) fall back to font-size
+        // heuristics, matching `measure_text` returning 0 when the
+        // host can't measure.
+        FontMetrics font_metrics(float /*fs*/, FontSpec /*font*/) const {
+            return {};
+        }
     };
     inline wasi_measurer g_wasi_measurer;
 }

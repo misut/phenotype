@@ -855,6 +855,21 @@ inline float text_measure_api(float font_size, unsigned int flags,
     return text_measure(font_size, key, text, len);
 }
 
+// platform_api::text.metrics entry point. Stub for now — Android paint
+// metric extraction needs a separate JNI hop (Paint.getFontMetrics()
+// scaled by font_size). Returns zeros so the shell wrapper surfaces a
+// default-constructed `FontMetrics{}` and callers fall back to a
+// font-size-based heuristic.
+inline void text_metrics_api(float /*font_size*/, unsigned int /*flags*/,
+                             char const* /*font_family*/,
+                             unsigned int /*family_len*/,
+                             float* out_ascent, float* out_descent,
+                             float* out_leading) {
+    if (out_ascent)  *out_ascent  = 0.0f;
+    if (out_descent) *out_descent = 0.0f;
+    if (out_leading) *out_leading = 0.0f;
+}
+
 // ---- Text atlas builder ----------------------------------------------
 //
 // build_atlas strip-packs one slot per TextEntry into an ARGB_8888
@@ -6385,6 +6400,7 @@ inline platform_api build_android_platform() {
         text_init,
         text_shutdown,
         text_measure_api,
+        text_metrics_api,
         text_build_atlas,
         text_register_font_file,
     };
