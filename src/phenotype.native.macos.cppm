@@ -1099,24 +1099,27 @@ inline float text_measure_api(float font_size, unsigned int flags,
     return text_measure(font_size, key, text, len);
 }
 
-// Pull ascent / descent / leading for the resolved face at
-// `font_size`. CoreText reports these on `CTFontRef` directly, so
-// there's no need to build a CTLine. `width_factor` doesn't affect
-// vertical metrics — the font matrix only scales X — so we always
-// measure with the natural matrix.
+// Pull ascent / descent / leading / cap_height for the resolved face
+// at `font_size`. CoreText reports all four on `CTFontRef` directly
+// (already scaled to the font's point size), so there's no need to
+// build a CTLine. `width_factor` doesn't affect vertical metrics — the
+// font matrix only scales X — so we always measure with the natural
+// matrix.
 inline bool text_metrics(float font_size, FontCacheKey const& key,
                          float& out_ascent, float& out_descent,
-                         float& out_leading) {
+                         float& out_leading, float& out_cap_height) {
     out_ascent = 0.0f;
     out_descent = 0.0f;
     out_leading = 0.0f;
+    out_cap_height = 0.0f;
     if (!g_text.initialized) text_init();
     if (!g_text.initialized) return false;
     auto font = copy_text_font(font_size, key);
     if (!font) return false;
-    out_ascent  = static_cast<float>(CTFontGetAscent(font.ref));
-    out_descent = static_cast<float>(CTFontGetDescent(font.ref));
-    out_leading = static_cast<float>(CTFontGetLeading(font.ref));
+    out_ascent     = static_cast<float>(CTFontGetAscent(font.ref));
+    out_descent    = static_cast<float>(CTFontGetDescent(font.ref));
+    out_leading    = static_cast<float>(CTFontGetLeading(font.ref));
+    out_cap_height = static_cast<float>(CTFontGetCapHeight(font.ref));
     return true;
 }
 
@@ -1125,21 +1128,24 @@ inline bool text_metrics(float font_size, FontCacheKey const& key,
 inline void text_metrics_api(float font_size, unsigned int flags,
                              char const* font_family, unsigned int family_len,
                              float* out_ascent, float* out_descent,
-                             float* out_leading) {
-    if (out_ascent)  *out_ascent  = 0.0f;
-    if (out_descent) *out_descent = 0.0f;
-    if (out_leading) *out_leading = 0.0f;
+                             float* out_leading,
+                             float* out_cap_height) {
+    if (out_ascent)     *out_ascent     = 0.0f;
+    if (out_descent)    *out_descent    = 0.0f;
+    if (out_leading)    *out_leading    = 0.0f;
+    if (out_cap_height) *out_cap_height = 0.0f;
     FontCacheKey key{};
     if (font_family && family_len > 0)
         key.family.assign(font_family, family_len);
     key.weight = (flags & 2u) ? ::phenotype::FontWeight::Bold   : ::phenotype::FontWeight::Regular;
     key.style  = (flags & 4u) ? ::phenotype::FontStyle::Italic  : ::phenotype::FontStyle::Upright;
     key.mono   = (flags & 1u) != 0;
-    float a = 0.0f, d = 0.0f, l = 0.0f;
-    if (!text_metrics(font_size, key, a, d, l)) return;
-    if (out_ascent)  *out_ascent  = a;
-    if (out_descent) *out_descent = d;
-    if (out_leading) *out_leading = l;
+    float a = 0.0f, d = 0.0f, l = 0.0f, c = 0.0f;
+    if (!text_metrics(font_size, key, a, d, l, c)) return;
+    if (out_ascent)     *out_ascent     = a;
+    if (out_descent)    *out_descent    = d;
+    if (out_leading)    *out_leading    = l;
+    if (out_cap_height) *out_cap_height = c;
 }
 
 inline unsigned long utf16_length(std::string_view utf8) {

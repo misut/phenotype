@@ -131,7 +131,8 @@ struct native_host {
             font_size, flags,
             font.family.data(),
             static_cast<unsigned int>(font.family.size()),
-            &out.ascent, &out.descent, &out.leading);
+            &out.ascent, &out.descent, &out.leading,
+            &out.cap_height);
         return out;
     }
 
