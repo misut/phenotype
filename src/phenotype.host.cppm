@@ -30,6 +30,11 @@ concept text_measurer = requires(T const& t, float font_size,
                                   FontSpec font, char const* text,
                                   unsigned int len) {
     { t.measure_text(font_size, font, text, len) } -> std::same_as<float>;
+    // Vertical metrics for the resolved face at `font_size`. Hosts
+    // without per-face metric resolution may return a zero
+    // `FontMetrics{}` and let callers fall back to a font-size-based
+    // heuristic — see `phenotype::FontMetrics` for the contract.
+    { t.font_metrics(font_size, font) } -> std::same_as<FontMetrics>;
 };
 
 // `render_backend` exposes a command-stream buffer plus flush(). The
@@ -79,6 +84,11 @@ struct null_host {
     float measure_text(float font_size, FontSpec /*font*/,
                        char const* /*text*/, unsigned int len) const {
         return static_cast<float>(len) * font_size * 0.6f;
+    }
+
+    FontMetrics font_metrics(float /*font_size*/,
+                             FontSpec /*font*/) const {
+        return {};
     }
 
     // render_backend — growable command stream. Initial capacity

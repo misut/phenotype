@@ -31,6 +31,16 @@ inline float stub_measure(float font_size, unsigned int /*flags*/,
     return static_cast<float>(len) * font_size * 0.6f;
 }
 
+inline void stub_metrics(float /*font_size*/, unsigned int /*flags*/,
+                         char const* /*font_family*/,
+                         unsigned int /*family_len*/,
+                         float* out_ascent, float* out_descent,
+                         float* out_leading) {
+    if (out_ascent)  *out_ascent  = 0.0f;
+    if (out_descent) *out_descent = 0.0f;
+    if (out_leading) *out_leading = 0.0f;
+}
+
 inline TextAtlas stub_build_atlas(std::vector<TextEntry> const&, float) {
     return {};
 }
@@ -179,6 +189,7 @@ inline platform_api make_stub_platform(char const* name,
         detail::stub_text_init,
         detail::stub_text_shutdown,
         detail::stub_measure,
+        detail::stub_metrics,
         detail::stub_build_atlas,
     };
     api.renderer = {

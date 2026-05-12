@@ -54,6 +54,17 @@ struct text_api {
     float (*measure)(float font_size, unsigned int flags,
                      char const* font_family, unsigned int family_len,
                      char const* text, unsigned int len) = nullptr;
+    // Vertical metrics for the resolved face at `font_size`. Backends
+    // that cannot resolve metrics fill the three out-params with 0.0f
+    // — the shell wrapper turns that into a zero `FontMetrics{}` for
+    // the caller. `flags` and `font_family` are encoded the same way
+    // as `measure`. Implementations are expected to be lightweight
+    // enough to call once per text run during layout (the same cost
+    // shape as `measure`).
+    void (*metrics)(float font_size, unsigned int flags,
+                    char const* font_family, unsigned int family_len,
+                    float* out_ascent, float* out_descent,
+                    float* out_leading) = nullptr;
     TextAtlas (*build_atlas)(std::vector<TextEntry> const& entries,
                              float backing_scale) = nullptr;
     // Register a TTF / OTF / TTC file with the process's font manager

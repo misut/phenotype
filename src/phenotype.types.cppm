@@ -553,6 +553,32 @@ struct FontSpec {
     float            width_factor = 1.0f;
 };
 
+// Vertical metrics for a `FontSpec` at a given `font_size`, in canvas
+// pixels. `ascent` is the distance from the baseline up to the top of
+// the font's design ascender; `descent` is the distance down from the
+// baseline to the bottom of the descender (positive value); `leading`
+// is the platform-recommended extra space between consecutive lines
+// (often 0 on CoreText). Sum `ascent + descent + leading` to obtain the
+// canonical natural line height for the face at this size.
+//
+// CAD viewers and custom-layout widgets need this to anchor text by
+// baseline / cap-top rather than by the Painter::text's font-box top
+// (which is `(x, y)` but corresponds to ascent above the baseline, so
+// the visible glyph cap-top sits at `y + (ascent - cap_height) / scale`
+// in practice). Painter consumers that mix bundled / system fonts of
+// differing ascender heights (e.g. cad++'s Architects Daughter vs
+// AutoCAD-shipped `cityb___.ttf`) read these metrics to keep glyph
+// baselines on the entity's geometric anchor regardless of which face
+// resolved.
+//
+// All values are 0 when the backend cannot resolve the face — the
+// caller should fall back to a font-size-based heuristic in that case.
+struct FontMetrics {
+    float ascent  = 0.0f;
+    float descent = 0.0f;
+    float leading = 0.0f;
+};
+
 // Painter — immediate-mode drawing surface handed to a `widget::canvas`
 // callback during the paint pass. Coordinates are local to the canvas
 // (origin at the canvas's top-left, x extends right, y extends down).
@@ -588,6 +614,15 @@ public:
     virtual float measure_text(char const* str, unsigned int len,
                                float font_size,
                                FontSpec font = {}) const = 0;
+    // Vertical metrics for `font` at `font_size`. Returns a zero
+    // `FontMetrics{}` when the backend cannot resolve the face — the
+    // caller should fall back to a `font_size`-based heuristic in that
+    // case. See `FontMetrics` for the per-field semantics. Hosts that
+    // can't measure (some embedded surfaces, the stub backend) return
+    // zero; callers are expected to handle that the same way they
+    // already handle `measure_text` returning 0.
+    virtual FontMetrics font_metrics(float font_size,
+                                     FontSpec font = {}) const = 0;
     // Arc — stroked circular arc centred at `(cx, cy)` with the given
     // `radius`, swept from `start_angle` to `end_angle` (radians, CCW
     // per the math / AutoCAD convention; positive y goes down on the

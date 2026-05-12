@@ -251,6 +251,14 @@ struct wasi_paint_host {
             static_cast<unsigned int>(font.family.size()),
             t, l);
     }
+
+    // No wasm-side font-metric host yet; the WASI text renderer is
+    // canvas-2D-backed, where the layout consumer (cadpp on wasm) has
+    // its own fallback. Returning zero matches the existing
+    // "no measurement capability" contract from `measure_text`.
+    FontMetrics font_metrics(float /*fs*/, FontSpec /*font*/) const {
+        return {};
+    }
     unsigned char* buf() { return phenotype_cmd_buf; }
     unsigned int& buf_len() { return phenotype_cmd_len; }
     unsigned int buf_size() { return BUF_SIZE; }
@@ -1221,6 +1229,16 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 float const natural =
                     measurer.measure_text(font_size, font, str, len);
                 return natural * font.width_factor;
+            }
+
+            FontMetrics font_metrics(float font_size,
+                                     FontSpec font = {}) const override {
+                // Hosts without per-face metric resolution surface a
+                // zero `FontMetrics{}` — the caller is expected to
+                // fall back to a font-size-based heuristic in that
+                // case. `width_factor` doesn't influence vertical
+                // metrics, so we never multiply here.
+                return measurer.font_metrics(font_size, font);
             }
 
             void push_clip(float x, float y,
