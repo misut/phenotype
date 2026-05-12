@@ -558,25 +558,36 @@ struct FontSpec {
 // the font's design ascender; `descent` is the distance down from the
 // baseline to the bottom of the descender (positive value); `leading`
 // is the platform-recommended extra space between consecutive lines
-// (often 0 on CoreText). Sum `ascent + descent + leading` to obtain the
-// canonical natural line height for the face at this size.
+// (often 0 on CoreText). `cap_height` is the distance from the baseline
+// up to the visible top of the font's capital glyphs (typically smaller
+// than `ascent`, which also covers diacritic clearance and the design
+// ascender area above the cap). Sum `ascent + descent + leading` to
+// obtain the canonical natural line height for the face at this size.
 //
 // CAD viewers and custom-layout widgets need this to anchor text by
 // baseline / cap-top rather than by the Painter::text's font-box top
 // (which is `(x, y)` but corresponds to ascent above the baseline, so
-// the visible glyph cap-top sits at `y + (ascent - cap_height) / scale`
-// in practice). Painter consumers that mix bundled / system fonts of
+// the visible glyph cap-top sits at `y + (ascent - cap_height)` in
+// practice). Painter consumers that mix bundled / system fonts of
 // differing ascender heights (e.g. cad++'s Architects Daughter vs
 // AutoCAD-shipped `cityb___.ttf`) read these metrics to keep glyph
 // baselines on the entity's geometric anchor regardless of which face
-// resolved.
+// resolved. `cap_height` additionally lets CAD-style consumers
+// cap-height-lock the rendered glyph size so a host font_size derived
+// from `autocad_height / (cap_height / font_size)` produces a visible
+// capital that matches AutoCAD's `STYLE.height` regardless of the
+// substitute face's design proportions.
 //
-// All values are 0 when the backend cannot resolve the face — the
-// caller should fall back to a font-size-based heuristic in that case.
+// `width_factor` does not affect any of these values — they are pure
+// vertical metrics. All four values are 0 when the backend cannot
+// resolve the face (or has not implemented the metric query yet, e.g.
+// the Windows / Android stubs as of this PR) — the caller should fall
+// back to a font-size-based heuristic in that case.
 struct FontMetrics {
-    float ascent  = 0.0f;
-    float descent = 0.0f;
-    float leading = 0.0f;
+    float ascent     = 0.0f;
+    float descent    = 0.0f;
+    float leading    = 0.0f;
+    float cap_height = 0.0f;
 };
 
 // Painter — immediate-mode drawing surface handed to a `widget::canvas`

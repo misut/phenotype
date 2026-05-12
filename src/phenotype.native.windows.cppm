@@ -444,10 +444,12 @@ inline void text_metrics_api(float /*font_size*/, unsigned int /*flags*/,
                              char const* /*font_family*/,
                              unsigned int /*family_len*/,
                              float* out_ascent, float* out_descent,
-                             float* out_leading) {
-    if (out_ascent)  *out_ascent  = 0.0f;
-    if (out_descent) *out_descent = 0.0f;
-    if (out_leading) *out_leading = 0.0f;
+                             float* out_leading,
+                             float* out_cap_height) {
+    if (out_ascent)     *out_ascent     = 0.0f;
+    if (out_descent)    *out_descent    = 0.0f;
+    if (out_leading)    *out_leading    = 0.0f;
+    if (out_cap_height) *out_cap_height = 0.0f;
 }
 
 class GlyphBitmapRenderer final : public IDWriteTextRenderer {
