@@ -316,6 +316,7 @@ struct jni_refs {
     jclass bitmap_class        = nullptr;
     jclass canvas_class        = nullptr;
     jclass bitmap_config_class = nullptr;
+    jclass rect_class          = nullptr;
 
     // Method IDs (no cleanup needed — tied to class lifetime).
     jmethodID paint_ctor          = nullptr;
@@ -326,12 +327,20 @@ struct jni_refs {
     jmethodID paint_measure_text  = nullptr;
     jmethodID paint_ascent        = nullptr;
     jmethodID paint_descent       = nullptr;
+    // Tight glyph bounds — used by text_metrics for cap-height.
+    jmethodID paint_get_text_bounds = nullptr;
 
     jmethodID bitmap_create      = nullptr;
     jmethodID bitmap_erase_color = nullptr;
 
     jmethodID canvas_ctor      = nullptr;
     jmethodID canvas_draw_text = nullptr;
+
+    // android.graphics.Rect — shared instance reused by text_metrics
+    // to receive Paint.getTextBounds output. Single render thread so
+    // no aliasing hazard.
+    jmethodID rect_ctor      = nullptr;
+    jfieldID  rect_top_field = nullptr;
 
     // Typeface.create(String family, int style) and
     // Typeface.create(Typeface family, int style) — both yield a
@@ -353,6 +362,11 @@ struct jni_refs {
     jobject typeface_default   = nullptr;
     jobject typeface_monospace = nullptr;
     jobject config_argb8888    = nullptr;
+    // Pre-allocated android.graphics.Rect global ref reused by
+    // text_metrics's Paint.getTextBounds call. Reset implicitly by
+    // each getTextBounds invocation (the framework overwrites all four
+    // fields).
+    jobject shared_rect        = nullptr;
 
     // Paint cache keyed on (family, weight, style, mono). Each value
     // is a global ref owned by g_jni; cleared in text_shutdown.
@@ -461,8 +475,10 @@ inline bool init_jni_refs(JNIEnv* env) {
     g_jni.bitmap_class        = find_global("android/graphics/Bitmap");
     g_jni.canvas_class        = find_global("android/graphics/Canvas");
     g_jni.bitmap_config_class = find_global("android/graphics/Bitmap$Config");
+    g_jni.rect_class          = find_global("android/graphics/Rect");
     if (!g_jni.paint_class || !g_jni.typeface_class || !g_jni.bitmap_class
-        || !g_jni.canvas_class || !g_jni.bitmap_config_class) {
+        || !g_jni.canvas_class || !g_jni.bitmap_config_class
+        || !g_jni.rect_class) {
         return false;
     }
 
@@ -482,6 +498,9 @@ inline bool init_jni_refs(JNIEnv* env) {
         g_jni.paint_class, "ascent", "()F");
     g_jni.paint_descent = env->GetMethodID(
         g_jni.paint_class, "descent", "()F");
+    g_jni.paint_get_text_bounds = env->GetMethodID(
+        g_jni.paint_class, "getTextBounds",
+        "(Ljava/lang/String;IILandroid/graphics/Rect;)V");
 
     g_jni.bitmap_create = env->GetStaticMethodID(
         g_jni.bitmap_class, "createBitmap",
@@ -494,6 +513,9 @@ inline bool init_jni_refs(JNIEnv* env) {
     g_jni.canvas_draw_text = env->GetMethodID(
         g_jni.canvas_class, "drawText",
         "(Ljava/lang/String;FFLandroid/graphics/Paint;)V");
+
+    g_jni.rect_ctor = env->GetMethodID(g_jni.rect_class, "<init>", "()V");
+    g_jni.rect_top_field = env->GetFieldID(g_jni.rect_class, "top", "I");
 
     g_jni.typeface_create_string = env->GetStaticMethodID(
         g_jni.typeface_class, "create",
@@ -520,8 +542,10 @@ inline bool init_jni_refs(JNIEnv* env) {
         || !g_jni.paint_set_typeface || !g_jni.paint_set_color
         || !g_jni.paint_set_antialias || !g_jni.paint_measure_text
         || !g_jni.paint_ascent || !g_jni.paint_descent
+        || !g_jni.paint_get_text_bounds
         || !g_jni.bitmap_create || !g_jni.bitmap_erase_color
         || !g_jni.canvas_ctor || !g_jni.canvas_draw_text
+        || !g_jni.rect_ctor || !g_jni.rect_top_field
         || !g_jni.typeface_create_string || !g_jni.typeface_create_typeface
         || !g_jni.typeface_create_from_file)
         return false;
@@ -552,6 +576,21 @@ inline bool init_jni_refs(JNIEnv* env) {
         if (!local) { check_and_clear_exception(env); return false; }
         g_jni.config_argb8888 = env->NewGlobalRef(local);
         env->DeleteLocalRef(local);
+    }
+
+    // Pre-allocate a single android.graphics.Rect global ref. The
+    // text_metrics helper reuses it for every Paint.getTextBounds
+    // query — the framework overwrites all four int fields per call,
+    // so there's no cross-call leakage on the single render thread.
+    {
+        jobject local = env->NewObject(g_jni.rect_class, g_jni.rect_ctor);
+        if (check_and_clear_exception(env) || !local) {
+            if (local) env->DeleteLocalRef(local);
+            return false;
+        }
+        g_jni.shared_rect = env->NewGlobalRef(local);
+        env->DeleteLocalRef(local);
+        if (!g_jni.shared_rect) return false;
     }
 
     return true;
@@ -726,10 +765,12 @@ inline void text_shutdown() {
     drop(reinterpret_cast<jobject&>(g_jni.bitmap_class));
     drop(reinterpret_cast<jobject&>(g_jni.canvas_class));
     drop(reinterpret_cast<jobject&>(g_jni.bitmap_config_class));
+    drop(reinterpret_cast<jobject&>(g_jni.rect_class));
     drop(g_jni.typeface_default);
     drop(g_jni.typeface_monospace);
     drop(g_jni.config_argb8888);
-    // Method IDs don't need cleanup — they die with the class ref.
+    drop(g_jni.shared_rect);
+    // Method / field IDs don't need cleanup — they die with the class ref.
     g_jni.paint_ctor = nullptr;
     g_jni.paint_set_textsize = nullptr;
     g_jni.paint_set_typeface = nullptr;
@@ -738,10 +779,13 @@ inline void text_shutdown() {
     g_jni.paint_measure_text = nullptr;
     g_jni.paint_ascent = nullptr;
     g_jni.paint_descent = nullptr;
+    g_jni.paint_get_text_bounds = nullptr;
     g_jni.bitmap_create = nullptr;
     g_jni.bitmap_erase_color = nullptr;
     g_jni.canvas_ctor = nullptr;
     g_jni.canvas_draw_text = nullptr;
+    g_jni.rect_ctor = nullptr;
+    g_jni.rect_top_field = nullptr;
     g_jni.typeface_create_string = nullptr;
     g_jni.typeface_create_typeface = nullptr;
     g_jni.typeface_create_from_file = nullptr;
@@ -855,14 +899,94 @@ inline float text_measure_api(float font_size, unsigned int flags,
     return text_measure(font_size, key, text, len);
 }
 
-// platform_api::text.metrics entry point. Stub for now — Android paint
-// metric extraction needs a separate JNI hop (Paint.getFontMetrics()
-// scaled by font_size). Returns zeros so the shell wrapper surfaces a
-// default-constructed `FontMetrics{}` and callers fall back to a
-// font-size-based heuristic.
-inline void text_metrics_api(float /*font_size*/, unsigned int /*flags*/,
-                             char const* /*font_family*/,
-                             unsigned int /*family_len*/,
+// Query vertical metrics for `key` at `font_size`. Returns false (and
+// leaves all outputs at zero) when the requested family is not in
+// `registered_aliases` — that's the cadpp-side `m.ascent > 0` signal
+// for "host has this face". We deliberately bypass `acquire_paint`'s
+// silent fallback to `Typeface.create(String, int)`, which on Android
+// returns the platform default (Roboto) for unknown families with no
+// indication of substitution; treating its metrics as valid would
+// defeat caller-side alias-table fallbacks.
+//
+// Empty family is the FontPaintKey default for "sans / mono default";
+// it's resolvable on Android without registration, so we let it
+// through and read the system default's metrics.
+//
+// Sign conventions:
+//  - Android `Paint.ascent()` returns a NEGATIVE float (pixels above
+//    baseline). FontMetrics expects positive ascent to match macOS
+//    CTFontGetAscent — we negate here.
+//  - `Paint.descent()` is already positive on both platforms.
+//  - cap-height is derived from `Paint.getTextBounds("H", 0, 1, rect)`,
+//    where `rect.top` is negative (above origin) for any non-zero
+//    glyph height; we negate.
+//  - leading is left at zero — there is no Painter-level consumer and
+//    macOS CTFontGetLeading is typically zero for system fonts; a
+//    follow-up can derive it from `Paint.getFontSpacing()` once a
+//    call site materialises.
+inline bool text_metrics(float font_size, FontPaintKey const& key,
+                         float& out_ascent, float& out_descent,
+                         float& out_leading, float& out_cap_height) {
+    out_ascent     = 0.0f;
+    out_descent    = 0.0f;
+    out_leading    = 0.0f;
+    out_cap_height = 0.0f;
+    if (!g_jni.initialised) return false;
+
+    if (!key.family.empty()
+        && g_jni.registered_aliases.find(key.family)
+            == g_jni.registered_aliases.end()) {
+        return false;
+    }
+
+    ScopedEnv e(g_jni.vm);
+    if (!e) return false;
+    auto* env = e.env;
+
+    jobject paint = acquire_paint(env, key);
+    if (!paint) return false;
+
+    env->CallVoidMethod(paint, g_jni.paint_set_textsize,
+                        static_cast<jfloat>(font_size));
+    if (check_and_clear_exception(env)) return false;
+
+    jfloat a = env->CallFloatMethod(paint, g_jni.paint_ascent);
+    if (check_and_clear_exception(env)) return false;
+    jfloat d = env->CallFloatMethod(paint, g_jni.paint_descent);
+    if (check_and_clear_exception(env)) return false;
+
+    // cap-height via tight bounds of capital 'H'. Latin / Bitstream
+    // faces always carry the glyph; symbol or CJK-only fonts return
+    // (0, 0, 0, 0), which collapses to cap_height = 0 — acceptable
+    // given the bundled-OFL set ships with 'H'.
+    jstring h = make_jstring_utf8(env, "H", 1);
+    jint top = 0;
+    if (h) {
+        env->CallVoidMethod(paint, g_jni.paint_get_text_bounds,
+                            h, jint{0}, jint{1}, g_jni.shared_rect);
+        env->DeleteLocalRef(h);
+        if (!check_and_clear_exception(env)) {
+            top = env->GetIntField(g_jni.shared_rect,
+                                   g_jni.rect_top_field);
+            (void)check_and_clear_exception(env);
+        }
+    }
+
+    out_ascent     = a < 0.0f ? -static_cast<float>(a)
+                              :  static_cast<float>(a);
+    out_descent    = static_cast<float>(d);
+    out_leading    = 0.0f;
+    out_cap_height = top < 0 ? -static_cast<float>(top) : 0.0f;
+    return true;
+}
+
+// platform_api::text.metrics entry point. Decodes the wire-format
+// flag bits and family pointer pair into a FontPaintKey, then delegates
+// to `text_metrics`. Mirrors `text_measure_api` above and the macOS
+// `text_metrics_api` at phenotype.native.macos.cppm:1128-1149.
+inline void text_metrics_api(float font_size, unsigned int flags,
+                             char const* font_family,
+                             unsigned int family_len,
                              float* out_ascent, float* out_descent,
                              float* out_leading,
                              float* out_cap_height) {
@@ -870,6 +994,20 @@ inline void text_metrics_api(float /*font_size*/, unsigned int /*flags*/,
     if (out_descent)    *out_descent    = 0.0f;
     if (out_leading)    *out_leading    = 0.0f;
     if (out_cap_height) *out_cap_height = 0.0f;
+    FontPaintKey key{};
+    if (font_family && family_len > 0)
+        key.family.assign(font_family, family_len);
+    key.weight = (flags & 2u) ? ::phenotype::FontWeight::Bold
+                              : ::phenotype::FontWeight::Regular;
+    key.style  = (flags & 4u) ? ::phenotype::FontStyle::Italic
+                              : ::phenotype::FontStyle::Upright;
+    key.mono   = (flags & 1u) != 0;
+    float a = 0.0f, d = 0.0f, l = 0.0f, c = 0.0f;
+    if (!text_metrics(font_size, key, a, d, l, c)) return;
+    if (out_ascent)     *out_ascent     = a;
+    if (out_descent)    *out_descent    = d;
+    if (out_leading)    *out_leading    = l;
+    if (out_cap_height) *out_cap_height = c;
 }
 
 // ---- Text atlas builder ----------------------------------------------
