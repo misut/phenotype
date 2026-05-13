@@ -4002,17 +4002,50 @@ inline void decode_android_color_commands(unsigned char const* buf,
             prepare_batch_for_pipeline(out, 0);
             float dx = x2 - x1;
             float dy = y2 - y1;
-            float line_len = std::sqrt(dx * dx + dy * dy);
-            float w = (dy == 0.0f) ? line_len : th;
-            float h = (dx == 0.0f) ? line_len : th;
-            float x = (dx == 0.0f) ? x1 - th * 0.5f : std::min(x1, x2);
-            float y = (dy == 0.0f) ? y1 - th * 0.5f : std::min(y1, y2);
-            ColorInstanceGPU inst{};
-            inst.rect[0] = x; inst.rect[1] = y;
-            inst.rect[2] = w; inst.rect[3] = h;
-            normalize_color(cc, inst.color);
-            inst.params[2] = 3.0f;
-            out.batches.back().colors.push_back(inst);
+            if (dx == 0.0f || dy == 0.0f) {
+                // Axis-aligned: a single instance is exact.
+                float line_len = std::sqrt(dx * dx + dy * dy);
+                float w = (dy == 0.0f) ? line_len : th;
+                float h = (dx == 0.0f) ? line_len : th;
+                float x = (dx == 0.0f) ? x1 - th * 0.5f : std::min(x1, x2);
+                float y = (dy == 0.0f) ? y1 - th * 0.5f : std::min(y1, y2);
+                ColorInstanceGPU inst{};
+                inst.rect[0] = x; inst.rect[1] = y;
+                inst.rect[2] = w; inst.rect[3] = h;
+                normalize_color(cc, inst.color);
+                inst.params[2] = 3.0f;
+                out.batches.back().colors.push_back(inst);
+            } else {
+                // Diagonal: the instanced color pipeline can only fill
+                // axis-aligned rects, so decompose the segment into a
+                // chain of overlapping `th × th` dots stepped at half-
+                // thickness along the line direction. O(line_len / th)
+                // instances per diagonal, batched into a single Vulkan
+                // draw call. Ports the macOS Metal fix (commit 36ccc2b,
+                // PR #195) one-for-one — without this, Hershey-rendered
+                // SHX text strokes lose their diagonals (R looks like
+                // P, N drops its diagonal, "/" is invisible).
+                float line_len = std::sqrt(dx * dx + dy * dy);
+                float step = th * 0.5f;
+                if (step < 0.5f) step = 0.5f;
+                int n_steps = static_cast<int>(std::ceil(line_len / step));
+                if (n_steps < 1) n_steps = 1;
+                float half_th = th * 0.5f;
+                for (int i = 0; i <= n_steps; ++i) {
+                    float t = static_cast<float>(i)
+                              / static_cast<float>(n_steps);
+                    float cx = x1 + dx * t;
+                    float cy = y1 + dy * t;
+                    ColorInstanceGPU inst{};
+                    inst.rect[0] = cx - half_th;
+                    inst.rect[1] = cy - half_th;
+                    inst.rect[2] = th;
+                    inst.rect[3] = th;
+                    normalize_color(cc, inst.color);
+                    inst.params[2] = 0.0f;
+                    out.batches.back().colors.push_back(inst);
+                }
+            }
         } else if (cmd == ::phenotype::Cmd::DrawText) {
             float x = read_f32(), y = read_f32();
             float fs = read_f32();
