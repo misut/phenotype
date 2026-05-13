@@ -43,6 +43,17 @@ struct TextEntry {
     std::string family;
     FontWeight weight = FontWeight::Regular;
     FontStyle  style  = FontStyle::Upright;
+    // Per-run rotation (radians, CCW about pivot (x, y), already in
+    // canvas-frame). Backends that support text rotation pass this
+    // straight through to the vertex shader's rigid-body transform.
+    // Default 0.0f reproduces the axis-aligned atlas path bit-for-bit.
+    float rotation = 0.0f;
+    // Horizontal glyph stretch — matches FontSpec::width_factor. The
+    // raster pass folds this into the atlas via the backend's font-
+    // matrix (CoreText) / Paint.setTextScaleX (Android) so glyph
+    // advances and bitmap widths both scale. 1.0f is the unstretched
+    // identity.
+    float width_factor = 1.0f;
 };
 
 struct text_api {

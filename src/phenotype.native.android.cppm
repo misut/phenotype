@@ -78,20 +78,36 @@ static_assert(sizeof(ArcInstanceGPU) == 48,
               "ArcInstance stride must match the GLSL SSBO layout");
 
 // TextInstance layout mirrored byte-for-byte with macOS
-// phenotype.native.macos.cppm's TextInstanceGPU (stride 48). The GLSL
-// `struct TextInstance` in text.vert reads the same layout.
+// phenotype.native.macos.cppm's TextInstanceGPU (stride 64). The GLSL
+// `struct TextInstance` in text.vert reads the same layout. `rot[4]`
+// encodes the per-run rigid-body rotation as
+// `(pivot_x, pivot_y, cos, sin)`; the vertex shader rotates each
+// glyph-quad corner around `(pivot_x, pivot_y)` by `(cos, sin)`.
+// Identity rotation packs as `(0, 0, 1, 0)` and the shader's
+// rotate-around-pivot math collapses to a no-op, so axis-aligned text
+// emits pixel-identical output.
 struct TextInstanceGPU {
     float rect[4];
     float uv_rect[4];
     float color[4];
+    float rot[4]{0.0f, 0.0f, 1.0f, 0.0f};
 };
-static_assert(sizeof(TextInstanceGPU) == 48,
+static_assert(sizeof(TextInstanceGPU) == 64,
               "TextInstance stride must match the GLSL SSBO layout");
 
-// Stage 5 image instance. Layout is identical to TextInstanceGPU so
-// the text pipeline's SSBO plumbing generalises — we keep the name
-// distinct for readability.
-using ImageInstanceGPU = TextInstanceGPU;
+// Stage 5 image instance. Originally typedef'd onto TextInstanceGPU
+// when both pipelines were stride-identical; broken out now that
+// TextInstanceGPU carries per-run rotation. Images stay at stride 48
+// (no rotation slot yet) so the image SSBO and shader can ignore the
+// new field. If image rotation lands later, this can collapse back
+// into a shared 64-byte layout.
+struct ImageInstanceGPU {
+    float rect[4];
+    float uv_rect[4];
+    float color[4];
+};
+static_assert(sizeof(ImageInstanceGPU) == 48,
+              "ImageInstance stride must match the GLSL SSBO layout");
 
 // Per-vertex GPU layout for the triangle pipeline (FillPath / FillQuads
 // fast path). Each ear-clipped triangle pushes 3 of these into the
@@ -329,6 +345,10 @@ struct jni_refs {
     jmethodID paint_descent       = nullptr;
     // Tight glyph bounds — used by text_metrics for cap-height.
     jmethodID paint_get_text_bounds = nullptr;
+    // Horizontal glyph stretch — used by text_build_atlas to fold
+    // FontSpec::width_factor into the rasterised slot (affects both
+    // measureText and drawText output).
+    jmethodID paint_set_text_scale_x = nullptr;
 
     jmethodID bitmap_create      = nullptr;
     jmethodID bitmap_erase_color = nullptr;
@@ -501,6 +521,8 @@ inline bool init_jni_refs(JNIEnv* env) {
     g_jni.paint_get_text_bounds = env->GetMethodID(
         g_jni.paint_class, "getTextBounds",
         "(Ljava/lang/String;IILandroid/graphics/Rect;)V");
+    g_jni.paint_set_text_scale_x = env->GetMethodID(
+        g_jni.paint_class, "setTextScaleX", "(F)V");
 
     g_jni.bitmap_create = env->GetStaticMethodID(
         g_jni.bitmap_class, "createBitmap",
@@ -543,6 +565,7 @@ inline bool init_jni_refs(JNIEnv* env) {
         || !g_jni.paint_set_antialias || !g_jni.paint_measure_text
         || !g_jni.paint_ascent || !g_jni.paint_descent
         || !g_jni.paint_get_text_bounds
+        || !g_jni.paint_set_text_scale_x
         || !g_jni.bitmap_create || !g_jni.bitmap_erase_color
         || !g_jni.canvas_ctor || !g_jni.canvas_draw_text
         || !g_jni.rect_ctor || !g_jni.rect_top_field
@@ -780,6 +803,7 @@ inline void text_shutdown() {
     g_jni.paint_ascent = nullptr;
     g_jni.paint_descent = nullptr;
     g_jni.paint_get_text_bounds = nullptr;
+    g_jni.paint_set_text_scale_x = nullptr;
     g_jni.bitmap_create = nullptr;
     g_jni.bitmap_erase_color = nullptr;
     g_jni.canvas_ctor = nullptr;
@@ -1069,6 +1093,16 @@ inline ::phenotype::native::TextAtlas text_build_atlas(
                             static_cast<jfloat>(te.font_size * scale));
         if (check_and_clear_exception(env)) { slot.skipped = true; continue; }
 
+        // Fold FontSpec::width_factor into the rasterised slot:
+        // setTextScaleX scales horizontal advance and the glyph
+        // bitmap output, so measureText and drawText both come out
+        // pre-stretched. Always set — covers width_factor == 1.0f
+        // entries following a non-1.0 entry that shared the cached
+        // Paint instance.
+        env->CallVoidMethod(paint, g_jni.paint_set_text_scale_x,
+                            static_cast<jfloat>(te.width_factor));
+        if (check_and_clear_exception(env)) { slot.skipped = true; continue; }
+
         slot.ascent  = env->CallFloatMethod(paint, g_jni.paint_ascent);
         slot.descent = env->CallFloatMethod(paint, g_jni.paint_descent);
         if (check_and_clear_exception(env)) { slot.skipped = true; continue; }
@@ -1150,6 +1184,8 @@ inline ::phenotype::native::TextAtlas text_build_atlas(
         if (!paint) continue;
         env->CallVoidMethod(paint, g_jni.paint_set_textsize,
                             static_cast<jfloat>(te.font_size * scale));
+        env->CallVoidMethod(paint, g_jni.paint_set_text_scale_x,
+                            static_cast<jfloat>(te.width_factor));
         env->CallVoidMethod(paint, g_jni.paint_set_color,
                             pack_android_color(te.r, te.g, te.b, te.a));
         if (check_and_clear_exception(env)) continue;
@@ -4187,13 +4223,13 @@ inline void decode_android_color_commands(unsigned char const* buf,
         } else if (cmd == ::phenotype::Cmd::DrawText) {
             float x = read_f32(), y = read_f32();
             float fs = read_f32();
-            // Wire format carries `rotation` (radians) and
-            // `width_factor` (horizontal stretch) right after
-            // `font_size`. Android's text path currently renders
-            // axis-natural and unstretched; read both fields so the
-            // remaining payload aligns and drop them on the floor.
-            (void)read_f32();  // rotation
-            (void)read_f32();  // width_factor
+            // Wire format carries `rotation` (radians, canvas-frame
+            // CCW about pivot (x, y)) and `width_factor` (horizontal
+            // stretch) right after `font_size`. Both feed the atlas
+            // rasterisation (width_factor → Paint.setTextScaleX) and
+            // the per-instance shader transform (rotation → rot[4]).
+            float rotation     = read_f32();
+            float width_factor = read_f32();
             std::uint32_t flags = read_u32();
             ::phenotype::Color cc = unpack(read_u32());
             std::uint32_t flen = read_u32();
@@ -4210,6 +4246,12 @@ inline void decode_android_color_commands(unsigned char const* buf,
             ::phenotype::native::TextEntry entry{};
             entry.x = x; entry.y = y;
             entry.font_size = fs;
+            entry.rotation = rotation;
+            // Clamp degenerate values (zero / negative / NaN) to 1.0
+            // so the atlas raster path always sees a positive scale.
+            // Matches the macOS contract at copy_text_font.
+            entry.width_factor =
+                (width_factor > 0.0f) ? width_factor : 1.0f;
             entry.mono = (flags & 1u) != 0;
             entry.r = cc.r / 255.0f;
             entry.g = cc.g / 255.0f;
@@ -5311,6 +5353,20 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             inst.uv_rect[2] = q.uw; inst.uv_rect[3] = q.vh;
             inst.color[0] = entry.r; inst.color[1] = entry.g;
             inst.color[2] = entry.b; inst.color[3] = entry.a;
+            // Per-instance rigid-body rotation. Pivot is the run's
+            // anchor (entry.x, entry.y) — matches the macOS path's
+            // `(pivot_x, pivot_y) = (run.x, run.y)`. cos/sin from
+            // entry.rotation; identity (0.0f) packs as (1, 0) and
+            // collapses the shader's rotate-around-pivot to identity.
+            inst.rot[0] = entry.x;
+            inst.rot[1] = entry.y;
+            if (entry.rotation == 0.0f) {
+                inst.rot[2] = 1.0f;
+                inst.rot[3] = 0.0f;
+            } else {
+                inst.rot[2] = std::cos(entry.rotation);
+                inst.rot[3] = std::sin(entry.rotation);
+            }
             auto const batch_idx =
                 (i < scratch.text_entries_batch_idx.size())
                     ? scratch.text_entries_batch_idx[i]
