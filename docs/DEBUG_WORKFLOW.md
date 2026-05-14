@@ -100,6 +100,9 @@ the actual `material_plans` executed for the frame. Each plan includes:
   edge highlight, noise, and shadow values;
 - `render_target`, including target dimensions, scale, pixel format, pixel
   count, readiness, and whether the backdrop-pixel budget was satisfied;
+- `decision_trace`, including the pure gate booleans for geometry, quality,
+  backend capabilities, backdrop-source readiness, reduced transparency, and
+  the first blocker that explains the fallback path;
 - `backdrop_sampling`, `fallback`, `fallback_path`, and `fallback_reason`;
 - `backdrop`, including source, readiness flags, sanitized luminance
   statistics, luminance response, and floor/gain/edge deltas;
@@ -120,6 +123,9 @@ to the decision.
 `backdrop-filter` for sampled glass, `fallback-fill` for deterministic fallback,
 and `none` for inactive material work. `max_texture_copy_pixels` is non-zero
 only for backdrop passes and must not exceed `render_target.pixel_count`.
+`decision_trace.can_sample_backdrop` must match `backdrop_sampling`, and
+`decision_trace.first_blocker` must match `fallback_path`; a mismatch usually
+means the backend serialized stale policy metadata or skipped the pure planner.
 `backdrop.luminance_response` is `not-sampled` for fallback plans and one of
 `neutral`, `dark`, `bright`, `flat`, `dark-flat`, or `bright-flat` for sampled
 plans. The adjacent delta fields show whether the pure planner actually changed
@@ -167,15 +173,17 @@ Manifests can also set `require_material_plan_summary` to assert the resolved
 material aggregate, not just the per-plan schema. Supported keys are `count`,
 `min_count`, `fallback`, `backdrop_sampling`, `backdrop_available`,
 `backdrop_stable`, `luminance_adapted`, `render_target_ready`,
-`render_target_within_backdrop_budget`, and exact count maps for
-`fallback_paths`, `fallback_reasons`, `kinds`, `pass_names`,
-`backdrop_sources`, `luminance_responses`, and
-`render_target_pixel_formats`, and `pass_executors`. This catches policy drift
-such as a glass scene silently switching from backdrop blur to fallback, a
-fallback backend reporting the wrong deterministic pass, a sampled scene losing
-its previous-frame backdrop source, a render target exceeding the pure backdrop
-budget, a pass switching executor roles, or a quality/capability downgrade
-losing its LLM-actionable reason string.
+`render_target_within_backdrop_budget`, `decision_can_sample_backdrop`,
+`decision_backend_supports_backdrop`, `decision_backdrop_source_ready`, and
+exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`,
+`pass_names`, `backdrop_sources`, `luminance_responses`,
+`render_target_pixel_formats`, `pass_executors`, and `decision_blockers`. This
+catches policy drift such as a glass scene silently switching from backdrop
+blur to fallback, a fallback backend reporting the wrong deterministic pass, a
+sampled scene losing its previous-frame backdrop source, a render target
+exceeding the pure backdrop budget, a pass switching executor roles, a decision
+trace naming the wrong blocker, or a quality/capability downgrade losing its
+LLM-actionable reason string.
 
 The plan schema check also treats `primary_pass` as a runtime contract. Its
 sample-tap count must match the plan, and the backend `passes[]` list must

@@ -1107,6 +1107,12 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(fallback_plan.render_target.within_backdrop_budget);
     assert(std::string(fallback_plan.render_target.pixel_format)
            == "unknown");
+    assert(fallback_plan.decision_trace.has_material);
+    assert(fallback_plan.decision_trace.target_ready);
+    assert(!fallback_plan.decision_trace.backend_supports_backdrop);
+    assert(!fallback_plan.decision_trace.can_sample_backdrop);
+    assert(std::string(fallback_plan.decision_trace.first_blocker)
+           == "unsupported-backend");
     assert(fallback_plan.fallback_path == MaterialFallbackPath::UnsupportedBackend);
     assert(fallback_plan.blur_radius == 0.0f);
     assert(std::string(fallback_plan.primary_pass.name)
@@ -1136,6 +1142,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     auto glass_plan = plan_material_surface(request, glass_env);
     assert(!glass_plan.fallback());
     assert(glass_plan.backdrop_sampling);
+    assert(glass_plan.decision_trace.backend_supports_backdrop);
+    assert(glass_plan.decision_trace.backdrop_source_ready);
+    assert(glass_plan.decision_trace.can_sample_backdrop);
+    assert(std::string(glass_plan.decision_trace.first_blocker) == "none");
     assert(glass_plan.render_target.ready);
     assert(glass_plan.render_target.within_backdrop_budget);
     assert(glass_plan.blur_radius >= 20.0f);
@@ -1285,6 +1295,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(oversize_plan.fallback_path == MaterialFallbackPath::QualityPolicy);
     assert(oversize_plan.render_target.pixel_count == 395'200);
     assert(!oversize_plan.render_target.within_backdrop_budget);
+    assert(!oversize_plan.decision_trace.backdrop_pixels_within_budget);
+    assert(std::string(oversize_plan.decision_trace.first_blocker)
+           == "quality-policy");
     assert(oversize_plan.quality_policy.max_backdrop_pixels == 100);
     assert(oversize_plan.resource_budget.max_backdrop_pixels == 100);
     assert(!oversize_plan.backdrop_sampling);
@@ -1301,6 +1314,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!invalid_plan.primary_pass.active);
     assert(std::string(invalid_plan.primary_pass.executor) == "none");
     assert(invalid_plan.primary_pass.max_texture_copy_pixels == 0);
+    assert(!invalid_plan.decision_trace.has_geometry);
+    assert(!invalid_plan.decision_trace.has_material);
+    assert(std::string(invalid_plan.decision_trace.first_blocker)
+           == "invalid-geometry");
 
     std::puts("PASS: material planner resolves backdrop and fallback paths");
 }

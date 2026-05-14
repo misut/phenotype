@@ -55,6 +55,12 @@
     "render_target_within_backdrop_budget": 7,
     "render_target_pixel_formats": {
       "bgra8unorm": 7
+    },
+    "decision_can_sample_backdrop": 7,
+    "decision_backend_supports_backdrop": 7,
+    "decision_backdrop_source_ready": 7,
+    "decision_blockers": {
+      "none": 7
     }
   },
   "require_material_resource_bounds": {

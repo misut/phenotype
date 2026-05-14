@@ -171,9 +171,12 @@ MaterialPlan plan = plan_material_surface(request, environment);
 
 The plan records blur, tint, saturation, luminance curve, edge highlight,
 noise/dither, shadow, render-target analysis, backdrop sampling, backdrop
-analysis, fallback path, debug metadata, pass expectations, the resolved quality
-policy, resource budgets, and verifier
-expectations. `primary_pass` states whether the backend should run a backdrop
+analysis, decision trace, fallback path, debug metadata, pass expectations, the
+resolved quality policy, resource budgets, and verifier expectations.
+`decision_trace` records the pure gate booleans for geometry, target readiness,
+quality, backend capabilities, accessibility settings, backdrop-source
+readiness, and the first fallback blocker. `primary_pass` states whether the
+backend should run a backdrop
 blur pass or deterministic translucent fallback. It also records the pure
 executor role and maximum texture-copy pixels for that pass, so a backend
 artifact can prove whether it stayed within the render-target copy budget.
