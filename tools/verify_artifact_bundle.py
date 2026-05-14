@@ -72,6 +72,69 @@ ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
 }
 
 
+def suggested_action_for_failure(
+    path: str,
+    likely_layer: str,
+    likely_pass: str,
+    region: str,
+) -> str:
+    if likely_pass == "material-executor":
+        return (
+            "Inspect renderer.material_executor_summary and the backend "
+            "material executor counters for the missing or excess pass work.")
+    if likely_pass:
+        return (
+            f"Inspect the {likely_pass} material pass serialization and the "
+            "matching MaterialPlan.primary_pass entry.")
+    if region:
+        return (
+            f"Inspect frame.bmp region {region}, its manifest rectangle, and "
+            "renderer.material_plans#summary.region_layers.")
+    if likely_layer.startswith("material."):
+        return (
+            "Inspect plan_material_surface and the resolved MaterialPlan "
+            "fields for this material plan id.")
+    if likely_layer == "material-decision":
+        return (
+            "Inspect MaterialPlan.decision_trace, fallback_path, and the "
+            "pure planner gate that selected the fallback.")
+    if likely_layer == "material-verifier":
+        return (
+            "Inspect MaterialPlan.verifier, semantic verifier_profile, and "
+            "primary_pass.likely_layer.")
+    if likely_layer == "material-pass":
+        return (
+            "Inspect MaterialPlan.primary_pass and renderer.material_plans[].passes "
+            "for pass name, executor, and texture-copy drift.")
+    if likely_layer == "material-backdrop":
+        return (
+            "Inspect MaterialPlan.backdrop and the backend backdrop descriptor "
+            "captured for this frame.")
+    if likely_layer == "material-render-target":
+        return (
+            "Inspect MaterialPlan.render_target and backend render-target "
+            "metadata before checking blur output.")
+    if likely_layer == "platform-runtime":
+        return (
+            "Inspect debug.platform_runtime.details and the backend runtime "
+            "JSON serializer for the reported path.")
+    if likely_layer == "frame-capture":
+        return (
+            "Inspect frame capture dimensions, frame.bmp validity, and the "
+            "manifest region rectangle.")
+    if likely_layer == "artifact-manifest":
+        return (
+            "Inspect artifact_manifest.json for an invalid path, metric, or "
+            "region contract.")
+    if path.startswith("debug.platform_runtime.details.renderer.material_plans"):
+        return (
+            "Inspect renderer.material_plans[] and the pure MaterialPlan "
+            "contract that feeds the artifact verifier.")
+    if path:
+        return f"Inspect {path} in snapshot.json and the matching runtime writer."
+    return "Inspect the first failing check and its surrounding artifact bundle."
+
+
 class Report:
     def __init__(self, bundle: Path) -> None:
         self.data: JsonObject = {
@@ -142,6 +205,11 @@ class Report:
                 failure["likely_pass"] = likely_pass
             if hint:
                 failure["hint"] = hint
+            failure["suggested_action"] = suggested_action_for_failure(
+                path,
+                likely_layer,
+                likely_pass,
+                region)
             self.data["failures"].append(failure)
         return condition
 
@@ -155,6 +223,7 @@ class Report:
             by_layer: JsonObject = {}
             by_pass: JsonObject = {}
             by_path: JsonObject = {}
+            by_action: JsonObject = {}
             for failure in failures:
                 if not isinstance(failure, dict):
                     continue
@@ -167,11 +236,15 @@ class Report:
                 path = failure.get("path")
                 if isinstance(path, str) and path:
                     by_path[path] = by_path.get(path, 0) + 1
+                action = failure.get("suggested_action")
+                if isinstance(action, str) and action:
+                    by_action[action] = by_action.get(action, 0) + 1
             self.data["failure_summary"] = {
                 "count": len(failures),
                 "by_likely_layer": by_layer,
                 "by_likely_pass": by_pass,
                 "by_path": by_path,
+                "by_suggested_action": by_action,
             }
             if failures:
                 first = failures[0]
@@ -187,6 +260,7 @@ class Report:
                             "likely_layer",
                             "likely_pass",
                             "hint",
+                            "suggested_action",
                         )
                         if key in first
                     }
@@ -197,6 +271,10 @@ class Report:
             if by_pass:
                 self.data["failure_summary"]["top_likely_pass"] = max(
                     by_pass.items(),
+                    key=lambda item: (item[1], item[0]))[0]
+            if by_action:
+                self.data["failure_summary"]["top_suggested_action"] = max(
+                    by_action.items(),
                     key=lambda item: (item[1], item[0]))[0]
         json.dump(self.data, sys.stdout, indent=2, sort_keys=True)
         sys.stdout.write("\n")

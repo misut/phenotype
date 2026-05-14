@@ -683,10 +683,17 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["likely_layer"], "platform-runtime")
         self.assertEqual(failure["likely_pass"], "material-executor")
         self.assertIn("missing pass or counter", failure["hint"])
+        self.assertIn("material executor counters", failure["suggested_action"])
         failure_summary = report["failure_summary"]
         self.assertEqual(failure_summary["count"], 1)
         self.assertEqual(failure_summary["top_likely_layer"], "platform-runtime")
         self.assertEqual(failure_summary["top_likely_pass"], "material-executor")
+        self.assertEqual(
+            failure_summary["top_suggested_action"],
+            failure["suggested_action"])
+        self.assertEqual(
+            failure_summary["by_suggested_action"][failure["suggested_action"]],
+            1)
         self.assertEqual(
             failure_summary["first_failure"]["path"],
             failure["path"])
@@ -699,6 +706,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertIn(
             "missing pass or counter",
             failure_summary["first_failure"]["hint"])
+        self.assertEqual(
+            failure_summary["first_failure"]["suggested_action"],
+            failure["suggested_action"])
 
     def test_material_executor_summary_mismatch_is_llm_actionable(self) -> None:
         root = snapshot(material_plan())
@@ -813,6 +823,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "backdrop")
         self.assertEqual(failure["actual"]["region"], "blur")
         self.assertIn("smoother than the named backdrop reference", failure["hint"])
+        self.assertIn("frame.bmp region blur", failure["suggested_action"])
 
 
 if __name__ == "__main__":
