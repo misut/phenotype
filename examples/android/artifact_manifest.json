@@ -25,6 +25,9 @@
     "fallback_paths": {
       "unsupported-backend": 1
     },
+    "fallback_reasons": {
+      "backend reports no material backdrop blur support": 1
+    },
     "kinds": {
       "regular": 1
     },

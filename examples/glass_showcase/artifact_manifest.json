@@ -29,6 +29,7 @@
     "fallback_paths": {
       "none": 7
     },
+    "fallback_reasons": {},
     "kinds": {
       "clear": 1,
       "thin": 2,

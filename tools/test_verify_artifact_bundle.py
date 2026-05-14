@@ -320,6 +320,22 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
             25)
 
+    def test_manifest_can_require_fallback_reason_summary(self) -> None:
+        manifest = {
+            "require_material_plan_summary": {
+                "fallback_reasons": {
+                    "backend reports no material backdrop blur support": 1,
+                },
+            },
+        }
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(
+            report["material_plans"]["fallback_reasons"],
+            {"backend reports no material backdrop blur support": 1})
+
     def test_manifest_can_require_quality_policy_pixel_budget(self) -> None:
         manifest = {
             "require_material_quality_policy": {

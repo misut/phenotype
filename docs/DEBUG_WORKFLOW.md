@@ -150,9 +150,10 @@ so an LLM can jump to the most likely source first. Use
 Manifests can also set `require_material_plan_summary` to assert the resolved
 material aggregate, not just the per-plan schema. Supported keys are `count`,
 `min_count`, `fallback`, `backdrop_sampling`, and exact count maps for
-`fallback_paths`, `kinds`, and `pass_names`. This catches policy drift such as a
-glass scene silently switching from backdrop blur to fallback, or a fallback
-backend reporting the wrong deterministic pass.
+`fallback_paths`, `fallback_reasons`, `kinds`, and `pass_names`. This catches
+policy drift such as a glass scene silently switching from backdrop blur to
+fallback, a fallback backend reporting the wrong deterministic pass, or a
+quality/capability downgrade losing its LLM-actionable reason string.
 
 The plan schema check also treats `primary_pass` as a runtime contract. Its
 sample-tap count must match the plan, and the backend `passes[]` list must
