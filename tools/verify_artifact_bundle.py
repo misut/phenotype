@@ -1784,17 +1784,32 @@ def check_material_plan_summary_requirements(
                 actual=summary.get(field),
                 likely_layer="platform-runtime",
                 hint="Inspect fallback_path and primary_pass for each material plan.")
+    summary_field_hints = {
+        "fallback_paths": (
+            "material-plan",
+            "Inspect MaterialPlan.fallback_path and fallback classification."),
+        "fallback_reasons": (
+            "material-plan",
+            "Inspect MaterialPlan.fallback_reason and the pure fallback decision."),
+        "kinds": (
+            "material-contract",
+            "Inspect MaterialKind serialization and MaterialRect command emission."),
+        "pass_names": (
+            "material-pass",
+            "Inspect MaterialPlan.primary_pass and runtime pass serialization."),
+    }
     for field in ("fallback_paths", "fallback_reasons", "kinds", "pass_names"):
         if field in spec:
             actual = summary.get(field)
+            likely_layer, hint = summary_field_hints[field]
             report.check(
                 f"material plan summary {field} matches",
                 actual == spec[field],
                 path=f"{base_path}.{field}",
                 expected=spec[field],
                 actual=actual,
-                likely_layer="platform-runtime",
-                hint="Inspect renderer.material_plans[] for the unexpected plan kind/pass/fallback.")
+                likely_layer=likely_layer,
+                hint=hint)
 
 
 def check_material_resource_bounds_requirements(
