@@ -1193,6 +1193,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             plan_path,
             likely_layer=likely_layer,
             hint="The pure plan should name the backend pass it expects.")
+        primary_pass_sample_taps: int | float | None = None
         if primary_pass is not None:
             for key in MATERIAL_PASS_FIELDS:
                 if key in ("active", "requires_backdrop"):
@@ -1204,7 +1205,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         likely_layer=likely_layer,
                         hint="Material pass booleans must be explicit.")
                 elif key == "sample_taps":
-                    check_number_field(
+                    primary_pass_sample_taps = check_number_field(
                         report,
                         primary_pass,
                         key,
@@ -1224,6 +1225,17 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             if pass_name:
                 pass_names = summary["pass_names"]
                 pass_names[pass_name] = pass_names.get(pass_name, 0) + 1
+            if isinstance(sample_taps, (int, float)) and isinstance(
+                    primary_pass_sample_taps, (int, float)):
+                report.check(
+                    "material primary pass sample taps match plan",
+                    int(primary_pass_sample_taps) == int(sample_taps),
+                    path=f"{plan_path}.primary_pass.sample_taps",
+                    expected=int(sample_taps),
+                    actual=int(primary_pass_sample_taps),
+                    likely_layer=likely_layer,
+                    hint="Keep MaterialPlan.sample_taps and primary_pass.sample_taps in sync.",
+                    record_success=False)
 
         passes = plan.get("passes")
         report.check(
@@ -1285,6 +1297,26 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                             pass_path,
                             likely_layer=likely_layer,
                             hint="Pass entries must name their layer for debugging.")
+            if isinstance(primary_pass, dict):
+                report.check(
+                    "material pass list includes primary pass",
+                    any(
+                        isinstance(entry, dict)
+                        and entry.get("name") == primary_pass.get("name")
+                        and entry.get("active") == primary_pass.get("active")
+                        and entry.get("requires_backdrop") == primary_pass.get(
+                            "requires_backdrop")
+                        and entry.get("sample_taps") == primary_pass.get("sample_taps")
+                        and entry.get("likely_layer") == primary_pass.get(
+                            "likely_layer")
+                        for entry in passes
+                    ),
+                    path=f"{plan_path}.passes",
+                    expected=primary_pass,
+                    actual=passes,
+                    likely_layer=likely_layer,
+                    hint="Runtime pass details should include the primary pass unchanged.",
+                    record_success=False)
 
         if fallback is True:
             report.check(

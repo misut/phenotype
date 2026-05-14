@@ -145,6 +145,11 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 glass scene silently switching from backdrop blur to fallback, or a fallback
 backend reporting the wrong deterministic pass.
 
+The plan schema check also treats `primary_pass` as a runtime contract. Its
+sample-tap count must match the plan, and the backend `passes[]` list must
+include the same pass entry. When this fails, inspect the pass serializer before
+changing material policy.
+
 Use `require_material_resource_bounds` when a material gate must prove the
 runtime stayed within the pure plan's performance budget. Supported limits are
 `max_plan_blur_radius_lte`, `max_budget_blur_radius_lte`,
