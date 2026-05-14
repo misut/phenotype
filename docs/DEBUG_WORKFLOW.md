@@ -178,6 +178,9 @@ to the most likely source first. It also repeats the first actionable failure
 as `first_failure` and publishes `top_likely_layer`, `top_likely_pass`, and
 `top_suggested_action` when those hints are available, which lets CI logs
 identify the first file/pass family to inspect without scanning every check.
+Plan-level failures route to `plan_material_surface` and runtime plan
+serialization; semantic/runtime contract failures route to semantic material
+nodes, `MaterialRect` command emission, and `renderer.material_plans[]` parity.
 Use `--require-material-plan` when a bundle must contain resolved material
 plans.
 

@@ -623,6 +623,8 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             ".fallback_reasons")
         self.assertEqual(failure["likely_layer"], "material-plan")
         self.assertIn("MaterialPlan.fallback_reason", failure["hint"])
+        self.assertIn("plan_material_surface", failure["suggested_action"])
+        self.assertIn("MaterialPlan fields", failure["suggested_action"])
 
     def test_non_fallback_reason_failure_is_llm_actionable(self) -> None:
         plan = material_plan()
@@ -849,6 +851,31 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["actual"]["region"], "blur")
         self.assertIn("smoother than the named backdrop reference", failure["hint"])
         self.assertIn("frame.bmp region blur", failure["suggested_action"])
+
+    def test_material_contract_mismatch_has_specific_suggested_action(self) -> None:
+        root = snapshot(material_plan())
+        semantic_tree = root["debug"]["semantic_tree"]
+        assert isinstance(semantic_tree, dict)
+        children = semantic_tree["children"]
+        assert isinstance(children, list)
+        material_node = children[0]
+        assert isinstance(material_node, dict)
+        material_debug = material_node["material"]
+        assert isinstance(material_debug, dict)
+        material_debug["kind"] = "thin"
+
+        code, report = self.run_verifier(root)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material semantic/runtime kinds match")
+        self.assertEqual(
+            failure["path"],
+            "debug.material_semantic_runtime_match.kinds")
+        self.assertEqual(failure["likely_layer"], "material-contract")
+        self.assertIn("semantic material nodes", failure["suggested_action"])
+        self.assertIn("renderer.material_plans", failure["suggested_action"])
 
 
 if __name__ == "__main__":
