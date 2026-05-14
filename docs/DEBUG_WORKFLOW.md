@@ -324,8 +324,11 @@ pull requests fail if the committed glass showcase manifest no longer matches
 the startup frame or semantic material contract. Docs-only and tools-only PRs
 avoid the root C++ test matrix; docs changes run the docs WASI build, while
 tooling changes run the verifier's Python contract checks. The main-branch
-push workflow only runs artifact/docs build gates. Windows artifact automation
-and Android CI wiring remain future work.
+push workflow only runs artifact/docs build gates. WASI root tests and docs
+builds run on Linux runners; macOS runners are reserved for the native glass
+artifact gate. Workflow-file changes deliberately enable all relevant gates so
+runner policy edits validate themselves. Windows artifact automation and Android
+CI wiring remain future work.
 
 The Android manifest intentionally does not assert an exact
 `render_target_within_backdrop_budget` count because physical devices and
