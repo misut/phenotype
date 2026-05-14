@@ -6044,6 +6044,10 @@ inline ::json::Object android_renderer_runtime_json() {
         ::json::Value{g_renderer.tri_pipeline != VK_NULL_HANDLE});
     r.emplace("material_pipeline_ready", ::json::Value{false});
     r.emplace("material_backdrop_source_ready", ::json::Value{false});
+    r.emplace(
+        "material_plan_contract_version",
+        ::json::Value{
+            static_cast<std::int64_t>(material_plan_contract_version)});
     auto const material_plan_count = g_renderer.last_scratch_valid
         ? g_renderer.last_scratch.material_records.size()
         : std::size_t{0};

@@ -5022,6 +5022,10 @@ inline json::Object windows_renderer_runtime_json() {
     renderer.emplace("material_pipeline_ready", json::Value{false});
     renderer.emplace("material_backdrop_source_ready", json::Value{false});
     renderer.emplace(
+        "material_plan_contract_version",
+        json::Value{
+            static_cast<std::int64_t>(material_plan_contract_version)});
+    renderer.emplace(
         "material_plan_count",
         json::Value{
             static_cast<std::int64_t>(g_renderer.material_records.size())});

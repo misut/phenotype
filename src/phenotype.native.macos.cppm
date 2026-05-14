@@ -6992,6 +6992,10 @@ inline json::Object macos_renderer_runtime_json() {
         "readback_buffer_ready",
         json::Value{g_renderer.frame_readback_buf != nullptr});
     renderer.emplace(
+        "material_plan_contract_version",
+        json::Value{
+            static_cast<std::int64_t>(material_plan_contract_version)});
+    renderer.emplace(
         "material_plan_count",
         json::Value{
             static_cast<std::int64_t>(
