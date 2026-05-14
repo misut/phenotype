@@ -1,10 +1,7 @@
-// Round-trip consumer for the JSON artifacts produced by phenotype-web's
-// `themeToPhenotypeJson` snapshot tests (PR #6, PR #9).
+// Round-trip consumer for committed Theme JSON fixtures.
 //
-// Each raw-string literal below MUST stay byte-equivalent with the
-// matching `tests/fixtures/themes/<theme>.theme.json` file. Those
-// files mirror `phenotype-web/src/theme/__snapshots__/<theme>.theme.json`
-// and are the human-visible artifacts of the M3 token pipeline. The
+// Each raw-string literal below MUST stay value-equivalent with the
+// matching `tests/fixtures/themes/<theme>.theme.json` file. The
 // literals let every target (native + wasi) verify the round-trip
 // without depending on filesystem preopens, which exon's wasmtime
 // runner does not grant.
@@ -16,13 +13,12 @@
 // shape of the JSON literal does not have to match the fixture file
 // byte-for-byte, only the key set and the values.
 //
-// Update flow when a phenotype-web snapshot changes:
-//   1. Pull the new snapshot(s) from phenotype-web.
-//   2. Overwrite `tests/fixtures/themes/<theme>.theme.json` with them.
-//   3. Update the raw-string literal(s) below to the same values
+// Update flow when a committed theme fixture changes:
+//   1. Overwrite `tests/fixtures/themes/<theme>.theme.json`.
+//   2. Update the raw-string literal(s) below to the same values
 //      (compact form is fine — the parity guard checks key set, the
 //      detail tests pin specific values).
-//   PR review surfaces all three edits in the same diff.
+//   PR review surfaces both edits in the same diff.
 
 #include <cassert>
 #include <cstdio>
@@ -1016,7 +1012,7 @@ constexpr ThemeFixture THEME_FIXTURES[] = {
 
 } // namespace
 
-void test_phenotype_web_default_theme_roundtrip() {
+void test_default_theme_roundtrip() {
     auto parsed = theme_from_json(std::string{DEFAULT_THEME_JSON});
     assert(parsed.has_value());
 
@@ -1029,19 +1025,14 @@ void test_phenotype_web_default_theme_roundtrip() {
     assert(t.surface.r == 255 && t.surface.g == 255 && t.surface.b == 255);
     assert(t.transparent.a == 0);
 
-    // phenotype-web's "angular" radius defaults — radius_xs (3) and
-    // radius_full (9999) match phenotype's defaults exactly; the
-    // sm / md / lg rungs are smaller (2/3/4 vs phenotype's earlier
-    // 4/6/8) and rely on the JSON override path.
+    // Compact radius defaults.
     assert(t.radius_xs == 3.0f);
     assert(t.radius_sm == 2.0f);
     assert(t.radius_md == 3.0f);
     assert(t.radius_lg == 4.0f);
     assert(t.radius_full == 9999.0f);
 
-    // Spacing scale: phenotype-web mirrors phenotype's defaults
-    // exactly across all seven rungs, so the assertions mostly guard
-    // against silently dropped fields.
+    // Spacing scale: guard all seven rungs against silently dropped fields.
     assert(t.space_xs == 4.0f);
     assert(t.space_sm == 8.0f);
     assert(t.space_md == 12.0f);
@@ -1066,15 +1057,15 @@ void test_phenotype_web_default_theme_roundtrip() {
     assert(t.semantic_info_border.r == 59 && t.semantic_info_border.b == 246);
     assert(t.semantic_error_fg.r == 185 && t.semantic_error_fg.b == 28);
 
-    // Typography + layout untouched by phenotype-web's default theme.
+    // Typography + layout defaults.
     assert(t.body_font_size == 16.0f);
     assert(t.line_height_ratio > 1.59f && t.line_height_ratio < 1.61f);
     assert(t.max_content_width == 720.0f);
 
-    std::puts("PASS: phenotype-web default theme round-trip");
+    std::puts("PASS: default theme round-trip");
 }
 
-void test_phenotype_web_dark_theme_roundtrip() {
+void test_dark_theme_roundtrip() {
     auto parsed = theme_from_json(std::string{DARK_THEME_JSON});
     assert(parsed.has_value());
     Theme const& t = *parsed;
@@ -1101,10 +1092,10 @@ void test_phenotype_web_dark_theme_roundtrip() {
     assert(t.body_font_size == 16.0f);
     assert(t.line_height_ratio > 1.59f && t.line_height_ratio < 1.61f);
 
-    std::puts("PASS: phenotype-web dark theme round-trip");
+    std::puts("PASS: dark theme round-trip");
 }
 
-void test_phenotype_web_warm_theme_roundtrip() {
+void test_warm_theme_roundtrip() {
     auto parsed = theme_from_json(std::string{WARM_THEME_JSON});
     assert(parsed.has_value());
     Theme const& t = *parsed;
@@ -1126,10 +1117,10 @@ void test_phenotype_web_warm_theme_roundtrip() {
     // semantic palette inherited from default.
     assert(t.semantic_success_bg.r == 236);
 
-    std::puts("PASS: phenotype-web warm theme round-trip");
+    std::puts("PASS: warm theme round-trip");
 }
 
-void test_phenotype_web_dense_theme_roundtrip() {
+void test_dense_theme_roundtrip() {
     auto parsed = theme_from_json(std::string{DENSE_THEME_JSON});
     assert(parsed.has_value());
     Theme const& t = *parsed;
@@ -1155,15 +1146,14 @@ void test_phenotype_web_dense_theme_roundtrip() {
     assert(t.radius_md == 4.0f);
     assert(t.radius_lg == 6.0f);
 
-    std::puts("PASS: phenotype-web dense theme round-trip");
+    std::puts("PASS: dense theme round-trip");
 }
 
 void test_token_vocabulary_parity() {
     // partial-mode deserialization would silently swallow drift between
-    // phenotype's Theme and any phenotype-web fixture (extra Theme
-    // fields fall back to C++ defaults, unknown JSON keys are
-    // ignored). This guard catches both directions explicitly across
-    // every theme.
+    // phenotype's Theme and any committed fixture (extra Theme fields
+    // fall back to C++ defaults, unknown JSON keys are ignored). This
+    // guard catches both directions explicitly across every theme.
 
     std::set<std::string> theme_fields;
     [&]<std::size_t... Is>(std::index_sequence<Is...>) {
@@ -1200,17 +1190,17 @@ void test_token_vocabulary_parity() {
             }
         }
     }
-    assert(!any_failed && "phenotype Theme and one or more phenotype-web fixtures have drifted");
+    assert(!any_failed && "phenotype Theme and one or more theme fixtures have drifted");
 
     std::printf("PASS: token vocabulary parity across all 4 themes (%zu fields)\n",
                 theme_fields.size());
 }
 
 int main() {
-    test_phenotype_web_default_theme_roundtrip();
-    test_phenotype_web_dark_theme_roundtrip();
-    test_phenotype_web_warm_theme_roundtrip();
-    test_phenotype_web_dense_theme_roundtrip();
+    test_default_theme_roundtrip();
+    test_dark_theme_roundtrip();
+    test_warm_theme_roundtrip();
+    test_dense_theme_roundtrip();
     test_token_vocabulary_parity();
     return 0;
 }

@@ -353,18 +353,17 @@ show the override, every material plan to fall back through
 `reduced-transparency`, and the runtime executor summary to contain only
 fallback material work.
 
-The standard and accessibility gates are wired into PR CI for code and
-artifact-relevant changes, so pull requests fail if either committed glass
-showcase manifest no longer matches the startup frame or semantic material
-contract. Docs-only and tools-only PRs avoid the root C++ test matrix; docs
-changes run the docs WASI build, tooling changes run the verifier's Python
-contract checks, and committed glass showcase artifact manifests run the
-artifact gates instead of the full root matrix. The main-branch push workflow
-only runs artifact/docs build gates. WASI root tests and docs builds run on
-Linux runners; macOS runners are reserved for the native glass artifact gates.
-Workflow-file changes deliberately enable all relevant gates so runner policy
-edits validate themselves. Windows artifact automation and Android CI wiring
-remain future work.
+The standard and accessibility gates are local acceptance checks for PR work.
+Run them before changing material rendering, artifact manifests, or verifier
+expectations. PR CI deliberately does not run the slow macOS glass showcase
+capture; docs-only and tools-only PRs avoid the root C++ test matrix, docs
+changes run the docs WASI build, and tooling changes run the verifier's Python
+contract checks. The main-branch push workflow is the automated artifact safety
+net and only runs artifact/docs build gates. WASI root tests and docs builds
+run on Linux runners; macOS runners are reserved for the main-branch native
+glass artifact gates. Workflow-file changes deliberately enable code, docs,
+and tooling gates so runner policy edits validate themselves. Windows artifact
+automation and Android CI wiring remain future work.
 
 The Android manifest intentionally does not assert an exact
 `render_target_within_backdrop_budget` count because physical devices and

@@ -11,9 +11,9 @@
 // to an empty literal — assert_snapshot prints a CAPTURE block when
 // the expected is empty so the workflow stays explicit.
 //
-// Scope: phenotype-side regression catch only. Cross-tool pixel diff
-// against phenotype-web's Playwright snapshots is a separate
-// milestone (font-stack + DPR + sub-pixel positioning differ).
+// Scope: phenotype-side regression catch only. Pixel-level visual checks
+// belong in example artifact manifests where backend differences can be
+// captured explicitly.
 
 #include <cassert>
 #include <cstdint>
