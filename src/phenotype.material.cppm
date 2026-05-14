@@ -9,6 +9,8 @@ import phenotype.types;
 
 export namespace phenotype {
 
+inline constexpr std::uint32_t material_plan_contract_version = 1;
+
 struct MaterialGeometry {
     float x = 0.0f;
     float y = 0.0f;
@@ -159,6 +161,7 @@ struct MaterialDecisionTrace {
 };
 
 struct MaterialPlan {
+    std::uint32_t contract_version = material_plan_contract_version;
     MaterialKind kind = MaterialKind::None;
     MaterialGeometry geometry{};
     MaterialRenderTargetAnalysis render_target{};

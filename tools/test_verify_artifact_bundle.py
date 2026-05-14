@@ -32,6 +32,7 @@ def material_plan(
 ) -> dict[str, object]:
     primary = material_pass(primary_sample_taps)
     return {
+        "contract_version": 1,
         "kind": "regular",
         "plan_id": "material.regular.fallback",
         "geometry": {"x": 12.0, "y": 20.0, "w": 240.0, "h": 96.0, "radius": 10.0},
@@ -360,6 +361,29 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["failure_summary"]["by_path"][failure["path"]],
             1)
 
+    def test_material_plan_contract_version_mismatch_is_llm_actionable(self) -> None:
+        plan = material_plan()
+        plan["contract_version"] = 2
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material plan contract version is supported")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".contract_version")
+        self.assertEqual(failure["expected"], 1)
+        self.assertEqual(failure["actual"], 2)
+        self.assertEqual(failure["likely_layer"], "material.regular.fallback")
+        self.assertIn("MaterialPlan schema version", failure["hint"])
+        self.assertIn("plan_material_surface", failure["suggested_action"])
+        self.assertEqual(
+            report["material_plans"]["contract_versions"],
+            {"2": 1})
+
     def test_manifest_can_require_plan_sample_and_runtime_pass_bounds(self) -> None:
         manifest = {
             "require_material_resource_bounds": {
@@ -407,6 +431,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "backdrop_sampling": 0,
                 "backdrop_available": 0,
                 "backdrop_stable": 0,
+                "contract_versions": {"1": 1},
                 "backdrop_sources": {"none": 1},
                 "luminance_responses": {"not-sampled": 1},
                 "luminance_adapted": 0,

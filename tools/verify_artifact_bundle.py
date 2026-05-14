@@ -71,6 +71,8 @@ ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
     "not-sampled",
 }
 
+MATERIAL_PLAN_CONTRACT_VERSION = 1
+
 
 def suggested_action_for_failure(
     path: str,
@@ -700,6 +702,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "min_count",
         "fallback",
         "backdrop_sampling",
+        "contract_versions",
         "fallback_paths",
         "fallback_reasons",
         "kinds",
@@ -764,6 +767,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         spec["fallback_reasons"] = string_int_map(
             value["fallback_reasons"],
             "require_material_plan_summary.fallback_reasons")
+    if "contract_versions" in value:
+        spec["contract_versions"] = string_int_map(
+            value["contract_versions"],
+            "require_material_plan_summary.contract_versions")
     if "backdrop_sources" in value:
         spec["backdrop_sources"] = string_int_map(
             value["backdrop_sources"],
@@ -1241,6 +1248,7 @@ def summarize_semantic_tree(tree: JsonObject) -> JsonObject:
 
 
 REQUIRED_MATERIAL_PLAN_FIELDS = (
+    "contract_version",
     "kind",
     "plan_id",
     "geometry",
@@ -1358,6 +1366,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "pass_names": {},
         "pass_executors": {},
         "plan_ids": [],
+        "contract_versions": {},
         "region_layers": {},
         "verifier_profiles": {},
         "verifier_require_backdrop_source": 0,
@@ -1446,6 +1455,43 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 hint="Regenerate the resolved MaterialPlan before writing runtime JSON.",
                 record_success=False)
 
+        plan_id = plan.get("plan_id")
+        if isinstance(plan_id, str):
+            summary["plan_ids"].append(plan_id)
+        likely_layer = plan_id if isinstance(plan_id, str) and plan_id else "material-plan"
+        if "contract_version" in plan:
+            contract_version = plan.get("contract_version")
+            contract_version_is_int = (
+                isinstance(contract_version, int)
+                and not isinstance(contract_version, bool))
+            report.check(
+                "material plan contract version is integer",
+                contract_version_is_int,
+                path=f"{plan_path}.contract_version",
+                expected="integer",
+                actual=contract_version,
+                likely_layer=likely_layer,
+                hint=(
+                    "MaterialPlan.contract_version must be serialized as an "
+                    "integer before any schema-specific fields are trusted."),
+                record_success=False)
+            if contract_version_is_int:
+                versions = summary["contract_versions"]
+                key = str(contract_version)
+                versions[key] = versions.get(key, 0) + 1
+                report.check(
+                    "material plan contract version is supported",
+                    contract_version == MATERIAL_PLAN_CONTRACT_VERSION,
+                    path=f"{plan_path}.contract_version",
+                    expected=MATERIAL_PLAN_CONTRACT_VERSION,
+                    actual=contract_version,
+                    likely_layer=likely_layer,
+                    hint=(
+                        "Update verify_artifact_bundle.py and the material "
+                        "artifact docs before emitting a new MaterialPlan "
+                        "schema version."),
+                    record_success=False)
+
         kind = plan.get("kind")
         if isinstance(kind, str):
             kinds = summary["kinds"]
@@ -1459,10 +1505,6 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 likely_layer=kind,
                 hint="Update the pure MaterialKind serializer and verifier vocabulary together.",
                 record_success=False)
-        plan_id = plan.get("plan_id")
-        if isinstance(plan_id, str):
-            summary["plan_ids"].append(plan_id)
-        likely_layer = plan_id if isinstance(plan_id, str) and plan_id else "material-plan"
 
         plan_blur_radius: int | float | None = None
         plan_edge_highlight: int | float | None = None
@@ -2779,6 +2821,9 @@ def check_material_plan_summary_requirements(
         "fallback_reasons": (
             "material-plan",
             "Inspect MaterialPlan.fallback_reason and the pure fallback decision."),
+        "contract_versions": (
+            "material-plan",
+            "Inspect MaterialPlan.contract_version and the artifact verifier schema."),
         "kinds": (
             "material-contract",
             "Inspect MaterialKind serialization and MaterialRect command emission."),
@@ -2810,6 +2855,7 @@ def check_material_plan_summary_requirements(
     for field in (
             "fallback_paths",
             "fallback_reasons",
+            "contract_versions",
             "kinds",
             "pass_names",
             "pass_executors",

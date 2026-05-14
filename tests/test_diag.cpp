@@ -688,6 +688,8 @@ void test_material_runtime_record_json_contract() {
     auto const& obj = value.as_object();
 
     assert(obj.at("command_index").as_integer() == 3);
+    assert(obj.at("contract_version").as_integer()
+           == material_plan_contract_version);
     assert(obj.at("kind").as_string() == "thin");
     assert(obj.at("plan_id").as_string() == "material.thin.fallback");
     assert(obj.at("fallback").as_bool() == true);
