@@ -48,6 +48,7 @@ struct MaterialQualityPolicy {
     bool allow_shadow = true;
     float max_blur_radius = 36.0f;
     unsigned int max_sample_taps = 25;
+    std::int64_t max_backdrop_pixels = 4'000'000;
 };
 
 struct MaterialDebugSeed {
@@ -393,6 +394,9 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     resolved_quality.max_sample_taps = std::min(
         resolved_quality.max_sample_taps,
         25u);
+    resolved_quality.max_backdrop_pixels = std::max(
+        std::int64_t{0},
+        resolved_quality.max_backdrop_pixels);
     auto const max_blur_radius = std::max(
         0.0f,
         resolved_quality.max_blur_radius);
@@ -429,7 +433,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.resource_budget.max_blur_radius = max_blur_radius;
     plan.resource_budget.max_sample_taps = plan.sample_taps;
     plan.resource_budget.max_pass_count = 1;
-    plan.resource_budget.max_backdrop_pixels = target_pixels;
+    plan.resource_budget.max_backdrop_pixels =
+        resolved_quality.max_backdrop_pixels;
     plan.resource_budget.bounded_texture_copy = true;
     plan.resource_budget.deterministic_fallback = true;
 
@@ -441,10 +446,15 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         && has_geometry;
     bool const target_ready = environment.render_target.width > 0
         && environment.render_target.height > 0;
-    bool const quality_allows_backdrop =
+    bool const backdrop_pixels_within_budget =
+        target_pixels <= resolved_quality.max_backdrop_pixels;
+    bool const quality_switches_allow_backdrop =
         resolved_quality.allow_backdrop_sampling
         && max_blur_radius > 0.0f
         && plan.sample_taps > 0u;
+    bool const quality_allows_backdrop =
+        quality_switches_allow_backdrop
+        && backdrop_pixels_within_budget;
     bool const can_sample_backdrop =
         has_material
         && target_ready
@@ -475,7 +485,9 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.noise_opacity = 0.0f;
     } else if (!quality_allows_backdrop) {
         plan.fallback_path = MaterialFallbackPath::QualityPolicy;
-        plan.fallback_reason = "quality policy disables material backdrop sampling";
+        plan.fallback_reason = !quality_switches_allow_backdrop
+            ? "quality policy disables material backdrop sampling"
+            : "quality policy backdrop pixel budget exceeded";
         plan.blur_radius = 0.0f;
         plan.saturation = 1.0f;
         plan.noise_opacity = 0.0f;

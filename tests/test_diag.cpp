@@ -672,6 +672,7 @@ void test_material_runtime_record_json_contract() {
     env.debug_seed.node = 11;
     env.quality.max_blur_radius = 18.0f;
     env.quality.max_sample_taps = 9;
+    env.quality.max_backdrop_pixels = 100'000;
 
     auto plan = plan_material_surface(
         material_request_for_command(
@@ -705,6 +706,7 @@ void test_material_runtime_record_json_contract() {
     assert(quality_policy.at("allow_shadow").as_bool() == true);
     assert(quality_policy.at("max_blur_radius").as_float() == 18.0);
     assert(quality_policy.at("max_sample_taps").as_integer() == 9);
+    assert(quality_policy.at("max_backdrop_pixels").as_integer() == 100'000);
     assert(obj.at("resource_budget").as_object()
                .at("max_sample_taps").as_integer() == 9);
     assert(obj.at("resource_budget").as_object()

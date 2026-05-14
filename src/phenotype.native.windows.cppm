@@ -4530,6 +4530,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_env.debug_seed.frame = ++g_renderer.material_frame_sequence;
     material_env.quality.max_blur_radius = 36.0f;
     material_env.quality.max_sample_taps = 25;
+    material_env.quality.max_backdrop_pixels = 4'000'000;
     DecodedFrame decoded;
     g_renderer.material_records.clear();
     g_renderer.material_executor_summary = MaterialExecutorSummary{};

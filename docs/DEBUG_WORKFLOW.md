@@ -192,7 +192,11 @@ likely `material-executor` pass when the path targets the executor summary.
 Use `require_material_quality_policy` when a material gate must prove the
 resolved pure policy stayed enabled and bounded. It can require backdrop
 sampling, noise, and shadow to remain allowed for every plan, and can bound the
-maximum quality-policy blur radius and sample taps seen in the artifact.
+maximum quality-policy blur radius, sample taps, and backdrop pixel budget seen
+in the artifact. `max_backdrop_pixels_lte` is the pure planning limit for
+backdrop copy/blur eligibility; compare it with
+`renderer.material_executor_summary.backdrop_copy_pixels` when diagnosing how
+many pixels the backend actually copied in a frame.
 
 Set `require_material_semantic_runtime_match` when a gate must prove that the
 semantic material nodes and the backend runtime material plans describe the

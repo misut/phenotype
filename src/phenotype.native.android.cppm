@@ -4780,6 +4780,7 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
     material_env.backdrop.source = "android-vulkan-fallback";
     material_env.quality.max_blur_radius = 36.0f;
     material_env.quality.max_sample_taps = 25;
+    material_env.quality.max_backdrop_pixels = 4'000'000;
     std::uint32_t command_index = 0;
     for (auto const& cmd : commands) {
         auto const current_command_index = command_index++;
@@ -5415,6 +5416,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         material_env.debug_seed.frame = ++g_renderer.material_frame_sequence;
         material_env.quality.max_blur_radius = 36.0f;
         material_env.quality.max_sample_taps = 25;
+        material_env.quality.max_backdrop_pixels = 4'000'000;
         decode_android_color_commands(buf, len, material_env, scratch);
         if (!scratch.has_clear) {
             auto const& theme = ::phenotype::current_theme();

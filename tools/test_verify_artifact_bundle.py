@@ -56,6 +56,7 @@ def material_plan(
             "allow_shadow": True,
             "max_blur_radius": 36.0,
             "max_sample_taps": 25,
+            "max_backdrop_pixels": 4_000_000,
         },
         "primary_pass": primary,
         "resource_budget": {
@@ -318,6 +319,25 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
             25)
+
+    def test_manifest_can_require_quality_policy_pixel_budget(self) -> None:
+        manifest = {
+            "require_material_quality_policy": {
+                "require_backdrop_sampling_allowed": True,
+                "require_noise_allowed": True,
+                "require_shadow_allowed": True,
+                "max_blur_radius_lte": 36.0,
+                "max_sample_taps_lte": 25,
+                "max_backdrop_pixels_lte": 4_000_000,
+            },
+        }
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(
+            report["material_plans"]["quality_policy"]["max_backdrop_pixels"],
+            4_000_000)
 
     def test_manifest_can_require_runtime_numeric_bounds(self) -> None:
         manifest = {

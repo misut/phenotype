@@ -636,6 +636,7 @@ def material_quality_policy_spec_from_manifest(value: Any) -> JsonObject | None:
     number_fields = {
         "max_blur_radius_lte",
         "max_sample_taps_lte",
+        "max_backdrop_pixels_lte",
     }
     bool_fields = {
         "require_backdrop_sampling_allowed",
@@ -1095,6 +1096,7 @@ MATERIAL_QUALITY_POLICY_BOOL_FIELDS = (
 MATERIAL_QUALITY_POLICY_NUMBER_FIELDS = (
     "max_blur_radius",
     "max_sample_taps",
+    "max_backdrop_pixels",
 )
 
 
@@ -1128,6 +1130,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "shadow_disabled": 0,
             "max_blur_radius": 0.0,
             "max_sample_taps": 0,
+            "max_backdrop_pixels": 0,
         },
     }
     if not isinstance(plans, list):
@@ -1379,6 +1382,10 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     elif key == "max_sample_taps":
                         quality_summary["max_sample_taps"] = max(
                             int(quality_summary["max_sample_taps"]),
+                            int(policy_limit))
+                    elif key == "max_backdrop_pixels":
+                        quality_summary["max_backdrop_pixels"] = max(
+                            int(quality_summary["max_backdrop_pixels"]),
                             int(policy_limit))
 
         resource_budget = check_object_field(
@@ -1909,6 +1916,7 @@ def check_material_quality_policy_requirements(
     field_map = {
         "max_blur_radius_lte": "max_blur_radius",
         "max_sample_taps_lte": "max_sample_taps",
+        "max_backdrop_pixels_lte": "max_backdrop_pixels",
     }
     for spec_field, summary_field in field_map.items():
         if spec_field not in spec:

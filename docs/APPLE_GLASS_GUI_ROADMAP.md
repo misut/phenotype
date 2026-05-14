@@ -134,7 +134,8 @@ fallback path, debug metadata, resolved quality policy, pass expectations,
 resource budgets, and verifier expectations. Backdrops also degrade through
 an explicit
 `quality-policy` fallback when the pure quality policy disables sampling or
-sets an unusable blur/tap budget. Backends execute the plan; they do not
+sets an unusable blur/tap budget, and when the render target exceeds the
+resolved `max_backdrop_pixels` budget. Backends execute the plan; they do not
 re-decide policy.
 
 ### Theme and widgets

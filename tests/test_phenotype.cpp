@@ -1177,6 +1177,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     budget_env.capabilities.reduce_transparency = false;
     budget_env.quality.max_blur_radius = 12.0f;
     budget_env.quality.max_sample_taps = 7;
+    budget_env.quality.max_backdrop_pixels = 600'000;
     budget_env.quality.allow_noise = false;
     budget_env.quality.allow_shadow = false;
     auto budget_plan = plan_material_surface(request, budget_env);
@@ -1188,14 +1189,28 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(budget_plan.shadow_radius == 0.0f);
     assert(budget_plan.quality_policy.max_blur_radius == 12.0f);
     assert(budget_plan.quality_policy.max_sample_taps == 7);
+    assert(budget_plan.quality_policy.max_backdrop_pixels == 600'000);
     assert(!budget_plan.quality_policy.allow_noise);
     assert(!budget_plan.quality_policy.allow_shadow);
     assert(budget_plan.resource_budget.max_blur_radius == 12.0f);
     assert(budget_plan.resource_budget.max_sample_taps == 7);
     assert(budget_plan.resource_budget.max_pass_count == 1);
-    assert(budget_plan.resource_budget.max_backdrop_pixels == 520 * 760);
+    assert(budget_plan.resource_budget.max_backdrop_pixels == 600'000);
     assert(budget_plan.resource_budget.bounded_texture_copy);
     assert(budget_plan.resource_budget.deterministic_fallback);
+
+    MaterialEnvironment oversize_env = glass_env;
+    oversize_env.quality.max_backdrop_pixels = 100;
+    auto oversize_plan = plan_material_surface(request, oversize_env);
+    assert(oversize_plan.fallback());
+    assert(oversize_plan.fallback_path == MaterialFallbackPath::QualityPolicy);
+    assert(oversize_plan.quality_policy.max_backdrop_pixels == 100);
+    assert(oversize_plan.resource_budget.max_backdrop_pixels == 100);
+    assert(!oversize_plan.backdrop_sampling);
+    assert(oversize_plan.sample_taps == 0);
+    assert(oversize_plan.primary_pass.sample_taps == 0);
+    assert(std::string(oversize_plan.fallback_reason)
+           == "quality policy backdrop pixel budget exceeded");
 
     MaterialRequest invalid_request = request;
     invalid_request.geometry.w = 0.0f;
