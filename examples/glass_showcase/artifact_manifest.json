@@ -102,11 +102,11 @@
     },
     {
       "path": "renderer.material_executor_summary.backdrop_copy_pixels",
-      "lte": 4000000
+      "lte": 2000000
     },
     {
       "path": "renderer.material_executor_summary.material_upload_bytes",
-      "lte": 4096
+      "lte": 1024
     },
     {
       "path": "renderer.material_executor_summary.material_buffer_capacity_bytes",
@@ -118,16 +118,16 @@
     },
     {
       "path": "renderer.material_executor_summary.cpu_decode_ns",
-      "lte": 5000000000
+      "lte": 50000000
     },
     {
       "path": "renderer.material_executor_summary.cpu_material_upload_ns",
-      "lte": 5000000000
+      "lte": 5000000
     },
     {
       "path": "renderer.material_executor_summary.cpu_total_ns",
       "gte": 1,
-      "lte": 5000000000
+      "lte": 100000000
     }
   ],
   "require_material_fallback": true,
