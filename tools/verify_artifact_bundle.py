@@ -278,6 +278,10 @@ class Report:
                         )
                         if key in first
                     }
+                artifact_context = self.data.get("artifact_context")
+                if isinstance(artifact_context, dict):
+                    self.data["failure_summary"]["artifact_context"] = (
+                        artifact_context)
             if by_layer:
                 self.data["failure_summary"]["top_likely_layer"] = max(
                     by_layer.items(),
@@ -322,6 +326,68 @@ def value_at(value: Any, path: str) -> tuple[bool, Any]:
             return False, None
         current = current[part]
     return True, current
+
+
+def material_failure_context(
+    capabilities: JsonObject,
+    runtime: JsonObject,
+    semantic_summary: JsonObject,
+    renderer_details: JsonObject | None,
+    material_plan_summary: JsonObject | None,
+) -> JsonObject:
+    context: JsonObject = {}
+    platform = string_at(capabilities, "platform")
+    if platform:
+        context["platform"] = platform
+    backend = runtime.get("backend")
+    if isinstance(backend, str):
+        context["backend"] = backend
+    viewport = runtime.get("viewport")
+    if isinstance(viewport, dict):
+        context["viewport"] = {
+            key: viewport.get(key)
+            for key in ("x", "y", "w", "h", "valid")
+            if key in viewport
+        }
+
+    material_contract: JsonObject = {
+        "semantic_material_nodes": semantic_summary.get("material_nodes"),
+        "semantic_material_fallback_nodes": semantic_summary.get(
+            "material_fallback_nodes"),
+        "semantic_material_kinds": semantic_summary.get("material_kinds"),
+        "semantic_verifier_profiles": semantic_summary.get(
+            "material_verifier_profiles"),
+    }
+    if isinstance(renderer_details, dict):
+        material_contract["renderer_plan_contract_version"] = (
+            renderer_details.get("material_plan_contract_version"))
+        material_contract["renderer_plan_count"] = renderer_details.get(
+            "material_plan_count")
+        material_contract["renderer_plans_present"] = isinstance(
+            renderer_details.get("material_plans"),
+            list)
+        material_contract["renderer_runtime_summary_present"] = isinstance(
+            renderer_details.get("material_runtime_summary"),
+            dict)
+        material_contract["renderer_executor_summary_present"] = isinstance(
+            renderer_details.get("material_executor_summary"),
+            dict)
+    if isinstance(material_plan_summary, dict):
+        decision_trace = material_plan_summary.get("decision_trace")
+        if not isinstance(decision_trace, dict):
+            decision_trace = {}
+        material_contract["resolved_plan_count"] = material_plan_summary.get(
+            "count")
+        material_contract["plan_contract_versions"] = (
+            material_plan_summary.get("contract_versions"))
+        material_contract["fallback_paths"] = material_plan_summary.get(
+            "fallback_paths")
+        material_contract["pass_executors"] = material_plan_summary.get(
+            "pass_executors")
+        material_contract["decision_first_blockers"] = decision_trace.get(
+            "first_blockers")
+    context["material_contract"] = material_contract
+    return context
 
 
 def bool_at(value: JsonObject, key: str) -> bool | None:
@@ -3613,6 +3679,13 @@ def verify(args: argparse.Namespace) -> int:
             hint="Enable renderer.material_plans before requiring semantic/runtime parity.")
         if isinstance(material_plan_summary, dict):
             check_material_semantic_runtime_match(summary, material_plan_summary, report)
+
+    report.data["artifact_context"] = material_failure_context(
+        capabilities,
+        runtime,
+        summary,
+        renderer_details,
+        material_plan_summary)
 
     full_labels: list[str] = []
     walk_labels(semantic_tree, full_labels)
