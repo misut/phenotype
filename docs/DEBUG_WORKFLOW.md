@@ -163,8 +163,8 @@ schema drift before a human has to infer it visually.
 
 Use `require_material_resource_bounds` when a material gate must prove the
 runtime stayed within the pure plan's performance budget. Supported limits are
-`max_plan_blur_radius_lte`, `max_budget_blur_radius_lte`,
-`max_sample_taps_lte`, `max_pass_count_lte`, and
+`max_plan_blur_radius_lte`, `max_plan_sample_taps_lte`,
+`max_budget_blur_radius_lte`, `max_sample_taps_lte`, `max_pass_count_lte`, and
 `max_backdrop_pixels_lte`; `require_bounded_texture_copy` and
 `require_deterministic_fallback` require those booleans to hold for every
 resolved plan.

@@ -158,6 +158,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(report["failures"], [])
         self.assertEqual(report["material_plans"]["count"], 1)
         self.assertEqual(report["material_plans"]["fallback"], 1)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
+            0)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"]["max_sample_taps"],
+            25)
 
     def test_material_plan_mismatch_failure_is_llm_actionable(self) -> None:
         code, report = self.run_verifier(snapshot(material_plan(sample_taps=25)))
@@ -175,6 +181,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["actual"], 0)
         self.assertEqual(failure["likely_layer"], "material.regular.fallback")
         self.assertIn("MaterialPlan.sample_taps", failure["hint"])
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
+            25)
         self.assertEqual(report["failure_summary"]["count"], 1)
         self.assertEqual(
             report["failure_summary"]["by_path"][failure["path"]],
