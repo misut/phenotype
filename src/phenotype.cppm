@@ -2842,19 +2842,20 @@ inline std::optional<unsigned int> optional_callback_id(unsigned int callback_id
     return callback_id;
 }
 
-inline bool rect_intersects_viewport(diag::RectSnapshot const& rect) {
+inline bool rect_intersects_viewport(diag::RectSnapshot const& rect,
+                                     bool screen_fixed = false) {
     if (!rect.valid)
         return false;
     auto viewport_width = g_app.debug_viewport_width;
     auto viewport_height = g_app.debug_viewport_height;
     if (viewport_width <= 0.0f || viewport_height <= 0.0f)
         return false;
-    float viewport_left  = g_app.scroll_x;
-    float viewport_right = g_app.scroll_x + viewport_width;
+    float viewport_left  = screen_fixed ? 0.0f : g_app.scroll_x;
+    float viewport_right = viewport_left + viewport_width;
     if (rect.x + rect.w <= viewport_left || rect.x >= viewport_right)
         return false;
-    float viewport_top = g_app.scroll_y;
-    float viewport_bottom = g_app.scroll_y + viewport_height;
+    float viewport_top = screen_fixed ? 0.0f : g_app.scroll_y;
+    float viewport_bottom = viewport_top + viewport_height;
     return rect.y + rect.h > viewport_top && rect.y < viewport_bottom;
 }
 
@@ -2871,7 +2872,8 @@ inline diag::RectSnapshot node_bounds_snapshot(float x, float y, float w, float 
 inline void collect_semantic_nodes(NodeHandle node_h,
                                    float ox,
                                    float oy,
-                                   std::vector<diag::SemanticNodeSnapshot>& out) {
+                                   std::vector<diag::SemanticNodeSnapshot>& out,
+                                   bool screen_fixed = false) {
     auto* node_ptr = g_app.arena.get(node_h);
     if (!node_ptr)
         return;
@@ -2897,7 +2899,7 @@ inline void collect_semantic_nodes(NodeHandle node_h,
 
     if (!explicit_semantics && !auto_semantics) {
         for (auto child_h : node.children)
-            collect_semantic_nodes(child_h, ax, ay, out);
+            collect_semantic_nodes(child_h, ax, ay, out, screen_fixed);
         return;
     }
 
@@ -2950,7 +2952,7 @@ inline void collect_semantic_nodes(NodeHandle node_h,
     }
 
     semantic.bounds = node_bounds_snapshot(ax, ay, node.width, node.height);
-    semantic.visible = is_root || rect_intersects_viewport(semantic.bounds);
+    semantic.visible = is_root || rect_intersects_viewport(semantic.bounds, screen_fixed);
     semantic.enabled = node.debug_semantic_enabled;
     semantic.focusable = explicit_semantics
         ? (node.debug_semantic_focusable && semantic.enabled)
@@ -2960,8 +2962,23 @@ inline void collect_semantic_nodes(NodeHandle node_h,
     semantic.scroll_container = is_root;
 
     for (auto child_h : node.children)
-        collect_semantic_nodes(child_h, ax, ay, semantic.children);
+        collect_semantic_nodes(child_h, ax, ay, semantic.children, screen_fixed);
     out.push_back(std::move(semantic));
+}
+
+inline void append_overlay_semantic_nodes(diag::SemanticNodeSnapshot& root) {
+    for (auto overlay_h : g_app.overlays) {
+        std::vector<diag::SemanticNodeSnapshot> overlay_nodes;
+        collect_semantic_nodes(overlay_h, 0.0f, 0.0f, overlay_nodes, true);
+        for (auto& overlay_node : overlay_nodes) {
+            if (overlay_node.role == "root" && overlay_node.scroll_container) {
+                for (auto& child : overlay_node.children)
+                    root.children.push_back(std::move(child));
+            } else {
+                root.children.push_back(std::move(overlay_node));
+            }
+        }
+    }
 }
 
 inline std::optional<diag::SemanticNodeSnapshot> build_semantic_tree_snapshot() {
@@ -2969,7 +2986,9 @@ inline std::optional<diag::SemanticNodeSnapshot> build_semantic_tree_snapshot() 
     collect_semantic_nodes(g_app.root, 0.0f, 0.0f, nodes);
     if (nodes.empty())
         return std::nullopt;
-    return std::move(nodes.front());
+    auto root = std::move(nodes.front());
+    append_overlay_semantic_nodes(root);
+    return root;
 }
 
 inline char const* default_debug_platform_name() {

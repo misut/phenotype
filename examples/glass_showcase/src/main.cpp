@@ -264,6 +264,23 @@ static void view(State const& state) {
             widget::text("Artifact target");
             widget::text("Build, launch with PHENOTYPE_ARTIFACT_DIR, and verify clear/thin/regular/thick material semantics before using the frame for visual debugging.");
         });
+
+    layout::overlay([&] {
+        layout::spacer(430);
+        layout::row([&] {
+            layout::sized_box(280.0f, [&] {
+                layout::material_surface(
+                    MaterialKind::Thin,
+                    [] {
+                        widget::text("Visible Blur Probe");
+                        layout::spacer(4);
+                        widget::text("Samples the deterministic backdrop.");
+                    },
+                    SpaceToken::Sm,
+                    SpaceToken::Xs);
+            });
+        }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Center);
+    });
 }
 
 int main() {

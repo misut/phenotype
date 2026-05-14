@@ -205,6 +205,8 @@ This keeps the framework core pure while pushing side effects into thin adapters
 Debugging follows one shared model across native and WASI targets:
 
 - the common snapshot schema is defined in `phenotype` / `phenotype.diag`
+- semantic snapshots include root-level overlays after the main tree with
+  screen-fixed visibility, matching the paint and focus traversal order
 - platform adapters only provide capability overrides and `platform_runtime.details`
 - artifact bundles always start from `snapshot.json`, then add optional
   `frame.bmp` and `platform/<platform>-runtime.json`
