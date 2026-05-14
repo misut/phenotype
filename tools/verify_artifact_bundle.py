@@ -498,6 +498,7 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
     number_fields = {
         "max_plan_blur_radius_lte",
         "max_plan_sample_taps_lte",
+        "max_plan_sample_taps_gte",
         "max_budget_blur_radius_lte",
         "max_sample_taps_lte",
         "max_pass_count_lte",
@@ -1677,6 +1678,23 @@ def check_material_resource_bounds_requirements(
             actual=actual,
             likely_layer="platform-runtime",
             hint="Inspect MaterialResourceBudget in the resolved material plans.")
+    min_field_map = {
+        "max_plan_sample_taps_gte": "max_plan_sample_taps",
+    }
+    for spec_field, summary_field in min_field_map.items():
+        if spec_field not in spec:
+            continue
+        actual = bounds.get(summary_field)
+        expected = spec[spec_field]
+        report.check(
+            f"material resource bound {summary_field} meets floor",
+            isinstance(actual, (int, float)) and not isinstance(actual, bool)
+            and float(actual) >= float(expected),
+            path=f"{base_path}.{summary_field}",
+            expected={">=": expected},
+            actual=actual,
+            likely_layer="platform-runtime",
+            hint="Inspect MaterialPlan.sample_taps in the resolved plans.")
     if spec.get("require_bounded_texture_copy") is True:
         actual = bounds.get("unbounded_texture_copy")
         report.check(
