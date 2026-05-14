@@ -14,6 +14,19 @@ phenotype_android_require_tool ADB "adb"
 
 step() { printf '\n── %s\n' "$1"; }
 
+run_uv_python() {
+    if [ -n "${UV:-}" ]; then
+        "$UV" run --frozen python "$@"
+    elif command -v uv >/dev/null 2>&1; then
+        uv run --frozen python "$@"
+    elif command -v mise >/dev/null 2>&1; then
+        mise exec -- uv run --frozen python "$@"
+    else
+        echo "error: uv is required; run through 'mise exec -- uv run ...'" >&2
+        exit 1
+    fi
+}
+
 CONTRACT_REMOTE_REL="${PHENOTYPE_ANDROID_CONTRACT_REMOTE_REL:-files/phenotype-contract}"
 CONTRACT_OUT="${PHENOTYPE_ANDROID_CONTRACT_OUT:-$PHENOTYPE_ANDROID_STATE_DIR/contract-bundle}"
 CONTRACT_TIMEOUT="${PHENOTYPE_ANDROID_CONTRACT_TIMEOUT:-30}"
@@ -86,7 +99,7 @@ mkdir -p "$CONTRACT_OUT/platform"
     > "$CONTRACT_OUT/platform/android-runtime.json"
 
 step "verify artifact"
-python3 "$PHENOTYPE_ROOT/tools/verify_artifact_bundle.py" "$CONTRACT_OUT" \
-    --manifest "$PHENOTYPE_ROOT/examples/android/artifact_manifest.json"
+(cd "$PHENOTYPE_ROOT" && run_uv_python tools/verify_artifact_bundle.py "$CONTRACT_OUT" \
+    --manifest examples/android/artifact_manifest.json)
 
 printf '\nandroid contract artifact: %s\n' "$CONTRACT_OUT"

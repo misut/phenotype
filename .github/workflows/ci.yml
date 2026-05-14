@@ -1,8 +1,6 @@
 name: CI
 
 on:
-  push:
-    branches: [main]
   pull_request:
     branches: [main]
 
@@ -11,8 +9,85 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  changes:
+    name: classify changes
+    runs-on: ubuntu-24.04
+    outputs:
+      code_tests: ${{ steps.classify.outputs.code_tests }}
+      docs_build: ${{ steps.classify.outputs.docs_build }}
+      tools_check: ${{ steps.classify.outputs.tools_check }}
+      artifact_build: ${{ steps.classify.outputs.artifact_build }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Classify pull request paths
+        id: classify
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          base="${{ github.event.pull_request.base.sha }}"
+          head="${{ github.event.pull_request.head.sha }}"
+
+          if git cat-file -e "${base}^{commit}" && git cat-file -e "${head}^{commit}"; then
+            mapfile -t files < <(git diff --name-only "$base...$head" | sort)
+          else
+            mapfile -t files < <(git diff --name-only HEAD^1 HEAD | sort)
+          fi
+
+          code_tests=false
+          docs_build=false
+          tools_check=false
+          artifact_build=false
+
+          for path in "${files[@]}"; do
+            case "$path" in
+              docs/*|README.md)
+                docs_build=true
+                ;;
+            esac
+
+            case "$path" in
+              tools/*|pyproject.toml|uv.lock|.python-version)
+                tools_check=true
+                ;;
+            esac
+
+            case "$path" in
+              src/*|tests/*|examples/*|exon.toml|exon.lock|mise.toml|.intron.toml)
+                code_tests=true
+                ;;
+            esac
+
+            case "$path" in
+              src/*|examples/glass_showcase/*|tools/verify_artifact_bundle.py|tools/verify_glass_showcase_artifact.sh|pyproject.toml|uv.lock|.python-version)
+                artifact_build=true
+                ;;
+            esac
+          done
+
+          {
+            echo "code_tests=$code_tests"
+            echo "docs_build=$docs_build"
+            echo "tools_check=$tools_check"
+            echo "artifact_build=$artifact_build"
+          } >> "$GITHUB_OUTPUT"
+
+          printf 'Changed files:\n'
+          if ((${#files[@]} == 0)); then
+            printf '  <none>\n'
+          else
+            printf '  %s\n' "${files[@]}"
+          fi
+          printf 'code_tests=%s docs_build=%s tools_check=%s artifact_build=%s\n' \
+            "$code_tests" "$docs_build" "$tools_check" "$artifact_build"
+
   test:
     name: test (${{ matrix.os }}, ${{ matrix.target }})
+    needs: changes
+    if: needs.changes.outputs.code_tests == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -90,6 +165,17 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Install uv
+        if: matrix.target == 'native'
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.11.14"
+          enable-cache: true
+
+      - name: Install Python for tools
+        if: matrix.target == 'native'
+        run: uv python install
+
       - name: Build
         env:
           EXON_CXXFLAGS: ${{ matrix.cxxflags }}
@@ -109,7 +195,7 @@ jobs:
       - name: Test artifact verifier contract
         if: matrix.target == 'native'
         run: |
-          python3 tools/test_verify_artifact_bundle.py
+          uv run --frozen python tools/test_verify_artifact_bundle.py
 
       - name: Verify glass showcase artifact
         if: matrix.target == 'native'
@@ -134,6 +220,8 @@ jobs:
 
   windows-native:
     name: test (windows-2022, native)
+    needs: changes
+    if: needs.changes.outputs.code_tests == 'true'
     runs-on: windows-2022
     steps:
       - uses: actions/checkout@v6
@@ -203,3 +291,193 @@ jobs:
           $env:CXX = "cl"
           Set-Location examples/native
           exon build
+
+  docs:
+    name: docs build (wasm32-wasi)
+    needs: changes
+    if: needs.changes.outputs.docs_build == 'true'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve tool versions
+        id: tool-versions
+        shell: bash
+        run: |
+          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+
+      - name: Restore toolchains
+        id: toolchain-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.intron/toolchains
+          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
+
+      - name: Restore build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            docs/.exon
+            ~/.exon/cache
+          key: docs-${{ runner.os }}-${{ hashFiles('mise.toml', 'docs/exon.toml', 'exon.lock') }}
+          restore-keys: |
+            docs-${{ runner.os }}-
+
+      - name: Install intron
+        run: |
+          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-aarch64-apple-darwin.tar.gz"
+          tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install toolchains
+        run: |
+          intron install llvm 22.1.2
+          intron install cmake 4.3.1
+          intron install ninja 1.13.2
+          intron install wasi-sdk 32
+          intron install wasmtime 43.0.1
+          intron default wasmtime 43.0.1
+
+      - name: Save toolchains
+        if: github.ref == 'refs/heads/main' && steps.toolchain-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.intron/toolchains
+          key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
+
+      - name: Install exon
+        run: |
+          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-aarch64-apple-darwin.tar.gz"
+          tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build docs
+        run: |
+          eval "$(intron env)"
+          cd docs
+          exon build --target wasm32-wasi
+
+      - name: Save build artifacts
+        if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            docs/.exon
+            ~/.exon/cache
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
+  tooling:
+    name: tooling checks
+    needs: changes
+    if: needs.changes.outputs.tools_check == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.11.14"
+          enable-cache: true
+
+      - name: Install Python for tools
+        run: uv python install
+
+      - name: Check artifact verifier syntax
+        run: |
+          uv run --frozen python -m py_compile tools/verify_artifact_bundle.py
+
+      - name: Test artifact verifier contract
+        run: |
+          uv run --frozen python tools/test_verify_artifact_bundle.py
+
+  glass-artifact:
+    name: glass showcase artifact
+    needs: changes
+    if: needs.changes.outputs.artifact_build == 'true' && needs.changes.outputs.code_tests != 'true'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve tool versions
+        id: tool-versions
+        shell: bash
+        run: |
+          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+
+      - name: Restore toolchains
+        id: toolchain-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.intron/toolchains
+          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
+
+      - name: Restore build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            examples/glass_showcase/.exon
+            ~/.exon/cache
+          key: glass-artifact-${{ runner.os }}-${{ hashFiles('mise.toml', 'examples/glass_showcase/exon.toml', 'exon.lock') }}
+          restore-keys: |
+            glass-artifact-${{ runner.os }}-
+
+      - name: Install intron
+        run: |
+          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-aarch64-apple-darwin.tar.gz"
+          tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install toolchains
+        run: |
+          intron install llvm 22.1.2
+          intron install cmake 4.3.1
+          intron install ninja 1.13.2
+
+      - name: Save toolchains
+        if: github.ref == 'refs/heads/main' && steps.toolchain-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.intron/toolchains
+          key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
+
+      - name: Install exon
+        run: |
+          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-aarch64-apple-darwin.tar.gz"
+          tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.11.14"
+          enable-cache: true
+
+      - name: Install Python for tools
+        run: uv python install
+
+      - name: Verify glass showcase artifact
+        env:
+          EXON: exon
+          PHENOTYPE_ARTIFACT_DIR: ${{ runner.temp }}/phenotype-glass-showcase
+          PHENOTYPE_EXPECT_PLATFORM: macos
+        run: |
+          eval "$(intron env)"
+          tools/verify_glass_showcase_artifact.sh
+
+      - name: Save build artifacts
+        if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            examples/glass_showcase/.exon
+            ~/.exon/cache
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}

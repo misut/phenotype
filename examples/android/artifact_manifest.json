@@ -29,7 +29,7 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "1": 1
+      "2": 1
     },
     "kinds": {
       "regular": 1
@@ -50,13 +50,14 @@
     },
     "luminance_adapted": 0,
     "render_target_ready": 1,
-    "render_target_within_backdrop_budget": 1,
     "render_target_pixel_formats": {
       "rgba8unorm": 1
     },
     "decision_can_sample_backdrop": 0,
     "decision_backend_supports_backdrop": 0,
     "decision_backdrop_source_ready": 0,
+    "decision_increase_contrast": 0,
+    "decision_reduce_motion": 0,
     "decision_blockers": {
       "unsupported-backend": 1
     },

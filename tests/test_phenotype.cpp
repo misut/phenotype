@@ -1133,6 +1133,18 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(fallback_plan.verifier.likely_layer)
            == "material-fallback-pass");
 
+    MaterialEnvironment unsupported_large_env = fallback_env;
+    unsupported_large_env.render_target.width = 2400;
+    unsupported_large_env.render_target.height = 2400;
+    auto unsupported_large_plan =
+        plan_material_surface(request, unsupported_large_env);
+    assert(unsupported_large_plan.fallback());
+    assert(unsupported_large_plan.fallback_path
+           == MaterialFallbackPath::UnsupportedBackend);
+    assert(!unsupported_large_plan.render_target.within_backdrop_budget);
+    assert(std::string(unsupported_large_plan.decision_trace.first_blocker)
+           == "unsupported-backend");
+
     MaterialEnvironment glass_env = fallback_env;
     glass_env.capabilities.material_backdrop_blur = true;
     glass_env.capabilities.shader_blur = true;
@@ -1225,6 +1237,22 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::fabs(flat_backdrop_plan.backdrop.luminance_gain_delta)
            < 0.0001f);
     assert(flat_backdrop_plan.backdrop.edge_highlight_delta > 0.0f);
+
+    MaterialEnvironment contrast_motion_env = glass_env;
+    contrast_motion_env.capabilities.increase_contrast = true;
+    contrast_motion_env.capabilities.reduce_motion = true;
+    auto contrast_motion_plan =
+        plan_material_surface(request, contrast_motion_env);
+    assert(contrast_motion_plan.backdrop_sampling);
+    assert(contrast_motion_plan.decision_trace.increase_contrast);
+    assert(contrast_motion_plan.decision_trace.reduce_motion);
+    assert(contrast_motion_plan.opacity > glass_plan.opacity);
+    assert(contrast_motion_plan.luminance_floor > glass_plan.luminance_floor);
+    assert(contrast_motion_plan.saturation <= 1.0f);
+    assert(contrast_motion_plan.noise_opacity == 0.0f);
+    assert(contrast_motion_plan.sample_taps < glass_plan.sample_taps);
+    assert(contrast_motion_plan.primary_pass.sample_taps
+           == contrast_motion_plan.sample_taps);
 
     glass_env.capabilities.reduce_transparency = true;
     auto reduced_plan = plan_material_surface(request, glass_env);

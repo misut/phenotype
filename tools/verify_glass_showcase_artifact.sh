@@ -18,6 +18,19 @@ run_exon() {
   fi
 }
 
+run_uv_python() {
+  if [[ -n "${UV:-}" ]]; then
+    "$UV" run --frozen python "$@"
+  elif command -v uv >/dev/null 2>&1; then
+    uv run --frozen python "$@"
+  elif command -v mise >/dev/null 2>&1; then
+    mise exec -- uv run --frozen python "$@"
+  else
+    echo "error: uv is required; run through 'mise exec -- uv run ...'" >&2
+    exit 1
+  fi
+}
+
 cd "$EXAMPLE_DIR"
 run_exon build
 
@@ -27,6 +40,6 @@ PHENOTYPE_ARTIFACT_EXIT=1 \
   .exon/debug/glass_showcase
 
 cd "$ROOT"
-tools/verify_artifact_bundle.py "$BUNDLE_DIR" \
+run_uv_python tools/verify_artifact_bundle.py "$BUNDLE_DIR" \
   --expect-platform "${PHENOTYPE_EXPECT_PLATFORM:-macos}" \
   --manifest examples/glass_showcase/artifact_manifest.json

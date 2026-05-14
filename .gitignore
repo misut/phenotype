@@ -46,6 +46,8 @@
 # Build
 build/
 .exon/
+.venv/
+__pycache__/
 exon.lock
 !/exon.lock
 !/docs/exon.lock
