@@ -1112,6 +1112,11 @@ namespace detail {
         json::Object renderer;
         renderer.emplace("material_pipeline_ready", json::Value{false});
         renderer.emplace("material_backdrop_source_ready", json::Value{false});
+        renderer.emplace(
+            "material_plan_contract_version",
+            json::Value{
+                static_cast<std::int64_t>(
+                    material_plan_contract_version)});
         renderer.emplace("material_plan_count", json::Value{std::int64_t{0}});
         renderer.emplace("material_plans", json::Value{json::Array{}});
         renderer.emplace(

@@ -3512,6 +3512,37 @@ def verify(args: argparse.Namespace) -> int:
     if renderer_details is not None:
         material_plans = renderer_details.get("material_plans")
         if args.require_material_plan or material_plans is not None:
+            renderer_contract_version = renderer_details.get(
+                "material_plan_contract_version")
+            renderer_contract_version_is_int = (
+                isinstance(renderer_contract_version, int)
+                and not isinstance(renderer_contract_version, bool))
+            report.check(
+                "renderer material plan contract version is integer",
+                renderer_contract_version_is_int,
+                path=(
+                    "debug.platform_runtime.details.renderer."
+                    "material_plan_contract_version"),
+                expected="integer",
+                actual=renderer_contract_version,
+                likely_layer="platform-runtime",
+                hint=(
+                    "Backends should publish the MaterialPlan artifact "
+                    "contract version next to renderer.material_plans."))
+            if renderer_contract_version_is_int:
+                report.check(
+                    "renderer material plan contract version is supported",
+                    renderer_contract_version == MATERIAL_PLAN_CONTRACT_VERSION,
+                    path=(
+                        "debug.platform_runtime.details.renderer."
+                        "material_plan_contract_version"),
+                    expected=MATERIAL_PLAN_CONTRACT_VERSION,
+                    actual=renderer_contract_version,
+                    likely_layer="platform-runtime",
+                    hint=(
+                        "Update verify_artifact_bundle.py and all backend "
+                        "renderer contract serializers before changing the "
+                        "MaterialPlan artifact version."))
             material_plan_summary = summarize_material_plans(
                 material_plans,
                 report,

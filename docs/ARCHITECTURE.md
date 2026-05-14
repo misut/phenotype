@@ -214,7 +214,9 @@ sampled-backdrop pass, Windows and Android record deterministic fallback
 plans, and snapshot-only targets publish an empty renderer contract with an
 explicit fallback policy. Each serialized plan carries the same
 `contract_version` so artifact verifiers can reject unknown material plan
-schemas before reading version-specific fields. Backends also publish
+schemas before reading version-specific fields. The renderer object also carries
+`material_plan_contract_version`, allowing empty renderer contracts to advertise
+the same artifact schema. Backends also publish
 `renderer.material_runtime_summary`, a flat count/max summary derived from
 the same records; the artifact verifier recomputes it from
 `material_plans[]` so CI can catch summary drift, unexpected executor pass

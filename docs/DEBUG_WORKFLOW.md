@@ -129,6 +129,9 @@ means the backend serialized stale policy metadata or skipped the pure planner.
 The verifier rejects unknown `contract_version` values before trusting
 schema-specific fields, so artifact-schema drift becomes an explicit CI failure
 instead of a silent debug-plane mismatch.
+The renderer contract also publishes `material_plan_contract_version` next to
+`material_plans[]`, so snapshot-only or empty material renderers still expose the
+same artifact schema version without requiring a per-plan object.
 The adjacent `verifier` object is also derived from the same plan:
 `require_backdrop_source` mirrors `backdrop_sampling`,
 `require_edge_highlight` is true only for non-fallback plans with a positive

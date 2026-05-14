@@ -771,6 +771,8 @@ void test_material_runtime_record_json_contract() {
         "test-semantic-fallback");
     assert(empty.at("material_pipeline_ready").as_bool() == false);
     assert(empty.at("material_backdrop_source_ready").as_bool() == false);
+    assert(empty.at("material_plan_contract_version").as_integer()
+           == material_plan_contract_version);
     assert(empty.at("material_plan_count").as_integer() == 0);
     assert(empty.at("material_plans").as_array().empty());
     assert(empty.at("material_runtime_summary").as_object()
@@ -815,6 +817,8 @@ void test_wasi_debug_artifact_bundle_contract() {
     auto const& renderer = runtime_obj.at("renderer").as_object();
     assert(renderer.at("material_pipeline_ready").as_bool() == false);
     assert(renderer.at("material_backdrop_source_ready").as_bool() == false);
+    assert(renderer.at("material_plan_contract_version").as_integer()
+           == material_plan_contract_version);
     assert(renderer.at("material_plan_count").as_integer() == 0);
     assert(renderer.at("material_plans").as_array().empty());
     assert(renderer.at("material_runtime_summary").as_object()

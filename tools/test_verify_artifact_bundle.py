@@ -212,6 +212,7 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                 "viewport": {"x": 0, "y": 0, "w": 320, "h": 240, "valid": True},
                 "details": {
                     "renderer": {
+                        "material_plan_contract_version": 1,
                         "material_plan_count": 1,
                         "material_plans": [plan],
                         "material_runtime_summary": material_runtime_summary(plan),
@@ -383,6 +384,29 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["contract_versions"],
             {"2": 1})
+
+    def test_renderer_contract_version_mismatch_is_llm_actionable(self) -> None:
+        root = snapshot(material_plan())
+        renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+        assert isinstance(renderer, dict)
+        renderer["material_plan_contract_version"] = 2
+
+        code, report = self.run_verifier(root)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "renderer material plan contract version is supported"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer"
+            ".material_plan_contract_version")
+        self.assertEqual(failure["expected"], 1)
+        self.assertEqual(failure["actual"], 2)
+        self.assertEqual(failure["likely_layer"], "platform-runtime")
+        self.assertIn("backend renderer contract", failure["hint"])
+        self.assertIn("debug.platform_runtime.details", failure["suggested_action"])
 
     def test_manifest_can_require_plan_sample_and_runtime_pass_bounds(self) -> None:
         manifest = {
