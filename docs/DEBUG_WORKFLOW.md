@@ -196,6 +196,12 @@ framebuffer-history copy pixels, and CPU enqueue timings. Use
 paths. Each entry names a path under `debug.platform_runtime.details` and can
 provide `equals`, `gte`, and/or `lte`; failures report the exact path plus the
 likely `material-executor` pass when the path targets the executor summary.
+Whenever material plans are present, the verifier also cross-checks executor
+counts against `renderer.material_plans#summary`: `plan_count`,
+`fallback_instance_count`, and `material_instance_count` must match the
+resolved plan aggregate, draw calls must stay within material instances times
+the pure pass budget, upload bytes must fit the reported material buffer
+capacity, and copied backdrop pixels must stay within the pure resource budget.
 Use `require_material_quality_policy` when a material gate must prove the
 resolved pure policy stayed enabled and bounded. It can require backdrop
 sampling, noise, and shadow to remain allowed for every plan, and can bound the
