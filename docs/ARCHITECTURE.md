@@ -175,6 +175,9 @@ expectations, resource budgets, and verifier expectations. `primary_pass`
 states whether the backend should run a backdrop blur pass or deterministic
 translucent fallback. `resource_budget` records the clamped blur/sample-tap
 limits and whether texture copies and fallback behavior are bounded.
+If the quality policy disables backdrop sampling or reduces the blur/tap
+budget to zero, the pure planner returns `fallback_path: quality-policy`
+instead of leaving the backend to infer that downgrade.
 Runtime adapters serialize the same `MaterialRuntimeRecord` shape into
 `debug.platform_runtime.details.renderer.material_plans`: macOS records the
 sampled-backdrop pass, Windows and Android record deterministic fallback

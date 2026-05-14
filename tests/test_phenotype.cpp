@@ -1141,6 +1141,29 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(reduced_plan.primary_pass.name)
            == "translucent-rounded-rect");
 
+    glass_env.capabilities.reduce_transparency = false;
+    MaterialEnvironment disabled_quality_env = glass_env;
+    disabled_quality_env.quality.allow_backdrop_sampling = false;
+    auto disabled_quality_plan =
+        plan_material_surface(request, disabled_quality_env);
+    assert(disabled_quality_plan.fallback());
+    assert(disabled_quality_plan.fallback_path
+           == MaterialFallbackPath::QualityPolicy);
+    assert(!disabled_quality_plan.backdrop_sampling);
+    assert(disabled_quality_plan.blur_radius == 0.0f);
+    assert(std::string(disabled_quality_plan.fallback_reason)
+           == "quality policy disables material backdrop sampling");
+    assert(std::string(disabled_quality_plan.primary_pass.name)
+           == "translucent-rounded-rect");
+
+    MaterialEnvironment zero_tap_env = glass_env;
+    zero_tap_env.quality.max_sample_taps = 0;
+    auto zero_tap_plan = plan_material_surface(request, zero_tap_env);
+    assert(zero_tap_plan.fallback());
+    assert(zero_tap_plan.fallback_path == MaterialFallbackPath::QualityPolicy);
+    assert(zero_tap_plan.sample_taps == 0);
+    assert(zero_tap_plan.primary_pass.sample_taps == 0);
+
     MaterialEnvironment budget_env = glass_env;
     budget_env.capabilities.reduce_transparency = false;
     budget_env.quality.max_blur_radius = 12.0f;

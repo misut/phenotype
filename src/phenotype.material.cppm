@@ -68,6 +68,7 @@ enum class MaterialFallbackPath {
     UnsupportedBackend,
     NoBackdropSource,
     ReducedTransparency,
+    QualityPolicy,
 };
 
 inline char const* material_fallback_path_name(MaterialFallbackPath path) noexcept {
@@ -78,6 +79,7 @@ inline char const* material_fallback_path_name(MaterialFallbackPath path) noexce
         case MaterialFallbackPath::UnsupportedBackend: return "unsupported-backend";
         case MaterialFallbackPath::NoBackdropSource: return "no-backdrop-source";
         case MaterialFallbackPath::ReducedTransparency: return "reduced-transparency";
+        case MaterialFallbackPath::QualityPolicy: return "quality-policy";
     }
     return "unsupported-backend";
 }
@@ -361,10 +363,14 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         && has_geometry;
     bool const target_ready = environment.render_target.width > 0
         && environment.render_target.height > 0;
+    bool const quality_allows_backdrop =
+        environment.quality.allow_backdrop_sampling
+        && max_blur_radius > 0.0f
+        && plan.sample_taps > 0u;
     bool const can_sample_backdrop =
         has_material
         && target_ready
-        && environment.quality.allow_backdrop_sampling
+        && quality_allows_backdrop
         && environment.capabilities.material_surfaces
         && environment.capabilities.material_backdrop_blur
         && environment.capabilities.shader_blur
@@ -386,6 +392,12 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     } else if (environment.capabilities.reduce_transparency) {
         plan.fallback_path = MaterialFallbackPath::ReducedTransparency;
         plan.fallback_reason = "reduced transparency disables backdrop sampling";
+        plan.blur_radius = 0.0f;
+        plan.saturation = 1.0f;
+        plan.noise_opacity = 0.0f;
+    } else if (!quality_allows_backdrop) {
+        plan.fallback_path = MaterialFallbackPath::QualityPolicy;
+        plan.fallback_reason = "quality policy disables material backdrop sampling";
         plan.blur_radius = 0.0f;
         plan.saturation = 1.0f;
         plan.noise_opacity = 0.0f;
