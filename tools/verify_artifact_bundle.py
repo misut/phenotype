@@ -690,6 +690,10 @@ def walk_semantic(node: Any, summary: JsonObject) -> None:
         if isinstance(kind, str):
             material_kinds = summary["material_kinds"]
             material_kinds[kind] = material_kinds.get(kind, 0) + 1
+        verifier_profile = material.get("verifier_profile")
+        if isinstance(verifier_profile, str):
+            profiles = summary["material_verifier_profiles"]
+            profiles[verifier_profile] = profiles.get(verifier_profile, 0) + 1
         if material.get("fallback") is True:
             summary["material_fallback_nodes"] += 1
 
@@ -713,6 +717,7 @@ def summarize_semantic_tree(tree: JsonObject) -> JsonObject:
         "material_fallback_nodes": 0,
         "material_kinds": {},
         "material_nodes": 0,
+        "material_verifier_profiles": {},
         "nodes": 0,
         "nodes_without_role": 0,
         "roles": {},
@@ -796,6 +801,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "pass_names": {},
         "plan_ids": [],
         "region_layers": {},
+        "verifier_profiles": {},
         "resource_bounds": {
             "max_plan_blur_radius": 0.0,
             "max_budget_blur_radius": 0.0,
@@ -981,6 +987,9 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         hint="Verifier numeric thresholds must be non-negative.")
             region_name = string_at(verifier, "region_name")
             region_layer = string_at(verifier, "likely_layer")
+            if region_name:
+                profiles = summary["verifier_profiles"]
+                profiles[region_name] = profiles.get(region_name, 0) + 1
             if region_name and region_layer:
                 summary["region_layers"][region_name] = region_layer
 
@@ -1383,6 +1392,20 @@ def check_material_semantic_runtime_match(
             "The semantic tree and runtime plan summary disagree on material "
             "kinds; check whether a material node was skipped or decoded with "
             "the wrong kind."))
+
+    semantic_profiles = semantic_summary.get("material_verifier_profiles")
+    runtime_profiles = material_plan_summary.get("verifier_profiles")
+    report.check(
+        "material semantic/runtime verifier profiles match",
+        semantic_profiles == runtime_profiles,
+        path=f"{base_path}.verifier_profiles",
+        expected=semantic_profiles,
+        actual=runtime_profiles,
+        likely_layer="material-contract",
+        hint=(
+            "The semantic material verifier profile and runtime plan verifier "
+            "region disagree; check material_style defaults and pure "
+            "MaterialPlan verifier expectations."))
 
 
 def load_platform_files(platform_dir: Path, report: Report) -> list[JsonObject]:
