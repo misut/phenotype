@@ -33,7 +33,16 @@
     },
     "pass_names": {
       "translucent-rounded-rect": 1
-    }
+    },
+    "backdrop_available": 0,
+    "backdrop_stable": 0,
+    "backdrop_sources": {
+      "android-vulkan-fallback": 1
+    },
+    "luminance_responses": {
+      "not-sampled": 1
+    },
+    "luminance_adapted": 0
   },
   "require_material_resource_bounds": {
     "max_plan_blur_radius_lte": 0.0,

@@ -49,6 +49,16 @@ ALLOWED_MATERIAL_PASS_NAMES = {
     "translucent-rounded-rect",
 }
 
+ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
+    "bright",
+    "bright-flat",
+    "dark",
+    "dark-flat",
+    "flat",
+    "neutral",
+    "not-sampled",
+}
+
 
 class Report:
     def __init__(self, bundle: Path) -> None:
@@ -583,6 +593,11 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "fallback_reasons",
         "kinds",
         "pass_names",
+        "backdrop_available",
+        "backdrop_stable",
+        "backdrop_sources",
+        "luminance_responses",
+        "luminance_adapted",
     }
     unknown = sorted(set(value) - allowed)
     if unknown:
@@ -590,7 +605,14 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "unknown require_material_plan_summary keys: "
             + ", ".join(unknown))
     spec: JsonObject = {}
-    for field in ("count", "min_count", "fallback", "backdrop_sampling"):
+    for field in (
+            "count",
+            "min_count",
+            "fallback",
+            "backdrop_sampling",
+            "backdrop_available",
+            "backdrop_stable",
+            "luminance_adapted"):
         if field in value:
             spec[field] = non_negative_int(
                 value[field],
@@ -599,6 +621,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "fallback_paths": ALLOWED_MATERIAL_FALLBACK_PATHS,
         "kinds": ALLOWED_MATERIAL_KINDS,
         "pass_names": ALLOWED_MATERIAL_PASS_NAMES,
+        "luminance_responses": ALLOWED_MATERIAL_LUMINANCE_RESPONSES,
     }
     for field, allowed_keys in map_vocabularies.items():
         if field in value:
@@ -610,6 +633,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         spec["fallback_reasons"] = string_int_map(
             value["fallback_reasons"],
             "require_material_plan_summary.fallback_reasons")
+    if "backdrop_sources" in value:
+        spec["backdrop_sources"] = string_int_map(
+            value["backdrop_sources"],
+            "require_material_plan_summary.backdrop_sources")
     return spec
 
 
@@ -1076,6 +1103,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "shadow_alpha",
     "shadow_radius",
     "backdrop_sampling",
+    "backdrop",
     "fallback",
     "fallback_path",
     "fallback_reason",
@@ -1103,6 +1131,18 @@ MATERIAL_PLAN_NUMERIC_FIELDS = (
 
 MATERIAL_GEOMETRY_FIELDS = ("x", "y", "w", "h", "radius")
 MATERIAL_TINT_FIELDS = ("r", "g", "b", "a")
+MATERIAL_BACKDROP_BOOL_FIELDS = ("available", "stable")
+MATERIAL_BACKDROP_LUMA_FIELDS = (
+    "luma_min",
+    "luma_max",
+    "luma_mean",
+    "luma_span",
+)
+MATERIAL_BACKDROP_DELTA_FIELDS = (
+    "luminance_floor_delta",
+    "luminance_gain_delta",
+    "edge_highlight_delta",
+)
 MATERIAL_VERIFIER_FIELDS = (
     "require_backdrop_source",
     "require_edge_highlight",
@@ -1142,6 +1182,17 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "plan_ids": [],
         "region_layers": {},
         "verifier_profiles": {},
+        "backdrop": {
+            "available": 0,
+            "stable": 0,
+            "sources": {},
+            "luminance_responses": {},
+            "luminance_adapted": 0,
+            "max_luma_span": 0.0,
+            "max_abs_floor_delta": 0.0,
+            "max_abs_gain_delta": 0.0,
+            "max_abs_edge_delta": 0.0,
+        },
         "resource_bounds": {
             "max_plan_blur_radius": 0.0,
             "max_plan_sample_taps": 0,
@@ -1236,7 +1287,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     bounds["max_plan_blur_radius"] = max(
                         float(bounds["max_plan_blur_radius"]),
                         float(number))
-        check_bool_field(
+        backdrop_sampling = check_bool_field(
             report,
             plan,
             "backdrop_sampling",
@@ -1330,6 +1381,184 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     min_value=0.0,
                     likely_layer=likely_layer,
                     hint="Check MaterialPlan tint RGBA serialization.")
+
+        backdrop = check_object_field(
+            report,
+            plan,
+            "backdrop",
+            plan_path,
+            likely_layer=likely_layer,
+            hint=(
+                "MaterialPlan.backdrop should copy the pure backdrop "
+                "descriptor and luminance response used by the planner."))
+        if backdrop is not None:
+            backdrop_summary = summary["backdrop"]
+            available = None
+            stable = None
+            for key in MATERIAL_BACKDROP_BOOL_FIELDS:
+                value = check_bool_field(
+                    report,
+                    backdrop,
+                    key,
+                    f"{plan_path}.backdrop",
+                    likely_layer=likely_layer,
+                    hint="Backdrop availability flags must stay explicit.")
+                if value is True:
+                    backdrop_summary[key] = int(backdrop_summary[key]) + 1
+                if key == "available":
+                    available = value
+                elif key == "stable":
+                    stable = value
+            luma_values: dict[str, int | float] = {}
+            for key in MATERIAL_BACKDROP_LUMA_FIELDS:
+                value = check_number_field(
+                    report,
+                    backdrop,
+                    key,
+                    f"{plan_path}.backdrop",
+                    min_value=0.0,
+                    likely_layer=likely_layer,
+                    hint="Backdrop luminance statistics must be sanitized in the pure plan.")
+                if isinstance(value, (int, float)):
+                    luma_values[key] = value
+                    report.check(
+                        f"material backdrop {key} is normalized",
+                        float(value) <= 1.0,
+                        path=f"{plan_path}.backdrop.{key}",
+                        expected={"<=": 1.0},
+                        actual=value,
+                        likely_layer=likely_layer,
+                        hint="Clamp backdrop luminance statistics before planning.",
+                        record_success=False)
+                    if key == "luma_span":
+                        backdrop_summary["max_luma_span"] = max(
+                            float(backdrop_summary["max_luma_span"]),
+                            float(value))
+            luma_min = luma_values.get("luma_min")
+            luma_max = luma_values.get("luma_max")
+            luma_mean = luma_values.get("luma_mean")
+            luma_span = luma_values.get("luma_span")
+            if isinstance(luma_min, (int, float)) and isinstance(luma_max, (int, float)):
+                report.check(
+                    "material backdrop luma min <= max",
+                    float(luma_min) <= float(luma_max),
+                    path=f"{plan_path}.backdrop.luma_min",
+                    expected={"<=": luma_max},
+                    actual=luma_min,
+                    likely_layer=likely_layer,
+                    hint="Sanitize MaterialBackdropDescriptor before planning.",
+                    record_success=False)
+            if all(isinstance(value, (int, float))
+                   for value in (luma_min, luma_max, luma_mean)):
+                assert isinstance(luma_min, (int, float))
+                assert isinstance(luma_max, (int, float))
+                assert isinstance(luma_mean, (int, float))
+                report.check(
+                    "material backdrop luma mean within range",
+                    float(luma_min) <= float(luma_mean) <= float(luma_max),
+                    path=f"{plan_path}.backdrop.luma_mean",
+                    expected={">=": luma_min, "<=": luma_max},
+                    actual=luma_mean,
+                    likely_layer=likely_layer,
+                    hint="Clamp backdrop mean to the sanitized luminance range.",
+                    record_success=False)
+            if all(isinstance(value, (int, float))
+                   for value in (luma_min, luma_max, luma_span)):
+                assert isinstance(luma_min, (int, float))
+                assert isinstance(luma_max, (int, float))
+                assert isinstance(luma_span, (int, float))
+                expected_span = float(luma_max) - float(luma_min)
+                report.check(
+                    "material backdrop luma span matches min/max",
+                    abs(float(luma_span) - expected_span) <= 0.0001,
+                    path=f"{plan_path}.backdrop.luma_span",
+                    expected=expected_span,
+                    actual=luma_span,
+                    likely_layer=likely_layer,
+                    hint="Keep MaterialBackdropAnalysis.luma_span derived from min/max.",
+                    record_success=False)
+            max_abs_delta_for_plan = 0.0
+            for key in MATERIAL_BACKDROP_DELTA_FIELDS:
+                value = check_number_field(
+                    report,
+                    backdrop,
+                    key,
+                    f"{plan_path}.backdrop",
+                    likely_layer=likely_layer,
+                    hint="Backdrop luminance deltas must be explicit numeric values.")
+                if isinstance(value, (int, float)):
+                    summary_key = {
+                        "luminance_floor_delta": "max_abs_floor_delta",
+                        "luminance_gain_delta": "max_abs_gain_delta",
+                        "edge_highlight_delta": "max_abs_edge_delta",
+                    }[key]
+                    backdrop_summary[summary_key] = max(
+                        float(backdrop_summary[summary_key]),
+                        abs(float(value)))
+                    max_abs_delta_for_plan = max(
+                        max_abs_delta_for_plan,
+                        abs(float(value)))
+            if max_abs_delta_for_plan > 0.0001:
+                backdrop_summary["luminance_adapted"] = int(
+                    backdrop_summary["luminance_adapted"]) + 1
+            source = check_string_field(
+                report,
+                backdrop,
+                "source",
+                f"{plan_path}.backdrop",
+                likely_layer=likely_layer,
+                hint="Backdrop source should name the edge input used by the pure plan.")
+            if isinstance(source, str):
+                sources = backdrop_summary["sources"]
+                sources[source] = sources.get(source, 0) + 1
+            response = check_string_field(
+                report,
+                backdrop,
+                "luminance_response",
+                f"{plan_path}.backdrop",
+                likely_layer=likely_layer,
+                hint="Backdrop luminance response should explain the pure contrast policy.")
+            if isinstance(response, str):
+                responses = backdrop_summary["luminance_responses"]
+                responses[response] = responses.get(response, 0) + 1
+                report.check(
+                    "material backdrop luminance response is known",
+                    response in ALLOWED_MATERIAL_LUMINANCE_RESPONSES,
+                    path=f"{plan_path}.backdrop.luminance_response",
+                    expected=sorted(ALLOWED_MATERIAL_LUMINANCE_RESPONSES),
+                    actual=response,
+                    likely_layer=likely_layer,
+                    hint="Update the verifier vocabulary with intentional new pure responses.",
+                    record_success=False)
+            if backdrop_sampling is True:
+                report.check(
+                    "material sampled backdrop descriptor is ready",
+                    available is True and stable is True,
+                    path=f"{plan_path}.backdrop",
+                    expected={"available": True, "stable": True},
+                    actual={"available": available, "stable": stable},
+                    likely_layer=likely_layer,
+                    hint="Sampled material plans require a stable backdrop descriptor.",
+                    record_success=False)
+                report.check(
+                    "material sampled backdrop has luminance response",
+                    response != "not-sampled",
+                    path=f"{plan_path}.backdrop.luminance_response",
+                    expected="not not-sampled",
+                    actual=response,
+                    likely_layer=likely_layer,
+                    hint="Run apply_backdrop_luminance_policy for sampled plans.",
+                    record_success=False)
+            elif backdrop_sampling is False:
+                report.check(
+                    "material fallback backdrop response is not-sampled",
+                    response == "not-sampled",
+                    path=f"{plan_path}.backdrop.luminance_response",
+                    expected="not-sampled",
+                    actual=response,
+                    likely_layer=likely_layer,
+                    hint="Fallback plans should not report sampled luminance policy.",
+                    record_success=False)
 
         verifier = check_object_field(
             report,
@@ -1799,14 +2028,34 @@ def check_material_plan_summary_requirements(
             actual=actual,
             likely_layer="platform-runtime",
             hint="Check whether MaterialRect commands reached the backend decoder.")
-    for field in ("fallback", "backdrop_sampling"):
+    for field in (
+            "fallback",
+            "backdrop_sampling",
+            "backdrop_available",
+            "backdrop_stable",
+            "luminance_adapted"):
         if field in spec:
+            actual = summary.get(field)
+            summary_path = f"{base_path}.{field}"
+            if field in ("backdrop_available", "backdrop_stable"):
+                backdrop_summary = summary.get("backdrop")
+                if not isinstance(backdrop_summary, dict):
+                    backdrop_summary = {}
+                nested_field = field.removeprefix("backdrop_")
+                actual = backdrop_summary.get(nested_field)
+                summary_path = f"{base_path}.backdrop.{nested_field}"
+            elif field == "luminance_adapted":
+                backdrop_summary = summary.get("backdrop")
+                if not isinstance(backdrop_summary, dict):
+                    backdrop_summary = {}
+                actual = backdrop_summary.get("luminance_adapted")
+                summary_path = f"{base_path}.backdrop.luminance_adapted"
             report.check(
                 f"material plan summary {field} matches",
-                summary.get(field) == spec[field],
-                path=f"{base_path}.{field}",
+                actual == spec[field],
+                path=summary_path,
                 expected=spec[field],
-                actual=summary.get(field),
+                actual=actual,
                 likely_layer="platform-runtime",
                 hint="Inspect fallback_path and primary_pass for each material plan.")
     summary_field_hints = {
@@ -1822,15 +2071,40 @@ def check_material_plan_summary_requirements(
         "pass_names": (
             "material-pass",
             "Inspect MaterialPlan.primary_pass and runtime pass serialization."),
+        "backdrop_sources": (
+            "material-backdrop",
+            "Inspect MaterialPlan.backdrop.source and the backend backdrop descriptor."),
+        "luminance_responses": (
+            "material-backdrop",
+            "Inspect MaterialPlan.backdrop.luminance_response and pure contrast policy."),
     }
-    for field in ("fallback_paths", "fallback_reasons", "kinds", "pass_names"):
+    for field in (
+            "fallback_paths",
+            "fallback_reasons",
+            "kinds",
+            "pass_names",
+            "backdrop_sources",
+            "luminance_responses"):
         if field in spec:
             actual = summary.get(field)
+            summary_path = f"{base_path}.{field}"
+            if field == "backdrop_sources":
+                backdrop_summary = summary.get("backdrop")
+                if not isinstance(backdrop_summary, dict):
+                    backdrop_summary = {}
+                actual = backdrop_summary.get("sources")
+                summary_path = f"{base_path}.backdrop.sources"
+            elif field == "luminance_responses":
+                backdrop_summary = summary.get("backdrop")
+                if not isinstance(backdrop_summary, dict):
+                    backdrop_summary = {}
+                actual = backdrop_summary.get("luminance_responses")
+                summary_path = f"{base_path}.backdrop.luminance_responses"
             likely_layer, hint = summary_field_hints[field]
             report.check(
                 f"material plan summary {field} matches",
                 actual == spec[field],
-                path=f"{base_path}.{field}",
+                path=summary_path,
                 expected=spec[field],
                 actual=actual,
                 likely_layer=likely_layer,

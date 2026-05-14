@@ -791,6 +791,27 @@ namespace detail {
             "deterministic_fallback",
             json::Value{plan.resource_budget.deterministic_fallback});
 
+        json::Object backdrop;
+        backdrop.emplace("available", json::Value{plan.backdrop.available});
+        backdrop.emplace("stable", json::Value{plan.backdrop.stable});
+        backdrop.emplace("luma_min", json::Value{plan.backdrop.luma_min});
+        backdrop.emplace("luma_max", json::Value{plan.backdrop.luma_max});
+        backdrop.emplace("luma_mean", json::Value{plan.backdrop.luma_mean});
+        backdrop.emplace("luma_span", json::Value{plan.backdrop.luma_span});
+        backdrop.emplace("source", json::Value{plan.backdrop.source});
+        backdrop.emplace(
+            "luminance_response",
+            json::Value{plan.backdrop.luminance_response});
+        backdrop.emplace(
+            "luminance_floor_delta",
+            json::Value{plan.backdrop.luminance_floor_delta});
+        backdrop.emplace(
+            "luminance_gain_delta",
+            json::Value{plan.backdrop.luminance_gain_delta});
+        backdrop.emplace(
+            "edge_highlight_delta",
+            json::Value{plan.backdrop.edge_highlight_delta});
+
         json::Object quality_policy;
         quality_policy.emplace(
             "allow_backdrop_sampling",
@@ -851,6 +872,7 @@ namespace detail {
         out.emplace("shadow_alpha", json::Value{plan.shadow_alpha});
         out.emplace("shadow_radius", json::Value{plan.shadow_radius});
         out.emplace("backdrop_sampling", json::Value{plan.backdrop_sampling});
+        out.emplace("backdrop", json::Value{std::move(backdrop)});
         out.emplace("fallback", json::Value{plan.fallback()});
         out.emplace(
             "fallback_path",

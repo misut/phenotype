@@ -45,6 +45,19 @@ def material_plan(
         "shadow_alpha": 0.14,
         "shadow_radius": 14.0,
         "backdrop_sampling": False,
+        "backdrop": {
+            "available": False,
+            "stable": False,
+            "luma_min": 0.0,
+            "luma_max": 1.0,
+            "luma_mean": 0.5,
+            "luma_span": 1.0,
+            "source": "none",
+            "luminance_response": "not-sampled",
+            "luminance_floor_delta": 0.0,
+            "luminance_gain_delta": 0.0,
+            "edge_highlight_delta": 0.0,
+        },
         "fallback": True,
         "fallback_path": "unsupported-backend",
         "fallback_reason": "backend reports no material backdrop blur support",
@@ -335,6 +348,47 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["fallback_reasons"],
             {"backend reports no material backdrop blur support": 1})
+
+    def test_manifest_can_require_backdrop_analysis_summary(self) -> None:
+        manifest = {
+            "require_material_plan_summary": {
+                "backdrop_sampling": 0,
+                "backdrop_available": 0,
+                "backdrop_stable": 0,
+                "backdrop_sources": {"none": 1},
+                "luminance_responses": {"not-sampled": 1},
+                "luminance_adapted": 0,
+            },
+        }
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(
+            report["material_plans"]["backdrop"]["sources"],
+            {"none": 1})
+        self.assertEqual(
+            report["material_plans"]["backdrop"]["luminance_responses"],
+            {"not-sampled": 1})
+
+    def test_unknown_backdrop_response_points_to_backdrop_policy(self) -> None:
+        plan = material_plan()
+        backdrop = plan["backdrop"]
+        assert isinstance(backdrop, dict)
+        backdrop["luminance_response"] = "mystery"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material backdrop luminance response is known")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".backdrop.luminance_response")
+        self.assertEqual(failure["likely_layer"], "material.regular.fallback")
+        self.assertIn("verifier vocabulary", failure["hint"])
 
     def test_fallback_reason_summary_failure_points_to_material_plan(self) -> None:
         manifest = {
