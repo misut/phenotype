@@ -555,6 +555,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "fallback",
         "backdrop_sampling",
         "fallback_paths",
+        "fallback_reasons",
         "kinds",
         "pass_names",
     }
@@ -580,6 +581,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
                 value[field],
                 f"require_material_plan_summary.{field}",
                 allowed_keys)
+    if "fallback_reasons" in value:
+        spec["fallback_reasons"] = string_int_map(
+            value["fallback_reasons"],
+            "require_material_plan_summary.fallback_reasons")
     return spec
 
 
@@ -1106,6 +1111,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "fallback": 0,
         "backdrop_sampling": 0,
         "fallback_paths": {},
+        "fallback_reasons": {},
         "kinds": {},
         "pass_names": {},
         "plan_ids": [],
@@ -1246,6 +1252,11 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 likely_layer=likely_layer,
                 hint="Keep MaterialFallbackPath serialization and verifier vocabulary in sync.",
                 record_success=False)
+        if (fallback is True
+                and isinstance(fallback_reason, str)
+                and fallback_reason):
+            reasons = summary["fallback_reasons"]
+            reasons[fallback_reason] = reasons.get(fallback_reason, 0) + 1
         sample_taps = check_number_field(
             report,
             plan,
@@ -1764,7 +1775,7 @@ def check_material_plan_summary_requirements(
                 actual=summary.get(field),
                 likely_layer="platform-runtime",
                 hint="Inspect fallback_path and primary_pass for each material plan.")
-    for field in ("fallback_paths", "kinds", "pass_names"):
+    for field in ("fallback_paths", "fallback_reasons", "kinds", "pass_names"):
         if field in spec:
             actual = summary.get(field)
             report.check(
