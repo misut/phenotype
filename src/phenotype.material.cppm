@@ -138,10 +138,31 @@ struct MaterialRenderTargetAnalysis {
     bool within_backdrop_budget = true;
 };
 
+struct MaterialDecisionTrace {
+    bool has_geometry = false;
+    bool has_material = false;
+    bool target_ready = false;
+    bool quality_switches_allow_backdrop = false;
+    bool backdrop_pixels_within_budget = false;
+    bool quality_allows_backdrop = false;
+    bool capability_material_surfaces = false;
+    bool capability_material_backdrop_blur = false;
+    bool capability_shader_blur = false;
+    bool capability_frame_history = false;
+    bool backend_supports_backdrop = false;
+    bool backdrop_available = false;
+    bool backdrop_stable = false;
+    bool backdrop_source_ready = false;
+    bool reduced_transparency = false;
+    bool can_sample_backdrop = false;
+    char const* first_blocker = "none";
+};
+
 struct MaterialPlan {
     MaterialKind kind = MaterialKind::None;
     MaterialGeometry geometry{};
     MaterialRenderTargetAnalysis render_target{};
+    MaterialDecisionTrace decision_trace{};
     float opacity = 0.0f;
     float blur_radius = 0.0f;
     Color tint = {0, 0, 0, 0};
@@ -604,17 +625,44 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     bool const quality_allows_backdrop =
         quality_switches_allow_backdrop
         && backdrop_pixels_within_budget;
+    bool const backend_supports_backdrop =
+        environment.capabilities.material_surfaces
+        && environment.capabilities.material_backdrop_blur
+        && environment.capabilities.shader_blur;
+    bool const backdrop_source_ready =
+        environment.backdrop.available
+        && environment.backdrop.stable;
     bool const can_sample_backdrop =
         has_material
         && target_ready
         && quality_allows_backdrop
-        && environment.capabilities.material_surfaces
-        && environment.capabilities.material_backdrop_blur
-        && environment.capabilities.shader_blur
+        && backend_supports_backdrop
         && environment.capabilities.frame_history
-        && environment.backdrop.available
-        && environment.backdrop.stable
+        && backdrop_source_ready
         && !environment.capabilities.reduce_transparency;
+    plan.decision_trace.has_geometry = has_geometry;
+    plan.decision_trace.has_material = has_material;
+    plan.decision_trace.target_ready = target_ready;
+    plan.decision_trace.quality_switches_allow_backdrop =
+        quality_switches_allow_backdrop;
+    plan.decision_trace.backdrop_pixels_within_budget =
+        backdrop_pixels_within_budget;
+    plan.decision_trace.quality_allows_backdrop = quality_allows_backdrop;
+    plan.decision_trace.capability_material_surfaces =
+        environment.capabilities.material_surfaces;
+    plan.decision_trace.capability_material_backdrop_blur =
+        environment.capabilities.material_backdrop_blur;
+    plan.decision_trace.capability_shader_blur =
+        environment.capabilities.shader_blur;
+    plan.decision_trace.capability_frame_history =
+        environment.capabilities.frame_history;
+    plan.decision_trace.backend_supports_backdrop = backend_supports_backdrop;
+    plan.decision_trace.backdrop_available = environment.backdrop.available;
+    plan.decision_trace.backdrop_stable = environment.backdrop.stable;
+    plan.decision_trace.backdrop_source_ready = backdrop_source_ready;
+    plan.decision_trace.reduced_transparency =
+        environment.capabilities.reduce_transparency;
+    plan.decision_trace.can_sample_backdrop = can_sample_backdrop;
 
     if (!has_material) {
         plan.fallback_path = style.kind == MaterialKind::None
@@ -657,6 +705,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.saturation = 1.0f;
         plan.noise_opacity = 0.0f;
     }
+    plan.decision_trace.first_blocker =
+        material_fallback_path_name(plan.fallback_path);
 
     plan.backdrop_sampling = can_sample_backdrop;
     if (!plan.backdrop_sampling) {

@@ -608,6 +608,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "render_target_ready",
         "render_target_within_backdrop_budget",
         "render_target_pixel_formats",
+        "decision_can_sample_backdrop",
+        "decision_backend_supports_backdrop",
+        "decision_backdrop_source_ready",
+        "decision_blockers",
     }
     unknown = sorted(set(value) - allowed)
     if unknown:
@@ -624,7 +628,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "backdrop_stable",
             "luminance_adapted",
             "render_target_ready",
-            "render_target_within_backdrop_budget"):
+            "render_target_within_backdrop_budget",
+            "decision_can_sample_backdrop",
+            "decision_backend_supports_backdrop",
+            "decision_backdrop_source_ready"):
         if field in value:
             spec[field] = non_negative_int(
                 value[field],
@@ -654,6 +661,11 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         spec["render_target_pixel_formats"] = string_int_map(
             value["render_target_pixel_formats"],
             "require_material_plan_summary.render_target_pixel_formats")
+    if "decision_blockers" in value:
+        spec["decision_blockers"] = string_int_map(
+            value["decision_blockers"],
+            "require_material_plan_summary.decision_blockers",
+            ALLOWED_MATERIAL_FALLBACK_PATHS)
     return spec
 
 
@@ -1113,6 +1125,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "plan_id",
     "geometry",
     "render_target",
+    "decision_trace",
     "opacity",
     "blur_radius",
     "tint",
@@ -1154,6 +1167,24 @@ MATERIAL_PLAN_NUMERIC_FIELDS = (
 MATERIAL_GEOMETRY_FIELDS = ("x", "y", "w", "h", "radius")
 MATERIAL_RENDER_TARGET_INT_FIELDS = ("width", "height", "pixel_count")
 MATERIAL_RENDER_TARGET_BOOL_FIELDS = ("ready", "within_backdrop_budget")
+MATERIAL_DECISION_TRACE_BOOL_FIELDS = (
+    "has_geometry",
+    "has_material",
+    "target_ready",
+    "quality_switches_allow_backdrop",
+    "backdrop_pixels_within_budget",
+    "quality_allows_backdrop",
+    "capability_material_surfaces",
+    "capability_material_backdrop_blur",
+    "capability_shader_blur",
+    "capability_frame_history",
+    "backend_supports_backdrop",
+    "backdrop_available",
+    "backdrop_stable",
+    "backdrop_source_ready",
+    "reduced_transparency",
+    "can_sample_backdrop",
+)
 MATERIAL_TINT_FIELDS = ("r", "g", "b", "a")
 MATERIAL_BACKDROP_BOOL_FIELDS = ("available", "stable")
 MATERIAL_BACKDROP_LUMA_FIELDS = (
@@ -1214,6 +1245,12 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "within_backdrop_budget": 0,
             "max_pixel_count": 0,
             "pixel_formats": {},
+        },
+        "decision_trace": {
+            "can_sample_backdrop": 0,
+            "backend_supports_backdrop": 0,
+            "backdrop_source_ready": 0,
+            "first_blockers": {},
         },
         "backdrop": {
             "available": 0,
@@ -1501,6 +1538,162 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     actual={"ready": ready, "within_backdrop_budget": within_budget},
                     likely_layer=likely_layer,
                     hint="Sampled material plans require a render target inside the backdrop budget.",
+                    record_success=False)
+
+        decision_trace = check_object_field(
+            report,
+            plan,
+            "decision_trace",
+            plan_path,
+            likely_layer=likely_layer,
+            hint=(
+                "MaterialPlan.decision_trace should expose the pure gate "
+                "booleans that led to backdrop sampling or fallback."))
+        if decision_trace is not None:
+            trace_summary = summary["decision_trace"]
+            trace_values: dict[str, bool] = {}
+            for key in MATERIAL_DECISION_TRACE_BOOL_FIELDS:
+                value = check_bool_field(
+                    report,
+                    decision_trace,
+                    key,
+                    f"{plan_path}.decision_trace",
+                    likely_layer=likely_layer,
+                    hint="Decision trace gate values must be explicit booleans.")
+                if isinstance(value, bool):
+                    trace_values[key] = value
+                    if key in (
+                            "can_sample_backdrop",
+                            "backend_supports_backdrop",
+                            "backdrop_source_ready") and value:
+                        trace_summary[key] = int(trace_summary[key]) + 1
+            first_blocker = check_string_field(
+                report,
+                decision_trace,
+                "first_blocker",
+                f"{plan_path}.decision_trace",
+                likely_layer=likely_layer,
+                hint="Decision trace should name the first pure blocker.")
+            if isinstance(first_blocker, str):
+                blockers = trace_summary["first_blockers"]
+                blockers[first_blocker] = blockers.get(first_blocker, 0) + 1
+                report.check(
+                    "material decision blocker is known",
+                    first_blocker in ALLOWED_MATERIAL_FALLBACK_PATHS,
+                    path=f"{plan_path}.decision_trace.first_blocker",
+                    expected=sorted(ALLOWED_MATERIAL_FALLBACK_PATHS),
+                    actual=first_blocker,
+                    likely_layer=likely_layer,
+                    hint="Keep MaterialDecisionTrace.first_blocker aligned with fallback paths.",
+                    record_success=False)
+                report.check(
+                    "material decision blocker matches fallback path",
+                    first_blocker == fallback_path,
+                    path=f"{plan_path}.decision_trace.first_blocker",
+                    expected=fallback_path,
+                    actual=first_blocker,
+                    likely_layer=likely_layer,
+                    hint=(
+                        "The first decision blocker should explain the same "
+                        "fallback path that the plan exposes."),
+                    record_success=False)
+            can_sample = trace_values.get("can_sample_backdrop")
+            if can_sample is not None:
+                report.check(
+                    "material decision trace matches backdrop sampling",
+                    can_sample == backdrop_sampling,
+                    path=f"{plan_path}.decision_trace.can_sample_backdrop",
+                    expected=backdrop_sampling,
+                    actual=can_sample,
+                    likely_layer=likely_layer,
+                    hint=(
+                        "Decision trace can_sample_backdrop should be the "
+                        "pure predicate behind MaterialPlan.backdrop_sampling."),
+                    record_success=False)
+            backend_inputs = (
+                trace_values.get("capability_material_surfaces"),
+                trace_values.get("capability_material_backdrop_blur"),
+                trace_values.get("capability_shader_blur"),
+            )
+            if all(isinstance(value, bool) for value in backend_inputs):
+                expected_backend = all(backend_inputs)
+                report.check(
+                    "material decision backend support is derived",
+                    trace_values.get("backend_supports_backdrop")
+                    == expected_backend,
+                    path=f"{plan_path}.decision_trace.backend_supports_backdrop",
+                    expected=expected_backend,
+                    actual=trace_values.get("backend_supports_backdrop"),
+                    likely_layer=likely_layer,
+                    hint=(
+                        "backend_supports_backdrop should be the conjunction "
+                        "of material surface, backdrop blur, and shader blur capabilities."),
+                    record_success=False)
+            backdrop_inputs = (
+                trace_values.get("backdrop_available"),
+                trace_values.get("backdrop_stable"),
+            )
+            if all(isinstance(value, bool) for value in backdrop_inputs):
+                expected_source = all(backdrop_inputs)
+                report.check(
+                    "material decision backdrop source readiness is derived",
+                    trace_values.get("backdrop_source_ready") == expected_source,
+                    path=f"{plan_path}.decision_trace.backdrop_source_ready",
+                    expected=expected_source,
+                    actual=trace_values.get("backdrop_source_ready"),
+                    likely_layer=likely_layer,
+                    hint=(
+                        "backdrop_source_ready should reflect available and "
+                        "stable backdrop input."),
+                    record_success=False)
+            if all(key in trace_values for key in (
+                    "quality_switches_allow_backdrop",
+                    "backdrop_pixels_within_budget")):
+                expected_quality = (
+                    trace_values["quality_switches_allow_backdrop"]
+                    and trace_values["backdrop_pixels_within_budget"])
+                report.check(
+                    "material decision quality allowance is derived",
+                    trace_values.get("quality_allows_backdrop")
+                    == expected_quality,
+                    path=f"{plan_path}.decision_trace.quality_allows_backdrop",
+                    expected=expected_quality,
+                    actual=trace_values.get("quality_allows_backdrop"),
+                    likely_layer=likely_layer,
+                    hint=(
+                        "quality_allows_backdrop should combine the quality "
+                        "switches with the backdrop pixel budget."),
+                    record_success=False)
+            can_sample_inputs = (
+                "has_material",
+                "target_ready",
+                "quality_allows_backdrop",
+                "backend_supports_backdrop",
+                "capability_frame_history",
+                "backdrop_source_ready",
+                "reduced_transparency",
+            )
+            if all(key in trace_values for key in can_sample_inputs):
+                expected_can_sample = (
+                    trace_values["has_material"]
+                    and trace_values["target_ready"]
+                    and trace_values["quality_allows_backdrop"]
+                    and trace_values["backend_supports_backdrop"]
+                    and trace_values["capability_frame_history"]
+                    and trace_values["backdrop_source_ready"]
+                    and not trace_values["reduced_transparency"])
+                report.check(
+                    "material decision can-sample predicate is derived",
+                    trace_values.get("can_sample_backdrop")
+                    == expected_can_sample,
+                    path=f"{plan_path}.decision_trace.can_sample_backdrop",
+                    expected=expected_can_sample,
+                    actual=trace_values.get("can_sample_backdrop"),
+                    likely_layer=likely_layer,
+                    hint=(
+                        "can_sample_backdrop should be the conjunction of "
+                        "material, target, quality, backend, frame-history, "
+                        "backdrop-source, and reduced-transparency gates."),
                     record_success=False)
 
         tint = check_object_field(
@@ -2307,7 +2500,10 @@ def check_material_plan_summary_requirements(
             "backdrop_stable",
             "luminance_adapted",
             "render_target_ready",
-            "render_target_within_backdrop_budget"):
+            "render_target_within_backdrop_budget",
+            "decision_can_sample_backdrop",
+            "decision_backend_supports_backdrop",
+            "decision_backdrop_source_ready"):
         if field in spec:
             actual = summary.get(field)
             summary_path = f"{base_path}.{field}"
@@ -2333,6 +2529,16 @@ def check_material_plan_summary_requirements(
                 nested_field = field.removeprefix("render_target_")
                 actual = render_summary.get(nested_field)
                 summary_path = f"{base_path}.render_target.{nested_field}"
+            elif field in (
+                    "decision_can_sample_backdrop",
+                    "decision_backend_supports_backdrop",
+                    "decision_backdrop_source_ready"):
+                decision_summary = summary.get("decision_trace")
+                if not isinstance(decision_summary, dict):
+                    decision_summary = {}
+                nested_field = field.removeprefix("decision_")
+                actual = decision_summary.get(nested_field)
+                summary_path = f"{base_path}.decision_trace.{nested_field}"
             report.check(
                 f"material plan summary {field} matches",
                 actual == spec[field],
@@ -2366,6 +2572,9 @@ def check_material_plan_summary_requirements(
         "render_target_pixel_formats": (
             "material-render-target",
             "Inspect MaterialPlan.render_target.pixel_format and backend target metadata."),
+        "decision_blockers": (
+            "material-decision",
+            "Inspect MaterialPlan.decision_trace.first_blocker and fallback_path."),
     }
     for field in (
             "fallback_paths",
@@ -2375,7 +2584,8 @@ def check_material_plan_summary_requirements(
             "pass_executors",
             "backdrop_sources",
             "luminance_responses",
-            "render_target_pixel_formats"):
+            "render_target_pixel_formats",
+            "decision_blockers"):
         if field in spec:
             actual = summary.get(field)
             summary_path = f"{base_path}.{field}"
@@ -2397,6 +2607,12 @@ def check_material_plan_summary_requirements(
                     render_summary = {}
                 actual = render_summary.get("pixel_formats")
                 summary_path = f"{base_path}.render_target.pixel_formats"
+            elif field == "decision_blockers":
+                decision_summary = summary.get("decision_trace")
+                if not isinstance(decision_summary, dict):
+                    decision_summary = {}
+                actual = decision_summary.get("first_blockers")
+                summary_path = f"{base_path}.decision_trace.first_blockers"
             likely_layer, hint = summary_field_hints[field]
             report.check(
                 f"material plan summary {field} matches",

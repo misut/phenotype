@@ -749,6 +749,62 @@ namespace detail {
             "within_backdrop_budget",
             json::Value{plan.render_target.within_backdrop_budget});
 
+        json::Object decision_trace;
+        decision_trace.emplace(
+            "has_geometry",
+            json::Value{plan.decision_trace.has_geometry});
+        decision_trace.emplace(
+            "has_material",
+            json::Value{plan.decision_trace.has_material});
+        decision_trace.emplace(
+            "target_ready",
+            json::Value{plan.decision_trace.target_ready});
+        decision_trace.emplace(
+            "quality_switches_allow_backdrop",
+            json::Value{
+                plan.decision_trace.quality_switches_allow_backdrop});
+        decision_trace.emplace(
+            "backdrop_pixels_within_budget",
+            json::Value{
+                plan.decision_trace.backdrop_pixels_within_budget});
+        decision_trace.emplace(
+            "quality_allows_backdrop",
+            json::Value{plan.decision_trace.quality_allows_backdrop});
+        decision_trace.emplace(
+            "capability_material_surfaces",
+            json::Value{plan.decision_trace.capability_material_surfaces});
+        decision_trace.emplace(
+            "capability_material_backdrop_blur",
+            json::Value{
+                plan.decision_trace.capability_material_backdrop_blur});
+        decision_trace.emplace(
+            "capability_shader_blur",
+            json::Value{plan.decision_trace.capability_shader_blur});
+        decision_trace.emplace(
+            "capability_frame_history",
+            json::Value{plan.decision_trace.capability_frame_history});
+        decision_trace.emplace(
+            "backend_supports_backdrop",
+            json::Value{plan.decision_trace.backend_supports_backdrop});
+        decision_trace.emplace(
+            "backdrop_available",
+            json::Value{plan.decision_trace.backdrop_available});
+        decision_trace.emplace(
+            "backdrop_stable",
+            json::Value{plan.decision_trace.backdrop_stable});
+        decision_trace.emplace(
+            "backdrop_source_ready",
+            json::Value{plan.decision_trace.backdrop_source_ready});
+        decision_trace.emplace(
+            "reduced_transparency",
+            json::Value{plan.decision_trace.reduced_transparency});
+        decision_trace.emplace(
+            "can_sample_backdrop",
+            json::Value{plan.decision_trace.can_sample_backdrop});
+        decision_trace.emplace(
+            "first_blocker",
+            json::Value{plan.decision_trace.first_blocker});
+
         json::Object tint;
         tint.emplace("r", json::Value{static_cast<std::int64_t>(plan.tint.r)});
         tint.emplace("g", json::Value{static_cast<std::int64_t>(plan.tint.g)});
@@ -892,6 +948,7 @@ namespace detail {
         out.emplace("plan_id", json::Value{plan.plan_id});
         out.emplace("geometry", json::Value{std::move(geometry)});
         out.emplace("render_target", json::Value{std::move(render_target)});
+        out.emplace("decision_trace", json::Value{std::move(decision_trace)});
         out.emplace("opacity", json::Value{plan.opacity});
         out.emplace("blur_radius", json::Value{plan.blur_radius});
         out.emplace("tint", json::Value{std::move(tint)});

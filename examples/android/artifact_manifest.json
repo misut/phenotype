@@ -50,6 +50,12 @@
     "render_target_within_backdrop_budget": 1,
     "render_target_pixel_formats": {
       "rgba8unorm": 1
+    },
+    "decision_can_sample_backdrop": 0,
+    "decision_backend_supports_backdrop": 0,
+    "decision_backdrop_source_ready": 0,
+    "decision_blockers": {
+      "unsupported-backend": 1
     }
   },
   "require_material_resource_bounds": {

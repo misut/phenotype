@@ -44,6 +44,25 @@ def material_plan(
             "ready": True,
             "within_backdrop_budget": True,
         },
+        "decision_trace": {
+            "has_geometry": True,
+            "has_material": True,
+            "target_ready": True,
+            "quality_switches_allow_backdrop": True,
+            "backdrop_pixels_within_budget": True,
+            "quality_allows_backdrop": True,
+            "capability_material_surfaces": True,
+            "capability_material_backdrop_blur": False,
+            "capability_shader_blur": False,
+            "capability_frame_history": False,
+            "backend_supports_backdrop": False,
+            "backdrop_available": False,
+            "backdrop_stable": False,
+            "backdrop_source_ready": False,
+            "reduced_transparency": False,
+            "can_sample_backdrop": False,
+            "first_blocker": "unsupported-backend",
+        },
         "opacity": 0.58,
         "blur_radius": 0.0,
         "tint": {"r": 255, "g": 255, "b": 255, "a": 148},
@@ -305,6 +324,13 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["resource_bounds"][
                 "total_pass_texture_copy_pixels"],
             0)
+        self.assertEqual(
+            report["material_plans"]["decision_trace"]["first_blockers"],
+            {"unsupported-backend": 1})
+        self.assertEqual(
+            report["material_plans"]["decision_trace"][
+                "can_sample_backdrop"],
+            0)
 
     def test_material_plan_mismatch_failure_is_llm_actionable(self) -> None:
         code, report = self.run_verifier(snapshot(material_plan(sample_taps=25)))
@@ -388,6 +414,10 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "render_target_within_backdrop_budget": 1,
                 "render_target_pixel_formats": {"rgba8unorm": 1},
                 "pass_executors": {"fallback-fill": 1},
+                "decision_can_sample_backdrop": 0,
+                "decision_backend_supports_backdrop": 0,
+                "decision_backdrop_source_ready": 0,
+                "decision_blockers": {"unsupported-backend": 1},
             },
         }
         code, report = self.run_verifier(snapshot(material_plan()), manifest)
@@ -403,6 +433,31 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["render_target"]["pixel_formats"],
             {"rgba8unorm": 1})
+        self.assertEqual(
+            report["material_plans"]["decision_trace"]["first_blockers"],
+            {"unsupported-backend": 1})
+
+    def test_decision_trace_blocker_mismatch_points_to_plan_policy(self) -> None:
+        plan = material_plan()
+        trace = plan["decision_trace"]
+        assert isinstance(trace, dict)
+        trace["first_blocker"] = "none"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material decision blocker matches fallback path"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".decision_trace.first_blocker")
+        self.assertEqual(failure["expected"], "unsupported-backend")
+        self.assertEqual(failure["actual"], "none")
+        self.assertEqual(failure["likely_layer"], "material.regular.fallback")
+        self.assertIn("first decision blocker", failure["hint"])
 
     def test_fallback_pass_texture_copy_points_to_pass_contract(self) -> None:
         plan = material_plan()
