@@ -455,7 +455,9 @@ This branch starts that path with:
   local glass showcase gate;
 - macOS native CI wiring for the glass showcase manifest gate, inside the
   existing `test (macos-15, native)` job;
-- an Android device/emulator contract runner for the bundled stage 7 example;
+- an Android device/emulator contract runner for the bundled stage 7 example,
+  including a material fallback probe that must produce a resolved runtime
+  fallback plan;
 - `MaterialRect`, a shared command contract for material surfaces, with macOS
   Metal sampled-backdrop rendering, resolved runtime fallback plans on Windows
   and Android, and explicit snapshot fallback contracts on WebGPU/WASI.
