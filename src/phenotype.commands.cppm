@@ -27,6 +27,14 @@ struct MaterialRectCmd {
     float opacity;
     float blur_radius;
     Color tint;
+    float saturation;
+    float luminance_floor;
+    float luminance_gain;
+    float edge_highlight;
+    float edge_width;
+    float noise_opacity;
+    float shadow_alpha;
+    float shadow_radius;
 };
 // DrawTextCmd carries the decoded `Cmd::DrawText` payload. `mono`
 // stays as a convenience boolean (still derived from flags bit 0)
@@ -165,8 +173,18 @@ inline std::vector<DrawCommand> parse_commands(
             float opacity = read_f32();
             float blur_radius = read_f32();
             auto tint = unpack(read_u32());
+            float saturation = read_f32();
+            float luminance_floor = read_f32();
+            float luminance_gain = read_f32();
+            float edge_highlight = read_f32();
+            float edge_width = read_f32();
+            float noise_opacity = read_f32();
+            float shadow_alpha = read_f32();
+            float shadow_radius = read_f32();
             out.emplace_back(MaterialRectCmd{
-                x, y, w, h, r, kind, opacity, blur_radius, tint});
+                x, y, w, h, r, kind, opacity, blur_radius, tint,
+                saturation, luminance_floor, luminance_gain, edge_highlight,
+                edge_width, noise_opacity, shadow_alpha, shadow_radius});
             break;
         }
         case Cmd::DrawText: {

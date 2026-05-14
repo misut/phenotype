@@ -816,6 +816,7 @@ function parseCommands(instance) {
         pos += 4; // opacity
         pos += 4; // blur_radius
         const rgba = view.getUint32(pos, true); pos += 4;
+        pos += 32; // saturation, luminance, edge, noise, and shadow fields
         const c = unpackColor(rgba);
         quads.push({ x, y, w, h, r: c.r, g: c.g, b: c.b, a: c.a, type: 2, radius });
         break;

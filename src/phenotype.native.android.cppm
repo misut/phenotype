@@ -4183,6 +4183,14 @@ inline void decode_android_color_commands(unsigned char const* buf,
             auto const opacity = read_f32();
             auto const blur_radius = read_f32();
             auto const tint = unpack(read_u32());
+            auto const saturation = read_f32();
+            auto const luminance_floor = read_f32();
+            auto const luminance_gain = read_f32();
+            auto const edge_highlight = read_f32();
+            auto const edge_width = read_f32();
+            auto const noise_opacity = read_f32();
+            auto const shadow_alpha = read_f32();
+            auto const shadow_radius = read_f32();
             auto material_env_for_command = material_env;
             material_env_for_command.debug_seed.node = current_command_index;
             auto plan = ::phenotype::plan_material_surface(
@@ -4191,6 +4199,14 @@ inline void decode_android_color_commands(unsigned char const* buf,
                     opacity,
                     blur_radius,
                     tint,
+                    saturation,
+                    luminance_floor,
+                    luminance_gain,
+                    edge_highlight,
+                    edge_width,
+                    noise_opacity,
+                    shadow_alpha,
+                    shadow_radius,
                     ::phenotype::MaterialGeometry{x, y, w, h, r},
                     ::phenotype::current_theme()),
                 material_env_for_command);
@@ -4826,6 +4842,14 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                         c.opacity,
                         c.blur_radius,
                         c.tint,
+                        c.saturation,
+                        c.luminance_floor,
+                        c.luminance_gain,
+                        c.edge_highlight,
+                        c.edge_width,
+                        c.noise_opacity,
+                        c.shadow_alpha,
+                        c.shadow_radius,
                         ::phenotype::MaterialGeometry{
                             c.x, c.y, c.w, c.h, c.radius},
                         ::phenotype::current_theme()),
