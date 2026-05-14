@@ -137,7 +137,7 @@ struct Theme {
     // 44 dp at app startup via phenotype::set_theme.
     float toggle_box_size    = 16.0f;
 
-    // Radius scale (mirrors phenotype-web's "angular over rounded" defaults)
+    // Radius scale for compact native chrome.
     float radius_xs   = 3.0f;
     float radius_sm   = 2.0f;
     float radius_md   = 3.0f;
@@ -167,7 +167,7 @@ struct Theme {
     Color state_focus_ring        = { 10, 186, 181, 255}; // = accent (Tiffany)
     float state_focus_ring_width  = 2.0f;
 
-    // Semantic colors (consumers TBD; mirror phenotype-web defaults)
+    // Semantic colors reserved for downstream status widgets.
     Color semantic_success_bg     = {220, 252, 231, 255};
     Color semantic_success_fg     = { 22, 101,  52, 255};
     Color semantic_success_border = { 34, 197,  94, 255};
@@ -452,7 +452,7 @@ enum class InteractionRole {
     TextField,
 };
 
-// Button visual variant. Mirrors phenotype-web's Button.tsx prop.
+// Button visual variant.
 //   Default — code_bg / surface chrome with hover_bg fallback.
 //   Primary — accent-filled with white text; hover darkens to accent_strong.
 enum class ButtonVariant {
@@ -460,7 +460,7 @@ enum class ButtonVariant {
     Primary,
 };
 
-// Text size variant. Mirrors phenotype-web's Text.tsx `size` prop.
+// Text size variant.
 // Picks one of the typography scalars on Theme. `Code` additionally
 // applies the code-block chrome (mono font, code_bg background,
 // 1px border, radius_md, space_lg padding).
@@ -473,7 +473,7 @@ enum class TextSize {
     HeroSubtitle,
 };
 
-// Text color variant. Mirrors phenotype-web's Text.tsx `color` prop.
+// Text color variant.
 // Picks one of the foreground / muted / accent / hero color tokens.
 enum class TextColor {
     Default,
@@ -483,9 +483,7 @@ enum class TextColor {
     HeroMuted,
 };
 
-// Spacing-scale token. Mirrors phenotype-web's `SpaceToken` and the
-// six rungs phenotype-web exposes through `<Column gap=...>` /
-// `<Row gap=...>`. Resolved against the active Theme by
+// Spacing-scale token resolved against the active Theme by
 // layout::space_value().
 enum class SpaceToken {
     Xs,

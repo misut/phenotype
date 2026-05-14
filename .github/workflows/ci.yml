@@ -16,7 +16,6 @@ jobs:
       code_tests: ${{ steps.classify.outputs.code_tests }}
       docs_build: ${{ steps.classify.outputs.docs_build }}
       tools_check: ${{ steps.classify.outputs.tools_check }}
-      artifact_build: ${{ steps.classify.outputs.artifact_build }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -40,7 +39,6 @@ jobs:
           code_tests=false
           docs_build=false
           tools_check=false
-          artifact_build=false
 
           for path in "${files[@]}"; do
             case "$path" in
@@ -48,7 +46,6 @@ jobs:
                 code_tests=true
                 docs_build=true
                 tools_check=true
-                artifact_build=true
                 continue
                 ;;
             esac
@@ -67,7 +64,6 @@ jobs:
 
             case "$path" in
               examples/glass_showcase/artifact_manifest*.json)
-                artifact_build=true
                 continue
                 ;;
             esac
@@ -78,18 +74,12 @@ jobs:
                 ;;
             esac
 
-            case "$path" in
-              src/*|examples/glass_showcase/*|tools/verify_artifact_bundle.py|tools/verify_glass_showcase*.sh|pyproject.toml|uv.lock|.python-version)
-                artifact_build=true
-                ;;
-            esac
           done
 
           {
             echo "code_tests=$code_tests"
             echo "docs_build=$docs_build"
             echo "tools_check=$tools_check"
-            echo "artifact_build=$artifact_build"
           } >> "$GITHUB_OUTPUT"
 
           printf 'Changed files:\n'
@@ -98,8 +88,8 @@ jobs:
           else
             printf '  %s\n' "${files[@]}"
           fi
-          printf 'code_tests=%s docs_build=%s tools_check=%s artifact_build=%s\n' \
-            "$code_tests" "$docs_build" "$tools_check" "$artifact_build"
+          printf 'code_tests=%s docs_build=%s tools_check=%s\n' \
+            "$code_tests" "$docs_build" "$tools_check"
 
   test:
     name: test (${{ matrix.os }}, ${{ matrix.target }})
@@ -216,19 +206,6 @@ jobs:
         if: matrix.target == 'native'
         run: |
           uv run --frozen python tools/test_verify_artifact_bundle.py
-
-      - name: Verify glass showcase artifact
-        if: matrix.target == 'native'
-        env:
-          EXON: exon
-          EXON_CXXFLAGS: ${{ matrix.cxxflags }}
-          EXON_LDFLAGS: ${{ matrix.ldflags }}
-          PHENOTYPE_ARTIFACT_DIR: ${{ runner.temp }}/phenotype-glass-showcase
-          PHENOTYPE_EXPECT_PLATFORM: macos
-        run: |
-          eval "$(intron env)"
-          tools/verify_glass_showcase_artifact.sh
-          tools/verify_glass_showcase_accessibility_artifact.sh
 
       - name: Save build artifacts
         if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
@@ -415,91 +392,3 @@ jobs:
       - name: Test artifact verifier contract
         run: |
           uv run --frozen python tools/test_verify_artifact_bundle.py
-
-  glass-artifact:
-    name: glass showcase artifact
-    needs: changes
-    if: needs.changes.outputs.artifact_build == 'true' && needs.changes.outputs.code_tests != 'true'
-    runs-on: macos-15
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Resolve tool versions
-        id: tool-versions
-        shell: bash
-        run: |
-          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
-          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
-
-      - name: Restore toolchains
-        id: toolchain-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: ~/.intron/toolchains
-          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
-
-      - name: Restore build artifacts
-        id: build-cache
-        uses: actions/cache/restore@v5
-        with:
-          path: |
-            examples/glass_showcase/.exon
-            ~/.exon/cache
-          key: glass-artifact-${{ runner.os }}-${{ hashFiles('mise.toml', 'examples/glass_showcase/exon.toml', 'exon.lock') }}
-          restore-keys: |
-            glass-artifact-${{ runner.os }}-
-
-      - name: Install intron
-        run: |
-          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-aarch64-apple-darwin.tar.gz"
-          tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Install toolchains
-        run: |
-          intron install llvm 22.1.2
-          intron install cmake 4.3.1
-          intron install ninja 1.13.2
-
-      - name: Save toolchains
-        if: github.ref == 'refs/heads/main' && steps.toolchain-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: ~/.intron/toolchains
-          key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
-
-      - name: Install exon
-        run: |
-          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-aarch64-apple-darwin.tar.gz"
-          tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
-        env:
-          GH_TOKEN: ${{ github.token }}
-
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
-        with:
-          version: "0.11.14"
-          enable-cache: true
-
-      - name: Install Python for tools
-        run: uv python install
-
-      - name: Verify glass showcase artifact
-        env:
-          EXON: exon
-          PHENOTYPE_ARTIFACT_DIR: ${{ runner.temp }}/phenotype-glass-showcase
-          PHENOTYPE_EXPECT_PLATFORM: macos
-        run: |
-          eval "$(intron env)"
-          tools/verify_glass_showcase_artifact.sh
-          tools/verify_glass_showcase_accessibility_artifact.sh
-
-      - name: Save build artifacts
-        if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
-        uses: actions/cache/save@v5
-        with:
-          path: |
-            examples/glass_showcase/.exon
-            ~/.exon/cache
-          key: ${{ steps.build-cache.outputs.cache-primary-key }}

@@ -201,7 +201,7 @@ struct FontRegistry {
     ComPtr<IDWriteFontCollectionLoader>    collection_loader;
     // Linear-scan vector mirroring the rationale on TextState::formats —
     // never more than a handful of DWG STYLE-derived aliases, and the
-    // MSVC + `import std` `std::map` AV trigger documented in CLAUDE.md
+    // MSVC + `import std` `std::map` AV trigger documented in AGENTS.md
     // applies to wstring-key + non-trivial-value module-static maps.
     std::vector<FontAlias>             aliases;
     std::vector<std::wstring>          paths;

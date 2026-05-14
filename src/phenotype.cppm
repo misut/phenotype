@@ -125,11 +125,10 @@ namespace widget {
 
 // text — single string label, inherits text_align from current scope.
 //
-// `size` picks one of phenotype-web's typography rungs (Body / Heading /
+// `size` picks one of the Theme typography rungs (Body / Heading /
 // Small / Code / HeroTitle / HeroSubtitle). `Code` additionally swaps
 // the node into the inline code-block chrome (mono font, code_bg
-// background, 1px border, radius_md, space_xs / space_sm padding) —
-// matches phenotype-web's <Text size="code">.
+// background, 1px border, radius_md, space_xs / space_sm padding).
 //
 // `color` picks one of the foreground / muted / accent / hero color
 // tokens. Defaults to foreground.
@@ -162,7 +161,7 @@ inline void text(str content,
         default:                   node.text_color = t.foreground; break;
     }
 
-    // Inline code chrome — matches phenotype-web's Text.css L17-24.
+    // Inline code chrome.
     if (size == TextSize::Code) {
         node.background = t.code_bg;
         node.border_color = t.border;
@@ -253,12 +252,11 @@ inline void code(str content) {
 
 // cell — compact bordered grid slot for a single piece of content.
 //
-// Mirrors phenotype-web's <Cell> widget. The first concrete spreadsheet
-// primitive used by examples/seven_guis/cells. Header variant flips the
-// background to code_bg and centers content — used for column letters
-// and row numbers. Width / height default to 0 / -1 (no cap), so the
-// caller is responsible for uniform sizing if a true grid alignment
-// is needed (currently a fidelity gap; M8-3 closes it).
+// Compact bordered grid slot. The first concrete spreadsheet primitive
+// used by examples/seven_guis/cells. Header variant flips the background
+// to code_bg and centers content — used for column letters and row numbers.
+// Width / height default to 0 / -1 (no cap), so the caller is responsible
+// for uniform sizing if a true grid alignment is needed.
 inline void cell(str content,
                  bool header = false,
                  float width = 0,
@@ -1515,10 +1513,9 @@ inline MaterialStyle material_style(MaterialKind kind) noexcept {
 
 // column — vertical flex container.
 //
-// Builder overload accepts gap / cross-axis / main-axis props that
-// mirror phenotype-web's <Column> attributes. The variadic overload
-// keeps its M0-3 behaviour (defaults only) so existing call sites stay
-// terse; pass a builder lambda when you need the props.
+// Builder overload accepts gap / cross-axis / main-axis props. The
+// variadic overload keeps its defaults-only behaviour so existing call
+// sites stay terse; pass a builder lambda when you need the props.
 template<typename F>
     requires std::is_invocable_v<F>
 void column(F&& builder,
@@ -1550,9 +1547,8 @@ void column(A&& a, B&& b, Rest&&... rest) {
     Scope::set_current(prev);
 }
 
-// row — horizontal flex container. Defaults match phenotype-web's
-// <Row> (gap=Sm, cross=Center). Builder overload exposes all three
-// props; the variadic overload keeps the defaults.
+// row — horizontal flex container. Builder overload exposes gap and
+// alignment props; the variadic overload keeps the defaults.
 template<typename F>
     requires std::is_invocable_v<F>
 void row(F&& builder,

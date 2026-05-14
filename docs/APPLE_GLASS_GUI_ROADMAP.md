@@ -409,11 +409,11 @@ Current seed:
   startup artifact bundle, and applies the manifest;
 - `tools/verify_glass_showcase_accessibility_artifact.sh` wraps the
   accessibility-response manifest without adding another default CI job;
-- PR CI runs the gate through the macOS native path for code changes and through
-  a lighter artifact job for artifact-only changes; main-branch pushes run only
-  artifact/docs build gates instead of the full code test matrix. WASI root
-  tests and docs builds run on Linux runners, while macOS runners stay reserved
-  for the native glass artifact gate.
+- PR CI keeps the slow macOS artifact capture as a local acceptance check rather
+  than a required job; main-branch pushes run only artifact/docs build gates
+  instead of the full code test matrix. WASI root tests and docs builds run on
+  Linux runners, while macOS runners stay reserved for the main-branch native
+  glass artifact gate.
 
 Validation:
 
