@@ -441,6 +441,22 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["likely_layer"], "platform-runtime")
         self.assertEqual(failure["likely_pass"], "material-executor")
         self.assertIn("missing pass or counter", failure["hint"])
+        failure_summary = report["failure_summary"]
+        self.assertEqual(failure_summary["count"], 1)
+        self.assertEqual(failure_summary["top_likely_layer"], "platform-runtime")
+        self.assertEqual(failure_summary["top_likely_pass"], "material-executor")
+        self.assertEqual(
+            failure_summary["first_failure"]["path"],
+            failure["path"])
+        self.assertEqual(
+            failure_summary["first_failure"]["expected"],
+            failure["expected"])
+        self.assertEqual(
+            failure_summary["first_failure"]["actual"],
+            failure["actual"])
+        self.assertIn(
+            "missing pass or counter",
+            failure_summary["first_failure"]["hint"])
 
     def test_manifest_can_compare_pixel_region_metrics(self) -> None:
         manifest = {
