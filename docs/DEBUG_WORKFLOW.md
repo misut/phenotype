@@ -191,7 +191,7 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 `render_target_within_backdrop_budget`, `decision_can_sample_backdrop`,
 `decision_backend_supports_backdrop`, `decision_backdrop_source_ready`, and
 exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`,
-`pass_names`, `backdrop_sources`, `luminance_responses`,
+`contract_versions`, `pass_names`, `backdrop_sources`, `luminance_responses`,
 `render_target_pixel_formats`, `pass_executors`, `decision_blockers`,
 `verifier_profiles`, and `verifier_region_layers`; it can also count
 `verifier_require_backdrop_source` and `verifier_require_edge_highlight`. This
@@ -199,9 +199,9 @@ catches policy drift such as a glass scene silently switching from backdrop
 blur to fallback, a fallback backend reporting the wrong deterministic pass, a
 sampled scene losing its previous-frame backdrop source, a render target
 exceeding the pure backdrop budget, a pass switching executor roles, a decision
-trace naming the wrong blocker, verifier expectations pointing at the wrong
-region/layer, or a quality/capability downgrade losing its LLM-actionable
-reason string.
+trace naming the wrong blocker, an artifact emitting an unexpected material plan
+schema version, verifier expectations pointing at the wrong region/layer, or a
+quality/capability downgrade losing its LLM-actionable reason string.
 
 The plan schema check also treats `primary_pass` as a runtime contract. Its
 sample-tap count must match the plan, and the backend `passes[]` list must
