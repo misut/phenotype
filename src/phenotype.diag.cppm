@@ -730,6 +730,25 @@ namespace detail {
         geometry.emplace("h", json::Value{plan.geometry.h});
         geometry.emplace("radius", json::Value{plan.geometry.radius});
 
+        json::Object render_target;
+        render_target.emplace(
+            "width",
+            json::Value{static_cast<std::int64_t>(plan.render_target.width)});
+        render_target.emplace(
+            "height",
+            json::Value{static_cast<std::int64_t>(plan.render_target.height)});
+        render_target.emplace("scale", json::Value{plan.render_target.scale});
+        render_target.emplace(
+            "pixel_format",
+            json::Value{plan.render_target.pixel_format});
+        render_target.emplace(
+            "pixel_count",
+            json::Value{plan.render_target.pixel_count});
+        render_target.emplace("ready", json::Value{plan.render_target.ready});
+        render_target.emplace(
+            "within_backdrop_budget",
+            json::Value{plan.render_target.within_backdrop_budget});
+
         json::Object tint;
         tint.emplace("r", json::Value{static_cast<std::int64_t>(plan.tint.r)});
         tint.emplace("g", json::Value{static_cast<std::int64_t>(plan.tint.g)});
@@ -860,6 +879,7 @@ namespace detail {
         out.emplace("kind", json::Value{material_kind_name(plan.kind)});
         out.emplace("plan_id", json::Value{plan.plan_id});
         out.emplace("geometry", json::Value{std::move(geometry)});
+        out.emplace("render_target", json::Value{std::move(render_target)});
         out.emplace("opacity", json::Value{plan.opacity});
         out.emplace("blur_radius", json::Value{plan.blur_radius});
         out.emplace("tint", json::Value{std::move(tint)});

@@ -47,7 +47,12 @@
     "luminance_responses": {
       "neutral": 7
     },
-    "luminance_adapted": 0
+    "luminance_adapted": 0,
+    "render_target_ready": 7,
+    "render_target_within_backdrop_budget": 7,
+    "render_target_pixel_formats": {
+      "bgra8unorm": 7
+    }
   },
   "require_material_resource_bounds": {
     "max_plan_blur_radius_lte": 36.0,

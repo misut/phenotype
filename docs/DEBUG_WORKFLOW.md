@@ -98,6 +98,8 @@ the actual `material_plans` executed for the frame. Each plan includes:
 
 - `plan_id`, `kind`, geometry, tint, blur radius, saturation, luminance curve,
   edge highlight, noise, and shadow values;
+- `render_target`, including target dimensions, scale, pixel format, pixel
+  count, readiness, and whether the backdrop-pixel budget was satisfied;
 - `backdrop_sampling`, `fallback`, `fallback_path`, and `fallback_reason`;
 - `backdrop`, including source, readiness flags, sanitized luminance
   statistics, luminance response, and floor/gain/edge deltas;
@@ -159,13 +161,15 @@ the first file/pass family to inspect without scanning every check. Use
 Manifests can also set `require_material_plan_summary` to assert the resolved
 material aggregate, not just the per-plan schema. Supported keys are `count`,
 `min_count`, `fallback`, `backdrop_sampling`, `backdrop_available`,
-`backdrop_stable`, `luminance_adapted`, and exact count maps for
+`backdrop_stable`, `luminance_adapted`, `render_target_ready`,
+`render_target_within_backdrop_budget`, and exact count maps for
 `fallback_paths`, `fallback_reasons`, `kinds`, `pass_names`,
-`backdrop_sources`, and `luminance_responses`. This catches policy drift such
-as a glass scene silently switching from backdrop blur to fallback, a fallback
-backend reporting the wrong deterministic pass, a sampled scene losing its
-previous-frame backdrop source, or a quality/capability downgrade losing its
-LLM-actionable reason string.
+`backdrop_sources`, `luminance_responses`, and
+`render_target_pixel_formats`. This catches policy drift such as a glass scene
+silently switching from backdrop blur to fallback, a fallback backend reporting
+the wrong deterministic pass, a sampled scene losing its previous-frame
+backdrop source, a render target exceeding the pure backdrop budget, or a
+quality/capability downgrade losing its LLM-actionable reason string.
 
 The plan schema check also treats `primary_pass` as a runtime contract. Its
 sample-tap count must match the plan, and the backend `passes[]` list must
