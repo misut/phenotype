@@ -1965,6 +1965,141 @@ def check_material_runtime_summary_contract(
                 "summary from renderer.material_plans[]."))
 
 
+def check_material_executor_summary_contract(
+        summary: JsonObject,
+        executor_summary: Any,
+        report: Report) -> None:
+    base_path = "debug.platform_runtime.details.renderer.material_executor_summary"
+    report.check(
+        "material executor summary is object",
+        isinstance(executor_summary, dict),
+        path=base_path,
+        expected="object",
+        actual=type(executor_summary).__name__,
+        likely_layer="platform-runtime",
+        likely_pass="material-executor",
+        hint=(
+            "Backends should serialize material_executor_summary next to "
+            "renderer.material_plans so CI can cross-check edge execution."))
+    if not isinstance(executor_summary, dict):
+        return
+
+    count = summary.get("count")
+    fallback = summary.get("fallback")
+    material_instances = (
+        count - fallback
+        if isinstance(count, int) and isinstance(fallback, int)
+        else None)
+    expected_fields = {
+        "plan_count": count,
+        "fallback_instance_count": fallback,
+        "material_instance_count": material_instances,
+    }
+    for field, expected in expected_fields.items():
+        actual = executor_summary.get(field)
+        report.check(
+            f"material executor summary {field} matches plans",
+            actual == expected,
+            path=f"{base_path}.{field}",
+            expected=expected,
+            actual=actual,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "Compare renderer.material_executor_summary with "
+                "renderer.material_plans#summary before changing backend policy."))
+
+    numeric_fields = (
+        "plan_count",
+        "material_instance_count",
+        "fallback_instance_count",
+        "material_draw_calls",
+        "backdrop_copy_count",
+        "backdrop_copy_pixels",
+        "material_upload_bytes",
+        "material_buffer_capacity_bytes",
+        "material_buffer_reallocations",
+        "cpu_decode_ns",
+        "cpu_material_upload_ns",
+        "cpu_total_ns",
+    )
+    for field in numeric_fields:
+        actual = executor_summary.get(field)
+        report.check(
+            f"material executor summary {field} is non-negative",
+            isinstance(actual, (int, float)) and not isinstance(actual, bool)
+            and float(actual) >= 0.0,
+            path=f"{base_path}.{field}",
+            expected={">=": 0},
+            actual=actual,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint="Executor telemetry must be numeric and non-negative.")
+
+    draw_calls = executor_summary.get("material_draw_calls")
+    if isinstance(draw_calls, (int, float)) and not isinstance(draw_calls, bool):
+        bounds = summary.get("resource_bounds")
+        max_pass_count = None
+        if isinstance(bounds, dict):
+            max_pass_count = bounds.get("max_pass_count")
+        draw_call_limit = (
+            material_instances * max_pass_count
+            if isinstance(material_instances, int)
+            and isinstance(max_pass_count, int)
+            else material_instances)
+        report.check(
+            "material executor draw calls are bounded by pass budget",
+            isinstance(draw_call_limit, int)
+            and float(draw_calls) <= float(draw_call_limit),
+            path=f"{base_path}.material_draw_calls",
+            expected={"<=": draw_call_limit},
+            actual=draw_calls,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "Material draw calls should stay within material instances "
+                "times MaterialResourceBudget.max_pass_count."))
+
+    upload_bytes = executor_summary.get("material_upload_bytes")
+    upload_capacity = executor_summary.get("material_buffer_capacity_bytes")
+    if (isinstance(upload_bytes, (int, float))
+            and not isinstance(upload_bytes, bool)
+            and isinstance(upload_capacity, (int, float))
+            and not isinstance(upload_capacity, bool)):
+        report.check(
+            "material executor upload bytes fit buffer capacity",
+            float(upload_bytes) <= float(upload_capacity),
+            path=f"{base_path}.material_upload_bytes",
+            expected={"<=": upload_capacity},
+            actual=upload_bytes,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "The backend should grow the material instance buffer before "
+                "recording uploads."))
+
+    bounds = summary.get("resource_bounds")
+    max_backdrop_pixels = None
+    if isinstance(bounds, dict):
+        max_backdrop_pixels = bounds.get("max_backdrop_pixels")
+    copied_pixels = executor_summary.get("backdrop_copy_pixels")
+    if (isinstance(copied_pixels, (int, float))
+            and not isinstance(copied_pixels, bool)
+            and isinstance(max_backdrop_pixels, (int, float))
+            and not isinstance(max_backdrop_pixels, bool)):
+        report.check(
+            "material executor backdrop copy stays within plan budget",
+            float(copied_pixels) <= float(max_backdrop_pixels),
+            path=f"{base_path}.backdrop_copy_pixels",
+            expected={"<=": max_backdrop_pixels},
+            actual=copied_pixels,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "Compare the backend framebuffer-history copy with "
+                "MaterialResourceBudget.max_backdrop_pixels."))
+
+
 def check_material_quality_policy_requirements(
         summary: JsonObject,
         spec: JsonObject,
@@ -2315,6 +2450,10 @@ def verify(args: argparse.Namespace) -> int:
             check_material_runtime_summary_contract(
                 material_plan_summary,
                 renderer_details.get("material_runtime_summary"),
+                report)
+            check_material_executor_summary_contract(
+                material_plan_summary,
+                renderer_details.get("material_executor_summary"),
                 report)
             material_plan_summary_spec = getattr(
                 args,

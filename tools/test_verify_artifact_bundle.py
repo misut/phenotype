@@ -458,6 +458,35 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "missing pass or counter",
             failure_summary["first_failure"]["hint"])
 
+    def test_material_executor_summary_mismatch_is_llm_actionable(self) -> None:
+        root = snapshot(material_plan())
+        renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+        assert isinstance(renderer, dict)
+        executor = renderer["material_executor_summary"]
+        assert isinstance(executor, dict)
+        executor["fallback_instance_count"] = 0
+
+        code, report = self.run_verifier(root)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material executor summary fallback_instance_count "
+                "matches plans"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_executor_summary"
+            ".fallback_instance_count")
+        self.assertEqual(failure["expected"], 1)
+        self.assertEqual(failure["actual"], 0)
+        self.assertEqual(failure["likely_layer"], "platform-runtime")
+        self.assertEqual(failure["likely_pass"], "material-executor")
+        self.assertIn("material_executor_summary", failure["hint"])
+        self.assertEqual(
+            report["failure_summary"]["top_likely_pass"],
+            "material-executor")
+
     def test_manifest_can_compare_pixel_region_metrics(self) -> None:
         manifest = {
             "require_frame": True,
