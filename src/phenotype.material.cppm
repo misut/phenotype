@@ -1,6 +1,7 @@
 module;
 #include <algorithm>
 #include <cstdint>
+#include <cmath>
 
 export module phenotype.material;
 
@@ -362,6 +363,51 @@ inline std::uint32_t material_debug_seed(MaterialDebugSeed seed,
     return value;
 }
 
+inline float material_safe_luma(float value, float fallback) noexcept {
+    return std::isfinite(value)
+        ? std::clamp(value, 0.0f, 1.0f)
+        : fallback;
+}
+
+inline void apply_backdrop_luminance_policy(
+        MaterialPlan& plan,
+        MaterialBackdropDescriptor backdrop) noexcept {
+    auto const luma_min = material_safe_luma(backdrop.luma_min, 0.0f);
+    auto const luma_max = std::max(
+        luma_min,
+        material_safe_luma(backdrop.luma_max, 1.0f));
+    auto const luma_mean = material_safe_luma(backdrop.luma_mean, 0.5f);
+    auto const luma_span = luma_max - luma_min;
+
+    if (luma_mean < 0.35f) {
+        auto const darkness = std::clamp((0.35f - luma_mean) / 0.35f, 0.0f, 1.0f);
+        plan.luminance_floor = std::max(
+            plan.luminance_floor,
+            0.08f + 0.08f * darkness);
+        plan.luminance_gain = std::max(
+            plan.luminance_gain,
+            1.08f + 0.10f * darkness);
+        plan.edge_highlight = std::min(
+            1.0f,
+            plan.edge_highlight + 0.06f * darkness);
+    } else if (luma_mean > 0.72f) {
+        auto const brightness = std::clamp((luma_mean - 0.72f) / 0.28f, 0.0f, 1.0f);
+        plan.luminance_gain = std::max(
+            1.0f,
+            plan.luminance_gain - 0.04f * brightness);
+        plan.edge_highlight = std::min(
+            1.0f,
+            plan.edge_highlight + 0.04f * brightness);
+    }
+
+    if (luma_span < 0.12f) {
+        auto const flatness = std::clamp((0.12f - luma_span) / 0.12f, 0.0f, 1.0f);
+        plan.edge_highlight = std::min(
+            1.0f,
+            plan.edge_highlight + 0.04f * flatness);
+    }
+}
+
 inline char const* material_plan_id(MaterialKind kind,
                                     bool backdrop_sampling) noexcept {
     switch (kind) {
@@ -512,6 +558,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.backdrop_sampling = can_sample_backdrop;
     if (!plan.backdrop_sampling) {
         plan.sample_taps = 0u;
+    } else {
+        apply_backdrop_luminance_policy(plan, environment.backdrop);
     }
     if (environment.capabilities.increase_contrast) {
         plan.opacity = std::clamp(plan.opacity + 0.12f, 0.0f, 1.0f);

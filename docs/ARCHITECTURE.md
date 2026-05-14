@@ -180,6 +180,10 @@ records the pure planner's resolved sampling/noise/shadow switches and quality
 limits, including `max_backdrop_pixels`. `resource_budget` records the clamped
 blur/sample-tap limits, the same allowed backdrop-pixel budget, and whether
 texture copies and fallback behavior are bounded.
+When a stable backdrop descriptor is available, the pure planner also uses its
+bounded luminance statistics to adjust the glass luminance curve and edge
+highlight before handing the plan to a backend. This keeps legibility policy in
+the same deterministic layer as blur, tint, and fallback decisions.
 Artifact gates can separately bound actual plan taps and resource-budget taps,
 which lets fallback scenes require zero executed taps while preserving the
 backend's allowed quality budget in the same artifact.
