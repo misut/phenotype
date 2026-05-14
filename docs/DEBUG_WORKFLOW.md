@@ -138,9 +138,9 @@ Use `--require-runtime-detail PATH=JSON` when a backend-specific contract must p
 Verifier failures are structured for automated diagnosis. Each failed check
 adds an entry to `failures[]` with the JSON path or frame region, expected
 value, actual value, likely layer/pass, and a short hint. The top-level
-`failure_summary` groups failures by likely layer and JSON path so an LLM can
-jump to the most likely source first. Use `--require-material-plan` when a
-bundle must contain resolved material plans.
+`failure_summary` groups failures by likely layer, likely pass, and JSON path
+so an LLM can jump to the most likely source first. Use
+`--require-material-plan` when a bundle must contain resolved material plans.
 
 Manifests can also set `require_material_plan_summary` to assert the resolved
 material aggregate, not just the per-plan schema. Supported keys are `count`,

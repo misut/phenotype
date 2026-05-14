@@ -180,11 +180,15 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["expected"], 25)
         self.assertEqual(failure["actual"], 0)
         self.assertEqual(failure["likely_layer"], "material.regular.fallback")
+        self.assertEqual(failure["likely_pass"], "translucent-rounded-rect")
         self.assertIn("MaterialPlan.sample_taps", failure["hint"])
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
             25)
         self.assertEqual(report["failure_summary"]["count"], 1)
+        self.assertEqual(
+            report["failure_summary"]["by_likely_pass"]["translucent-rounded-rect"],
+            1)
         self.assertEqual(
             report["failure_summary"]["by_path"][failure["path"]],
             1)

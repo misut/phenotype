@@ -72,6 +72,7 @@ class Report:
         actual: Any = None,
         region: str = "",
         likely_layer: str = "",
+        likely_pass: str = "",
         hint: str = "",
         record_success: bool = True,
     ) -> bool:
@@ -90,6 +91,8 @@ class Report:
             check["region"] = region
         if likely_layer:
             check["likely_layer"] = likely_layer
+        if likely_pass:
+            check["likely_pass"] = likely_pass
         if hint:
             check["hint"] = hint
         if condition and not record_success:
@@ -113,6 +116,8 @@ class Report:
                 failure["region"] = region
             if likely_layer:
                 failure["likely_layer"] = likely_layer
+            if likely_pass:
+                failure["likely_pass"] = likely_pass
             if hint:
                 failure["hint"] = hint
             self.data["failures"].append(failure)
@@ -126,6 +131,7 @@ class Report:
         failures = self.data.get("failures", [])
         if isinstance(failures, list):
             by_layer: JsonObject = {}
+            by_pass: JsonObject = {}
             by_path: JsonObject = {}
             for failure in failures:
                 if not isinstance(failure, dict):
@@ -133,12 +139,16 @@ class Report:
                 layer = failure.get("likely_layer")
                 if isinstance(layer, str) and layer:
                     by_layer[layer] = by_layer.get(layer, 0) + 1
+                likely_pass = failure.get("likely_pass")
+                if isinstance(likely_pass, str) and likely_pass:
+                    by_pass[likely_pass] = by_pass.get(likely_pass, 0) + 1
                 path = failure.get("path")
                 if isinstance(path, str) and path:
                     by_path[path] = by_path.get(path, 0) + 1
             self.data["failure_summary"] = {
                 "count": len(failures),
                 "by_likely_layer": by_layer,
+                "by_likely_pass": by_pass,
                 "by_path": by_path,
             }
         json.dump(self.data, sys.stdout, indent=2, sort_keys=True)
@@ -219,6 +229,7 @@ def check_bool_field(
     path: str,
     *,
     likely_layer: str,
+    likely_pass: str = "",
     hint: str,
 ) -> bool | None:
     item = value.get(key)
@@ -229,6 +240,7 @@ def check_bool_field(
         expected="boolean",
         actual=item,
         likely_layer=likely_layer,
+        likely_pass=likely_pass,
         hint=hint,
         record_success=False)
     return item if isinstance(item, bool) else None
@@ -242,6 +254,7 @@ def check_number_field(
     *,
     min_value: float | None = None,
     likely_layer: str,
+    likely_pass: str = "",
     hint: str,
 ) -> int | float | None:
     item = value.get(key)
@@ -258,6 +271,7 @@ def check_number_field(
         expected=expected,
         actual=item,
         likely_layer=likely_layer,
+        likely_pass=likely_pass,
         hint=hint,
         record_success=False)
     return item if isinstance(item, (int, float)) and not isinstance(item, bool) else None
@@ -1361,7 +1375,9 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             likely_layer=likely_layer,
             hint="The pure plan should name the backend pass it expects.")
         primary_pass_sample_taps: int | float | None = None
+        primary_pass_name = ""
         if primary_pass is not None:
+            primary_pass_name = string_at(primary_pass, "name") or ""
             for key in MATERIAL_PASS_FIELDS:
                 if key in ("active", "requires_backdrop"):
                     check_bool_field(
@@ -1370,6 +1386,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         key,
                         f"{plan_path}.primary_pass",
                         likely_layer=likely_layer,
+                        likely_pass=primary_pass_name,
                         hint="Material pass booleans must be explicit.")
                 elif key == "sample_taps":
                     primary_pass_sample_taps = check_number_field(
@@ -1379,6 +1396,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         f"{plan_path}.primary_pass",
                         min_value=0.0,
                         likely_layer=likely_layer,
+                        likely_pass=primary_pass_name,
                         hint="Pass sample taps must be bounded.")
                 else:
                     check_string_field(
@@ -1388,7 +1406,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         f"{plan_path}.primary_pass",
                         likely_layer=likely_layer,
                         hint="Material pass must name its layer for debugging.")
-            pass_name = string_at(primary_pass, "name")
+            pass_name = primary_pass_name
             if pass_name:
                 pass_names = summary["pass_names"]
                 pass_names[pass_name] = pass_names.get(pass_name, 0) + 1
@@ -1399,6 +1417,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     expected=sorted(ALLOWED_MATERIAL_PASS_NAMES),
                     actual=pass_name,
                     likely_layer=likely_layer,
+                    likely_pass=pass_name,
                     hint="Add new backend pass names to the verifier contract when they are intentional.",
                     record_success=False)
             if isinstance(sample_taps, (int, float)) and isinstance(
@@ -1410,6 +1429,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     expected=int(sample_taps),
                     actual=int(primary_pass_sample_taps),
                     likely_layer=likely_layer,
+                    likely_pass=primary_pass_name,
                     hint="Keep MaterialPlan.sample_taps and primary_pass.sample_taps in sync.",
                     record_success=False)
 
@@ -1455,6 +1475,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                             key,
                             pass_path,
                             likely_layer=likely_layer,
+                            likely_pass=string_at(pass_entry, "name") or primary_pass_name,
                             hint="Pass entries must expose runtime activation state.")
                     elif key == "sample_taps":
                         check_number_field(
@@ -1464,6 +1485,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                             pass_path,
                             min_value=0.0,
                             likely_layer=likely_layer,
+                            likely_pass=string_at(pass_entry, "name") or primary_pass_name,
                             hint="Pass sample taps must be numeric.")
                     else:
                         pass_value = check_string_field(
@@ -1481,6 +1503,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                                 expected=sorted(ALLOWED_MATERIAL_PASS_NAMES),
                                 actual=pass_value,
                                 likely_layer=likely_layer,
+                                likely_pass=pass_value,
                                 hint="Add new backend pass names to the verifier contract when they are intentional.",
                                 record_success=False)
             if isinstance(primary_pass, dict):
@@ -1501,6 +1524,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     expected=primary_pass,
                     actual=passes,
                     likely_layer=likely_layer,
+                    likely_pass=primary_pass_name,
                     hint="Runtime pass details should include the primary pass unchanged.",
                     record_success=False)
 
@@ -1555,6 +1579,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 actual=None if not isinstance(primary_pass, dict)
                 else primary_pass.get("requires_backdrop"),
                 likely_layer=likely_layer,
+                likely_pass=primary_pass_name,
                 hint="Backdrop plans should expose the backdrop dependency.",
                 record_success=False)
             report.check(
@@ -1569,6 +1594,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 expected="active backdrop pass",
                 actual=plan.get("passes"),
                 likely_layer=likely_layer,
+                likely_pass=primary_pass_name,
                 hint="The backend likely planned glass but did not record the blur pass.",
                 record_success=False)
     return summary
