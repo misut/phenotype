@@ -25,6 +25,11 @@ Every diagnostics snapshot keeps the same top-level `debug` object:
 - `platform_runtime`
 - `frame_image`
 - `platform_diagnostics`
+- `material_surfaces`
+- `material_backdrop_blur`
+- `reduce_transparency`
+- `increase_contrast`
+- `reduce_motion`
 
 The common snapshot schema remains the source of truth for all platforms:
 
@@ -90,6 +95,13 @@ continues running. The same hook applies to `examples/flight_board` and
 `examples/workbook`. `examples/glass_showcase` uses the same route for
 material-focused checks, including macOS sampled-backdrop rendering and
 fallback metadata.
+The macOS native backend reads accessibility display preferences from
+`NSWorkspace` by default. For deterministic artifact capture, set
+`PHENOTYPE_ACCESSIBILITY_DISPLAY=standard` to disable those inputs, or set
+`PHENOTYPE_ACCESSIBILITY_DISPLAY=reduce-transparency,increase-contrast,reduce-motion`
+with any subset of tokens to exercise the pure accessibility downgrade paths.
+`tools/verify_glass_showcase_artifact.sh` defaults to `standard` unless the
+caller supplies a different value.
 
 Material frames also expose a resolved backend plan. Semantic material nodes
 describe the stable request (`kind`, opacity, blur intent, contrast intent, and
@@ -196,6 +208,12 @@ renderer material plan contract version, resolved plan count, fallback paths,
 pass executors, first decision blockers, and accessibility decision counts so
 CI logs can explain which semantic/runtime contract surface drifted before
 opening the full bundle.
+On macOS, also inspect
+`debug.platform_runtime.details.renderer.accessibility_display_options`; it
+records whether the frame used live system settings, `standard` gate settings,
+or an explicit environment override before the pure planner produced
+`decision_trace.reduced_transparency`, `decision_trace.increase_contrast`, and
+`decision_trace.reduce_motion`.
 Plan-level failures route to `plan_material_surface` and runtime plan
 serialization; semantic/runtime contract failures route to semantic material
 nodes, `MaterialRect` command emission, and `renderer.material_plans[]` parity.
@@ -208,7 +226,8 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 `backdrop_stable`, `luminance_adapted`, `render_target_ready`,
 `render_target_within_backdrop_budget`, `decision_can_sample_backdrop`,
 `decision_backend_supports_backdrop`, `decision_backdrop_source_ready`,
-`decision_increase_contrast`, `decision_reduce_motion`, and
+`decision_reduced_transparency`, `decision_increase_contrast`,
+`decision_reduce_motion`, and
 exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`,
 `contract_versions`, `pass_names`, `backdrop_sources`, `luminance_responses`,
 `render_target_pixel_formats`, `pass_executors`, `decision_blockers`,

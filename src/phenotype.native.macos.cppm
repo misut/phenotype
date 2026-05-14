@@ -6,6 +6,7 @@ module;
 #include <condition_variable>
 #include <cstdint>
 #include <cstdio>
+#include <cstdlib>
 #include <cstring>
 #include <deque>
 #include <filesystem>
@@ -444,6 +445,26 @@ inline SEL sel_set_display_mode() {
 
 inline SEL sel_automatic_mode_options() {
     static auto sel = sel_registerName("automaticModeOptions");
+    return sel;
+}
+
+inline SEL sel_shared_workspace() {
+    static auto sel = sel_registerName("sharedWorkspace");
+    return sel;
+}
+
+inline SEL sel_accessibility_display_should_reduce_transparency() {
+    static auto sel = sel_registerName("accessibilityDisplayShouldReduceTransparency");
+    return sel;
+}
+
+inline SEL sel_accessibility_display_should_increase_contrast() {
+    static auto sel = sel_registerName("accessibilityDisplayShouldIncreaseContrast");
+    return sel;
+}
+
+inline SEL sel_accessibility_display_should_reduce_motion() {
+    static auto sel = sel_registerName("accessibilityDisplayShouldReduceMotion");
     return sel;
 }
 
@@ -3849,6 +3870,88 @@ fragment float4 fs_arc(ArcVsOut in [[stage_in]]) {
 }
 )";
 
+struct MacOSAccessibilityDisplayOptions {
+    bool reduce_transparency = false;
+    bool increase_contrast = false;
+    bool reduce_motion = false;
+    char const* source = "system";
+};
+
+inline bool env_token_enabled(std::string_view config,
+                              std::string_view token) noexcept {
+    if (token.empty())
+        return false;
+    std::size_t start = 0;
+    while (start < config.size()) {
+        while (start < config.size()
+               && (config[start] == ',' || config[start] == ';'
+                   || config[start] == ' ' || config[start] == '+')) {
+            ++start;
+        }
+        auto end = start;
+        while (end < config.size()
+               && config[end] != ',' && config[end] != ';'
+               && config[end] != ' ' && config[end] != '+') {
+            ++end;
+        }
+        if (config.substr(start, end - start) == token)
+            return true;
+        start = end;
+    }
+    return false;
+}
+
+inline bool workspace_bool_property(id workspace, SEL selector) {
+    using ObjcBool = signed char;
+    if (!workspace)
+        return false;
+    if (!objc_send<ObjcBool>(workspace, sel_responds_to_selector(), selector))
+        return false;
+    return objc_send<ObjcBool>(workspace, selector) != 0;
+}
+
+inline MacOSAccessibilityDisplayOptions system_accessibility_display_options() {
+    MacOSAccessibilityDisplayOptions options{};
+    auto workspace_class = static_cast<Class>(objc_getClass("NSWorkspace"));
+    if (!workspace_class)
+        return options;
+    auto workspace = objc_send<id>(class_as_id(workspace_class), sel_shared_workspace());
+    options.reduce_transparency = workspace_bool_property(
+        workspace,
+        sel_accessibility_display_should_reduce_transparency());
+    options.increase_contrast = workspace_bool_property(
+        workspace,
+        sel_accessibility_display_should_increase_contrast());
+    options.reduce_motion = workspace_bool_property(
+        workspace,
+        sel_accessibility_display_should_reduce_motion());
+    return options;
+}
+
+inline MacOSAccessibilityDisplayOptions accessibility_display_options() {
+    auto const* raw = std::getenv("PHENOTYPE_ACCESSIBILITY_DISPLAY");
+    if (!raw || raw[0] == '\0')
+        return system_accessibility_display_options();
+
+    std::string_view config{raw};
+    if (config == "system")
+        return system_accessibility_display_options();
+    if (config == "standard" || config == "off" || config == "none") {
+        MacOSAccessibilityDisplayOptions options{};
+        options.source = "env-standard";
+        return options;
+    }
+
+    MacOSAccessibilityDisplayOptions options{};
+    options.source = "env-override";
+    options.reduce_transparency =
+        env_token_enabled(config, "reduce-transparency");
+    options.increase_contrast =
+        env_token_enabled(config, "increase-contrast");
+    options.reduce_motion = env_token_enabled(config, "reduce-motion");
+    return options;
+}
+
 struct RendererState {
     MTL::Device* device = nullptr;
     MTL::CommandQueue* queue = nullptr;
@@ -3891,6 +3994,7 @@ struct RendererState {
     int last_render_width = 0;
     int last_render_height = 0;
     std::uint32_t material_frame_sequence = 0;
+    MacOSAccessibilityDisplayOptions accessibility_options{};
     MaterialExecutorSummary material_executor_summary{};
     bool last_frame_available = false;
     bool initialized = false;
@@ -5989,11 +6093,18 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         && g_renderer.debug_capture_width == fbw
         && g_renderer.debug_capture_height == fbh;
     MaterialEnvironment material_env{};
+    auto const accessibility = accessibility_display_options();
+    g_renderer.accessibility_options = accessibility;
     material_env.capabilities.material_surfaces = true;
     material_env.capabilities.material_backdrop_blur =
         g_renderer.material_pipeline != nullptr;
     material_env.capabilities.shader_blur = g_renderer.material_pipeline != nullptr;
     material_env.capabilities.frame_history = g_renderer.last_frame_available;
+    material_env.capabilities.reduce_transparency =
+        accessibility.reduce_transparency;
+    material_env.capabilities.increase_contrast =
+        accessibility.increase_contrast;
+    material_env.capabilities.reduce_motion = accessibility.reduce_motion;
     material_env.backdrop.available = backdrop_ready;
     material_env.backdrop.stable = backdrop_ready;
     material_env.backdrop.source = backdrop_ready
@@ -6938,7 +7049,8 @@ inline void clear_composition_for_tests() {}
 namespace phenotype::native::detail {
 
 inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities() {
-    return {
+    auto accessibility = accessibility_display_options();
+    ::phenotype::diag::PlatformCapabilitiesSnapshot snapshot{
         "macos",
         true,
         true,
@@ -6952,6 +7064,10 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities(
         true,
         true,
     };
+    snapshot.reduce_transparency = accessibility.reduce_transparency;
+    snapshot.increase_contrast = accessibility.increase_contrast;
+    snapshot.reduce_motion = accessibility.reduce_motion;
+    return snapshot;
 }
 
 inline json::Array material_plans_runtime_json() {
@@ -6991,6 +7107,22 @@ inline json::Object macos_renderer_runtime_json() {
     renderer.emplace(
         "readback_buffer_ready",
         json::Value{g_renderer.frame_readback_buf != nullptr});
+    json::Object accessibility;
+    accessibility.emplace(
+        "source",
+        json::Value{g_renderer.accessibility_options.source});
+    accessibility.emplace(
+        "reduce_transparency",
+        json::Value{g_renderer.accessibility_options.reduce_transparency});
+    accessibility.emplace(
+        "increase_contrast",
+        json::Value{g_renderer.accessibility_options.increase_contrast});
+    accessibility.emplace(
+        "reduce_motion",
+        json::Value{g_renderer.accessibility_options.reduce_motion});
+    renderer.emplace(
+        "accessibility_display_options",
+        json::Value{std::move(accessibility)});
     renderer.emplace(
         "material_plan_contract_version",
         json::Value{

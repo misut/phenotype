@@ -209,6 +209,13 @@ If the quality policy disables backdrop sampling, reduces the blur/tap budget
 to zero, or the render target exceeds `max_backdrop_pixels`, the pure planner
 returns `fallback_path: quality-policy` instead of leaving the backend to infer
 that downgrade.
+macOS probes `NSWorkspace` accessibility display preferences at the native
+edge and passes the immutable `reduce_transparency`, `increase_contrast`, and
+`reduce_motion` booleans into `MaterialEnvironment`. The pure planner remains
+the only layer that decides whether those inputs produce opaque fallback,
+higher contrast, reduced noise, or lower sample taps. The runtime artifact also
+records `renderer.accessibility_display_options` so a captured frame explains
+which system or test override fed the plan.
 Runtime adapters serialize the same `MaterialRuntimeRecord` shape into
 `debug.platform_runtime.details.renderer.material_plans`: macOS records the
 sampled-backdrop pass, Windows and Android record deterministic fallback

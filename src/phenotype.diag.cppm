@@ -636,6 +636,9 @@ struct PlatformCapabilitiesSnapshot {
     bool platform_diagnostics = false;
     bool material_surfaces = true;
     bool material_backdrop_blur = false;
+    bool reduce_transparency = false;
+    bool increase_contrast = false;
+    bool reduce_motion = false;
 };
 
 struct PlatformRuntimeSnapshot {
@@ -1432,6 +1435,13 @@ inline json::Value platform_capabilities_to_json(
     out.emplace(
         "material_backdrop_blur",
         json::Value{capabilities.material_backdrop_blur});
+    out.emplace(
+        "reduce_transparency",
+        json::Value{capabilities.reduce_transparency});
+    out.emplace(
+        "increase_contrast",
+        json::Value{capabilities.increase_contrast});
+    out.emplace("reduce_motion", json::Value{capabilities.reduce_motion});
     return json::Value{std::move(out)};
 }
 
