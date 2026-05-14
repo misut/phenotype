@@ -939,6 +939,50 @@ namespace detail {
         return material_runtime_summary_json(summary);
     }
 
+    inline json::Value material_executor_summary_json(
+            MaterialExecutorSummary const& summary) {
+        json::Object out;
+        out.emplace(
+            "plan_count",
+            json::Value{static_cast<std::int64_t>(summary.plan_count)});
+        out.emplace(
+            "material_instance_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.material_instance_count)});
+        out.emplace(
+            "fallback_instance_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.fallback_instance_count)});
+        out.emplace(
+            "material_draw_calls",
+            json::Value{
+                static_cast<std::int64_t>(summary.material_draw_calls)});
+        out.emplace(
+            "backdrop_copy_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.backdrop_copy_count)});
+        out.emplace(
+            "backdrop_copy_pixels",
+            json::Value{summary.backdrop_copy_pixels});
+        out.emplace(
+            "material_upload_bytes",
+            json::Value{summary.material_upload_bytes});
+        out.emplace(
+            "material_buffer_capacity_bytes",
+            json::Value{summary.material_buffer_capacity_bytes});
+        out.emplace(
+            "material_buffer_reallocations",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.material_buffer_reallocations)});
+        out.emplace("cpu_decode_ns", json::Value{summary.cpu_decode_ns});
+        out.emplace(
+            "cpu_material_upload_ns",
+            json::Value{summary.cpu_material_upload_ns});
+        out.emplace("cpu_total_ns", json::Value{summary.cpu_total_ns});
+        return json::Value{std::move(out)};
+    }
+
     inline json::Object empty_material_renderer_contract(
             std::string_view fallback_policy) {
         json::Object renderer;
@@ -949,6 +993,9 @@ namespace detail {
         renderer.emplace(
             "material_runtime_summary",
             material_runtime_summary_json(MaterialRuntimeSummary{}));
+        renderer.emplace(
+            "material_executor_summary",
+            material_executor_summary_json(MaterialExecutorSummary{}));
         renderer.emplace(
             "material_fallback_policy",
             json::Value{std::string(fallback_policy)});

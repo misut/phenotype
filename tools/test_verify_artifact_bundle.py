@@ -103,6 +103,23 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     }
 
 
+def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
+    return {
+        "plan_count": 1,
+        "material_instance_count": 0 if plan["fallback"] else 1,
+        "fallback_instance_count": 1 if plan["fallback"] else 0,
+        "material_draw_calls": 0 if plan["fallback"] else 1,
+        "backdrop_copy_count": 0,
+        "backdrop_copy_pixels": 0,
+        "material_upload_bytes": 0,
+        "material_buffer_capacity_bytes": 0,
+        "material_buffer_reallocations": 0,
+        "cpu_decode_ns": 100,
+        "cpu_material_upload_ns": 0,
+        "cpu_total_ns": 200,
+    }
+
+
 def snapshot(plan: dict[str, object]) -> dict[str, object]:
     return {
         "debug": {
@@ -151,6 +168,7 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                         "material_plan_count": 1,
                         "material_plans": [plan],
                         "material_runtime_summary": material_runtime_summary(plan),
+                        "material_executor_summary": material_executor_summary(plan),
                     }
                 },
             },
@@ -300,6 +318,53 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
             25)
+
+    def test_manifest_can_require_runtime_numeric_bounds(self) -> None:
+        manifest = {
+            "require_runtime_numeric_bounds": [
+                {
+                    "path": "renderer.material_executor_summary.plan_count",
+                    "equals": 1,
+                },
+                {
+                    "path": "renderer.material_executor_summary.cpu_total_ns",
+                    "gte": 1,
+                    "lte": 500,
+                },
+            ],
+        }
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["manifest"]["runtime_numeric_bounds"], 2)
+
+    def test_runtime_numeric_bound_failure_is_llm_actionable(self) -> None:
+        manifest = {
+            "require_runtime_numeric_bounds": [
+                {
+                    "path": "renderer.material_executor_summary.material_draw_calls",
+                    "gte": 1,
+                }
+            ],
+        }
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "runtime numeric >= bound: "
+                "renderer.material_executor_summary.material_draw_calls"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_executor_summary"
+            ".material_draw_calls")
+        self.assertEqual(failure["expected"], {">=": 1})
+        self.assertEqual(failure["actual"], 0)
+        self.assertEqual(failure["likely_layer"], "platform-runtime")
+        self.assertEqual(failure["likely_pass"], "material-executor")
+        self.assertIn("missing pass or counter", failure["hint"])
 
     def test_manifest_can_compare_pixel_region_metrics(self) -> None:
         manifest = {

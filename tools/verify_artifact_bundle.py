@@ -479,6 +479,38 @@ def runtime_detail_spec_from_manifest(entry: Any) -> str:
     return f"{path}={expected}"
 
 
+def runtime_numeric_bound_spec_from_manifest(entry: Any, index: int) -> JsonObject:
+    if not isinstance(entry, dict):
+        raise ValueError("require_runtime_numeric_bounds entries must be objects")
+    path = entry.get("path")
+    if not isinstance(path, str) or not path:
+        raise ValueError(
+            f"require_runtime_numeric_bounds[{index}].path must be a non-empty string")
+    spec: JsonObject = {"path": path}
+    has_bound = False
+    for field in ("equals", "gte", "lte"):
+        if field in entry:
+            spec[field] = non_negative_number(
+                entry[field],
+                f"require_runtime_numeric_bounds[{index}].{field}")
+            has_bound = True
+    if not has_bound:
+        raise ValueError(
+            f"require_runtime_numeric_bounds[{index}] must contain equals, gte, or lte")
+    return spec
+
+
+def runtime_numeric_bound_specs_from_manifest(value: Any) -> list[JsonObject]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("require_runtime_numeric_bounds must be a list")
+    return [
+        runtime_numeric_bound_spec_from_manifest(entry, index)
+        for index, entry in enumerate(value)
+    ]
+
+
 def non_negative_int(value: Any, field: str) -> int:
     if not isinstance(value, int) or isinstance(value, bool) or value < 0:
         raise ValueError(f"{field} must be a non-negative integer")
@@ -704,6 +736,9 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
             raise ValueError("require_runtime_details must be a list")
         args.require_runtime_detail.extend(
             runtime_detail_spec_from_manifest(entry) for entry in runtime_details)
+        args.require_runtime_numeric_bound.extend(
+            runtime_numeric_bound_specs_from_manifest(
+                manifest.get("require_runtime_numeric_bounds")))
 
         pixel_regions = manifest.get("pixel_regions", [])
         if pixel_regions is None:
@@ -730,6 +765,8 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         "pixel_region_metrics": len(manifest.get("pixel_region_metrics", []) or []),
         "pixel_region_metric_comparisons": len(
             manifest.get("pixel_region_metric_comparisons", []) or []),
+        "runtime_numeric_bounds": len(
+            manifest.get("require_runtime_numeric_bounds", []) or []),
     }
     report.check("manifest schema is valid", True, str(manifest_path))
     return True
@@ -2056,6 +2093,61 @@ def verify(args: argparse.Namespace) -> int:
             likely_layer="platform-runtime",
             hint="Check the backend runtime JSON details for this renderer pass.")
 
+    for spec in args.require_runtime_numeric_bound:
+        path = spec["path"]
+        exists, actual = value_at(details, path) if isinstance(details, dict) else (False, None)
+        numeric = isinstance(actual, (int, float)) and not isinstance(actual, bool)
+        likely_pass = "material-executor" if "material_executor_summary" in path else ""
+        report.check(
+            f"runtime numeric bound exists: {path}",
+            exists and numeric,
+            f"expected numeric runtime detail, got {actual!r}",
+            path=f"debug.platform_runtime.details.{path}",
+            expected="number",
+            actual=actual,
+            likely_layer="platform-runtime",
+            likely_pass=likely_pass,
+            hint="Check backend runtime numeric summary serialization.")
+        if not (exists and numeric):
+            continue
+        assert isinstance(actual, (int, float)) and not isinstance(actual, bool)
+        if "equals" in spec:
+            expected = spec["equals"]
+            report.check(
+                f"runtime numeric equals: {path}",
+                actual == expected,
+                f"expected {path} == {expected}, got {actual}",
+                path=f"debug.platform_runtime.details.{path}",
+                expected=expected,
+                actual=actual,
+                likely_layer="platform-runtime",
+                likely_pass=likely_pass,
+                hint="Inspect the backend executor summary for a drifted count or budget.")
+        if "gte" in spec:
+            expected = spec["gte"]
+            report.check(
+                f"runtime numeric >= bound: {path}",
+                float(actual) >= float(expected),
+                f"expected {path} >= {expected}, got {actual}",
+                path=f"debug.platform_runtime.details.{path}",
+                expected={">=": expected},
+                actual=actual,
+                likely_layer="platform-runtime",
+                likely_pass=likely_pass,
+                hint="Inspect the backend executor summary for a missing pass or counter.")
+        if "lte" in spec:
+            expected = spec["lte"]
+            report.check(
+                f"runtime numeric <= bound: {path}",
+                float(actual) <= float(expected),
+                f"expected {path} <= {expected}, got {actual}",
+                path=f"debug.platform_runtime.details.{path}",
+                expected={"<=": expected},
+                actual=actual,
+                likely_layer="platform-runtime",
+                likely_pass=likely_pass,
+                hint="Inspect the backend executor summary for excess work or an unbounded resource.")
+
     platform = string_at(capabilities, "platform")
     if args.expect_platform:
         report.check(
@@ -2603,6 +2695,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         require_material_plan_summary=None,
         require_material_resource_bounds=None,
         require_material_quality_policy=None,
+        require_runtime_numeric_bound=[],
         require_pixel_region_metric_comparison=[],
         require_material_semantic_runtime_match=False)
     return parser.parse_args(argv)

@@ -735,6 +735,19 @@ void test_material_runtime_record_json_contract() {
     assert(summary_obj.at("max_plan_sample_taps").as_integer() == 0);
     assert(summary_obj.at("max_sample_taps").as_integer() == 9);
 
+    MaterialExecutorSummary executor_summary;
+    executor_summary.plan_count = 1;
+    executor_summary.fallback_instance_count = 1;
+    executor_summary.cpu_decode_ns = 120;
+    auto executor = diag::detail::material_executor_summary_json(
+        executor_summary);
+    auto const& executor_obj = executor.as_object();
+    assert(executor_obj.at("plan_count").as_integer() == 1);
+    assert(executor_obj.at("material_instance_count").as_integer() == 0);
+    assert(executor_obj.at("fallback_instance_count").as_integer() == 1);
+    assert(executor_obj.at("material_draw_calls").as_integer() == 0);
+    assert(executor_obj.at("cpu_decode_ns").as_integer() == 120);
+
     auto empty = diag::detail::empty_material_renderer_contract(
         "test-semantic-fallback");
     assert(empty.at("material_pipeline_ready").as_bool() == false);
@@ -742,6 +755,8 @@ void test_material_runtime_record_json_contract() {
     assert(empty.at("material_plan_count").as_integer() == 0);
     assert(empty.at("material_plans").as_array().empty());
     assert(empty.at("material_runtime_summary").as_object()
+               .at("plan_count").as_integer() == 0);
+    assert(empty.at("material_executor_summary").as_object()
                .at("plan_count").as_integer() == 0);
     assert(empty.at("material_fallback_policy").as_string()
            == "test-semantic-fallback");
