@@ -513,6 +513,41 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
     return spec
 
 
+def material_quality_policy_spec_from_manifest(value: Any) -> JsonObject | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("require_material_quality_policy must be an object")
+    number_fields = {
+        "max_blur_radius_lte",
+        "max_sample_taps_lte",
+    }
+    bool_fields = {
+        "require_backdrop_sampling_allowed",
+        "require_noise_allowed",
+        "require_shadow_allowed",
+    }
+    unknown = sorted(set(value) - number_fields - bool_fields)
+    if unknown:
+        raise ValueError(
+            "unknown require_material_quality_policy keys: "
+            + ", ".join(unknown))
+    spec: JsonObject = {}
+    for field in number_fields:
+        if field in value:
+            spec[field] = non_negative_number(
+                value[field],
+                f"require_material_quality_policy.{field}")
+    for field in bool_fields:
+        if field in value:
+            item = value[field]
+            if not isinstance(item, bool):
+                raise ValueError(
+                    f"require_material_quality_policy.{field} must be a boolean")
+            spec[field] = item
+    return spec
+
+
 def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
     if not args.manifest:
         return True
@@ -565,6 +600,11 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         if material_resource_bounds is not None:
             args.require_material_plan = True
             args.require_material_resource_bounds = material_resource_bounds
+        material_quality_policy = material_quality_policy_spec_from_manifest(
+            manifest.get("require_material_quality_policy"))
+        if material_quality_policy is not None:
+            args.require_material_plan = True
+            args.require_material_quality_policy = material_quality_policy
 
         args.require_label.extend(list_of_strings(manifest, "require_labels"))
         args.require_label_contains.extend(
@@ -953,6 +993,13 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "unbounded_texture_copy": 0,
             "non_deterministic_fallback": 0,
         },
+        "quality_policy": {
+            "backdrop_sampling_disabled": 0,
+            "noise_disabled": 0,
+            "shadow_disabled": 0,
+            "max_blur_radius": 0.0,
+            "max_sample_taps": 0,
+        },
     }
     if not isinstance(plans, list):
         report.check(
@@ -1162,15 +1209,26 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             hint="Material plans must expose the resolved pure quality policy.")
         if quality_policy is not None:
             for key in MATERIAL_QUALITY_POLICY_BOOL_FIELDS:
-                check_bool_field(
+                enabled = check_bool_field(
                     report,
                     quality_policy,
                     key,
                     f"{plan_path}.quality_policy",
                     likely_layer=likely_layer,
                     hint="Quality policy booleans must stay explicit.")
+                if enabled is False:
+                    quality_summary = summary["quality_policy"]
+                    if key == "allow_backdrop_sampling":
+                        quality_summary["backdrop_sampling_disabled"] = int(
+                            quality_summary["backdrop_sampling_disabled"]) + 1
+                    elif key == "allow_noise":
+                        quality_summary["noise_disabled"] = int(
+                            quality_summary["noise_disabled"]) + 1
+                    elif key == "allow_shadow":
+                        quality_summary["shadow_disabled"] = int(
+                            quality_summary["shadow_disabled"]) + 1
             for key in MATERIAL_QUALITY_POLICY_NUMBER_FIELDS:
-                check_number_field(
+                policy_limit = check_number_field(
                     report,
                     quality_policy,
                     key,
@@ -1178,6 +1236,16 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     min_value=0.0,
                     likely_layer=likely_layer,
                     hint="Quality policy limits must be resolved to non-negative values.")
+                if isinstance(policy_limit, (int, float)):
+                    quality_summary = summary["quality_policy"]
+                    if key == "max_blur_radius":
+                        quality_summary["max_blur_radius"] = max(
+                            float(quality_summary["max_blur_radius"]),
+                            float(policy_limit))
+                    elif key == "max_sample_taps":
+                        quality_summary["max_sample_taps"] = max(
+                            int(quality_summary["max_sample_taps"]),
+                            int(policy_limit))
 
         resource_budget = check_object_field(
             report,
@@ -1597,6 +1665,52 @@ def check_material_resource_bounds_requirements(
             hint="MaterialResourceBudget.deterministic_fallback must stay true for every plan.")
 
 
+def check_material_quality_policy_requirements(
+        summary: JsonObject,
+        spec: JsonObject,
+        report: Report) -> None:
+    policy = summary.get("quality_policy")
+    if not isinstance(policy, dict):
+        policy = {}
+    base_path = "debug.platform_runtime.details.renderer.material_plans#quality_policy"
+    field_map = {
+        "max_blur_radius_lte": "max_blur_radius",
+        "max_sample_taps_lte": "max_sample_taps",
+    }
+    for spec_field, summary_field in field_map.items():
+        if spec_field not in spec:
+            continue
+        actual = policy.get(summary_field)
+        expected = spec[spec_field]
+        report.check(
+            f"material quality policy {summary_field} is within limit",
+            isinstance(actual, (int, float)) and not isinstance(actual, bool)
+            and float(actual) <= float(expected),
+            path=f"{base_path}.{summary_field}",
+            expected={"<=": expected},
+            actual=actual,
+            likely_layer="material-plan",
+            hint="Inspect MaterialPlan.quality_policy in the resolved plans.")
+
+    required_allowed = {
+        "require_backdrop_sampling_allowed": "backdrop_sampling_disabled",
+        "require_noise_allowed": "noise_disabled",
+        "require_shadow_allowed": "shadow_disabled",
+    }
+    for spec_field, summary_field in required_allowed.items():
+        if spec.get(spec_field) is not True:
+            continue
+        actual = policy.get(summary_field)
+        report.check(
+            f"material quality policy {summary_field} is zero",
+            actual == 0,
+            path=f"{base_path}.{summary_field}",
+            expected=0,
+            actual=actual,
+            likely_layer="material-plan",
+            hint="Inspect MaterialPlan.quality_policy and the backend MaterialEnvironment.")
+
+
 def check_material_semantic_runtime_match(
         semantic_summary: JsonObject,
         material_plan_summary: JsonObject,
@@ -1859,6 +1973,15 @@ def verify(args: argparse.Namespace) -> int:
                 check_material_resource_bounds_requirements(
                     material_plan_summary,
                     material_resource_bounds_spec,
+                    report)
+            material_quality_policy_spec = getattr(
+                args,
+                "require_material_quality_policy",
+                None)
+            if isinstance(material_quality_policy_spec, dict):
+                check_material_quality_policy_requirements(
+                    material_plan_summary,
+                    material_quality_policy_spec,
                     report)
     if args.require_material_semantic_runtime_match:
         report.check(
@@ -2173,6 +2296,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.set_defaults(
         require_material_plan_summary=None,
         require_material_resource_bounds=None,
+        require_material_quality_policy=None,
         require_material_semantic_runtime_match=False)
     return parser.parse_args(argv)
 

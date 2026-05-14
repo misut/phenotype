@@ -164,6 +164,10 @@ runtime stayed within the pure plan's performance budget. Supported limits are
 `max_backdrop_pixels_lte`; `require_bounded_texture_copy` and
 `require_deterministic_fallback` require those booleans to hold for every
 resolved plan.
+Use `require_material_quality_policy` when a material gate must prove the
+resolved pure policy stayed enabled and bounded. It can require backdrop
+sampling, noise, and shadow to remain allowed for every plan, and can bound the
+maximum quality-policy blur radius and sample taps seen in the artifact.
 
 Set `require_material_semantic_runtime_match` when a gate must prove that the
 semantic material nodes and the backend runtime material plans describe the
