@@ -1,0 +1,179 @@
+{
+  "name": "glass_showcase_accessibility_startup",
+  "description": "Startup artifact contract for material accessibility response.",
+  "require_frame": true,
+  "require_labels": [
+    "Glass Material Showcase",
+    "Backdrop Test Pattern",
+    "Visible Blur Probe",
+    "Material Ramp",
+    "Debug Contract"
+  ],
+  "require_roles": [
+    "button",
+    "material",
+    "text_field"
+  ],
+  "require_material_kinds": [
+    "clear",
+    "thin",
+    "regular",
+    "thick"
+  ],
+  "require_material_plans": true,
+  "require_material_semantic_runtime_match": true,
+  "require_material_plan_summary": {
+    "count": 7,
+    "fallback": 7,
+    "backdrop_sampling": 0,
+    "fallback_paths": {
+      "reduced-transparency": 7
+    },
+    "fallback_reasons": {
+      "reduced transparency disables backdrop sampling": 7
+    },
+    "contract_versions": {
+      "2": 7
+    },
+    "kinds": {
+      "clear": 1,
+      "thin": 2,
+      "regular": 2,
+      "thick": 2
+    },
+    "pass_names": {
+      "translucent-rounded-rect": 7
+    },
+    "pass_executors": {
+      "fallback-fill": 7
+    },
+    "backdrop_available": 7,
+    "backdrop_stable": 7,
+    "backdrop_sources": {
+      "previous-presented-frame": 7
+    },
+    "luminance_responses": {
+      "not-sampled": 7
+    },
+    "luminance_adapted": 0,
+    "render_target_ready": 7,
+    "render_target_within_backdrop_budget": 7,
+    "render_target_pixel_formats": {
+      "bgra8unorm": 7
+    },
+    "decision_can_sample_backdrop": 0,
+    "decision_backend_supports_backdrop": 7,
+    "decision_backdrop_source_ready": 7,
+    "decision_reduced_transparency": 7,
+    "decision_increase_contrast": 7,
+    "decision_reduce_motion": 7,
+    "decision_blockers": {
+      "reduced-transparency": 7
+    },
+    "verifier_require_backdrop_source": 0,
+    "verifier_require_edge_highlight": 0,
+    "verifier_profiles": {
+      "clear-over-rich-backdrop": 1,
+      "thin-balanced-backdrop": 2,
+      "regular-legibility-backdrop": 2,
+      "thick-high-contrast-backdrop": 2
+    },
+    "verifier_region_layers": {
+      "clear-over-rich-backdrop": "material-fallback-pass",
+      "thin-balanced-backdrop": "material-fallback-pass",
+      "regular-legibility-backdrop": "material-fallback-pass",
+      "thick-high-contrast-backdrop": "material-fallback-pass"
+    }
+  },
+  "require_material_resource_bounds": {
+    "max_plan_blur_radius_lte": 0,
+    "max_plan_sample_taps_lte": 0,
+    "max_plan_sample_taps_gte": 0,
+    "max_budget_blur_radius_lte": 36.0,
+    "max_sample_taps_lte": 25,
+    "max_pass_count_lte": 1,
+    "max_backdrop_pixels_lte": 4000000,
+    "max_pass_texture_copy_pixels_lte": 0,
+    "max_pass_texture_copy_pixels_gte": 0,
+    "total_pass_texture_copy_pixels_lte": 0,
+    "total_pass_texture_copy_pixels_gte": 0,
+    "total_runtime_passes_lte": 7,
+    "total_runtime_passes_gte": 7,
+    "active_runtime_passes_lte": 7,
+    "active_runtime_passes_gte": 7,
+    "backdrop_runtime_passes_lte": 0,
+    "backdrop_runtime_passes_gte": 0,
+    "require_bounded_texture_copy": true,
+    "require_deterministic_fallback": true
+  },
+  "require_material_quality_policy": {
+    "require_backdrop_sampling_allowed": true,
+    "require_shadow_allowed": true,
+    "max_blur_radius_lte": 36.0,
+    "max_sample_taps_lte": 25,
+    "max_backdrop_pixels_lte": 4000000
+  },
+  "require_capabilities": [
+    "material_backdrop_blur",
+    "reduce_transparency",
+    "increase_contrast",
+    "reduce_motion"
+  ],
+  "require_runtime_details": [
+    {
+      "path": "renderer.accessibility_display_options.source",
+      "equals": "env-override"
+    },
+    {
+      "path": "renderer.accessibility_display_options.reduce_transparency",
+      "equals": true
+    },
+    {
+      "path": "renderer.accessibility_display_options.increase_contrast",
+      "equals": true
+    },
+    {
+      "path": "renderer.accessibility_display_options.reduce_motion",
+      "equals": true
+    },
+    {
+      "path": "renderer.material_pipeline_ready",
+      "equals": true
+    },
+    {
+      "path": "renderer.material_backdrop_source_ready",
+      "equals": true
+    }
+  ],
+  "require_runtime_numeric_bounds": [
+    {
+      "path": "renderer.material_executor_summary.plan_count",
+      "equals": 7
+    },
+    {
+      "path": "renderer.material_executor_summary.material_instance_count",
+      "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.fallback_instance_count",
+      "equals": 7
+    },
+    {
+      "path": "renderer.material_executor_summary.material_draw_calls",
+      "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_pixels",
+      "lte": 2000000
+    },
+    {
+      "path": "renderer.material_executor_summary.cpu_total_ns",
+      "gte": 1,
+      "lte": 100000000
+    }
+  ]
+}

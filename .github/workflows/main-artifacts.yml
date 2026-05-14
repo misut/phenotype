@@ -54,7 +54,7 @@ jobs:
             esac
 
             case "$path" in
-              src/*|examples/glass_showcase/*|tools/verify_artifact_bundle.py|tools/verify_glass_showcase_artifact.sh|pyproject.toml|uv.lock|.python-version|exon.toml|exon.lock|mise.toml|.intron.toml)
+              src/*|examples/glass_showcase/*|tools/verify_artifact_bundle.py|tools/verify_glass_showcase*.sh|pyproject.toml|uv.lock|.python-version|exon.toml|exon.lock|mise.toml|.intron.toml)
                 artifact_build=true
                 ;;
             esac
@@ -228,6 +228,7 @@ jobs:
         run: |
           eval "$(intron env)"
           tools/verify_glass_showcase_artifact.sh
+          tools/verify_glass_showcase_accessibility_artifact.sh
 
       - name: Save build artifacts
         if: steps.build-cache.outputs.cache-hit != 'true'
