@@ -1,6 +1,6 @@
 # Examples Coverage
 
-Status: current coverage contract for `origin/main` at `fdb2b47`.
+Status: current coverage contract for `origin/main`.
 
 The examples under `examples/` are the local acceptance surface for phenotype.
 They are not all equivalent: some are compact widget showcases, some are dense

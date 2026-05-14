@@ -17,6 +17,14 @@ from typing import Any
 
 JsonObject = dict[str, Any]
 
+ALLOWED_PIXEL_REGION_METRICS = {
+    "edge_energy",
+    "luma_delta",
+    "luma_mean",
+    "luma_stddev",
+    "unique_colors",
+}
+
 
 class Report:
     def __init__(self, bundle: Path) -> None:
@@ -311,13 +319,6 @@ def pixel_region_metric_specs_from_manifest(value: Any) -> list[JsonObject]:
     if not isinstance(value, list):
         raise ValueError("pixel_region_metrics must be a list")
     specs: list[JsonObject] = []
-    allowed_metrics = {
-        "edge_energy",
-        "luma_delta",
-        "luma_mean",
-        "luma_stddev",
-        "unique_colors",
-    }
     for index, entry in enumerate(value):
         if not isinstance(entry, dict):
             raise ValueError(f"pixel_region_metrics[{index}] must be an object")
@@ -325,10 +326,10 @@ def pixel_region_metric_specs_from_manifest(value: Any) -> list[JsonObject]:
         metric = entry.get("metric")
         if not isinstance(region, str) or not region:
             raise ValueError(f"pixel_region_metrics[{index}].region must be a non-empty string")
-        if metric not in allowed_metrics:
+        if metric not in ALLOWED_PIXEL_REGION_METRICS:
             raise ValueError(
                 f"pixel_region_metrics[{index}].metric must be one of "
-                + ", ".join(sorted(allowed_metrics)))
+                + ", ".join(sorted(ALLOWED_PIXEL_REGION_METRICS)))
         spec: JsonObject = {"region": region, "metric": metric}
         has_bound = False
         for bound in ("gte", "lte"):
@@ -342,6 +343,29 @@ def pixel_region_metric_specs_from_manifest(value: Any) -> list[JsonObject]:
                 f"pixel_region_metrics[{index}] must contain gte or lte")
         specs.append(spec)
     return specs
+
+
+def pixel_region_metric_spec_from_cli(spec: str) -> JsonObject:
+    parts = spec.split(":")
+    if len(parts) != 4:
+        raise argparse.ArgumentTypeError(
+            "expected REGION:METRIC:BOUND:VALUE")
+    region, metric, bound, raw_value = parts
+    if not region:
+        raise argparse.ArgumentTypeError("REGION must be non-empty")
+    if metric not in ALLOWED_PIXEL_REGION_METRICS:
+        raise argparse.ArgumentTypeError(
+            "METRIC must be one of "
+            + ", ".join(sorted(ALLOWED_PIXEL_REGION_METRICS)))
+    if bound not in ("gte", "lte"):
+        raise argparse.ArgumentTypeError("BOUND must be gte or lte")
+    try:
+        value = float(raw_value)
+    except ValueError as exc:
+        raise argparse.ArgumentTypeError("VALUE must be a number") from exc
+    if value < 0.0:
+        raise argparse.ArgumentTypeError("VALUE must be non-negative")
+    return {"region": region, "metric": metric, bound: value}
 
 
 def runtime_detail_spec_from_manifest(entry: Any) -> str:
@@ -539,6 +563,7 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         "path": str(manifest_path),
         "name": manifest.get("name"),
         "pixel_regions": len(manifest.get("pixel_regions", []) or []),
+        "pixel_region_metrics": len(manifest.get("pixel_region_metrics", []) or []),
     }
     report.check("manifest schema is valid", True, str(manifest_path))
     return True
@@ -1991,11 +2016,21 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "Require a frame.bmp region to have contrast and color variety. "
             "Coordinates are absolute pixels, or normalized fractions when all "
             "four values are between 0 and 1. Repeatable."))
+    parser.add_argument(
+        "--require-pixel-region-metric",
+        action="append",
+        default=[],
+        type=pixel_region_metric_spec_from_cli,
+        metavar="REGION:METRIC:BOUND:VALUE",
+        help=(
+            "Require a previously named pixel region metric to satisfy a "
+            "numeric bound. METRIC is one of edge_energy, luma_delta, "
+            "luma_mean, luma_stddev, unique_colors. BOUND is gte or lte. "
+            "Repeatable."))
     parser.set_defaults(
         require_material_plan_summary=None,
         require_material_resource_bounds=None,
-        require_material_semantic_runtime_match=False,
-        require_pixel_region_metric=[])
+        require_material_semantic_runtime_match=False)
     return parser.parse_args(argv)
 
 
