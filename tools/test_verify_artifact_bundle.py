@@ -135,19 +135,25 @@ class ArtifactVerifierContractTest(unittest.TestCase):
     def run_verifier(
         self,
         snapshot_json: dict[str, object],
+        manifest: dict[str, object] | None = None,
     ) -> tuple[int, dict[str, object]]:
         with tempfile.TemporaryDirectory() as raw_dir:
             bundle = Path(raw_dir)
             (bundle / "snapshot.json").write_text(
                 json.dumps(snapshot_json),
                 encoding="utf-8")
+            args = [
+                str(bundle),
+                "--require-material-plan",
+                "--require-material-semantic-runtime-match",
+            ]
+            if manifest is not None:
+                manifest_path = bundle / "artifact_manifest.json"
+                manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+                args.extend(["--manifest", str(manifest_path)])
             output = io.StringIO()
             with contextlib.redirect_stdout(output):
-                code = verifier.main([
-                    str(bundle),
-                    "--require-material-plan",
-                    "--require-material-semantic-runtime-match",
-                ])
+                code = verifier.main(args)
             return code, json.loads(output.getvalue())
 
     def test_material_plan_contract_accepts_synchronized_fallback_taps(self) -> None:
@@ -192,6 +198,23 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["failure_summary"]["by_path"][failure["path"]],
             1)
+
+    def test_manifest_can_require_plan_sample_tap_floor(self) -> None:
+        manifest = {
+            "require_material_resource_bounds": {
+                "max_plan_sample_taps_lte": 25,
+                "max_plan_sample_taps_gte": 25,
+            }
+        }
+        code, report = self.run_verifier(
+            snapshot(material_plan(sample_taps=25, primary_sample_taps=25)),
+            manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
+            25)
 
 
 if __name__ == "__main__":
