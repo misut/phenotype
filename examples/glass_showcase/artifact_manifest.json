@@ -61,6 +61,20 @@
     "decision_backdrop_source_ready": 7,
     "decision_blockers": {
       "none": 7
+    },
+    "verifier_require_backdrop_source": 7,
+    "verifier_require_edge_highlight": 7,
+    "verifier_profiles": {
+      "clear-over-rich-backdrop": 1,
+      "thin-balanced-backdrop": 2,
+      "regular-legibility-backdrop": 2,
+      "thick-high-contrast-backdrop": 2
+    },
+    "verifier_region_layers": {
+      "clear-over-rich-backdrop": "material-blur-pass",
+      "thin-balanced-backdrop": "material-blur-pass",
+      "regular-legibility-backdrop": "material-blur-pass",
+      "thick-high-contrast-backdrop": "material-blur-pass"
     }
   },
   "require_material_resource_bounds": {

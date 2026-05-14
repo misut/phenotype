@@ -56,6 +56,14 @@
     "decision_backdrop_source_ready": 0,
     "decision_blockers": {
       "unsupported-backend": 1
+    },
+    "verifier_require_backdrop_source": 0,
+    "verifier_require_edge_highlight": 0,
+    "verifier_profiles": {
+      "regular-legibility-backdrop": 1
+    },
+    "verifier_region_layers": {
+      "regular-legibility-backdrop": "material-fallback-pass"
     }
   },
   "require_material_resource_bounds": {
