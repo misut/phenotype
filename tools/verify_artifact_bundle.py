@@ -448,6 +448,12 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         require_material_plans = bool_manifest_value(manifest, "require_material_plans")
         if require_material_plans is True:
             args.require_material_plan = True
+        require_material_semantic_runtime_match = bool_manifest_value(
+            manifest,
+            "require_material_semantic_runtime_match")
+        if require_material_semantic_runtime_match is True:
+            args.require_material_plan = True
+            args.require_material_semantic_runtime_match = True
         material_plan_summary = material_plan_summary_spec_from_manifest(
             manifest.get("require_material_plan_summary"))
         if material_plan_summary is not None:
@@ -1345,6 +1351,40 @@ def check_material_resource_bounds_requirements(
             hint="MaterialResourceBudget.deterministic_fallback must stay true for every plan.")
 
 
+def check_material_semantic_runtime_match(
+        semantic_summary: JsonObject,
+        material_plan_summary: JsonObject,
+        report: Report) -> None:
+    base_path = "debug.material_semantic_runtime_match"
+    semantic_count = semantic_summary.get("material_nodes")
+    runtime_count = material_plan_summary.get("count")
+    report.check(
+        "material semantic/runtime count matches",
+        semantic_count == runtime_count,
+        path=f"{base_path}.count",
+        expected=semantic_count,
+        actual=runtime_count,
+        likely_layer="material-contract",
+        hint=(
+            "Semantic material nodes and backend MaterialRect commands diverged; "
+            "inspect layout::material_surface emission, overlay collection, and "
+            "the backend command parser."))
+
+    semantic_kinds = semantic_summary.get("material_kinds")
+    runtime_kinds = material_plan_summary.get("kinds")
+    report.check(
+        "material semantic/runtime kinds match",
+        semantic_kinds == runtime_kinds,
+        path=f"{base_path}.kinds",
+        expected=semantic_kinds,
+        actual=runtime_kinds,
+        likely_layer="material-contract",
+        hint=(
+            "The semantic tree and runtime plan summary disagree on material "
+            "kinds; check whether a material node was skipped or decoded with "
+            "the wrong kind."))
+
+
 def load_platform_files(platform_dir: Path, report: Report) -> list[JsonObject]:
     files: list[JsonObject] = []
     if not platform_dir.exists():
@@ -1560,6 +1600,17 @@ def verify(args: argparse.Namespace) -> int:
                     material_plan_summary,
                     material_resource_bounds_spec,
                     report)
+    if args.require_material_semantic_runtime_match:
+        report.check(
+            "material semantic/runtime summary is available",
+            isinstance(material_plan_summary, dict),
+            path="debug.platform_runtime.details.renderer.material_plans",
+            expected="material plan summary",
+            actual=type(material_plan_summary).__name__,
+            likely_layer="material-contract",
+            hint="Enable renderer.material_plans before requiring semantic/runtime parity.")
+        if isinstance(material_plan_summary, dict):
+            check_material_semantic_runtime_match(summary, material_plan_summary, report)
 
     full_labels: list[str] = []
     walk_labels(semantic_tree, full_labels)
@@ -1763,6 +1814,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "Require debug.platform_runtime.details.renderer.material_plans "
             "to describe resolved backend material plans."))
     parser.add_argument(
+        "--require-material-semantic-runtime-match",
+        action="store_true",
+        help=(
+            "Require semantic material node count/kinds to match resolved "
+            "backend material plan count/kinds."))
+    parser.add_argument(
         "--require-capability",
         action="append",
         default=[],
@@ -1786,7 +1843,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "four values are between 0 and 1. Repeatable."))
     parser.set_defaults(
         require_material_plan_summary=None,
-        require_material_resource_bounds=None)
+        require_material_resource_bounds=None,
+        require_material_semantic_runtime_match=False)
     return parser.parse_args(argv)
 
 
