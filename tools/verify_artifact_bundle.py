@@ -323,6 +323,14 @@ def non_negative_int(value: Any, field: str) -> int:
     return value
 
 
+def non_negative_number(value: Any, field: str) -> int | float:
+    if (not isinstance(value, (int, float))
+            or isinstance(value, bool)
+            or value < 0):
+        raise ValueError(f"{field} must be a non-negative number")
+    return value
+
+
 def string_int_map(value: Any, field: str) -> JsonObject:
     if not isinstance(value, dict):
         raise ValueError(f"{field} must be an object")
@@ -367,6 +375,43 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
     return spec
 
 
+def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("require_material_resource_bounds must be an object")
+    number_fields = {
+        "max_plan_blur_radius_lte",
+        "max_budget_blur_radius_lte",
+        "max_sample_taps_lte",
+        "max_pass_count_lte",
+        "max_backdrop_pixels_lte",
+    }
+    bool_fields = {
+        "require_bounded_texture_copy",
+        "require_deterministic_fallback",
+    }
+    unknown = sorted(set(value) - number_fields - bool_fields)
+    if unknown:
+        raise ValueError(
+            "unknown require_material_resource_bounds keys: "
+            + ", ".join(unknown))
+    spec: JsonObject = {}
+    for field in number_fields:
+        if field in value:
+            spec[field] = non_negative_number(
+                value[field],
+                f"require_material_resource_bounds.{field}")
+    for field in bool_fields:
+        if field in value:
+            item = value[field]
+            if not isinstance(item, bool):
+                raise ValueError(
+                    f"require_material_resource_bounds.{field} must be a boolean")
+            spec[field] = item
+    return spec
+
+
 def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
     if not args.manifest:
         return True
@@ -408,6 +453,11 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         if material_plan_summary is not None:
             args.require_material_plan = True
             args.require_material_plan_summary = material_plan_summary
+        material_resource_bounds = material_resource_bounds_spec_from_manifest(
+            manifest.get("require_material_resource_bounds"))
+        if material_resource_bounds is not None:
+            args.require_material_plan = True
+            args.require_material_resource_bounds = material_resource_bounds
 
         args.require_label.extend(list_of_strings(manifest, "require_labels"))
         args.require_label_contains.extend(
@@ -740,6 +790,15 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "pass_names": {},
         "plan_ids": [],
         "region_layers": {},
+        "resource_bounds": {
+            "max_plan_blur_radius": 0.0,
+            "max_budget_blur_radius": 0.0,
+            "max_sample_taps": 0,
+            "max_pass_count": 0,
+            "max_backdrop_pixels": 0,
+            "unbounded_texture_copy": 0,
+            "non_deterministic_fallback": 0,
+        },
     }
     if not isinstance(plans, list):
         report.check(
@@ -787,8 +846,9 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             summary["plan_ids"].append(plan_id)
         likely_layer = plan_id if isinstance(plan_id, str) and plan_id else "material-plan"
 
+        plan_blur_radius: int | float | None = None
         for key in MATERIAL_PLAN_NUMERIC_FIELDS:
-            check_number_field(
+            number = check_number_field(
                 report,
                 plan,
                 key,
@@ -796,6 +856,13 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 min_value=0.0,
                 likely_layer=likely_layer,
                 hint="Check pure MaterialPlan clamping and backend JSON serialization.")
+            if key == "blur_radius":
+                plan_blur_radius = number
+                if isinstance(number, (int, float)):
+                    bounds = summary["resource_bounds"]
+                    bounds["max_plan_blur_radius"] = max(
+                        float(bounds["max_plan_blur_radius"]),
+                        float(number))
         check_bool_field(
             report,
             plan,
@@ -918,8 +985,10 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             plan_path,
             likely_layer=likely_layer,
             hint="Material plans must expose bounded resource policy for CI debugging.")
+        max_pass_count: int | float | None = None
         if resource_budget is not None:
-            check_number_field(
+            bounds = summary["resource_bounds"]
+            max_blur_radius = check_number_field(
                 report,
                 resource_budget,
                 "max_blur_radius",
@@ -927,6 +996,10 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 min_value=0.0,
                 likely_layer=likely_layer,
                 hint="Blur radius should be clamped in the pure plan.")
+            if isinstance(max_blur_radius, (int, float)):
+                bounds["max_budget_blur_radius"] = max(
+                    float(bounds["max_budget_blur_radius"]),
+                    float(max_blur_radius))
             max_sample_taps = check_number_field(
                 report,
                 resource_budget,
@@ -935,20 +1008,64 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 min_value=0.0,
                 likely_layer=likely_layer,
                 hint="Sample tap budget should be bounded in the pure plan.")
-            check_bool_field(
+            if isinstance(max_sample_taps, (int, float)):
+                bounds["max_sample_taps"] = max(
+                    int(bounds["max_sample_taps"]),
+                    int(max_sample_taps))
+            max_pass_count = check_number_field(
+                report,
+                resource_budget,
+                "max_pass_count",
+                f"{plan_path}.resource_budget",
+                min_value=0.0,
+                likely_layer=likely_layer,
+                hint="Material pass count should be bounded in the pure plan.")
+            if isinstance(max_pass_count, (int, float)):
+                bounds["max_pass_count"] = max(
+                    int(bounds["max_pass_count"]),
+                    int(max_pass_count))
+            max_backdrop_pixels = check_number_field(
+                report,
+                resource_budget,
+                "max_backdrop_pixels",
+                f"{plan_path}.resource_budget",
+                min_value=0.0,
+                likely_layer=likely_layer,
+                hint="Backdrop texture copy budget should be bounded by the render target.")
+            if isinstance(max_backdrop_pixels, (int, float)):
+                bounds["max_backdrop_pixels"] = max(
+                    int(bounds["max_backdrop_pixels"]),
+                    int(max_backdrop_pixels))
+            bounded_texture_copy = check_bool_field(
                 report,
                 resource_budget,
                 "bounded_texture_copy",
                 f"{plan_path}.resource_budget",
                 likely_layer=likely_layer,
                 hint="The backend contract should state whether texture copies are bounded.")
-            check_bool_field(
+            if bounded_texture_copy is False:
+                bounds["unbounded_texture_copy"] = int(
+                    bounds["unbounded_texture_copy"]) + 1
+            deterministic_fallback = check_bool_field(
                 report,
                 resource_budget,
                 "deterministic_fallback",
                 f"{plan_path}.resource_budget",
                 likely_layer=likely_layer,
                 hint="Fallback behavior must be deterministic for LLM debugging.")
+            if deterministic_fallback is False:
+                bounds["non_deterministic_fallback"] = int(
+                    bounds["non_deterministic_fallback"]) + 1
+            if isinstance(plan_blur_radius, (int, float)) and isinstance(max_blur_radius, (int, float)):
+                report.check(
+                    "material blur radius is within budget",
+                    float(plan_blur_radius) <= float(max_blur_radius),
+                    path=f"{plan_path}.blur_radius",
+                    expected={"<=": float(max_blur_radius)},
+                    actual=float(plan_blur_radius),
+                    likely_layer=likely_layer,
+                    hint="Clamp blur radius in plan_material_surface.",
+                    record_success=False)
             if isinstance(sample_taps, (int, float)) and isinstance(max_sample_taps, (int, float)):
                 report.check(
                     "material sample taps are within budget",
@@ -1010,6 +1127,16 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             hint="Backend runtime JSON should mirror MaterialPlan pass expectations.",
             record_success=False)
         if isinstance(passes, list):
+            if isinstance(max_pass_count, (int, float)):
+                report.check(
+                    "material pass count is within budget",
+                    len(passes) <= int(max_pass_count),
+                    path=f"{plan_path}.passes",
+                    expected={"length<=": int(max_pass_count)},
+                    actual=len(passes),
+                    likely_layer=likely_layer,
+                    hint="Keep the runtime pass list within MaterialResourceBudget.max_pass_count.",
+                    record_success=False)
             for pass_index, pass_entry in enumerate(passes):
                 pass_path = f"{plan_path}.passes[{pass_index}]"
                 report.check(
@@ -1165,6 +1292,57 @@ def check_material_plan_summary_requirements(
                 actual=actual,
                 likely_layer="platform-runtime",
                 hint="Inspect renderer.material_plans[] for the unexpected plan kind/pass/fallback.")
+
+
+def check_material_resource_bounds_requirements(
+        summary: JsonObject,
+        spec: JsonObject,
+        report: Report) -> None:
+    bounds = summary.get("resource_bounds")
+    if not isinstance(bounds, dict):
+        bounds = {}
+    base_path = "debug.platform_runtime.details.renderer.material_plans#resource_bounds"
+    field_map = {
+        "max_plan_blur_radius_lte": "max_plan_blur_radius",
+        "max_budget_blur_radius_lte": "max_budget_blur_radius",
+        "max_sample_taps_lte": "max_sample_taps",
+        "max_pass_count_lte": "max_pass_count",
+        "max_backdrop_pixels_lte": "max_backdrop_pixels",
+    }
+    for spec_field, summary_field in field_map.items():
+        if spec_field not in spec:
+            continue
+        actual = bounds.get(summary_field)
+        expected = spec[spec_field]
+        report.check(
+            f"material resource bound {summary_field} is within limit",
+            isinstance(actual, (int, float)) and not isinstance(actual, bool)
+            and float(actual) <= float(expected),
+            path=f"{base_path}.{summary_field}",
+            expected={"<=": expected},
+            actual=actual,
+            likely_layer="platform-runtime",
+            hint="Inspect MaterialResourceBudget in the resolved material plans.")
+    if spec.get("require_bounded_texture_copy") is True:
+        actual = bounds.get("unbounded_texture_copy")
+        report.check(
+            "material resource bound requires bounded texture copies",
+            actual == 0,
+            path=f"{base_path}.unbounded_texture_copy",
+            expected=0,
+            actual=actual,
+            likely_layer="platform-runtime",
+            hint="MaterialResourceBudget.bounded_texture_copy must stay true for every plan.")
+    if spec.get("require_deterministic_fallback") is True:
+        actual = bounds.get("non_deterministic_fallback")
+        report.check(
+            "material resource bound requires deterministic fallback",
+            actual == 0,
+            path=f"{base_path}.non_deterministic_fallback",
+            expected=0,
+            actual=actual,
+            likely_layer="platform-runtime",
+            hint="MaterialResourceBudget.deterministic_fallback must stay true for every plan.")
 
 
 def load_platform_files(platform_dir: Path, report: Report) -> list[JsonObject]:
@@ -1372,6 +1550,15 @@ def verify(args: argparse.Namespace) -> int:
                 check_material_plan_summary_requirements(
                     material_plan_summary,
                     material_plan_summary_spec,
+                    report)
+            material_resource_bounds_spec = getattr(
+                args,
+                "require_material_resource_bounds",
+                None)
+            if isinstance(material_resource_bounds_spec, dict):
+                check_material_resource_bounds_requirements(
+                    material_plan_summary,
+                    material_resource_bounds_spec,
                     report)
 
     full_labels: list[str] = []
@@ -1597,7 +1784,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "Require a frame.bmp region to have contrast and color variety. "
             "Coordinates are absolute pixels, or normalized fractions when all "
             "four values are between 0 and 1. Repeatable."))
-    parser.set_defaults(require_material_plan_summary=None)
+    parser.set_defaults(
+        require_material_plan_summary=None,
+        require_material_resource_bounds=None)
     return parser.parse_args(argv)
 
 

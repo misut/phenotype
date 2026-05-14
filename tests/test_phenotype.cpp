@@ -1156,6 +1156,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(budget_plan.shadow_radius == 0.0f);
     assert(budget_plan.resource_budget.max_blur_radius == 12.0f);
     assert(budget_plan.resource_budget.max_sample_taps == 7);
+    assert(budget_plan.resource_budget.max_pass_count == 1);
+    assert(budget_plan.resource_budget.max_backdrop_pixels == 520 * 760);
+    assert(budget_plan.resource_budget.bounded_texture_copy);
+    assert(budget_plan.resource_budget.deterministic_fallback);
 
     MaterialRequest invalid_request = request;
     invalid_request.geometry.w = 0.0f;

@@ -257,11 +257,11 @@ Done means `examples/` is a local acceptance suite, not just demos:
 |---|---|---|
 | Analyze current phenotype progress | This document, `README.md`, `docs/ARCHITECTURE.md`, `docs/DEBUG_WORKFLOW.md`, examples and tests | Keep updated as milestones land |
 | Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, macOS sampled-backdrop rendering, resolved runtime fallback plans on Windows/Android, snapshot fallback contracts elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
-| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, startup bundle verifier, optional pixel-region checks, material plan summary gates, a glass showcase manifest, a macOS native glass showcase CI gate, and a local Android contract runner | Add Android CI wiring and stricter blur-specific probes |
+| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, startup bundle verifier, optional pixel-region checks, material plan summary gates, material resource bound gates, a glass showcase manifest, a macOS native glass showcase CI gate, and a local Android contract runner | Add Android CI wiring and stricter blur-specific probes |
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
-| Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations | Add material performance counters and budget tests |
+| Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, and pure material resource bounds for blur radius, sample taps, pass count, backdrop pixels, bounded texture copies, and deterministic fallback | Add material performance counters and backend timing budget tests |
 | Runnable examples under `examples/` | Native, glass showcase, flight board, workbook, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |
-| All phenotype features testable locally | `docs/EXAMPLES_COVERAGE.md` maps current examples/tests to public surfaces and artifact expectations; `tools/verify_artifact_bundle.py` validates startup bundles, optional pixel regions, exact material plan summaries, `examples/glass_showcase/artifact_manifest.json`, and `examples/android/artifact_manifest.json`; `tools/verify_glass_showcase_artifact.sh` wraps the glass gate; `mise run android:contract` wraps the Android device/emulator artifact route | Android CI wiring remains |
+| All phenotype features testable locally | `docs/EXAMPLES_COVERAGE.md` maps current examples/tests to public surfaces and artifact expectations; `tools/verify_artifact_bundle.py` validates startup bundles, optional pixel regions, exact material plan summaries, material resource bounds, `examples/glass_showcase/artifact_manifest.json`, and `examples/android/artifact_manifest.json`; `tools/verify_glass_showcase_artifact.sh` wraps the glass gate; `mise run android:contract` wraps the Android device/emulator artifact route | Android CI wiring remains |
 
 ## Implementation roadmap
 
@@ -450,9 +450,9 @@ This branch starts that path with:
   examples plus Android/WASI artifact expectations;
 - `tools/verify_artifact_bundle.py`, a deterministic verifier for schema,
   semantic tree roles/labels/disabled state/material fallback metadata, runtime,
-  resolved material plan schema and summary counts, platform diagnostics,
-  frame-file invariants, optional pixel-region contrast/color checks, reusable
-  JSON manifests, and a local glass showcase gate;
+  resolved material plan schema, summary counts, resource bounds, platform
+  diagnostics, frame-file invariants, optional pixel-region contrast/color
+  checks, reusable JSON manifests, and a local glass showcase gate;
 - macOS native CI wiring for the glass showcase manifest gate, inside the
   existing `test (macos-15, native)` job;
 - an Android device/emulator contract runner for the bundled stage 7 example,
