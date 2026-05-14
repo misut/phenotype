@@ -571,15 +571,81 @@ void test_material_surface_semantic_debug_fields() {
     auto const& material_debug = material->at("material").as_object();
     assert(material_debug.at("kind").as_string() == "regular");
     assert(material_debug.at("fallback").as_bool() == true);
-    assert(material_debug.at("fallback_reason").as_string().find("translucent")
+    assert(material_debug.at("fallback_reason").as_string().find("fallback path")
            != std::string::npos);
     assert(material_debug.at("opacity").as_float() > 0.5);
     assert(material_debug.at("blur_radius").as_float() >= 20.0);
+    assert(material_debug.at("saturation").as_float() > 1.0);
+    assert(material_debug.at("edge_highlight").as_float() > 0.0);
+    assert(material_debug.at("noise_opacity").as_float() > 0.0);
+    assert(material_debug.at("shadow_alpha").as_float() > 0.0);
     assert(material_debug.at("contrast_intent").as_string() == "legible");
+    assert(material_debug.at("plan_id").as_string() == "material.regular.base");
+    assert(material_debug.at("verifier_profile").as_string()
+           == "regular-legibility-backdrop");
 
     auto const& material_children = material->at("children").as_array();
     assert(find_semantic_child(material_children, "text", "Glass panel") != nullptr);
     assert(find_semantic_child(material_children, "button", "Action") != nullptr);
+}
+
+void test_material_runtime_record_json_contract() {
+    Theme theme{};
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = false;
+    env.capabilities.shader_blur = false;
+    env.capabilities.frame_history = false;
+    env.backdrop.source = "test-fallback";
+    env.render_target.width = 320;
+    env.render_target.height = 240;
+    env.render_target.scale = 2.0f;
+    env.render_target.pixel_format = "rgba8unorm";
+    env.debug_seed.frame = 7;
+    env.debug_seed.node = 11;
+    env.quality.max_blur_radius = 18.0f;
+    env.quality.max_sample_taps = 9;
+
+    auto plan = plan_material_surface(
+        material_request_for_command(
+            MaterialKind::Thin,
+            0.5f,
+            14.0f,
+            Color{240, 248, 255, 128},
+            MaterialGeometry{4.0f, 8.0f, 160.0f, 64.0f, 12.0f},
+            theme),
+        env);
+    MaterialRuntimeRecord record{plan, 3};
+    auto value = diag::detail::material_plan_runtime_json(record);
+    auto const& obj = value.as_object();
+
+    assert(obj.at("command_index").as_integer() == 3);
+    assert(obj.at("kind").as_string() == "thin");
+    assert(obj.at("plan_id").as_string() == "material.thin.fallback");
+    assert(obj.at("fallback").as_bool() == true);
+    assert(obj.at("fallback_path").as_string() == "unsupported-backend");
+    assert(obj.at("fallback_reason").as_string()
+           == "backend reports no material backdrop blur support");
+    assert(obj.at("backdrop_sampling").as_bool() == false);
+    assert(obj.at("primary_pass").as_object().at("name").as_string()
+           == "translucent-rounded-rect");
+    assert(obj.at("resource_budget").as_object()
+               .at("deterministic_fallback").as_bool() == true);
+    assert(obj.at("verifier").as_object().at("likely_layer").as_string()
+           == "material-fallback-pass");
+
+    std::vector<MaterialRuntimeRecord> records{record};
+    auto plans = diag::detail::material_plans_runtime_json(records);
+    assert(plans.size() == 1);
+
+    auto empty = diag::detail::empty_material_renderer_contract(
+        "test-semantic-fallback");
+    assert(empty.at("material_pipeline_ready").as_bool() == false);
+    assert(empty.at("material_backdrop_source_ready").as_bool() == false);
+    assert(empty.at("material_plan_count").as_integer() == 0);
+    assert(empty.at("material_plans").as_array().empty());
+    assert(empty.at("material_fallback_policy").as_string()
+           == "test-semantic-fallback");
 }
 
 #ifdef __wasi__
@@ -613,6 +679,11 @@ void test_wasi_debug_artifact_bundle_contract() {
     auto const& runtime_obj = runtime_file.as_object();
     assert(runtime_obj.at("host_model").as_string() == "wasi");
     assert(runtime_obj.at("frame_capture_supported").as_bool() == false);
+    auto const& renderer = runtime_obj.at("renderer").as_object();
+    assert(renderer.at("material_pipeline_ready").as_bool() == false);
+    assert(renderer.at("material_backdrop_source_ready").as_bool() == false);
+    assert(renderer.at("material_plan_count").as_integer() == 0);
+    assert(renderer.at("material_plans").as_array().empty());
     assert(runtime_obj.at("artifact_reason").as_string() == "wasi-common-contract-test");
 
     std::filesystem::remove_all(bundle_dir);
@@ -644,6 +715,8 @@ int main() {
     std::printf("PASS: debug plane semantic tree shape + stability\n");
     test_material_surface_semantic_debug_fields();
     std::printf("PASS: material surface semantic debug fields\n");
+    test_material_runtime_record_json_contract();
+    std::printf("PASS: material runtime record JSON contract\n");
 #ifdef __wasi__
     test_wasi_debug_artifact_bundle_contract();
     std::printf("PASS: WASI debug artifact bundle contract\n");

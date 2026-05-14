@@ -1,7 +1,8 @@
 # Apple Glass GUI Roadmap
 
-Status: planning baseline for `origin/main` at `9b042bf`
-(`feat(native-android): respect text rotation + width_factor on DrawText`).
+Status: implementation baseline for `origin/main` at `fdb2b47`
+(`feat(native): add glass material contract and artifact gates`), extended by
+the pure material-planning boundary described below.
 
 This document turns the current long-term goal into concrete deliverables:
 
@@ -29,6 +30,10 @@ phenotype are:
   primary actions or status.
 - The implementation must adapt to accessibility settings such as reduced
   transparency, increased contrast, and reduced motion.
+- phenotype's custom material system should follow these semantics without
+  claiming to be a drop-in replacement for Apple system components. Use the
+  `liquid-glass` backend path for functional layers and controls; use standard
+  material/fallback semantics for content-layer grouping.
 
 References:
 
@@ -97,15 +102,36 @@ paths, arcs, and batching. It is not enough for faithful Apple material work.
 
 Missing primitives for true glass:
 
-- backdrop blur or material sampling;
-- vibrancy / material-aware foreground color;
-- shadow or elevation;
 - gradient command as a backend-native primitive;
-- explicit blend/material metadata in snapshots and semantic output.
+- foreground vibrancy tokens that adapt text/icon colors on top of material.
 
 The current fallback can approximate glass with translucent rounded surfaces
-over rich content, but it cannot produce real backdrop blur or Liquid Glass
-behavior.
+over rich content. macOS now has a bounded sampled-backdrop material path.
+Windows and Android intentionally degrade to translucent fallback passes while
+recording the same resolved `MaterialPlan` schema; WASI/WebGPU snapshot paths
+publish an empty renderer material contract instead of pretending a backend
+pass executed.
+
+### Pure material planning
+
+Material policy is centralized in `phenotype.material`.
+`plan_material_surface(MaterialRequest, MaterialEnvironment)` is a pure,
+total function: platform capability probes, clocks, shader compilation,
+filesystem writes, and image capture remain in backend adapters. The function
+accepts immutable inputs:
+
+- `MaterialStyle`
+- geometry
+- capability snapshot
+- backdrop descriptor
+- render-target metadata
+- debug seed
+- quality policy
+
+The returned `MaterialPlan` describes blur radius, tint, saturation,
+luminance curve, edge highlight, noise/dither, shadow, backdrop sampling,
+fallback path, debug metadata, pass expectations, resource budgets, and
+verifier expectations. Backends execute the plan; they do not re-decide policy.
 
 ### Theme and widgets
 
@@ -148,9 +174,13 @@ This is a strong start, but not yet enough for "100% LLM GUI debugging".
 
 Remaining gaps:
 
-- Windows, Android, and WASI/WebGPU still use the documented material fallback;
+- Windows and Android still use the documented material fallback, with resolved
+  runtime fallback plans;
+- WASI/WebGPU stays snapshot-only for now;
 - blur-specific pixel probes should become stricter now that macOS has sampled
   backdrop material rendering;
+- resolved material plans should stay present in
+  `debug.platform_runtime.details.renderer.material_plans`;
 - Android CI device/emulator wiring remains a policy and runner-capacity
   decision.
 
@@ -200,9 +230,11 @@ or material problems without manual visual guessing:
 - every artifact contains `snapshot.json`;
 - every visual scene has a semantic tree with stable roles and labels;
 - every material surface appears in debug output with type, opacity, blur,
-  fallback state, bounds, and contrast intent;
+  fallback availability, bounds, contrast intent, and a backend-resolved
+  `MaterialPlan`;
 - native frame captures are available on macOS and Windows;
-- visual verifier output names exact failing regions and expected invariants;
+- visual verifier output names exact failing JSON paths or frame regions,
+  expected values, actual values, likely layer/pass, and suggested next check;
 - input failures can be diagnosed from `input_debug` and platform runtime
   state.
 
@@ -224,8 +256,8 @@ Done means `examples/` is a local acceptance suite, not just demos:
 | Requirement | Current evidence | Gap |
 |---|---|---|
 | Analyze current phenotype progress | This document, `README.md`, `docs/ARCHITECTURE.md`, `docs/DEBUG_WORKFLOW.md`, examples and tests | Keep updated as milestones land |
-| Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, macOS sampled-backdrop rendering, documented fallback elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
-| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, startup bundle verifier, optional pixel-region checks, a glass showcase manifest, a macOS native glass showcase CI gate, and a local Android contract runner | Add Android CI wiring and stricter blur-specific probes |
+| Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, macOS sampled-backdrop rendering, resolved runtime fallback plans on Windows/Android, snapshot fallback contracts elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
+| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, startup bundle verifier, optional pixel-region checks, a glass showcase manifest, a macOS native glass showcase CI gate, and a local Android contract runner | Add Android CI wiring and stricter blur-specific probes |
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
 | Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations | Add material performance counters and budget tests |
 | Runnable examples under `examples/` | Native, glass showcase, flight board, workbook, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |
@@ -304,8 +336,13 @@ Deliverables:
 
 - command protocol extension for material/backdrop region or a renderer-local
   material path that is fully represented in debug output;
-- macOS Metal implementation first: `MaterialRect` samples the previous
-  captured framebuffer as the backdrop source, then blends the material tint;
+- macOS Metal implementation first: `MaterialRect` is resolved through the
+  pure `MaterialPlan`, samples the previous captured framebuffer as the
+  backdrop source, then applies blur, tint, saturation, luminance preservation,
+  edge highlight, deterministic noise, and depth/shadow values from the plan;
+  runtime JSON mirrors the plan's `primary_pass`, resource budget, fallback
+  reason, and verifier expectations so a CI failure points back to the likely
+  layer/pass;
 - Windows Direct3D 12 implementation second;
 - Android Vulkan implementation or explicit fallback;
 - WASI/WebGPU shim path or explicit fallback;
@@ -404,7 +441,7 @@ This branch starts that path with:
   commands;
 - first-class `MaterialKind` / `MaterialStyle` / `layout::material_surface`
   fallback API, including semantic debug material kind, opacity, blur intent,
-  contrast intent, and fallback reason;
+  contrast intent, fallback reason, and resolved runtime plan serialization;
 - a material section in `examples/native`;
 - `examples/glass_showcase`, a dedicated material scene with deterministic
   backdrop regions, macOS sampled-backdrop rendering, fallback metadata, and
@@ -413,15 +450,15 @@ This branch starts that path with:
   examples plus Android/WASI artifact expectations;
 - `tools/verify_artifact_bundle.py`, a deterministic verifier for schema,
   semantic tree roles/labels/disabled state/material fallback metadata, runtime,
-  platform diagnostics, frame-file invariants, optional pixel-region
-  contrast/color checks, reusable JSON manifests, and a local glass showcase
-  gate;
+  resolved material plan schema, platform diagnostics, frame-file invariants,
+  optional pixel-region contrast/color checks, reusable JSON manifests, and a
+  local glass showcase gate;
 - macOS native CI wiring for the glass showcase manifest gate, inside the
   existing `test (macos-15, native)` job;
 - an Android device/emulator contract runner for the bundled stage 7 example;
 - `MaterialRect`, a shared command contract for material surfaces, with macOS
-  Metal sampled-backdrop rendering and explicit fallback consumption on
-  Windows, Android, and WebGPU/WASI.
+  Metal sampled-backdrop rendering, resolved runtime fallback plans on Windows
+  and Android, and explicit snapshot fallback contracts on WebGPU/WASI.
 
 The next PR should decide whether true material rendering should move next to
 Windows Direct3D 12, Android Vulkan, or stricter blur-specific verifier probes,

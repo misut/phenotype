@@ -68,7 +68,7 @@ static std::string material_contract_text(
     std::string text = "kind: ";
     text += phenotype::material_kind_name(kind);
     text += "\nfallback: translucent rounded rect available";
-    text += "\nbackdrop blur: macOS sampled backdrop when available";
+    text += "\nfunctional layer: macOS sampled backdrop when available";
     text += "\ncontrast intent: ";
     text += expected_contrast;
     return text;
@@ -187,7 +187,7 @@ static void view(State const& state) {
             layout::card([&] {
                 widget::text("Material Ramp");
                 layout::spacer(6);
-                widget::text("Every public MaterialKind is present as a semantic node in this scene. macOS native samples the captured backdrop; other backends keep the documented translucent fallback.");
+                widget::text("Every public MaterialKind is present as a semantic node in this scene. The probe represents functional layers; unsupported backends keep the documented translucent fallback.");
                 layout::spacer(10);
                 material_panel(
                     MaterialKind::Clear,

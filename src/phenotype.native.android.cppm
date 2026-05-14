@@ -42,6 +42,7 @@ import json;
 import cppx.unicode;
 import phenotype;
 import phenotype.diag;
+import phenotype.material;
 import phenotype.native.platform;
 import phenotype.native.shell;
 import phenotype.native.stub;
@@ -177,6 +178,7 @@ struct FrameScratch {
     std::vector<ArcInstanceGPU>   arc_instances;
     std::vector<TextInstanceGPU>  text_instances;
     std::vector<ImageInstanceGPU> image_instances;
+    std::vector<MaterialRuntimeRecord> material_records;
 
     std::vector<::phenotype::native::TextEntry> text_entries;
     // Parallel to text_entries: which batch each entry belongs to. Set
@@ -1617,6 +1619,7 @@ struct android_renderer {
     double perf_upload_ms_sum = 0.0;
     double perf_record_ms_sum = 0.0;
     double perf_total_ms_sum  = 0.0;
+    std::uint32_t material_frame_sequence = 0;
 
     // Stage 4 text pipeline. Atlas image + view grow on demand;
     // everything else is allocated once per device.
@@ -4078,6 +4081,7 @@ inline void polygon_ear_clip(std::vector<float>& poly,
 
 inline void decode_android_color_commands(unsigned char const* buf,
                                           unsigned int len,
+                                          MaterialEnvironment const& material_env,
                                           FrameScratch& out) {
     // First batch is a sentinel (full swapchain) so any draw before a
     // Cmd::Scissor renders unclipped.
@@ -4121,8 +4125,10 @@ inline void decode_android_color_commands(unsigned char const* buf,
         pos = (pos + 3) & ~3u;
     };
 
+    std::uint32_t command_index = 0;
     while (pos + 4 <= len) {
         auto cmd = static_cast<::phenotype::Cmd>(read_u32());
+        auto const current_command_index = command_index++;
 
         // Opcode-by-opcode handlers: identical semantics to the
         // previous parse + visit dispatch but skipping every
@@ -4172,15 +4178,30 @@ inline void decode_android_color_commands(unsigned char const* buf,
             float x = read_f32(), y = read_f32();
             float w = read_f32(), h = read_f32();
             float r = read_f32();
-            (void)read_u32(); // kind
-            (void)read_f32(); // opacity
-            (void)read_f32(); // blur_radius
-            ::phenotype::Color cc = unpack(read_u32());
+            auto const kind = read_u32();
+            auto const opacity = read_f32();
+            auto const blur_radius = read_f32();
+            auto const tint = unpack(read_u32());
+            auto material_env_for_command = material_env;
+            material_env_for_command.debug_seed.node = current_command_index;
+            auto plan = ::phenotype::plan_material_surface(
+                ::phenotype::material_request_for_command(
+                    ::phenotype::material_kind_from_wire(kind),
+                    opacity,
+                    blur_radius,
+                    tint,
+                    ::phenotype::MaterialGeometry{x, y, w, h, r},
+                    ::phenotype::current_theme()),
+                material_env_for_command);
+            out.material_records.push_back(
+                ::phenotype::MaterialRuntimeRecord{
+                    plan,
+                    current_command_index});
             prepare_batch_for_pipeline(out, 0);
             ColorInstanceGPU inst{};
             inst.rect[0] = x; inst.rect[1] = y;
             inst.rect[2] = w; inst.rect[3] = h;
-            normalize_color(cc, inst.color);
+            normalize_color(plan.tint, inst.color);
             inst.params[0] = r;
             inst.params[1] = 0.0f;
             inst.params[2] = 2.0f; // Round fallback
@@ -4750,7 +4771,17 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                                                  FrameScratch& out) {
     out.batches.push_back(ScissorBatch{});
     auto commands = ::phenotype::parse_commands(buf, len);
+    MaterialEnvironment material_env{};
+    material_env.capabilities.material_surfaces = true;
+    material_env.capabilities.material_backdrop_blur = false;
+    material_env.capabilities.shader_blur = false;
+    material_env.capabilities.frame_history = false;
+    material_env.backdrop.source = "android-vulkan-fallback";
+    material_env.quality.max_blur_radius = 36.0f;
+    material_env.quality.max_sample_taps = 25;
+    std::uint32_t command_index = 0;
     for (auto const& cmd : commands) {
+        auto const current_command_index = command_index++;
         std::visit([&](auto const& c) {
             using T = std::decay_t<decltype(c)>;
             if constexpr (std::same_as<T, ::phenotype::ClearCmd>) {
@@ -4785,11 +4816,27 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                 inst.params[2] = 2.0f; // draw_type = Round
                 out.batches.back().colors.push_back(inst);
             } else if constexpr (std::same_as<T, ::phenotype::MaterialRectCmd>) {
+                auto material_env_for_command = material_env;
+                material_env_for_command.debug_seed.node = current_command_index;
+                auto plan = ::phenotype::plan_material_surface(
+                    ::phenotype::material_request_for_command(
+                        c.kind,
+                        c.opacity,
+                        c.blur_radius,
+                        c.tint,
+                        ::phenotype::MaterialGeometry{
+                            c.x, c.y, c.w, c.h, c.radius},
+                        ::phenotype::current_theme()),
+                    material_env_for_command);
+                out.material_records.push_back(
+                    ::phenotype::MaterialRuntimeRecord{
+                        plan,
+                        current_command_index});
                 prepare_batch_for_pipeline(out, 0);
                 ColorInstanceGPU inst{};
                 inst.rect[0] = c.x; inst.rect[1] = c.y;
                 inst.rect[2] = c.w; inst.rect[3] = c.h;
-                normalize_color(c.tint, inst.color);
+                normalize_color(plan.tint, inst.color);
                 inst.params[0] = c.radius;
                 inst.params[1] = 0.0f;
                 inst.params[2] = 2.0f; // draw_type = Round fallback
@@ -5348,7 +5395,24 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     ::phenotype::native::TextAtlas atlas{};
 
     if (!can_skip_decode) {
-        decode_android_color_commands(buf, len, scratch);
+        MaterialEnvironment material_env{};
+        material_env.capabilities.material_surfaces = true;
+        material_env.capabilities.material_backdrop_blur = false;
+        material_env.capabilities.shader_blur = false;
+        material_env.capabilities.frame_history = g_renderer.last_frame_available;
+        material_env.backdrop.available = false;
+        material_env.backdrop.stable = false;
+        material_env.backdrop.source = "android-vulkan-fallback";
+        material_env.render_target.width =
+            static_cast<int>(g_renderer.swapchain_extent.width);
+        material_env.render_target.height =
+            static_cast<int>(g_renderer.swapchain_extent.height);
+        material_env.render_target.scale = 1.0f;
+        material_env.render_target.pixel_format = "rgba8unorm";
+        material_env.debug_seed.frame = ++g_renderer.material_frame_sequence;
+        material_env.quality.max_blur_radius = 36.0f;
+        material_env.quality.max_sample_taps = 25;
+        decode_android_color_commands(buf, len, material_env, scratch);
         if (!scratch.has_clear) {
             auto const& theme = ::phenotype::current_theme();
             normalize_color(theme.background, scratch.clear_color);
@@ -5962,6 +6026,26 @@ inline ::json::Object android_renderer_runtime_json() {
         ::json::Value{g_renderer.color_pipeline != VK_NULL_HANDLE});
     r.emplace("tri_pipeline_ready",
         ::json::Value{g_renderer.tri_pipeline != VK_NULL_HANDLE});
+    r.emplace("material_pipeline_ready", ::json::Value{false});
+    r.emplace("material_backdrop_source_ready", ::json::Value{false});
+    auto const material_plan_count = g_renderer.last_scratch_valid
+        ? g_renderer.last_scratch.material_records.size()
+        : std::size_t{0};
+    r.emplace(
+        "material_plan_count",
+        ::json::Value{static_cast<std::int64_t>(material_plan_count)});
+    if (g_renderer.last_scratch_valid) {
+        r.emplace(
+            "material_plans",
+            ::json::Value{
+                ::phenotype::diag::detail::material_plans_runtime_json(
+                    g_renderer.last_scratch.material_records)});
+    } else {
+        r.emplace("material_plans", ::json::Value{::json::Array{}});
+    }
+    r.emplace(
+        "material_fallback_policy",
+        ::json::Value{"vulkan-translucent-rounded-rect"});
     return r;
 }
 

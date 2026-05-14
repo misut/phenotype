@@ -1,6 +1,6 @@
 # Examples Coverage
 
-Status: current coverage contract for `origin/main` at `9b042bf`.
+Status: current coverage contract for `origin/main` at `fdb2b47`.
 
 The examples under `examples/` are the local acceptance surface for phenotype.
 They are not all equivalent: some are compact widget showcases, some are dense
@@ -236,7 +236,7 @@ Gaps:
 | `frame.bmp` artifact | no | yes | yes | yes |
 | platform diagnostics | no | yes | yes | yes |
 | remote image diagnostics | no | yes | yes | Android local/asset only |
-| material/glass diagnostics | semantic fallback | macOS sampled backdrop + semantic fallback metadata | semantic fallback | semantic fallback |
+| material/glass diagnostics | empty runtime contract + semantic fallback | macOS sampled backdrop + resolved runtime plans | resolved runtime fallback plans | resolved runtime fallback plans |
 
 Gaps:
 
@@ -247,12 +247,14 @@ Gaps:
 - `tools/verify_artifact_bundle.py` validates the common schema, semantic tree,
   disabled semantic state, material kind/fallback metadata, runtime viewport,
   platform diagnostics, backend runtime detail assertions, frame file, optional
-  pixel-region contrast/color checks, and reusable JSON manifests.
+  pixel-region contrast/color checks, resolved material plan schema, failure
+  summaries, and reusable JSON manifests.
   `tools/verify_glass_showcase_artifact.sh` is the material showcase gate and
   runs in the macOS native CI job.
 - Material surfaces render a macOS sampled-backdrop material path when the
-  previous frame capture is ready; unsupported backends consume the same
-  `MaterialRect` command as a documented translucent fallback.
+  previous frame capture is ready; Windows and Android consume the same
+  `MaterialRect` command as deterministic translucent fallback and still write
+  `renderer.material_plans[]` with fallback path/pass metadata.
 - Android has a local device/emulator contract runner via
   `mise run android:contract`; CI wiring remains a separate policy decision.
 
@@ -291,7 +293,7 @@ Current status by example:
 | Example | Expected artifact route | Current gap |
 |---|---|---|
 | `examples/native` | `mise exec -- exon build`, then `PHENOTYPE_ARTIFACT_DIR=/tmp/phenotype-native-startup PHENOTYPE_ARTIFACT_EXIT=1 .exon/debug/native` | Verified by `tools/verify_artifact_bundle.py`; scenario-specific pixel-region checks can be added as needed |
-| `examples/glass_showcase` | Same environment hook with `.exon/debug/glass_showcase` after the material scene startup frame renders | Verifies all public material kinds, macOS material capability, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; enforced by the macOS native CI job |
+| `examples/glass_showcase` | Same environment hook with `.exon/debug/glass_showcase` after the material scene startup frame renders | Verifies all public material kinds, macOS material capability, resolved material plan schema, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; enforced by the macOS native CI job |
 | `examples/flight_board` | Same environment hook after the dashboard startup frame renders | Verified by `tools/verify_artifact_bundle.py`; scenario-specific label/role assertions can be added as needed |
 | `examples/workbook` | Same environment hook after the workbook startup frame renders | Verified by `tools/verify_artifact_bundle.py`; scenario-specific label/role assertions can be added as needed |
 | `examples/android` | `mise run android:contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | CI device/emulator wiring remains future work |

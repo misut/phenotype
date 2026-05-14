@@ -1083,6 +1083,90 @@ void test_material_props_invalidate_diff_cache() {
     std::puts("PASS: material prop changes invalidate diff/paint cache");
 }
 
+void test_material_planner_backdrop_and_fallback_paths() {
+    Theme theme{};
+    auto style = material_style_for_kind(MaterialKind::Regular, theme);
+    MaterialRequest request{
+        style,
+        MaterialGeometry{12.0f, 20.0f, 240.0f, 96.0f, 10.0f},
+    };
+
+    MaterialEnvironment fallback_env{};
+    fallback_env.capabilities.material_surfaces = true;
+    fallback_env.render_target.width = 520;
+    fallback_env.render_target.height = 760;
+    fallback_env.render_target.scale = 2.0f;
+    auto fallback_plan = plan_material_surface(request, fallback_env);
+    assert(fallback_plan.kind == MaterialKind::Regular);
+    assert(fallback_plan.fallback());
+    assert(!fallback_plan.backdrop_sampling);
+    assert(fallback_plan.fallback_path == MaterialFallbackPath::UnsupportedBackend);
+    assert(fallback_plan.blur_radius == 0.0f);
+    assert(std::string(fallback_plan.primary_pass.name)
+           == "translucent-rounded-rect");
+    assert(fallback_plan.primary_pass.active);
+    assert(!fallback_plan.primary_pass.requires_backdrop);
+    assert(fallback_plan.resource_budget.deterministic_fallback);
+    assert(std::string(fallback_plan.verifier.likely_layer)
+           == "material-fallback-pass");
+
+    MaterialEnvironment glass_env = fallback_env;
+    glass_env.capabilities.material_backdrop_blur = true;
+    glass_env.capabilities.shader_blur = true;
+    glass_env.capabilities.frame_history = true;
+    glass_env.backdrop.available = true;
+    glass_env.backdrop.stable = true;
+    glass_env.backdrop.source = "previous-presented-frame";
+    auto glass_plan = plan_material_surface(request, glass_env);
+    assert(!glass_plan.fallback());
+    assert(glass_plan.backdrop_sampling);
+    assert(glass_plan.blur_radius >= 20.0f);
+    assert(glass_plan.saturation > 1.0f);
+    assert(glass_plan.edge_highlight > 0.0f);
+    assert(glass_plan.shadow_alpha > 0.0f);
+    assert(std::string(glass_plan.primary_pass.name)
+           == "backdrop-sample-blur");
+    assert(glass_plan.primary_pass.active);
+    assert(glass_plan.primary_pass.requires_backdrop);
+    assert(glass_plan.primary_pass.sample_taps == glass_plan.sample_taps);
+    assert(std::string(glass_plan.verifier.likely_layer)
+           == "material-blur-pass");
+
+    glass_env.capabilities.reduce_transparency = true;
+    auto reduced_plan = plan_material_surface(request, glass_env);
+    assert(reduced_plan.fallback());
+    assert(reduced_plan.fallback_path == MaterialFallbackPath::ReducedTransparency);
+    assert(!reduced_plan.backdrop_sampling);
+    assert(reduced_plan.noise_opacity == 0.0f);
+    assert(std::string(reduced_plan.primary_pass.name)
+           == "translucent-rounded-rect");
+
+    MaterialEnvironment budget_env = glass_env;
+    budget_env.capabilities.reduce_transparency = false;
+    budget_env.quality.max_blur_radius = 12.0f;
+    budget_env.quality.max_sample_taps = 7;
+    budget_env.quality.allow_noise = false;
+    budget_env.quality.allow_shadow = false;
+    auto budget_plan = plan_material_surface(request, budget_env);
+    assert(budget_plan.blur_radius == 12.0f);
+    assert(budget_plan.sample_taps == 7);
+    assert(budget_plan.primary_pass.sample_taps == 7);
+    assert(budget_plan.noise_opacity == 0.0f);
+    assert(budget_plan.shadow_alpha == 0.0f);
+    assert(budget_plan.shadow_radius == 0.0f);
+    assert(budget_plan.resource_budget.max_blur_radius == 12.0f);
+    assert(budget_plan.resource_budget.max_sample_taps == 7);
+
+    MaterialRequest invalid_request = request;
+    invalid_request.geometry.w = 0.0f;
+    auto invalid_plan = plan_material_surface(invalid_request, glass_env);
+    assert(invalid_plan.fallback());
+    assert(invalid_plan.fallback_path == MaterialFallbackPath::InvalidGeometry);
+    assert(!invalid_plan.primary_pass.active);
+
+    std::puts("PASS: material planner resolves backdrop and fallback paths");
+}
+
 void test_material_surface_emits_material_rect_command() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -2008,6 +2092,7 @@ int main() {
     test_frame_skip_on_identical_cmd_buffer();
     test_paint_only_props_invalidate_diff_cache();
     test_material_props_invalidate_diff_cache();
+    test_material_planner_backdrop_and_fallback_paths();
     test_material_surface_emits_material_rect_command();
     test_radio_paint_cache_stale_descendant_after_subtree_blit();
     test_row_cross_align_center_default();

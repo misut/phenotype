@@ -3,6 +3,7 @@ module;
 #include <filesystem>
 #include <optional>
 #include <string>
+#include <utility>
 #include <variant>
 #include <vector>
 #endif
@@ -134,7 +135,13 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot stub_debug_capabilities()
 }
 
 inline json::Value stub_platform_runtime_details_json() {
-    return json::Value{json::Object{}};
+    json::Object runtime;
+    runtime.emplace(
+        "renderer",
+        json::Value{
+            ::phenotype::diag::detail::empty_material_renderer_contract(
+                "stub-semantic-material-fallback")});
+    return json::Value{std::move(runtime)};
 }
 
 inline std::string stub_snapshot_json() {

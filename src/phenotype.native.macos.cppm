@@ -53,6 +53,7 @@ import json;
 import phenotype;
 import phenotype.commands;
 import phenotype.diag;
+import phenotype.material;
 import phenotype.state;
 import phenotype.native.platform;
 import phenotype.native.shell;
@@ -1328,6 +1329,10 @@ struct MaterialInstanceGPU {
     float tint[4]{};
     // radius, blur radius, opacity, kind
     float params[4]{};
+    // saturation, luminance floor, luminance gain, edge highlight
+    float optics[4]{};
+    // edge width, shadow alpha, shadow radius, noise opacity
+    float effects[4]{};
 };
 
 // Per-vertex GPU layout for the triangle pipeline (FillPath fast path).
@@ -1636,6 +1641,7 @@ struct FrameScratch {
     std::vector<ParsedTextRun> text_runs;
     std::vector<PendingImageCmd> images;
     std::vector<std::string> overlay_text_storage;
+    std::vector<MaterialRuntimeRecord> material_records;
 
     // Per-FillPath scratch buffers, reused across every Cmd::FillPath
     // decode in a single frame. CAD HATCH-heavy content (e.g.
@@ -1668,6 +1674,7 @@ struct FrameScratch {
         text_instances.clear();
         overlay_text_instances.clear();
         overlay_text_storage.clear();
+        material_records.clear();
         overlay_text_first = 0;
         overlay_text_count = 0;
     }
@@ -1811,24 +1818,46 @@ inline void append_color_instance(std::vector<ColorInstanceGPU>& out,
 }
 
 inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
-                                     float x, float y, float w, float h,
-                                     float radius, unsigned int kind,
-                                     float opacity, float blur_radius,
-                                     Color tint) {
+                                     MaterialPlan const& plan) {
     MaterialInstanceGPU inst{};
-    inst.rect[0] = x;
-    inst.rect[1] = y;
-    inst.rect[2] = w;
-    inst.rect[3] = h;
-    inst.tint[0] = tint.r / 255.0f;
-    inst.tint[1] = tint.g / 255.0f;
-    inst.tint[2] = tint.b / 255.0f;
-    inst.tint[3] = tint.a / 255.0f;
-    inst.params[0] = radius;
-    inst.params[1] = blur_radius;
-    inst.params[2] = opacity;
-    inst.params[3] = static_cast<float>(kind);
+    inst.rect[0] = plan.geometry.x;
+    inst.rect[1] = plan.geometry.y;
+    inst.rect[2] = plan.geometry.w;
+    inst.rect[3] = plan.geometry.h;
+    inst.tint[0] = plan.tint.r / 255.0f;
+    inst.tint[1] = plan.tint.g / 255.0f;
+    inst.tint[2] = plan.tint.b / 255.0f;
+    inst.tint[3] = plan.tint.a / 255.0f;
+    inst.params[0] = plan.geometry.radius;
+    inst.params[1] = plan.blur_radius;
+    inst.params[2] = plan.opacity;
+    inst.params[3] = static_cast<float>(plan.kind);
+    inst.optics[0] = plan.saturation;
+    inst.optics[1] = plan.luminance_floor;
+    inst.optics[2] = plan.luminance_gain;
+    inst.optics[3] = plan.edge_highlight;
+    inst.effects[0] = plan.edge_width;
+    inst.effects[1] = plan.shadow_alpha;
+    inst.effects[2] = plan.shadow_radius;
+    inst.effects[3] = plan.noise_opacity;
     out.push_back(inst);
+}
+
+inline void append_material_fallback_instance(std::vector<ColorInstanceGPU>& out,
+                                              MaterialPlan const& plan) {
+    append_color_instance(
+        out,
+        plan.geometry.x,
+        plan.geometry.y,
+        plan.geometry.w,
+        plan.geometry.h,
+        plan.tint.r / 255.0f,
+        plan.tint.g / 255.0f,
+        plan.tint.b / 255.0f,
+        plan.tint.a / 255.0f,
+        plan.geometry.radius,
+        0.0f,
+        2.0f);
 }
 
 inline void material_instances_to_fallback(FrameScratch& scratch) {
@@ -2076,6 +2105,7 @@ inline std::filesystem::path resolve_image_path(std::string const& url) {
 
 inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                                   float line_height_ratio,
+                                  MaterialEnvironment const& material_env,
                                   FrameScratch& scratch,
                                   std::vector<HitRegionCmd>& hit_regions,
                                   double& cr, double& cg,
@@ -2088,10 +2118,12 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
     ca = 1.0;
 
     CommandReader reader{buf, buf + len};
+    std::uint32_t command_index = 0;
     while (reader.cur < reader.end) {
         unsigned int raw_cmd = 0;
         if (!reader.read_u32(raw_cmd))
             return false;
+        auto const current_command_index = command_index++;
 
         switch (static_cast<Cmd>(raw_cmd)) {
             case Cmd::Clear: {
@@ -2169,16 +2201,35 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     || !reader.read_f32(blur_radius)
                     || !reader.read_u32(packed))
                     return false;
+                auto material_env_for_command = material_env;
+                material_env_for_command.debug_seed.node =
+                    current_command_index;
+                auto plan = plan_material_surface(
+                    material_request_for_command(
+                        material_kind_from_wire(kind),
+                        opacity,
+                        blur_radius,
+                        unpack_color(packed),
+                        MaterialGeometry{x, y, w, h, radius},
+                        ::phenotype::detail::g_app.theme),
+                    material_env_for_command);
+                scratch.material_records.push_back(
+                    MaterialRuntimeRecord{plan, current_command_index});
                 auto& cur = scratch.batches.back();
                 if (!cur.tri_vertices.empty() || !cur.colors.empty()
                     || !cur.materials.empty() || !cur.arcs.empty()
                     || !cur.images.empty() || !cur.texts.empty()) {
                     open_same_scissor_batch(scratch);
                 }
-                append_material_instance(
-                    scratch.batches.back().materials,
-                    x, y, w, h, radius, kind, opacity, blur_radius,
-                    unpack_color(packed));
+                if (plan.backdrop_sampling && !plan.fallback()) {
+                    append_material_instance(
+                        scratch.batches.back().materials,
+                        plan);
+                } else {
+                    append_material_fallback_instance(
+                        scratch.batches.back().colors,
+                        plan);
+                }
                 open_same_scissor_batch(scratch);
                 break;
             }
@@ -3502,12 +3553,16 @@ struct MaterialVsOut {
     float2 screen_uv;
     float4 tint;
     float4 params;
+    float4 optics;
+    float4 effects;
 };
 
 struct MaterialInstance {
     float4 rect;
     float4 tint;
     float4 params;
+    float4 optics;
+    float4 effects;
 };
 
 vertex MaterialVsOut vs_material(
@@ -3533,6 +3588,8 @@ vertex MaterialVsOut vs_material(
     out.screen_uv = float2(px / u.viewport.x, py / u.viewport.y);
     out.tint = inst.tint;
     out.params = inst.params;
+    out.optics = inst.optics;
+    out.effects = inst.effects;
     return out;
 }
 
@@ -3542,6 +3599,8 @@ fragment float4 fs_material(
     sampler samp [[sampler(0)]]
 ) {
     float radius = in.params.x;
+    float edge_width = max(in.effects.x, 0.5);
+    float signed_edge_distance = 1024.0;
     float edge_alpha = 1.0;
     if (radius > 0.0) {
         float2 half_size = in.rect_size * 0.5;
@@ -3549,6 +3608,7 @@ fragment float4 fs_material(
         float d = length(max(p, float2(0.0))) - radius;
         if (d > 0.5) discard_fragment();
         edge_alpha = clamp(0.5 - d, 0.0, 1.0);
+        signed_edge_distance = abs(d);
     }
 
     float2 texel = 1.0 / float2(float(backdrop.get_width()),
@@ -3570,9 +3630,27 @@ fragment float4 fs_material(
         }
     }
     float4 blurred = acc / weight_sum;
+    float luma = dot(blurred.rgb, float3(0.2126, 0.7152, 0.0722));
+    float saturation = max(in.optics.x, 0.0);
+    float luminance_floor = clamp(in.optics.y, 0.0, 1.0);
+    float luminance_gain = max(in.optics.z, 0.0);
+    float3 backdrop_rgb = mix(float3(luma), blurred.rgb, saturation);
+    backdrop_rgb = clamp(max(backdrop_rgb * luminance_gain,
+                            float3(luminance_floor)), 0.0, 1.0);
     float tint_strength = clamp(in.tint.a, 0.0, 1.0);
     float opacity = clamp(in.params.z, 0.0, 1.0);
-    float3 rgb = mix(blurred.rgb, in.tint.rgb, tint_strength);
+    float3 rgb = mix(backdrop_rgb, in.tint.rgb, tint_strength);
+    float edge = 1.0 - smoothstep(0.0, edge_width, signed_edge_distance);
+    rgb += float3(edge * clamp(in.optics.w, 0.0, 1.0));
+    float shadow = smoothstep(0.45, 1.0, in.local_pos.y / max(in.rect_size.y, 1.0))
+        * clamp(in.effects.y, 0.0, 0.4);
+    rgb *= (1.0 - shadow);
+    float noise = fract(sin(dot(
+        in.screen_uv * float2(float(backdrop.get_width()),
+                              float(backdrop.get_height())),
+        float2(12.9898, 78.233))) * 43758.5453);
+    rgb += (noise - 0.5) * clamp(in.effects.w, 0.0, 0.05);
+    rgb = clamp(rgb, 0.0, 1.0);
     float alpha = max(opacity, tint_strength) * edge_alpha;
     return float4(rgb, alpha);
 }
@@ -3812,6 +3890,7 @@ struct RendererState {
     int drawable_height = 0;
     int last_render_width = 0;
     int last_render_height = 0;
+    std::uint32_t material_frame_sequence = 0;
     bool last_frame_available = false;
     bool initialized = false;
 };
@@ -5891,18 +5970,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     double cb = 0.98;
     double ca = 1.0;
     (void)process_completed_images();
-    auto decode_started = metrics::detail::now_ns();
-    if (!decode_frame_commands(
-            buf, len, line_height_ratio,
-            g_renderer.scratch, g_renderer.hit_regions,
-            cr, cg, cb, ca)) {
-        pool->release();
-        return;
-    }
-    metrics::inst::native_phase_duration.record(
-        metrics::detail::now_ns() - decode_started,
-        native_attrs("command_decode"));
-
     int fbw = 0;
     int fbh = 0;
     glfwGetFramebufferSize(g_renderer.window, &fbw, &fbh);
@@ -5912,6 +5979,42 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
 
     sync_drawable_size(fbw, fbh);
+    bool const backdrop_ready =
+        g_renderer.material_pipeline
+        && g_renderer.debug_capture_texture
+        && g_renderer.last_frame_available
+        && g_renderer.debug_capture_width == fbw
+        && g_renderer.debug_capture_height == fbh;
+    MaterialEnvironment material_env{};
+    material_env.capabilities.material_surfaces = true;
+    material_env.capabilities.material_backdrop_blur =
+        g_renderer.material_pipeline != nullptr;
+    material_env.capabilities.shader_blur = g_renderer.material_pipeline != nullptr;
+    material_env.capabilities.frame_history = g_renderer.last_frame_available;
+    material_env.backdrop.available = backdrop_ready;
+    material_env.backdrop.stable = backdrop_ready;
+    material_env.backdrop.source = backdrop_ready
+        ? "previous-presented-frame"
+        : "none";
+    material_env.render_target.width = fbw;
+    material_env.render_target.height = fbh;
+    material_env.render_target.scale = frame_scale;
+    material_env.render_target.pixel_format = "bgra8unorm";
+    material_env.debug_seed.frame = ++g_renderer.material_frame_sequence;
+    material_env.quality.max_blur_radius = 36.0f;
+    material_env.quality.max_sample_taps = 25;
+    auto decode_started = metrics::detail::now_ns();
+    if (!decode_frame_commands(
+            buf, len, line_height_ratio,
+            material_env,
+            g_renderer.scratch, g_renderer.hit_regions,
+            cr, cg, cb, ca)) {
+        pool->release();
+        return;
+    }
+    metrics::inst::native_phase_duration.record(
+        metrics::detail::now_ns() - decode_started,
+        native_attrs("command_decode"));
 
     auto image_started = metrics::detail::now_ns();
     prepare_image_instances(text_scale);
@@ -5931,14 +6034,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         metrics::detail::now_ns() - text_started,
         native_attrs("text_prepare"));
 
-    bool const can_render_material =
-        g_renderer.material_pipeline
-        && g_renderer.debug_capture_texture
-        && g_renderer.last_frame_available
-        && g_renderer.debug_capture_width == fbw
-        && g_renderer.debug_capture_height == fbh;
-    if (!can_render_material)
-        material_instances_to_fallback(g_renderer.scratch);
     finalize_batches(g_renderer.scratch);
 
     int winw = 0;
@@ -6341,6 +6436,7 @@ inline void renderer_shutdown() {
     g_renderer.debug_capture_height = 0;
     g_renderer.last_render_width = 0;
     g_renderer.last_render_height = 0;
+    g_renderer.material_frame_sequence = 0;
     g_renderer.last_frame_available = false;
     g_renderer.window = nullptr;
     g_renderer.initialized = false;
@@ -6823,6 +6919,126 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities(
     };
 }
 
+inline json::Value material_plan_runtime_json(MaterialRuntimeRecord const& record) {
+    auto const& plan = record.plan;
+    json::Object geometry;
+    geometry.emplace("x", json::Value{plan.geometry.x});
+    geometry.emplace("y", json::Value{plan.geometry.y});
+    geometry.emplace("w", json::Value{plan.geometry.w});
+    geometry.emplace("h", json::Value{plan.geometry.h});
+    geometry.emplace("radius", json::Value{plan.geometry.radius});
+
+    json::Object tint;
+    tint.emplace("r", json::Value{static_cast<std::int64_t>(plan.tint.r)});
+    tint.emplace("g", json::Value{static_cast<std::int64_t>(plan.tint.g)});
+    tint.emplace("b", json::Value{static_cast<std::int64_t>(plan.tint.b)});
+    tint.emplace("a", json::Value{static_cast<std::int64_t>(plan.tint.a)});
+
+    json::Object verifier;
+    verifier.emplace(
+        "require_backdrop_source",
+        json::Value{plan.verifier.require_backdrop_source});
+    verifier.emplace(
+        "require_edge_highlight",
+        json::Value{plan.verifier.require_edge_highlight});
+    verifier.emplace(
+        "min_luma_delta",
+        json::Value{plan.verifier.min_luma_delta});
+    verifier.emplace(
+        "min_unique_colors",
+        json::Value{static_cast<std::int64_t>(plan.verifier.min_unique_colors)});
+    verifier.emplace("region_name", json::Value{plan.verifier.region_name});
+    verifier.emplace("likely_layer", json::Value{plan.verifier.likely_layer});
+
+    json::Object primary_pass;
+    primary_pass.emplace("name", json::Value{plan.primary_pass.name});
+    primary_pass.emplace("active", json::Value{plan.primary_pass.active});
+    primary_pass.emplace(
+        "requires_backdrop",
+        json::Value{plan.primary_pass.requires_backdrop});
+    primary_pass.emplace(
+        "sample_taps",
+        json::Value{static_cast<std::int64_t>(plan.primary_pass.sample_taps)});
+    primary_pass.emplace(
+        "likely_layer",
+        json::Value{plan.primary_pass.likely_layer});
+
+    json::Object resource_budget;
+    resource_budget.emplace(
+        "max_blur_radius",
+        json::Value{plan.resource_budget.max_blur_radius});
+    resource_budget.emplace(
+        "max_sample_taps",
+        json::Value{
+            static_cast<std::int64_t>(plan.resource_budget.max_sample_taps)});
+    resource_budget.emplace(
+        "bounded_texture_copy",
+        json::Value{plan.resource_budget.bounded_texture_copy});
+    resource_budget.emplace(
+        "deterministic_fallback",
+        json::Value{plan.resource_budget.deterministic_fallback});
+
+    json::Array passes;
+    {
+        json::Object pass;
+        pass.emplace("name", json::Value{plan.primary_pass.name});
+        pass.emplace("active", json::Value{plan.primary_pass.active});
+        pass.emplace(
+            "requires_backdrop",
+            json::Value{plan.primary_pass.requires_backdrop});
+        pass.emplace("likely_layer", json::Value{plan.primary_pass.likely_layer});
+        pass.emplace(
+            "sample_taps",
+            json::Value{
+                static_cast<std::int64_t>(plan.primary_pass.sample_taps)});
+        passes.push_back(json::Value{std::move(pass)});
+    }
+
+    json::Object out;
+    out.emplace(
+        "command_index",
+        json::Value{static_cast<std::int64_t>(record.command_index)});
+    out.emplace("kind", json::Value{material_kind_name(plan.kind)});
+    out.emplace("plan_id", json::Value{plan.plan_id});
+    out.emplace("geometry", json::Value{std::move(geometry)});
+    out.emplace("opacity", json::Value{plan.opacity});
+    out.emplace("blur_radius", json::Value{plan.blur_radius});
+    out.emplace("tint", json::Value{std::move(tint)});
+    out.emplace("saturation", json::Value{plan.saturation});
+    out.emplace("luminance_floor", json::Value{plan.luminance_floor});
+    out.emplace("luminance_gain", json::Value{plan.luminance_gain});
+    out.emplace("edge_highlight", json::Value{plan.edge_highlight});
+    out.emplace("edge_width", json::Value{plan.edge_width});
+    out.emplace("noise_opacity", json::Value{plan.noise_opacity});
+    out.emplace("shadow_alpha", json::Value{plan.shadow_alpha});
+    out.emplace("shadow_radius", json::Value{plan.shadow_radius});
+    out.emplace("backdrop_sampling", json::Value{plan.backdrop_sampling});
+    out.emplace("fallback", json::Value{plan.fallback()});
+    out.emplace(
+        "fallback_path",
+        json::Value{material_fallback_path_name(plan.fallback_path)});
+    out.emplace("fallback_reason", json::Value{plan.fallback_reason});
+    out.emplace("contrast_intent", json::Value{plan.contrast_intent});
+    out.emplace(
+        "debug_seed",
+        json::Value{static_cast<std::int64_t>(plan.debug_seed)});
+    out.emplace(
+        "sample_taps",
+        json::Value{static_cast<std::int64_t>(plan.sample_taps)});
+    out.emplace("primary_pass", json::Value{std::move(primary_pass)});
+    out.emplace("resource_budget", json::Value{std::move(resource_budget)});
+    out.emplace("verifier", json::Value{std::move(verifier)});
+    out.emplace("passes", json::Value{std::move(passes)});
+    return json::Value{std::move(out)};
+}
+
+inline json::Array material_plans_runtime_json() {
+    json::Array plans;
+    for (auto const& record : g_renderer.scratch.material_records)
+        plans.push_back(material_plan_runtime_json(record));
+    return plans;
+}
+
 inline json::Object macos_renderer_runtime_json() {
     json::Object renderer;
     renderer.emplace("initialized", json::Value{g_renderer.initialized});
@@ -6855,6 +7071,14 @@ inline json::Object macos_renderer_runtime_json() {
     renderer.emplace(
         "readback_buffer_ready",
         json::Value{g_renderer.frame_readback_buf != nullptr});
+    renderer.emplace(
+        "material_plan_count",
+        json::Value{
+            static_cast<std::int64_t>(
+                g_renderer.scratch.material_records.size())});
+    renderer.emplace(
+        "material_plans",
+        json::Value{material_plans_runtime_json()});
     return renderer;
 }
 
