@@ -336,6 +336,27 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["fallback_reasons"],
             {"backend reports no material backdrop blur support": 1})
 
+    def test_fallback_reason_summary_failure_points_to_material_plan(self) -> None:
+        manifest = {
+            "require_material_plan_summary": {
+                "fallback_reasons": {
+                    "quality policy backdrop pixel budget exceeded": 1,
+                },
+            },
+        }
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material plan summary fallback_reasons matches")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans#summary"
+            ".fallback_reasons")
+        self.assertEqual(failure["likely_layer"], "material-plan")
+        self.assertIn("MaterialPlan.fallback_reason", failure["hint"])
+
     def test_non_fallback_reason_failure_is_llm_actionable(self) -> None:
         plan = material_plan()
         plan["fallback"] = False
