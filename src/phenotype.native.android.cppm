@@ -6253,6 +6253,15 @@ inline void view(State const& s) {
                 ::phenotype::widget::text(
                     "Tap the buttons, or Tab to focus and press Enter / Space.");
             });
+            ::phenotype::layout::spacer(12);
+            ::phenotype::layout::material_surface(
+                ::phenotype::MaterialKind::Regular,
+                [&] {
+                    ::phenotype::widget::text("Android Material Fallback");
+                    ::phenotype::widget::text(
+                        "Vulkan records the resolved material plan and "
+                        "uses the deterministic translucent fallback pass.");
+                });
         },
         [] {
             ::phenotype::widget::text(

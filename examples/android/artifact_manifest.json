@@ -6,9 +6,25 @@
   "require_labels": [
     "phenotype \u00b7 stage 7",
     "Core Widgets",
+    "Android Material Fallback",
     "Stage 7: debug plane + resume + scroll."
   ],
   "require_roles": [
-    "button"
+    "button",
+    "material"
+  ],
+  "require_material_kinds": [
+    "regular"
+  ],
+  "require_material_plans": true,
+  "require_runtime_details": [
+    {
+      "path": "renderer.material_pipeline_ready",
+      "equals": false
+    },
+    {
+      "path": "renderer.material_backdrop_source_ready",
+      "equals": false
+    }
   ]
 }
