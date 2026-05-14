@@ -179,6 +179,9 @@ actual taps required by that resolved pass, so deterministic fallback plans use
 records the pure planner's resolved sampling/noise/shadow switches and quality
 limits, while `resource_budget` records the clamped blur/sample-tap limits and
 whether texture copies and fallback behavior are bounded.
+Artifact gates can separately bound actual plan taps and resource-budget taps,
+which lets fallback scenes require zero executed taps while preserving the
+backend's allowed quality budget in the same artifact.
 If the quality policy disables backdrop sampling or reduces the blur/tap
 budget to zero, the pure planner returns `fallback_path: quality-policy`
 instead of leaving the backend to infer that downgrade.

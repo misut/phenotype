@@ -483,6 +483,7 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
         raise ValueError("require_material_resource_bounds must be an object")
     number_fields = {
         "max_plan_blur_radius_lte",
+        "max_plan_sample_taps_lte",
         "max_budget_blur_radius_lte",
         "max_sample_taps_lte",
         "max_pass_count_lte",
@@ -986,6 +987,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "verifier_profiles": {},
         "resource_bounds": {
             "max_plan_blur_radius": 0.0,
+            "max_plan_sample_taps": 0,
             "max_budget_blur_radius": 0.0,
             "max_sample_taps": 0,
             "max_pass_count": 0,
@@ -1122,6 +1124,11 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             min_value=0.0,
             likely_layer=likely_layer,
             hint="Material sample taps should be an explicit bounded integer.")
+        if isinstance(sample_taps, (int, float)):
+            bounds = summary["resource_bounds"]
+            bounds["max_plan_sample_taps"] = max(
+                int(bounds["max_plan_sample_taps"]),
+                int(sample_taps))
 
         geometry = check_object_field(
             report,
@@ -1624,6 +1631,7 @@ def check_material_resource_bounds_requirements(
     base_path = "debug.platform_runtime.details.renderer.material_plans#resource_bounds"
     field_map = {
         "max_plan_blur_radius_lte": "max_plan_blur_radius",
+        "max_plan_sample_taps_lte": "max_plan_sample_taps",
         "max_budget_blur_radius_lte": "max_budget_blur_radius",
         "max_sample_taps_lte": "max_sample_taps",
         "max_pass_count_lte": "max_pass_count",
