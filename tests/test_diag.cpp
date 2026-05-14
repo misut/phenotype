@@ -74,6 +74,35 @@ json::Object const* find_semantic_child(json::Array const& arr,
     return nullptr;
 }
 
+json::Object const* find_semantic_descendant(json::Object const& obj,
+                                             std::string_view role,
+                                             std::string_view label = {}) {
+    auto role_it = obj.find("role");
+    if (role_it != obj.end() && role_it->second.is_string()
+        && role_it->second.as_string() == role) {
+        if (label.empty())
+            return &obj;
+        auto label_it = obj.find("label");
+        if (label_it != obj.end() && label_it->second.is_string()
+            && label_it->second.as_string() == label) {
+            return &obj;
+        }
+    }
+
+    auto children_it = obj.find("children");
+    if (children_it == obj.end() || !children_it->second.is_array())
+        return nullptr;
+    for (auto const& child : children_it->second.as_array()) {
+        if (!child.is_object())
+            continue;
+        if (auto const* found =
+                find_semantic_descendant(child.as_object(), role, label)) {
+            return found;
+        }
+    }
+    return nullptr;
+}
+
 int count_semantic_role(json::Array const& arr, std::string_view role) {
     int count = 0;
     for (auto const& value : arr) {
@@ -589,6 +618,44 @@ void test_material_surface_semantic_debug_fields() {
     assert(find_semantic_child(material_children, "button", "Action") != nullptr);
 }
 
+void test_overlay_semantic_debug_nodes_are_screen_fixed() {
+    metrics::reset_all();
+    log::set_level(log::Severity::info);
+#if !defined(__wasi__) && !defined(__ANDROID__)
+    run<DiagState, DebugPlaneMsg>(diag_host,
+#else
+    run<DiagState, DebugPlaneMsg>(
+#endif
+        [](DiagState const&) {
+            layout::column([&] {
+                widget::text("Main content");
+                layout::spacer(900.0f);
+            });
+            layout::overlay([&] {
+                layout::spacer(32.0f);
+                layout::material_surface(MaterialKind::Thin, [&] {
+                    widget::text("Overlay glass");
+                    widget::button<DebugPlaneMsg>("Overlay action", DebugPlaneNoop{});
+                });
+            });
+        },
+        [](DiagState&, DebugPlaneMsg) {});
+
+    detail::set_scroll_y(640.0f);
+    auto parsed = json::parse(detail::serialize_diag_snapshot_with_debug());
+    auto const& semantic_tree =
+        parsed.as_object().at("debug").as_object().at("semantic_tree").as_object();
+    auto const& children = semantic_tree.at("children").as_array();
+
+    auto const* material = find_semantic_child(children, "material");
+    assert(material != nullptr);
+    assert(material->at("visible").as_bool() == true);
+    auto const& material_debug = material->at("material").as_object();
+    assert(material_debug.at("kind").as_string() == "thin");
+    assert(find_semantic_descendant(*material, "text", "Overlay glass") != nullptr);
+    assert(find_semantic_descendant(*material, "button", "Overlay action") != nullptr);
+}
+
 void test_material_runtime_record_json_contract() {
     Theme theme{};
     MaterialEnvironment env{};
@@ -715,6 +782,8 @@ int main() {
     std::printf("PASS: debug plane semantic tree shape + stability\n");
     test_material_surface_semantic_debug_fields();
     std::printf("PASS: material surface semantic debug fields\n");
+    test_overlay_semantic_debug_nodes_are_screen_fixed();
+    std::printf("PASS: overlay semantic debug nodes stay screen fixed\n");
     test_material_runtime_record_json_contract();
     std::printf("PASS: material runtime record JSON contract\n");
 #ifdef __wasi__

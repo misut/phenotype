@@ -5,6 +5,7 @@
   "require_labels": [
     "Glass Material Showcase",
     "Backdrop Test Pattern",
+    "Visible Blur Probe",
     "Material Ramp",
     "Debug Contract"
   ],
@@ -21,20 +22,20 @@
   ],
   "require_material_plans": true,
   "require_material_plan_summary": {
-    "count": 6,
+    "count": 7,
     "fallback": 0,
-    "backdrop_sampling": 6,
+    "backdrop_sampling": 7,
     "fallback_paths": {
-      "none": 6
+      "none": 7
     },
     "kinds": {
       "clear": 1,
-      "thin": 1,
+      "thin": 2,
       "regular": 2,
       "thick": 2
     },
     "pass_names": {
-      "backdrop-sample-blur": 6
+      "backdrop-sample-blur": 7
     }
   },
   "require_material_resource_bounds": {
@@ -63,14 +64,14 @@
   "pixel_regions": [
     {
       "name": "backdrop-pattern",
-      "rect": [0.08, 0.18, 0.7, 0.18],
+      "rect": [0.08, 0.52, 0.68, 0.24],
       "min_luma_delta": 18.0,
       "min_unique_colors": 8
     },
     {
-      "name": "material-ramp",
-      "rect": [0.08, 0.44, 0.74, 0.22],
-      "min_luma_delta": 10.0,
+      "name": "visible-blur-probe",
+      "rect": [0.26, 0.58, 0.48, 0.09],
+      "min_luma_delta": 8.0,
       "min_unique_colors": 4
     }
   ]

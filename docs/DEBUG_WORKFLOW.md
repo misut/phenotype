@@ -30,6 +30,9 @@ The common snapshot schema remains the source of truth for all platforms:
 
 - `input_debug` reports the last input event, caret geometry, and composition state.
 - `semantic_tree` serializes the same accessibility-oriented semantic tree on every target.
+  Root-level overlays are included in paint/focus order and keep screen-fixed
+  visibility semantics, so dialogs, popovers, and material probes cannot vanish
+  from artifact debugging when the document underneath is scrolled.
 - `platform_runtime` always includes the shared viewport/scroll/focus state plus a
   platform-specific `details` object.
 
