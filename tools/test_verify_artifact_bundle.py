@@ -480,6 +480,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "decision_can_sample_backdrop": 0,
                 "decision_backend_supports_backdrop": 0,
                 "decision_backdrop_source_ready": 0,
+                "decision_reduced_transparency": 0,
                 "decision_increase_contrast": 0,
                 "decision_reduce_motion": 0,
                 "decision_blockers": {"unsupported-backend": 1},
@@ -819,6 +820,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             material_contract["decision_first_blockers"],
             {"unsupported-backend": 1})
+        self.assertEqual(material_contract["decision_reduced_transparency"], 0)
         self.assertEqual(material_contract["decision_increase_contrast"], 0)
         self.assertEqual(material_contract["decision_reduce_motion"], 0)
 

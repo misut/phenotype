@@ -1,7 +1,7 @@
 # Apple Glass GUI Roadmap
 
-Status: implementation baseline for `origin/main` at `9e495ca`
-(`test: improve material summary failure hints`). This includes the pure
+Status: implementation baseline for `origin/main` at `a37d6e1`
+(`chore: run wasi ci on linux`). This includes the pure
 material-planning boundary, macOS sampled-backdrop execution, deterministic
 fallback contracts on non-macOS backends, edge executor telemetry, and the
 artifact verifier gates described below.
@@ -47,6 +47,10 @@ References:
   https://developer.apple.com/documentation/technologyoverviews/adopting-liquid-glass
 - Apple developer guidance, Applying Liquid Glass to custom views:
   https://developer.apple.com/documentation/SwiftUI/Applying-Liquid-Glass-to-custom-views
+- Apple AppKit accessibility display preferences:
+  https://developer.apple.com/documentation/appkit/nsworkspace/accessibilitydisplayshouldreducetransparency
+  https://developer.apple.com/documentation/appkit/nsworkspace/accessibilitydisplayshouldincreasecontrast
+  https://developer.apple.com/documentation/appkit/nsworkspace/accessibilitydisplayshouldreducemotion
 
 ## Current state
 
@@ -129,6 +133,7 @@ accepts immutable inputs:
 - render-target metadata
 - debug seed
 - quality policy
+- accessibility display inputs
 
 The returned `MaterialPlan` describes blur radius, tint, saturation,
 luminance curve, edge highlight, noise/dither, shadow, backdrop sampling,
@@ -139,6 +144,11 @@ an explicit
 sets an unusable blur/tap budget, and when the render target exceeds the
 resolved `max_backdrop_pixels` budget. Backends execute the plan; they do not
 re-decide policy.
+The macOS backend now reads AppKit accessibility display preferences at the
+edge and passes them as immutable planner inputs. Reduce Transparency resolves
+to the deterministic material fallback path, Increase Contrast adjusts opacity
+and luminance legibility in the pure plan, and Reduce Motion disables material
+noise while lowering sampled-backdrop taps.
 
 ### Theme and widgets
 

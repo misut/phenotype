@@ -257,6 +257,9 @@ void test_snapshot_shape() {
     assert(capabilities.contains("platform_diagnostics"));
     assert(capabilities.at("material_surfaces").as_bool() == true);
     assert(capabilities.at("material_backdrop_blur").as_bool() == false);
+    assert(capabilities.at("reduce_transparency").as_bool() == false);
+    assert(capabilities.at("increase_contrast").as_bool() == false);
+    assert(capabilities.at("reduce_motion").as_bool() == false);
 
     auto const& input_debug = debug.at("input_debug").as_object();
     assert(input_debug.contains("event"));
@@ -591,6 +594,9 @@ void test_material_surface_semantic_debug_fields() {
     auto const& capabilities = debug.at("platform_capabilities").as_object();
     assert(capabilities.at("material_surfaces").as_bool() == true);
     assert(capabilities.at("material_backdrop_blur").as_bool() == false);
+    assert(capabilities.at("reduce_transparency").as_bool() == false);
+    assert(capabilities.at("increase_contrast").as_bool() == false);
+    assert(capabilities.at("reduce_motion").as_bool() == false);
 
     auto const& semantic_tree = debug.at("semantic_tree").as_object();
     auto const& children = semantic_tree.at("children").as_array();
@@ -703,6 +709,7 @@ void test_material_runtime_record_json_contract() {
     assert(decision_trace.at("target_ready").as_bool() == true);
     assert(decision_trace.at("backend_supports_backdrop").as_bool() == false);
     assert(decision_trace.at("can_sample_backdrop").as_bool() == false);
+    assert(decision_trace.at("reduced_transparency").as_bool() == false);
     assert(decision_trace.at("increase_contrast").as_bool() == false);
     assert(decision_trace.at("reduce_motion").as_bool() == false);
     assert(decision_trace.at("first_blocker").as_string()

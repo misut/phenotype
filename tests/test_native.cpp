@@ -1605,6 +1605,12 @@ static void test_macos_common_debug_contract_entry_points() {
     assert(renderer.at("initialized").as_bool());
     assert(renderer.at("drawable_width").as_integer() > 0);
     assert(renderer.at("drawable_height").as_integer() > 0);
+    auto const& accessibility =
+        renderer.at("accessibility_display_options").as_object();
+    assert(accessibility.contains("source"));
+    assert(accessibility.contains("reduce_transparency"));
+    assert(accessibility.contains("increase_contrast"));
+    assert(accessibility.contains("reduce_motion"));
     auto const& images = details.at("images").as_object();
     assert(images.at("pending_queue_count").as_integer() == 0);
     assert(images.at("completed_queue_count").as_integer() == 0);
@@ -1648,6 +1654,33 @@ static void test_macos_common_debug_contract_entry_points() {
     std::filesystem::remove_all(bundle_dir);
     clear_composition_for_tests();
     std::puts("PASS: macOS common debug contract entry points");
+}
+
+static void test_macos_accessibility_display_capabilities_follow_env() {
+    char constexpr key[] = "PHENOTYPE_ACCESSIBILITY_DISPLAY";
+    auto const* previous_raw = std::getenv(key);
+    bool const had_previous = previous_raw != nullptr;
+    std::string const previous = previous_raw ? previous_raw : "";
+
+    setenv(key, "reduce-transparency+increase-contrast reduce-motion", 1);
+    auto capabilities = phenotype::native::debug::capabilities();
+    assert(capabilities.platform == "macos");
+    assert(capabilities.reduce_transparency);
+    assert(capabilities.increase_contrast);
+    assert(capabilities.reduce_motion);
+
+    setenv(key, "standard", 1);
+    capabilities = phenotype::native::debug::capabilities();
+    assert(!capabilities.reduce_transparency);
+    assert(!capabilities.increase_contrast);
+    assert(!capabilities.reduce_motion);
+
+    if (had_previous) {
+        setenv(key, previous.c_str(), 1);
+    } else {
+        unsetenv(key);
+    }
+    std::puts("PASS: macOS accessibility display capability override");
 }
 
 static void test_macos_debug_capture_frame_from_rendered_frame() {
@@ -3376,6 +3409,7 @@ int main() {
     test_macos_custom_caret_tracks_rightmost_text_pixel();
     test_macos_scroll_tracking_hides_caret_until_idle();
     test_macos_common_debug_contract_entry_points();
+    test_macos_accessibility_display_capabilities_follow_env();
     test_macos_debug_capture_frame_from_rendered_frame();
     test_default_scroll_delta_fallback();
     test_text_measure_basic();

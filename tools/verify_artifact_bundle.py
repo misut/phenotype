@@ -386,6 +386,8 @@ def material_failure_context(
             "pass_executors")
         material_contract["decision_first_blockers"] = decision_trace.get(
             "first_blockers")
+        material_contract["decision_reduced_transparency"] = (
+            decision_trace.get("reduced_transparency"))
         material_contract["decision_increase_contrast"] = decision_trace.get(
             "increase_contrast")
         material_contract["decision_reduce_motion"] = decision_trace.get(
@@ -801,6 +803,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "decision_can_sample_backdrop",
         "decision_backend_supports_backdrop",
         "decision_backdrop_source_ready",
+        "decision_reduced_transparency",
         "decision_increase_contrast",
         "decision_reduce_motion",
         "decision_blockers",
@@ -828,6 +831,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "decision_can_sample_backdrop",
             "decision_backend_supports_backdrop",
             "decision_backdrop_source_ready",
+            "decision_reduced_transparency",
             "decision_increase_contrast",
             "decision_reduce_motion",
             "verifier_require_backdrop_source",
@@ -1469,6 +1473,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "can_sample_backdrop": 0,
             "backend_supports_backdrop": 0,
             "backdrop_source_ready": 0,
+            "reduced_transparency": 0,
             "increase_contrast": 0,
             "reduce_motion": 0,
             "first_blockers": {},
@@ -1823,6 +1828,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                             "can_sample_backdrop",
                             "backend_supports_backdrop",
                             "backdrop_source_ready",
+                            "reduced_transparency",
                             "increase_contrast",
                             "reduce_motion") and value:
                         trace_summary[key] = int(trace_summary[key]) + 1
@@ -2857,6 +2863,7 @@ def check_material_plan_summary_requirements(
             "decision_can_sample_backdrop",
             "decision_backend_supports_backdrop",
             "decision_backdrop_source_ready",
+            "decision_reduced_transparency",
             "decision_increase_contrast",
             "decision_reduce_motion",
             "verifier_require_backdrop_source",
@@ -2890,6 +2897,7 @@ def check_material_plan_summary_requirements(
                     "decision_can_sample_backdrop",
                     "decision_backend_supports_backdrop",
                     "decision_backdrop_source_ready",
+                    "decision_reduced_transparency",
                     "decision_increase_contrast",
                     "decision_reduce_motion"):
                 decision_summary = summary.get("decision_trace")

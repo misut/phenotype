@@ -97,6 +97,11 @@ The repo-local gate wraps build, startup capture, and manifest verification:
 tools/verify_glass_showcase_artifact.sh
 ```
 
+The gate pins `PHENOTYPE_ACCESSIBILITY_DISPLAY=standard` by default so local or
+runner Accessibility settings cannot turn the showcase into a reduced
+transparency fallback. Override that environment variable when deliberately
+capturing accessibility-response artifacts.
+
 Pull-request CI runs the same gate in the macOS native test job for code
 changes, and a lighter artifact job can run it without root code tests for
 tooling or manifest-only changes. The main-branch push workflow only runs
