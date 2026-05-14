@@ -876,6 +876,69 @@ namespace detail {
         return plans;
     }
 
+    inline json::Value material_runtime_summary_json(
+            MaterialRuntimeSummary const& summary) {
+        json::Object out;
+        out.emplace(
+            "plan_count",
+            json::Value{static_cast<std::int64_t>(summary.plan_count)});
+        out.emplace(
+            "fallback_count",
+            json::Value{static_cast<std::int64_t>(summary.fallback_count)});
+        out.emplace(
+            "backdrop_sampling_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.backdrop_sampling_count)});
+        out.emplace(
+            "total_runtime_passes",
+            json::Value{
+                static_cast<std::int64_t>(summary.total_runtime_passes)});
+        out.emplace(
+            "active_runtime_passes",
+            json::Value{
+                static_cast<std::int64_t>(summary.active_runtime_passes)});
+        out.emplace(
+            "backdrop_runtime_passes",
+            json::Value{
+                static_cast<std::int64_t>(summary.backdrop_runtime_passes)});
+        out.emplace("max_plan_blur_radius",
+                    json::Value{summary.max_plan_blur_radius});
+        out.emplace(
+            "max_plan_sample_taps",
+            json::Value{
+                static_cast<std::int64_t>(summary.max_plan_sample_taps)});
+        out.emplace("max_budget_blur_radius",
+                    json::Value{summary.max_budget_blur_radius});
+        out.emplace(
+            "max_sample_taps",
+            json::Value{
+                static_cast<std::int64_t>(summary.max_sample_taps)});
+        out.emplace(
+            "max_pass_count",
+            json::Value{static_cast<std::int64_t>(summary.max_pass_count)});
+        out.emplace("max_backdrop_pixels",
+                    json::Value{summary.max_backdrop_pixels});
+        out.emplace(
+            "unbounded_texture_copy",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.unbounded_texture_copy)});
+        out.emplace(
+            "non_deterministic_fallback",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.non_deterministic_fallback)});
+        return json::Value{std::move(out)};
+    }
+
+    inline json::Value material_runtime_summary_json(
+            std::vector<MaterialRuntimeRecord> const& records) {
+        MaterialRuntimeSummary summary;
+        for (auto const& record : records)
+            accumulate_material_runtime_summary(summary, record);
+        return material_runtime_summary_json(summary);
+    }
+
     inline json::Object empty_material_renderer_contract(
             std::string_view fallback_policy) {
         json::Object renderer;
@@ -883,6 +946,9 @@ namespace detail {
         renderer.emplace("material_backdrop_source_ready", json::Value{false});
         renderer.emplace("material_plan_count", json::Value{std::int64_t{0}});
         renderer.emplace("material_plans", json::Value{json::Array{}});
+        renderer.emplace(
+            "material_runtime_summary",
+            material_runtime_summary_json(MaterialRuntimeSummary{}));
         renderer.emplace(
             "material_fallback_policy",
             json::Value{std::string(fallback_policy)});

@@ -172,7 +172,10 @@ runtime stayed within the pure plan's performance budget. Supported limits are
 `require_deterministic_fallback` require those booleans to hold for every
 resolved plan. The runtime pass limits are aggregated from
 `renderer.material_plans[].passes` and should describe the actual executor pass
-list, not only the pure resource budget.
+list, not only the pure resource budget. Backends also serialize
+`renderer.material_runtime_summary`; the verifier recomputes the same counters
+from `renderer.material_plans[]` and reports the exact summary field if the
+backend's view of executed material work drifts from the resolved plans.
 Use `require_material_quality_policy` when a material gate must prove the
 resolved pure policy stayed enabled and bounded. It can require backdrop
 sampling, noise, and shadow to remain allowed for every plan, and can bound the

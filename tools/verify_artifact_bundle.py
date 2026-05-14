@@ -1744,6 +1744,57 @@ def check_material_resource_bounds_requirements(
             hint="MaterialResourceBudget.deterministic_fallback must stay true for every plan.")
 
 
+def check_material_runtime_summary_contract(
+        summary: JsonObject,
+        runtime_summary: Any,
+        report: Report) -> None:
+    base_path = "debug.platform_runtime.details.renderer.material_runtime_summary"
+    report.check(
+        "material runtime summary is object",
+        isinstance(runtime_summary, dict),
+        path=base_path,
+        expected="object",
+        actual=type(runtime_summary).__name__,
+        likely_layer="platform-runtime",
+        hint=(
+            "Backends should serialize material_runtime_summary next to "
+            "renderer.material_plans so CI can compare executor counters."))
+    if not isinstance(runtime_summary, dict):
+        return
+
+    bounds = summary.get("resource_bounds")
+    if not isinstance(bounds, dict):
+        bounds = {}
+    expected_fields = {
+        "plan_count": summary.get("count"),
+        "fallback_count": summary.get("fallback"),
+        "backdrop_sampling_count": summary.get("backdrop_sampling"),
+        "total_runtime_passes": bounds.get("total_runtime_passes"),
+        "active_runtime_passes": bounds.get("active_runtime_passes"),
+        "backdrop_runtime_passes": bounds.get("backdrop_runtime_passes"),
+        "max_plan_blur_radius": bounds.get("max_plan_blur_radius"),
+        "max_plan_sample_taps": bounds.get("max_plan_sample_taps"),
+        "max_budget_blur_radius": bounds.get("max_budget_blur_radius"),
+        "max_sample_taps": bounds.get("max_sample_taps"),
+        "max_pass_count": bounds.get("max_pass_count"),
+        "max_backdrop_pixels": bounds.get("max_backdrop_pixels"),
+        "unbounded_texture_copy": bounds.get("unbounded_texture_copy"),
+        "non_deterministic_fallback": bounds.get("non_deterministic_fallback"),
+    }
+    for field, expected in expected_fields.items():
+        actual = runtime_summary.get(field)
+        report.check(
+            f"material runtime summary {field} matches plans",
+            actual == expected,
+            path=f"{base_path}.{field}",
+            expected=expected,
+            actual=actual,
+            likely_layer="platform-runtime",
+            hint=(
+                "Compare renderer.material_runtime_summary with the derived "
+                "summary from renderer.material_plans[]."))
+
+
 def check_material_quality_policy_requirements(
         summary: JsonObject,
         spec: JsonObject,
@@ -2035,6 +2086,10 @@ def verify(args: argparse.Namespace) -> int:
                     actual=plan_count,
                     likely_layer="platform-runtime",
                     hint="Keep renderer.material_plan_count in sync with renderer.material_plans.")
+            check_material_runtime_summary_contract(
+                material_plan_summary,
+                renderer_details.get("material_runtime_summary"),
+                report)
             material_plan_summary_spec = getattr(
                 args,
                 "require_material_plan_summary",

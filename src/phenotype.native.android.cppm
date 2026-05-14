@@ -6040,8 +6040,16 @@ inline ::json::Object android_renderer_runtime_json() {
             ::json::Value{
                 ::phenotype::diag::detail::material_plans_runtime_json(
                     g_renderer.last_scratch.material_records)});
+        r.emplace(
+            "material_runtime_summary",
+            ::phenotype::diag::detail::material_runtime_summary_json(
+                g_renderer.last_scratch.material_records));
     } else {
         r.emplace("material_plans", ::json::Value{::json::Array{}});
+        r.emplace(
+            "material_runtime_summary",
+            ::phenotype::diag::detail::material_runtime_summary_json(
+                ::phenotype::MaterialRuntimeSummary{}));
     }
     r.emplace(
         "material_fallback_policy",

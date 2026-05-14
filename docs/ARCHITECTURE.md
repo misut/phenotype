@@ -189,7 +189,11 @@ Runtime adapters serialize the same `MaterialRuntimeRecord` shape into
 `debug.platform_runtime.details.renderer.material_plans`: macOS records the
 sampled-backdrop pass, Windows and Android record deterministic fallback
 plans, and snapshot-only targets publish an empty renderer contract with an
-explicit fallback policy.
+explicit fallback policy. Backends also publish
+`renderer.material_runtime_summary`, a flat count/max summary derived from
+the same records; the artifact verifier recomputes it from
+`material_plans[]` so CI can catch summary drift and unexpected executor pass
+growth.
 Platform APIs, Metal/AppKit calls, shader compilation, texture capture, clocks,
 filesystem writes, and process execution stay outside this pure layer.
 

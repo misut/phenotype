@@ -715,6 +715,25 @@ void test_material_runtime_record_json_contract() {
     std::vector<MaterialRuntimeRecord> records{record};
     auto plans = diag::detail::material_plans_runtime_json(records);
     assert(plans.size() == 1);
+    MaterialRuntimeSummary pure_summary;
+    accumulate_material_runtime_summary(pure_summary, record);
+    assert(pure_summary.plan_count == 1);
+    assert(pure_summary.fallback_count == 1);
+    assert(pure_summary.total_runtime_passes == 1);
+    assert(pure_summary.active_runtime_passes == 1);
+    assert(pure_summary.backdrop_runtime_passes == 0);
+    assert(pure_summary.max_plan_sample_taps == 0);
+    assert(pure_summary.max_sample_taps == 9);
+
+    auto summary = diag::detail::material_runtime_summary_json(records);
+    auto const& summary_obj = summary.as_object();
+    assert(summary_obj.at("plan_count").as_integer() == 1);
+    assert(summary_obj.at("fallback_count").as_integer() == 1);
+    assert(summary_obj.at("total_runtime_passes").as_integer() == 1);
+    assert(summary_obj.at("active_runtime_passes").as_integer() == 1);
+    assert(summary_obj.at("backdrop_runtime_passes").as_integer() == 0);
+    assert(summary_obj.at("max_plan_sample_taps").as_integer() == 0);
+    assert(summary_obj.at("max_sample_taps").as_integer() == 9);
 
     auto empty = diag::detail::empty_material_renderer_contract(
         "test-semantic-fallback");
@@ -722,6 +741,8 @@ void test_material_runtime_record_json_contract() {
     assert(empty.at("material_backdrop_source_ready").as_bool() == false);
     assert(empty.at("material_plan_count").as_integer() == 0);
     assert(empty.at("material_plans").as_array().empty());
+    assert(empty.at("material_runtime_summary").as_object()
+               .at("plan_count").as_integer() == 0);
     assert(empty.at("material_fallback_policy").as_string()
            == "test-semantic-fallback");
 }
@@ -762,6 +783,8 @@ void test_wasi_debug_artifact_bundle_contract() {
     assert(renderer.at("material_backdrop_source_ready").as_bool() == false);
     assert(renderer.at("material_plan_count").as_integer() == 0);
     assert(renderer.at("material_plans").as_array().empty());
+    assert(renderer.at("material_runtime_summary").as_object()
+               .at("plan_count").as_integer() == 0);
     assert(runtime_obj.at("artifact_reason").as_string() == "wasi-common-contract-test");
 
     std::filesystem::remove_all(bundle_dir);
