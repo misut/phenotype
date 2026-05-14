@@ -131,6 +131,7 @@ struct MaterialPlan {
     char const* plan_id = "material.none";
     std::uint32_t debug_seed = 0;
     unsigned int sample_taps = 0;
+    MaterialQualityPolicy quality_policy{};
     MaterialPassExpectation primary_pass{};
     MaterialResourceBudget resource_budget{};
     MaterialVerifierExpectation verifier{};
@@ -316,11 +317,19 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
                                           MaterialEnvironment environment) noexcept {
     MaterialPlan plan{};
     auto const& style = request.style;
+    MaterialQualityPolicy resolved_quality = environment.quality;
+    resolved_quality.max_blur_radius = std::max(
+        0.0f,
+        resolved_quality.max_blur_radius);
+    resolved_quality.max_sample_taps = std::min(
+        resolved_quality.max_sample_taps,
+        25u);
     auto const max_blur_radius = std::max(
         0.0f,
-        environment.quality.max_blur_radius);
+        resolved_quality.max_blur_radius);
     plan.kind = style.kind;
     plan.geometry = request.geometry;
+    plan.quality_policy = resolved_quality;
     plan.opacity = std::clamp(style.opacity, 0.0f, 1.0f);
     plan.blur_radius = std::clamp(
         style.blur_radius, 0.0f, max_blur_radius);
@@ -330,18 +339,18 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.luminance_gain = std::max(0.0f, style.luminance_gain);
     plan.edge_highlight = std::clamp(style.edge_highlight, 0.0f, 1.0f);
     plan.edge_width = std::max(0.5f, style.edge_width);
-    plan.noise_opacity = environment.quality.allow_noise
+    plan.noise_opacity = resolved_quality.allow_noise
         ? std::clamp(style.noise_opacity, 0.0f, 0.05f)
         : 0.0f;
-    plan.shadow_alpha = environment.quality.allow_shadow
+    plan.shadow_alpha = resolved_quality.allow_shadow
         ? std::clamp(style.shadow_alpha, 0.0f, 0.4f)
         : 0.0f;
-    plan.shadow_radius = environment.quality.allow_shadow
+    plan.shadow_radius = resolved_quality.allow_shadow
         ? std::max(0.0f, style.shadow_radius)
         : 0.0f;
     plan.contrast_intent = style.contrast_intent;
     plan.debug_seed = material_debug_seed(environment.debug_seed, style.kind);
-    plan.sample_taps = std::min(environment.quality.max_sample_taps, 25u);
+    plan.sample_taps = resolved_quality.max_sample_taps;
     auto const target_pixels =
         environment.render_target.width > 0
         && environment.render_target.height > 0
@@ -364,7 +373,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     bool const target_ready = environment.render_target.width > 0
         && environment.render_target.height > 0;
     bool const quality_allows_backdrop =
-        environment.quality.allow_backdrop_sampling
+        resolved_quality.allow_backdrop_sampling
         && max_blur_radius > 0.0f
         && plan.sample_taps > 0u;
     bool const can_sample_backdrop =

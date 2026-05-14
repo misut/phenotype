@@ -1149,6 +1149,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(disabled_quality_plan.fallback());
     assert(disabled_quality_plan.fallback_path
            == MaterialFallbackPath::QualityPolicy);
+    assert(!disabled_quality_plan.quality_policy.allow_backdrop_sampling);
     assert(!disabled_quality_plan.backdrop_sampling);
     assert(disabled_quality_plan.blur_radius == 0.0f);
     assert(std::string(disabled_quality_plan.fallback_reason)
@@ -1161,6 +1162,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     auto zero_tap_plan = plan_material_surface(request, zero_tap_env);
     assert(zero_tap_plan.fallback());
     assert(zero_tap_plan.fallback_path == MaterialFallbackPath::QualityPolicy);
+    assert(zero_tap_plan.quality_policy.max_sample_taps == 0);
     assert(zero_tap_plan.sample_taps == 0);
     assert(zero_tap_plan.primary_pass.sample_taps == 0);
 
@@ -1177,6 +1179,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(budget_plan.noise_opacity == 0.0f);
     assert(budget_plan.shadow_alpha == 0.0f);
     assert(budget_plan.shadow_radius == 0.0f);
+    assert(budget_plan.quality_policy.max_blur_radius == 12.0f);
+    assert(budget_plan.quality_policy.max_sample_taps == 7);
+    assert(!budget_plan.quality_policy.allow_noise);
+    assert(!budget_plan.quality_policy.allow_shadow);
     assert(budget_plan.resource_budget.max_blur_radius == 12.0f);
     assert(budget_plan.resource_budget.max_sample_taps == 7);
     assert(budget_plan.resource_budget.max_pass_count == 1);

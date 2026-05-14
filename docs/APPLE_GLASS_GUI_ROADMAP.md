@@ -130,8 +130,9 @@ accepts immutable inputs:
 
 The returned `MaterialPlan` describes blur radius, tint, saturation,
 luminance curve, edge highlight, noise/dither, shadow, backdrop sampling,
-fallback path, debug metadata, pass expectations, resource budgets, and
-verifier expectations. Backdrops also degrade through an explicit
+fallback path, debug metadata, resolved quality policy, pass expectations,
+resource budgets, and verifier expectations. Backdrops also degrade through
+an explicit
 `quality-policy` fallback when the pure quality policy disables sampling or
 sets an unusable blur/tap budget. Backends execute the plan; they do not
 re-decide policy.

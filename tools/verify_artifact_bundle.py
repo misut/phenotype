@@ -885,6 +885,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "fallback_reason",
     "debug_seed",
     "sample_taps",
+    "quality_policy",
     "primary_pass",
     "resource_budget",
     "verifier",
@@ -920,6 +921,15 @@ MATERIAL_PASS_FIELDS = (
     "requires_backdrop",
     "sample_taps",
     "likely_layer",
+)
+MATERIAL_QUALITY_POLICY_BOOL_FIELDS = (
+    "allow_backdrop_sampling",
+    "allow_noise",
+    "allow_shadow",
+)
+MATERIAL_QUALITY_POLICY_NUMBER_FIELDS = (
+    "max_blur_radius",
+    "max_sample_taps",
 )
 
 
@@ -1142,6 +1152,32 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 profiles[region_name] = profiles.get(region_name, 0) + 1
             if region_name and region_layer:
                 summary["region_layers"][region_name] = region_layer
+
+        quality_policy = check_object_field(
+            report,
+            plan,
+            "quality_policy",
+            plan_path,
+            likely_layer=likely_layer,
+            hint="Material plans must expose the resolved pure quality policy.")
+        if quality_policy is not None:
+            for key in MATERIAL_QUALITY_POLICY_BOOL_FIELDS:
+                check_bool_field(
+                    report,
+                    quality_policy,
+                    key,
+                    f"{plan_path}.quality_policy",
+                    likely_layer=likely_layer,
+                    hint="Quality policy booleans must stay explicit.")
+            for key in MATERIAL_QUALITY_POLICY_NUMBER_FIELDS:
+                check_number_field(
+                    report,
+                    quality_policy,
+                    key,
+                    f"{plan_path}.quality_policy",
+                    min_value=0.0,
+                    likely_layer=likely_layer,
+                    hint="Quality policy limits must be resolved to non-negative values.")
 
         resource_budget = check_object_field(
             report,
