@@ -610,6 +610,8 @@ void test_material_surface_semantic_debug_fields() {
            != std::string::npos);
     assert(material_debug.at("opacity").as_float() > 0.5);
     assert(material_debug.at("blur_radius").as_float() >= 20.0);
+    auto const& tint = material_debug.at("tint").as_object();
+    assert(tint.at("a").as_integer() > 0);
     assert(material_debug.at("saturation").as_float() > 1.0);
     assert(material_debug.at("edge_highlight").as_float() > 0.0);
     assert(material_debug.at("noise_opacity").as_float() > 0.0);
@@ -698,6 +700,15 @@ void test_material_runtime_record_json_contract() {
            == material_plan_contract_version);
     assert(obj.at("kind").as_string() == "thin");
     assert(obj.at("plan_id").as_string() == "material.thin.fallback");
+    auto const& descriptor = obj.at("command_descriptor").as_object();
+    assert(descriptor.at("kind").as_string() == "thin");
+    assert(descriptor.at("opacity").as_float() == 0.5f);
+    assert(descriptor.at("blur_radius").as_float() == 14.0f);
+    auto const& descriptor_tint = descriptor.at("tint").as_object();
+    assert(descriptor_tint.at("r").as_integer() == 240);
+    assert(descriptor_tint.at("g").as_integer() == 248);
+    assert(descriptor_tint.at("b").as_integer() == 255);
+    assert(descriptor_tint.at("a").as_integer() == 128);
     assert(obj.at("fallback").as_bool() == true);
     assert(obj.at("fallback_path").as_string() == "unsupported-backend");
     assert(obj.at("fallback_reason").as_string()

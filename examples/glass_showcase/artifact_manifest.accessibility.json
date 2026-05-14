@@ -33,7 +33,7 @@
       "reduced transparency disables backdrop sampling": 7
     },
     "contract_versions": {
-      "2": 7
+      "3": 7
     },
     "kinds": {
       "clear": 1,

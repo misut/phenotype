@@ -108,8 +108,11 @@ describe the stable request (`kind`, opacity, blur intent, contrast intent, and
 fallback availability), while `debug.platform_runtime.details.renderer` records
 the actual `material_plans` executed for the frame. Each plan includes:
 
-- `contract_version`, `plan_id`, `kind`, geometry, tint, blur radius,
-  saturation, luminance curve, edge highlight, noise, and shadow values;
+- `contract_version`, `plan_id`, `kind`, and `command_descriptor`, which
+  preserves the decoded `MaterialRect` material values before fallback or
+  luminance policy mutates the resolved plan;
+- geometry, tint, blur radius, saturation, luminance curve, edge highlight,
+  noise, and shadow values for the resolved plan;
 - `render_target`, including target dimensions, scale, pixel format, pixel
   count, readiness, and whether the backdrop-pixel budget was satisfied;
 - `decision_trace`, including the pure gate booleans for geometry, quality,
@@ -126,8 +129,9 @@ the actual `material_plans` executed for the frame. Each plan includes:
 
 When debugging a material failure, read the semantic node first to confirm the
 UI emitted the expected material surface, then inspect
-`renderer.material_plans[]` to see whether the backend ran the glass pass or a
-deterministic fallback.
+`renderer.material_plans[]`. The verifier compares semantic material fields
+against `MaterialPlan.command_descriptor`, then separately reports whether the
+resolved plan ran the glass pass or a deterministic fallback.
 `sample_taps` and `primary_pass.sample_taps` describe the actual resolved pass.
 Fallback plans therefore report `0` taps, while `quality_policy.max_sample_taps`
 and `resource_budget.max_sample_taps` preserve the allowed upper bound that led
@@ -219,8 +223,10 @@ serialization; semantic/runtime contract failures route to semantic material
 nodes, `MaterialRect` command emission, and `renderer.material_plans[]` parity.
 The `MaterialRect` command carries the material node's numeric style descriptor
 to the backend, including saturation, luminance curve, edge highlight, noise,
-and shadow. If semantic material fields are correct but runtime plans drift,
-inspect the command decoder before changing backend policy.
+and shadow. Native command decoders convert this payload into
+`MaterialCommandDescriptor` before building the pure `MaterialRequest`. If
+semantic material fields are correct but runtime plans drift, inspect the
+command descriptor decode path before changing backend policy.
 Use `--require-material-plan` when a bundle must contain resolved material
 plans.
 

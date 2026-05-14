@@ -71,7 +71,7 @@ ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
     "not-sampled",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 2
+MATERIAL_PLAN_CONTRACT_VERSION = 3
 
 
 def suggested_action_for_failure(
@@ -100,6 +100,10 @@ def suggested_action_for_failure(
         return (
             "Inspect semantic material nodes, MaterialRect command emission, "
             "and renderer.material_plans[] for semantic/runtime parity.")
+    if likely_layer == "material-command":
+        return (
+            "Inspect semantic material nodes, MaterialCommandDescriptor "
+            "serialization, and backend MaterialRect command decoding.")
     if likely_layer == "material-or-backdrop-pass":
         return (
             "Inspect renderer.material_plans[], the backend material/backdrop "
@@ -409,6 +413,31 @@ def string_at(value: JsonObject, key: str) -> str | None:
 def number_at(value: JsonObject, key: str) -> int | float | None:
     item = value.get(key)
     return item if isinstance(item, (int, float)) and not isinstance(item, bool) else None
+
+
+def material_descriptor_from(value: JsonObject) -> JsonObject | None:
+    kind = string_at(value, "kind")
+    tint = value.get("tint")
+    if not kind or not isinstance(tint, dict):
+        return None
+    descriptor: JsonObject = {"kind": kind}
+    tint_descriptor: JsonObject = {}
+    for key in ("r", "g", "b", "a"):
+        channel = number_at(tint, key)
+        if channel is None:
+            return None
+        tint_descriptor[key] = int(channel)
+    descriptor["tint"] = tint_descriptor
+    for key in MATERIAL_COMMAND_DESCRIPTOR_NUMERIC_FIELDS:
+        number = number_at(value, key)
+        if number is None:
+            return None
+        descriptor[key] = float(number)
+    return descriptor
+
+
+def descriptor_signature(value: JsonObject) -> str:
+    return json.dumps(value, sort_keys=True, separators=(",", ":"))
 
 
 def check_object_field(
@@ -1291,6 +1320,11 @@ def walk_semantic(node: Any, summary: JsonObject) -> None:
     material = node.get("material")
     if isinstance(material, dict):
         summary["material_nodes"] += 1
+        descriptor = material_descriptor_from(material)
+        if descriptor is None:
+            summary["material_descriptor_missing"] += 1
+        else:
+            summary["material_descriptors"].append(descriptor)
         kind = material.get("kind")
         if isinstance(kind, str):
             material_kinds = summary["material_kinds"]
@@ -1319,6 +1353,8 @@ def summarize_semantic_tree(tree: JsonObject) -> JsonObject:
         "invalid_child_lists": 0,
         "invalid_nodes": 0,
         "labels": [],
+        "material_descriptor_missing": 0,
+        "material_descriptors": [],
         "material_fallback_nodes": 0,
         "material_kinds": {},
         "material_nodes": 0,
@@ -1341,6 +1377,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "contract_version",
     "kind",
     "plan_id",
+    "command_descriptor",
     "geometry",
     "render_target",
     "decision_trace",
@@ -1370,6 +1407,19 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
 )
 
 MATERIAL_PLAN_NUMERIC_FIELDS = (
+    "opacity",
+    "blur_radius",
+    "saturation",
+    "luminance_floor",
+    "luminance_gain",
+    "edge_highlight",
+    "edge_width",
+    "noise_opacity",
+    "shadow_alpha",
+    "shadow_radius",
+)
+
+MATERIAL_COMMAND_DESCRIPTOR_NUMERIC_FIELDS = (
     "opacity",
     "blur_radius",
     "saturation",
@@ -1458,6 +1508,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "pass_names": {},
         "pass_executors": {},
         "plan_ids": [],
+        "command_descriptor_missing": 0,
+        "command_descriptors": [],
         "contract_versions": {},
         "region_layers": {},
         "verifier_profiles": {},
@@ -1600,6 +1652,74 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 likely_layer=kind,
                 hint="Update the pure MaterialKind serializer and verifier vocabulary together.",
                 record_success=False)
+
+        command_descriptor = check_object_field(
+            report,
+            plan,
+            "command_descriptor",
+            plan_path,
+            likely_layer="material-command",
+            hint=(
+                "MaterialPlan.command_descriptor should preserve the decoded "
+                "MaterialRect command values before fallback or luminance policy "
+                "mutates the resolved plan."))
+        if command_descriptor is not None:
+            descriptor_values = material_descriptor_from(command_descriptor)
+            if descriptor_values is None:
+                summary["command_descriptor_missing"] = int(
+                    summary["command_descriptor_missing"]) + 1
+            else:
+                summary["command_descriptors"].append(descriptor_values)
+            descriptor_kind = check_string_field(
+                report,
+                command_descriptor,
+                "kind",
+                f"{plan_path}.command_descriptor",
+                likely_layer="material-command",
+                hint="The command descriptor must preserve the material kind.")
+            if isinstance(descriptor_kind, str):
+                report.check(
+                    "material command descriptor kind matches plan kind",
+                    descriptor_kind == kind,
+                    path=f"{plan_path}.command_descriptor.kind",
+                    expected=kind,
+                    actual=descriptor_kind,
+                    likely_layer="material-command",
+                    hint=(
+                        "The decoded command descriptor kind should feed the "
+                        "same pure plan kind."),
+                    record_success=False)
+            descriptor_tint = check_object_field(
+                report,
+                command_descriptor,
+                "tint",
+                f"{plan_path}.command_descriptor",
+                likely_layer="material-command",
+                hint="The command descriptor must preserve the MaterialRect tint.")
+            if descriptor_tint is not None:
+                for key in MATERIAL_TINT_FIELDS:
+                    check_number_field(
+                        report,
+                        descriptor_tint,
+                        key,
+                        f"{plan_path}.command_descriptor.tint",
+                        min_value=0.0,
+                        likely_layer="material-command",
+                        hint="Check MaterialRect tint decoding and descriptor serialization.")
+            for key in MATERIAL_COMMAND_DESCRIPTOR_NUMERIC_FIELDS:
+                check_number_field(
+                    report,
+                    command_descriptor,
+                    key,
+                    f"{plan_path}.command_descriptor",
+                    min_value=0.0,
+                    likely_layer="material-command",
+                    hint=(
+                        "Check MaterialRect command decoding and "
+                        "MaterialCommandDescriptor serialization."))
+        else:
+            summary["command_descriptor_missing"] = int(
+                summary["command_descriptor_missing"]) + 1
 
         plan_blur_radius: int | float | None = None
         plan_edge_highlight: int | float | None = None
@@ -3374,6 +3494,52 @@ def check_material_semantic_runtime_match(
             "The semantic material verifier profile and runtime plan verifier "
             "region disagree; check material_style defaults and pure "
             "MaterialPlan verifier expectations."))
+
+    semantic_missing = semantic_summary.get("material_descriptor_missing")
+    runtime_missing = material_plan_summary.get("command_descriptor_missing")
+    report.check(
+        "material semantic descriptors are complete",
+        semantic_missing == 0,
+        path=f"{base_path}.semantic_command_descriptors",
+        expected=0,
+        actual=semantic_missing,
+        likely_layer="material-command",
+        hint=(
+            "Semantic material nodes must expose every command descriptor field, "
+            "including tint, so runtime command decoding can be compared."))
+    report.check(
+        "material runtime command descriptors are complete",
+        runtime_missing == 0,
+        path=f"{base_path}.runtime_command_descriptors",
+        expected=0,
+        actual=runtime_missing,
+        likely_layer="material-command",
+        hint=(
+            "MaterialPlan.command_descriptor must be serialized for every "
+            "runtime material plan."))
+
+    semantic_descriptors = semantic_summary.get("material_descriptors")
+    runtime_descriptors = material_plan_summary.get("command_descriptors")
+    semantic_signatures = sorted(
+        descriptor_signature(item)
+        for item in semantic_descriptors
+        if isinstance(item, dict))
+    runtime_signatures = sorted(
+        descriptor_signature(item)
+        for item in runtime_descriptors
+        if isinstance(item, dict))
+    report.check(
+        "material semantic/runtime command descriptors match",
+        semantic_signatures == runtime_signatures,
+        path=f"{base_path}.command_descriptors",
+        expected=semantic_signatures,
+        actual=runtime_signatures,
+        likely_layer="material-command",
+        hint=(
+            "The semantic material node descriptor and runtime "
+            "MaterialPlan.command_descriptor disagree; inspect material style "
+            "emission, MaterialRect command payload writes, and backend command "
+            "decoding before changing resolved fallback policy."))
 
 
 def load_platform_files(platform_dir: Path, report: Report) -> list[JsonObject]:

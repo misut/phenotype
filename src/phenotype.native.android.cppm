@@ -4193,20 +4193,22 @@ inline void decode_android_color_commands(unsigned char const* buf,
             auto const shadow_radius = read_f32();
             auto material_env_for_command = material_env;
             material_env_for_command.debug_seed.node = current_command_index;
+            ::phenotype::MaterialCommandDescriptor descriptor{
+                ::phenotype::material_kind_from_wire(kind),
+                opacity,
+                blur_radius,
+                tint,
+                saturation,
+                luminance_floor,
+                luminance_gain,
+                edge_highlight,
+                edge_width,
+                noise_opacity,
+                shadow_alpha,
+                shadow_radius};
             auto plan = ::phenotype::plan_material_surface(
                 ::phenotype::material_request_for_command(
-                    ::phenotype::material_kind_from_wire(kind),
-                    opacity,
-                    blur_radius,
-                    tint,
-                    saturation,
-                    luminance_floor,
-                    luminance_gain,
-                    edge_highlight,
-                    edge_width,
-                    noise_opacity,
-                    shadow_alpha,
-                    shadow_radius,
+                    descriptor,
                     ::phenotype::MaterialGeometry{x, y, w, h, r},
                     ::phenotype::current_theme()),
                 material_env_for_command);
@@ -4838,18 +4840,7 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                 material_env_for_command.debug_seed.node = current_command_index;
                 auto plan = ::phenotype::plan_material_surface(
                     ::phenotype::material_request_for_command(
-                        c.kind,
-                        c.opacity,
-                        c.blur_radius,
-                        c.tint,
-                        c.saturation,
-                        c.luminance_floor,
-                        c.luminance_gain,
-                        c.edge_highlight,
-                        c.edge_width,
-                        c.noise_opacity,
-                        c.shadow_alpha,
-                        c.shadow_radius,
+                        c.material,
                         ::phenotype::MaterialGeometry{
                             c.x, c.y, c.w, c.h, c.radius},
                         ::phenotype::current_theme()),

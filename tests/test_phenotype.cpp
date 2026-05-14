@@ -1380,18 +1380,19 @@ void test_material_surface_emits_material_rect_command() {
     }
 
     assert(material != nullptr);
-    assert(material->kind == MaterialKind::Regular);
-    assert(material->opacity > 0.5f);
-    assert(material->blur_radius >= 20.0f);
-    assert(material->tint.a > 0);
-    assert(material->saturation > 1.0f);
-    assert(material->luminance_floor > 0.0f);
-    assert(material->luminance_gain > 1.0f);
-    assert(material->edge_highlight > 0.0f);
-    assert(material->edge_width >= 1.0f);
-    assert(material->noise_opacity > 0.0f);
-    assert(material->shadow_alpha > 0.0f);
-    assert(material->shadow_radius > 0.0f);
+    auto const& descriptor = material->material;
+    assert(descriptor.kind == MaterialKind::Regular);
+    assert(descriptor.opacity > 0.5f);
+    assert(descriptor.blur_radius >= 20.0f);
+    assert(descriptor.tint.a > 0);
+    assert(descriptor.saturation > 1.0f);
+    assert(descriptor.luminance_floor > 0.0f);
+    assert(descriptor.luminance_gain > 1.0f);
+    assert(descriptor.edge_highlight > 0.0f);
+    assert(descriptor.edge_width >= 1.0f);
+    assert(descriptor.noise_opacity > 0.0f);
+    assert(descriptor.shadow_alpha > 0.0f);
+    assert(descriptor.shadow_radius > 0.0f);
 
     std::puts("PASS: material surface emits MaterialRect command");
 }
@@ -1440,19 +1441,21 @@ void test_material_command_preserves_style_optics() {
     }
 
     assert(cmd != nullptr);
-    assert(cmd->kind == MaterialKind::Regular);
-    assert(std::fabs(cmd->opacity - 0.63f) < 0.0001f);
-    assert(std::fabs(cmd->blur_radius - 18.0f) < 0.0001f);
-    assert(cmd->tint.r == 32 && cmd->tint.g == 64 && cmd->tint.b == 96);
-    assert(cmd->tint.a == 144);
-    assert(std::fabs(cmd->saturation - 0.73f) < 0.0001f);
-    assert(std::fabs(cmd->luminance_floor - 0.19f) < 0.0001f);
-    assert(std::fabs(cmd->luminance_gain - 1.31f) < 0.0001f);
-    assert(std::fabs(cmd->edge_highlight - 0.57f) < 0.0001f);
-    assert(std::fabs(cmd->edge_width - 2.25f) < 0.0001f);
-    assert(std::fabs(cmd->noise_opacity - 0.031f) < 0.0001f);
-    assert(std::fabs(cmd->shadow_alpha - 0.22f) < 0.0001f);
-    assert(std::fabs(cmd->shadow_radius - 17.0f) < 0.0001f);
+    auto const& descriptor = cmd->material;
+    assert(descriptor.kind == MaterialKind::Regular);
+    assert(std::fabs(descriptor.opacity - 0.63f) < 0.0001f);
+    assert(std::fabs(descriptor.blur_radius - 18.0f) < 0.0001f);
+    assert(descriptor.tint.r == 32 && descriptor.tint.g == 64
+           && descriptor.tint.b == 96);
+    assert(descriptor.tint.a == 144);
+    assert(std::fabs(descriptor.saturation - 0.73f) < 0.0001f);
+    assert(std::fabs(descriptor.luminance_floor - 0.19f) < 0.0001f);
+    assert(std::fabs(descriptor.luminance_gain - 1.31f) < 0.0001f);
+    assert(std::fabs(descriptor.edge_highlight - 0.57f) < 0.0001f);
+    assert(std::fabs(descriptor.edge_width - 2.25f) < 0.0001f);
+    assert(std::fabs(descriptor.noise_opacity - 0.031f) < 0.0001f);
+    assert(std::fabs(descriptor.shadow_alpha - 0.22f) < 0.0001f);
+    assert(std::fabs(descriptor.shadow_radius - 17.0f) < 0.0001f);
 
     MaterialEnvironment env{};
     env.capabilities.material_surfaces = true;
@@ -1465,18 +1468,7 @@ void test_material_command_preserves_style_optics() {
     env.render_target.height = 40;
     auto plan = plan_material_surface(
         material_request_for_command(
-            cmd->kind,
-            cmd->opacity,
-            cmd->blur_radius,
-            cmd->tint,
-            cmd->saturation,
-            cmd->luminance_floor,
-            cmd->luminance_gain,
-            cmd->edge_highlight,
-            cmd->edge_width,
-            cmd->noise_opacity,
-            cmd->shadow_alpha,
-            cmd->shadow_radius,
+            descriptor,
             MaterialGeometry{cmd->x, cmd->y, cmd->w, cmd->h, cmd->radius},
             detail::g_app.theme),
         env);

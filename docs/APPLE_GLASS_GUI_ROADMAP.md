@@ -135,18 +135,19 @@ accepts immutable inputs:
 - quality policy
 - accessibility display inputs
 
-The returned `MaterialPlan` describes blur radius, tint, saturation,
-luminance curve, edge highlight, noise/dither, shadow, backdrop sampling,
-fallback path, debug metadata, resolved quality policy, pass expectations,
-resource budgets, and verifier expectations. Backdrops also degrade through
-an explicit
+The returned `MaterialPlan` describes the source command descriptor, blur
+radius, tint, saturation, luminance curve, edge highlight, noise/dither,
+shadow, backdrop sampling, fallback path, debug metadata, resolved quality
+policy, pass expectations, resource budgets, and verifier expectations.
+Backdrops also degrade through an explicit
 `quality-policy` fallback when the pure quality policy disables sampling or
 sets an unusable blur/tap budget, and when the render target exceeds the
 resolved `max_backdrop_pixels` budget. Backends execute the plan; they do not
 re-decide policy.
 `MaterialRect` commands carry the material node's numeric optics/effects
-descriptor into every backend, so runtime plans no longer need to reconstruct
-saturation, luminance, edge, noise, or shadow values from the current theme.
+descriptor into every backend as `MaterialCommandDescriptor`, so runtime plans
+no longer need to reconstruct saturation, luminance, edge, noise, or shadow
+values from the current theme.
 The macOS backend now reads AppKit accessibility display preferences at the
 edge and passes them as immutable planner inputs. Reduce Transparency resolves
 to the deterministic material fallback path, Increase Contrast adjusts opacity

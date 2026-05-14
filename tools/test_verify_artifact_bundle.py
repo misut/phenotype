@@ -31,10 +31,25 @@ def material_plan(
     primary_sample_taps: int = 0,
 ) -> dict[str, object]:
     primary = material_pass(primary_sample_taps)
+    command_descriptor: dict[str, object] = {
+        "kind": "regular",
+        "opacity": 0.58,
+        "blur_radius": 22.0,
+        "tint": {"r": 255, "g": 255, "b": 255, "a": 148},
+        "saturation": 1.08,
+        "luminance_floor": 0.08,
+        "luminance_gain": 1.08,
+        "edge_highlight": 0.34,
+        "edge_width": 1.0,
+        "noise_opacity": 0.014,
+        "shadow_alpha": 0.14,
+        "shadow_radius": 14.0,
+    }
     return {
         "contract_version": verifier.MATERIAL_PLAN_CONTRACT_VERSION,
         "kind": "regular",
         "plan_id": "material.regular.fallback",
+        "command_descriptor": command_descriptor,
         "geometry": {"x": 12.0, "y": 20.0, "w": 240.0, "h": 96.0, "radius": 10.0},
         "render_target": {
             "width": 320,
@@ -201,6 +216,17 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                         "visible": True,
                         "material": {
                             "kind": "regular",
+                            "opacity": 0.58,
+                            "blur_radius": 22.0,
+                            "tint": {"r": 255, "g": 255, "b": 255, "a": 148},
+                            "saturation": 1.08,
+                            "luminance_floor": 0.08,
+                            "luminance_gain": 1.08,
+                            "edge_highlight": 0.34,
+                            "edge_width": 1.0,
+                            "noise_opacity": 0.014,
+                            "shadow_alpha": 0.14,
+                            "shadow_radius": 14.0,
                             "fallback": True,
                             "verifier_profile": "regular-legibility-backdrop",
                         },
@@ -333,9 +359,51 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["decision_trace"]["first_blockers"],
             {"unsupported-backend": 1})
         self.assertEqual(
+            report["material_plans"]["command_descriptor_missing"],
+            0)
+        self.assertEqual(
+            report["semantic_tree"]["material_descriptor_missing"],
+            0)
+
+    def test_command_descriptor_mismatch_points_to_material_command(self) -> None:
+        plan = material_plan()
+        descriptor = plan["command_descriptor"]
+        assert isinstance(descriptor, dict)
+        descriptor["saturation"] = 0.42
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material semantic/runtime command descriptors match")
+        self.assertEqual(
+            failure["path"],
+            "debug.material_semantic_runtime_match.command_descriptors")
+        self.assertEqual(failure["likely_layer"], "material-command")
+        self.assertIn("MaterialCommandDescriptor", failure["suggested_action"])
+        self.assertEqual(
             report["material_plans"]["decision_trace"][
                 "can_sample_backdrop"],
             0)
+
+    def test_missing_command_descriptor_is_counted(self) -> None:
+        plan = material_plan()
+        del plan["command_descriptor"]
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        self.assertEqual(
+            report["material_plans"]["command_descriptor_missing"],
+            1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material runtime command descriptors are complete")
+        self.assertEqual(
+            failure["path"],
+            "debug.material_semantic_runtime_match.runtime_command_descriptors")
+        self.assertEqual(failure["likely_layer"], "material-command")
 
     def test_material_plan_mismatch_failure_is_llm_actionable(self) -> None:
         code, report = self.run_verifier(snapshot(material_plan(sample_taps=25)))
