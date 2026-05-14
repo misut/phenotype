@@ -6964,6 +6964,10 @@ inline json::Object macos_renderer_runtime_json() {
     renderer.emplace(
         "material_plans",
         json::Value{material_plans_runtime_json()});
+    renderer.emplace(
+        "material_runtime_summary",
+        ::phenotype::diag::detail::material_runtime_summary_json(
+            g_renderer.scratch.material_records));
     return renderer;
 }
 

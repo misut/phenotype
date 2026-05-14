@@ -5023,6 +5023,10 @@ inline json::Object windows_renderer_runtime_json() {
             ::phenotype::diag::detail::material_plans_runtime_json(
                 g_renderer.material_records)});
     renderer.emplace(
+        "material_runtime_summary",
+        ::phenotype::diag::detail::material_runtime_summary_json(
+            g_renderer.material_records));
+    renderer.emplace(
         "material_fallback_policy",
         json::Value{"d3d12-translucent-rounded-rect"});
     return renderer;

@@ -77,6 +77,31 @@ def material_plan(
     }
 
 
+def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
+    budget = plan["resource_budget"]
+    primary = plan["primary_pass"]
+    assert isinstance(budget, dict)
+    assert isinstance(primary, dict)
+    return {
+        "plan_count": 1,
+        "fallback_count": 1 if plan["fallback"] else 0,
+        "backdrop_sampling_count": 1 if plan["backdrop_sampling"] else 0,
+        "total_runtime_passes": 1,
+        "active_runtime_passes": 1 if primary["active"] else 0,
+        "backdrop_runtime_passes": 1 if primary["requires_backdrop"] else 0,
+        "max_plan_blur_radius": plan["blur_radius"],
+        "max_plan_sample_taps": plan["sample_taps"],
+        "max_budget_blur_radius": budget["max_blur_radius"],
+        "max_sample_taps": budget["max_sample_taps"],
+        "max_pass_count": budget["max_pass_count"],
+        "max_backdrop_pixels": budget["max_backdrop_pixels"],
+        "unbounded_texture_copy": 0 if budget["bounded_texture_copy"] else 1,
+        "non_deterministic_fallback": (
+            0 if budget["deterministic_fallback"] else 1
+        ),
+    }
+
+
 def snapshot(plan: dict[str, object]) -> dict[str, object]:
     return {
         "debug": {
@@ -124,6 +149,7 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                     "renderer": {
                         "material_plan_count": 1,
                         "material_plans": [plan],
+                        "material_runtime_summary": material_runtime_summary(plan),
                     }
                 },
             },

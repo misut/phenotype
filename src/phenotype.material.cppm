@@ -146,6 +146,60 @@ struct MaterialRuntimeRecord {
     std::uint32_t command_index = 0;
 };
 
+struct MaterialRuntimeSummary {
+    std::uint32_t plan_count = 0;
+    std::uint32_t fallback_count = 0;
+    std::uint32_t backdrop_sampling_count = 0;
+    std::uint32_t total_runtime_passes = 0;
+    std::uint32_t active_runtime_passes = 0;
+    std::uint32_t backdrop_runtime_passes = 0;
+    float max_plan_blur_radius = 0.0f;
+    unsigned int max_plan_sample_taps = 0;
+    float max_budget_blur_radius = 0.0f;
+    unsigned int max_sample_taps = 0;
+    unsigned int max_pass_count = 0;
+    std::int64_t max_backdrop_pixels = 0;
+    std::uint32_t unbounded_texture_copy = 0;
+    std::uint32_t non_deterministic_fallback = 0;
+};
+
+inline void accumulate_material_runtime_summary(
+        MaterialRuntimeSummary& summary,
+        MaterialRuntimeRecord const& record) noexcept {
+    auto const& plan = record.plan;
+    ++summary.plan_count;
+    if (plan.fallback())
+        ++summary.fallback_count;
+    if (plan.backdrop_sampling)
+        ++summary.backdrop_sampling_count;
+
+    ++summary.total_runtime_passes;
+    if (plan.primary_pass.active)
+        ++summary.active_runtime_passes;
+    if (plan.primary_pass.requires_backdrop)
+        ++summary.backdrop_runtime_passes;
+
+    summary.max_plan_blur_radius =
+        std::max(summary.max_plan_blur_radius, plan.blur_radius);
+    summary.max_plan_sample_taps =
+        std::max(summary.max_plan_sample_taps, plan.sample_taps);
+    summary.max_budget_blur_radius = std::max(
+        summary.max_budget_blur_radius,
+        plan.resource_budget.max_blur_radius);
+    summary.max_sample_taps = std::max(
+        summary.max_sample_taps,
+        plan.resource_budget.max_sample_taps);
+    summary.max_pass_count =
+        std::max(summary.max_pass_count, plan.resource_budget.max_pass_count);
+    summary.max_backdrop_pixels = std::max(
+        summary.max_backdrop_pixels,
+        plan.resource_budget.max_backdrop_pixels);
+    if (!plan.resource_budget.bounded_texture_copy)
+        ++summary.unbounded_texture_copy;
+    if (!plan.resource_budget.deterministic_fallback)
+        ++summary.non_deterministic_fallback;
+}
+
 struct MaterialEnvironment {
     MaterialCapabilityInput capabilities{};
     MaterialBackdropDescriptor backdrop{};
