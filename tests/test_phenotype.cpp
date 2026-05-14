@@ -1100,6 +1100,13 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(fallback_plan.kind == MaterialKind::Regular);
     assert(fallback_plan.fallback());
     assert(!fallback_plan.backdrop_sampling);
+    assert(fallback_plan.render_target.width == 520);
+    assert(fallback_plan.render_target.height == 760);
+    assert(fallback_plan.render_target.pixel_count == 395'200);
+    assert(fallback_plan.render_target.ready);
+    assert(fallback_plan.render_target.within_backdrop_budget);
+    assert(std::string(fallback_plan.render_target.pixel_format)
+           == "unknown");
     assert(fallback_plan.fallback_path == MaterialFallbackPath::UnsupportedBackend);
     assert(fallback_plan.blur_radius == 0.0f);
     assert(std::string(fallback_plan.primary_pass.name)
@@ -1126,6 +1133,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     auto glass_plan = plan_material_surface(request, glass_env);
     assert(!glass_plan.fallback());
     assert(glass_plan.backdrop_sampling);
+    assert(glass_plan.render_target.ready);
+    assert(glass_plan.render_target.within_backdrop_budget);
     assert(glass_plan.blur_radius >= 20.0f);
     assert(glass_plan.saturation > 1.0f);
     assert(glass_plan.edge_highlight > 0.0f);
@@ -1267,6 +1276,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     auto oversize_plan = plan_material_surface(request, oversize_env);
     assert(oversize_plan.fallback());
     assert(oversize_plan.fallback_path == MaterialFallbackPath::QualityPolicy);
+    assert(oversize_plan.render_target.pixel_count == 395'200);
+    assert(!oversize_plan.render_target.within_backdrop_budget);
     assert(oversize_plan.quality_policy.max_backdrop_pixels == 100);
     assert(oversize_plan.resource_budget.max_backdrop_pixels == 100);
     assert(!oversize_plan.backdrop_sampling);

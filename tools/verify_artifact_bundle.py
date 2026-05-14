@@ -598,6 +598,9 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "backdrop_sources",
         "luminance_responses",
         "luminance_adapted",
+        "render_target_ready",
+        "render_target_within_backdrop_budget",
+        "render_target_pixel_formats",
     }
     unknown = sorted(set(value) - allowed)
     if unknown:
@@ -612,7 +615,9 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "backdrop_sampling",
             "backdrop_available",
             "backdrop_stable",
-            "luminance_adapted"):
+            "luminance_adapted",
+            "render_target_ready",
+            "render_target_within_backdrop_budget"):
         if field in value:
             spec[field] = non_negative_int(
                 value[field],
@@ -637,6 +642,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         spec["backdrop_sources"] = string_int_map(
             value["backdrop_sources"],
             "require_material_plan_summary.backdrop_sources")
+    if "render_target_pixel_formats" in value:
+        spec["render_target_pixel_formats"] = string_int_map(
+            value["render_target_pixel_formats"],
+            "require_material_plan_summary.render_target_pixel_formats")
     return spec
 
 
@@ -1091,6 +1100,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "kind",
     "plan_id",
     "geometry",
+    "render_target",
     "opacity",
     "blur_radius",
     "tint",
@@ -1130,6 +1140,8 @@ MATERIAL_PLAN_NUMERIC_FIELDS = (
 )
 
 MATERIAL_GEOMETRY_FIELDS = ("x", "y", "w", "h", "radius")
+MATERIAL_RENDER_TARGET_INT_FIELDS = ("width", "height", "pixel_count")
+MATERIAL_RENDER_TARGET_BOOL_FIELDS = ("ready", "within_backdrop_budget")
 MATERIAL_TINT_FIELDS = ("r", "g", "b", "a")
 MATERIAL_BACKDROP_BOOL_FIELDS = ("available", "stable")
 MATERIAL_BACKDROP_LUMA_FIELDS = (
@@ -1182,6 +1194,12 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "plan_ids": [],
         "region_layers": {},
         "verifier_profiles": {},
+        "render_target": {
+            "ready": 0,
+            "within_backdrop_budget": 0,
+            "max_pixel_count": 0,
+            "pixel_formats": {},
+        },
         "backdrop": {
             "available": 0,
             "stable": 0,
@@ -1363,6 +1381,107 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     f"{plan_path}.geometry",
                     likely_layer=likely_layer,
                     hint="Check MaterialPlan geometry serialization.")
+
+        render_target = check_object_field(
+            report,
+            plan,
+            "render_target",
+            plan_path,
+            likely_layer=likely_layer,
+            hint=(
+                "MaterialPlan.render_target should expose the render target "
+                "metadata and pixel budget decision used by pure planning."))
+        if render_target is not None:
+            render_summary = summary["render_target"]
+            render_values: dict[str, int | float] = {}
+            for key in MATERIAL_RENDER_TARGET_INT_FIELDS:
+                value = check_number_field(
+                    report,
+                    render_target,
+                    key,
+                    f"{plan_path}.render_target",
+                    min_value=0.0,
+                    likely_layer=likely_layer,
+                    hint="Render target dimensions and pixel count must be non-negative.")
+                if isinstance(value, (int, float)):
+                    render_values[key] = value
+                    if key == "pixel_count":
+                        render_summary["max_pixel_count"] = max(
+                            int(render_summary["max_pixel_count"]),
+                            int(value))
+            width = render_values.get("width")
+            height = render_values.get("height")
+            pixel_count = render_values.get("pixel_count")
+            if all(isinstance(value, (int, float))
+                   for value in (width, height, pixel_count)):
+                assert isinstance(width, (int, float))
+                assert isinstance(height, (int, float))
+                assert isinstance(pixel_count, (int, float))
+                expected_pixels = int(width) * int(height)
+                report.check(
+                    "material render target pixel count matches dimensions",
+                    int(pixel_count) == expected_pixels,
+                    path=f"{plan_path}.render_target.pixel_count",
+                    expected=expected_pixels,
+                    actual=int(pixel_count),
+                    likely_layer=likely_layer,
+                    hint="Keep MaterialRenderTargetAnalysis.pixel_count derived from width * height.",
+                    record_success=False)
+            check_number_field(
+                report,
+                render_target,
+                "scale",
+                f"{plan_path}.render_target",
+                min_value=0.0,
+                likely_layer=likely_layer,
+                hint="Render target scale should be sanitized before planning.")
+            ready = None
+            within_budget = None
+            for key in MATERIAL_RENDER_TARGET_BOOL_FIELDS:
+                value = check_bool_field(
+                    report,
+                    render_target,
+                    key,
+                    f"{plan_path}.render_target",
+                    likely_layer=likely_layer,
+                    hint="Render target readiness and budget flags must be explicit.")
+                if value is True:
+                    render_summary[key] = int(render_summary[key]) + 1
+                if key == "ready":
+                    ready = value
+                elif key == "within_backdrop_budget":
+                    within_budget = value
+            if isinstance(width, (int, float)) and isinstance(height, (int, float)):
+                expected_ready = int(width) > 0 and int(height) > 0
+                report.check(
+                    "material render target ready matches dimensions",
+                    ready == expected_ready,
+                    path=f"{plan_path}.render_target.ready",
+                    expected=expected_ready,
+                    actual=ready,
+                    likely_layer=likely_layer,
+                    hint="Render target readiness should be derived from positive dimensions.",
+                    record_success=False)
+            pixel_format = check_string_field(
+                report,
+                render_target,
+                "pixel_format",
+                f"{plan_path}.render_target",
+                likely_layer=likely_layer,
+                hint="Render target pixel format should name the backend target format.")
+            if isinstance(pixel_format, str):
+                formats = render_summary["pixel_formats"]
+                formats[pixel_format] = formats.get(pixel_format, 0) + 1
+            if backdrop_sampling is True:
+                report.check(
+                    "material sampled render target is ready and within budget",
+                    ready is True and within_budget is True,
+                    path=f"{plan_path}.render_target",
+                    expected={"ready": True, "within_backdrop_budget": True},
+                    actual={"ready": ready, "within_backdrop_budget": within_budget},
+                    likely_layer=likely_layer,
+                    hint="Sampled material plans require a render target inside the backdrop budget.",
+                    record_success=False)
 
         tint = check_object_field(
             report,
@@ -2033,7 +2152,9 @@ def check_material_plan_summary_requirements(
             "backdrop_sampling",
             "backdrop_available",
             "backdrop_stable",
-            "luminance_adapted"):
+            "luminance_adapted",
+            "render_target_ready",
+            "render_target_within_backdrop_budget"):
         if field in spec:
             actual = summary.get(field)
             summary_path = f"{base_path}.{field}"
@@ -2050,6 +2171,15 @@ def check_material_plan_summary_requirements(
                     backdrop_summary = {}
                 actual = backdrop_summary.get("luminance_adapted")
                 summary_path = f"{base_path}.backdrop.luminance_adapted"
+            elif field in (
+                    "render_target_ready",
+                    "render_target_within_backdrop_budget"):
+                render_summary = summary.get("render_target")
+                if not isinstance(render_summary, dict):
+                    render_summary = {}
+                nested_field = field.removeprefix("render_target_")
+                actual = render_summary.get(nested_field)
+                summary_path = f"{base_path}.render_target.{nested_field}"
             report.check(
                 f"material plan summary {field} matches",
                 actual == spec[field],
@@ -2077,6 +2207,9 @@ def check_material_plan_summary_requirements(
         "luminance_responses": (
             "material-backdrop",
             "Inspect MaterialPlan.backdrop.luminance_response and pure contrast policy."),
+        "render_target_pixel_formats": (
+            "material-render-target",
+            "Inspect MaterialPlan.render_target.pixel_format and backend target metadata."),
     }
     for field in (
             "fallback_paths",
@@ -2084,7 +2217,8 @@ def check_material_plan_summary_requirements(
             "kinds",
             "pass_names",
             "backdrop_sources",
-            "luminance_responses"):
+            "luminance_responses",
+            "render_target_pixel_formats"):
         if field in spec:
             actual = summary.get(field)
             summary_path = f"{base_path}.{field}"
@@ -2100,6 +2234,12 @@ def check_material_plan_summary_requirements(
                     backdrop_summary = {}
                 actual = backdrop_summary.get("luminance_responses")
                 summary_path = f"{base_path}.backdrop.luminance_responses"
+            elif field == "render_target_pixel_formats":
+                render_summary = summary.get("render_target")
+                if not isinstance(render_summary, dict):
+                    render_summary = {}
+                actual = render_summary.get("pixel_formats")
+                summary_path = f"{base_path}.render_target.pixel_formats"
             likely_layer, hint = summary_field_hints[field]
             report.check(
                 f"material plan summary {field} matches",

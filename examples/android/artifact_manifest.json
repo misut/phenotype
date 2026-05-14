@@ -42,7 +42,12 @@
     "luminance_responses": {
       "not-sampled": 1
     },
-    "luminance_adapted": 0
+    "luminance_adapted": 0,
+    "render_target_ready": 1,
+    "render_target_within_backdrop_budget": 1,
+    "render_target_pixel_formats": {
+      "rgba8unorm": 1
+    }
   },
   "require_material_resource_bounds": {
     "max_plan_blur_radius_lte": 0.0,

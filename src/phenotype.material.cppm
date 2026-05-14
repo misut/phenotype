@@ -126,9 +126,20 @@ struct MaterialBackdropAnalysis {
     float edge_highlight_delta = 0.0f;
 };
 
+struct MaterialRenderTargetAnalysis {
+    int width = 0;
+    int height = 0;
+    float scale = 1.0f;
+    char const* pixel_format = "unknown";
+    std::int64_t pixel_count = 0;
+    bool ready = false;
+    bool within_backdrop_budget = true;
+};
+
 struct MaterialPlan {
     MaterialKind kind = MaterialKind::None;
     MaterialGeometry geometry{};
+    MaterialRenderTargetAnalysis render_target{};
     float opacity = 0.0f;
     float blur_radius = 0.0f;
     Color tint = {0, 0, 0, 0};
@@ -404,6 +415,28 @@ inline MaterialBackdropAnalysis analyze_material_backdrop(
     return analysis;
 }
 
+inline MaterialRenderTargetAnalysis analyze_material_render_target(
+        MaterialRenderTargetMetadata target,
+        std::int64_t max_backdrop_pixels) noexcept {
+    MaterialRenderTargetAnalysis analysis{};
+    analysis.width = std::max(0, target.width);
+    analysis.height = std::max(0, target.height);
+    analysis.scale = std::isfinite(target.scale) && target.scale > 0.0f
+        ? target.scale
+        : 1.0f;
+    analysis.pixel_format = target.pixel_format && target.pixel_format[0]
+        ? target.pixel_format
+        : "unknown";
+    analysis.ready = analysis.width > 0 && analysis.height > 0;
+    analysis.pixel_count = analysis.ready
+        ? static_cast<std::int64_t>(analysis.width)
+            * static_cast<std::int64_t>(analysis.height)
+        : std::int64_t{0};
+    analysis.within_backdrop_budget =
+        analysis.pixel_count <= max_backdrop_pixels;
+    return analysis;
+}
+
 inline char const* material_luminance_response_name(
         bool dark,
         bool bright,
@@ -513,6 +546,9 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.kind = style.kind;
     plan.geometry = request.geometry;
     plan.quality_policy = resolved_quality;
+    plan.render_target = analyze_material_render_target(
+        environment.render_target,
+        resolved_quality.max_backdrop_pixels);
     plan.opacity = std::clamp(style.opacity, 0.0f, 1.0f);
     plan.blur_radius = std::clamp(
         style.blur_radius, 0.0f, max_blur_radius);
@@ -534,12 +570,6 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.contrast_intent = style.contrast_intent;
     plan.debug_seed = material_debug_seed(environment.debug_seed, style.kind);
     plan.sample_taps = resolved_quality.max_sample_taps;
-    auto const target_pixels =
-        environment.render_target.width > 0
-        && environment.render_target.height > 0
-            ? static_cast<std::int64_t>(environment.render_target.width)
-                * static_cast<std::int64_t>(environment.render_target.height)
-            : std::int64_t{0};
     plan.resource_budget.max_blur_radius = max_blur_radius;
     plan.resource_budget.max_sample_taps = plan.sample_taps;
     plan.resource_budget.max_pass_count = 1;
@@ -555,10 +585,9 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         && style.tint.a > 0
         && plan.opacity > 0.0f
         && has_geometry;
-    bool const target_ready = environment.render_target.width > 0
-        && environment.render_target.height > 0;
+    bool const target_ready = plan.render_target.ready;
     bool const backdrop_pixels_within_budget =
-        target_pixels <= resolved_quality.max_backdrop_pixels;
+        plan.render_target.within_backdrop_budget;
     bool const quality_switches_allow_backdrop =
         resolved_quality.allow_backdrop_sampling
         && max_blur_radius > 0.0f

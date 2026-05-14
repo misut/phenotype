@@ -170,14 +170,17 @@ MaterialPlan plan = plan_material_surface(request, environment);
 ```
 
 The plan records blur, tint, saturation, luminance curve, edge highlight,
-noise/dither, shadow, backdrop sampling, backdrop analysis, fallback path, debug metadata, pass
-expectations, the resolved quality policy, resource budgets, and verifier
+noise/dither, shadow, render-target analysis, backdrop sampling, backdrop
+analysis, fallback path, debug metadata, pass expectations, the resolved quality
+policy, resource budgets, and verifier
 expectations. `primary_pass` states whether the backend should run a backdrop
 blur pass or deterministic translucent fallback. `sample_taps` records the
 actual taps required by that resolved pass, so deterministic fallback plans use
 `sample_taps: 0` even when the quality budget allows more. `quality_policy`
 records the pure planner's resolved sampling/noise/shadow switches and quality
-limits, including `max_backdrop_pixels`. `resource_budget` records the clamped
+limits, including `max_backdrop_pixels`. `render_target` records sanitized
+target dimensions, scale, pixel format, pixel count, readiness, and whether the
+target stays within that backdrop budget. `resource_budget` records the clamped
 blur/sample-tap limits, the same allowed backdrop-pixel budget, and whether
 texture copies and fallback behavior are bounded.
 When a stable backdrop descriptor is available, the pure planner also copies

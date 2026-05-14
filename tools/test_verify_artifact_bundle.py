@@ -33,6 +33,15 @@ def material_plan(
         "kind": "regular",
         "plan_id": "material.regular.fallback",
         "geometry": {"x": 12.0, "y": 20.0, "w": 240.0, "h": 96.0, "radius": 10.0},
+        "render_target": {
+            "width": 320,
+            "height": 240,
+            "scale": 1.0,
+            "pixel_format": "rgba8unorm",
+            "pixel_count": 320 * 240,
+            "ready": True,
+            "within_backdrop_budget": True,
+        },
         "opacity": 0.58,
         "blur_radius": 0.0,
         "tint": {"r": 255, "g": 255, "b": 255, "a": 148},
@@ -358,6 +367,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "backdrop_sources": {"none": 1},
                 "luminance_responses": {"not-sampled": 1},
                 "luminance_adapted": 0,
+                "render_target_ready": 1,
+                "render_target_within_backdrop_budget": 1,
+                "render_target_pixel_formats": {"rgba8unorm": 1},
             },
         }
         code, report = self.run_verifier(snapshot(material_plan()), manifest)
@@ -370,6 +382,31 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["backdrop"]["luminance_responses"],
             {"not-sampled": 1})
+        self.assertEqual(
+            report["material_plans"]["render_target"]["pixel_formats"],
+            {"rgba8unorm": 1})
+
+    def test_render_target_pixel_mismatch_points_to_plan_metadata(self) -> None:
+        plan = material_plan()
+        target = plan["render_target"]
+        assert isinstance(target, dict)
+        target["pixel_count"] = 1
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material render target pixel count matches dimensions"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".render_target.pixel_count")
+        self.assertEqual(failure["expected"], 320 * 240)
+        self.assertEqual(failure["actual"], 1)
+        self.assertEqual(failure["likely_layer"], "material.regular.fallback")
+        self.assertIn("width * height", failure["hint"])
 
     def test_unknown_backdrop_response_points_to_backdrop_policy(self) -> None:
         plan = material_plan()
