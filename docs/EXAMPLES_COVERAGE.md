@@ -310,9 +310,8 @@ checks.
 After seeding the first material API, keep the remaining coverage work
 focused on deterministic visual verification and platform contract parity:
 
-1. Add stricter blur-specific material-region probes for the macOS sampled
-   backdrop path, then mirror them on additional backends as they gain native
-   material support.
+1. Mirror the macOS blur-specific material-region probes on additional
+   backends as they gain native material support.
 2. Add Windows startup artifact automation if the runner proves reliable.
 3. Decide whether Android device/emulator contract coverage belongs in CI or
    remains a local/device gate.

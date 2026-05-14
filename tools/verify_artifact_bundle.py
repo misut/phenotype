@@ -305,6 +305,45 @@ def pixel_region_spec_from_manifest(region: Any) -> str:
     return f"{name}:{coords}:{float(min_delta)}:{min_unique}"
 
 
+def pixel_region_metric_specs_from_manifest(value: Any) -> list[JsonObject]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("pixel_region_metrics must be a list")
+    specs: list[JsonObject] = []
+    allowed_metrics = {
+        "edge_energy",
+        "luma_delta",
+        "luma_mean",
+        "luma_stddev",
+        "unique_colors",
+    }
+    for index, entry in enumerate(value):
+        if not isinstance(entry, dict):
+            raise ValueError(f"pixel_region_metrics[{index}] must be an object")
+        region = entry.get("region")
+        metric = entry.get("metric")
+        if not isinstance(region, str) or not region:
+            raise ValueError(f"pixel_region_metrics[{index}].region must be a non-empty string")
+        if metric not in allowed_metrics:
+            raise ValueError(
+                f"pixel_region_metrics[{index}].metric must be one of "
+                + ", ".join(sorted(allowed_metrics)))
+        spec: JsonObject = {"region": region, "metric": metric}
+        has_bound = False
+        for bound in ("gte", "lte"):
+            if bound in entry:
+                spec[bound] = non_negative_number(
+                    entry[bound],
+                    f"pixel_region_metrics[{index}].{bound}")
+                has_bound = True
+        if not has_bound:
+            raise ValueError(
+                f"pixel_region_metrics[{index}] must contain gte or lte")
+        specs.append(spec)
+    return specs
+
+
 def runtime_detail_spec_from_manifest(entry: Any) -> str:
     if not isinstance(entry, dict):
         raise ValueError("require_runtime_details entries must be objects")
@@ -488,6 +527,9 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
             raise ValueError("pixel_regions must be a list")
         args.require_pixel_region.extend(
             pixel_region_spec_from_manifest(region) for region in pixel_regions)
+        args.require_pixel_region_metric.extend(
+            pixel_region_metric_specs_from_manifest(
+                manifest.get("pixel_region_metrics")))
 
     except ValueError as exc:
         report.check("manifest schema is valid", False, str(exc))
@@ -618,10 +660,17 @@ def analyze_bmp_region(path: Path, frame: JsonObject, rect: tuple[int, int, int,
     alpha_max = 0
     unique_colors: set[tuple[int, int, int, int]] = set()
     sampled = 0
+    luma_sum = 0.0
+    luma_square_sum = 0.0
+    edge_sum = 0.0
+    edge_count = 0
+    previous_row: list[float] | None = None
 
     for py in range(y, y + h):
         source_y = py if top_down else height - 1 - py
         row_start = pixel_offset + source_y * row_bytes
+        row_luma: list[float] = []
+        previous_luma: float | None = None
         for px in range(x, x + w):
             offset = row_start + px * bytes_per_pixel
             if offset + bytes_per_pixel > len(data):
@@ -633,19 +682,39 @@ def analyze_bmp_region(path: Path, frame: JsonObject, rect: tuple[int, int, int,
             luma = 0.2126 * r + 0.7152 * g + 0.0722 * b
             luma_min = min(luma_min, luma)
             luma_max = max(luma_max, luma)
+            luma_sum += luma
+            luma_square_sum += luma * luma
             alpha_min = min(alpha_min, a)
             alpha_max = max(alpha_max, a)
             if len(unique_colors) < 4096:
                 unique_colors.add((r, g, b, a))
+            if previous_luma is not None:
+                edge_sum += abs(luma - previous_luma)
+                edge_count += 1
+            previous_luma = luma
+            row_luma.append(luma)
             sampled += 1
+        if previous_row is not None:
+            for current, previous in zip(row_luma, previous_row):
+                edge_sum += abs(current - previous)
+                edge_count += 1
+        previous_row = row_luma
+
+    luma_mean = luma_sum / sampled if sampled else 0.0
+    luma_variance = (
+        max(0.0, (luma_square_sum / sampled) - (luma_mean * luma_mean))
+        if sampled else 0.0)
 
     return {
         "alpha_max": alpha_max,
         "alpha_min": alpha_min,
+        "edge_energy": round(edge_sum / edge_count, 3) if edge_count else 0.0,
         "height": h,
         "luma_delta": round(luma_max - luma_min, 3),
         "luma_max": round(luma_max, 3),
+        "luma_mean": round(luma_mean, 3),
         "luma_min": round(luma_min, 3),
+        "luma_stddev": round(luma_variance ** 0.5, 3),
         "sampled_pixels": sampled,
         "unique_colors": len(unique_colors),
         "width": w,
@@ -1750,6 +1819,64 @@ def verify(args: argparse.Namespace) -> int:
         if pixel_regions:
             report.data["pixel_regions"] = pixel_regions
 
+        pixel_region_by_name = {
+            str(region.get("name")): region
+            for region in pixel_regions
+            if isinstance(region.get("name"), str)
+        }
+        for index, spec in enumerate(args.require_pixel_region_metric):
+            region_name = str(spec.get("region", ""))
+            metric = str(spec.get("metric", ""))
+            region = pixel_region_by_name.get(region_name)
+            report.check(
+                f"pixel region metric region exists: {region_name}",
+                isinstance(region, dict),
+                path=f"manifest.pixel_region_metrics[{index}].region",
+                expected="existing pixel region",
+                actual=region_name,
+                region=region_name,
+                likely_layer="artifact-manifest",
+                hint="Add the named region to pixel_regions before applying metric bounds.",
+                record_success=False)
+            if not isinstance(region, dict):
+                continue
+            actual = region.get(metric)
+            report.check(
+                f"pixel region metric is numeric: {region_name}.{metric}",
+                isinstance(actual, (int, float)) and not isinstance(actual, bool),
+                path=f"frame.bmp#{region_name}.{metric}",
+                expected="numeric metric",
+                actual=actual,
+                region=region_name,
+                likely_layer="frame-capture",
+                hint="Check analyze_bmp_region and the metric name.",
+                record_success=False)
+            if not isinstance(actual, (int, float)) or isinstance(actual, bool):
+                continue
+            likely_layer = "material-or-backdrop-pass"
+            if material_plan_summary is not None:
+                layers = material_plan_summary.get("region_layers")
+                if isinstance(layers, dict):
+                    likely_layer = str(layers.get(region_name, likely_layer))
+            for bound, symbol in (("gte", ">="), ("lte", "<=")):
+                if bound not in spec:
+                    continue
+                expected = float(spec[bound])
+                ok = float(actual) >= expected if bound == "gte" else float(actual) <= expected
+                report.check(
+                    f"pixel region metric {symbol} bound: {region_name}.{metric}",
+                    ok,
+                    f"expected {symbol} {expected}, got {actual}",
+                    path=f"frame.bmp#{region_name}.{metric}",
+                    expected={symbol: expected},
+                    actual=region,
+                    region=region_name,
+                    likely_layer=likely_layer,
+                    hint=(
+                        "For blur probes, inspect renderer.material_plans, "
+                        "the backdrop sample pass, and whether the manifest "
+                        "region avoids foreground text."))
+
     platform_dir = bundle / "platform"
     platform_files = load_platform_files(platform_dir, report)
     report.data["platform_files"] = platform_files
@@ -1867,7 +1994,8 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
     parser.set_defaults(
         require_material_plan_summary=None,
         require_material_resource_bounds=None,
-        require_material_semantic_runtime_match=False)
+        require_material_semantic_runtime_match=False,
+        require_pixel_region_metric=[])
     return parser.parse_args(argv)
 
 

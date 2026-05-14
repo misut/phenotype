@@ -177,8 +177,8 @@ Remaining gaps:
 - Windows and Android still use the documented material fallback, with resolved
   runtime fallback plans;
 - WASI/WebGPU stays snapshot-only for now;
-- blur-specific pixel probes should become stricter now that macOS has sampled
-  backdrop material rendering;
+- macOS has a blur-specific pixel probe based on smoothness metrics; mirror
+  that on additional backends as they gain native material rendering;
 - resolved material plans should stay present in
   `debug.platform_runtime.details.renderer.material_plans`;
 - Android CI device/emulator wiring remains a policy and runner-capacity
