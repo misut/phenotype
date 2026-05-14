@@ -1620,6 +1620,7 @@ struct android_renderer {
     double perf_record_ms_sum = 0.0;
     double perf_total_ms_sum  = 0.0;
     std::uint32_t material_frame_sequence = 0;
+    MaterialExecutorSummary material_executor_summary{};
 
     // Stage 4 text pipeline. Atlas image + view grow on demand;
     // everything else is allocated once per device.
@@ -5365,10 +5366,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         g_renderer.last_frame_buf.clear();
         g_renderer.last_buf_hash = 0;
         g_renderer.last_scratch_valid = false;
+        g_renderer.material_executor_summary = MaterialExecutorSummary{};
         return;
     }
 
     auto const t_start = std::chrono::steady_clock::now();
+    g_renderer.material_executor_summary = MaterialExecutorSummary{};
 
     // Snapshot the caller's buffer so hit_test can replay it later
     // without forcing another view() pass.
@@ -5738,6 +5741,17 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
 
     auto const t_end = std::chrono::steady_clock::now();
+    MaterialExecutorSummary material_summary;
+    material_summary.plan_count =
+        static_cast<std::uint32_t>(scratch.material_records.size());
+    material_summary.fallback_instance_count = material_summary.plan_count;
+    material_summary.cpu_decode_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            t_decode_end - t_start).count();
+    material_summary.cpu_total_ns =
+        std::chrono::duration_cast<std::chrono::nanoseconds>(
+            t_end - t_start).count();
+    g_renderer.material_executor_summary = material_summary;
 
     // Save scratch + atlas for next frame's potential decode-skip. We
     // do this only on the heavy path (decode actually ran) — the skip
@@ -6051,6 +6065,13 @@ inline ::json::Object android_renderer_runtime_json() {
             ::phenotype::diag::detail::material_runtime_summary_json(
                 ::phenotype::MaterialRuntimeSummary{}));
     }
+    auto const executor_summary = g_renderer.last_scratch_valid
+        ? g_renderer.material_executor_summary
+        : ::phenotype::MaterialExecutorSummary{};
+    r.emplace(
+        "material_executor_summary",
+        ::phenotype::diag::detail::material_executor_summary_json(
+            executor_summary));
     r.emplace(
         "material_fallback_policy",
         ::json::Value{"vulkan-translucent-rounded-rect"});

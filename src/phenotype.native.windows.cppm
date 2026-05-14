@@ -1424,6 +1424,7 @@ struct RendererState {
     UINT last_render_height = 0;
     UINT64 next_fence_value = 1;
     std::uint32_t material_frame_sequence = 0;
+    MaterialExecutorSummary material_executor_summary{};
     HRESULT last_failure_hr = S_OK;
     HRESULT device_removed_reason = S_OK;
     HRESULT last_close_hr = S_OK;
@@ -4531,6 +4532,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_env.quality.max_sample_taps = 25;
     DecodedFrame decoded;
     g_renderer.material_records.clear();
+    g_renderer.material_executor_summary = MaterialExecutorSummary{};
     if (!decode_frame_commands(
             buf, len, line_height_ratio, material_env, decoded)) {
         if (g_renderer.debug_enabled) {
@@ -4541,6 +4543,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         return;
     }
     g_renderer.material_records = decoded.material_records;
+    MaterialExecutorSummary material_summary;
+    material_summary.plan_count =
+        static_cast<std::uint32_t>(g_renderer.material_records.size());
+    material_summary.fallback_instance_count = material_summary.plan_count;
+    g_renderer.material_executor_summary = material_summary;
     suppress_focused_input_base_text_for_composition(decoded);
     (void)process_completed_images();
 
@@ -5026,6 +5033,10 @@ inline json::Object windows_renderer_runtime_json() {
         "material_runtime_summary",
         ::phenotype::diag::detail::material_runtime_summary_json(
             g_renderer.material_records));
+    renderer.emplace(
+        "material_executor_summary",
+        ::phenotype::diag::detail::material_executor_summary_json(
+            g_renderer.material_executor_summary));
     renderer.emplace(
         "material_fallback_policy",
         json::Value{"d3d12-translucent-rounded-rect"});

@@ -64,5 +64,36 @@
       "path": "renderer.material_backdrop_source_ready",
       "equals": false
     }
+  ],
+  "require_runtime_numeric_bounds": [
+    {
+      "path": "renderer.material_executor_summary.plan_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.material_instance_count",
+      "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.fallback_instance_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.material_draw_calls",
+      "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_count",
+      "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.material_upload_bytes",
+      "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.cpu_total_ns",
+      "gte": 1,
+      "lte": 5000000000
+    }
   ]
 }

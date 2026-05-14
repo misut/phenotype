@@ -163,6 +163,21 @@ struct MaterialRuntimeSummary {
     std::uint32_t non_deterministic_fallback = 0;
 };
 
+struct MaterialExecutorSummary {
+    std::uint32_t plan_count = 0;
+    std::uint32_t material_instance_count = 0;
+    std::uint32_t fallback_instance_count = 0;
+    std::uint32_t material_draw_calls = 0;
+    std::uint32_t backdrop_copy_count = 0;
+    std::int64_t backdrop_copy_pixels = 0;
+    std::int64_t material_upload_bytes = 0;
+    std::int64_t material_buffer_capacity_bytes = 0;
+    std::uint32_t material_buffer_reallocations = 0;
+    std::int64_t cpu_decode_ns = 0;
+    std::int64_t cpu_material_upload_ns = 0;
+    std::int64_t cpu_total_ns = 0;
+};
+
 inline void accumulate_material_runtime_summary(
         MaterialRuntimeSummary& summary,
         MaterialRuntimeRecord const& record) noexcept {

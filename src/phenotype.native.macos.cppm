@@ -3891,6 +3891,7 @@ struct RendererState {
     int last_render_width = 0;
     int last_render_height = 0;
     std::uint32_t material_frame_sequence = 0;
+    MaterialExecutorSummary material_executor_summary{};
     bool last_frame_available = false;
     bool initialized = false;
 };
@@ -5954,6 +5955,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (len == 0 || !g_renderer.initialized) return;
 
     NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
+    auto const flush_started = metrics::detail::now_ns();
+    g_renderer.material_executor_summary = MaterialExecutorSummary{};
     // Read the host-cached HiDPI scale so we don't poll GLFW twice per
     // frame. The shell keeps cached_content_scale in sync with the
     // framebuffer_size and content_scale callbacks.
@@ -6012,8 +6015,9 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         pool->release();
         return;
     }
+    auto const decode_ns = metrics::detail::now_ns() - decode_started;
     metrics::inst::native_phase_duration.record(
-        metrics::detail::now_ns() - decode_started,
+        decode_ns,
         native_attrs("command_decode"));
 
     auto image_started = metrics::detail::now_ns();
@@ -6035,6 +6039,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         native_attrs("text_prepare"));
 
     finalize_batches(g_renderer.scratch);
+
+    MaterialExecutorSummary material_summary;
+    material_summary.cpu_decode_ns = decode_ns;
+    material_summary.plan_count =
+        static_cast<std::uint32_t>(g_renderer.scratch.material_records.size());
+    for (auto const& record : g_renderer.scratch.material_records) {
+        if (!record.plan.backdrop_sampling || record.plan.fallback())
+            ++material_summary.fallback_instance_count;
+    }
 
     int winw = 0;
     int winh = 0;
@@ -6122,7 +6135,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     auto const material_bytes =
         scratch.material_instances.size() * sizeof(MaterialInstanceGPU);
     bool material_uploaded = false;
+    material_summary.material_instance_count =
+        static_cast<std::uint32_t>(scratch.material_instances.size());
+    auto material_upload_started = metrics::detail::now_ns();
     if (!scratch.material_instances.empty()) {
+        auto const old_material_capacity = g_renderer.material_instances_capacity;
         if (!ensure_instance_buffer(
                 g_renderer.material_instances_buf,
                 g_renderer.material_instances_capacity,
@@ -6137,7 +6154,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             scratch.material_instances.data(),
             material_bytes);
         material_uploaded = true;
+        material_summary.material_upload_bytes =
+            static_cast<std::int64_t>(material_bytes);
+        material_summary.material_buffer_capacity_bytes =
+            static_cast<std::int64_t>(g_renderer.material_instances_capacity);
+        if (g_renderer.material_instances_capacity != old_material_capacity)
+            ++material_summary.material_buffer_reallocations;
     }
+    material_summary.cpu_material_upload_ns =
+        metrics::detail::now_ns() - material_upload_started;
 
     auto const arc_bytes = scratch.arc_instances.size() * sizeof(ArcInstanceGPU);
     bool arc_uploaded = false;
@@ -6271,6 +6296,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 NS::UInteger(0), 6,
                 NS::UInteger(batch_material_count),
                 NS::UInteger(batch.material_first));
+            ++material_summary.material_draw_calls;
         }
         if (arc_uploaded && batch_arc_count > 0) {
             encoder->setRenderPipelineState(g_renderer.arc_pipeline);
@@ -6378,10 +6404,17 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 origin);
             blit->endEncoding();
             g_renderer.last_frame_available = true;
+            material_summary.backdrop_copy_count = 1;
+            material_summary.backdrop_copy_pixels =
+                static_cast<std::int64_t>(fbw)
+                * static_cast<std::int64_t>(fbh);
         }
     }
     command_buffer->presentDrawable(drawable);
     command_buffer->commit();
+    material_summary.cpu_total_ns =
+        metrics::detail::now_ns() - flush_started;
+    g_renderer.material_executor_summary = material_summary;
 
     pool->release();
 }
@@ -6437,6 +6470,7 @@ inline void renderer_shutdown() {
     g_renderer.last_render_width = 0;
     g_renderer.last_render_height = 0;
     g_renderer.material_frame_sequence = 0;
+    g_renderer.material_executor_summary = MaterialExecutorSummary{};
     g_renderer.last_frame_available = false;
     g_renderer.window = nullptr;
     g_renderer.initialized = false;
@@ -6968,6 +7002,10 @@ inline json::Object macos_renderer_runtime_json() {
         "material_runtime_summary",
         ::phenotype::diag::detail::material_runtime_summary_json(
             g_renderer.scratch.material_records));
+    renderer.emplace(
+        "material_executor_summary",
+        ::phenotype::diag::detail::material_executor_summary_json(
+            g_renderer.material_executor_summary));
     return renderer;
 }
 

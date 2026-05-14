@@ -181,6 +181,14 @@ list, not only the pure resource budget. Backends also serialize
 `renderer.material_runtime_summary`; the verifier recomputes the same counters
 from `renderer.material_plans[]` and reports the exact summary field if the
 backend's view of executed material work drifts from the resolved plans.
+Backends also serialize `renderer.material_executor_summary` for edge-only
+work that cannot be derived from the pure plan, including material instance
+count, fallback instance count, material draw calls, upload bytes/capacity,
+framebuffer-history copy pixels, and CPU enqueue timings. Use
+`require_runtime_numeric_bounds` for CI-safe limits on those numeric runtime
+paths. Each entry names a path under `debug.platform_runtime.details` and can
+provide `equals`, `gte`, and/or `lte`; failures report the exact path plus the
+likely `material-executor` pass when the path targets the executor summary.
 Use `require_material_quality_policy` when a material gate must prove the
 resolved pure policy stayed enabled and bounded. It can require backdrop
 sampling, noise, and shadow to remain allowed for every plan, and can bound the

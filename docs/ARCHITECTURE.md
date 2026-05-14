@@ -194,6 +194,12 @@ explicit fallback policy. Backends also publish
 the same records; the artifact verifier recomputes it from
 `material_plans[]` so CI can catch summary drift and unexpected executor pass
 growth.
+Backends separately publish `renderer.material_executor_summary` for edge-only
+execution telemetry: material instances, fallback instances, material draw
+calls, upload bytes/capacity, framebuffer-history copy bounds, and CPU enqueue
+timings. These fields are not inputs to the pure planner. They let artifact
+gates prove the backend stayed inside deterministic resource limits while also
+leaving nondeterministic timing data available for post-failure diagnosis.
 Platform APIs, Metal/AppKit calls, shader compilation, texture capture, clocks,
 filesystem writes, and process execution stay outside this pure layer.
 
