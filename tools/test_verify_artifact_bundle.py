@@ -626,6 +626,26 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertIn("plan_material_surface", failure["suggested_action"])
         self.assertIn("MaterialPlan fields", failure["suggested_action"])
 
+    def test_contract_version_summary_failure_points_to_material_plan(self) -> None:
+        manifest = {
+            "require_material_plan_summary": {
+                "contract_versions": {"2": 1},
+            },
+        }
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material plan summary contract_versions matches")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans#summary"
+            ".contract_versions")
+        self.assertEqual(failure["likely_layer"], "material-plan")
+        self.assertIn("MaterialPlan.contract_version", failure["hint"])
+        self.assertIn("plan_material_surface", failure["suggested_action"])
+
     def test_non_fallback_reason_failure_is_llm_actionable(self) -> None:
         plan = material_plan()
         plan["fallback"] = False
