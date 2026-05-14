@@ -130,6 +130,13 @@ value, actual value, likely layer/pass, and a short hint. The top-level
 jump to the most likely source first. Use `--require-material-plan` when a
 bundle must contain resolved material plans.
 
+Manifests can also set `require_material_plan_summary` to assert the resolved
+material aggregate, not just the per-plan schema. Supported keys are `count`,
+`min_count`, `fallback`, `backdrop_sampling`, and exact count maps for
+`fallback_paths`, `kinds`, and `pass_names`. This catches policy drift such as a
+glass scene silently switching from backdrop blur to fallback, or a fallback
+backend reporting the wrong deterministic pass.
+
 ```sh
 tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
   --expect-platform macos \
