@@ -102,6 +102,8 @@ struct MaterialPassExpectation {
 struct MaterialResourceBudget {
     float max_blur_radius = 0.0f;
     unsigned int max_sample_taps = 0;
+    unsigned int max_pass_count = 1;
+    std::int64_t max_backdrop_pixels = 0;
     bool bounded_texture_copy = true;
     bool deterministic_fallback = true;
 };
@@ -338,8 +340,16 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.contrast_intent = style.contrast_intent;
     plan.debug_seed = material_debug_seed(environment.debug_seed, style.kind);
     plan.sample_taps = std::min(environment.quality.max_sample_taps, 25u);
+    auto const target_pixels =
+        environment.render_target.width > 0
+        && environment.render_target.height > 0
+            ? static_cast<std::int64_t>(environment.render_target.width)
+                * static_cast<std::int64_t>(environment.render_target.height)
+            : std::int64_t{0};
     plan.resource_budget.max_blur_radius = max_blur_radius;
     plan.resource_budget.max_sample_taps = plan.sample_taps;
+    plan.resource_budget.max_pass_count = 1;
+    plan.resource_budget.max_backdrop_pixels = target_pixels;
     plan.resource_budget.bounded_texture_copy = true;
     plan.resource_budget.deterministic_fallback = true;
 

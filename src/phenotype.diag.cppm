@@ -777,6 +777,14 @@ namespace detail {
                 static_cast<std::int64_t>(
                     plan.resource_budget.max_sample_taps)});
         resource_budget.emplace(
+            "max_pass_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.resource_budget.max_pass_count)});
+        resource_budget.emplace(
+            "max_backdrop_pixels",
+            json::Value{plan.resource_budget.max_backdrop_pixels});
+        resource_budget.emplace(
             "bounded_texture_copy",
             json::Value{plan.resource_budget.bounded_texture_copy});
         resource_budget.emplace(
