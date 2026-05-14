@@ -92,6 +92,18 @@ def suggested_action_for_failure(
         return (
             f"Inspect frame.bmp region {region}, its manifest rectangle, and "
             "renderer.material_plans#summary.region_layers.")
+    if likely_layer == "material-plan":
+        return (
+            "Inspect plan_material_surface, the resolved MaterialPlan fields, "
+            "and the runtime material plan serializer for this plan-level contract.")
+    if likely_layer == "material-contract":
+        return (
+            "Inspect semantic material nodes, MaterialRect command emission, "
+            "and renderer.material_plans[] for semantic/runtime parity.")
+    if likely_layer == "material-or-backdrop-pass":
+        return (
+            "Inspect renderer.material_plans[], the backend material/backdrop "
+            "pass output, and the named frame region before changing thresholds.")
     if likely_layer.startswith("material."):
         return (
             "Inspect plan_material_surface and the resolved MaterialPlan "
