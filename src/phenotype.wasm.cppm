@@ -33,6 +33,11 @@ inline json::Value platform_runtime_details_json_with_reason(
     runtime.emplace("host_model", json::Value{"wasi"});
     runtime.emplace("frame_capture_supported", json::Value{false});
     runtime.emplace("artifact_bundle_support", json::Value{"snapshot-only"});
+    runtime.emplace(
+        "renderer",
+        json::Value{
+            ::phenotype::diag::detail::empty_material_renderer_contract(
+                "snapshot-only-semantic-material-fallback")});
     if (!artifact_reason.empty()) {
         runtime.emplace(
             "artifact_reason",

@@ -6,7 +6,7 @@ phenotype = **platform-agnostic core** (C++23 modules) + **platform backends**.
 
 The core handles widgets, layout, state management, vDOM diff, and draw-command emission. It knows nothing about windows, GPUs, or fonts — those are provided by the backend via a thin host interface.
 
-- **Core modules**: types, state, layout, paint, commands, diag, theme_json
+- **Core modules**: types, material, state, layout, paint, commands, diag, theme_json
 - **Backend contract**: `phenotype_host.h` (5 host functions) + `phenotype.commands` (typed draw commands)
 - **Current backends**: WASM+JS (production), macOS native (GLFW shell + CoreText + Metal), Windows native (GLFW shell + DirectWrite + Direct3D 12), Linux stub native backend
 - **Planned backends**: platform-specific native renderers/text systems behind the same shell + command-buffer contract
@@ -158,6 +158,38 @@ All values are little-endian. Colors are packed as `(r << 24) | (g << 16) | (b <
 
 The `phenotype.commands` module provides a C++ parser (`parse_commands(buf, len)`) that decodes these bytes into typed structs (`ClearCmd`, `FillRectCmd`, etc.) for native backends.
 
+## Material Planning
+
+Material policy lives in the pure `phenotype.material` module. Backends provide
+immutable edge inputs — capability snapshot, backdrop descriptor, render-target
+metadata, debug seed, and quality policy — then execute the returned
+`MaterialPlan`.
+
+```cpp
+MaterialPlan plan = plan_material_surface(request, environment);
+```
+
+The plan records blur, tint, saturation, luminance curve, edge highlight,
+noise/dither, shadow, backdrop sampling, fallback path, debug metadata, pass
+expectations, resource budgets, and verifier expectations. `primary_pass`
+states whether the backend should run a backdrop blur pass or deterministic
+translucent fallback. `resource_budget` records the clamped blur/sample-tap
+limits and whether texture copies and fallback behavior are bounded.
+Runtime adapters serialize the same `MaterialRuntimeRecord` shape into
+`debug.platform_runtime.details.renderer.material_plans`: macOS records the
+sampled-backdrop pass, Windows and Android record deterministic fallback
+plans, and snapshot-only targets publish an empty renderer contract with an
+explicit fallback policy.
+Platform APIs, Metal/AppKit calls, shader compilation, texture capture, clocks,
+filesystem writes, and process execution stay outside this pure layer.
+
+Apple's Human Interface Guidelines distinguish Liquid Glass from standard
+materials: Liquid Glass belongs primarily to functional control/navigation
+layers that float above content. phenotype follows that boundary in its
+contract language. Backends may render an Apple-inspired glass effect, but the
+core material API remains a cross-platform semantic contract with explicit
+fallbacks rather than a claim to reproduce private system component behavior.
+
 ## Native backend structure
 
 The native path is intentionally split into three layers so macOS and Windows work mostly in separate files:
@@ -178,7 +210,7 @@ Debugging follows one shared model across native and WASI targets:
   `frame.bmp` and `platform/<platform>-runtime.json`
 
 See [DEBUG_WORKFLOW.md](DEBUG_WORKFLOW.md) for the full contract and the current
-macOS / WASI extensions.
+material/runtime extensions.
 
 ### Current native backends
 

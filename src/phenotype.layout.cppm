@@ -219,9 +219,19 @@ inline bool material_equal(MaterialStyle const& a, MaterialStyle const& b) noexc
         && a.blur_radius == b.blur_radius
         && color_equal(a.tint, b.tint)
         && color_equal(a.border, b.border)
+        && a.saturation == b.saturation
+        && a.luminance_floor == b.luminance_floor
+        && a.luminance_gain == b.luminance_gain
+        && a.edge_highlight == b.edge_highlight
+        && a.edge_width == b.edge_width
+        && a.noise_opacity == b.noise_opacity
+        && a.shadow_alpha == b.shadow_alpha
+        && a.shadow_radius == b.shadow_radius
         && a.fallback == b.fallback
         && cstr_equal(a.fallback_reason, b.fallback_reason)
-        && cstr_equal(a.contrast_intent, b.contrast_intent);
+        && cstr_equal(a.contrast_intent, b.contrast_intent)
+        && cstr_equal(a.plan_id, b.plan_id)
+        && cstr_equal(a.verifier_profile, b.verifier_profile);
 }
 
 inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {

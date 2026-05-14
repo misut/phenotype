@@ -97,7 +97,7 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 | `grid(columns, row_height, builder)` | Rigid `columns × N` grid; children are placed row-major into fixed tracks |
 | `scaffold(top, content, bottom)` | Page layout with hero header, max-width content, and footer |
 | `card(builder)` | Rounded white container with padding |
-| `material_surface(kind, builder)` | Debug-visible material container with clear/thin/regular/thick semantics, macOS sampled-backdrop rendering, and translucent fallback elsewhere |
+| `material_surface(kind, builder)` | Debug-visible material container with clear/thin/regular/thick semantics, macOS sampled-backdrop rendering, and resolved deterministic fallback plans elsewhere |
 | `scroll_view(fixed_height, builder)` | Per-node scroll viewport that catches wheel events inside its bounds |
 | `overlay(builder)` | Top-of-stack layer that paints after the main tree (foundation for dialogs, popovers, tooltips) |
 | `dialog(builder, max_width=360, top_padding=96)` | Centered modal card on top of an `overlay` |
@@ -287,8 +287,11 @@ exon run
 
 `examples/glass_showcase` is the material and debug-artifact scene. It renders
 deterministic backdrop regions, all public material kinds, macOS sampled
-backdrop material, fallback metadata, and stable semantic labels for
-pixel-region verification.
+backdrop material for functional-layer probes, resolved runtime material plans,
+fallback metadata, and stable semantic labels for pixel-region verification.
+Unsupported renderers still emit the same material plan schema with a
+translucent fallback pass so artifacts explain why backdrop sampling did not
+run.
 
 ```bash
 cd examples/workbook

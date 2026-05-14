@@ -19,6 +19,7 @@
     "regular",
     "thick"
   ],
+  "require_material_plans": true,
   "require_capabilities": [
     "material_backdrop_blur"
   ],

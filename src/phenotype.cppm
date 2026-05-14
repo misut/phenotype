@@ -18,6 +18,7 @@ export module phenotype;
 
 export import phenotype.diag;
 export import phenotype.types;
+export import phenotype.material;
 export import phenotype.state;
 export import phenotype.layout;
 export import phenotype.paint;
@@ -1508,59 +1509,8 @@ inline float space_value(SpaceToken token) noexcept {
     return t.space_md;
 }
 
-inline Color with_alpha(Color color, unsigned char alpha) noexcept {
-    color.a = alpha;
-    return color;
-}
-
 inline MaterialStyle material_style(MaterialKind kind) noexcept {
-    auto const& t = detail::g_app.theme;
-    MaterialStyle style{};
-    style.kind = kind;
-    style.fallback = kind != MaterialKind::None;
-    style.fallback_reason = kind == MaterialKind::None
-        ? ""
-        : "backdrop blur is not implemented; using translucent rounded rect";
-
-    switch (kind) {
-        case MaterialKind::Clear:
-            style.opacity = 0.28f;
-            style.blur_radius = 10.0f;
-            style.tint = with_alpha(t.surface, 72);
-            style.border = with_alpha(t.border, 120);
-            style.contrast_intent = "context";
-            break;
-        case MaterialKind::Thin:
-            style.opacity = 0.42f;
-            style.blur_radius = 16.0f;
-            style.tint = with_alpha(t.surface, 108);
-            style.border = with_alpha(t.border, 150);
-            style.contrast_intent = "balanced";
-            break;
-        case MaterialKind::Regular:
-            style.opacity = 0.58f;
-            style.blur_radius = 22.0f;
-            style.tint = with_alpha(t.surface, 148);
-            style.border = with_alpha(t.border, 190);
-            style.contrast_intent = "legible";
-            break;
-        case MaterialKind::Thick:
-            style.opacity = 0.78f;
-            style.blur_radius = 30.0f;
-            style.tint = with_alpha(t.surface, 198);
-            style.border = with_alpha(t.border, 230);
-            style.contrast_intent = "high-contrast";
-            break;
-        case MaterialKind::None:
-        default:
-            style.opacity = 0.0f;
-            style.blur_radius = 0.0f;
-            style.tint = t.transparent;
-            style.border = t.transparent;
-            style.contrast_intent = "standard";
-            break;
-    }
-    return style;
+    return material_style_for_kind(kind, detail::g_app.theme);
 }
 
 // column — vertical flex container.
@@ -2977,9 +2927,19 @@ inline void collect_semantic_nodes(NodeHandle node_h,
             .kind = material_kind_name(node.material.kind),
             .opacity = node.material.opacity,
             .blur_radius = node.material.blur_radius,
+            .saturation = node.material.saturation,
+            .luminance_floor = node.material.luminance_floor,
+            .luminance_gain = node.material.luminance_gain,
+            .edge_highlight = node.material.edge_highlight,
+            .edge_width = node.material.edge_width,
+            .noise_opacity = node.material.noise_opacity,
+            .shadow_alpha = node.material.shadow_alpha,
+            .shadow_radius = node.material.shadow_radius,
             .fallback = node.material.fallback,
             .fallback_reason = node.material.fallback_reason,
             .contrast_intent = node.material.contrast_intent,
+            .plan_id = node.material.plan_id,
+            .verifier_profile = node.material.verifier_profile,
         };
     }
 

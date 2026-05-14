@@ -68,9 +68,19 @@ struct MaterialStyle {
     float blur_radius = 0.0f;
     Color tint = {0, 0, 0, 0};
     Color border = {0, 0, 0, 0};
+    float saturation = 1.0f;
+    float luminance_floor = 0.0f;
+    float luminance_gain = 1.0f;
+    float edge_highlight = 0.0f;
+    float edge_width = 1.0f;
+    float noise_opacity = 0.0f;
+    float shadow_alpha = 0.0f;
+    float shadow_radius = 0.0f;
     bool fallback = false;
     char const* fallback_reason = "";
     char const* contrast_intent = "standard";
+    char const* plan_id = "material.none";
+    char const* verifier_profile = "none";
 };
 
 // A solid convex quadrilateral in canvas-local coordinates. Intended

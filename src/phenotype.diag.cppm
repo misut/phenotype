@@ -36,6 +36,8 @@ module;
 export module phenotype.diag;
 
 import json;
+import phenotype.material;
+import phenotype.types;
 
 export namespace phenotype {
 
@@ -597,9 +599,19 @@ struct SemanticNodeSnapshot {
         std::string kind;
         float opacity = 0.0f;
         float blur_radius = 0.0f;
+        float saturation = 1.0f;
+        float luminance_floor = 0.0f;
+        float luminance_gain = 1.0f;
+        float edge_highlight = 0.0f;
+        float edge_width = 1.0f;
+        float noise_opacity = 0.0f;
+        float shadow_alpha = 0.0f;
+        float shadow_radius = 0.0f;
         bool fallback = false;
         std::string fallback_reason;
         std::string contrast_intent;
+        std::string plan_id;
+        std::string verifier_profile;
     };
     std::optional<MaterialSnapshot> material;
     RectSnapshot bounds{};
@@ -706,6 +718,147 @@ namespace detail {
         if (auto provider = platform_runtime_details_provider_storage())
             return provider();
         return json::Value{json::Object{}};
+    }
+
+    inline json::Value material_plan_runtime_json(
+            MaterialRuntimeRecord const& record) {
+        auto const& plan = record.plan;
+        json::Object geometry;
+        geometry.emplace("x", json::Value{plan.geometry.x});
+        geometry.emplace("y", json::Value{plan.geometry.y});
+        geometry.emplace("w", json::Value{plan.geometry.w});
+        geometry.emplace("h", json::Value{plan.geometry.h});
+        geometry.emplace("radius", json::Value{plan.geometry.radius});
+
+        json::Object tint;
+        tint.emplace("r", json::Value{static_cast<std::int64_t>(plan.tint.r)});
+        tint.emplace("g", json::Value{static_cast<std::int64_t>(plan.tint.g)});
+        tint.emplace("b", json::Value{static_cast<std::int64_t>(plan.tint.b)});
+        tint.emplace("a", json::Value{static_cast<std::int64_t>(plan.tint.a)});
+
+        json::Object verifier;
+        verifier.emplace(
+            "require_backdrop_source",
+            json::Value{plan.verifier.require_backdrop_source});
+        verifier.emplace(
+            "require_edge_highlight",
+            json::Value{plan.verifier.require_edge_highlight});
+        verifier.emplace(
+            "min_luma_delta",
+            json::Value{plan.verifier.min_luma_delta});
+        verifier.emplace(
+            "min_unique_colors",
+            json::Value{
+                static_cast<std::int64_t>(plan.verifier.min_unique_colors)});
+        verifier.emplace("region_name", json::Value{plan.verifier.region_name});
+        verifier.emplace("likely_layer", json::Value{plan.verifier.likely_layer});
+
+        json::Object primary_pass;
+        primary_pass.emplace("name", json::Value{plan.primary_pass.name});
+        primary_pass.emplace("active", json::Value{plan.primary_pass.active});
+        primary_pass.emplace(
+            "requires_backdrop",
+            json::Value{plan.primary_pass.requires_backdrop});
+        primary_pass.emplace(
+            "sample_taps",
+            json::Value{
+                static_cast<std::int64_t>(plan.primary_pass.sample_taps)});
+        primary_pass.emplace(
+            "likely_layer",
+            json::Value{plan.primary_pass.likely_layer});
+
+        json::Object resource_budget;
+        resource_budget.emplace(
+            "max_blur_radius",
+            json::Value{plan.resource_budget.max_blur_radius});
+        resource_budget.emplace(
+            "max_sample_taps",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.resource_budget.max_sample_taps)});
+        resource_budget.emplace(
+            "bounded_texture_copy",
+            json::Value{plan.resource_budget.bounded_texture_copy});
+        resource_budget.emplace(
+            "deterministic_fallback",
+            json::Value{plan.resource_budget.deterministic_fallback});
+
+        json::Array passes;
+        {
+            json::Object pass;
+            pass.emplace("name", json::Value{plan.primary_pass.name});
+            pass.emplace("active", json::Value{plan.primary_pass.active});
+            pass.emplace(
+                "requires_backdrop",
+                json::Value{plan.primary_pass.requires_backdrop});
+            pass.emplace(
+                "likely_layer",
+                json::Value{plan.primary_pass.likely_layer});
+            pass.emplace(
+                "sample_taps",
+                json::Value{
+                    static_cast<std::int64_t>(
+                        plan.primary_pass.sample_taps)});
+            passes.push_back(json::Value{std::move(pass)});
+        }
+
+        json::Object out;
+        out.emplace(
+            "command_index",
+            json::Value{static_cast<std::int64_t>(record.command_index)});
+        out.emplace("kind", json::Value{material_kind_name(plan.kind)});
+        out.emplace("plan_id", json::Value{plan.plan_id});
+        out.emplace("geometry", json::Value{std::move(geometry)});
+        out.emplace("opacity", json::Value{plan.opacity});
+        out.emplace("blur_radius", json::Value{plan.blur_radius});
+        out.emplace("tint", json::Value{std::move(tint)});
+        out.emplace("saturation", json::Value{plan.saturation});
+        out.emplace("luminance_floor", json::Value{plan.luminance_floor});
+        out.emplace("luminance_gain", json::Value{plan.luminance_gain});
+        out.emplace("edge_highlight", json::Value{plan.edge_highlight});
+        out.emplace("edge_width", json::Value{plan.edge_width});
+        out.emplace("noise_opacity", json::Value{plan.noise_opacity});
+        out.emplace("shadow_alpha", json::Value{plan.shadow_alpha});
+        out.emplace("shadow_radius", json::Value{plan.shadow_radius});
+        out.emplace("backdrop_sampling", json::Value{plan.backdrop_sampling});
+        out.emplace("fallback", json::Value{plan.fallback()});
+        out.emplace(
+            "fallback_path",
+            json::Value{material_fallback_path_name(plan.fallback_path)});
+        out.emplace("fallback_reason", json::Value{plan.fallback_reason});
+        out.emplace("contrast_intent", json::Value{plan.contrast_intent});
+        out.emplace(
+            "debug_seed",
+            json::Value{static_cast<std::int64_t>(plan.debug_seed)});
+        out.emplace(
+            "sample_taps",
+            json::Value{static_cast<std::int64_t>(plan.sample_taps)});
+        out.emplace("primary_pass", json::Value{std::move(primary_pass)});
+        out.emplace("resource_budget", json::Value{std::move(resource_budget)});
+        out.emplace("verifier", json::Value{std::move(verifier)});
+        out.emplace("passes", json::Value{std::move(passes)});
+        return json::Value{std::move(out)};
+    }
+
+    inline json::Array material_plans_runtime_json(
+            std::vector<MaterialRuntimeRecord> const& records) {
+        json::Array plans;
+        for (auto const& record : records)
+            plans.push_back(material_plan_runtime_json(record));
+        return plans;
+    }
+
+    inline json::Object empty_material_renderer_contract(
+            std::string_view fallback_policy) {
+        json::Object renderer;
+        renderer.emplace("material_pipeline_ready", json::Value{false});
+        renderer.emplace("material_backdrop_source_ready", json::Value{false});
+        renderer.emplace("material_plan_count", json::Value{std::int64_t{0}});
+        renderer.emplace("material_plans", json::Value{json::Array{}});
+        renderer.emplace(
+            "material_fallback_policy",
+            json::Value{std::string(fallback_policy)});
+        return renderer;
     }
 
     inline void append_u16_le(std::vector<std::uint8_t>& out, std::uint16_t value) {
@@ -936,6 +1089,22 @@ inline json::Value semantic_node_to_json(SemanticNodeSnapshot const& node) {
         material.emplace("kind", json::Value{node.material->kind});
         material.emplace("opacity", json::Value{node.material->opacity});
         material.emplace("blur_radius", json::Value{node.material->blur_radius});
+        material.emplace("saturation", json::Value{node.material->saturation});
+        material.emplace(
+            "luminance_floor",
+            json::Value{node.material->luminance_floor});
+        material.emplace(
+            "luminance_gain",
+            json::Value{node.material->luminance_gain});
+        material.emplace(
+            "edge_highlight",
+            json::Value{node.material->edge_highlight});
+        material.emplace("edge_width", json::Value{node.material->edge_width});
+        material.emplace(
+            "noise_opacity",
+            json::Value{node.material->noise_opacity});
+        material.emplace("shadow_alpha", json::Value{node.material->shadow_alpha});
+        material.emplace("shadow_radius", json::Value{node.material->shadow_radius});
         material.emplace("fallback", json::Value{node.material->fallback});
         material.emplace(
             "fallback_reason",
@@ -943,6 +1112,10 @@ inline json::Value semantic_node_to_json(SemanticNodeSnapshot const& node) {
         material.emplace(
             "contrast_intent",
             json::Value{node.material->contrast_intent});
+        material.emplace("plan_id", json::Value{node.material->plan_id});
+        material.emplace(
+            "verifier_profile",
+            json::Value{node.material->verifier_profile});
         out.emplace("material", json::Value{std::move(material)});
     } else {
         out.emplace("material", json::Value{});

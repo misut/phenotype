@@ -88,6 +88,29 @@ continues running. The same hook applies to `examples/flight_board` and
 material-focused checks, including macOS sampled-backdrop rendering and
 fallback metadata.
 
+Material frames also expose a resolved backend plan. Semantic material nodes
+describe the stable request (`kind`, opacity, blur intent, contrast intent, and
+fallback availability), while `debug.platform_runtime.details.renderer` records
+the actual `material_plans` executed for the frame. Each plan includes:
+
+- `plan_id`, `kind`, geometry, tint, blur radius, saturation, luminance curve,
+  edge highlight, noise, and shadow values;
+- `backdrop_sampling`, `fallback`, `fallback_path`, and `fallback_reason`;
+- `primary_pass`, `resource_budget`, and the pass list the backend attempted,
+  including the likely layer name;
+- verifier expectations for region checks.
+
+When debugging a material failure, read the semantic node first to confirm the
+UI emitted the expected material surface, then inspect
+`renderer.material_plans[]` to see whether the backend ran the glass pass or a
+deterministic fallback.
+macOS writes sampled-backdrop plans when the previous frame capture is ready.
+Windows and Android write the same plan schema with `fallback_path:
+unsupported-backend` and `primary_pass.name: translucent-rounded-rect`.
+Snapshot-only WASI/stub runtimes expose an empty renderer material contract
+with `material_fallback_policy` so the absence of per-command execution is
+machine-readable.
+
 ## Artifact verification
 
 From the repo root, use `tools/verify_artifact_bundle.py` to validate the
@@ -99,6 +122,13 @@ semantic tree shape, runtime viewport, platform diagnostics files, and
 luminance contrast and color variety. Use `--require-runtime-detail PATH=JSON`
 when a backend-specific contract must prove a value under
 `debug.platform_runtime.details`.
+
+Verifier failures are structured for automated diagnosis. Each failed check
+adds an entry to `failures[]` with the JSON path or frame region, expected
+value, actual value, likely layer/pass, and a short hint. The top-level
+`failure_summary` groups failures by likely layer and JSON path so an LLM can
+jump to the most likely source first. Use `--require-material-plan` when a
+bundle must contain resolved material plans.
 
 ```sh
 tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
@@ -112,7 +142,8 @@ tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
   --require-role text_field \
   --require-disabled-count 2 \
   --require-material-kind regular \
-  --require-material-fallback
+  --require-material-fallback \
+  --require-material-plan
 ```
 
 For the material-focused showcase, require every public material kind:
@@ -148,6 +179,7 @@ The macOS adapter keeps the shared top-level schema and extends
   - drawable size
   - last rendered size
   - last-frame/readback availability
+  - resolved `material_plans`
 - `images`
   - pending/completed queue counts
   - worker state

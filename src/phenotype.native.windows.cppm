@@ -49,6 +49,8 @@ import cppx.unicode;
 import json;
 import phenotype;
 import phenotype.commands;
+import phenotype.diag;
+import phenotype.material;
 import phenotype.state;
 import phenotype.types;
 import phenotype.native.platform;
@@ -1406,6 +1408,7 @@ struct RendererState {
     UploadBuffer upload{};
     ReadbackBuffer readback{};
     std::vector<HitRegionCmd> hit_regions;
+    std::vector<MaterialRuntimeRecord> material_records;
     GLFWwindow* window = nullptr;
     bool initialized = false;
     bool debug_preset_enabled = false;
@@ -1420,6 +1423,7 @@ struct RendererState {
     UINT last_render_width = 0;
     UINT last_render_height = 0;
     UINT64 next_fence_value = 1;
+    std::uint32_t material_frame_sequence = 0;
     HRESULT last_failure_hr = S_OK;
     HRESULT device_removed_reason = S_OK;
     HRESULT last_close_hr = S_OK;
@@ -2440,19 +2444,23 @@ struct DecodedFrame {
     std::vector<float> image_data;
     std::vector<TextEntry> text_entries;
     std::vector<HitRegionCmd> hit_regions;
+    std::vector<MaterialRuntimeRecord> material_records;
     std::vector<PendingImageCmd> images;
 };
 
 inline bool decode_frame_commands(unsigned char const* buf,
                                   unsigned int len,
                                   float line_height_ratio,
+                                  MaterialEnvironment const& material_env,
                                   DecodedFrame& frame) {
     frame = {};
     CommandReader reader{buf, buf + len};
+    std::uint32_t command_index = 0;
     while (reader.cur < reader.end) {
         unsigned int raw_cmd = 0;
         if (!reader.read_u32(raw_cmd))
             return false;
+        auto const current_command_index = command_index++;
 
         switch (static_cast<Cmd>(raw_cmd)) {
         case Cmd::Clear: {
@@ -2532,15 +2540,24 @@ inline bool decode_frame_commands(unsigned char const* buf,
                 || !reader.read_f32(blur_radius)
                 || !reader.read_u32(packed))
                 return false;
-            (void)kind;
-            (void)opacity;
-            (void)blur_radius;
-            auto color = unpack_color(packed);
+            auto material_env_for_command = material_env;
+            material_env_for_command.debug_seed.node = current_command_index;
+            auto plan = plan_material_surface(
+                material_request_for_command(
+                    material_kind_from_wire(kind),
+                    opacity,
+                    blur_radius,
+                    unpack_color(packed),
+                    MaterialGeometry{x, y, w, h, radius},
+                    ::phenotype::detail::g_app.theme),
+                material_env_for_command);
+            frame.material_records.push_back(
+                MaterialRuntimeRecord{plan, current_command_index});
             append_color_instance(
                 frame.color_data,
                 x, y, w, h,
-                color.r / 255.0f, color.g / 255.0f,
-                color.b / 255.0f, color.a / 255.0f,
+                plan.tint.r / 255.0f, plan.tint.g / 255.0f,
+                plan.tint.b / 255.0f, plan.tint.a / 255.0f,
                 radius, 0.0f, 2.0f);
             break;
         }
@@ -4495,10 +4512,27 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         if (FAILED(resize_swap_chain())) return;
     }
 
-        float text_scale = glfw_backing_scale(g_renderer.window);
+    float text_scale = glfw_backing_scale(g_renderer.window);
     float line_height_ratio = ::phenotype::detail::g_app.theme.line_height_ratio;
+    MaterialEnvironment material_env{};
+    material_env.capabilities.material_surfaces = true;
+    material_env.capabilities.material_backdrop_blur = false;
+    material_env.capabilities.shader_blur = false;
+    material_env.capabilities.frame_history = g_renderer.last_frame_available;
+    material_env.backdrop.available = false;
+    material_env.backdrop.stable = false;
+    material_env.backdrop.source = "windows-d3d12-fallback";
+    material_env.render_target.width = fbw;
+    material_env.render_target.height = fbh;
+    material_env.render_target.scale = text_scale;
+    material_env.render_target.pixel_format = "bgra8unorm";
+    material_env.debug_seed.frame = ++g_renderer.material_frame_sequence;
+    material_env.quality.max_blur_radius = 36.0f;
+    material_env.quality.max_sample_taps = 25;
     DecodedFrame decoded;
-    if (!decode_frame_commands(buf, len, line_height_ratio, decoded)) {
+    g_renderer.material_records.clear();
+    if (!decode_frame_commands(
+            buf, len, line_height_ratio, material_env, decoded)) {
         if (g_renderer.debug_enabled) {
             std::fprintf(stderr,
                          "[phenotype-native] dropped invalid draw command stream (%u bytes)\n",
@@ -4506,6 +4540,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         }
         return;
     }
+    g_renderer.material_records = decoded.material_records;
     suppress_focused_input_base_text_for_composition(decoded);
     (void)process_completed_images();
 
@@ -4976,6 +5011,20 @@ inline json::Object windows_renderer_runtime_json() {
         "dred_device_state",
         json::Value{static_cast<std::int64_t>(g_renderer.dred_device_state)});
     renderer.emplace("failure_label", json::Value{g_renderer.last_failure_label});
+    renderer.emplace("material_pipeline_ready", json::Value{false});
+    renderer.emplace("material_backdrop_source_ready", json::Value{false});
+    renderer.emplace(
+        "material_plan_count",
+        json::Value{
+            static_cast<std::int64_t>(g_renderer.material_records.size())});
+    renderer.emplace(
+        "material_plans",
+        json::Value{
+            ::phenotype::diag::detail::material_plans_runtime_json(
+                g_renderer.material_records)});
+    renderer.emplace(
+        "material_fallback_policy",
+        json::Value{"d3d12-translucent-rounded-rect"});
     return renderer;
 }
 

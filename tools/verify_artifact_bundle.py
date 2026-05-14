@@ -25,18 +25,65 @@ class Report:
             "bundle": str(bundle),
             "checks": [],
             "errors": [],
+            "failures": [],
             "warnings": [],
         }
 
-    def check(self, name: str, condition: bool, detail: str = "") -> bool:
-        self.data["checks"].append({
+    def check(
+        self,
+        name: str,
+        condition: bool,
+        detail: str = "",
+        *,
+        path: str = "",
+        expected: Any = None,
+        actual: Any = None,
+        region: str = "",
+        likely_layer: str = "",
+        hint: str = "",
+        record_success: bool = True,
+    ) -> bool:
+        check: JsonObject = {
             "name": name,
             "ok": condition,
             "detail": detail,
-        })
+        }
+        if path:
+            check["path"] = path
+        if expected is not None:
+            check["expected"] = expected
+        if actual is not None:
+            check["actual"] = actual
+        if region:
+            check["region"] = region
+        if likely_layer:
+            check["likely_layer"] = likely_layer
+        if hint:
+            check["hint"] = hint
+        if condition and not record_success:
+            return True
+        self.data["checks"].append(check)
         if not condition:
             message = name if not detail else f"{name}: {detail}"
             self.data["errors"].append(message)
+            failure: JsonObject = {
+                "failure_type": "artifact-check",
+                "name": name,
+                "message": message,
+            }
+            if path:
+                failure["path"] = path
+            if expected is not None:
+                failure["expected"] = expected
+            if actual is not None:
+                failure["actual"] = actual
+            if region:
+                failure["region"] = region
+            if likely_layer:
+                failure["likely_layer"] = likely_layer
+            if hint:
+                failure["hint"] = hint
+            self.data["failures"].append(failure)
         return condition
 
     def warn(self, message: str) -> None:
@@ -44,6 +91,24 @@ class Report:
 
     def finish(self) -> int:
         self.data["ok"] = len(self.data["errors"]) == 0
+        failures = self.data.get("failures", [])
+        if isinstance(failures, list):
+            by_layer: JsonObject = {}
+            by_path: JsonObject = {}
+            for failure in failures:
+                if not isinstance(failure, dict):
+                    continue
+                layer = failure.get("likely_layer")
+                if isinstance(layer, str) and layer:
+                    by_layer[layer] = by_layer.get(layer, 0) + 1
+                path = failure.get("path")
+                if isinstance(path, str) and path:
+                    by_path[path] = by_path.get(path, 0) + 1
+            self.data["failure_summary"] = {
+                "count": len(failures),
+                "by_likely_layer": by_layer,
+                "by_path": by_path,
+            }
         json.dump(self.data, sys.stdout, indent=2, sort_keys=True)
         sys.stdout.write("\n")
         return 0 if self.data["ok"] else 1
@@ -90,7 +155,104 @@ def string_at(value: JsonObject, key: str) -> str | None:
 
 def number_at(value: JsonObject, key: str) -> int | float | None:
     item = value.get(key)
-    return item if isinstance(item, (int, float)) else None
+    return item if isinstance(item, (int, float)) and not isinstance(item, bool) else None
+
+
+def check_object_field(
+    report: Report,
+    value: JsonObject,
+    key: str,
+    path: str,
+    *,
+    likely_layer: str,
+    hint: str,
+) -> JsonObject | None:
+    item = value.get(key)
+    report.check(
+        f"{path}.{key} is object",
+        isinstance(item, dict),
+        path=f"{path}.{key}",
+        expected="object",
+        actual=type(item).__name__,
+        likely_layer=likely_layer,
+        hint=hint,
+        record_success=False)
+    return item if isinstance(item, dict) else None
+
+
+def check_bool_field(
+    report: Report,
+    value: JsonObject,
+    key: str,
+    path: str,
+    *,
+    likely_layer: str,
+    hint: str,
+) -> bool | None:
+    item = value.get(key)
+    report.check(
+        f"{path}.{key} is boolean",
+        isinstance(item, bool),
+        path=f"{path}.{key}",
+        expected="boolean",
+        actual=item,
+        likely_layer=likely_layer,
+        hint=hint,
+        record_success=False)
+    return item if isinstance(item, bool) else None
+
+
+def check_number_field(
+    report: Report,
+    value: JsonObject,
+    key: str,
+    path: str,
+    *,
+    min_value: float | None = None,
+    likely_layer: str,
+    hint: str,
+) -> int | float | None:
+    item = value.get(key)
+    ok = isinstance(item, (int, float)) and not isinstance(item, bool)
+    if ok and min_value is not None:
+        ok = float(item) >= min_value
+    expected: Any = "number"
+    if min_value is not None:
+        expected = {"type": "number", ">=": min_value}
+    report.check(
+        f"{path}.{key} is valid number",
+        ok,
+        path=f"{path}.{key}",
+        expected=expected,
+        actual=item,
+        likely_layer=likely_layer,
+        hint=hint,
+        record_success=False)
+    return item if isinstance(item, (int, float)) and not isinstance(item, bool) else None
+
+
+def check_string_field(
+    report: Report,
+    value: JsonObject,
+    key: str,
+    path: str,
+    *,
+    allow_empty: bool = False,
+    likely_layer: str,
+    hint: str,
+) -> str | None:
+    item = value.get(key)
+    ok = isinstance(item, str) and (allow_empty or bool(item))
+    report.check(
+        f"{path}.{key} is valid string",
+        ok,
+        path=f"{path}.{key}",
+        expected="string" if allow_empty else "non-empty string",
+        actual=item,
+        likely_layer=likely_layer,
+        hint=hint,
+        record_success=False)
+    return item if isinstance(item, str) else None
 
 
 def list_of_strings(value: Any, key: str) -> list[str]:
@@ -187,6 +349,10 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         require_material_fallback = bool_manifest_value(manifest, "require_material_fallback")
         if require_material_fallback is True:
             args.require_material_fallback = True
+
+        require_material_plans = bool_manifest_value(manifest, "require_material_plans")
+        if require_material_plans is True:
+            args.require_material_plan = True
 
         args.require_label.extend(list_of_strings(manifest, "require_labels"))
         args.require_label_contains.extend(
@@ -450,6 +616,455 @@ def summarize_semantic_tree(tree: JsonObject) -> JsonObject:
     return summary
 
 
+REQUIRED_MATERIAL_PLAN_FIELDS = (
+    "kind",
+    "plan_id",
+    "geometry",
+    "opacity",
+    "blur_radius",
+    "tint",
+    "saturation",
+    "luminance_floor",
+    "luminance_gain",
+    "edge_highlight",
+    "edge_width",
+    "noise_opacity",
+    "shadow_alpha",
+    "shadow_radius",
+    "backdrop_sampling",
+    "fallback",
+    "fallback_path",
+    "fallback_reason",
+    "debug_seed",
+    "sample_taps",
+    "primary_pass",
+    "resource_budget",
+    "verifier",
+    "passes",
+)
+
+MATERIAL_PLAN_NUMERIC_FIELDS = (
+    "opacity",
+    "blur_radius",
+    "saturation",
+    "luminance_floor",
+    "luminance_gain",
+    "edge_highlight",
+    "edge_width",
+    "noise_opacity",
+    "shadow_alpha",
+    "shadow_radius",
+)
+
+MATERIAL_GEOMETRY_FIELDS = ("x", "y", "w", "h", "radius")
+MATERIAL_TINT_FIELDS = ("r", "g", "b", "a")
+MATERIAL_VERIFIER_FIELDS = (
+    "require_backdrop_source",
+    "require_edge_highlight",
+    "min_luma_delta",
+    "min_unique_colors",
+    "region_name",
+    "likely_layer",
+)
+MATERIAL_PASS_FIELDS = (
+    "name",
+    "active",
+    "requires_backdrop",
+    "sample_taps",
+    "likely_layer",
+)
+
+
+def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObject:
+    summary: JsonObject = {
+        "count": 0,
+        "fallback": 0,
+        "backdrop_sampling": 0,
+        "fallback_paths": {},
+        "kinds": {},
+        "pass_names": {},
+        "plan_ids": [],
+        "region_layers": {},
+    }
+    if not isinstance(plans, list):
+        report.check(
+            "material plans is array",
+            False,
+            repr(type(plans).__name__),
+            path=path,
+            expected="array",
+            actual=type(plans).__name__,
+            likely_layer="platform-runtime",
+            hint="Check renderer.material_plans serialization.")
+        return summary
+
+    summary["count"] = len(plans)
+    for index, plan in enumerate(plans):
+        plan_path = f"{path}[{index}]"
+        if not isinstance(plan, dict):
+            report.check(
+                "material plan is object",
+                False,
+                repr(plan),
+                path=plan_path,
+                expected="object",
+                actual=type(plan).__name__,
+                likely_layer="platform-runtime",
+                hint="Check the backend MaterialPlan JSON writer.")
+            continue
+        for key in REQUIRED_MATERIAL_PLAN_FIELDS:
+            report.check(
+                f"material plan contains {key}",
+                key in plan,
+                path=f"{plan_path}.{key}",
+                expected="present",
+                actual="missing" if key not in plan else "present",
+                likely_layer=string_at(plan, "plan_id") or "material-plan",
+                hint="Regenerate the resolved MaterialPlan before writing runtime JSON.",
+                record_success=False)
+
+        kind = plan.get("kind")
+        if isinstance(kind, str):
+            kinds = summary["kinds"]
+            kinds[kind] = kinds.get(kind, 0) + 1
+        plan_id = plan.get("plan_id")
+        if isinstance(plan_id, str):
+            summary["plan_ids"].append(plan_id)
+        likely_layer = plan_id if isinstance(plan_id, str) and plan_id else "material-plan"
+
+        for key in MATERIAL_PLAN_NUMERIC_FIELDS:
+            check_number_field(
+                report,
+                plan,
+                key,
+                plan_path,
+                min_value=0.0,
+                likely_layer=likely_layer,
+                hint="Check pure MaterialPlan clamping and backend JSON serialization.")
+        check_bool_field(
+            report,
+            plan,
+            "backdrop_sampling",
+            plan_path,
+            likely_layer=likely_layer,
+            hint="Resolved plans must explicitly state whether backdrop sampling runs.")
+        fallback = check_bool_field(
+            report,
+            plan,
+            "fallback",
+            plan_path,
+            likely_layer=likely_layer,
+            hint="Resolved plans must explicitly state whether deterministic fallback runs.")
+        fallback_path = check_string_field(
+            report,
+            plan,
+            "fallback_path",
+            plan_path,
+            likely_layer=likely_layer,
+            hint="Fallback state must name the exact fallback path.")
+        fallback_reason = check_string_field(
+            report,
+            plan,
+            "fallback_reason",
+            plan_path,
+            allow_empty=True,
+            likely_layer=likely_layer,
+            hint="Fallback plans require a reason; non-fallback plans should leave it empty.")
+        if isinstance(fallback_path, str):
+            paths = summary["fallback_paths"]
+            paths[fallback_path] = paths.get(fallback_path, 0) + 1
+        sample_taps = check_number_field(
+            report,
+            plan,
+            "sample_taps",
+            plan_path,
+            min_value=0.0,
+            likely_layer=likely_layer,
+            hint="Material sample taps should be an explicit bounded integer.")
+
+        geometry = check_object_field(
+            report,
+            plan,
+            "geometry",
+            plan_path,
+            likely_layer=likely_layer,
+            hint="MaterialPlan.geometry should be serialized from the pure request.")
+        if geometry is not None:
+            for key in MATERIAL_GEOMETRY_FIELDS:
+                check_number_field(
+                    report,
+                    geometry,
+                    key,
+                    f"{plan_path}.geometry",
+                    likely_layer=likely_layer,
+                    hint="Check MaterialPlan geometry serialization.")
+
+        tint = check_object_field(
+            report,
+            plan,
+            "tint",
+            plan_path,
+            likely_layer=likely_layer,
+            hint="MaterialPlan.tint should be serialized as RGBA components.")
+        if tint is not None:
+            for key in MATERIAL_TINT_FIELDS:
+                check_number_field(
+                    report,
+                    tint,
+                    key,
+                    f"{plan_path}.tint",
+                    min_value=0.0,
+                    likely_layer=likely_layer,
+                    hint="Check MaterialPlan tint RGBA serialization.")
+
+        verifier = check_object_field(
+            report,
+            plan,
+            "verifier",
+            plan_path,
+            likely_layer=likely_layer,
+            hint="The pure plan should provide verifier expectations.")
+        if verifier is not None:
+            for key in MATERIAL_VERIFIER_FIELDS:
+                if key.startswith("require_"):
+                    check_bool_field(
+                        report,
+                        verifier,
+                        key,
+                        f"{plan_path}.verifier",
+                        likely_layer=likely_layer,
+                        hint="Verifier expectation booleans must stay explicit.")
+                elif key in ("region_name", "likely_layer"):
+                    check_string_field(
+                        report,
+                        verifier,
+                        key,
+                        f"{plan_path}.verifier",
+                        likely_layer=likely_layer,
+                        hint="Verifier expectations must name the failing region/layer.")
+                else:
+                    check_number_field(
+                        report,
+                        verifier,
+                        key,
+                        f"{plan_path}.verifier",
+                        min_value=0.0,
+                        likely_layer=likely_layer,
+                        hint="Verifier numeric thresholds must be non-negative.")
+            region_name = string_at(verifier, "region_name")
+            region_layer = string_at(verifier, "likely_layer")
+            if region_name and region_layer:
+                summary["region_layers"][region_name] = region_layer
+
+        resource_budget = check_object_field(
+            report,
+            plan,
+            "resource_budget",
+            plan_path,
+            likely_layer=likely_layer,
+            hint="Material plans must expose bounded resource policy for CI debugging.")
+        if resource_budget is not None:
+            check_number_field(
+                report,
+                resource_budget,
+                "max_blur_radius",
+                f"{plan_path}.resource_budget",
+                min_value=0.0,
+                likely_layer=likely_layer,
+                hint="Blur radius should be clamped in the pure plan.")
+            max_sample_taps = check_number_field(
+                report,
+                resource_budget,
+                "max_sample_taps",
+                f"{plan_path}.resource_budget",
+                min_value=0.0,
+                likely_layer=likely_layer,
+                hint="Sample tap budget should be bounded in the pure plan.")
+            check_bool_field(
+                report,
+                resource_budget,
+                "bounded_texture_copy",
+                f"{plan_path}.resource_budget",
+                likely_layer=likely_layer,
+                hint="The backend contract should state whether texture copies are bounded.")
+            check_bool_field(
+                report,
+                resource_budget,
+                "deterministic_fallback",
+                f"{plan_path}.resource_budget",
+                likely_layer=likely_layer,
+                hint="Fallback behavior must be deterministic for LLM debugging.")
+            if isinstance(sample_taps, (int, float)) and isinstance(max_sample_taps, (int, float)):
+                report.check(
+                    "material sample taps are within budget",
+                    int(sample_taps) <= int(max_sample_taps),
+                    path=f"{plan_path}.sample_taps",
+                    expected={"<=": int(max_sample_taps)},
+                    actual=int(sample_taps),
+                    likely_layer=likely_layer,
+                    hint="Clamp sample taps in plan_material_surface.",
+                    record_success=False)
+
+        primary_pass = check_object_field(
+            report,
+            plan,
+            "primary_pass",
+            plan_path,
+            likely_layer=likely_layer,
+            hint="The pure plan should name the backend pass it expects.")
+        if primary_pass is not None:
+            for key in MATERIAL_PASS_FIELDS:
+                if key in ("active", "requires_backdrop"):
+                    check_bool_field(
+                        report,
+                        primary_pass,
+                        key,
+                        f"{plan_path}.primary_pass",
+                        likely_layer=likely_layer,
+                        hint="Material pass booleans must be explicit.")
+                elif key == "sample_taps":
+                    check_number_field(
+                        report,
+                        primary_pass,
+                        key,
+                        f"{plan_path}.primary_pass",
+                        min_value=0.0,
+                        likely_layer=likely_layer,
+                        hint="Pass sample taps must be bounded.")
+                else:
+                    check_string_field(
+                        report,
+                        primary_pass,
+                        key,
+                        f"{plan_path}.primary_pass",
+                        likely_layer=likely_layer,
+                        hint="Material pass must name its layer for debugging.")
+            pass_name = string_at(primary_pass, "name")
+            if pass_name:
+                pass_names = summary["pass_names"]
+                pass_names[pass_name] = pass_names.get(pass_name, 0) + 1
+
+        passes = plan.get("passes")
+        report.check(
+            "material plan passes is array",
+            isinstance(passes, list),
+            path=f"{plan_path}.passes",
+            expected="array",
+            actual=type(passes).__name__,
+            likely_layer=likely_layer,
+            hint="Backend runtime JSON should mirror MaterialPlan pass expectations.",
+            record_success=False)
+        if isinstance(passes, list):
+            for pass_index, pass_entry in enumerate(passes):
+                pass_path = f"{plan_path}.passes[{pass_index}]"
+                report.check(
+                    "material pass entry is object",
+                    isinstance(pass_entry, dict),
+                    path=pass_path,
+                    expected="object",
+                    actual=type(pass_entry).__name__,
+                    likely_layer=likely_layer,
+                    hint="Pass entries should be structured objects.",
+                    record_success=False)
+                if not isinstance(pass_entry, dict):
+                    continue
+                for key in MATERIAL_PASS_FIELDS:
+                    if key in ("active", "requires_backdrop"):
+                        check_bool_field(
+                            report,
+                            pass_entry,
+                            key,
+                            pass_path,
+                            likely_layer=likely_layer,
+                            hint="Pass entries must expose runtime activation state.")
+                    elif key == "sample_taps":
+                        check_number_field(
+                            report,
+                            pass_entry,
+                            key,
+                            pass_path,
+                            min_value=0.0,
+                            likely_layer=likely_layer,
+                            hint="Pass sample taps must be numeric.")
+                    else:
+                        check_string_field(
+                            report,
+                            pass_entry,
+                            key,
+                            pass_path,
+                            likely_layer=likely_layer,
+                            hint="Pass entries must name their layer for debugging.")
+
+        if fallback is True:
+            report.check(
+                "material fallback path is not none",
+                fallback_path != "none",
+                path=f"{plan_path}.fallback_path",
+                expected="not none",
+                actual=fallback_path,
+                likely_layer=likely_layer,
+                hint="Fallback plans should identify the exact deterministic fallback path.",
+                record_success=False)
+            report.check(
+                "material fallback has reason",
+                isinstance(fallback_reason, str) and bool(fallback_reason),
+                path=f"{plan_path}.fallback_reason",
+                expected="non-empty string",
+                actual=fallback_reason,
+                likely_layer=likely_layer,
+                hint="Fallback plans should explain the exact missing capability or policy.",
+                record_success=False)
+        elif fallback is False:
+            report.check(
+                "material non-fallback path is none",
+                fallback_path == "none",
+                path=f"{plan_path}.fallback_path",
+                expected="none",
+                actual=fallback_path,
+                likely_layer=likely_layer,
+                hint="Non-fallback plans should not carry stale fallback metadata.",
+                record_success=False)
+        if plan.get("fallback") is True:
+            summary["fallback"] += 1
+        if plan.get("backdrop_sampling") is True:
+            summary["backdrop_sampling"] += 1
+            report.check(
+                "material backdrop plan is not fallback",
+                fallback is False,
+                path=f"{plan_path}.fallback",
+                expected=False,
+                actual=fallback,
+                likely_layer=likely_layer,
+                hint="Backdrop sampling and fallback should be mutually exclusive.",
+                record_success=False)
+            report.check(
+                "material backdrop primary pass requires backdrop",
+                isinstance(primary_pass, dict)
+                and primary_pass.get("requires_backdrop") is True,
+                path=f"{plan_path}.primary_pass.requires_backdrop",
+                expected=True,
+                actual=None if not isinstance(primary_pass, dict)
+                else primary_pass.get("requires_backdrop"),
+                likely_layer=likely_layer,
+                hint="Backdrop plans should expose the backdrop dependency.",
+                record_success=False)
+            report.check(
+                "material backdrop plan has active pass",
+                any(
+                    isinstance(entry, dict)
+                    and entry.get("active") is True
+                    and "backdrop" in str(entry.get("name", ""))
+                    for entry in plan.get("passes", [])
+                ),
+                path=f"{plan_path}.passes",
+                expected="active backdrop pass",
+                actual=plan.get("passes"),
+                likely_layer=likely_layer,
+                hint="The backend likely planned glass but did not record the blur pass.",
+                record_success=False)
+    return summary
+
+
 def load_platform_files(platform_dir: Path, report: Report) -> list[JsonObject]:
     files: list[JsonObject] = []
     if not platform_dir.exists():
@@ -544,7 +1159,12 @@ def verify(args: argparse.Namespace) -> int:
         report.check(
             f"runtime detail matches: {path}",
             exists and actual == expected,
-            f"expected {expected!r}, got {actual!r}")
+            f"expected {expected!r}, got {actual!r}",
+            path=f"debug.platform_runtime.details.{path}",
+            expected=expected,
+            actual=actual,
+            likely_layer="platform-runtime",
+            hint="Check the backend runtime JSON details for this renderer pass.")
 
     platform = string_at(capabilities, "platform")
     if args.expect_platform:
@@ -603,6 +1223,45 @@ def verify(args: argparse.Namespace) -> int:
             "semantic material fallback exists",
             summary["material_fallback_nodes"] > 0,
             str(summary["material_fallback_nodes"]))
+
+    renderer_details = object_at(runtime, "details.renderer")
+    material_plan_summary: JsonObject | None = None
+    if args.require_material_plan:
+        report.check(
+            "renderer runtime details object exists for material plans",
+            renderer_details is not None,
+            path="debug.platform_runtime.details.renderer",
+            expected="object",
+            actual=None if renderer_details is None else "object",
+            likely_layer="platform-runtime",
+            hint="The backend must write renderer.material_plans into runtime details.")
+    if renderer_details is not None:
+        material_plans = renderer_details.get("material_plans")
+        if args.require_material_plan or material_plans is not None:
+            material_plan_summary = summarize_material_plans(
+                material_plans,
+                report,
+                "debug.platform_runtime.details.renderer.material_plans")
+            report.data["material_plans"] = material_plan_summary
+            if args.require_material_plan:
+                report.check(
+                    "material plans exist",
+                    material_plan_summary["count"] > 0,
+                    path="debug.platform_runtime.details.renderer.material_plans",
+                    expected="non-empty array",
+                    actual=material_plan_summary["count"],
+                    likely_layer="platform-runtime",
+                    hint="MaterialRect commands may not have reached the backend decoder.")
+            plan_count = renderer_details.get("material_plan_count")
+            if isinstance(plan_count, int) and not isinstance(plan_count, bool):
+                report.check(
+                    "material plan count matches array length",
+                    plan_count == material_plan_summary["count"],
+                    path="debug.platform_runtime.details.renderer.material_plan_count",
+                    expected=material_plan_summary["count"],
+                    actual=plan_count,
+                    likely_layer="platform-runtime",
+                    hint="Keep renderer.material_plan_count in sync with renderer.material_plans.")
 
     full_labels: list[str] = []
     walk_labels(semantic_tree, full_labels)
@@ -667,20 +1326,55 @@ def verify(args: argparse.Namespace) -> int:
                 region["min_luma_delta"] = min_delta
                 region["min_unique_colors"] = min_unique
                 pixel_regions.append(region)
+                region_layers: JsonObject = {}
+                if material_plan_summary is not None:
+                    layers = material_plan_summary.get("region_layers")
+                    if isinstance(layers, dict):
+                        region_layers = layers
+                likely_layer = str(region_layers.get(
+                    name,
+                    "material-or-backdrop-pass"))
                 report.check(
                     f"pixel region is non-empty: {name}",
                     region["sampled_pixels"] > 0 and region["width"] > 0 and region["height"] > 0,
-                    repr(rect))
+                    repr(rect),
+                    path=f"frame.bmp#{name}",
+                    expected="non-empty region",
+                    actual=region,
+                    region=name,
+                    likely_layer="frame-capture",
+                    hint="Check the manifest rect or renderer capture dimensions.")
                 report.check(
                     f"pixel region has luma contrast: {name}",
                     float(region["luma_delta"]) >= min_delta,
-                    f"expected >= {min_delta}, got {region['luma_delta']}")
+                    f"expected >= {min_delta}, got {region['luma_delta']}",
+                    path=f"frame.bmp#{name}.luma_delta",
+                    expected={">=": min_delta},
+                    actual=region,
+                    region=name,
+                    likely_layer=likely_layer,
+                    hint="If this is a material region, inspect renderer.material_plans and backdrop pass output.")
                 report.check(
                     f"pixel region has color variety: {name}",
                     int(region["unique_colors"]) >= min_unique,
-                    f"expected >= {min_unique}, got {region['unique_colors']}")
+                    f"expected >= {min_unique}, got {region['unique_colors']}",
+                    path=f"frame.bmp#{name}.unique_colors",
+                    expected={">=": min_unique},
+                    actual=region,
+                    region=name,
+                    likely_layer=likely_layer,
+                    hint="A flat region usually means the fallback layer or capture pass replaced the expected scene detail.")
             except ValueError as exc:
-                report.check(f"pixel region spec is valid: {spec}", False, str(exc))
+                report.check(
+                    f"pixel region spec is valid: {spec}",
+                    False,
+                    str(exc),
+                    path="manifest.pixel_regions",
+                    expected="NAME:X,Y,W,H[:MIN_LUMA_DELTA[:MIN_UNIQUE_COLORS]]",
+                    actual=spec,
+                    region=spec.split(":", 1)[0],
+                    likely_layer="artifact-manifest",
+                    hint="Fix the pixel region manifest entry.")
         if pixel_regions:
             report.data["pixel_regions"] = pixel_regions
 
@@ -764,6 +1458,12 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         "--require-material-fallback",
         action="store_true",
         help="Require at least one semantic material node with fallback=true.")
+    parser.add_argument(
+        "--require-material-plan",
+        action="store_true",
+        help=(
+            "Require debug.platform_runtime.details.renderer.material_plans "
+            "to describe resolved backend material plans."))
     parser.add_argument(
         "--require-capability",
         action="append",
