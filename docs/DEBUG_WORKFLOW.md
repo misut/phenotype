@@ -107,6 +107,10 @@ When debugging a material failure, read the semantic node first to confirm the
 UI emitted the expected material surface, then inspect
 `renderer.material_plans[]` to see whether the backend ran the glass pass or a
 deterministic fallback.
+`sample_taps` and `primary_pass.sample_taps` describe the actual resolved pass.
+Fallback plans therefore report `0` taps, while `quality_policy.max_sample_taps`
+and `resource_budget.max_sample_taps` preserve the allowed upper bound that led
+to the decision.
 macOS writes sampled-backdrop plans when the previous frame capture is ready.
 Windows and Android write the same plan schema with `fallback_path:
 unsupported-backend` and `primary_pass.name: translucent-rounded-rect`.
