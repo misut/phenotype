@@ -132,6 +132,11 @@ repro needs metric bounds. Manifest-driven gates use the same
 `pixel_region_metrics` checks for region metrics such as `edge_energy` and
 `luma_stddev`; use those for blur-specific probes where a material region
 should smooth high-frequency backdrop detail without becoming visually blank.
+Manifests can also set `pixel_region_metric_comparisons` to compare one named
+region against another by ratio. The glass showcase uses this to prove the
+visible blur probe stays smoother than the nearby backdrop reference, which
+catches a blur pass that renders nonblank pixels but stops filtering the
+backdrop.
 Use `--require-runtime-detail PATH=JSON` when a backend-specific contract must prove a value under
 `debug.platform_runtime.details`.
 

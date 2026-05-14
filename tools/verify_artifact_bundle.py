@@ -383,6 +383,67 @@ def pixel_region_metric_specs_from_manifest(value: Any) -> list[JsonObject]:
     return specs
 
 
+def pixel_region_metric_comparison_specs_from_manifest(value: Any) -> list[JsonObject]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("pixel_region_metric_comparisons must be a list")
+    specs: list[JsonObject] = []
+    allowed = {
+        "region",
+        "metric",
+        "reference_region",
+        "reference_metric",
+        "gte_ratio",
+        "lte_ratio",
+    }
+    for index, entry in enumerate(value):
+        if not isinstance(entry, dict):
+            raise ValueError(
+                f"pixel_region_metric_comparisons[{index}] must be an object")
+        unknown = sorted(set(entry) - allowed)
+        if unknown:
+            raise ValueError(
+                f"unknown pixel_region_metric_comparisons[{index}] keys: "
+                + ", ".join(unknown))
+        region = entry.get("region")
+        metric = entry.get("metric")
+        reference_region = entry.get("reference_region")
+        reference_metric = entry.get("reference_metric", metric)
+        if not isinstance(region, str) or not region:
+            raise ValueError(
+                f"pixel_region_metric_comparisons[{index}].region must be a non-empty string")
+        if metric not in ALLOWED_PIXEL_REGION_METRICS:
+            raise ValueError(
+                f"pixel_region_metric_comparisons[{index}].metric must be one of "
+                + ", ".join(sorted(ALLOWED_PIXEL_REGION_METRICS)))
+        if not isinstance(reference_region, str) or not reference_region:
+            raise ValueError(
+                f"pixel_region_metric_comparisons[{index}].reference_region must be a non-empty string")
+        if reference_metric not in ALLOWED_PIXEL_REGION_METRICS:
+            raise ValueError(
+                f"pixel_region_metric_comparisons[{index}].reference_metric must be one of "
+                + ", ".join(sorted(ALLOWED_PIXEL_REGION_METRICS)))
+        spec: JsonObject = {
+            "region": region,
+            "metric": metric,
+            "reference_region": reference_region,
+            "reference_metric": reference_metric,
+        }
+        has_bound = False
+        for bound in ("gte_ratio", "lte_ratio"):
+            if bound in entry:
+                spec[bound] = non_negative_number(
+                    entry[bound],
+                    f"pixel_region_metric_comparisons[{index}].{bound}")
+                has_bound = True
+        if not has_bound:
+            raise ValueError(
+                f"pixel_region_metric_comparisons[{index}] must contain gte_ratio or lte_ratio")
+        specs.append(spec)
+    return specs
+
+
 def pixel_region_metric_spec_from_cli(spec: str) -> JsonObject:
     parts = spec.split(":")
     if len(parts) != 4:
@@ -654,6 +715,9 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         args.require_pixel_region_metric.extend(
             pixel_region_metric_specs_from_manifest(
                 manifest.get("pixel_region_metrics")))
+        args.require_pixel_region_metric_comparison.extend(
+            pixel_region_metric_comparison_specs_from_manifest(
+                manifest.get("pixel_region_metric_comparisons")))
 
     except ValueError as exc:
         report.check("manifest schema is valid", False, str(exc))
@@ -664,6 +728,8 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         "name": manifest.get("name"),
         "pixel_regions": len(manifest.get("pixel_regions", []) or []),
         "pixel_region_metrics": len(manifest.get("pixel_region_metrics", []) or []),
+        "pixel_region_metric_comparisons": len(
+            manifest.get("pixel_region_metric_comparisons", []) or []),
     }
     report.check("manifest schema is valid", True, str(manifest_path))
     return True
@@ -2302,6 +2368,112 @@ def verify(args: argparse.Namespace) -> int:
                         "the backdrop sample pass, and whether the manifest "
                         "region avoids foreground text."))
 
+        for index, spec in enumerate(args.require_pixel_region_metric_comparison):
+            region_name = str(spec.get("region", ""))
+            metric = str(spec.get("metric", ""))
+            reference_name = str(spec.get("reference_region", ""))
+            reference_metric = str(spec.get("reference_metric", metric))
+            region = pixel_region_by_name.get(region_name)
+            reference_region = pixel_region_by_name.get(reference_name)
+            report.check(
+                f"pixel region comparison region exists: {region_name}",
+                isinstance(region, dict),
+                path=f"manifest.pixel_region_metric_comparisons[{index}].region",
+                expected="existing pixel region",
+                actual=region_name,
+                region=region_name,
+                likely_layer="artifact-manifest",
+                hint="Add the named region to pixel_regions before applying metric comparisons.",
+                record_success=False)
+            report.check(
+                f"pixel region comparison reference exists: {reference_name}",
+                isinstance(reference_region, dict),
+                path=f"manifest.pixel_region_metric_comparisons[{index}].reference_region",
+                expected="existing pixel region",
+                actual=reference_name,
+                region=reference_name,
+                likely_layer="artifact-manifest",
+                hint="Add the reference region to pixel_regions before applying metric comparisons.",
+                record_success=False)
+            if not isinstance(region, dict) or not isinstance(reference_region, dict):
+                continue
+            actual = region.get(metric)
+            reference_actual = reference_region.get(reference_metric)
+            report.check(
+                f"pixel region comparison metric is numeric: {region_name}.{metric}",
+                isinstance(actual, (int, float)) and not isinstance(actual, bool),
+                path=f"frame.bmp#{region_name}.{metric}",
+                expected="numeric metric",
+                actual=actual,
+                region=region_name,
+                likely_layer="frame-capture",
+                hint="Check analyze_bmp_region and the comparison metric name.",
+                record_success=False)
+            report.check(
+                f"pixel region comparison reference metric is numeric: {reference_name}.{reference_metric}",
+                isinstance(reference_actual, (int, float))
+                and not isinstance(reference_actual, bool),
+                path=f"frame.bmp#{reference_name}.{reference_metric}",
+                expected="numeric metric",
+                actual=reference_actual,
+                region=reference_name,
+                likely_layer="frame-capture",
+                hint="Check analyze_bmp_region and the comparison reference metric name.",
+                record_success=False)
+            if (
+                not isinstance(actual, (int, float))
+                or isinstance(actual, bool)
+                or not isinstance(reference_actual, (int, float))
+                or isinstance(reference_actual, bool)
+            ):
+                continue
+            likely_layer = "material-or-backdrop-pass"
+            if material_plan_summary is not None:
+                layers = material_plan_summary.get("region_layers")
+                if isinstance(layers, dict):
+                    likely_layer = str(layers.get(region_name, likely_layer))
+            for bound, symbol in (("gte_ratio", ">="), ("lte_ratio", "<=")):
+                if bound not in spec:
+                    continue
+                ratio = float(spec[bound])
+                expected_value = float(reference_actual) * ratio
+                ok = (
+                    float(actual) >= expected_value
+                    if bound == "gte_ratio"
+                    else float(actual) <= expected_value
+                )
+                report.check(
+                    f"pixel region metric {symbol} reference ratio: {region_name}.{metric}",
+                    ok,
+                    (
+                        f"expected {region_name}.{metric} {symbol} "
+                        f"{reference_name}.{reference_metric} * {ratio}, "
+                        f"got {actual} vs {reference_actual}"
+                    ),
+                    path=f"frame.bmp#{region_name}.{metric}",
+                    expected={
+                        symbol: {
+                            "reference_region": reference_name,
+                            "reference_metric": reference_metric,
+                            "ratio": ratio,
+                            "value": round(expected_value, 3),
+                        }
+                    },
+                    actual={
+                        "region": region_name,
+                        "metric": metric,
+                        "value": actual,
+                        "reference_region": reference_name,
+                        "reference_metric": reference_metric,
+                        "reference_value": reference_actual,
+                    },
+                    region=region_name,
+                    likely_layer=likely_layer,
+                    hint=(
+                        "For blur comparisons, the material probe should be "
+                        "smoother than the named backdrop reference; inspect "
+                        "renderer.material_plans and the backdrop pass if this drifts."))
+
     platform_dir = bundle / "platform"
     platform_files = load_platform_files(platform_dir, report)
     report.data["platform_files"] = platform_files
@@ -2431,6 +2603,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         require_material_plan_summary=None,
         require_material_resource_bounds=None,
         require_material_quality_policy=None,
+        require_pixel_region_metric_comparison=[],
         require_material_semantic_runtime_match=False)
     return parser.parse_args(argv)
 

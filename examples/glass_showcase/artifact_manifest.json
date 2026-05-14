@@ -108,5 +108,19 @@
       "metric": "luma_stddev",
       "lte": 35.0
     }
+  ],
+  "pixel_region_metric_comparisons": [
+    {
+      "region": "visible-blur-smoothness",
+      "metric": "edge_energy",
+      "reference_region": "backdrop-pattern",
+      "lte_ratio": 0.60
+    },
+    {
+      "region": "visible-blur-smoothness",
+      "metric": "luma_stddev",
+      "reference_region": "backdrop-pattern",
+      "lte_ratio": 0.60
+    }
   ]
 }

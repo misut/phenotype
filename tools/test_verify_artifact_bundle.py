@@ -7,6 +7,7 @@ import contextlib
 import io
 import json
 from pathlib import Path
+import struct
 import tempfile
 import unittest
 
@@ -157,17 +158,60 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
     }
 
 
+def write_synthetic_bmp(path: Path) -> None:
+    width = 8
+    height = 2
+    rows = [
+        [
+            (0, 0, 0, 255),
+            (255, 255, 255, 255),
+            (0, 0, 0, 255),
+            (255, 255, 255, 255),
+            (100, 100, 100, 255),
+            (110, 110, 110, 255),
+            (120, 120, 120, 255),
+            (130, 130, 130, 255),
+        ],
+        [
+            (0, 0, 0, 255),
+            (255, 255, 255, 255),
+            (0, 0, 0, 255),
+            (255, 255, 255, 255),
+            (100, 100, 100, 255),
+            (110, 110, 110, 255),
+            (120, 120, 120, 255),
+            (130, 130, 130, 255),
+        ],
+    ]
+    pixel_data = bytearray()
+    for row in rows:
+        for r, g, b, a in row:
+            pixel_data.extend((b, g, r, a))
+    pixel_offset = 14 + 40
+    file_size = pixel_offset + len(pixel_data)
+    header = bytearray()
+    header.extend(b"BM")
+    header.extend(struct.pack("<IHHI", file_size, 0, 0, pixel_offset))
+    header.extend(struct.pack("<IiiHHIIiiII",
+                              40, width, -height, 1, 32, 0,
+                              len(pixel_data), 0, 0, 0, 0))
+    path.write_bytes(header + pixel_data)
+
+
 class ArtifactVerifierContractTest(unittest.TestCase):
     def run_verifier(
         self,
         snapshot_json: dict[str, object],
         manifest: dict[str, object] | None = None,
+        write_frame: bool = False,
     ) -> tuple[int, dict[str, object]]:
         with tempfile.TemporaryDirectory() as raw_dir:
             bundle = Path(raw_dir)
             (bundle / "snapshot.json").write_text(
                 json.dumps(snapshot_json),
                 encoding="utf-8")
+            if write_frame:
+                write_synthetic_bmp(bundle / "frame.bmp")
             args = [
                 str(bundle),
                 "--require-material-plan",
@@ -256,6 +300,91 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
             25)
+
+    def test_manifest_can_compare_pixel_region_metrics(self) -> None:
+        manifest = {
+            "require_frame": True,
+            "pixel_regions": [
+                {
+                    "name": "backdrop",
+                    "rect": [0, 0, 4, 2],
+                    "min_luma_delta": 200,
+                    "min_unique_colors": 2,
+                },
+                {
+                    "name": "blur",
+                    "rect": [4, 0, 4, 2],
+                    "min_luma_delta": 20,
+                    "min_unique_colors": 2,
+                },
+            ],
+            "pixel_region_metric_comparisons": [
+                {
+                    "region": "blur",
+                    "metric": "edge_energy",
+                    "reference_region": "backdrop",
+                    "lte_ratio": 0.25,
+                }
+            ],
+        }
+        code, report = self.run_verifier(
+            snapshot(material_plan()),
+            manifest,
+            write_frame=True)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        regions = {item["name"]: item for item in report["pixel_regions"]}
+        self.assertLess(
+            regions["blur"]["edge_energy"],
+            regions["backdrop"]["edge_energy"] * 0.25)
+        self.assertEqual(
+            report["manifest"]["pixel_region_metric_comparisons"],
+            1)
+
+    def test_pixel_region_metric_comparison_failure_is_llm_actionable(self) -> None:
+        manifest = {
+            "require_frame": True,
+            "pixel_regions": [
+                {
+                    "name": "backdrop",
+                    "rect": [0, 0, 4, 2],
+                    "min_luma_delta": 200,
+                    "min_unique_colors": 2,
+                },
+                {
+                    "name": "blur",
+                    "rect": [4, 0, 4, 2],
+                    "min_luma_delta": 20,
+                    "min_unique_colors": 2,
+                },
+            ],
+            "pixel_region_metric_comparisons": [
+                {
+                    "region": "blur",
+                    "metric": "edge_energy",
+                    "reference_region": "backdrop",
+                    "lte_ratio": 0.01,
+                }
+            ],
+        }
+        code, report = self.run_verifier(
+            snapshot(material_plan()),
+            manifest,
+            write_frame=True)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "pixel region metric <= reference ratio: blur.edge_energy")
+        self.assertEqual(failure["path"], "frame.bmp#blur.edge_energy")
+        self.assertEqual(failure["region"], "blur")
+        self.assertEqual(failure["likely_layer"], "material-or-backdrop-pass")
+        self.assertEqual(
+            failure["expected"]["<="]["reference_region"],
+            "backdrop")
+        self.assertEqual(failure["actual"]["region"], "blur")
+        self.assertIn("smoother than the named backdrop reference", failure["hint"])
 
 
 if __name__ == "__main__":

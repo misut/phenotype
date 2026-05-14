@@ -181,8 +181,9 @@ Remaining gaps:
 - Windows and Android still use the documented material fallback, with resolved
   runtime fallback plans;
 - WASI/WebGPU stays snapshot-only for now;
-- macOS has a blur-specific pixel probe based on smoothness metrics; mirror
-  that on additional backends as they gain native material rendering;
+- macOS has blur-specific pixel probes based on smoothness metrics and ratio
+  comparisons against the unfiltered backdrop reference; mirror those on
+  additional backends as they gain native material rendering;
 - resolved material plans should stay present in
   `debug.platform_runtime.details.renderer.material_plans`;
 - Android CI device/emulator wiring remains a policy and runner-capacity
@@ -261,7 +262,7 @@ Done means `examples/` is a local acceptance suite, not just demos:
 |---|---|---|
 | Analyze current phenotype progress | This document, `README.md`, `docs/ARCHITECTURE.md`, `docs/DEBUG_WORKFLOW.md`, examples and tests | Keep updated as milestones land |
 | Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, macOS sampled-backdrop rendering, resolved runtime fallback plans on Windows/Android, snapshot fallback contracts elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
-| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, startup bundle verifier, optional pixel-region checks, material plan summary gates, semantic/runtime material parity gates, material resource bound gates, a glass showcase manifest, a macOS native glass showcase CI gate, and a local Android contract runner | Add Android CI wiring and stricter blur-specific probes |
+| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, startup bundle verifier, optional pixel-region checks, material plan summary gates, semantic/runtime material parity gates, material resource bound gates, ratio-based blur probes, a glass showcase manifest, a macOS native glass showcase CI gate, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
 | Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, backdrop pixels, bounded texture copies, deterministic fallback, and backend `material_runtime_summary` counters cross-checked by the verifier | Add backend timing budget tests |
 | Runnable examples under `examples/` | Native, glass showcase, flight board, workbook, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |
