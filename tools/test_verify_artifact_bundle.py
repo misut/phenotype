@@ -21,6 +21,8 @@ def material_pass(sample_taps: int) -> dict[str, object]:
         "requires_backdrop": False,
         "sample_taps": sample_taps,
         "likely_layer": "material-fallback-pass",
+        "executor": "fallback-fill",
+        "max_texture_copy_pixels": 0,
     }
 
 
@@ -113,6 +115,8 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "total_runtime_passes": 1,
         "active_runtime_passes": 1 if primary["active"] else 0,
         "backdrop_runtime_passes": 1 if primary["requires_backdrop"] else 0,
+        "max_pass_texture_copy_pixels": primary["max_texture_copy_pixels"],
+        "total_pass_texture_copy_pixels": primary["max_texture_copy_pixels"],
         "max_plan_blur_radius": plan["blur_radius"],
         "max_plan_sample_taps": plan["sample_taps"],
         "max_budget_blur_radius": budget["max_blur_radius"],
@@ -290,6 +294,17 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["backdrop_runtime_passes"],
             0)
+        self.assertEqual(
+            report["material_plans"]["pass_executors"],
+            {"fallback-fill": 1})
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "max_pass_texture_copy_pixels"],
+            0)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "total_pass_texture_copy_pixels"],
+            0)
 
     def test_material_plan_mismatch_failure_is_llm_actionable(self) -> None:
         code, report = self.run_verifier(snapshot(material_plan(sample_taps=25)))
@@ -330,6 +345,8 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "active_runtime_passes_gte": 1,
                 "backdrop_runtime_passes_lte": 0,
                 "backdrop_runtime_passes_gte": 0,
+                "max_pass_texture_copy_pixels_lte": 0,
+                "total_pass_texture_copy_pixels_lte": 0,
             }
         }
         code, report = self.run_verifier(
@@ -370,6 +387,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "render_target_ready": 1,
                 "render_target_within_backdrop_budget": 1,
                 "render_target_pixel_formats": {"rgba8unorm": 1},
+                "pass_executors": {"fallback-fill": 1},
             },
         }
         code, report = self.run_verifier(snapshot(material_plan()), manifest)
@@ -385,6 +403,28 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["render_target"]["pixel_formats"],
             {"rgba8unorm": 1})
+
+    def test_fallback_pass_texture_copy_points_to_pass_contract(self) -> None:
+        plan = material_plan()
+        primary = plan["primary_pass"]
+        assert isinstance(primary, dict)
+        primary["max_texture_copy_pixels"] = 1
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material non-backdrop primary pass has no texture copy"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".primary_pass.max_texture_copy_pixels")
+        self.assertEqual(failure["expected"], 0)
+        self.assertEqual(failure["actual"], 1)
+        self.assertEqual(failure["likely_pass"], "translucent-rounded-rect")
+        self.assertIn("Fallback/fill passes", failure["hint"])
 
     def test_render_target_pixel_mismatch_points_to_plan_metadata(self) -> None:
         plan = material_plan()

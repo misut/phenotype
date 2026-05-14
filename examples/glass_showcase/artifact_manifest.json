@@ -39,6 +39,9 @@
     "pass_names": {
       "backdrop-sample-blur": 7
     },
+    "pass_executors": {
+      "backdrop-filter": 7
+    },
     "backdrop_available": 7,
     "backdrop_stable": 7,
     "backdrop_sources": {
@@ -62,6 +65,10 @@
     "max_sample_taps_lte": 25,
     "max_pass_count_lte": 1,
     "max_backdrop_pixels_lte": 4000000,
+    "max_pass_texture_copy_pixels_lte": 4000000,
+    "max_pass_texture_copy_pixels_gte": 1,
+    "total_pass_texture_copy_pixels_lte": 28000000,
+    "total_pass_texture_copy_pixels_gte": 1,
     "total_runtime_passes_lte": 7,
     "total_runtime_passes_gte": 7,
     "active_runtime_passes_lte": 7,

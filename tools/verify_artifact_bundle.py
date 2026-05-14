@@ -49,6 +49,12 @@ ALLOWED_MATERIAL_PASS_NAMES = {
     "translucent-rounded-rect",
 }
 
+ALLOWED_MATERIAL_PASS_EXECUTORS = {
+    "backdrop-filter",
+    "fallback-fill",
+    "none",
+}
+
 ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
     "bright",
     "bright-flat",
@@ -593,6 +599,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "fallback_reasons",
         "kinds",
         "pass_names",
+        "pass_executors",
         "backdrop_available",
         "backdrop_stable",
         "backdrop_sources",
@@ -626,6 +633,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "fallback_paths": ALLOWED_MATERIAL_FALLBACK_PATHS,
         "kinds": ALLOWED_MATERIAL_KINDS,
         "pass_names": ALLOWED_MATERIAL_PASS_NAMES,
+        "pass_executors": ALLOWED_MATERIAL_PASS_EXECUTORS,
         "luminance_responses": ALLOWED_MATERIAL_LUMINANCE_RESPONSES,
     }
     for field, allowed_keys in map_vocabularies.items():
@@ -662,6 +670,10 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
         "max_sample_taps_lte",
         "max_pass_count_lte",
         "max_backdrop_pixels_lte",
+        "max_pass_texture_copy_pixels_lte",
+        "max_pass_texture_copy_pixels_gte",
+        "total_pass_texture_copy_pixels_lte",
+        "total_pass_texture_copy_pixels_gte",
         "total_runtime_passes_lte",
         "total_runtime_passes_gte",
         "active_runtime_passes_lte",
@@ -1169,6 +1181,8 @@ MATERIAL_PASS_FIELDS = (
     "requires_backdrop",
     "sample_taps",
     "likely_layer",
+    "executor",
+    "max_texture_copy_pixels",
 )
 MATERIAL_QUALITY_POLICY_BOOL_FIELDS = (
     "allow_backdrop_sampling",
@@ -1191,6 +1205,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "fallback_reasons": {},
         "kinds": {},
         "pass_names": {},
+        "pass_executors": {},
         "plan_ids": [],
         "region_layers": {},
         "verifier_profiles": {},
@@ -1221,6 +1236,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "total_runtime_passes": 0,
             "active_runtime_passes": 0,
             "backdrop_runtime_passes": 0,
+            "max_pass_texture_copy_pixels": 0,
+            "total_pass_texture_copy_pixels": 0,
             "unbounded_texture_copy": 0,
             "non_deterministic_fallback": 0,
         },
@@ -1382,6 +1399,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     likely_layer=likely_layer,
                     hint="Check MaterialPlan geometry serialization.")
 
+        render_target_pixel_count: int | None = None
         render_target = check_object_field(
             report,
             plan,
@@ -1412,6 +1430,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             width = render_values.get("width")
             height = render_values.get("height")
             pixel_count = render_values.get("pixel_count")
+            if isinstance(pixel_count, (int, float)):
+                render_target_pixel_count = int(pixel_count)
             if all(isinstance(value, (int, float))
                    for value in (width, height, pixel_count)):
                 assert isinstance(width, (int, float))
@@ -1879,6 +1899,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             likely_layer=likely_layer,
             hint="The pure plan should name the backend pass it expects.")
         primary_pass_sample_taps: int | float | None = None
+        primary_pass_texture_copy_pixels: int | float | None = None
         primary_pass_name = ""
         if primary_pass is not None:
             primary_pass_name = string_at(primary_pass, "name") or ""
@@ -1902,14 +1923,35 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         likely_layer=likely_layer,
                         likely_pass=primary_pass_name,
                         hint="Pass sample taps must be bounded.")
+                elif key == "max_texture_copy_pixels":
+                    primary_pass_texture_copy_pixels = check_number_field(
+                        report,
+                        primary_pass,
+                        key,
+                        f"{plan_path}.primary_pass",
+                        min_value=0.0,
+                        likely_layer=likely_layer,
+                        likely_pass=primary_pass_name,
+                        hint="Pass texture-copy bounds must be explicit.")
                 else:
-                    check_string_field(
+                    value = check_string_field(
                         report,
                         primary_pass,
                         key,
                         f"{plan_path}.primary_pass",
                         likely_layer=likely_layer,
                         hint="Material pass must name its layer for debugging.")
+                    if key == "executor" and isinstance(value, str):
+                        report.check(
+                            "material primary pass executor is known",
+                            value in ALLOWED_MATERIAL_PASS_EXECUTORS,
+                            path=f"{plan_path}.primary_pass.executor",
+                            expected=sorted(ALLOWED_MATERIAL_PASS_EXECUTORS),
+                            actual=value,
+                            likely_layer=likely_layer,
+                            likely_pass=primary_pass_name,
+                            hint="Add new pure executor roles to the verifier contract when intentional.",
+                            record_success=False)
             pass_name = primary_pass_name
             if pass_name:
                 pass_names = summary["pass_names"]
@@ -1936,6 +1978,48 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     likely_pass=primary_pass_name,
                     hint="Keep MaterialPlan.sample_taps and primary_pass.sample_taps in sync.",
                     record_success=False)
+            if isinstance(primary_pass_texture_copy_pixels, (int, float)):
+                bounds = summary["resource_bounds"]
+                bounds["max_pass_texture_copy_pixels"] = max(
+                    int(bounds["max_pass_texture_copy_pixels"]),
+                    int(primary_pass_texture_copy_pixels))
+                if primary_pass.get("active") is False:
+                    report.check(
+                        "material inactive primary pass has no texture copy",
+                        int(primary_pass_texture_copy_pixels) == 0,
+                        path=f"{plan_path}.primary_pass.max_texture_copy_pixels",
+                        expected=0,
+                        actual=int(primary_pass_texture_copy_pixels),
+                        likely_layer=likely_layer,
+                        likely_pass=primary_pass_name,
+                        hint="Inactive material passes must not reserve texture-copy work.",
+                        record_success=False)
+                if primary_pass.get("requires_backdrop") is False:
+                    report.check(
+                        "material non-backdrop primary pass has no texture copy",
+                        int(primary_pass_texture_copy_pixels) == 0,
+                        path=f"{plan_path}.primary_pass.max_texture_copy_pixels",
+                        expected=0,
+                        actual=int(primary_pass_texture_copy_pixels),
+                        likely_layer=likely_layer,
+                        likely_pass=primary_pass_name,
+                        hint="Fallback/fill passes should not copy backdrop textures.",
+                        record_success=False)
+                elif (primary_pass.get("requires_backdrop") is True
+                      and render_target_pixel_count is not None):
+                    report.check(
+                        "material backdrop primary pass texture copy is within render target",
+                        0 < int(primary_pass_texture_copy_pixels)
+                        <= render_target_pixel_count,
+                        path=f"{plan_path}.primary_pass.max_texture_copy_pixels",
+                        expected={">": 0, "<=": render_target_pixel_count},
+                        actual=int(primary_pass_texture_copy_pixels),
+                        likely_layer=likely_layer,
+                        likely_pass=primary_pass_name,
+                        hint=(
+                            "Backdrop pass texture-copy bounds should be derived "
+                            "from MaterialPlan.render_target.pixel_count."),
+                        record_success=False)
 
         passes = plan.get("passes")
         report.check(
@@ -1981,6 +2065,10 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 if pass_entry.get("requires_backdrop") is True:
                     bounds["backdrop_runtime_passes"] = int(
                         bounds["backdrop_runtime_passes"]) + 1
+                pass_name_for_hint = string_at(pass_entry, "name") or primary_pass_name
+                pass_requires_backdrop = pass_entry.get("requires_backdrop")
+                pass_active = pass_entry.get("active")
+                pass_texture_copy_pixels: int | None = None
                 for key in MATERIAL_PASS_FIELDS:
                     if key in ("active", "requires_backdrop"):
                         check_bool_field(
@@ -1989,7 +2077,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                             key,
                             pass_path,
                             likely_layer=likely_layer,
-                            likely_pass=string_at(pass_entry, "name") or primary_pass_name,
+                            likely_pass=pass_name_for_hint,
                             hint="Pass entries must expose runtime activation state.")
                     elif key == "sample_taps":
                         check_number_field(
@@ -1999,8 +2087,26 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                             pass_path,
                             min_value=0.0,
                             likely_layer=likely_layer,
-                            likely_pass=string_at(pass_entry, "name") or primary_pass_name,
+                            likely_pass=pass_name_for_hint,
                             hint="Pass sample taps must be numeric.")
+                    elif key == "max_texture_copy_pixels":
+                        value = check_number_field(
+                            report,
+                            pass_entry,
+                            key,
+                            pass_path,
+                            min_value=0.0,
+                            likely_layer=likely_layer,
+                            likely_pass=pass_name_for_hint,
+                            hint="Pass texture-copy bounds must be numeric.")
+                        if isinstance(value, (int, float)):
+                            pass_texture_copy_pixels = int(value)
+                            bounds["max_pass_texture_copy_pixels"] = max(
+                                int(bounds["max_pass_texture_copy_pixels"]),
+                                int(value))
+                            bounds["total_pass_texture_copy_pixels"] = (
+                                int(bounds["total_pass_texture_copy_pixels"])
+                                + int(value))
                     else:
                         pass_value = check_string_field(
                             report,
@@ -2020,18 +2126,65 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                                 likely_pass=pass_value,
                                 hint="Add new backend pass names to the verifier contract when they are intentional.",
                                 record_success=False)
+                        if key == "executor" and isinstance(pass_value, str):
+                            pass_executors = summary["pass_executors"]
+                            pass_executors[pass_value] = (
+                                pass_executors.get(pass_value, 0) + 1)
+                            report.check(
+                                "material pass executor is known",
+                                pass_value in ALLOWED_MATERIAL_PASS_EXECUTORS,
+                                path=f"{pass_path}.executor",
+                                expected=sorted(ALLOWED_MATERIAL_PASS_EXECUTORS),
+                                actual=pass_value,
+                                likely_layer=likely_layer,
+                                likely_pass=pass_name_for_hint,
+                                hint="Add new pure executor roles to the verifier contract when intentional.",
+                                record_success=False)
+                if pass_texture_copy_pixels is not None:
+                    if pass_active is False:
+                        report.check(
+                            "material inactive runtime pass has no texture copy",
+                            pass_texture_copy_pixels == 0,
+                            path=f"{pass_path}.max_texture_copy_pixels",
+                            expected=0,
+                            actual=pass_texture_copy_pixels,
+                            likely_layer=likely_layer,
+                            likely_pass=pass_name_for_hint,
+                            hint="Inactive material passes must not reserve texture-copy work.",
+                            record_success=False)
+                    if pass_requires_backdrop is False:
+                        report.check(
+                            "material non-backdrop runtime pass has no texture copy",
+                            pass_texture_copy_pixels == 0,
+                            path=f"{pass_path}.max_texture_copy_pixels",
+                            expected=0,
+                            actual=pass_texture_copy_pixels,
+                            likely_layer=likely_layer,
+                            likely_pass=pass_name_for_hint,
+                            hint="Fallback/fill passes should not copy backdrop textures.",
+                            record_success=False)
+                    elif (pass_requires_backdrop is True
+                          and render_target_pixel_count is not None):
+                        report.check(
+                            "material backdrop runtime pass texture copy is within render target",
+                            0 < pass_texture_copy_pixels <= render_target_pixel_count,
+                            path=f"{pass_path}.max_texture_copy_pixels",
+                            expected={">": 0, "<=": render_target_pixel_count},
+                            actual=pass_texture_copy_pixels,
+                            likely_layer=likely_layer,
+                            likely_pass=pass_name_for_hint,
+                            hint=(
+                                "Runtime backdrop pass texture-copy bounds "
+                                "should be derived from MaterialPlan.render_target.pixel_count."),
+                            record_success=False)
             if isinstance(primary_pass, dict):
                 report.check(
                     "material pass list includes primary pass",
                     any(
                         isinstance(entry, dict)
-                        and entry.get("name") == primary_pass.get("name")
-                        and entry.get("active") == primary_pass.get("active")
-                        and entry.get("requires_backdrop") == primary_pass.get(
-                            "requires_backdrop")
-                        and entry.get("sample_taps") == primary_pass.get("sample_taps")
-                        and entry.get("likely_layer") == primary_pass.get(
-                            "likely_layer")
+                        and all(
+                            entry.get(key) == primary_pass.get(key)
+                            for key in MATERIAL_PASS_FIELDS)
                         for entry in passes
                     ),
                     path=f"{plan_path}.passes",
@@ -2201,6 +2354,9 @@ def check_material_plan_summary_requirements(
         "pass_names": (
             "material-pass",
             "Inspect MaterialPlan.primary_pass and runtime pass serialization."),
+        "pass_executors": (
+            "material-pass",
+            "Inspect MaterialPlan.primary_pass.executor and runtime pass roles."),
         "backdrop_sources": (
             "material-backdrop",
             "Inspect MaterialPlan.backdrop.source and the backend backdrop descriptor."),
@@ -2216,6 +2372,7 @@ def check_material_plan_summary_requirements(
             "fallback_reasons",
             "kinds",
             "pass_names",
+            "pass_executors",
             "backdrop_sources",
             "luminance_responses",
             "render_target_pixel_formats"):
@@ -2266,6 +2423,8 @@ def check_material_resource_bounds_requirements(
         "max_sample_taps_lte": "max_sample_taps",
         "max_pass_count_lte": "max_pass_count",
         "max_backdrop_pixels_lte": "max_backdrop_pixels",
+        "max_pass_texture_copy_pixels_lte": "max_pass_texture_copy_pixels",
+        "total_pass_texture_copy_pixels_lte": "total_pass_texture_copy_pixels",
         "total_runtime_passes_lte": "total_runtime_passes",
         "active_runtime_passes_lte": "active_runtime_passes",
         "backdrop_runtime_passes_lte": "backdrop_runtime_passes",
@@ -2286,6 +2445,8 @@ def check_material_resource_bounds_requirements(
             hint="Inspect MaterialResourceBudget in the resolved material plans.")
     min_field_map = {
         "max_plan_sample_taps_gte": "max_plan_sample_taps",
+        "max_pass_texture_copy_pixels_gte": "max_pass_texture_copy_pixels",
+        "total_pass_texture_copy_pixels_gte": "total_pass_texture_copy_pixels",
         "total_runtime_passes_gte": "total_runtime_passes",
         "active_runtime_passes_gte": "active_runtime_passes",
         "backdrop_runtime_passes_gte": "backdrop_runtime_passes",
@@ -2356,6 +2517,10 @@ def check_material_runtime_summary_contract(
         "total_runtime_passes": bounds.get("total_runtime_passes"),
         "active_runtime_passes": bounds.get("active_runtime_passes"),
         "backdrop_runtime_passes": bounds.get("backdrop_runtime_passes"),
+        "max_pass_texture_copy_pixels": bounds.get(
+            "max_pass_texture_copy_pixels"),
+        "total_pass_texture_copy_pixels": bounds.get(
+            "total_pass_texture_copy_pixels"),
         "max_plan_blur_radius": bounds.get("max_plan_blur_radius"),
         "max_plan_sample_taps": bounds.get("max_plan_sample_taps"),
         "max_budget_blur_radius": bounds.get("max_budget_blur_radius"),

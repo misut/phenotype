@@ -174,9 +174,12 @@ noise/dither, shadow, render-target analysis, backdrop sampling, backdrop
 analysis, fallback path, debug metadata, pass expectations, the resolved quality
 policy, resource budgets, and verifier
 expectations. `primary_pass` states whether the backend should run a backdrop
-blur pass or deterministic translucent fallback. `sample_taps` records the
-actual taps required by that resolved pass, so deterministic fallback plans use
-`sample_taps: 0` even when the quality budget allows more. `quality_policy`
+blur pass or deterministic translucent fallback. It also records the pure
+executor role and maximum texture-copy pixels for that pass, so a backend
+artifact can prove whether it stayed within the render-target copy budget.
+`sample_taps` records the actual taps required by that resolved pass, so
+deterministic fallback plans use `sample_taps: 0` even when the quality budget
+allows more. `quality_policy`
 records the pure planner's resolved sampling/noise/shadow switches and quality
 limits, including `max_backdrop_pixels`. `render_target` records sanitized
 target dimensions, scale, pixel format, pixel count, readiness, and whether the
@@ -204,8 +207,8 @@ plans, and snapshot-only targets publish an empty renderer contract with an
 explicit fallback policy. Backends also publish
 `renderer.material_runtime_summary`, a flat count/max summary derived from
 the same records; the artifact verifier recomputes it from
-`material_plans[]` so CI can catch summary drift and unexpected executor pass
-growth.
+`material_plans[]` so CI can catch summary drift, unexpected executor pass
+growth, and texture-copy budget drift.
 Backends separately publish `renderer.material_executor_summary` for edge-only
 execution telemetry: material instances, fallback instances, material draw
 calls, upload bytes/capacity, framebuffer-history copy bounds, and CPU enqueue

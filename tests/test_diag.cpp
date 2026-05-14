@@ -700,6 +700,10 @@ void test_material_runtime_record_json_contract() {
            == "translucent-rounded-rect");
     assert(obj.at("primary_pass").as_object().at("sample_taps").as_integer()
            == 0);
+    assert(obj.at("primary_pass").as_object().at("executor").as_string()
+           == "fallback-fill");
+    assert(obj.at("primary_pass").as_object()
+               .at("max_texture_copy_pixels").as_integer() == 0);
     auto const& quality_policy = obj.at("quality_policy").as_object();
     assert(quality_policy.at("allow_backdrop_sampling").as_bool() == true);
     assert(quality_policy.at("allow_noise").as_bool() == true);
@@ -724,6 +728,8 @@ void test_material_runtime_record_json_contract() {
     assert(pure_summary.total_runtime_passes == 1);
     assert(pure_summary.active_runtime_passes == 1);
     assert(pure_summary.backdrop_runtime_passes == 0);
+    assert(pure_summary.max_pass_texture_copy_pixels == 0);
+    assert(pure_summary.total_pass_texture_copy_pixels == 0);
     assert(pure_summary.max_plan_sample_taps == 0);
     assert(pure_summary.max_sample_taps == 9);
 
@@ -734,6 +740,8 @@ void test_material_runtime_record_json_contract() {
     assert(summary_obj.at("total_runtime_passes").as_integer() == 1);
     assert(summary_obj.at("active_runtime_passes").as_integer() == 1);
     assert(summary_obj.at("backdrop_runtime_passes").as_integer() == 0);
+    assert(summary_obj.at("max_pass_texture_copy_pixels").as_integer() == 0);
+    assert(summary_obj.at("total_pass_texture_copy_pixels").as_integer() == 0);
     assert(summary_obj.at("max_plan_sample_taps").as_integer() == 0);
     assert(summary_obj.at("max_sample_taps").as_integer() == 9);
 
