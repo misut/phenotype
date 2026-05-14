@@ -395,7 +395,9 @@ Current seed:
   startup artifact bundle, and applies the manifest;
 - PR CI runs the gate through the macOS native path for code changes and through
   a lighter artifact job for artifact-only changes; main-branch pushes run only
-  artifact/docs build gates instead of the full code test matrix.
+  artifact/docs build gates instead of the full code test matrix. WASI root
+  tests and docs builds run on Linux runners, while macOS runners stay reserved
+  for the native glass artifact gate.
 
 Validation:
 

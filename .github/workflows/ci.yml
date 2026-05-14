@@ -44,6 +44,16 @@ jobs:
 
           for path in "${files[@]}"; do
             case "$path" in
+              .github/workflows/*)
+                code_tests=true
+                docs_build=true
+                tools_check=true
+                artifact_build=true
+                continue
+                ;;
+            esac
+
+            case "$path" in
               docs/*|README.md)
                 docs_build=true
                 ;;
@@ -93,8 +103,9 @@ jobs:
       matrix:
         include:
           # WASM: UBSan trap mode (wasi-sdk has no ASan runtime).
-          - os: macos-15
-            platform: aarch64-apple-darwin
+          # This target has no macOS API dependency, so run it on Linux.
+          - os: ubuntu-24.04
+            platform: x86_64-linux-gnu
             target: wasm32-wasi
             target_arg: --target wasm32-wasi
             cxxflags: -fsanitize=undefined -fsanitize-trap=undefined -g
@@ -147,9 +158,11 @@ jobs:
           intron install llvm 22.1.2
           intron install cmake 4.3.1
           intron install ninja 1.13.2
-          intron install wasi-sdk 32
-          intron install wasmtime 43.0.1
-          intron default wasmtime 43.0.1
+          if [[ "${{ matrix.target }}" == "wasm32-wasi" ]]; then
+            intron install wasi-sdk 32
+            intron install wasmtime 43.0.1
+            intron default wasmtime 43.0.1
+          fi
 
       - name: Save toolchains
         if: github.ref == 'refs/heads/main' && matrix.target == 'native' && steps.toolchain-cache.outputs.cache-hit != 'true'
@@ -296,7 +309,7 @@ jobs:
     name: docs build (wasm32-wasi)
     needs: changes
     if: needs.changes.outputs.docs_build == 'true'
-    runs-on: macos-15
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 
@@ -327,7 +340,7 @@ jobs:
 
       - name: Install intron
         run: |
-          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-aarch64-apple-darwin.tar.gz"
+          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-x86_64-linux-gnu.tar.gz"
           tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
         env:
           GH_TOKEN: ${{ github.token }}
@@ -350,7 +363,7 @@ jobs:
 
       - name: Install exon
         run: |
-          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-aarch64-apple-darwin.tar.gz"
+          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-x86_64-linux-gnu.tar.gz"
           tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
         env:
           GH_TOKEN: ${{ github.token }}

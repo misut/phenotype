@@ -40,6 +40,14 @@ jobs:
 
           for path in "${files[@]}"; do
             case "$path" in
+              .github/workflows/*)
+                docs_build=true
+                artifact_build=true
+                continue
+                ;;
+            esac
+
+            case "$path" in
               docs/*|README.md)
                 docs_build=true
                 ;;
@@ -65,11 +73,11 @@ jobs:
           fi
           printf 'docs_build=%s artifact_build=%s\n' "$docs_build" "$artifact_build"
 
-  main-artifacts:
-    name: artifact/docs build
+  docs:
+    name: docs build (wasm32-wasi)
     needs: changes
-    if: needs.changes.outputs.docs_build == 'true' || needs.changes.outputs.artifact_build == 'true'
-    runs-on: macos-15
+    if: needs.changes.outputs.docs_build == 'true'
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v6
 
@@ -93,11 +101,88 @@ jobs:
         with:
           path: |
             docs/.exon
+            ~/.exon/cache
+          key: main-docs-${{ runner.os }}-${{ hashFiles('mise.toml', 'docs/exon.toml', 'exon.lock') }}
+          restore-keys: |
+            main-docs-${{ runner.os }}-
+
+      - name: Install intron
+        run: |
+          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-x86_64-linux-gnu.tar.gz"
+          tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install toolchains
+        run: |
+          intron install llvm 22.1.2
+          intron install cmake 4.3.1
+          intron install ninja 1.13.2
+          intron install wasi-sdk 32
+          intron install wasmtime 43.0.1
+          intron default wasmtime 43.0.1
+
+      - name: Save toolchains
+        if: steps.toolchain-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.intron/toolchains
+          key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
+
+      - name: Install exon
+        run: |
+          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-x86_64-linux-gnu.tar.gz"
+          tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build docs
+        run: |
+          eval "$(intron env)"
+          cd docs
+          exon build --target wasm32-wasi
+
+      - name: Save build artifacts
+        if: steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            docs/.exon
+            ~/.exon/cache
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
+
+  artifact:
+    name: glass showcase artifact
+    needs: changes
+    if: needs.changes.outputs.artifact_build == 'true'
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve tool versions
+        id: tool-versions
+        shell: bash
+        run: |
+          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+
+      - name: Restore toolchains
+        id: toolchain-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.intron/toolchains
+          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
+
+      - name: Restore build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
             examples/glass_showcase/.exon
             ~/.exon/cache
-          key: main-artifacts-${{ runner.os }}-${{ hashFiles('mise.toml', 'docs/exon.toml', 'examples/glass_showcase/exon.toml', 'exon.lock') }}
+          key: main-artifact-${{ runner.os }}-${{ hashFiles('mise.toml', 'examples/glass_showcase/exon.toml', 'exon.lock') }}
           restore-keys: |
-            main-artifacts-${{ runner.os }}-
+            main-artifact-${{ runner.os }}-
 
       - name: Install intron
         run: |
@@ -111,11 +196,6 @@ jobs:
           intron install llvm 22.1.2
           intron install cmake 4.3.1
           intron install ninja 1.13.2
-          if [[ "${{ needs.changes.outputs.docs_build }}" == "true" ]]; then
-            intron install wasi-sdk 32
-            intron install wasmtime 43.0.1
-            intron default wasmtime 43.0.1
-          fi
 
       - name: Save toolchains
         if: steps.toolchain-cache.outputs.cache-hit != 'true'
@@ -132,18 +212,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Install uv
-        if: needs.changes.outputs.artifact_build == 'true'
         uses: astral-sh/setup-uv@v8.1.0
         with:
           version: "0.11.14"
           enable-cache: true
 
       - name: Install Python for tools
-        if: needs.changes.outputs.artifact_build == 'true'
         run: uv python install
 
       - name: Verify glass showcase artifact
-        if: needs.changes.outputs.artifact_build == 'true'
         env:
           EXON: exon
           PHENOTYPE_ARTIFACT_DIR: ${{ runner.temp }}/phenotype-glass-showcase
@@ -152,19 +229,11 @@ jobs:
           eval "$(intron env)"
           tools/verify_glass_showcase_artifact.sh
 
-      - name: Build docs
-        if: needs.changes.outputs.docs_build == 'true'
-        run: |
-          eval "$(intron env)"
-          cd docs
-          exon build --target wasm32-wasi
-
       - name: Save build artifacts
         if: steps.build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: |
-            docs/.exon
             examples/glass_showcase/.exon
             ~/.exon/cache
           key: ${{ steps.build-cache.outputs.cache-primary-key }}

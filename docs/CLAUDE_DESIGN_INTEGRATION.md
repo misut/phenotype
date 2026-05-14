@@ -122,8 +122,8 @@ prerequisite for the Core 6 port (M4). It touched nearly every widget.
 | **A5** | Introduce state color tokens on `Theme`: hover/active/disabled/error pairs (`*_bg`, `*_fg`) derived from accent/foreground/border by default, overridable in JSON | [`src/phenotype.types.cppm`](../src/phenotype.types.cppm), paint layer ([`src/phenotype.paint.cppm`](../src/phenotype.paint.cppm)), widget emitters | ✅ M0-3: 12 new state fields incl. `state_focus_ring{,_width}` consumed by `paint.cppm`; button hover binds to `state_hover_bg`; `state_active_bg` defaults to `accent_strong`; disabled / error tokens shipped (no widget consumer yet) |
 | **A6** | Add semantic color tokens for downstream widgets (`semantic_{success,warning,info,error}_{bg,fg,border}`) | [`src/phenotype.types.cppm`](../src/phenotype.types.cppm) | ✅ M0-3: 12 new fields with phenotype-web defaults; no widget consumers yet, ready for Toast / Banner in a later milestone |
 
-Milestone 0 completion: `exon test` passes on five CI targets (macOS
-native, macOS wasi, ubuntu wasi, windows native, docs wasi); the
+Milestone 0 completion: `exon test` passes on the native/WASI CI target set
+(macOS native, Linux WASI, Windows native, and Linux docs WASI build); the
 `native`, `counter`, and `hello` examples render with the new default
 Tiffany palette (the `examples/native` `showcase_theme()` override was
 removed in M0-3 so the example tracks the default theme); a JSON theme
