@@ -1384,8 +1384,113 @@ void test_material_surface_emits_material_rect_command() {
     assert(material->opacity > 0.5f);
     assert(material->blur_radius >= 20.0f);
     assert(material->tint.a > 0);
+    assert(material->saturation > 1.0f);
+    assert(material->luminance_floor > 0.0f);
+    assert(material->luminance_gain > 1.0f);
+    assert(material->edge_highlight > 0.0f);
+    assert(material->edge_width >= 1.0f);
+    assert(material->noise_opacity > 0.0f);
+    assert(material->shadow_alpha > 0.0f);
+    assert(material->shadow_radius > 0.0f);
 
     std::puts("PASS: material surface emits MaterialRect command");
+}
+
+void test_material_command_preserves_style_optics() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    auto material_h = detail::alloc_node();
+    auto& root = detail::node_at(root_h);
+    root.style.flex_direction = FlexDirection::Column;
+    root.children.push_back(material_h);
+
+    auto& material = detail::node_at(material_h);
+    material.material = layout::material_style(MaterialKind::Regular);
+    material.material.opacity = 0.63f;
+    material.material.blur_radius = 18.0f;
+    material.material.tint = Color{32, 64, 96, 144};
+    material.material.saturation = 0.73f;
+    material.material.luminance_floor = 0.19f;
+    material.material.luminance_gain = 1.31f;
+    material.material.edge_highlight = 0.57f;
+    material.material.edge_width = 2.25f;
+    material.material.noise_opacity = 0.031f;
+    material.material.shadow_alpha = 0.22f;
+    material.material.shadow_radius = 17.0f;
+    material.background = material.material.tint;
+    material.border_color = material.material.border;
+    material.border_width = 1.0f;
+    material.border_radius = 6.0f;
+    material.style.fixed_height = 40.0f;
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    auto const* cmd = static_cast<MaterialRectCmd const*>(nullptr);
+    for (auto const& parsed : cmds) {
+        if (auto const* material_cmd = std::get_if<MaterialRectCmd>(&parsed)) {
+            cmd = material_cmd;
+            break;
+        }
+    }
+
+    assert(cmd != nullptr);
+    assert(cmd->kind == MaterialKind::Regular);
+    assert(std::fabs(cmd->opacity - 0.63f) < 0.0001f);
+    assert(std::fabs(cmd->blur_radius - 18.0f) < 0.0001f);
+    assert(cmd->tint.r == 32 && cmd->tint.g == 64 && cmd->tint.b == 96);
+    assert(cmd->tint.a == 144);
+    assert(std::fabs(cmd->saturation - 0.73f) < 0.0001f);
+    assert(std::fabs(cmd->luminance_floor - 0.19f) < 0.0001f);
+    assert(std::fabs(cmd->luminance_gain - 1.31f) < 0.0001f);
+    assert(std::fabs(cmd->edge_highlight - 0.57f) < 0.0001f);
+    assert(std::fabs(cmd->edge_width - 2.25f) < 0.0001f);
+    assert(std::fabs(cmd->noise_opacity - 0.031f) < 0.0001f);
+    assert(std::fabs(cmd->shadow_alpha - 0.22f) < 0.0001f);
+    assert(std::fabs(cmd->shadow_radius - 17.0f) < 0.0001f);
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.render_target.width = 320;
+    env.render_target.height = 40;
+    auto plan = plan_material_surface(
+        material_request_for_command(
+            cmd->kind,
+            cmd->opacity,
+            cmd->blur_radius,
+            cmd->tint,
+            cmd->saturation,
+            cmd->luminance_floor,
+            cmd->luminance_gain,
+            cmd->edge_highlight,
+            cmd->edge_width,
+            cmd->noise_opacity,
+            cmd->shadow_alpha,
+            cmd->shadow_radius,
+            MaterialGeometry{cmd->x, cmd->y, cmd->w, cmd->h, cmd->radius},
+            detail::g_app.theme),
+        env);
+    assert(!plan.fallback());
+    assert(std::fabs(plan.saturation - 0.73f) < 0.0001f);
+    assert(std::fabs(plan.luminance_floor - 0.19f) < 0.0001f);
+    assert(std::fabs(plan.luminance_gain - 1.31f) < 0.0001f);
+    assert(std::fabs(plan.edge_highlight - 0.57f) < 0.0001f);
+    assert(std::fabs(plan.edge_width - 2.25f) < 0.0001f);
+    assert(std::fabs(plan.noise_opacity - 0.031f) < 0.0001f);
+    assert(std::fabs(plan.shadow_alpha - 0.22f) < 0.0001f);
+    assert(std::fabs(plan.shadow_radius - 17.0f) < 0.0001f);
+
+    std::puts("PASS: material command preserves style optics");
 }
 
 // Regression: when a subtree (here widget::radio's row) keeps blitting
@@ -2279,6 +2384,7 @@ int main() {
     test_material_props_invalidate_diff_cache();
     test_material_planner_backdrop_and_fallback_paths();
     test_material_surface_emits_material_rect_command();
+    test_material_command_preserves_style_optics();
     test_radio_paint_cache_stale_descendant_after_subtree_blit();
     test_row_cross_align_center_default();
     test_theme_json_roundtrip();

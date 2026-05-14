@@ -141,7 +141,8 @@ On WASM, a `PHENOTYPE_IMPORT` macro applies `__attribute__((import_module, impor
 
 ## Command buffer protocol
 
-The cmd buffer (`phenotype_cmd_buf[65536]`) uses a binary encoding with 8 opcodes:
+The cmd buffer (`phenotype_cmd_buf[65536]`) uses a binary encoding with
+append-only opcodes:
 
 | Opcode | Name | Payload (after 4-byte opcode) |
 |--------|------|------|
@@ -153,10 +154,13 @@ The cmd buffer (`phenotype_cmd_buf[65536]`) uses a binary encoding with 8 opcode
 | 6 | DrawLine | f32 x1, y1, x2, y2, thickness; u32 color |
 | 7 | HitRegion | f32 x, y, w, h; u32 callback_id, cursor_type |
 | 8 | DrawImage | f32 x, y, w, h; u32 len; bytes url (4-byte aligned) |
+| 15 | MaterialRect | f32 x, y, w, h, radius; u32 kind; f32 opacity, blur_radius; u32 tint; f32 saturation, luminance_floor, luminance_gain, edge_highlight, edge_width, noise_opacity, shadow_alpha, shadow_radius |
 
 All values are little-endian. Colors are packed as `(r << 24) | (g << 16) | (b << 8) | a`.
 
-The `phenotype.commands` module provides a C++ parser (`parse_commands(buf, len)`) that decodes these bytes into typed structs (`ClearCmd`, `FillRectCmd`, etc.) for native backends.
+The `phenotype.commands` module provides a C++ parser (`parse_commands(buf,
+len)`) that decodes these bytes into typed structs (`ClearCmd`, `FillRectCmd`,
+`MaterialRectCmd`, etc.) for native backends.
 
 ## Material Planning
 
@@ -164,6 +168,13 @@ Material policy lives in the pure `phenotype.material` module. Backends provide
 immutable edge inputs — capability snapshot, backdrop descriptor, render-target
 metadata, debug seed, and quality policy — then execute the returned
 `MaterialPlan`.
+
+`Cmd::MaterialRect` carries the material node's numeric `MaterialStyle`
+descriptor across the backend boundary: kind, opacity, blur, tint, saturation,
+luminance curve, edge highlight, edge width, noise opacity, and shadow. Backends
+reconstruct `MaterialRequest` from that descriptor plus geometry, then call the
+pure planner. They should not re-derive these style values from the current
+theme after the command has been emitted.
 
 ```cpp
 MaterialPlan plan = plan_material_surface(request, environment);

@@ -2214,13 +2214,29 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 float opacity = 0.0f;
                 float blur_radius = 0.0f;
                 unsigned int packed = 0;
+                float saturation = 1.0f;
+                float luminance_floor = 0.0f;
+                float luminance_gain = 1.0f;
+                float edge_highlight = 0.0f;
+                float edge_width = 1.0f;
+                float noise_opacity = 0.0f;
+                float shadow_alpha = 0.0f;
+                float shadow_radius = 0.0f;
                 if (!reader.read_f32(x) || !reader.read_f32(y)
                     || !reader.read_f32(w) || !reader.read_f32(h)
                     || !reader.read_f32(radius)
                     || !reader.read_u32(kind)
                     || !reader.read_f32(opacity)
                     || !reader.read_f32(blur_radius)
-                    || !reader.read_u32(packed))
+                    || !reader.read_u32(packed)
+                    || !reader.read_f32(saturation)
+                    || !reader.read_f32(luminance_floor)
+                    || !reader.read_f32(luminance_gain)
+                    || !reader.read_f32(edge_highlight)
+                    || !reader.read_f32(edge_width)
+                    || !reader.read_f32(noise_opacity)
+                    || !reader.read_f32(shadow_alpha)
+                    || !reader.read_f32(shadow_radius))
                     return false;
                 auto material_env_for_command = material_env;
                 material_env_for_command.debug_seed.node =
@@ -2231,6 +2247,14 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                         opacity,
                         blur_radius,
                         unpack_color(packed),
+                        saturation,
+                        luminance_floor,
+                        luminance_gain,
+                        edge_highlight,
+                        edge_width,
+                        noise_opacity,
+                        shadow_alpha,
+                        shadow_radius,
                         MaterialGeometry{x, y, w, h, radius},
                         ::phenotype::detail::g_app.theme),
                     material_env_for_command);

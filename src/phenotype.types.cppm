@@ -236,7 +236,9 @@ enum class Cmd : unsigned int {
     // that is needed to preserve fill ordering.
     FillRects  = 14,
     // Material surface. Layout: opcode + x/y/w/h/radius f32 +
-    // kind u32 + opacity f32 + blur_radius f32 + packed RGBA tint.
+    // kind u32 + opacity f32 + blur_radius f32 + packed RGBA tint +
+    // saturation/luminance_floor/luminance_gain/edge_highlight/
+    // edge_width/noise_opacity/shadow_alpha/shadow_radius f32.
     // Backends with backdrop sampling render a glass/material effect;
     // backends without it draw the tint as a rounded-rect fallback.
     MaterialRect = 15,

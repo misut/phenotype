@@ -332,7 +332,7 @@ void emit_material_rect(R& r, float x, float y, float w, float h,
                         float radius, MaterialStyle const& material) {
     if (material.kind == MaterialKind::None || material.tint.a == 0)
         return;
-    if (!detail::ensure(r, 40, Cmd::MaterialRect)) return;
+    if (!detail::ensure(r, 72, Cmd::MaterialRect)) return;
     detail::write_u32(r, static_cast<unsigned int>(Cmd::MaterialRect));
     detail::write_f32(r, x); detail::write_f32(r, y);
     detail::write_f32(r, w); detail::write_f32(r, h);
@@ -341,6 +341,14 @@ void emit_material_rect(R& r, float x, float y, float w, float h,
     detail::write_f32(r, material.opacity);
     detail::write_f32(r, material.blur_radius);
     detail::write_u32(r, material.tint.packed());
+    detail::write_f32(r, material.saturation);
+    detail::write_f32(r, material.luminance_floor);
+    detail::write_f32(r, material.luminance_gain);
+    detail::write_f32(r, material.edge_highlight);
+    detail::write_f32(r, material.edge_width);
+    detail::write_f32(r, material.noise_opacity);
+    detail::write_f32(r, material.shadow_alpha);
+    detail::write_f32(r, material.shadow_radius);
 }
 
 // Pack a FontSpec's mono / weight / italic bits into the wire-format

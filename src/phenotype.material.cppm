@@ -404,6 +404,36 @@ inline MaterialStyle material_style_for_command(MaterialKind kind,
     return style;
 }
 
+inline MaterialStyle material_style_for_command(MaterialKind kind,
+                                                float opacity,
+                                                float blur_radius,
+                                                Color tint,
+                                                float saturation,
+                                                float luminance_floor,
+                                                float luminance_gain,
+                                                float edge_highlight,
+                                                float edge_width,
+                                                float noise_opacity,
+                                                float shadow_alpha,
+                                                float shadow_radius,
+                                                Theme const& theme) noexcept {
+    auto style = material_style_for_command(
+        kind,
+        opacity,
+        blur_radius,
+        tint,
+        theme);
+    style.saturation = saturation;
+    style.luminance_floor = luminance_floor;
+    style.luminance_gain = luminance_gain;
+    style.edge_highlight = edge_highlight;
+    style.edge_width = edge_width;
+    style.noise_opacity = noise_opacity;
+    style.shadow_alpha = shadow_alpha;
+    style.shadow_radius = shadow_radius;
+    return style;
+}
+
 inline MaterialRequest material_request_for_command(MaterialKind kind,
                                                     float opacity,
                                                     float blur_radius,
@@ -412,6 +442,39 @@ inline MaterialRequest material_request_for_command(MaterialKind kind,
                                                     Theme const& theme) noexcept {
     return MaterialRequest{
         material_style_for_command(kind, opacity, blur_radius, tint, theme),
+        geometry,
+    };
+}
+
+inline MaterialRequest material_request_for_command(MaterialKind kind,
+                                                    float opacity,
+                                                    float blur_radius,
+                                                    Color tint,
+                                                    float saturation,
+                                                    float luminance_floor,
+                                                    float luminance_gain,
+                                                    float edge_highlight,
+                                                    float edge_width,
+                                                    float noise_opacity,
+                                                    float shadow_alpha,
+                                                    float shadow_radius,
+                                                    MaterialGeometry geometry,
+                                                    Theme const& theme) noexcept {
+    return MaterialRequest{
+        material_style_for_command(
+            kind,
+            opacity,
+            blur_radius,
+            tint,
+            saturation,
+            luminance_floor,
+            luminance_gain,
+            edge_highlight,
+            edge_width,
+            noise_opacity,
+            shadow_alpha,
+            shadow_radius,
+            theme),
         geometry,
     };
 }

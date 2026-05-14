@@ -217,6 +217,10 @@ or an explicit environment override before the pure planner produced
 Plan-level failures route to `plan_material_surface` and runtime plan
 serialization; semantic/runtime contract failures route to semantic material
 nodes, `MaterialRect` command emission, and `renderer.material_plans[]` parity.
+The `MaterialRect` command carries the material node's numeric style descriptor
+to the backend, including saturation, luminance curve, edge highlight, noise,
+and shadow. If semantic material fields are correct but runtime plans drift,
+inspect the command decoder before changing backend policy.
 Use `--require-material-plan` when a bundle must contain resolved material
 plans.
 
