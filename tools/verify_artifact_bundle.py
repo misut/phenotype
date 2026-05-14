@@ -503,6 +503,12 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
         "max_sample_taps_lte",
         "max_pass_count_lte",
         "max_backdrop_pixels_lte",
+        "total_runtime_passes_lte",
+        "total_runtime_passes_gte",
+        "active_runtime_passes_lte",
+        "active_runtime_passes_gte",
+        "backdrop_runtime_passes_lte",
+        "backdrop_runtime_passes_gte",
     }
     bool_fields = {
         "require_bounded_texture_copy",
@@ -1007,6 +1013,9 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "max_sample_taps": 0,
             "max_pass_count": 0,
             "max_backdrop_pixels": 0,
+            "total_runtime_passes": 0,
+            "active_runtime_passes": 0,
+            "backdrop_runtime_passes": 0,
             "unbounded_texture_copy": 0,
             "non_deterministic_fallback": 0,
         },
@@ -1445,6 +1454,9 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             hint="Backend runtime JSON should mirror MaterialPlan pass expectations.",
             record_success=False)
         if isinstance(passes, list):
+            bounds = summary["resource_bounds"]
+            bounds["total_runtime_passes"] = int(
+                bounds["total_runtime_passes"]) + len(passes)
             if isinstance(max_pass_count, (int, float)):
                 report.check(
                     "material pass count is within budget",
@@ -1468,6 +1480,13 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     record_success=False)
                 if not isinstance(pass_entry, dict):
                     continue
+                bounds = summary["resource_bounds"]
+                if pass_entry.get("active") is True:
+                    bounds["active_runtime_passes"] = int(
+                        bounds["active_runtime_passes"]) + 1
+                if pass_entry.get("requires_backdrop") is True:
+                    bounds["backdrop_runtime_passes"] = int(
+                        bounds["backdrop_runtime_passes"]) + 1
                 for key in MATERIAL_PASS_FIELDS:
                     if key in ("active", "requires_backdrop"):
                         check_bool_field(
@@ -1663,6 +1682,9 @@ def check_material_resource_bounds_requirements(
         "max_sample_taps_lte": "max_sample_taps",
         "max_pass_count_lte": "max_pass_count",
         "max_backdrop_pixels_lte": "max_backdrop_pixels",
+        "total_runtime_passes_lte": "total_runtime_passes",
+        "active_runtime_passes_lte": "active_runtime_passes",
+        "backdrop_runtime_passes_lte": "backdrop_runtime_passes",
     }
     for spec_field, summary_field in field_map.items():
         if spec_field not in spec:
@@ -1680,6 +1702,9 @@ def check_material_resource_bounds_requirements(
             hint="Inspect MaterialResourceBudget in the resolved material plans.")
     min_field_map = {
         "max_plan_sample_taps_gte": "max_plan_sample_taps",
+        "total_runtime_passes_gte": "total_runtime_passes",
+        "active_runtime_passes_gte": "active_runtime_passes",
+        "backdrop_runtime_passes_gte": "backdrop_runtime_passes",
     }
     for spec_field, summary_field in min_field_map.items():
         if spec_field not in spec:
@@ -1694,7 +1719,9 @@ def check_material_resource_bounds_requirements(
             expected={">=": expected},
             actual=actual,
             likely_layer="platform-runtime",
-            hint="Inspect MaterialPlan.sample_taps in the resolved plans.")
+            hint=(
+                "Inspect MaterialPlan.sample_taps and "
+                "renderer.material_plans[].passes in the resolved plans."))
     if spec.get("require_bounded_texture_copy") is True:
         actual = bounds.get("unbounded_texture_copy")
         report.check(

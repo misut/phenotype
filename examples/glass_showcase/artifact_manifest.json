@@ -47,6 +47,12 @@
     "max_sample_taps_lte": 25,
     "max_pass_count_lte": 1,
     "max_backdrop_pixels_lte": 4000000,
+    "total_runtime_passes_lte": 7,
+    "total_runtime_passes_gte": 7,
+    "active_runtime_passes_lte": 7,
+    "active_runtime_passes_gte": 7,
+    "backdrop_runtime_passes_lte": 7,
+    "backdrop_runtime_passes_gte": 7,
     "require_bounded_texture_copy": true,
     "require_deterministic_fallback": true
   },

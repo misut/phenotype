@@ -165,10 +165,14 @@ Use `require_material_resource_bounds` when a material gate must prove the
 runtime stayed within the pure plan's performance budget. Supported limits are
 `max_plan_blur_radius_lte`, `max_plan_sample_taps_lte`,
 `max_plan_sample_taps_gte`, `max_budget_blur_radius_lte`,
-`max_sample_taps_lte`, `max_pass_count_lte`, and `max_backdrop_pixels_lte`;
+`max_sample_taps_lte`, `max_pass_count_lte`, `max_backdrop_pixels_lte`,
+`total_runtime_passes_lte`/`gte`, `active_runtime_passes_lte`/`gte`, and
+`backdrop_runtime_passes_lte`/`gte`;
 `require_bounded_texture_copy` and
 `require_deterministic_fallback` require those booleans to hold for every
-resolved plan.
+resolved plan. The runtime pass limits are aggregated from
+`renderer.material_plans[].passes` and should describe the actual executor pass
+list, not only the pure resource budget.
 Use `require_material_quality_policy` when a material gate must prove the
 resolved pure policy stayed enabled and bounded. It can require backdrop
 sampling, noise, and shadow to remain allowed for every plan, and can bound the

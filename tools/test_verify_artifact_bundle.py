@@ -170,6 +170,15 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["max_sample_taps"],
             25)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"]["total_runtime_passes"],
+            1)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"]["active_runtime_passes"],
+            1)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"]["backdrop_runtime_passes"],
+            0)
 
     def test_material_plan_mismatch_failure_is_llm_actionable(self) -> None:
         code, report = self.run_verifier(snapshot(material_plan(sample_taps=25)))
@@ -199,11 +208,17 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["failure_summary"]["by_path"][failure["path"]],
             1)
 
-    def test_manifest_can_require_plan_sample_tap_floor(self) -> None:
+    def test_manifest_can_require_plan_sample_and_runtime_pass_bounds(self) -> None:
         manifest = {
             "require_material_resource_bounds": {
                 "max_plan_sample_taps_lte": 25,
                 "max_plan_sample_taps_gte": 25,
+                "total_runtime_passes_lte": 1,
+                "total_runtime_passes_gte": 1,
+                "active_runtime_passes_lte": 1,
+                "active_runtime_passes_gte": 1,
+                "backdrop_runtime_passes_lte": 0,
+                "backdrop_runtime_passes_gte": 0,
             }
         }
         code, report = self.run_verifier(
