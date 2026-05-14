@@ -28,6 +28,9 @@
     "fallback_reasons": {
       "backend reports no material backdrop blur support": 1
     },
+    "contract_versions": {
+      "1": 1
+    },
     "kinds": {
       "regular": 1
     },

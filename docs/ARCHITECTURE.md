@@ -169,10 +169,11 @@ metadata, debug seed, and quality policy — then execute the returned
 MaterialPlan plan = plan_material_surface(request, environment);
 ```
 
-The plan records blur, tint, saturation, luminance curve, edge highlight,
-noise/dither, shadow, render-target analysis, backdrop sampling, backdrop
-analysis, decision trace, fallback path, debug metadata, pass expectations, the
-resolved quality policy, resource budgets, and verifier expectations.
+The plan records its artifact `contract_version`, blur, tint, saturation,
+luminance curve, edge highlight, noise/dither, shadow, render-target analysis,
+backdrop sampling, backdrop analysis, decision trace, fallback path, debug
+metadata, pass expectations, the resolved quality policy, resource budgets, and
+verifier expectations.
 `decision_trace` records the pure gate booleans for geometry, target readiness,
 quality, backend capabilities, accessibility settings, backdrop-source
 readiness, and the first fallback blocker. `primary_pass` states whether the
@@ -211,7 +212,9 @@ Runtime adapters serialize the same `MaterialRuntimeRecord` shape into
 `debug.platform_runtime.details.renderer.material_plans`: macOS records the
 sampled-backdrop pass, Windows and Android record deterministic fallback
 plans, and snapshot-only targets publish an empty renderer contract with an
-explicit fallback policy. Backends also publish
+explicit fallback policy. Each serialized plan carries the same
+`contract_version` so artifact verifiers can reject unknown material plan
+schemas before reading version-specific fields. Backends also publish
 `renderer.material_runtime_summary`, a flat count/max summary derived from
 the same records; the artifact verifier recomputes it from
 `material_plans[]` so CI can catch summary drift, unexpected executor pass

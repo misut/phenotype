@@ -1097,6 +1097,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     fallback_env.render_target.height = 760;
     fallback_env.render_target.scale = 2.0f;
     auto fallback_plan = plan_material_surface(request, fallback_env);
+    assert(fallback_plan.contract_version == material_plan_contract_version);
     assert(fallback_plan.kind == MaterialKind::Regular);
     assert(fallback_plan.fallback());
     assert(!fallback_plan.backdrop_sampling);
@@ -1140,6 +1141,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     glass_env.backdrop.stable = true;
     glass_env.backdrop.source = "previous-presented-frame";
     auto glass_plan = plan_material_surface(request, glass_env);
+    assert(glass_plan.contract_version == material_plan_contract_version);
     assert(!glass_plan.fallback());
     assert(glass_plan.backdrop_sampling);
     assert(glass_plan.decision_trace.backend_supports_backdrop);

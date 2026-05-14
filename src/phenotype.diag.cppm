@@ -944,6 +944,10 @@ namespace detail {
         out.emplace(
             "command_index",
             json::Value{static_cast<std::int64_t>(record.command_index)});
+        out.emplace(
+            "contract_version",
+            json::Value{
+                static_cast<std::int64_t>(plan.contract_version)});
         out.emplace("kind", json::Value{material_kind_name(plan.kind)});
         out.emplace("plan_id", json::Value{plan.plan_id});
         out.emplace("geometry", json::Value{std::move(geometry)});

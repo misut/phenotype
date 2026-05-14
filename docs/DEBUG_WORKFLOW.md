@@ -96,8 +96,8 @@ describe the stable request (`kind`, opacity, blur intent, contrast intent, and
 fallback availability), while `debug.platform_runtime.details.renderer` records
 the actual `material_plans` executed for the frame. Each plan includes:
 
-- `plan_id`, `kind`, geometry, tint, blur radius, saturation, luminance curve,
-  edge highlight, noise, and shadow values;
+- `contract_version`, `plan_id`, `kind`, geometry, tint, blur radius,
+  saturation, luminance curve, edge highlight, noise, and shadow values;
 - `render_target`, including target dimensions, scale, pixel format, pixel
   count, readiness, and whether the backdrop-pixel budget was satisfied;
 - `decision_trace`, including the pure gate booleans for geometry, quality,
@@ -126,6 +126,9 @@ only for backdrop passes and must not exceed `render_target.pixel_count`.
 `decision_trace.can_sample_backdrop` must match `backdrop_sampling`, and
 `decision_trace.first_blocker` must match `fallback_path`; a mismatch usually
 means the backend serialized stale policy metadata or skipped the pure planner.
+The verifier rejects unknown `contract_version` values before trusting
+schema-specific fields, so artifact-schema drift becomes an explicit CI failure
+instead of a silent debug-plane mismatch.
 The adjacent `verifier` object is also derived from the same plan:
 `require_backdrop_source` mirrors `backdrop_sampling`,
 `require_edge_highlight` is true only for non-fallback plans with a positive
