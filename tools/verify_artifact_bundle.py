@@ -25,6 +25,30 @@ ALLOWED_PIXEL_REGION_METRICS = {
     "unique_colors",
 }
 
+ALLOWED_MATERIAL_FALLBACK_PATHS = {
+    "invalid-geometry",
+    "no-backdrop-source",
+    "no-material",
+    "none",
+    "quality-policy",
+    "reduced-transparency",
+    "unsupported-backend",
+}
+
+ALLOWED_MATERIAL_KINDS = {
+    "clear",
+    "none",
+    "regular",
+    "thick",
+    "thin",
+}
+
+ALLOWED_MATERIAL_PASS_NAMES = {
+    "backdrop-sample-blur",
+    "none",
+    "translucent-rounded-rect",
+}
+
 
 class Report:
     def __init__(self, bundle: Path) -> None:
@@ -394,13 +418,21 @@ def non_negative_number(value: Any, field: str) -> int | float:
     return value
 
 
-def string_int_map(value: Any, field: str) -> JsonObject:
+def string_int_map(
+    value: Any,
+    field: str,
+    allowed_keys: set[str] | None = None,
+) -> JsonObject:
     if not isinstance(value, dict):
         raise ValueError(f"{field} must be an object")
     out: JsonObject = {}
     for key, count in value.items():
         if not isinstance(key, str) or not key:
             raise ValueError(f"{field} keys must be non-empty strings")
+        if allowed_keys is not None and key not in allowed_keys:
+            raise ValueError(
+                f"{field}.{key} must be one of "
+                + ", ".join(sorted(allowed_keys)))
         out[key] = non_negative_int(count, f"{field}.{key}")
     return out
 
@@ -430,11 +462,17 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             spec[field] = non_negative_int(
                 value[field],
                 f"require_material_plan_summary.{field}")
-    for field in ("fallback_paths", "kinds", "pass_names"):
+    map_vocabularies = {
+        "fallback_paths": ALLOWED_MATERIAL_FALLBACK_PATHS,
+        "kinds": ALLOWED_MATERIAL_KINDS,
+        "pass_names": ALLOWED_MATERIAL_PASS_NAMES,
+    }
+    for field, allowed_keys in map_vocabularies.items():
         if field in value:
             spec[field] = string_int_map(
                 value[field],
-                f"require_material_plan_summary.{field}")
+                f"require_material_plan_summary.{field}",
+                allowed_keys)
     return spec
 
 
@@ -947,6 +985,15 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         if isinstance(kind, str):
             kinds = summary["kinds"]
             kinds[kind] = kinds.get(kind, 0) + 1
+            report.check(
+                "material kind is known",
+                kind in ALLOWED_MATERIAL_KINDS,
+                path=f"{plan_path}.kind",
+                expected=sorted(ALLOWED_MATERIAL_KINDS),
+                actual=kind,
+                likely_layer=kind,
+                hint="Update the pure MaterialKind serializer and verifier vocabulary together.",
+                record_success=False)
         plan_id = plan.get("plan_id")
         if isinstance(plan_id, str):
             summary["plan_ids"].append(plan_id)
@@ -1001,6 +1048,15 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         if isinstance(fallback_path, str):
             paths = summary["fallback_paths"]
             paths[fallback_path] = paths.get(fallback_path, 0) + 1
+            report.check(
+                "material fallback path is known",
+                fallback_path in ALLOWED_MATERIAL_FALLBACK_PATHS,
+                path=f"{plan_path}.fallback_path",
+                expected=sorted(ALLOWED_MATERIAL_FALLBACK_PATHS),
+                actual=fallback_path,
+                likely_layer=likely_layer,
+                hint="Keep MaterialFallbackPath serialization and verifier vocabulary in sync.",
+                record_success=False)
         sample_taps = check_number_field(
             report,
             plan,
@@ -1225,6 +1281,15 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             if pass_name:
                 pass_names = summary["pass_names"]
                 pass_names[pass_name] = pass_names.get(pass_name, 0) + 1
+                report.check(
+                    "material primary pass name is known",
+                    pass_name in ALLOWED_MATERIAL_PASS_NAMES,
+                    path=f"{plan_path}.primary_pass.name",
+                    expected=sorted(ALLOWED_MATERIAL_PASS_NAMES),
+                    actual=pass_name,
+                    likely_layer=likely_layer,
+                    hint="Add new backend pass names to the verifier contract when they are intentional.",
+                    record_success=False)
             if isinstance(sample_taps, (int, float)) and isinstance(
                     primary_pass_sample_taps, (int, float)):
                 report.check(
@@ -1290,13 +1355,23 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                             likely_layer=likely_layer,
                             hint="Pass sample taps must be numeric.")
                     else:
-                        check_string_field(
+                        pass_value = check_string_field(
                             report,
                             pass_entry,
                             key,
                             pass_path,
                             likely_layer=likely_layer,
                             hint="Pass entries must name their layer for debugging.")
+                        if key == "name" and isinstance(pass_value, str):
+                            report.check(
+                                "material pass name is known",
+                                pass_value in ALLOWED_MATERIAL_PASS_NAMES,
+                                path=f"{pass_path}.name",
+                                expected=sorted(ALLOWED_MATERIAL_PASS_NAMES),
+                                actual=pass_value,
+                                likely_layer=likely_layer,
+                                hint="Add new backend pass names to the verifier contract when they are intentional.",
+                                record_success=False)
             if isinstance(primary_pass, dict):
                 report.check(
                     "material pass list includes primary pass",

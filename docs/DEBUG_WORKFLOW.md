@@ -149,6 +149,13 @@ The plan schema check also treats `primary_pass` as a runtime contract. Its
 sample-tap count must match the plan, and the backend `passes[]` list must
 include the same pass entry. When this fails, inspect the pass serializer before
 changing material policy.
+The verifier also treats material kind, fallback path, and material pass names
+as fixed vocabularies. Current fallback paths are `none`, `no-material`,
+`invalid-geometry`, `unsupported-backend`, `no-backdrop-source`,
+`reduced-transparency`, and `quality-policy`; current pass names are `none`,
+`backdrop-sample-blur`, and `translucent-rounded-rect`. Add new planner/backend
+vocabulary to the verifier in the same patch that introduces it, so CI reports
+schema drift before a human has to infer it visually.
 
 Use `require_material_resource_bounds` when a material gate must prove the
 runtime stayed within the pure plan's performance budget. Supported limits are
