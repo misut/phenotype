@@ -41,6 +41,13 @@
     "require_bounded_texture_copy": true,
     "require_deterministic_fallback": true
   },
+  "require_material_quality_policy": {
+    "require_backdrop_sampling_allowed": true,
+    "require_noise_allowed": true,
+    "require_shadow_allowed": true,
+    "max_blur_radius_lte": 36.0,
+    "max_sample_taps_lte": 25
+  },
   "require_runtime_details": [
     {
       "path": "renderer.material_pipeline_ready",

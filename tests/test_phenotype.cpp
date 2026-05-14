@@ -1106,6 +1106,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "translucent-rounded-rect");
     assert(fallback_plan.primary_pass.active);
     assert(!fallback_plan.primary_pass.requires_backdrop);
+    assert(fallback_plan.sample_taps == 0);
+    assert(fallback_plan.primary_pass.sample_taps == 0);
+    assert(fallback_plan.resource_budget.max_sample_taps == 25);
     assert(fallback_plan.resource_budget.deterministic_fallback);
     assert(std::string(fallback_plan.verifier.likely_layer)
            == "material-fallback-pass");
@@ -1137,6 +1140,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(reduced_plan.fallback());
     assert(reduced_plan.fallback_path == MaterialFallbackPath::ReducedTransparency);
     assert(!reduced_plan.backdrop_sampling);
+    assert(reduced_plan.sample_taps == 0);
+    assert(reduced_plan.primary_pass.sample_taps == 0);
     assert(reduced_plan.noise_opacity == 0.0f);
     assert(std::string(reduced_plan.primary_pass.name)
            == "translucent-rounded-rect");
@@ -1152,6 +1157,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!disabled_quality_plan.quality_policy.allow_backdrop_sampling);
     assert(!disabled_quality_plan.backdrop_sampling);
     assert(disabled_quality_plan.blur_radius == 0.0f);
+    assert(disabled_quality_plan.sample_taps == 0);
+    assert(disabled_quality_plan.primary_pass.sample_taps == 0);
     assert(std::string(disabled_quality_plan.fallback_reason)
            == "quality policy disables material backdrop sampling");
     assert(std::string(disabled_quality_plan.primary_pass.name)

@@ -429,6 +429,9 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     }
 
     plan.backdrop_sampling = can_sample_backdrop;
+    if (!plan.backdrop_sampling) {
+        plan.sample_taps = 0u;
+    }
     if (environment.capabilities.increase_contrast) {
         plan.opacity = std::clamp(plan.opacity + 0.12f, 0.0f, 1.0f);
         plan.luminance_floor = std::clamp(plan.luminance_floor + 0.05f, 0.0f, 1.0f);
