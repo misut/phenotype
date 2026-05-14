@@ -101,6 +101,8 @@ struct MaterialPassExpectation {
     bool requires_backdrop = false;
     unsigned int sample_taps = 0;
     char const* likely_layer = "material-fallback";
+    char const* executor = "none";
+    std::int64_t max_texture_copy_pixels = 0;
 };
 
 struct MaterialResourceBudget {
@@ -181,6 +183,8 @@ struct MaterialRuntimeSummary {
     std::uint32_t total_runtime_passes = 0;
     std::uint32_t active_runtime_passes = 0;
     std::uint32_t backdrop_runtime_passes = 0;
+    std::int64_t max_pass_texture_copy_pixels = 0;
+    std::int64_t total_pass_texture_copy_pixels = 0;
     float max_plan_blur_radius = 0.0f;
     unsigned int max_plan_sample_taps = 0;
     float max_budget_blur_radius = 0.0f;
@@ -221,6 +225,11 @@ inline void accumulate_material_runtime_summary(
         ++summary.active_runtime_passes;
     if (plan.primary_pass.requires_backdrop)
         ++summary.backdrop_runtime_passes;
+    summary.max_pass_texture_copy_pixels = std::max(
+        summary.max_pass_texture_copy_pixels,
+        plan.primary_pass.max_texture_copy_pixels);
+    summary.total_pass_texture_copy_pixels +=
+        plan.primary_pass.max_texture_copy_pixels;
 
     summary.max_plan_blur_radius =
         std::max(summary.max_plan_blur_radius, plan.blur_radius);
@@ -669,6 +678,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
             true,
             plan.sample_taps,
             "material-blur-pass",
+            "backdrop-filter",
+            plan.render_target.pixel_count,
         };
     } else if (has_material && plan.fallback_path != MaterialFallbackPath::InvalidGeometry) {
         plan.primary_pass = MaterialPassExpectation{
@@ -677,6 +688,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
             false,
             0u,
             "material-fallback-pass",
+            "fallback-fill",
+            0,
         };
     } else {
         plan.primary_pass = MaterialPassExpectation{
@@ -685,6 +698,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
             false,
             0u,
             "material-fallback-pass",
+            "none",
+            0,
         };
     }
     plan.verifier.require_backdrop_source = plan.backdrop_sampling;

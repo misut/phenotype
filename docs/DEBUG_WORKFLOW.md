@@ -104,7 +104,8 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `backdrop`, including source, readiness flags, sanitized luminance
   statistics, luminance response, and floor/gain/edge deltas;
 - `quality_policy`, `primary_pass`, `resource_budget`, and the pass list the
-  backend attempted, including the likely layer name;
+  backend attempted, including the likely layer name, pure executor role, and
+  maximum texture-copy pixels;
 - verifier expectations for region checks.
 
 When debugging a material failure, read the semantic node first to confirm the
@@ -115,6 +116,10 @@ deterministic fallback.
 Fallback plans therefore report `0` taps, while `quality_policy.max_sample_taps`
 and `resource_budget.max_sample_taps` preserve the allowed upper bound that led
 to the decision.
+`primary_pass.executor` and each `passes[].executor` use pure roles:
+`backdrop-filter` for sampled glass, `fallback-fill` for deterministic fallback,
+and `none` for inactive material work. `max_texture_copy_pixels` is non-zero
+only for backdrop passes and must not exceed `render_target.pixel_count`.
 `backdrop.luminance_response` is `not-sampled` for fallback plans and one of
 `neutral`, `dark`, `bright`, `flat`, `dark-flat`, or `bright-flat` for sampled
 plans. The adjacent delta fields show whether the pure planner actually changed
@@ -165,11 +170,12 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 `render_target_within_backdrop_budget`, and exact count maps for
 `fallback_paths`, `fallback_reasons`, `kinds`, `pass_names`,
 `backdrop_sources`, `luminance_responses`, and
-`render_target_pixel_formats`. This catches policy drift such as a glass scene
-silently switching from backdrop blur to fallback, a fallback backend reporting
-the wrong deterministic pass, a sampled scene losing its previous-frame
-backdrop source, a render target exceeding the pure backdrop budget, or a
-quality/capability downgrade losing its LLM-actionable reason string.
+`render_target_pixel_formats`, and `pass_executors`. This catches policy drift
+such as a glass scene silently switching from backdrop blur to fallback, a
+fallback backend reporting the wrong deterministic pass, a sampled scene losing
+its previous-frame backdrop source, a render target exceeding the pure backdrop
+budget, a pass switching executor roles, or a quality/capability downgrade
+losing its LLM-actionable reason string.
 
 The plan schema check also treats `primary_pass` as a runtime contract. Its
 sample-tap count must match the plan, and the backend `passes[]` list must
@@ -191,6 +197,8 @@ runtime stayed within the pure plan's performance budget. Supported limits are
 `max_plan_blur_radius_lte`, `max_plan_sample_taps_lte`,
 `max_plan_sample_taps_gte`, `max_budget_blur_radius_lte`,
 `max_sample_taps_lte`, `max_pass_count_lte`, `max_backdrop_pixels_lte`,
+`max_pass_texture_copy_pixels_lte`/`gte`,
+`total_pass_texture_copy_pixels_lte`/`gte`,
 `total_runtime_passes_lte`/`gte`, `active_runtime_passes_lte`/`gte`, and
 `backdrop_runtime_passes_lte`/`gte`;
 `require_bounded_texture_copy` and

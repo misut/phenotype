@@ -785,6 +785,12 @@ namespace detail {
         primary_pass.emplace(
             "likely_layer",
             json::Value{plan.primary_pass.likely_layer});
+        primary_pass.emplace(
+            "executor",
+            json::Value{plan.primary_pass.executor});
+        primary_pass.emplace(
+            "max_texture_copy_pixels",
+            json::Value{plan.primary_pass.max_texture_copy_pixels});
 
         json::Object resource_budget;
         resource_budget.emplace(
@@ -869,6 +875,12 @@ namespace detail {
                 json::Value{
                     static_cast<std::int64_t>(
                         plan.primary_pass.sample_taps)});
+            pass.emplace(
+                "executor",
+                json::Value{plan.primary_pass.executor});
+            pass.emplace(
+                "max_texture_copy_pixels",
+                json::Value{plan.primary_pass.max_texture_copy_pixels});
             passes.push_back(json::Value{std::move(pass)});
         }
 
@@ -946,6 +958,12 @@ namespace detail {
             "backdrop_runtime_passes",
             json::Value{
                 static_cast<std::int64_t>(summary.backdrop_runtime_passes)});
+        out.emplace(
+            "max_pass_texture_copy_pixels",
+            json::Value{summary.max_pass_texture_copy_pixels});
+        out.emplace(
+            "total_pass_texture_copy_pixels",
+            json::Value{summary.total_pass_texture_copy_pixels});
         out.emplace("max_plan_blur_radius",
                     json::Value{summary.max_plan_blur_radius});
         out.emplace(

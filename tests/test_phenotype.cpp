@@ -1115,6 +1115,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!fallback_plan.primary_pass.requires_backdrop);
     assert(fallback_plan.sample_taps == 0);
     assert(fallback_plan.primary_pass.sample_taps == 0);
+    assert(std::string(fallback_plan.primary_pass.executor)
+           == "fallback-fill");
+    assert(fallback_plan.primary_pass.max_texture_copy_pixels == 0);
     assert(fallback_plan.resource_budget.max_sample_taps == 25);
     assert(fallback_plan.resource_budget.deterministic_fallback);
     assert(std::string(fallback_plan.backdrop.source) == "none");
@@ -1144,6 +1147,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(glass_plan.primary_pass.active);
     assert(glass_plan.primary_pass.requires_backdrop);
     assert(glass_plan.primary_pass.sample_taps == glass_plan.sample_taps);
+    assert(std::string(glass_plan.primary_pass.executor)
+           == "backdrop-filter");
+    assert(glass_plan.primary_pass.max_texture_copy_pixels
+           == glass_plan.render_target.pixel_count);
     assert(glass_plan.backdrop.available);
     assert(glass_plan.backdrop.stable);
     assert(std::string(glass_plan.backdrop.source)
@@ -1292,6 +1299,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(invalid_plan.fallback());
     assert(invalid_plan.fallback_path == MaterialFallbackPath::InvalidGeometry);
     assert(!invalid_plan.primary_pass.active);
+    assert(std::string(invalid_plan.primary_pass.executor) == "none");
+    assert(invalid_plan.primary_pass.max_texture_copy_pixels == 0);
 
     std::puts("PASS: material planner resolves backdrop and fallback paths");
 }

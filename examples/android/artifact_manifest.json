@@ -34,6 +34,9 @@
     "pass_names": {
       "translucent-rounded-rect": 1
     },
+    "pass_executors": {
+      "fallback-fill": 1
+    },
     "backdrop_available": 0,
     "backdrop_stable": 0,
     "backdrop_sources": {
@@ -56,6 +59,8 @@
     "max_sample_taps_lte": 25,
     "max_pass_count_lte": 1,
     "max_backdrop_pixels_lte": 4000000,
+    "max_pass_texture_copy_pixels_lte": 0,
+    "total_pass_texture_copy_pixels_lte": 0,
     "total_runtime_passes_lte": 1,
     "total_runtime_passes_gte": 1,
     "active_runtime_passes_lte": 1,
