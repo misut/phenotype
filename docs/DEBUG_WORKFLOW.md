@@ -122,8 +122,10 @@ in CI. The verifier checks the common debug schema, platform capabilities,
 semantic tree shape, runtime viewport, platform diagnostics files, and
 `frame.bmp` header/size invariants. For visual smoke checks, repeat
 `--require-pixel-region` to require a named frame region to have minimum
-luminance contrast and color variety. Manifest-driven gates can additionally
-set `pixel_region_metrics` bounds for region metrics such as `edge_energy` and
+luminance contrast and color variety, then repeat
+`--require-pixel-region-metric REGION:METRIC:BOUND:VALUE` when a direct CLI
+repro needs metric bounds. Manifest-driven gates use the same
+`pixel_region_metrics` checks for region metrics such as `edge_energy` and
 `luma_stddev`; use those for blur-specific probes where a material region
 should smooth high-frequency backdrop detail without becoming visually blank.
 Use `--require-runtime-detail PATH=JSON` when a backend-specific contract must prove a value under
