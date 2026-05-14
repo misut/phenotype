@@ -55,6 +55,12 @@ ALLOWED_MATERIAL_PASS_EXECUTORS = {
     "none",
 }
 
+ALLOWED_MATERIAL_LIKELY_LAYERS = {
+    "material-blur-pass",
+    "material-fallback",
+    "material-fallback-pass",
+}
+
 ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
     "bright",
     "bright-flat",
@@ -585,6 +591,27 @@ def string_int_map(
     return out
 
 
+def string_string_map(
+    value: Any,
+    field: str,
+    allowed_values: set[str] | None = None,
+) -> JsonObject:
+    if not isinstance(value, dict):
+        raise ValueError(f"{field} must be an object")
+    out: JsonObject = {}
+    for key, item in value.items():
+        if not isinstance(key, str) or not key:
+            raise ValueError(f"{field} keys must be non-empty strings")
+        if not isinstance(item, str) or not item:
+            raise ValueError(f"{field}.{key} must be a non-empty string")
+        if allowed_values is not None and item not in allowed_values:
+            raise ValueError(
+                f"{field}.{key} must be one of "
+                + ", ".join(sorted(allowed_values)))
+        out[key] = item
+    return out
+
+
 def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
     if value is None:
         return None
@@ -612,6 +639,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "decision_backend_supports_backdrop",
         "decision_backdrop_source_ready",
         "decision_blockers",
+        "verifier_require_backdrop_source",
+        "verifier_require_edge_highlight",
+        "verifier_profiles",
+        "verifier_region_layers",
     }
     unknown = sorted(set(value) - allowed)
     if unknown:
@@ -631,7 +662,9 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "render_target_within_backdrop_budget",
             "decision_can_sample_backdrop",
             "decision_backend_supports_backdrop",
-            "decision_backdrop_source_ready"):
+            "decision_backdrop_source_ready",
+            "verifier_require_backdrop_source",
+            "verifier_require_edge_highlight"):
         if field in value:
             spec[field] = non_negative_int(
                 value[field],
@@ -666,6 +699,15 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             value["decision_blockers"],
             "require_material_plan_summary.decision_blockers",
             ALLOWED_MATERIAL_FALLBACK_PATHS)
+    if "verifier_profiles" in value:
+        spec["verifier_profiles"] = string_int_map(
+            value["verifier_profiles"],
+            "require_material_plan_summary.verifier_profiles")
+    if "verifier_region_layers" in value:
+        spec["verifier_region_layers"] = string_string_map(
+            value["verifier_region_layers"],
+            "require_material_plan_summary.verifier_region_layers",
+            ALLOWED_MATERIAL_LIKELY_LAYERS)
     return spec
 
 
@@ -1240,6 +1282,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "plan_ids": [],
         "region_layers": {},
         "verifier_profiles": {},
+        "verifier_require_backdrop_source": 0,
+        "verifier_require_edge_highlight": 0,
         "render_target": {
             "ready": 0,
             "within_backdrop_budget": 0,
@@ -1343,6 +1387,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         likely_layer = plan_id if isinstance(plan_id, str) and plan_id else "material-plan"
 
         plan_blur_radius: int | float | None = None
+        plan_edge_highlight: int | float | None = None
         for key in MATERIAL_PLAN_NUMERIC_FIELDS:
             number = check_number_field(
                 report,
@@ -1359,6 +1404,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     bounds["max_plan_blur_radius"] = max(
                         float(bounds["max_plan_blur_radius"]),
                         float(number))
+            elif key == "edge_highlight":
+                plan_edge_highlight = number
         backdrop_sampling = check_bool_field(
             report,
             plan,
@@ -1900,25 +1947,44 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             likely_layer=likely_layer,
             hint="The pure plan should provide verifier expectations.")
         if verifier is not None:
+            verifier_values: JsonObject = {}
             for key in MATERIAL_VERIFIER_FIELDS:
                 if key.startswith("require_"):
-                    check_bool_field(
+                    value = check_bool_field(
                         report,
                         verifier,
                         key,
                         f"{plan_path}.verifier",
                         likely_layer=likely_layer,
                         hint="Verifier expectation booleans must stay explicit.")
+                    if isinstance(value, bool):
+                        verifier_values[key] = value
+                        if value:
+                            summary[key.replace("require_", "verifier_require_")] += 1
                 elif key in ("region_name", "likely_layer"):
-                    check_string_field(
+                    value = check_string_field(
                         report,
                         verifier,
                         key,
                         f"{plan_path}.verifier",
                         likely_layer=likely_layer,
                         hint="Verifier expectations must name the failing region/layer.")
+                    if isinstance(value, str):
+                        verifier_values[key] = value
+                        if key == "likely_layer":
+                            report.check(
+                                "material verifier likely layer is known",
+                                value in ALLOWED_MATERIAL_LIKELY_LAYERS,
+                                path=f"{plan_path}.verifier.likely_layer",
+                                expected=sorted(ALLOWED_MATERIAL_LIKELY_LAYERS),
+                                actual=value,
+                                likely_layer=likely_layer,
+                                hint=(
+                                    "Verifier likely layers should stay aligned "
+                                    "with material pass layer names."),
+                                record_success=False)
                 else:
-                    check_number_field(
+                    value = check_number_field(
                         report,
                         verifier,
                         key,
@@ -1926,6 +1992,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         min_value=0.0,
                         likely_layer=likely_layer,
                         hint="Verifier numeric thresholds must be non-negative.")
+                    if isinstance(value, (int, float)):
+                        verifier_values[key] = value
             region_name = string_at(verifier, "region_name")
             region_layer = string_at(verifier, "likely_layer")
             if region_name:
@@ -1933,6 +2001,79 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 profiles[region_name] = profiles.get(region_name, 0) + 1
             if region_name and region_layer:
                 summary["region_layers"][region_name] = region_layer
+            if "require_backdrop_source" in verifier_values:
+                expected = backdrop_sampling is True
+                report.check(
+                    "material verifier backdrop-source requirement is derived",
+                    verifier_values["require_backdrop_source"] == expected,
+                    path=f"{plan_path}.verifier.require_backdrop_source",
+                    expected=expected,
+                    actual=verifier_values["require_backdrop_source"],
+                    likely_layer=likely_layer,
+                    hint=(
+                        "require_backdrop_source should mirror the pure "
+                        "backdrop_sampling decision."),
+                    record_success=False)
+            if "require_edge_highlight" in verifier_values:
+                expected = (
+                    isinstance(plan_edge_highlight, (int, float))
+                    and float(plan_edge_highlight) > 0.0
+                    and fallback is False)
+                report.check(
+                    "material verifier edge-highlight requirement is derived",
+                    verifier_values["require_edge_highlight"] == expected,
+                    path=f"{plan_path}.verifier.require_edge_highlight",
+                    expected=expected,
+                    actual=verifier_values["require_edge_highlight"],
+                    likely_layer=likely_layer,
+                    hint=(
+                        "require_edge_highlight should only be true for "
+                        "non-fallback plans with a positive edge highlight."),
+                    record_success=False)
+            if "min_luma_delta" in verifier_values:
+                expected = 8.0 if backdrop_sampling is True else 3.0
+                report.check(
+                    "material verifier luma threshold is derived",
+                    float(verifier_values["min_luma_delta"]) == expected,
+                    path=f"{plan_path}.verifier.min_luma_delta",
+                    expected=expected,
+                    actual=verifier_values["min_luma_delta"],
+                    likely_layer=likely_layer,
+                    hint=(
+                        "min_luma_delta should use the sampled-backdrop "
+                        "threshold for glass plans and fallback threshold otherwise."),
+                    record_success=False)
+            if "min_unique_colors" in verifier_values:
+                expected = 4 if backdrop_sampling is True else 2
+                report.check(
+                    "material verifier unique-color threshold is derived",
+                    int(verifier_values["min_unique_colors"]) == expected,
+                    path=f"{plan_path}.verifier.min_unique_colors",
+                    expected=expected,
+                    actual=verifier_values["min_unique_colors"],
+                    likely_layer=likely_layer,
+                    hint=(
+                        "min_unique_colors should use the sampled-backdrop "
+                        "threshold for glass plans and fallback threshold otherwise."),
+                    record_success=False)
+            primary_pass_for_verifier = plan.get("primary_pass")
+            if isinstance(primary_pass_for_verifier, dict):
+                expected_layer = string_at(
+                    primary_pass_for_verifier,
+                    "likely_layer")
+                if expected_layer and "likely_layer" in verifier_values:
+                    report.check(
+                        "material verifier likely layer matches primary pass",
+                        verifier_values["likely_layer"] == expected_layer,
+                        path=f"{plan_path}.verifier.likely_layer",
+                        expected=expected_layer,
+                        actual=verifier_values["likely_layer"],
+                        likely_layer=likely_layer,
+                        likely_pass=string_at(primary_pass_for_verifier, "name"),
+                        hint=(
+                            "Verifier failures should point at the same "
+                            "likely layer as MaterialPlan.primary_pass."),
+                        record_success=False)
 
         quality_policy = check_object_field(
             report,
@@ -2503,7 +2644,9 @@ def check_material_plan_summary_requirements(
             "render_target_within_backdrop_budget",
             "decision_can_sample_backdrop",
             "decision_backend_supports_backdrop",
-            "decision_backdrop_source_ready"):
+            "decision_backdrop_source_ready",
+            "verifier_require_backdrop_source",
+            "verifier_require_edge_highlight"):
         if field in spec:
             actual = summary.get(field)
             summary_path = f"{base_path}.{field}"
@@ -2539,6 +2682,10 @@ def check_material_plan_summary_requirements(
                 nested_field = field.removeprefix("decision_")
                 actual = decision_summary.get(nested_field)
                 summary_path = f"{base_path}.decision_trace.{nested_field}"
+            elif field in (
+                    "verifier_require_backdrop_source",
+                    "verifier_require_edge_highlight"):
+                summary_path = f"{base_path}.{field}"
             report.check(
                 f"material plan summary {field} matches",
                 actual == spec[field],
@@ -2575,6 +2722,12 @@ def check_material_plan_summary_requirements(
         "decision_blockers": (
             "material-decision",
             "Inspect MaterialPlan.decision_trace.first_blocker and fallback_path."),
+        "verifier_profiles": (
+            "material-verifier",
+            "Inspect semantic material verifier_profile and MaterialPlan.verifier.region_name."),
+        "verifier_region_layers": (
+            "material-verifier",
+            "Inspect MaterialPlan.verifier.likely_layer and primary_pass.likely_layer."),
     }
     for field in (
             "fallback_paths",
@@ -2585,7 +2738,9 @@ def check_material_plan_summary_requirements(
             "backdrop_sources",
             "luminance_responses",
             "render_target_pixel_formats",
-            "decision_blockers"):
+            "decision_blockers",
+            "verifier_profiles",
+            "verifier_region_layers"):
         if field in spec:
             actual = summary.get(field)
             summary_path = f"{base_path}.{field}"
@@ -2613,6 +2768,9 @@ def check_material_plan_summary_requirements(
                     decision_summary = {}
                 actual = decision_summary.get("first_blockers")
                 summary_path = f"{base_path}.decision_trace.first_blockers"
+            elif field == "verifier_region_layers":
+                actual = summary.get("region_layers")
+                summary_path = f"{base_path}.region_layers"
             likely_layer, hint = summary_field_hints[field]
             report.check(
                 f"material plan summary {field} matches",

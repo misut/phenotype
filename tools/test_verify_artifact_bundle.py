@@ -418,6 +418,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "decision_backend_supports_backdrop": 0,
                 "decision_backdrop_source_ready": 0,
                 "decision_blockers": {"unsupported-backend": 1},
+                "verifier_require_backdrop_source": 0,
+                "verifier_require_edge_highlight": 0,
+                "verifier_profiles": {"regular-legibility-backdrop": 1},
+                "verifier_region_layers": {
+                    "regular-legibility-backdrop": "material-fallback-pass",
+                },
             },
         }
         code, report = self.run_verifier(snapshot(material_plan()), manifest)
@@ -436,6 +442,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["decision_trace"]["first_blockers"],
             {"unsupported-backend": 1})
+        self.assertEqual(
+            report["material_plans"]["verifier_profiles"],
+            {"regular-legibility-backdrop": 1})
+        self.assertEqual(
+            report["material_plans"]["region_layers"],
+            {"regular-legibility-backdrop": "material-fallback-pass"})
 
     def test_decision_trace_blocker_mismatch_points_to_plan_policy(self) -> None:
         plan = material_plan()
@@ -458,6 +470,50 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["actual"], "none")
         self.assertEqual(failure["likely_layer"], "material.regular.fallback")
         self.assertIn("first decision blocker", failure["hint"])
+
+    def test_verifier_expectation_mismatch_points_to_region_contract(self) -> None:
+        plan = material_plan()
+        verifier_contract = plan["verifier"]
+        assert isinstance(verifier_contract, dict)
+        verifier_contract["require_backdrop_source"] = True
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material verifier backdrop-source requirement is derived"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".verifier.require_backdrop_source")
+        self.assertEqual(failure["expected"], False)
+        self.assertEqual(failure["actual"], True)
+        self.assertEqual(failure["likely_layer"], "material.regular.fallback")
+        self.assertIn("backdrop_sampling decision", failure["hint"])
+
+    def test_verifier_layer_mismatch_points_to_primary_pass(self) -> None:
+        plan = material_plan()
+        verifier_contract = plan["verifier"]
+        assert isinstance(verifier_contract, dict)
+        verifier_contract["likely_layer"] = "material-blur-pass"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material verifier likely layer matches primary pass"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".verifier.likely_layer")
+        self.assertEqual(failure["expected"], "material-fallback-pass")
+        self.assertEqual(failure["actual"], "material-blur-pass")
+        self.assertEqual(failure["likely_pass"], "translucent-rounded-rect")
+        self.assertIn("primary_pass", failure["hint"])
 
     def test_fallback_pass_texture_copy_points_to_pass_contract(self) -> None:
         plan = material_plan()

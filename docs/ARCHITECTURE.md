@@ -189,6 +189,10 @@ target dimensions, scale, pixel format, pixel count, readiness, and whether the
 target stays within that backdrop budget. `resource_budget` records the clamped
 blur/sample-tap limits, the same allowed backdrop-pixel budget, and whether
 texture copies and fallback behavior are bounded.
+`verifier` records the deterministic pixel-region contract derived from the
+same plan: whether a backdrop source or edge highlight must be present, the
+minimum luma/color thresholds for sampled or fallback rendering, the semantic
+profile name, and the likely pass layer that a failure should inspect first.
 When a stable backdrop descriptor is available, the pure planner also copies
 its source, readiness flags, sanitized luminance statistics, response bucket,
 and floor/gain/edge deltas into `MaterialPlan.backdrop`. The same value drives

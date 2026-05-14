@@ -126,6 +126,13 @@ only for backdrop passes and must not exceed `render_target.pixel_count`.
 `decision_trace.can_sample_backdrop` must match `backdrop_sampling`, and
 `decision_trace.first_blocker` must match `fallback_path`; a mismatch usually
 means the backend serialized stale policy metadata or skipped the pure planner.
+The adjacent `verifier` object is also derived from the same plan:
+`require_backdrop_source` mirrors `backdrop_sampling`,
+`require_edge_highlight` is true only for non-fallback plans with a positive
+edge highlight, and `likely_layer` must match `primary_pass.likely_layer`.
+Manifests can pin `verifier_profiles` and `verifier_region_layers` in
+`require_material_plan_summary` so a pixel-region failure reports the expected
+region contract and layer before anyone opens the frame visually.
 `backdrop.luminance_response` is `not-sampled` for fallback plans and one of
 `neutral`, `dark`, `bright`, `flat`, `dark-flat`, or `bright-flat` for sampled
 plans. The adjacent delta fields show whether the pure planner actually changed
@@ -177,13 +184,16 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 `decision_backend_supports_backdrop`, `decision_backdrop_source_ready`, and
 exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`,
 `pass_names`, `backdrop_sources`, `luminance_responses`,
-`render_target_pixel_formats`, `pass_executors`, and `decision_blockers`. This
+`render_target_pixel_formats`, `pass_executors`, `decision_blockers`,
+`verifier_profiles`, and `verifier_region_layers`; it can also count
+`verifier_require_backdrop_source` and `verifier_require_edge_highlight`. This
 catches policy drift such as a glass scene silently switching from backdrop
 blur to fallback, a fallback backend reporting the wrong deterministic pass, a
 sampled scene losing its previous-frame backdrop source, a render target
 exceeding the pure backdrop budget, a pass switching executor roles, a decision
-trace naming the wrong blocker, or a quality/capability downgrade losing its
-LLM-actionable reason string.
+trace naming the wrong blocker, verifier expectations pointing at the wrong
+region/layer, or a quality/capability downgrade losing its LLM-actionable
+reason string.
 
 The plan schema check also treats `primary_pass` as a runtime contract. Its
 sample-tap count must match the plan, and the backend `passes[]` list must
