@@ -38,7 +38,7 @@
     "max_budget_blur_radius_lte": 36.0,
     "max_sample_taps_lte": 25,
     "max_pass_count_lte": 1,
-    "max_backdrop_pixels_lte": 10000000,
+    "max_backdrop_pixels_lte": 4000000,
     "total_runtime_passes_lte": 1,
     "total_runtime_passes_gte": 1,
     "active_runtime_passes_lte": 1,
@@ -53,7 +53,8 @@
     "require_noise_allowed": true,
     "require_shadow_allowed": true,
     "max_blur_radius_lte": 36.0,
-    "max_sample_taps_lte": 25
+    "max_sample_taps_lte": 25,
+    "max_backdrop_pixels_lte": 4000000
   },
   "require_runtime_details": [
     {

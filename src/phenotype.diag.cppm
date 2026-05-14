@@ -809,6 +809,9 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     plan.quality_policy.max_sample_taps)});
+        quality_policy.emplace(
+            "max_backdrop_pixels",
+            json::Value{plan.quality_policy.max_backdrop_pixels});
 
         json::Array passes;
         {

@@ -177,14 +177,16 @@ blur pass or deterministic translucent fallback. `sample_taps` records the
 actual taps required by that resolved pass, so deterministic fallback plans use
 `sample_taps: 0` even when the quality budget allows more. `quality_policy`
 records the pure planner's resolved sampling/noise/shadow switches and quality
-limits, while `resource_budget` records the clamped blur/sample-tap limits and
-whether texture copies and fallback behavior are bounded.
+limits, including `max_backdrop_pixels`. `resource_budget` records the clamped
+blur/sample-tap limits, the same allowed backdrop-pixel budget, and whether
+texture copies and fallback behavior are bounded.
 Artifact gates can separately bound actual plan taps and resource-budget taps,
 which lets fallback scenes require zero executed taps while preserving the
 backend's allowed quality budget in the same artifact.
-If the quality policy disables backdrop sampling or reduces the blur/tap
-budget to zero, the pure planner returns `fallback_path: quality-policy`
-instead of leaving the backend to infer that downgrade.
+If the quality policy disables backdrop sampling, reduces the blur/tap budget
+to zero, or the render target exceeds `max_backdrop_pixels`, the pure planner
+returns `fallback_path: quality-policy` instead of leaving the backend to infer
+that downgrade.
 Runtime adapters serialize the same `MaterialRuntimeRecord` shape into
 `debug.platform_runtime.details.renderer.material_plans`: macOS records the
 sampled-backdrop pass, Windows and Android record deterministic fallback
