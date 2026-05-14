@@ -247,8 +247,8 @@ Gaps:
 - `tools/verify_artifact_bundle.py` validates the common schema, semantic tree,
   disabled semantic state, material kind/fallback metadata, runtime viewport,
   platform diagnostics, backend runtime detail assertions, frame file, optional
-  pixel-region contrast/color checks, resolved material plan schema, failure
-  summaries, and reusable JSON manifests.
+  pixel-region contrast/color checks, resolved material plan schema and
+  summary gates, failure summaries, and reusable JSON manifests.
   `tools/verify_glass_showcase_artifact.sh` is the material showcase gate and
   runs in the macOS native CI job.
 - Material surfaces render a macOS sampled-backdrop material path when the
@@ -293,10 +293,10 @@ Current status by example:
 | Example | Expected artifact route | Current gap |
 |---|---|---|
 | `examples/native` | `mise exec -- exon build`, then `PHENOTYPE_ARTIFACT_DIR=/tmp/phenotype-native-startup PHENOTYPE_ARTIFACT_EXIT=1 .exon/debug/native` | Verified by `tools/verify_artifact_bundle.py`; scenario-specific pixel-region checks can be added as needed |
-| `examples/glass_showcase` | Same environment hook with `.exon/debug/glass_showcase` after the material scene startup frame renders | Verifies all public material kinds, macOS material capability, resolved material plan schema, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; enforced by the macOS native CI job |
+| `examples/glass_showcase` | Same environment hook with `.exon/debug/glass_showcase` after the material scene startup frame renders | Verifies all public material kinds, macOS material capability, resolved material plan schema, exact material plan summary, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; enforced by the macOS native CI job |
 | `examples/flight_board` | Same environment hook after the dashboard startup frame renders | Verified by `tools/verify_artifact_bundle.py`; scenario-specific label/role assertions can be added as needed |
 | `examples/workbook` | Same environment hook after the workbook startup frame renders | Verified by `tools/verify_artifact_bundle.py`; scenario-specific label/role assertions can be added as needed |
-| `examples/android` | `mise run android:contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | Verifies Android debug/runtime basics plus a real `MaterialRect` fallback plan; CI device/emulator wiring remains future work |
+| `examples/android` | `mise run android:contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | Verifies Android debug/runtime basics plus a real `MaterialRect` fallback plan and exact fallback material plan summary; CI device/emulator wiring remains future work |
 | `docs` | WASI snapshot bundle is available when the host preopens a writable directory | Default `exon test --target wasm32-wasi` does not preopen one |
 
 The verifier milestone now consumes startup bundles and reports schema,

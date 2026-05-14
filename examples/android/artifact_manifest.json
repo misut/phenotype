@@ -17,6 +17,20 @@
     "regular"
   ],
   "require_material_plans": true,
+  "require_material_plan_summary": {
+    "count": 1,
+    "fallback": 1,
+    "backdrop_sampling": 0,
+    "fallback_paths": {
+      "unsupported-backend": 1
+    },
+    "kinds": {
+      "regular": 1
+    },
+    "pass_names": {
+      "translucent-rounded-rect": 1
+    }
+  },
   "require_runtime_details": [
     {
       "path": "renderer.material_pipeline_ready",

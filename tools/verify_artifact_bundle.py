@@ -317,6 +317,56 @@ def runtime_detail_spec_from_manifest(entry: Any) -> str:
     return f"{path}={expected}"
 
 
+def non_negative_int(value: Any, field: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0:
+        raise ValueError(f"{field} must be a non-negative integer")
+    return value
+
+
+def string_int_map(value: Any, field: str) -> JsonObject:
+    if not isinstance(value, dict):
+        raise ValueError(f"{field} must be an object")
+    out: JsonObject = {}
+    for key, count in value.items():
+        if not isinstance(key, str) or not key:
+            raise ValueError(f"{field} keys must be non-empty strings")
+        out[key] = non_negative_int(count, f"{field}.{key}")
+    return out
+
+
+def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
+    if value is None:
+        return None
+    if not isinstance(value, dict):
+        raise ValueError("require_material_plan_summary must be an object")
+    allowed = {
+        "count",
+        "min_count",
+        "fallback",
+        "backdrop_sampling",
+        "fallback_paths",
+        "kinds",
+        "pass_names",
+    }
+    unknown = sorted(set(value) - allowed)
+    if unknown:
+        raise ValueError(
+            "unknown require_material_plan_summary keys: "
+            + ", ".join(unknown))
+    spec: JsonObject = {}
+    for field in ("count", "min_count", "fallback", "backdrop_sampling"):
+        if field in value:
+            spec[field] = non_negative_int(
+                value[field],
+                f"require_material_plan_summary.{field}")
+    for field in ("fallback_paths", "kinds", "pass_names"):
+        if field in value:
+            spec[field] = string_int_map(
+                value[field],
+                f"require_material_plan_summary.{field}")
+    return spec
+
+
 def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
     if not args.manifest:
         return True
@@ -353,6 +403,11 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         require_material_plans = bool_manifest_value(manifest, "require_material_plans")
         if require_material_plans is True:
             args.require_material_plan = True
+        material_plan_summary = material_plan_summary_spec_from_manifest(
+            manifest.get("require_material_plan_summary"))
+        if material_plan_summary is not None:
+            args.require_material_plan = True
+            args.require_material_plan_summary = material_plan_summary
 
         args.require_label.extend(list_of_strings(manifest, "require_labels"))
         args.require_label_contains.extend(
@@ -1065,6 +1120,53 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
     return summary
 
 
+def check_material_plan_summary_requirements(
+        summary: JsonObject,
+        spec: JsonObject,
+        report: Report) -> None:
+    base_path = "debug.platform_runtime.details.renderer.material_plans#summary"
+    if "count" in spec:
+        report.check(
+            "material plan summary count matches",
+            summary.get("count") == spec["count"],
+            path=f"{base_path}.count",
+            expected=spec["count"],
+            actual=summary.get("count"),
+            likely_layer="platform-runtime",
+            hint="Check whether the scene emitted the expected number of MaterialRect commands.")
+    if "min_count" in spec:
+        actual = summary.get("count")
+        report.check(
+            "material plan summary count meets minimum",
+            isinstance(actual, int) and actual >= spec["min_count"],
+            path=f"{base_path}.count",
+            expected={">=": spec["min_count"]},
+            actual=actual,
+            likely_layer="platform-runtime",
+            hint="Check whether MaterialRect commands reached the backend decoder.")
+    for field in ("fallback", "backdrop_sampling"):
+        if field in spec:
+            report.check(
+                f"material plan summary {field} matches",
+                summary.get(field) == spec[field],
+                path=f"{base_path}.{field}",
+                expected=spec[field],
+                actual=summary.get(field),
+                likely_layer="platform-runtime",
+                hint="Inspect fallback_path and primary_pass for each material plan.")
+    for field in ("fallback_paths", "kinds", "pass_names"):
+        if field in spec:
+            actual = summary.get(field)
+            report.check(
+                f"material plan summary {field} matches",
+                actual == spec[field],
+                path=f"{base_path}.{field}",
+                expected=spec[field],
+                actual=actual,
+                likely_layer="platform-runtime",
+                hint="Inspect renderer.material_plans[] for the unexpected plan kind/pass/fallback.")
+
+
 def load_platform_files(platform_dir: Path, report: Report) -> list[JsonObject]:
     files: list[JsonObject] = []
     if not platform_dir.exists():
@@ -1262,6 +1364,15 @@ def verify(args: argparse.Namespace) -> int:
                     actual=plan_count,
                     likely_layer="platform-runtime",
                     hint="Keep renderer.material_plan_count in sync with renderer.material_plans.")
+            material_plan_summary_spec = getattr(
+                args,
+                "require_material_plan_summary",
+                None)
+            if isinstance(material_plan_summary_spec, dict):
+                check_material_plan_summary_requirements(
+                    material_plan_summary,
+                    material_plan_summary_spec,
+                    report)
 
     full_labels: list[str] = []
     walk_labels(semantic_tree, full_labels)
@@ -1486,6 +1597,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
             "Require a frame.bmp region to have contrast and color variety. "
             "Coordinates are absolute pixels, or normalized fractions when all "
             "four values are between 0 and 1. Repeatable."))
+    parser.set_defaults(require_material_plan_summary=None)
     return parser.parse_args(argv)
 
 

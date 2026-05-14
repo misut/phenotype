@@ -20,6 +20,23 @@
     "thick"
   ],
   "require_material_plans": true,
+  "require_material_plan_summary": {
+    "count": 6,
+    "fallback": 0,
+    "backdrop_sampling": 6,
+    "fallback_paths": {
+      "none": 6
+    },
+    "kinds": {
+      "clear": 1,
+      "thin": 1,
+      "regular": 2,
+      "thick": 2
+    },
+    "pass_names": {
+      "backdrop-sample-blur": 6
+    }
+  },
   "require_capabilities": [
     "material_backdrop_blur"
   ],
