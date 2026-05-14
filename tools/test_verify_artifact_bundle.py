@@ -780,6 +780,25 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             failure_summary["first_failure"]["suggested_action"],
             failure["suggested_action"])
+        artifact_context = failure_summary["artifact_context"]
+        self.assertEqual(report["artifact_context"], artifact_context)
+        self.assertEqual(artifact_context["platform"], "test")
+        self.assertEqual(artifact_context["backend"], "synthetic")
+        material_contract = artifact_context["material_contract"]
+        self.assertEqual(material_contract["semantic_material_nodes"], 1)
+        self.assertEqual(material_contract["renderer_plan_contract_version"], 1)
+        self.assertEqual(material_contract["renderer_plan_count"], 1)
+        self.assertTrue(material_contract["renderer_plans_present"])
+        self.assertEqual(material_contract["resolved_plan_count"], 1)
+        self.assertEqual(
+            material_contract["plan_contract_versions"],
+            {"1": 1})
+        self.assertEqual(
+            material_contract["fallback_paths"],
+            {"unsupported-backend": 1})
+        self.assertEqual(
+            material_contract["decision_first_blockers"],
+            {"unsupported-backend": 1})
 
     def test_material_executor_summary_mismatch_is_llm_actionable(self) -> None:
         root = snapshot(material_plan())

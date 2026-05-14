@@ -181,6 +181,12 @@ to the most likely source first. It also repeats the first actionable failure
 as `first_failure` and publishes `top_likely_layer`, `top_likely_pass`, and
 `top_suggested_action` when those hints are available, which lets CI logs
 identify the first file/pass family to inspect without scanning every check.
+The report also includes `artifact_context`, and failed runs copy that compact
+context into `failure_summary.artifact_context`. It records the platform,
+backend, viewport, semantic material counts, renderer material plan count,
+renderer material plan contract version, resolved plan count, fallback paths,
+pass executors, and first decision blockers so CI logs can explain which
+semantic/runtime contract surface drifted before opening the full bundle.
 Plan-level failures route to `plan_material_surface` and runtime plan
 serialization; semantic/runtime contract failures route to semantic material
 nodes, `MaterialRect` command emission, and `renderer.material_plans[]` parity.
