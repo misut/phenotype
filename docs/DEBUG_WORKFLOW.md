@@ -144,7 +144,10 @@ Verifier failures are structured for automated diagnosis. Each failed check
 adds an entry to `failures[]` with the JSON path or frame region, expected
 value, actual value, likely layer/pass, and a short hint. The top-level
 `failure_summary` groups failures by likely layer, likely pass, and JSON path
-so an LLM can jump to the most likely source first. Use
+so an LLM can jump to the most likely source first. It also repeats the first
+actionable failure as `first_failure` and publishes `top_likely_layer` /
+`top_likely_pass` when those hints are available, which lets CI logs identify
+the first file/pass family to inspect without scanning every check. Use
 `--require-material-plan` when a bundle must contain resolved material plans.
 
 Manifests can also set `require_material_plan_summary` to assert the resolved

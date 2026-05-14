@@ -151,6 +151,31 @@ class Report:
                 "by_likely_pass": by_pass,
                 "by_path": by_path,
             }
+            if failures:
+                first = failures[0]
+                if isinstance(first, dict):
+                    self.data["failure_summary"]["first_failure"] = {
+                        key: first[key]
+                        for key in (
+                            "name",
+                            "path",
+                            "expected",
+                            "actual",
+                            "region",
+                            "likely_layer",
+                            "likely_pass",
+                            "hint",
+                        )
+                        if key in first
+                    }
+            if by_layer:
+                self.data["failure_summary"]["top_likely_layer"] = max(
+                    by_layer.items(),
+                    key=lambda item: (item[1], item[0]))[0]
+            if by_pass:
+                self.data["failure_summary"]["top_likely_pass"] = max(
+                    by_pass.items(),
+                    key=lambda item: (item[1], item[0]))[0]
         json.dump(self.data, sys.stdout, indent=2, sort_keys=True)
         sys.stdout.write("\n")
         return 0 if self.data["ok"] else 1
