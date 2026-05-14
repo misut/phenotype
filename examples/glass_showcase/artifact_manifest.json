@@ -38,7 +38,16 @@
     },
     "pass_names": {
       "backdrop-sample-blur": 7
-    }
+    },
+    "backdrop_available": 7,
+    "backdrop_stable": 7,
+    "backdrop_sources": {
+      "previous-presented-frame": 7
+    },
+    "luminance_responses": {
+      "neutral": 7
+    },
+    "luminance_adapted": 0
   },
   "require_material_resource_bounds": {
     "max_plan_blur_radius_lte": 36.0,

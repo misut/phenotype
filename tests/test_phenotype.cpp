@@ -1110,6 +1110,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(fallback_plan.primary_pass.sample_taps == 0);
     assert(fallback_plan.resource_budget.max_sample_taps == 25);
     assert(fallback_plan.resource_budget.deterministic_fallback);
+    assert(std::string(fallback_plan.backdrop.source) == "none");
+    assert(std::string(fallback_plan.backdrop.luminance_response)
+           == "not-sampled");
     assert(std::string(fallback_plan.verifier.likely_layer)
            == "material-fallback-pass");
 
@@ -1132,6 +1135,15 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(glass_plan.primary_pass.active);
     assert(glass_plan.primary_pass.requires_backdrop);
     assert(glass_plan.primary_pass.sample_taps == glass_plan.sample_taps);
+    assert(glass_plan.backdrop.available);
+    assert(glass_plan.backdrop.stable);
+    assert(std::string(glass_plan.backdrop.source)
+           == "previous-presented-frame");
+    assert(std::string(glass_plan.backdrop.luminance_response)
+           == "neutral");
+    assert(std::fabs(glass_plan.backdrop.luminance_floor_delta) < 0.0001f);
+    assert(std::fabs(glass_plan.backdrop.luminance_gain_delta) < 0.0001f);
+    assert(std::fabs(glass_plan.backdrop.edge_highlight_delta) < 0.0001f);
     assert(std::string(glass_plan.verifier.likely_layer)
            == "material-blur-pass");
 
@@ -1148,6 +1160,11 @@ void test_material_planner_backdrop_and_fallback_paths() {
            > glass_plan.luminance_gain);
     assert(dark_backdrop_plan.edge_highlight
            > glass_plan.edge_highlight);
+    assert(std::string(dark_backdrop_plan.backdrop.luminance_response)
+           == "dark");
+    assert(dark_backdrop_plan.backdrop.luminance_floor_delta > 0.0f);
+    assert(dark_backdrop_plan.backdrop.luminance_gain_delta > 0.0f);
+    assert(dark_backdrop_plan.backdrop.edge_highlight_delta > 0.0f);
 
     MaterialEnvironment bright_backdrop_env = glass_env;
     bright_backdrop_env.backdrop.luma_min = 0.84f;
@@ -1160,6 +1177,26 @@ void test_material_planner_backdrop_and_fallback_paths() {
            < glass_plan.luminance_gain);
     assert(bright_backdrop_plan.edge_highlight
            > glass_plan.edge_highlight);
+    assert(std::string(bright_backdrop_plan.backdrop.luminance_response)
+           == "bright");
+    assert(bright_backdrop_plan.backdrop.luminance_gain_delta < 0.0f);
+    assert(bright_backdrop_plan.backdrop.edge_highlight_delta > 0.0f);
+
+    MaterialEnvironment flat_backdrop_env = glass_env;
+    flat_backdrop_env.backdrop.luma_min = 0.46f;
+    flat_backdrop_env.backdrop.luma_max = 0.50f;
+    flat_backdrop_env.backdrop.luma_mean = 0.48f;
+    auto flat_backdrop_plan =
+        plan_material_surface(request, flat_backdrop_env);
+    assert(flat_backdrop_plan.backdrop_sampling);
+    assert(flat_backdrop_plan.backdrop.luma_span < 0.05f);
+    assert(std::string(flat_backdrop_plan.backdrop.luminance_response)
+           == "flat");
+    assert(std::fabs(flat_backdrop_plan.backdrop.luminance_floor_delta)
+           < 0.0001f);
+    assert(std::fabs(flat_backdrop_plan.backdrop.luminance_gain_delta)
+           < 0.0001f);
+    assert(flat_backdrop_plan.backdrop.edge_highlight_delta > 0.0f);
 
     glass_env.capabilities.reduce_transparency = true;
     auto reduced_plan = plan_material_surface(request, glass_env);
