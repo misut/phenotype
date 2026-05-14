@@ -41,6 +41,7 @@
   },
   "require_material_resource_bounds": {
     "max_plan_blur_radius_lte": 36.0,
+    "max_plan_sample_taps_lte": 25,
     "max_budget_blur_radius_lte": 36.0,
     "max_sample_taps_lte": 25,
     "max_pass_count_lte": 1,
