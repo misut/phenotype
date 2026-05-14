@@ -101,6 +101,10 @@ The gate pins `PHENOTYPE_ACCESSIBILITY_DISPLAY=standard` by default so local or
 runner Accessibility settings cannot turn the showcase into a reduced
 transparency fallback. Override that environment variable when deliberately
 capturing accessibility-response artifacts.
+Use `tools/verify_glass_showcase_accessibility_artifact.sh` for the committed
+accessibility-response gate; it runs the same scene with reduced transparency,
+increased contrast, and reduced motion enabled, then applies
+`examples/glass_showcase/artifact_manifest.accessibility.json`.
 
 Pull-request CI runs the same gate in the macOS native test job for code
 changes, and a lighter artifact job can run it without root code tests for

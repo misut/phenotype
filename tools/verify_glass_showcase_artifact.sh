@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 EXAMPLE_DIR="$ROOT/examples/glass_showcase"
+MANIFEST="${PHENOTYPE_ARTIFACT_MANIFEST:-examples/glass_showcase/artifact_manifest.json}"
 BUNDLE_DIR="${PHENOTYPE_ARTIFACT_DIR:-}"
 if [[ -z "$BUNDLE_DIR" ]]; then
   BUNDLE_DIR="$(mktemp -d "${TMPDIR:-/tmp}/phenotype-glass-showcase.XXXXXX")"
@@ -43,4 +44,4 @@ PHENOTYPE_ARTIFACT_EXIT=1 \
 cd "$ROOT"
 run_uv_python tools/verify_artifact_bundle.py "$BUNDLE_DIR" \
   --expect-platform "${PHENOTYPE_EXPECT_PLATFORM:-macos}" \
-  --manifest examples/glass_showcase/artifact_manifest.json
+  --manifest "$MANIFEST"

@@ -401,8 +401,14 @@ Current seed:
   pixel-region manifest and also requires the macOS material pipeline/source
   runtime details, material quality policy, resource bounds, executor numeric
   bounds, fallback reason summary, and stale fallback metadata checks;
+- `examples/glass_showcase/artifact_manifest.accessibility.json` captures the
+  same scene under reduced transparency, increased contrast, and reduced motion
+  overrides so the artifact proves deterministic accessibility fallback
+  behavior;
 - `tools/verify_glass_showcase_artifact.sh` builds the example, captures a
   startup artifact bundle, and applies the manifest;
+- `tools/verify_glass_showcase_accessibility_artifact.sh` wraps the
+  accessibility-response manifest without adding another default CI job;
 - PR CI runs the gate through the macOS native path for code changes and through
   a lighter artifact job for artifact-only changes; main-branch pushes run only
   artifact/docs build gates instead of the full code test matrix. WASI root

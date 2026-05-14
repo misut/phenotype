@@ -338,16 +338,33 @@ tools/verify_glass_showcase_artifact.sh
 The command emits a deterministic JSON report and exits non-zero when an
 invariant fails.
 
-The same gate is wired into PR CI for code and artifact-relevant changes, so
-pull requests fail if the committed glass showcase manifest no longer matches
-the startup frame or semantic material contract. Docs-only and tools-only PRs
-avoid the root C++ test matrix; docs changes run the docs WASI build, while
-tooling changes run the verifier's Python contract checks. The main-branch
-push workflow only runs artifact/docs build gates. WASI root tests and docs
-builds run on Linux runners; macOS runners are reserved for the native glass
-artifact gate. Workflow-file changes deliberately enable all relevant gates so
-runner policy edits validate themselves. Windows artifact automation and Android
-CI wiring remain future work.
+To validate the accessibility downgrade contract end to end, run the companion
+gate:
+
+```sh
+tools/verify_glass_showcase_accessibility_artifact.sh
+```
+
+It launches the same scene with
+`PHENOTYPE_ACCESSIBILITY_DISPLAY=reduce-transparency,increase-contrast,reduce-motion`
+and verifies `examples/glass_showcase/artifact_manifest.accessibility.json`.
+That manifest requires platform capabilities and renderer runtime details to
+show the override, every material plan to fall back through
+`reduced-transparency`, and the runtime executor summary to contain only
+fallback material work.
+
+The standard and accessibility gates are wired into PR CI for code and
+artifact-relevant changes, so pull requests fail if either committed glass
+showcase manifest no longer matches the startup frame or semantic material
+contract. Docs-only and tools-only PRs avoid the root C++ test matrix; docs
+changes run the docs WASI build, tooling changes run the verifier's Python
+contract checks, and committed glass showcase artifact manifests run the
+artifact gates instead of the full root matrix. The main-branch push workflow
+only runs artifact/docs build gates. WASI root tests and docs builds run on
+Linux runners; macOS runners are reserved for the native glass artifact gates.
+Workflow-file changes deliberately enable all relevant gates so runner policy
+edits validate themselves. Windows artifact automation and Android CI wiring
+remain future work.
 
 The Android manifest intentionally does not assert an exact
 `render_target_within_backdrop_budget` count because physical devices and
