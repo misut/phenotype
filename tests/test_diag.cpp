@@ -696,6 +696,12 @@ void test_material_runtime_record_json_contract() {
     assert(obj.at("backdrop_sampling").as_bool() == false);
     assert(obj.at("primary_pass").as_object().at("name").as_string()
            == "translucent-rounded-rect");
+    auto const& quality_policy = obj.at("quality_policy").as_object();
+    assert(quality_policy.at("allow_backdrop_sampling").as_bool() == true);
+    assert(quality_policy.at("allow_noise").as_bool() == true);
+    assert(quality_policy.at("allow_shadow").as_bool() == true);
+    assert(quality_policy.at("max_blur_radius").as_float() == 18.0);
+    assert(quality_policy.at("max_sample_taps").as_integer() == 9);
     assert(obj.at("resource_budget").as_object()
                .at("deterministic_fallback").as_bool() == true);
     assert(obj.at("verifier").as_object().at("likely_layer").as_string()

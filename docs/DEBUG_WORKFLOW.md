@@ -99,8 +99,8 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `plan_id`, `kind`, geometry, tint, blur radius, saturation, luminance curve,
   edge highlight, noise, and shadow values;
 - `backdrop_sampling`, `fallback`, `fallback_path`, and `fallback_reason`;
-- `primary_pass`, `resource_budget`, and the pass list the backend attempted,
-  including the likely layer name;
+- `quality_policy`, `primary_pass`, `resource_budget`, and the pass list the
+  backend attempted, including the likely layer name;
 - verifier expectations for region checks.
 
 When debugging a material failure, read the semantic node first to confirm the

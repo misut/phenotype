@@ -791,6 +791,25 @@ namespace detail {
             "deterministic_fallback",
             json::Value{plan.resource_budget.deterministic_fallback});
 
+        json::Object quality_policy;
+        quality_policy.emplace(
+            "allow_backdrop_sampling",
+            json::Value{plan.quality_policy.allow_backdrop_sampling});
+        quality_policy.emplace(
+            "allow_noise",
+            json::Value{plan.quality_policy.allow_noise});
+        quality_policy.emplace(
+            "allow_shadow",
+            json::Value{plan.quality_policy.allow_shadow});
+        quality_policy.emplace(
+            "max_blur_radius",
+            json::Value{plan.quality_policy.max_blur_radius});
+        quality_policy.emplace(
+            "max_sample_taps",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.quality_policy.max_sample_taps)});
+
         json::Array passes;
         {
             json::Object pass;
@@ -841,6 +860,7 @@ namespace detail {
         out.emplace(
             "sample_taps",
             json::Value{static_cast<std::int64_t>(plan.sample_taps)});
+        out.emplace("quality_policy", json::Value{std::move(quality_policy)});
         out.emplace("primary_pass", json::Value{std::move(primary_pass)});
         out.emplace("resource_budget", json::Value{std::move(resource_budget)});
         out.emplace("verifier", json::Value{std::move(verifier)});
