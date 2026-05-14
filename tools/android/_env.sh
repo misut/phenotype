@@ -30,6 +30,10 @@ _phenotype_android_default_ndk() {
         printf '%s/ndk/%s' "$ANDROID_HOME" "$rev"
         return 0
     fi
+    if [ -d "$HOME/.intron/toolchains/android-ndk/r30-beta1" ]; then
+        printf '%s/.intron/toolchains/android-ndk/r30-beta1' "$HOME"
+        return 0
+    fi
     if [ -d "/tmp/ndk-r30/android-ndk-r30-beta1" ]; then
         printf '/tmp/ndk-r30/android-ndk-r30-beta1'
         return 0
@@ -55,6 +59,9 @@ _phenotype_android_first_avd() {
 export ANDROID_HOME
 
 _ndk_default="$(_phenotype_android_default_ndk)"
+if [ -n "${ANDROID_NDK_HOME:-}" ] && [ ! -d "$ANDROID_NDK_HOME" ]; then
+    unset ANDROID_NDK_HOME
+fi
 if [ -z "${ANDROID_NDK_HOME:-}" ] && [ -n "$_ndk_default" ]; then
     ANDROID_NDK_HOME="$_ndk_default"
 fi

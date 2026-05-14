@@ -71,7 +71,7 @@ ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
     "not-sampled",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 1
+MATERIAL_PLAN_CONTRACT_VERSION = 2
 
 
 def suggested_action_for_failure(
@@ -386,6 +386,10 @@ def material_failure_context(
             "pass_executors")
         material_contract["decision_first_blockers"] = decision_trace.get(
             "first_blockers")
+        material_contract["decision_increase_contrast"] = decision_trace.get(
+            "increase_contrast")
+        material_contract["decision_reduce_motion"] = decision_trace.get(
+            "reduce_motion")
     context["material_contract"] = material_contract
     return context
 
@@ -797,6 +801,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "decision_can_sample_backdrop",
         "decision_backend_supports_backdrop",
         "decision_backdrop_source_ready",
+        "decision_increase_contrast",
+        "decision_reduce_motion",
         "decision_blockers",
         "verifier_require_backdrop_source",
         "verifier_require_edge_highlight",
@@ -822,6 +828,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "decision_can_sample_backdrop",
             "decision_backend_supports_backdrop",
             "decision_backdrop_source_ready",
+            "decision_increase_contrast",
+            "decision_reduce_motion",
             "verifier_require_backdrop_source",
             "verifier_require_edge_highlight"):
         if field in value:
@@ -1389,6 +1397,8 @@ MATERIAL_DECISION_TRACE_BOOL_FIELDS = (
     "backdrop_stable",
     "backdrop_source_ready",
     "reduced_transparency",
+    "increase_contrast",
+    "reduce_motion",
     "can_sample_backdrop",
 )
 MATERIAL_TINT_FIELDS = ("r", "g", "b", "a")
@@ -1459,6 +1469,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "can_sample_backdrop": 0,
             "backend_supports_backdrop": 0,
             "backdrop_source_ready": 0,
+            "increase_contrast": 0,
+            "reduce_motion": 0,
             "first_blockers": {},
         },
         "backdrop": {
@@ -1810,7 +1822,9 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     if key in (
                             "can_sample_backdrop",
                             "backend_supports_backdrop",
-                            "backdrop_source_ready") and value:
+                            "backdrop_source_ready",
+                            "increase_contrast",
+                            "reduce_motion") and value:
                         trace_summary[key] = int(trace_summary[key]) + 1
             first_blocker = check_string_field(
                 report,
@@ -2843,6 +2857,8 @@ def check_material_plan_summary_requirements(
             "decision_can_sample_backdrop",
             "decision_backend_supports_backdrop",
             "decision_backdrop_source_ready",
+            "decision_increase_contrast",
+            "decision_reduce_motion",
             "verifier_require_backdrop_source",
             "verifier_require_edge_highlight"):
         if field in spec:
@@ -2873,7 +2889,9 @@ def check_material_plan_summary_requirements(
             elif field in (
                     "decision_can_sample_backdrop",
                     "decision_backend_supports_backdrop",
-                    "decision_backdrop_source_ready"):
+                    "decision_backdrop_source_ready",
+                    "decision_increase_contrast",
+                    "decision_reduce_motion"):
                 decision_summary = summary.get("decision_trace")
                 if not isinstance(decision_summary, dict):
                     decision_summary = {}

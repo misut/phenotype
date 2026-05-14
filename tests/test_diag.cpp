@@ -703,6 +703,8 @@ void test_material_runtime_record_json_contract() {
     assert(decision_trace.at("target_ready").as_bool() == true);
     assert(decision_trace.at("backend_supports_backdrop").as_bool() == false);
     assert(decision_trace.at("can_sample_backdrop").as_bool() == false);
+    assert(decision_trace.at("increase_contrast").as_bool() == false);
+    assert(decision_trace.at("reduce_motion").as_bool() == false);
     assert(decision_trace.at("first_blocker").as_string()
            == "unsupported-backend");
     assert(obj.at("primary_pass").as_object().at("name").as_string()

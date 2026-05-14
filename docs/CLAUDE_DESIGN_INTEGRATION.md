@@ -266,7 +266,8 @@ Status: **in progress**. Cross-repo plumbing is in place; the actual
    test:update` re-baselines the Playwright PNGs (Docker-only;
    bit-for-bit reproducible on CI).
 3. **phenotype PR follow-up** runs
-   `python tools/sync_themes_from_phenotype_web.py` from the phenotype
+   `mise exec -- uv run --frozen python tools/sync_themes_from_phenotype_web.py`
+   from the phenotype
    repo root. The script pulls all four snapshots from
    phenotype-web/main via `gh api`, rewrites
    `tests/fixtures/themes/<theme>.theme.json`, and patches the matching

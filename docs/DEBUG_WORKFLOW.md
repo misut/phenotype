@@ -101,8 +101,9 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `render_target`, including target dimensions, scale, pixel format, pixel
   count, readiness, and whether the backdrop-pixel budget was satisfied;
 - `decision_trace`, including the pure gate booleans for geometry, quality,
-  backend capabilities, backdrop-source readiness, reduced transparency, and
-  the first blocker that explains the fallback path;
+  backend capabilities, backdrop-source readiness, reduced transparency,
+  increased contrast, reduced motion, and the first blocker that explains the
+  fallback path;
 - `backdrop_sampling`, `fallback`, `fallback_path`, and `fallback_reason`;
 - `backdrop`, including source, readiness flags, sanitized luminance
   statistics, luminance response, and floor/gain/edge deltas;
@@ -118,7 +119,9 @@ deterministic fallback.
 `sample_taps` and `primary_pass.sample_taps` describe the actual resolved pass.
 Fallback plans therefore report `0` taps, while `quality_policy.max_sample_taps`
 and `resource_budget.max_sample_taps` preserve the allowed upper bound that led
-to the decision.
+to the decision. Reduced-motion plans disable material noise and cap backdrop
+sample taps before a backend executes the pass; increased-contrast plans raise
+opacity and luminance legibility in the same pure layer.
 `primary_pass.executor` and each `passes[].executor` use pure roles:
 `backdrop-filter` for sampled glass, `fallback-fill` for deterministic fallback,
 and `none` for inactive material work. `max_texture_copy_pixels` is non-zero
@@ -152,9 +155,14 @@ machine-readable.
 
 ## Artifact verification
 
-From the repo root, use `tools/verify_artifact_bundle.py` to validate the
-bundle before handing it to an LLM, attaching it to an issue, or comparing it
-in CI. The verifier checks the common debug schema, platform capabilities,
+From the repo root, run the verifier through the uv-managed Python environment:
+`mise exec -- uv run --frozen python tools/verify_artifact_bundle.py ...`.
+`mise.toml` pins Python and uv, while `pyproject.toml`/`uv.lock` define the
+Python tool environment. Use `mise run tools:artifact:test` for the verifier's
+contract tests and `mise run tools:artifact:pycompile` for syntax checks.
+Use the verifier command to validate the bundle before handing it to an LLM,
+attaching it to an issue, or comparing it in CI. The verifier checks the common
+debug schema, platform capabilities,
 semantic tree shape, runtime viewport, platform diagnostics files, and
 `frame.bmp` header/size invariants. For visual smoke checks, repeat
 `--require-pixel-region` to require a named frame region to have minimum
@@ -185,8 +193,9 @@ The report also includes `artifact_context`, and failed runs copy that compact
 context into `failure_summary.artifact_context`. It records the platform,
 backend, viewport, semantic material counts, renderer material plan count,
 renderer material plan contract version, resolved plan count, fallback paths,
-pass executors, and first decision blockers so CI logs can explain which
-semantic/runtime contract surface drifted before opening the full bundle.
+pass executors, first decision blockers, and accessibility decision counts so
+CI logs can explain which semantic/runtime contract surface drifted before
+opening the full bundle.
 Plan-level failures route to `plan_material_surface` and runtime plan
 serialization; semantic/runtime contract failures route to semantic material
 nodes, `MaterialRect` command emission, and `renderer.material_plans[]` parity.
@@ -198,7 +207,8 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 `min_count`, `fallback`, `backdrop_sampling`, `backdrop_available`,
 `backdrop_stable`, `luminance_adapted`, `render_target_ready`,
 `render_target_within_backdrop_budget`, `decision_can_sample_backdrop`,
-`decision_backend_supports_backdrop`, `decision_backdrop_source_ready`, and
+`decision_backend_supports_backdrop`, `decision_backdrop_source_ready`,
+`decision_increase_contrast`, `decision_reduce_motion`, and
 exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`,
 `contract_versions`, `pass_names`, `backdrop_sources`, `luminance_responses`,
 `render_target_pixel_formats`, `pass_executors`, `decision_blockers`,
@@ -276,7 +286,7 @@ point at the material contract layer so the likely break is not confused with a
 pure pixel-capture failure.
 
 ```sh
-tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
+mise exec -- uv run --frozen python tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
   --expect-platform macos \
   --require-frame \
   --require-label "Control States" \
@@ -294,7 +304,7 @@ tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
 For the material-focused showcase, require every public material kind:
 
 ```sh
-tools/verify_artifact_bundle.py /tmp/phenotype-glass-showcase \
+mise exec -- uv run --frozen python tools/verify_artifact_bundle.py /tmp/phenotype-glass-showcase \
   --expect-platform macos \
   --manifest examples/glass_showcase/artifact_manifest.json
 ```
@@ -309,10 +319,19 @@ tools/verify_glass_showcase_artifact.sh
 The command emits a deterministic JSON report and exits non-zero when an
 invariant fails.
 
-The same gate is wired into the macOS native CI job, so pull requests fail if
-the committed glass showcase manifest no longer matches the startup frame or
-semantic material contract. Windows artifact automation and Android CI wiring
-remain future work.
+The same gate is wired into PR CI for code and artifact-relevant changes, so
+pull requests fail if the committed glass showcase manifest no longer matches
+the startup frame or semantic material contract. Docs-only and tools-only PRs
+avoid the root C++ test matrix; docs changes run the docs WASI build, while
+tooling changes run the verifier's Python contract checks. The main-branch
+push workflow only runs artifact/docs build gates. Windows artifact automation
+and Android CI wiring remain future work.
+
+The Android manifest intentionally does not assert an exact
+`render_target_within_backdrop_budget` count because physical devices and
+emulators expose different startup frame sizes. It still records the field in
+the verifier summary and requires deterministic `unsupported-backend` fallback
+metadata.
 
 ## macOS extensions
 

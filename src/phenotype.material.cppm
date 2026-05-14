@@ -9,7 +9,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 1;
+inline constexpr std::uint32_t material_plan_contract_version = 2;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -156,6 +156,8 @@ struct MaterialDecisionTrace {
     bool backdrop_stable = false;
     bool backdrop_source_ready = false;
     bool reduced_transparency = false;
+    bool increase_contrast = false;
+    bool reduce_motion = false;
     bool can_sample_backdrop = false;
     char const* first_blocker = "none";
 };
@@ -665,6 +667,10 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.decision_trace.backdrop_source_ready = backdrop_source_ready;
     plan.decision_trace.reduced_transparency =
         environment.capabilities.reduce_transparency;
+    plan.decision_trace.increase_contrast =
+        environment.capabilities.increase_contrast;
+    plan.decision_trace.reduce_motion =
+        environment.capabilities.reduce_motion;
     plan.decision_trace.can_sample_backdrop = can_sample_backdrop;
 
     if (!has_material) {
@@ -683,11 +689,9 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.blur_radius = 0.0f;
         plan.saturation = 1.0f;
         plan.noise_opacity = 0.0f;
-    } else if (!quality_allows_backdrop) {
+    } else if (!quality_switches_allow_backdrop) {
         plan.fallback_path = MaterialFallbackPath::QualityPolicy;
-        plan.fallback_reason = !quality_switches_allow_backdrop
-            ? "quality policy disables material backdrop sampling"
-            : "quality policy backdrop pixel budget exceeded";
+        plan.fallback_reason = "quality policy disables material backdrop sampling";
         plan.blur_radius = 0.0f;
         plan.saturation = 1.0f;
         plan.noise_opacity = 0.0f;
@@ -696,6 +700,12 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
                || !environment.capabilities.shader_blur) {
         plan.fallback_path = MaterialFallbackPath::UnsupportedBackend;
         plan.fallback_reason = "backend reports no material backdrop blur support";
+        plan.blur_radius = 0.0f;
+        plan.saturation = 1.0f;
+        plan.noise_opacity = 0.0f;
+    } else if (!backdrop_pixels_within_budget) {
+        plan.fallback_path = MaterialFallbackPath::QualityPolicy;
+        plan.fallback_reason = "quality policy backdrop pixel budget exceeded";
         plan.blur_radius = 0.0f;
         plan.saturation = 1.0f;
         plan.noise_opacity = 0.0f;
@@ -716,6 +726,12 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.sample_taps = 0u;
     } else {
         apply_backdrop_luminance_policy(plan);
+    }
+    if (environment.capabilities.reduce_motion) {
+        plan.noise_opacity = 0.0f;
+        if (plan.backdrop_sampling) {
+            plan.sample_taps = std::min(plan.sample_taps, 9u);
+        }
     }
     if (environment.capabilities.increase_contrast) {
         plan.opacity = std::clamp(plan.opacity + 0.12f, 0.0f, 1.0f);

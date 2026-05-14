@@ -69,7 +69,7 @@ From the repo root, verify a generated bundle before using it as a debugging
 artifact:
 
 ```sh
-tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
+mise exec -- uv run --frozen python tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
   --expect-platform macos \
   --require-frame \
   --require-label "Control States" \
@@ -86,7 +86,7 @@ tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
 For `examples/glass_showcase`, use the checked-in manifest:
 
 ```sh
-tools/verify_artifact_bundle.py /tmp/phenotype-glass-showcase \
+mise exec -- uv run --frozen python tools/verify_artifact_bundle.py /tmp/phenotype-glass-showcase \
   --expect-platform macos \
   --manifest examples/glass_showcase/artifact_manifest.json
 ```
@@ -97,9 +97,10 @@ The repo-local gate wraps build, startup capture, and manifest verification:
 tools/verify_glass_showcase_artifact.sh
 ```
 
-The macOS native CI job runs the same gate after the root native tests, keeping
-the glass showcase manifest committed and enforced without adding another
-required status-check context.
+Pull-request CI runs the same gate in the macOS native test job for code
+changes, and a lighter artifact job can run it without root code tests for
+tooling or manifest-only changes. The main-branch push workflow only runs
+artifact/docs build gates, not the full code test matrix.
 
 ## Example roles
 
@@ -251,7 +252,7 @@ Gaps:
   contract-version summary gates, material resource bounds, failure summaries,
   and reusable JSON manifests.
   `tools/verify_glass_showcase_artifact.sh` is the material showcase gate and
-  runs in the macOS native CI job.
+  runs in PR CI for relevant changes plus the main-branch artifact workflow.
 - Material surfaces render a macOS sampled-backdrop material path when the
   previous frame capture is ready; Windows and Android consume the same
   `MaterialRect` command as deterministic translucent fallback and still write
@@ -294,7 +295,7 @@ Current status by example:
 | Example | Expected artifact route | Current gap |
 |---|---|---|
 | `examples/native` | `mise exec -- exon build`, then `PHENOTYPE_ARTIFACT_DIR=/tmp/phenotype-native-startup PHENOTYPE_ARTIFACT_EXIT=1 .exon/debug/native` | Verified by `tools/verify_artifact_bundle.py`; scenario-specific pixel-region checks can be added as needed |
-| `examples/glass_showcase` | Same environment hook with `.exon/debug/glass_showcase` after the material scene startup frame renders | Verifies all public material kinds, macOS material capability, resolved material plan schema and contract version, exact material plan summary, semantic/runtime material parity, material quality policy, material resource bounds, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; enforced by the macOS native CI job |
+| `examples/glass_showcase` | Same environment hook with `.exon/debug/glass_showcase` after the material scene startup frame renders | Verifies all public material kinds, macOS material capability, resolved material plan schema and contract version, exact material plan summary, semantic/runtime material parity, material quality policy, material resource bounds, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; enforced by PR CI for relevant changes and by the main-branch artifact workflow |
 | `examples/flight_board` | Same environment hook after the dashboard startup frame renders | Verified by `tools/verify_artifact_bundle.py`; scenario-specific label/role assertions can be added as needed |
 | `examples/workbook` | Same environment hook after the workbook startup frame renders | Verified by `tools/verify_artifact_bundle.py`; scenario-specific label/role assertions can be added as needed |
 | `examples/android` | `mise run android:contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | Verifies Android debug/runtime basics plus a real `MaterialRect` fallback plan, exact fallback material plan summary and contract version, semantic/runtime material parity, material quality policy, and material resource bounds; CI device/emulator wiring remains future work |

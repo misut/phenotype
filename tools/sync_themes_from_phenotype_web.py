@@ -4,7 +4,7 @@ the raw-string literals in tests/test_token_roundtrip.cpp.
 
 Run from the phenotype repo root:
 
-    python tools/sync_themes_from_phenotype_web.py
+    mise exec -- uv run --frozen python tools/sync_themes_from_phenotype_web.py
 
 Requires the `gh` CLI to be authenticated against misut/phenotype-web
 (the repo is private). Files are pulled from the latest commit on

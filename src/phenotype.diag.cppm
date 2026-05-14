@@ -799,6 +799,12 @@ namespace detail {
             "reduced_transparency",
             json::Value{plan.decision_trace.reduced_transparency});
         decision_trace.emplace(
+            "increase_contrast",
+            json::Value{plan.decision_trace.increase_contrast});
+        decision_trace.emplace(
+            "reduce_motion",
+            json::Value{plan.decision_trace.reduce_motion});
+        decision_trace.emplace(
             "can_sample_backdrop",
             json::Value{plan.decision_trace.can_sample_backdrop});
         decision_trace.emplace(

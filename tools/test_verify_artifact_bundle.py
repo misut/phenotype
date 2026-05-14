@@ -32,7 +32,7 @@ def material_plan(
 ) -> dict[str, object]:
     primary = material_pass(primary_sample_taps)
     return {
-        "contract_version": 1,
+        "contract_version": verifier.MATERIAL_PLAN_CONTRACT_VERSION,
         "kind": "regular",
         "plan_id": "material.regular.fallback",
         "geometry": {"x": 12.0, "y": 20.0, "w": 240.0, "h": 96.0, "radius": 10.0},
@@ -61,6 +61,8 @@ def material_plan(
             "backdrop_stable": False,
             "backdrop_source_ready": False,
             "reduced_transparency": False,
+            "increase_contrast": False,
+            "reduce_motion": False,
             "can_sample_backdrop": False,
             "first_blocker": "unsupported-backend",
         },
@@ -212,7 +214,8 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                 "viewport": {"x": 0, "y": 0, "w": 320, "h": 240, "valid": True},
                 "details": {
                     "renderer": {
-                        "material_plan_contract_version": 1,
+                        "material_plan_contract_version": (
+                            verifier.MATERIAL_PLAN_CONTRACT_VERSION),
                         "material_plan_count": 1,
                         "material_plans": [plan],
                         "material_runtime_summary": material_runtime_summary(plan),
@@ -364,7 +367,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
 
     def test_material_plan_contract_version_mismatch_is_llm_actionable(self) -> None:
         plan = material_plan()
-        plan["contract_version"] = 2
+        plan["contract_version"] = verifier.MATERIAL_PLAN_CONTRACT_VERSION + 1
 
         code, report = self.run_verifier(snapshot(plan))
 
@@ -376,20 +379,25 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             failure["path"],
             "debug.platform_runtime.details.renderer.material_plans[0]"
             ".contract_version")
-        self.assertEqual(failure["expected"], 1)
-        self.assertEqual(failure["actual"], 2)
+        self.assertEqual(
+            failure["expected"],
+            verifier.MATERIAL_PLAN_CONTRACT_VERSION)
+        self.assertEqual(
+            failure["actual"],
+            verifier.MATERIAL_PLAN_CONTRACT_VERSION + 1)
         self.assertEqual(failure["likely_layer"], "material.regular.fallback")
         self.assertIn("MaterialPlan schema version", failure["hint"])
         self.assertIn("plan_material_surface", failure["suggested_action"])
         self.assertEqual(
             report["material_plans"]["contract_versions"],
-            {"2": 1})
+            {str(verifier.MATERIAL_PLAN_CONTRACT_VERSION + 1): 1})
 
     def test_renderer_contract_version_mismatch_is_llm_actionable(self) -> None:
         root = snapshot(material_plan())
         renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
         assert isinstance(renderer, dict)
-        renderer["material_plan_contract_version"] = 2
+        renderer["material_plan_contract_version"] = (
+            verifier.MATERIAL_PLAN_CONTRACT_VERSION + 1)
 
         code, report = self.run_verifier(root)
 
@@ -402,8 +410,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             failure["path"],
             "debug.platform_runtime.details.renderer"
             ".material_plan_contract_version")
-        self.assertEqual(failure["expected"], 1)
-        self.assertEqual(failure["actual"], 2)
+        self.assertEqual(
+            failure["expected"],
+            verifier.MATERIAL_PLAN_CONTRACT_VERSION)
+        self.assertEqual(
+            failure["actual"],
+            verifier.MATERIAL_PLAN_CONTRACT_VERSION + 1)
         self.assertEqual(failure["likely_layer"], "platform-runtime")
         self.assertIn("backend renderer contract", failure["hint"])
         self.assertIn("debug.platform_runtime.details", failure["suggested_action"])
@@ -455,7 +467,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "backdrop_sampling": 0,
                 "backdrop_available": 0,
                 "backdrop_stable": 0,
-                "contract_versions": {"1": 1},
+                "contract_versions": {
+                    str(verifier.MATERIAL_PLAN_CONTRACT_VERSION): 1,
+                },
                 "backdrop_sources": {"none": 1},
                 "luminance_responses": {"not-sampled": 1},
                 "luminance_adapted": 0,
@@ -466,6 +480,8 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "decision_can_sample_backdrop": 0,
                 "decision_backend_supports_backdrop": 0,
                 "decision_backdrop_source_ready": 0,
+                "decision_increase_contrast": 0,
+                "decision_reduce_motion": 0,
                 "decision_blockers": {"unsupported-backend": 1},
                 "verifier_require_backdrop_source": 0,
                 "verifier_require_edge_highlight": 0,
@@ -653,7 +669,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
     def test_contract_version_summary_failure_points_to_material_plan(self) -> None:
         manifest = {
             "require_material_plan_summary": {
-                "contract_versions": {"2": 1},
+                "contract_versions": {
+                    str(verifier.MATERIAL_PLAN_CONTRACT_VERSION + 1): 1,
+                },
             },
         }
         code, report = self.run_verifier(snapshot(material_plan()), manifest)
@@ -786,19 +804,23 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(artifact_context["backend"], "synthetic")
         material_contract = artifact_context["material_contract"]
         self.assertEqual(material_contract["semantic_material_nodes"], 1)
-        self.assertEqual(material_contract["renderer_plan_contract_version"], 1)
+        self.assertEqual(
+            material_contract["renderer_plan_contract_version"],
+            verifier.MATERIAL_PLAN_CONTRACT_VERSION)
         self.assertEqual(material_contract["renderer_plan_count"], 1)
         self.assertTrue(material_contract["renderer_plans_present"])
         self.assertEqual(material_contract["resolved_plan_count"], 1)
         self.assertEqual(
             material_contract["plan_contract_versions"],
-            {"1": 1})
+            {str(verifier.MATERIAL_PLAN_CONTRACT_VERSION): 1})
         self.assertEqual(
             material_contract["fallback_paths"],
             {"unsupported-backend": 1})
         self.assertEqual(
             material_contract["decision_first_blockers"],
             {"unsupported-backend": 1})
+        self.assertEqual(material_contract["decision_increase_contrast"], 0)
+        self.assertEqual(material_contract["decision_reduce_motion"], 0)
 
     def test_material_executor_summary_mismatch_is_llm_actionable(self) -> None:
         root = snapshot(material_plan())

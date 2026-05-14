@@ -31,7 +31,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "1": 7
+      "2": 7
     },
     "kinds": {
       "clear": 1,
@@ -62,6 +62,8 @@
     "decision_can_sample_backdrop": 7,
     "decision_backend_supports_backdrop": 7,
     "decision_backdrop_source_ready": 7,
+    "decision_increase_contrast": 0,
+    "decision_reduce_motion": 0,
     "decision_blockers": {
       "none": 7
     },

@@ -183,7 +183,8 @@ executor role and maximum texture-copy pixels for that pass, so a backend
 artifact can prove whether it stayed within the render-target copy budget.
 `sample_taps` records the actual taps required by that resolved pass, so
 deterministic fallback plans use `sample_taps: 0` even when the quality budget
-allows more. `quality_policy`
+allows more. Reduced-motion plans also disable material noise and cap backdrop
+sample taps before any backend executes the pass. `quality_policy`
 records the pure planner's resolved sampling/noise/shadow switches and quality
 limits, including `max_backdrop_pixels`. `render_target` records sanitized
 target dimensions, scale, pixel format, pixel count, readiness, and whether the

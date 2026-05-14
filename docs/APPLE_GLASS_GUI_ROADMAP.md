@@ -393,13 +393,15 @@ Current seed:
   bounds, fallback reason summary, and stale fallback metadata checks;
 - `tools/verify_glass_showcase_artifact.sh` builds the example, captures a
   startup artifact bundle, and applies the manifest;
-- the existing macOS native CI job runs the gate after the root native tests, so
-  no new required status-check context is added.
+- PR CI runs the gate through the macOS native path for code changes and through
+  a lighter artifact job for artifact-only changes; main-branch pushes run only
+  artifact/docs build gates instead of the full code test matrix.
 
 Validation:
 
 - local verifier passes on the glass showcase;
-- CI gate runs on macOS native, where GUI startup capture is currently reliable;
+- CI artifact gates run on macOS native, where GUI startup capture is currently
+  reliable;
 - verifier intentionally fails on a seeded bad snapshot in a test fixture or
   unit-level harness.
 
