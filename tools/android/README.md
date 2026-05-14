@@ -21,6 +21,7 @@ sources `_env.sh` so `ANDROID_HOME`, `ANDROID_NDK_HOME`, `JAVA_HOME`,
 | `android:logs` | `logs.sh` | `adb logcat` filtered to phenotype + crash categories |
 | `android:screencap` | `screencap.sh` | PNG pulled to `$PHENOTYPE_ANDROID_STATE_DIR`, auto-opens on macOS |
 | `android:run` | `run.sh` | End-to-end: emu:start → build → apk → install → stop → launch → log snapshot |
+| `android:contract` | `contract.sh` | End-to-end: online device or emu:start → build → apk → install → launch → pull debug artifact → verifier |
 | `android:clean` | `clean.sh` | Gradle clean + wipe `.exon/aarch64-linux-android` + stop emulator |
 | `android` | — | Alias for `android:run` |
 
@@ -32,6 +33,7 @@ for the full list. Script-internal state goes under
 
 - `emu.pid` / `emu.log` — backgrounded emulator process
 - `phenotype-<epoch>.png` — screenshots from `android:screencap`
+- `contract-bundle/` — pulled artifact bundle from `android:contract`
 
 Everything is scoped to `/tmp`, so nothing needs to be in `.gitignore`.
 
@@ -45,4 +47,5 @@ and `JAVA_HOME` either have sensible defaults or are exported:
 ./tools/android/doctor.sh
 ./tools/android/emu_start.sh
 ./tools/android/run.sh
+./tools/android/contract.sh
 ```

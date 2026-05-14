@@ -17,6 +17,7 @@ const CMD_DRAW_IMAGE = 8;
 const CMD_SCISSOR    = 9;
 const CMD_FILL_QUADS = 13;
 const CMD_FILL_RECTS = 14;
+const CMD_MATERIAL_RECT = 15;
 
 // --- Color helpers ---
 
@@ -694,6 +695,8 @@ function parseCommands(instance) {
         const x = view.getFloat32(pos, true); pos += 4;
         const y = view.getFloat32(pos, true); pos += 4;
         const fontSize = view.getFloat32(pos, true); pos += 4;
+        const rotation = view.getFloat32(pos, true); pos += 4;
+        const widthFactor = view.getFloat32(pos, true); pos += 4;
         const flags = view.getUint32(pos, true); pos += 4;
         const rgba = view.getUint32(pos, true); pos += 4;
         const familyLen = view.getUint32(pos, true); pos += 4;
@@ -706,7 +709,10 @@ function parseCommands(instance) {
         const mono   = (flags & 1) !== 0;
         const bold   = (flags & 2) !== 0;
         const italic = (flags & 4) !== 0;
-        texts.push({ x, y, fontSize, mono, bold, italic, family, text, color: c });
+        texts.push({
+          x, y, fontSize, rotation, widthFactor,
+          mono, bold, italic, family, text, color: c
+        });
         break;
       }
       case CMD_DRAW_LINE: {
@@ -798,6 +804,20 @@ function parseCommands(instance) {
           const c = unpackColor(rgba);
           quads.push({ x, y, w, h, r: c.r, g: c.g, b: c.b, a: c.a, type: 0 });
         }
+        break;
+      }
+      case CMD_MATERIAL_RECT: {
+        const x = view.getFloat32(pos, true); pos += 4;
+        const y = view.getFloat32(pos, true); pos += 4;
+        const w = view.getFloat32(pos, true); pos += 4;
+        const h = view.getFloat32(pos, true); pos += 4;
+        const radius = view.getFloat32(pos, true); pos += 4;
+        pos += 4; // kind
+        pos += 4; // opacity
+        pos += 4; // blur_radius
+        const rgba = view.getUint32(pos, true); pos += 4;
+        const c = unpackColor(rgba);
+        quads.push({ x, y, w, h, r: c.r, g: c.g, b: c.b, a: c.a, type: 2, radius });
         break;
       }
       default:

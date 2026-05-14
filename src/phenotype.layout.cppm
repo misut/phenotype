@@ -3,6 +3,7 @@ module;
 #include <cstdint>
 #include <map>
 #include <string>
+#include <string_view>
 #include <tuple>
 #include <vector>
 #ifdef __wasi__
@@ -208,11 +209,27 @@ inline bool color_equal(Color const& a, Color const& b) noexcept {
     return a.r == b.r && a.g == b.g && a.b == b.b && a.a == b.a;
 }
 
+inline bool cstr_equal(char const* a, char const* b) noexcept {
+    return std::string_view{a ? a : ""} == std::string_view{b ? b : ""};
+}
+
+inline bool material_equal(MaterialStyle const& a, MaterialStyle const& b) noexcept {
+    return a.kind == b.kind
+        && a.opacity == b.opacity
+        && a.blur_radius == b.blur_radius
+        && color_equal(a.tint, b.tint)
+        && color_equal(a.border, b.border)
+        && a.fallback == b.fallback
+        && cstr_equal(a.fallback_reason, b.fallback_reason)
+        && cstr_equal(a.contrast_intent, b.contrast_intent);
+}
+
 inline bool layout_props_equal(LayoutNode const& a, LayoutNode const& b) {
     return a.text == b.text
         && a.font_size == b.font_size
         && a.mono == b.mono
         && a.image_url == b.image_url
+        && material_equal(a.material, b.material)
         && color_equal(a.background, b.background)
         && color_equal(a.text_color, b.text_color)
         && a.border_radius == b.border_radius

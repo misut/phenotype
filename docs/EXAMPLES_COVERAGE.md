@@ -1,0 +1,315 @@
+# Examples Coverage
+
+Status: current coverage contract for `origin/main` at `9b042bf`.
+
+The examples under `examples/` are the local acceptance surface for phenotype.
+They are not all equivalent: some are compact widget showcases, some are dense
+product-style scenes, and Android is a platform-specific packaging route.
+
+## Run commands
+
+Run commands from the target repo or example directory, with tools resolved by
+that directory's `mise.toml`.
+
+```sh
+cd examples/native
+mise exec -- exon build
+mise exec -- exon run
+```
+
+```sh
+cd examples/glass_showcase
+mise exec -- exon build
+mise exec -- exon run
+```
+
+```sh
+cd examples/flight_board
+mise exec -- exon build
+mise exec -- exon run
+```
+
+```sh
+cd examples/workbook
+mise exec -- exon build
+mise exec -- exon run
+```
+
+```sh
+mise run android:doctor
+mise run android
+mise run android:logs
+mise run android:contract
+```
+
+For docs/WASI dogfooding:
+
+```sh
+cd docs
+mise exec -- exon build --target wasm32-wasi
+```
+
+For LLM-debuggable native startup artifacts:
+
+```sh
+cd examples/native
+mise exec -- exon build
+PHENOTYPE_ARTIFACT_DIR=/tmp/phenotype-native-startup \
+PHENOTYPE_ARTIFACT_REASON=native-startup \
+PHENOTYPE_ARTIFACT_EXIT=1 \
+.exon/debug/native
+```
+
+The same environment hook works for `examples/flight_board` and
+`examples/workbook`. Use `examples/glass_showcase` when the artifact should
+prove material semantics across every public `MaterialKind`, including macOS
+sampled-backdrop rendering and fallback metadata.
+
+From the repo root, verify a generated bundle before using it as a debugging
+artifact:
+
+```sh
+tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
+  --expect-platform macos \
+  --require-frame \
+  --require-label "Control States" \
+  --require-label "Material Surface" \
+  --require-label "Paint Command Showcase" \
+  --require-role button \
+  --require-role material \
+  --require-role text_field \
+  --require-disabled-count 2 \
+  --require-material-kind regular \
+  --require-material-fallback
+```
+
+For `examples/glass_showcase`, use the checked-in manifest:
+
+```sh
+tools/verify_artifact_bundle.py /tmp/phenotype-glass-showcase \
+  --expect-platform macos \
+  --manifest examples/glass_showcase/artifact_manifest.json
+```
+
+The repo-local gate wraps build, startup capture, and manifest verification:
+
+```sh
+tools/verify_glass_showcase_artifact.sh
+```
+
+The macOS native CI job runs the same gate after the root native tests, keeping
+the glass showcase manifest committed and enforced without adding another
+required status-check context.
+
+## Example roles
+
+| Example | Platforms | Role |
+|---|---|---|
+| `examples/native` | macOS, Windows | Compact desktop widget showcase for shared controls, input debug, local/remote images, scroll, resize, and manual acceptance |
+| `examples/glass_showcase` | macOS, Windows | Material and glass-debug acceptance scene for deterministic backdrop regions, macOS sampled backdrop, all material kinds, artifact capture, and pixel-region checks |
+| `examples/flight_board` | macOS, Windows | Data-dense operational dashboard for grid layout, canvas-heavy drawing, state synchronization, status visuals, and performance-sensitive repaint behavior |
+| `examples/workbook` | macOS, Windows | Spreadsheet-like product workflow for keyed cells, dense grids, formula validation, selected-cell editing, and chart canvas drawing |
+| `examples/android` | Android | GameActivity/Vulkan packaging route, Android event dispatch, platform lifecycle, asset/local images, debug API, and logcat/manual device validation |
+| `docs` | WASI | Dogfooded documentation app, WASI build, JS shim integration, and web-facing DSL examples |
+
+## Widget coverage
+
+| Public surface | Native | Glass | Flight board | Workbook | Docs | Android | Tests |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `widget::text` | yes | yes | yes | yes | yes | yes | yes |
+| text size/color variants | partial | no | yes | yes | partial | partial | yes |
+| `widget::code` | yes | yes | yes | yes | yes | no | yes |
+| `widget::link` | yes | no | no | no | yes | no | yes |
+| `widget::image` local | yes | no | no | no | no | asset/local | yes |
+| `widget::image` remote | yes | no | no | no | no | no | macOS/Windows |
+| `widget::canvas` | yes | yes | yes | yes | no | no | yes |
+| `widget::button` | yes | yes | custom cells | yes | yes | yes | yes |
+| `ButtonVariant::Primary` | yes | yes | no | yes | no | no | yes |
+| disabled button | yes | no | no | no | no | no | yes |
+| `widget::checkbox` | yes | no | no | no | yes | no | yes |
+| `widget::radio` | yes | no | no | yes | yes | no | yes |
+| `widget::switch_` | yes | no | no | no | no | no | yes |
+| `widget::tabs` | yes | yes | no | no | no | no | yes |
+| `widget::progress` | yes | yes | no | no | no | no | yes |
+| `widget::progress_indeterminate` | yes | no | no | no | no | no | yes |
+| `widget::text_field` | yes | yes | no | yes | yes | no | yes |
+| text-field error/disabled | yes | no | no | no | no | no | yes |
+| `widget::cell` | no | no | no | yes | no | no | yes |
+
+Gaps:
+
+- Disabled button, disabled/error text field, and determinate progress are now
+  present in `examples/native`.
+- `widget::cell` is product-covered by `workbook`, not included in the compact
+  native showcase.
+
+## Layout coverage
+
+| Public surface | Native | Glass | Flight board | Workbook | Docs | Android | Tests |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| `layout::column` | yes | no | yes | yes | yes | yes | yes |
+| `layout::row` | yes | yes | yes | yes | yes | yes | yes |
+| `layout::box` | yes | no | no | no | no | no | yes |
+| `layout::padded` | yes | no | yes | yes | no | no | implicit |
+| `layout::sized_box` | yes | no | no | yes | yes | no | yes |
+| `layout::weighted` | yes | no | no | no | no | no | yes |
+| `layout::grid` | no | no | yes | yes | no | no | yes |
+| `layout::scaffold` | yes | yes | no | no | yes | no | yes |
+| `layout::card` | yes | yes | yes | yes | yes | yes | yes |
+| `layout::scroll_view` | yes | no | no | no | no | no | yes |
+| `layout::overlay` | via dialog | no | no | no | no | no | yes |
+| `layout::dialog` | yes | no | no | no | no | no | yes |
+| `layout::accordion` | yes | no | no | no | no | no | yes |
+| `layout::material_surface` | yes | all kinds | no | no | no | no | yes |
+| `layout::list_items` / `item` | yes | no | no | no | yes | no | yes |
+| `layout::divider` | no | no | no | no | yes | no | yes |
+| `layout::spacer` | yes | yes | yes | yes | yes | yes | yes |
+| `phenotype::keyed` | no | no | no | yes | no | no | yes |
+
+Gaps:
+
+- `overlay` is still covered through `layout::dialog`; a standalone overlay
+  example remains optional.
+- `examples/native` now covers the previously missing compact layout primitives
+  and the first material surface.
+- `examples/glass_showcase` covers clear, thin, regular, and thick material
+  surfaces in one artifact-oriented scene.
+
+## Paint command coverage
+
+| Command / painter path | Native | Glass | Flight board | Workbook | Android | Tests |
+|---|---:|---:|---:|---:|---:|---:|
+| `Clear` | yes | yes | yes | yes | yes | yes |
+| `FillRect` | yes | yes | yes | yes | yes | yes |
+| `StrokeRect` | yes | yes | custom line stroke | custom line stroke | yes | yes |
+| `RoundRect` | yes | yes | yes | yes | yes | yes |
+| `DrawText` | yes | yes | yes | yes | yes | yes |
+| `DrawLine` | yes | yes | yes | yes | yes | yes |
+| `HitRegion` | yes | yes | yes | yes | yes | yes |
+| `DrawImage` | yes | no | no | no | asset/local | yes |
+| `Scissor` | yes | yes | no | no | yes | yes |
+| `DrawArc` | yes | no | approximated with lines | no | yes | yes |
+| `Path` / `stroke_path` | yes | no | no | no | parser/backend path | yes |
+| `FillPath` | yes | no | no | no | parser/backend path | yes |
+| `FillQuads` | yes | yes | no | no | backend path | yes |
+| `FillRects` | yes | yes | no | no | backend path | yes |
+
+Gaps:
+
+- `examples/native` now has a paint command showcase for the advanced command
+  paths.
+- `flight_board` still approximates arcs and filled shapes with line/circle helpers;
+  it is useful visually but not a direct command-level acceptance scene.
+
+## Input coverage
+
+| Input path | Native | Glass | Flight board | Workbook | Android | Tests |
+|---|---:|---:|---:|---:|---:|---:|
+| hover | yes | yes | yes | yes | pointer dependent | yes |
+| pointer click/tap | yes | yes | yes | yes | yes | yes |
+| focus traversal | yes | yes | partial | yes | hardware key | yes |
+| Enter/Space activation | yes | yes | partial | partial | yes | yes |
+| text entry | yes | yes | no | yes | no soft keyboard yet | yes |
+| selection / select-all | yes | text field | no | selected-cell workflow | no | yes |
+| wheel / trackpad scroll | yes | page-level | page-level | page-level | wheel/roll | yes |
+| keyboard scroll | manual | manual | no | no | no | yes |
+| IME composition | Windows yes, macOS gap | text field only | no | no | Android gap | partial |
+| transient overlay dismiss | platform-specific | no | no | no | no | yes |
+
+Gaps:
+
+- macOS native IME composition remains a known gap.
+- Android soft keyboard and IME composition remain follow-up work.
+- The compact native example covers manual input behavior but does not produce
+  a scripted input artifact.
+
+## Debug coverage
+
+| Debug capability | WASI/docs | macOS native | Windows native | Android |
+|---|---:|---:|---:|---:|
+| `snapshot_json` | yes | yes | yes | yes |
+| `platform_capabilities` | yes | yes | yes | yes |
+| `input_debug` | yes | yes | yes | yes |
+| `semantic_tree` | yes | yes | yes | yes |
+| `platform_runtime` | yes | yes | yes | yes |
+| `capture_frame_rgba` | no | yes | yes | yes |
+| `frame.bmp` artifact | no | yes | yes | yes |
+| platform diagnostics | no | yes | yes | yes |
+| remote image diagnostics | no | yes | yes | Android local/asset only |
+| material/glass diagnostics | semantic fallback | macOS sampled backdrop + semantic fallback metadata | semantic fallback | semantic fallback |
+
+Gaps:
+
+- Desktop native examples can write startup artifact bundles through
+  `PHENOTYPE_ARTIFACT_DIR`.
+- `examples/glass_showcase` is the material-focused startup artifact target
+  and includes exact labels plus all public material kinds for verifier gates.
+- `tools/verify_artifact_bundle.py` validates the common schema, semantic tree,
+  disabled semantic state, material kind/fallback metadata, runtime viewport,
+  platform diagnostics, backend runtime detail assertions, frame file, optional
+  pixel-region contrast/color checks, and reusable JSON manifests.
+  `tools/verify_glass_showcase_artifact.sh` is the material showcase gate and
+  runs in the macOS native CI job.
+- Material surfaces render a macOS sampled-backdrop material path when the
+  previous frame capture is ready; unsupported backends consume the same
+  `MaterialRect` command as a documented translucent fallback.
+- Android has a local device/emulator contract runner via
+  `mise run android:contract`; CI wiring remains a separate policy decision.
+
+## Platform image coverage
+
+| URL kind | macOS | Windows | Android |
+|---|---:|---:|---:|
+| local filesystem path | supported | supported | supported |
+| `file://` | supported | supported | supported |
+| `asset://` | no | no | supported |
+| `http://` / `https://` | supported | supported | rejected |
+| failed remote placeholder | supported | supported | rejected/local placeholder |
+
+The Android README now matches the code: `http://` and `https://` images are
+rejected with `remote images not implemented (stage 7)` in
+`src/phenotype.native.android.cppm`.
+
+## Artifact bundle expectations
+
+Native and Android backends expose the same debug API shape:
+
+```cpp
+auto bundle = phenotype::native::debug::write_artifact_bundle(
+    "/tmp/phenotype-native-artifacts",
+    "manual-example-capture");
+```
+
+The bundle layout is documented in `docs/DEBUG_WORKFLOW.md`:
+
+- `snapshot.json`
+- optional `frame.bmp`
+- optional `platform/<platform>-runtime.json`
+
+Current status by example:
+
+| Example | Expected artifact route | Current gap |
+|---|---|---|
+| `examples/native` | `mise exec -- exon build`, then `PHENOTYPE_ARTIFACT_DIR=/tmp/phenotype-native-startup PHENOTYPE_ARTIFACT_EXIT=1 .exon/debug/native` | Verified by `tools/verify_artifact_bundle.py`; scenario-specific pixel-region checks can be added as needed |
+| `examples/glass_showcase` | Same environment hook with `.exon/debug/glass_showcase` after the material scene startup frame renders | Verifies all public material kinds, macOS material capability, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; enforced by the macOS native CI job |
+| `examples/flight_board` | Same environment hook after the dashboard startup frame renders | Verified by `tools/verify_artifact_bundle.py`; scenario-specific label/role assertions can be added as needed |
+| `examples/workbook` | Same environment hook after the workbook startup frame renders | Verified by `tools/verify_artifact_bundle.py`; scenario-specific label/role assertions can be added as needed |
+| `examples/android` | `mise run android:contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | CI device/emulator wiring remains future work |
+| `docs` | WASI snapshot bundle is available when the host preopens a writable directory | Default `exon test --target wasm32-wasi` does not preopen one |
+
+The verifier milestone now consumes startup bundles and reports schema,
+semantic, runtime, frame-file, and optional pixel-region invariant failures.
+`examples/glass_showcase` is the first material-focused target for those
+checks.
+
+## Required next coverage work
+
+After seeding the first material API, keep the remaining coverage work
+focused on deterministic visual verification and platform contract parity:
+
+1. Add stricter blur-specific material-region probes for the macOS sampled
+   backdrop path, then mirror them on additional backends as they gain native
+   material support.
+2. Add Windows startup artifact automation if the runner proves reliable.
+3. Decide whether Android device/emulator contract coverage belongs in CI or
+   remains a local/device gate.

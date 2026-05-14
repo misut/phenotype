@@ -40,6 +40,39 @@ struct Color {
     constexpr bool operator==(Color const&) const = default;
 };
 
+// First-class material contract. Backends may render these with native
+// backdrop sampling; unsupported backends consume the same material
+// command as a translucent rounded-rect fallback.
+enum class MaterialKind {
+    None,
+    Clear,
+    Thin,
+    Regular,
+    Thick,
+};
+
+inline char const* material_kind_name(MaterialKind kind) noexcept {
+    switch (kind) {
+        case MaterialKind::None:    return "none";
+        case MaterialKind::Clear:   return "clear";
+        case MaterialKind::Thin:    return "thin";
+        case MaterialKind::Regular: return "regular";
+        case MaterialKind::Thick:   return "thick";
+    }
+    return "none";
+}
+
+struct MaterialStyle {
+    MaterialKind kind = MaterialKind::None;
+    float opacity = 0.0f;
+    float blur_radius = 0.0f;
+    Color tint = {0, 0, 0, 0};
+    Color border = {0, 0, 0, 0};
+    bool fallback = false;
+    char const* fallback_reason = "";
+    char const* contrast_intent = "standard";
+};
+
 // A solid convex quadrilateral in canvas-local coordinates. Intended
 // for CAD / chart workloads that need to emit thousands of already-
 // tessellated fills without paying PathBuilder + FillPath decode cost
@@ -192,6 +225,11 @@ enum class Cmd : unsigned int {
     // to an instanced rectangle path or expand it to triangles when
     // that is needed to preserve fill ordering.
     FillRects  = 14,
+    // Material surface. Layout: opcode + x/y/w/h/radius f32 +
+    // kind u32 + opacity f32 + blur_radius f32 + packed RGBA tint.
+    // Backends with backdrop sampling render a glass/material effect;
+    // backends without it draw the tint as a rounded-rect fallback.
+    MaterialRect = 15,
 };
 
 // Verb tags inside a Cmd::Path / Cmd::FillPath payload. Numeric values
@@ -710,6 +748,7 @@ struct LayoutNode {
     Color border_color = {0, 0, 0, 0};
     float border_width = 0;
     Decoration decoration = Decoration::None; // checkmark / inner dot glyph
+    MaterialStyle material;
 
     // Content
     std::string text;
@@ -724,6 +763,7 @@ struct LayoutNode {
     unsigned int debug_semantic_callback_id = 0xFFFFFFFFu;
     bool debug_semantic_hidden = false;
     bool debug_semantic_focusable = false;
+    bool debug_semantic_enabled = true;
 
     // Hover styles (alpha=0 means no hover override)
     Color hover_background = {0, 0, 0, 0};

@@ -10,6 +10,7 @@ module;
 #include <cmath>
 #include <chrono>
 #include <concepts>
+#include <cstdlib>
 #include <cstdio>
 #include <functional>
 #include <utility>
@@ -119,6 +120,50 @@ inline GLFWwindow* g_active_glfw_window = nullptr;
 
 inline void glfw_set_hover_cursor(bool pointing) {
     glfw_update_cursor(g_active_glfw_window, pointing);
+}
+
+inline bool env_flag_enabled(char const* name) {
+    auto const* value = std::getenv(name);
+    return value && value[0] != '\0' && value[0] != '0';
+}
+
+inline bool write_startup_artifact_bundle(platform_api const& platform,
+                                          char const* directory) {
+    if (!directory || directory[0] == '\0')
+        return true;
+    if (!platform.debug.write_artifact_bundle) {
+        std::fprintf(stderr,
+            "[phenotype-native] artifact bundle failed: platform '%s' does not expose write_artifact_bundle\n",
+            platform.name ? platform.name : "unknown");
+        return false;
+    }
+
+    auto const* reason = std::getenv("PHENOTYPE_ARTIFACT_REASON");
+    if (!reason || reason[0] == '\0')
+        reason = "startup-frame";
+
+    auto bundle = platform.debug.write_artifact_bundle(directory, reason);
+    if (!bundle.ok) {
+        std::fprintf(stderr,
+            "[phenotype-native] artifact bundle failed: %s\n",
+            bundle.error.empty() ? "unknown error" : bundle.error.c_str());
+        return false;
+    }
+
+    std::fprintf(stderr,
+        "[phenotype-native] artifact bundle written: %s\n",
+        bundle.directory.c_str());
+    if (!bundle.snapshot_json_path.empty()) {
+        std::fprintf(stderr,
+            "[phenotype-native] snapshot: %s\n",
+            bundle.snapshot_json_path.c_str());
+    }
+    if (!bundle.frame_image_path.empty()) {
+        std::fprintf(stderr,
+            "[phenotype-native] frame: %s\n",
+            bundle.frame_image_path.c_str());
+    }
+    return true;
 }
 
 inline void refresh_cached_canvas_size(::phenotype::native::native_host& host,
@@ -302,6 +347,32 @@ int run_app_with_platform(platform_api const& platform,
 
     ::phenotype::native::detail::run_host<State, Msg>(host, std::move(view), std::move(update));
 
+    auto cleanup = [&] {
+        ::phenotype::native::detail::shutdown_host(host);
+        g_active_glfw_window = nullptr;
+        glfwDestroyWindow(window);
+        glfwTerminate();
+    };
+
+    auto const* artifact_dir = std::getenv("PHENOTYPE_ARTIFACT_DIR");
+    bool const artifact_requested = artifact_dir && artifact_dir[0] != '\0';
+    if (artifact_requested && platform.debug.capabilities
+        && platform.debug.capabilities().material_backdrop_blur) {
+        // Material backends that sample the captured framebuffer need one
+        // already-presented frame before the artifact frame can exercise the
+        // true material path. Force a paint flush even when the command buffer
+        // is byte-identical to the startup render.
+        ::phenotype::detail::g_app.last_paint_hash = 0;
+        ::phenotype::native::detail::repaint_current();
+    }
+    bool const artifact_ok = artifact_requested
+        ? write_startup_artifact_bundle(platform, artifact_dir)
+        : true;
+    if (artifact_requested && env_flag_enabled("PHENOTYPE_ARTIFACT_EXIT")) {
+        cleanup();
+        return artifact_ok ? 0 : 1;
+    }
+
     auto last_animation_tick = std::chrono::steady_clock::now();
     while (!glfwWindowShouldClose(window)) {
         glfwPollEvents();
@@ -327,10 +398,7 @@ int run_app_with_platform(platform_api const& platform,
         }
     }
 
-    ::phenotype::native::detail::shutdown_host(host);
-    g_active_glfw_window = nullptr;
-    glfwDestroyWindow(window);
-    glfwTerminate();
+    cleanup();
     return 0;
 }
 

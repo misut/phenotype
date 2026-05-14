@@ -130,3 +130,8 @@ phenotype_android_emu_running() {
     [ -x "$ADB" ] || return 1
     "$ADB" devices 2>/dev/null | awk 'NR>1 && $1 ~ /^emulator-/ && $2=="device"' | grep -q .
 }
+
+phenotype_android_device_online() {
+    [ -x "$ADB" ] || return 1
+    "$ADB" devices 2>/dev/null | awk 'NR>1 && $2=="device"' | grep -q .
+}

@@ -41,7 +41,7 @@ shell).
 |---|---|---|
 | `asset://path.png` | `AAssetManager_open` + `AImageDecoder_createFromBuffer` | **supported** |
 | `/absolute/path.png` (or `file:///absolute/path.png`) | `open()` + `AImageDecoder_createFromFd` | **supported** |
-| `http://…` / `https://…` | JNI `HttpsURLConnection` worker | Stage 7 |
+| `http://…` / `https://…` | — | **rejected** (`remote images not implemented (stage 7)`) |
 | relative path | — | **rejected** (no CWD on Android) |
 
 Rejected and failed URLs render a light-gray placeholder with a darker
@@ -93,6 +93,7 @@ From the phenotype repo root:
 mise run android:doctor   # verify SDK / NDK / JDK / AVD are wired up
 mise run android          # boot emu -> build -> apk -> install -> launch
 mise run android:logs     # live-tail logcat filtered to phenotype
+mise run android:contract # pull and verify a debug artifact bundle
 ```
 
 `mise run android` is an alias for `mise run android:run`. Individual
@@ -109,7 +110,7 @@ environment variables:
 | `PHENOTYPE_ANDROID_AVD` | first entry of `emulator -list-avds` | emulator target |
 | `PHENOTYPE_ANDROID_PACKAGE` | `io.github.misut.phenotype.example` | `am` target |
 | `PHENOTYPE_ANDROID_APK` | `examples/android/app/build/outputs/apk/debug/app-debug.apk` | install target |
-| `PHENOTYPE_ANDROID_STATE_DIR` | `/tmp/phenotype-android` | emulator pid/log + screenshots |
+| `PHENOTYPE_ANDROID_STATE_DIR` | `/tmp/phenotype-android` | emulator pid/log, screenshots, contract bundle |
 
 The screen clears to the phenotype theme background
 (`{250,250,250,255}` off-white by default). Home → pull recents →
@@ -129,6 +130,19 @@ adb install -r examples/android/app/build/outputs/apk/debug/app-debug.apk
 adb shell am start -n io.github.misut.phenotype.example/.MainActivity
 adb logcat | grep phenotype
 ```
+
+For automated debug-plane validation on an attached device or emulator:
+
+```sh
+mise run android:contract
+```
+
+The contract runner enables the example's opt-in artifact hook with
+`debug.phenotype.contract`, waits for `snapshot.json` and `frame.bmp`, pulls the
+bundle from app-private storage with `adb run-as`, and validates it with
+`tools/verify_artifact_bundle.py --manifest examples/android/artifact_manifest.json`.
+The pulled bundle lands in `$PHENOTYPE_ANDROID_STATE_DIR/contract-bundle` by
+default.
 
 ## Overrides
 

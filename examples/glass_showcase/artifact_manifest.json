@@ -1,0 +1,50 @@
+{
+  "name": "glass_showcase_startup",
+  "description": "Startup artifact contract for the material showcase.",
+  "require_frame": true,
+  "require_labels": [
+    "Glass Material Showcase",
+    "Backdrop Test Pattern",
+    "Material Ramp",
+    "Debug Contract"
+  ],
+  "require_roles": [
+    "button",
+    "material",
+    "text_field"
+  ],
+  "require_material_kinds": [
+    "clear",
+    "thin",
+    "regular",
+    "thick"
+  ],
+  "require_capabilities": [
+    "material_backdrop_blur"
+  ],
+  "require_runtime_details": [
+    {
+      "path": "renderer.material_pipeline_ready",
+      "equals": true
+    },
+    {
+      "path": "renderer.material_backdrop_source_ready",
+      "equals": true
+    }
+  ],
+  "require_material_fallback": true,
+  "pixel_regions": [
+    {
+      "name": "backdrop-pattern",
+      "rect": [0.08, 0.18, 0.7, 0.18],
+      "min_luma_delta": 18.0,
+      "min_unique_colors": 8
+    },
+    {
+      "name": "material-ramp",
+      "rect": [0.08, 0.44, 0.74, 0.22],
+      "min_luma_delta": 10.0,
+      "min_unique_colors": 4
+    }
+  ]
+}

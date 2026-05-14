@@ -106,6 +106,18 @@ jobs:
           eval "$(intron env)"
           exon test ${{ matrix.target_arg }}
 
+      - name: Verify glass showcase artifact
+        if: matrix.target == 'native'
+        env:
+          EXON: exon
+          EXON_CXXFLAGS: ${{ matrix.cxxflags }}
+          EXON_LDFLAGS: ${{ matrix.ldflags }}
+          PHENOTYPE_ARTIFACT_DIR: ${{ runner.temp }}/phenotype-glass-showcase
+          PHENOTYPE_EXPECT_PLATFORM: macos
+        run: |
+          eval "$(intron env)"
+          tools/verify_glass_showcase_artifact.sh
+
       - name: Save build artifacts
         if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5

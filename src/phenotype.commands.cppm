@@ -20,6 +20,14 @@ struct ClearCmd     { Color color; };
 struct FillRectCmd  { float x, y, w, h; Color color; };
 struct StrokeRectCmd{ float x, y, w, h; float line_width; Color color; };
 struct RoundRectCmd { float x, y, w, h; float radius; Color color; };
+struct MaterialRectCmd {
+    float x, y, w, h;
+    float radius;
+    MaterialKind kind;
+    float opacity;
+    float blur_radius;
+    Color tint;
+};
 // DrawTextCmd carries the decoded `Cmd::DrawText` payload. `mono`
 // stays as a convenience boolean (still derived from flags bit 0)
 // so existing pre-FontSpec consumers compile unchanged. New consumers
@@ -91,7 +99,8 @@ struct FillRectsCmd { std::vector<PaintRect> rects; };
 using DrawCommand = std::variant<
     ClearCmd, FillRectCmd, StrokeRectCmd, RoundRectCmd,
     DrawTextCmd, DrawLineCmd, HitRegionCmd, DrawImageCmd, ScissorCmd,
-    DrawArcCmd, DrawPathCmd, FillPathCmd, FillQuadsCmd, FillRectsCmd>;
+    DrawArcCmd, DrawPathCmd, FillPathCmd, FillQuadsCmd, FillRectsCmd,
+    MaterialRectCmd>;
 
 // ---- Parser ----
 
@@ -147,6 +156,17 @@ inline std::vector<DrawCommand> parse_commands(
             float x = read_f32(), y = read_f32(), w = read_f32(), h = read_f32();
             float r = read_f32();
             out.emplace_back(RoundRectCmd{x, y, w, h, r, unpack(read_u32())});
+            break;
+        }
+        case Cmd::MaterialRect: {
+            float x = read_f32(), y = read_f32(), w = read_f32(), h = read_f32();
+            float r = read_f32();
+            auto kind = static_cast<MaterialKind>(read_u32());
+            float opacity = read_f32();
+            float blur_radius = read_f32();
+            auto tint = unpack(read_u32());
+            out.emplace_back(MaterialRectCmd{
+                x, y, w, h, r, kind, opacity, blur_radius, tint});
             break;
         }
         case Cmd::DrawText: {

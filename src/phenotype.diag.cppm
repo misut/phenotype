@@ -593,6 +593,15 @@ struct SemanticNodeSnapshot {
     std::optional<unsigned int> callback_id;
     std::string role = "none";
     std::string label;
+    struct MaterialSnapshot {
+        std::string kind;
+        float opacity = 0.0f;
+        float blur_radius = 0.0f;
+        bool fallback = false;
+        std::string fallback_reason;
+        std::string contrast_intent;
+    };
+    std::optional<MaterialSnapshot> material;
     RectSnapshot bounds{};
     bool visible = false;
     bool enabled = true;
@@ -613,6 +622,8 @@ struct PlatformCapabilitiesSnapshot {
     bool platform_runtime = true;
     bool frame_image = false;
     bool platform_diagnostics = false;
+    bool material_surfaces = true;
+    bool material_backdrop_blur = false;
 };
 
 struct PlatformRuntimeSnapshot {
@@ -920,6 +931,22 @@ inline json::Value semantic_node_to_json(SemanticNodeSnapshot const& node) {
     out.emplace("callback_id", callback_id_to_json(node.callback_id));
     out.emplace("role", json::Value{node.role});
     out.emplace("label", json::Value{node.label});
+    if (node.material.has_value()) {
+        json::Object material;
+        material.emplace("kind", json::Value{node.material->kind});
+        material.emplace("opacity", json::Value{node.material->opacity});
+        material.emplace("blur_radius", json::Value{node.material->blur_radius});
+        material.emplace("fallback", json::Value{node.material->fallback});
+        material.emplace(
+            "fallback_reason",
+            json::Value{node.material->fallback_reason});
+        material.emplace(
+            "contrast_intent",
+            json::Value{node.material->contrast_intent});
+        out.emplace("material", json::Value{std::move(material)});
+    } else {
+        out.emplace("material", json::Value{});
+    }
     out.emplace("bounds", rect_to_json(node.bounds));
     out.emplace("visible", json::Value{node.visible});
     out.emplace("enabled", json::Value{node.enabled});
@@ -950,6 +977,12 @@ inline json::Value platform_capabilities_to_json(
     out.emplace(
         "platform_diagnostics",
         json::Value{capabilities.platform_diagnostics});
+    out.emplace(
+        "material_surfaces",
+        json::Value{capabilities.material_surfaces});
+    out.emplace(
+        "material_backdrop_blur",
+        json::Value{capabilities.material_backdrop_blur});
     return json::Value{std::move(out)};
 }
 

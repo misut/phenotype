@@ -1045,6 +1045,80 @@ void test_paint_only_props_invalidate_diff_cache() {
     std::puts("PASS: paint-only prop changes invalidate diff/paint cache");
 }
 
+void test_material_props_invalidate_diff_cache() {
+    auto make_tree = [](float blur_radius) {
+        auto root_h = detail::alloc_node();
+        auto material_h = detail::alloc_node();
+        auto& material = detail::node_at(material_h);
+        material.material = layout::material_style(MaterialKind::Regular);
+        material.material.blur_radius = blur_radius;
+        material.background = Color{255, 255, 255, 128};
+        material.border_color = Color{229, 231, 235, 190};
+        material.border_width = 1.0f;
+        material.border_radius = 4.0f;
+        material.style.fixed_height = 40.0f;
+        detail::node_at(root_h).children.push_back(material_h);
+        return root_h;
+    };
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    auto old_root = make_tree(16.0f);
+    detail::g_app.prev_root = old_root;
+    std::swap(detail::g_app.arena, detail::g_app.prev_arena);
+    detail::g_app.arena.reset();
+
+    auto new_root = make_tree(30.0f);
+    auto matched = detail::diff_and_copy_layout(
+        detail::g_app.prev_root,
+        new_root,
+        detail::g_app.prev_arena,
+        detail::g_app.arena);
+
+    assert(!matched);
+    auto const& material = detail::node_at(detail::node_at(new_root).children[0]);
+    assert(!material.layout_valid);
+    assert(!material.paint_valid);
+
+    std::puts("PASS: material prop changes invalidate diff/paint cache");
+}
+
+void test_material_surface_emits_material_rect_command() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::material_surface(MaterialKind::Regular, [] {
+        widget::text("Glass command");
+    });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    auto const* material = static_cast<MaterialRectCmd const*>(nullptr);
+    for (auto const& cmd : cmds) {
+        if (auto const* m = std::get_if<MaterialRectCmd>(&cmd)) {
+            material = m;
+            break;
+        }
+    }
+
+    assert(material != nullptr);
+    assert(material->kind == MaterialKind::Regular);
+    assert(material->opacity > 0.5f);
+    assert(material->blur_radius >= 20.0f);
+    assert(material->tint.a > 0);
+
+    std::puts("PASS: material surface emits MaterialRect command");
+}
+
 // Regression: when a subtree (here widget::radio's row) keeps blitting
 // as a chunk frame after frame, descendants' paint_offset values stay
 // frozen at whatever frame last walked them. Pre-fix, the moment a
@@ -1933,6 +2007,8 @@ int main() {
     test_checkbox_and_radio_widgets();
     test_frame_skip_on_identical_cmd_buffer();
     test_paint_only_props_invalidate_diff_cache();
+    test_material_props_invalidate_diff_cache();
+    test_material_surface_emits_material_rect_command();
     test_radio_paint_cache_stale_descendant_after_subtree_blit();
     test_row_cross_align_center_default();
     test_theme_json_roundtrip();

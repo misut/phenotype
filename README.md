@@ -97,6 +97,7 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 | `grid(columns, row_height, builder)` | Rigid `columns × N` grid; children are placed row-major into fixed tracks |
 | `scaffold(top, content, bottom)` | Page layout with hero header, max-width content, and footer |
 | `card(builder)` | Rounded white container with padding |
+| `material_surface(kind, builder)` | Debug-visible material container with clear/thin/regular/thick semantics, macOS sampled-backdrop rendering, and translucent fallback elsewhere |
 | `scroll_view(fixed_height, builder)` | Per-node scroll viewport that catches wheel events inside its bounds |
 | `overlay(builder)` | Top-of-stack layer that paints after the main tree (foundation for dialogs, popovers, tooltips) |
 | `dialog(builder, max_width=360, top_padding=96)` | Centered modal card on top of an `overlay` |
@@ -280,6 +281,16 @@ of every shared widget rendered via the GLFW shell + Metal (macOS) or
 Direct3D 12 (Windows) backend.
 
 ```bash
+cd examples/glass_showcase
+exon run
+```
+
+`examples/glass_showcase` is the material and debug-artifact scene. It renders
+deterministic backdrop regions, all public material kinds, macOS sampled
+backdrop material, fallback metadata, and stable semantic labels for
+pixel-region verification.
+
+```bash
 cd examples/workbook
 exon run
 ```
@@ -311,7 +322,11 @@ As an exon dependency:
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the rendering pipeline,
 host interface, command buffer protocol, native backend structure, and module
 dependency graph. See [docs/DEBUG_WORKFLOW.md](docs/DEBUG_WORKFLOW.md) for the
-unified debug workflow and cross-platform snapshot contract.
+unified debug workflow and cross-platform snapshot contract. See
+[docs/APPLE_GLASS_GUI_ROADMAP.md](docs/APPLE_GLASS_GUI_ROADMAP.md) for the
+Apple-style material GUI roadmap, current capability audit, and example/debug
+coverage criteria. See [docs/EXAMPLES_COVERAGE.md](docs/EXAMPLES_COVERAGE.md)
+for the current feature-to-example coverage matrix.
 
 ## Roadmap
 
