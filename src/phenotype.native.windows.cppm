@@ -2517,6 +2517,33 @@ inline bool decode_frame_commands(unsigned char const* buf,
                 radius, 0.0f, 2.0f);
             break;
         }
+        case Cmd::MaterialRect: {
+            float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+            float radius = 0.0f;
+            unsigned int kind = 0;
+            float opacity = 0.0f;
+            float blur_radius = 0.0f;
+            unsigned int packed = 0;
+            if (!reader.read_f32(x) || !reader.read_f32(y)
+                || !reader.read_f32(w) || !reader.read_f32(h)
+                || !reader.read_f32(radius)
+                || !reader.read_u32(kind)
+                || !reader.read_f32(opacity)
+                || !reader.read_f32(blur_radius)
+                || !reader.read_u32(packed))
+                return false;
+            (void)kind;
+            (void)opacity;
+            (void)blur_radius;
+            auto color = unpack_color(packed);
+            append_color_instance(
+                frame.color_data,
+                x, y, w, h,
+                color.r / 255.0f, color.g / 255.0f,
+                color.b / 255.0f, color.a / 255.0f,
+                radius, 0.0f, 2.0f);
+            break;
+        }
         case Cmd::DrawText: {
             float x = 0.0f, y = 0.0f, font_size = 0.0f, rotation = 0.0f;
             float width_factor = 1.0f;

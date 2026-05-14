@@ -1,0 +1,14 @@
+{
+  "name": "android_stage7_startup",
+  "description": "Device/emulator artifact contract for the bundled Android stage 7 demo.",
+  "expect_platform": "android",
+  "require_frame": true,
+  "require_labels": [
+    "phenotype \u00b7 stage 7",
+    "Core Widgets",
+    "Stage 7: debug plane + resume + scroll."
+  ],
+  "require_roles": [
+    "button"
+  ]
+}

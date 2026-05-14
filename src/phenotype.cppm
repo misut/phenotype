@@ -318,6 +318,7 @@ inline void button(str label, Msg msg,
         node.border_width = 1;
         node.cursor_type = 0;
         node.focusable = false;
+        node.debug_semantic_enabled = false;
         // No callback — the button is non-interactive. Skip the
         // callback registration entirely so click dispatch finds
         // node.callback_id == 0xFFFFFFFF and falls through.
@@ -491,6 +492,7 @@ inline void text_field(str hint, std::string const& current,
     node.interaction_role = InteractionRole::TextField;
     node.placeholder = std::string(hint.data, hint.len);
     node.text = current.empty() ? node.placeholder : current;
+    node.debug_semantic_label = node.placeholder;
     node.font_size = t.body_font_size;
     node.border_radius = t.radius_sm;
     node.style.padding[0] = t.space_sm;
@@ -506,6 +508,7 @@ inline void text_field(str hint, std::string const& current,
         node.border_width = 1;
         node.cursor_type = 0;
         node.focusable = false;
+        node.debug_semantic_enabled = false;
         // No callback / input handler — the field is non-interactive.
         detail::attach_to_scope(h);
         return;
@@ -1505,6 +1508,61 @@ inline float space_value(SpaceToken token) noexcept {
     return t.space_md;
 }
 
+inline Color with_alpha(Color color, unsigned char alpha) noexcept {
+    color.a = alpha;
+    return color;
+}
+
+inline MaterialStyle material_style(MaterialKind kind) noexcept {
+    auto const& t = detail::g_app.theme;
+    MaterialStyle style{};
+    style.kind = kind;
+    style.fallback = kind != MaterialKind::None;
+    style.fallback_reason = kind == MaterialKind::None
+        ? ""
+        : "backdrop blur is not implemented; using translucent rounded rect";
+
+    switch (kind) {
+        case MaterialKind::Clear:
+            style.opacity = 0.28f;
+            style.blur_radius = 10.0f;
+            style.tint = with_alpha(t.surface, 72);
+            style.border = with_alpha(t.border, 120);
+            style.contrast_intent = "context";
+            break;
+        case MaterialKind::Thin:
+            style.opacity = 0.42f;
+            style.blur_radius = 16.0f;
+            style.tint = with_alpha(t.surface, 108);
+            style.border = with_alpha(t.border, 150);
+            style.contrast_intent = "balanced";
+            break;
+        case MaterialKind::Regular:
+            style.opacity = 0.58f;
+            style.blur_radius = 22.0f;
+            style.tint = with_alpha(t.surface, 148);
+            style.border = with_alpha(t.border, 190);
+            style.contrast_intent = "legible";
+            break;
+        case MaterialKind::Thick:
+            style.opacity = 0.78f;
+            style.blur_radius = 30.0f;
+            style.tint = with_alpha(t.surface, 198);
+            style.border = with_alpha(t.border, 230);
+            style.contrast_intent = "high-contrast";
+            break;
+        case MaterialKind::None:
+        default:
+            style.opacity = 0.0f;
+            style.blur_radius = 0.0f;
+            style.tint = t.transparent;
+            style.border = t.transparent;
+            style.contrast_intent = "standard";
+            break;
+    }
+    return style;
+}
+
 // column — vertical flex container.
 //
 // Builder overload accepts gap / cross-axis / main-axis props that
@@ -1639,6 +1697,29 @@ void weighted(float grow, F&& builder) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.flex_grow = grow;
+    detail::open_container(h, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void material_surface(MaterialKind kind, F&& builder,
+                      SpaceToken padding = SpaceToken::Lg,
+                      SpaceToken gap = SpaceToken::Md) {
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    auto const& t = detail::g_app.theme;
+    node.material = material_style(kind);
+    node.background = node.material.tint;
+    node.border_color = node.material.border;
+    node.border_width = kind == MaterialKind::None ? 0.0f : 1.0f;
+    node.border_radius = t.radius_lg;
+    node.style.flex_direction = FlexDirection::Column;
+    node.style.gap = space_value(gap);
+    float p = space_value(padding);
+    node.style.padding[0] = p;
+    node.style.padding[1] = p;
+    node.style.padding[2] = p;
+    node.style.padding[3] = p;
     detail::open_container(h, std::forward<F>(builder));
 }
 
@@ -2854,10 +2935,13 @@ inline void collect_semantic_nodes(NodeHandle node_h,
     bool is_root = !node.parent.valid();
     bool explicit_semantics = !node.debug_semantic_role.empty()
         || node.debug_semantic_callback_id != 0xFFFFFFFFu;
+    bool const has_interaction_role =
+        node.interaction_role != InteractionRole::None;
+    bool const has_material = node.material.kind != MaterialKind::None;
     bool auto_semantics = is_root
+        || has_material
         || node.is_input
-        || (node.callback_id != 0xFFFFFFFFu
-            && node.interaction_role != InteractionRole::None)
+        || has_interaction_role
         || !node.image_url.empty()
         || !node.text.empty();
 
@@ -2878,15 +2962,25 @@ inline void collect_semantic_nodes(NodeHandle node_h,
         semantic.role = node.debug_semantic_role;
     } else if (is_root) {
         semantic.role = "root";
-    } else if (node.is_input) {
-        semantic.role = "text_field";
-    } else if (node.callback_id != 0xFFFFFFFFu
-               && node.interaction_role != InteractionRole::None) {
+    } else if (has_interaction_role) {
         semantic.role = interaction_role_name(node.interaction_role);
     } else if (!node.image_url.empty()) {
         semantic.role = "image";
+    } else if (has_material) {
+        semantic.role = "material";
     } else {
         semantic.role = "text";
+    }
+
+    if (has_material) {
+        semantic.material = diag::SemanticNodeSnapshot::MaterialSnapshot{
+            .kind = material_kind_name(node.material.kind),
+            .opacity = node.material.opacity,
+            .blur_radius = node.material.blur_radius,
+            .fallback = node.material.fallback,
+            .fallback_reason = node.material.fallback_reason,
+            .contrast_intent = node.material.contrast_intent,
+        };
     }
 
     if (!node.debug_semantic_label.empty()) {
@@ -2897,9 +2991,9 @@ inline void collect_semantic_nodes(NodeHandle node_h,
 
     semantic.bounds = node_bounds_snapshot(ax, ay, node.width, node.height);
     semantic.visible = is_root || rect_intersects_viewport(semantic.bounds);
-    semantic.enabled = true;
+    semantic.enabled = node.debug_semantic_enabled;
     semantic.focusable = explicit_semantics
-        ? node.debug_semantic_focusable
+        ? (node.debug_semantic_focusable && semantic.enabled)
         : (semantic_callback_id != 0xFFFFFFFFu && node.focusable);
     semantic.focused = semantic_callback_id != 0xFFFFFFFFu
         && semantic_callback_id == g_app.focused_id;

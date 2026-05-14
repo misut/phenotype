@@ -226,6 +226,8 @@ void test_snapshot_shape() {
     assert(capabilities.at("platform_runtime").as_bool() == true);
     assert(capabilities.contains("frame_image"));
     assert(capabilities.contains("platform_diagnostics"));
+    assert(capabilities.at("material_surfaces").as_bool() == true);
+    assert(capabilities.at("material_backdrop_blur").as_bool() == false);
 
     auto const& input_debug = debug.at("input_debug").as_object();
     assert(input_debug.contains("event"));
@@ -436,6 +438,11 @@ void test_debug_plane_semantic_tree_shape_and_stability() {
             layout::column([&] {
                 widget::text("Heading");
                 widget::button<DebugPlaneMsg>("Run", DebugPlaneNoop{});
+                widget::button<DebugPlaneMsg>(
+                    "Disabled run",
+                    DebugPlaneNoop{},
+                    ButtonVariant::Default,
+                    true);
                 widget::link("Docs", "https://example.com/docs");
                 widget::checkbox<DebugPlaneMsg>("Subscribe", true, DebugPlaneNoop{});
                 widget::radio<DebugPlaneMsg>("Option A", true, DebugPlaneNoop{});
@@ -443,6 +450,12 @@ void test_debug_plane_semantic_tree_shape_and_stability() {
                     "Type here",
                     "",
                     map_debug_plane_text);
+                widget::text_field<DebugPlaneMsg>(
+                    "Locked field",
+                    "read only",
+                    map_debug_plane_text,
+                    false,
+                    true);
                 widget::image("hero.png", 48.0f, 32.0f);
             });
         },
@@ -458,13 +471,13 @@ void test_debug_plane_semantic_tree_shape_and_stability() {
     assert(root_bounds.at("valid").as_bool() == true);
 
     auto const& children = semantic_tree.at("children").as_array();
-    assert(children.size() == 7);
+    assert(children.size() == 9);
     assert(count_semantic_role(children, "checkbox") == 1);
     assert(count_semantic_role(children, "radio") == 1);
-    assert(count_semantic_role(children, "button") == 1);
+    assert(count_semantic_role(children, "button") == 2);
     assert(count_semantic_role(children, "link") == 1);
     assert(count_semantic_role(children, "text") == 1);
-    assert(count_semantic_role(children, "text_field") == 1);
+    assert(count_semantic_role(children, "text_field") == 2);
     assert(count_semantic_role(children, "image") == 1);
 
     auto const* checkbox = find_semantic_child(children, "checkbox", "Subscribe");
@@ -483,6 +496,13 @@ void test_debug_plane_semantic_tree_shape_and_stability() {
     assert(button != nullptr);
     assert(button->at("callback_id").as_integer() >= 0);
 
+    auto const* disabled_button =
+        find_semantic_child(children, "button", "Disabled run");
+    assert(disabled_button != nullptr);
+    assert(disabled_button->at("callback_id").is_null());
+    assert(disabled_button->at("enabled").as_bool() == false);
+    assert(disabled_button->at("focusable").as_bool() == false);
+
     auto const* link = find_semantic_child(children, "link", "Docs");
     assert(link != nullptr);
     assert(link->at("callback_id").as_integer() >= 0);
@@ -495,6 +515,13 @@ void test_debug_plane_semantic_tree_shape_and_stability() {
     assert(text_field != nullptr);
     assert(text_field->at("callback_id").as_integer() >= 0);
     assert(text_field->at("focusable").as_bool() == true);
+
+    auto const* disabled_text_field =
+        find_semantic_child(children, "text_field", "Locked field");
+    assert(disabled_text_field != nullptr);
+    assert(disabled_text_field->at("callback_id").is_null());
+    assert(disabled_text_field->at("enabled").as_bool() == false);
+    assert(disabled_text_field->at("focusable").as_bool() == false);
 
     auto const* image = find_semantic_child(children, "image");
     assert(image != nullptr);
@@ -512,6 +539,47 @@ void test_debug_plane_semantic_tree_shape_and_stability() {
     auto second_tree =
         json::emit(second.as_object().at("debug").as_object().at("semantic_tree"));
     assert(first_tree == second_tree);
+}
+
+void test_material_surface_semantic_debug_fields() {
+    metrics::reset_all();
+    log::set_level(log::Severity::info);
+#if !defined(__wasi__) && !defined(__ANDROID__)
+    run<DiagState, DebugPlaneMsg>(diag_host,
+#else
+    run<DiagState, DebugPlaneMsg>(
+#endif
+        [](DiagState const&) {
+            layout::material_surface(MaterialKind::Regular, [&] {
+                widget::text("Glass panel");
+                widget::button<DebugPlaneMsg>("Action", DebugPlaneNoop{});
+            });
+        },
+        [](DiagState&, DebugPlaneMsg) {});
+
+    auto parsed = json::parse(detail::serialize_diag_snapshot_with_debug());
+    auto const& debug = parsed.as_object().at("debug").as_object();
+    auto const& capabilities = debug.at("platform_capabilities").as_object();
+    assert(capabilities.at("material_surfaces").as_bool() == true);
+    assert(capabilities.at("material_backdrop_blur").as_bool() == false);
+
+    auto const& semantic_tree = debug.at("semantic_tree").as_object();
+    auto const& children = semantic_tree.at("children").as_array();
+    auto const* material = find_semantic_child(children, "material");
+    assert(material != nullptr);
+    assert(material->contains("material"));
+    auto const& material_debug = material->at("material").as_object();
+    assert(material_debug.at("kind").as_string() == "regular");
+    assert(material_debug.at("fallback").as_bool() == true);
+    assert(material_debug.at("fallback_reason").as_string().find("translucent")
+           != std::string::npos);
+    assert(material_debug.at("opacity").as_float() > 0.5);
+    assert(material_debug.at("blur_radius").as_float() >= 20.0);
+    assert(material_debug.at("contrast_intent").as_string() == "legible");
+
+    auto const& material_children = material->at("children").as_array();
+    assert(find_semantic_child(material_children, "text", "Glass panel") != nullptr);
+    assert(find_semantic_child(material_children, "button", "Action") != nullptr);
 }
 
 #ifdef __wasi__
@@ -574,6 +642,8 @@ int main() {
     std::printf("PASS: runner records frame + phase histograms\n");
     test_debug_plane_semantic_tree_shape_and_stability();
     std::printf("PASS: debug plane semantic tree shape + stability\n");
+    test_material_surface_semantic_debug_fields();
+    std::printf("PASS: material surface semantic debug fields\n");
 #ifdef __wasi__
     test_wasi_debug_artifact_bundle_contract();
     std::printf("PASS: WASI debug artifact bundle contract\n");

@@ -54,6 +54,90 @@ Rules:
 - `platform/<platform>-runtime.json` mirrors `platform_runtime.details` and adds
   `artifact_reason` when a reason is supplied.
 
+## Desktop example artifact hook
+
+GLFW-based native examples can write a startup artifact bundle without adding
+example-specific code. Set `PHENOTYPE_ARTIFACT_DIR` before launching the
+example:
+
+```sh
+cd examples/native
+PHENOTYPE_ARTIFACT_DIR=/tmp/phenotype-native-startup \
+PHENOTYPE_ARTIFACT_REASON=native-startup \
+PHENOTYPE_ARTIFACT_EXIT=1 \
+mise exec -- exon run
+```
+
+For automation, build first and execute the generated binary directly so the
+artifact capture and process exit are not hidden behind the run wrapper:
+
+```sh
+cd examples/native
+mise exec -- exon build
+PHENOTYPE_ARTIFACT_DIR=/tmp/phenotype-native-startup \
+PHENOTYPE_ARTIFACT_REASON=native-startup \
+PHENOTYPE_ARTIFACT_EXIT=1 \
+.exon/debug/native
+```
+
+`PHENOTYPE_ARTIFACT_EXIT=1` makes the example exit after writing the first
+rendered frame, which is useful for CI or LLM debugging. Omit it for manual
+inspection; the bundle is still written after the initial render and the window
+continues running. The same hook applies to `examples/flight_board` and
+`examples/workbook`. `examples/glass_showcase` uses the same route for
+material-focused checks, including macOS sampled-backdrop rendering and
+fallback metadata.
+
+## Artifact verification
+
+From the repo root, use `tools/verify_artifact_bundle.py` to validate the
+bundle before handing it to an LLM, attaching it to an issue, or comparing it
+in CI. The verifier checks the common debug schema, platform capabilities,
+semantic tree shape, runtime viewport, platform diagnostics files, and
+`frame.bmp` header/size invariants. For visual smoke checks, repeat
+`--require-pixel-region` to require a named frame region to have minimum
+luminance contrast and color variety. Use `--require-runtime-detail PATH=JSON`
+when a backend-specific contract must prove a value under
+`debug.platform_runtime.details`.
+
+```sh
+tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
+  --expect-platform macos \
+  --require-frame \
+  --require-label "Control States" \
+  --require-label "Material Surface" \
+  --require-label "Paint Command Showcase" \
+  --require-role button \
+  --require-role material \
+  --require-role text_field \
+  --require-disabled-count 2 \
+  --require-material-kind regular \
+  --require-material-fallback
+```
+
+For the material-focused showcase, require every public material kind:
+
+```sh
+tools/verify_artifact_bundle.py /tmp/phenotype-glass-showcase \
+  --expect-platform macos \
+  --manifest examples/glass_showcase/artifact_manifest.json
+```
+
+Or run the local gate, which builds the example, launches the startup artifact
+hook, and applies the manifest in one command:
+
+```sh
+tools/verify_glass_showcase_artifact.sh
+```
+
+The command emits a deterministic JSON report and exits non-zero when an
+invariant fails.
+
+The same gate is wired into the macOS native CI job, so pull requests fail if
+the committed glass showcase manifest no longer matches the startup frame or
+semantic material contract. Windows artifact automation and Android CI wiring
+remain future work.
+
 ## macOS extensions
 
 The macOS adapter keeps the shared top-level schema and extends

@@ -1323,6 +1323,13 @@ struct ColorInstanceGPU {
     float params[4]{};
 };
 
+struct MaterialInstanceGPU {
+    float rect[4]{};
+    float tint[4]{};
+    // radius, blur radius, opacity, kind
+    float params[4]{};
+};
+
 // Per-vertex GPU layout for the triangle pipeline (FillPath fast path).
 // Each ear-clipped triangle pushes 3 of these into the batch's triangle
 // vertex buffer; the GPU rasterises with hardware coverage rules so
@@ -1593,11 +1600,13 @@ struct ScissorBatch {
     // later triangle primitive must appear above prior color instances.
     std::vector<TriVertexGPU>     tri_vertices;
     std::vector<ColorInstanceGPU> colors;
+    std::vector<MaterialInstanceGPU> materials;
     std::vector<ArcInstanceGPU>   arcs;
     std::vector<ImageInstanceGPU> images;
     std::vector<TextInstanceGPU>  texts;
     std::uint32_t tri_first   = 0;
     std::uint32_t color_first = 0;
+    std::uint32_t material_first = 0;
     std::uint32_t arc_first   = 0;
     std::uint32_t image_first = 0;
     std::uint32_t text_first  = 0;
@@ -1613,6 +1622,7 @@ struct FrameScratch {
     // per-batch locals above.
     std::vector<TriVertexGPU>     tri_vertices;
     std::vector<ColorInstanceGPU> color_instances;
+    std::vector<MaterialInstanceGPU> material_instances;
     std::vector<ArcInstanceGPU>   arc_instances;
     std::vector<ImageInstanceGPU> image_instances;
     std::vector<TextInstanceGPU> text_instances;
@@ -1649,6 +1659,7 @@ struct FrameScratch {
         batches.push_back(ScissorBatch{});  // sentinel: full viewport
         tri_vertices.clear();
         color_instances.clear();
+        material_instances.clear();
         arc_instances.clear();
         overlay_color_instances.clear();
         text_runs.clear();
@@ -1665,7 +1676,8 @@ struct FrameScratch {
 inline void open_scissor_batch(FrameScratch& s,
                                float x, float y, float w, float h) {
     auto& cur = s.batches.back();
-    if (cur.tri_vertices.empty() && cur.colors.empty() && cur.arcs.empty()
+    if (cur.tri_vertices.empty() && cur.colors.empty()
+        && cur.materials.empty() && cur.arcs.empty()
         && cur.images.empty() && cur.texts.empty()) {
         cur.x = x; cur.y = y; cur.w = w; cur.h = h;
         return;
@@ -1682,7 +1694,7 @@ inline void open_same_scissor_batch(FrameScratch& s) {
 
 inline void ensure_triangle_order_batch(FrameScratch& s) {
     auto const& cur = s.batches.back();
-    if (!cur.colors.empty() || !cur.arcs.empty()
+    if (!cur.colors.empty() || !cur.materials.empty() || !cur.arcs.empty()
         || !cur.images.empty() || !cur.texts.empty()) {
         open_same_scissor_batch(s);
     }
@@ -1691,12 +1703,14 @@ inline void ensure_triangle_order_batch(FrameScratch& s) {
 inline void finalize_batches(FrameScratch& s) {
     s.tri_vertices.clear();
     s.color_instances.clear();
+    s.material_instances.clear();
     s.arc_instances.clear();
     s.image_instances.clear();
     s.text_instances.clear();
     for (auto& b : s.batches) {
         b.tri_first   = static_cast<std::uint32_t>(s.tri_vertices.size());
         b.color_first = static_cast<std::uint32_t>(s.color_instances.size());
+        b.material_first = static_cast<std::uint32_t>(s.material_instances.size());
         b.arc_first   = static_cast<std::uint32_t>(s.arc_instances.size());
         b.image_first = static_cast<std::uint32_t>(s.image_instances.size());
         b.text_first  = static_cast<std::uint32_t>(s.text_instances.size());
@@ -1704,6 +1718,8 @@ inline void finalize_batches(FrameScratch& s) {
                               b.tri_vertices.begin(), b.tri_vertices.end());
         s.color_instances.insert(s.color_instances.end(),
                                  b.colors.begin(), b.colors.end());
+        s.material_instances.insert(s.material_instances.end(),
+                                    b.materials.begin(), b.materials.end());
         s.arc_instances.insert(s.arc_instances.end(),
                                b.arcs.begin(), b.arcs.end());
         s.image_instances.insert(s.image_instances.end(),
@@ -1792,6 +1808,48 @@ inline void append_color_instance(std::vector<ColorInstanceGPU>& out,
     inst.params[2] = p2;
     inst.params[3] = p3;
     out.push_back(inst);
+}
+
+inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
+                                     float x, float y, float w, float h,
+                                     float radius, unsigned int kind,
+                                     float opacity, float blur_radius,
+                                     Color tint) {
+    MaterialInstanceGPU inst{};
+    inst.rect[0] = x;
+    inst.rect[1] = y;
+    inst.rect[2] = w;
+    inst.rect[3] = h;
+    inst.tint[0] = tint.r / 255.0f;
+    inst.tint[1] = tint.g / 255.0f;
+    inst.tint[2] = tint.b / 255.0f;
+    inst.tint[3] = tint.a / 255.0f;
+    inst.params[0] = radius;
+    inst.params[1] = blur_radius;
+    inst.params[2] = opacity;
+    inst.params[3] = static_cast<float>(kind);
+    out.push_back(inst);
+}
+
+inline void material_instances_to_fallback(FrameScratch& scratch) {
+    for (auto& batch : scratch.batches) {
+        for (auto const& material : batch.materials) {
+            append_color_instance(
+                batch.colors,
+                material.rect[0],
+                material.rect[1],
+                material.rect[2],
+                material.rect[3],
+                material.tint[0],
+                material.tint[1],
+                material.tint[2],
+                material.tint[3],
+                material.params[0],
+                0.0f,
+                2.0f);
+        }
+        batch.materials.clear();
+    }
 }
 
 // FillPath helpers. Walk a flat polygon (vertex list with an implicit
@@ -2094,6 +2152,34 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     color.r / 255.0f, color.g / 255.0f,
                     color.b / 255.0f, color.a / 255.0f,
                     radius, 0.0f, 2.0f);
+                break;
+            }
+            case Cmd::MaterialRect: {
+                float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+                float radius = 0.0f;
+                unsigned int kind = 0;
+                float opacity = 0.0f;
+                float blur_radius = 0.0f;
+                unsigned int packed = 0;
+                if (!reader.read_f32(x) || !reader.read_f32(y)
+                    || !reader.read_f32(w) || !reader.read_f32(h)
+                    || !reader.read_f32(radius)
+                    || !reader.read_u32(kind)
+                    || !reader.read_f32(opacity)
+                    || !reader.read_f32(blur_radius)
+                    || !reader.read_u32(packed))
+                    return false;
+                auto& cur = scratch.batches.back();
+                if (!cur.tri_vertices.empty() || !cur.colors.empty()
+                    || !cur.materials.empty() || !cur.arcs.empty()
+                    || !cur.images.empty() || !cur.texts.empty()) {
+                    open_same_scissor_batch(scratch);
+                }
+                append_material_instance(
+                    scratch.batches.back().materials,
+                    x, y, w, h, radius, kind, opacity, blur_radius,
+                    unpack_color(packed));
+                open_same_scissor_batch(scratch);
                 break;
             }
             case Cmd::DrawText: {
@@ -3409,6 +3495,88 @@ fragment float4 fs_color(ColorVsOut in [[stage_in]]) {
     return in.color;
 }
 
+struct MaterialVsOut {
+    float4 pos [[position]];
+    float2 local_pos;
+    float2 rect_size;
+    float2 screen_uv;
+    float4 tint;
+    float4 params;
+};
+
+struct MaterialInstance {
+    float4 rect;
+    float4 tint;
+    float4 params;
+};
+
+vertex MaterialVsOut vs_material(
+    uint vi [[vertex_id]],
+    uint ii [[instance_id]],
+    constant Uniforms& u [[buffer(0)]],
+    const device MaterialInstance* instances [[buffer(1)]]
+) {
+    constexpr float2 corners[] = {
+        float2(0,0), float2(1,0), float2(0,1),
+        float2(1,0), float2(1,1), float2(0,1),
+    };
+    float2 c = corners[vi];
+    MaterialInstance inst = instances[ii];
+    float px = inst.rect.x + c.x * inst.rect.z;
+    float py = inst.rect.y + c.y * inst.rect.w;
+    float cx = (px / u.viewport.x) * 2.0 - 1.0;
+    float cy = 1.0 - (py / u.viewport.y) * 2.0;
+    MaterialVsOut out;
+    out.pos = float4(cx, cy, 0, 1);
+    out.local_pos = c * inst.rect.zw;
+    out.rect_size = inst.rect.zw;
+    out.screen_uv = float2(px / u.viewport.x, py / u.viewport.y);
+    out.tint = inst.tint;
+    out.params = inst.params;
+    return out;
+}
+
+fragment float4 fs_material(
+    MaterialVsOut in [[stage_in]],
+    texture2d<float> backdrop [[texture(0)]],
+    sampler samp [[sampler(0)]]
+) {
+    float radius = in.params.x;
+    float edge_alpha = 1.0;
+    if (radius > 0.0) {
+        float2 half_size = in.rect_size * 0.5;
+        float2 p = abs(in.local_pos - half_size) - half_size + float2(radius);
+        float d = length(max(p, float2(0.0))) - radius;
+        if (d > 0.5) discard_fragment();
+        edge_alpha = clamp(0.5 - d, 0.0, 1.0);
+    }
+
+    float2 texel = 1.0 / float2(float(backdrop.get_width()),
+                                float(backdrop.get_height()));
+    float blur_px = clamp(in.params.y, 0.0, 36.0);
+    float2 step_uv = texel * max(1.0, blur_px * 0.35);
+    float4 acc = float4(0.0);
+    float weight_sum = 0.0;
+    for (int y = -2; y <= 2; ++y) {
+        for (int x = -2; x <= 2; ++x) {
+            float dist = abs(float(x)) + abs(float(y));
+            float weight = (dist == 0.0) ? 4.0 : ((dist <= 1.0) ? 2.0 : 1.0);
+            float2 uv = clamp(
+                in.screen_uv + float2(float(x), float(y)) * step_uv,
+                float2(0.0),
+                float2(1.0));
+            acc += backdrop.sample(samp, uv) * weight;
+            weight_sum += weight;
+        }
+    }
+    float4 blurred = acc / weight_sum;
+    float tint_strength = clamp(in.tint.a, 0.0, 1.0);
+    float opacity = clamp(in.params.z, 0.0, 1.0);
+    float3 rgb = mix(blurred.rgb, in.tint.rgb, tint_strength);
+    float alpha = max(opacity, tint_strength) * edge_alpha;
+    return float4(rgb, alpha);
+}
+
 struct TextVsOut {
     float4 pos [[position]];
     float2 uv;
@@ -3609,6 +3777,7 @@ struct RendererState {
     CA::MetalLayer* layer = nullptr;
     MTL::RenderPipelineState* tri_pipeline = nullptr;
     MTL::RenderPipelineState* color_pipeline = nullptr;
+    MTL::RenderPipelineState* material_pipeline = nullptr;
     MTL::RenderPipelineState* arc_pipeline = nullptr;
     MTL::RenderPipelineState* image_pipeline = nullptr;
     MTL::RenderPipelineState* text_pipeline = nullptr;
@@ -3617,6 +3786,8 @@ struct RendererState {
     std::size_t tri_vertices_capacity = 0;
     MTL::Buffer* color_instances_buf = nullptr;
     std::size_t color_instances_capacity = 0;
+    MTL::Buffer* material_instances_buf = nullptr;
+    std::size_t material_instances_capacity = 0;
     MTL::Buffer* arc_instances_buf = nullptr;
     std::size_t arc_instances_capacity = 0;
     MTL::Buffer* overlay_color_instances_buf = nullptr;
@@ -5668,11 +5839,13 @@ inline void renderer_init(native_surface_handle handle) {
 
     g_renderer.tri_pipeline   = create_pipeline(g_renderer.device, lib, "vs_tri",   "fs_tri");
     g_renderer.color_pipeline = create_pipeline(g_renderer.device, lib, "vs_color", "fs_color");
+    g_renderer.material_pipeline = create_pipeline(g_renderer.device, lib, "vs_material", "fs_material");
     g_renderer.arc_pipeline   = create_pipeline(g_renderer.device, lib, "vs_arc",   "fs_arc");
     g_renderer.image_pipeline = create_pipeline(g_renderer.device, lib, "vs_image", "fs_image");
     g_renderer.text_pipeline = create_pipeline(g_renderer.device, lib, "vs_text", "fs_text");
     lib->release();
     if (!g_renderer.tri_pipeline || !g_renderer.color_pipeline
+        || !g_renderer.material_pipeline
         || !g_renderer.arc_pipeline
         || !g_renderer.image_pipeline || !g_renderer.text_pipeline) {
         std::fprintf(stderr, "[metal] failed to create render pipelines\n");
@@ -5758,6 +5931,14 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         metrics::detail::now_ns() - text_started,
         native_attrs("text_prepare"));
 
+    bool const can_render_material =
+        g_renderer.material_pipeline
+        && g_renderer.debug_capture_texture
+        && g_renderer.last_frame_available
+        && g_renderer.debug_capture_width == fbw
+        && g_renderer.debug_capture_height == fbh;
+    if (!can_render_material)
+        material_instances_to_fallback(g_renderer.scratch);
     finalize_batches(g_renderer.scratch);
 
     int winw = 0;
@@ -5843,6 +6024,26 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         color_uploaded = true;
     }
 
+    auto const material_bytes =
+        scratch.material_instances.size() * sizeof(MaterialInstanceGPU);
+    bool material_uploaded = false;
+    if (!scratch.material_instances.empty()) {
+        if (!ensure_instance_buffer(
+                g_renderer.material_instances_buf,
+                g_renderer.material_instances_capacity,
+                material_bytes,
+                "material_instances")) {
+            encoder->endEncoding();
+            pool->release();
+            return;
+        }
+        std::memcpy(
+            g_renderer.material_instances_buf->contents(),
+            scratch.material_instances.data(),
+            material_bytes);
+        material_uploaded = true;
+    }
+
     auto const arc_bytes = scratch.arc_instances.size() * sizeof(ArcInstanceGPU);
     bool arc_uploaded = false;
     if (!scratch.arc_instances.empty()) {
@@ -5909,13 +6110,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             static_cast<std::uint32_t>(batch.tri_vertices.size());
         auto const batch_color_count =
             static_cast<std::uint32_t>(batch.colors.size());
+        auto const batch_material_count =
+            static_cast<std::uint32_t>(batch.materials.size());
         auto const batch_arc_count =
             static_cast<std::uint32_t>(batch.arcs.size());
         auto const batch_image_count =
             static_cast<std::uint32_t>(batch.images.size());
         auto const batch_text_count =
             static_cast<std::uint32_t>(batch.texts.size());
-        if (batch_tri_count + batch_color_count + batch_arc_count
+        if (batch_tri_count + batch_color_count + batch_material_count + batch_arc_count
             + batch_image_count + batch_text_count == 0)
             continue;
         auto const sr = compute_metal_scissor(
@@ -5960,6 +6163,19 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 NS::UInteger(0), 6,
                 NS::UInteger(batch_color_count),
                 NS::UInteger(batch.color_first));
+        }
+        if (material_uploaded && batch_material_count > 0
+            && g_renderer.debug_capture_texture) {
+            encoder->setRenderPipelineState(g_renderer.material_pipeline);
+            encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+            encoder->setVertexBuffer(g_renderer.material_instances_buf, 0, 1);
+            encoder->setFragmentTexture(g_renderer.debug_capture_texture, 0);
+            encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+            encoder->drawPrimitives(
+                MTL::PrimitiveTypeTriangle,
+                NS::UInteger(0), 6,
+                NS::UInteger(batch_material_count),
+                NS::UInteger(batch.material_first));
         }
         if (arc_uploaded && batch_arc_count > 0) {
             encoder->setRenderPipelineState(g_renderer.arc_pipeline);
@@ -6084,6 +6300,7 @@ inline void renderer_shutdown() {
     if (g_renderer.image_instances_buf) { g_renderer.image_instances_buf->release(); g_renderer.image_instances_buf = nullptr; }
     if (g_renderer.text_instances_buf) { g_renderer.text_instances_buf->release(); g_renderer.text_instances_buf = nullptr; }
     if (g_renderer.color_instances_buf) { g_renderer.color_instances_buf->release(); g_renderer.color_instances_buf = nullptr; }
+    if (g_renderer.material_instances_buf) { g_renderer.material_instances_buf->release(); g_renderer.material_instances_buf = nullptr; }
     if (g_renderer.tri_vertices_buf) { g_renderer.tri_vertices_buf->release(); g_renderer.tri_vertices_buf = nullptr; }
     if (g_renderer.arc_instances_buf) { g_renderer.arc_instances_buf->release(); g_renderer.arc_instances_buf = nullptr; }
     if (g_renderer.overlay_color_instances_buf) { g_renderer.overlay_color_instances_buf->release(); g_renderer.overlay_color_instances_buf = nullptr; }
@@ -6091,6 +6308,7 @@ inline void renderer_shutdown() {
     if (g_renderer.image_pipeline) { g_renderer.image_pipeline->release(); g_renderer.image_pipeline = nullptr; }
     if (g_renderer.text_pipeline) { g_renderer.text_pipeline->release(); g_renderer.text_pipeline = nullptr; }
     if (g_renderer.arc_pipeline) { g_renderer.arc_pipeline->release(); g_renderer.arc_pipeline = nullptr; }
+    if (g_renderer.material_pipeline) { g_renderer.material_pipeline->release(); g_renderer.material_pipeline = nullptr; }
     if (g_renderer.color_pipeline) { g_renderer.color_pipeline->release(); g_renderer.color_pipeline = nullptr; }
     if (g_renderer.tri_pipeline) { g_renderer.tri_pipeline->release(); g_renderer.tri_pipeline = nullptr; }
     if (g_renderer.layer) { g_renderer.layer->release(); g_renderer.layer = nullptr; }
@@ -6112,6 +6330,7 @@ inline void renderer_shutdown() {
     g_renderer.text_cache.active_scale_key = 0;
     g_renderer.tri_vertices_capacity = 0;
     g_renderer.color_instances_capacity = 0;
+    g_renderer.material_instances_capacity = 0;
     g_renderer.overlay_color_instances_capacity = 0;
     g_renderer.image_instances_capacity = 0;
     g_renderer.text_instances_capacity = 0;
@@ -6599,6 +6818,8 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities(
         true,
         true,
         true,
+        true,
+        true,
     };
 }
 
@@ -6623,6 +6844,14 @@ inline json::Object macos_renderer_runtime_json() {
     renderer.emplace(
         "readback_texture_ready",
         json::Value{g_renderer.debug_capture_texture != nullptr});
+    renderer.emplace(
+        "material_pipeline_ready",
+        json::Value{g_renderer.material_pipeline != nullptr});
+    renderer.emplace(
+        "material_backdrop_source_ready",
+        json::Value{
+            g_renderer.debug_capture_texture != nullptr
+            && g_renderer.last_frame_available});
     renderer.emplace(
         "readback_buffer_ready",
         json::Value{g_renderer.frame_readback_buf != nullptr});

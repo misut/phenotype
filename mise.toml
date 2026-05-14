@@ -13,6 +13,7 @@ ninja = "latest"
 #   mise run android            # default alias -> android:run
 #   mise run android:doctor     # verify SDK / NDK / JDK / AVD setup
 #   mise run android:run        # emu:start → build → apk → install → launch
+#   mise run android:contract   # emu/device artifact bundle + verifier gate
 #
 # Individual stages (build, apk, emu:start, install, launch, logs, ...)
 # are all runnable on their own.
@@ -74,6 +75,10 @@ run = "tools/android/screencap.sh"
 [tasks."android:run"]
 description = "End-to-end: boot emu → build → apk → install → launch → log snapshot"
 run = "tools/android/run.sh"
+
+[tasks."android:contract"]
+description = "End-to-end Android debug artifact bundle contract runner"
+run = "tools/android/contract.sh"
 
 [tasks."android:clean"]
 description = "gradle clean + wipe exon aarch64-linux-android output + stop emulator"

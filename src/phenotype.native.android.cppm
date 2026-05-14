@@ -4168,6 +4168,23 @@ inline void decode_android_color_commands(unsigned char const* buf,
             inst.params[1] = 0.0f;
             inst.params[2] = 2.0f; // Round
             out.batches.back().colors.push_back(inst);
+        } else if (cmd == ::phenotype::Cmd::MaterialRect) {
+            float x = read_f32(), y = read_f32();
+            float w = read_f32(), h = read_f32();
+            float r = read_f32();
+            (void)read_u32(); // kind
+            (void)read_f32(); // opacity
+            (void)read_f32(); // blur_radius
+            ::phenotype::Color cc = unpack(read_u32());
+            prepare_batch_for_pipeline(out, 0);
+            ColorInstanceGPU inst{};
+            inst.rect[0] = x; inst.rect[1] = y;
+            inst.rect[2] = w; inst.rect[3] = h;
+            normalize_color(cc, inst.color);
+            inst.params[0] = r;
+            inst.params[1] = 0.0f;
+            inst.params[2] = 2.0f; // Round fallback
+            out.batches.back().colors.push_back(inst);
         } else if (cmd == ::phenotype::Cmd::DrawLine) {
             float x1 = read_f32(), y1 = read_f32();
             float x2 = read_f32(), y2 = read_f32();
@@ -4766,6 +4783,16 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                 inst.params[0] = c.radius;
                 inst.params[1] = 0.0f;
                 inst.params[2] = 2.0f; // draw_type = Round
+                out.batches.back().colors.push_back(inst);
+            } else if constexpr (std::same_as<T, ::phenotype::MaterialRectCmd>) {
+                prepare_batch_for_pipeline(out, 0);
+                ColorInstanceGPU inst{};
+                inst.rect[0] = c.x; inst.rect[1] = c.y;
+                inst.rect[2] = c.w; inst.rect[3] = c.h;
+                normalize_color(c.tint, inst.color);
+                inst.params[0] = c.radius;
+                inst.params[1] = 0.0f;
+                inst.params[2] = 2.0f; // draw_type = Round fallback
                 out.batches.back().colors.push_back(inst);
             } else if constexpr (std::same_as<T, ::phenotype::DrawLineCmd>) {
                 prepare_batch_for_pipeline(out, 0);
@@ -7089,6 +7116,27 @@ void phenotype_android_dispatch_scroll(double dy) {
                  ? static_cast<float>(d::g_android_host.cached_height_px)
                  : 800.0f;
     d::dispatch_scroll(dy, vh);
+}
+
+__attribute__((visibility("default")))
+int phenotype_android_write_artifact_bundle(char const* directory,
+                                            char const* reason) {
+    namespace d = phenotype::native::detail;
+    auto result = d::android_write_artifact_bundle(directory, reason);
+    if (!result.ok) {
+        __android_log_print(
+            ANDROID_LOG_ERROR,
+            d::ANDROID_LOG_TAG,
+            "artifact bundle failed: %s",
+            result.error.empty() ? "unknown error" : result.error.c_str());
+        return 1;
+    }
+    __android_log_print(
+        ANDROID_LOG_INFO,
+        d::ANDROID_LOG_TAG,
+        "artifact bundle written: %s",
+        result.directory.c_str());
+    return 0;
 }
 
 } // extern "C"

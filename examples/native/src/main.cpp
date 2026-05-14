@@ -15,8 +15,10 @@ struct Increment {};
 struct Decrement {};
 struct NameChanged { std::string text; };
 struct ImeChanged { std::string text; };
+struct ValidationChanged { std::string text; };
 struct ToggleAgreed {};
 struct ToggleNotifications {};
+struct ToggleDialog {};
 struct SetChoice { int value; };
 struct SelectTab { std::size_t value; };
 struct Resized { int width; int height; float scale; };
@@ -26,8 +28,10 @@ using Msg = std::variant<
     Decrement,
     NameChanged,
     ImeChanged,
+    ValidationChanged,
     ToggleAgreed,
     ToggleNotifications,
+    ToggleDialog,
     SetChoice,
     SelectTab,
     Resized>;
@@ -38,8 +42,10 @@ struct State {
     int count = 0;
     std::string name;
     std::string ime_sample;
+    std::string validation_sample = "Needs review";
     bool agreed = false;
     bool notifications = false;
+    bool dialog_open = false;
     int choice = 0;
     std::size_t selected_tab = 0;
     int viewport_width = 0;
@@ -57,8 +63,10 @@ void update(State& state, Msg msg) {
         else if constexpr (std::same_as<T, Decrement>)  state.count -= 1;
         else if constexpr (std::same_as<T, NameChanged>) state.name = m.text;
         else if constexpr (std::same_as<T, ImeChanged>) state.ime_sample = m.text;
+        else if constexpr (std::same_as<T, ValidationChanged>) state.validation_sample = m.text;
         else if constexpr (std::same_as<T, ToggleAgreed>) state.agreed = !state.agreed;
         else if constexpr (std::same_as<T, ToggleNotifications>) state.notifications = !state.notifications;
+        else if constexpr (std::same_as<T, ToggleDialog>) state.dialog_open = !state.dialog_open;
         else if constexpr (std::same_as<T, SetChoice>)  state.choice = m.value;
         else if constexpr (std::same_as<T, SelectTab>)  state.selected_tab = m.value;
         else if constexpr (std::same_as<T, Resized>) {
@@ -82,6 +90,7 @@ void update(State& state, Msg msg) {
 
 static Msg on_name_changed(std::string s) { return NameChanged{std::move(s)}; }
 static Msg on_ime_changed(std::string s) { return ImeChanged{std::move(s)}; }
+static Msg on_validation_changed(std::string s) { return ValidationChanged{std::move(s)}; }
 
 static constexpr char kLocalImageAsset[] = "showcase-local.bmp";
 static constexpr char kRemoteImageAsset[] = "showcase.bmp";
@@ -211,6 +220,70 @@ static void render_expectation_card(phenotype::str title, phenotype::str body) {
     });
 }
 
+static void render_paint_command_showcase() {
+    using namespace phenotype;
+
+    layout::card([&] {
+        widget::text("Paint Command Showcase");
+        layout::spacer(6);
+        widget::text("This canvas intentionally touches every advanced Painter command so backend regressions can be spotted from one runnable scene.");
+        layout::spacer(8);
+        widget::canvas(320.0f, 210.0f, [](Painter& painter) {
+            constexpr float pi = 3.1415926535f;
+            Color ink{15, 23, 42, 255};
+            Color blue{59, 130, 246, 220};
+            Color cyan{6, 182, 212, 190};
+            Color green{34, 197, 94, 210};
+            Color amber{245, 158, 11, 215};
+            Color rose{244, 63, 94, 190};
+            Color purple{147, 51, 234, 190};
+            Color grid{203, 213, 225, 130};
+
+            PaintRect rects[] = {
+                {12.0f, 14.0f, 48.0f, 28.0f, Color{219, 234, 254, 255}},
+                {66.0f, 14.0f, 48.0f, 28.0f, Color{224, 242, 254, 255}},
+                {120.0f, 14.0f, 48.0f, 28.0f, Color{220, 252, 231, 255}},
+            };
+            painter.fill_rects(rects, 3);
+
+            PaintQuad quads[] = {
+                {18.0f, 64.0f, 72.0f, 54.0f, 84.0f, 98.0f, 26.0f, 108.0f, blue},
+                {92.0f, 58.0f, 142.0f, 70.0f, 132.0f, 112.0f, 84.0f, 96.0f, cyan},
+            };
+            painter.fill_quads(quads, 2);
+
+            painter.line(12.0f, 132.0f, 168.0f, 132.0f, 2.0f, ink);
+            painter.arc(54.0f, 168.0f, 26.0f, 0.15f * pi, 1.75f * pi, 4.0f, amber);
+
+            PathBuilder stroke_path;
+            stroke_path.move_to(184.0f, 38.0f);
+            stroke_path.cubic_to(220.0f, 2.0f, 270.0f, 78.0f, 304.0f, 38.0f);
+            painter.stroke_path(stroke_path, 3.0f, rose);
+
+            PathBuilder fill_path;
+            fill_path.move_to(202.0f, 78.0f);
+            fill_path.line_to(288.0f, 78.0f);
+            fill_path.quad_to(306.0f, 122.0f, 244.0f, 134.0f);
+            fill_path.line_to(190.0f, 112.0f);
+            fill_path.close();
+            painter.fill_path(fill_path, purple);
+
+            painter.push_clip(188.0f, 150.0f, 104.0f, 40.0f);
+            for (int i = 0; i < 7; ++i) {
+                auto x = 170.0f + static_cast<float>(i) * 20.0f;
+                painter.line(x, 148.0f, x + 56.0f, 194.0f, 3.0f, grid);
+            }
+            painter.text(198.0f, 162.0f, "clipped", 7, 14.0f, ink);
+            painter.pop_clip();
+
+            std::string footer = "FillRects / FillQuads / Line / Arc / Path / FillPath / Clip / Text";
+            painter.text(12.0f, 188.0f,
+                         footer.c_str(), static_cast<unsigned int>(footer.size()),
+                         11.0f, ink);
+        });
+    });
+}
+
 void view(State const& state) {
     using namespace phenotype;
     auto input_debug = phenotype::diag::input_debug_snapshot();
@@ -334,6 +407,110 @@ void view(State const& state) {
             layout::spacer(6);
             widget::progress_indeterminate(280.0f);
         });
+
+        layout::spacer(12);
+
+        layout::card([&] {
+            widget::text("Control States");
+            layout::spacer(6);
+            widget::text("Disabled, validation, and determinate progress states are included here so the compact native showcase covers more than the happy path.");
+            layout::spacer(8);
+            layout::row([&] {
+                widget::button<Msg>("Primary action", Increment{}, ButtonVariant::Primary);
+                widget::button<Msg>("Disabled action", Increment{}, ButtonVariant::Default, true);
+            });
+            layout::spacer(10);
+            widget::text_field<Msg>("Validation error sample", state.validation_sample, on_validation_changed, true);
+            layout::spacer(8);
+            widget::text_field<Msg>("Disabled field", std::string("Locked value"), on_name_changed, false, true);
+            layout::spacer(10);
+            widget::text("Determinate progress");
+            layout::spacer(6);
+            widget::progress(state.agreed ? 0.72f : 0.35f, 280.0f);
+            layout::spacer(6);
+            widget::text(std::string("Progress source: ")
+                + (state.agreed ? "agreement enabled" : "agreement disabled"));
+        });
+
+        layout::spacer(12);
+
+        layout::material_surface(MaterialKind::Regular, [&] {
+            widget::text("Material Surface");
+            layout::spacer(6);
+            widget::text("Regular material is represented in semantic debug output; macOS samples the captured backdrop while unsupported backends use the translucent fallback.");
+            layout::spacer(8);
+            layout::row([&] {
+                widget::button<Msg>("Glass action", Increment{}, ButtonVariant::Primary);
+                widget::button<Msg>("Secondary", Decrement{});
+            });
+            layout::spacer(8);
+            widget::code("layout::material_surface(MaterialKind::Regular, builder);");
+        });
+
+        layout::spacer(12);
+
+        layout::card([&] {
+            widget::text("Layout Primitives");
+            layout::spacer(6);
+            widget::text("This section exercises layout helpers that previously existed only in tests or larger product examples.");
+            layout::spacer(10);
+            widget::text("Weighted row and box");
+            layout::spacer(6);
+            layout::row([&] {
+                layout::weighted(2.0f, [&] {
+                    layout::box([&] {
+                        widget::code("Weight 2\nexpanded track");
+                    });
+                });
+                layout::weighted(1.0f, [&] {
+                    layout::box([&] {
+                        widget::code("Weight 1\nside track");
+                    });
+                });
+            });
+            layout::spacer(12);
+            widget::text("Padded sized box");
+            layout::spacer(6);
+            layout::padded(SpaceToken::Sm, [&] {
+                layout::sized_box(260.0f, [&] {
+                    layout::box([&] {
+                        widget::code("layout::padded -> sized_box -> box");
+                    });
+                });
+            });
+            layout::spacer(12);
+            widget::text("Nested scroll view");
+            layout::spacer(6);
+            layout::scroll_view(112.0f, [&] {
+                for (int i = 0; i < 8; ++i) {
+                    widget::text(std::string("Scrollable row ") + std::to_string(i + 1));
+                    layout::spacer(4);
+                }
+            }, SpaceToken::Sm);
+            layout::spacer(12);
+            layout::accordion("Accordion details", [&] {
+                widget::text("This body is emitted only when the accordion is expanded.");
+                layout::spacer(6);
+                widget::code("layout::accordion(\"Accordion details\", builder);");
+            });
+            layout::spacer(12);
+            auto dialog_label = state.dialog_open
+                ? std::string("Close dialog overlay")
+                : std::string("Open dialog overlay");
+            widget::button<Msg>(dialog_label, ToggleDialog{});
+        });
+
+        if (state.dialog_open) {
+            layout::dialog([&] {
+                widget::text("Dialog Overlay");
+                widget::text("This modal is rendered through layout::dialog on top of the main tree.");
+                widget::button<Msg>("Close", ToggleDialog{}, ButtonVariant::Primary);
+            }, 360.0f, 72);
+        }
+
+        layout::spacer(12);
+
+        render_paint_command_showcase();
 
         layout::spacer(12);
 

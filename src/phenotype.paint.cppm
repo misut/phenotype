@@ -63,6 +63,7 @@ inline char const* opcode_name(Cmd c) noexcept {
         case Cmd::FillPath:   return "FillPath";
         case Cmd::FillQuads:  return "FillQuads";
         case Cmd::FillRects:  return "FillRects";
+        case Cmd::MaterialRect: return "MaterialRect";
     }
     return "Unknown";
 }
@@ -324,6 +325,22 @@ void emit_round_rect(R& r, float x, float y, float w, float h, float radius, Col
     detail::write_f32(r, w); detail::write_f32(r, h);
     detail::write_f32(r, radius);
     detail::write_u32(r, c.packed());
+}
+
+template <render_backend R>
+void emit_material_rect(R& r, float x, float y, float w, float h,
+                        float radius, MaterialStyle const& material) {
+    if (material.kind == MaterialKind::None || material.tint.a == 0)
+        return;
+    if (!detail::ensure(r, 40, Cmd::MaterialRect)) return;
+    detail::write_u32(r, static_cast<unsigned int>(Cmd::MaterialRect));
+    detail::write_f32(r, x); detail::write_f32(r, y);
+    detail::write_f32(r, w); detail::write_f32(r, h);
+    detail::write_f32(r, radius);
+    detail::write_u32(r, static_cast<unsigned int>(material.kind));
+    detail::write_f32(r, material.opacity);
+    detail::write_f32(r, material.blur_radius);
+    detail::write_u32(r, material.tint.packed());
 }
 
 // Pack a FontSpec's mono / weight / italic bits into the wire-format
@@ -878,7 +895,10 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
 
     Color bg = (is_hovered && node.hover_background.a > 0)
         ? node.hover_background : node.background;
-    if (bg.a > 0) {
+    if (node.material.kind != MaterialKind::None) {
+        emit_material_rect(r, draw_x, draw_y, node.width, node.height,
+                           node.border_radius, node.material);
+    } else if (bg.a > 0) {
         if (node.border_radius > 0)
             emit_round_rect(r, draw_x, draw_y, node.width, node.height,
                             node.border_radius, bg);

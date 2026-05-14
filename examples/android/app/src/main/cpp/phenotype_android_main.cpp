@@ -7,6 +7,9 @@
 #include <game-activity/native_app_glue/android_native_app_glue.h>
 
 #include <android/log.h>
+#include <sys/system_properties.h>
+
+#include <string>
 
 extern "C" {
 // Stage 4 adds a JNI-backed text pipeline; phenotype needs the process
@@ -25,6 +28,8 @@ void phenotype_android_dispatch_pointer(float x, float y, int action);
 void phenotype_android_dispatch_key(int android_keycode, int action, int mods);
 void phenotype_android_dispatch_char(unsigned int codepoint);
 void phenotype_android_dispatch_scroll(double dy);
+int phenotype_android_write_artifact_bundle(char const* directory,
+                                            char const* reason);
 char const* phenotype_android_startup_message(void);
 }
 
@@ -34,6 +39,60 @@ constexpr char const* TAG = "phenotype";
 
 bool g_surface_ready = false;
 bool g_app_started = false;
+bool g_contract_artifact_attempted = false;
+int g_rendered_frames = 0;
+
+bool property_enabled(char const* name) {
+    char value[PROP_VALUE_MAX] = {};
+    int len = __system_property_get(name, value);
+    return len > 0 && value[0] != '\0' && value[0] != '0';
+}
+
+std::string property_value(char const* name, char const* fallback) {
+    char value[PROP_VALUE_MAX] = {};
+    int len = __system_property_get(name, value);
+    if (len <= 0 || value[0] == '\0') return fallback ? fallback : "";
+    return value;
+}
+
+std::string default_contract_dir(android_app* app) {
+    char const* base = nullptr;
+    if (app && app->activity) base = app->activity->internalDataPath;
+    if (!base || base[0] == '\0') base = "/data/local/tmp";
+    std::string out = base;
+    out += "/phenotype-contract";
+    return out;
+}
+
+void maybe_write_contract_artifact(android_app* app) {
+    if (g_contract_artifact_attempted) return;
+    if (!property_enabled("debug.phenotype.contract")) return;
+    if (g_rendered_frames < 3) return;
+
+    g_contract_artifact_attempted = true;
+    auto directory = property_value(
+        "debug.phenotype.dir",
+        default_contract_dir(app).c_str());
+    auto reason = property_value(
+        "debug.phenotype.reason",
+        "android-contract");
+    int rc = phenotype_android_write_artifact_bundle(
+        directory.c_str(),
+        reason.c_str());
+    if (rc == 0) {
+        __android_log_print(
+            ANDROID_LOG_INFO,
+            TAG,
+            "contract artifact written: %s",
+            directory.c_str());
+    } else {
+        __android_log_print(
+            ANDROID_LOG_ERROR,
+            TAG,
+            "contract artifact failed: %s",
+            directory.c_str());
+    }
+}
 
 void handle_cmd(android_app* app, int32_t cmd) {
     switch (cmd) {
@@ -154,6 +213,8 @@ extern "C" void android_main(android_app* app) {
         }
 
         phenotype_android_draw_frame();
+        ++g_rendered_frames;
+        maybe_write_contract_artifact(app);
     }
 
     phenotype_android_detach_surface();
