@@ -1698,6 +1698,15 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 likely_layer=likely_layer,
                 hint="Non-fallback plans should not carry stale fallback metadata.",
                 record_success=False)
+            report.check(
+                "material non-fallback reason is empty",
+                fallback_reason == "",
+                path=f"{plan_path}.fallback_reason",
+                expected="empty string",
+                actual=fallback_reason,
+                likely_layer=likely_layer,
+                hint="Non-fallback plans should not carry stale fallback metadata.",
+                record_success=False)
         if plan.get("fallback") is True:
             summary["fallback"] += 1
         if plan.get("backdrop_sampling") is True:

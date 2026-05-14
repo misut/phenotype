@@ -158,7 +158,10 @@ quality/capability downgrade losing its LLM-actionable reason string.
 The plan schema check also treats `primary_pass` as a runtime contract. Its
 sample-tap count must match the plan, and the backend `passes[]` list must
 include the same pass entry. When this fails, inspect the pass serializer before
-changing material policy.
+changing material policy. Fallback metadata is similarly strict: fallback plans
+must report a non-empty `fallback_reason`, while non-fallback plans must leave
+`fallback_reason` empty so stale downgrade explanations cannot leak into glass
+artifacts.
 The verifier also treats material kind, fallback path, and material pass names
 as fixed vocabularies. Current fallback paths are `none`, `no-material`,
 `invalid-geometry`, `unsupported-backend`, `no-backdrop-source`,
