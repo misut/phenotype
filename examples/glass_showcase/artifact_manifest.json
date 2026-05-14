@@ -74,6 +74,24 @@
       "rect": [0.26, 0.58, 0.48, 0.09],
       "min_luma_delta": 8.0,
       "min_unique_colors": 4
+    },
+    {
+      "name": "visible-blur-smoothness",
+      "rect": [0.64, 0.655, 0.10, 0.015],
+      "min_luma_delta": 12.0,
+      "min_unique_colors": 4
+    }
+  ],
+  "pixel_region_metrics": [
+    {
+      "region": "visible-blur-smoothness",
+      "metric": "edge_energy",
+      "lte": 6.0
+    },
+    {
+      "region": "visible-blur-smoothness",
+      "metric": "luma_stddev",
+      "lte": 35.0
     }
   ]
 }
