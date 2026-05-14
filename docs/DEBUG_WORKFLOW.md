@@ -148,6 +148,14 @@ runtime stayed within the pure plan's performance budget. Supported limits are
 `require_deterministic_fallback` require those booleans to hold for every
 resolved plan.
 
+Set `require_material_semantic_runtime_match` when a gate must prove that the
+semantic material nodes and the backend runtime material plans describe the
+same material surfaces. The verifier compares the material node count and
+material kind map from `debug.semantic_tree` against
+`debug.platform_runtime.details.renderer.material_plans#summary`; mismatches
+point at the material contract layer so the likely break is not confused with a
+pure pixel-capture failure.
+
 ```sh
 tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
   --expect-platform macos \
