@@ -318,6 +318,20 @@ inline id create_appkit_window(int width,
 inline id g_active_appkit_window = nullptr;
 inline NativeSurfaceDescriptor* g_active_appkit_surface = nullptr;
 
+inline void prime_appkit_window_ordering(id app) {
+    if (!app)
+        return;
+    // AppKit does additional WindowServer ordering work inside NSApplication::run.
+    // Prime it once, then return to phenotype's deterministic event pump.
+    objc_send<void>(
+        app,
+        sel("performSelector:withObject:afterDelay:"),
+        sel("stop:"),
+        nullptr,
+        0.01);
+    objc_send<void>(app, sel("run"));
+}
+
 inline void appkit_set_hover_cursor(bool pointing) {
     id cursor = objc_send<id>(
         class_id("NSCursor"),
@@ -421,8 +435,9 @@ int run_app_with_macos_platform(platform_api const& platform,
         surface.content_scale);
     run_host<State, Msg>(host, std::move(view), std::move(update));
 
-    objc_send<void>(window, sel("makeKeyAndOrderFront:"), nullptr);
     objc_send<void>(app, sel("activateIgnoringOtherApps:"), static_cast<signed char>(1));
+    objc_send<void>(window, sel("makeKeyAndOrderFront:"), nullptr);
+    prime_appkit_window_ordering(app);
 
     auto const* artifact_dir = std::getenv("PHENOTYPE_ARTIFACT_DIR");
     bool const artifact_requested = artifact_dir && artifact_dir[0] != '\0';
