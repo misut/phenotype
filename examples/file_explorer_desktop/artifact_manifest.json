@@ -1,0 +1,62 @@
+{
+  "name": "file_explorer_desktop_startup",
+  "description": "Startup artifact contract for the Finder-style desktop file explorer example.",
+  "expect_platform": "macos",
+  "require_frame": true,
+  "require_labels": [
+    "Phenotype Finder",
+    "Locations",
+    "Files",
+    "Preview",
+    "Create File",
+    "README.txt"
+  ],
+  "require_roles": [
+    "button",
+    "material",
+    "text_field"
+  ],
+  "require_material_kinds": [
+    "clear",
+    "thin",
+    "regular",
+    "thick"
+  ],
+  "require_material_plans": true,
+  "require_material_semantic_runtime_match": true,
+  "require_capabilities": [
+    "material_backdrop_blur"
+  ],
+  "require_runtime_details": [
+    {
+      "path": "renderer.material_pipeline_ready",
+      "equals": true
+    },
+    {
+      "path": "renderer.material_backdrop_source_ready",
+      "equals": true
+    }
+  ],
+  "require_material_resource_bounds": {
+    "max_plan_blur_radius_lte": 36.0,
+    "max_plan_sample_taps_lte": 25,
+    "max_budget_blur_radius_lte": 36.0,
+    "max_sample_taps_lte": 25,
+    "max_pass_count_lte": 1,
+    "max_backdrop_pixels_lte": 4000000,
+    "max_pass_texture_copy_pixels_lte": 4000000,
+    "total_runtime_passes_gte": 1,
+    "active_runtime_passes_gte": 1,
+    "backdrop_runtime_passes_gte": 1,
+    "require_bounded_texture_copy": true,
+    "require_deterministic_fallback": true
+  },
+  "require_material_quality_policy": {
+    "require_backdrop_sampling_allowed": true,
+    "require_noise_allowed": true,
+    "require_shadow_allowed": true,
+    "max_blur_radius_lte": 36.0,
+    "max_sample_taps_lte": 25,
+    "max_backdrop_pixels_lte": 4000000
+  }
+}

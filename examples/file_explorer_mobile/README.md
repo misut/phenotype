@@ -1,0 +1,29 @@
+# Mobile File Explorer Example
+
+This example exercises the same sandboxed file model as the desktop file
+explorer, but presents it as a compact mobile workflow with Browse, Preview,
+and Create tabs plus a location strip.
+
+All filesystem writes stay inside an example-owned temp directory named
+`phenotype-file-explorer-mobile`. The example never points at the user's real
+home folder.
+
+## Run
+
+```sh
+cd examples/file_explorer_mobile
+mise exec -- exon build
+mise exec -- exon run
+```
+
+## Artifact Gate
+
+From the repo root:
+
+```sh
+tools/verify_file_explorer_artifacts.sh
+```
+
+The checked-in manifest requires stable labels and roles, every public
+`MaterialKind`, resolved material plans, semantic/runtime material parity, and
+bounded material resource budgets.

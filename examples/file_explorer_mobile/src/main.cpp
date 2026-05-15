@@ -1,0 +1,254 @@
+#include <concepts>
+#include <cstddef>
+#include <string>
+#include <type_traits>
+#include <utility>
+#include <variant>
+#include <vector>
+
+#include "../../file_explorer_shared/file_explorer_model.hpp"
+
+import phenotype;
+import phenotype.native;
+
+namespace {
+
+struct SelectLocation { std::string id; };
+struct SelectEntry { std::string name; };
+struct SearchChanged { std::string text; };
+struct DraftNameChanged { std::string text; };
+struct DraftBodyChanged { std::string text; };
+struct SelectTab { std::size_t value; };
+struct CreateFile {};
+struct DeleteSelected {};
+struct GoUp {};
+struct ResetDemo {};
+struct Resized { int width; int height; float scale; };
+
+using Msg = std::variant<
+    SelectLocation,
+    SelectEntry,
+    SearchChanged,
+    DraftNameChanged,
+    DraftBodyChanged,
+    SelectTab,
+    CreateFile,
+    DeleteSelected,
+    GoUp,
+    ResetDemo,
+    Resized>;
+
+struct State {
+    file_explorer_demo::ExplorerState explorer =
+        file_explorer_demo::make_state("mobile");
+};
+
+Msg on_search_changed(std::string text) {
+    return SearchChanged{std::move(text)};
+}
+
+Msg on_draft_name_changed(std::string text) {
+    return DraftNameChanged{std::move(text)};
+}
+
+Msg on_draft_body_changed(std::string text) {
+    return DraftBodyChanged{std::move(text)};
+}
+
+void update(State& state, Msg msg) {
+    auto& explorer = state.explorer;
+    std::visit([&](auto const& m) {
+        using T = std::decay_t<decltype(m)>;
+        if constexpr (std::same_as<T, SelectLocation>) {
+            file_explorer_demo::select_location(explorer, m.id);
+            explorer.mobile_tab = 0;
+        } else if constexpr (std::same_as<T, SelectEntry>) {
+            file_explorer_demo::select_entry(explorer, m.name);
+            if (!explorer.selected_name.empty())
+                explorer.mobile_tab = 1;
+        } else if constexpr (std::same_as<T, SearchChanged>) {
+            explorer.search = m.text;
+            explorer.status = explorer.search.empty()
+                ? "Filter cleared."
+                : "Filtering by " + explorer.search;
+        } else if constexpr (std::same_as<T, DraftNameChanged>) {
+            explorer.draft_name = m.text;
+        } else if constexpr (std::same_as<T, DraftBodyChanged>) {
+            explorer.draft_body = m.text;
+        } else if constexpr (std::same_as<T, SelectTab>) {
+            explorer.mobile_tab = m.value;
+        } else if constexpr (std::same_as<T, CreateFile>) {
+            file_explorer_demo::create_file(explorer);
+            explorer.mobile_tab = 1;
+        } else if constexpr (std::same_as<T, DeleteSelected>) {
+            file_explorer_demo::delete_selected(explorer);
+            explorer.mobile_tab = 0;
+        } else if constexpr (std::same_as<T, GoUp>) {
+            file_explorer_demo::go_up(explorer);
+            explorer.mobile_tab = 0;
+        } else if constexpr (std::same_as<T, ResetDemo>) {
+            file_explorer_demo::reset_demo_tree(explorer, "mobile");
+            explorer.mobile_tab = 0;
+        } else if constexpr (std::same_as<T, Resized>) {
+            explorer.viewport_width = m.width;
+            explorer.viewport_height = m.height;
+            explorer.viewport_scale = m.scale;
+        }
+    }, msg);
+}
+
+void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
+    using namespace phenotype;
+    auto const& explorer = state.explorer;
+    layout::material_surface(MaterialKind::Clear, [&] {
+        widget::text("Files");
+        widget::text(snap.relative_location, TextSize::Small, TextColor::Muted);
+        layout::spacer(8);
+        widget::text_field<Msg>("Search", explorer.search, on_search_changed);
+        layout::spacer(8);
+        std::vector<phenotype::str> tabs;
+        tabs.emplace_back("Browse", 6u);
+        tabs.emplace_back("Preview", 7u);
+        tabs.emplace_back("Create", 6u);
+        widget::tabs<Msg>(tabs, explorer.mobile_tab, [](std::size_t index) -> Msg {
+            return SelectTab{index};
+        });
+    }, SpaceToken::Md, SpaceToken::Sm);
+}
+
+void location_strip() {
+    using namespace phenotype;
+    layout::material_surface(MaterialKind::Thin, [&] {
+        layout::row([&] {
+            widget::button<Msg>("Root", SelectLocation{"root"});
+            widget::button<Msg>("Docs", SelectLocation{"documents"});
+            widget::button<Msg>("Pics", SelectLocation{"pictures"});
+            widget::button<Msg>("Shared", SelectLocation{"shared"});
+        }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
+    }, SpaceToken::Sm, SpaceToken::Xs);
+}
+
+void browse_tab(file_explorer_demo::Snapshot const& snap) {
+    using namespace phenotype;
+    layout::material_surface(MaterialKind::Regular, [&] {
+        layout::row([&] {
+            layout::weighted(1.0f, [&] {
+                std::string summary = std::to_string(snap.entries.size()) + " items";
+                widget::text(summary, TextSize::Small, TextColor::Muted);
+            });
+            widget::button<Msg>("Up", GoUp{});
+        });
+        layout::spacer(8);
+        layout::scroll_view(430.0f, [&] {
+            if (snap.entries.empty()) {
+                widget::text("No matching files.");
+                return;
+            }
+            for (auto const& entry : snap.entries) {
+                layout::material_surface(
+                    entry.folder ? MaterialKind::Clear : MaterialKind::Thin,
+                    [&] {
+                        widget::button<Msg>(
+                            file_explorer_demo::entry_label(entry),
+                            SelectEntry{entry.name},
+                            entry.folder
+                                ? ButtonVariant::Default
+                                : ButtonVariant::Primary);
+                        widget::text(
+                            entry.folder
+                                ? "Folder"
+                                : file_explorer_demo::format_size(entry.size),
+                            TextSize::Small,
+                            TextColor::Muted);
+                    },
+                    SpaceToken::Sm,
+                    SpaceToken::Xs);
+            }
+        }, SpaceToken::Sm);
+    }, SpaceToken::Md, SpaceToken::Sm);
+}
+
+void preview_tab(
+        State const& state,
+        file_explorer_demo::Snapshot const& snap) {
+    using namespace phenotype;
+    auto const& explorer = state.explorer;
+    layout::material_surface(MaterialKind::Thick, [&] {
+        widget::text("Preview");
+        layout::spacer(4);
+        if (snap.has_selection) {
+            widget::text(snap.selected.name);
+            widget::text(file_explorer_demo::format_size(snap.selected.size),
+                         TextSize::Small,
+                         TextColor::Muted);
+        } else {
+            widget::text("Select a file from Browse.");
+        }
+        layout::spacer(8);
+        widget::code(snap.preview);
+        layout::spacer(12);
+        widget::button<Msg>("Delete File", DeleteSelected{});
+        layout::spacer(8);
+        widget::text(explorer.status, TextSize::Small, TextColor::Muted);
+    }, SpaceToken::Md, SpaceToken::Sm);
+}
+
+void create_tab(State const& state) {
+    using namespace phenotype;
+    auto const& explorer = state.explorer;
+    layout::material_surface(MaterialKind::Regular, [&] {
+        widget::text("Create File");
+        widget::text("Files are written only inside the demo root.",
+                     TextSize::Small,
+                     TextColor::Muted);
+        layout::spacer(8);
+        widget::text_field<Msg>("File name", explorer.draft_name, on_draft_name_changed);
+        layout::spacer(8);
+        widget::text_field<Msg>("Contents", explorer.draft_body, on_draft_body_changed);
+        layout::spacer(10);
+        widget::button<Msg>("Create", CreateFile{}, ButtonVariant::Primary);
+        layout::spacer(6);
+        widget::button<Msg>("Reset Demo Files", ResetDemo{});
+    }, SpaceToken::Md, SpaceToken::Sm);
+}
+
+void view(State const& state) {
+    using namespace phenotype;
+    auto snap = file_explorer_demo::snapshot(state.explorer);
+    layout::padded(SpaceToken::Md, [&] {
+        layout::column([&] {
+            top_bar(state, snap);
+            location_strip();
+            if (state.explorer.mobile_tab == 0) {
+                browse_tab(snap);
+            } else if (state.explorer.mobile_tab == 1) {
+                preview_tab(state, snap);
+            } else {
+                create_tab(state);
+            }
+            layout::material_surface(MaterialKind::Thick, [&] {
+                widget::text("Status");
+                std::string detail = "Status: " + state.explorer.status;
+                detail += "\nViewport: ";
+                detail += std::to_string(state.explorer.viewport_width);
+                detail += " x ";
+                detail += std::to_string(state.explorer.viewport_height);
+                widget::code(detail);
+            }, SpaceToken::Sm, SpaceToken::Xs);
+        }, SpaceToken::Sm);
+    });
+}
+
+} // namespace
+
+int main() {
+    return phenotype::native::run_app<State, Msg>(
+        390,
+        780,
+        "phenotype file explorer mobile",
+        view,
+        update,
+        [](int width, int height, float scale) -> Msg {
+            return Resized{width, height, scale};
+        });
+}

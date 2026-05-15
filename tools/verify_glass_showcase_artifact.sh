@@ -22,10 +22,10 @@ run_exon() {
 run_uv_python() {
   if [[ -n "${UV:-}" ]]; then
     "$UV" run --frozen python "$@"
-  elif command -v uv >/dev/null 2>&1; then
-    uv run --frozen python "$@"
   elif command -v mise >/dev/null 2>&1; then
     mise exec -- uv run --frozen python "$@"
+  elif command -v uv >/dev/null 2>&1; then
+    uv run --frozen python "$@"
   else
     echo "error: uv is required; run through 'mise exec -- uv run ...'" >&2
     exit 1
