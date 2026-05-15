@@ -102,7 +102,7 @@ ALLOWED_MATERIAL_LUMINANCE_CURVES = {
     "fallback-flat",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 8
+MATERIAL_PLAN_CONTRACT_VERSION = 9
 
 
 def suggested_action_for_failure(
@@ -135,6 +135,10 @@ def suggested_action_for_failure(
         return (
             "Inspect plan_material_surface, the resolved MaterialPlan fields, "
             "and the runtime material plan serializer for this plan-level contract.")
+    if likely_layer == "material-shape":
+        return (
+            "Inspect MaterialPlan.shape, MaterialGeometry analysis, and the "
+            "backend radius upload path for stale shape metadata.")
     if likely_layer == "material-contract":
         return (
             "Inspect semantic material nodes, MaterialRect command emission, "
@@ -437,6 +441,7 @@ def material_failure_context(
             material_plan_summary.get("roles"))
         material_contract["plan_container"] = (
             material_plan_summary.get("container"))
+        material_contract["plan_shape"] = material_plan_summary.get("shape")
         material_contract["fallback_paths"] = material_plan_summary.get(
             "fallback_paths")
         material_contract["pass_executors"] = material_plan_summary.get(
@@ -925,6 +930,17 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "container_unioned",
         "container_interactive",
         "container_morph_transitions",
+        "shape_valid",
+        "shape_rounded",
+        "shape_radius_clamped",
+        "shape_max_surface_area_lte",
+        "shape_max_surface_area_gte",
+        "shape_max_effective_radius_lte",
+        "shape_max_effective_radius_gte",
+        "shape_max_radius_limit_lte",
+        "shape_max_radius_limit_gte",
+        "shape_max_normalized_radius_lte",
+        "shape_max_normalized_radius_gte",
         "pass_names",
         "pass_executors",
         "sampling_kernels",
@@ -978,12 +994,28 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "container_unioned",
             "container_interactive",
             "container_morph_transitions",
+            "shape_valid",
+            "shape_rounded",
+            "shape_radius_clamped",
             "verifier_require_backdrop_source",
             "verifier_require_container_identity",
             "verifier_require_container_morph_contract",
             "verifier_require_edge_highlight"):
         if field in value:
             spec[field] = non_negative_int(
+                value[field],
+                f"require_material_plan_summary.{field}")
+    for field in (
+            "shape_max_surface_area_lte",
+            "shape_max_surface_area_gte",
+            "shape_max_effective_radius_lte",
+            "shape_max_effective_radius_gte",
+            "shape_max_radius_limit_lte",
+            "shape_max_radius_limit_gte",
+            "shape_max_normalized_radius_lte",
+            "shape_max_normalized_radius_gte"):
+        if field in value:
+            spec[field] = non_negative_number(
                 value[field],
                 f"require_material_plan_summary.{field}")
     map_vocabularies = {
@@ -1547,6 +1579,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "container",
     "command_descriptor",
     "geometry",
+    "shape",
     "render_target",
     "decision_trace",
     "opacity",
@@ -1603,6 +1636,15 @@ MATERIAL_COMMAND_DESCRIPTOR_NUMERIC_FIELDS = (
 )
 
 MATERIAL_GEOMETRY_FIELDS = ("x", "y", "w", "h", "radius")
+MATERIAL_SHAPE_BOOL_FIELDS = ("valid", "rounded", "radius_clamped")
+MATERIAL_SHAPE_NUMERIC_FIELDS = (
+    "surface_area",
+    "min_extent",
+    "max_extent",
+    "radius_limit",
+    "effective_radius",
+    "normalized_radius",
+)
 MATERIAL_RENDER_TARGET_INT_FIELDS = ("width", "height", "pixel_count")
 MATERIAL_RENDER_TARGET_BOOL_FIELDS = ("ready", "within_backdrop_budget")
 MATERIAL_DECISION_TRACE_BOOL_FIELDS = (
@@ -1707,6 +1749,15 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "interactive": 0,
             "morph_transitions": 0,
             "max_spacing": 0.0,
+        },
+        "shape": {
+            "valid": 0,
+            "rounded": 0,
+            "radius_clamped": 0,
+            "max_surface_area": 0.0,
+            "max_effective_radius": 0.0,
+            "max_radius_limit": 0.0,
+            "max_normalized_radius": 0.0,
         },
         "pass_names": {},
         "pass_executors": {},
@@ -2467,15 +2518,126 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             plan_path,
             likely_layer=likely_layer,
             hint="MaterialPlan.geometry should be serialized from the pure request.")
+        geometry_numbers: JsonObject = {}
         if geometry is not None:
             for key in MATERIAL_GEOMETRY_FIELDS:
-                check_number_field(
+                number = check_number_field(
                     report,
                     geometry,
                     key,
                     f"{plan_path}.geometry",
                     likely_layer=likely_layer,
                     hint="Check MaterialPlan geometry serialization.")
+                if number is not None:
+                    geometry_numbers[key] = float(number)
+
+        shape = check_object_field(
+            report,
+            plan,
+            "shape",
+            plan_path,
+            likely_layer="material-shape",
+            hint=(
+                "MaterialPlan.shape should expose the pure geometry "
+                "analysis and effective radius executed by backends."))
+        if shape is not None:
+            shape_summary = summary["shape"]
+            shape_bools: JsonObject = {}
+            shape_numbers: JsonObject = {}
+            for key in MATERIAL_SHAPE_BOOL_FIELDS:
+                item = check_bool_field(
+                    report,
+                    shape,
+                    key,
+                    f"{plan_path}.shape",
+                    likely_layer="material-shape",
+                    hint="Check MaterialShapeAnalysis boolean serialization.")
+                if item is not None:
+                    shape_bools[key] = item
+            for key in MATERIAL_SHAPE_NUMERIC_FIELDS:
+                number = check_number_field(
+                    report,
+                    shape,
+                    key,
+                    f"{plan_path}.shape",
+                    min_value=0.0,
+                    likely_layer="material-shape",
+                    hint="Check MaterialShapeAnalysis numeric serialization.")
+                if number is not None:
+                    shape_numbers[key] = float(number)
+            if shape_bools.get("valid"):
+                shape_summary["valid"] = int(shape_summary["valid"]) + 1
+            if shape_bools.get("rounded"):
+                shape_summary["rounded"] = int(shape_summary["rounded"]) + 1
+            if shape_bools.get("radius_clamped"):
+                shape_summary["radius_clamped"] = (
+                    int(shape_summary["radius_clamped"]) + 1)
+            for key, summary_key in (
+                    ("surface_area", "max_surface_area"),
+                    ("effective_radius", "max_effective_radius"),
+                    ("radius_limit", "max_radius_limit"),
+                    ("normalized_radius", "max_normalized_radius")):
+                if key in shape_numbers:
+                    shape_summary[summary_key] = max(
+                        float(shape_summary[summary_key]),
+                        shape_numbers[key])
+            if {"w", "h", "radius"} <= geometry_numbers.keys():
+                width = geometry_numbers["w"]
+                height = geometry_numbers["h"]
+                radius = geometry_numbers["radius"]
+                expected_valid = width > 0.0 and height > 0.0
+                expected_limit = min(width, height) * 0.5 if expected_valid else 0.0
+                expected_radius = min(max(radius, 0.0), expected_limit)
+                expected_normalized = (
+                    expected_radius / expected_limit
+                    if expected_limit > 0.0 else 0.0)
+                if "valid" in shape_bools:
+                    report.check(
+                        "material shape validity matches geometry",
+                        shape_bools["valid"] == expected_valid,
+                        path=f"{plan_path}.shape.valid",
+                        expected=expected_valid,
+                        actual=shape_bools["valid"],
+                        likely_layer="material-shape",
+                        hint=(
+                            "Keep MaterialShapeAnalysis.valid derived from "
+                            "MaterialGeometry width and height."))
+                if "effective_radius" in shape_numbers:
+                    report.check(
+                        "material shape effective radius matches geometry",
+                        abs(shape_numbers["effective_radius"]
+                            - expected_radius) <= 0.0001,
+                        path=f"{plan_path}.shape.effective_radius",
+                        expected=expected_radius,
+                        actual=shape_numbers["effective_radius"],
+                        likely_layer="material-shape",
+                        hint=(
+                            "Backends should consume MaterialPlan.shape."
+                            "effective_radius rather than raw geometry.radius."))
+                if "radius_limit" in shape_numbers:
+                    report.check(
+                        "material shape radius limit matches geometry",
+                        abs(shape_numbers["radius_limit"]
+                            - expected_limit) <= 0.0001,
+                        path=f"{plan_path}.shape.radius_limit",
+                        expected=expected_limit,
+                        actual=shape_numbers["radius_limit"],
+                        likely_layer="material-shape",
+                        hint=(
+                            "MaterialShapeAnalysis.radius_limit should be "
+                            "half of the smaller valid extent."))
+                if "normalized_radius" in shape_numbers:
+                    report.check(
+                        "material shape normalized radius matches geometry",
+                        abs(shape_numbers["normalized_radius"]
+                            - expected_normalized) <= 0.0001,
+                        path=f"{plan_path}.shape.normalized_radius",
+                        expected=expected_normalized,
+                        actual=shape_numbers["normalized_radius"],
+                        likely_layer="material-shape",
+                        hint=(
+                            "MaterialShapeAnalysis.normalized_radius should "
+                            "describe the executable radius within its limit."))
 
         render_target_pixel_count: int | None = None
         render_target = check_object_field(
@@ -3693,6 +3855,9 @@ def check_material_plan_summary_requirements(
             "container_unioned",
             "container_interactive",
             "container_morph_transitions",
+            "shape_valid",
+            "shape_rounded",
+            "shape_radius_clamped",
             "verifier_require_backdrop_source",
             "verifier_require_container_identity",
             "verifier_require_container_morph_contract",
@@ -3754,6 +3919,16 @@ def check_material_plan_summary_requirements(
                     nested_field = "unioned"
                 actual = container_summary.get(nested_field)
                 summary_path = f"{base_path}.container.{nested_field}"
+            elif field in (
+                    "shape_valid",
+                    "shape_rounded",
+                    "shape_radius_clamped"):
+                shape_summary = summary.get("shape")
+                if not isinstance(shape_summary, dict):
+                    shape_summary = {}
+                nested_field = field.removeprefix("shape_")
+                actual = shape_summary.get(nested_field)
+                summary_path = f"{base_path}.shape.{nested_field}"
             report.check(
                 f"material plan summary {field} matches",
                 actual == spec[field],
@@ -3762,6 +3937,36 @@ def check_material_plan_summary_requirements(
                 actual=actual,
                 likely_layer="platform-runtime",
                 hint="Inspect fallback_path and primary_pass for each material plan.")
+    shape_bounds = {
+        "shape_max_surface_area": "max_surface_area",
+        "shape_max_effective_radius": "max_effective_radius",
+        "shape_max_radius_limit": "max_radius_limit",
+        "shape_max_normalized_radius": "max_normalized_radius",
+    }
+    for prefix, nested_field in shape_bounds.items():
+        for suffix, comparator in (("_lte", "<="), ("_gte", ">=")):
+            field = f"{prefix}{suffix}"
+            if field not in spec:
+                continue
+            shape_summary = summary.get("shape")
+            if not isinstance(shape_summary, dict):
+                shape_summary = {}
+            actual = shape_summary.get(nested_field)
+            expected = spec[field]
+            condition = (
+                isinstance(actual, (int, float))
+                and not isinstance(actual, bool)
+                and (actual <= expected if comparator == "<=" else actual >= expected))
+            report.check(
+                f"material plan summary {field} bound",
+                condition,
+                path=f"{base_path}.shape.{nested_field}",
+                expected={comparator: expected},
+                actual=actual,
+                likely_layer="material-shape",
+                hint=(
+                    "Inspect MaterialPlan.shape and caller material surface "
+                    "geometry before changing pixel-region thresholds."))
     summary_field_hints = {
         "fallback_paths": (
             "material-plan",
@@ -4031,6 +4236,23 @@ def check_material_runtime_summary_contract(
         "morph_transition_count": summary.get("container", {}).get(
             "morph_transitions")
             if isinstance(summary.get("container"), dict) else None,
+        "valid_shape_count": summary.get("shape", {}).get("valid")
+            if isinstance(summary.get("shape"), dict) else None,
+        "rounded_shape_count": summary.get("shape", {}).get("rounded")
+            if isinstance(summary.get("shape"), dict) else None,
+        "radius_clamped_count": summary.get("shape", {}).get(
+            "radius_clamped")
+            if isinstance(summary.get("shape"), dict) else None,
+        "max_surface_area": summary.get("shape", {}).get("max_surface_area")
+            if isinstance(summary.get("shape"), dict) else None,
+        "max_effective_radius": summary.get("shape", {}).get(
+            "max_effective_radius")
+            if isinstance(summary.get("shape"), dict) else None,
+        "max_radius_limit": summary.get("shape", {}).get("max_radius_limit")
+            if isinstance(summary.get("shape"), dict) else None,
+        "max_normalized_radius": summary.get("shape", {}).get(
+            "max_normalized_radius")
+            if isinstance(summary.get("shape"), dict) else None,
         "unbounded_texture_copy": bounds.get("unbounded_texture_copy"),
         "non_deterministic_fallback": bounds.get("non_deterministic_fallback"),
     }

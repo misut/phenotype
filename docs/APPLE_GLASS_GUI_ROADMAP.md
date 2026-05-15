@@ -148,9 +148,10 @@ accepts immutable inputs:
 
 The returned `MaterialPlan` describes the source command descriptor, blur
 radius, tint, saturation, luminance curve, edge highlight, noise/dither,
-shadow, material container analysis, backdrop sampling, fallback path, debug
-metadata, resolved quality policy, pass expectations, sampling kernel,
-resource budgets, and verifier expectations. The plan also carries a
+shadow, material container analysis, pure shape analysis, backdrop sampling,
+fallback path, debug metadata, resolved quality policy, pass expectations,
+sampling kernel, resource budgets, and verifier expectations. The plan also
+carries a
 `luminance_curve` contract: sampled glass uses the backdrop-driven
 `adaptive-backdrop-luma` curve, while deterministic fallback uses
 `fallback-flat`.
@@ -164,6 +165,11 @@ Backdrops also degrade through an explicit
 sets an unusable blur/tap budget, and when the render target exceeds the
 resolved `max_backdrop_pixels` budget. Backends execute the plan; they do not
 re-decide policy.
+`MaterialPlan.shape` turns raw material geometry into the executable radius,
+area, radius limit, and clamp status consumed by native backends. This keeps
+Finder-style rounded chrome and mobile card surfaces debuggable from artifacts
+instead of relying on screenshots to infer whether a backend used the intended
+shape.
 `MaterialRect` commands carry the material node's surface role plus numeric
 optics/effects descriptor and material container identity into every backend as
 `MaterialCommandDescriptor`, so runtime plans no longer need to reconstruct
@@ -321,9 +327,9 @@ Done means `examples/` is a local acceptance suite, not just demos:
 |---|---|---|
 | Analyze current phenotype progress | This document, `README.md`, `docs/ARCHITECTURE.md`, `docs/DEBUG_WORKFLOW.md`, examples and tests | Keep updated as milestones land |
 | Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, material container/union identity, macOS sampled-backdrop rendering, resolved runtime fallback plans on Windows/Android, snapshot fallback contracts elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
-| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, startup bundle verifier, optional pixel-region checks, material/container plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
+| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, startup bundle verifier, optional pixel-region checks, material/container/shape plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
-| Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, backdrop pixels, bounded texture copies, deterministic fallback, backend `material_runtime_summary` counters cross-checked by the verifier, and backend `material_executor_summary` budget/timing telemetry guarded by artifact manifests | Keep tightening backend timing budgets as more native material renderers land |
+| Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, backdrop pixels, bounded texture copies, deterministic fallback, pure effective-radius shape bounds, backend `material_runtime_summary` counters cross-checked by the verifier, and backend `material_executor_summary` budget/timing telemetry guarded by artifact manifests | Keep tightening backend timing budgets as more native material renderers land |
 | Runnable examples under `examples/` | Native, glass showcase, desktop/mobile file explorer, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |
 | All phenotype features testable locally | `docs/EXAMPLES_COVERAGE.md` maps current examples/tests to public surfaces and artifact expectations; `tools/verify_artifact_bundle.py` validates startup bundles, optional pixel regions, exact material/container plan summaries, semantic/runtime material parity, material resource bounds, runtime numeric bounds, `examples/glass_showcase/artifact_manifest.json`, `examples/file_explorer_desktop/artifact_manifest.json`, `examples/file_explorer_mobile/artifact_manifest.json`, and `examples/android/artifact_manifest.json`; `tools/verify_glass_showcase_artifact.sh` wraps the glass gate; `tools/verify_file_explorer_artifacts.sh` wraps the local desktop/mobile file explorer gate; `mise run android:contract` wraps the Android device/emulator artifact route | Android CI wiring remains |
 

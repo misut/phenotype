@@ -88,7 +88,7 @@ constexpr float k_sidebar_width = 224.0f;
 constexpr float k_sidebar_row_width = 188.0f;
 constexpr float k_content_radius = 8.0f;
 constexpr float k_window_radius = 18.0f;
-constexpr float k_toolbar_group_radius = 22.0f;
+constexpr float k_toolbar_group_radius = 21.0f;
 constexpr float k_toolbar_group_height = 44.0f;
 
 phenotype::Color rgba(int r, int g, int b, int a = 255) {
@@ -1116,33 +1116,47 @@ void finder_status_bar(State const& state,
                        file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
-    layout::status_bar([&] {
-        layout::row([&] {
-            layout::weighted(1.0f, [&] {
-                std::string status = finder_status(snap);
-                if (!explorer.status.empty())
-                    status += " - " + explorer.status;
-                if (snap.has_selection
-                    && explorer.status != "Ready"
-                    && !snap.preview.empty()) {
-                    status += " - " + compact_preview(snap.preview);
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::Clear,
+            .role = MaterialSurfaceRole::StatusBar,
+            .direction = FlexDirection::Column,
+            .padding = SpaceToken::Xs,
+            .gap = SpaceToken::Xs,
+            .border_radius = 14.0f,
+            .border_width = 0.0f,
+            .semantic_label = "Status Bar",
+        },
+        [&] {
+            layout::row([&] {
+                layout::weighted(1.0f, [&] {
+                    std::string status = finder_status(snap);
+                    if (!explorer.status.empty())
+                        status += " - " + explorer.status;
+                    if (snap.has_selection
+                        && explorer.status != "Ready"
+                        && !snap.preview.empty()) {
+                        status += " - " + compact_preview(snap.preview);
+                    }
+                    widget::text(status, TextSize::Small, TextColor::Muted);
+                });
+                if (snap.has_selection) {
+                    layout::sized_box(144.0f, [&] {
+                        widget::text(snap.selected_kind_label,
+                                     TextSize::Small,
+                                     TextColor::Muted);
+                    });
+                    layout::sized_box(96.0f, [&] {
+                        widget::text(snap.selected_size_label,
+                                     TextSize::Small,
+                                     TextColor::Muted);
+                    });
                 }
-                widget::text(status, TextSize::Small, TextColor::Muted);
-            });
-            if (snap.has_selection) {
-                layout::sized_box(144.0f, [&] {
-                    widget::text(snap.selected_kind_label,
-                                 TextSize::Small,
-                                 TextColor::Muted);
-                });
-                layout::sized_box(96.0f, [&] {
-                    widget::text(snap.selected_size_label,
-                                 TextSize::Small,
-                                 TextColor::Muted);
-                });
-            }
-        }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Start);
-    }, MaterialKind::Clear, SpaceToken::Xs, SpaceToken::Xs);
+            },
+            SpaceToken::Sm,
+            CrossAxisAlignment::Center,
+            MainAxisAlignment::Start);
+        });
 }
 
 void view(State const& state) {

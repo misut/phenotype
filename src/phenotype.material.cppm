@@ -9,7 +9,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 8;
+inline constexpr std::uint32_t material_plan_contract_version = 9;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -17,6 +17,18 @@ struct MaterialGeometry {
     float w = 0.0f;
     float h = 0.0f;
     float radius = 0.0f;
+};
+
+struct MaterialShapeAnalysis {
+    bool valid = false;
+    bool rounded = false;
+    bool radius_clamped = false;
+    float surface_area = 0.0f;
+    float min_extent = 0.0f;
+    float max_extent = 0.0f;
+    float radius_limit = 0.0f;
+    float effective_radius = 0.0f;
+    float normalized_radius = 0.0f;
 };
 
 struct MaterialCapabilityInput {
@@ -207,6 +219,7 @@ struct MaterialPlan {
     MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
     MaterialCommandDescriptor command_descriptor{};
     MaterialGeometry geometry{};
+    MaterialShapeAnalysis shape{};
     MaterialRenderTargetAnalysis render_target{};
     MaterialContainerAnalysis container{};
     MaterialDecisionTrace decision_trace{};
@@ -268,6 +281,13 @@ struct MaterialRuntimeSummary {
     std::uint32_t unioned_count = 0;
     std::uint32_t interactive_count = 0;
     std::uint32_t morph_transition_count = 0;
+    std::uint32_t valid_shape_count = 0;
+    std::uint32_t rounded_shape_count = 0;
+    std::uint32_t radius_clamped_count = 0;
+    float max_surface_area = 0.0f;
+    float max_effective_radius = 0.0f;
+    float max_radius_limit = 0.0f;
+    float max_normalized_radius = 0.0f;
     std::uint32_t unbounded_texture_copy = 0;
     std::uint32_t non_deterministic_fallback = 0;
 };
@@ -340,6 +360,24 @@ inline void accumulate_material_runtime_summary(
         ++summary.interactive_count;
     if (plan.container.morph_transitions)
         ++summary.morph_transition_count;
+    if (plan.shape.valid)
+        ++summary.valid_shape_count;
+    if (plan.shape.rounded)
+        ++summary.rounded_shape_count;
+    if (plan.shape.radius_clamped)
+        ++summary.radius_clamped_count;
+    summary.max_surface_area = std::max(
+        summary.max_surface_area,
+        plan.shape.surface_area);
+    summary.max_effective_radius = std::max(
+        summary.max_effective_radius,
+        plan.shape.effective_radius);
+    summary.max_radius_limit = std::max(
+        summary.max_radius_limit,
+        plan.shape.radius_limit);
+    summary.max_normalized_radius = std::max(
+        summary.max_normalized_radius,
+        plan.shape.normalized_radius);
     if (!plan.resource_budget.bounded_texture_copy)
         ++summary.unbounded_texture_copy;
     if (!plan.resource_budget.deterministic_fallback)
@@ -703,6 +741,34 @@ inline MaterialRenderTargetAnalysis analyze_material_render_target(
     return analysis;
 }
 
+inline MaterialShapeAnalysis analyze_material_shape(
+        MaterialGeometry geometry) noexcept {
+    MaterialShapeAnalysis analysis{};
+    bool const width_ready = std::isfinite(geometry.w) && geometry.w > 0.0f;
+    bool const height_ready = std::isfinite(geometry.h) && geometry.h > 0.0f;
+    analysis.valid = width_ready && height_ready;
+    if (!analysis.valid)
+        return analysis;
+
+    auto const surface_area = geometry.w * geometry.h;
+    analysis.surface_area = std::isfinite(surface_area) ? surface_area : 0.0f;
+    analysis.min_extent = std::min(geometry.w, geometry.h);
+    analysis.max_extent = std::max(geometry.w, geometry.h);
+    analysis.radius_limit = analysis.min_extent * 0.5f;
+    auto const requested_radius = std::isfinite(geometry.radius)
+        ? geometry.radius
+        : 0.0f;
+    analysis.effective_radius =
+        std::clamp(requested_radius, 0.0f, analysis.radius_limit);
+    analysis.rounded = analysis.effective_radius > 0.0f;
+    analysis.radius_clamped =
+        std::fabs(analysis.effective_radius - requested_radius) > 0.0001f;
+    analysis.normalized_radius = analysis.radius_limit > 0.0f
+        ? analysis.effective_radius / analysis.radius_limit
+        : 0.0f;
+    return analysis;
+}
+
 inline MaterialContainerAnalysis analyze_material_container(
         MaterialContainerDescriptor descriptor,
         bool reduce_motion) noexcept {
@@ -869,6 +935,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.role = style.role;
     plan.command_descriptor = material_command_descriptor(style);
     plan.geometry = request.geometry;
+    plan.shape = analyze_material_shape(request.geometry);
     plan.quality_policy = resolved_quality;
     plan.render_target = analyze_material_render_target(
         environment.render_target,
@@ -911,8 +978,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.resource_budget.deterministic_fallback = true;
     plan.backdrop = analyze_material_backdrop(environment.backdrop);
 
-    bool const has_geometry = request.geometry.w > 0.0f
-        && request.geometry.h > 0.0f;
+    bool const has_geometry = plan.shape.valid;
     bool const has_material = style.kind != MaterialKind::None
         && style.tint.a > 0
         && plan.opacity > 0.0f

@@ -783,6 +783,22 @@ namespace detail {
         geometry.emplace("h", json::Value{plan.geometry.h});
         geometry.emplace("radius", json::Value{plan.geometry.radius});
 
+        json::Object shape;
+        shape.emplace("valid", json::Value{plan.shape.valid});
+        shape.emplace("rounded", json::Value{plan.shape.rounded});
+        shape.emplace("radius_clamped",
+                      json::Value{plan.shape.radius_clamped});
+        shape.emplace("surface_area",
+                      json::Value{plan.shape.surface_area});
+        shape.emplace("min_extent", json::Value{plan.shape.min_extent});
+        shape.emplace("max_extent", json::Value{plan.shape.max_extent});
+        shape.emplace("radius_limit",
+                      json::Value{plan.shape.radius_limit});
+        shape.emplace("effective_radius",
+                      json::Value{plan.shape.effective_radius});
+        shape.emplace("normalized_radius",
+                      json::Value{plan.shape.normalized_radius});
+
         json::Object render_target;
         render_target.emplace(
             "width",
@@ -1150,6 +1166,7 @@ namespace detail {
             "command_descriptor",
             json::Value{std::move(command_descriptor)});
         out.emplace("geometry", json::Value{std::move(geometry)});
+        out.emplace("shape", json::Value{std::move(shape)});
         out.emplace("render_target", json::Value{std::move(render_target)});
         out.emplace("decision_trace", json::Value{std::move(decision_trace)});
         out.emplace("opacity", json::Value{plan.opacity});
@@ -1273,6 +1290,26 @@ namespace detail {
             "morph_transition_count",
             json::Value{
                 static_cast<std::int64_t>(summary.morph_transition_count)});
+        out.emplace(
+            "valid_shape_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.valid_shape_count)});
+        out.emplace(
+            "rounded_shape_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.rounded_shape_count)});
+        out.emplace(
+            "radius_clamped_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.radius_clamped_count)});
+        out.emplace("max_surface_area",
+                    json::Value{summary.max_surface_area});
+        out.emplace("max_effective_radius",
+                    json::Value{summary.max_effective_radius});
+        out.emplace("max_radius_limit",
+                    json::Value{summary.max_radius_limit});
+        out.emplace("max_normalized_radius",
+                    json::Value{summary.max_normalized_radius});
         out.emplace(
             "unbounded_texture_copy",
             json::Value{

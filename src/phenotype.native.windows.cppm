@@ -2661,7 +2661,7 @@ inline bool decode_frame_commands(unsigned char const* buf,
                 x, y, w, h,
                 plan.tint.r / 255.0f, plan.tint.g / 255.0f,
                 plan.tint.b / 255.0f, plan.tint.a / 255.0f,
-                radius, 0.0f, 2.0f);
+                plan.shape.effective_radius, 0.0f, 2.0f);
             break;
         }
         case Cmd::DrawText: {

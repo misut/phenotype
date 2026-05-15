@@ -4250,7 +4250,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
             inst.rect[0] = x; inst.rect[1] = y;
             inst.rect[2] = w; inst.rect[3] = h;
             normalize_color(plan.tint, inst.color);
-            inst.params[0] = r;
+            inst.params[0] = plan.shape.effective_radius;
             inst.params[1] = 0.0f;
             inst.params[2] = 2.0f; // Round fallback
             out.batches.back().colors.push_back(inst);

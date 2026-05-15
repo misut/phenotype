@@ -65,7 +65,7 @@
     "fallback": 0,
     "backdrop_sampling": 11,
     "contract_versions": {
-      "8": 11
+      "9": 11
     },
     "roles": {
       "surface": 1,
@@ -84,6 +84,8 @@
     "container_unioned": 0,
     "container_interactive": 0,
     "container_morph_transitions": 11,
+    "shape_valid": 11,
+    "shape_radius_clamped": 0,
     "sampling_kernels": {
       "weighted-5x5-manhattan": 11
     },
