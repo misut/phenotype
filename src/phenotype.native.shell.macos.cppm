@@ -328,8 +328,101 @@ inline void prime_appkit_window_ordering(id app) {
         sel("performSelector:withObject:afterDelay:"),
         sel("stop:"),
         nullptr,
-        0.01);
+        0.10);
     objc_send<void>(app, sel("run"));
+}
+
+struct AppKitWindowServerSurface {
+    bool valid = false;
+    bool onscreen = false;
+    double width = 0.0;
+    double height = 0.0;
+};
+
+inline AppKitWindowServerSurface appkit_window_server_surface(id window) {
+    AppKitWindowServerSurface surface;
+    if (!window)
+        return surface;
+
+    auto number = objc_send<int>(window, sel("windowNumber"));
+    if (number <= 0)
+        return surface;
+
+    CFArrayRef raw_windows = CGWindowListCopyWindowInfo(
+        kCGWindowListOptionIncludingWindow,
+        static_cast<CGWindowID>(number));
+    if (!raw_windows)
+        return surface;
+
+    struct CFArrayGuard {
+        CFArrayRef value = nullptr;
+        ~CFArrayGuard() {
+            if (value)
+                CFRelease(value);
+        }
+    } windows{raw_windows};
+
+    if (CFArrayGetCount(windows.value) <= 0)
+        return surface;
+    auto info = static_cast<CFDictionaryRef>(
+        CFArrayGetValueAtIndex(windows.value, 0));
+    if (!info || CFGetTypeID(info) != CFDictionaryGetTypeID())
+        return surface;
+
+    if (auto raw_onscreen = CFDictionaryGetValue(info, kCGWindowIsOnscreen)) {
+        if (CFGetTypeID(raw_onscreen) == CFBooleanGetTypeID()) {
+            surface.onscreen = CFBooleanGetValue(
+                static_cast<CFBooleanRef>(raw_onscreen));
+        }
+    }
+
+    auto raw_bounds = CFDictionaryGetValue(info, kCGWindowBounds);
+    if (!raw_bounds || CFGetTypeID(raw_bounds) != CFDictionaryGetTypeID())
+        return surface;
+
+    CGRect rect{};
+    if (!CGRectMakeWithDictionaryRepresentation(
+            static_cast<CFDictionaryRef>(raw_bounds),
+            &rect))
+        return surface;
+
+    surface.valid = rect.size.width > 0.0 && rect.size.height > 0.0;
+    surface.width = rect.size.width;
+    surface.height = rect.size.height;
+    return surface;
+}
+
+inline bool appkit_window_server_surface_ready(id window) {
+    auto surface = appkit_window_server_surface(window);
+    return surface.valid && surface.onscreen;
+}
+
+inline void pump_appkit_ordering_once(id app, double timeout_seconds) {
+    if (!app)
+        return;
+    objc_send<void>(app, sel("updateWindows"));
+    id event = objc_send<id>(
+        app,
+        sel("nextEventMatchingMask:untilDate:inMode:dequeue:"),
+        ~0ul,
+        ns_date_after(timeout_seconds),
+        ns_string("NSDefaultRunLoopMode"),
+        static_cast<signed char>(1));
+    if (event)
+        objc_send<void>(app, sel("sendEvent:"), event);
+    objc_send<void>(app, sel("updateWindows"));
+}
+
+inline void wait_for_appkit_window_server_surface(id app, id window) {
+    if (!app || !window)
+        return;
+    auto const deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(1000);
+    while (!appkit_window_server_surface_ready(window)) {
+        if (std::chrono::steady_clock::now() >= deadline)
+            return;
+        pump_appkit_ordering_once(app, 0.016);
+    }
 }
 
 inline void appkit_set_hover_cursor(bool pointing) {
@@ -437,7 +530,9 @@ int run_app_with_macos_platform(platform_api const& platform,
 
     objc_send<void>(app, sel("activateIgnoringOtherApps:"), static_cast<signed char>(1));
     objc_send<void>(window, sel("makeKeyAndOrderFront:"), nullptr);
+    objc_send<void>(window, sel("orderFrontRegardless"));
     prime_appkit_window_ordering(app);
+    wait_for_appkit_window_server_surface(app, window);
 
     auto const* artifact_dir = std::getenv("PHENOTYPE_ARTIFACT_DIR");
     bool const artifact_requested = artifact_dir && artifact_dir[0] != '\0';
@@ -445,6 +540,7 @@ int run_app_with_macos_platform(platform_api const& platform,
         && platform.debug.capabilities().material_backdrop_blur) {
         ::phenotype::detail::g_app.last_paint_hash = 0;
         repaint_current();
+        wait_for_appkit_window_server_surface(app, window);
     }
     bool const artifact_ok = artifact_requested
         ? write_startup_artifact_bundle(platform, artifact_dir)

@@ -31,6 +31,11 @@ run_uv_python() {
   fi
 }
 
+settle_native_window_capture() {
+  local seconds="${PHENOTYPE_FILE_EXPLORER_CAPTURE_SETTLE_SECONDS:-0.25}"
+  sleep "$seconds"
+}
+
 reset_demo_profile() {
   local profile="$1"
   local base="${TMPDIR:-/tmp}"
@@ -83,6 +88,16 @@ append_scenario_requirements() {
     "deleted-file")
       extra_args+=(--require-label-contains "Deleted Delete Me.txt")
       extra_args+=(--require-label-contains "Operation: file_delete ok - Delete Me.txt")
+      ;;
+    "created-folder")
+      extra_args+=(--require-label-contains "Review Folder")
+      extra_args+=(--require-label-contains "Created folder Review Folder")
+      extra_args+=(--require-label-contains "Operation: folder_create ok - Review Folder")
+      extra_args+=(--require-label-contains "Open this folder to view its files.")
+      ;;
+    "deleted-folder")
+      extra_args+=(--require-label-contains "Deleted folder Trash Folder")
+      extra_args+=(--require-label-contains "Operation: folder_delete ok - Trash Folder")
       ;;
     "duplicated-file")
       extra_args+=(--require-label-contains "README copy.txt")
@@ -186,6 +201,7 @@ verify_desktop_capture() {
 
   reset_demo_profile "desktop"
   cd "$DESKTOP_DIR"
+  settle_native_window_capture
   env "${env_args[@]}" .exon/debug/file_explorer_desktop
 
   cd "$ROOT"
@@ -237,6 +253,7 @@ verify_mobile_capture() {
 
   reset_demo_profile "mobile"
   cd "$MOBILE_DIR"
+  settle_native_window_capture
   env "${env_args[@]}" .exon/debug/file_explorer_mobile
 
   cd "$ROOT"
@@ -259,7 +276,7 @@ run_exon build
 for mode in icon list column gallery; do
   verify_desktop_capture "$mode" "default" "$(desktop_bundle_for_case "$mode")"
 done
-for scenario in created-preview deleted-file duplicated-file documents-preview history-forward sorted-kind search-active; do
+for scenario in created-preview deleted-file created-folder deleted-folder duplicated-file documents-preview history-forward sorted-kind search-active; do
   verify_desktop_capture \
     "icon" \
     "$scenario" \
@@ -269,6 +286,6 @@ done
 cd "$MOBILE_DIR"
 run_exon build
 verify_mobile_capture "default" "$(mobile_bundle_for_case "default")"
-for scenario in created-preview deleted-file duplicated-file documents-preview history-forward sorted-kind search-active; do
+for scenario in created-preview deleted-file created-folder deleted-folder duplicated-file documents-preview history-forward sorted-kind search-active; do
   verify_mobile_capture "$scenario" "$(mobile_bundle_for_case "$scenario")"
 done

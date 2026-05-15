@@ -128,8 +128,8 @@ themselves.
 |---|---|---|
 | `examples/native` | macOS, Windows | Compact desktop widget showcase for shared controls, input debug, local/remote images, scroll, resize, and manual acceptance |
 | `examples/glass_showcase` | macOS, Windows | Material and glass-debug acceptance scene for deterministic backdrop regions, macOS sampled backdrop, all material kinds, artifact capture, and pixel-region checks |
-| `examples/file_explorer_desktop` | macOS, Windows | Finder-style desktop product workflow with glass toolbar action clusters, sidebar locations, Recents icon grid, document/image/video/folder thumbnails, icon-revealed search, create, duplicate, delete, file preview, and sandboxed temp-root file operations |
-| `examples/file_explorer_mobile` | macOS, Windows | Mobile file explorer layout with browse/preview/create tabs, compact location strip, material surfaces, search, file preview, create, duplicate, delete, and the same sandboxed model |
+| `examples/file_explorer_desktop` | macOS, Windows | Finder-style desktop product workflow with glass toolbar action clusters, sidebar locations, Recents icon grid, document/image/video/folder thumbnails, icon-revealed search, file/folder create, duplicate, delete, file preview, and sandboxed temp-root operations |
+| `examples/file_explorer_mobile` | macOS, Windows | Mobile file explorer layout with browse/preview/create tabs, compact location strip, material surfaces, search, file preview, file/folder create, duplicate, delete, and the same sandboxed model |
 | `examples/android` | Android | GameActivity/Vulkan packaging route, Android event dispatch, platform lifecycle, asset/local images, debug API, and logcat/manual device validation |
 | `docs` | WASI | Dogfooded documentation app, WASI build, JS shim integration, and web-facing DSL examples |
 
@@ -137,11 +137,11 @@ The file explorer examples deliberately keep filesystem side effects at the
 example edge. The shared model operates only under a deterministic temp
 directory (`phenotype-file-explorer-desktop` or
 `phenotype-file-explorer-mobile`) and never points at the user's real home
-folder. File create, read, duplicate, and delete actions produce operation
-receipts, and sort mode changes produce a shared `Sort: ...` status contract,
-that the desktop and mobile status surfaces expose to artifact verification.
-This keeps the examples useful for interactive product checks while preserving
-a stable startup artifact contract.
+folder. File create, folder create, read, duplicate, and file/folder delete
+actions produce operation receipts, and sort mode changes produce a shared
+`Sort: ...` status contract, that the desktop and mobile status surfaces expose
+to artifact verification. This keeps the examples useful for interactive
+product checks while preserving a stable startup artifact contract.
 
 ## Widget coverage
 

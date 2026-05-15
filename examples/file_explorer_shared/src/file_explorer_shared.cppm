@@ -47,6 +47,7 @@ struct Snapshot {
     bool can_go_back = false;
     bool can_go_forward = false;
     bool can_create_file = false;
+    bool can_create_folder = false;
     bool can_delete_selected = false;
     bool can_duplicate_selected = false;
     bool can_preview_selected = false;
@@ -68,6 +69,7 @@ struct ExplorerState {
     std::string selected_name = "README.txt";
     std::string search;
     std::string draft_name = "New Note.txt";
+    std::string draft_folder_name = "New Folder";
     std::string draft_body = "Created from the phenotype file explorer demo.";
     std::string status = "Ready";
     std::vector<fs::path> back_stack;
@@ -130,6 +132,36 @@ inline std::string sanitize_file_name(std::string_view input) {
         cleaned = "New Note.txt";
     if (cleaned.find('.') == std::string::npos)
         cleaned += ".txt";
+    return cleaned;
+}
+
+inline std::string sanitize_folder_name(std::string_view input) {
+    std::string cleaned;
+    cleaned.reserve(input.size());
+    bool previous_space = false;
+    for (char ch : input) {
+        auto uch = static_cast<unsigned char>(ch);
+        bool const ok = std::isalnum(uch) || ch == '-' || ch == '_'
+            || ch == ' ';
+        if (!ok)
+            continue;
+        if (ch == ' ') {
+            if (previous_space)
+                continue;
+            previous_space = true;
+        } else {
+            previous_space = false;
+        }
+        cleaned.push_back(ch);
+        if (cleaned.size() >= 48)
+            break;
+    }
+    cleaned = trim(cleaned);
+    while (!cleaned.empty() && cleaned.front() == '.')
+        cleaned.erase(cleaned.begin());
+    cleaned = trim(cleaned);
+    if (cleaned.empty())
+        cleaned = "New Folder";
     return cleaned;
 }
 
@@ -405,6 +437,33 @@ inline bool matches_filter(std::string const& name, std::string const& filter) {
     return lower_copy(name).find(lower_copy(needle)) != std::string::npos;
 }
 
+inline bool protected_root_folder(std::string_view name) {
+    return name == "Documents" || name == "Pictures" || name == "Shared";
+}
+
+inline bool path_inside_root(fs::path const& root, fs::path const& path) {
+    auto rel = path.lexically_relative(root).generic_string();
+    if (rel.empty() || rel == ".")
+        return false;
+    return rel != ".." && !rel.starts_with("../");
+}
+
+inline bool deletable_empty_directory(
+        fs::path const& root,
+        fs::path const& path) {
+    std::error_code ec;
+    if (!fs::is_directory(path, ec) || ec)
+        return false;
+    if (!path_inside_root(root, path) || same_path(root, path))
+        return false;
+    if (same_path(path.parent_path(), root)
+        && protected_root_folder(path.filename().string())) {
+        return false;
+    }
+    ec.clear();
+    return fs::is_empty(path, ec) && !ec;
+}
+
 inline std::vector<Entry> list_entries(
         fs::path const& current,
         std::string const& filter,
@@ -493,6 +552,7 @@ inline Snapshot snapshot(ExplorerState const& state) {
     out.can_go_forward = !state.forward_stack.empty();
     std::error_code ec;
     out.can_create_file = fs::is_directory(state.current, ec) && !ec;
+    out.can_create_folder = out.can_create_file;
     out.entries = list_entries(state.current, state.search, state.sort_mode);
     out.operation_label = operation_label(state.last_operation);
     out.sort_label = "Sort: " + sort_mode_label(state.sort_mode);
@@ -510,9 +570,12 @@ inline Snapshot snapshot(ExplorerState const& state) {
     if (out.folder_count > 0)
         out.item_summary += ", " + std::to_string(out.folder_count) + " folders";
     if (out.has_selection) {
-        out.can_delete_selected = !out.selected.folder;
+        auto const selected_path = state.current / out.selected.name;
+        out.can_delete_selected = out.selected.folder
+            ? deletable_empty_directory(state.root, selected_path)
+            : true;
         out.can_duplicate_selected = !out.selected.folder;
-        out.can_preview_selected = !out.selected.folder;
+        out.can_preview_selected = true;
         out.selected_kind_label = entry_kind_label(out.selected);
         out.selected_size_label = entry_size_label(out.selected);
         out.selected_path_label =
@@ -695,16 +758,69 @@ inline void create_file(ExplorerState& state) {
         state.status);
 }
 
+inline void create_folder(ExplorerState& state) {
+    auto name = sanitize_folder_name(state.draft_folder_name);
+    auto path = unique_child_path(state.current, name);
+    std::error_code ec;
+    if (!fs::create_directory(path, ec) || ec) {
+        state.status = "Could not create folder " + name;
+        record_operation(state, "folder_create", name, false, state.status);
+        return;
+    }
+    state.selected_name = path.filename().string();
+    state.status = "Created folder " + state.selected_name;
+    record_operation(
+        state,
+        "folder_create",
+        state.selected_name,
+        true,
+        state.status);
+}
+
 inline void delete_selected(ExplorerState& state) {
     if (state.selected_name.empty()) {
-        state.status = "Select a file before deleting.";
+        state.status = "Select a file or folder before deleting.";
         record_operation(state, "file_delete", {}, false, state.status);
         return;
     }
     auto path = state.current / state.selected_name;
     std::error_code ec;
+    if (fs::is_directory(path, ec)) {
+        if (!deletable_empty_directory(state.root, path)) {
+            state.status = "Only empty demo folders can be deleted.";
+            record_operation(
+                state,
+                "folder_delete",
+                state.selected_name,
+                false,
+                state.status);
+            return;
+        }
+        ec.clear();
+        if (!fs::remove(path, ec) || ec) {
+            state.status = "Could not delete folder " + state.selected_name;
+            record_operation(
+                state,
+                "folder_delete",
+                state.selected_name,
+                false,
+                state.status);
+            return;
+        }
+        auto deleted = state.selected_name;
+        state.status = "Deleted folder " + state.selected_name;
+        state.selected_name.clear();
+        record_operation(
+            state,
+            "folder_delete",
+            deleted,
+            true,
+            state.status);
+        return;
+    }
+    ec.clear();
     if (!fs::is_regular_file(path, ec)) {
-        state.status = "Only files can be deleted in this demo.";
+        state.status = "Only files or empty demo folders can be deleted.";
         record_operation(
             state,
             "file_delete",
@@ -786,6 +902,7 @@ inline void reset_demo_tree(ExplorerState& state, std::string_view profile) {
     state.selected_name = "README.txt";
     state.search.clear();
     state.draft_name = "New Note.txt";
+    state.draft_folder_name = "New Folder";
     state.draft_body = "Created from the phenotype file explorer demo.";
     state.back_stack.clear();
     state.forward_stack.clear();
@@ -799,6 +916,14 @@ inline void remove_regular_file_if_present(fs::path const& path) {
     if (fs::is_regular_file(path, ec)) {
         ec.clear();
         fs::remove(path, ec);
+    }
+}
+
+inline void remove_directory_if_present(fs::path const& path) {
+    std::error_code ec;
+    if (fs::is_directory(path, ec)) {
+        ec.clear();
+        fs::remove_all(path, ec);
     }
 }
 
@@ -826,6 +951,23 @@ inline void apply_startup_scenario(
         state.draft_body =
             "This temporary file should be deleted before the artifact frame.";
         create_file(state);
+        delete_selected(state);
+        state.mobile_tab = 0;
+        return;
+    }
+
+    if (name == "created-folder" || name == "folder-create") {
+        remove_directory_if_present(state.current / "Review Folder");
+        state.draft_folder_name = "Review Folder";
+        create_folder(state);
+        state.mobile_tab = 1;
+        return;
+    }
+
+    if (name == "deleted-folder" || name == "folder-delete") {
+        remove_directory_if_present(state.current / "Trash Folder");
+        state.draft_folder_name = "Trash Folder";
+        create_folder(state);
         delete_selected(state);
         state.mobile_tab = 0;
         return;
