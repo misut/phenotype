@@ -67,6 +67,19 @@ struct MaterialQualityPolicy {
     std::int64_t max_backdrop_pixels = 4'000'000;
 };
 
+inline constexpr MaterialQualityPolicy default_material_quality_policy() noexcept {
+    return MaterialQualityPolicy{};
+}
+
+inline MaterialQualityPolicy sanitize_material_quality_policy(
+        MaterialQualityPolicy policy) noexcept {
+    policy.max_blur_radius = std::max(0.0f, policy.max_blur_radius);
+    policy.max_sample_taps = std::min(policy.max_sample_taps, 25u);
+    policy.max_backdrop_pixels =
+        std::max(std::int64_t{0}, policy.max_backdrop_pixels);
+    return policy;
+}
+
 struct MaterialDebugSeed {
     std::uint32_t frame = 0;
     std::uint32_t node = 0;
@@ -1201,16 +1214,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
                                           MaterialEnvironment environment) noexcept {
     MaterialPlan plan{};
     auto const& style = request.style;
-    MaterialQualityPolicy resolved_quality = environment.quality;
-    resolved_quality.max_blur_radius = std::max(
-        0.0f,
-        resolved_quality.max_blur_radius);
-    resolved_quality.max_sample_taps = std::min(
-        resolved_quality.max_sample_taps,
-        25u);
-    resolved_quality.max_backdrop_pixels = std::max(
-        std::int64_t{0},
-        resolved_quality.max_backdrop_pixels);
+    MaterialQualityPolicy resolved_quality =
+        sanitize_material_quality_policy(environment.quality);
     auto const max_blur_radius = std::max(
         0.0f,
         resolved_quality.max_blur_radius);

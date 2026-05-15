@@ -1143,6 +1143,23 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(material_resolve_sample_taps(24) == 13);
     assert(material_resolve_sample_taps(25) == 25);
 
+    auto default_quality = default_material_quality_policy();
+    assert(default_quality.allow_backdrop_sampling);
+    assert(default_quality.allow_noise);
+    assert(default_quality.allow_shadow);
+    assert(default_quality.max_blur_radius == 36.0f);
+    assert(default_quality.max_sample_taps == 25);
+    assert(default_quality.max_backdrop_pixels == 4'000'000);
+
+    MaterialQualityPolicy raw_quality{};
+    raw_quality.max_blur_radius = -4.0f;
+    raw_quality.max_sample_taps = 99;
+    raw_quality.max_backdrop_pixels = -8;
+    auto sanitized_quality = sanitize_material_quality_policy(raw_quality);
+    assert(sanitized_quality.max_blur_radius == 0.0f);
+    assert(sanitized_quality.max_sample_taps == 25);
+    assert(sanitized_quality.max_backdrop_pixels == 0);
+
     auto style = material_style_for_kind(MaterialKind::Regular, theme);
     MaterialRequest request{
         style,

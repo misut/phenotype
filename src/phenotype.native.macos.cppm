@@ -6428,9 +6428,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_env.render_target.scale = frame_scale;
     material_env.render_target.pixel_format = "bgra8unorm";
     material_env.debug_seed.frame = ++g_renderer.material_frame_sequence;
-    material_env.quality.max_blur_radius = 36.0f;
-    material_env.quality.max_sample_taps = 25;
-    material_env.quality.max_backdrop_pixels = 4'000'000;
+    material_env.quality = default_material_quality_policy();
     auto decode_started = metrics::detail::now_ns();
     if (!decode_frame_commands(
             buf, len, line_height_ratio,

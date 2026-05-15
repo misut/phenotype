@@ -4903,9 +4903,7 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
     material_env.capabilities.shader_blur = false;
     material_env.capabilities.frame_history = false;
     material_env.backdrop.source = "android-vulkan-fallback";
-    material_env.quality.max_blur_radius = 36.0f;
-    material_env.quality.max_sample_taps = 25;
-    material_env.quality.max_backdrop_pixels = 4'000'000;
+    material_env.quality = default_material_quality_policy();
     std::uint32_t command_index = 0;
     for (auto const& cmd : commands) {
         auto const current_command_index = command_index++;
@@ -5563,9 +5561,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         material_env.render_target.scale = 1.0f;
         material_env.render_target.pixel_format = "rgba8unorm";
         material_env.debug_seed.frame = ++g_renderer.material_frame_sequence;
-        material_env.quality.max_blur_radius = 36.0f;
-        material_env.quality.max_sample_taps = 25;
-        material_env.quality.max_backdrop_pixels = 4'000'000;
+        material_env.quality = default_material_quality_policy();
         decode_android_color_commands(buf, len, material_env, scratch);
         if (!scratch.has_clear) {
             auto const& theme = ::phenotype::current_theme();
