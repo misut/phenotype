@@ -656,6 +656,126 @@ inline void canvas(float width, float height,
     detail::attach_to_scope(h);
 }
 
+template<typename Msg>
+inline void canvas_button(str label,
+                          float width,
+                          float height,
+                          std::function<void(Painter&)> paint_fn,
+                          Msg msg,
+                          ButtonStyleOptions options = {},
+                          std::uint64_t paint_token = 0) {
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    auto const& t = detail::g_app.theme;
+
+    float default_padding[4] = {0.0f, 0.0f, 0.0f, 0.0f};
+    float option_padding[4] = {
+        options.padding_top,
+        options.padding_right,
+        options.padding_bottom,
+        options.padding_left,
+    };
+    for (int i = 0; i < 4; ++i) {
+        node.style.padding[i] = option_padding[i] >= 0.0f
+            ? option_padding[i]
+            : default_padding[i];
+    }
+
+    float const outer_width = options.max_width > 0.0f
+        ? options.max_width
+        : width;
+    float const outer_height = options.fixed_height >= 0.0f
+        ? options.fixed_height
+        : height;
+
+    node.style.flex_direction = FlexDirection::Row;
+    node.style.cross_align = CrossAxisAlignment::Center;
+    node.style.main_align = MainAxisAlignment::Center;
+    node.style.max_width = outer_width;
+    node.style.fixed_height = outer_height;
+    node.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : t.radius_sm;
+    node.interaction_role = InteractionRole::Button;
+    node.debug_semantic_label = std::string(label.data, label.len);
+
+    if (options.disabled) {
+        node.background = t.state_disabled_bg;
+        node.text_color = t.state_disabled_fg;
+        node.border_color = t.state_disabled_border;
+        node.border_width = 1.0f;
+        node.cursor_type = 0;
+        node.focusable = false;
+        node.debug_semantic_enabled = false;
+        detail::attach_to_scope(h);
+    } else {
+        auto const id = static_cast<unsigned int>(
+            detail::g_app.callbacks.size());
+        bool const is_hovered = (id == detail::g_app.hovered_id);
+        bool const is_focused = (id == detail::g_app.focused_id);
+
+        Color base_bg, hover_bg, base_border;
+        switch (options.variant) {
+            case ButtonVariant::Primary:
+                base_bg = t.accent;
+                hover_bg = t.accent_strong;
+                base_border = t.accent;
+                node.text_color = t.state_active_fg;
+                break;
+            case ButtonVariant::Default:
+            default:
+                base_bg = t.surface;
+                hover_bg = t.state_hover_bg;
+                base_border = t.border;
+                node.text_color = t.foreground;
+                break;
+        }
+        if (options.has_background)
+            base_bg = options.background;
+        if (options.has_hover_background)
+            hover_bg = options.hover_background;
+        if (options.has_border_color)
+            base_border = options.border_color;
+        if (options.has_text_color)
+            node.text_color = options.text_color;
+        float const base_border_width = options.border_width >= 0.0f
+            ? options.border_width
+            : 1.0f;
+
+        node.background = animate_color(is_hovered ? hover_bg : base_bg, 150);
+        node.border_width = animate_float(
+            is_focused ? t.state_focus_ring_width : base_border_width, 150);
+        node.border_color = animate_color(
+            is_focused ? t.state_focus_ring : base_border, 150);
+        node.cursor_type = 1;
+
+        detail::g_app.callbacks.push_back([msg = std::move(msg)] {
+            detail::post<Msg>(msg);
+            detail::trigger_rebuild();
+        });
+        detail::g_app.callback_roles.push_back(InteractionRole::Button);
+        node.callback_id = id;
+
+        detail::attach_to_scope(h);
+    }
+
+    float const child_width = std::max(
+        0.0f,
+        outer_width - node.style.padding[1] - node.style.padding[3]);
+    float const child_height = std::max(
+        0.0f,
+        outer_height - node.style.padding[0] - node.style.padding[2]);
+
+    auto canvas_h = detail::alloc_node();
+    auto& canvas_node = detail::node_at(canvas_h);
+    canvas_node.style.max_width = child_width;
+    canvas_node.style.fixed_height = child_height;
+    canvas_node.paint_fn = std::move(paint_fn);
+    canvas_node.paint_token = paint_token;
+    canvas_node.debug_semantic_hidden = true;
+    detail::append_child(h, canvas_h);
+}
+
 // progress — horizontal determinate progress bar. `value` is clamped
 // to [0, 1] and drives the filled portion's width as a fraction of
 // `max_width`. Track is theme.border, fill is theme.accent. Both pieces

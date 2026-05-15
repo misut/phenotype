@@ -1,7 +1,7 @@
 # Desktop File Explorer Example
 
 This example is a Finder-style desktop workflow for phenotype's material
-system. It uses a glass toolbar with Finder-like view/action/search clusters,
+system. It uses a glass toolbar with Finder-like semantic view/action/search buttons,
 translucent sidebar locations, a Recents icon grid with document, image, video,
 and folder thumbnails, search, create, delete, and reset actions.
 
@@ -27,5 +27,6 @@ tools/verify_file_explorer_artifacts.sh
 
 The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity,
-bounded material resource budgets, and pixel-region checks for the sidebar,
-toolbar, icon grid, and selected-file label.
+semantic toolbar button labels, bounded material resource budgets, and
+pixel-region checks for the sidebar, toolbar, icon grid, and selected-file
+label.
