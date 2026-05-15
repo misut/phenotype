@@ -86,10 +86,10 @@ constexpr float k_tau = 6.28318530717958647692f;
 constexpr float k_integrated_titlebar_height = 56.0f;
 constexpr float k_sidebar_width = 224.0f;
 constexpr float k_sidebar_row_width = 188.0f;
-constexpr float k_content_radius = 8.0f;
+constexpr float k_content_radius = 0.0f;
 constexpr float k_window_radius = 18.0f;
-constexpr float k_toolbar_group_radius = 21.0f;
-constexpr float k_toolbar_group_height = 44.0f;
+constexpr float k_toolbar_group_radius = 20.0f;
+constexpr float k_toolbar_group_height = 40.0f;
 
 phenotype::Color rgba(int r, int g, int b, int a = 255) {
     return phenotype::Color{
@@ -143,7 +143,7 @@ phenotype::layout::MaterialSurfaceOptions content_surface_options(
         .kind = MaterialKind::Regular,
         .role = MaterialSurfaceRole::Content,
         .direction = FlexDirection::Column,
-        .padding = SpaceToken::Lg,
+        .padding = SpaceToken::Xl,
         .gap = gap,
         .cross_align = CrossAxisAlignment::Start,
         .main_align = MainAxisAlignment::Start,
@@ -614,9 +614,9 @@ phenotype::ButtonStyleOptions toolbar_icon_button_options(
     options.has_border_color = true;
     options.border_color = t.transparent;
     options.border_width = 0.0f;
-    options.border_radius = 17.0f;
-    options.max_width = 40.0f;
-    options.fixed_height = 34.0f;
+    options.border_radius = 16.0f;
+    options.max_width = 38.0f;
+    options.fixed_height = 32.0f;
     options.disabled = disabled;
     return options;
 }
@@ -670,8 +670,8 @@ void paint_group_sort_icon(phenotype::Painter& painter) {
                          7.0f, 4.0f, 1.0f, 1.7f, ink);
         }
     }
-    painter.line(33.0f, 15.0f, 37.0f, 19.0f, 2.2f, ink);
-    painter.line(41.0f, 15.0f, 37.0f, 19.0f, 2.2f, ink);
+    painter.line(31.5f, 15.0f, 35.0f, 18.5f, 2.2f, ink);
+    painter.line(38.5f, 15.0f, 35.0f, 18.5f, 2.2f, ink);
 }
 
 void paint_share_icon(phenotype::Painter& painter) {
@@ -736,8 +736,8 @@ void view_mode_button(char const* label,
     std::string semantic_label(label);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        40.0f,
-        34.0f,
+        38.0f,
+        32.0f,
         [paint, selected](phenotype::Painter& painter) {
             paint(painter, selected);
         },
@@ -752,8 +752,8 @@ void toolbar_action_button(char const* label,
     std::string semantic_label(label);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        40.0f,
-        34.0f,
+        38.0f,
+        32.0f,
         [paint](phenotype::Painter& painter) {
             paint(painter);
         },
@@ -771,8 +771,8 @@ void file_action_button(char const* label,
     std::string semantic_label(label);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        40.0f,
-        34.0f,
+        38.0f,
+        32.0f,
         [paint, enabled](phenotype::Painter& painter) {
             paint(painter, enabled);
         },
@@ -790,8 +790,8 @@ void navigation_button(char const* label,
     std::string semantic_label(label);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        40.0f,
-        34.0f,
+        38.0f,
+        32.0f,
         [paint, enabled](phenotype::Painter& painter) {
             paint(painter, enabled);
         },
@@ -805,7 +805,7 @@ void finder_toolbar(State const& state,
     using namespace phenotype;
     layout::material_surface(toolbar_shell_options(), [&] {
         layout::material_surface(
-            toolbar_group_options("Navigation Controls", 96.0f),
+            toolbar_group_options("Navigation Controls", 92.0f),
             [&] {
                 navigation_button("Back", GoBack{}, snap.can_go_back,
                                   paint_back_icon, 0x6201u);
@@ -818,7 +818,7 @@ void finder_toolbar(State const& state,
             TextSize::Heading);
         layout::weighted(1.0f, [] {});
         layout::material_surface(
-            toolbar_group_options("View Controls", 240.0f),
+            toolbar_group_options("View Controls", 224.0f),
             [&] {
                 view_mode_button("Icon View", FinderViewMode::Icon,
                                  state.view_mode, paint_icon_view, 0x6301u);
@@ -830,7 +830,7 @@ void finder_toolbar(State const& state,
                                  state.view_mode, paint_gallery_view, 0x6304u);
             });
         layout::material_surface(
-            toolbar_group_options("File Actions", 148.0f),
+            toolbar_group_options("File Actions", 140.0f),
             [&] {
                 file_action_button("New File", CreateFile{},
                                    snap.can_create_file,
@@ -849,7 +849,7 @@ void finder_toolbar(State const& state,
                     "Group Sort", paint_group_sort_icon, 0x6501u);
             });
         layout::material_surface(
-            toolbar_group_options("Share Tag More", 148.0f),
+            toolbar_group_options("Share Tag More", 140.0f),
             [] {
                 toolbar_action_button("Share", paint_share_icon, 0x6601u);
                 toolbar_action_button("Tag", paint_tag_icon, 0x6602u);
@@ -874,7 +874,8 @@ void finder_grid(file_explorer_demo::Snapshot const& snap) {
                 widget::text("No matching files.");
                 return;
             }
-            layout::scroll_view(552.0f, [&] {
+            layout::spacer(18.0f);
+            layout::scroll_view(528.0f, [&] {
                 std::vector<float> columns{
                     142.0f, 142.0f, 142.0f, 142.0f, 142.0f, 142.0f,
                 };
@@ -1134,7 +1135,7 @@ void finder_status_bar(State const& state,
             .direction = FlexDirection::Column,
             .padding = SpaceToken::Xs,
             .gap = SpaceToken::Xs,
-            .border_radius = 14.0f,
+            .border_radius = 12.0f,
             .border_width = 0.0f,
             .semantic_label = "Status Bar",
         },
@@ -1222,9 +1223,9 @@ int main() {
     theme.border = rgba(226, 226, 230);
     theme.surface = rgba(255, 255, 255);
     theme.code_bg = rgba(242, 242, 247);
-    theme.body_font_size = 15.0f;
-    theme.heading_font_size = 21.0f;
-    theme.small_font_size = 13.0f;
+    theme.body_font_size = 14.0f;
+    theme.heading_font_size = 18.0f;
+    theme.small_font_size = 12.0f;
     theme.radius_sm = 10.0f;
     theme.radius_md = 14.0f;
     theme.radius_lg = 22.0f;
