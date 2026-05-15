@@ -214,6 +214,13 @@ kernel's blur step scale to Metal instead of hard-coding that policy in the
 shader; other backends serialize the same kernel contract before they gain an
 advanced material executor. Reduced-motion plans also disable material noise
 and cap backdrop sample taps before any backend executes the pass.
+`luminance_curve` is the pure contrast transform that the backend should apply
+after saturation and before tint. It records the curve name, resolved
+floor/gain, gamma, midpoint, contrast, edge lift, whether the curve is
+backdrop-driven, and whether all shader inputs are bounded. Sampled glass uses
+`adaptive-backdrop-luma`; deterministic fallback uses `fallback-flat`. macOS
+uploads gamma, midpoint, contrast, and edge lift to Metal so adaptive backdrop
+legibility is executed from the pure plan instead of a backend-local heuristic.
 `quality_policy` records the pure planner's resolved
 sampling/noise/shadow switches and caller quality limits, including
 `max_backdrop_pixels`. `render_target` records sanitized target dimensions,
@@ -237,10 +244,11 @@ respecting accessibility settings.
 When a stable backdrop descriptor is available, the pure planner also copies
 its source, readiness flags, sanitized luminance statistics, response bucket,
 and floor/gain/edge deltas into `MaterialPlan.backdrop`. The same value drives
-glass luminance curve and edge-highlight adjustment before the plan reaches a
-backend. This keeps legibility policy in the deterministic layer as blur, tint,
-and fallback decisions, and lets artifacts explain why a material responded to
-dark, bright, flat, or neutral backdrop content.
+the `MaterialPlan.luminance_curve` gamma/midpoint/contrast and edge-highlight
+adjustment before the plan reaches a backend. This keeps legibility policy in
+the deterministic layer as blur, tint, and fallback decisions, and lets
+artifacts explain why a material responded to dark, bright, flat, or neutral
+backdrop content.
 Artifact gates can separately bound actual plan taps and resource-budget taps,
 which lets fallback scenes require zero executed taps while preserving the
 backend's allowed quality budget in the same artifact.

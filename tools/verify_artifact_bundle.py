@@ -97,7 +97,12 @@ ALLOWED_MATERIAL_SAMPLING_WEIGHT_PROFILES = {
     "none",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 7
+ALLOWED_MATERIAL_LUMINANCE_CURVES = {
+    "adaptive-backdrop-luma",
+    "fallback-flat",
+}
+
+MATERIAL_PLAN_CONTRACT_VERSION = 8
 
 
 def suggested_action_for_failure(
@@ -114,6 +119,10 @@ def suggested_action_for_failure(
         return (
             "Inspect MaterialPlan.sampling_kernel and the backend material "
             "shader inputs for stale blur-kernel metadata.")
+    if likely_pass == "luminance-curve":
+        return (
+            "Inspect MaterialPlan.luminance_curve, backdrop luminance analysis, "
+            "and the backend material shader curve inputs.")
     if likely_pass:
         return (
             f"Inspect the {likely_pass} material pass serialization and the "
@@ -920,6 +929,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "pass_executors",
         "sampling_kernels",
         "sampling_weight_profiles",
+        "luminance_curves",
         "backdrop_available",
         "backdrop_stable",
         "backdrop_sources",
@@ -985,6 +995,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "pass_executors": ALLOWED_MATERIAL_PASS_EXECUTORS,
         "sampling_kernels": ALLOWED_MATERIAL_SAMPLING_KERNELS,
         "sampling_weight_profiles": ALLOWED_MATERIAL_SAMPLING_WEIGHT_PROFILES,
+        "luminance_curves": ALLOWED_MATERIAL_LUMINANCE_CURVES,
         "luminance_responses": ALLOWED_MATERIAL_LUMINANCE_RESPONSES,
     }
     for field, allowed_keys in map_vocabularies.items():
@@ -1544,6 +1555,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "saturation",
     "luminance_floor",
     "luminance_gain",
+    "luminance_curve",
     "edge_highlight",
     "edge_width",
     "noise_opacity",
@@ -1654,6 +1666,17 @@ MATERIAL_SAMPLING_KERNEL_FIELDS = (
     "requires_backdrop",
     "bounded",
 )
+MATERIAL_LUMINANCE_CURVE_FIELDS = (
+    "name",
+    "floor",
+    "gain",
+    "gamma",
+    "midpoint",
+    "contrast",
+    "edge_lift",
+    "backdrop_driven",
+    "bounded",
+)
 MATERIAL_QUALITY_POLICY_BOOL_FIELDS = (
     "allow_backdrop_sampling",
     "allow_noise",
@@ -1689,6 +1712,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "pass_executors": {},
         "sampling_kernels": {},
         "sampling_weight_profiles": {},
+        "luminance_curves": {},
+        "luminance_curve_backdrop_driven": 0,
         "plan_ids": [],
         "command_descriptor_missing": 0,
         "command_descriptors": [],
@@ -2085,6 +2110,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
 
         plan_blur_radius: int | float | None = None
         plan_edge_highlight: int | float | None = None
+        plan_luminance_floor: int | float | None = None
+        plan_luminance_gain: int | float | None = None
         for key in MATERIAL_PLAN_NUMERIC_FIELDS:
             number = check_number_field(
                 report,
@@ -2103,6 +2130,10 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         float(number))
             elif key == "edge_highlight":
                 plan_edge_highlight = number
+            elif key == "luminance_floor":
+                plan_luminance_floor = number
+            elif key == "luminance_gain":
+                plan_luminance_gain = number
         backdrop_sampling = check_bool_field(
             report,
             plan,
@@ -2149,6 +2180,145 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 and fallback_reason):
             reasons = summary["fallback_reasons"]
             reasons[fallback_reason] = reasons.get(fallback_reason, 0) + 1
+        luminance_curve = check_object_field(
+            report,
+            plan,
+            "luminance_curve",
+            plan_path,
+            likely_layer=likely_layer,
+            hint="MaterialPlan must expose the pure luminance curve executed by the backend.")
+        if luminance_curve is not None:
+            curve_name = ""
+            curve_backdrop_driven: bool | None = None
+            curve_bounded: bool | None = None
+            curve_numbers: dict[str, int | float] = {}
+            for key in MATERIAL_LUMINANCE_CURVE_FIELDS:
+                if key in ("backdrop_driven", "bounded"):
+                    value = check_bool_field(
+                        report,
+                        luminance_curve,
+                        key,
+                        f"{plan_path}.luminance_curve",
+                        likely_layer=likely_layer,
+                        likely_pass="luminance-curve",
+                        hint="Luminance curve booleans must stay explicit.")
+                    if key == "backdrop_driven":
+                        curve_backdrop_driven = value
+                        if value is True:
+                            summary["luminance_curve_backdrop_driven"] = int(
+                                summary["luminance_curve_backdrop_driven"]) + 1
+                    elif key == "bounded":
+                        curve_bounded = value
+                elif key == "name":
+                    value = check_string_field(
+                        report,
+                        luminance_curve,
+                        key,
+                        f"{plan_path}.luminance_curve",
+                        likely_layer=likely_layer,
+                        hint="Luminance curve must name the pure contrast transform.")
+                    if isinstance(value, str):
+                        curve_name = value
+                        curves = summary["luminance_curves"]
+                        curves[value] = curves.get(value, 0) + 1
+                        report.check(
+                            "material luminance curve is known",
+                            value in ALLOWED_MATERIAL_LUMINANCE_CURVES,
+                            path=f"{plan_path}.luminance_curve.name",
+                            expected=sorted(ALLOWED_MATERIAL_LUMINANCE_CURVES),
+                            actual=value,
+                            likely_layer=likely_layer,
+                            likely_pass="luminance-curve",
+                            hint="Add new luminance curves to the verifier vocabulary when intentional.",
+                            record_success=False)
+                else:
+                    value = check_number_field(
+                        report,
+                        luminance_curve,
+                        key,
+                        f"{plan_path}.luminance_curve",
+                        min_value=0.0,
+                        likely_layer=likely_layer,
+                        likely_pass="luminance-curve",
+                        hint="Luminance curve numeric fields must be non-negative.")
+                    if isinstance(value, (int, float)):
+                        curve_numbers[key] = value
+            if isinstance(plan_luminance_floor, (int, float)):
+                report.check(
+                    "material luminance curve floor matches plan",
+                    abs(float(curve_numbers.get("floor", -1.0))
+                        - float(plan_luminance_floor)) <= 0.0001,
+                    path=f"{plan_path}.luminance_curve.floor",
+                    expected=plan_luminance_floor,
+                    actual=curve_numbers.get("floor"),
+                    likely_layer=likely_layer,
+                    likely_pass="luminance-curve",
+                    hint="Keep MaterialPlan.luminance_floor and luminance_curve.floor in sync.",
+                    record_success=False)
+            if isinstance(plan_luminance_gain, (int, float)):
+                report.check(
+                    "material luminance curve gain matches plan",
+                    abs(float(curve_numbers.get("gain", -1.0))
+                        - float(plan_luminance_gain)) <= 0.0001,
+                    path=f"{plan_path}.luminance_curve.gain",
+                    expected=plan_luminance_gain,
+                    actual=curve_numbers.get("gain"),
+                    likely_layer=likely_layer,
+                    likely_pass="luminance-curve",
+                    hint="Keep MaterialPlan.luminance_gain and luminance_curve.gain in sync.",
+                    record_success=False)
+            for key in ("floor", "midpoint", "edge_lift"):
+                value = curve_numbers.get(key)
+                if isinstance(value, (int, float)):
+                    report.check(
+                        f"material luminance curve {key} is normalized",
+                        float(value) <= 1.0,
+                        path=f"{plan_path}.luminance_curve.{key}",
+                        expected={"<=": 1.0},
+                        actual=value,
+                        likely_layer=likely_layer,
+                        likely_pass="luminance-curve",
+                        hint="Clamp luminance curve unit fields in pure planning.",
+                        record_success=False)
+            for key in ("gamma", "gain", "contrast"):
+                value = curve_numbers.get(key)
+                if isinstance(value, (int, float)):
+                    report.check(
+                        f"material luminance curve {key} is bounded",
+                        float(value) <= 4.0,
+                        path=f"{plan_path}.luminance_curve.{key}",
+                        expected={"<=": 4.0},
+                        actual=value,
+                        likely_layer=likely_layer,
+                        likely_pass="luminance-curve",
+                        hint="Keep shader luminance curve inputs bounded.",
+                        record_success=False)
+            if backdrop_sampling is True:
+                report.check(
+                    "material sampled backdrop uses adaptive luminance curve",
+                    curve_name == "adaptive-backdrop-luma"
+                    and curve_backdrop_driven is True
+                    and curve_bounded is True,
+                    path=f"{plan_path}.luminance_curve",
+                    expected="adaptive backdrop-driven bounded curve",
+                    actual=luminance_curve,
+                    likely_layer=likely_layer,
+                    likely_pass="luminance-curve",
+                    hint="Sampled glass should expose the backdrop-driven luminance transform.",
+                    record_success=False)
+            elif backdrop_sampling is False:
+                report.check(
+                    "material fallback uses flat luminance curve",
+                    curve_name == "fallback-flat"
+                    and curve_backdrop_driven is False
+                    and curve_bounded is True,
+                    path=f"{plan_path}.luminance_curve",
+                    expected="flat bounded fallback curve",
+                    actual=luminance_curve,
+                    likely_layer=likely_layer,
+                    likely_pass="luminance-curve",
+                    hint="Fallback plans must not report a backdrop-driven luminance curve.",
+                    record_success=False)
         sample_taps = check_number_field(
             report,
             plan,
@@ -3629,6 +3799,9 @@ def check_material_plan_summary_requirements(
         "sampling_weight_profiles": (
             "sampling-kernel",
             "Inspect MaterialPlan.sampling_kernel.weight_profile and blur tap weighting."),
+        "luminance_curves": (
+            "luminance-curve",
+            "Inspect MaterialPlan.luminance_curve and backend shader curve inputs."),
         "backdrop_sources": (
             "material-backdrop",
             "Inspect MaterialPlan.backdrop.source and the backend backdrop descriptor."),
@@ -3661,6 +3834,7 @@ def check_material_plan_summary_requirements(
             "pass_executors",
             "sampling_kernels",
             "sampling_weight_profiles",
+            "luminance_curves",
             "backdrop_sources",
             "luminance_responses",
             "render_target_pixel_formats",

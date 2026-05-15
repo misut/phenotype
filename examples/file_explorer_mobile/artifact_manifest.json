@@ -39,7 +39,7 @@
     "fallback": 0,
     "backdrop_sampling": 22,
     "contract_versions": {
-      "7": 22
+      "8": 22
     },
     "roles": {
       "surface": 19,
@@ -62,6 +62,9 @@
     },
     "sampling_weight_profiles": {
       "center4-cardinal2-diagonal1": 22
+    },
+    "luminance_curves": {
+      "adaptive-backdrop-luma": 22
     }
   },
   "require_capabilities": [

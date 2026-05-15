@@ -834,6 +834,19 @@ void test_material_runtime_record_json_contract() {
     assert(sampling_kernel.at("weight_profile").as_string() == "none");
     assert(sampling_kernel.at("requires_backdrop").as_bool() == false);
     assert(sampling_kernel.at("bounded").as_bool() == true);
+    auto const& luminance_curve = obj.at("luminance_curve").as_object();
+    assert(luminance_curve.at("name").as_string() == "fallback-flat");
+    assert(luminance_curve.at("floor").as_float()
+           == obj.at("luminance_floor").as_float());
+    assert(luminance_curve.at("gain").as_float()
+           == obj.at("luminance_gain").as_float());
+    assert(luminance_curve.at("gamma").as_float() == 1.0f);
+    assert(luminance_curve.at("midpoint").as_float() == 0.5f);
+    assert(luminance_curve.at("contrast").as_float() == 1.0f);
+    assert(luminance_curve.at("edge_lift").as_float()
+           == obj.at("edge_highlight").as_float());
+    assert(luminance_curve.at("backdrop_driven").as_bool() == false);
+    assert(luminance_curve.at("bounded").as_bool() == true);
     auto const& decision_trace = obj.at("decision_trace").as_object();
     assert(decision_trace.at("has_material").as_bool() == true);
     assert(decision_trace.at("target_ready").as_bool() == true);
