@@ -31,6 +31,7 @@ struct GoUp {};
 struct Refresh {};
 struct ResetDemo {};
 struct Resized { int width; int height; float scale; };
+struct Noop {};
 
 using Msg = std::variant<
     SelectLocation,
@@ -45,7 +46,8 @@ using Msg = std::variant<
     GoUp,
     Refresh,
     ResetDemo,
-    Resized>;
+    Resized,
+    Noop>;
 
 FinderViewMode view_mode_from_name(std::string_view value) {
     std::string mode(value);
@@ -369,6 +371,7 @@ void update(State& state, Msg msg) {
             explorer.viewport_width = m.width;
             explorer.viewport_height = m.height;
             explorer.viewport_scale = m.scale;
+        } else if constexpr (std::same_as<T, Noop>) {
         }
     }, msg);
 }
@@ -408,32 +411,78 @@ void finder_button(std::string label,
     phenotype::widget::button<Msg>(label, std::move(msg), options);
 }
 
-void icon_canvas(std::string_view id) {
-    using namespace phenotype;
-    widget::canvas(28.0f, 28.0f,
-        [name = std::string(id)](Painter& painter) {
-            paint_sidebar_icon(painter, name);
-        },
-        {},
-        stable_token(std::string(id)) | 0x2000u);
-}
-
 void sidebar_row(std::string_view label,
                  std::string_view icon,
                  std::string location_id,
                  bool selected = false) {
     using namespace phenotype;
-    layout::row([&] {
-        icon_canvas(icon);
-        finder_button(
-            std::string(label),
-            SelectLocation{std::move(location_id)},
-            selected,
-            178.0f,
-            17.0f,
-            false,
-            false);
-    }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
+    ButtonStyleOptions options;
+    options.has_background = true;
+    options.background = selected
+        ? rgba(232, 232, 234, 235)
+        : rgba(0, 0, 0, 0);
+    options.has_hover_background = true;
+    options.hover_background = selected
+        ? rgba(224, 224, 229, 245)
+        : rgba(230, 230, 234, 150);
+    options.has_border_color = true;
+    options.border_color = rgba(0, 0, 0, 0);
+    options.border_width = 0.0f;
+    options.border_radius = 8.0f;
+    options.max_width = 220.0f;
+    options.fixed_height = 36.0f;
+
+    std::string label_text(label);
+    std::string icon_name(icon);
+    widget::canvas_button<Msg>(
+        str{label_text},
+        220.0f,
+        36.0f,
+        [label_text, icon_name, selected](Painter& painter) {
+            paint_sidebar_icon(painter, icon_name);
+            auto ink = selected ? rgba(0, 122, 255) : rgba(30, 30, 30);
+            painter.text(44.0f,
+                         7.0f,
+                         label_text.c_str(),
+                         static_cast<unsigned int>(label_text.size()),
+                         16.0f,
+                         ink);
+        },
+        SelectLocation{std::move(location_id)},
+        options,
+        stable_token(label_text) ^ stable_token(icon_name) ^ 0x510000u);
+}
+
+void sidebar_heading(std::string_view label) {
+    using namespace phenotype;
+    ButtonStyleOptions options;
+    options.has_background = true;
+    options.background = rgba(0, 0, 0, 0);
+    options.has_hover_background = true;
+    options.hover_background = rgba(0, 0, 0, 0);
+    options.has_border_color = true;
+    options.border_color = rgba(0, 0, 0, 0);
+    options.border_width = 0.0f;
+    options.border_radius = 0.0f;
+    options.max_width = 220.0f;
+    options.fixed_height = 28.0f;
+
+    std::string label_text(label);
+    widget::canvas_button<Msg>(
+        str{label_text},
+        220.0f,
+        28.0f,
+        [label_text](Painter& painter) {
+            painter.text(8.0f,
+                         8.0f,
+                         label_text.c_str(),
+                         static_cast<unsigned int>(label_text.size()),
+                         14.0f,
+                         rgba(82, 82, 86));
+        },
+        Noop{},
+        options,
+        stable_token(label_text) ^ 0x520000u);
 }
 
 void finder_sidebar(State const& state) {
@@ -449,14 +498,14 @@ void finder_sidebar(State const& state) {
         sidebar_row("Shared", "folder", "shared",
                     relative == "Demo Root/Shared");
         layout::spacer(16);
-        widget::text("Favorites", TextSize::Small, TextColor::Muted);
+        sidebar_heading("Favorites");
         sidebar_row("Applications", "app", "root");
         sidebar_row("Desktop", "desktop", "root");
         sidebar_row("Documents", "doc", "documents",
                     relative == "Demo Root/Documents");
         sidebar_row("Downloads", "download", "root");
         layout::spacer(16);
-        widget::text("Locations", TextSize::Small, TextColor::Muted);
+        sidebar_heading("Locations");
         sidebar_row("iCloud Drive", "cloud", "root");
         sidebar_row("kakao", "home", "root");
         sidebar_row("AirDrop", "airdrop", "shared");
@@ -494,9 +543,9 @@ phenotype::ButtonStyleOptions toolbar_icon_button_options(
     options.has_border_color = true;
     options.border_color = t.transparent;
     options.border_width = 0.0f;
-    options.border_radius = 18.0f;
-    options.max_width = 44.0f;
-    options.fixed_height = 36.0f;
+    options.border_radius = 17.0f;
+    options.max_width = 40.0f;
+    options.fixed_height = 34.0f;
     options.disabled = disabled;
     return options;
 }
@@ -616,8 +665,8 @@ void view_mode_button(char const* label,
     std::string semantic_label(label);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        44.0f,
-        36.0f,
+        40.0f,
+        34.0f,
         [paint, selected](phenotype::Painter& painter) {
             paint(painter, selected);
         },
@@ -632,8 +681,8 @@ void toolbar_action_button(char const* label,
     std::string semantic_label(label);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        44.0f,
-        36.0f,
+        40.0f,
+        34.0f,
         [paint](phenotype::Painter& painter) {
             paint(painter);
         },
@@ -651,8 +700,8 @@ void file_action_button(char const* label,
     std::string semantic_label(label);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        44.0f,
-        36.0f,
+        40.0f,
+        34.0f,
         [paint, enabled](phenotype::Painter& painter) {
             paint(painter, enabled);
         },
@@ -670,8 +719,8 @@ void navigation_button(char const* label,
     std::string semantic_label(label);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        44.0f,
-        36.0f,
+        40.0f,
+        34.0f,
         [paint, enabled](phenotype::Painter& painter) {
             paint(painter, enabled);
         },
@@ -693,8 +742,8 @@ void finder_toolbar(State const& state,
                 .gap = SpaceToken::Xs,
                 .cross_align = CrossAxisAlignment::Center,
                 .main_align = MainAxisAlignment::Start,
-                .max_width = 104.0f,
-                .fixed_height = 48.0f,
+                .max_width = 96.0f,
+                .fixed_height = 44.0f,
                 .semantic_label = "Navigation Controls",
             },
             [&] {
@@ -717,8 +766,8 @@ void finder_toolbar(State const& state,
                 .gap = SpaceToken::Xs,
                 .cross_align = CrossAxisAlignment::Center,
                 .main_align = MainAxisAlignment::Start,
-                .max_width = 260.0f,
-                .fixed_height = 48.0f,
+                .max_width = 240.0f,
+                .fixed_height = 44.0f,
                 .semantic_label = "View Controls",
             },
             [&] {
@@ -740,8 +789,8 @@ void finder_toolbar(State const& state,
                 .gap = SpaceToken::Xs,
                 .cross_align = CrossAxisAlignment::Center,
                 .main_align = MainAxisAlignment::Start,
-                .max_width = 164.0f,
-                .fixed_height = 48.0f,
+                .max_width = 148.0f,
+                .fixed_height = 44.0f,
                 .semantic_label = "File Actions",
             },
             [&] {
@@ -764,8 +813,8 @@ void finder_toolbar(State const& state,
                 .gap = SpaceToken::Xs,
                 .cross_align = CrossAxisAlignment::Center,
                 .main_align = MainAxisAlignment::Start,
-                .max_width = 82.0f,
-                .fixed_height = 48.0f,
+                .max_width = 52.0f,
+                .fixed_height = 44.0f,
                 .semantic_label = "Group Sort",
             },
             [] {
@@ -781,8 +830,8 @@ void finder_toolbar(State const& state,
                 .gap = SpaceToken::Xs,
                 .cross_align = CrossAxisAlignment::Center,
                 .main_align = MainAxisAlignment::Start,
-                .max_width = 164.0f,
-                .fixed_height = 48.0f,
+                .max_width = 148.0f,
+                .fixed_height = 44.0f,
                 .semantic_label = "Share Tag More",
             },
             [] {
@@ -799,15 +848,15 @@ void finder_toolbar(State const& state,
                 .gap = SpaceToken::Xs,
                 .cross_align = CrossAxisAlignment::Center,
                 .main_align = MainAxisAlignment::Start,
-                .max_width = 56.0f,
-                .fixed_height = 48.0f,
+                .max_width = 52.0f,
+                .fixed_height = 44.0f,
                 .semantic_label = "Search Control",
             },
             [] {
                 toolbar_action_button(
                     "Search Control", paint_search_icon, 0x6401u);
             });
-    }, MaterialKind::Clear, SpaceToken::Sm, SpaceToken::Sm);
+    }, MaterialKind::Clear, SpaceToken::Xs, SpaceToken::Xs);
 }
 
 void finder_grid(file_explorer_demo::Snapshot const& snap) {
@@ -1120,13 +1169,15 @@ void finder_status_bar(State const& state,
     layout::status_bar([&] {
         layout::row([&] {
             layout::weighted(1.0f, [&] {
-                widget::text(finder_status(snap), TextSize::Small, TextColor::Muted);
-                widget::text(explorer.status, TextSize::Small, TextColor::Muted);
-                if (snap.has_selection) {
-                    widget::text(compact_preview(snap.preview),
-                                 TextSize::Small,
-                                 TextColor::Muted);
+                std::string status = finder_status(snap);
+                if (!explorer.status.empty())
+                    status += " - " + explorer.status;
+                if (snap.has_selection
+                    && explorer.status != "Ready"
+                    && !snap.preview.empty()) {
+                    status += " - " + compact_preview(snap.preview);
                 }
+                widget::text(status, TextSize::Small, TextColor::Muted);
             });
             if (snap.has_selection) {
                 layout::sized_box(144.0f, [&] {
@@ -1141,7 +1192,7 @@ void finder_status_bar(State const& state,
                 });
             }
         }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Start);
-    }, MaterialKind::Clear, SpaceToken::Sm, SpaceToken::Xs);
+    }, MaterialKind::Clear, SpaceToken::Xs, SpaceToken::Xs);
 }
 
 void view(State const& state) {

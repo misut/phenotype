@@ -2341,6 +2341,52 @@ static void test_macos_rendered_text_preserves_vertical_orientation() {
     std::puts("PASS: macOS rendered text preserves vertical orientation");
 }
 
+static void test_macos_text_only_scissor_keeps_own_batch() {
+    std::vector<unsigned char> commands;
+    append_u32(commands, static_cast<unsigned int>(Cmd::Scissor));
+    append_f32(commands, 18.0f);
+    append_f32(commands, 24.0f);
+    append_f32(commands, 160.0f);
+    append_f32(commands, 44.0f);
+    append_u32(commands, static_cast<unsigned int>(Cmd::DrawText));
+    append_f32(commands, 24.0f);
+    append_f32(commands, 32.0f);
+    append_f32(commands, 16.0f);
+    append_f32(commands, 0.0f);
+    append_f32(commands, 1.0f);
+    append_u32(commands, 0u);
+    append_u32(commands, Color{20, 20, 20, 255}.packed());
+    append_u32(commands, 0u);
+    append_u32(commands, 7u);
+    append_bytes(commands, "Heading", 7u);
+    append_u32(commands, static_cast<unsigned int>(Cmd::Scissor));
+    append_f32(commands, 0.0f);
+    append_f32(commands, 0.0f);
+    append_f32(commands, 0.0f);
+    append_f32(commands, 0.0f);
+    append_u32(commands, static_cast<unsigned int>(Cmd::FillRect));
+    append_f32(commands, 0.0f);
+    append_f32(commands, 0.0f);
+    append_f32(commands, 8.0f);
+    append_f32(commands, 8.0f);
+    append_u32(commands, Color{255, 255, 255, 255}.packed());
+
+    auto debug = phenotype::native::macos_test::decode_scissor_batches_debug(
+        commands);
+    assert(debug.ok);
+    assert(debug.text_run_batches.size() == 1);
+    assert(debug.text_run_batches[0] == 0);
+    assert(debug.batches.size() == 2);
+    assert(debug.batches[0].x == 18.0f);
+    assert(debug.batches[0].y == 24.0f);
+    assert(debug.batches[0].w == 160.0f);
+    assert(debug.batches[0].h == 44.0f);
+    assert(debug.batches[0].pending_text_runs);
+    assert(debug.batches[1].w == 0.0f);
+    assert(debug.batches[1].h == 0.0f);
+    std::puts("PASS: macOS text-only scissor keeps own batch");
+}
+
 static void test_text_build_atlas_mixed_fallback_scale_preserves_bounds() {
     text::init();
     std::vector<text::TextEntry> entries;
@@ -3553,6 +3599,7 @@ int main() {
     test_text_build_atlas_crops_padding();
     test_text_build_atlas_scale_preserves_logical_bounds();
     test_macos_rendered_text_preserves_vertical_orientation();
+    test_macos_text_only_scissor_keeps_own_batch();
     test_text_build_atlas_mixed_fallback_scale_preserves_bounds();
     test_text_build_atlas_respects_line_box();
     test_text_build_atlas_keeps_line_box_stable();

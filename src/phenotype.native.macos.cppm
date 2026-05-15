@@ -1686,6 +1686,10 @@ struct ScissorBatch {
     std::vector<ArcInstanceGPU>   arcs;
     std::vector<ImageInstanceGPU> images;
     std::vector<TextInstanceGPU>  texts;
+    // DrawText commands are decoded into text_runs first and materialized into
+    // texts after atlas preparation. Track them here so text-only scissored
+    // canvases still keep their own batch instead of being treated as empty.
+    bool pending_text_runs = false;
     std::uint32_t tri_first   = 0;
     std::uint32_t color_first = 0;
     std::uint32_t material_first = 0;
@@ -1762,7 +1766,8 @@ inline void open_scissor_batch(FrameScratch& s,
     auto& cur = s.batches.back();
     if (cur.tri_vertices.empty() && cur.colors.empty()
         && cur.materials.empty() && cur.arcs.empty()
-        && cur.images.empty() && cur.texts.empty()) {
+        && cur.images.empty() && cur.texts.empty()
+        && !cur.pending_text_runs) {
         cur.x = x; cur.y = y; cur.w = w; cur.h = h;
         return;
     }
@@ -1779,7 +1784,8 @@ inline void open_same_scissor_batch(FrameScratch& s) {
 inline void ensure_triangle_order_batch(FrameScratch& s) {
     auto const& cur = s.batches.back();
     if (!cur.colors.empty() || !cur.materials.empty() || !cur.arcs.empty()
-        || !cur.images.empty() || !cur.texts.empty()) {
+        || !cur.images.empty() || !cur.texts.empty()
+        || cur.pending_text_runs) {
         open_same_scissor_batch(s);
     }
 }
@@ -2337,7 +2343,8 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 auto& cur = scratch.batches.back();
                 if (!cur.tri_vertices.empty() || !cur.colors.empty()
                     || !cur.materials.empty() || !cur.arcs.empty()
-                    || !cur.images.empty() || !cur.texts.empty()) {
+                    || !cur.images.empty() || !cur.texts.empty()
+                    || cur.pending_text_runs) {
                     open_same_scissor_batch(scratch);
                 }
                 if (plan.backdrop_sampling && !plan.fallback()) {
@@ -2396,6 +2403,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     ? ::phenotype::FontStyle::Italic
                     : ::phenotype::FontStyle::Upright;
                 run.font_key.mono = run.mono;
+                scratch.batches.back().pending_text_runs = true;
                 scratch.text_runs.push_back(std::move(run));
                 break;
             }
@@ -6844,6 +6852,21 @@ struct RasterizedTextRunDebug {
     std::uint64_t bottom_alpha = 0;
 };
 
+struct ScissorBatchDebug {
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+    bool pending_text_runs = false;
+    std::size_t text_count = 0;
+};
+
+struct ScissorDecodeDebug {
+    bool ok = false;
+    std::vector<ScissorBatchDebug> batches;
+    std::vector<std::uint32_t> text_run_batches;
+};
+
 inline Utf8Range utf16_range_to_utf8(std::string const& text,
                                      unsigned long location,
                                      unsigned long length) {
@@ -6972,6 +6995,44 @@ inline RasterizedTextRunDebug rasterized_text_run_debug(std::string const& text,
             }
         }
     }
+    return debug;
+}
+
+inline ScissorDecodeDebug decode_scissor_batches_debug(
+        std::vector<unsigned char> const& commands) {
+    ScissorDecodeDebug debug{};
+    detail::FrameScratch scratch;
+    std::vector<HitRegionCmd> hit_regions;
+    double cr = 0.0;
+    double cg = 0.0;
+    double cb = 0.0;
+    double ca = 0.0;
+    MaterialEnvironment material_env{};
+    debug.ok = detail::decode_frame_commands(
+        commands.data(),
+        static_cast<unsigned int>(commands.size()),
+        1.6f,
+        material_env,
+        scratch,
+        hit_regions,
+        cr,
+        cg,
+        cb,
+        ca);
+    if (!debug.ok)
+        return debug;
+    for (auto const& batch : scratch.batches) {
+        debug.batches.push_back(ScissorBatchDebug{
+            batch.x,
+            batch.y,
+            batch.w,
+            batch.h,
+            batch.pending_text_runs,
+            batch.texts.size(),
+        });
+    }
+    for (auto const& run : scratch.text_runs)
+        debug.text_run_batches.push_back(run.batch_idx);
     return debug;
 }
 
@@ -7159,6 +7220,21 @@ struct RasterizedTextRunDebug {
     std::uint64_t bottom_alpha = 0;
 };
 
+struct ScissorBatchDebug {
+    float x = 0.0f;
+    float y = 0.0f;
+    float w = 0.0f;
+    float h = 0.0f;
+    bool pending_text_runs = false;
+    std::size_t text_count = 0;
+};
+
+struct ScissorDecodeDebug {
+    bool ok = false;
+    std::vector<ScissorBatchDebug> batches;
+    std::vector<std::uint32_t> text_run_batches;
+};
+
 inline Utf8Range utf16_range_to_utf8(std::string const&,
                                      unsigned long,
                                      unsigned long) {
@@ -7196,6 +7272,11 @@ inline RasterizedTextRunDebug rasterized_text_run_debug(
         bool,
         float,
         float) {
+    return {};
+}
+
+inline ScissorDecodeDebug decode_scissor_batches_debug(
+        std::vector<unsigned char> const&) {
     return {};
 }
 
