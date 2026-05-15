@@ -64,7 +64,7 @@ Rules:
 
 ## Desktop example artifact hook
 
-GLFW-based native examples can write a startup artifact bundle without adding
+Native desktop examples can write a startup artifact bundle without adding
 example-specific code. Set `PHENOTYPE_ARTIFACT_DIR` before launching the
 example:
 

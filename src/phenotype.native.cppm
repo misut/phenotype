@@ -2,6 +2,7 @@ module;
 
 #if !defined(__wasi__)
 #include <concepts>
+#include <cstdio>
 #include <functional>
 #include <optional>
 #include <string>
@@ -20,9 +21,13 @@ import phenotype.native.stub;
 #if defined(__ANDROID__)
 import phenotype.native.android;
 #else
-export import phenotype.native.shell.glfw;
 import phenotype.native.macos;
 import phenotype.native.windows;
+#  if defined(__APPLE__)
+export import phenotype.native.shell.macos;
+#  elif defined(_WIN32)
+export import phenotype.native.shell.windows;
+#  endif
 #endif
 
 namespace phenotype::native::detail {
@@ -41,6 +46,51 @@ inline platform_api const& select_platform() {
 
 inline platform_api const& require_platform(platform_api const* platform) {
     return platform ? *platform : select_platform();
+}
+
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+int run_desktop_app_with_platform(platform_api const& platform,
+                                  int width,
+                                  int height,
+                                  char const* title,
+                                  WindowOptions options,
+                                  View view,
+                                  Update update,
+                                  std::function<void(int, int, float)> on_viewport = {}) {
+#if defined(__APPLE__)
+    return run_app_with_macos_platform<State, Msg>(
+        platform,
+        width,
+        height,
+        title,
+        options,
+        std::move(view),
+        std::move(update),
+        std::move(on_viewport));
+#elif defined(_WIN32)
+    return run_app_with_windows_platform<State, Msg>(
+        platform,
+        width,
+        height,
+        title,
+        options,
+        std::move(view),
+        std::move(update),
+        std::move(on_viewport));
+#else
+    (void)platform;
+    (void)width;
+    (void)height;
+    (void)title;
+    (void)options;
+    (void)view;
+    (void)update;
+    (void)on_viewport;
+    std::fprintf(stderr, "phenotype.native run_app is not available on this desktop target\n");
+    return 1;
+#endif
 }
 
 } // namespace phenotype::native::detail
@@ -230,16 +280,16 @@ void run(native_host& host, View view, Update update) {
 }
 
 #if !defined(__ANDROID__)
-// run_app assumes a GLFW-style windowing driver. Android consumers write
+// run_app assumes the platform-native desktop windowing driver. Android consumers write
 // their own android_main that pumps the GameActivity loop and calls
 // `run<State, Msg>` directly with a native_host bound to an ANativeWindow*.
 template<typename State, typename Msg, typename View, typename Update>
     requires std::invocable<View, State const&>
           && std::invocable<Update, State&, Msg>
 int run_app(int width, int height, char const* title, View view, Update update) {
-    return detail::run_app_with_platform<State, Msg>(
+    return detail::run_desktop_app_with_platform<State, Msg>(
         current_platform(), width, height, title,
-        std::move(view), std::move(update));
+        WindowOptions{}, std::move(view), std::move(update));
 }
 
 template<typename State, typename Msg, typename View, typename Update>
@@ -248,7 +298,7 @@ template<typename State, typename Msg, typename View, typename Update>
 int run_app(int width, int height, char const* title,
             WindowOptions options,
             View view, Update update) {
-    return detail::run_app_with_platform<State, Msg>(
+    return detail::run_desktop_app_with_platform<State, Msg>(
         current_platform(), width, height, title,
         options, std::move(view), std::move(update));
 }
@@ -269,9 +319,9 @@ int run_app(int width, int height, char const* title,
         [factory = std::move(make_viewport_msg)](int w, int h, float s) {
             ::phenotype::detail::post<Msg>(factory(w, h, s));
         };
-    return detail::run_app_with_platform<State, Msg>(
+    return detail::run_desktop_app_with_platform<State, Msg>(
         current_platform(), width, height, title,
-        std::move(view), std::move(update), std::move(thunk));
+        WindowOptions{}, std::move(view), std::move(update), std::move(thunk));
 }
 
 template<typename State, typename Msg, typename View, typename Update,
@@ -286,7 +336,7 @@ int run_app(int width, int height, char const* title,
         [factory = std::move(make_viewport_msg)](int w, int h, float s) {
             ::phenotype::detail::post<Msg>(factory(w, h, s));
         };
-    return detail::run_app_with_platform<State, Msg>(
+    return detail::run_desktop_app_with_platform<State, Msg>(
         current_platform(), width, height, title,
         options, std::move(view), std::move(update), std::move(thunk));
 }

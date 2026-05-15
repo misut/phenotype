@@ -13,7 +13,16 @@ platforms = [
 cmake-in-root = false
 
 [target.'cfg(os = "macos")'.build]
-ldflags = ["-framework", "Security", "-Wl,-framework,CoreFoundation"]
+ldflags = [
+    "-Wl,-framework,AppKit",
+    "-Wl,-framework,CoreGraphics",
+    "-Wl,-framework,CoreText",
+    "-Wl,-framework,Foundation",
+    "-Wl,-framework,Metal",
+    "-Wl,-framework,QuartzCore",
+    "-Wl,-framework,Security",
+    "-Wl,-framework,CoreFoundation",
+]
 
 [dependencies]
 "github.com/misut/cppx" = "1.9.0"

@@ -99,7 +99,6 @@ struct text_api {
 
 enum class NativeSurfaceKind {
     Unknown,
-    GlfwWindow,
     MacOSWindow,
     Win32Window,
     AndroidWindow,
@@ -118,7 +117,7 @@ struct NativeSurfaceDescriptor {
 
 // Opaque native surface handle. Desktop shells pass a
 // NativeSurfaceDescriptor*. Android still passes its platform window directly
-// so the C ABI surface stays stable while desktop migrates away from GLFW.
+// so the C ABI surface stays stable.
 using native_surface_handle = void*;
 
 enum class WindowChromeStyle {

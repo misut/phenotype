@@ -208,7 +208,7 @@ The interactions wired through this pipeline:
 - `tabs` 2 px indicator that slides under the selected tab.
 - `progress_indeterminate` looping slug.
 
-Hover, focus, and scroll dispatches in the GLFW shell route through
+Hover, focus, and scroll dispatches in the native desktop shells route through
 `trigger_rebuild` (instead of just `repaint_current`) so each
 transition is observed at view time. Scroll stays on the cheaper
 paint-only path while no animation is running, then promotes to a
@@ -256,7 +256,7 @@ phenotype::run<State, Msg>(view, update)
 - **No external libraries** — layout, rendering, event handling, JSON, and
   diagnostics are all implemented from scratch.
 - **Platform-agnostic C++ API** — the web path goes through the JS shim,
-  while desktop native paths use the shared GLFW shell plus platform-specific
+  while desktop native paths use AppKit / Win32 shells plus platform-specific
   text / renderer adapters behind the same command-buffer contract.
 - **C++23 modules** — `.cppm` files, `import std;` (or GMF on wasi-sdk).
 - **OTel-shaped observability** — diagnostics are framed as Counter / Gauge /
@@ -277,7 +277,7 @@ exon run
 ```
 
 `examples/native` is the desktop widget showcase — a non-trivial composition
-of every shared widget rendered via the GLFW shell + Metal (macOS) or
+of every shared widget rendered via the AppKit + Metal (macOS) or Win32 +
 Direct3D 12 (Windows) backend.
 
 ```bash
@@ -358,7 +358,7 @@ for the current feature-to-example coverage matrix.
 - [x] vDOM-style diff / partial paint v1 — frame skip on identical cmd buffers
 - [x] vDOM-style diff / partial paint v2 — double-buffer arena + position-based subtree diff
 - [x] Native backend split (public coordinator + shared shell + platform modules)
-- [x] macOS native backend (GLFW shell + CoreText + Metal)
+- [x] macOS native backend (AppKit shell + CoreText + Metal)
 - [x] Windows native backend (shared shell + DirectWrite + Direct3D 12)
 - [x] Windows native IME composition and candidate overlay
 - [x] Windows native image rendering (`DrawImage` local files + async remote images via WIC)

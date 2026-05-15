@@ -87,8 +87,8 @@ runtime JSON, frame capture) instead of relying only on screenshots.
 | Target | State |
 |---|---|
 | `wasi` | Supported snapshot/debug target, no native frame capture |
-| `macos/aarch64` | Native GLFW shell, CoreText, Metal, local and remote images |
-| `windows/x86_64` | Native GLFW shell, DirectWrite, Direct3D 12, local and remote images |
+| `macos/aarch64` | AppKit shell, CoreText, Metal, local and remote images |
+| `windows/x86_64` | Win32 shell, DirectWrite, Direct3D 12, local and remote images |
 | `android/aarch64` | GameActivity shell, Vulkan renderer, text/image pipelines, debug plane |
 
 Linux native is intentionally not a supported renderer target today.

@@ -6884,8 +6884,8 @@ inline void bind_platform_once() {
 
 // ---- Stage 6 input dispatch helpers ---------------------------------
 //
-// Android key codes are a disjoint enum from GLFW's (and therefore from
-// phenotype's neutral Key enum, which mirrors GLFW values so desktop
+// Android key codes are a disjoint enum from phenotype's neutral Key enum
+// (which preserves the original desktop numeric values so desktop
 // can cast-through). We only translate the keys that
 // shell::dispatch_key actually switches on — everything else maps to
 // Key::Other, which the shell already treats as "no semantic match".
@@ -6917,7 +6917,7 @@ inline Key translate_android_keycode(int akc) {
 // Translate Android's KeyEvent meta flags to phenotype's Modifier
 // bitmask. META_SHIFT_ON | META_CTRL_ON | META_ALT_ON | META_META_ON
 // (Super) are 1 / 0x1000 / 0x02 / 0x10000 respectively per
-// <android/input.h>; shift to match phenotype's GLFW-mirrored values.
+// <android/input.h>; shift to match phenotype's neutral desktop values.
 inline int translate_android_mods(int android_meta) {
     int mods = 0;
     if (android_meta & AMETA_SHIFT_ON) mods |= static_cast<int>(Modifier::Shift);
@@ -6931,7 +6931,7 @@ inline int translate_android_mods(int android_meta) {
 
 // Public templated entry for Android consumers that link in their own
 // State / Msg / view / update via a static archive. Counterpart to
-// `phenotype::native::run_app` for the GLFW shell.
+// `phenotype::native::run_app` for the desktop shell.
 //
 // Apps that build their own `lib<app>-modules.a` (via exon for
 // aarch64-linux-android) and link it into the GameActivity NDK target
@@ -7022,8 +7022,8 @@ void phenotype_android_draw_frame(void) {
     namespace d = phenotype::native::detail;
     if (!d::g_android_host.platform || !d::g_android_host.window) return;
     // Stage 6: driver ticks call here every frame. Drive the standard
-    // caret-blink / IME-sync / repaint sequence the GLFW shell uses
-    // between glfwPollEvents calls. repaint_current is a no-op until
+    // caret-blink / IME-sync / repaint sequence the desktop shell uses
+    // between native event-pump iterations. repaint_current is a no-op until
     // phenotype_android_start_app wires the view/update loop; before
     // that, the screen will simply not re-present (first frame after
     // start_app will paint).

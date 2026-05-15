@@ -18,11 +18,9 @@ import phenotype.native.platform;
 
 export namespace phenotype::native {
 
-// Neutral input enums. Values mirror GLFW so the GLFW-side driver can
-// pass-through with `static_cast` while non-GLFW drivers (Android, future
-// iOS) translate their platform constants to these values. Compatibility
-// with GLFW is asserted from `phenotype.native.shell.glfw`, which can
-// include the GLFW headers.
+// Neutral input enums. Values intentionally keep the original desktop numeric
+// assignments for source compatibility, while platform drivers translate
+// AppKit, Win32, Android, or future toolkit constants into this small set.
 enum class KeyAction : int {
     Release = 0,
     Press   = 1,
@@ -68,6 +66,47 @@ enum class Key : int {
     Other     = -1,
 };
 
+inline Key key_from_legacy_code(int key) {
+    switch (key) {
+        case static_cast<int>(Key::Tab): return Key::Tab;
+        case static_cast<int>(Key::Backspace): return Key::Backspace;
+        case static_cast<int>(Key::Enter): return Key::Enter;
+        case static_cast<int>(Key::KpEnter): return Key::KpEnter;
+        case static_cast<int>(Key::Space): return Key::Space;
+        case static_cast<int>(Key::Left): return Key::Left;
+        case static_cast<int>(Key::Right): return Key::Right;
+        case static_cast<int>(Key::Up): return Key::Up;
+        case static_cast<int>(Key::Down): return Key::Down;
+        case static_cast<int>(Key::PageUp): return Key::PageUp;
+        case static_cast<int>(Key::PageDown): return Key::PageDown;
+        case static_cast<int>(Key::Home): return Key::Home;
+        case static_cast<int>(Key::End): return Key::End;
+        case static_cast<int>(Key::Escape): return Key::Escape;
+        case static_cast<int>(Key::A): return Key::A;
+        default: return Key::Other;
+    }
+}
+
+inline KeyAction key_action_from_legacy_code(int action) {
+    switch (action) {
+        case static_cast<int>(KeyAction::Release): return KeyAction::Release;
+        case static_cast<int>(KeyAction::Repeat): return KeyAction::Repeat;
+        case static_cast<int>(KeyAction::Press):
+        default:
+            return KeyAction::Press;
+    }
+}
+
+inline MouseButton mouse_button_from_legacy_code(int button) {
+    switch (button) {
+        case static_cast<int>(MouseButton::Right): return MouseButton::Right;
+        case static_cast<int>(MouseButton::Middle): return MouseButton::Middle;
+        case static_cast<int>(MouseButton::Left):
+        default:
+            return MouseButton::Left;
+    }
+}
+
 struct native_host {
     // Opaque native surface handle. Desktop shells pass a
     // NativeSurfaceDescriptor* carrying the OS window/view and viewport
@@ -75,16 +114,14 @@ struct native_host {
     native_surface_handle window = nullptr;
     platform_api const* platform = nullptr;
 
-    // Cached framebuffer size, populated by the driver layer (shell.glfw
-    // or a future shell.android). Used by the host_platform concept so
+    // Cached framebuffer size, populated by the driver layer. Used by the host_platform concept so
     // shell dispatch code never has to query the windowing toolkit
     // directly.
     int cached_width_px = 800;
     int cached_height_px = 600;
 
     // Cached HiDPI scale (framebuffer_pixels / window_points). Driver
-    // updates this from `glfwGetWindowContentScale` at startup and on
-    // every framebuffer_size / content_scale callback so renderers can
+    // updates this at startup and on every viewport/content-scale callback so renderers can
     // read it without polling the windowing toolkit each frame.
     float cached_content_scale = 1.0f;
 
@@ -96,9 +133,8 @@ struct native_host {
     std::function<void(int /*w*/, int /*h*/, float /*scale*/)>
         on_viewport_changed;
 
-    // Optional driver hook for hardware-cursor updates. shell.glfw sets
-    // this to a GLFW-based cursor updater; other drivers leave it null
-    // (touch devices don't have a pointer cursor).
+    // Optional driver hook for hardware-cursor updates. Pointer-based desktop drivers set
+    // this; touch-only drivers leave it null.
     void (*set_hover_cursor)(bool pointing) = nullptr;
 
     float measure_text(float font_size, ::phenotype::FontSpec font,
@@ -692,6 +728,16 @@ inline bool dispatch_mouse_button(float mx, float my,
     return cleared;
 }
 
+inline bool dispatch_mouse_button(float mx, float my,
+                                  int button, int action, int mods) {
+    return dispatch_mouse_button(
+        mx,
+        my,
+        mouse_button_from_legacy_code(button),
+        key_action_from_legacy_code(action),
+        mods);
+}
+
 inline bool dispatch_cursor_pos(float mx, float my) {
     g_app_state.last_mouse_x = mx;
     g_app_state.last_mouse_y = my;
@@ -1025,6 +1071,13 @@ inline bool dispatch_key(Key key, KeyAction action, int mods) {
     }
 }
 
+inline bool dispatch_key(int key, int action, int mods) {
+    return dispatch_key(
+        key_from_legacy_code(key),
+        key_action_from_legacy_code(action),
+        mods);
+}
+
 inline bool dispatch_char(unsigned int codepoint) {
     auto detail = (codepoint == static_cast<unsigned int>(' ')) ? "space-char" : "char";
     if (!::phenotype::detail::focused_is_input()) {
@@ -1055,6 +1108,19 @@ void run_host(native_host& host, View view, Update update) {
         host.platform->renderer.init(host.window);
     phenotype::run<State, Msg>(host, std::move(view), std::move(update));
     sync_platform_input();
+}
+
+inline void service_host_tick(std::chrono::steady_clock::time_point& last_animation_tick) {
+    tick_caret_blink();
+    sync_platform_input();
+
+    if (::phenotype::detail::g_app.has_active_animations) {
+        auto now = std::chrono::steady_clock::now();
+        if (now - last_animation_tick >= std::chrono::milliseconds(16)) {
+            ::phenotype::detail::trigger_rebuild();
+            last_animation_tick = now;
+        }
+    }
 }
 
 inline void shutdown_host(native_host& host) {

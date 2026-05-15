@@ -18,8 +18,11 @@
 
 #if !defined(__wasi__) && !defined(__ANDROID__)
 
-#include <GLFW/glfw3.h>
-
+#ifdef __APPLE__
+#include <CoreGraphics/CoreGraphics.h>
+#include <objc/message.h>
+#include <objc/runtime.h>
+#endif
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -47,6 +50,27 @@ import phenotype.native.windows;
 
 using namespace phenotype::native;
 using namespace phenotype;
+
+static constexpr int LEGACY_RELEASE = static_cast<int>(KeyAction::Release);
+static constexpr int LEGACY_PRESS = static_cast<int>(KeyAction::Press);
+static constexpr int LEGACY_REPEAT = static_cast<int>(KeyAction::Repeat);
+static constexpr int LEGACY_MOD_SHIFT = static_cast<int>(Modifier::Shift);
+static constexpr int LEGACY_MOD_CONTROL = static_cast<int>(Modifier::Control);
+static constexpr int LEGACY_MOD_SUPER = static_cast<int>(Modifier::Super);
+static constexpr int LEGACY_MOUSE_BUTTON_LEFT = static_cast<int>(MouseButton::Left);
+static constexpr int LEGACY_KEY_TAB = static_cast<int>(Key::Tab);
+static constexpr int LEGACY_KEY_BACKSPACE = static_cast<int>(Key::Backspace);
+static constexpr int LEGACY_KEY_ENTER = static_cast<int>(Key::Enter);
+static constexpr int LEGACY_KEY_SPACE = static_cast<int>(Key::Space);
+static constexpr int LEGACY_KEY_LEFT = static_cast<int>(Key::Left);
+static constexpr int LEGACY_KEY_RIGHT = static_cast<int>(Key::Right);
+static constexpr int LEGACY_KEY_UP = static_cast<int>(Key::Up);
+static constexpr int LEGACY_KEY_DOWN = static_cast<int>(Key::Down);
+static constexpr int LEGACY_KEY_PAGE_DOWN = static_cast<int>(Key::PageDown);
+static constexpr int LEGACY_KEY_HOME = static_cast<int>(Key::Home);
+static constexpr int LEGACY_KEY_END = static_cast<int>(Key::End);
+static constexpr int LEGACY_KEY_ESCAPE = static_cast<int>(Key::Escape);
+static constexpr int LEGACY_KEY_A = static_cast<int>(Key::A);
 
 static constexpr char kLocalExampleImageAsset[] = "showcase-local.bmp";
 static constexpr char kRemoteExampleImageAsset[] = "showcase.bmp";
@@ -110,42 +134,147 @@ static void assert_non_empty_frame_capture(DebugFrameCapture const& frame) {
     assert(has_non_zero_channel);
 }
 
-static float backing_scale_for_window(GLFWwindow* window) {
-    assert(window != nullptr);
-    int fbw = 0;
-    int fbh = 0;
-    int winw = 0;
-    int winh = 0;
-    glfwGetFramebufferSize(window, &fbw, &fbh);
-    glfwGetWindowSize(window, &winw, &winh);
-    assert(fbw > 0);
-    assert(winw > 0);
-
-    auto sx = static_cast<float>(fbw) / static_cast<float>(winw);
-    auto sy = (winh > 0)
-        ? static_cast<float>(fbh) / static_cast<float>(winh)
-        : sx;
-    return (sx > sy) ? sx : sy;
+#ifdef __APPLE__
+template<typename R, typename... Args>
+static R test_objc_send(id object, SEL selector, Args... args) {
+    return reinterpret_cast<R (*)(id, SEL, Args...)>(objc_msgSend)(
+        object,
+        selector,
+        args...);
 }
 
-static NativeSurfaceDescriptor make_glfw_surface(GLFWwindow* window) {
+static id test_class_id(char const* name) {
+    return reinterpret_cast<id>(objc_getClass(name));
+}
+
+static SEL test_sel(char const* name) {
+    return sel_registerName(name);
+}
+
+static id test_ns_string(char const* text) {
+    return test_objc_send<id>(
+        test_class_id("NSString"),
+        test_sel("stringWithUTF8String:"),
+        text ? text : "");
+}
+
+static id create_hidden_macos_window(int width, int height, char const* title) {
+    auto app = test_objc_send<id>(test_class_id("NSApplication"), test_sel("sharedApplication"));
+    test_objc_send<void>(app, test_sel("setActivationPolicy:"), static_cast<long>(0));
+    test_objc_send<void>(app, test_sel("finishLaunching"));
+
+    CGRect frame{};
+    frame.size.width = width;
+    frame.size.height = height;
+    constexpr unsigned long style =
+        (1ul << 0) | (1ul << 1) | (1ul << 2) | (1ul << 3);
+    id window = test_objc_send<id>(
+        test_objc_send<id>(test_class_id("NSWindow"), test_sel("alloc")),
+        test_sel("initWithContentRect:styleMask:backing:defer:"),
+        frame,
+        style,
+        static_cast<unsigned long>(2),
+        static_cast<signed char>(0));
     assert(window != nullptr);
-    int fbw = 0;
-    int fbh = 0;
-    int winw = 0;
-    int winh = 0;
-    glfwGetFramebufferSize(window, &fbw, &fbh);
-    glfwGetWindowSize(window, &winw, &winh);
+    test_objc_send<void>(window, test_sel("setReleasedWhenClosed:"), static_cast<signed char>(0));
+    test_objc_send<void>(window, test_sel("setTitle:"), test_ns_string(title));
+    return window;
+}
+
+static NativeSurfaceDescriptor make_macos_surface(id window) {
+    assert(window != nullptr);
+    id view = test_objc_send<id>(window, test_sel("contentView"));
+    CGRect bounds = test_objc_send<CGRect>(view, test_sel("bounds"));
+    double scale = test_objc_send<double>(window, test_sel("backingScaleFactor"));
+    int logical_width = static_cast<int>(std::lround(bounds.size.width));
+    int logical_height = static_cast<int>(std::lround(bounds.size.height));
+    int framebuffer_width = static_cast<int>(
+        std::lround(static_cast<double>(logical_width) * scale));
+    int framebuffer_height = static_cast<int>(
+        std::lround(static_cast<double>(logical_height) * scale));
     return NativeSurfaceDescriptor{
-        .kind = NativeSurfaceKind::GlfwWindow,
+        .kind = NativeSurfaceKind::MacOSWindow,
         .window = window,
-        .logical_width = winw,
-        .logical_height = winh,
-        .framebuffer_width = fbw,
-        .framebuffer_height = fbh,
-        .content_scale = backing_scale_for_window(window),
+        .view = view,
+        .logical_width = logical_width,
+        .logical_height = logical_height,
+        .framebuffer_width = framebuffer_width,
+        .framebuffer_height = framebuffer_height,
+        .content_scale = static_cast<float>(scale),
     };
 }
+#endif
+
+#ifdef _WIN32
+static float test_dpi_scale_for_window(HWND hwnd) {
+    UINT dpi = 96;
+    if (auto* user32 = GetModuleHandleW(L"user32.dll")) {
+        using GetDpiForWindowFn = UINT(WINAPI*)(HWND);
+        auto* get_dpi = reinterpret_cast<GetDpiForWindowFn>(
+            GetProcAddress(user32, "GetDpiForWindow"));
+        if (get_dpi)
+            dpi = get_dpi(hwnd);
+    }
+    return static_cast<float>(dpi) / 96.0f;
+}
+
+static LRESULT CALLBACK native_test_wndproc(HWND hwnd, UINT msg, WPARAM wp, LPARAM lp) {
+    return DefWindowProcW(hwnd, msg, wp, lp);
+}
+
+static HWND create_hidden_win32_window(int width, int height, wchar_t const* title) {
+    auto instance = GetModuleHandleW(nullptr);
+    constexpr wchar_t class_name[] = L"PhenotypeNativeTestWindow";
+    WNDCLASSW wc{};
+    wc.lpfnWndProc = native_test_wndproc;
+    wc.hInstance = instance;
+    wc.lpszClassName = class_name;
+    RegisterClassW(&wc);
+    DWORD style = WS_OVERLAPPEDWINDOW;
+    RECT rect{0, 0, width, height};
+    AdjustWindowRectEx(&rect, style, FALSE, 0);
+    HWND hwnd = CreateWindowExW(
+        0,
+        class_name,
+        title,
+        style,
+        CW_USEDEFAULT,
+        CW_USEDEFAULT,
+        rect.right - rect.left,
+        rect.bottom - rect.top,
+        nullptr,
+        nullptr,
+        instance,
+        nullptr);
+    assert(hwnd != nullptr);
+    return hwnd;
+}
+
+static NativeSurfaceDescriptor make_win32_surface(HWND hwnd) {
+    assert(hwnd != nullptr);
+    RECT rect{};
+    GetClientRect(hwnd, &rect);
+    int width = static_cast<int>(rect.right - rect.left);
+    int height = static_cast<int>(rect.bottom - rect.top);
+    return NativeSurfaceDescriptor{
+        .kind = NativeSurfaceKind::Win32Window,
+        .window = hwnd,
+        .logical_width = width,
+        .logical_height = height,
+        .framebuffer_width = width,
+        .framebuffer_height = height,
+        .content_scale = test_dpi_scale_for_window(hwnd),
+    };
+}
+
+static void pump_native_test_events() {
+    MSG msg{};
+    while (PeekMessageW(&msg, nullptr, 0, 0, PM_REMOVE)) {
+        TranslateMessage(&msg);
+        DispatchMessageW(&msg);
+    }
+}
+#endif
 
 static int find_rightmost_dark_pixel_x(DebugFrameCapture const& frame,
                                        int min_x,
@@ -258,7 +387,7 @@ static void assert_macos_runtime_sections(json::Object const& details) {
 
 #ifdef _WIN32
 struct WindowsRendererFixture {
-    GLFWwindow* window = nullptr;
+    HWND window = nullptr;
     NativeSurfaceDescriptor surface{};
     native_host host{};
 
@@ -267,14 +396,10 @@ struct WindowsRendererFixture {
         _putenv_s("PHENOTYPE_DX12_WARP", "1");
         _putenv_s("PHENOTYPE_DX12_DEBUG", "0");
 
-        assert(glfwInit());
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-        window = glfwCreateWindow(320, 240, "phenotype-test", nullptr, nullptr);
-        assert(window != nullptr);
+        window = create_hidden_win32_window(320, 240, L"phenotype-test");
 
         text::init();
-        surface = make_glfw_surface(window);
+        surface = make_win32_surface(window);
         renderer::init(&surface);
 
         host.window = &surface;
@@ -285,8 +410,7 @@ struct WindowsRendererFixture {
         renderer::shutdown();
         text::shutdown();
         if (window)
-            glfwDestroyWindow(window);
-        glfwTerminate();
+            DestroyWindow(window);
     }
 };
 
@@ -488,9 +612,9 @@ static void test_default_scroll_delta_fallback() {
 
 static int select_all_mods() {
 #ifdef __APPLE__
-    return GLFW_MOD_SUPER;
+    return LEGACY_MOD_SUPER;
 #else
-    return GLFW_MOD_CONTROL;
+    return LEGACY_MOD_CONTROL;
 #endif
 }
 
@@ -652,7 +776,7 @@ struct Harness {
 
 #ifdef _WIN32
 struct WindowsInputHarness {
-    GLFWwindow* window = nullptr;
+    HWND window = nullptr;
     NativeSurfaceDescriptor surface{};
     native_host host{};
 
@@ -663,13 +787,9 @@ struct WindowsInputHarness {
         _putenv_s("PHENOTYPE_DX12_WARP", "1");
         _putenv_s("PHENOTYPE_DX12_DEBUG", "0");
 
-        assert(glfwInit());
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-        window = glfwCreateWindow(360, 640, "phenotype-input-test", nullptr, nullptr);
-        assert(window != nullptr);
+        window = create_hidden_win32_window(360, 640, L"phenotype-input-test");
 
-        surface = make_glfw_surface(window);
+        surface = make_win32_surface(window);
         host.window = &surface;
         host.platform = &current_platform();
         phenotype::native::run<input_regression::State, input_regression::Msg>(
@@ -682,8 +802,7 @@ struct WindowsInputHarness {
     ~WindowsInputHarness() {
         phenotype::native::detail::shutdown_host(host);
         if (window)
-            glfwDestroyWindow(window);
-        glfwTerminate();
+            DestroyWindow(window);
         phenotype::native::windows_test::reset_input_debug_counters();
         input_regression::reset_core_state();
     }
@@ -735,7 +854,7 @@ static void view(State const&) {
 } // namespace remote_shell_regression
 
 struct WindowsRemoteShellHarness {
-    GLFWwindow* window = nullptr;
+    HWND window = nullptr;
     NativeSurfaceDescriptor surface{};
     native_host host{};
 
@@ -748,13 +867,9 @@ struct WindowsRemoteShellHarness {
 
         remote_shell_regression::g_remote_url = std::move(remote_url);
 
-        assert(glfwInit());
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-        window = glfwCreateWindow(360, 640, "phenotype-remote-shell-test", nullptr, nullptr);
-        assert(window != nullptr);
+        window = create_hidden_win32_window(360, 640, L"phenotype-remote-shell-test");
 
-        surface = make_glfw_surface(window);
+        surface = make_win32_surface(window);
         host.window = &surface;
         host.platform = &current_platform();
         phenotype::native::run<remote_shell_regression::State, remote_shell_regression::Msg>(
@@ -767,8 +882,7 @@ struct WindowsRemoteShellHarness {
     ~WindowsRemoteShellHarness() {
         phenotype::native::detail::shutdown_host(host);
         if (window)
-            glfwDestroyWindow(window);
-        glfwTerminate();
+            DestroyWindow(window);
         remote_shell_regression::g_remote_url.clear();
         phenotype::native::windows_test::reset_input_debug_counters();
         input_regression::reset_core_state();
@@ -815,7 +929,7 @@ static void test_shell_pointer_hover_click_and_tab_navigation() {
     assert(has_metric("hover", "pointer-move", "handled", "button"));
 
     assert(phenotype::native::detail::dispatch_mouse_button(
-        x, y, GLFW_MOUSE_BUTTON_LEFT, GLFW_PRESS, 0));
+        x, y, LEGACY_MOUSE_BUTTON_LEFT, LEGACY_PRESS, 0));
     assert(g_observed_state.button_activations == 1);
     assert(phenotype::detail::get_focused_id() == button_id);
     debug = phenotype::diag::input_debug_snapshot();
@@ -827,11 +941,11 @@ static void test_shell_pointer_hover_click_and_tab_navigation() {
     assert(debug.focused_role == "button");
     assert(has_metric("click", "pointer-click", "handled", "button"));
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_TAB, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_TAB, LEGACY_PRESS, 0));
     assert(phenotype::detail::get_focused_id() == link_id);
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_TAB, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_TAB, LEGACY_PRESS, 0));
     assert(phenotype::detail::get_focused_id() == checkbox_id);
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_TAB, GLFW_PRESS, GLFW_MOD_SHIFT));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_TAB, LEGACY_PRESS, LEGACY_MOD_SHIFT));
     assert(phenotype::detail::get_focused_id() == link_id);
     std::puts("PASS: shared shell pointer hover/click and tab navigation");
 }
@@ -842,19 +956,19 @@ static void test_shell_activation_keys_respect_roles() {
     Harness harness;
 
     phenotype::detail::set_focus_id(button_id, "test", "setup");
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_SPACE, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_SPACE, LEGACY_PRESS, 0));
     assert(g_observed_state.button_activations == 1);
 
     phenotype::detail::set_focus_id(checkbox_id, "test", "setup");
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_SPACE, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_SPACE, LEGACY_PRESS, 0));
     assert(g_observed_state.checked);
 
     phenotype::detail::set_focus_id(radio_b_id, "test", "setup");
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_SPACE, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_SPACE, LEGACY_PRESS, 0));
     assert(g_observed_state.choice == 1);
 
     phenotype::detail::set_focus_id(link_id, "test", "setup");
-    assert(!phenotype::native::detail::dispatch_key(GLFW_KEY_SPACE, GLFW_PRESS, 0));
+    assert(!phenotype::native::detail::dispatch_key(LEGACY_KEY_SPACE, LEGACY_PRESS, 0));
     auto debug = phenotype::diag::input_debug_snapshot();
     assert(debug.event == "key");
     assert(debug.detail == "space");
@@ -862,19 +976,19 @@ static void test_shell_activation_keys_respect_roles() {
     assert(debug.role == "link");
     assert(has_metric("key", "space", "ignored", "link"));
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ENTER, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_ENTER, LEGACY_PRESS, 0));
     assert(g_link_open_count == 1);
 
     phenotype::detail::set_focus_id(button_id, "test", "setup");
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ENTER, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_ENTER, LEGACY_PRESS, 0));
     assert(g_observed_state.button_activations == 2);
 
     phenotype::detail::set_focus_id(checkbox_id, "test", "setup");
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ENTER, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_ENTER, LEGACY_PRESS, 0));
     assert(!g_observed_state.checked);
 
     phenotype::detail::set_focus_id(radio_b_id, "test", "setup");
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ENTER, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_ENTER, LEGACY_PRESS, 0));
     assert(g_observed_state.choice == 1);
     std::puts("PASS: shared shell activation keys respect roles");
 }
@@ -885,14 +999,14 @@ static void test_shell_text_space_char_and_enter_behavior() {
     Harness harness;
 
     phenotype::detail::set_focus_id(text_field_id, "test", "setup");
-    assert(!phenotype::native::detail::dispatch_key(GLFW_KEY_ENTER, GLFW_PRESS, 0));
+    assert(!phenotype::native::detail::dispatch_key(LEGACY_KEY_ENTER, LEGACY_PRESS, 0));
     auto debug = phenotype::diag::input_debug_snapshot();
     assert(debug.event == "key");
     assert(debug.detail == "enter");
     assert(debug.result == "ignored");
     assert(debug.role == "text_field");
 
-    assert(!phenotype::native::detail::dispatch_key(GLFW_KEY_SPACE, GLFW_PRESS, 0));
+    assert(!phenotype::native::detail::dispatch_key(LEGACY_KEY_SPACE, LEGACY_PRESS, 0));
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.detail == "space");
     assert(debug.result == "ignored");
@@ -924,25 +1038,25 @@ static void test_shell_text_caret_navigation_and_backspace() {
 
     phenotype::detail::toggle_caret();
     assert(!phenotype::detail::get_caret_visible());
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_LEFT, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_LEFT, LEGACY_PRESS, 0));
     assert(phenotype::detail::get_caret_pos() == 2);
     assert(phenotype::detail::get_caret_visible());
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_RIGHT, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_RIGHT, LEGACY_PRESS, 0));
     assert(phenotype::detail::get_caret_pos() == 3);
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_HOME, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_HOME, LEGACY_PRESS, 0));
     assert(phenotype::detail::get_caret_pos() == 0);
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_RIGHT, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_RIGHT, LEGACY_PRESS, 0));
     assert(phenotype::detail::get_caret_pos() == 1);
 
     assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>('Z')));
     assert(g_observed_state.text == "AZBC");
     assert(phenotype::detail::get_caret_pos() == 2);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_END, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_END, LEGACY_PRESS, 0));
     assert(phenotype::detail::get_caret_pos() == 4);
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_LEFT, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_LEFT, LEGACY_PRESS, 0));
     assert(phenotype::detail::get_caret_pos() == 3);
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_BACKSPACE, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_BACKSPACE, LEGACY_PRESS, 0));
     assert(g_observed_state.text == "AZC");
     assert(phenotype::detail::get_caret_pos() == 2);
 
@@ -969,7 +1083,7 @@ static void test_shell_text_selection_shortcuts_and_replacement() {
     assert(phenotype::native::detail::dispatch_char(static_cast<unsigned int>('D')));
     assert(g_observed_state.text == "ABCD");
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_A, GLFW_PRESS, select_all_mods()));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_A, LEGACY_PRESS, select_all_mods()));
     auto debug = phenotype::diag::input_debug_snapshot();
     assert(debug.detail == "select-all");
     assert(debug.selection_active);
@@ -985,19 +1099,19 @@ static void test_shell_text_selection_shortcuts_and_replacement() {
     assert(phenotype::detail::replace_focused_input_text(0, g_observed_state.text.size(), "A가C"));
     assert(g_observed_state.text == "A가C");
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_LEFT, GLFW_PRESS, GLFW_MOD_SHIFT));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_LEFT, LEGACY_PRESS, LEGACY_MOD_SHIFT));
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.selection_active);
     assert(debug.selection_start == 4);
     assert(debug.selection_end == 5);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_LEFT, GLFW_PRESS, GLFW_MOD_SHIFT));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_LEFT, LEGACY_PRESS, LEGACY_MOD_SHIFT));
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.selection_active);
     assert(debug.selection_start == 1);
     assert(debug.selection_end == 5);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_BACKSPACE, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_BACKSPACE, LEGACY_PRESS, 0));
     assert(g_observed_state.text == "A");
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.detail == "backspace");
@@ -1022,8 +1136,8 @@ static void test_shell_pointer_text_caret_placement_and_visibility_reset() {
         return phenotype::native::detail::dispatch_mouse_button(
             x,
             y,
-            GLFW_MOUSE_BUTTON_LEFT,
-            GLFW_PRESS,
+            LEGACY_MOUSE_BUTTON_LEFT,
+            LEGACY_PRESS,
             0);
     };
 
@@ -1110,8 +1224,8 @@ static void test_shell_pointer_drag_selection_and_click_collapse() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         base_x + 1.0f,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
     assert(phenotype::native::detail::dispatch_cursor_pos(
         base_x + prefix_width(3) + 1.0f,
@@ -1125,15 +1239,15 @@ static void test_shell_pointer_drag_selection_and_click_collapse() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         base_x + prefix_width(3) + 1.0f,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_RELEASE,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_RELEASE,
         0));
 
     assert(phenotype::native::detail::dispatch_mouse_button(
         snapshot.x + snapshot.width - 1.0f,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
     debug = phenotype::diag::input_debug_snapshot();
     assert(!debug.selection_active);
@@ -1142,8 +1256,8 @@ static void test_shell_pointer_drag_selection_and_click_collapse() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         snapshot.x + snapshot.width + 40.0f,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.focused_id == phenotype::native::invalid_callback_id);
@@ -1178,24 +1292,24 @@ static void test_shared_caret_debug_rect_tracks_layout() {
     assert(std::fabs(debug.caret_rect.x - (base_x + prefix_width(snapshot.value.size()))) < 0.75f);
     assert(std::fabs(debug.caret_rect.y - (snapshot.y + snapshot.padding[0])) < 0.75f);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_HOME, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_HOME, LEGACY_PRESS, 0));
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.caret_renderer == "custom");
     assert(debug.caret_rect.valid);
     assert(std::fabs(debug.caret_rect.x - base_x) < 0.75f);
     assert(std::fabs(debug.caret_rect.y - (snapshot.y + snapshot.padding[0])) < 0.75f);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_RIGHT, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_RIGHT, LEGACY_PRESS, 0));
     debug = phenotype::diag::input_debug_snapshot();
     assert(std::fabs(debug.caret_rect.x - (base_x + prefix_width(1))) < 0.75f);
     assert(std::fabs(debug.caret_rect.y - (snapshot.y + snapshot.padding[0])) < 0.75f);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_RIGHT, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_RIGHT, LEGACY_PRESS, 0));
     debug = phenotype::diag::input_debug_snapshot();
     assert(std::fabs(debug.caret_rect.x - (base_x + prefix_width(4))) < 0.75f);
     assert(std::fabs(debug.caret_rect.y - (snapshot.y + snapshot.padding[0])) < 0.75f);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_END, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_END, LEGACY_PRESS, 0));
     debug = phenotype::diag::input_debug_snapshot();
     assert(std::fabs(debug.caret_rect.x - (base_x + prefix_width(snapshot.value.size()))) < 0.75f);
     assert(std::fabs(debug.caret_rect.y - (snapshot.y + snapshot.padding[0])) < 0.75f);
@@ -1261,7 +1375,7 @@ static void test_shared_text_replacement_helper() {
         phenotype::detail::clear_input_composition_state();
         return true;
     };
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ESCAPE, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_ESCAPE, LEGACY_PRESS, 0));
     debug = phenotype::diag::input_debug_snapshot();
     assert(!debug.composition_active);
     assert(debug.composition_text.empty());
@@ -1281,17 +1395,17 @@ static void test_focus_transitions_sync_platform_input() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         text_x,
         text_y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
     auto after_click = g_platform_sync_calls;
     assert(after_click >= 1);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_TAB, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_TAB, LEGACY_PRESS, 0));
     auto after_tab = g_platform_sync_calls;
     assert(after_tab > after_click);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ESCAPE, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_ESCAPE, LEGACY_PRESS, 0));
     assert(g_platform_sync_calls > after_tab);
 
     std::puts("PASS: focus transitions sync platform input");
@@ -1328,25 +1442,25 @@ static void test_shell_scroll_and_escape_observability() {
     assert(has_metric("scroll", "wheel", "handled"));
 
     phenotype::detail::set_focus_id(button_id, "test", "setup");
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_PAGE_DOWN, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_PAGE_DOWN, LEGACY_PRESS, 0));
     float after_page_down = phenotype::detail::get_scroll_y();
     assert(after_page_down > after_wheel);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_DOWN, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_DOWN, LEGACY_PRESS, 0));
     float after_down = phenotype::detail::get_scroll_y();
     assert(after_down > after_page_down);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_END, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_END, LEGACY_PRESS, 0));
     float max_scroll = phenotype::native::detail::max_scroll_for_viewport(
         harness.host.canvas_height());
     assert(std::fabs(phenotype::detail::get_scroll_y() - max_scroll) < 0.001f);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_HOME, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_HOME, LEGACY_PRESS, 0));
     assert(phenotype::detail::get_scroll_y() == 0.0f);
 
     phenotype::detail::set_focus_id(text_field_id, "test", "setup");
     float before_input_up = phenotype::detail::get_scroll_y();
-    assert(!phenotype::native::detail::dispatch_key(GLFW_KEY_UP, GLFW_PRESS, 0));
+    assert(!phenotype::native::detail::dispatch_key(LEGACY_KEY_UP, LEGACY_PRESS, 0));
     assert(phenotype::detail::get_scroll_y() == before_input_up);
     auto debug = phenotype::diag::input_debug_snapshot();
     assert(debug.detail == "arrow-up");
@@ -1354,7 +1468,7 @@ static void test_shell_scroll_and_escape_observability() {
     assert(debug.focused_role == "text_field");
 
     phenotype::detail::set_focus_id(button_id, "test", "setup");
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ESCAPE, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_ESCAPE, LEGACY_PRESS, 0));
     assert(phenotype::detail::get_focused_id() == phenotype::native::invalid_callback_id);
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.detail == "escape");
@@ -1521,19 +1635,15 @@ struct MacStaticHttpServer {
 };
 
 struct MacRendererFixture {
-    GLFWwindow* window = nullptr;
+    id window = nullptr;
     NativeSurfaceDescriptor surface{};
     native_host host{};
 
     MacRendererFixture() {
-        assert(glfwInit());
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-        window = glfwCreateWindow(320, 240, "phenotype-test", nullptr, nullptr);
-        assert(window != nullptr);
+        window = create_hidden_macos_window(320, 240, "phenotype-test");
 
         text::init();
-        surface = make_glfw_surface(window);
+        surface = make_macos_surface(window);
         renderer::init(&surface);
 
         host.window = &surface;
@@ -1543,26 +1653,23 @@ struct MacRendererFixture {
     ~MacRendererFixture() {
         renderer::shutdown();
         text::shutdown();
-        if (window)
-            glfwDestroyWindow(window);
-        glfwTerminate();
+        if (window) {
+            test_objc_send<void>(window, test_sel("close"));
+            test_objc_send<void>(window, test_sel("release"));
+        }
     }
 };
 
 struct MacInputHarness {
-    GLFWwindow* window = nullptr;
+    id window = nullptr;
     NativeSurfaceDescriptor surface{};
     native_host host{};
 
     MacInputHarness() {
         input_regression::reset_core_state();
-        assert(glfwInit());
-        glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-        glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-        window = glfwCreateWindow(360, 640, "phenotype-input-test", nullptr, nullptr);
-        assert(window != nullptr);
+        window = create_hidden_macos_window(360, 640, "phenotype-input-test");
 
-        surface = make_glfw_surface(window);
+        surface = make_macos_surface(window);
         host.window = &surface;
         host.platform = &current_platform();
         phenotype::native::run<input_regression::State, input_regression::Msg>(
@@ -1573,9 +1680,10 @@ struct MacInputHarness {
 
     ~MacInputHarness() {
         phenotype::native::detail::shutdown_host(host);
-        if (window)
-            glfwDestroyWindow(window);
-        glfwTerminate();
+        if (window) {
+            test_objc_send<void>(window, test_sel("close"));
+            test_objc_send<void>(window, test_sel("release"));
+        }
         phenotype::native::macos_test::force_disable_system_caret(false);
         input_regression::reset_core_state();
     }
@@ -1606,8 +1714,8 @@ static void test_macos_common_debug_contract_entry_points() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
     set_composition_for_tests("im", 0, 0, 2);
 
@@ -1777,8 +1885,8 @@ static void test_macos_system_caret_indicator_tracks_focus_and_composition() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
 
     auto caret = system_caret_debug();
@@ -1831,7 +1939,7 @@ static void test_macos_system_caret_indicator_tracks_focus_and_composition() {
     assert(std::fabs(caret.draw_rect.y - debug.caret_draw_rect.y) < 0.001f);
     assert(std::fabs(caret.host_rect.y - debug.caret_host_rect.y) < 0.001f);
 
-    assert(phenotype::native::detail::dispatch_key(GLFW_KEY_ESCAPE, GLFW_PRESS, 0));
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_ESCAPE, LEGACY_PRESS, 0));
     caret = system_caret_debug();
     assert(caret.display_mode == 1);
     debug = phenotype::diag::input_debug_snapshot();
@@ -1867,8 +1975,8 @@ static void test_macos_selected_range_and_selector_commands() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
 
     assert(phenotype::detail::replace_focused_input_text(0, 0, "ABCD"));
@@ -1924,8 +2032,8 @@ static void test_macos_fallback_caret_path_exposes_custom_debug_rect() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
     phenotype::native::detail::repaint_current();
 
@@ -1952,8 +2060,8 @@ static void test_macos_custom_caret_tracks_rightmost_text_pixel() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
 
     std::string sample = "sadfasfasfasfasdfasdfasdfasdfasdfasdfa";
@@ -1972,7 +2080,7 @@ static void test_macos_custom_caret_tracks_rightmost_text_pixel() {
     assert(frame.has_value());
     assert_non_empty_frame_capture(*frame);
 
-    float scale = backing_scale_for_window(harness.window);
+    float scale = harness.surface.content_scale;
     int min_x = static_cast<int>(std::floor(
         (snapshot.x + snapshot.padding[3]) * scale));
     int max_x = static_cast<int>(std::ceil(
@@ -2008,8 +2116,8 @@ static void test_macos_scroll_tracking_hides_caret_until_idle() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
 
     set_scroll_tracking_for_tests(true);
@@ -2181,7 +2289,7 @@ static void test_macos_rendered_text_preserves_vertical_orientation() {
     assert(frame.has_value());
     assert_non_empty_frame_capture(*frame);
 
-    float scale = backing_scale_for_window(fixture.window);
+    float scale = fixture.surface.content_scale;
     int min_x = static_cast<int>(std::floor(24.0f * scale));
     int max_x = static_cast<int>(std::ceil((24.0f + 140.0f) * scale));
     int min_y = static_cast<int>(std::floor(24.0f * scale));
@@ -2587,32 +2695,18 @@ static void test_windows_text_build_atlas_preserves_vertical_orientation() {
     std::puts("PASS: windows text build atlas preserves vertical orientation");
 }
 
-static void test_windows_backing_scale_matches_glfw_content_scale() {
-    assert(glfwInit());
-    glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-    glfwWindowHint(GLFW_VISIBLE, GLFW_FALSE);
-#ifdef GLFW_SCALE_TO_MONITOR
-    glfwWindowHint(GLFW_SCALE_TO_MONITOR, GLFW_TRUE);
-#endif
-
-    auto* window = glfwCreateWindow(320, 240, "phenotype-scale", nullptr, nullptr);
-    assert(window != nullptr);
-
-#if defined(GLFW_VERSION_MAJOR) \
-    && ((GLFW_VERSION_MAJOR > 3) || (GLFW_VERSION_MAJOR == 3 && GLFW_VERSION_MINOR >= 3))
-    float sx = 1.0f;
-    float sy = 1.0f;
-    glfwGetWindowContentScale(window, &sx, &sy);
-    float expected = (sx > sy) ? sx : sy;
-    float actual = phenotype::native::detail::glfw_backing_scale(window);
-    assert(std::fabs(actual - expected) < 0.001f);
-#else
-    assert(phenotype::native::detail::glfw_backing_scale(window) > 0.0f);
-#endif
-
-    glfwDestroyWindow(window);
-    glfwTerminate();
-    std::puts("PASS: windows backing scale matches GLFW content scale");
+static void test_windows_surface_descriptor_scale_is_valid() {
+    HWND window = create_hidden_win32_window(320, 240, L"phenotype-scale");
+    auto surface = make_win32_surface(window);
+    assert(surface.kind == NativeSurfaceKind::Win32Window);
+    assert(surface.window == window);
+    assert(surface.logical_width > 0);
+    assert(surface.logical_height > 0);
+    assert(surface.framebuffer_width == surface.logical_width);
+    assert(surface.framebuffer_height == surface.logical_height);
+    assert(surface.content_scale > 0.0f);
+    DestroyWindow(window);
+    std::puts("PASS: windows native surface descriptor scale is valid");
 }
 
 static void test_windows_text_build_atlas_empty() {
@@ -2922,8 +3016,16 @@ static void test_windows_renderer_remote_image_survives_resize_after_completion(
     assert(final.entry_exists);
     assert(final.entry_state == 1);
 
-    glfwSetWindowSize(fixture.window, 480, 360);
-    glfwPollEvents();
+    SetWindowPos(
+        fixture.window,
+        nullptr,
+        0,
+        0,
+        480,
+        360,
+        SWP_NOMOVE | SWP_NOZORDER | SWP_NOACTIVATE);
+    pump_native_test_events();
+    fixture.surface = make_win32_surface(fixture.window);
     renderer::flush(commands.data(), static_cast<unsigned int>(commands.size()));
     assert_dx12_renderer_clean("remote image resize");
     std::puts("PASS: windows renderer survives resize after remote image completion");
@@ -2950,7 +3052,7 @@ static void test_windows_shell_remote_image_scroll_path_survives_async_completio
     auto deadline = std::chrono::steady_clock::now() + std::chrono::seconds(5);
     phenotype::native::windows_test::RemoteImageDebug final{};
     while (std::chrono::steady_clock::now() < deadline) {
-        glfwPollEvents();
+        pump_native_test_events();
         harness.host.platform->input.sync();
         final = remote_image_debug(remote_url);
         if (final.entry_exists
@@ -2971,7 +3073,7 @@ static void test_windows_shell_remote_image_scroll_path_survives_async_completio
             next,
             640.0f,
             "remote-shell-oscillation");
-        glfwPollEvents();
+        pump_native_test_events();
         harness.host.platform->input.sync();
         std::this_thread::sleep_for(std::chrono::milliseconds(10));
     }
@@ -3152,8 +3254,8 @@ static void test_windows_ime_repaint_requests_are_deferred_until_sync() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
 
     auto hwnd = phenotype::native::windows_test::attached_hwnd();
@@ -3183,8 +3285,8 @@ static void test_windows_ime_startcomposition_captures_current_selection_range()
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
 
     assert(phenotype::detail::replace_focused_input_text(0, 0, "ABC"));
@@ -3222,8 +3324,8 @@ static void test_windows_ime_composition_visual_replaces_placeholder() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
 
     phenotype::native::windows_test::set_composition_for_tests("가", 0, 1);
@@ -3248,8 +3350,8 @@ static void test_windows_ime_suppresses_base_placeholder_text_entry() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
 
     phenotype::native::windows_test::set_composition_for_tests("아", 0, 1);
@@ -3300,8 +3402,8 @@ static void test_windows_ime_overlay_text_omits_erase_pass() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
 
     phenotype::native::windows_test::set_composition_for_tests("아", 0, 1);
@@ -3321,8 +3423,8 @@ static void test_windows_ime_zero_cursor_draws_caret_at_composition_end() {
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
 
     assert(phenotype::detail::replace_focused_input_text(0, 0, "와우 친구들 "));
@@ -3350,8 +3452,8 @@ static void test_windows_ime_notify_self_generated_paths_do_not_request_repaint(
     assert(phenotype::native::detail::dispatch_mouse_button(
         x,
         y,
-        GLFW_MOUSE_BUTTON_LEFT,
-        GLFW_PRESS,
+        LEGACY_MOUSE_BUTTON_LEFT,
+        LEGACY_PRESS,
         0));
 
     auto hwnd = phenotype::native::windows_test::attached_hwnd();
@@ -3470,7 +3572,7 @@ int main() {
     test_windows_text_build_atlas();
     test_windows_text_build_atlas_scale_preserves_bounds();
     test_windows_text_build_atlas_preserves_vertical_orientation();
-    test_windows_backing_scale_matches_glfw_content_scale();
+    test_windows_surface_descriptor_scale_is_valid();
     test_windows_text_build_atlas_empty();
     test_renderer_flush_empty();
     test_windows_renderer_reinit_cycle();

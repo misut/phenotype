@@ -1,12 +1,8 @@
 module;
 #if !defined(__wasi__) && !defined(__ANDROID__)
 #include <cstdio>
-#include <GLFW/glfw3.h>
 
 #ifdef _WIN32
-#define GLFW_EXPOSE_NATIVE_WIN32
-#include <GLFW/glfw3native.h>
-
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
 #include <dwmapi.h>
@@ -57,7 +53,6 @@ import phenotype.state;
 import phenotype.types;
 import phenotype.native.platform;
 import phenotype.native.shell;
-import phenotype.native.shell.glfw;
 import phenotype.native.stub;
 
 namespace phenotype::native::detail {
@@ -1451,19 +1446,11 @@ inline NativeSurfaceDescriptor* desktop_surface(native_surface_handle handle) {
     return static_cast<NativeSurfaceDescriptor*>(handle);
 }
 
-inline GLFWwindow* surface_glfw_window(NativeSurfaceDescriptor const* surface) {
-    return surface && surface->kind == NativeSurfaceKind::GlfwWindow
-        ? static_cast<GLFWwindow*>(surface->window)
-        : nullptr;
-}
-
 inline HWND surface_hwnd(NativeSurfaceDescriptor const* surface) {
     if (!surface)
         return nullptr;
     if (surface->kind == NativeSurfaceKind::Win32Window)
         return static_cast<HWND>(surface->window);
-    if (auto* window = surface_glfw_window(surface))
-        return glfwGetWin32Window(window);
     return nullptr;
 }
 
@@ -1474,10 +1461,6 @@ inline void surface_framebuffer_size(NativeSurfaceDescriptor const* surface,
     height = 0;
     if (!surface)
         return;
-    if (auto* window = surface_glfw_window(surface)) {
-        glfwGetFramebufferSize(window, &width, &height);
-        return;
-    }
     width = surface->framebuffer_width;
     height = surface->framebuffer_height;
 }
@@ -1489,10 +1472,6 @@ inline void surface_logical_size(NativeSurfaceDescriptor const* surface,
     height = 0;
     if (!surface)
         return;
-    if (auto* window = surface_glfw_window(surface)) {
-        glfwGetWindowSize(window, &width, &height);
-        return;
-    }
     width = surface->logical_width;
     height = surface->logical_height;
 }
@@ -1500,8 +1479,6 @@ inline void surface_logical_size(NativeSurfaceDescriptor const* surface,
 inline float surface_content_scale(NativeSurfaceDescriptor const* surface) {
     if (!surface)
         return 1.0f;
-    if (auto* window = surface_glfw_window(surface))
-        return glfw_backing_scale(window);
     float const scale = surface->content_scale;
     return (scale > 0.0f) ? scale : 1.0f;
 }
@@ -3370,7 +3347,8 @@ inline bool input_handle_cursor_pos(float x, float y) {
 
 inline bool input_handle_mouse_button(float x, float y,
                                       int button, int action, int) {
-    if (button != GLFW_MOUSE_BUTTON_LEFT || action != GLFW_PRESS)
+    if (button != static_cast<int>(MouseButton::Left)
+        || action != static_cast<int>(KeyAction::Press))
         return false;
     auto hit = find_candidate_hit(x, y);
     bool inside_panel = g_ime.overlay.visible

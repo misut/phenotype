@@ -73,7 +73,7 @@ void update(State& state, Msg msg) {
             state.viewport_width = m.width;
             state.viewport_height = m.height;
             state.viewport_scale = m.scale;
-            // Apply window-size constraints once the GLFW window is up;
+            // Apply window-size constraints once the native window is up;
             // the first Resized message is the earliest safe moment.
             if (!state.size_limits_applied) {
                 phenotype::native::set_window_size_limits(
