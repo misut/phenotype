@@ -40,6 +40,29 @@ int main() {
     assert(!fs::exists(state.current / "Launch Plan.txt"));
     assert(state.selected_name.empty());
 
+    demo::apply_startup_scenario(state, "created-preview");
+    assert(state.selected_name == "Action Note.txt");
+    assert(fs::exists(state.current / "Action Note.txt"));
+    assert(demo::read_preview(state.current / "Action Note.txt")
+        .find("Created from artifact scenario") != std::string::npos);
+
+    demo::apply_startup_scenario(state, "created-preview");
+    assert(state.selected_name == "Action Note.txt");
+    assert(fs::exists(state.current / "Action Note.txt"));
+    assert(!fs::exists(state.current / "Action Note 2.txt"));
+
+    demo::apply_startup_scenario(state, "deleted-file");
+    assert(!fs::exists(state.current / "Delete Me.txt"));
+    assert(state.selected_name.empty());
+    assert(state.status == "Deleted Delete Me.txt");
+
+    demo::apply_startup_scenario(state, "documents-preview");
+    assert(demo::relative_location(state.root, state.current)
+        == "Demo Root/Documents");
+    assert(state.selected_name == "Project Notes.txt");
+    assert(demo::snapshot(state).preview.find("Finder-like desktop layout")
+        != std::string::npos);
+
     demo::select_location(state, "documents");
     assert(demo::relative_location(state.root, state.current)
         == "Demo Root/Documents");

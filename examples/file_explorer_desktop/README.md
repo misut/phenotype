@@ -35,3 +35,9 @@ label.
 The gate captures the desktop example in `icon`, `list`, `column`, and
 `gallery` modes through `PHENOTYPE_FILE_EXPLORER_VIEW` so each Finder-style
 content surface has a machine-readable artifact contract.
+
+It also captures deterministic startup scenarios through
+`PHENOTYPE_FILE_EXPLORER_SCENARIO`: `created-preview`, `deleted-file`, and
+`documents-preview`. These scenarios make create, delete, navigation, and file
+preview behavior visible in the semantic artifact without requiring manual
+click playback.
