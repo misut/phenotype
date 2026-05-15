@@ -33,28 +33,28 @@
   "require_material_plans": true,
   "require_material_semantic_runtime_match": true,
   "require_material_plan_summary": {
-    "count": 17,
+    "count": 22,
     "fallback": 0,
-    "backdrop_sampling": 17,
+    "backdrop_sampling": 22,
     "contract_versions": {
-      "6": 17
+      "6": 22
     },
     "roles": {
-      "surface": 14,
+      "surface": 19,
       "toolbar": 1,
       "navigation": 1,
       "status_bar": 1
     },
     "container_modes": {
-      "container": 17
+      "container": 22
     },
     "container_ids": {
-      "3100": 17
+      "3100": 22
     },
-    "container_participating": 17,
+    "container_participating": 22,
     "container_unioned": 0,
     "container_interactive": 0,
-    "container_morph_transitions": 17
+    "container_morph_transitions": 22
   },
   "require_capabilities": [
     "material_backdrop_blur"
@@ -74,7 +74,7 @@
     },
     {
       "path": "renderer.material_executor_summary.material_total_sample_taps",
-      "equals": 425
+      "equals": 550
     }
   ],
   "require_material_resource_bounds": {
@@ -87,8 +87,8 @@
     "max_container_spacing_lte": 12.0,
     "max_container_spacing_gte": 12.0,
     "max_pass_texture_copy_pixels_lte": 4000000,
-    "total_plan_sample_taps_lte": 425,
-    "total_plan_sample_taps_gte": 425,
+    "total_plan_sample_taps_lte": 550,
+    "total_plan_sample_taps_gte": 550,
     "total_runtime_passes_gte": 1,
     "active_runtime_passes_gte": 1,
     "backdrop_runtime_passes_gte": 1,
