@@ -291,6 +291,12 @@ void paint_image_thumbnail(phenotype::Painter& painter,
     auto border = selected ? rgba(0, 122, 255) : rgba(224, 228, 234);
     fill_round(painter, 18.0f, 30.0f, 92.0f, 22.0f, 8.0f, rgba(0, 0, 0, 20));
     fill_round(painter, 16.0f, 28.0f, 92.0f, 22.0f, 8.0f, rgba(255, 255, 255, 248));
+    painter.linear_gradient_rect(
+        18.0f, 30.0f, 88.0f, 18.0f,
+        rgba(248, 250, 252),
+        rgba(226, 232, 240),
+        phenotype::GradientAxis::Horizontal,
+        12);
     stroke_round(painter, 16.0f, 28.0f, 92.0f, 22.0f, 8.0f, 1.0f, border);
     fill_round(painter, 29.0f, 33.0f, 24.0f, 12.0f, 6.0f, rgba(214, 217, 222));
     fill_round(painter, 56.0f, 33.0f, 18.0f, 12.0f, 6.0f, rgba(188, 193, 201));
@@ -303,7 +309,12 @@ void paint_video_thumbnail(phenotype::Painter& painter,
     fill_round(painter, 15.0f, 22.0f, 96.0f, 40.0f, 7.0f, rgba(0, 0, 0, 30));
     fill_round(painter, 13.0f, 20.0f, 96.0f, 40.0f, 7.0f, rgba(245, 248, 251));
     stroke_round(painter, 13.0f, 20.0f, 96.0f, 40.0f, 7.0f, 1.0f, border);
-    fill_rect(painter, 15.0f, 22.0f, 92.0f, 9.0f, rgba(42, 123, 222, 210));
+    painter.linear_gradient_rect(
+        15.0f, 22.0f, 92.0f, 9.0f,
+        rgba(42, 123, 222, 210),
+        rgba(99, 102, 241, 190),
+        phenotype::GradientAxis::Horizontal,
+        10);
     for (int i = 0; i < 6; ++i) {
         float x = 19.0f + static_cast<float>(i) * 14.0f;
         fill_rect(painter, x, 34.0f, 9.0f, 18.0f,

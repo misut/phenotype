@@ -1,7 +1,7 @@
 # Apple Glass GUI Roadmap
 
-Status: implementation baseline for `origin/main` at `3d055d3`
-(`feat: expose material command descriptors in artifacts`). This includes the pure
+Status: implementation baseline for `origin/main` after
+`feat: expose material shape execution contracts`. This includes the pure
 material-planning boundary, macOS sampled-backdrop execution, deterministic
 fallback contracts on non-macOS backends, edge executor telemetry, and the
 artifact verifier gates described below.
@@ -114,11 +114,16 @@ and renderer parity:
 - `FillRects`
 
 This is enough for cards, controls, text, images, canvas-heavy views, clipping,
-paths, arcs, and batching. It is not enough for faithful Apple material work.
+paths, arcs, batching, and bounded stripe-backed linear gradients through
+`Painter::linear_gradient_rect`. It is not enough for faithful Apple material
+work.
 
 Missing primitives for true glass:
 
-- gradient command as a backend-native primitive;
+- gradient command as a backend-native primitive. The current
+  `Painter::linear_gradient_rect` helper intentionally lowers to bounded
+  `FillRects` so every backend shares the same deterministic behavior while a
+  future opcode can optimize gradients without changing app code;
 - foreground vibrancy tokens that adapt text/icon colors on top of material.
 
 The current fallback can approximate glass with translucent rounded surfaces
@@ -320,6 +325,8 @@ Done means `examples/` is a local acceptance suite, not just demos:
   system as a real app surface, with filesystem side effects isolated to an
   example-owned temp directory;
 - Android has a documented local device/emulator contract runner.
+- Painter has a bounded `linear_gradient_rect` helper that uses the existing
+  `FillRects` path with no heap allocation in the helper itself.
 
 ## Prompt-to-artifact checklist
 

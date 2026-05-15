@@ -479,6 +479,57 @@ void test_canvas_widget_invokes_painter() {
     std::puts("PASS: widget::canvas invokes painter and emits DrawLine + DrawText");
 }
 
+void test_canvas_linear_gradient_rect_emits_fill_rects() {
+    detail::g_app.arena.reset();
+
+    auto root_h = detail::alloc_node();
+    auto& root = detail::node_at(root_h);
+    root.style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::canvas(120.0f, 80.0f, [](Painter& p) {
+        p.linear_gradient_rect(
+            8.0f,
+            10.0f,
+            80.0f,
+            24.0f,
+            Color{10, 20, 30, 255},
+            Color{110, 120, 130, 128},
+            GradientAxis::Horizontal,
+            4);
+    });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 240.0f);
+
+    CMD_LEN = 0;
+    PAINT_NODE(root_h, 0, 0, 0, 240.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    FillRectsCmd const* gradient = nullptr;
+    for (auto const& cmd : cmds) {
+        if (auto const* fill = std::get_if<FillRectsCmd>(&cmd)) {
+            gradient = fill;
+            break;
+        }
+    }
+
+    assert(gradient != nullptr);
+    assert(gradient->rects.size() == 4);
+    assert(gradient->rects.front().x == 8.0f);
+    assert(gradient->rects.front().y == 10.0f);
+    assert(gradient->rects.front().w == 20.0f);
+    assert(gradient->rects.front().h == 24.0f);
+    auto const start_color = Color{10, 20, 30, 255};
+    auto const end_color = Color{110, 120, 130, 128};
+    assert(gradient->rects.front().color == start_color);
+    assert(gradient->rects.back().x == 68.0f);
+    assert(gradient->rects.back().color == end_color);
+
+    std::puts("PASS: Painter::linear_gradient_rect emits bounded FillRects");
+}
+
 void test_canvas_bypasses_paint_cache_after_diff() {
     auto make_canvas_tree = [](int& paint_calls, Color color, bool paint) {
         auto root_h = detail::alloc_node();
@@ -2782,6 +2833,7 @@ int main() {
     test_image_widget_layout_and_emit();
     test_grid_cell_text_is_vertically_centered();
     test_canvas_widget_invokes_painter();
+    test_canvas_linear_gradient_rect_emits_fill_rects();
     test_canvas_bypasses_paint_cache_after_diff();
     test_canvas_paint_token_hit_skips_paint_fn();
     test_canvas_paint_token_miss_invokes_paint_fn();

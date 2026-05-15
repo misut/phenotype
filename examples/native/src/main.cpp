@@ -239,12 +239,12 @@ static void render_paint_command_showcase() {
             Color purple{147, 51, 234, 190};
             Color grid{203, 213, 225, 130};
 
-            PaintRect rects[] = {
-                {12.0f, 14.0f, 48.0f, 28.0f, Color{219, 234, 254, 255}},
-                {66.0f, 14.0f, 48.0f, 28.0f, Color{224, 242, 254, 255}},
-                {120.0f, 14.0f, 48.0f, 28.0f, Color{220, 252, 231, 255}},
-            };
-            painter.fill_rects(rects, 3);
+            painter.linear_gradient_rect(
+                12.0f, 14.0f, 156.0f, 28.0f,
+                Color{219, 234, 254, 255},
+                Color{220, 252, 231, 255},
+                GradientAxis::Horizontal,
+                12);
 
             PaintQuad quads[] = {
                 {18.0f, 64.0f, 72.0f, 54.0f, 84.0f, 98.0f, 26.0f, 108.0f, blue},
@@ -276,7 +276,7 @@ static void render_paint_command_showcase() {
             painter.text(198.0f, 162.0f, "clipped", 7, 14.0f, ink);
             painter.pop_clip();
 
-            std::string footer = "FillRects / FillQuads / Line / Arc / Path / FillPath / Clip / Text";
+            std::string footer = "Gradient / FillQuads / Line / Arc / Path / FillPath / Clip / Text";
             painter.text(12.0f, 188.0f,
                          footer.c_str(), static_cast<unsigned int>(footer.size()),
                          11.0f, ink);
