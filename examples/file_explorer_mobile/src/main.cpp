@@ -82,10 +82,7 @@ void update(State& state, Msg msg) {
             if (!explorer.selected_name.empty())
                 explorer.mobile_tab = 1;
         } else if constexpr (std::same_as<T, SearchChanged>) {
-            explorer.search = m.text;
-            explorer.status = explorer.search.empty()
-                ? "Filter cleared."
-                : "Filtering by " + explorer.search;
+            file_explorer_demo::set_search_filter(explorer, m.text);
         } else if constexpr (std::same_as<T, DraftNameChanged>) {
             explorer.draft_name = m.text;
         } else if constexpr (std::same_as<T, DraftBodyChanged>) {

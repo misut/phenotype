@@ -615,6 +615,18 @@ inline void cycle_sort_mode(ExplorerState& state) {
     set_sort_mode(state, next_sort_mode(state.sort_mode));
 }
 
+inline void set_search_filter(ExplorerState& state, std::string text) {
+    state.search = std::move(text);
+    auto query = trim(state.search);
+    if (!state.selected_name.empty()
+        && !matches_filter(state.selected_name, state.search)) {
+        state.selected_name.clear();
+    }
+    state.status = query.empty()
+        ? "Search cleared."
+        : "Searching for " + query;
+}
+
 inline void select_entry(ExplorerState& state, std::string const& name) {
     std::error_code ec;
     auto path = state.current / name;
@@ -846,6 +858,13 @@ inline void apply_startup_scenario(
 
     if (name == "sorted-kind" || name == "sort-kind") {
         set_sort_mode(state, SortMode::Kind);
+        state.mobile_tab = 0;
+        return;
+    }
+
+    if (name == "search-active" || name == "search") {
+        select_location(state, "root");
+        set_search_filter(state, "Screen");
         state.mobile_tab = 0;
         return;
     }
