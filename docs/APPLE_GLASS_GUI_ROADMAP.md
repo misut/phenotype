@@ -149,8 +149,13 @@ accepts immutable inputs:
 The returned `MaterialPlan` describes the source command descriptor, blur
 radius, tint, saturation, luminance curve, edge highlight, noise/dither,
 shadow, material container analysis, backdrop sampling, fallback path, debug
-metadata, resolved quality policy, pass expectations, resource budgets, and
-verifier expectations.
+metadata, resolved quality policy, pass expectations, sampling kernel,
+resource budgets, and verifier expectations.
+The current sampled-glass kernel is a pure `weighted-5x5-manhattan` descriptor
+with the resolved tap count, kernel radius, blur step scale, and weight profile;
+fallback plans serialize the inactive `none` kernel. This keeps blur spread and
+tap-shape policy in `plan_material_surface` while macOS Metal executes the
+descriptor and other backends publish deterministic fallback metadata.
 Backdrops also degrade through an explicit
 `quality-policy` fallback when the pure quality policy disables sampling or
 sets an unusable blur/tap budget, and when the render target exceeds the
@@ -395,10 +400,10 @@ Deliverables:
   pure `MaterialPlan`, preserves the functional `MaterialSurfaceRole`, samples
   the previous captured framebuffer as the backdrop source, then applies blur,
   tint, saturation, luminance preservation,
-  edge highlight, deterministic noise, and depth/shadow values from the plan;
-  runtime JSON mirrors the plan's `primary_pass`, resource budget, fallback
-  reason, and verifier expectations so a CI failure points back to the likely
-  layer/pass;
+  edge highlight, deterministic noise, depth/shadow, and the resolved sampling
+  kernel values from the plan; runtime JSON mirrors the plan's `primary_pass`,
+  sampling kernel, resource budget, fallback reason, and verifier expectations
+  so a CI failure points back to the likely layer/pass;
 - Windows Direct3D 12 implementation second;
 - Android Vulkan implementation or explicit fallback;
 - WASI/WebGPU shim path or explicit fallback;

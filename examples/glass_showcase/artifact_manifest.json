@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "6": 7
+      "7": 7
     },
     "roles": {
       "surface": 7
@@ -67,6 +67,12 @@
     },
     "pass_executors": {
       "backdrop-filter": 7
+    },
+    "sampling_kernels": {
+      "weighted-5x5-manhattan": 7
+    },
+    "sampling_weight_profiles": {
+      "center4-cardinal2-diagonal1": 7
     },
     "backdrop_available": 7,
     "backdrop_stable": 7,
@@ -114,6 +120,8 @@
     "max_plan_sample_taps_gte": 25,
     "max_budget_blur_radius_lte": 36.0,
     "max_sample_taps_lte": 25,
+    "max_sampling_kernel_radius_lte": 2,
+    "max_sampling_kernel_radius_gte": 2,
     "max_pass_count_lte": 1,
     "max_backdrop_pixels_lte": 4000000,
     "max_container_spacing_lte": 28.0,

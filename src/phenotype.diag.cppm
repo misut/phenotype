@@ -987,6 +987,11 @@ namespace detail {
                 static_cast<std::int64_t>(
                     plan.resource_budget.max_sample_taps)});
         resource_budget.emplace(
+            "max_sampling_kernel_radius",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.resource_budget.max_sampling_kernel_radius)});
+        resource_budget.emplace(
             "max_pass_count",
             json::Value{
                 static_cast<std::int64_t>(
@@ -1046,6 +1051,30 @@ namespace detail {
         quality_policy.emplace(
             "max_backdrop_pixels",
             json::Value{plan.quality_policy.max_backdrop_pixels});
+
+        json::Object sampling_kernel;
+        sampling_kernel.emplace("name", json::Value{plan.sampling_kernel.name});
+        sampling_kernel.emplace(
+            "radius",
+            json::Value{
+                static_cast<std::int64_t>(plan.sampling_kernel.radius)});
+        sampling_kernel.emplace(
+            "sample_taps",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.sampling_kernel.sample_taps)});
+        sampling_kernel.emplace(
+            "blur_step_scale",
+            json::Value{plan.sampling_kernel.blur_step_scale});
+        sampling_kernel.emplace(
+            "weight_profile",
+            json::Value{plan.sampling_kernel.weight_profile});
+        sampling_kernel.emplace(
+            "requires_backdrop",
+            json::Value{plan.sampling_kernel.requires_backdrop});
+        sampling_kernel.emplace(
+            "bounded",
+            json::Value{plan.sampling_kernel.bounded});
 
         json::Array passes;
         {
@@ -1119,6 +1148,9 @@ namespace detail {
         out.emplace(
             "sample_taps",
             json::Value{static_cast<std::int64_t>(plan.sample_taps)});
+        out.emplace(
+            "sampling_kernel",
+            json::Value{std::move(sampling_kernel)});
         out.emplace("quality_policy", json::Value{std::move(quality_policy)});
         out.emplace("primary_pass", json::Value{std::move(primary_pass)});
         out.emplace("resource_budget", json::Value{std::move(resource_budget)});
@@ -1181,6 +1213,11 @@ namespace detail {
             "max_sample_taps",
             json::Value{
                 static_cast<std::int64_t>(summary.max_sample_taps)});
+        out.emplace(
+            "max_sampling_kernel_radius",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.max_sampling_kernel_radius)});
         out.emplace(
             "max_pass_count",
             json::Value{static_cast<std::int64_t>(summary.max_pass_count)});

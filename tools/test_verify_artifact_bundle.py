@@ -128,6 +128,15 @@ def material_plan(
         "fallback_reason": "backend reports no material backdrop blur support",
         "debug_seed": 4919,
         "sample_taps": sample_taps,
+        "sampling_kernel": {
+            "name": "none",
+            "radius": 0,
+            "sample_taps": sample_taps,
+            "blur_step_scale": 0.0,
+            "weight_profile": "none",
+            "requires_backdrop": False,
+            "bounded": True,
+        },
         "quality_policy": {
             "allow_backdrop_sampling": True,
             "allow_noise": True,
@@ -140,6 +149,7 @@ def material_plan(
         "resource_budget": {
             "max_blur_radius": 36.0,
             "max_sample_taps": 25,
+            "max_sampling_kernel_radius": 0,
             "max_pass_count": 1,
             "max_backdrop_pixels": 320 * 240,
             "max_container_spacing": 0.0,
@@ -165,6 +175,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     assert isinstance(plan["decision_trace"], dict)
     assert isinstance(plan["backdrop"], dict)
     assert isinstance(plan["primary_pass"], dict)
+    assert isinstance(plan["sampling_kernel"], dict)
     plan["plan_id"] = "material.regular.liquid-glass"
     plan["backdrop_sampling"] = True
     plan["fallback"] = False
@@ -199,6 +210,17 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "executor": "backdrop-filter",
         "max_texture_copy_pixels": 320 * 240,
     })
+    plan["sampling_kernel"].update({
+        "name": "weighted-5x5-manhattan",
+        "radius": 2,
+        "sample_taps": sample_taps,
+        "blur_step_scale": 0.35,
+        "weight_profile": "center4-cardinal2-diagonal1",
+        "requires_backdrop": True,
+        "bounded": True,
+    })
+    assert isinstance(plan["resource_budget"], dict)
+    plan["resource_budget"]["max_sampling_kernel_radius"] = 2
     plan["passes"] = [plan["primary_pass"]]
     assert isinstance(plan["verifier"], dict)
     plan["verifier"].update({
@@ -230,6 +252,7 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "total_plan_sample_taps": plan["sample_taps"],
         "max_budget_blur_radius": budget["max_blur_radius"],
         "max_sample_taps": budget["max_sample_taps"],
+        "max_sampling_kernel_radius": budget["max_sampling_kernel_radius"],
         "max_pass_count": budget["max_pass_count"],
         "max_backdrop_pixels": budget["max_backdrop_pixels"],
         "max_container_spacing": budget["max_container_spacing"],
@@ -669,6 +692,8 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "max_plan_sample_taps_gte": 25,
                 "total_plan_sample_taps_lte": 25,
                 "total_plan_sample_taps_gte": 25,
+                "max_sampling_kernel_radius_lte": 2,
+                "max_sampling_kernel_radius_gte": 2,
                 "total_runtime_passes_lte": 1,
                 "total_runtime_passes_gte": 1,
                 "active_runtime_passes_lte": 1,
@@ -691,6 +716,30 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["total_plan_sample_taps"],
             25)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "max_sampling_kernel_radius"],
+            2)
+
+    def test_sampling_kernel_mismatch_is_llm_actionable(self) -> None:
+        plan = sampled_material_plan(sample_taps=13)
+        assert isinstance(plan["sampling_kernel"], dict)
+        plan["sampling_kernel"]["sample_taps"] = 25
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material sampling kernel taps match plan")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".sampling_kernel.sample_taps")
+        self.assertEqual(failure["expected"], 13)
+        self.assertEqual(failure["actual"], 25)
+        self.assertEqual(failure["likely_pass"], "sampling-kernel")
+        self.assertIn("MaterialPlan.sampling_kernel", failure["suggested_action"])
 
     def test_manifest_can_require_fallback_reason_summary(self) -> None:
         manifest = {

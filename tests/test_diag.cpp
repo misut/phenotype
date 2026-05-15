@@ -826,6 +826,14 @@ void test_material_runtime_record_json_contract() {
            == "backend reports no material backdrop blur support");
     assert(obj.at("backdrop_sampling").as_bool() == false);
     assert(obj.at("sample_taps").as_integer() == 0);
+    auto const& sampling_kernel = obj.at("sampling_kernel").as_object();
+    assert(sampling_kernel.at("name").as_string() == "none");
+    assert(sampling_kernel.at("radius").as_integer() == 0);
+    assert(sampling_kernel.at("sample_taps").as_integer() == 0);
+    assert(sampling_kernel.at("blur_step_scale").as_float() == 0.0f);
+    assert(sampling_kernel.at("weight_profile").as_string() == "none");
+    assert(sampling_kernel.at("requires_backdrop").as_bool() == false);
+    assert(sampling_kernel.at("bounded").as_bool() == true);
     auto const& decision_trace = obj.at("decision_trace").as_object();
     assert(decision_trace.at("has_material").as_bool() == true);
     assert(decision_trace.at("target_ready").as_bool() == true);
@@ -854,6 +862,8 @@ void test_material_runtime_record_json_contract() {
     assert(obj.at("resource_budget").as_object()
                .at("max_sample_taps").as_integer() == 9);
     assert(obj.at("resource_budget").as_object()
+               .at("max_sampling_kernel_radius").as_integer() == 0);
+    assert(obj.at("resource_budget").as_object()
                .at("max_container_spacing").as_float() == 0.0f);
     assert(obj.at("resource_budget").as_object()
                .at("deterministic_fallback").as_bool() == true);
@@ -875,6 +885,7 @@ void test_material_runtime_record_json_contract() {
     assert(pure_summary.max_plan_sample_taps == 0);
     assert(pure_summary.total_plan_sample_taps == 0);
     assert(pure_summary.max_sample_taps == 9);
+    assert(pure_summary.max_sampling_kernel_radius == 0);
     assert(pure_summary.containered_count == 0);
     assert(pure_summary.unioned_count == 0);
     assert(pure_summary.max_container_spacing == 0.0f);
@@ -891,6 +902,7 @@ void test_material_runtime_record_json_contract() {
     assert(summary_obj.at("max_plan_sample_taps").as_integer() == 0);
     assert(summary_obj.at("total_plan_sample_taps").as_integer() == 0);
     assert(summary_obj.at("max_sample_taps").as_integer() == 9);
+    assert(summary_obj.at("max_sampling_kernel_radius").as_integer() == 0);
     assert(summary_obj.at("containered_count").as_integer() == 0);
     assert(summary_obj.at("unioned_count").as_integer() == 0);
     assert(summary_obj.at("interactive_count").as_integer() == 0);

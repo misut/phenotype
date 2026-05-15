@@ -1416,6 +1416,8 @@ struct MaterialInstanceGPU {
     float optics[4]{};
     // edge width, shadow alpha, shadow radius, noise opacity
     float effects[4]{};
+    // blur step scale, kernel radius, reserved, reserved
+    float sampling[4]{};
 };
 
 // Per-vertex GPU layout for the triangle pipeline (FillPath fast path).
@@ -1928,6 +1930,8 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.effects[1] = plan.shadow_alpha;
     inst.effects[2] = plan.shadow_radius;
     inst.effects[3] = plan.noise_opacity;
+    inst.sampling[0] = plan.sampling_kernel.blur_step_scale;
+    inst.sampling[1] = static_cast<float>(plan.sampling_kernel.radius);
     out.push_back(inst);
 }
 
@@ -3687,6 +3691,7 @@ struct MaterialVsOut {
     float4 params;
     float4 optics;
     float4 effects;
+    float4 sampling;
 };
 
 struct MaterialInstance {
@@ -3695,6 +3700,7 @@ struct MaterialInstance {
     float4 params;
     float4 optics;
     float4 effects;
+    float4 sampling;
 };
 
 vertex MaterialVsOut vs_material(
@@ -3722,6 +3728,7 @@ vertex MaterialVsOut vs_material(
     out.params = inst.params;
     out.optics = inst.optics;
     out.effects = inst.effects;
+    out.sampling = inst.sampling;
     return out;
 }
 
@@ -3747,7 +3754,8 @@ fragment float4 fs_material(
                                 float(backdrop.get_height()));
     float blur_px = clamp(in.params.y, 0.0, 36.0);
     uint sample_taps = uint(clamp(round(in.params.w), 1.0, 25.0));
-    float2 step_uv = texel * max(1.0, blur_px * 0.35);
+    float blur_step_scale = max(in.sampling.x, 0.0);
+    float2 step_uv = texel * max(1.0, blur_px * blur_step_scale);
     float4 acc = float4(0.0);
     float weight_sum = 0.0;
     for (int y = -2; y <= 2; ++y) {

@@ -125,6 +125,8 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `backdrop_sampling`, `fallback`, `fallback_path`, and `fallback_reason`;
 - `backdrop`, including source, readiness flags, sanitized luminance
   statistics, luminance response, and floor/gain/edge deltas;
+- `sampling_kernel`, including the pure kernel name, radius, tap count, blur
+  step scale, weight profile, backdrop dependency, and boundedness flag;
 - `quality_policy`, `primary_pass`, `resource_budget`, and the pass list the
   backend attempted, including the likely layer name, pure executor role, and
   maximum texture-copy pixels;
@@ -151,10 +153,14 @@ Fallback plans therefore report `0` taps, while `quality_policy.max_sample_taps`
 preserves the caller's upper bound and `resource_budget.max_sample_taps`
 records the executable kernel selected by the planner. The supported sampled
 backdrop kernels are 1, 5, 9, 13, and 25 taps; the planner chooses the largest
-kernel that does not exceed the policy limit. Reduced-motion plans disable
-material noise and cap backdrop sample taps before a backend executes the pass;
-increased-contrast plans raise opacity and luminance legibility in the same
-pure layer.
+kernel that does not exceed the policy limit. `sampling_kernel.name` is
+`weighted-5x5-manhattan` for active sampled glass and `none` for deterministic
+fallback. Its `blur_step_scale` is part of the pure contract and is uploaded to
+the macOS material shader, so changing blur spread requires changing the plan,
+serializer, verifier vocabulary, and docs together. Reduced-motion plans
+disable material noise and cap backdrop sample taps before a backend executes
+the pass; increased-contrast plans raise opacity and luminance legibility in
+the same pure layer.
 `primary_pass.executor` and each `passes[].executor` use pure roles:
 `backdrop-filter` for sampled glass, `fallback-fill` for deterministic fallback,
 and `none` for inactive material work. `max_texture_copy_pixels` is non-zero
@@ -261,9 +267,10 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 `decision_reduce_motion`, and
 exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `contract_versions`, `pass_names`, `backdrop_sources`, `luminance_responses`,
-`render_target_pixel_formats`, `pass_executors`, `decision_blockers`,
-`verifier_profiles`, `verifier_region_layers`, `container_modes`,
-`container_ids`, and `union_ids`; it can also count
+`render_target_pixel_formats`, `pass_executors`, `sampling_kernels`,
+`sampling_weight_profiles`, `decision_blockers`, `verifier_profiles`,
+`verifier_region_layers`, `container_modes`, `container_ids`, and `union_ids`;
+it can also count
 `container_participating`, `container_unioned`, `container_interactive`,
 `container_morph_transitions`, `verifier_require_backdrop_source`,
 `verifier_require_edge_highlight`, `verifier_require_container_identity`, and
@@ -274,8 +281,9 @@ sampled scene losing its previous-frame backdrop source, a render target
 exceeding the pure backdrop budget, a pass switching executor roles, a decision
 trace naming the wrong blocker, an artifact emitting an unexpected material plan
 schema version, verifier expectations pointing at the wrong region/layer, a
-material container losing its identity/union grouping, or a quality/capability
-downgrade losing its LLM-actionable reason string.
+material container losing its identity/union grouping, a blur kernel drifting
+out of sync with the backend shader, or a quality/capability downgrade losing
+its LLM-actionable reason string.
 Use `require_material_surface_roles` when a scene must contain at least one
 semantic material node for each functional role.
 
@@ -286,19 +294,22 @@ changing material policy. Fallback metadata is similarly strict: fallback plans
 must report a non-empty `fallback_reason`, while non-fallback plans must leave
 `fallback_reason` empty so stale downgrade explanations cannot leak into glass
 artifacts.
-The verifier also treats material kind, fallback path, and material pass names
-as fixed vocabularies. Current fallback paths are `none`, `no-material`,
-`invalid-geometry`, `unsupported-backend`, `no-backdrop-source`,
-`reduced-transparency`, and `quality-policy`; current pass names are `none`,
-`backdrop-sample-blur`, and `translucent-rounded-rect`. Add new planner/backend
-vocabulary to the verifier in the same patch that introduces it, so CI reports
-schema drift before a human has to infer it visually.
+The verifier also treats material kind, fallback path, material pass names, and
+sampling kernel names as fixed vocabularies. Current fallback paths are `none`,
+`no-material`, `invalid-geometry`, `unsupported-backend`,
+`no-backdrop-source`, `reduced-transparency`, and `quality-policy`; current
+pass names are `none`, `backdrop-sample-blur`, and
+`translucent-rounded-rect`; current sampling kernels are `none` and
+`weighted-5x5-manhattan`. Add new planner/backend vocabulary to the verifier in
+the same patch that introduces it, so CI reports schema drift before a human has
+to infer it visually.
 
 Use `require_material_resource_bounds` when a material gate must prove the
 runtime stayed within the pure plan's performance budget. Supported limits are
 `max_plan_blur_radius_lte`, `max_plan_sample_taps_lte`,
 `max_plan_sample_taps_gte`, `total_plan_sample_taps_lte`/`gte`,
-`max_budget_blur_radius_lte`, `max_sample_taps_lte`, `max_pass_count_lte`,
+`max_budget_blur_radius_lte`, `max_sample_taps_lte`,
+`max_sampling_kernel_radius_lte`/`gte`, `max_pass_count_lte`,
 `max_backdrop_pixels_lte`, `max_container_spacing_lte`/`gte`,
 `max_pass_texture_copy_pixels_lte`/`gte`,
 `total_pass_texture_copy_pixels_lte`/`gte`,

@@ -9,7 +9,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 6;
+inline constexpr std::uint32_t material_plan_contract_version = 7;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -109,9 +109,20 @@ struct MaterialPassExpectation {
     std::int64_t max_texture_copy_pixels = 0;
 };
 
+struct MaterialSamplingKernel {
+    char const* name = "none";
+    unsigned int radius = 0;
+    unsigned int sample_taps = 0;
+    float blur_step_scale = 0.0f;
+    char const* weight_profile = "none";
+    bool requires_backdrop = false;
+    bool bounded = true;
+};
+
 struct MaterialResourceBudget {
     float max_blur_radius = 0.0f;
     unsigned int max_sample_taps = 0;
+    unsigned int max_sampling_kernel_radius = 0;
     unsigned int max_pass_count = 1;
     std::int64_t max_backdrop_pixels = 0;
     float max_container_spacing = 0.0f;
@@ -206,6 +217,7 @@ struct MaterialPlan {
     char const* plan_id = "material.none";
     std::uint32_t debug_seed = 0;
     unsigned int sample_taps = 0;
+    MaterialSamplingKernel sampling_kernel{};
     MaterialQualityPolicy quality_policy{};
     MaterialPassExpectation primary_pass{};
     MaterialResourceBudget resource_budget{};
@@ -235,6 +247,7 @@ struct MaterialRuntimeSummary {
     std::int64_t total_plan_sample_taps = 0;
     float max_budget_blur_radius = 0.0f;
     unsigned int max_sample_taps = 0;
+    unsigned int max_sampling_kernel_radius = 0;
     unsigned int max_pass_count = 0;
     std::int64_t max_backdrop_pixels = 0;
     float max_container_spacing = 0.0f;
@@ -295,6 +308,9 @@ inline void accumulate_material_runtime_summary(
     summary.max_sample_taps = std::max(
         summary.max_sample_taps,
         plan.resource_budget.max_sample_taps);
+    summary.max_sampling_kernel_radius = std::max(
+        summary.max_sampling_kernel_radius,
+        plan.resource_budget.max_sampling_kernel_radius);
     summary.max_pass_count =
         std::max(summary.max_pass_count, plan.resource_budget.max_pass_count);
     summary.max_backdrop_pixels = std::max(
@@ -610,6 +626,22 @@ inline unsigned int material_resolve_sample_taps(
     return 25u;
 }
 
+inline MaterialSamplingKernel material_resolve_sampling_kernel(
+        bool backdrop_sampling,
+        unsigned int sample_taps) noexcept {
+    if (!backdrop_sampling || sample_taps == 0u)
+        return {};
+    return MaterialSamplingKernel{
+        "weighted-5x5-manhattan",
+        2u,
+        sample_taps,
+        0.35f,
+        "center4-cardinal2-diagonal1",
+        true,
+        true,
+    };
+}
+
 inline float material_safe_luma(float value, float fallback) noexcept {
     return std::isfinite(value)
         ? std::clamp(value, 0.0f, 1.0f)
@@ -820,6 +852,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.sample_taps = std::min(plan.sample_taps, 9u);
     plan.resource_budget.max_blur_radius = max_blur_radius;
     plan.resource_budget.max_sample_taps = plan.sample_taps;
+    plan.resource_budget.max_sampling_kernel_radius = 0u;
     plan.resource_budget.max_pass_count = 1;
     plan.resource_budget.max_backdrop_pixels =
         resolved_quality.max_backdrop_pixels;
@@ -941,6 +974,11 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     } else {
         apply_backdrop_luminance_policy(plan);
     }
+    plan.sampling_kernel = material_resolve_sampling_kernel(
+        plan.backdrop_sampling,
+        plan.sample_taps);
+    plan.resource_budget.max_sampling_kernel_radius =
+        plan.sampling_kernel.radius;
     if (environment.capabilities.reduce_motion) {
         plan.noise_opacity = 0.0f;
     }
