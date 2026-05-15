@@ -128,6 +128,25 @@ static float backing_scale_for_window(GLFWwindow* window) {
     return (sx > sy) ? sx : sy;
 }
 
+static NativeSurfaceDescriptor make_glfw_surface(GLFWwindow* window) {
+    assert(window != nullptr);
+    int fbw = 0;
+    int fbh = 0;
+    int winw = 0;
+    int winh = 0;
+    glfwGetFramebufferSize(window, &fbw, &fbh);
+    glfwGetWindowSize(window, &winw, &winh);
+    return NativeSurfaceDescriptor{
+        .kind = NativeSurfaceKind::GlfwWindow,
+        .window = window,
+        .logical_width = winw,
+        .logical_height = winh,
+        .framebuffer_width = fbw,
+        .framebuffer_height = fbh,
+        .content_scale = backing_scale_for_window(window),
+    };
+}
+
 static int find_rightmost_dark_pixel_x(DebugFrameCapture const& frame,
                                        int min_x,
                                        int max_x,
@@ -240,6 +259,7 @@ static void assert_macos_runtime_sections(json::Object const& details) {
 #ifdef _WIN32
 struct WindowsRendererFixture {
     GLFWwindow* window = nullptr;
+    NativeSurfaceDescriptor surface{};
     native_host host{};
 
     WindowsRendererFixture() {
@@ -254,9 +274,10 @@ struct WindowsRendererFixture {
         assert(window != nullptr);
 
         text::init();
-        renderer::init(window);
+        surface = make_glfw_surface(window);
+        renderer::init(&surface);
 
-        host.window = window;
+        host.window = &surface;
         host.platform = &current_platform();
     }
 
@@ -632,6 +653,7 @@ struct Harness {
 #ifdef _WIN32
 struct WindowsInputHarness {
     GLFWwindow* window = nullptr;
+    NativeSurfaceDescriptor surface{};
     native_host host{};
 
     WindowsInputHarness() {
@@ -647,7 +669,8 @@ struct WindowsInputHarness {
         window = glfwCreateWindow(360, 640, "phenotype-input-test", nullptr, nullptr);
         assert(window != nullptr);
 
-        host.window = window;
+        surface = make_glfw_surface(window);
+        host.window = &surface;
         host.platform = &current_platform();
         phenotype::native::run<input_regression::State, input_regression::Msg>(
             host,
@@ -713,6 +736,7 @@ static void view(State const&) {
 
 struct WindowsRemoteShellHarness {
     GLFWwindow* window = nullptr;
+    NativeSurfaceDescriptor surface{};
     native_host host{};
 
     explicit WindowsRemoteShellHarness(std::string remote_url) {
@@ -730,7 +754,8 @@ struct WindowsRemoteShellHarness {
         window = glfwCreateWindow(360, 640, "phenotype-remote-shell-test", nullptr, nullptr);
         assert(window != nullptr);
 
-        host.window = window;
+        surface = make_glfw_surface(window);
+        host.window = &surface;
         host.platform = &current_platform();
         phenotype::native::run<remote_shell_regression::State, remote_shell_regression::Msg>(
             host,
@@ -1497,6 +1522,7 @@ struct MacStaticHttpServer {
 
 struct MacRendererFixture {
     GLFWwindow* window = nullptr;
+    NativeSurfaceDescriptor surface{};
     native_host host{};
 
     MacRendererFixture() {
@@ -1507,9 +1533,10 @@ struct MacRendererFixture {
         assert(window != nullptr);
 
         text::init();
-        renderer::init(window);
+        surface = make_glfw_surface(window);
+        renderer::init(&surface);
 
-        host.window = window;
+        host.window = &surface;
         host.platform = &current_platform();
     }
 
@@ -1524,6 +1551,7 @@ struct MacRendererFixture {
 
 struct MacInputHarness {
     GLFWwindow* window = nullptr;
+    NativeSurfaceDescriptor surface{};
     native_host host{};
 
     MacInputHarness() {
@@ -1534,7 +1562,8 @@ struct MacInputHarness {
         window = glfwCreateWindow(360, 640, "phenotype-input-test", nullptr, nullptr);
         assert(window != nullptr);
 
-        host.window = window;
+        surface = make_glfw_surface(window);
+        host.window = &surface;
         host.platform = &current_platform();
         phenotype::native::run<input_regression::State, input_regression::Msg>(
             host,

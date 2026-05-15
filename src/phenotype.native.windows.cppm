@@ -1415,7 +1415,8 @@ struct RendererState {
     ReadbackBuffer readback{};
     std::vector<HitRegionCmd> hit_regions;
     std::vector<MaterialRuntimeRecord> material_records;
-    GLFWwindow* window = nullptr;
+    NativeSurfaceDescriptor* surface = nullptr;
+    HWND hwnd = nullptr;
     bool initialized = false;
     bool debug_preset_enabled = false;
     bool debug_enabled = false;
@@ -1445,6 +1446,65 @@ constexpr UINT WM_PHENOTYPE_IMAGE_READY = WM_APP + 61;
 constexpr UINT IMAGE_SRV_SLOT = 0;
 constexpr UINT FIRST_TEXT_SRV_SLOT = 1;
 constexpr UINT SRV_SLOT_COUNT = FIRST_TEXT_SRV_SLOT + RendererState::frame_count;
+
+inline NativeSurfaceDescriptor* desktop_surface(native_surface_handle handle) {
+    return static_cast<NativeSurfaceDescriptor*>(handle);
+}
+
+inline GLFWwindow* surface_glfw_window(NativeSurfaceDescriptor const* surface) {
+    return surface && surface->kind == NativeSurfaceKind::GlfwWindow
+        ? static_cast<GLFWwindow*>(surface->window)
+        : nullptr;
+}
+
+inline HWND surface_hwnd(NativeSurfaceDescriptor const* surface) {
+    if (!surface)
+        return nullptr;
+    if (surface->kind == NativeSurfaceKind::Win32Window)
+        return static_cast<HWND>(surface->window);
+    if (auto* window = surface_glfw_window(surface))
+        return glfwGetWin32Window(window);
+    return nullptr;
+}
+
+inline void surface_framebuffer_size(NativeSurfaceDescriptor const* surface,
+                                     int& width,
+                                     int& height) {
+    width = 0;
+    height = 0;
+    if (!surface)
+        return;
+    if (auto* window = surface_glfw_window(surface)) {
+        glfwGetFramebufferSize(window, &width, &height);
+        return;
+    }
+    width = surface->framebuffer_width;
+    height = surface->framebuffer_height;
+}
+
+inline void surface_logical_size(NativeSurfaceDescriptor const* surface,
+                                 int& width,
+                                 int& height) {
+    width = 0;
+    height = 0;
+    if (!surface)
+        return;
+    if (auto* window = surface_glfw_window(surface)) {
+        glfwGetWindowSize(window, &width, &height);
+        return;
+    }
+    width = surface->logical_width;
+    height = surface->logical_height;
+}
+
+inline float surface_content_scale(NativeSurfaceDescriptor const* surface) {
+    if (!surface)
+        return 1.0f;
+    if (auto* window = surface_glfw_window(surface))
+        return glfw_backing_scale(window);
+    float const scale = surface->content_scale;
+    return (scale > 0.0f) ? scale : 1.0f;
+}
 
 inline bool running_under_tests() {
     char path[MAX_PATH]{};
@@ -1684,7 +1744,7 @@ struct WindowPointCache {
 };
 
 struct ImeState {
-    GLFWwindow* window = nullptr;
+    NativeSurfaceDescriptor* surface = nullptr;
     HWND hwnd = nullptr;
     WNDPROC prev_wndproc = nullptr;
     void (*request_repaint)() = nullptr;
@@ -3033,7 +3093,7 @@ inline void sync_ime_windows() {
                 } else {
                     int winw = 0;
                     int winh = 0;
-                    glfwGetWindowSize(g_ime.window, &winw, &winh);
+                    surface_logical_size(g_ime.surface, winw, winh);
                     if (winw <= 0) winw = 1;
                     if (winh <= 0) winh = 1;
 
@@ -3250,10 +3310,10 @@ inline LRESULT CALLBACK ime_wndproc(HWND hwnd, UINT msg, WPARAM wparam, LPARAM l
 }
 
 inline void input_attach(native_surface_handle handle, void (*request_repaint)()) {
-    auto* window = static_cast<GLFWwindow*>(handle);
-    g_ime.window = window;
+    auto* surface = desktop_surface(handle);
+    g_ime.surface = surface;
     g_ime.request_repaint = request_repaint;
-    g_ime.hwnd = window ? glfwGetWin32Window(window) : nullptr;
+    g_ime.hwnd = surface_hwnd(surface);
     g_ime.ui_thread_id = GetCurrentThreadId();
     g_ime.in_wndproc = false;
     g_ime.sync_in_progress = false;
@@ -3274,7 +3334,7 @@ inline void input_detach() {
                           reinterpret_cast<LONG_PTR>(g_ime.prev_wndproc));
     }
     clear_ime_state();
-    g_ime.window = nullptr;
+    g_ime.surface = nullptr;
     g_ime.hwnd = nullptr;
     g_ime.prev_wndproc = nullptr;
     g_ime.request_repaint = nullptr;
@@ -3342,8 +3402,7 @@ inline void configure_window(native_surface_handle handle,
         || options->chrome != WindowChromeStyle::IntegratedTitlebar)
         return;
 
-    auto* window = static_cast<GLFWwindow*>(handle);
-    HWND hwnd = window ? glfwGetWin32Window(window) : nullptr;
+    HWND hwnd = surface_hwnd(desktop_surface(handle));
     if (!hwnd)
         return;
 
@@ -4186,13 +4245,13 @@ inline HRESULT create_factory_and_device() {
     return S_OK;
 }
 
-inline HRESULT create_swap_chain(GLFWwindow* window) {
-    HWND hwnd = glfwGetWin32Window(window);
+inline HRESULT create_swap_chain(NativeSurfaceDescriptor* surface) {
+    HWND hwnd = surface_hwnd(surface);
     if (!hwnd) return E_FAIL;
 
     int fbw = 0;
     int fbh = 0;
-    glfwGetFramebufferSize(window, &fbw, &fbh);
+    surface_framebuffer_size(surface, fbw, fbh);
     if (fbw <= 0) fbw = 1;
     if (fbh <= 0) fbh = 1;
 
@@ -4231,7 +4290,7 @@ inline void release_swap_chain_targets() {
 }
 
 inline HRESULT resize_swap_chain() {
-    if (!g_renderer.swap_chain || !g_renderer.device || !g_renderer.window)
+    if (!g_renderer.swap_chain || !g_renderer.device || !g_renderer.surface)
         return E_FAIL;
 
     for (auto& frame : g_renderer.frames)
@@ -4240,7 +4299,7 @@ inline HRESULT resize_swap_chain() {
     release_swap_chain_targets();
     int fbw = 0;
     int fbh = 0;
-    glfwGetFramebufferSize(g_renderer.window, &fbw, &fbh);
+    surface_framebuffer_size(g_renderer.surface, fbw, fbh);
     if (fbw <= 0 || fbh <= 0) return S_OK;
 
     auto hr = g_renderer.swap_chain->ResizeBuffers(
@@ -4527,8 +4586,13 @@ inline void end_frame(FrameContext& frame) {
 inline void renderer_init(native_surface_handle handle) {
     install_process_diagnostics();
     if (g_renderer.initialized) return;
-    auto* window = static_cast<GLFWwindow*>(handle);
-    g_renderer.window = window;
+    auto* surface = desktop_surface(handle);
+    g_renderer.surface = surface;
+    g_renderer.hwnd = surface_hwnd(surface);
+    if (!g_renderer.hwnd) {
+        std::fprintf(stderr, "[dx12] no HWND surface\n");
+        return;
+    }
     g_renderer.debug_preset_enabled = env_enabled("PHENOTYPE_WINDOWS_DEBUG");
     g_renderer.debug_enabled = g_renderer.debug_preset_enabled
         || env_enabled("PHENOTYPE_DX12_DEBUG");
@@ -4551,7 +4615,7 @@ inline void renderer_init(native_surface_handle handle) {
 
     enable_debug_layers();
     if (FAILED(create_factory_and_device())
-        || FAILED(create_swap_chain(window))
+        || FAILED(create_swap_chain(surface))
         || FAILED(create_root_signature())
         || FAILED(create_pipelines())
         || FAILED(create_frame_resources())
@@ -4572,7 +4636,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     int fbw = 0;
     int fbh = 0;
-    glfwGetFramebufferSize(g_renderer.window, &fbw, &fbh);
+    surface_framebuffer_size(g_renderer.surface, fbw, fbh);
     if (fbw <= 0 || fbh <= 0) return;
 
     auto current_index = g_renderer.swap_chain->GetCurrentBackBufferIndex();
@@ -4589,7 +4653,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         if (FAILED(resize_swap_chain())) return;
     }
 
-    float text_scale = glfw_backing_scale(g_renderer.window);
+    float text_scale = surface_content_scale(g_renderer.surface);
     float line_height_ratio = ::phenotype::detail::g_app.theme.line_height_ratio;
     MaterialEnvironment material_env{};
     material_env.capabilities.material_surfaces = true;
@@ -4840,7 +4904,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     int winw = 0;
     int winh = 0;
-    glfwGetWindowSize(g_renderer.window, &winw, &winh);
+    surface_logical_size(g_renderer.surface, winw, winh);
     float uniforms[4]{
         static_cast<float>((winw > 0) ? winw : fbw),
         static_cast<float>((winh > 0) ? winh : fbh),

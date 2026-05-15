@@ -97,10 +97,28 @@ struct text_api {
                                unsigned int path_len) = nullptr;
 };
 
-// Opaque native surface handle. Today this carries a GLFWwindow* on
-// macOS / Windows; the upcoming Android backend will carry an
-// ANativeWindow*. Platform backends cast back to their own type at
-// the single entry point where they need it.
+enum class NativeSurfaceKind {
+    Unknown,
+    GlfwWindow,
+    MacOSWindow,
+    Win32Window,
+    AndroidWindow,
+};
+
+struct NativeSurfaceDescriptor {
+    NativeSurfaceKind kind = NativeSurfaceKind::Unknown;
+    void* window = nullptr;
+    void* view = nullptr;
+    int logical_width = 0;
+    int logical_height = 0;
+    int framebuffer_width = 0;
+    int framebuffer_height = 0;
+    float content_scale = 1.0f;
+};
+
+// Opaque native surface handle. Desktop shells pass a
+// NativeSurfaceDescriptor*. Android still passes its platform window directly
+// so the C ABI surface stays stable while desktop migrates away from GLFW.
 using native_surface_handle = void*;
 
 enum class WindowChromeStyle {
