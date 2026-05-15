@@ -22,6 +22,8 @@ struct SelectEntry { std::string name; };
 enum class FinderViewMode { Icon, List, Column, Gallery };
 struct SetViewMode { FinderViewMode mode; };
 struct ToolbarAction { std::string label; };
+struct SearchChanged { std::string text; };
+struct ToggleSearch {};
 struct CreateFile {};
 struct DeleteSelected {};
 struct DuplicateSelected {};
@@ -39,6 +41,8 @@ using Msg = std::variant<
     SelectEntry,
     SetViewMode,
     ToolbarAction,
+    SearchChanged,
+    ToggleSearch,
     CreateFile,
     DeleteSelected,
     DuplicateSelected,
@@ -79,8 +83,15 @@ file_explorer_demo::ExplorerState initial_explorer_state() {
 }
 
 struct State {
-    file_explorer_demo::ExplorerState explorer = initial_explorer_state();
-    FinderViewMode view_mode = initial_view_mode();
+    file_explorer_demo::ExplorerState explorer;
+    FinderViewMode view_mode;
+    bool search_visible = false;
+
+    State()
+        : explorer(initial_explorer_state()),
+          view_mode(initial_view_mode()),
+          search_visible(!explorer.search.empty()) {
+    }
 };
 
 constexpr float k_pi = 3.14159265358979323846f;
@@ -424,6 +435,16 @@ void update(State& state, Msg msg) {
             explorer.status = "Switched to " + view_mode_name(m.mode) + ".";
         } else if constexpr (std::same_as<T, ToolbarAction>) {
             explorer.status = m.label + " action is available in the native toolbar contract.";
+        } else if constexpr (std::same_as<T, SearchChanged>) {
+            file_explorer_demo::set_search_filter(explorer, m.text);
+            state.search_visible = true;
+        } else if constexpr (std::same_as<T, ToggleSearch>) {
+            state.search_visible = !state.search_visible;
+            if (!state.search_visible) {
+                file_explorer_demo::set_search_filter(explorer, {});
+            } else {
+                explorer.status = "Search ready.";
+            }
         } else if constexpr (std::same_as<T, CreateFile>) {
             file_explorer_demo::create_file(explorer);
         } else if constexpr (std::same_as<T, DeleteSelected>) {
@@ -768,6 +789,24 @@ void toolbar_action_button(char const* label,
         token);
 }
 
+Msg on_search_changed(std::string text) {
+    return SearchChanged{std::move(text)};
+}
+
+void search_toggle_button(bool selected) {
+    std::string semantic_label = "Search Control";
+    phenotype::widget::canvas_button<Msg>(
+        phenotype::str{semantic_label},
+        38.0f,
+        32.0f,
+        [](phenotype::Painter& painter) {
+            paint_search_icon(painter);
+        },
+        ToggleSearch{},
+        toolbar_icon_button_options(selected),
+        0x6401u ^ (selected ? 0x400000000ull : 0ull));
+}
+
 void sort_action_button(file_explorer_demo::Snapshot const& snap) {
     std::string semantic_label = "Group Sort";
     if (!snap.sort_label.empty())
@@ -877,10 +916,17 @@ void finder_toolbar(State const& state,
                 toolbar_action_button("More", paint_more_icon, 0x6603u);
             });
         layout::material_surface(
-            toolbar_group_options("Search Control", 52.0f),
-            [] {
-                toolbar_action_button(
-                    "Search Control", paint_search_icon, 0x6401u);
+            toolbar_group_options(
+                "Search Control",
+                state.search_visible ? 236.0f : 52.0f),
+            [&] {
+                search_toggle_button(state.search_visible);
+                if (state.search_visible) {
+                    widget::text_field<Msg>(
+                        "Search",
+                        state.explorer.search,
+                        on_search_changed);
+                }
             });
     });
 }

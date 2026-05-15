@@ -29,6 +29,11 @@ On macOS it additionally checks WindowServer bounds and onscreen state, which
 catches regressions where the process owns a Dock icon but the ordered NSWindow
 is still 0x0 and therefore invisible.
 
+The toolbar search control starts as a Finder-style icon button. Activating it
+reveals a search field wired to the shared file model, so desktop and mobile
+examples use the same deterministic filename filter and startup artifact
+scenario.
+
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-desktop`. The example never points at the user's real
 home folder.
@@ -61,9 +66,10 @@ content surface has a machine-readable artifact contract.
 
 It also captures deterministic startup scenarios through
 `PHENOTYPE_FILE_EXPLORER_SCENARIO`: `created-preview`, `deleted-file`,
-`duplicated-file`, `documents-preview`, `history-forward`, and `sorted-kind`.
+`duplicated-file`, `documents-preview`, `history-forward`, `sorted-kind`, and
+`search-active`.
 These scenarios make create, delete, duplicate, navigation history, file
-preview behavior, and sort state visible in the semantic artifact without
+preview behavior, sort state, and active search visible in the semantic artifact without
 requiring manual click playback. File operation scenarios also expose an
 `Operation: ...` receipt in the status surface so the artifact can identify the
 action kind, target, and result.

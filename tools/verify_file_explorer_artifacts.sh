@@ -103,6 +103,13 @@ append_scenario_requirements() {
       extra_args+=(--require-label-contains "Sort: Kind")
       extra_args+=(--require-label-contains "Sorted by Kind")
       ;;
+    "search-active")
+      extra_args+=(--require-role text_field)
+      extra_args+=(--require-label "Search")
+      extra_args+=(--require-label-contains "Searching for Screen")
+      extra_args+=(--require-label-contains "Screen Recording")
+      extra_args+=(--require-label-contains "Screenshot")
+      ;;
     *)
       echo "error: unknown file explorer startup scenario: $scenario" >&2
       exit 1
@@ -252,7 +259,7 @@ run_exon build
 for mode in icon list column gallery; do
   verify_desktop_capture "$mode" "default" "$(desktop_bundle_for_case "$mode")"
 done
-for scenario in created-preview deleted-file duplicated-file documents-preview history-forward sorted-kind; do
+for scenario in created-preview deleted-file duplicated-file documents-preview history-forward sorted-kind search-active; do
   verify_desktop_capture \
     "icon" \
     "$scenario" \
@@ -262,6 +269,6 @@ done
 cd "$MOBILE_DIR"
 run_exon build
 verify_mobile_capture "default" "$(mobile_bundle_for_case "default")"
-for scenario in created-preview deleted-file duplicated-file documents-preview history-forward sorted-kind; do
+for scenario in created-preview deleted-file duplicated-file documents-preview history-forward sorted-kind search-active; do
   verify_mobile_capture "$scenario" "$(mobile_bundle_for_case "$scenario")"
 done

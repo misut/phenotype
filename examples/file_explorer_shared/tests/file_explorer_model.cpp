@@ -185,6 +185,16 @@ int main() {
     assert(demo::snapshot(state).sort_label == "Sort: Kind");
     assert(state.status == "Sorted by Kind");
 
+    demo::apply_startup_scenario(state, "search-active");
+    snap = demo::snapshot(state);
+    assert(state.search == "Screen");
+    assert(state.status == "Searching for Screen");
+    assert(!snap.has_selection);
+    assert(!snap.entries.empty());
+    for (auto const& entry : snap.entries) {
+        assert(demo::lower_copy(entry.name).find("screen") != std::string::npos);
+    }
+
     demo::apply_startup_scenario(state, "duplicated-file");
     assert(state.selected_name == "README copy.txt");
     assert(fs::exists(state.current / "README copy.txt"));
