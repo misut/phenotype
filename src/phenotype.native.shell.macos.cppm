@@ -399,6 +399,9 @@ int run_app_with_macos_platform(platform_api const& platform,
         .window = window,
         .view = view_obj,
     };
+    surface.window_chrome = options.chrome;
+    surface.integrated_titlebar = options.integrated_titlebar;
+    surface.window_options_valid = true;
     host.window = &surface;
     host.platform = &platform;
     host.set_hover_cursor = &appkit_set_hover_cursor;

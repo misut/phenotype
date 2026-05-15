@@ -742,6 +742,9 @@ int run_app_with_windows_platform(platform_api const& platform,
         .kind = NativeSurfaceKind::Win32Window,
         .window = hwnd,
     };
+    surface.window_chrome = options.chrome;
+    surface.integrated_titlebar = options.integrated_titlebar;
+    surface.window_options_valid = true;
     host.window = &surface;
     host.platform = &platform;
     host.set_hover_cursor = &win32_set_hover_cursor;

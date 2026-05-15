@@ -40,6 +40,11 @@ The common snapshot schema remains the source of truth for all platforms:
   from artifact debugging when the document underneath is scrolled.
 - `platform_runtime` always includes the shared viewport/scroll/focus state plus a
   platform-specific `details` object.
+- Native desktop `platform_runtime.details.window` records the resolved window
+  surface kind, requested `WindowOptions`, integrated titlebar metrics,
+  native-control ownership, and `uses_glfw=false` / `toolkit_window_shim=false`
+  so an artifact can prove whether the app is running through AppKit/Win32
+  native chrome rather than guessing from a screenshot.
 
 `phenotype_diag_export()` remains the WASI export surface for the snapshot JSON.
 
@@ -277,6 +282,12 @@ records whether the frame used live system settings, `standard` gate settings,
 or an explicit environment override before the pure planner produced
 `decision_trace.reduced_transparency`, `decision_trace.increase_contrast`, and
 `decision_trace.reduce_motion`.
+For Finder-style desktop windows, inspect
+`debug.platform_runtime.details.window`: `chrome=integrated_titlebar`,
+`window_options_present=true`, and matching `integrated_titlebar.*` metrics
+mean the example requested native integrated chrome. `native_controls_owned_by_os=true`
+with `uses_glfw=false` confirms close/minimize/maximize controls and caption
+hit testing stay at the platform edge rather than being redrawn by phenotype.
 Plan-level failures route to `plan_material_surface` and runtime plan
 serialization; semantic/runtime contract failures route to semantic material
 nodes, `MaterialRect` command emission, and `renderer.material_plans[]` parity.

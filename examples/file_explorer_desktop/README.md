@@ -22,6 +22,9 @@ Startup frame artifacts intentionally capture phenotype content rather than the
 operating system's non-client controls. The top-left titlebar reserve must stay
 visually quiet in the artifact because AppKit/Win32 own the real close,
 minimize, maximize, and caption-button hit testing at runtime.
+The manifest also checks `debug.platform_runtime.details.window` so CI can
+prove the example requested `IntegratedTitlebar`, preserved the expected
+titlebar metrics, and is not using GLFW or another toolkit window shim.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-desktop`. The example never points at the user's real

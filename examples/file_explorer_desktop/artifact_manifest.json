@@ -115,6 +115,42 @@
     {
       "path": "renderer.material_executor_summary.material_total_sample_taps",
       "equals": 275
+    },
+    {
+      "path": "window.surface_kind",
+      "equals": "macos_window"
+    },
+    {
+      "path": "window.window_options_present",
+      "equals": true
+    },
+    {
+      "path": "window.chrome",
+      "equals": "integrated_titlebar"
+    },
+    {
+      "path": "window.integrated_titlebar.height",
+      "equals": 56.0
+    },
+    {
+      "path": "window.integrated_titlebar.drag_region_height",
+      "equals": 56.0
+    },
+    {
+      "path": "window.integrated_titlebar.trailing_control_reserved_width",
+      "equals": 168.0
+    },
+    {
+      "path": "window.native_controls_owned_by_os",
+      "equals": true
+    },
+    {
+      "path": "window.toolkit_window_shim",
+      "equals": false
+    },
+    {
+      "path": "window.uses_glfw",
+      "equals": false
     }
   ],
   "require_runtime_numeric_bounds": [

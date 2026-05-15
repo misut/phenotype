@@ -104,26 +104,30 @@ enum class NativeSurfaceKind {
     AndroidWindow,
 };
 
-struct NativeSurfaceDescriptor {
-    NativeSurfaceKind kind = NativeSurfaceKind::Unknown;
-    void* window = nullptr;
-    void* view = nullptr;
-    int logical_width = 0;
-    int logical_height = 0;
-    int framebuffer_width = 0;
-    int framebuffer_height = 0;
-    float content_scale = 1.0f;
-};
-
-// Opaque native surface handle. Desktop shells pass a
-// NativeSurfaceDescriptor*. Android still passes its platform window directly
-// so the C ABI surface stays stable.
-using native_surface_handle = void*;
+inline char const* native_surface_kind_name(NativeSurfaceKind kind) noexcept {
+    switch (kind) {
+        case NativeSurfaceKind::MacOSWindow: return "macos_window";
+        case NativeSurfaceKind::Win32Window: return "win32_window";
+        case NativeSurfaceKind::AndroidWindow: return "android_window";
+        case NativeSurfaceKind::Unknown:
+        default: return "unknown";
+    }
+}
 
 enum class WindowChromeStyle {
     System,
     IntegratedTitlebar,
 };
+
+inline char const* window_chrome_style_name(WindowChromeStyle style) noexcept {
+    switch (style) {
+        case WindowChromeStyle::IntegratedTitlebar:
+            return "integrated_titlebar";
+        case WindowChromeStyle::System:
+        default:
+            return "system";
+    }
+}
 
 struct IntegratedTitlebarOptions {
     // Logical pixels reserved by the app chrome at the top of the
@@ -143,6 +147,25 @@ struct WindowOptions {
     WindowChromeStyle chrome = WindowChromeStyle::System;
     IntegratedTitlebarOptions integrated_titlebar = {};
 };
+
+struct NativeSurfaceDescriptor {
+    NativeSurfaceKind kind = NativeSurfaceKind::Unknown;
+    void* window = nullptr;
+    void* view = nullptr;
+    int logical_width = 0;
+    int logical_height = 0;
+    int framebuffer_width = 0;
+    int framebuffer_height = 0;
+    float content_scale = 1.0f;
+    WindowChromeStyle window_chrome = WindowChromeStyle::System;
+    IntegratedTitlebarOptions integrated_titlebar = {};
+    bool window_options_valid = false;
+};
+
+// Opaque native surface handle. Desktop shells pass a
+// NativeSurfaceDescriptor*. Android still passes its platform window directly
+// so the C ABI surface stays stable.
+using native_surface_handle = void*;
 
 struct window_api {
     void (*configure)(native_surface_handle surface,
