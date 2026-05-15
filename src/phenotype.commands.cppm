@@ -92,12 +92,19 @@ struct FillPathCmd { Color color; std::vector<PathSegment> segs; };
 // preserving per-primitive fill.
 struct FillQuadsCmd { std::vector<PaintQuad> quads; };
 struct FillRectsCmd { std::vector<PaintRect> rects; };
+struct LinearGradientRectCmd {
+    float x, y, w, h;
+    Color from;
+    Color to;
+    GradientAxis axis = GradientAxis::Vertical;
+    unsigned int steps = 1;
+};
 
 using DrawCommand = std::variant<
     ClearCmd, FillRectCmd, StrokeRectCmd, RoundRectCmd,
     DrawTextCmd, DrawLineCmd, HitRegionCmd, DrawImageCmd, ScissorCmd,
     DrawArcCmd, DrawPathCmd, FillPathCmd, FillQuadsCmd, FillRectsCmd,
-    MaterialRectCmd>;
+    MaterialRectCmd, LinearGradientRectCmd>;
 
 // ---- Parser ----
 
@@ -388,6 +395,17 @@ inline std::vector<DrawCommand> parse_commands(
                 rects.emplace_back(PaintRect{x, y, w, h, c});
             }
             out.emplace_back(FillRectsCmd{std::move(rects)});
+            break;
+        }
+        case Cmd::LinearGradientRect: {
+            float x = read_f32(), y = read_f32();
+            float w = read_f32(), h = read_f32();
+            auto from = unpack(read_u32());
+            auto to = unpack(read_u32());
+            auto axis = gradient_axis_from_wire(read_u32());
+            auto steps = linear_gradient_step_count(read_u32());
+            out.emplace_back(LinearGradientRectCmd{
+                x, y, w, h, from, to, axis, steps});
             break;
         }
         default:

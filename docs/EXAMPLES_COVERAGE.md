@@ -225,7 +225,7 @@ Gaps:
 | `FillPath` | yes | no | no | parser/backend path | yes |
 | `FillQuads` | yes | yes | no | backend path | yes |
 | `FillRects` | yes | yes | yes | backend path | yes |
-| `Painter::linear_gradient_rect` | yes | yes | yes | via `FillRects` | yes |
+| `LinearGradientRect` / `Painter::linear_gradient_rect` | yes | yes | yes | backend path | yes |
 
 Gaps:
 

@@ -2432,6 +2432,56 @@ inline void append_color_instance(std::vector<float>& color_data,
     });
 }
 
+inline void append_linear_gradient_instances(
+        std::vector<float>& color_data,
+        float x, float y, float w, float h,
+        Color from, Color to, GradientAxis axis, unsigned int steps) {
+    if (w == 0.0f || h == 0.0f)
+        return;
+    if (w < 0.0f) { x += w; w = -w; }
+    if (h < 0.0f) { y += h; h = -h; }
+
+    unsigned int const count = linear_gradient_step_count(steps);
+    color_data.reserve(color_data.size() + static_cast<std::size_t>(count) * 12);
+    for (unsigned int i = 0; i < count; ++i) {
+        float const t = count == 1
+            ? 0.0f
+            : static_cast<float>(i) / static_cast<float>(count - 1);
+        auto const color = lerp_color(from, to, t);
+        if (axis == GradientAxis::Horizontal) {
+            float const x0 = x + w * static_cast<float>(i)
+                / static_cast<float>(count);
+            float const x1 = x + w * static_cast<float>(i + 1)
+                / static_cast<float>(count);
+            append_color_instance(
+                color_data,
+                x0,
+                y,
+                x1 - x0,
+                h,
+                color.r / 255.0f,
+                color.g / 255.0f,
+                color.b / 255.0f,
+                color.a / 255.0f);
+        } else {
+            float const y0 = y + h * static_cast<float>(i)
+                / static_cast<float>(count);
+            float const y1 = y + h * static_cast<float>(i + 1)
+                / static_cast<float>(count);
+            append_color_instance(
+                color_data,
+                x,
+                y0,
+                w,
+                y1 - y0,
+                color.r / 255.0f,
+                color.g / 255.0f,
+                color.b / 255.0f,
+                color.a / 255.0f);
+        }
+    }
+}
+
 inline void append_tri_vertex(std::vector<float>& tri_data,
                               float x, float y, Color color) {
     tri_data.insert(tri_data.end(), {
@@ -2823,6 +2873,31 @@ inline bool decode_frame_commands(unsigned char const* buf,
                     color.r / 255.0f, color.g / 255.0f,
                     color.b / 255.0f, color.a / 255.0f);
             }
+            break;
+        }
+        case Cmd::LinearGradientRect: {
+            float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+            unsigned int from_packed = 0;
+            unsigned int to_packed = 0;
+            unsigned int axis_raw = 0;
+            unsigned int steps = 0;
+            if (!reader.read_f32(x) || !reader.read_f32(y)
+                || !reader.read_f32(w) || !reader.read_f32(h)
+                || !reader.read_u32(from_packed)
+                || !reader.read_u32(to_packed)
+                || !reader.read_u32(axis_raw)
+                || !reader.read_u32(steps))
+                return false;
+            append_linear_gradient_instances(
+                frame.color_data,
+                x,
+                y,
+                w,
+                h,
+                unpack_color(from_packed),
+                unpack_color(to_packed),
+                gradient_axis_from_wire(axis_raw),
+                steps);
             break;
         }
         default:

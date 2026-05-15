@@ -64,6 +64,7 @@ inline char const* opcode_name(Cmd c) noexcept {
         case Cmd::FillQuads:  return "FillQuads";
         case Cmd::FillRects:  return "FillRects";
         case Cmd::MaterialRect: return "MaterialRect";
+        case Cmd::LinearGradientRect: return "LinearGradientRect";
     }
     return "Unknown";
 }
@@ -354,6 +355,36 @@ void emit_material_rect(R& r, float x, float y, float w, float h,
     detail::write_u32(r, material.container.union_id);
     detail::write_f32(r, material.container.spacing);
     detail::write_u32(r, material_container_flags(material.container));
+}
+
+template <render_backend R>
+void emit_linear_gradient_rect(R& r, float x, float y, float w, float h,
+                               Color from, Color to, GradientAxis axis,
+                               unsigned int steps) {
+    if (w == 0.0f || h == 0.0f)
+        return;
+    if (w < 0.0f) { x += w; w = -w; }
+    if (h < 0.0f) { y += h; h = -h; }
+
+    if (!detail::ensure(r, 36, Cmd::LinearGradientRect)) return;
+    detail::write_u32(r, static_cast<unsigned int>(Cmd::LinearGradientRect));
+    detail::write_f32(r, x); detail::write_f32(r, y);
+    detail::write_f32(r, w); detail::write_f32(r, h);
+    detail::write_u32(r, from.packed());
+    detail::write_u32(r, to.packed());
+    detail::write_u32(r, static_cast<unsigned int>(axis));
+    detail::write_u32(r, linear_gradient_step_count(steps));
+}
+
+template <render_backend R>
+void emit_linear_gradient_rect_translated(R& r,
+                                          float x, float y, float w, float h,
+                                          Color from, Color to,
+                                          GradientAxis axis,
+                                          unsigned int steps,
+                                          float origin_x, float origin_y) {
+    emit_linear_gradient_rect(
+        r, origin_x + x, origin_y + y, w, h, from, to, axis, steps);
 }
 
 // Pack a FontSpec's mono / weight / italic bits into the wire-format
@@ -1190,6 +1221,15 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
                 if (!rects || count == 0) return;
                 emit_fill_rects_translated(r, rects, count,
                                            origin_x, origin_y);
+            }
+
+            void linear_gradient_rect(float x, float y, float w, float h,
+                                      Color from, Color to,
+                                      GradientAxis axis,
+                                      unsigned int steps) override {
+                emit_linear_gradient_rect_translated(
+                    r, x, y, w, h, from, to, axis, steps,
+                    origin_x, origin_y);
             }
 
             void text(float x, float y,

@@ -1909,6 +1909,56 @@ inline void append_color_instance(std::vector<ColorInstanceGPU>& out,
     out.push_back(inst);
 }
 
+inline void append_linear_gradient_instances(
+        std::vector<ColorInstanceGPU>& out,
+        float x, float y, float w, float h,
+        Color from, Color to, GradientAxis axis, unsigned int steps) {
+    if (w == 0.0f || h == 0.0f)
+        return;
+    if (w < 0.0f) { x += w; w = -w; }
+    if (h < 0.0f) { y += h; h = -h; }
+
+    unsigned int const count = linear_gradient_step_count(steps);
+    out.reserve(out.size() + count);
+    for (unsigned int i = 0; i < count; ++i) {
+        float const t = count == 1
+            ? 0.0f
+            : static_cast<float>(i) / static_cast<float>(count - 1);
+        auto const color = lerp_color(from, to, t);
+        if (axis == GradientAxis::Horizontal) {
+            float const x0 = x + w * static_cast<float>(i)
+                / static_cast<float>(count);
+            float const x1 = x + w * static_cast<float>(i + 1)
+                / static_cast<float>(count);
+            append_color_instance(
+                out,
+                x0,
+                y,
+                x1 - x0,
+                h,
+                color.r / 255.0f,
+                color.g / 255.0f,
+                color.b / 255.0f,
+                color.a / 255.0f);
+        } else {
+            float const y0 = y + h * static_cast<float>(i)
+                / static_cast<float>(count);
+            float const y1 = y + h * static_cast<float>(i + 1)
+                / static_cast<float>(count);
+            append_color_instance(
+                out,
+                x,
+                y0,
+                w,
+                y1 - y0,
+                color.r / 255.0f,
+                color.g / 255.0f,
+                color.b / 255.0f,
+                color.a / 255.0f);
+        }
+    }
+}
+
 inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
                                      MaterialPlan const& plan) {
     MaterialInstanceGPU inst{};
@@ -3042,6 +3092,31 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                         color.r / 255.0f, color.g / 255.0f,
                         color.b / 255.0f, color.a / 255.0f);
                 }
+                break;
+            }
+            case Cmd::LinearGradientRect: {
+                float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
+                unsigned int from_packed = 0;
+                unsigned int to_packed = 0;
+                unsigned int axis_raw = 0;
+                unsigned int steps = 0;
+                if (!reader.read_f32(x) || !reader.read_f32(y)
+                    || !reader.read_f32(w) || !reader.read_f32(h)
+                    || !reader.read_u32(from_packed)
+                    || !reader.read_u32(to_packed)
+                    || !reader.read_u32(axis_raw)
+                    || !reader.read_u32(steps))
+                    return false;
+                append_linear_gradient_instances(
+                    scratch.batches.back().colors,
+                    x,
+                    y,
+                    w,
+                    h,
+                    unpack_color(from_packed),
+                    unpack_color(to_packed),
+                    gradient_axis_from_wire(axis_raw),
+                    steps);
                 break;
             }
             default:

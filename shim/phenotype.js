@@ -18,6 +18,7 @@ const CMD_SCISSOR    = 9;
 const CMD_FILL_QUADS = 13;
 const CMD_FILL_RECTS = 14;
 const CMD_MATERIAL_RECT = 15;
+const CMD_LINEAR_GRADIENT_RECT = 16;
 
 // --- Color helpers ---
 
@@ -28,6 +29,37 @@ function unpackColor(rgba) {
     b: ((rgba >>>  8) & 0xFF) / 255,
     a: ((rgba >>>  0) & 0xFF) / 255,
   };
+}
+
+function lerpColor(from, to, t) {
+  const clamped = Math.max(0, Math.min(1, t));
+  return {
+    r: from.r + (to.r - from.r) * clamped,
+    g: from.g + (to.g - from.g) * clamped,
+    b: from.b + (to.b - from.b) * clamped,
+    a: from.a + (to.a - from.a) * clamped,
+  };
+}
+
+function pushLinearGradientQuads(quads, x, y, w, h, from, to, axis, steps) {
+  if (w === 0 || h === 0) return;
+  if (w < 0) { x += w; w = -w; }
+  if (h < 0) { y += h; h = -h; }
+
+  const count = Math.max(1, Math.min(64, steps || 1));
+  for (let i = 0; i < count; ++i) {
+    const t = count === 1 ? 0 : i / (count - 1);
+    const c = lerpColor(from, to, t);
+    if (axis === 0) {
+      const x0 = x + w * i / count;
+      const x1 = x + w * (i + 1) / count;
+      quads.push({ x: x0, y, w: x1 - x0, h, r: c.r, g: c.g, b: c.b, a: c.a, type: 0 });
+    } else {
+      const y0 = y + h * i / count;
+      const y1 = y + h * (i + 1) / count;
+      quads.push({ x, y: y0, w, h: y1 - y0, r: c.r, g: c.g, b: c.b, a: c.a, type: 0 });
+    }
+  }
 }
 
 // --- Text measurement (offscreen canvas) ---
@@ -813,12 +845,26 @@ function parseCommands(instance) {
         const h = view.getFloat32(pos, true); pos += 4;
         const radius = view.getFloat32(pos, true); pos += 4;
         pos += 4; // kind
+        pos += 4; // role
         pos += 4; // opacity
         pos += 4; // blur_radius
         const rgba = view.getUint32(pos, true); pos += 4;
         pos += 32; // saturation, luminance, edge, noise, and shadow fields
+        pos += 16; // container id, union id, spacing, flags
         const c = unpackColor(rgba);
         quads.push({ x, y, w, h, r: c.r, g: c.g, b: c.b, a: c.a, type: 2, radius });
+        break;
+      }
+      case CMD_LINEAR_GRADIENT_RECT: {
+        const x = view.getFloat32(pos, true); pos += 4;
+        const y = view.getFloat32(pos, true); pos += 4;
+        const w = view.getFloat32(pos, true); pos += 4;
+        const h = view.getFloat32(pos, true); pos += 4;
+        const from = unpackColor(view.getUint32(pos, true)); pos += 4;
+        const to = unpackColor(view.getUint32(pos, true)); pos += 4;
+        const axis = view.getUint32(pos, true); pos += 4;
+        const steps = view.getUint32(pos, true); pos += 4;
+        pushLinearGradientQuads(quads, x, y, w, h, from, to, axis, steps);
         break;
       }
       default:

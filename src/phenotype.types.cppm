@@ -227,6 +227,26 @@ enum class GradientAxis {
     Vertical,
 };
 
+inline constexpr unsigned int max_linear_gradient_steps = 64;
+
+inline unsigned int linear_gradient_step_count(unsigned int steps) noexcept {
+    if (steps == 0)
+        return 1;
+    return steps > max_linear_gradient_steps
+        ? max_linear_gradient_steps
+        : steps;
+}
+
+inline GradientAxis gradient_axis_from_wire(unsigned int raw) noexcept {
+    switch (static_cast<GradientAxis>(raw)) {
+        case GradientAxis::Horizontal:
+            return GradientAxis::Horizontal;
+        case GradientAxis::Vertical:
+        default:
+            return GradientAxis::Vertical;
+    }
+}
+
 inline Color lerp_color(Color from, Color to, float t) noexcept {
     if (t < 0.0f) t = 0.0f;
     if (t > 1.0f) t = 1.0f;
@@ -381,10 +401,16 @@ enum class Cmd : unsigned int {
     // kind u32 + role u32 + opacity f32 + blur_radius f32 + packed
     // RGBA tint + saturation/luminance_floor/luminance_gain/
     // edge_highlight/edge_width/noise_opacity/shadow_alpha/
-    // shadow_radius f32.
+    // shadow_radius f32 + container_id/union_id u32 +
+    // container_spacing f32 + container_flags u32.
     // Backends with backdrop sampling render a glass/material effect;
     // backends without it draw the tint as a rounded-rect fallback.
     MaterialRect = 15,
+    // Bounded axis-aligned linear gradient. Layout: opcode +
+    // x/y/w/h f32 + packed RGBA from/to + axis u32 + steps u32.
+    // Backends may use a native gradient path later; today every
+    // renderer lowers through the same bounded strip contract.
+    LinearGradientRect = 16,
 };
 
 // Verb tags inside a Cmd::Path / Cmd::FillPath payload. Numeric values
@@ -884,10 +910,9 @@ public:
     virtual void fill_rects(PaintRect const* rects, unsigned int count) {
         (void)rects; (void)count;
     }
-    // Bounded linear-gradient helper. This deliberately lowers to
-    // `fill_rects` instead of adding a backend opcode, so every current
-    // renderer gets identical deterministic output. The strip count is
-    // stack-bounded to avoid per-frame heap churn in canvas hot paths.
+    // Bounded linear-gradient helper. External Painter derivations get
+    // a deterministic `fill_rects` fallback; phenotype's own canvas
+    // adapter overrides this with the first-class wire command.
     virtual void linear_gradient_rect(float x, float y, float w, float h,
                                       Color from, Color to,
                                       GradientAxis axis = GradientAxis::Vertical,
@@ -897,12 +922,9 @@ public:
         if (w < 0.0f) { x += w; w = -w; }
         if (h < 0.0f) { y += h; h = -h; }
 
-        constexpr unsigned int max_steps = 64;
-        unsigned int count = steps == 0 ? 1 : steps;
-        if (count > max_steps)
-            count = max_steps;
+        unsigned int const count = linear_gradient_step_count(steps);
 
-        PaintRect rects[max_steps]{};
+        PaintRect rects[max_linear_gradient_steps]{};
         for (unsigned int i = 0; i < count; ++i) {
             float const t = count == 1
                 ? 0.0f
