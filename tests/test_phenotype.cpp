@@ -1508,6 +1508,51 @@ void test_material_surface_emits_material_rect_command() {
     std::puts("PASS: material surface emits MaterialRect command");
 }
 
+void test_material_surface_shape_overrides() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::Regular,
+            .role = MaterialSurfaceRole::Content,
+            .fixed_height = 40.0f,
+            .border_radius = 7.5f,
+            .border_width = 0.0f,
+            .semantic_label = "Shaped Material",
+        },
+        [] {
+            widget::text("Override radius");
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    auto const* material = static_cast<MaterialRectCmd const*>(nullptr);
+    bool saw_stroke = false;
+    for (auto const& cmd : cmds) {
+        if (auto const* m = std::get_if<MaterialRectCmd>(&cmd))
+            material = m;
+        if (std::holds_alternative<StrokeRectCmd>(cmd))
+            saw_stroke = true;
+    }
+
+    assert(material != nullptr);
+    assert(std::fabs(material->radius - 7.5f) < 0.0001f);
+    assert(material->material.role == MaterialSurfaceRole::Content);
+    assert(!saw_stroke);
+
+    std::puts("PASS: material surface shape overrides");
+}
+
 void test_material_container_scope_emits_command_context() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -2723,6 +2768,7 @@ int main() {
     test_material_props_invalidate_diff_cache();
     test_material_planner_backdrop_and_fallback_paths();
     test_material_surface_emits_material_rect_command();
+    test_material_surface_shape_overrides();
     test_material_container_scope_emits_command_context();
     test_material_command_preserves_style_optics();
     test_radio_paint_cache_stale_descendant_after_subtree_blit();

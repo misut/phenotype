@@ -298,7 +298,10 @@ layout, semantic labels, and `MaterialSurfaceRole`; they still emit the same
 `MaterialRect` command and flow through the pure planner/backend executor
 contract above. Artifact gates can require roles such as `toolbar`, `sidebar`,
 `status_bar`, `navigation`, or `surface` without changing backend rendering
-policy.
+policy. `MaterialSurfaceOptions` also carries explicit border radius and
+border width overrides; these are view/layout chrome decisions that shape the
+emitted command while leaving material optics, fallback decisions, and pass
+selection in the pure planner/backend executor contract.
 
 ## Native backend structure
 

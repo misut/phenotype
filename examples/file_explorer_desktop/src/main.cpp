@@ -84,6 +84,12 @@ struct State {
 constexpr float k_pi = 3.14159265358979323846f;
 constexpr float k_tau = 6.28318530717958647692f;
 constexpr float k_integrated_titlebar_height = 56.0f;
+constexpr float k_sidebar_width = 224.0f;
+constexpr float k_sidebar_row_width = 188.0f;
+constexpr float k_content_radius = 8.0f;
+constexpr float k_window_radius = 18.0f;
+constexpr float k_toolbar_group_radius = 22.0f;
+constexpr float k_toolbar_group_height = 44.0f;
 
 phenotype::Color rgba(int r, int g, int b, int a = 255) {
     return phenotype::Color{
@@ -91,6 +97,59 @@ phenotype::Color rgba(int r, int g, int b, int a = 255) {
         static_cast<unsigned char>(g),
         static_cast<unsigned char>(b),
         static_cast<unsigned char>(a),
+    };
+}
+
+phenotype::layout::MaterialSurfaceOptions toolbar_shell_options() {
+    using namespace phenotype;
+    return layout::MaterialSurfaceOptions{
+        .kind = MaterialKind::Clear,
+        .role = MaterialSurfaceRole::Toolbar,
+        .direction = FlexDirection::Row,
+        .padding = SpaceToken::Xs,
+        .gap = SpaceToken::Xs,
+        .cross_align = CrossAxisAlignment::Center,
+        .main_align = MainAxisAlignment::Start,
+        .border_radius = 0.0f,
+        .border_width = 0.0f,
+        .semantic_label = "Toolbar",
+    };
+}
+
+phenotype::layout::MaterialSurfaceOptions toolbar_group_options(
+        char const* label,
+        float max_width) {
+    using namespace phenotype;
+    return layout::MaterialSurfaceOptions{
+        .kind = MaterialKind::Thick,
+        .role = MaterialSurfaceRole::Toolbar,
+        .direction = FlexDirection::Row,
+        .padding = SpaceToken::Xs,
+        .gap = SpaceToken::Xs,
+        .cross_align = CrossAxisAlignment::Center,
+        .main_align = MainAxisAlignment::Start,
+        .max_width = max_width,
+        .fixed_height = k_toolbar_group_height,
+        .border_radius = k_toolbar_group_radius,
+        .border_width = 0.0f,
+        .semantic_label = label,
+    };
+}
+
+phenotype::layout::MaterialSurfaceOptions content_surface_options(
+        phenotype::SpaceToken gap = phenotype::SpaceToken::Md) {
+    using namespace phenotype;
+    return layout::MaterialSurfaceOptions{
+        .kind = MaterialKind::Regular,
+        .role = MaterialSurfaceRole::Content,
+        .direction = FlexDirection::Column,
+        .padding = SpaceToken::Lg,
+        .gap = gap,
+        .cross_align = CrossAxisAlignment::Start,
+        .main_align = MainAxisAlignment::Start,
+        .border_radius = k_content_radius,
+        .border_width = 0.0f,
+        .semantic_label = "Files",
     };
 }
 
@@ -430,14 +489,14 @@ void sidebar_row(std::string_view label,
     options.border_color = rgba(0, 0, 0, 0);
     options.border_width = 0.0f;
     options.border_radius = 8.0f;
-    options.max_width = 220.0f;
+    options.max_width = k_sidebar_row_width;
     options.fixed_height = 36.0f;
 
     std::string label_text(label);
     std::string icon_name(icon);
     widget::canvas_button<Msg>(
         str{label_text},
-        220.0f,
+        k_sidebar_row_width,
         36.0f,
         [label_text, icon_name, selected](Painter& painter) {
             paint_sidebar_icon(painter, icon_name);
@@ -465,13 +524,13 @@ void sidebar_heading(std::string_view label) {
     options.border_color = rgba(0, 0, 0, 0);
     options.border_width = 0.0f;
     options.border_radius = 0.0f;
-    options.max_width = 220.0f;
+    options.max_width = k_sidebar_row_width;
     options.fixed_height = 28.0f;
 
     std::string label_text(label);
     widget::canvas_button<Msg>(
         str{label_text},
-        220.0f,
+        k_sidebar_row_width,
         28.0f,
         [label_text](Painter& painter) {
             painter.text(8.0f,
@@ -493,7 +552,7 @@ void finder_sidebar(State const& state) {
         explorer.root,
         explorer.current);
     bool const in_root = relative == "Demo Root";
-    layout::sidebar(252.0f, [&] {
+    layout::sidebar(k_sidebar_width, [&] {
         layout::spacer(k_integrated_titlebar_height);
         sidebar_row("Recents", "recents", "root", in_root);
         sidebar_row("Shared", "folder", "shared",
@@ -733,20 +792,9 @@ void navigation_button(char const* label,
 void finder_toolbar(State const& state,
                     file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
-    layout::toolbar([&] {
+    layout::material_surface(toolbar_shell_options(), [&] {
         layout::material_surface(
-            layout::MaterialSurfaceOptions{
-                .kind = MaterialKind::Thick,
-                .role = MaterialSurfaceRole::Toolbar,
-                .direction = FlexDirection::Row,
-                .padding = SpaceToken::Xs,
-                .gap = SpaceToken::Xs,
-                .cross_align = CrossAxisAlignment::Center,
-                .main_align = MainAxisAlignment::Start,
-                .max_width = 96.0f,
-                .fixed_height = 44.0f,
-                .semantic_label = "Navigation Controls",
-            },
+            toolbar_group_options("Navigation Controls", 96.0f),
             [&] {
                 navigation_button("Back", GoBack{}, snap.can_go_back,
                                   paint_back_icon, 0x6201u);
@@ -759,18 +807,7 @@ void finder_toolbar(State const& state,
             TextSize::Heading);
         layout::weighted(1.0f, [] {});
         layout::material_surface(
-            layout::MaterialSurfaceOptions{
-                .kind = MaterialKind::Thick,
-                .role = MaterialSurfaceRole::Toolbar,
-                .direction = FlexDirection::Row,
-                .padding = SpaceToken::Xs,
-                .gap = SpaceToken::Xs,
-                .cross_align = CrossAxisAlignment::Center,
-                .main_align = MainAxisAlignment::Start,
-                .max_width = 240.0f,
-                .fixed_height = 44.0f,
-                .semantic_label = "View Controls",
-            },
+            toolbar_group_options("View Controls", 240.0f),
             [&] {
                 view_mode_button("Icon View", FinderViewMode::Icon,
                                  state.view_mode, paint_icon_view, 0x6301u);
@@ -782,18 +819,7 @@ void finder_toolbar(State const& state,
                                  state.view_mode, paint_gallery_view, 0x6304u);
             });
         layout::material_surface(
-            layout::MaterialSurfaceOptions{
-                .kind = MaterialKind::Thick,
-                .role = MaterialSurfaceRole::Toolbar,
-                .direction = FlexDirection::Row,
-                .padding = SpaceToken::Xs,
-                .gap = SpaceToken::Xs,
-                .cross_align = CrossAxisAlignment::Center,
-                .main_align = MainAxisAlignment::Start,
-                .max_width = 148.0f,
-                .fixed_height = 44.0f,
-                .semantic_label = "File Actions",
-            },
+            toolbar_group_options("File Actions", 148.0f),
             [&] {
                 file_action_button("New File", CreateFile{},
                                    snap.can_create_file,
@@ -806,76 +832,32 @@ void finder_toolbar(State const& state,
                                    paint_delete_icon, 0x6703u);
             });
         layout::material_surface(
-            layout::MaterialSurfaceOptions{
-                .kind = MaterialKind::Thick,
-                .role = MaterialSurfaceRole::Toolbar,
-                .direction = FlexDirection::Row,
-                .padding = SpaceToken::Xs,
-                .gap = SpaceToken::Xs,
-                .cross_align = CrossAxisAlignment::Center,
-                .main_align = MainAxisAlignment::Start,
-                .max_width = 52.0f,
-                .fixed_height = 44.0f,
-                .semantic_label = "Group Sort",
-            },
+            toolbar_group_options("Group Sort", 52.0f),
             [] {
                 toolbar_action_button(
                     "Group Sort", paint_group_sort_icon, 0x6501u);
             });
         layout::material_surface(
-            layout::MaterialSurfaceOptions{
-                .kind = MaterialKind::Thick,
-                .role = MaterialSurfaceRole::Toolbar,
-                .direction = FlexDirection::Row,
-                .padding = SpaceToken::Xs,
-                .gap = SpaceToken::Xs,
-                .cross_align = CrossAxisAlignment::Center,
-                .main_align = MainAxisAlignment::Start,
-                .max_width = 148.0f,
-                .fixed_height = 44.0f,
-                .semantic_label = "Share Tag More",
-            },
+            toolbar_group_options("Share Tag More", 148.0f),
             [] {
                 toolbar_action_button("Share", paint_share_icon, 0x6601u);
                 toolbar_action_button("Tag", paint_tag_icon, 0x6602u);
                 toolbar_action_button("More", paint_more_icon, 0x6603u);
             });
         layout::material_surface(
-            layout::MaterialSurfaceOptions{
-                .kind = MaterialKind::Thick,
-                .role = MaterialSurfaceRole::Toolbar,
-                .direction = FlexDirection::Row,
-                .padding = SpaceToken::Xs,
-                .gap = SpaceToken::Xs,
-                .cross_align = CrossAxisAlignment::Center,
-                .main_align = MainAxisAlignment::Start,
-                .max_width = 52.0f,
-                .fixed_height = 44.0f,
-                .semantic_label = "Search Control",
-            },
+            toolbar_group_options("Search Control", 52.0f),
             [] {
                 toolbar_action_button(
                     "Search Control", paint_search_icon, 0x6401u);
             });
-    }, MaterialKind::Clear, SpaceToken::Xs, SpaceToken::Xs);
+    });
 }
 
 void finder_grid(file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto entries = finder_entries(snap);
     layout::material_surface(
-        layout::MaterialSurfaceOptions{
-            .kind = MaterialKind::Regular,
-            .role = MaterialSurfaceRole::Content,
-            .direction = FlexDirection::Column,
-            .padding = SpaceToken::Lg,
-            .gap = SpaceToken::Md,
-            .cross_align = CrossAxisAlignment::Start,
-            .main_align = MainAxisAlignment::Start,
-            .max_width = 0.0f,
-            .fixed_height = -1.0f,
-            .semantic_label = "Files",
-        },
+        content_surface_options(),
         [&] {
             if (entries.empty()) {
                 widget::text("No matching files.");
@@ -917,18 +899,7 @@ void finder_list(file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto entries = finder_entries(snap);
     layout::material_surface(
-        layout::MaterialSurfaceOptions{
-            .kind = MaterialKind::Regular,
-            .role = MaterialSurfaceRole::Content,
-            .direction = FlexDirection::Column,
-            .padding = SpaceToken::Lg,
-            .gap = SpaceToken::Sm,
-            .cross_align = CrossAxisAlignment::Start,
-            .main_align = MainAxisAlignment::Start,
-            .max_width = 0.0f,
-            .fixed_height = -1.0f,
-            .semantic_label = "Files",
-        },
+        content_surface_options(SpaceToken::Sm),
         [&] {
             layout::row([&] {
                 layout::sized_box(420.0f, [&] {
@@ -984,18 +955,7 @@ void finder_column_view(file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto entries = finder_entries(snap);
     layout::material_surface(
-        layout::MaterialSurfaceOptions{
-            .kind = MaterialKind::Regular,
-            .role = MaterialSurfaceRole::Content,
-            .direction = FlexDirection::Column,
-            .padding = SpaceToken::Lg,
-            .gap = SpaceToken::Md,
-            .cross_align = CrossAxisAlignment::Start,
-            .main_align = MainAxisAlignment::Start,
-            .max_width = 0.0f,
-            .fixed_height = -1.0f,
-            .semantic_label = "Files",
-        },
+        content_surface_options(),
         [&] {
             layout::row([&] {
                 layout::sized_box(210.0f, [&] {
@@ -1078,18 +1038,7 @@ void finder_gallery_view(file_explorer_demo::Snapshot const& snap) {
         : (entries.empty() ? file_explorer_demo::Entry{} : entries.front());
     bool const has_hero = !hero.name.empty();
     layout::material_surface(
-        layout::MaterialSurfaceOptions{
-            .kind = MaterialKind::Regular,
-            .role = MaterialSurfaceRole::Content,
-            .direction = FlexDirection::Column,
-            .padding = SpaceToken::Lg,
-            .gap = SpaceToken::Md,
-            .cross_align = CrossAxisAlignment::Start,
-            .main_align = MainAxisAlignment::Start,
-            .max_width = 0.0f,
-            .fixed_height = -1.0f,
-            .semantic_label = "Files",
-        },
+        content_surface_options(),
         [&] {
             if (!has_hero) {
                 widget::text("No matching files.");
@@ -1218,6 +1167,8 @@ void view(State const& state) {
                         .main_align = MainAxisAlignment::Start,
                         .max_width = 0.0f,
                         .fixed_height = -1.0f,
+                        .border_radius = k_window_radius,
+                        .border_width = 0.0f,
                         .semantic_label = "Finder Window",
                     },
                     [&] {

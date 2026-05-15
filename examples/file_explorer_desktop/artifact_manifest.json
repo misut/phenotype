@@ -146,7 +146,7 @@
   "pixel_regions": [
     {
       "name": "finder-titlebar-reserve",
-      "rect": [0.02, 0.02, 0.18, 0.08],
+      "rect": [0.02, 0.02, 0.16, 0.08],
       "min_luma_delta": 8.0,
       "min_unique_colors": 16
     },
