@@ -87,7 +87,17 @@ ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
     "not-sampled",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 6
+ALLOWED_MATERIAL_SAMPLING_KERNELS = {
+    "none",
+    "weighted-5x5-manhattan",
+}
+
+ALLOWED_MATERIAL_SAMPLING_WEIGHT_PROFILES = {
+    "center4-cardinal2-diagonal1",
+    "none",
+}
+
+MATERIAL_PLAN_CONTRACT_VERSION = 7
 
 
 def suggested_action_for_failure(
@@ -100,6 +110,10 @@ def suggested_action_for_failure(
         return (
             "Inspect renderer.material_executor_summary and the backend "
             "material executor counters for the missing or excess pass work.")
+    if likely_pass == "sampling-kernel":
+        return (
+            "Inspect MaterialPlan.sampling_kernel and the backend material "
+            "shader inputs for stale blur-kernel metadata.")
     if likely_pass:
         return (
             f"Inspect the {likely_pass} material pass serialization and the "
@@ -904,6 +918,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "container_morph_transitions",
         "pass_names",
         "pass_executors",
+        "sampling_kernels",
+        "sampling_weight_profiles",
         "backdrop_available",
         "backdrop_stable",
         "backdrop_sources",
@@ -967,6 +983,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "container_modes": ALLOWED_MATERIAL_CONTAINER_MODES,
         "pass_names": ALLOWED_MATERIAL_PASS_NAMES,
         "pass_executors": ALLOWED_MATERIAL_PASS_EXECUTORS,
+        "sampling_kernels": ALLOWED_MATERIAL_SAMPLING_KERNELS,
+        "sampling_weight_profiles": ALLOWED_MATERIAL_SAMPLING_WEIGHT_PROFILES,
         "luminance_responses": ALLOWED_MATERIAL_LUMINANCE_RESPONSES,
     }
     for field, allowed_keys in map_vocabularies.items():
@@ -1029,6 +1047,8 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
         "total_plan_sample_taps_gte",
         "max_budget_blur_radius_lte",
         "max_sample_taps_lte",
+        "max_sampling_kernel_radius_lte",
+        "max_sampling_kernel_radius_gte",
         "max_pass_count_lte",
         "max_backdrop_pixels_lte",
         "max_container_spacing_lte",
@@ -1536,6 +1556,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "fallback_reason",
     "debug_seed",
     "sample_taps",
+    "sampling_kernel",
     "quality_policy",
     "primary_pass",
     "resource_budget",
@@ -1624,6 +1645,15 @@ MATERIAL_PASS_FIELDS = (
     "executor",
     "max_texture_copy_pixels",
 )
+MATERIAL_SAMPLING_KERNEL_FIELDS = (
+    "name",
+    "radius",
+    "sample_taps",
+    "blur_step_scale",
+    "weight_profile",
+    "requires_backdrop",
+    "bounded",
+)
 MATERIAL_QUALITY_POLICY_BOOL_FIELDS = (
     "allow_backdrop_sampling",
     "allow_noise",
@@ -1657,6 +1687,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         },
         "pass_names": {},
         "pass_executors": {},
+        "sampling_kernels": {},
+        "sampling_weight_profiles": {},
         "plan_ids": [],
         "command_descriptor_missing": 0,
         "command_descriptors": [],
@@ -1699,6 +1731,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "total_plan_sample_taps": 0,
             "max_budget_blur_radius": 0.0,
             "max_sample_taps": 0,
+            "max_sampling_kernel_radius": 0,
             "max_pass_count": 0,
             "max_backdrop_pixels": 0,
             "max_container_spacing": 0.0,
@@ -2131,6 +2164,131 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 int(sample_taps))
             bounds["total_plan_sample_taps"] = (
                 int(bounds["total_plan_sample_taps"]) + int(sample_taps))
+
+        sampling_kernel = check_object_field(
+            report,
+            plan,
+            "sampling_kernel",
+            plan_path,
+            likely_layer=likely_layer,
+            hint="MaterialPlan must expose the pure backdrop sampling kernel.")
+        if sampling_kernel is not None:
+            kernel_name = ""
+            kernel_weight_profile = ""
+            kernel_radius: int | float | None = None
+            kernel_taps: int | float | None = None
+            kernel_requires_backdrop: bool | None = None
+            kernel_bounded: bool | None = None
+            for key in MATERIAL_SAMPLING_KERNEL_FIELDS:
+                if key in ("requires_backdrop", "bounded"):
+                    value = check_bool_field(
+                        report,
+                        sampling_kernel,
+                        key,
+                        f"{plan_path}.sampling_kernel",
+                        likely_layer=likely_layer,
+                        likely_pass="sampling-kernel",
+                        hint="Sampling kernel booleans must stay explicit.")
+                    if key == "requires_backdrop":
+                        kernel_requires_backdrop = value
+                    elif key == "bounded":
+                        kernel_bounded = value
+                elif key in ("radius", "sample_taps", "blur_step_scale"):
+                    value = check_number_field(
+                        report,
+                        sampling_kernel,
+                        key,
+                        f"{plan_path}.sampling_kernel",
+                        min_value=0.0,
+                        likely_layer=likely_layer,
+                        likely_pass="sampling-kernel",
+                        hint="Sampling kernel numeric fields must be non-negative.")
+                    if key == "radius":
+                        kernel_radius = value
+                        if isinstance(value, (int, float)):
+                            bounds = summary["resource_bounds"]
+                            bounds["max_sampling_kernel_radius"] = max(
+                                int(bounds["max_sampling_kernel_radius"]),
+                                int(value))
+                    elif key == "sample_taps":
+                        kernel_taps = value
+                else:
+                    value = check_string_field(
+                        report,
+                        sampling_kernel,
+                        key,
+                        f"{plan_path}.sampling_kernel",
+                        likely_layer=likely_layer,
+                        hint="Sampling kernel fields must name the pure blur contract.")
+                    if key == "name" and isinstance(value, str):
+                        kernel_name = value
+                        kernels = summary["sampling_kernels"]
+                        kernels[value] = kernels.get(value, 0) + 1
+                        report.check(
+                            "material sampling kernel is known",
+                            value in ALLOWED_MATERIAL_SAMPLING_KERNELS,
+                            path=f"{plan_path}.sampling_kernel.name",
+                            expected=sorted(ALLOWED_MATERIAL_SAMPLING_KERNELS),
+                            actual=value,
+                            likely_layer=likely_layer,
+                            likely_pass="sampling-kernel",
+                            hint="Add new sampling kernels to the verifier vocabulary when intentional.",
+                            record_success=False)
+                    elif key == "weight_profile" and isinstance(value, str):
+                        kernel_weight_profile = value
+                        profiles = summary["sampling_weight_profiles"]
+                        profiles[value] = profiles.get(value, 0) + 1
+                        report.check(
+                            "material sampling weight profile is known",
+                            value in ALLOWED_MATERIAL_SAMPLING_WEIGHT_PROFILES,
+                            path=f"{plan_path}.sampling_kernel.weight_profile",
+                            expected=sorted(ALLOWED_MATERIAL_SAMPLING_WEIGHT_PROFILES),
+                            actual=value,
+                            likely_layer=likely_layer,
+                            likely_pass="sampling-kernel",
+                            hint="Add new sampling weight profiles to the verifier vocabulary when intentional.",
+                            record_success=False)
+            if isinstance(sample_taps, (int, float)) and isinstance(kernel_taps, (int, float)):
+                report.check(
+                    "material sampling kernel taps match plan",
+                    int(kernel_taps) == int(sample_taps),
+                    path=f"{plan_path}.sampling_kernel.sample_taps",
+                    expected=int(sample_taps),
+                    actual=int(kernel_taps),
+                    likely_layer=likely_layer,
+                    likely_pass="sampling-kernel",
+                    hint="Keep MaterialPlan.sample_taps and sampling_kernel.sample_taps in sync.",
+                    record_success=False)
+            if backdrop_sampling is True:
+                report.check(
+                    "material backdrop sampling uses active kernel",
+                    kernel_name != "none"
+                    and kernel_requires_backdrop is True
+                    and kernel_bounded is True
+                    and isinstance(kernel_radius, (int, float))
+                    and int(kernel_radius) > 0
+                    and kernel_weight_profile != "none",
+                    path=f"{plan_path}.sampling_kernel",
+                    expected="active bounded backdrop kernel",
+                    actual=sampling_kernel,
+                    likely_layer=likely_layer,
+                    likely_pass="sampling-kernel",
+                    hint="Backdrop plans should expose the pure blur kernel executed by the backend.",
+                    record_success=False)
+            elif backdrop_sampling is False:
+                report.check(
+                    "material fallback uses no sampling kernel",
+                    kernel_name == "none"
+                    and kernel_requires_backdrop is False
+                    and isinstance(kernel_radius, (int, float))
+                    and int(kernel_radius) == 0,
+                    path=f"{plan_path}.sampling_kernel",
+                    expected="inactive kernel",
+                    actual=sampling_kernel,
+                    likely_layer=likely_layer,
+                    likely_pass="sampling-kernel",
+                    hint="Fallback plans must not carry stale blur-kernel metadata.",
+                    record_success=False)
 
         geometry = check_object_field(
             report,
@@ -3465,6 +3623,12 @@ def check_material_plan_summary_requirements(
         "pass_executors": (
             "material-pass",
             "Inspect MaterialPlan.primary_pass.executor and runtime pass roles."),
+        "sampling_kernels": (
+            "sampling-kernel",
+            "Inspect MaterialPlan.sampling_kernel.name and the backend blur shader contract."),
+        "sampling_weight_profiles": (
+            "sampling-kernel",
+            "Inspect MaterialPlan.sampling_kernel.weight_profile and blur tap weighting."),
         "backdrop_sources": (
             "material-backdrop",
             "Inspect MaterialPlan.backdrop.source and the backend backdrop descriptor."),
@@ -3495,6 +3659,8 @@ def check_material_plan_summary_requirements(
             "union_ids",
             "pass_names",
             "pass_executors",
+            "sampling_kernels",
+            "sampling_weight_profiles",
             "backdrop_sources",
             "luminance_responses",
             "render_target_pixel_formats",
@@ -3567,6 +3733,7 @@ def check_material_resource_bounds_requirements(
         "total_plan_sample_taps_lte": "total_plan_sample_taps",
         "max_budget_blur_radius_lte": "max_budget_blur_radius",
         "max_sample_taps_lte": "max_sample_taps",
+        "max_sampling_kernel_radius_lte": "max_sampling_kernel_radius",
         "max_pass_count_lte": "max_pass_count",
         "max_backdrop_pixels_lte": "max_backdrop_pixels",
         "max_container_spacing_lte": "max_container_spacing",
@@ -3593,6 +3760,7 @@ def check_material_resource_bounds_requirements(
     min_field_map = {
         "max_plan_sample_taps_gte": "max_plan_sample_taps",
         "total_plan_sample_taps_gte": "total_plan_sample_taps",
+        "max_sampling_kernel_radius_gte": "max_sampling_kernel_radius",
         "max_pass_texture_copy_pixels_gte": "max_pass_texture_copy_pixels",
         "max_container_spacing_gte": "max_container_spacing",
         "total_pass_texture_copy_pixels_gte": "total_pass_texture_copy_pixels",
@@ -3675,6 +3843,8 @@ def check_material_runtime_summary_contract(
         "total_plan_sample_taps": bounds.get("total_plan_sample_taps"),
         "max_budget_blur_radius": bounds.get("max_budget_blur_radius"),
         "max_sample_taps": bounds.get("max_sample_taps"),
+        "max_sampling_kernel_radius": bounds.get(
+            "max_sampling_kernel_radius"),
         "max_pass_count": bounds.get("max_pass_count"),
         "max_backdrop_pixels": bounds.get("max_backdrop_pixels"),
         "max_container_spacing": bounds.get("max_container_spacing"),

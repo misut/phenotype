@@ -1138,7 +1138,16 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "fallback-fill");
     assert(fallback_plan.primary_pass.max_texture_copy_pixels == 0);
     assert(fallback_plan.resource_budget.max_sample_taps == 25);
+    assert(fallback_plan.resource_budget.max_sampling_kernel_radius == 0);
     assert(fallback_plan.resource_budget.deterministic_fallback);
+    assert(std::string(fallback_plan.sampling_kernel.name) == "none");
+    assert(fallback_plan.sampling_kernel.radius == 0);
+    assert(fallback_plan.sampling_kernel.sample_taps == 0);
+    assert(fallback_plan.sampling_kernel.blur_step_scale == 0.0f);
+    assert(std::string(fallback_plan.sampling_kernel.weight_profile)
+           == "none");
+    assert(!fallback_plan.sampling_kernel.requires_backdrop);
+    assert(fallback_plan.sampling_kernel.bounded);
     assert(std::string(fallback_plan.backdrop.source) == "none");
     assert(std::string(fallback_plan.backdrop.luminance_response)
            == "not-sampled");
@@ -1189,6 +1198,17 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "backdrop-filter");
     assert(glass_plan.primary_pass.max_texture_copy_pixels
            == glass_plan.render_target.pixel_count);
+    assert(std::string(glass_plan.sampling_kernel.name)
+           == "weighted-5x5-manhattan");
+    assert(glass_plan.sampling_kernel.radius == 2);
+    assert(glass_plan.sampling_kernel.sample_taps == glass_plan.sample_taps);
+    assert(std::fabs(glass_plan.sampling_kernel.blur_step_scale - 0.35f)
+           < 0.0001f);
+    assert(std::string(glass_plan.sampling_kernel.weight_profile)
+           == "center4-cardinal2-diagonal1");
+    assert(glass_plan.sampling_kernel.requires_backdrop);
+    assert(glass_plan.sampling_kernel.bounded);
+    assert(glass_plan.resource_budget.max_sampling_kernel_radius == 2);
     assert(glass_plan.backdrop.available);
     assert(glass_plan.backdrop.stable);
     assert(std::string(glass_plan.backdrop.source)
@@ -1360,6 +1380,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!budget_plan.quality_policy.allow_shadow);
     assert(budget_plan.resource_budget.max_blur_radius == 12.0f);
     assert(budget_plan.resource_budget.max_sample_taps == 5);
+    assert(budget_plan.resource_budget.max_sampling_kernel_radius == 2);
     assert(budget_plan.resource_budget.max_pass_count == 1);
     assert(budget_plan.resource_budget.max_backdrop_pixels == 600'000);
     assert(budget_plan.resource_budget.bounded_texture_copy);
@@ -1379,6 +1400,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(oversize_plan.resource_budget.max_backdrop_pixels == 100);
     assert(!oversize_plan.backdrop_sampling);
     assert(oversize_plan.sample_taps == 0);
+    assert(oversize_plan.sampling_kernel.radius == 0);
+    assert(oversize_plan.resource_budget.max_sampling_kernel_radius == 0);
     assert(oversize_plan.primary_pass.sample_taps == 0);
     assert(std::string(oversize_plan.fallback_reason)
            == "quality policy backdrop pixel budget exceeded");

@@ -193,7 +193,7 @@ The plan records its artifact `contract_version`, source
 saturation, luminance curve, edge highlight, noise/dither, shadow, render-target
 analysis, backdrop sampling, backdrop analysis, decision trace, fallback path,
 debug metadata, pass expectations, the resolved quality policy, resource
-budgets, and verifier expectations.
+budgets, the resolved sampling kernel, and verifier expectations.
 `decision_trace` records the pure gate booleans for geometry, target readiness,
 quality, backend capabilities, accessibility settings, backdrop-source
 readiness, and the first fallback blocker. `primary_pass` states whether the
@@ -205,18 +205,25 @@ artifact can prove whether it stayed within the render-target copy budget.
 deterministic fallback plans use `sample_taps: 0` even when the quality budget
 allows more. The pure planner normalizes caller tap limits to executable
 backdrop kernels of 1, 5, 9, 13, or 25 taps, selecting the largest kernel that
-does not exceed `quality_policy.max_sample_taps`. Reduced-motion plans also
-disable material noise and cap backdrop sample taps before any backend executes
-the pass. `quality_policy` records the pure planner's resolved
+does not exceed `quality_policy.max_sample_taps`. `sampling_kernel` then names
+the exact bounded blur kernel (`weighted-5x5-manhattan` today), its radius,
+resolved tap count, blur step scale, weight profile, and whether it requires a
+backdrop source. Deterministic fallback plans use the inactive `none` kernel so
+stale blur metadata cannot leak into fallback artifacts. macOS uploads the
+kernel's blur step scale to Metal instead of hard-coding that policy in the
+shader; other backends serialize the same kernel contract before they gain an
+advanced material executor. Reduced-motion plans also disable material noise
+and cap backdrop sample taps before any backend executes the pass.
+`quality_policy` records the pure planner's resolved
 sampling/noise/shadow switches and caller quality limits, including
 `max_backdrop_pixels`. `render_target` records sanitized target dimensions,
 scale, pixel format, pixel count, readiness, and whether the target stays
 within that backdrop budget. `resource_budget` records the clamped
-blur/executable sample-tap limits, the same allowed backdrop-pixel budget, and
-whether texture copies and fallback behavior are bounded. Container spacing is
-also reported as `max_container_spacing`, so artifact gates can bound future
-container/union expansion work before a backend starts allocating extra
-backdrop passes.
+blur/executable sample-tap limits, max sampling kernel radius, the same allowed
+backdrop-pixel budget, and whether texture copies and fallback behavior are
+bounded. Container spacing is also reported as `max_container_spacing`, so
+artifact gates can bound future container/union expansion work before a backend
+starts allocating extra backdrop passes.
 `verifier` records the deterministic pixel-region contract derived from the
 same plan: whether a backdrop source or edge highlight must be present, the
 minimum luma/color thresholds for sampled or fallback rendering, the semantic
