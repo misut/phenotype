@@ -69,16 +69,22 @@ int main() {
     demo::create_file(state);
     assert(state.selected_name == "Launch Plan.txt");
     assert(fs::exists(state.current / "Launch Plan.txt"));
+    assert(demo::snapshot(state).operation_label
+        .find("Operation: file_create ok - Launch Plan.txt") != std::string::npos);
     assert(demo::read_preview(state.current / "Launch Plan.txt")
         .find("Created from test_file_explorer_model") != std::string::npos);
 
     demo::delete_selected(state);
     assert(!fs::exists(state.current / "Launch Plan.txt"));
     assert(state.selected_name.empty());
+    assert(demo::snapshot(state).operation_label
+        .find("Operation: file_delete ok - Launch Plan.txt") != std::string::npos);
 
     demo::apply_startup_scenario(state, "created-preview");
     assert(state.selected_name == "Action Note.txt");
     assert(fs::exists(state.current / "Action Note.txt"));
+    assert(demo::snapshot(state).operation_label
+        .find("Operation: file_create ok - Action Note.txt") != std::string::npos);
     assert(demo::read_preview(state.current / "Action Note.txt")
         .find("Created from artifact scenario") != std::string::npos);
 
@@ -91,14 +97,20 @@ int main() {
     assert(!fs::exists(state.current / "Delete Me.txt"));
     assert(state.selected_name.empty());
     assert(state.status == "Deleted Delete Me.txt");
+    assert(demo::snapshot(state).operation_label
+        .find("Operation: file_delete ok - Delete Me.txt") != std::string::npos);
 
     demo::select_entry(state, "README.txt");
+    assert(demo::snapshot(state).operation_label
+        .find("Operation: file_read ok - README.txt") != std::string::npos);
     demo::duplicate_selected(state);
     assert(state.selected_name == "README copy.txt");
     assert(fs::exists(state.current / "README copy.txt"));
     assert(state.status == "Duplicated README.txt to README copy.txt");
     snap = demo::snapshot(state);
     assert(snap.selected.name == "README copy.txt");
+    assert(snap.operation_label
+        .find("Operation: file_duplicate ok - README copy.txt") != std::string::npos);
     assert(snap.can_delete_selected);
     assert(snap.can_duplicate_selected);
     assert(snap.selected_path_label.find("README copy.txt") != std::string::npos);
@@ -142,6 +154,7 @@ int main() {
     demo::reset_demo_tree(state, profile);
     assert(!demo::snapshot(state).can_go_back);
     assert(!demo::snapshot(state).can_go_forward);
+    assert(demo::snapshot(state).operation_label.empty());
 
     fs::remove_all(root, ec);
     std::puts("PASS: file explorer model contract");

@@ -34,4 +34,6 @@ The local gate also captures `created-preview`, `deleted-file`,
 `duplicated-file`, `documents-preview`, and `history-forward` startup scenarios
 through `PHENOTYPE_FILE_EXPLORER_SCENARIO`. These scenario artifacts keep
 mobile create, delete, duplicate, navigation history, and preview behavior
-debuggable without interactive input replay.
+debuggable without interactive input replay. File operation scenarios also
+write an `Operation: ...` receipt into the status surface so the same shared
+model contract is visible on mobile artifacts.

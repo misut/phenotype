@@ -1150,6 +1150,8 @@ void finder_status_bar(State const& state,
                         && !snap.preview.empty()) {
                         status += " - " + compact_preview(snap.preview);
                     }
+                    if (!snap.operation_label.empty())
+                        status += " - " + snap.operation_label;
                     widget::text(status, TextSize::Small, TextColor::Muted);
                 });
                 if (snap.has_selection) {

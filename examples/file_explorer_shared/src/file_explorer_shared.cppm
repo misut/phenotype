@@ -9,6 +9,7 @@ module;
 #include <string>
 #include <string_view>
 #include <system_error>
+#include <utility>
 #include <vector>
 
 export module file_explorer_shared;
@@ -21,6 +22,13 @@ struct Entry {
     std::string name;
     bool folder = false;
     std::uintmax_t size = 0;
+};
+
+struct OperationReceipt {
+    std::string kind;
+    std::string target;
+    bool ok = false;
+    std::string detail;
 };
 
 struct Snapshot {
@@ -41,6 +49,7 @@ struct Snapshot {
     std::string selected_path_label;
     std::string item_summary;
     std::string action_summary;
+    std::string operation_label;
     std::string preview;
     std::size_t file_count = 0;
     std::size_t folder_count = 0;
@@ -56,6 +65,7 @@ struct ExplorerState {
     std::string status = "Ready";
     std::vector<fs::path> back_stack;
     std::vector<fs::path> forward_stack;
+    OperationReceipt last_operation;
     int viewport_width = 0;
     int viewport_height = 0;
     float viewport_scale = 1.0f;
@@ -276,6 +286,32 @@ inline std::string entry_size_label(Entry const& entry) {
     return entry.folder ? "--" : format_size(entry.size);
 }
 
+inline void record_operation(
+        ExplorerState& state,
+        std::string kind,
+        std::string target,
+        bool ok,
+        std::string detail) {
+    state.last_operation = OperationReceipt{
+        .kind = std::move(kind),
+        .target = std::move(target),
+        .ok = ok,
+        .detail = std::move(detail),
+    };
+}
+
+inline std::string operation_label(OperationReceipt const& receipt) {
+    if (receipt.kind.empty())
+        return {};
+    std::string label = "Operation: " + receipt.kind;
+    label += receipt.ok ? " ok" : " failed";
+    if (!receipt.target.empty())
+        label += " - " + receipt.target;
+    if (!receipt.detail.empty())
+        label += " - " + receipt.detail;
+    return label;
+}
+
 inline std::string relative_location(fs::path const& root, fs::path const& current) {
     std::error_code ec;
     auto rel = fs::relative(current, root, ec);
@@ -422,6 +458,7 @@ inline Snapshot snapshot(ExplorerState const& state) {
     std::error_code ec;
     out.can_create_file = fs::is_directory(state.current, ec) && !ec;
     out.entries = list_entries(state.current, state.search);
+    out.operation_label = operation_label(state.last_operation);
     for (auto const& entry : out.entries) {
         if (entry.folder)
             ++out.folder_count;
@@ -543,9 +580,21 @@ inline void select_entry(ExplorerState& state, std::string const& name) {
     if (fs::is_regular_file(path, ec)) {
         state.selected_name = name;
         state.status = "Selected " + name;
+        record_operation(
+            state,
+            "file_read",
+            name,
+            true,
+            "Selected " + name + " for preview");
         return;
     }
     state.status = "Entry is no longer available.";
+    record_operation(
+        state,
+        "file_read",
+        name,
+        false,
+        state.status);
 }
 
 inline fs::path unique_child_path(fs::path const& parent, std::string name) {
@@ -569,41 +618,80 @@ inline void create_file(ExplorerState& state) {
     std::ofstream out(path, std::ios::binary);
     if (!out) {
         state.status = "Could not create " + name;
+        record_operation(state, "file_create", name, false, state.status);
         return;
     }
     out << state.draft_body << "\n";
+    if (!out) {
+        state.status = "Could not write " + name;
+        record_operation(state, "file_create", name, false, state.status);
+        return;
+    }
     state.selected_name = path.filename().string();
     state.status = "Created " + state.selected_name;
+    record_operation(
+        state,
+        "file_create",
+        state.selected_name,
+        true,
+        state.status);
 }
 
 inline void delete_selected(ExplorerState& state) {
     if (state.selected_name.empty()) {
         state.status = "Select a file before deleting.";
+        record_operation(state, "file_delete", {}, false, state.status);
         return;
     }
     auto path = state.current / state.selected_name;
     std::error_code ec;
     if (!fs::is_regular_file(path, ec)) {
         state.status = "Only files can be deleted in this demo.";
+        record_operation(
+            state,
+            "file_delete",
+            state.selected_name,
+            false,
+            state.status);
         return;
     }
     if (!fs::remove(path, ec) || ec) {
         state.status = "Could not delete " + state.selected_name;
+        record_operation(
+            state,
+            "file_delete",
+            state.selected_name,
+            false,
+            state.status);
         return;
     }
+    auto deleted = state.selected_name;
     state.status = "Deleted " + state.selected_name;
     state.selected_name.clear();
+    record_operation(
+        state,
+        "file_delete",
+        deleted,
+        true,
+        state.status);
 }
 
 inline void duplicate_selected(ExplorerState& state) {
     if (state.selected_name.empty()) {
         state.status = "Select a file before duplicating.";
+        record_operation(state, "file_duplicate", {}, false, state.status);
         return;
     }
     auto source = state.current / state.selected_name;
     std::error_code ec;
     if (!fs::is_regular_file(source, ec)) {
         state.status = "Only files can be duplicated in this demo.";
+        record_operation(
+            state,
+            "file_duplicate",
+            state.selected_name,
+            false,
+            state.status);
         return;
     }
     auto candidate_name =
@@ -612,11 +700,23 @@ inline void duplicate_selected(ExplorerState& state) {
     ec.clear();
     if (!fs::copy_file(source, target, fs::copy_options::none, ec) || ec) {
         state.status = "Could not duplicate " + state.selected_name;
+        record_operation(
+            state,
+            "file_duplicate",
+            state.selected_name,
+            false,
+            state.status);
         return;
     }
     auto previous = state.selected_name;
     state.selected_name = target.filename().string();
     state.status = "Duplicated " + previous + " to " + state.selected_name;
+    record_operation(
+        state,
+        "file_duplicate",
+        state.selected_name,
+        true,
+        state.status);
 }
 
 inline void reset_demo_tree(ExplorerState& state, std::string_view profile) {
@@ -631,6 +731,7 @@ inline void reset_demo_tree(ExplorerState& state, std::string_view profile) {
     state.draft_body = "Created from the phenotype file explorer demo.";
     state.back_stack.clear();
     state.forward_stack.clear();
+    state.last_operation = {};
     state.status = "Demo files reset.";
 }
 
