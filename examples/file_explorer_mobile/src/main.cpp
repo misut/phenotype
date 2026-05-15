@@ -21,6 +21,7 @@ struct DraftBodyChanged { std::string text; };
 struct SelectTab { std::size_t value; };
 struct CreateFile {};
 struct DeleteSelected {};
+struct DuplicateSelected {};
 struct GoBack {};
 struct GoForward {};
 struct GoUp {};
@@ -36,6 +37,7 @@ using Msg = std::variant<
     SelectTab,
     CreateFile,
     DeleteSelected,
+    DuplicateSelected,
     GoBack,
     GoForward,
     GoUp,
@@ -94,6 +96,9 @@ void update(State& state, Msg msg) {
         } else if constexpr (std::same_as<T, DeleteSelected>) {
             file_explorer_demo::delete_selected(explorer);
             explorer.mobile_tab = 0;
+        } else if constexpr (std::same_as<T, DuplicateSelected>) {
+            file_explorer_demo::duplicate_selected(explorer);
+            explorer.mobile_tab = 1;
         } else if constexpr (std::same_as<T, GoBack>) {
             file_explorer_demo::go_back(explorer);
             explorer.mobile_tab = 0;
@@ -215,7 +220,8 @@ void preview_tab(
         layout::spacer(4);
         if (snap.has_selection) {
             widget::text(snap.selected.name);
-            widget::text(file_explorer_demo::format_size(snap.selected.size),
+            widget::text(snap.selected_kind_label + " - "
+                             + snap.selected_size_label,
                          TextSize::Small,
                          TextColor::Muted);
         } else {
@@ -224,7 +230,15 @@ void preview_tab(
         layout::spacer(8);
         widget::code(snap.preview);
         layout::spacer(12);
-        widget::button<Msg>("Delete File", DeleteSelected{});
+        widget::button<Msg>("Duplicate File",
+                            DuplicateSelected{},
+                            ButtonVariant::Default,
+                            !snap.can_duplicate_selected);
+        layout::spacer(8);
+        widget::button<Msg>("Delete File",
+                            DeleteSelected{},
+                            ButtonVariant::Default,
+                            !snap.can_delete_selected);
         layout::spacer(8);
         widget::text(explorer.status, TextSize::Small, TextColor::Muted);
     }, SpaceToken::Md, SpaceToken::Sm);

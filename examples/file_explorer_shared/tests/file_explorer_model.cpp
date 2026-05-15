@@ -42,6 +42,13 @@ int main() {
     assert(snap.selected.name == "README.txt");
     assert(snap.file_count >= 15);
     assert(snap.folder_count == 3);
+    assert(snap.can_create_file);
+    assert(snap.can_delete_selected);
+    assert(snap.can_duplicate_selected);
+    assert(snap.can_preview_selected);
+    assert(snap.selected_kind_label == "TXT File");
+    assert(snap.selected_size_label != "--");
+    assert(snap.action_summary.find("Selected README.txt") != std::string::npos);
 
     state.draft_name = "../ Launch Plan";
     state.draft_body = "Created from test_file_explorer_model.";
@@ -70,6 +77,17 @@ int main() {
     assert(!fs::exists(state.current / "Delete Me.txt"));
     assert(state.selected_name.empty());
     assert(state.status == "Deleted Delete Me.txt");
+
+    demo::select_entry(state, "README.txt");
+    demo::duplicate_selected(state);
+    assert(state.selected_name == "README copy.txt");
+    assert(fs::exists(state.current / "README copy.txt"));
+    assert(state.status == "Duplicated README.txt to README copy.txt");
+    snap = demo::snapshot(state);
+    assert(snap.selected.name == "README copy.txt");
+    assert(snap.can_delete_selected);
+    assert(snap.can_duplicate_selected);
+    assert(snap.selected_path_label.find("README copy.txt") != std::string::npos);
 
     demo::apply_startup_scenario(state, "documents-preview");
     assert(demo::relative_location(state.root, state.current)
@@ -101,6 +119,11 @@ int main() {
     assert(demo::relative_location(state.root, state.current)
         == "Demo Root/Documents");
     assert(state.status == "Went forward to Demo Root/Documents");
+
+    demo::apply_startup_scenario(state, "duplicated-file");
+    assert(state.selected_name == "README copy.txt");
+    assert(fs::exists(state.current / "README copy.txt"));
+    assert(state.status == "Duplicated README.txt to README copy.txt");
 
     demo::reset_demo_tree(state, profile);
     assert(!demo::snapshot(state).can_go_back);

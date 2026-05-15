@@ -3,8 +3,8 @@
 This example is a Finder-style desktop workflow for phenotype's material
 system. It uses a glass toolbar with Finder-like semantic view/action/search
 buttons, translucent sidebar locations, icon/list/column/gallery file views,
-document, image, video, and folder thumbnails, search, create, delete, and
-reset actions.
+document, image, video, and folder thumbnails, read/create/duplicate/delete
+file actions, and compact Finder-style selection status.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-desktop`. The example never points at the user's real
@@ -37,7 +37,7 @@ The gate captures the desktop example in `icon`, `list`, `column`, and
 content surface has a machine-readable artifact contract.
 
 It also captures deterministic startup scenarios through
-`PHENOTYPE_FILE_EXPLORER_SCENARIO`: `created-preview`, `deleted-file`, and
-`documents-preview`, and `history-forward`. These scenarios make create,
-delete, navigation history, and file preview behavior visible in the semantic
-artifact without requiring manual click playback.
+`PHENOTYPE_FILE_EXPLORER_SCENARIO`: `created-preview`, `deleted-file`,
+`duplicated-file`, `documents-preview`, and `history-forward`. These scenarios
+make create, delete, duplicate, navigation history, and file preview behavior
+visible in the semantic artifact without requiring manual click playback.
