@@ -77,7 +77,7 @@ struct CFGuard {
 // Font cache: keyed by (family, weight, style, mono). Each slot owns
 // a base 16pt CTFontRef; per-call sizing is layered on top via
 // CTFontCreateCopyWithAttributes (matches the pre-FontSpec sans/mono
-// pattern). Empty family + mono=false → system sans;
+// pattern). Empty family + mono=false → Pretendard when available, then system sans;
 // empty family + mono=true → user fixed-pitch.
 struct FontCacheKey {
     std::string family;
@@ -101,7 +101,7 @@ struct FontCacheKeyLess {
 };
 
 struct TextState {
-    // Pre-warmed system defaults — kept for the empty-family fast path
+    // Pre-warmed default faces — kept for the empty-family fast path
     // (most widget::text calls don't carry a custom family).
     CTFontRef sans = nullptr;
     CTFontRef mono = nullptr;
@@ -683,9 +683,51 @@ inline LineBoxMetrics make_line_box(float logical_width,
     return box;
 }
 
+inline std::string cf_string_to_utf8(CFStringRef value) {
+    if (!value)
+        return {};
+    CFIndex const chars = CFStringGetLength(value);
+    CFIndex const max_bytes = CFStringGetMaximumSizeForEncoding(
+        chars, kCFStringEncodingUTF8);
+    std::string out;
+    out.resize(static_cast<std::size_t>(max_bytes + 1), '\0');
+    if (!CFStringGetCString(value, out.data(), max_bytes + 1,
+                            kCFStringEncodingUTF8)) {
+        return {};
+    }
+    out.resize(std::strlen(out.c_str()));
+    return out;
+}
+
+inline CTFontRef create_preferred_sans_font() {
+    char const preferred[] = "Pretendard";
+    auto cf_name = CFGuard<CFStringRef>(CFStringCreateWithBytes(
+        kCFAllocatorDefault,
+        reinterpret_cast<UInt8 const*>(preferred),
+        static_cast<CFIndex>(sizeof(preferred) - 1),
+        kCFStringEncodingUTF8,
+        false));
+    if (!cf_name)
+        return nullptr;
+
+    CTFontRef font = CTFontCreateWithName(cf_name, 16.0, nullptr);
+    if (!font)
+        return nullptr;
+
+    auto family = CFGuard<CFStringRef>(CTFontCopyFamilyName(font));
+    auto family_name = cf_string_to_utf8(family.ref);
+    if (family_name.find(preferred) != std::string::npos)
+        return font;
+
+    CFRelease(font);
+    return nullptr;
+}
+
 inline void text_init() {
     if (g_text.initialized) return;
-    g_text.sans = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 16.0, nullptr);
+    g_text.sans = create_preferred_sans_font();
+    if (!g_text.sans)
+        g_text.sans = CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 16.0, nullptr);
     g_text.mono = CTFontCreateUIFontForLanguage(kCTFontUIFontUserFixedPitch, 16.0, nullptr);
     if (!g_text.sans) {
         std::fprintf(stderr, "[text] failed to create system font\n");
@@ -1348,7 +1390,7 @@ struct ColorInstanceGPU {
 struct MaterialInstanceGPU {
     float rect[4]{};
     float tint[4]{};
-    // radius, blur radius, opacity, kind
+    // radius, blur radius, opacity, resolved sample taps
     float params[4]{};
     // saturation, luminance floor, luminance gain, edge highlight
     float optics[4]{};
@@ -1852,7 +1894,7 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.params[0] = plan.geometry.radius;
     inst.params[1] = plan.blur_radius;
     inst.params[2] = plan.opacity;
-    inst.params[3] = static_cast<float>(plan.kind);
+    inst.params[3] = static_cast<float>(plan.sample_taps);
     inst.optics[0] = plan.saturation;
     inst.optics[1] = plan.luminance_floor;
     inst.optics[2] = plan.luminance_gain;
@@ -3677,12 +3719,24 @@ fragment float4 fs_material(
     float2 texel = 1.0 / float2(float(backdrop.get_width()),
                                 float(backdrop.get_height()));
     float blur_px = clamp(in.params.y, 0.0, 36.0);
+    uint sample_taps = uint(clamp(round(in.params.w), 1.0, 25.0));
     float2 step_uv = texel * max(1.0, blur_px * 0.35);
     float4 acc = float4(0.0);
     float weight_sum = 0.0;
     for (int y = -2; y <= 2; ++y) {
         for (int x = -2; x <= 2; ++x) {
-            float dist = abs(float(x)) + abs(float(y));
+            int ax = abs(x);
+            int ay = abs(y);
+            int manhattan = ax + ay;
+            int chebyshev = max(ax, ay);
+            bool include = sample_taps >= 25u
+                || (sample_taps >= 13u && manhattan <= 2)
+                || (sample_taps >= 9u && chebyshev <= 1)
+                || (sample_taps >= 5u && manhattan <= 1)
+                || (sample_taps >= 1u && manhattan == 0);
+            if (!include)
+                continue;
+            float dist = float(manhattan);
             float weight = (dist == 0.0) ? 4.0 : ((dist <= 1.0) ? 2.0 : 1.0);
             float2 uv = clamp(
                 in.screen_uv + float2(float(x), float(y)) * step_uv,
@@ -6199,8 +6253,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_summary.plan_count =
         static_cast<std::uint32_t>(g_renderer.scratch.material_records.size());
     for (auto const& record : g_renderer.scratch.material_records) {
-        if (!record.plan.backdrop_sampling || record.plan.fallback())
+        if (!record.plan.backdrop_sampling || record.plan.fallback()) {
             ++material_summary.fallback_instance_count;
+        } else {
+            material_summary.material_max_sample_taps = std::max(
+                material_summary.material_max_sample_taps,
+                record.plan.sample_taps);
+            material_summary.material_total_sample_taps +=
+                record.plan.sample_taps;
+        }
     }
 
     int winw = 0;

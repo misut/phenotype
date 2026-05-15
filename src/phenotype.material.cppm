@@ -9,7 +9,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 5;
+inline constexpr std::uint32_t material_plan_contract_version = 6;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -232,6 +232,7 @@ struct MaterialRuntimeSummary {
     std::int64_t total_pass_texture_copy_pixels = 0;
     float max_plan_blur_radius = 0.0f;
     unsigned int max_plan_sample_taps = 0;
+    std::int64_t total_plan_sample_taps = 0;
     float max_budget_blur_radius = 0.0f;
     unsigned int max_sample_taps = 0;
     unsigned int max_pass_count = 0;
@@ -251,6 +252,8 @@ struct MaterialExecutorSummary {
     std::uint32_t fallback_instance_count = 0;
     std::uint32_t material_draw_calls = 0;
     std::uint32_t backdrop_copy_count = 0;
+    std::uint32_t material_max_sample_taps = 0;
+    std::int64_t material_total_sample_taps = 0;
     std::int64_t backdrop_copy_pixels = 0;
     std::int64_t material_upload_bytes = 0;
     std::int64_t material_buffer_capacity_bytes = 0;
@@ -285,6 +288,7 @@ inline void accumulate_material_runtime_summary(
         std::max(summary.max_plan_blur_radius, plan.blur_radius);
     summary.max_plan_sample_taps =
         std::max(summary.max_plan_sample_taps, plan.sample_taps);
+    summary.total_plan_sample_taps += plan.sample_taps;
     summary.max_budget_blur_radius = std::max(
         summary.max_budget_blur_radius,
         plan.resource_budget.max_blur_radius);
@@ -590,6 +594,22 @@ inline std::uint32_t material_debug_seed(MaterialDebugSeed seed,
     return value;
 }
 
+inline unsigned int material_resolve_sample_taps(
+        unsigned int max_sample_taps) noexcept {
+    auto const bounded = std::min(max_sample_taps, 25u);
+    if (bounded == 0u)
+        return 0u;
+    if (bounded < 5u)
+        return 1u;
+    if (bounded < 9u)
+        return 5u;
+    if (bounded < 13u)
+        return 9u;
+    if (bounded < 25u)
+        return 13u;
+    return 25u;
+}
+
 inline float material_safe_luma(float value, float fallback) noexcept {
     return std::isfinite(value)
         ? std::clamp(value, 0.0f, 1.0f)
@@ -794,7 +814,10 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         : 0.0f;
     plan.contrast_intent = style.contrast_intent;
     plan.debug_seed = material_debug_seed(environment.debug_seed, style.kind);
-    plan.sample_taps = resolved_quality.max_sample_taps;
+    plan.sample_taps =
+        material_resolve_sample_taps(resolved_quality.max_sample_taps);
+    if (environment.capabilities.reduce_motion)
+        plan.sample_taps = std::min(plan.sample_taps, 9u);
     plan.resource_budget.max_blur_radius = max_blur_radius;
     plan.resource_budget.max_sample_taps = plan.sample_taps;
     plan.resource_budget.max_pass_count = 1;
@@ -920,9 +943,6 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     }
     if (environment.capabilities.reduce_motion) {
         plan.noise_opacity = 0.0f;
-        if (plan.backdrop_sampling) {
-            plan.sample_taps = std::min(plan.sample_taps, 9u);
-        }
     }
     if (environment.capabilities.increase_contrast) {
         plan.opacity = std::clamp(plan.opacity + 0.12f, 0.0f, 1.0f);

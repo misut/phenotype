@@ -35,7 +35,7 @@ function unpackColor(rgba) {
 const measureCanvas = new OffscreenCanvas(1, 1);
 const measureCtx = measureCanvas.getContext('2d');
 
-const FONT_SANS = 'system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
+const FONT_SANS = '"Pretendard", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif';
 const FONT_MONO = '"SF Mono", "Fira Code", "Cascadia Code", monospace';
 
 // Build a CSS font string from FontSpec components. `family` is a

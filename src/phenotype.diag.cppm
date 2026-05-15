@@ -1172,6 +1172,9 @@ namespace detail {
             "max_plan_sample_taps",
             json::Value{
                 static_cast<std::int64_t>(summary.max_plan_sample_taps)});
+        out.emplace(
+            "total_plan_sample_taps",
+            json::Value{summary.total_plan_sample_taps});
         out.emplace("max_budget_blur_radius",
                     json::Value{summary.max_budget_blur_radius});
         out.emplace(
@@ -1244,6 +1247,14 @@ namespace detail {
             "backdrop_copy_count",
             json::Value{
                 static_cast<std::int64_t>(summary.backdrop_copy_count)});
+        out.emplace(
+            "material_max_sample_taps",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.material_max_sample_taps)});
+        out.emplace(
+            "material_total_sample_taps",
+            json::Value{summary.material_total_sample_taps});
         out.emplace(
             "backdrop_copy_pixels",
             json::Value{summary.backdrop_copy_pixels});

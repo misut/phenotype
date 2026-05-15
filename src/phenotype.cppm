@@ -295,22 +295,40 @@ inline void cell(str content,
 // fallback stays available for widgets (tabs, link) that haven't been
 // migrated yet.
 template<typename Msg>
-inline void button(str label, Msg msg,
-                   ButtonVariant variant = ButtonVariant::Default,
-                   bool disabled = false) {
+inline void button(str label, Msg msg, ButtonStyleOptions options) {
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     auto const& t = detail::g_app.theme;
     node.text = std::string(label.data, label.len);
-    node.font_size = t.body_font_size;
-    node.border_radius = t.radius_sm;
-    node.style.padding[0] = t.space_sm;
-    node.style.padding[1] = t.space_md;
-    node.style.padding[2] = t.space_sm;
-    node.style.padding[3] = t.space_md;
+    node.font_size = options.font_size > 0.0f
+        ? options.font_size
+        : t.body_font_size;
+    node.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : t.radius_sm;
+    float default_padding[4] = {
+        t.space_sm,
+        t.space_md,
+        t.space_sm,
+        t.space_md,
+    };
+    float option_padding[4] = {
+        options.padding_top,
+        options.padding_right,
+        options.padding_bottom,
+        options.padding_left,
+    };
+    for (int i = 0; i < 4; ++i) {
+        node.style.padding[i] = option_padding[i] >= 0.0f
+            ? option_padding[i]
+            : default_padding[i];
+    }
+    node.style.max_width = options.max_width;
+    node.style.fixed_height = options.fixed_height;
+    node.style.text_align = options.text_align;
     node.interaction_role = InteractionRole::Button;
 
-    if (disabled) {
+    if (options.disabled) {
         node.background = t.state_disabled_bg;
         node.text_color = t.state_disabled_fg;
         node.border_color = t.state_disabled_border;
@@ -334,7 +352,7 @@ inline void button(str label, Msg msg,
     bool const is_focused = (id == detail::g_app.focused_id);
 
     Color base_bg, hover_bg, base_border;
-    switch (variant) {
+    switch (options.variant) {
         case ButtonVariant::Primary:
             base_bg = t.accent;
             hover_bg = t.accent_strong;
@@ -349,6 +367,18 @@ inline void button(str label, Msg msg,
             node.text_color = t.foreground;
             break;
     }
+    if (options.has_background)
+        base_bg = options.background;
+    if (options.has_hover_background)
+        hover_bg = options.hover_background;
+    if (options.has_border_color)
+        base_border = options.border_color;
+    if (options.has_text_color)
+        node.text_color = options.text_color;
+    float const base_border_width = options.border_width >= 0.0f
+        ? options.border_width
+        : 1.0f;
+
     // `node.hover_background` stays unset so paint's
     // `(is_hovered && hover_background.a > 0)` guard falls through to
     // the animated `node.background` we just produced.
@@ -358,7 +388,7 @@ inline void button(str label, Msg msg,
     // resting border to `state_focus_ring`. Paint reads both fields
     // directly.
     node.border_width = animate_float(
-        is_focused ? t.state_focus_ring_width : 1.0f, 150);
+        is_focused ? t.state_focus_ring_width : base_border_width, 150);
     node.border_color = animate_color(
         is_focused ? t.state_focus_ring : base_border, 150);
     node.cursor_type = 1;
@@ -371,6 +401,16 @@ inline void button(str label, Msg msg,
     node.callback_id = id;
 
     detail::attach_to_scope(h);
+}
+
+template<typename Msg>
+inline void button(str label, Msg msg,
+                   ButtonVariant variant = ButtonVariant::Default,
+                   bool disabled = false) {
+    ButtonStyleOptions options;
+    options.variant = variant;
+    options.disabled = disabled;
+    button(label, std::move(msg), options);
 }
 
 namespace _impl {

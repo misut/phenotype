@@ -136,6 +136,35 @@ inline fs::path ensure_demo_tree(std::string_view profile) {
         "This demo root is isolated under the system temp directory. "
         "Create and delete files here without touching the real home folder.\n");
     write_file_if_missing(
+        root / "Application Form 3.pdf",
+        "PDF placeholder\n\n"
+        "The desktop example renders this sandboxed text file as a Finder-like "
+        "document thumbnail while keeping file reads deterministic.\n");
+    write_file_if_missing(
+        root / "Application Form 2.pdf",
+        "PDF placeholder for the Recents probe scene.\n");
+    write_file_if_missing(
+        root / "Withdrawal Notice.pdf",
+        "PDF placeholder for the Recents probe scene.\n");
+    write_file_if_missing(
+        root / "Operating Guide.pdf",
+        "PDF placeholder for the Recents probe scene.\n");
+    write_file_if_missing(
+        root / "line_2.png",
+        "PNG placeholder rendered as a light rounded Finder thumbnail.\n");
+    write_file_if_missing(
+        root / "line_23.png",
+        "PNG placeholder rendered as a light rounded Finder thumbnail.\n");
+    write_file_if_missing(
+        root / "line_8.png",
+        "PNG placeholder rendered as a light rounded Finder thumbnail.\n");
+    write_file_if_missing(
+        root / "Screen Recording 2025-11-04.mov",
+        "MOV placeholder rendered as a wide video thumbnail.\n");
+    write_file_if_missing(
+        root / "Screenshot 2025-11-05.png",
+        "PNG screenshot placeholder for the Finder-like icon grid.\n");
+    write_file_if_missing(
         root / "Documents" / "Project Notes.txt",
         "Finder-like desktop layout\n"
         "- Sidebar locations\n"

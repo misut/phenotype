@@ -584,6 +584,29 @@ enum class ButtonVariant {
     Primary,
 };
 
+struct ButtonStyleOptions {
+    ButtonVariant variant = ButtonVariant::Default;
+    bool disabled = false;
+    bool has_background = false;
+    Color background = {};
+    bool has_hover_background = false;
+    Color hover_background = {};
+    bool has_border_color = false;
+    Color border_color = {};
+    bool has_text_color = false;
+    Color text_color = {};
+    float border_width = -1.0f;
+    float border_radius = -1.0f;
+    float font_size = 0.0f;
+    float padding_top = -1.0f;
+    float padding_right = -1.0f;
+    float padding_bottom = -1.0f;
+    float padding_left = -1.0f;
+    float max_width = 0.0f;
+    float fixed_height = -1.0f;
+    TextAlign text_align = TextAlign::Start;
+};
+
 // Text size variant.
 // Picks one of the typography scalars on Theme. `Code` additionally
 // applies the code-block chrome (mono font, code_bg background,

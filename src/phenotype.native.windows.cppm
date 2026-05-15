@@ -275,15 +275,19 @@ inline IDWriteTextFormat* acquire_text_format(DWriteCacheKey const& key) {
     }
     if (family == nullptr) {
         family = key.family.empty()
-            ? (key.mono ? L"Consolas" : L"Segoe UI")
+            ? (key.mono ? L"Consolas" : L"Pretendard")
             : key.family.c_str();
         // collection stays null — system collection path.
     }
 
     ComPtr<IDWriteTextFormat> format;
-    if (FAILED(create_text_format(family, collection,
-                                  key.weight, key.style, format)))
-        return nullptr;
+    auto hr = create_text_format(family, collection,
+                                 key.weight, key.style, format);
+    if (FAILED(hr) && key.family.empty() && !key.mono) {
+        hr = create_text_format(L"Segoe UI", nullptr,
+                                key.weight, key.style, format);
+    }
+    if (FAILED(hr)) return nullptr;
     auto* raw = format.Get();
     g_text.formats.emplace_back(key, std::move(format));
     return raw;
