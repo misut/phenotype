@@ -31,3 +31,7 @@ The checked-in manifest requires stable labels and roles, every public
 semantic toolbar button labels, bounded material resource budgets, and
 pixel-region checks for the sidebar, toolbar, icon grid, and selected-file
 label.
+
+The gate captures the desktop example in `icon`, `list`, `column`, and
+`gallery` modes through `PHENOTYPE_FILE_EXPLORER_VIEW` so each Finder-style
+content surface has a machine-readable artifact contract.

@@ -1,6 +1,7 @@
 #include <algorithm>
 #include <cctype>
 #include <concepts>
+#include <cstdlib>
 #include <cstddef>
 #include <cstdint>
 #include <string>
@@ -47,10 +48,29 @@ using Msg = std::variant<
     ResetDemo,
     Resized>;
 
+FinderViewMode view_mode_from_name(std::string_view value) {
+    std::string mode(value);
+    std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (mode == "list")
+        return FinderViewMode::List;
+    if (mode == "column")
+        return FinderViewMode::Column;
+    if (mode == "gallery")
+        return FinderViewMode::Gallery;
+    return FinderViewMode::Icon;
+}
+
+FinderViewMode initial_view_mode() {
+    char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_VIEW");
+    return raw ? view_mode_from_name(raw) : FinderViewMode::Icon;
+}
+
 struct State {
     file_explorer_demo::ExplorerState explorer =
         file_explorer_demo::make_state("desktop");
-    FinderViewMode view_mode = FinderViewMode::Icon;
+    FinderViewMode view_mode = initial_view_mode();
 };
 
 constexpr float k_pi = 3.14159265358979323846f;
