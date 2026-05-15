@@ -24,6 +24,18 @@ mise exec -- exon run
 ```
 
 ```sh
+cd examples/file_explorer_desktop
+mise exec -- exon build
+mise exec -- exon run
+```
+
+```sh
+cd examples/file_explorer_mobile
+mise exec -- exon build
+mise exec -- exon run
+```
+
+```sh
 cd examples/flight_board
 mise exec -- exon build
 mise exec -- exon run
@@ -106,6 +118,13 @@ accessibility-response gate; it runs the same scene with reduced transparency,
 increased contrast, and reduced motion enabled, then applies
 `examples/glass_showcase/artifact_manifest.accessibility.json`.
 
+The file explorer examples use the same artifact contract, but are intended as
+local product-workflow smoke tests instead of a default CI gate:
+
+```sh
+tools/verify_file_explorer_artifacts.sh
+```
+
 Pull-request CI runs the same gate in the macOS native test job for code
 changes, and a lighter artifact job can run it without root code tests for
 tooling or manifest-only changes. The main-branch push workflow only runs
@@ -120,10 +139,19 @@ gates so runner policy edits validate themselves.
 |---|---|---|
 | `examples/native` | macOS, Windows | Compact desktop widget showcase for shared controls, input debug, local/remote images, scroll, resize, and manual acceptance |
 | `examples/glass_showcase` | macOS, Windows | Material and glass-debug acceptance scene for deterministic backdrop regions, macOS sampled backdrop, all material kinds, artifact capture, and pixel-region checks |
+| `examples/file_explorer_desktop` | macOS, Windows | Finder-style desktop product workflow with glass toolbar, sidebar locations, file list, preview pane, search, create, delete, and sandboxed temp-root file operations |
+| `examples/file_explorer_mobile` | macOS, Windows | Mobile file explorer layout with browse/preview/create tabs, compact location strip, material surfaces, search, file preview, create, delete, and the same sandboxed model |
 | `examples/flight_board` | macOS, Windows | Data-dense operational dashboard for grid layout, canvas-heavy drawing, state synchronization, status visuals, and performance-sensitive repaint behavior |
 | `examples/workbook` | macOS, Windows | Spreadsheet-like product workflow for keyed cells, dense grids, formula validation, selected-cell editing, and chart canvas drawing |
 | `examples/android` | Android | GameActivity/Vulkan packaging route, Android event dispatch, platform lifecycle, asset/local images, debug API, and logcat/manual device validation |
 | `docs` | WASI | Dogfooded documentation app, WASI build, JS shim integration, and web-facing DSL examples |
+
+The file explorer examples deliberately keep filesystem side effects at the
+example edge. The shared model operates only under a deterministic temp
+directory (`phenotype-file-explorer-desktop` or
+`phenotype-file-explorer-mobile`) and never points at the user's real home
+folder. This keeps the examples useful for interactive product checks while
+preserving a stable startup artifact contract.
 
 ## Widget coverage
 
@@ -257,6 +285,10 @@ Gaps:
   `PHENOTYPE_ARTIFACT_DIR`.
 - `examples/glass_showcase` is the material-focused startup artifact target
   and includes exact labels plus all public material kinds for verifier gates.
+- `examples/file_explorer_desktop` and `examples/file_explorer_mobile` are
+  product-style glass workflow targets. Their checked-in manifests require
+  stable labels, button/material/text-field roles, all material kinds, material
+  plan output, semantic/runtime material parity, and bounded resource budgets.
 - `tools/verify_artifact_bundle.py` validates the common schema, semantic tree,
   disabled semantic state, material kind/fallback metadata, runtime viewport,
   platform diagnostics, backend runtime detail assertions, frame file, optional
@@ -265,6 +297,8 @@ Gaps:
   and reusable JSON manifests.
   `tools/verify_glass_showcase_artifact.sh` is the material showcase gate and
   runs in PR CI for relevant changes plus the main-branch artifact workflow.
+  `tools/verify_file_explorer_artifacts.sh` builds both file explorer examples
+  and applies their manifests with the uv-managed verifier through `mise`.
 - Material surfaces render a macOS sampled-backdrop material path when the
   previous frame capture is ready; Windows and Android consume the same
   `MaterialRect` command as deterministic translucent fallback and still write
@@ -308,6 +342,8 @@ Current status by example:
 |---|---|---|
 | `examples/native` | `mise exec -- exon build`, then `PHENOTYPE_ARTIFACT_DIR=/tmp/phenotype-native-startup PHENOTYPE_ARTIFACT_EXIT=1 .exon/debug/native` | Verified by `tools/verify_artifact_bundle.py`; scenario-specific pixel-region checks can be added as needed |
 | `examples/glass_showcase` | Same environment hook with `.exon/debug/glass_showcase` after the material scene startup frame renders | Verifies all public material kinds, macOS material capability, resolved material plan schema and contract version, exact material plan summary, semantic/runtime material parity, material quality policy, material resource bounds, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; run locally before material PRs and enforced by the macOS main-branch artifact workflow |
+| `examples/file_explorer_desktop` | Same environment hook with `.exon/debug/file_explorer_desktop`, or `tools/verify_file_explorer_artifacts.sh` from the repo root | Verifies a Finder-style desktop startup scene with glass toolbar/sidebar/list/preview surfaces, stable file-operation labels, semantic/runtime material parity, and bounded material resource budgets; local gate only by default |
+| `examples/file_explorer_mobile` | Same environment hook with `.exon/debug/file_explorer_mobile`, or `tools/verify_file_explorer_artifacts.sh` from the repo root | Verifies the compact mobile browse/preview/create startup scene with all material kinds, stable navigation labels, semantic/runtime material parity, and bounded material resource budgets; local gate only by default |
 | `examples/flight_board` | Same environment hook after the dashboard startup frame renders | Verified by `tools/verify_artifact_bundle.py`; scenario-specific label/role assertions can be added as needed |
 | `examples/workbook` | Same environment hook after the workbook startup frame renders | Verified by `tools/verify_artifact_bundle.py`; scenario-specific label/role assertions can be added as needed |
 | `examples/android` | `mise run android:contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | Verifies Android debug/runtime basics plus a real `MaterialRect` fallback plan, exact fallback material plan summary and contract version, semantic/runtime material parity, material quality policy, and material resource bounds; CI device/emulator wiring remains future work |

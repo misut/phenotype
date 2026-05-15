@@ -1,7 +1,7 @@
 # Apple Glass GUI Roadmap
 
-Status: implementation baseline for `origin/main` at `a37d6e1`
-(`chore: run wasi ci on linux`). This includes the pure
+Status: implementation baseline for `origin/main` at `3d055d3`
+(`feat: expose material command descriptors in artifacts`). This includes the pure
 material-planning boundary, macOS sampled-backdrop execution, deterministic
 fallback contracts on non-macOS backends, edge executor telemetry, and the
 artifact verifier gates described below.
@@ -51,6 +51,16 @@ References:
   https://developer.apple.com/documentation/appkit/nsworkspace/accessibilitydisplayshouldreducetransparency
   https://developer.apple.com/documentation/appkit/nsworkspace/accessibilitydisplayshouldincreasecontrast
   https://developer.apple.com/documentation/appkit/nsworkspace/accessibilitydisplayshouldreducemotion
+- Apple Human Interface Guidelines, File management:
+  https://developer.apple.com/design/human-interface-guidelines/file-management
+- Apple Human Interface Guidelines, Sidebars:
+  https://developer.apple.com/design/human-interface-guidelines/sidebars
+- Apple Human Interface Guidelines, Column views:
+  https://developer.apple.com/design/human-interface-guidelines/column-views
+- Apple Human Interface Guidelines, Toolbars:
+  https://developer.apple.com/design/human-interface-guidelines/toolbars
+- Apple Human Interface Guidelines, Search fields:
+  https://developer.apple.com/design/human-interface-guidelines/search-fields
 
 ## Current state
 
@@ -220,6 +230,8 @@ Current runnable examples under `examples/`:
 |---|---|---|
 | `examples/native` | Native widget showcase | Best desktop acceptance scene for shared widgets, input debug, images, scrolling, resizing |
 | `examples/glass_showcase` | Material showcase | Exercises deterministic backdrop regions, macOS sampled backdrop material, all public material kinds, semantic material metadata, and startup artifact capture |
+| `examples/file_explorer_desktop` | Finder-style desktop app example | Exercises glass toolbar/sidebar/list/preview composition plus sandboxed view/read/create/delete file workflows |
+| `examples/file_explorer_mobile` | Mobile file explorer app example | Exercises a compact browse/preview/create flow with the same sandboxed file model and all material kinds |
 | `examples/flight_board` | Data-dense operational app | Exercises canvas drawing, grids, animation-ish state churn, custom cells, and richer visual composition |
 | `examples/workbook` | Spreadsheet-like app | Exercises dense tables, editing workflow, formula-style UI, and custom cell surfaces |
 | `examples/android` | Android APK example | Exercises GameActivity/Vulkan/native Android route |
@@ -247,6 +259,10 @@ Apple-style glass interface while preserving platform parity:
   contrast expectations;
 - a glass showcase under `examples/` with controls/navigation as the glass
   layer and rich content below it;
+- desktop and mobile file explorer examples under `examples/` that translate
+  the glass contract into an app-like file-management workflow with toolbar,
+  sidebar/location navigation, list content, preview, search, create, and
+  delete actions;
 - tests that cover command encoding, parser behavior, fallback policy, and at
   least one captured-frame invariant on native backends.
 
@@ -277,6 +293,9 @@ Done means `examples/` is a local acceptance suite, not just demos:
   to at least one example/test;
 - `examples/native` remains the compact all-widget desktop showcase;
 - a new glass showcase exercises the material system specifically;
+- Finder-style desktop and mobile file explorer examples exercise the material
+  system as a real app surface, with filesystem side effects isolated to an
+  example-owned temp directory;
 - `examples/flight_board` remains the dense operational performance scene;
 - Android has a documented local device/emulator contract runner.
 
@@ -289,8 +308,8 @@ Done means `examples/` is a local acceptance suite, not just demos:
 | LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, startup bundle verifier, optional pixel-region checks, material plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, ratio-based blur probes, a glass showcase manifest, a macOS native glass showcase CI gate, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
 | Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, backdrop pixels, bounded texture copies, deterministic fallback, backend `material_runtime_summary` counters cross-checked by the verifier, and backend `material_executor_summary` budget/timing telemetry guarded by artifact manifests | Keep tightening backend timing budgets as more native material renderers land |
-| Runnable examples under `examples/` | Native, glass showcase, flight board, workbook, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |
-| All phenotype features testable locally | `docs/EXAMPLES_COVERAGE.md` maps current examples/tests to public surfaces and artifact expectations; `tools/verify_artifact_bundle.py` validates startup bundles, optional pixel regions, exact material plan summaries, semantic/runtime material parity, material resource bounds, runtime numeric bounds, `examples/glass_showcase/artifact_manifest.json`, and `examples/android/artifact_manifest.json`; `tools/verify_glass_showcase_artifact.sh` wraps the glass gate; `mise run android:contract` wraps the Android device/emulator artifact route | Android CI wiring remains |
+| Runnable examples under `examples/` | Native, glass showcase, desktop/mobile file explorer, flight board, workbook, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |
+| All phenotype features testable locally | `docs/EXAMPLES_COVERAGE.md` maps current examples/tests to public surfaces and artifact expectations; `tools/verify_artifact_bundle.py` validates startup bundles, optional pixel regions, exact material plan summaries, semantic/runtime material parity, material resource bounds, runtime numeric bounds, `examples/glass_showcase/artifact_manifest.json`, `examples/file_explorer_desktop/artifact_manifest.json`, `examples/file_explorer_mobile/artifact_manifest.json`, and `examples/android/artifact_manifest.json`; `tools/verify_glass_showcase_artifact.sh` wraps the glass gate; `tools/verify_file_explorer_artifacts.sh` wraps the local desktop/mobile file explorer gate; `mise run android:contract` wraps the Android device/emulator artifact route | Android CI wiring remains |
 
 ## Implementation roadmap
 
