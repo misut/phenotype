@@ -49,6 +49,13 @@ int main() {
     assert(snap.selected_kind_label == "TXT File");
     assert(snap.selected_size_label != "--");
     assert(snap.action_summary.find("Selected README.txt") != std::string::npos);
+    assert(snap.sort_label == "Sort: Name");
+    bool saw_file_after_folder = false;
+    for (auto const& entry : snap.entries) {
+        if (!entry.folder)
+            saw_file_after_folder = true;
+        assert(!entry.folder || !saw_file_after_folder);
+    }
     bool saw_korean_pdf = false;
     bool saw_japanese_pdf = false;
     bool saw_chinese_pdf = false;
@@ -115,6 +122,34 @@ int main() {
     assert(snap.can_duplicate_selected);
     assert(snap.selected_path_label.find("README copy.txt") != std::string::npos);
 
+    demo::set_sort_mode(state, demo::SortMode::Kind);
+    snap = demo::snapshot(state);
+    assert(snap.sort_label == "Sort: Kind");
+    assert(state.status == "Sorted by Kind");
+    std::string previous_kind;
+    for (auto const& entry : snap.entries) {
+        if (entry.folder)
+            continue;
+        auto current_kind = demo::lower_copy(demo::entry_kind_label(entry));
+        assert(previous_kind.empty() || previous_kind <= current_kind);
+        previous_kind = std::move(current_kind);
+    }
+    demo::cycle_sort_mode(state);
+    snap = demo::snapshot(state);
+    assert(snap.sort_label == "Sort: Size");
+    std::uintmax_t previous_size = 0;
+    bool saw_sized_file = false;
+    for (auto const& entry : snap.entries) {
+        if (entry.folder)
+            continue;
+        if (saw_sized_file)
+            assert(previous_size >= entry.size);
+        previous_size = entry.size;
+        saw_sized_file = true;
+    }
+    demo::cycle_sort_mode(state);
+    assert(demo::snapshot(state).sort_label == "Sort: Name");
+
     demo::apply_startup_scenario(state, "documents-preview");
     assert(demo::relative_location(state.root, state.current)
         == "Demo Root/Documents");
@@ -145,6 +180,10 @@ int main() {
     assert(demo::relative_location(state.root, state.current)
         == "Demo Root/Documents");
     assert(state.status == "Went forward to Demo Root/Documents");
+
+    demo::apply_startup_scenario(state, "sorted-kind");
+    assert(demo::snapshot(state).sort_label == "Sort: Kind");
+    assert(state.status == "Sorted by Kind");
 
     demo::apply_startup_scenario(state, "duplicated-file");
     assert(state.selected_name == "README copy.txt");

@@ -31,6 +31,12 @@ struct OperationReceipt {
     std::string detail;
 };
 
+enum class SortMode {
+    Name,
+    Kind,
+    Size,
+};
+
 struct Snapshot {
     fs::path root;
     fs::path current;
@@ -50,6 +56,7 @@ struct Snapshot {
     std::string item_summary;
     std::string action_summary;
     std::string operation_label;
+    std::string sort_label;
     std::string preview;
     std::size_t file_count = 0;
     std::size_t folder_count = 0;
@@ -66,6 +73,7 @@ struct ExplorerState {
     std::vector<fs::path> back_stack;
     std::vector<fs::path> forward_stack;
     OperationReceipt last_operation;
+    SortMode sort_mode = SortMode::Name;
     int viewport_width = 0;
     int viewport_height = 0;
     float viewport_scale = 1.0f;
@@ -286,6 +294,24 @@ inline std::string entry_size_label(Entry const& entry) {
     return entry.folder ? "--" : format_size(entry.size);
 }
 
+inline std::string sort_mode_label(SortMode mode) {
+    switch (mode) {
+        case SortMode::Kind: return "Kind";
+        case SortMode::Size: return "Size";
+        case SortMode::Name:
+        default: return "Name";
+    }
+}
+
+inline SortMode next_sort_mode(SortMode mode) {
+    switch (mode) {
+        case SortMode::Name: return SortMode::Kind;
+        case SortMode::Kind: return SortMode::Size;
+        case SortMode::Size:
+        default: return SortMode::Name;
+    }
+}
+
 inline void record_operation(
         ExplorerState& state,
         std::string kind,
@@ -381,7 +407,8 @@ inline bool matches_filter(std::string const& name, std::string const& filter) {
 
 inline std::vector<Entry> list_entries(
         fs::path const& current,
-        std::string const& filter) {
+        std::string const& filter,
+        SortMode sort_mode = SortMode::Name) {
     std::vector<Entry> entries;
     std::error_code ec;
     fs::directory_iterator it(current, ec);
@@ -408,9 +435,18 @@ inline std::vector<Entry> list_entries(
         }
         entries.push_back(entry);
     }
-    std::sort(entries.begin(), entries.end(), [](Entry const& a, Entry const& b) {
+    std::sort(entries.begin(), entries.end(), [sort_mode](Entry const& a, Entry const& b) {
         if (a.folder != b.folder)
             return a.folder && !b.folder;
+        if (sort_mode == SortMode::Kind) {
+            auto lhs_kind = lower_copy(entry_kind_label(a));
+            auto rhs_kind = lower_copy(entry_kind_label(b));
+            if (lhs_kind != rhs_kind)
+                return lhs_kind < rhs_kind;
+        } else if (sort_mode == SortMode::Size && !a.folder && !b.folder) {
+            if (a.size != b.size)
+                return a.size > b.size;
+        }
         return lower_copy(a.name) < lower_copy(b.name);
     });
     return entries;
@@ -457,8 +493,9 @@ inline Snapshot snapshot(ExplorerState const& state) {
     out.can_go_forward = !state.forward_stack.empty();
     std::error_code ec;
     out.can_create_file = fs::is_directory(state.current, ec) && !ec;
-    out.entries = list_entries(state.current, state.search);
+    out.entries = list_entries(state.current, state.search, state.sort_mode);
     out.operation_label = operation_label(state.last_operation);
+    out.sort_label = "Sort: " + sort_mode_label(state.sort_mode);
     for (auto const& entry : out.entries) {
         if (entry.folder)
             ++out.folder_count;
@@ -567,6 +604,15 @@ inline void go_forward(ExplorerState& state) {
         next,
         "Went forward to " + relative_location(state.root, next),
         false);
+}
+
+inline void set_sort_mode(ExplorerState& state, SortMode mode) {
+    state.sort_mode = mode;
+    state.status = "Sorted by " + sort_mode_label(mode);
+}
+
+inline void cycle_sort_mode(ExplorerState& state) {
+    set_sort_mode(state, next_sort_mode(state.sort_mode));
 }
 
 inline void select_entry(ExplorerState& state, std::string const& name) {
@@ -732,6 +778,7 @@ inline void reset_demo_tree(ExplorerState& state, std::string_view profile) {
     state.back_stack.clear();
     state.forward_stack.clear();
     state.last_operation = {};
+    state.sort_mode = SortMode::Name;
     state.status = "Demo files reset.";
 }
 
@@ -793,6 +840,12 @@ inline void apply_startup_scenario(
         select_location(state, "documents");
         go_back(state);
         go_forward(state);
+        state.mobile_tab = 0;
+        return;
+    }
+
+    if (name == "sorted-kind" || name == "sort-kind") {
+        set_sort_mode(state, SortMode::Kind);
         state.mobile_tab = 0;
         return;
     }

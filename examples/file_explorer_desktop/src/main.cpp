@@ -28,6 +28,7 @@ struct DuplicateSelected {};
 struct GoBack {};
 struct GoForward {};
 struct GoUp {};
+struct CycleSort {};
 struct Refresh {};
 struct ResetDemo {};
 struct Resized { int width; int height; float scale; };
@@ -44,6 +45,7 @@ using Msg = std::variant<
     GoBack,
     GoForward,
     GoUp,
+    CycleSort,
     Refresh,
     ResetDemo,
     Resized,
@@ -368,6 +370,8 @@ std::string finder_status(file_explorer_demo::Snapshot const& snap) {
     std::string text = snap.item_summary;
     if (snap.has_selection)
         text += " - selected " + snap.selected.name;
+    if (!snap.sort_label.empty())
+        text += " - " + snap.sort_label;
     return text;
 }
 
@@ -432,6 +436,8 @@ void update(State& state, Msg msg) {
             file_explorer_demo::go_forward(explorer);
         } else if constexpr (std::same_as<T, GoUp>) {
             file_explorer_demo::go_up(explorer);
+        } else if constexpr (std::same_as<T, CycleSort>) {
+            file_explorer_demo::cycle_sort_mode(explorer);
         } else if constexpr (std::same_as<T, Refresh>) {
             explorer.status = "Refreshed " + file_explorer_demo::relative_location(
                 explorer.root,
@@ -762,6 +768,22 @@ void toolbar_action_button(char const* label,
         token);
 }
 
+void sort_action_button(file_explorer_demo::Snapshot const& snap) {
+    std::string semantic_label = "Group Sort";
+    if (!snap.sort_label.empty())
+        semantic_label += " (" + snap.sort_label + ")";
+    phenotype::widget::canvas_button<Msg>(
+        phenotype::str{semantic_label},
+        38.0f,
+        32.0f,
+        [](phenotype::Painter& painter) {
+            paint_group_sort_icon(painter);
+        },
+        CycleSort{},
+        toolbar_icon_button_options(false),
+        0x6501u);
+}
+
 template<typename Paint>
 void file_action_button(char const* label,
                         Msg msg,
@@ -844,9 +866,8 @@ void finder_toolbar(State const& state,
             });
         layout::material_surface(
             toolbar_group_options("Group Sort", 52.0f),
-            [] {
-                toolbar_action_button(
-                    "Group Sort", paint_group_sort_icon, 0x6501u);
+            [&] {
+                sort_action_button(snap);
             });
         layout::material_surface(
             toolbar_group_options("Share Tag More", 140.0f),

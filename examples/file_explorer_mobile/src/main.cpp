@@ -25,6 +25,7 @@ struct DuplicateSelected {};
 struct GoBack {};
 struct GoForward {};
 struct GoUp {};
+struct CycleSort {};
 struct ResetDemo {};
 struct Resized { int width; int height; float scale; };
 
@@ -41,6 +42,7 @@ using Msg = std::variant<
     GoBack,
     GoForward,
     GoUp,
+    CycleSort,
     ResetDemo,
     Resized>;
 
@@ -108,6 +110,9 @@ void update(State& state, Msg msg) {
         } else if constexpr (std::same_as<T, GoUp>) {
             file_explorer_demo::go_up(explorer);
             explorer.mobile_tab = 0;
+        } else if constexpr (std::same_as<T, CycleSort>) {
+            file_explorer_demo::cycle_sort_mode(explorer);
+            explorer.mobile_tab = 0;
         } else if constexpr (std::same_as<T, ResetDemo>) {
             file_explorer_demo::reset_demo_tree(explorer, "mobile");
             explorer.mobile_tab = 0;
@@ -170,8 +175,11 @@ void browse_tab(file_explorer_demo::Snapshot const& snap) {
         layout::row([&] {
             layout::weighted(1.0f, [&] {
                 std::string summary = std::to_string(snap.entries.size()) + " items";
+                if (!snap.sort_label.empty())
+                    summary += " - " + snap.sort_label;
                 widget::text(summary, TextSize::Small, TextColor::Muted);
             });
+            widget::button<Msg>("Sort", CycleSort{});
             widget::button<Msg>("Back", GoBack{},
                                 ButtonVariant::Default,
                                 !snap.can_go_back);
