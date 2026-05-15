@@ -80,6 +80,7 @@ static void test_window_options_integrated_titlebar_contract() {
     assert(defaults.chrome == WindowChromeStyle::System);
     assert(defaults.integrated_titlebar.height == 52.0f);
     assert(defaults.integrated_titlebar.drag_region_height == 52.0f);
+    assert(defaults.integrated_titlebar.leading_control_reserved_width == 0.0f);
     assert(defaults.integrated_titlebar.trailing_control_reserved_width == 156.0f);
     assert(std::string_view(window_chrome_style_name(defaults.chrome)) == "system");
 
@@ -88,12 +89,14 @@ static void test_window_options_integrated_titlebar_contract() {
         .integrated_titlebar = {
             .height = 56.0f,
             .drag_region_height = 48.0f,
+            .leading_control_reserved_width = 144.0f,
             .trailing_control_reserved_width = 168.0f,
         },
     };
     assert(integrated.chrome == WindowChromeStyle::IntegratedTitlebar);
     assert(integrated.integrated_titlebar.height == 56.0f);
     assert(integrated.integrated_titlebar.drag_region_height == 48.0f);
+    assert(integrated.integrated_titlebar.leading_control_reserved_width == 144.0f);
     assert(integrated.integrated_titlebar.trailing_control_reserved_width == 168.0f);
     assert(std::string_view(window_chrome_style_name(integrated.chrome))
         == "integrated_titlebar");
@@ -109,6 +112,7 @@ static void test_window_options_integrated_titlebar_contract() {
     assert(std::string_view(native_surface_kind_name(surface.kind)) == "win32_window");
     assert(surface.window_chrome == WindowChromeStyle::IntegratedTitlebar);
     assert(surface.integrated_titlebar.height == 56.0f);
+    assert(surface.integrated_titlebar.leading_control_reserved_width == 144.0f);
     std::puts("PASS: window options integrated titlebar contract");
 }
 

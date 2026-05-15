@@ -7726,6 +7726,11 @@ inline json::Object macos_window_runtime_json() {
             static_cast<double>(
                 titlebar_options.drag_region_height)});
     titlebar.emplace(
+        "leading_control_reserved_width",
+        json::Value{
+            static_cast<double>(
+                titlebar_options.leading_control_reserved_width)});
+    titlebar.emplace(
         "trailing_control_reserved_width",
         json::Value{
             static_cast<double>(

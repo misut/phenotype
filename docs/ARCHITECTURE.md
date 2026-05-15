@@ -354,9 +354,9 @@ toolkit shims for window creation; the platform shell is the product contract.
 The descriptor also stores the requested window chrome fields for
 artifact/runtime debugging. macOS and Windows serialize those fields under
 `debug.platform_runtime.details.window`, including the integrated titlebar
-metrics, whether native OS controls own the caption-button/traffic-light
-territory, and explicit `uses_glfw=false` / `toolkit_window_shim=false`
-markers.
+metrics, leading/trailing native-control reserves, whether native OS controls
+own the caption-button/traffic-light territory, and explicit `uses_glfw=false`
+/ `toolkit_window_shim=false` markers.
 
 ## Unified debug plane
 

@@ -138,6 +138,10 @@
       "equals": 56.0
     },
     {
+      "path": "window.integrated_titlebar.leading_control_reserved_width",
+      "equals": 176.0
+    },
+    {
       "path": "window.integrated_titlebar.trailing_control_reserved_width",
       "equals": 168.0
     },
