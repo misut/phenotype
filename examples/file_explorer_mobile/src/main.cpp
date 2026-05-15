@@ -17,9 +17,11 @@ struct SelectLocation { std::string id; };
 struct SelectEntry { std::string name; };
 struct SearchChanged { std::string text; };
 struct DraftNameChanged { std::string text; };
+struct DraftFolderNameChanged { std::string text; };
 struct DraftBodyChanged { std::string text; };
 struct SelectTab { std::size_t value; };
 struct CreateFile {};
+struct CreateFolder {};
 struct DeleteSelected {};
 struct DuplicateSelected {};
 struct GoBack {};
@@ -34,9 +36,11 @@ using Msg = std::variant<
     SelectEntry,
     SearchChanged,
     DraftNameChanged,
+    DraftFolderNameChanged,
     DraftBodyChanged,
     SelectTab,
     CreateFile,
+    CreateFolder,
     DeleteSelected,
     DuplicateSelected,
     GoBack,
@@ -66,6 +70,10 @@ Msg on_draft_name_changed(std::string text) {
     return DraftNameChanged{std::move(text)};
 }
 
+Msg on_draft_folder_name_changed(std::string text) {
+    return DraftFolderNameChanged{std::move(text)};
+}
+
 Msg on_draft_body_changed(std::string text) {
     return DraftBodyChanged{std::move(text)};
 }
@@ -85,12 +93,17 @@ void update(State& state, Msg msg) {
             file_explorer_demo::set_search_filter(explorer, m.text);
         } else if constexpr (std::same_as<T, DraftNameChanged>) {
             explorer.draft_name = m.text;
+        } else if constexpr (std::same_as<T, DraftFolderNameChanged>) {
+            explorer.draft_folder_name = m.text;
         } else if constexpr (std::same_as<T, DraftBodyChanged>) {
             explorer.draft_body = m.text;
         } else if constexpr (std::same_as<T, SelectTab>) {
             explorer.mobile_tab = m.value;
         } else if constexpr (std::same_as<T, CreateFile>) {
             file_explorer_demo::create_file(explorer);
+            explorer.mobile_tab = 1;
+        } else if constexpr (std::same_as<T, CreateFolder>) {
+            file_explorer_demo::create_folder(explorer);
             explorer.mobile_tab = 1;
         } else if constexpr (std::same_as<T, DeleteSelected>) {
             file_explorer_demo::delete_selected(explorer);
@@ -240,7 +253,7 @@ void preview_tab(
                             ButtonVariant::Default,
                             !snap.can_duplicate_selected);
         layout::spacer(8);
-        widget::button<Msg>("Delete File",
+        widget::button<Msg>("Delete Selected",
                             DeleteSelected{},
                             ButtonVariant::Default,
                             !snap.can_delete_selected);
@@ -253,8 +266,8 @@ void create_tab(State const& state) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
     layout::material_surface(MaterialKind::Regular, [&] {
-        widget::text("Create File");
-        widget::text("Files are written only inside the demo root.",
+        widget::text("Create");
+        widget::text("Files and folders are written only inside the demo root.",
                      TextSize::Small,
                      TextColor::Muted);
         layout::spacer(8);
@@ -262,7 +275,14 @@ void create_tab(State const& state) {
         layout::spacer(8);
         widget::text_field<Msg>("Contents", explorer.draft_body, on_draft_body_changed);
         layout::spacer(10);
-        widget::button<Msg>("Create", CreateFile{}, ButtonVariant::Primary);
+        widget::button<Msg>("Create File", CreateFile{}, ButtonVariant::Primary);
+        layout::spacer(10);
+        widget::text_field<Msg>(
+            "Folder name",
+            explorer.draft_folder_name,
+            on_draft_folder_name_changed);
+        layout::spacer(8);
+        widget::button<Msg>("Create Folder", CreateFolder{}, ButtonVariant::Default);
         layout::spacer(6);
         widget::button<Msg>("Reset Demo Files", ResetDemo{});
     }, SpaceToken::Md, SpaceToken::Sm);

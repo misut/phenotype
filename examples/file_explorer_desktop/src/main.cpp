@@ -25,6 +25,7 @@ struct ToolbarAction { std::string label; };
 struct SearchChanged { std::string text; };
 struct ToggleSearch {};
 struct CreateFile {};
+struct CreateFolder {};
 struct DeleteSelected {};
 struct DuplicateSelected {};
 struct GoBack {};
@@ -44,6 +45,7 @@ using Msg = std::variant<
     SearchChanged,
     ToggleSearch,
     CreateFile,
+    CreateFolder,
     DeleteSelected,
     DuplicateSelected,
     GoBack,
@@ -447,6 +449,8 @@ void update(State& state, Msg msg) {
             }
         } else if constexpr (std::same_as<T, CreateFile>) {
             file_explorer_demo::create_file(explorer);
+        } else if constexpr (std::same_as<T, CreateFolder>) {
+            file_explorer_demo::create_folder(explorer);
         } else if constexpr (std::same_as<T, DeleteSelected>) {
             file_explorer_demo::delete_selected(explorer);
         } else if constexpr (std::same_as<T, DuplicateSelected>) {
@@ -738,6 +742,15 @@ void paint_new_file_icon(phenotype::Painter& painter, bool enabled) {
     painter.line(17.0f, 22.0f, 27.0f, 22.0f, 2.4f, ink);
 }
 
+void paint_new_folder_icon(phenotype::Painter& painter, bool enabled) {
+    auto ink = nav_icon_ink(enabled);
+    stroke_round(painter, 9.0f, 12.0f, 26.0f, 17.0f, 4.0f, 2.0f, ink);
+    painter.line(11.0f, 12.0f, 16.0f, 8.0f, 2.0f, ink);
+    painter.line(16.0f, 8.0f, 24.0f, 8.0f, 2.0f, ink);
+    painter.line(22.0f, 17.0f, 22.0f, 27.0f, 2.2f, ink);
+    painter.line(17.0f, 22.0f, 27.0f, 22.0f, 2.2f, ink);
+}
+
 void paint_duplicate_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
     stroke_round(painter, 12.0f, 11.0f, 16.0f, 19.0f, 3.0f, 2.0f, ink);
@@ -891,11 +904,14 @@ void finder_toolbar(State const& state,
                                  state.view_mode, paint_gallery_view, 0x6304u);
             });
         layout::material_surface(
-            toolbar_group_options("File Actions", 140.0f),
+            toolbar_group_options("File Actions", 184.0f),
             [&] {
                 file_action_button("New File", CreateFile{},
                                    snap.can_create_file,
                                    paint_new_file_icon, 0x6701u);
+                file_action_button("New Folder", CreateFolder{},
+                                   snap.can_create_folder,
+                                   paint_new_folder_icon, 0x6704u);
                 file_action_button("Duplicate", DuplicateSelected{},
                                    snap.can_duplicate_selected,
                                    paint_duplicate_icon, 0x6702u);

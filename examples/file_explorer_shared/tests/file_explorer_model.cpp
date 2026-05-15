@@ -30,6 +30,8 @@ int main() {
     assert(demo::sanitize_file_name("../ bad:name") == "badname.txt");
     assert(demo::sanitize_file_name("  Report  Draft  ") == "Report Draft.txt");
     assert(demo::sanitize_file_name(".hidden") == "hidden.txt");
+    assert(demo::sanitize_folder_name("../ Drafts:v1") == "Draftsv1");
+    assert(demo::sanitize_folder_name("  Review   Folder  ") == "Review Folder");
 
     std::string const profile = "test-model-contract";
     auto root = demo::demo_root(profile);
@@ -43,6 +45,7 @@ int main() {
     assert(snap.file_count >= 15);
     assert(snap.folder_count == 3);
     assert(snap.can_create_file);
+    assert(snap.can_create_folder);
     assert(snap.can_delete_selected);
     assert(snap.can_duplicate_selected);
     assert(snap.can_preview_selected);
@@ -87,6 +90,23 @@ int main() {
     assert(demo::snapshot(state).operation_label
         .find("Operation: file_delete ok - Launch Plan.txt") != std::string::npos);
 
+    state.draft_folder_name = "../ Review Folder";
+    demo::create_folder(state);
+    assert(state.selected_name == "Review Folder");
+    assert(fs::is_directory(state.current / "Review Folder"));
+    snap = demo::snapshot(state);
+    assert(snap.selected.folder);
+    assert(snap.can_delete_selected);
+    assert(snap.operation_label
+        .find("Operation: folder_create ok - Review Folder") != std::string::npos);
+    assert(snap.preview.find("Open this folder") != std::string::npos);
+
+    demo::delete_selected(state);
+    assert(!fs::exists(state.current / "Review Folder"));
+    assert(state.selected_name.empty());
+    assert(demo::snapshot(state).operation_label
+        .find("Operation: folder_delete ok - Review Folder") != std::string::npos);
+
     demo::apply_startup_scenario(state, "created-preview");
     assert(state.selected_name == "Action Note.txt");
     assert(fs::exists(state.current / "Action Note.txt"));
@@ -106,6 +126,18 @@ int main() {
     assert(state.status == "Deleted Delete Me.txt");
     assert(demo::snapshot(state).operation_label
         .find("Operation: file_delete ok - Delete Me.txt") != std::string::npos);
+
+    demo::apply_startup_scenario(state, "created-folder");
+    assert(state.selected_name == "Review Folder");
+    assert(fs::is_directory(state.current / "Review Folder"));
+    assert(demo::snapshot(state).operation_label
+        .find("Operation: folder_create ok - Review Folder") != std::string::npos);
+
+    demo::apply_startup_scenario(state, "deleted-folder");
+    assert(!fs::exists(state.current / "Trash Folder"));
+    assert(state.selected_name.empty());
+    assert(demo::snapshot(state).operation_label
+        .find("Operation: folder_delete ok - Trash Folder") != std::string::npos);
 
     demo::select_entry(state, "README.txt");
     assert(demo::snapshot(state).operation_label
