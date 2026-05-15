@@ -1046,6 +1046,89 @@ namespace detail {
             "edge_highlight_delta",
             json::Value{plan.backdrop.edge_highlight_delta});
 
+        json::Object foreground_primary;
+        foreground_primary.emplace(
+            "r",
+            json::Value{static_cast<std::int64_t>(plan.foreground.primary.r)});
+        foreground_primary.emplace(
+            "g",
+            json::Value{static_cast<std::int64_t>(plan.foreground.primary.g)});
+        foreground_primary.emplace(
+            "b",
+            json::Value{static_cast<std::int64_t>(plan.foreground.primary.b)});
+        foreground_primary.emplace(
+            "a",
+            json::Value{static_cast<std::int64_t>(plan.foreground.primary.a)});
+        json::Object foreground_secondary;
+        foreground_secondary.emplace(
+            "r",
+            json::Value{
+                static_cast<std::int64_t>(plan.foreground.secondary.r)});
+        foreground_secondary.emplace(
+            "g",
+            json::Value{
+                static_cast<std::int64_t>(plan.foreground.secondary.g)});
+        foreground_secondary.emplace(
+            "b",
+            json::Value{
+                static_cast<std::int64_t>(plan.foreground.secondary.b)});
+        foreground_secondary.emplace(
+            "a",
+            json::Value{
+                static_cast<std::int64_t>(plan.foreground.secondary.a)});
+        json::Object foreground_accent;
+        foreground_accent.emplace(
+            "r",
+            json::Value{static_cast<std::int64_t>(plan.foreground.accent.r)});
+        foreground_accent.emplace(
+            "g",
+            json::Value{static_cast<std::int64_t>(plan.foreground.accent.g)});
+        foreground_accent.emplace(
+            "b",
+            json::Value{static_cast<std::int64_t>(plan.foreground.accent.b)});
+        foreground_accent.emplace(
+            "a",
+            json::Value{static_cast<std::int64_t>(plan.foreground.accent.a)});
+        json::Object foreground;
+        foreground.emplace(
+            "primary",
+            json::Value{std::move(foreground_primary)});
+        foreground.emplace(
+            "secondary",
+            json::Value{std::move(foreground_secondary)});
+        foreground.emplace(
+            "accent",
+            json::Value{std::move(foreground_accent)});
+        foreground.emplace("scheme", json::Value{plan.foreground.scheme});
+        foreground.emplace("source", json::Value{plan.foreground.source});
+        foreground.emplace(
+            "background_luma",
+            json::Value{plan.foreground.background_luma});
+        foreground.emplace(
+            "primary_contrast_ratio",
+            json::Value{plan.foreground.primary_contrast_ratio});
+        foreground.emplace(
+            "secondary_contrast_ratio",
+            json::Value{plan.foreground.secondary_contrast_ratio});
+        foreground.emplace(
+            "accent_contrast_ratio",
+            json::Value{plan.foreground.accent_contrast_ratio});
+        foreground.emplace(
+            "minimum_contrast_ratio",
+            json::Value{plan.foreground.minimum_contrast_ratio});
+        foreground.emplace(
+            "backdrop_driven",
+            json::Value{plan.foreground.backdrop_driven});
+        foreground.emplace(
+            "high_contrast",
+            json::Value{plan.foreground.high_contrast});
+        foreground.emplace(
+            "uses_vibrancy",
+            json::Value{plan.foreground.uses_vibrancy});
+        foreground.emplace(
+            "deterministic",
+            json::Value{plan.foreground.deterministic});
+
         json::Object quality_policy;
         quality_policy.emplace(
             "allow_backdrop_sampling",
@@ -1185,6 +1268,7 @@ namespace detail {
         out.emplace("shadow_radius", json::Value{plan.shadow_radius});
         out.emplace("backdrop_sampling", json::Value{plan.backdrop_sampling});
         out.emplace("backdrop", json::Value{std::move(backdrop)});
+        out.emplace("foreground", json::Value{std::move(foreground)});
         out.emplace("fallback", json::Value{plan.fallback()});
         out.emplace(
             "fallback_path",
@@ -1302,6 +1386,21 @@ namespace detail {
             "radius_clamped_count",
             json::Value{
                 static_cast<std::int64_t>(summary.radius_clamped_count)});
+        out.emplace(
+            "foreground_backdrop_driven_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.foreground_backdrop_driven_count)});
+        out.emplace(
+            "foreground_high_contrast_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.foreground_high_contrast_count)});
+        out.emplace(
+            "foreground_vibrant_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.foreground_vibrant_count)});
         out.emplace("max_surface_area",
                     json::Value{summary.max_surface_area});
         out.emplace("max_effective_radius",
@@ -1310,6 +1409,9 @@ namespace detail {
                     json::Value{summary.max_radius_limit});
         out.emplace("max_normalized_radius",
                     json::Value{summary.max_normalized_radius});
+        out.emplace(
+            "min_foreground_contrast_ratio",
+            json::Value{summary.min_foreground_contrast_ratio});
         out.emplace(
             "unbounded_texture_copy",
             json::Value{

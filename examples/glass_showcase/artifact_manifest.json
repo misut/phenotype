@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "9": 7
+      "10": 7
     },
     "roles": {
       "surface": 7
@@ -89,6 +89,19 @@
       "neutral": 7
     },
     "luminance_adapted": 0,
+    "foreground_schemes": {
+      "vibrant-balanced": 5,
+      "vibrant-dark": 2
+    },
+    "foreground_sources": {
+      "backdrop-analysis": 7
+    },
+    "foreground_backdrop_driven": 7,
+    "foreground_high_contrast": 0,
+    "foreground_vibrant": 7,
+    "foreground_deterministic": 7,
+    "foreground_min_primary_contrast_gte": 4.5,
+    "foreground_minimum_contrast_gte": 4.5,
     "render_target_ready": 7,
     "render_target_within_backdrop_budget": 7,
     "render_target_pixel_formats": {

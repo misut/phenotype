@@ -126,6 +126,9 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `backdrop_sampling`, `fallback`, `fallback_path`, and `fallback_reason`;
 - `backdrop`, including source, readiness flags, sanitized luminance
   statistics, luminance response, and floor/gain/edge deltas;
+- `foreground`, including primary/secondary/accent recommendations, scheme,
+  source, estimated background luminance, contrast ratios, accessibility flags,
+  and whether the recommendation was backdrop-driven or vibrancy-enabled;
 - `sampling_kernel`, including the pure kernel name, radius, tap count, blur
   step scale, weight profile, backdrop dependency, and boundedness flag;
 - `quality_policy`, `primary_pass`, `resource_budget`, and the pass list the
@@ -175,6 +178,12 @@ plans must use `fallback-flat` with `backdrop_driven: false`. `floor` and
 `MaterialPlan.luminance_gain`, while `gamma`, `midpoint`, `contrast`, and
 `edge_lift` are bounded shader inputs. A curve failure should be debugged from
 `MaterialPlan.backdrop` first, then from the backend shader input upload.
+`foreground` is the material text/icon legibility contract. Active sampled glass
+must report `backdrop_driven: true` and `uses_vibrancy: true`; deterministic
+fallback reports a fallback or accessibility source. The verifier checks that
+`primary_contrast_ratio` meets `minimum_contrast_ratio` and that scheme/source
+values are known, so foreground failures point at pure material policy before
+backend drawing.
 `primary_pass.executor` and each `passes[].executor` use pure roles:
 `backdrop-filter` for sampled glass, `fallback-fill` for deterministic fallback,
 and `none` for inactive material work. `max_texture_copy_pixels` is non-zero
@@ -199,6 +208,11 @@ The same summary can pin `container_modes`, `container_ids`, `union_ids`,
 `container_participating`, `container_unioned`, `container_interactive`,
 `container_morph_transitions`, `verifier_require_container_identity`, and
 `verifier_require_container_morph_contract`.
+Foreground gates can pin `foreground_schemes`, `foreground_sources`,
+`foreground_backdrop_driven`, `foreground_high_contrast`,
+`foreground_vibrant`, `foreground_deterministic`,
+`foreground_min_primary_contrast_gte`, and
+`foreground_minimum_contrast_gte`.
 `backdrop.luminance_response` is `not-sampled` for fallback plans and one of
 `neutral`, `dark`, `bright`, `flat`, `dark-flat`, or `bright-flat` for sampled
 plans. The adjacent delta fields show whether the pure planner actually changed
@@ -283,12 +297,17 @@ exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `contract_versions`, `pass_names`, `backdrop_sources`, `luminance_responses`,
 `render_target_pixel_formats`, `pass_executors`, `sampling_kernels`,
 `sampling_weight_profiles`, `luminance_curves`, `decision_blockers`,
-`verifier_profiles`, `verifier_region_layers`, `container_modes`,
-`container_ids`, and `union_ids`; it can also count
+`foreground_schemes`, `foreground_sources`, `verifier_profiles`,
+`verifier_region_layers`, `container_modes`, `container_ids`, and `union_ids`;
+it can also count
 `container_participating`, `container_unioned`, `container_interactive`,
 `container_morph_transitions`, `verifier_require_backdrop_source`,
 `verifier_require_edge_highlight`, `verifier_require_container_identity`, and
-`verifier_require_container_morph_contract`. Shape gates can additionally pin
+`verifier_require_container_morph_contract`. Foreground gates can additionally
+pin `foreground_backdrop_driven`, `foreground_high_contrast`,
+`foreground_vibrant`, `foreground_deterministic`,
+`foreground_min_primary_contrast_gte`, and
+`foreground_minimum_contrast_gte`. Shape gates can additionally pin
 `shape_valid`, `shape_rounded`, `shape_radius_clamped`, and max shape bounds
 such as `shape_max_effective_radius_lte`/`gte`. This
 catches policy drift such as a glass scene silently switching from backdrop
@@ -299,7 +318,8 @@ trace naming the wrong blocker, an artifact emitting an unexpected material plan
 schema version, verifier expectations pointing at the wrong region/layer, a
 material container losing its identity/union grouping, a backend using raw
 radius instead of the pure effective shape radius, a blur kernel drifting out of
-sync with the backend shader, or a quality/capability downgrade losing its
+sync with the backend shader, a foreground contrast recommendation falling
+below the pure minimum, or a quality/capability downgrade losing its
 LLM-actionable reason string.
 Use `require_material_surface_roles` when a scene must contain at least one
 semantic material node for each functional role.

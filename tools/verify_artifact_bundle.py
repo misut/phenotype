@@ -75,6 +75,7 @@ ALLOWED_MATERIAL_LIKELY_LAYERS = {
     "material-blur-pass",
     "material-fallback",
     "material-fallback-pass",
+    "material-foreground",
 }
 
 ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
@@ -102,7 +103,25 @@ ALLOWED_MATERIAL_LUMINANCE_CURVES = {
     "fallback-flat",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 9
+ALLOWED_MATERIAL_FOREGROUND_SCHEMES = {
+    "high-contrast",
+    "none",
+    "solid-fallback",
+    "standard",
+    "vibrant-balanced",
+    "vibrant-dark",
+    "vibrant-light",
+}
+
+ALLOWED_MATERIAL_FOREGROUND_SOURCES = {
+    "accessibility",
+    "backdrop-analysis",
+    "fallback-material",
+    "none",
+    "theme",
+}
+
+MATERIAL_PLAN_CONTRACT_VERSION = 10
 
 
 def suggested_action_for_failure(
@@ -176,6 +195,10 @@ def suggested_action_for_failure(
         return (
             "Inspect MaterialPlan.backdrop and the backend backdrop descriptor "
             "captured for this frame.")
+    if likely_layer == "material-foreground":
+        return (
+            "Inspect MaterialPlan.foreground, foreground contrast selection, "
+            "and the material style theme tokens used by the pure planner.")
     if likely_layer == "material-render-target":
         return (
             "Inspect MaterialPlan.render_target and backend render-target "
@@ -446,6 +469,8 @@ def material_failure_context(
             "fallback_paths")
         material_contract["pass_executors"] = material_plan_summary.get(
             "pass_executors")
+        material_contract["foreground"] = material_plan_summary.get(
+            "foreground")
         material_contract["decision_first_blockers"] = decision_trace.get(
             "first_blockers")
         material_contract["decision_reduced_transparency"] = (
@@ -951,6 +976,14 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "backdrop_sources",
         "luminance_responses",
         "luminance_adapted",
+        "foreground_schemes",
+        "foreground_sources",
+        "foreground_backdrop_driven",
+        "foreground_high_contrast",
+        "foreground_vibrant",
+        "foreground_deterministic",
+        "foreground_min_primary_contrast_gte",
+        "foreground_minimum_contrast_gte",
         "render_target_ready",
         "render_target_within_backdrop_budget",
         "render_target_pixel_formats",
@@ -997,6 +1030,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "shape_valid",
             "shape_rounded",
             "shape_radius_clamped",
+            "foreground_backdrop_driven",
+            "foreground_high_contrast",
+            "foreground_vibrant",
+            "foreground_deterministic",
             "verifier_require_backdrop_source",
             "verifier_require_container_identity",
             "verifier_require_container_morph_contract",
@@ -1013,7 +1050,9 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "shape_max_radius_limit_lte",
             "shape_max_radius_limit_gte",
             "shape_max_normalized_radius_lte",
-            "shape_max_normalized_radius_gte"):
+            "shape_max_normalized_radius_gte",
+            "foreground_min_primary_contrast_gte",
+            "foreground_minimum_contrast_gte"):
         if field in value:
             spec[field] = non_negative_number(
                 value[field],
@@ -1029,6 +1068,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "sampling_weight_profiles": ALLOWED_MATERIAL_SAMPLING_WEIGHT_PROFILES,
         "luminance_curves": ALLOWED_MATERIAL_LUMINANCE_CURVES,
         "luminance_responses": ALLOWED_MATERIAL_LUMINANCE_RESPONSES,
+        "foreground_schemes": ALLOWED_MATERIAL_FOREGROUND_SCHEMES,
+        "foreground_sources": ALLOWED_MATERIAL_FOREGROUND_SOURCES,
     }
     for field, allowed_keys in map_vocabularies.items():
         if field in value:
@@ -1596,6 +1637,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "shadow_radius",
     "backdrop_sampling",
     "backdrop",
+    "foreground",
     "fallback",
     "fallback_path",
     "fallback_reason",
@@ -1668,6 +1710,7 @@ MATERIAL_DECISION_TRACE_BOOL_FIELDS = (
     "can_sample_backdrop",
 )
 MATERIAL_TINT_FIELDS = ("r", "g", "b", "a")
+MATERIAL_COLOR_FIELDS = ("r", "g", "b", "a")
 MATERIAL_BACKDROP_BOOL_FIELDS = ("available", "stable")
 MATERIAL_BACKDROP_LUMA_FIELDS = (
     "luma_min",
@@ -1718,6 +1761,24 @@ MATERIAL_LUMINANCE_CURVE_FIELDS = (
     "edge_lift",
     "backdrop_driven",
     "bounded",
+)
+MATERIAL_FOREGROUND_COLOR_FIELDS = (
+    "primary",
+    "secondary",
+    "accent",
+)
+MATERIAL_FOREGROUND_NUMERIC_FIELDS = (
+    "background_luma",
+    "primary_contrast_ratio",
+    "secondary_contrast_ratio",
+    "accent_contrast_ratio",
+    "minimum_contrast_ratio",
+)
+MATERIAL_FOREGROUND_BOOL_FIELDS = (
+    "backdrop_driven",
+    "high_contrast",
+    "uses_vibrancy",
+    "deterministic",
 )
 MATERIAL_QUALITY_POLICY_BOOL_FIELDS = (
     "allow_backdrop_sampling",
@@ -1800,6 +1861,19 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "max_abs_floor_delta": 0.0,
             "max_abs_gain_delta": 0.0,
             "max_abs_edge_delta": 0.0,
+        },
+        "foreground": {
+            "schemes": {},
+            "sources": {},
+            "backdrop_driven": 0,
+            "high_contrast": 0,
+            "vibrant": 0,
+            "deterministic": 0,
+            "min_primary_contrast": 0.0,
+            "min_secondary_contrast": 0.0,
+            "min_accent_contrast": 0.0,
+            "min_minimum_contrast": 0.0,
+            "max_background_luma": 0.0,
         },
         "resource_bounds": {
             "max_plan_blur_radius": 0.0,
@@ -2369,6 +2443,177 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     likely_layer=likely_layer,
                     likely_pass="luminance-curve",
                     hint="Fallback plans must not report a backdrop-driven luminance curve.",
+                    record_success=False)
+        foreground = check_object_field(
+            report,
+            plan,
+            "foreground",
+            plan_path,
+            likely_layer="material-foreground",
+            hint=(
+                "MaterialPlan.foreground must expose the pure foreground "
+                "legibility and vibrancy recommendation."))
+        if foreground is not None:
+            foreground_summary = summary["foreground"]
+            for key in MATERIAL_FOREGROUND_COLOR_FIELDS:
+                color = check_object_field(
+                    report,
+                    foreground,
+                    key,
+                    f"{plan_path}.foreground",
+                    likely_layer="material-foreground",
+                    hint="Foreground recommendation colors must be RGBA objects.")
+                if color is not None:
+                    for channel in MATERIAL_COLOR_FIELDS:
+                        value = check_number_field(
+                            report,
+                            color,
+                            channel,
+                            f"{plan_path}.foreground.{key}",
+                            min_value=0.0,
+                            likely_layer="material-foreground",
+                            hint="Foreground color channels must be numeric.")
+                        if isinstance(value, (int, float)):
+                            report.check(
+                                "material foreground color channel is byte-sized",
+                                0.0 <= float(value) <= 255.0,
+                                path=f"{plan_path}.foreground.{key}.{channel}",
+                                expected={"range": [0, 255]},
+                                actual=value,
+                                likely_layer="material-foreground",
+                                hint="Serialize foreground colors as RGBA byte channels.",
+                                record_success=False)
+            scheme = check_string_field(
+                report,
+                foreground,
+                "scheme",
+                f"{plan_path}.foreground",
+                likely_layer="material-foreground",
+                hint="Foreground scheme must name the pure material legibility path.")
+            if isinstance(scheme, str):
+                schemes = foreground_summary["schemes"]
+                schemes[scheme] = schemes.get(scheme, 0) + 1
+                report.check(
+                    "material foreground scheme is known",
+                    scheme in ALLOWED_MATERIAL_FOREGROUND_SCHEMES,
+                    path=f"{plan_path}.foreground.scheme",
+                    expected=sorted(ALLOWED_MATERIAL_FOREGROUND_SCHEMES),
+                    actual=scheme,
+                    likely_layer="material-foreground",
+                    hint="Update foreground scheme vocabulary with the pure planner.",
+                    record_success=False)
+            source = check_string_field(
+                report,
+                foreground,
+                "source",
+                f"{plan_path}.foreground",
+                likely_layer="material-foreground",
+                hint="Foreground source must name the input that drove color selection.")
+            if isinstance(source, str):
+                sources = foreground_summary["sources"]
+                sources[source] = sources.get(source, 0) + 1
+                report.check(
+                    "material foreground source is known",
+                    source in ALLOWED_MATERIAL_FOREGROUND_SOURCES,
+                    path=f"{plan_path}.foreground.source",
+                    expected=sorted(ALLOWED_MATERIAL_FOREGROUND_SOURCES),
+                    actual=source,
+                    likely_layer="material-foreground",
+                    hint="Update foreground source vocabulary with the pure planner.",
+                    record_success=False)
+            foreground_numbers: dict[str, int | float] = {}
+            for key in MATERIAL_FOREGROUND_NUMERIC_FIELDS:
+                number = check_number_field(
+                    report,
+                    foreground,
+                    key,
+                    f"{plan_path}.foreground",
+                    min_value=0.0,
+                    likely_layer="material-foreground",
+                    hint="Foreground contrast fields must be non-negative numbers.")
+                if isinstance(number, (int, float)):
+                    foreground_numbers[key] = number
+                    if key == "background_luma":
+                        foreground_summary["max_background_luma"] = max(
+                            float(foreground_summary["max_background_luma"]),
+                            float(number))
+                    elif key == "primary_contrast_ratio":
+                        current = float(foreground_summary["min_primary_contrast"])
+                        foreground_summary["min_primary_contrast"] = (
+                            float(number) if current == 0.0
+                            else min(current, float(number)))
+                    elif key == "secondary_contrast_ratio":
+                        current = float(foreground_summary["min_secondary_contrast"])
+                        foreground_summary["min_secondary_contrast"] = (
+                            float(number) if current == 0.0
+                            else min(current, float(number)))
+                    elif key == "accent_contrast_ratio":
+                        current = float(foreground_summary["min_accent_contrast"])
+                        foreground_summary["min_accent_contrast"] = (
+                            float(number) if current == 0.0
+                            else min(current, float(number)))
+                    elif key == "minimum_contrast_ratio":
+                        current = float(foreground_summary["min_minimum_contrast"])
+                        foreground_summary["min_minimum_contrast"] = (
+                            float(number) if current == 0.0
+                            else min(current, float(number)))
+            for key in MATERIAL_FOREGROUND_BOOL_FIELDS:
+                value = check_bool_field(
+                    report,
+                    foreground,
+                    key,
+                    f"{plan_path}.foreground",
+                    likely_layer="material-foreground",
+                    hint="Foreground recommendation booleans must stay explicit.")
+                if value is True:
+                    if key == "backdrop_driven":
+                        foreground_summary["backdrop_driven"] = (
+                            int(foreground_summary["backdrop_driven"]) + 1)
+                    elif key == "high_contrast":
+                        foreground_summary["high_contrast"] = (
+                            int(foreground_summary["high_contrast"]) + 1)
+                    elif key == "uses_vibrancy":
+                        foreground_summary["vibrant"] = (
+                            int(foreground_summary["vibrant"]) + 1)
+                    elif key == "deterministic":
+                        foreground_summary["deterministic"] = (
+                            int(foreground_summary["deterministic"]) + 1)
+            minimum_contrast = foreground_numbers.get("minimum_contrast_ratio")
+            if isinstance(minimum_contrast, (int, float)):
+                for key in (
+                        "primary_contrast_ratio",
+                        "secondary_contrast_ratio",
+                        "accent_contrast_ratio"):
+                    contrast = foreground_numbers.get(key)
+                    if not isinstance(contrast, (int, float)):
+                        continue
+                    report.check(
+                        f"material foreground {key} meets plan minimum",
+                        float(contrast) + 0.0001 >= float(minimum_contrast),
+                        path=f"{plan_path}.foreground.{key}",
+                        expected={">=": minimum_contrast},
+                        actual=contrast,
+                        likely_layer="material-foreground",
+                        hint=(
+                            "Adjust MaterialPlan.foreground color selection before "
+                            "weakening contrast thresholds."),
+                        record_success=False)
+            if backdrop_sampling is True:
+                report.check(
+                    "sampled material foreground is backdrop-driven",
+                    foreground.get("backdrop_driven") is True
+                    and foreground.get("uses_vibrancy") is True,
+                    path=f"{plan_path}.foreground",
+                    expected={
+                        "backdrop_driven": True,
+                        "uses_vibrancy": True,
+                    },
+                    actual={
+                        "backdrop_driven": foreground.get("backdrop_driven"),
+                        "uses_vibrancy": foreground.get("uses_vibrancy"),
+                    },
+                    likely_layer="material-foreground",
+                    hint="Sampled Liquid Glass plans should expose vibrancy-driven foreground metadata.",
                     record_success=False)
         sample_taps = check_number_field(
             report,
@@ -3858,6 +4103,10 @@ def check_material_plan_summary_requirements(
             "shape_valid",
             "shape_rounded",
             "shape_radius_clamped",
+            "foreground_backdrop_driven",
+            "foreground_high_contrast",
+            "foreground_vibrant",
+            "foreground_deterministic",
             "verifier_require_backdrop_source",
             "verifier_require_container_identity",
             "verifier_require_container_morph_contract",
@@ -3929,6 +4178,19 @@ def check_material_plan_summary_requirements(
                 nested_field = field.removeprefix("shape_")
                 actual = shape_summary.get(nested_field)
                 summary_path = f"{base_path}.shape.{nested_field}"
+            elif field in (
+                    "foreground_backdrop_driven",
+                    "foreground_high_contrast",
+                    "foreground_vibrant",
+                    "foreground_deterministic"):
+                foreground_summary = summary.get("foreground")
+                if not isinstance(foreground_summary, dict):
+                    foreground_summary = {}
+                nested_field = field.removeprefix("foreground_")
+                if nested_field == "vibrant":
+                    nested_field = "vibrant"
+                actual = foreground_summary.get(nested_field)
+                summary_path = f"{base_path}.foreground.{nested_field}"
             report.check(
                 f"material plan summary {field} matches",
                 actual == spec[field],
@@ -3937,6 +4199,28 @@ def check_material_plan_summary_requirements(
                 actual=actual,
                 likely_layer="platform-runtime",
                 hint="Inspect fallback_path and primary_pass for each material plan.")
+    foreground_bounds = {
+        "foreground_min_primary_contrast_gte": "min_primary_contrast",
+        "foreground_minimum_contrast_gte": "min_minimum_contrast",
+    }
+    for field, nested_field in foreground_bounds.items():
+        if field not in spec:
+            continue
+        foreground_summary = summary.get("foreground")
+        if not isinstance(foreground_summary, dict):
+            foreground_summary = {}
+        actual = foreground_summary.get(nested_field)
+        expected = spec[field]
+        report.check(
+            f"material plan summary {field} bound",
+            isinstance(actual, (int, float))
+            and not isinstance(actual, bool)
+            and float(actual) >= float(expected),
+            path=f"{base_path}.foreground.{nested_field}",
+            expected={">=": expected},
+            actual=actual,
+            likely_layer="material-foreground",
+            hint="Inspect MaterialPlan.foreground contrast selection.")
     shape_bounds = {
         "shape_max_surface_area": "max_surface_area",
         "shape_max_effective_radius": "max_effective_radius",
@@ -4025,6 +4309,12 @@ def check_material_plan_summary_requirements(
         "verifier_region_layers": (
             "material-verifier",
             "Inspect MaterialPlan.verifier.likely_layer and primary_pass.likely_layer."),
+        "foreground_schemes": (
+            "material-foreground",
+            "Inspect MaterialPlan.foreground.scheme and pure contrast policy."),
+        "foreground_sources": (
+            "material-foreground",
+            "Inspect MaterialPlan.foreground.source and planner inputs."),
     }
     for field in (
             "fallback_paths",
@@ -4045,7 +4335,9 @@ def check_material_plan_summary_requirements(
             "render_target_pixel_formats",
             "decision_blockers",
             "verifier_profiles",
-            "verifier_region_layers"):
+            "verifier_region_layers",
+            "foreground_schemes",
+            "foreground_sources"):
         if field in spec:
             actual = summary.get(field)
             summary_path = f"{base_path}.{field}"
@@ -4087,6 +4379,16 @@ def check_material_plan_summary_requirements(
             elif field == "verifier_region_layers":
                 actual = summary.get("region_layers")
                 summary_path = f"{base_path}.region_layers"
+            elif field in ("foreground_schemes", "foreground_sources"):
+                foreground_summary = summary.get("foreground")
+                if not isinstance(foreground_summary, dict):
+                    foreground_summary = {}
+                nested = {
+                    "foreground_schemes": "schemes",
+                    "foreground_sources": "sources",
+                }[field]
+                actual = foreground_summary.get(nested)
+                summary_path = f"{base_path}.foreground.{nested}"
             likely_layer, hint = summary_field_hints[field]
             report.check(
                 f"material plan summary {field} matches",
@@ -4243,6 +4545,15 @@ def check_material_runtime_summary_contract(
         "radius_clamped_count": summary.get("shape", {}).get(
             "radius_clamped")
             if isinstance(summary.get("shape"), dict) else None,
+        "foreground_backdrop_driven_count": summary.get(
+            "foreground", {}).get("backdrop_driven")
+            if isinstance(summary.get("foreground"), dict) else None,
+        "foreground_high_contrast_count": summary.get(
+            "foreground", {}).get("high_contrast")
+            if isinstance(summary.get("foreground"), dict) else None,
+        "foreground_vibrant_count": summary.get(
+            "foreground", {}).get("vibrant")
+            if isinstance(summary.get("foreground"), dict) else None,
         "max_surface_area": summary.get("shape", {}).get("max_surface_area")
             if isinstance(summary.get("shape"), dict) else None,
         "max_effective_radius": summary.get("shape", {}).get(
@@ -4253,6 +4564,9 @@ def check_material_runtime_summary_contract(
         "max_normalized_radius": summary.get("shape", {}).get(
             "max_normalized_radius")
             if isinstance(summary.get("shape"), dict) else None,
+        "min_foreground_contrast_ratio": summary.get(
+            "foreground", {}).get("min_primary_contrast")
+            if isinstance(summary.get("foreground"), dict) else None,
         "unbounded_texture_copy": bounds.get("unbounded_texture_copy"),
         "non_deterministic_fallback": bounds.get("non_deterministic_fallback"),
     }

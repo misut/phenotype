@@ -9,7 +9,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 9;
+inline constexpr std::uint32_t material_plan_contract_version = 10;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -168,6 +168,23 @@ struct MaterialBackdropAnalysis {
     float edge_highlight_delta = 0.0f;
 };
 
+struct MaterialForegroundRecommendation {
+    Color primary = {0, 0, 0, 255};
+    Color secondary = {0, 0, 0, 255};
+    Color accent = {0, 0, 0, 255};
+    char const* scheme = "standard";
+    char const* source = "theme";
+    float background_luma = 1.0f;
+    float primary_contrast_ratio = 1.0f;
+    float secondary_contrast_ratio = 1.0f;
+    float accent_contrast_ratio = 1.0f;
+    float minimum_contrast_ratio = 4.5f;
+    bool backdrop_driven = false;
+    bool high_contrast = false;
+    bool uses_vibrancy = false;
+    bool deterministic = true;
+};
+
 struct MaterialRenderTargetAnalysis {
     int width = 0;
     int height = 0;
@@ -237,6 +254,7 @@ struct MaterialPlan {
     float shadow_radius = 0.0f;
     bool backdrop_sampling = false;
     MaterialBackdropAnalysis backdrop{};
+    MaterialForegroundRecommendation foreground{};
     MaterialFallbackPath fallback_path = MaterialFallbackPath::None;
     char const* fallback_reason = "";
     char const* contrast_intent = "standard";
@@ -284,10 +302,14 @@ struct MaterialRuntimeSummary {
     std::uint32_t valid_shape_count = 0;
     std::uint32_t rounded_shape_count = 0;
     std::uint32_t radius_clamped_count = 0;
+    std::uint32_t foreground_backdrop_driven_count = 0;
+    std::uint32_t foreground_high_contrast_count = 0;
+    std::uint32_t foreground_vibrant_count = 0;
     float max_surface_area = 0.0f;
     float max_effective_radius = 0.0f;
     float max_radius_limit = 0.0f;
     float max_normalized_radius = 0.0f;
+    float min_foreground_contrast_ratio = 0.0f;
     std::uint32_t unbounded_texture_copy = 0;
     std::uint32_t non_deterministic_fallback = 0;
 };
@@ -366,6 +388,12 @@ inline void accumulate_material_runtime_summary(
         ++summary.rounded_shape_count;
     if (plan.shape.radius_clamped)
         ++summary.radius_clamped_count;
+    if (plan.foreground.backdrop_driven)
+        ++summary.foreground_backdrop_driven_count;
+    if (plan.foreground.high_contrast)
+        ++summary.foreground_high_contrast_count;
+    if (plan.foreground.uses_vibrancy)
+        ++summary.foreground_vibrant_count;
     summary.max_surface_area = std::max(
         summary.max_surface_area,
         plan.shape.surface_area);
@@ -378,6 +406,13 @@ inline void accumulate_material_runtime_summary(
     summary.max_normalized_radius = std::max(
         summary.max_normalized_radius,
         plan.shape.normalized_radius);
+    if (plan.foreground.primary_contrast_ratio > 0.0f) {
+        summary.min_foreground_contrast_ratio =
+            summary.min_foreground_contrast_ratio == 0.0f
+                ? plan.foreground.primary_contrast_ratio
+                : std::min(summary.min_foreground_contrast_ratio,
+                           plan.foreground.primary_contrast_ratio);
+    }
     if (!plan.resource_budget.bounded_texture_copy)
         ++summary.unbounded_texture_copy;
     if (!plan.resource_budget.deterministic_fallback)
@@ -416,6 +451,10 @@ inline MaterialStyle material_style_for_kind(MaterialKind kind,
     style.fallback_reason = kind == MaterialKind::None
         ? ""
         : "fallback path is available when backdrop blur is unavailable";
+    style.foreground = theme.foreground;
+    style.secondary_foreground = theme.muted;
+    style.accent_foreground = theme.accent;
+    style.strong_accent_foreground = theme.accent_strong;
 
     switch (kind) {
         case MaterialKind::Clear:
@@ -697,6 +736,161 @@ inline float material_safe_luma(float value, float fallback) noexcept {
     return std::isfinite(value)
         ? std::clamp(value, 0.0f, 1.0f)
         : fallback;
+}
+
+inline float material_srgb_channel_luma(unsigned char channel) noexcept {
+    auto const value = static_cast<float>(channel) / 255.0f;
+    return value <= 0.04045f
+        ? value / 12.92f
+        : std::pow((value + 0.055f) / 1.055f, 2.4f);
+}
+
+inline float material_color_luma(Color color) noexcept {
+    return 0.2126f * material_srgb_channel_luma(color.r)
+        + 0.7152f * material_srgb_channel_luma(color.g)
+        + 0.0722f * material_srgb_channel_luma(color.b);
+}
+
+inline float material_contrast_ratio(float a, float b) noexcept {
+    auto const lighter = std::max(a, b);
+    auto const darker = std::min(a, b);
+    return (lighter + 0.05f) / (darker + 0.05f);
+}
+
+inline float material_contrast_ratio(Color foreground,
+                                     float background_luma) noexcept {
+    return material_contrast_ratio(
+        material_color_luma(foreground),
+        material_safe_luma(background_luma, 1.0f));
+}
+
+inline Color material_with_opaque_alpha(Color color) noexcept {
+    color.a = 255;
+    return color;
+}
+
+inline Color material_pick_readable_color(Color preferred,
+                                          float background_luma,
+                                          float minimum_contrast) noexcept {
+    auto best = material_with_opaque_alpha(preferred);
+    auto best_contrast = material_contrast_ratio(best, background_luma);
+    if (best_contrast >= minimum_contrast)
+        return best;
+    auto const dark = Color{17, 24, 39, 255};
+    auto const light = Color{255, 255, 255, 255};
+    Color const candidates[2] = {dark, light};
+    for (auto candidate : candidates) {
+        auto const contrast = material_contrast_ratio(candidate, background_luma);
+        if (contrast > best_contrast) {
+            best = candidate;
+            best_contrast = contrast;
+        }
+    }
+    return best;
+}
+
+inline float material_estimated_surface_luma(MaterialPlan const& plan) noexcept {
+    auto const backdrop_luma = plan.backdrop.available
+        ? plan.backdrop.luma_mean
+        : material_color_luma(plan.tint);
+    auto const tint_luma = material_color_luma(plan.tint);
+    auto const alpha = std::clamp(
+        plan.opacity * (static_cast<float>(plan.tint.a) / 255.0f),
+        0.0f,
+        1.0f);
+    auto const mixed = backdrop_luma * (1.0f - alpha) + tint_luma * alpha;
+    return std::clamp(mixed + plan.luminance_floor * 0.08f, 0.0f, 1.0f);
+}
+
+inline char const* material_foreground_scheme_name(
+        MaterialPlan const& plan,
+        float background_luma,
+        MaterialCapabilityInput capabilities) noexcept {
+    if (plan.kind == MaterialKind::None)
+        return "none";
+    if (capabilities.increase_contrast)
+        return "high-contrast";
+    if (capabilities.reduce_transparency || plan.fallback())
+        return "solid-fallback";
+    if (!plan.backdrop_sampling)
+        return "standard";
+    if (background_luma < 0.48f)
+        return "vibrant-light";
+    if (background_luma > 0.68f)
+        return "vibrant-dark";
+    return "vibrant-balanced";
+}
+
+inline char const* material_foreground_source_name(
+        MaterialPlan const& plan,
+        MaterialCapabilityInput capabilities) noexcept {
+    if (plan.kind == MaterialKind::None)
+        return "none";
+    if (capabilities.increase_contrast)
+        return "accessibility";
+    if (plan.backdrop_sampling)
+        return "backdrop-analysis";
+    if (plan.fallback())
+        return "fallback-material";
+    return "theme";
+}
+
+inline MaterialForegroundRecommendation material_resolve_foreground(
+        MaterialPlan const& plan,
+        MaterialStyle const& style,
+        MaterialCapabilityInput capabilities) noexcept {
+    MaterialForegroundRecommendation foreground{};
+    foreground.background_luma = material_estimated_surface_luma(plan);
+    foreground.minimum_contrast_ratio = 4.5f;
+    foreground.scheme = material_foreground_scheme_name(
+        plan,
+        foreground.background_luma,
+        capabilities);
+    foreground.source = material_foreground_source_name(plan, capabilities);
+    foreground.backdrop_driven = plan.backdrop_sampling;
+    foreground.high_contrast = capabilities.increase_contrast;
+    foreground.uses_vibrancy = plan.backdrop_sampling
+        && !capabilities.reduce_transparency
+        && !plan.fallback();
+    foreground.deterministic = true;
+
+    foreground.primary = material_pick_readable_color(
+        style.foreground,
+        foreground.background_luma,
+        foreground.minimum_contrast_ratio);
+    auto const primary_light =
+        material_color_luma(foreground.primary) > foreground.background_luma;
+    auto secondary_preferred = style.secondary_foreground;
+    if (material_contrast_ratio(secondary_preferred,
+                                foreground.background_luma)
+            < foreground.minimum_contrast_ratio) {
+        secondary_preferred = primary_light
+            ? Color{226, 232, 240, 255}
+            : Color{71, 85, 105, 255};
+    }
+    foreground.secondary = material_pick_readable_color(
+        secondary_preferred,
+        foreground.background_luma,
+        foreground.minimum_contrast_ratio);
+
+    auto accent_preferred = style.accent_foreground;
+    if (material_contrast_ratio(accent_preferred,
+                                foreground.background_luma)
+            < foreground.minimum_contrast_ratio) {
+        accent_preferred = style.strong_accent_foreground;
+    }
+    foreground.accent = material_pick_readable_color(
+        accent_preferred,
+        foreground.background_luma,
+        foreground.minimum_contrast_ratio);
+
+    foreground.primary_contrast_ratio =
+        material_contrast_ratio(foreground.primary, foreground.background_luma);
+    foreground.secondary_contrast_ratio =
+        material_contrast_ratio(foreground.secondary, foreground.background_luma);
+    foreground.accent_contrast_ratio =
+        material_contrast_ratio(foreground.accent, foreground.background_luma);
+    return foreground;
 }
 
 inline MaterialBackdropAnalysis analyze_material_backdrop(
@@ -1109,6 +1303,10 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.luminance_floor,
         plan.luminance_gain,
         plan.edge_highlight);
+    plan.foreground = material_resolve_foreground(
+        plan,
+        style,
+        environment.capabilities);
 
     plan.plan_id = material_plan_id(style.kind, plan.backdrop_sampling);
     if (has_material && plan.backdrop_sampling && !plan.fallback()) {

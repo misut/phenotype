@@ -200,8 +200,8 @@ The plan records its artifact `contract_version`, source
 saturation, luminance curve, edge highlight, noise/dither, shadow, render-target
 analysis, pure shape analysis, backdrop sampling, backdrop analysis, decision
 trace, fallback path, debug metadata, pass expectations, the resolved quality
-policy, resource budgets, the resolved sampling kernel, and verifier
-expectations.
+policy, foreground legibility/vibrancy recommendation, resource budgets, the
+resolved sampling kernel, and verifier expectations.
 `decision_trace` records the pure gate booleans for geometry, target readiness,
 quality, backend capabilities, accessibility settings, backdrop-source
 readiness, and the first fallback blocker. `primary_pass` states whether the
@@ -229,6 +229,13 @@ backdrop-driven, and whether all shader inputs are bounded. Sampled glass uses
 `adaptive-backdrop-luma`; deterministic fallback uses `fallback-flat`. macOS
 uploads gamma, midpoint, contrast, and edge lift to Metal so adaptive backdrop
 legibility is executed from the pure plan instead of a backend-local heuristic.
+`foreground` is the pure text/icon legibility recommendation for content drawn
+on top of a material surface. It records primary, secondary, and accent colors,
+the foreground scheme/source, estimated background luminance, contrast ratios,
+the minimum contrast target, and whether the recommendation is backdrop-driven,
+high-contrast, vibrancy-enabled, and deterministic. Backends consume or expose
+this recommendation; they do not choose independent foreground policy for glass
+surfaces.
 `quality_policy` records the pure planner's resolved
 sampling/noise/shadow switches and caller quality limits, including
 `max_backdrop_pixels`. `render_target` records sanitized target dimensions,

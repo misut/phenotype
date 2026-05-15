@@ -1228,6 +1228,19 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(fallback_plan.backdrop.source) == "none");
     assert(std::string(fallback_plan.backdrop.luminance_response)
            == "not-sampled");
+    assert(std::string(fallback_plan.foreground.scheme)
+           == "solid-fallback");
+    assert(std::string(fallback_plan.foreground.source)
+           == "fallback-material");
+    assert(!fallback_plan.foreground.backdrop_driven);
+    assert(!fallback_plan.foreground.uses_vibrancy);
+    assert(fallback_plan.foreground.deterministic);
+    assert(fallback_plan.foreground.primary_contrast_ratio
+           >= fallback_plan.foreground.minimum_contrast_ratio);
+    assert(fallback_plan.foreground.secondary_contrast_ratio
+           >= fallback_plan.foreground.minimum_contrast_ratio);
+    assert(fallback_plan.foreground.accent_contrast_ratio
+           >= fallback_plan.foreground.minimum_contrast_ratio);
     assert(std::string(fallback_plan.verifier.likely_layer)
            == "material-fallback-pass");
 
@@ -1311,6 +1324,22 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::fabs(glass_plan.backdrop.luminance_floor_delta) < 0.0001f);
     assert(std::fabs(glass_plan.backdrop.luminance_gain_delta) < 0.0001f);
     assert(std::fabs(glass_plan.backdrop.edge_highlight_delta) < 0.0001f);
+    assert(std::string(glass_plan.foreground.scheme)
+           == "vibrant-balanced");
+    assert(std::string(glass_plan.foreground.source)
+           == "backdrop-analysis");
+    assert(glass_plan.foreground.backdrop_driven);
+    assert(glass_plan.foreground.uses_vibrancy);
+    assert(!glass_plan.foreground.high_contrast);
+    assert(glass_plan.foreground.deterministic);
+    assert(glass_plan.foreground.background_luma > 0.60f);
+    assert(glass_plan.foreground.background_luma < 0.75f);
+    assert(glass_plan.foreground.primary_contrast_ratio
+           >= glass_plan.foreground.minimum_contrast_ratio);
+    assert(glass_plan.foreground.secondary_contrast_ratio
+           >= glass_plan.foreground.minimum_contrast_ratio);
+    assert(glass_plan.foreground.accent_contrast_ratio
+           >= glass_plan.foreground.minimum_contrast_ratio);
     assert(std::string(glass_plan.verifier.likely_layer)
            == "material-blur-pass");
 
@@ -1379,6 +1408,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(dark_backdrop_plan.backdrop.edge_highlight_delta > 0.0f);
     assert(dark_backdrop_plan.luminance_curve.gamma < 1.0f);
     assert(dark_backdrop_plan.luminance_curve.midpoint < 0.35f);
+    assert(std::string(dark_backdrop_plan.foreground.scheme)
+           == "vibrant-light");
+    assert(dark_backdrop_plan.foreground.primary_contrast_ratio
+           >= dark_backdrop_plan.foreground.minimum_contrast_ratio);
 
     MaterialEnvironment bright_backdrop_env = glass_env;
     bright_backdrop_env.backdrop.luma_min = 0.84f;
@@ -1397,6 +1430,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(bright_backdrop_plan.backdrop.edge_highlight_delta > 0.0f);
     assert(bright_backdrop_plan.luminance_curve.gamma > 1.0f);
     assert(bright_backdrop_plan.luminance_curve.midpoint > 0.70f);
+    assert(std::string(bright_backdrop_plan.foreground.scheme)
+           == "vibrant-dark");
+    assert(bright_backdrop_plan.foreground.primary_contrast_ratio
+           >= bright_backdrop_plan.foreground.minimum_contrast_ratio);
 
     MaterialEnvironment flat_backdrop_env = glass_env;
     flat_backdrop_env.backdrop.luma_min = 0.46f;
@@ -1430,6 +1467,11 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(contrast_motion_plan.sample_taps < glass_plan.sample_taps);
     assert(contrast_motion_plan.primary_pass.sample_taps
            == contrast_motion_plan.sample_taps);
+    assert(std::string(contrast_motion_plan.foreground.scheme)
+           == "high-contrast");
+    assert(std::string(contrast_motion_plan.foreground.source)
+           == "accessibility");
+    assert(contrast_motion_plan.foreground.high_contrast);
 
     glass_env.capabilities.reduce_transparency = true;
     auto reduced_plan = plan_material_surface(request, glass_env);
