@@ -191,9 +191,10 @@ MaterialPlan plan = plan_material_surface(request, environment);
 The plan records its artifact `contract_version`, source
 `command_descriptor`, material `role`, material container analysis, blur, tint,
 saturation, luminance curve, edge highlight, noise/dither, shadow, render-target
-analysis, backdrop sampling, backdrop analysis, decision trace, fallback path,
-debug metadata, pass expectations, the resolved quality policy, resource
-budgets, the resolved sampling kernel, and verifier expectations.
+analysis, pure shape analysis, backdrop sampling, backdrop analysis, decision
+trace, fallback path, debug metadata, pass expectations, the resolved quality
+policy, resource budgets, the resolved sampling kernel, and verifier
+expectations.
 `decision_trace` records the pure gate booleans for geometry, target readiness,
 quality, backend capabilities, accessibility settings, backdrop-source
 readiness, and the first fallback blocker. `primary_pass` states whether the
@@ -231,6 +232,12 @@ backdrop-pixel budget, and whether texture copies and fallback behavior are
 bounded. Container spacing is also reported as `max_container_spacing`, so
 artifact gates can bound future container/union expansion work before a backend
 starts allocating extra backdrop passes.
+`geometry` preserves the raw decoded `MaterialRect` rectangle, while `shape`
+records the pure executable shape: validity, surface area, min/max extent,
+radius limit, effective radius, normalized radius, rounded flag, and radius
+clamp flag. Native backends draw with `shape.effective_radius`, so radius
+sanitization remains deterministic and cross-platform instead of becoming a
+shader-local or fallback-local policy.
 `verifier` records the deterministic pixel-region contract derived from the
 same plan: whether a backdrop source or edge highlight must be present, the
 minimum luma/color thresholds for sampled or fallback rendering, the semantic
@@ -275,7 +282,8 @@ the same artifact schema. Backends also publish
 `renderer.material_runtime_summary`, a flat count/max summary derived from
 the same records; the artifact verifier recomputes it from
 `material_plans[]` so CI can catch summary drift, unexpected executor pass
-growth, and texture-copy budget drift.
+growth, texture-copy budget drift, and material shape drift such as a clamped
+radius not matching the backend-executed radius.
 Backends separately publish `renderer.material_executor_summary` for edge-only
 execution telemetry: material instances, fallback instances, material draw
 calls, upload bytes/capacity, framebuffer-history copy bounds, and CPU enqueue

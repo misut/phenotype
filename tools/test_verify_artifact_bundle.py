@@ -68,6 +68,17 @@ def material_plan(
         "plan_id": "material.regular.fallback",
         "command_descriptor": command_descriptor,
         "geometry": {"x": 12.0, "y": 20.0, "w": 240.0, "h": 96.0, "radius": 10.0},
+        "shape": {
+            "valid": True,
+            "rounded": True,
+            "radius_clamped": False,
+            "surface_area": 240.0 * 96.0,
+            "min_extent": 96.0,
+            "max_extent": 240.0,
+            "radius_limit": 48.0,
+            "effective_radius": 10.0,
+            "normalized_radius": 10.0 / 48.0,
+        },
         "render_target": {
             "width": 320,
             "height": 240,
@@ -252,8 +263,10 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
 def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     budget = plan["resource_budget"]
     primary = plan["primary_pass"]
+    shape = plan["shape"]
     assert isinstance(budget, dict)
     assert isinstance(primary, dict)
+    assert isinstance(shape, dict)
     return {
         "plan_count": 1,
         "fallback_count": 1 if plan["fallback"] else 0,
@@ -284,6 +297,13 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "morph_transition_count": (
             1 if plan["container"]["morph_transitions"] else 0
         ),
+        "valid_shape_count": 1 if shape["valid"] else 0,
+        "rounded_shape_count": 1 if shape["rounded"] else 0,
+        "radius_clamped_count": 1 if shape["radius_clamped"] else 0,
+        "max_surface_area": shape["surface_area"],
+        "max_effective_radius": shape["effective_radius"],
+        "max_radius_limit": shape["radius_limit"],
+        "max_normalized_radius": shape["normalized_radius"],
         "unbounded_texture_copy": 0 if budget["bounded_texture_copy"] else 1,
         "non_deterministic_fallback": (
             0 if budget["deterministic_fallback"] else 1
@@ -508,6 +528,18 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["command_descriptor_missing"],
             0)
         self.assertEqual(
+            report["material_plans"]["shape"]["valid"],
+            1)
+        self.assertEqual(
+            report["material_plans"]["shape"]["rounded"],
+            1)
+        self.assertEqual(
+            report["material_plans"]["shape"]["radius_clamped"],
+            0)
+        self.assertEqual(
+            report["material_plans"]["shape"]["max_effective_radius"],
+            10.0)
+        self.assertEqual(
             report["semantic_tree"]["material_descriptor_missing"],
             0)
 
@@ -532,6 +564,52 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["decision_trace"][
                 "can_sample_backdrop"],
             0)
+
+    def test_material_shape_mismatch_is_llm_actionable(self) -> None:
+        plan = material_plan()
+        shape = plan["shape"]
+        assert isinstance(shape, dict)
+        shape["effective_radius"] = 64.0
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material shape effective radius matches geometry")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".shape.effective_radius")
+        self.assertEqual(failure["expected"], 10.0)
+        self.assertEqual(failure["actual"], 64.0)
+        self.assertEqual(failure["likely_layer"], "material-shape")
+        self.assertIn("MaterialPlan.shape", failure["suggested_action"])
+
+    def test_manifest_can_require_material_shape_summary(self) -> None:
+        manifest = {
+            "require_material_plan_summary": {
+                "shape_valid": 1,
+                "shape_rounded": 1,
+                "shape_radius_clamped": 0,
+                "shape_max_surface_area_lte": 240.0 * 96.0,
+                "shape_max_surface_area_gte": 240.0 * 96.0,
+                "shape_max_effective_radius_lte": 10.0,
+                "shape_max_effective_radius_gte": 10.0,
+                "shape_max_radius_limit_lte": 48.0,
+                "shape_max_radius_limit_gte": 48.0,
+                "shape_max_normalized_radius_lte": 10.0 / 48.0,
+                "shape_max_normalized_radius_gte": 10.0 / 48.0,
+            },
+        }
+
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(
+            report["material_plans"]["shape"]["max_radius_limit"],
+            48.0)
 
     def test_command_descriptor_container_allows_resolved_reduce_motion(self) -> None:
         plan = material_plan()
@@ -1172,6 +1250,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             material_contract["fallback_paths"],
             {"unsupported-backend": 1})
+        self.assertEqual(material_contract["plan_shape"]["rounded"], 1)
         self.assertEqual(
             material_contract["decision_first_blockers"],
             {"unsupported-backend": 1})

@@ -114,8 +114,9 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `container`, including isolated/container/union mode, container id, union id,
   spacing, interactive flag, morph-transition expectation, shared backdrop
   scope, and shape-union expectation;
-- geometry, tint, blur radius, saturation, luminance curve, edge highlight,
-  noise, and shadow values for the resolved plan;
+- raw `geometry`, derived `shape` analysis, tint, blur radius, saturation,
+  luminance curve, edge highlight, noise, and shadow values for the resolved
+  plan. `shape.effective_radius` is the clamped radius the backend executes;
 - `render_target`, including target dimensions, scale, pixel format, pixel
   count, readiness, and whether the backdrop-pixel budget was satisfied;
 - `decision_trace`, including the pure gate booleans for geometry, quality,
@@ -148,6 +149,12 @@ scope propagation, `MaterialRect` encoding, or command decode before it points
 at backend drawing. `command_descriptor.container.morph_transitions` preserves
 the request, while `MaterialPlan.container.morph_transitions` may be false when
 Reduce Motion disables morph expectations.
+`MaterialPlan.geometry` preserves the raw decoded rectangle. `MaterialPlan.shape`
+is the pure executable shape contract: validity, surface area, min/max extent,
+radius limit, effective radius, normalized radius, rounded flag, and whether the
+requested radius was clamped. Backends must upload or draw
+`shape.effective_radius`; a shape failure points at geometry emission, command
+decode, or a backend using stale raw radius values.
 `sample_taps` and `primary_pass.sample_taps` describe the actual resolved pass.
 Fallback plans therefore report `0` taps, while `quality_policy.max_sample_taps`
 preserves the caller's upper bound and `resource_budget.max_sample_taps`
@@ -281,16 +288,19 @@ exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `container_participating`, `container_unioned`, `container_interactive`,
 `container_morph_transitions`, `verifier_require_backdrop_source`,
 `verifier_require_edge_highlight`, `verifier_require_container_identity`, and
-`verifier_require_container_morph_contract`. This
+`verifier_require_container_morph_contract`. Shape gates can additionally pin
+`shape_valid`, `shape_rounded`, `shape_radius_clamped`, and max shape bounds
+such as `shape_max_effective_radius_lte`/`gte`. This
 catches policy drift such as a glass scene silently switching from backdrop
 blur to fallback, a fallback backend reporting the wrong deterministic pass, a
 sampled scene losing its previous-frame backdrop source, a render target
 exceeding the pure backdrop budget, a pass switching executor roles, a decision
 trace naming the wrong blocker, an artifact emitting an unexpected material plan
 schema version, verifier expectations pointing at the wrong region/layer, a
-material container losing its identity/union grouping, a blur kernel drifting
-out of sync with the backend shader, or a quality/capability downgrade losing
-its LLM-actionable reason string.
+material container losing its identity/union grouping, a backend using raw
+radius instead of the pure effective shape radius, a blur kernel drifting out of
+sync with the backend shader, or a quality/capability downgrade losing its
+LLM-actionable reason string.
 Use `require_material_surface_roles` when a scene must contain at least one
 semantic material node for each functional role.
 

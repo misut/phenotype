@@ -1920,7 +1920,7 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.tint[1] = plan.tint.g / 255.0f;
     inst.tint[2] = plan.tint.b / 255.0f;
     inst.tint[3] = plan.tint.a / 255.0f;
-    inst.params[0] = plan.geometry.radius;
+    inst.params[0] = plan.shape.effective_radius;
     inst.params[1] = plan.blur_radius;
     inst.params[2] = plan.opacity;
     inst.params[3] = static_cast<float>(plan.sample_taps);
@@ -1953,7 +1953,7 @@ inline void append_material_fallback_instance(std::vector<ColorInstanceGPU>& out
         plan.tint.g / 255.0f,
         plan.tint.b / 255.0f,
         plan.tint.a / 255.0f,
-        plan.geometry.radius,
+        plan.shape.effective_radius,
         0.0f,
         2.0f);
 }

@@ -6,6 +6,7 @@
 
 #include <cassert>
 #include <chrono>
+#include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <filesystem>
@@ -807,6 +808,17 @@ void test_material_runtime_record_json_contract() {
     assert(container.at("participates").as_bool() == false);
     assert(container.at("shared_backdrop_scope").as_bool() == false);
     assert(container.at("shape_union_expected").as_bool() == false);
+    auto const& shape = obj.at("shape").as_object();
+    assert(shape.at("valid").as_bool() == true);
+    assert(shape.at("rounded").as_bool() == true);
+    assert(shape.at("radius_clamped").as_bool() == false);
+    assert(shape.at("surface_area").as_float() == 160.0f * 64.0f);
+    assert(shape.at("min_extent").as_float() == 64.0f);
+    assert(shape.at("max_extent").as_float() == 160.0f);
+    assert(shape.at("radius_limit").as_float() == 32.0f);
+    assert(shape.at("effective_radius").as_float() == 12.0f);
+    assert(std::fabs(shape.at("normalized_radius").as_float()
+                     - (12.0f / 32.0f)) < 0.0001f);
     assert(obj.at("plan_id").as_string() == "material.thin.fallback");
     auto const& descriptor = obj.at("command_descriptor").as_object();
     assert(descriptor.at("kind").as_string() == "thin");
@@ -901,6 +913,14 @@ void test_material_runtime_record_json_contract() {
     assert(pure_summary.max_sampling_kernel_radius == 0);
     assert(pure_summary.containered_count == 0);
     assert(pure_summary.unioned_count == 0);
+    assert(pure_summary.valid_shape_count == 1);
+    assert(pure_summary.rounded_shape_count == 1);
+    assert(pure_summary.radius_clamped_count == 0);
+    assert(pure_summary.max_surface_area == 160.0f * 64.0f);
+    assert(pure_summary.max_effective_radius == 12.0f);
+    assert(pure_summary.max_radius_limit == 32.0f);
+    assert(std::fabs(pure_summary.max_normalized_radius
+                     - (12.0f / 32.0f)) < 0.0001f);
     assert(pure_summary.max_container_spacing == 0.0f);
 
     auto summary = diag::detail::material_runtime_summary_json(records);
@@ -920,6 +940,14 @@ void test_material_runtime_record_json_contract() {
     assert(summary_obj.at("unioned_count").as_integer() == 0);
     assert(summary_obj.at("interactive_count").as_integer() == 0);
     assert(summary_obj.at("morph_transition_count").as_integer() == 0);
+    assert(summary_obj.at("valid_shape_count").as_integer() == 1);
+    assert(summary_obj.at("rounded_shape_count").as_integer() == 1);
+    assert(summary_obj.at("radius_clamped_count").as_integer() == 0);
+    assert(summary_obj.at("max_surface_area").as_float() == 160.0f * 64.0f);
+    assert(summary_obj.at("max_effective_radius").as_float() == 12.0f);
+    assert(summary_obj.at("max_radius_limit").as_float() == 32.0f);
+    assert(std::fabs(summary_obj.at("max_normalized_radius").as_float()
+                     - (12.0f / 32.0f)) < 0.0001f);
     assert(summary_obj.at("max_container_spacing").as_float() == 0.0f);
 
     MaterialExecutorSummary executor_summary;

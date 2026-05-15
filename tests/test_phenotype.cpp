@@ -1111,6 +1111,16 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(fallback_plan.container.mode == MaterialContainerMode::Isolated);
     assert(std::string(fallback_plan.container.mode_name) == "isolated");
     assert(!fallback_plan.container.participates);
+    assert(fallback_plan.shape.valid);
+    assert(fallback_plan.shape.rounded);
+    assert(!fallback_plan.shape.radius_clamped);
+    assert(fallback_plan.shape.surface_area == 240.0f * 96.0f);
+    assert(fallback_plan.shape.min_extent == 96.0f);
+    assert(fallback_plan.shape.max_extent == 240.0f);
+    assert(fallback_plan.shape.radius_limit == 48.0f);
+    assert(fallback_plan.shape.effective_radius == 10.0f);
+    assert(std::fabs(fallback_plan.shape.normalized_radius
+                     - (10.0f / 48.0f)) < 0.0001f);
     assert(fallback_plan.fallback());
     assert(!fallback_plan.backdrop_sampling);
     assert(fallback_plan.render_target.width == 520);
@@ -1276,6 +1286,18 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(container_plan.resource_budget.max_container_spacing == 24.0f);
     assert(container_plan.verifier.require_container_identity);
     assert(container_plan.verifier.require_container_morph_contract);
+
+    MaterialRequest clamped_shape_request = request;
+    clamped_shape_request.geometry.radius = 200.0f;
+    auto clamped_shape_plan =
+        plan_material_surface(clamped_shape_request, glass_env);
+    assert(!clamped_shape_plan.fallback());
+    assert(clamped_shape_plan.shape.valid);
+    assert(clamped_shape_plan.shape.rounded);
+    assert(clamped_shape_plan.shape.radius_clamped);
+    assert(clamped_shape_plan.shape.radius_limit == 48.0f);
+    assert(clamped_shape_plan.shape.effective_radius == 48.0f);
+    assert(clamped_shape_plan.shape.normalized_radius == 1.0f);
 
     MaterialEnvironment reduced_motion_container_env = glass_env;
     reduced_motion_container_env.capabilities.reduce_motion = true;
@@ -1451,6 +1473,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!invalid_plan.primary_pass.active);
     assert(std::string(invalid_plan.primary_pass.executor) == "none");
     assert(invalid_plan.primary_pass.max_texture_copy_pixels == 0);
+    assert(!invalid_plan.shape.valid);
+    assert(!invalid_plan.shape.rounded);
+    assert(invalid_plan.shape.effective_radius == 0.0f);
     assert(!invalid_plan.decision_trace.has_geometry);
     assert(!invalid_plan.decision_trace.has_material);
     assert(std::string(invalid_plan.decision_trace.first_blocker)

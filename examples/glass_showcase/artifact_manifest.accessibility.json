@@ -36,7 +36,7 @@
       "reduced transparency disables backdrop sampling": 7
     },
     "contract_versions": {
-      "8": 7
+      "9": 7
     },
     "roles": {
       "surface": 7
@@ -58,6 +58,9 @@
     "container_unioned": 1,
     "container_interactive": 1,
     "container_morph_transitions": 0,
+    "shape_valid": 7,
+    "shape_rounded": 7,
+    "shape_radius_clamped": 0,
     "kinds": {
       "clear": 1,
       "thin": 2,
