@@ -2777,6 +2777,45 @@ static void test_windows_surface_descriptor_scale_is_valid() {
     std::puts("PASS: windows native surface descriptor scale is valid");
 }
 
+static void test_windows_aspect_ratio_sizing_helper() {
+    RECT right_drag{0, 0, 400, 120};
+    bool adjusted = phenotype::native::detail::adjust_win32_aspect_ratio_rect(
+        right_drag, WMSZ_RIGHT, 16, 9, 0, 0);
+    assert(adjusted);
+    assert(right_drag.left == 0);
+    assert(right_drag.right == 400);
+    assert(right_drag.top == 0);
+    assert(right_drag.bottom == 225);
+
+    RECT top_drag{0, 0, 120, 200};
+    adjusted = phenotype::native::detail::adjust_win32_aspect_ratio_rect(
+        top_drag, WMSZ_TOP, 1, 1, 0, 0);
+    assert(adjusted);
+    assert(top_drag.left == 0);
+    assert(top_drag.right == 200);
+    assert(top_drag.top == 0);
+    assert(top_drag.bottom == 200);
+
+    RECT top_left_drag{0, 0, 240, 240};
+    adjusted = phenotype::native::detail::adjust_win32_aspect_ratio_rect(
+        top_left_drag, WMSZ_TOPLEFT, 4, 3, 16, 40);
+    assert(adjusted);
+    assert(top_left_drag.left == 0);
+    assert(top_left_drag.right == 240);
+    assert(top_left_drag.bottom == 240);
+    assert(top_left_drag.top == 32);
+
+    RECT invalid{0, 0, 100, 100};
+    adjusted = phenotype::native::detail::adjust_win32_aspect_ratio_rect(
+        invalid, WMSZ_RIGHT, 0, 9, 0, 0);
+    assert(!adjusted);
+    assert(invalid.left == 0);
+    assert(invalid.top == 0);
+    assert(invalid.right == 100);
+    assert(invalid.bottom == 100);
+    std::puts("PASS: windows native aspect ratio sizing helper");
+}
+
 static void test_windows_text_build_atlas_empty() {
     text::init();
     std::vector<text::TextEntry> entries;
@@ -3643,6 +3682,7 @@ int main() {
     test_windows_text_build_atlas_scale_preserves_bounds();
     test_windows_text_build_atlas_preserves_vertical_orientation();
     test_windows_surface_descriptor_scale_is_valid();
+    test_windows_aspect_ratio_sizing_helper();
     test_windows_text_build_atlas_empty();
     test_renderer_flush_empty();
     test_windows_renderer_reinit_cycle();
