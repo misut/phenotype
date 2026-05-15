@@ -156,17 +156,24 @@ append-only opcodes:
 | 2 | FillRect | f32 x, y, w, h; u32 color |
 | 3 | StrokeRect | f32 x, y, w, h, line_width; u32 color |
 | 4 | RoundRect | f32 x, y, w, h, radius; u32 color |
-| 5 | DrawText | f32 x, y, font_size; u32 mono, color, len; bytes text (4-byte aligned) |
+| 5 | DrawText | f32 x, y, font_size, rotation, width_factor; u32 flags, color, family_len; bytes family (4-byte aligned); u32 text_len; bytes text (4-byte aligned) |
 | 6 | DrawLine | f32 x1, y1, x2, y2, thickness; u32 color |
 | 7 | HitRegion | f32 x, y, w, h; u32 callback_id, cursor_type |
 | 8 | DrawImage | f32 x, y, w, h; u32 len; bytes url (4-byte aligned) |
-| 15 | MaterialRect | f32 x, y, w, h, radius; u32 kind, role; u32 container_id, union_id; f32 container_spacing; u32 container_flags; f32 opacity, blur_radius; u32 tint; f32 saturation, luminance_floor, luminance_gain, edge_highlight, edge_width, noise_opacity, shadow_alpha, shadow_radius |
+| 9 | Scissor | f32 x, y, w, h |
+| 10 | DrawArc | f32 cx, cy, radius, start_angle, end_angle, thickness; u32 color |
+| 11 | Path | f32 thickness; u32 color, verb_count; path verb stream |
+| 12 | FillPath | u32 color, verb_count; path verb stream |
+| 13 | FillQuads | u32 quad_count; repeated u32 color + 8 f32 points |
+| 14 | FillRects | u32 rect_count; repeated f32 x, y, w, h + u32 color |
+| 15 | MaterialRect | f32 x, y, w, h, radius; u32 kind, role; f32 opacity, blur_radius; u32 tint; f32 saturation, luminance_floor, luminance_gain, edge_highlight, edge_width, noise_opacity, shadow_alpha, shadow_radius; u32 container_id, union_id; f32 container_spacing; u32 container_flags |
+| 16 | LinearGradientRect | f32 x, y, w, h; u32 from_color, to_color, axis, steps |
 
 All values are little-endian. Colors are packed as `(r << 24) | (g << 16) | (b << 8) | a`.
 
 The `phenotype.commands` module provides a C++ parser (`parse_commands(buf,
 len)`) that decodes these bytes into typed structs (`ClearCmd`, `FillRectCmd`,
-`MaterialRectCmd`, etc.) for native backends.
+`MaterialRectCmd`, `LinearGradientRectCmd`, etc.) for native backends.
 
 ## Material Planning
 

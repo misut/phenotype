@@ -3979,6 +3979,50 @@ inline void normalize_color(::phenotype::Color const& c, float out[4]) {
     out[3] = static_cast<float>(c.a) / 255.0f;
 }
 
+inline void append_linear_gradient_instances(
+        std::vector<ColorInstanceGPU>& out,
+        float x, float y, float w, float h,
+        ::phenotype::Color from,
+        ::phenotype::Color to,
+        ::phenotype::GradientAxis axis,
+        unsigned int steps) {
+    if (w == 0.0f || h == 0.0f)
+        return;
+    if (w < 0.0f) { x += w; w = -w; }
+    if (h < 0.0f) { y += h; h = -h; }
+
+    unsigned int const count = ::phenotype::linear_gradient_step_count(steps);
+    out.reserve(out.size() + count);
+    for (unsigned int i = 0; i < count; ++i) {
+        float const t = count == 1
+            ? 0.0f
+            : static_cast<float>(i) / static_cast<float>(count - 1);
+        auto const color = ::phenotype::lerp_color(from, to, t);
+        ColorInstanceGPU inst{};
+        if (axis == ::phenotype::GradientAxis::Horizontal) {
+            float const x0 = x + w * static_cast<float>(i)
+                / static_cast<float>(count);
+            float const x1 = x + w * static_cast<float>(i + 1)
+                / static_cast<float>(count);
+            inst.rect[0] = x0;
+            inst.rect[1] = y;
+            inst.rect[2] = x1 - x0;
+            inst.rect[3] = h;
+        } else {
+            float const y0 = y + h * static_cast<float>(i)
+                / static_cast<float>(count);
+            float const y1 = y + h * static_cast<float>(i + 1)
+                / static_cast<float>(count);
+            inst.rect[0] = x;
+            inst.rect[1] = y0;
+            inst.rect[2] = w;
+            inst.rect[3] = y1 - y0;
+        }
+        normalize_color(color, inst.color);
+        out.push_back(inst);
+    }
+}
+
 // FillPath / FillQuads helpers — direct port of macOS
 // phenotype.native.macos.cppm's polygon ear-clipper. The triangle list
 // is fed into the dedicated tri_pipeline (`tri.vert` / `tri.frag`) as
@@ -4490,6 +4534,25 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 inst.color[2] = static_cast<float>(cc.b) * (1.0f/255.0f);
                 inst.color[3] = static_cast<float>(cc.a) * (1.0f/255.0f);
             }
+        } else if (cmd == ::phenotype::Cmd::LinearGradientRect) {
+            if (pos + 32u > len) { pos = len; break; }
+            float x = read_f32(), y = read_f32();
+            float w = read_f32(), h = read_f32();
+            auto const from = unpack(read_u32());
+            auto const to = unpack(read_u32());
+            auto const axis = ::phenotype::gradient_axis_from_wire(read_u32());
+            auto const steps = read_u32();
+            prepare_batch_for_pipeline(out, 0);
+            append_linear_gradient_instances(
+                out.batches.back().colors,
+                x,
+                y,
+                w,
+                h,
+                from,
+                to,
+                axis,
+                steps);
         } else if (cmd == ::phenotype::Cmd::Path
                    || cmd == ::phenotype::Cmd::FillPath) {
             // Fall back to the existing typed handler for paths — the
@@ -5375,6 +5438,18 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                     normalize_color(r.color, inst.color);
                     dst.push_back(inst);
                 }
+            } else if constexpr (std::same_as<T, ::phenotype::LinearGradientRectCmd>) {
+                prepare_batch_for_pipeline(out, 0);
+                append_linear_gradient_instances(
+                    out.batches.back().colors,
+                    c.x,
+                    c.y,
+                    c.w,
+                    c.h,
+                    c.from,
+                    c.to,
+                    c.axis,
+                    c.steps);
             }
             // HitRegion is ignored before Stage 6.
         }, cmd);

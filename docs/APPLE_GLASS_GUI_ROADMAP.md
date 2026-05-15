@@ -112,18 +112,19 @@ and renderer parity:
 - `FillPath`
 - `FillQuads`
 - `FillRects`
+- `LinearGradientRect`
 
 This is enough for cards, controls, text, images, canvas-heavy views, clipping,
-paths, arcs, batching, and bounded stripe-backed linear gradients through
-`Painter::linear_gradient_rect`. It is not enough for faithful Apple material
-work.
+paths, arcs, batching, and bounded stripe-backed linear gradients through a
+first-class `LinearGradientRect` command. It is not enough for faithful Apple
+material work.
 
 Missing primitives for true glass:
 
-- gradient command as a backend-native primitive. The current
-  `Painter::linear_gradient_rect` helper intentionally lowers to bounded
-  `FillRects` so every backend shares the same deterministic behavior while a
-  future opcode can optimize gradients without changing app code;
+- backend-native gradient shader paths. The current `LinearGradientRect`
+  command intentionally lowers to bounded strips in each backend so every
+  renderer shares deterministic output while a future shader path can optimize
+  the same command without changing app code;
 - foreground vibrancy tokens that adapt text/icon colors on top of material.
 
 The current fallback can approximate glass with translucent rounded surfaces
@@ -244,7 +245,7 @@ Remaining gaps:
   additional backends as they gain native material rendering;
 - Android CI device/emulator wiring remains a policy and runner-capacity
   decision;
-- foreground vibrancy tokens and a backend-native gradient primitive remain
+- foreground vibrancy tokens and backend-native gradient shader execution remain
   future work for a fuller Apple-style material vocabulary.
 
 ### Examples
@@ -325,8 +326,9 @@ Done means `examples/` is a local acceptance suite, not just demos:
   system as a real app surface, with filesystem side effects isolated to an
   example-owned temp directory;
 - Android has a documented local device/emulator contract runner.
-- Painter has a bounded `linear_gradient_rect` helper that uses the existing
-  `FillRects` path with no heap allocation in the helper itself.
+- Painter has a bounded `linear_gradient_rect` API backed by the explicit
+  `LinearGradientRect` wire command; unsupported external painter subclasses
+  still inherit the deterministic `FillRects` fallback.
 
 ## Prompt-to-artifact checklist
 

@@ -336,6 +336,33 @@ void test_fill_rects_round_trips() {
     assert(fr->rects[1].color == blue);
 }
 
+void test_linear_gradient_rect_round_trips() {
+    reset_buffer();
+    emit_linear_gradient_rect(
+        host,
+        4.0f,
+        5.0f,
+        -20.0f,
+        10.0f,
+        red,
+        blue,
+        GradientAxis::Horizontal,
+        128);
+
+    auto cmds = parse_commands(host.buf(), host.buf_len());
+    assert(cmds.size() == 1);
+    auto const* gradient = std::get_if<LinearGradientRectCmd>(&cmds[0]);
+    assert(gradient != nullptr);
+    assert(gradient->x == -16.0f);
+    assert(gradient->y == 5.0f);
+    assert(gradient->w == 20.0f);
+    assert(gradient->h == 10.0f);
+    assert(gradient->from == red);
+    assert(gradient->to == blue);
+    assert(gradient->axis == GradientAxis::Horizontal);
+    assert(gradient->steps == max_linear_gradient_steps);
+}
+
 } // namespace
 
 int main() {
@@ -350,6 +377,7 @@ int main() {
     test_fill_quads_chunks_large_batches();
     test_fill_quads_interleaves_with_scissor();
     test_fill_rects_round_trips();
+    test_linear_gradient_rect_round_trips();
     std::puts("\nAll path wire-format tests passed.");
     return 0;
 }
