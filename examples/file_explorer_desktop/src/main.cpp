@@ -95,41 +95,37 @@ void update(State& state, Msg msg) {
 void sidebar(State const& state) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
-    layout::sized_box(216.0f, [&] {
-        layout::material_surface(MaterialKind::Thin, [&] {
-            widget::text("Locations");
-            layout::spacer(6);
-            widget::button<Msg>("Demo Root", SelectLocation{"root"});
-            widget::button<Msg>("Documents", SelectLocation{"documents"});
-            widget::button<Msg>("Pictures", SelectLocation{"pictures"});
-            widget::button<Msg>("Shared", SelectLocation{"shared"});
-            layout::spacer(10);
-            layout::divider();
-            layout::spacer(10);
-            widget::text("Status", TextSize::Small, TextColor::Muted);
-            widget::code(explorer.status);
-        }, SpaceToken::Md, SpaceToken::Sm);
+    layout::sidebar(216.0f, [&] {
+        widget::text("Locations");
+        layout::spacer(6);
+        widget::button<Msg>("Demo Root", SelectLocation{"root"});
+        widget::button<Msg>("Documents", SelectLocation{"documents"});
+        widget::button<Msg>("Pictures", SelectLocation{"pictures"});
+        widget::button<Msg>("Shared", SelectLocation{"shared"});
+        layout::spacer(10);
+        layout::divider();
+        layout::spacer(10);
+        widget::text("Status", TextSize::Small, TextColor::Muted);
+        widget::code(explorer.status);
     });
 }
 
 void toolbar(State const& state, file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
-    layout::material_surface(MaterialKind::Clear, [&] {
-        layout::row([&] {
-            layout::weighted(1.0f, [&] {
-                widget::text("Phenotype Finder");
-                widget::text(snap.relative_location, TextSize::Small, TextColor::Muted);
-            });
-            layout::sized_box(240.0f, [&] {
-                widget::text_field<Msg>("Search files", explorer.search, on_search_changed);
-            });
-            widget::button<Msg>("Up", GoUp{});
-            widget::button<Msg>("Refresh", Refresh{});
-            widget::button<Msg>("Delete", DeleteSelected{});
-            widget::button<Msg>("Reset", ResetDemo{});
-        }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Start);
-    }, SpaceToken::Md, SpaceToken::Sm);
+    layout::toolbar([&] {
+        layout::weighted(1.0f, [&] {
+            widget::text("Phenotype Finder");
+            widget::text(snap.relative_location, TextSize::Small, TextColor::Muted);
+        });
+        layout::sized_box(240.0f, [&] {
+            widget::text_field<Msg>("Search files", explorer.search, on_search_changed);
+        });
+        widget::button<Msg>("Up", GoUp{});
+        widget::button<Msg>("Refresh", Refresh{});
+        widget::button<Msg>("Delete", DeleteSelected{});
+        widget::button<Msg>("Reset", ResetDemo{});
+    });
 }
 
 void file_table(file_explorer_demo::Snapshot const& snap) {
@@ -213,7 +209,7 @@ void view(State const& state) {
                 });
                 preview_panel(state, snap);
             }, SpaceToken::Md, CrossAxisAlignment::Start, MainAxisAlignment::Start);
-            layout::material_surface(MaterialKind::Clear, [&] {
+            layout::status_bar([&] {
                 std::string detail = "Demo root: ";
                 detail += state.explorer.root.string();
                 detail += "\nViewport: ";
@@ -221,7 +217,7 @@ void view(State const& state) {
                 detail += " x ";
                 detail += std::to_string(state.explorer.viewport_height);
                 widget::code(detail);
-            }, SpaceToken::Sm, SpaceToken::Xs);
+            });
         }, SpaceToken::Md);
     });
 }

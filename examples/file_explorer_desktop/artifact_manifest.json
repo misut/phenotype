@@ -4,6 +4,9 @@
   "expect_platform": "macos",
   "require_frame": true,
   "require_labels": [
+    "Toolbar",
+    "Sidebar",
+    "Status Bar",
     "Phenotype Finder",
     "Locations",
     "Files",

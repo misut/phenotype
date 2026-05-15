@@ -1646,27 +1646,117 @@ void weighted(float grow, F&& builder) {
     detail::open_container(h, std::forward<F>(builder));
 }
 
+struct MaterialSurfaceOptions {
+    MaterialKind kind = MaterialKind::Regular;
+    FlexDirection direction = FlexDirection::Column;
+    SpaceToken padding = SpaceToken::Lg;
+    SpaceToken gap = SpaceToken::Md;
+    CrossAxisAlignment cross_align = CrossAxisAlignment::Start;
+    MainAxisAlignment main_align = MainAxisAlignment::Start;
+    float max_width = 0.0f;
+    float fixed_height = -1.0f;
+    char const* semantic_label = "";
+};
+
+inline void configure_material_surface(LayoutNode& node,
+                                       MaterialSurfaceOptions const& options) {
+    auto const& t = detail::g_app.theme;
+    node.material = material_style(options.kind);
+    node.background = node.material.tint;
+    node.border_color = node.material.border;
+    node.border_width = options.kind == MaterialKind::None ? 0.0f : 1.0f;
+    node.border_radius = t.radius_lg;
+    node.style.flex_direction = options.direction;
+    node.style.gap = space_value(options.gap);
+    node.style.cross_align = options.cross_align;
+    node.style.main_align = options.main_align;
+    node.style.max_width = options.max_width;
+    node.style.fixed_height = options.fixed_height;
+    float p = space_value(options.padding);
+    node.style.padding[0] = p;
+    node.style.padding[1] = p;
+    node.style.padding[2] = p;
+    node.style.padding[3] = p;
+    if (options.semantic_label && options.semantic_label[0] != '\0')
+        node.debug_semantic_label = options.semantic_label;
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void material_surface(MaterialSurfaceOptions options, F&& builder) {
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    configure_material_surface(node, options);
+    detail::open_container(h, std::forward<F>(builder));
+}
+
 template<typename F>
     requires std::is_invocable_v<F>
 void material_surface(MaterialKind kind, F&& builder,
                       SpaceToken padding = SpaceToken::Lg,
                       SpaceToken gap = SpaceToken::Md) {
-    auto h = detail::alloc_node();
-    auto& node = detail::node_at(h);
-    auto const& t = detail::g_app.theme;
-    node.material = material_style(kind);
-    node.background = node.material.tint;
-    node.border_color = node.material.border;
-    node.border_width = kind == MaterialKind::None ? 0.0f : 1.0f;
-    node.border_radius = t.radius_lg;
-    node.style.flex_direction = FlexDirection::Column;
-    node.style.gap = space_value(gap);
-    float p = space_value(padding);
-    node.style.padding[0] = p;
-    node.style.padding[1] = p;
-    node.style.padding[2] = p;
-    node.style.padding[3] = p;
-    detail::open_container(h, std::forward<F>(builder));
+    material_surface(
+        MaterialSurfaceOptions{
+            .kind = kind,
+            .padding = padding,
+            .gap = gap,
+        },
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void toolbar(F&& builder,
+             MaterialKind kind = MaterialKind::Clear,
+             SpaceToken padding = SpaceToken::Md,
+             SpaceToken gap = SpaceToken::Sm) {
+    material_surface(
+        MaterialSurfaceOptions{
+            .kind = kind,
+            .direction = FlexDirection::Row,
+            .padding = padding,
+            .gap = gap,
+            .cross_align = CrossAxisAlignment::Center,
+            .main_align = MainAxisAlignment::Start,
+            .semantic_label = "Toolbar",
+        },
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void sidebar(float max_width,
+             F&& builder,
+             MaterialKind kind = MaterialKind::Thin,
+             SpaceToken padding = SpaceToken::Md,
+             SpaceToken gap = SpaceToken::Sm) {
+    material_surface(
+        MaterialSurfaceOptions{
+            .kind = kind,
+            .direction = FlexDirection::Column,
+            .padding = padding,
+            .gap = gap,
+            .max_width = max_width,
+            .semantic_label = "Sidebar",
+        },
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void status_bar(F&& builder,
+                MaterialKind kind = MaterialKind::Clear,
+                SpaceToken padding = SpaceToken::Sm,
+                SpaceToken gap = SpaceToken::Xs) {
+    material_surface(
+        MaterialSurfaceOptions{
+            .kind = kind,
+            .direction = FlexDirection::Column,
+            .padding = padding,
+            .gap = gap,
+            .semantic_label = "Status Bar",
+        },
+        std::forward<F>(builder));
 }
 
 // overlay — render `builder`'s contents above the main tree, after
