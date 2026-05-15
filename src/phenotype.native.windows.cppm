@@ -84,6 +84,23 @@ inline bool env_enabled(char const* name) {
 #endif
 }
 
+#ifdef _WIN32
+inline float dpi_scale_for_hwnd(HWND hwnd) {
+    UINT dpi = 96;
+    if (hwnd) {
+        if (auto* user32 = GetModuleHandleW(L"user32.dll")) {
+            using GetDpiForWindowFn = UINT(WINAPI*)(HWND);
+            auto* get_dpi = reinterpret_cast<GetDpiForWindowFn>(
+                GetProcAddress(user32, "GetDpiForWindow"));
+            if (get_dpi)
+                dpi = get_dpi(hwnd);
+        }
+    }
+    float scale = static_cast<float>(dpi) / 96.0f;
+    return sanitize_scale(scale);
+}
+#endif
+
 struct LineBoxMetrics {
     int slot_width = 0;
     int slot_height = 0;
@@ -3384,7 +3401,11 @@ inline void configure_window(native_surface_handle handle,
     if (!hwnd)
         return;
 
-    MARGINS margins{0, 0, 48, 0};
+    int top_margin = logical_pixels(
+        options->integrated_titlebar.height,
+        dpi_scale_for_hwnd(hwnd),
+        1);
+    MARGINS margins{0, 0, top_margin, 0};
     HRESULT hr = DwmExtendFrameIntoClientArea(hwnd, &margins);
     if (FAILED(hr)) {
         std::fprintf(stderr,

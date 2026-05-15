@@ -75,6 +75,28 @@ static constexpr int LEGACY_KEY_A = static_cast<int>(Key::A);
 static constexpr char kLocalExampleImageAsset[] = "showcase-local.bmp";
 static constexpr char kRemoteExampleImageAsset[] = "showcase.bmp";
 
+static void test_window_options_integrated_titlebar_contract() {
+    WindowOptions defaults{};
+    assert(defaults.chrome == WindowChromeStyle::System);
+    assert(defaults.integrated_titlebar.height == 52.0f);
+    assert(defaults.integrated_titlebar.drag_region_height == 52.0f);
+    assert(defaults.integrated_titlebar.trailing_control_reserved_width == 156.0f);
+
+    WindowOptions integrated{
+        .chrome = WindowChromeStyle::IntegratedTitlebar,
+        .integrated_titlebar = {
+            .height = 56.0f,
+            .drag_region_height = 48.0f,
+            .trailing_control_reserved_width = 168.0f,
+        },
+    };
+    assert(integrated.chrome == WindowChromeStyle::IntegratedTitlebar);
+    assert(integrated.integrated_titlebar.height == 56.0f);
+    assert(integrated.integrated_titlebar.drag_region_height == 48.0f);
+    assert(integrated.integrated_titlebar.trailing_control_reserved_width == 168.0f);
+    std::puts("PASS: window options integrated titlebar contract");
+}
+
 static void append_u32(std::vector<unsigned char>& buf, unsigned int value) {
     auto offset = buf.size();
     buf.resize(offset + 4);
@@ -3562,6 +3584,7 @@ static void test_stub_renderer_hit_test() {
 #endif // __APPLE__ / _WIN32
 
 int main() {
+    test_window_options_integrated_titlebar_contract();
     test_shell_pointer_hover_click_and_tab_navigation();
     test_shell_activation_keys_respect_roles();
     test_shell_text_space_char_and_enter_behavior();

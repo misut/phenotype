@@ -6,12 +6,13 @@ buttons, translucent sidebar locations, icon/list/column/gallery file views,
 document, image, video, and folder thumbnails, read/create/duplicate/delete
 file actions, and compact Finder-style selection status.
 
-The desktop window requests `WindowChromeStyle::IntegratedTitlebar`. On macOS
-the backend uses native AppKit titlebar transparency/full-size content so the
-system traffic-light controls are integrated into the content area instead of
-being redrawn by the example. Windows receives the same option through the
-native DWM edge hook, with the standard frame as the deterministic fallback
-while the full Win32 shell migration remains separate.
+The desktop window requests `WindowChromeStyle::IntegratedTitlebar` with an
+explicit titlebar metric. On macOS the backend uses native AppKit titlebar
+transparency/full-size content so the system traffic-light controls are
+integrated into the content area instead of being redrawn by the example. On
+Windows the native Win32 shell keeps the same contract through a DWM custom
+frame, using `WM_NCHITTEST` to preserve resize edges, caption-button behavior,
+blank-toolbar dragging, and phenotype toolbar hit regions.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-desktop`. The example never points at the user's real

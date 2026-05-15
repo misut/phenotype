@@ -125,8 +125,23 @@ enum class WindowChromeStyle {
     IntegratedTitlebar,
 };
 
+struct IntegratedTitlebarOptions {
+    // Logical pixels reserved by the app chrome at the top of the
+    // window. Desktop shells use this for native drag/hit-test
+    // integration; apps use the same value to keep controls out of
+    // system caption-button/traffic-light territory.
+    float height = 52.0f;
+    // Blank top-band pixels that should drag the native window when
+    // no phenotype hit region is present there.
+    float drag_region_height = 52.0f;
+    // Logical pixels at the top-right that are reserved for platform
+    // caption controls before app hit regions have been registered.
+    float trailing_control_reserved_width = 156.0f;
+};
+
 struct WindowOptions {
     WindowChromeStyle chrome = WindowChromeStyle::System;
+    IntegratedTitlebarOptions integrated_titlebar = {};
 };
 
 struct window_api {

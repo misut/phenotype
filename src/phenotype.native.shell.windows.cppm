@@ -8,6 +8,7 @@ module;
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
 #include <windows.h>
+#include <dwmapi.h>
 
 #include <chrono>
 #include <cmath>
@@ -19,6 +20,7 @@ module;
 #include <utility>
 
 #pragma comment(lib, "user32.lib")
+#pragma comment(lib, "dwmapi.lib")
 
 #ifdef DrawText
 #undef DrawText
@@ -49,6 +51,8 @@ struct Win32ShellState {
     HCURSOR hand_cursor = nullptr;
     HCURSOR active_cursor = nullptr;
     unsigned int pending_high_surrogate = 0;
+    IntegratedTitlebarOptions integrated_titlebar = {};
+    bool integrated_chrome = false;
     bool running = false;
 };
 
@@ -93,6 +97,27 @@ inline float dpi_scale_for_window(HWND hwnd) {
     }
     float scale = static_cast<float>(dpi) / 96.0f;
     return (scale > 0.0f && std::isfinite(scale)) ? scale : 1.0f;
+}
+
+inline int system_metric_for_window(HWND hwnd, int index) {
+    UINT dpi = static_cast<UINT>(
+        std::lround(static_cast<double>(dpi_scale_for_window(hwnd)) * 96.0));
+    if (dpi == 0)
+        dpi = 96;
+    if (auto* user32 = GetModuleHandleW(L"user32.dll")) {
+        using GetSystemMetricsForDpiFn = int(WINAPI*)(int, UINT);
+        auto* get_metric = reinterpret_cast<GetSystemMetricsForDpiFn>(
+            GetProcAddress(user32, "GetSystemMetricsForDpi"));
+        if (get_metric)
+            return get_metric(index, dpi);
+    }
+    return GetSystemMetrics(index);
+}
+
+inline int logical_to_device_px(HWND hwnd, float logical, int minimum = 0) {
+    int px = static_cast<int>(std::ceil(
+        static_cast<double>(logical) * static_cast<double>(dpi_scale_for_window(hwnd))));
+    return (px < minimum) ? minimum : px;
 }
 
 inline int x_from_lparam(LPARAM lparam) {
@@ -222,6 +247,68 @@ inline void apply_window_cursor(Win32ShellState const& state) {
     SetCursor(state.active_cursor ? state.active_cursor : state.arrow_cursor);
 }
 
+inline int resize_border_px(HWND hwnd) {
+    int frame = system_metric_for_window(hwnd, SM_CXSIZEFRAME);
+    int padding = system_metric_for_window(hwnd, SM_CXPADDEDBORDER);
+    int border = frame + padding;
+    return border > 0 ? border : 8;
+}
+
+inline bool phenotype_hit_region_at(float x, float y) {
+    auto hit = hit_test(x, y, g_app_state.scroll_x, g_app_state.scroll_y);
+    return hit.has_value();
+}
+
+inline LRESULT hit_test_integrated_chrome(Win32ShellState const& state,
+                                          HWND hwnd,
+                                          LPARAM lparam) {
+    RECT window_rect{};
+    if (!GetWindowRect(hwnd, &window_rect))
+        return HTCLIENT;
+
+    int const screen_x = x_from_lparam(lparam);
+    int const screen_y = y_from_lparam(lparam);
+    int const x = screen_x - window_rect.left;
+    int const y = screen_y - window_rect.top;
+    int const width = window_rect.right - window_rect.left;
+    int const height = window_rect.bottom - window_rect.top;
+    int const border = resize_border_px(hwnd);
+
+    bool const left = x >= 0 && x < border;
+    bool const right = x < width && x >= width - border;
+    bool const top = y >= 0 && y < border;
+    bool const bottom = y < height && y >= height - border;
+    if (top && left) return HTTOPLEFT;
+    if (top && right) return HTTOPRIGHT;
+    if (bottom && left) return HTBOTTOMLEFT;
+    if (bottom && right) return HTBOTTOMRIGHT;
+    if (top) return HTTOP;
+    if (bottom) return HTBOTTOM;
+    if (left) return HTLEFT;
+    if (right) return HTRIGHT;
+
+    POINT client_point{screen_x, screen_y};
+    ScreenToClient(hwnd, &client_point);
+    int const drag_height = logical_to_device_px(
+        hwnd, state.integrated_titlebar.drag_region_height, 1);
+    if (client_point.y >= 0 && client_point.y < drag_height) {
+        int const reserved = logical_to_device_px(
+            hwnd, state.integrated_titlebar.trailing_control_reserved_width, 0);
+        int const client_width = state.surface
+            ? state.surface->logical_width
+            : width;
+        if (reserved > 0 && client_point.x >= client_width - reserved)
+            return HTCLIENT;
+        if (phenotype_hit_region_at(
+                static_cast<float>(client_point.x),
+                static_cast<float>(client_point.y)))
+            return HTCLIENT;
+        return HTCAPTION;
+    }
+
+    return HTCLIENT;
+}
+
 inline LRESULT CALLBACK win32_shell_wndproc(HWND hwnd,
                                             UINT message,
                                             WPARAM wparam,
@@ -235,6 +322,18 @@ inline LRESULT CALLBACK win32_shell_wndproc(HWND hwnd,
     }
 
     switch (message) {
+        case WM_NCCALCSIZE:
+            if (state && state->integrated_chrome && wparam != 0)
+                return 0;
+            break;
+        case WM_NCHITTEST:
+            if (state && state->integrated_chrome) {
+                LRESULT dwm_result = 0;
+                if (DwmDefWindowProc(hwnd, message, wparam, lparam, &dwm_result))
+                    return dwm_result;
+                return hit_test_integrated_chrome(*state, hwnd, lparam);
+            }
+            break;
         case WM_CLOSE:
             DestroyWindow(hwnd);
             return 0;
@@ -408,7 +507,8 @@ inline HWND create_win32_window(int width,
     DWORD style = WS_OVERLAPPEDWINDOW;
     DWORD ex_style = 0;
     RECT rect{0, 0, width > 0 ? width : 800, height > 0 ? height : 600};
-    AdjustWindowRectEx(&rect, style, FALSE, ex_style);
+    if (!state.integrated_chrome)
+        AdjustWindowRectEx(&rect, style, FALSE, ex_style);
     auto wide_title = utf8_to_wide(title);
     return CreateWindowExW(
         ex_style,
@@ -490,6 +590,8 @@ int run_app_with_windows_platform(platform_api const& platform,
     shell.arrow_cursor = load_system_cursor(win32_cursor_arrow_id);
     shell.hand_cursor = load_system_cursor(win32_cursor_hand_id);
     shell.active_cursor = shell.arrow_cursor;
+    shell.integrated_chrome = options.chrome == WindowChromeStyle::IntegratedTitlebar;
+    shell.integrated_titlebar = options.integrated_titlebar;
     shell.running = true;
 
     HWND hwnd = create_win32_window(width, height, title, shell);
