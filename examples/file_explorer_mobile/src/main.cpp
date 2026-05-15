@@ -1,4 +1,5 @@
 #include <concepts>
+#include <cstdlib>
 #include <cstddef>
 #include <string>
 #include <type_traits>
@@ -38,9 +39,16 @@ using Msg = std::variant<
     ResetDemo,
     Resized>;
 
+file_explorer_demo::ExplorerState initial_explorer_state() {
+    auto state = file_explorer_demo::make_state("mobile");
+    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_SCENARIO")) {
+        file_explorer_demo::apply_startup_scenario(state, raw);
+    }
+    return state;
+}
+
 struct State {
-    file_explorer_demo::ExplorerState explorer =
-        file_explorer_demo::make_state("mobile");
+    file_explorer_demo::ExplorerState explorer = initial_explorer_state();
 };
 
 Msg on_search_changed(std::string text) {

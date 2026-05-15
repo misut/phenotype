@@ -435,6 +435,53 @@ inline void reset_demo_tree(ExplorerState& state, std::string_view profile) {
     state.status = "Demo files reset.";
 }
 
+inline void remove_regular_file_if_present(fs::path const& path) {
+    std::error_code ec;
+    if (fs::is_regular_file(path, ec)) {
+        ec.clear();
+        fs::remove(path, ec);
+    }
+}
+
+inline void apply_startup_scenario(
+        ExplorerState& state,
+        std::string_view scenario) {
+    auto name = lower_copy(trim(scenario));
+    if (name.empty() || name == "default")
+        return;
+
+    if (name == "created-preview" || name == "create") {
+        remove_regular_file_if_present(state.current / "Action Note.txt");
+        state.draft_name = "Action Note";
+        state.draft_body =
+            "Created from artifact scenario.\n"
+            "This note proves the file explorer can create and read a file.";
+        create_file(state);
+        state.mobile_tab = 1;
+        return;
+    }
+
+    if (name == "deleted-file" || name == "delete") {
+        remove_regular_file_if_present(state.current / "Delete Me.txt");
+        state.draft_name = "Delete Me";
+        state.draft_body =
+            "This temporary file should be deleted before the artifact frame.";
+        create_file(state);
+        delete_selected(state);
+        state.mobile_tab = 0;
+        return;
+    }
+
+    if (name == "documents-preview" || name == "read") {
+        select_location(state, "documents");
+        select_entry(state, "Project Notes.txt");
+        state.mobile_tab = 1;
+        return;
+    }
+
+    state.status = "Unknown startup scenario: " + std::string(scenario);
+}
+
 inline std::string entry_label(Entry const& entry) {
     std::string label = entry.folder ? "[Folder] " : "[File] ";
     label += entry.name;

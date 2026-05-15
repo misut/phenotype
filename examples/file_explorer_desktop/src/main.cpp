@@ -67,9 +67,16 @@ FinderViewMode initial_view_mode() {
     return raw ? view_mode_from_name(raw) : FinderViewMode::Icon;
 }
 
+file_explorer_demo::ExplorerState initial_explorer_state() {
+    auto state = file_explorer_demo::make_state("desktop");
+    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_SCENARIO")) {
+        file_explorer_demo::apply_startup_scenario(state, raw);
+    }
+    return state;
+}
+
 struct State {
-    file_explorer_demo::ExplorerState explorer =
-        file_explorer_demo::make_state("desktop");
+    file_explorer_demo::ExplorerState explorer = initial_explorer_state();
     FinderViewMode view_mode = initial_view_mode();
 };
 
@@ -1048,6 +1055,7 @@ void finder_status_bar(State const& state,
         layout::row([&] {
             layout::weighted(1.0f, [&] {
                 widget::text(finder_status(snap), TextSize::Small, TextColor::Muted);
+                widget::text(explorer.status, TextSize::Small, TextColor::Muted);
                 if (snap.has_selection) {
                     widget::text(compact_preview(snap.preview),
                                  TextSize::Small,
