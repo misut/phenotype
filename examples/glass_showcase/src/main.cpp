@@ -83,13 +83,12 @@ static void paint_backdrop(phenotype::Painter& painter, bool high_contrast) {
         ? Color{71, 85, 105, 255}
         : Color{100, 116, 139, 255};
 
-    PaintRect base[] = {
-        {0.0f, 0.0f, 360.0f, 52.0f, Color{239, 246, 255, 255}},
-        {0.0f, 52.0f, 360.0f, 54.0f, Color{236, 253, 245, 255}},
-        {0.0f, 106.0f, 360.0f, 54.0f, Color{255, 247, 237, 255}},
-        {0.0f, 160.0f, 360.0f, 40.0f, Color{250, 245, 255, 255}},
-    };
-    painter.fill_rects(base, 4);
+    painter.linear_gradient_rect(
+        0.0f, 0.0f, 360.0f, 200.0f,
+        Color{239, 246, 255, 255},
+        Color{250, 245, 255, 255},
+        GradientAxis::Vertical,
+        18);
 
     PaintQuad planes[] = {
         {24.0f, 24.0f, 158.0f, 8.0f, 122.0f, 88.0f, 10.0f, 96.0f,

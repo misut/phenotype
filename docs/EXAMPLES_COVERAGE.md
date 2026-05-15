@@ -150,7 +150,7 @@ preserving a stable startup artifact contract.
 | `widget::link` | yes | no | no | yes | no | yes |
 | `widget::image` local | yes | no | no | no | asset/local | yes |
 | `widget::image` remote | yes | no | no | no | no | macOS/Windows |
-| `widget::canvas` | yes | yes | no | no | no | yes |
+| `widget::canvas` | yes | yes | yes | no | no | yes |
 | `widget::button` | yes | yes | yes | yes | yes | yes |
 | `ButtonVariant::Primary` | yes | yes | yes | no | no | yes |
 | `ButtonStyleOptions` | no | no | yes | no | no | yes |
@@ -224,12 +224,13 @@ Gaps:
 | `Path` / `stroke_path` | yes | no | no | parser/backend path | yes |
 | `FillPath` | yes | no | no | parser/backend path | yes |
 | `FillQuads` | yes | yes | no | backend path | yes |
-| `FillRects` | yes | yes | no | backend path | yes |
+| `FillRects` | yes | yes | yes | backend path | yes |
+| `Painter::linear_gradient_rect` | yes | yes | yes | via `FillRects` | yes |
 
 Gaps:
 
 - `examples/native` now has a paint command showcase for the advanced command
-  paths.
+  paths, including bounded gradient strips.
 - The remaining examples avoid decorative visual-only scenes; command-level
   coverage now comes from focused tests and the compact native showcase.
 

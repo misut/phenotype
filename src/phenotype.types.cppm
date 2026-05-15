@@ -222,6 +222,27 @@ struct PaintRect {
     Color color;
 };
 
+enum class GradientAxis {
+    Horizontal,
+    Vertical,
+};
+
+inline Color lerp_color(Color from, Color to, float t) noexcept {
+    if (t < 0.0f) t = 0.0f;
+    if (t > 1.0f) t = 1.0f;
+    auto lerp_channel = [t](unsigned char a, unsigned char b) {
+        auto const af = static_cast<float>(a);
+        auto const bf = static_cast<float>(b);
+        return static_cast<unsigned char>(af + (bf - af) * t + 0.5f);
+    };
+    return {
+        lerp_channel(from.r, to.r),
+        lerp_channel(from.g, to.g),
+        lerp_channel(from.b, to.b),
+        lerp_channel(from.a, to.a),
+    };
+}
+
 // ============================================================
 // Theme — design tokens (matches exon docs CSS variables)
 // ============================================================
@@ -862,6 +883,46 @@ public:
     }
     virtual void fill_rects(PaintRect const* rects, unsigned int count) {
         (void)rects; (void)count;
+    }
+    // Bounded linear-gradient helper. This deliberately lowers to
+    // `fill_rects` instead of adding a backend opcode, so every current
+    // renderer gets identical deterministic output. The strip count is
+    // stack-bounded to avoid per-frame heap churn in canvas hot paths.
+    virtual void linear_gradient_rect(float x, float y, float w, float h,
+                                      Color from, Color to,
+                                      GradientAxis axis = GradientAxis::Vertical,
+                                      unsigned int steps = 24) {
+        if (w == 0.0f || h == 0.0f)
+            return;
+        if (w < 0.0f) { x += w; w = -w; }
+        if (h < 0.0f) { y += h; h = -h; }
+
+        constexpr unsigned int max_steps = 64;
+        unsigned int count = steps == 0 ? 1 : steps;
+        if (count > max_steps)
+            count = max_steps;
+
+        PaintRect rects[max_steps]{};
+        for (unsigned int i = 0; i < count; ++i) {
+            float const t = count == 1
+                ? 0.0f
+                : static_cast<float>(i) / static_cast<float>(count - 1);
+            auto const color = lerp_color(from, to, t);
+            if (axis == GradientAxis::Horizontal) {
+                auto const x0 = x + w * static_cast<float>(i)
+                    / static_cast<float>(count);
+                auto const x1 = x + w * static_cast<float>(i + 1)
+                    / static_cast<float>(count);
+                rects[i] = PaintRect{x0, y, x1 - x0, h, color};
+            } else {
+                auto const y0 = y + h * static_cast<float>(i)
+                    / static_cast<float>(count);
+                auto const y1 = y + h * static_cast<float>(i + 1)
+                    / static_cast<float>(count);
+                rects[i] = PaintRect{x, y0, w, y1 - y0, color};
+            }
+        }
+        fill_rects(rects, count);
     }
     // Push / pop a rectangular clip region. The rect is canvas-local
     // (same coordinate system as `line` / `arc` / `stroke_path`); the
