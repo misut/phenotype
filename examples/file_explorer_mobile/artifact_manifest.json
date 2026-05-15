@@ -4,6 +4,9 @@
   "expect_platform": "macos",
   "require_frame": true,
   "require_labels": [
+    "Toolbar",
+    "Locations",
+    "Status Bar",
     "Files",
     "Browse",
     "Create",

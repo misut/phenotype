@@ -626,6 +626,51 @@ void test_material_surface_semantic_debug_fields() {
     assert(find_semantic_child(material_children, "button", "Action") != nullptr);
 }
 
+void test_material_app_chrome_helpers_are_semantic_materials() {
+    metrics::reset_all();
+    log::set_level(log::Severity::info);
+#if !defined(__wasi__) && !defined(__ANDROID__)
+    run<DiagState, DebugPlaneMsg>(diag_host,
+#else
+    run<DiagState, DebugPlaneMsg>(
+#endif
+        [](DiagState const&) {
+            layout::column([&] {
+                layout::toolbar([&] {
+                    widget::button<DebugPlaneMsg>("New", DebugPlaneNoop{});
+                    widget::button<DebugPlaneMsg>("Delete", DebugPlaneNoop{});
+                });
+                layout::sidebar(160.0f, [&] {
+                    widget::text("Locations");
+                });
+                layout::status_bar([&] {
+                    widget::text("Ready");
+                }, MaterialKind::Thick);
+            });
+        },
+        [](DiagState&, DebugPlaneMsg) {});
+
+    auto parsed = json::parse(detail::serialize_diag_snapshot_with_debug());
+    auto const& children = parsed.as_object()
+        .at("debug").as_object()
+        .at("semantic_tree").as_object()
+        .at("children").as_array();
+
+    auto const* toolbar = find_semantic_child(children, "material", "Toolbar");
+    auto const* sidebar = find_semantic_child(children, "material", "Sidebar");
+    auto const* status_bar = find_semantic_child(children, "material", "Status Bar");
+    assert(toolbar != nullptr);
+    assert(sidebar != nullptr);
+    assert(status_bar != nullptr);
+    assert(toolbar->at("material").as_object().at("kind").as_string() == "clear");
+    assert(sidebar->at("material").as_object().at("kind").as_string() == "thin");
+    assert(status_bar->at("material").as_object().at("kind").as_string()
+           == "thick");
+    assert(find_semantic_descendant(*toolbar, "button", "New") != nullptr);
+    assert(find_semantic_descendant(*sidebar, "text", "Locations") != nullptr);
+    assert(find_semantic_descendant(*status_bar, "text", "Ready") != nullptr);
+}
+
 void test_overlay_semantic_debug_nodes_are_screen_fixed() {
     metrics::reset_all();
     log::set_level(log::Severity::info);
@@ -874,6 +919,8 @@ int main() {
     std::printf("PASS: debug plane semantic tree shape + stability\n");
     test_material_surface_semantic_debug_fields();
     std::printf("PASS: material surface semantic debug fields\n");
+    test_material_app_chrome_helpers_are_semantic_materials();
+    std::printf("PASS: material app chrome helpers are semantic materials\n");
     test_overlay_semantic_debug_nodes_are_screen_fixed();
     std::printf("PASS: overlay semantic debug nodes stay screen fixed\n");
     test_material_runtime_record_json_contract();

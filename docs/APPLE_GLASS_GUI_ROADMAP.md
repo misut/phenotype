@@ -184,7 +184,10 @@ Widgets currently cover:
   card, scroll view, overlay, dialog, accordion, list items, divider, spacer.
 
 The style system is usable, but not yet material-aware. There is no first-class
-`Material`, `Surface`, `Toolbar`, `Sidebar`, or glass-control style contract.
+`layout::material_surface` is now the low-level material container, with
+first-class `layout::toolbar`, `layout::sidebar`, and `layout::status_bar`
+helpers for app chrome. A richer glass-control style contract remains future
+work.
 
 ### Diagnostics and LLM debugging
 
@@ -263,6 +266,8 @@ Apple-style glass interface while preserving platform parity:
   the glass contract into an app-like file-management workflow with toolbar,
   sidebar/location navigation, list content, preview, search, create, and
   delete actions;
+- first-class material app-chrome helpers for toolbar, sidebar, and status bar
+  surfaces so examples do not need to hand-roll every glass container shape;
 - tests that cover command encoding, parser behavior, fallback policy, and at
   least one captured-frame invariant on native backends.
 

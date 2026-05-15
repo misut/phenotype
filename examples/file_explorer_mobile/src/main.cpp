@@ -100,7 +100,12 @@ void update(State& state, Msg msg) {
 void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
-    layout::material_surface(MaterialKind::Clear, [&] {
+    layout::material_surface(layout::MaterialSurfaceOptions{
+        .kind = MaterialKind::Clear,
+        .padding = SpaceToken::Md,
+        .gap = SpaceToken::Sm,
+        .semantic_label = "Toolbar",
+    }, [&] {
         widget::text("Files");
         widget::text(snap.relative_location, TextSize::Small, TextColor::Muted);
         layout::spacer(8);
@@ -113,19 +118,26 @@ void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
         widget::tabs<Msg>(tabs, explorer.mobile_tab, [](std::size_t index) -> Msg {
             return SelectTab{index};
         });
-    }, SpaceToken::Md, SpaceToken::Sm);
+    });
 }
 
 void location_strip() {
     using namespace phenotype;
-    layout::material_surface(MaterialKind::Thin, [&] {
+    layout::material_surface(layout::MaterialSurfaceOptions{
+        .kind = MaterialKind::Thin,
+        .direction = FlexDirection::Row,
+        .padding = SpaceToken::Sm,
+        .gap = SpaceToken::Xs,
+        .cross_align = CrossAxisAlignment::Center,
+        .semantic_label = "Locations",
+    }, [&] {
         layout::row([&] {
             widget::button<Msg>("Root", SelectLocation{"root"});
             widget::button<Msg>("Docs", SelectLocation{"documents"});
             widget::button<Msg>("Pics", SelectLocation{"pictures"});
             widget::button<Msg>("Shared", SelectLocation{"shared"});
         }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
-    }, SpaceToken::Sm, SpaceToken::Xs);
+    });
 }
 
 void browse_tab(file_explorer_demo::Snapshot const& snap) {
@@ -226,7 +238,7 @@ void view(State const& state) {
             } else {
                 create_tab(state);
             }
-            layout::material_surface(MaterialKind::Thick, [&] {
+            layout::status_bar([&] {
                 widget::text("Status");
                 std::string detail = "Status: " + state.explorer.status;
                 detail += "\nViewport: ";
@@ -234,7 +246,7 @@ void view(State const& state) {
                 detail += " x ";
                 detail += std::to_string(state.explorer.viewport_height);
                 widget::code(detail);
-            }, SpaceToken::Sm, SpaceToken::Xs);
+            }, MaterialKind::Thick);
         }, SpaceToken::Sm);
     });
 }

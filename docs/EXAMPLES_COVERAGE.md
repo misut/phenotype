@@ -202,6 +202,7 @@ Gaps:
 | `layout::dialog` | yes | no | no | no | no | no | yes |
 | `layout::accordion` | yes | no | no | no | no | no | yes |
 | `layout::material_surface` | yes | all kinds | no | no | no | no | yes |
+| `layout::toolbar` / `sidebar` / `status_bar` | file explorer | no | no | no | no | no | yes |
 | `layout::list_items` / `item` | yes | no | no | no | yes | no | yes |
 | `layout::divider` | no | no | no | no | yes | no | yes |
 | `layout::spacer` | yes | yes | yes | yes | yes | yes | yes |
@@ -215,6 +216,9 @@ Gaps:
   and the first material surface.
 - `examples/glass_showcase` covers clear, thin, regular, and thick material
   surfaces in one artifact-oriented scene.
+- `examples/file_explorer_desktop` and `examples/file_explorer_mobile` cover
+  the first app-chrome material helpers: toolbar, sidebar/location strip, and
+  status bar surfaces.
 
 ## Paint command coverage
 

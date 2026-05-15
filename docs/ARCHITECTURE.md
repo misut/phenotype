@@ -256,6 +256,11 @@ layers that float above content. phenotype follows that boundary in its
 contract language. Backends may render an Apple-inspired glass effect, but the
 core material API remains a cross-platform semantic contract with explicit
 fallbacks rather than a claim to reproduce private system component behavior.
+The layout DSL exposes this boundary through `layout::material_surface` for
+low-level material containers and `layout::toolbar`, `layout::sidebar`, and
+`layout::status_bar` for common app chrome. Those helpers only configure
+layout and semantic labels; they still emit the same `MaterialRect` command and
+flow through the pure planner/backend executor contract above.
 
 ## Native backend structure
 
