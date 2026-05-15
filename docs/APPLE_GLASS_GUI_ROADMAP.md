@@ -124,8 +124,7 @@ Missing primitives for true glass:
 - backend-native gradient shader paths. The current `LinearGradientRect`
   command intentionally lowers to bounded strips in each backend so every
   renderer shares deterministic output while a future shader path can optimize
-  the same command without changing app code;
-- foreground vibrancy tokens that adapt text/icon colors on top of material.
+  the same command without changing app code.
 
 The current fallback can approximate glass with translucent rounded surfaces
 over rich content. macOS now has a bounded sampled-backdrop material path.
@@ -156,8 +155,8 @@ The returned `MaterialPlan` describes the source command descriptor, blur
 radius, tint, saturation, luminance curve, edge highlight, noise/dither,
 shadow, material container analysis, pure shape analysis, backdrop sampling,
 fallback path, debug metadata, resolved quality policy, pass expectations,
-sampling kernel, resource budgets, and verifier expectations. The plan also
-carries a
+sampling kernel, foreground legibility/vibrancy recommendation, resource
+budgets, and verifier expectations. The plan also carries a
 `luminance_curve` contract: sampled glass uses the backdrop-driven
 `adaptive-backdrop-luma` curve, while deterministic fallback uses
 `fallback-flat`.
@@ -171,6 +170,11 @@ Backdrops also degrade through an explicit
 sets an unusable blur/tap budget, and when the render target exceeds the
 resolved `max_backdrop_pixels` budget. Backends execute the plan; they do not
 re-decide policy.
+`MaterialPlan.foreground` resolves primary, secondary, and accent foreground
+recommendations with a named scheme, source, estimated background luminance,
+contrast ratios, accessibility flags, and deterministic/vibrancy booleans. This
+keeps text and icon legibility policy in the pure material layer instead of
+letting each backend invent foreground colors for glass surfaces.
 `MaterialPlan.shape` turns raw material geometry into the executable radius,
 area, radius limit, and clamp status consumed by native backends. This keeps
 Finder-style rounded chrome and mobile card surfaces debuggable from artifacts
@@ -226,9 +230,9 @@ The current debug plane already provides important pieces:
 - native frame capture on macOS and Windows, explicit unsupported fields on
   WASI;
 - remote image queue/debug state on macOS and Windows.
-- resolved material plans with pass expectations, quality policy, resource
-  budgets, fallback paths/reasons, verifier expectations, derived runtime
-  summaries, and backend executor counters.
+- resolved material plans with pass expectations, quality policy, foreground
+  contrast recommendations, resource budgets, fallback paths/reasons, verifier
+  expectations, derived runtime summaries, and backend executor counters.
 
 This is now strong enough for the current material CI gates: an LLM can inspect
 the manifest failure path, material plan summary, fallback reason distribution,
@@ -245,8 +249,8 @@ Remaining gaps:
   additional backends as they gain native material rendering;
 - Android CI device/emulator wiring remains a policy and runner-capacity
   decision;
-- foreground vibrancy tokens and backend-native gradient shader execution remain
-  future work for a fuller Apple-style material vocabulary.
+- backend-native gradient shader execution remains future work for a fuller
+  Apple-style material vocabulary.
 
 ### Examples
 
@@ -255,7 +259,7 @@ Current runnable examples under `examples/`:
 | Example | Role | Current value |
 |---|---|---|
 | `examples/native` | Native widget showcase | Best desktop acceptance scene for shared widgets, input debug, images, scrolling, resizing |
-| `examples/glass_showcase` | Material showcase | Exercises deterministic backdrop regions, macOS sampled backdrop material, all public material kinds, semantic material metadata, and startup artifact capture |
+| `examples/glass_showcase` | Material showcase | Exercises deterministic backdrop regions, macOS sampled backdrop material, all public material kinds, material foreground/vibrancy metadata, semantic material metadata, and startup artifact capture |
 | `examples/file_explorer_desktop` | Finder-style desktop app example | Exercises glass toolbar/sidebar/icon-grid composition, Finder-like action clusters, document/image/video/folder thumbnail probes, and sandboxed view/read/create/duplicate/delete file workflows |
 | `examples/file_explorer_mobile` | Mobile file explorer app example | Exercises a compact browse/preview/create flow with the same sandboxed file model, duplicate/delete action metadata, and all material kinds |
 | `examples/android` | Android APK example | Exercises GameActivity/Vulkan/native Android route |
@@ -305,7 +309,7 @@ or material problems without manual visual guessing:
 - every visual scene has a semantic tree with stable roles and labels;
 - every material surface appears in debug output with type, opacity, blur,
   fallback availability, bounds, contrast intent, material container identity,
-  and a backend-resolved `MaterialPlan`;
+  foreground contrast recommendation, and a backend-resolved `MaterialPlan`;
 - native frame captures are available on macOS and Windows;
 - visual verifier output names exact failing JSON paths or frame regions,
   expected values, actual values, likely layer/pass, and suggested next check;
@@ -336,7 +340,7 @@ Done means `examples/` is a local acceptance suite, not just demos:
 |---|---|---|
 | Analyze current phenotype progress | This document, `README.md`, `docs/ARCHITECTURE.md`, `docs/DEBUG_WORKFLOW.md`, examples and tests | Keep updated as milestones land |
 | Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, material container/union identity, macOS sampled-backdrop rendering, resolved runtime fallback plans on Windows/Android, snapshot fallback contracts elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
-| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, startup bundle verifier, optional pixel-region checks, material/container/shape plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
+| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, startup bundle verifier, optional pixel-region checks, material/container/shape/foreground plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
 | Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, backdrop pixels, bounded texture copies, deterministic fallback, pure effective-radius shape bounds, backend `material_runtime_summary` counters cross-checked by the verifier, and backend `material_executor_summary` budget/timing telemetry guarded by artifact manifests | Keep tightening backend timing budgets as more native material renderers land |
 | Runnable examples under `examples/` | Native, glass showcase, desktop/mobile file explorer, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |

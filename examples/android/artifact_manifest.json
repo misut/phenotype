@@ -32,7 +32,7 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "9": 1
+      "10": 1
     },
     "roles": {
       "surface": 1

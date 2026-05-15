@@ -859,6 +859,20 @@ void test_material_runtime_record_json_contract() {
            == obj.at("edge_highlight").as_float());
     assert(luminance_curve.at("backdrop_driven").as_bool() == false);
     assert(luminance_curve.at("bounded").as_bool() == true);
+    auto const& foreground = obj.at("foreground").as_object();
+    assert(foreground.at("scheme").as_string() == "solid-fallback");
+    assert(foreground.at("source").as_string() == "fallback-material");
+    assert(foreground.at("backdrop_driven").as_bool() == false);
+    assert(foreground.at("high_contrast").as_bool() == false);
+    assert(foreground.at("uses_vibrancy").as_bool() == false);
+    assert(foreground.at("deterministic").as_bool() == true);
+    assert(foreground.at("primary").as_object().at("a").as_integer() == 255);
+    assert(foreground.at("primary_contrast_ratio").as_float()
+           >= foreground.at("minimum_contrast_ratio").as_float());
+    assert(foreground.at("secondary_contrast_ratio").as_float()
+           >= foreground.at("minimum_contrast_ratio").as_float());
+    assert(foreground.at("accent_contrast_ratio").as_float()
+           >= foreground.at("minimum_contrast_ratio").as_float());
     auto const& decision_trace = obj.at("decision_trace").as_object();
     assert(decision_trace.at("has_material").as_bool() == true);
     assert(decision_trace.at("target_ready").as_bool() == true);
@@ -916,6 +930,10 @@ void test_material_runtime_record_json_contract() {
     assert(pure_summary.valid_shape_count == 1);
     assert(pure_summary.rounded_shape_count == 1);
     assert(pure_summary.radius_clamped_count == 0);
+    assert(pure_summary.foreground_backdrop_driven_count == 0);
+    assert(pure_summary.foreground_high_contrast_count == 0);
+    assert(pure_summary.foreground_vibrant_count == 0);
+    assert(pure_summary.min_foreground_contrast_ratio > 4.5f);
     assert(pure_summary.max_surface_area == 160.0f * 64.0f);
     assert(pure_summary.max_effective_radius == 12.0f);
     assert(pure_summary.max_radius_limit == 32.0f);
@@ -943,6 +961,13 @@ void test_material_runtime_record_json_contract() {
     assert(summary_obj.at("valid_shape_count").as_integer() == 1);
     assert(summary_obj.at("rounded_shape_count").as_integer() == 1);
     assert(summary_obj.at("radius_clamped_count").as_integer() == 0);
+    assert(summary_obj.at("foreground_backdrop_driven_count").as_integer()
+           == 0);
+    assert(summary_obj.at("foreground_high_contrast_count").as_integer()
+           == 0);
+    assert(summary_obj.at("foreground_vibrant_count").as_integer() == 0);
+    assert(summary_obj.at("min_foreground_contrast_ratio").as_float()
+           > 4.5f);
     assert(summary_obj.at("max_surface_area").as_float() == 160.0f * 64.0f);
     assert(summary_obj.at("max_effective_radius").as_float() == 12.0f);
     assert(summary_obj.at("max_radius_limit").as_float() == 32.0f);

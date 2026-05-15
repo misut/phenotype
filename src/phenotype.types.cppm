@@ -172,6 +172,10 @@ struct MaterialStyle {
     float blur_radius = 0.0f;
     Color tint = {0, 0, 0, 0};
     Color border = {0, 0, 0, 0};
+    Color foreground = {0, 0, 0, 255};
+    Color secondary_foreground = {0, 0, 0, 255};
+    Color accent_foreground = {0, 0, 0, 255};
+    Color strong_accent_foreground = {0, 0, 0, 255};
     float saturation = 1.0f;
     float luminance_floor = 0.0f;
     float luminance_gain = 1.0f;

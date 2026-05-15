@@ -145,6 +145,22 @@ def material_plan(
             "luminance_gain_delta": 0.0,
             "edge_highlight_delta": 0.0,
         },
+        "foreground": {
+            "primary": {"r": 17, "g": 24, "b": 39, "a": 255},
+            "secondary": {"r": 71, "g": 85, "b": 105, "a": 255},
+            "accent": {"r": 8, "g": 128, "b": 124, "a": 255},
+            "scheme": "solid-fallback",
+            "source": "fallback-material",
+            "background_luma": 0.72,
+            "primary_contrast_ratio": 12.0,
+            "secondary_contrast_ratio": 6.0,
+            "accent_contrast_ratio": 4.5,
+            "minimum_contrast_ratio": 4.5,
+            "backdrop_driven": False,
+            "high_contrast": False,
+            "uses_vibrancy": False,
+            "deterministic": True,
+        },
         "fallback": True,
         "fallback_path": "unsupported-backend",
         "fallback_reason": "backend reports no material backdrop blur support",
@@ -199,6 +215,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     assert isinstance(plan["primary_pass"], dict)
     assert isinstance(plan["sampling_kernel"], dict)
     assert isinstance(plan["luminance_curve"], dict)
+    assert isinstance(plan["foreground"], dict)
     plan["plan_id"] = "material.regular.liquid-glass"
     plan["backdrop_sampling"] = True
     plan["fallback"] = False
@@ -245,6 +262,12 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     plan["luminance_curve"].update({
         "name": "adaptive-backdrop-luma",
         "backdrop_driven": True,
+    })
+    plan["foreground"].update({
+        "scheme": "vibrant-balanced",
+        "source": "backdrop-analysis",
+        "backdrop_driven": True,
+        "uses_vibrancy": True,
     })
     assert isinstance(plan["resource_budget"], dict)
     plan["resource_budget"]["max_sampling_kernel_radius"] = 2
@@ -300,10 +323,22 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "valid_shape_count": 1 if shape["valid"] else 0,
         "rounded_shape_count": 1 if shape["rounded"] else 0,
         "radius_clamped_count": 1 if shape["radius_clamped"] else 0,
+        "foreground_backdrop_driven_count": (
+            1 if plan["foreground"]["backdrop_driven"] else 0
+        ),
+        "foreground_high_contrast_count": (
+            1 if plan["foreground"]["high_contrast"] else 0
+        ),
+        "foreground_vibrant_count": (
+            1 if plan["foreground"]["uses_vibrancy"] else 0
+        ),
         "max_surface_area": shape["surface_area"],
         "max_effective_radius": shape["effective_radius"],
         "max_radius_limit": shape["radius_limit"],
         "max_normalized_radius": shape["normalized_radius"],
+        "min_foreground_contrast_ratio": (
+            plan["foreground"]["primary_contrast_ratio"]
+        ),
         "unbounded_texture_copy": 0 if budget["bounded_texture_copy"] else 1,
         "non_deterministic_fallback": (
             0 if budget["deterministic_fallback"] else 1
