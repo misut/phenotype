@@ -609,6 +609,7 @@ struct SemanticNodeSnapshot {
         float noise_opacity = 0.0f;
         float shadow_alpha = 0.0f;
         float shadow_radius = 0.0f;
+        MaterialContainerDescriptor container{};
         bool fallback = false;
         std::string fallback_reason;
         std::string contrast_intent;
@@ -723,6 +724,53 @@ namespace detail {
         if (auto provider = platform_runtime_details_provider_storage())
             return provider();
         return json::Value{json::Object{}};
+    }
+
+    inline json::Value material_container_descriptor_json(
+            MaterialContainerDescriptor const& descriptor) {
+        json::Object out;
+        out.emplace(
+            "mode",
+            json::Value{material_container_mode_name(descriptor.mode())});
+        out.emplace(
+            "container_id",
+            json::Value{
+                static_cast<std::int64_t>(descriptor.container_id)});
+        out.emplace(
+            "union_id",
+            json::Value{static_cast<std::int64_t>(descriptor.union_id)});
+        out.emplace("spacing", json::Value{descriptor.spacing});
+        out.emplace("interactive", json::Value{descriptor.interactive});
+        out.emplace(
+            "morph_transitions",
+            json::Value{descriptor.morph_transitions});
+        return json::Value{std::move(out)};
+    }
+
+    inline json::Value material_container_analysis_json(
+            MaterialContainerAnalysis const& analysis) {
+        json::Object out;
+        out.emplace("mode", json::Value{analysis.mode_name});
+        out.emplace(
+            "container_id",
+            json::Value{
+                static_cast<std::int64_t>(analysis.container_id)});
+        out.emplace(
+            "union_id",
+            json::Value{static_cast<std::int64_t>(analysis.union_id)});
+        out.emplace("spacing", json::Value{analysis.spacing});
+        out.emplace("interactive", json::Value{analysis.interactive});
+        out.emplace(
+            "morph_transitions",
+            json::Value{analysis.morph_transitions});
+        out.emplace("participates", json::Value{analysis.participates});
+        out.emplace(
+            "shared_backdrop_scope",
+            json::Value{analysis.shared_backdrop_scope});
+        out.emplace(
+            "shape_union_expected",
+            json::Value{analysis.shape_union_expected});
+        return json::Value{std::move(out)};
     }
 
     inline json::Value material_plan_runtime_json(
@@ -849,6 +897,10 @@ namespace detail {
             json::Value{
                 material_surface_role_name(plan.command_descriptor.role)});
         command_descriptor.emplace(
+            "container",
+            material_container_descriptor_json(
+                plan.command_descriptor.container));
+        command_descriptor.emplace(
             "opacity",
             json::Value{plan.command_descriptor.opacity});
         command_descriptor.emplace(
@@ -889,6 +941,12 @@ namespace detail {
         verifier.emplace(
             "require_edge_highlight",
             json::Value{plan.verifier.require_edge_highlight});
+        verifier.emplace(
+            "require_container_identity",
+            json::Value{plan.verifier.require_container_identity});
+        verifier.emplace(
+            "require_container_morph_contract",
+            json::Value{plan.verifier.require_container_morph_contract});
         verifier.emplace(
             "min_luma_delta",
             json::Value{plan.verifier.min_luma_delta});
@@ -936,6 +994,9 @@ namespace detail {
         resource_budget.emplace(
             "max_backdrop_pixels",
             json::Value{plan.resource_budget.max_backdrop_pixels});
+        resource_budget.emplace(
+            "max_container_spacing",
+            json::Value{plan.resource_budget.max_container_spacing});
         resource_budget.emplace(
             "bounded_texture_copy",
             json::Value{plan.resource_budget.bounded_texture_copy});
@@ -1023,6 +1084,9 @@ namespace detail {
         out.emplace(
             "role",
             json::Value{material_surface_role_name(plan.role)});
+        out.emplace(
+            "container",
+            material_container_analysis_json(plan.container));
         out.emplace("plan_id", json::Value{plan.plan_id});
         out.emplace(
             "command_descriptor",
@@ -1119,6 +1183,24 @@ namespace detail {
             json::Value{static_cast<std::int64_t>(summary.max_pass_count)});
         out.emplace("max_backdrop_pixels",
                     json::Value{summary.max_backdrop_pixels});
+        out.emplace("max_container_spacing",
+                    json::Value{summary.max_container_spacing});
+        out.emplace(
+            "containered_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.containered_count)});
+        out.emplace(
+            "unioned_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.unioned_count)});
+        out.emplace(
+            "interactive_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.interactive_count)});
+        out.emplace(
+            "morph_transition_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.morph_transition_count)});
         out.emplace(
             "unbounded_texture_copy",
             json::Value{
@@ -1467,6 +1549,10 @@ inline json::Value semantic_node_to_json(SemanticNodeSnapshot const& node) {
             json::Value{node.material->noise_opacity});
         material.emplace("shadow_alpha", json::Value{node.material->shadow_alpha});
         material.emplace("shadow_radius", json::Value{node.material->shadow_radius});
+        material.emplace(
+            "container",
+            detail::material_container_descriptor_json(
+                node.material->container));
         material.emplace("fallback", json::Value{node.material->fallback});
         material.emplace(
             "fallback_reason",

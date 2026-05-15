@@ -189,54 +189,71 @@ static void view(State const& state) {
                 layout::spacer(6);
                 widget::text("Every public MaterialKind is present as a semantic node in this scene. The probe represents functional layers; unsupported backends keep the documented translucent fallback.");
                 layout::spacer(10);
-                material_panel(
-                    MaterialKind::Clear,
-                    "Clear Material",
-                    "Lowest opacity surface for contextual controls over rich content.",
-                    "context");
-                layout::spacer(8);
-                material_panel(
-                    MaterialKind::Thin,
-                    "Thin Material",
-                    "Balanced surface for floating navigation and secondary controls.",
-                    "balanced");
-                layout::spacer(8);
-                material_panel(
-                    MaterialKind::Regular,
-                    "Regular Material",
-                    "Default legible glass layer for primary controls and inspectors.",
-                    "legible");
-                layout::spacer(8);
-                material_panel(
-                    MaterialKind::Thick,
-                    "Thick Material",
-                    "High-contrast surface for dense text over active content.",
-                    "high-contrast");
+                layout::material_container(
+                    layout::MaterialContainerOptions{
+                        .container_id = 1001u,
+                        .spacing = 20.0f,
+                        .morph_transitions = true,
+                    },
+                    [] {
+                        material_panel(
+                            MaterialKind::Clear,
+                            "Clear Material",
+                            "Lowest opacity surface for contextual controls over rich content.",
+                            "context");
+                        layout::spacer(8);
+                        material_panel(
+                            MaterialKind::Thin,
+                            "Thin Material",
+                            "Balanced surface for floating navigation and secondary controls.",
+                            "balanced");
+                        layout::spacer(8);
+                        material_panel(
+                            MaterialKind::Regular,
+                            "Regular Material",
+                            "Default legible glass layer for primary controls and inspectors.",
+                            "legible");
+                        layout::spacer(8);
+                        material_panel(
+                            MaterialKind::Thick,
+                            "Thick Material",
+                            "High-contrast surface for dense text over active content.",
+                            "high-contrast");
+                    });
             });
 
             layout::spacer(12);
-            layout::material_surface(MaterialKind::Regular, [&] {
-                widget::text("Control Layer");
-                layout::spacer(6);
-                widget::text("This panel combines material semantics with ordinary controls so input, focus, and artifact labels stay debuggable.");
-                layout::spacer(8);
-                {
-                    std::vector<phenotype::str> tabs;
-                    tabs.emplace_back("Comfortable", 11u);
-                    tabs.emplace_back("Balanced", 8u);
-                    tabs.emplace_back("Dense", 5u);
-                    widget::tabs<Msg>(tabs, state.selected_density,
-                        [](std::size_t index) -> Msg {
-                            return SelectDensity{index};
+            layout::material_container(
+                layout::MaterialContainerOptions{
+                    .container_id = 1003u,
+                    .spacing = 12.0f,
+                    .interactive = true,
+                    .morph_transitions = false,
+                },
+                [&] {
+                    layout::material_surface(MaterialKind::Regular, [&] {
+                        widget::text("Control Layer");
+                        layout::spacer(6);
+                        widget::text("This panel combines material semantics with ordinary controls so input, focus, and artifact labels stay debuggable.");
+                        layout::spacer(8);
+                        {
+                            std::vector<phenotype::str> tabs;
+                            tabs.emplace_back("Comfortable", 11u);
+                            tabs.emplace_back("Balanced", 8u);
+                            tabs.emplace_back("Dense", 5u);
+                            widget::tabs<Msg>(tabs, state.selected_density,
+                                [](std::size_t index) -> Msg {
+                                    return SelectDensity{index};
+                                });
+                        }
+                        layout::spacer(8);
+                        widget::text(std::string("Density: ") + density_label(state.selected_density));
+                        layout::spacer(8);
+                        widget::text_field<Msg>("Debug note", state.note, on_note_changed);
+                        layout::spacer(8);
+                        widget::progress(state.high_contrast_backdrop ? 0.85f : 0.55f, 300.0f);
                         });
-                }
-                layout::spacer(8);
-                widget::text(std::string("Density: ") + density_label(state.selected_density));
-                layout::spacer(8);
-                widget::text_field<Msg>("Debug note", state.note, on_note_changed);
-                layout::spacer(8);
-                widget::progress(state.high_contrast_backdrop ? 0.85f : 0.55f, 300.0f);
-            });
+                });
 
             if (state.inspector_open) {
                 layout::spacer(12);
@@ -269,15 +286,24 @@ static void view(State const& state) {
         layout::spacer(430);
         layout::row([&] {
             layout::sized_box(280.0f, [&] {
-                layout::material_surface(
-                    MaterialKind::Thin,
-                    [] {
-                        widget::text("Visible Blur Probe");
-                        layout::spacer(4);
-                        widget::text("Samples the deterministic backdrop.");
+                layout::material_container(
+                    layout::MaterialContainerOptions{
+                        .container_id = 1002u,
+                        .union_id = 1u,
+                        .spacing = 28.0f,
+                        .morph_transitions = true,
                     },
-                    SpaceToken::Sm,
-                    SpaceToken::Xs);
+                    [] {
+                        layout::material_surface(
+                            MaterialKind::Thin,
+                            [] {
+                                widget::text("Visible Blur Probe");
+                                layout::spacer(4);
+                                widget::text("Samples the deterministic backdrop.");
+                            },
+                            SpaceToken::Sm,
+                            SpaceToken::Xs);
+                    });
             });
         }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Center);
     });

@@ -9,7 +9,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 4;
+inline constexpr std::uint32_t material_plan_contract_version = 5;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -91,6 +91,8 @@ inline char const* material_fallback_path_name(MaterialFallbackPath path) noexce
 struct MaterialVerifierExpectation {
     bool require_backdrop_source = false;
     bool require_edge_highlight = false;
+    bool require_container_identity = false;
+    bool require_container_morph_contract = false;
     float min_luma_delta = 0.0f;
     int min_unique_colors = 1;
     char const* region_name = "material";
@@ -112,6 +114,7 @@ struct MaterialResourceBudget {
     unsigned int max_sample_taps = 0;
     unsigned int max_pass_count = 1;
     std::int64_t max_backdrop_pixels = 0;
+    float max_container_spacing = 0.0f;
     bool bounded_texture_copy = true;
     bool deterministic_fallback = true;
 };
@@ -138,6 +141,19 @@ struct MaterialRenderTargetAnalysis {
     std::int64_t pixel_count = 0;
     bool ready = false;
     bool within_backdrop_budget = true;
+};
+
+struct MaterialContainerAnalysis {
+    std::uint32_t container_id = 0;
+    std::uint32_t union_id = 0;
+    float spacing = 0.0f;
+    bool interactive = false;
+    bool morph_transitions = false;
+    bool participates = false;
+    MaterialContainerMode mode = MaterialContainerMode::Isolated;
+    char const* mode_name = "isolated";
+    bool shared_backdrop_scope = false;
+    bool shape_union_expected = false;
 };
 
 struct MaterialDecisionTrace {
@@ -169,6 +185,7 @@ struct MaterialPlan {
     MaterialCommandDescriptor command_descriptor{};
     MaterialGeometry geometry{};
     MaterialRenderTargetAnalysis render_target{};
+    MaterialContainerAnalysis container{};
     MaterialDecisionTrace decision_trace{};
     float opacity = 0.0f;
     float blur_radius = 0.0f;
@@ -219,6 +236,11 @@ struct MaterialRuntimeSummary {
     unsigned int max_sample_taps = 0;
     unsigned int max_pass_count = 0;
     std::int64_t max_backdrop_pixels = 0;
+    float max_container_spacing = 0.0f;
+    std::uint32_t containered_count = 0;
+    std::uint32_t unioned_count = 0;
+    std::uint32_t interactive_count = 0;
+    std::uint32_t morph_transition_count = 0;
     std::uint32_t unbounded_texture_copy = 0;
     std::uint32_t non_deterministic_fallback = 0;
 };
@@ -274,6 +296,17 @@ inline void accumulate_material_runtime_summary(
     summary.max_backdrop_pixels = std::max(
         summary.max_backdrop_pixels,
         plan.resource_budget.max_backdrop_pixels);
+    summary.max_container_spacing = std::max(
+        summary.max_container_spacing,
+        plan.resource_budget.max_container_spacing);
+    if (plan.container.participates)
+        ++summary.containered_count;
+    if (plan.container.shape_union_expected)
+        ++summary.unioned_count;
+    if (plan.container.interactive)
+        ++summary.interactive_count;
+    if (plan.container.morph_transitions)
+        ++summary.morph_transition_count;
     if (!plan.resource_budget.bounded_texture_copy)
         ++summary.unbounded_texture_copy;
     if (!plan.resource_budget.deterministic_fallback)
@@ -411,6 +444,7 @@ inline MaterialCommandDescriptor material_command_descriptor(
     return MaterialCommandDescriptor{
         style.kind,
         style.role,
+        style.container,
         style.opacity,
         style.blur_radius,
         style.tint,
@@ -488,6 +522,7 @@ inline MaterialStyle material_style_for_command(
         descriptor.shadow_radius,
         theme);
     style.role = descriptor.role;
+    style.container = descriptor.container;
     return style;
 }
 
@@ -531,6 +566,7 @@ inline MaterialRequest material_request_for_command(MaterialKind kind,
         MaterialCommandDescriptor{
             kind,
             MaterialSurfaceRole::Surface,
+            {},
             opacity,
             blur_radius,
             tint,
@@ -599,6 +635,25 @@ inline MaterialRenderTargetAnalysis analyze_material_render_target(
         : std::int64_t{0};
     analysis.within_backdrop_budget =
         analysis.pixel_count <= max_backdrop_pixels;
+    return analysis;
+}
+
+inline MaterialContainerAnalysis analyze_material_container(
+        MaterialContainerDescriptor descriptor,
+        bool reduce_motion) noexcept {
+    MaterialContainerAnalysis analysis{};
+    analysis.container_id = descriptor.container_id;
+    analysis.union_id = descriptor.union_id;
+    analysis.spacing = std::max(0.0f, descriptor.spacing);
+    analysis.interactive = descriptor.interactive;
+    analysis.morph_transitions =
+        descriptor.morph_transitions && !reduce_motion;
+    analysis.participates = descriptor.participates();
+    analysis.mode = descriptor.mode();
+    analysis.mode_name = material_container_mode_name(analysis.mode);
+    analysis.shared_backdrop_scope = analysis.participates;
+    analysis.shape_union_expected =
+        analysis.mode == MaterialContainerMode::Union;
     return analysis;
 }
 
@@ -716,6 +771,9 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.render_target = analyze_material_render_target(
         environment.render_target,
         resolved_quality.max_backdrop_pixels);
+    plan.container = analyze_material_container(
+        style.container,
+        environment.capabilities.reduce_motion);
     plan.opacity = std::clamp(style.opacity, 0.0f, 1.0f);
     plan.blur_radius = std::clamp(
         style.blur_radius, 0.0f, max_blur_radius);
@@ -742,6 +800,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.resource_budget.max_pass_count = 1;
     plan.resource_budget.max_backdrop_pixels =
         resolved_quality.max_backdrop_pixels;
+    plan.resource_budget.max_container_spacing = plan.container.spacing;
     plan.resource_budget.bounded_texture_copy = true;
     plan.resource_budget.deterministic_fallback = true;
     plan.backdrop = analyze_material_backdrop(environment.backdrop);
@@ -906,6 +965,9 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.verifier.require_backdrop_source = plan.backdrop_sampling;
     plan.verifier.require_edge_highlight = plan.edge_highlight > 0.0f
         && !plan.fallback();
+    plan.verifier.require_container_identity = plan.container.participates;
+    plan.verifier.require_container_morph_contract =
+        plan.container.morph_transitions;
     plan.verifier.min_luma_delta = plan.backdrop_sampling ? 8.0f : 3.0f;
     plan.verifier.min_unique_colors = plan.backdrop_sampling ? 4 : 2;
     plan.verifier.region_name = style.verifier_profile;

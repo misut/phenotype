@@ -32,11 +32,18 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "4": 1
+      "5": 1
     },
     "roles": {
       "surface": 1
     },
+    "container_modes": {
+      "isolated": 1
+    },
+    "container_participating": 0,
+    "container_unioned": 0,
+    "container_interactive": 0,
+    "container_morph_transitions": 0,
     "kinds": {
       "regular": 1
     },
@@ -70,6 +77,8 @@
     },
     "verifier_require_backdrop_source": 0,
     "verifier_require_edge_highlight": 0,
+    "verifier_require_container_identity": 0,
+    "verifier_require_container_morph_contract": 0,
     "verifier_profiles": {
       "regular-legibility-backdrop": 1
     },
@@ -84,6 +93,7 @@
     "max_sample_taps_lte": 25,
     "max_pass_count_lte": 1,
     "max_backdrop_pixels_lte": 4000000,
+    "max_container_spacing_lte": 0,
     "max_pass_texture_copy_pixels_lte": 0,
     "total_pass_texture_copy_pixels_lte": 0,
     "total_runtime_passes_lte": 1,

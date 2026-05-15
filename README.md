@@ -294,24 +294,22 @@ translucent fallback pass so artifacts explain why backdrop sampling did not
 run.
 
 ```bash
-cd examples/workbook
+cd examples/file_explorer_desktop
 exon run
 ```
 
-`examples/workbook` is a product-style revenue forecast workbook. It combines
-fixed-grid layout, keyed cells, text input, formula validation, dependency
-recompute, selected-cell editing, audit state, and a canvas trend chart in one
-runnable native example.
+`examples/file_explorer_desktop` is a Finder-style desktop workflow with glass
+toolbar/sidebar/list/preview/status surfaces and sandboxed temp-root file view,
+read, create, and delete actions.
 
 ```bash
-cd examples/flight_board
+cd examples/file_explorer_mobile
 exon run
 ```
 
-`examples/flight_board` is a visual flight operations dashboard. It validates
-canvas route motion, generated media-like destination visuals, compact status
-icons, state transitions, selected-flight synchronization, activity-feed
-updates, and timeline progress in one runnable native example.
+`examples/file_explorer_mobile` is the compact mobile version of the same
+file-management model, with browse, preview, and create flows over the same
+sandboxed data shape.
 
 As an exon dependency:
 

@@ -1511,6 +1511,44 @@ inline MaterialStyle material_style(MaterialKind kind) noexcept {
     return material_style_for_kind(kind, detail::g_app.theme);
 }
 
+struct MaterialContainerOptions {
+    std::uint32_t container_id = 0;
+    std::uint32_t union_id = 0;
+    float spacing = 20.0f;
+    bool interactive = false;
+    bool morph_transitions = true;
+};
+
+inline MaterialContainerDescriptor material_container_descriptor(
+        MaterialContainerOptions const& options) noexcept {
+    return MaterialContainerDescriptor{
+        options.container_id,
+        options.union_id,
+        options.spacing,
+        options.interactive,
+        options.morph_transitions};
+}
+
+inline std::vector<MaterialContainerDescriptor>& material_container_stack() {
+    static std::vector<MaterialContainerDescriptor>& stack =
+        *new std::vector<MaterialContainerDescriptor>();
+    return stack;
+}
+
+inline MaterialContainerDescriptor current_material_container() {
+    auto& stack = material_container_stack();
+    return stack.empty() ? MaterialContainerDescriptor{} : stack.back();
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void material_container(MaterialContainerOptions options, F&& builder) {
+    auto& stack = material_container_stack();
+    stack.push_back(material_container_descriptor(options));
+    builder();
+    stack.pop_back();
+}
+
 // column — vertical flex container.
 //
 // Builder overload accepts gap / cross-axis / main-axis props. The
@@ -1657,6 +1695,8 @@ struct MaterialSurfaceOptions {
     float max_width = 0.0f;
     float fixed_height = -1.0f;
     char const* semantic_label = "";
+    bool inherit_material_container = true;
+    MaterialContainerDescriptor container{};
 };
 
 inline void configure_material_surface(LayoutNode& node,
@@ -1664,6 +1704,9 @@ inline void configure_material_surface(LayoutNode& node,
     auto const& t = detail::g_app.theme;
     node.material = material_style(options.kind);
     node.material.role = options.role;
+    node.material.container = options.inherit_material_container
+        ? current_material_container()
+        : options.container;
     node.background = node.material.tint;
     node.border_color = node.material.border;
     node.border_width = options.kind == MaterialKind::None ? 0.0f : 1.0f;
@@ -3030,6 +3073,7 @@ inline void collect_semantic_nodes(NodeHandle node_h,
             .noise_opacity = node.material.noise_opacity,
             .shadow_alpha = node.material.shadow_alpha,
             .shadow_radius = node.material.shadow_radius,
+            .container = node.material.container,
             .fallback = node.material.fallback,
             .fallback_reason = node.material.fallback_reason,
             .contrast_intent = node.material.contrast_intent,

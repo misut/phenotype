@@ -137,6 +137,7 @@ filesystem writes, and image capture remain in backend adapters. The function
 accepts immutable inputs:
 
 - `MaterialStyle`
+- material container descriptor
 - geometry
 - capability snapshot
 - backdrop descriptor
@@ -147,17 +148,19 @@ accepts immutable inputs:
 
 The returned `MaterialPlan` describes the source command descriptor, blur
 radius, tint, saturation, luminance curve, edge highlight, noise/dither,
-shadow, backdrop sampling, fallback path, debug metadata, resolved quality
-policy, pass expectations, resource budgets, and verifier expectations.
+shadow, material container analysis, backdrop sampling, fallback path, debug
+metadata, resolved quality policy, pass expectations, resource budgets, and
+verifier expectations.
 Backdrops also degrade through an explicit
 `quality-policy` fallback when the pure quality policy disables sampling or
 sets an unusable blur/tap budget, and when the render target exceeds the
 resolved `max_backdrop_pixels` budget. Backends execute the plan; they do not
 re-decide policy.
 `MaterialRect` commands carry the material node's surface role plus numeric
-optics/effects descriptor into every backend as `MaterialCommandDescriptor`, so
-runtime plans no longer need to reconstruct app-chrome intent, saturation,
-luminance, edge, noise, or shadow values from the current theme.
+optics/effects descriptor and material container identity into every backend as
+`MaterialCommandDescriptor`, so runtime plans no longer need to reconstruct
+app-chrome intent, saturation, luminance, edge, noise, shadow, or grouped glass
+identity from the current theme.
 The macOS backend now reads AppKit accessibility display preferences at the
 edge and passes them as immutable planner inputs. Reduce Transparency resolves
 to the deterministic material fallback path, Increase Contrast adjusts opacity
@@ -235,8 +238,6 @@ Current runnable examples under `examples/`:
 | `examples/glass_showcase` | Material showcase | Exercises deterministic backdrop regions, macOS sampled backdrop material, all public material kinds, semantic material metadata, and startup artifact capture |
 | `examples/file_explorer_desktop` | Finder-style desktop app example | Exercises glass toolbar/sidebar/list/preview composition plus sandboxed view/read/create/delete file workflows |
 | `examples/file_explorer_mobile` | Mobile file explorer app example | Exercises a compact browse/preview/create flow with the same sandboxed file model and all material kinds |
-| `examples/flight_board` | Data-dense operational app | Exercises canvas drawing, grids, animation-ish state churn, custom cells, and richer visual composition |
-| `examples/workbook` | Spreadsheet-like app | Exercises dense tables, editing workflow, formula-style UI, and custom cell surfaces |
 | `examples/android` | Android APK example | Exercises GameActivity/Vulkan/native Android route |
 
 The examples now have a checked-in coverage matrix, generic pixel-region
@@ -260,6 +261,9 @@ Apple-style glass interface while preserving platform parity:
   where the backend cannot support it;
 - semantic/debug snapshots that describe material style, fallback reason, and
   contrast expectations;
+- material container and shape-union identity that lets related glass surfaces
+  share backdrop scope and morph expectations without moving policy into a
+  backend;
 - a glass showcase under `examples/` with controls/navigation as the glass
   layer and rich content below it;
 - desktop and mobile file explorer examples under `examples/` that translate
@@ -280,8 +284,8 @@ or material problems without manual visual guessing:
 - every artifact contains `snapshot.json`;
 - every visual scene has a semantic tree with stable roles and labels;
 - every material surface appears in debug output with type, opacity, blur,
-  fallback availability, bounds, contrast intent, and a backend-resolved
-  `MaterialPlan`;
+  fallback availability, bounds, contrast intent, material container identity,
+  and a backend-resolved `MaterialPlan`;
 - native frame captures are available on macOS and Windows;
 - visual verifier output names exact failing JSON paths or frame regions,
   expected values, actual values, likely layer/pass, and suggested next check;
@@ -301,7 +305,6 @@ Done means `examples/` is a local acceptance suite, not just demos:
 - Finder-style desktop and mobile file explorer examples exercise the material
   system as a real app surface, with filesystem side effects isolated to an
   example-owned temp directory;
-- `examples/flight_board` remains the dense operational performance scene;
 - Android has a documented local device/emulator contract runner.
 
 ## Prompt-to-artifact checklist
@@ -309,12 +312,12 @@ Done means `examples/` is a local acceptance suite, not just demos:
 | Requirement | Current evidence | Gap |
 |---|---|---|
 | Analyze current phenotype progress | This document, `README.md`, `docs/ARCHITECTURE.md`, `docs/DEBUG_WORKFLOW.md`, examples and tests | Keep updated as milestones land |
-| Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, macOS sampled-backdrop rendering, resolved runtime fallback plans on Windows/Android, snapshot fallback contracts elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
-| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, startup bundle verifier, optional pixel-region checks, material plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, ratio-based blur probes, a glass showcase manifest, a macOS native glass showcase CI gate, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
+| Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, material container/union identity, macOS sampled-backdrop rendering, resolved runtime fallback plans on Windows/Android, snapshot fallback contracts elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
+| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, startup bundle verifier, optional pixel-region checks, material/container plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
 | Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, backdrop pixels, bounded texture copies, deterministic fallback, backend `material_runtime_summary` counters cross-checked by the verifier, and backend `material_executor_summary` budget/timing telemetry guarded by artifact manifests | Keep tightening backend timing budgets as more native material renderers land |
-| Runnable examples under `examples/` | Native, glass showcase, desktop/mobile file explorer, flight board, workbook, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |
-| All phenotype features testable locally | `docs/EXAMPLES_COVERAGE.md` maps current examples/tests to public surfaces and artifact expectations; `tools/verify_artifact_bundle.py` validates startup bundles, optional pixel regions, exact material plan summaries, semantic/runtime material parity, material resource bounds, runtime numeric bounds, `examples/glass_showcase/artifact_manifest.json`, `examples/file_explorer_desktop/artifact_manifest.json`, `examples/file_explorer_mobile/artifact_manifest.json`, and `examples/android/artifact_manifest.json`; `tools/verify_glass_showcase_artifact.sh` wraps the glass gate; `tools/verify_file_explorer_artifacts.sh` wraps the local desktop/mobile file explorer gate; `mise run android:contract` wraps the Android device/emulator artifact route | Android CI wiring remains |
+| Runnable examples under `examples/` | Native, glass showcase, desktop/mobile file explorer, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |
+| All phenotype features testable locally | `docs/EXAMPLES_COVERAGE.md` maps current examples/tests to public surfaces and artifact expectations; `tools/verify_artifact_bundle.py` validates startup bundles, optional pixel regions, exact material/container plan summaries, semantic/runtime material parity, material resource bounds, runtime numeric bounds, `examples/glass_showcase/artifact_manifest.json`, `examples/file_explorer_desktop/artifact_manifest.json`, `examples/file_explorer_mobile/artifact_manifest.json`, and `examples/android/artifact_manifest.json`; `tools/verify_glass_showcase_artifact.sh` wraps the glass gate; `tools/verify_file_explorer_artifacts.sh` wraps the local desktop/mobile file explorer gate; `mise run android:contract` wraps the Android device/emulator artifact route | Android CI wiring remains |
 
 ## Implementation roadmap
 
@@ -335,8 +338,7 @@ Validation:
 - `mise exec -- exon test`;
 - `cd examples/native && mise exec -- exon build`;
 - `cd examples/glass_showcase && mise exec -- exon build`;
-- `cd examples/flight_board && mise exec -- exon build`;
-- `cd examples/workbook && mise exec -- exon build`;
+- `tools/verify_file_explorer_artifacts.sh`;
 - `cd docs && mise exec -- exon build --target wasm32-wasi`.
 - produce and verify startup artifact bundles for desktop examples.
 
@@ -441,8 +443,7 @@ Current seed:
 - PR CI keeps the slow macOS artifact capture as a local acceptance check rather
   than a required job; main-branch pushes run only artifact/docs build gates
   instead of the full code test matrix. WASI root tests and docs builds run on
-  Linux runners, while macOS runners stay reserved for the main-branch native
-  glass artifact gate.
+  Linux runners, while macOS runners stay reserved for native artifact builds.
 
 Validation:
 
@@ -459,7 +460,7 @@ Goal: every public feature has a local acceptance route.
 Deliverables:
 
 - complete feature-to-example matrix;
-- native, flight board, workbook, glass showcase, and Android routes documented;
+- native, glass showcase, file explorer, and Android routes documented;
 - test or build gate for every example that can run on the current host;
 - Android emulator/device runner planned or implemented.
 

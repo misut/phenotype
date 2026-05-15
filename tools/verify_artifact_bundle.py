@@ -53,6 +53,12 @@ ALLOWED_MATERIAL_SURFACE_ROLES = {
     "toolbar",
 }
 
+ALLOWED_MATERIAL_CONTAINER_MODES = {
+    "container",
+    "isolated",
+    "union",
+}
+
 ALLOWED_MATERIAL_PASS_NAMES = {
     "backdrop-sample-blur",
     "none",
@@ -81,7 +87,7 @@ ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
     "not-sampled",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 4
+MATERIAL_PLAN_CONTRACT_VERSION = 5
 
 
 def suggested_action_for_failure(
@@ -114,6 +120,11 @@ def suggested_action_for_failure(
         return (
             "Inspect semantic material nodes, MaterialCommandDescriptor "
             "serialization, and backend MaterialRect command decoding.")
+    if likely_layer == "material-container":
+        return (
+            "Inspect layout::material_container, MaterialSurfaceOptions "
+            "container inheritance, MaterialRect container payload writes, "
+            "and MaterialPlan.container serialization.")
     if likely_layer == "material-or-backdrop-pass":
         return (
             "Inspect renderer.material_plans[], the backend material/backdrop "
@@ -370,6 +381,10 @@ def material_failure_context(
             "material_fallback_nodes"),
         "semantic_material_kinds": semantic_summary.get("material_kinds"),
         "semantic_material_roles": semantic_summary.get("material_roles"),
+        "semantic_material_container_modes": semantic_summary.get(
+            "material_container_modes"),
+        "semantic_material_container_ids": semantic_summary.get(
+            "material_container_ids"),
         "semantic_verifier_profiles": semantic_summary.get(
             "material_verifier_profiles"),
     }
@@ -397,6 +412,8 @@ def material_failure_context(
             material_plan_summary.get("contract_versions"))
         material_contract["plan_surface_roles"] = (
             material_plan_summary.get("roles"))
+        material_contract["plan_container"] = (
+            material_plan_summary.get("container"))
         material_contract["fallback_paths"] = material_plan_summary.get(
             "fallback_paths")
         material_contract["pass_executors"] = material_plan_summary.get(
@@ -428,13 +445,45 @@ def number_at(value: JsonObject, key: str) -> int | float | None:
     return item if isinstance(item, (int, float)) and not isinstance(item, bool) else None
 
 
+def material_container_from(value: JsonObject) -> JsonObject | None:
+    container = value.get("container")
+    if not isinstance(container, dict):
+        return None
+    mode = string_at(container, "mode")
+    container_id = number_at(container, "container_id")
+    union_id = number_at(container, "union_id")
+    spacing = number_at(container, "spacing")
+    interactive = container.get("interactive")
+    morph_transitions = container.get("morph_transitions")
+    if (not mode
+            or container_id is None
+            or union_id is None
+            or spacing is None
+            or not isinstance(interactive, bool)
+            or not isinstance(morph_transitions, bool)):
+        return None
+    return {
+        "mode": mode,
+        "container_id": int(container_id),
+        "union_id": int(union_id),
+        "spacing": float(spacing),
+        "interactive": interactive,
+        "morph_transitions": morph_transitions,
+    }
+
+
 def material_descriptor_from(value: JsonObject) -> JsonObject | None:
     kind = string_at(value, "kind")
     role = string_at(value, "role")
     tint = value.get("tint")
-    if not kind or not role or not isinstance(tint, dict):
+    container = material_container_from(value)
+    if not kind or not role or container is None or not isinstance(tint, dict):
         return None
-    descriptor: JsonObject = {"kind": kind, "role": role}
+    descriptor: JsonObject = {
+        "kind": kind,
+        "role": role,
+        "container": container,
+    }
     tint_descriptor: JsonObject = {}
     for key in ("r", "g", "b", "a"):
         channel = number_at(tint, key)
@@ -452,6 +501,18 @@ def material_descriptor_from(value: JsonObject) -> JsonObject | None:
 
 def descriptor_signature(value: JsonObject) -> str:
     return json.dumps(value, sort_keys=True, separators=(",", ":"))
+
+
+def container_identity_signature(value: JsonObject | None) -> str | None:
+    if not isinstance(value, dict):
+        return None
+    return descriptor_signature({
+        "mode": value.get("mode"),
+        "container_id": value.get("container_id"),
+        "union_id": value.get("union_id"),
+        "spacing": value.get("spacing"),
+        "interactive": value.get("interactive"),
+    })
 
 
 def check_object_field(
@@ -834,6 +895,13 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "fallback_reasons",
         "kinds",
         "roles",
+        "container_modes",
+        "container_ids",
+        "union_ids",
+        "container_participating",
+        "container_unioned",
+        "container_interactive",
+        "container_morph_transitions",
         "pass_names",
         "pass_executors",
         "backdrop_available",
@@ -853,6 +921,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "decision_blockers",
         "verifier_require_backdrop_source",
         "verifier_require_edge_highlight",
+        "verifier_require_container_identity",
+        "verifier_require_container_morph_contract",
         "verifier_profiles",
         "verifier_region_layers",
     }
@@ -878,7 +948,13 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "decision_reduced_transparency",
             "decision_increase_contrast",
             "decision_reduce_motion",
+            "container_participating",
+            "container_unioned",
+            "container_interactive",
+            "container_morph_transitions",
             "verifier_require_backdrop_source",
+            "verifier_require_container_identity",
+            "verifier_require_container_morph_contract",
             "verifier_require_edge_highlight"):
         if field in value:
             spec[field] = non_negative_int(
@@ -888,6 +964,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "fallback_paths": ALLOWED_MATERIAL_FALLBACK_PATHS,
         "kinds": ALLOWED_MATERIAL_KINDS,
         "roles": ALLOWED_MATERIAL_SURFACE_ROLES,
+        "container_modes": ALLOWED_MATERIAL_CONTAINER_MODES,
         "pass_names": ALLOWED_MATERIAL_PASS_NAMES,
         "pass_executors": ALLOWED_MATERIAL_PASS_EXECUTORS,
         "luminance_responses": ALLOWED_MATERIAL_LUMINANCE_RESPONSES,
@@ -906,6 +983,14 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         spec["contract_versions"] = string_int_map(
             value["contract_versions"],
             "require_material_plan_summary.contract_versions")
+    if "container_ids" in value:
+        spec["container_ids"] = string_int_map(
+            value["container_ids"],
+            "require_material_plan_summary.container_ids")
+    if "union_ids" in value:
+        spec["union_ids"] = string_int_map(
+            value["union_ids"],
+            "require_material_plan_summary.union_ids")
     if "backdrop_sources" in value:
         spec["backdrop_sources"] = string_int_map(
             value["backdrop_sources"],
@@ -944,6 +1029,8 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
         "max_sample_taps_lte",
         "max_pass_count_lte",
         "max_backdrop_pixels_lte",
+        "max_container_spacing_lte",
+        "max_container_spacing_gte",
         "max_pass_texture_copy_pixels_lte",
         "max_pass_texture_copy_pixels_gte",
         "total_pass_texture_copy_pixels_lte",
@@ -1355,6 +1442,23 @@ def walk_semantic(node: Any, summary: JsonObject) -> None:
         if isinstance(verifier_profile, str):
             profiles = summary["material_verifier_profiles"]
             profiles[verifier_profile] = profiles.get(verifier_profile, 0) + 1
+        container = material_container_from(material)
+        if isinstance(container, dict):
+            mode = container["mode"]
+            modes = summary["material_container_modes"]
+            modes[mode] = modes.get(mode, 0) + 1
+            container_id = int(container["container_id"])
+            if container_id > 0:
+                summary["material_container_participating"] += 1
+                ids = summary["material_container_ids"]
+                key = str(container_id)
+                ids[key] = ids.get(key, 0) + 1
+            if int(container["union_id"]) > 0:
+                summary["material_container_unioned"] += 1
+            if container["interactive"] is True:
+                summary["material_container_interactive"] += 1
+            if container["morph_transitions"] is True:
+                summary["material_container_morph_transitions"] += 1
         if material.get("fallback") is True:
             summary["material_fallback_nodes"] += 1
 
@@ -1377,6 +1481,12 @@ def summarize_semantic_tree(tree: JsonObject) -> JsonObject:
         "labels": [],
         "material_descriptor_missing": 0,
         "material_descriptors": [],
+        "material_container_ids": {},
+        "material_container_modes": {},
+        "material_container_participating": 0,
+        "material_container_unioned": 0,
+        "material_container_interactive": 0,
+        "material_container_morph_transitions": 0,
         "material_fallback_nodes": 0,
         "material_kinds": {},
         "material_nodes": 0,
@@ -1401,6 +1511,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "kind",
     "role",
     "plan_id",
+    "container",
     "command_descriptor",
     "geometry",
     "render_target",
@@ -1495,6 +1606,8 @@ MATERIAL_BACKDROP_DELTA_FIELDS = (
 MATERIAL_VERIFIER_FIELDS = (
     "require_backdrop_source",
     "require_edge_highlight",
+    "require_container_identity",
+    "require_container_morph_contract",
     "min_luma_delta",
     "min_unique_colors",
     "region_name",
@@ -1530,6 +1643,16 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "fallback_reasons": {},
         "kinds": {},
         "roles": {},
+        "container": {
+            "modes": {},
+            "container_ids": {},
+            "union_ids": {},
+            "participating": 0,
+            "unioned": 0,
+            "interactive": 0,
+            "morph_transitions": 0,
+            "max_spacing": 0.0,
+        },
         "pass_names": {},
         "pass_executors": {},
         "plan_ids": [],
@@ -1540,6 +1663,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "verifier_profiles": {},
         "verifier_require_backdrop_source": 0,
         "verifier_require_edge_highlight": 0,
+        "verifier_require_container_identity": 0,
+        "verifier_require_container_morph_contract": 0,
         "render_target": {
             "ready": 0,
             "within_backdrop_budget": 0,
@@ -1573,6 +1698,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "max_sample_taps": 0,
             "max_pass_count": 0,
             "max_backdrop_pixels": 0,
+            "max_container_spacing": 0.0,
             "total_runtime_passes": 0,
             "active_runtime_passes": 0,
             "backdrop_runtime_passes": 0,
@@ -1694,6 +1820,118 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     "vocabulary together."),
                 record_success=False)
 
+        plan_container = check_object_field(
+            report,
+            plan,
+            "container",
+            plan_path,
+            likely_layer="material-container",
+            hint=(
+                "MaterialPlan.container should expose the pure glass "
+                "container/union identity for this surface."))
+        if plan_container is not None:
+            container_summary = summary["container"]
+            mode = check_string_field(
+                report,
+                plan_container,
+                "mode",
+                f"{plan_path}.container",
+                likely_layer="material-container",
+                hint="Material container mode should be isolated, container, or union.")
+            if isinstance(mode, str):
+                modes = container_summary["modes"]
+                modes[mode] = modes.get(mode, 0) + 1
+                report.check(
+                    "material container mode is known",
+                    mode in ALLOWED_MATERIAL_CONTAINER_MODES,
+                    path=f"{plan_path}.container.mode",
+                    expected=sorted(ALLOWED_MATERIAL_CONTAINER_MODES),
+                    actual=mode,
+                    likely_layer="material-container",
+                    hint="Keep MaterialContainerMode serialization and verifier vocabulary aligned.",
+                    record_success=False)
+            container_id = check_number_field(
+                report,
+                plan_container,
+                "container_id",
+                f"{plan_path}.container",
+                min_value=0.0,
+                likely_layer="material-container",
+                hint="Material container ids must be stable non-negative integers.")
+            union_id = check_number_field(
+                report,
+                plan_container,
+                "union_id",
+                f"{plan_path}.container",
+                min_value=0.0,
+                likely_layer="material-container",
+                hint="Material union ids must be stable non-negative integers.")
+            spacing = check_number_field(
+                report,
+                plan_container,
+                "spacing",
+                f"{plan_path}.container",
+                min_value=0.0,
+                likely_layer="material-container",
+                hint="Material container spacing should be an explicit non-negative value.")
+            if isinstance(spacing, (int, float)):
+                container_summary["max_spacing"] = max(
+                    float(container_summary["max_spacing"]),
+                    float(spacing))
+                bounds = summary["resource_bounds"]
+                bounds["max_container_spacing"] = max(
+                    float(bounds["max_container_spacing"]),
+                    float(spacing))
+            for key in (
+                    "interactive",
+                    "morph_transitions",
+                    "participates",
+                    "shared_backdrop_scope",
+                    "shape_union_expected"):
+                value = check_bool_field(
+                    report,
+                    plan_container,
+                    key,
+                    f"{plan_path}.container",
+                    likely_layer="material-container",
+                    hint="Material container booleans must stay explicit.")
+                if value is True:
+                    if key == "participates":
+                        container_summary["participating"] += 1
+                    elif key == "shape_union_expected":
+                        container_summary["unioned"] += 1
+                    elif key == "interactive":
+                        container_summary["interactive"] += 1
+                    elif key == "morph_transitions":
+                        container_summary["morph_transitions"] += 1
+            if isinstance(container_id, (int, float)):
+                cid = int(container_id)
+                if cid > 0:
+                    ids = container_summary["container_ids"]
+                    key = str(cid)
+                    ids[key] = ids.get(key, 0) + 1
+            if isinstance(union_id, (int, float)):
+                uid = int(union_id)
+                if uid > 0:
+                    ids = container_summary["union_ids"]
+                    key = str(uid)
+                    ids[key] = ids.get(key, 0) + 1
+            expected_mode = "isolated"
+            if isinstance(container_id, (int, float)) and int(container_id) > 0:
+                expected_mode = "container"
+                if isinstance(union_id, (int, float)) and int(union_id) > 0:
+                    expected_mode = "union"
+            if isinstance(mode, str):
+                report.check(
+                    "material container mode matches ids",
+                    mode == expected_mode,
+                    path=f"{plan_path}.container.mode",
+                    expected=expected_mode,
+                    actual=mode,
+                    likely_layer="material-container",
+                    hint="MaterialContainerDescriptor.mode should be derived from container_id and union_id.",
+                    record_success=False)
+
         command_descriptor = check_object_field(
             report,
             plan,
@@ -1760,6 +1998,23 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         "Check MaterialRect role decoding and "
                         "MaterialCommandDescriptor serialization."),
                     record_success=False)
+            descriptor_container = material_container_from(command_descriptor)
+            plan_container_signature = container_identity_signature(
+                material_container_from(plan))
+            descriptor_container_signature = container_identity_signature(
+                descriptor_container)
+            report.check(
+                "material command descriptor container identity matches plan container",
+                descriptor_container_signature == plan_container_signature,
+                path=f"{plan_path}.command_descriptor.container",
+                expected=plan_container_signature,
+                actual=descriptor_container_signature,
+                likely_layer="material-container",
+                hint=(
+                    "The decoded MaterialRect container identity should feed "
+                    "MaterialPlan.container. Resolved morph_transitions may differ "
+                    "when Reduce Motion is enabled."),
+                record_success=False)
             descriptor_tint = check_object_field(
                 report,
                 command_descriptor,
@@ -2439,6 +2694,38 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         "require_edge_highlight should only be true for "
                         "non-fallback plans with a positive edge highlight."),
                     record_success=False)
+            if "require_container_identity" in verifier_values:
+                container = material_container_from(plan)
+                expected = (
+                    isinstance(container, dict)
+                    and int(container["container_id"]) > 0)
+                report.check(
+                    "material verifier container identity requirement is derived",
+                    verifier_values["require_container_identity"] == expected,
+                    path=f"{plan_path}.verifier.require_container_identity",
+                    expected=expected,
+                    actual=verifier_values["require_container_identity"],
+                    likely_layer="material-container",
+                    hint=(
+                        "require_container_identity should be true only for "
+                        "plans that participate in a material container."),
+                    record_success=False)
+            if "require_container_morph_contract" in verifier_values:
+                container = material_container_from(plan)
+                expected = (
+                    isinstance(container, dict)
+                    and container["morph_transitions"] is True)
+                report.check(
+                    "material verifier container morph requirement is derived",
+                    verifier_values["require_container_morph_contract"] == expected,
+                    path=f"{plan_path}.verifier.require_container_morph_contract",
+                    expected=expected,
+                    actual=verifier_values["require_container_morph_contract"],
+                    likely_layer="material-container",
+                    hint=(
+                        "require_container_morph_contract should mirror the "
+                        "pure MaterialPlan.container morph flag."),
+                    record_success=False)
             if "min_luma_delta" in verifier_values:
                 expected = 8.0 if backdrop_sampling is True else 3.0
                 report.check(
@@ -2593,6 +2880,18 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 bounds["max_backdrop_pixels"] = max(
                     int(bounds["max_backdrop_pixels"]),
                     int(max_backdrop_pixels))
+            max_container_spacing = check_number_field(
+                report,
+                resource_budget,
+                "max_container_spacing",
+                f"{plan_path}.resource_budget",
+                min_value=0.0,
+                likely_layer="material-container",
+                hint="Container spacing should be surfaced as a resource/debug bound.")
+            if isinstance(max_container_spacing, (int, float)):
+                bounds["max_container_spacing"] = max(
+                    float(bounds["max_container_spacing"]),
+                    float(max_container_spacing))
             bounded_texture_copy = check_bool_field(
                 report,
                 resource_budget,
@@ -3057,7 +3356,13 @@ def check_material_plan_summary_requirements(
             "decision_reduced_transparency",
             "decision_increase_contrast",
             "decision_reduce_motion",
+            "container_participating",
+            "container_unioned",
+            "container_interactive",
+            "container_morph_transitions",
             "verifier_require_backdrop_source",
+            "verifier_require_container_identity",
+            "verifier_require_container_morph_contract",
             "verifier_require_edge_highlight"):
         if field in spec:
             actual = summary.get(field)
@@ -3099,8 +3404,23 @@ def check_material_plan_summary_requirements(
                 summary_path = f"{base_path}.decision_trace.{nested_field}"
             elif field in (
                     "verifier_require_backdrop_source",
+                    "verifier_require_container_identity",
+                    "verifier_require_container_morph_contract",
                     "verifier_require_edge_highlight"):
                 summary_path = f"{base_path}.{field}"
+            elif field in (
+                    "container_participating",
+                    "container_unioned",
+                    "container_interactive",
+                    "container_morph_transitions"):
+                container_summary = summary.get("container")
+                if not isinstance(container_summary, dict):
+                    container_summary = {}
+                nested_field = field.removeprefix("container_")
+                if nested_field == "unioned":
+                    nested_field = "unioned"
+                actual = container_summary.get(nested_field)
+                summary_path = f"{base_path}.container.{nested_field}"
             report.check(
                 f"material plan summary {field} matches",
                 actual == spec[field],
@@ -3125,6 +3445,15 @@ def check_material_plan_summary_requirements(
         "roles": (
             "material-contract",
             "Inspect MaterialSurfaceRole serialization and MaterialRect command emission."),
+        "container_modes": (
+            "material-container",
+            "Inspect MaterialPlan.container.mode and layout::material_container usage."),
+        "container_ids": (
+            "material-container",
+            "Inspect MaterialPlan.container.container_id and material container inheritance."),
+        "union_ids": (
+            "material-container",
+            "Inspect MaterialPlan.container.union_id and unioned glass surfaces."),
         "pass_names": (
             "material-pass",
             "Inspect MaterialPlan.primary_pass and runtime pass serialization."),
@@ -3156,6 +3485,9 @@ def check_material_plan_summary_requirements(
             "contract_versions",
             "kinds",
             "roles",
+            "container_modes",
+            "container_ids",
+            "union_ids",
             "pass_names",
             "pass_executors",
             "backdrop_sources",
@@ -3167,6 +3499,17 @@ def check_material_plan_summary_requirements(
         if field in spec:
             actual = summary.get(field)
             summary_path = f"{base_path}.{field}"
+            if field in ("container_modes", "container_ids", "union_ids"):
+                container_summary = summary.get("container")
+                if not isinstance(container_summary, dict):
+                    container_summary = {}
+                nested = {
+                    "container_modes": "modes",
+                    "container_ids": "container_ids",
+                    "union_ids": "union_ids",
+                }[field]
+                actual = container_summary.get(nested)
+                summary_path = f"{base_path}.container.{nested}"
             if field == "backdrop_sources":
                 backdrop_summary = summary.get("backdrop")
                 if not isinstance(backdrop_summary, dict):
@@ -3220,6 +3563,7 @@ def check_material_resource_bounds_requirements(
         "max_sample_taps_lte": "max_sample_taps",
         "max_pass_count_lte": "max_pass_count",
         "max_backdrop_pixels_lte": "max_backdrop_pixels",
+        "max_container_spacing_lte": "max_container_spacing",
         "max_pass_texture_copy_pixels_lte": "max_pass_texture_copy_pixels",
         "total_pass_texture_copy_pixels_lte": "total_pass_texture_copy_pixels",
         "total_runtime_passes_lte": "total_runtime_passes",
@@ -3243,6 +3587,7 @@ def check_material_resource_bounds_requirements(
     min_field_map = {
         "max_plan_sample_taps_gte": "max_plan_sample_taps",
         "max_pass_texture_copy_pixels_gte": "max_pass_texture_copy_pixels",
+        "max_container_spacing_gte": "max_container_spacing",
         "total_pass_texture_copy_pixels_gte": "total_pass_texture_copy_pixels",
         "total_runtime_passes_gte": "total_runtime_passes",
         "active_runtime_passes_gte": "active_runtime_passes",
@@ -3324,6 +3669,16 @@ def check_material_runtime_summary_contract(
         "max_sample_taps": bounds.get("max_sample_taps"),
         "max_pass_count": bounds.get("max_pass_count"),
         "max_backdrop_pixels": bounds.get("max_backdrop_pixels"),
+        "max_container_spacing": bounds.get("max_container_spacing"),
+        "containered_count": summary.get("container", {}).get("participating")
+            if isinstance(summary.get("container"), dict) else None,
+        "unioned_count": summary.get("container", {}).get("unioned")
+            if isinstance(summary.get("container"), dict) else None,
+        "interactive_count": summary.get("container", {}).get("interactive")
+            if isinstance(summary.get("container"), dict) else None,
+        "morph_transition_count": summary.get("container", {}).get(
+            "morph_transitions")
+            if isinstance(summary.get("container"), dict) else None,
         "unbounded_texture_copy": bounds.get("unbounded_texture_copy"),
         "non_deterministic_fallback": bounds.get("non_deterministic_fallback"),
     }
@@ -3569,6 +3924,41 @@ def check_material_semantic_runtime_match(
             "The semantic tree and runtime plan summary disagree on material "
             "surface roles; check layout::MaterialSurfaceOptions.role, "
             "MaterialRect payload writes, and backend command decoding."))
+
+    semantic_container_modes = semantic_summary.get("material_container_modes")
+    runtime_container = material_plan_summary.get("container")
+    runtime_container_modes = (
+        runtime_container.get("modes")
+        if isinstance(runtime_container, dict)
+        else None)
+    report.check(
+        "material semantic/runtime container modes match",
+        semantic_container_modes == runtime_container_modes,
+        path=f"{base_path}.container_modes",
+        expected=semantic_container_modes,
+        actual=runtime_container_modes,
+        likely_layer="material-container",
+        hint=(
+            "The semantic tree and runtime plan summary disagree on material "
+            "container modes; check layout::material_container inheritance and "
+            "MaterialRect payload decoding."))
+
+    semantic_container_ids = semantic_summary.get("material_container_ids")
+    runtime_container_ids = (
+        runtime_container.get("container_ids")
+        if isinstance(runtime_container, dict)
+        else None)
+    report.check(
+        "material semantic/runtime container ids match",
+        semantic_container_ids == runtime_container_ids,
+        path=f"{base_path}.container_ids",
+        expected=semantic_container_ids,
+        actual=runtime_container_ids,
+        likely_layer="material-container",
+        hint=(
+            "The semantic tree and runtime plan summary disagree on material "
+            "container ids; inspect material_container scopes and command "
+            "descriptor serialization."))
 
     semantic_profiles = semantic_summary.get("material_verifier_profiles")
     runtime_profiles = material_plan_summary.get("verifier_profiles")

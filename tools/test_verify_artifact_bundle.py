@@ -31,9 +31,18 @@ def material_plan(
     primary_sample_taps: int = 0,
 ) -> dict[str, object]:
     primary = material_pass(primary_sample_taps)
+    container: dict[str, object] = {
+        "mode": "isolated",
+        "container_id": 0,
+        "union_id": 0,
+        "spacing": 0.0,
+        "interactive": False,
+        "morph_transitions": False,
+    }
     command_descriptor: dict[str, object] = {
         "kind": "regular",
         "role": "surface",
+        "container": container,
         "opacity": 0.58,
         "blur_radius": 22.0,
         "tint": {"r": 255, "g": 255, "b": 255, "a": 148},
@@ -50,6 +59,12 @@ def material_plan(
         "contract_version": verifier.MATERIAL_PLAN_CONTRACT_VERSION,
         "kind": "regular",
         "role": "surface",
+        "container": {
+            **container,
+            "participates": False,
+            "shared_backdrop_scope": False,
+            "shape_union_expected": False,
+        },
         "plan_id": "material.regular.fallback",
         "command_descriptor": command_descriptor,
         "geometry": {"x": 12.0, "y": 20.0, "w": 240.0, "h": 96.0, "radius": 10.0},
@@ -127,12 +142,15 @@ def material_plan(
             "max_sample_taps": 25,
             "max_pass_count": 1,
             "max_backdrop_pixels": 320 * 240,
+            "max_container_spacing": 0.0,
             "bounded_texture_copy": True,
             "deterministic_fallback": True,
         },
         "verifier": {
             "require_backdrop_source": False,
             "require_edge_highlight": False,
+            "require_container_identity": False,
+            "require_container_morph_contract": False,
             "min_luma_delta": 3.0,
             "min_unique_colors": 2,
             "region_name": "regular-legibility-backdrop",
@@ -162,6 +180,19 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "max_sample_taps": budget["max_sample_taps"],
         "max_pass_count": budget["max_pass_count"],
         "max_backdrop_pixels": budget["max_backdrop_pixels"],
+        "max_container_spacing": budget["max_container_spacing"],
+        "containered_count": (
+            1 if plan["container"]["participates"] else 0
+        ),
+        "unioned_count": (
+            1 if plan["container"]["shape_union_expected"] else 0
+        ),
+        "interactive_count": (
+            1 if plan["container"]["interactive"] else 0
+        ),
+        "morph_transition_count": (
+            1 if plan["container"]["morph_transitions"] else 0
+        ),
         "unbounded_texture_copy": 0 if budget["bounded_texture_copy"] else 1,
         "non_deterministic_fallback": (
             0 if budget["deterministic_fallback"] else 1
@@ -230,6 +261,14 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                             "noise_opacity": 0.014,
                             "shadow_alpha": 0.14,
                             "shadow_radius": 14.0,
+                            "container": {
+                                "mode": "isolated",
+                                "container_id": 0,
+                                "union_id": 0,
+                                "spacing": 0.0,
+                                "interactive": False,
+                                "morph_transitions": False,
+                            },
                             "fallback": True,
                             "verifier_profile": "regular-legibility-backdrop",
                         },
@@ -393,6 +432,59 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["decision_trace"][
                 "can_sample_backdrop"],
             0)
+
+    def test_command_descriptor_container_allows_resolved_reduce_motion(self) -> None:
+        plan = material_plan()
+        plan_container = plan["container"]
+        descriptor = plan["command_descriptor"]
+        verifier_contract = plan["verifier"]
+        resource_budget = plan["resource_budget"]
+        assert isinstance(plan_container, dict)
+        assert isinstance(descriptor, dict)
+        assert isinstance(verifier_contract, dict)
+        assert isinstance(resource_budget, dict)
+
+        request_container = {
+            "mode": "container",
+            "container_id": 41,
+            "union_id": 0,
+            "spacing": 12.0,
+            "interactive": False,
+            "morph_transitions": True,
+        }
+        descriptor["container"] = request_container
+        plan_container.update({
+            **request_container,
+            "morph_transitions": False,
+            "participates": True,
+            "shared_backdrop_scope": True,
+            "shape_union_expected": False,
+        })
+        verifier_contract["require_container_identity"] = True
+        verifier_contract["require_container_morph_contract"] = False
+        resource_budget["max_container_spacing"] = 12.0
+
+        root = snapshot(plan)
+        material_node = root["debug"]["semantic_tree"]["children"][0]
+        assert isinstance(material_node, dict)
+        material = material_node["material"]
+        assert isinstance(material, dict)
+        material["container"] = request_container
+        renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+        assert isinstance(renderer, dict)
+        renderer["material_runtime_summary"] = material_runtime_summary(plan)
+
+        code, report = self.run_verifier(root)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["failures"], [])
+        self.assertEqual(
+            report["material_plans"]["container"]["morph_transitions"],
+            0)
+        self.assertEqual(
+            report["semantic_tree"]["material_container_morph_transitions"],
+            1)
 
     def test_surface_role_mismatch_points_to_material_contract(self) -> None:
         plan = material_plan()

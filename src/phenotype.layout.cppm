@@ -215,6 +215,8 @@ inline bool cstr_equal(char const* a, char const* b) noexcept {
 
 inline bool material_equal(MaterialStyle const& a, MaterialStyle const& b) noexcept {
     return a.kind == b.kind
+        && a.role == b.role
+        && a.container == b.container
         && a.opacity == b.opacity
         && a.blur_radius == b.blur_radius
         && color_equal(a.tint, b.tint)

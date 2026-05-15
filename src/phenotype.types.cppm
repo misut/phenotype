@@ -103,9 +103,71 @@ inline MaterialSurfaceRole material_surface_role_from_wire(
     return MaterialSurfaceRole::Surface;
 }
 
+// Semantic grouping for material surfaces. This mirrors the platform guidance
+// that multiple glass shapes can be coordinated by a container and, when
+// appropriate, unioned into a shared optical shape. It is metadata for pure
+// planning and artifacts; backend rendering still consumes the resolved plan.
+enum class MaterialContainerMode {
+    Isolated,
+    Container,
+    Union,
+};
+
+inline char const* material_container_mode_name(
+        MaterialContainerMode mode) noexcept {
+    switch (mode) {
+        case MaterialContainerMode::Isolated:  return "isolated";
+        case MaterialContainerMode::Container: return "container";
+        case MaterialContainerMode::Union:     return "union";
+    }
+    return "isolated";
+}
+
+struct MaterialContainerDescriptor {
+    std::uint32_t container_id = 0;
+    std::uint32_t union_id = 0;
+    float spacing = 0.0f;
+    bool interactive = false;
+    bool morph_transitions = false;
+
+    constexpr bool participates() const noexcept {
+        return container_id != 0u;
+    }
+
+    constexpr MaterialContainerMode mode() const noexcept {
+        if (container_id == 0u)
+            return MaterialContainerMode::Isolated;
+        return union_id != 0u
+            ? MaterialContainerMode::Union
+            : MaterialContainerMode::Container;
+    }
+
+    constexpr bool operator==(MaterialContainerDescriptor const&) const = default;
+};
+
+inline unsigned int material_container_flags(
+        MaterialContainerDescriptor descriptor) noexcept {
+    return (descriptor.interactive ? 1u : 0u)
+        | (descriptor.morph_transitions ? 2u : 0u);
+}
+
+inline MaterialContainerDescriptor material_container_descriptor_from_wire(
+        unsigned int container_id,
+        unsigned int union_id,
+        float spacing,
+        unsigned int flags) noexcept {
+    return MaterialContainerDescriptor{
+        container_id,
+        union_id,
+        spacing,
+        (flags & 1u) != 0u,
+        (flags & 2u) != 0u};
+}
+
 struct MaterialStyle {
     MaterialKind kind = MaterialKind::None;
     MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
+    MaterialContainerDescriptor container{};
     float opacity = 0.0f;
     float blur_radius = 0.0f;
     Color tint = {0, 0, 0, 0};
@@ -128,6 +190,7 @@ struct MaterialStyle {
 struct MaterialCommandDescriptor {
     MaterialKind kind = MaterialKind::None;
     MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
+    MaterialContainerDescriptor container{};
     float opacity = 0.0f;
     float blur_radius = 0.0f;
     Color tint = {0, 0, 0, 0};
