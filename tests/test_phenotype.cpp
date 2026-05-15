@@ -1099,6 +1099,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     auto fallback_plan = plan_material_surface(request, fallback_env);
     assert(fallback_plan.contract_version == material_plan_contract_version);
     assert(fallback_plan.kind == MaterialKind::Regular);
+    assert(fallback_plan.role == MaterialSurfaceRole::Surface);
+    assert(fallback_plan.command_descriptor.role == MaterialSurfaceRole::Surface);
     assert(fallback_plan.fallback());
     assert(!fallback_plan.backdrop_sampling);
     assert(fallback_plan.render_target.width == 520);
@@ -1154,6 +1156,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     glass_env.backdrop.source = "previous-presented-frame";
     auto glass_plan = plan_material_surface(request, glass_env);
     assert(glass_plan.contract_version == material_plan_contract_version);
+    assert(glass_plan.role == MaterialSurfaceRole::Surface);
     assert(!glass_plan.fallback());
     assert(glass_plan.backdrop_sampling);
     assert(glass_plan.decision_trace.backend_supports_backdrop);
@@ -1382,6 +1385,7 @@ void test_material_surface_emits_material_rect_command() {
     assert(material != nullptr);
     auto const& descriptor = material->material;
     assert(descriptor.kind == MaterialKind::Regular);
+    assert(descriptor.role == MaterialSurfaceRole::Surface);
     assert(descriptor.opacity > 0.5f);
     assert(descriptor.blur_radius >= 20.0f);
     assert(descriptor.tint.a > 0);
@@ -1411,6 +1415,7 @@ void test_material_command_preserves_style_optics() {
 
     auto& material = detail::node_at(material_h);
     material.material = layout::material_style(MaterialKind::Regular);
+    material.material.role = MaterialSurfaceRole::Content;
     material.material.opacity = 0.63f;
     material.material.blur_radius = 18.0f;
     material.material.tint = Color{32, 64, 96, 144};
@@ -1443,6 +1448,7 @@ void test_material_command_preserves_style_optics() {
     assert(cmd != nullptr);
     auto const& descriptor = cmd->material;
     assert(descriptor.kind == MaterialKind::Regular);
+    assert(descriptor.role == MaterialSurfaceRole::Content);
     assert(std::fabs(descriptor.opacity - 0.63f) < 0.0001f);
     assert(std::fabs(descriptor.blur_radius - 18.0f) < 0.0001f);
     assert(descriptor.tint.r == 32 && descriptor.tint.g == 64
@@ -1473,6 +1479,8 @@ void test_material_command_preserves_style_optics() {
             detail::g_app.theme),
         env);
     assert(!plan.fallback());
+    assert(plan.role == MaterialSurfaceRole::Content);
+    assert(plan.command_descriptor.role == MaterialSurfaceRole::Content);
     assert(std::fabs(plan.saturation - 0.73f) < 0.0001f);
     assert(std::fabs(plan.luminance_floor - 0.19f) < 0.0001f);
     assert(std::fabs(plan.luminance_gain - 1.31f) < 0.0001f);

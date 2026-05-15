@@ -62,8 +62,50 @@ inline char const* material_kind_name(MaterialKind kind) noexcept {
     return "none";
 }
 
+// Functional role for a material surface. This is semantic information, not
+// backend policy: pure planning and artifacts keep it so Liquid Glass usage can
+// be audited as app chrome, navigation, content, or overlay structure.
+enum class MaterialSurfaceRole {
+    Surface,
+    Toolbar,
+    Sidebar,
+    StatusBar,
+    Navigation,
+    Content,
+    Overlay,
+};
+
+inline char const* material_surface_role_name(MaterialSurfaceRole role) noexcept {
+    switch (role) {
+        case MaterialSurfaceRole::Surface:    return "surface";
+        case MaterialSurfaceRole::Toolbar:    return "toolbar";
+        case MaterialSurfaceRole::Sidebar:    return "sidebar";
+        case MaterialSurfaceRole::StatusBar:  return "status_bar";
+        case MaterialSurfaceRole::Navigation: return "navigation";
+        case MaterialSurfaceRole::Content:    return "content";
+        case MaterialSurfaceRole::Overlay:    return "overlay";
+    }
+    return "surface";
+}
+
+inline MaterialSurfaceRole material_surface_role_from_wire(
+        unsigned int raw) noexcept {
+    switch (static_cast<MaterialSurfaceRole>(raw)) {
+        case MaterialSurfaceRole::Surface:
+        case MaterialSurfaceRole::Toolbar:
+        case MaterialSurfaceRole::Sidebar:
+        case MaterialSurfaceRole::StatusBar:
+        case MaterialSurfaceRole::Navigation:
+        case MaterialSurfaceRole::Content:
+        case MaterialSurfaceRole::Overlay:
+            return static_cast<MaterialSurfaceRole>(raw);
+    }
+    return MaterialSurfaceRole::Surface;
+}
+
 struct MaterialStyle {
     MaterialKind kind = MaterialKind::None;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
     float opacity = 0.0f;
     float blur_radius = 0.0f;
     Color tint = {0, 0, 0, 0};
@@ -85,6 +127,7 @@ struct MaterialStyle {
 
 struct MaterialCommandDescriptor {
     MaterialKind kind = MaterialKind::None;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
     float opacity = 0.0f;
     float blur_radius = 0.0f;
     Color tint = {0, 0, 0, 0};
@@ -251,9 +294,10 @@ enum class Cmd : unsigned int {
     // that is needed to preserve fill ordering.
     FillRects  = 14,
     // Material surface. Layout: opcode + x/y/w/h/radius f32 +
-    // kind u32 + opacity f32 + blur_radius f32 + packed RGBA tint +
-    // saturation/luminance_floor/luminance_gain/edge_highlight/
-    // edge_width/noise_opacity/shadow_alpha/shadow_radius f32.
+    // kind u32 + role u32 + opacity f32 + blur_radius f32 + packed
+    // RGBA tint + saturation/luminance_floor/luminance_gain/
+    // edge_highlight/edge_width/noise_opacity/shadow_alpha/
+    // shadow_radius f32.
     // Backends with backdrop sampling render a glass/material effect;
     // backends without it draw the tint as a rounded-rect fallback.
     MaterialRect = 15,

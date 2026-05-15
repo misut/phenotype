@@ -2530,6 +2530,7 @@ inline bool decode_frame_commands(unsigned char const* buf,
             float x = 0.0f, y = 0.0f, w = 0.0f, h = 0.0f;
             float radius = 0.0f;
             unsigned int kind = 0;
+            unsigned int role = 0;
             float opacity = 0.0f;
             float blur_radius = 0.0f;
             unsigned int packed = 0;
@@ -2545,6 +2546,7 @@ inline bool decode_frame_commands(unsigned char const* buf,
                 || !reader.read_f32(w) || !reader.read_f32(h)
                 || !reader.read_f32(radius)
                 || !reader.read_u32(kind)
+                || !reader.read_u32(role)
                 || !reader.read_f32(opacity)
                 || !reader.read_f32(blur_radius)
                 || !reader.read_u32(packed)
@@ -2561,6 +2563,7 @@ inline bool decode_frame_commands(unsigned char const* buf,
             material_env_for_command.debug_seed.node = current_command_index;
             MaterialCommandDescriptor descriptor{
                 material_kind_from_wire(kind),
+                material_surface_role_from_wire(role),
                 opacity,
                 blur_radius,
                 unpack_color(packed),

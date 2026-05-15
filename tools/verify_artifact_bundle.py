@@ -43,6 +43,16 @@ ALLOWED_MATERIAL_KINDS = {
     "thin",
 }
 
+ALLOWED_MATERIAL_SURFACE_ROLES = {
+    "content",
+    "navigation",
+    "overlay",
+    "sidebar",
+    "status_bar",
+    "surface",
+    "toolbar",
+}
+
 ALLOWED_MATERIAL_PASS_NAMES = {
     "backdrop-sample-blur",
     "none",
@@ -71,7 +81,7 @@ ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
     "not-sampled",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 3
+MATERIAL_PLAN_CONTRACT_VERSION = 4
 
 
 def suggested_action_for_failure(
@@ -359,6 +369,7 @@ def material_failure_context(
         "semantic_material_fallback_nodes": semantic_summary.get(
             "material_fallback_nodes"),
         "semantic_material_kinds": semantic_summary.get("material_kinds"),
+        "semantic_material_roles": semantic_summary.get("material_roles"),
         "semantic_verifier_profiles": semantic_summary.get(
             "material_verifier_profiles"),
     }
@@ -384,6 +395,8 @@ def material_failure_context(
             "count")
         material_contract["plan_contract_versions"] = (
             material_plan_summary.get("contract_versions"))
+        material_contract["plan_surface_roles"] = (
+            material_plan_summary.get("roles"))
         material_contract["fallback_paths"] = material_plan_summary.get(
             "fallback_paths")
         material_contract["pass_executors"] = material_plan_summary.get(
@@ -417,10 +430,11 @@ def number_at(value: JsonObject, key: str) -> int | float | None:
 
 def material_descriptor_from(value: JsonObject) -> JsonObject | None:
     kind = string_at(value, "kind")
+    role = string_at(value, "role")
     tint = value.get("tint")
-    if not kind or not isinstance(tint, dict):
+    if not kind or not role or not isinstance(tint, dict):
         return None
-    descriptor: JsonObject = {"kind": kind}
+    descriptor: JsonObject = {"kind": kind, "role": role}
     tint_descriptor: JsonObject = {}
     for key in ("r", "g", "b", "a"):
         channel = number_at(tint, key)
@@ -819,6 +833,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "fallback_paths",
         "fallback_reasons",
         "kinds",
+        "roles",
         "pass_names",
         "pass_executors",
         "backdrop_available",
@@ -872,6 +887,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
     map_vocabularies = {
         "fallback_paths": ALLOWED_MATERIAL_FALLBACK_PATHS,
         "kinds": ALLOWED_MATERIAL_KINDS,
+        "roles": ALLOWED_MATERIAL_SURFACE_ROLES,
         "pass_names": ALLOWED_MATERIAL_PASS_NAMES,
         "pass_executors": ALLOWED_MATERIAL_PASS_EXECUTORS,
         "luminance_responses": ALLOWED_MATERIAL_LUMINANCE_RESPONSES,
@@ -1064,6 +1080,8 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         args.require_role.extend(list_of_strings(manifest, "require_roles"))
         args.require_material_kind.extend(
             list_of_strings(manifest, "require_material_kinds"))
+        args.require_material_surface_role.extend(
+            list_of_strings(manifest, "require_material_surface_roles"))
         args.require_capability.extend(
             list_of_strings(manifest, "require_capabilities"))
         runtime_details = manifest.get("require_runtime_details", [])
@@ -1329,6 +1347,10 @@ def walk_semantic(node: Any, summary: JsonObject) -> None:
         if isinstance(kind, str):
             material_kinds = summary["material_kinds"]
             material_kinds[kind] = material_kinds.get(kind, 0) + 1
+        role = material.get("role")
+        if isinstance(role, str):
+            material_roles = summary["material_roles"]
+            material_roles[role] = material_roles.get(role, 0) + 1
         verifier_profile = material.get("verifier_profile")
         if isinstance(verifier_profile, str):
             profiles = summary["material_verifier_profiles"]
@@ -1358,6 +1380,7 @@ def summarize_semantic_tree(tree: JsonObject) -> JsonObject:
         "material_fallback_nodes": 0,
         "material_kinds": {},
         "material_nodes": 0,
+        "material_roles": {},
         "material_verifier_profiles": {},
         "nodes": 0,
         "nodes_without_role": 0,
@@ -1376,6 +1399,7 @@ def summarize_semantic_tree(tree: JsonObject) -> JsonObject:
 REQUIRED_MATERIAL_PLAN_FIELDS = (
     "contract_version",
     "kind",
+    "role",
     "plan_id",
     "command_descriptor",
     "geometry",
@@ -1505,6 +1529,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "fallback_paths": {},
         "fallback_reasons": {},
         "kinds": {},
+        "roles": {},
         "pass_names": {},
         "pass_executors": {},
         "plan_ids": [],
@@ -1653,6 +1678,22 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 hint="Update the pure MaterialKind serializer and verifier vocabulary together.",
                 record_success=False)
 
+        role = plan.get("role")
+        if isinstance(role, str):
+            roles = summary["roles"]
+            roles[role] = roles.get(role, 0) + 1
+            report.check(
+                "material surface role is known",
+                role in ALLOWED_MATERIAL_SURFACE_ROLES,
+                path=f"{plan_path}.role",
+                expected=sorted(ALLOWED_MATERIAL_SURFACE_ROLES),
+                actual=role,
+                likely_layer="material-contract",
+                hint=(
+                    "Update MaterialSurfaceRole serialization and verifier "
+                    "vocabulary together."),
+                record_success=False)
+
         command_descriptor = check_object_field(
             report,
             plan,
@@ -1688,6 +1729,36 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     hint=(
                         "The decoded command descriptor kind should feed the "
                         "same pure plan kind."),
+                    record_success=False)
+            descriptor_role = check_string_field(
+                report,
+                command_descriptor,
+                "role",
+                f"{plan_path}.command_descriptor",
+                likely_layer="material-command",
+                hint="The command descriptor must preserve the material surface role.")
+            if isinstance(descriptor_role, str):
+                report.check(
+                    "material command descriptor role matches plan role",
+                    descriptor_role == role,
+                    path=f"{plan_path}.command_descriptor.role",
+                    expected=role,
+                    actual=descriptor_role,
+                    likely_layer="material-command",
+                    hint=(
+                        "The decoded command descriptor role should feed the "
+                        "same pure plan role."),
+                    record_success=False)
+                report.check(
+                    "material command descriptor role is known",
+                    descriptor_role in ALLOWED_MATERIAL_SURFACE_ROLES,
+                    path=f"{plan_path}.command_descriptor.role",
+                    expected=sorted(ALLOWED_MATERIAL_SURFACE_ROLES),
+                    actual=descriptor_role,
+                    likely_layer="material-command",
+                    hint=(
+                        "Check MaterialRect role decoding and "
+                        "MaterialCommandDescriptor serialization."),
                     record_success=False)
             descriptor_tint = check_object_field(
                 report,
@@ -3051,6 +3122,9 @@ def check_material_plan_summary_requirements(
         "kinds": (
             "material-contract",
             "Inspect MaterialKind serialization and MaterialRect command emission."),
+        "roles": (
+            "material-contract",
+            "Inspect MaterialSurfaceRole serialization and MaterialRect command emission."),
         "pass_names": (
             "material-pass",
             "Inspect MaterialPlan.primary_pass and runtime pass serialization."),
@@ -3081,6 +3155,7 @@ def check_material_plan_summary_requirements(
             "fallback_reasons",
             "contract_versions",
             "kinds",
+            "roles",
             "pass_names",
             "pass_executors",
             "backdrop_sources",
@@ -3481,6 +3556,20 @@ def check_material_semantic_runtime_match(
             "kinds; check whether a material node was skipped or decoded with "
             "the wrong kind."))
 
+    semantic_roles = semantic_summary.get("material_roles")
+    runtime_roles = material_plan_summary.get("roles")
+    report.check(
+        "material semantic/runtime roles match",
+        semantic_roles == runtime_roles,
+        path=f"{base_path}.roles",
+        expected=semantic_roles,
+        actual=runtime_roles,
+        likely_layer="material-contract",
+        hint=(
+            "The semantic tree and runtime plan summary disagree on material "
+            "surface roles; check layout::MaterialSurfaceOptions.role, "
+            "MaterialRect payload writes, and backend command decoding."))
+
     semantic_profiles = semantic_summary.get("material_verifier_profiles")
     runtime_profiles = material_plan_summary.get("verifier_profiles")
     report.check(
@@ -3750,6 +3839,12 @@ def verify(args: argparse.Namespace) -> int:
             f"semantic material kind exists: {required_kind}",
             material_kinds.get(required_kind, 0) > 0,
             repr(material_kinds))
+    material_roles = summary["material_roles"]
+    for required_role in args.require_material_surface_role:
+        report.check(
+            f"semantic material surface role exists: {required_role}",
+            material_roles.get(required_role, 0) > 0,
+            repr(material_roles))
     if args.require_material_fallback:
         report.check(
             "semantic material fallback exists",
@@ -4234,6 +4329,11 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         action="append",
         default=[],
         help="Require at least one semantic material node with this kind.")
+    parser.add_argument(
+        "--require-material-surface-role",
+        action="append",
+        default=[],
+        help="Require at least one semantic material node with this surface role.")
     parser.add_argument(
         "--require-material-fallback",
         action="store_true",

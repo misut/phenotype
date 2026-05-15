@@ -4180,6 +4180,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
             float w = read_f32(), h = read_f32();
             float r = read_f32();
             auto const kind = read_u32();
+            auto const role = read_u32();
             auto const opacity = read_f32();
             auto const blur_radius = read_f32();
             auto const tint = unpack(read_u32());
@@ -4195,6 +4196,7 @@ inline void decode_android_color_commands(unsigned char const* buf,
             material_env_for_command.debug_seed.node = current_command_index;
             ::phenotype::MaterialCommandDescriptor descriptor{
                 ::phenotype::material_kind_from_wire(kind),
+                ::phenotype::material_surface_role_from_wire(role),
                 opacity,
                 blur_radius,
                 tint,

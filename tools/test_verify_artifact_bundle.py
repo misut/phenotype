@@ -33,6 +33,7 @@ def material_plan(
     primary = material_pass(primary_sample_taps)
     command_descriptor: dict[str, object] = {
         "kind": "regular",
+        "role": "surface",
         "opacity": 0.58,
         "blur_radius": 22.0,
         "tint": {"r": 255, "g": 255, "b": 255, "a": 148},
@@ -48,6 +49,7 @@ def material_plan(
     return {
         "contract_version": verifier.MATERIAL_PLAN_CONTRACT_VERSION,
         "kind": "regular",
+        "role": "surface",
         "plan_id": "material.regular.fallback",
         "command_descriptor": command_descriptor,
         "geometry": {"x": 12.0, "y": 20.0, "w": 240.0, "h": 96.0, "radius": 10.0},
@@ -216,6 +218,7 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                         "visible": True,
                         "material": {
                             "kind": "regular",
+                            "role": "surface",
                             "opacity": 0.58,
                             "blur_radius": 22.0,
                             "tint": {"r": 255, "g": 255, "b": 255, "a": 148},
@@ -329,6 +332,10 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(report["failures"], [])
         self.assertEqual(report["material_plans"]["count"], 1)
         self.assertEqual(report["material_plans"]["fallback"], 1)
+        self.assertEqual(report["material_plans"]["roles"], {"surface": 1})
+        self.assertEqual(
+            report["semantic_tree"]["material_roles"],
+            {"surface": 1})
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
             0)
@@ -386,6 +393,23 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["decision_trace"][
                 "can_sample_backdrop"],
             0)
+
+    def test_surface_role_mismatch_points_to_material_contract(self) -> None:
+        plan = material_plan()
+        plan["role"] = "toolbar"
+        descriptor = plan["command_descriptor"]
+        assert isinstance(descriptor, dict)
+        descriptor["role"] = "toolbar"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material semantic/runtime roles match")
+        self.assertEqual(failure["path"], "debug.material_semantic_runtime_match.roles")
+        self.assertEqual(failure["likely_layer"], "material-contract")
+        self.assertIn("MaterialRect", failure["hint"])
 
     def test_missing_command_descriptor_is_counted(self) -> None:
         plan = material_plan()
@@ -538,6 +562,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "contract_versions": {
                     str(verifier.MATERIAL_PLAN_CONTRACT_VERSION): 1,
                 },
+                "roles": {"surface": 1},
                 "backdrop_sources": {"none": 1},
                 "luminance_responses": {"not-sampled": 1},
                 "luminance_adapted": 0,
@@ -582,6 +607,18 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["region_layers"],
             {"regular-legibility-backdrop": "material-fallback-pass"})
+
+    def test_manifest_can_require_material_surface_role(self) -> None:
+        manifest = {
+            "require_material_surface_roles": ["surface"],
+            "require_material_plan_summary": {
+                "roles": {"surface": 1},
+            },
+        }
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
 
     def test_decision_trace_blocker_mismatch_points_to_plan_policy(self) -> None:
         plan = material_plan()

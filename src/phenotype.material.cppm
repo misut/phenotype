@@ -9,7 +9,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 3;
+inline constexpr std::uint32_t material_plan_contract_version = 4;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -165,6 +165,7 @@ struct MaterialDecisionTrace {
 struct MaterialPlan {
     std::uint32_t contract_version = material_plan_contract_version;
     MaterialKind kind = MaterialKind::None;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
     MaterialCommandDescriptor command_descriptor{};
     MaterialGeometry geometry{};
     MaterialRenderTargetAnalysis render_target{};
@@ -409,6 +410,7 @@ inline MaterialCommandDescriptor material_command_descriptor(
         MaterialStyle const& style) noexcept {
     return MaterialCommandDescriptor{
         style.kind,
+        style.role,
         style.opacity,
         style.blur_radius,
         style.tint,
@@ -420,6 +422,22 @@ inline MaterialCommandDescriptor material_command_descriptor(
         style.noise_opacity,
         style.shadow_alpha,
         style.shadow_radius};
+}
+
+inline MaterialStyle material_style_for_command(MaterialKind kind,
+                                                MaterialSurfaceRole role,
+                                                float opacity,
+                                                float blur_radius,
+                                                Color tint,
+                                                Theme const& theme) noexcept {
+    auto style = material_style_for_command(
+        kind,
+        opacity,
+        blur_radius,
+        tint,
+        theme);
+    style.role = role;
+    return style;
 }
 
 inline MaterialStyle material_style_for_command(MaterialKind kind,
@@ -455,7 +473,7 @@ inline MaterialStyle material_style_for_command(MaterialKind kind,
 inline MaterialStyle material_style_for_command(
         MaterialCommandDescriptor const& descriptor,
         Theme const& theme) noexcept {
-    return material_style_for_command(
+    auto style = material_style_for_command(
         descriptor.kind,
         descriptor.opacity,
         descriptor.blur_radius,
@@ -469,6 +487,8 @@ inline MaterialStyle material_style_for_command(
         descriptor.shadow_alpha,
         descriptor.shadow_radius,
         theme);
+    style.role = descriptor.role;
+    return style;
 }
 
 inline MaterialRequest material_request_for_command(MaterialKind kind,
@@ -510,6 +530,7 @@ inline MaterialRequest material_request_for_command(MaterialKind kind,
     return material_request_for_command(
         MaterialCommandDescriptor{
             kind,
+            MaterialSurfaceRole::Surface,
             opacity,
             blur_radius,
             tint,
@@ -688,6 +709,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         0.0f,
         resolved_quality.max_blur_radius);
     plan.kind = style.kind;
+    plan.role = style.role;
     plan.command_descriptor = material_command_descriptor(style);
     plan.geometry = request.geometry;
     plan.quality_policy = resolved_quality;
