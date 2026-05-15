@@ -2542,6 +2542,10 @@ inline bool decode_frame_commands(unsigned char const* buf,
             float noise_opacity = 0.0f;
             float shadow_alpha = 0.0f;
             float shadow_radius = 0.0f;
+            unsigned int container_id = 0;
+            unsigned int union_id = 0;
+            float container_spacing = 0.0f;
+            unsigned int container_flags = 0;
             if (!reader.read_f32(x) || !reader.read_f32(y)
                 || !reader.read_f32(w) || !reader.read_f32(h)
                 || !reader.read_f32(radius)
@@ -2557,13 +2561,22 @@ inline bool decode_frame_commands(unsigned char const* buf,
                 || !reader.read_f32(edge_width)
                 || !reader.read_f32(noise_opacity)
                 || !reader.read_f32(shadow_alpha)
-                || !reader.read_f32(shadow_radius))
+                || !reader.read_f32(shadow_radius)
+                || !reader.read_u32(container_id)
+                || !reader.read_u32(union_id)
+                || !reader.read_f32(container_spacing)
+                || !reader.read_u32(container_flags))
                 return false;
             auto material_env_for_command = material_env;
             material_env_for_command.debug_seed.node = current_command_index;
             MaterialCommandDescriptor descriptor{
                 material_kind_from_wire(kind),
                 material_surface_role_from_wire(role),
+                material_container_descriptor_from_wire(
+                    container_id,
+                    union_id,
+                    container_spacing,
+                    container_flags),
                 opacity,
                 blur_radius,
                 unpack_color(packed),

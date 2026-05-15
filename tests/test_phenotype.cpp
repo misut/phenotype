@@ -1101,6 +1101,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(fallback_plan.kind == MaterialKind::Regular);
     assert(fallback_plan.role == MaterialSurfaceRole::Surface);
     assert(fallback_plan.command_descriptor.role == MaterialSurfaceRole::Surface);
+    assert(fallback_plan.container.mode == MaterialContainerMode::Isolated);
+    assert(std::string(fallback_plan.container.mode_name) == "isolated");
+    assert(!fallback_plan.container.participates);
     assert(fallback_plan.fallback());
     assert(!fallback_plan.backdrop_sampling);
     assert(fallback_plan.render_target.width == 520);
@@ -1157,6 +1160,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     auto glass_plan = plan_material_surface(request, glass_env);
     assert(glass_plan.contract_version == material_plan_contract_version);
     assert(glass_plan.role == MaterialSurfaceRole::Surface);
+    assert(glass_plan.container.mode == MaterialContainerMode::Isolated);
     assert(!glass_plan.fallback());
     assert(glass_plan.backdrop_sampling);
     assert(glass_plan.decision_trace.backend_supports_backdrop);
@@ -1189,6 +1193,39 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::fabs(glass_plan.backdrop.edge_highlight_delta) < 0.0001f);
     assert(std::string(glass_plan.verifier.likely_layer)
            == "material-blur-pass");
+
+    MaterialRequest container_request = request;
+    container_request.style.container = MaterialContainerDescriptor{
+        41u,
+        7u,
+        24.0f,
+        true,
+        true};
+    auto container_plan = plan_material_surface(container_request, glass_env);
+    assert(!container_plan.fallback());
+    assert(container_plan.container.mode == MaterialContainerMode::Union);
+    assert(std::string(container_plan.container.mode_name) == "union");
+    assert(container_plan.container.container_id == 41u);
+    assert(container_plan.container.union_id == 7u);
+    assert(container_plan.container.spacing == 24.0f);
+    assert(container_plan.container.participates);
+    assert(container_plan.container.shared_backdrop_scope);
+    assert(container_plan.container.shape_union_expected);
+    assert(container_plan.container.interactive);
+    assert(container_plan.container.morph_transitions);
+    assert(container_plan.command_descriptor.container.container_id == 41u);
+    assert(container_plan.resource_budget.max_container_spacing == 24.0f);
+    assert(container_plan.verifier.require_container_identity);
+    assert(container_plan.verifier.require_container_morph_contract);
+
+    MaterialEnvironment reduced_motion_container_env = glass_env;
+    reduced_motion_container_env.capabilities.reduce_motion = true;
+    auto reduced_motion_container_plan =
+        plan_material_surface(container_request, reduced_motion_container_env);
+    assert(reduced_motion_container_plan.container.participates);
+    assert(reduced_motion_container_plan.container.interactive);
+    assert(!reduced_motion_container_plan.container.morph_transitions);
+    assert(!reduced_motion_container_plan.verifier.require_container_morph_contract);
 
     MaterialEnvironment dark_backdrop_env = glass_env;
     dark_backdrop_env.backdrop.luma_min = 0.02f;
@@ -1386,6 +1423,9 @@ void test_material_surface_emits_material_rect_command() {
     auto const& descriptor = material->material;
     assert(descriptor.kind == MaterialKind::Regular);
     assert(descriptor.role == MaterialSurfaceRole::Surface);
+    assert(descriptor.container.container_id == 0u);
+    assert(descriptor.container.union_id == 0u);
+    assert(!descriptor.container.interactive);
     assert(descriptor.opacity > 0.5f);
     assert(descriptor.blur_radius >= 20.0f);
     assert(descriptor.tint.a > 0);
@@ -1399,6 +1439,54 @@ void test_material_surface_emits_material_rect_command() {
     assert(descriptor.shadow_radius > 0.0f);
 
     std::puts("PASS: material surface emits MaterialRect command");
+}
+
+void test_material_container_scope_emits_command_context() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::material_container(
+        layout::MaterialContainerOptions{
+            .container_id = 501u,
+            .union_id = 9u,
+            .spacing = 22.0f,
+            .interactive = true,
+            .morph_transitions = true,
+        },
+        [] {
+            layout::material_surface(MaterialKind::Thin, [] {
+                widget::text("Container glass");
+            });
+        });
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    auto const* material = static_cast<MaterialRectCmd const*>(nullptr);
+    for (auto const& cmd : cmds) {
+        if (auto const* m = std::get_if<MaterialRectCmd>(&cmd)) {
+            material = m;
+            break;
+        }
+    }
+
+    assert(material != nullptr);
+    auto const& container = material->material.container;
+    assert(container.container_id == 501u);
+    assert(container.union_id == 9u);
+    assert(std::fabs(container.spacing - 22.0f) < 0.0001f);
+    assert(container.interactive);
+    assert(container.morph_transitions);
+
+    std::puts("PASS: material container scope emits command context");
 }
 
 void test_material_command_preserves_style_optics() {
@@ -1416,6 +1504,12 @@ void test_material_command_preserves_style_optics() {
     auto& material = detail::node_at(material_h);
     material.material = layout::material_style(MaterialKind::Regular);
     material.material.role = MaterialSurfaceRole::Content;
+    material.material.container = MaterialContainerDescriptor{
+        88u,
+        12u,
+        18.0f,
+        true,
+        true};
     material.material.opacity = 0.63f;
     material.material.blur_radius = 18.0f;
     material.material.tint = Color{32, 64, 96, 144};
@@ -1449,6 +1543,11 @@ void test_material_command_preserves_style_optics() {
     auto const& descriptor = cmd->material;
     assert(descriptor.kind == MaterialKind::Regular);
     assert(descriptor.role == MaterialSurfaceRole::Content);
+    assert(descriptor.container.container_id == 88u);
+    assert(descriptor.container.union_id == 12u);
+    assert(std::fabs(descriptor.container.spacing - 18.0f) < 0.0001f);
+    assert(descriptor.container.interactive);
+    assert(descriptor.container.morph_transitions);
     assert(std::fabs(descriptor.opacity - 0.63f) < 0.0001f);
     assert(std::fabs(descriptor.blur_radius - 18.0f) < 0.0001f);
     assert(descriptor.tint.r == 32 && descriptor.tint.g == 64
@@ -1481,6 +1580,11 @@ void test_material_command_preserves_style_optics() {
     assert(!plan.fallback());
     assert(plan.role == MaterialSurfaceRole::Content);
     assert(plan.command_descriptor.role == MaterialSurfaceRole::Content);
+    assert(plan.container.mode == MaterialContainerMode::Union);
+    assert(plan.container.container_id == 88u);
+    assert(plan.container.union_id == 12u);
+    assert(plan.container.interactive);
+    assert(plan.container.morph_transitions);
     assert(std::fabs(plan.saturation - 0.73f) < 0.0001f);
     assert(std::fabs(plan.luminance_floor - 0.19f) < 0.0001f);
     assert(std::fabs(plan.luminance_gain - 1.31f) < 0.0001f);
@@ -2384,6 +2488,7 @@ int main() {
     test_material_props_invalidate_diff_cache();
     test_material_planner_backdrop_and_fallback_paths();
     test_material_surface_emits_material_rect_command();
+    test_material_container_scope_emits_command_context();
     test_material_command_preserves_style_optics();
     test_radio_paint_cache_stale_descendant_after_subtree_blit();
     test_row_cross_align_center_default();

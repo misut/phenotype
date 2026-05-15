@@ -32,6 +32,30 @@
   ],
   "require_material_plans": true,
   "require_material_semantic_runtime_match": true,
+  "require_material_plan_summary": {
+    "count": 8,
+    "fallback": 0,
+    "backdrop_sampling": 8,
+    "contract_versions": {
+      "5": 8
+    },
+    "roles": {
+      "surface": 5,
+      "toolbar": 1,
+      "navigation": 1,
+      "status_bar": 1
+    },
+    "container_modes": {
+      "container": 8
+    },
+    "container_ids": {
+      "3100": 8
+    },
+    "container_participating": 8,
+    "container_unioned": 0,
+    "container_interactive": 0,
+    "container_morph_transitions": 8
+  },
   "require_capabilities": [
     "material_backdrop_blur"
   ],
@@ -52,6 +76,8 @@
     "max_sample_taps_lte": 25,
     "max_pass_count_lte": 1,
     "max_backdrop_pixels_lte": 4000000,
+    "max_container_spacing_lte": 12.0,
+    "max_container_spacing_gte": 12.0,
     "max_pass_texture_copy_pixels_lte": 4000000,
     "total_runtime_passes_gte": 1,
     "active_runtime_passes_gte": 1,

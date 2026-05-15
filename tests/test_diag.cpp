@@ -606,6 +606,8 @@ void test_material_surface_semantic_debug_fields() {
     auto const& material_debug = material->at("material").as_object();
     assert(material_debug.at("kind").as_string() == "regular");
     assert(material_debug.at("role").as_string() == "surface");
+    assert(material_debug.at("container").as_object().at("mode").as_string()
+           == "isolated");
     assert(material_debug.at("fallback").as_bool() == true);
     assert(material_debug.at("fallback_reason").as_string().find("fallback path")
            != std::string::npos);
@@ -674,6 +676,50 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
     assert(find_semantic_descendant(*toolbar, "button", "New") != nullptr);
     assert(find_semantic_descendant(*sidebar, "text", "Locations") != nullptr);
     assert(find_semantic_descendant(*status_bar, "text", "Ready") != nullptr);
+}
+
+void test_material_container_semantic_debug_fields() {
+    metrics::reset_all();
+    log::set_level(log::Severity::info);
+#if !defined(__wasi__) && !defined(__ANDROID__)
+    run<DiagState, DebugPlaneMsg>(diag_host,
+#else
+    run<DiagState, DebugPlaneMsg>(
+#endif
+        [](DiagState const&) {
+            layout::material_container(
+                layout::MaterialContainerOptions{
+                    .container_id = 777u,
+                    .union_id = 3u,
+                    .spacing = 20.0f,
+                    .interactive = true,
+                    .morph_transitions = true,
+                },
+                [] {
+                    layout::material_surface(MaterialKind::Thin, [] {
+                        widget::text("Union glass");
+                    });
+                });
+        },
+        [](DiagState&, DebugPlaneMsg) {});
+
+    auto parsed = json::parse(detail::serialize_diag_snapshot_with_debug());
+    auto const& children = parsed.as_object()
+        .at("debug").as_object()
+        .at("semantic_tree").as_object()
+        .at("children").as_array();
+
+    auto const* material = find_semantic_child(children, "material");
+    assert(material != nullptr);
+    auto const& container = material->at("material").as_object()
+        .at("container").as_object();
+    assert(container.at("mode").as_string() == "union");
+    assert(container.at("container_id").as_integer() == 777);
+    assert(container.at("union_id").as_integer() == 3);
+    assert(container.at("spacing").as_float() == 20.0f);
+    assert(container.at("interactive").as_bool() == true);
+    assert(container.at("morph_transitions").as_bool() == true);
+    assert(find_semantic_descendant(*material, "text", "Union glass") != nullptr);
 }
 
 void test_overlay_semantic_debug_nodes_are_screen_fixed() {
@@ -751,10 +797,22 @@ void test_material_runtime_record_json_contract() {
            == material_plan_contract_version);
     assert(obj.at("kind").as_string() == "thin");
     assert(obj.at("role").as_string() == "surface");
+    auto const& container = obj.at("container").as_object();
+    assert(container.at("mode").as_string() == "isolated");
+    assert(container.at("container_id").as_integer() == 0);
+    assert(container.at("union_id").as_integer() == 0);
+    assert(container.at("spacing").as_float() == 0.0f);
+    assert(container.at("interactive").as_bool() == false);
+    assert(container.at("morph_transitions").as_bool() == false);
+    assert(container.at("participates").as_bool() == false);
+    assert(container.at("shared_backdrop_scope").as_bool() == false);
+    assert(container.at("shape_union_expected").as_bool() == false);
     assert(obj.at("plan_id").as_string() == "material.thin.fallback");
     auto const& descriptor = obj.at("command_descriptor").as_object();
     assert(descriptor.at("kind").as_string() == "thin");
     assert(descriptor.at("role").as_string() == "surface");
+    assert(descriptor.at("container").as_object().at("mode").as_string()
+           == "isolated");
     assert(descriptor.at("opacity").as_float() == 0.5f);
     assert(descriptor.at("blur_radius").as_float() == 14.0f);
     auto const& descriptor_tint = descriptor.at("tint").as_object();
@@ -796,6 +854,8 @@ void test_material_runtime_record_json_contract() {
     assert(obj.at("resource_budget").as_object()
                .at("max_sample_taps").as_integer() == 9);
     assert(obj.at("resource_budget").as_object()
+               .at("max_container_spacing").as_float() == 0.0f);
+    assert(obj.at("resource_budget").as_object()
                .at("deterministic_fallback").as_bool() == true);
     assert(obj.at("verifier").as_object().at("likely_layer").as_string()
            == "material-fallback-pass");
@@ -814,6 +874,9 @@ void test_material_runtime_record_json_contract() {
     assert(pure_summary.total_pass_texture_copy_pixels == 0);
     assert(pure_summary.max_plan_sample_taps == 0);
     assert(pure_summary.max_sample_taps == 9);
+    assert(pure_summary.containered_count == 0);
+    assert(pure_summary.unioned_count == 0);
+    assert(pure_summary.max_container_spacing == 0.0f);
 
     auto summary = diag::detail::material_runtime_summary_json(records);
     auto const& summary_obj = summary.as_object();
@@ -826,6 +889,11 @@ void test_material_runtime_record_json_contract() {
     assert(summary_obj.at("total_pass_texture_copy_pixels").as_integer() == 0);
     assert(summary_obj.at("max_plan_sample_taps").as_integer() == 0);
     assert(summary_obj.at("max_sample_taps").as_integer() == 9);
+    assert(summary_obj.at("containered_count").as_integer() == 0);
+    assert(summary_obj.at("unioned_count").as_integer() == 0);
+    assert(summary_obj.at("interactive_count").as_integer() == 0);
+    assert(summary_obj.at("morph_transition_count").as_integer() == 0);
+    assert(summary_obj.at("max_container_spacing").as_float() == 0.0f);
 
     MaterialExecutorSummary executor_summary;
     executor_summary.plan_count = 1;
@@ -929,6 +997,8 @@ int main() {
     std::printf("PASS: material surface semantic debug fields\n");
     test_material_app_chrome_helpers_are_semantic_materials();
     std::printf("PASS: material app chrome helpers are semantic materials\n");
+    test_material_container_semantic_debug_fields();
+    std::printf("PASS: material container semantic debug fields\n");
     test_overlay_semantic_debug_nodes_are_screen_fixed();
     std::printf("PASS: overlay semantic debug nodes stay screen fixed\n");
     test_material_runtime_record_json_contract();

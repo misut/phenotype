@@ -91,10 +91,10 @@ PHENOTYPE_ARTIFACT_EXIT=1 \
 `PHENOTYPE_ARTIFACT_EXIT=1` makes the example exit after writing the first
 rendered frame, which is useful for CI or LLM debugging. Omit it for manual
 inspection; the bundle is still written after the initial render and the window
-continues running. The same hook applies to `examples/flight_board` and
-`examples/workbook`. `examples/glass_showcase` uses the same route for
-material-focused checks, including macOS sampled-backdrop rendering and
-fallback metadata.
+continues running. `examples/glass_showcase` uses the same route for
+material-focused checks, including macOS sampled-backdrop rendering and fallback
+metadata. The desktop and mobile file explorer examples use the same route for
+product-style material workflow artifacts.
 The macOS native backend reads accessibility display preferences from
 `NSWorkspace` by default. For deterministic artifact capture, set
 `PHENOTYPE_ACCESSIBILITY_DISPLAY=standard` to disable those inputs, or set
@@ -111,6 +111,9 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `contract_version`, `plan_id`, `kind`, `role`, and `command_descriptor`,
   which preserves the decoded `MaterialRect` material values and functional
   surface role before fallback or luminance policy mutates the resolved plan;
+- `container`, including isolated/container/union mode, container id, union id,
+  spacing, interactive flag, morph-transition expectation, shared backdrop
+  scope, and shape-union expectation;
 - geometry, tint, blur radius, saturation, luminance curve, edge highlight,
   noise, and shadow values for the resolved plan;
 - `render_target`, including target dimensions, scale, pixel format, pixel
@@ -136,6 +139,13 @@ It also compares semantic material roles against runtime plan roles, so app
 chrome can prove that a glass surface was emitted as `toolbar`, `sidebar`,
 `status_bar`, `navigation`, `content`, `overlay`, or a generic `surface`
 without visual inspection.
+It also compares semantic material container descriptors against
+`MaterialPlan.command_descriptor.container` and compares resolved container
+identity against `MaterialPlan.container`; a container mismatch points at layout
+scope propagation, `MaterialRect` encoding, or command decode before it points
+at backend drawing. `command_descriptor.container.morph_transitions` preserves
+the request, while `MaterialPlan.container.morph_transitions` may be false when
+Reduce Motion disables morph expectations.
 `sample_taps` and `primary_pass.sample_taps` describe the actual resolved pass.
 Fallback plans therefore report `0` taps, while `quality_policy.max_sample_taps`
 and `resource_budget.max_sample_taps` preserve the allowed upper bound that led
@@ -162,6 +172,10 @@ edge highlight, and `likely_layer` must match `primary_pass.likely_layer`.
 Manifests can pin `verifier_profiles` and `verifier_region_layers` in
 `require_material_plan_summary` so a pixel-region failure reports the expected
 region contract and layer before anyone opens the frame visually.
+The same summary can pin `container_modes`, `container_ids`, `union_ids`,
+`container_participating`, `container_unioned`, `container_interactive`,
+`container_morph_transitions`, `verifier_require_container_identity`, and
+`verifier_require_container_morph_contract`.
 `backdrop.luminance_response` is `not-sampled` for fallback plans and one of
 `neutral`, `dark`, `bright`, `flat`, `dark-flat`, or `bright-flat` for sampled
 plans. The adjacent delta fields show whether the pure planner actually changed
@@ -245,15 +259,20 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `contract_versions`, `pass_names`, `backdrop_sources`, `luminance_responses`,
 `render_target_pixel_formats`, `pass_executors`, `decision_blockers`,
-`verifier_profiles`, and `verifier_region_layers`; it can also count
-`verifier_require_backdrop_source` and `verifier_require_edge_highlight`. This
+`verifier_profiles`, `verifier_region_layers`, `container_modes`,
+`container_ids`, and `union_ids`; it can also count
+`container_participating`, `container_unioned`, `container_interactive`,
+`container_morph_transitions`, `verifier_require_backdrop_source`,
+`verifier_require_edge_highlight`, `verifier_require_container_identity`, and
+`verifier_require_container_morph_contract`. This
 catches policy drift such as a glass scene silently switching from backdrop
 blur to fallback, a fallback backend reporting the wrong deterministic pass, a
 sampled scene losing its previous-frame backdrop source, a render target
 exceeding the pure backdrop budget, a pass switching executor roles, a decision
 trace naming the wrong blocker, an artifact emitting an unexpected material plan
-schema version, verifier expectations pointing at the wrong region/layer, or a
-quality/capability downgrade losing its LLM-actionable reason string.
+schema version, verifier expectations pointing at the wrong region/layer, a
+material container losing its identity/union grouping, or a quality/capability
+downgrade losing its LLM-actionable reason string.
 Use `require_material_surface_roles` when a scene must contain at least one
 semantic material node for each functional role.
 
@@ -277,7 +296,7 @@ runtime stayed within the pure plan's performance budget. Supported limits are
 `max_plan_blur_radius_lte`, `max_plan_sample_taps_lte`,
 `max_plan_sample_taps_gte`, `max_budget_blur_radius_lte`,
 `max_sample_taps_lte`, `max_pass_count_lte`, `max_backdrop_pixels_lte`,
-`max_pass_texture_copy_pixels_lte`/`gte`,
+`max_container_spacing_lte`/`gte`, `max_pass_texture_copy_pixels_lte`/`gte`,
 `total_pass_texture_copy_pixels_lte`/`gte`,
 `total_runtime_passes_lte`/`gte`, `active_runtime_passes_lte`/`gte`, and
 `backdrop_runtime_passes_lte`/`gte`;
@@ -315,7 +334,7 @@ many pixels the backend actually copied in a frame.
 Set `require_material_semantic_runtime_match` when a gate must prove that the
 semantic material nodes and the backend runtime material plans describe the
 same material surfaces. The verifier compares the material node count and
-material kind/profile maps from `debug.semantic_tree` against
+material kind/profile/container maps from `debug.semantic_tree` against
 `debug.platform_runtime.details.renderer.material_plans#summary`; mismatches
 point at the material contract layer so the likely break is not confused with a
 pure pixel-capture failure.
@@ -374,12 +393,12 @@ Run them before changing material rendering, artifact manifests, or verifier
 expectations. PR CI deliberately does not run the slow macOS glass showcase
 capture; docs-only and tools-only PRs avoid the root C++ test matrix, docs
 changes run the docs WASI build, and tooling changes run the verifier's Python
-contract checks. The main-branch push workflow is the automated artifact safety
-net and only runs artifact/docs build gates. WASI root tests and docs builds
-run on Linux runners; macOS runners are reserved for the main-branch native
-glass artifact gates. Workflow-file changes deliberately enable code, docs,
-and tooling gates so runner policy edits validate themselves. Windows artifact
-automation and Android CI wiring remain future work.
+contract checks. The main-branch push workflow only runs docs builds and native
+artifact builds; it does not repeat root code tests or slow glass artifact
+capture after merge. WASI root tests and docs builds run on Linux runners.
+Workflow-file changes deliberately enable code, docs, and tooling gates so
+runner policy edits validate themselves. Windows artifact automation and
+Android CI wiring remain future work.
 
 The Android manifest intentionally does not assert an exact
 `render_target_within_backdrop_budget` count because physical devices and

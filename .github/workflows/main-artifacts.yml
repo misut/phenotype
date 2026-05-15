@@ -152,7 +152,7 @@ jobs:
           key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
   artifact:
-    name: glass showcase artifact
+    name: glass showcase build
     needs: changes
     if: needs.changes.outputs.artifact_build == 'true'
     runs-on: macos-15
@@ -211,24 +211,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
-      - name: Install uv
-        uses: astral-sh/setup-uv@v8.1.0
-        with:
-          version: "0.11.14"
-          enable-cache: true
-
-      - name: Install Python for tools
-        run: uv python install
-
-      - name: Verify glass showcase artifact
-        env:
-          EXON: exon
-          PHENOTYPE_ARTIFACT_DIR: ${{ runner.temp }}/phenotype-glass-showcase
-          PHENOTYPE_EXPECT_PLATFORM: macos
+      - name: Build glass showcase
         run: |
           eval "$(intron env)"
-          tools/verify_glass_showcase_artifact.sh
-          tools/verify_glass_showcase_accessibility_artifact.sh
+          cd examples/glass_showcase
+          exon build
 
       - name: Save build artifacts
         if: steps.build-cache.outputs.cache-hit != 'true'

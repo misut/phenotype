@@ -4192,11 +4192,20 @@ inline void decode_android_color_commands(unsigned char const* buf,
             auto const noise_opacity = read_f32();
             auto const shadow_alpha = read_f32();
             auto const shadow_radius = read_f32();
+            auto const container_id = read_u32();
+            auto const union_id = read_u32();
+            auto const container_spacing = read_f32();
+            auto const container_flags = read_u32();
             auto material_env_for_command = material_env;
             material_env_for_command.debug_seed.node = current_command_index;
             ::phenotype::MaterialCommandDescriptor descriptor{
                 ::phenotype::material_kind_from_wire(kind),
                 ::phenotype::material_surface_role_from_wire(role),
+                ::phenotype::material_container_descriptor_from_wire(
+                    container_id,
+                    union_id,
+                    container_spacing,
+                    container_flags),
                 opacity,
                 blur_radius,
                 tint,

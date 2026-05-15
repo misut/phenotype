@@ -200,25 +200,33 @@ void view(State const& state) {
     using namespace phenotype;
     auto snap = file_explorer_demo::snapshot(state.explorer);
     layout::padded(SpaceToken::Lg, [&] {
-        layout::column([&] {
-            toolbar(state, snap);
-            layout::row([&] {
-                sidebar(state);
-                layout::weighted(1.0f, [&] {
-                    file_table(snap);
+        layout::material_container(
+            layout::MaterialContainerOptions{
+                .container_id = 2100u,
+                .spacing = 16.0f,
+                .morph_transitions = true,
+            },
+            [&] {
+                layout::column([&] {
+                    toolbar(state, snap);
+                    layout::row([&] {
+                        sidebar(state);
+                        layout::weighted(1.0f, [&] {
+                            file_table(snap);
+                        });
+                        preview_panel(state, snap);
+                    }, SpaceToken::Md, CrossAxisAlignment::Start, MainAxisAlignment::Start);
+                    layout::status_bar([&] {
+                        std::string detail = "Demo root: ";
+                        detail += state.explorer.root.string();
+                        detail += "\nViewport: ";
+                        detail += std::to_string(state.explorer.viewport_width);
+                        detail += " x ";
+                        detail += std::to_string(state.explorer.viewport_height);
+                        widget::code(detail);
+                    });
+                }, SpaceToken::Md);
                 });
-                preview_panel(state, snap);
-            }, SpaceToken::Md, CrossAxisAlignment::Start, MainAxisAlignment::Start);
-            layout::status_bar([&] {
-                std::string detail = "Demo root: ";
-                detail += state.explorer.root.string();
-                detail += "\nViewport: ";
-                detail += std::to_string(state.explorer.viewport_width);
-                detail += " x ";
-                detail += std::to_string(state.explorer.viewport_height);
-                widget::code(detail);
-            });
-        }, SpaceToken::Md);
     });
 }
 

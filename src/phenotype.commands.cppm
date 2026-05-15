@@ -171,6 +171,10 @@ inline std::vector<DrawCommand> parse_commands(
             float noise_opacity = read_f32();
             float shadow_alpha = read_f32();
             float shadow_radius = read_f32();
+            auto container_id = read_u32();
+            auto union_id = read_u32();
+            auto container_spacing = read_f32();
+            auto container_flags = read_u32();
             out.emplace_back(MaterialRectCmd{
                 x,
                 y,
@@ -180,6 +184,11 @@ inline std::vector<DrawCommand> parse_commands(
                 MaterialCommandDescriptor{
                     kind,
                     role,
+                    material_container_descriptor_from_wire(
+                        container_id,
+                        union_id,
+                        container_spacing,
+                        container_flags),
                     opacity,
                     blur_radius,
                     tint,

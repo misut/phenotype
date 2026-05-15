@@ -154,7 +154,7 @@ append-only opcodes:
 | 6 | DrawLine | f32 x1, y1, x2, y2, thickness; u32 color |
 | 7 | HitRegion | f32 x, y, w, h; u32 callback_id, cursor_type |
 | 8 | DrawImage | f32 x, y, w, h; u32 len; bytes url (4-byte aligned) |
-| 15 | MaterialRect | f32 x, y, w, h, radius; u32 kind, role; f32 opacity, blur_radius; u32 tint; f32 saturation, luminance_floor, luminance_gain, edge_highlight, edge_width, noise_opacity, shadow_alpha, shadow_radius |
+| 15 | MaterialRect | f32 x, y, w, h, radius; u32 kind, role; u32 container_id, union_id; f32 container_spacing; u32 container_flags; f32 opacity, blur_radius; u32 tint; f32 saturation, luminance_floor, luminance_gain, edge_highlight, edge_width, noise_opacity, shadow_alpha, shadow_radius |
 
 All values are little-endian. Colors are packed as `(r << 24) | (g << 16) | (b << 8) | a`.
 
@@ -170,22 +170,24 @@ metadata, debug seed, and quality policy — then execute the returned
 `MaterialPlan`.
 
 `Cmd::MaterialRect` carries the material node's material command descriptor
-across the backend boundary: kind, functional surface role, opacity, blur, tint,
-saturation, luminance curve, edge highlight, edge width, noise opacity, and shadow. In C++
-this is represented as `MaterialCommandDescriptor`; backends reconstruct
-`MaterialRequest` from that descriptor plus geometry, then call the pure
-planner. They should not re-derive these style values or functional roles from
-the current theme after the command has been emitted.
+across the backend boundary: kind, functional surface role, material container
+identity, union identity, container spacing/flags, opacity, blur, tint,
+saturation, luminance curve, edge highlight, edge width, noise opacity, and
+shadow. In C++ this is represented as `MaterialCommandDescriptor`; backends
+reconstruct `MaterialRequest` from that descriptor plus geometry, then call the
+pure planner. They should not re-derive these style values, functional roles, or
+container grouping from the current theme after the command has been emitted.
 
 ```cpp
 MaterialPlan plan = plan_material_surface(request, environment);
 ```
 
 The plan records its artifact `contract_version`, source
-`command_descriptor`, material `role`, blur, tint, saturation, luminance curve,
-edge highlight, noise/dither, shadow, render-target analysis, backdrop sampling,
-backdrop analysis, decision trace, fallback path, debug metadata, pass expectations, the
-resolved quality policy, resource budgets, and verifier expectations.
+`command_descriptor`, material `role`, material container analysis, blur, tint,
+saturation, luminance curve, edge highlight, noise/dither, shadow, render-target
+analysis, backdrop sampling, backdrop analysis, decision trace, fallback path,
+debug metadata, pass expectations, the resolved quality policy, resource
+budgets, and verifier expectations.
 `decision_trace` records the pure gate booleans for geometry, target readiness,
 quality, backend capabilities, accessibility settings, backdrop-source
 readiness, and the first fallback blocker. `primary_pass` states whether the
@@ -202,11 +204,20 @@ limits, including `max_backdrop_pixels`. `render_target` records sanitized
 target dimensions, scale, pixel format, pixel count, readiness, and whether the
 target stays within that backdrop budget. `resource_budget` records the clamped
 blur/sample-tap limits, the same allowed backdrop-pixel budget, and whether
-texture copies and fallback behavior are bounded.
+texture copies and fallback behavior are bounded. Container spacing is also
+reported as `max_container_spacing`, so artifact gates can bound future
+container/union expansion work before a backend starts allocating extra backdrop
+passes.
 `verifier` records the deterministic pixel-region contract derived from the
 same plan: whether a backdrop source or edge highlight must be present, the
 minimum luma/color thresholds for sampled or fallback rendering, the semantic
-profile name, and the likely pass layer that a failure should inspect first.
+profile name, whether material container identity/morph contracts are expected,
+and the likely pass layer that a failure should inspect first.
+`MaterialContainerAnalysis` records whether a surface is isolated, participates
+in a named material container, or belongs to a shape union. Reduced Motion keeps
+container identity intact but disables morph-transition expectations in the pure
+plan, matching Apple's guidance to coordinate related glass surfaces while still
+respecting accessibility settings.
 When a stable backdrop descriptor is available, the pure planner also copies
 its source, readiness flags, sanitized luminance statistics, response bucket,
 and floor/gain/edge deltas into `MaterialPlan.backdrop`. The same value drives
