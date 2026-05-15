@@ -86,8 +86,14 @@ append_scenario_requirements() {
       extra_args+=(--require-label-contains "Created from artifact scenario")
       ;;
     "deleted-file")
-      extra_args+=(--require-label-contains "Deleted Delete Me.txt")
+      extra_args+=(--require-label-contains "Moved Delete Me.txt to Trash")
       extra_args+=(--require-label-contains "Operation: file_delete ok - Delete Me.txt")
+      ;;
+    "trash-view")
+      extra_args+=(--require-label-contains "Trash")
+      extra_args+=(--require-label-contains "Trash Note.txt")
+      extra_args+=(--require-label-contains "Moved Trash Note.txt to Trash")
+      extra_args+=(--require-label-contains "Operation: file_delete ok - Trash Note.txt")
       ;;
     "created-folder")
       extra_args+=(--require-label-contains "Review Folder")
@@ -96,7 +102,7 @@ append_scenario_requirements() {
       extra_args+=(--require-label-contains "Open this folder to view its files.")
       ;;
     "deleted-folder")
-      extra_args+=(--require-label-contains "Deleted folder Trash Folder")
+      extra_args+=(--require-label-contains "Moved folder Trash Folder to Trash")
       extra_args+=(--require-label-contains "Operation: folder_delete ok - Trash Folder")
       ;;
     "duplicated-file")
@@ -276,7 +282,7 @@ run_exon build
 for mode in icon list column gallery; do
   verify_desktop_capture "$mode" "default" "$(desktop_bundle_for_case "$mode")"
 done
-for scenario in created-preview deleted-file created-folder deleted-folder duplicated-file documents-preview history-forward sorted-kind search-active; do
+for scenario in created-preview deleted-file trash-view created-folder deleted-folder duplicated-file documents-preview history-forward sorted-kind search-active; do
   verify_desktop_capture \
     "icon" \
     "$scenario" \
@@ -286,6 +292,6 @@ done
 cd "$MOBILE_DIR"
 run_exon build
 verify_mobile_capture "default" "$(mobile_bundle_for_case "default")"
-for scenario in created-preview deleted-file created-folder deleted-folder duplicated-file documents-preview history-forward sorted-kind search-active; do
+for scenario in created-preview deleted-file trash-view created-folder deleted-folder duplicated-file documents-preview history-forward sorted-kind search-active; do
   verify_mobile_capture "$scenario" "$(mobile_bundle_for_case "$scenario")"
 done

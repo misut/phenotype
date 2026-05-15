@@ -5,7 +5,9 @@ system. It uses a glass toolbar with Finder-like semantic view/action/search
 buttons, translucent sidebar locations, icon/list/column/gallery file views,
 document, image, video, and folder thumbnails, read/create/duplicate/delete
 file actions, empty-folder create/delete actions, and compact Finder-style
-selection status.
+selection status. The sidebar Trash item is backed by a hidden `.Trash`
+directory inside the demo sandbox, so delete actions move files and empty
+folders to Trash before any permanent removal behavior is exercised.
 
 The desktop window requests `WindowChromeStyle::IntegratedTitlebar` with an
 explicit titlebar metric. On macOS the backend uses native AppKit titlebar
@@ -67,10 +69,11 @@ content surface has a machine-readable artifact contract.
 
 It also captures deterministic startup scenarios through
 `PHENOTYPE_FILE_EXPLORER_SCENARIO`: `created-preview`, `deleted-file`,
-`created-folder`, `deleted-folder`, `duplicated-file`, `documents-preview`,
-`history-forward`, `sorted-kind`, and `search-active`.
-These scenarios make create, delete, duplicate, folder operation, navigation
-history, file preview behavior, sort state, and active search visible in the
-semantic artifact without requiring manual click playback. File and folder
-operation scenarios also expose an `Operation: ...` receipt in the status
-surface so the artifact can identify the action kind, target, and result.
+`trash-view`, `created-folder`, `deleted-folder`, `duplicated-file`,
+`documents-preview`, `history-forward`, `sorted-kind`, and `search-active`.
+These scenarios make create, Trash movement, duplicate, folder operation,
+navigation history, file preview behavior, sort state, and active search
+visible in the semantic artifact without requiring manual click playback. File
+and folder operation scenarios also expose an `Operation: ...` receipt in the
+status surface so the artifact can identify the action kind, target, and
+result.

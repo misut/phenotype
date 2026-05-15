@@ -190,6 +190,10 @@ inline fs::path demo_root(std::string_view profile) {
     return base / name;
 }
 
+inline fs::path trash_path(fs::path const& root) {
+    return root / ".Trash";
+}
+
 inline void write_file_if_missing(fs::path const& path, std::string_view body) {
     std::error_code ec;
     if (fs::exists(path, ec))
@@ -206,6 +210,7 @@ inline fs::path ensure_demo_tree(std::string_view profile) {
     fs::create_directories(root / "Documents", ec);
     fs::create_directories(root / "Pictures", ec);
     fs::create_directories(root / "Shared", ec);
+    fs::create_directories(trash_path(root), ec);
 
     write_file_if_missing(
         root / "README.txt",
@@ -372,6 +377,17 @@ inline std::string operation_label(OperationReceipt const& receipt) {
 
 inline std::string relative_location(fs::path const& root, fs::path const& current) {
     std::error_code ec;
+    auto const trash = trash_path(root);
+    if (fs::equivalent(current, trash, ec))
+        return "Trash";
+    ec.clear();
+    auto trash_rel = fs::relative(current, trash, ec);
+    if (!ec && !trash_rel.empty() && trash_rel != ".") {
+        auto text = trash_rel.generic_string();
+        if (text != ".." && !text.starts_with("../"))
+            return std::string("Trash/") + text;
+    }
+    ec.clear();
     auto rel = fs::relative(current, root, ec);
     if (ec || rel.empty() || rel == ".")
         return "Demo Root";
@@ -475,6 +491,8 @@ inline std::vector<Entry> list_entries(
         return entries;
     for (auto const& item : it) {
         auto name = item.path().filename().string();
+        if (!name.empty() && name.front() == '.')
+            continue;
         if (name.empty() || !matches_filter(name, filter))
             continue;
         Entry entry;
@@ -605,6 +623,8 @@ inline fs::path location_path(ExplorerState const& state, std::string_view id) {
         return state.root / "Pictures";
     if (id == "shared")
         return state.root / "Shared";
+    if (id == "trash")
+        return trash_path(state.root);
     return state.root;
 }
 
@@ -784,6 +804,8 @@ inline void delete_selected(ExplorerState& state) {
         return;
     }
     auto path = state.current / state.selected_name;
+    auto trash = trash_path(state.root);
+    bool const deleting_from_trash = same_path(state.current, trash);
     std::error_code ec;
     if (fs::is_directory(path, ec)) {
         if (!deletable_empty_directory(state.root, path)) {
@@ -797,8 +819,34 @@ inline void delete_selected(ExplorerState& state) {
             return;
         }
         ec.clear();
-        if (!fs::remove(path, ec) || ec) {
-            state.status = "Could not delete folder " + state.selected_name;
+        if (deleting_from_trash) {
+            if (!fs::remove(path, ec) || ec) {
+                state.status = "Could not delete folder " + state.selected_name;
+                record_operation(
+                    state,
+                    "folder_delete",
+                    state.selected_name,
+                    false,
+                    state.status);
+                return;
+            }
+            auto deleted = state.selected_name;
+            state.status = "Deleted folder " + state.selected_name + " from Trash";
+            state.selected_name.clear();
+            record_operation(
+                state,
+                "folder_delete",
+                deleted,
+                true,
+                state.status);
+            return;
+        }
+        fs::create_directories(trash, ec);
+        ec.clear();
+        auto target = unique_child_path(trash, state.selected_name);
+        fs::rename(path, target, ec);
+        if (ec) {
+            state.status = "Could not move folder " + state.selected_name + " to Trash";
             record_operation(
                 state,
                 "folder_delete",
@@ -807,13 +855,13 @@ inline void delete_selected(ExplorerState& state) {
                 state.status);
             return;
         }
-        auto deleted = state.selected_name;
-        state.status = "Deleted folder " + state.selected_name;
+        auto moved = state.selected_name;
+        state.status = "Moved folder " + state.selected_name + " to Trash";
         state.selected_name.clear();
         record_operation(
             state,
             "folder_delete",
-            deleted,
+            moved,
             true,
             state.status);
         return;
@@ -829,7 +877,33 @@ inline void delete_selected(ExplorerState& state) {
             state.status);
         return;
     }
-    if (!fs::remove(path, ec) || ec) {
+    if (deleting_from_trash) {
+        if (!fs::remove(path, ec) || ec) {
+            state.status = "Could not delete " + state.selected_name;
+            record_operation(
+                state,
+                "file_delete",
+                state.selected_name,
+                false,
+                state.status);
+            return;
+        }
+        auto deleted = state.selected_name;
+        state.status = "Deleted " + state.selected_name + " from Trash";
+        state.selected_name.clear();
+        record_operation(
+            state,
+            "file_delete",
+            deleted,
+            true,
+            state.status);
+        return;
+    }
+    fs::create_directories(trash, ec);
+    ec.clear();
+    auto target = unique_child_path(trash, state.selected_name);
+    fs::rename(path, target, ec);
+    if (ec) {
         state.status = "Could not delete " + state.selected_name;
         record_operation(
             state,
@@ -840,7 +914,7 @@ inline void delete_selected(ExplorerState& state) {
         return;
     }
     auto deleted = state.selected_name;
-    state.status = "Deleted " + state.selected_name;
+    state.status = "Moved " + state.selected_name + " to Trash";
     state.selected_name.clear();
     record_operation(
         state,
@@ -935,6 +1009,7 @@ inline void apply_startup_scenario(
         return;
 
     if (name == "created-preview" || name == "create") {
+        select_location(state, "root");
         remove_regular_file_if_present(state.current / "Action Note.txt");
         state.draft_name = "Action Note";
         state.draft_body =
@@ -946,17 +1021,34 @@ inline void apply_startup_scenario(
     }
 
     if (name == "deleted-file" || name == "delete") {
+        select_location(state, "root");
         remove_regular_file_if_present(state.current / "Delete Me.txt");
+        remove_regular_file_if_present(trash_path(state.root) / "Delete Me.txt");
         state.draft_name = "Delete Me";
         state.draft_body =
-            "This temporary file should be deleted before the artifact frame.";
+            "This temporary file should be moved to Trash before the artifact frame.";
         create_file(state);
         delete_selected(state);
         state.mobile_tab = 0;
         return;
     }
 
+    if (name == "trash-view" || name == "trash") {
+        select_location(state, "root");
+        remove_regular_file_if_present(state.current / "Trash Note.txt");
+        remove_regular_file_if_present(trash_path(state.root) / "Trash Note.txt");
+        state.draft_name = "Trash Note";
+        state.draft_body =
+            "This note proves delete moves sandbox files to Trash.";
+        create_file(state);
+        delete_selected(state);
+        select_location(state, "trash");
+        state.mobile_tab = 0;
+        return;
+    }
+
     if (name == "created-folder" || name == "folder-create") {
+        select_location(state, "root");
         remove_directory_if_present(state.current / "Review Folder");
         state.draft_folder_name = "Review Folder";
         create_folder(state);
@@ -965,7 +1057,9 @@ inline void apply_startup_scenario(
     }
 
     if (name == "deleted-folder" || name == "folder-delete") {
+        select_location(state, "root");
         remove_directory_if_present(state.current / "Trash Folder");
+        remove_directory_if_present(trash_path(state.root) / "Trash Folder");
         state.draft_folder_name = "Trash Folder";
         create_folder(state);
         delete_selected(state);
