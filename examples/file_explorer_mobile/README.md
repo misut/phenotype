@@ -28,8 +28,8 @@ The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity, and
 bounded material resource budgets.
 
-The local gate also captures `created-preview`, `deleted-file`, and
-`documents-preview` startup scenarios through
+The local gate also captures `created-preview`, `deleted-file`,
+`documents-preview`, and `history-forward` startup scenarios through
 `PHENOTYPE_FILE_EXPLORER_SCENARIO`. These scenario artifacts keep mobile
-create, delete, navigation, and preview behavior debuggable without interactive
-input replay.
+create, delete, navigation history, and preview behavior debuggable without
+interactive input replay.

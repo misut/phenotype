@@ -1,7 +1,7 @@
-#pragma once
-
+module;
 #include <algorithm>
 #include <cctype>
+#include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
@@ -11,7 +11,9 @@
 #include <system_error>
 #include <vector>
 
-namespace file_explorer_demo {
+export module file_explorer_shared;
+
+export namespace file_explorer_demo {
 
 namespace fs = std::filesystem;
 
@@ -28,6 +30,8 @@ struct Snapshot {
     std::vector<Entry> entries;
     Entry selected{};
     bool has_selection = false;
+    bool can_go_back = false;
+    bool can_go_forward = false;
     std::string preview;
     std::size_t file_count = 0;
     std::size_t folder_count = 0;
@@ -41,6 +45,8 @@ struct ExplorerState {
     std::string draft_name = "New Note.txt";
     std::string draft_body = "Created from the phenotype file explorer demo.";
     std::string status = "Ready";
+    std::vector<fs::path> back_stack;
+    std::vector<fs::path> forward_stack;
     int viewport_width = 0;
     int viewport_height = 0;
     float viewport_scale = 1.0f;
@@ -217,6 +223,58 @@ inline std::string relative_location(fs::path const& root, fs::path const& curre
     return std::string("Demo Root/") + rel.generic_string();
 }
 
+inline bool same_path(fs::path const& a, fs::path const& b) {
+    if (a.empty() || b.empty())
+        return a.empty() == b.empty();
+
+    std::error_code ec;
+    if (fs::equivalent(a, b, ec))
+        return true;
+
+    auto lhs = a.lexically_normal().generic_string();
+    auto rhs = b.lexically_normal().generic_string();
+#if defined(_WIN32)
+    lhs = lower_copy(std::move(lhs));
+    rhs = lower_copy(std::move(rhs));
+#endif
+    return lhs == rhs;
+}
+
+inline void trim_history(std::vector<fs::path>& history) {
+    constexpr std::size_t max_history = 32;
+    if (history.size() > max_history) {
+        history.erase(history.begin(),
+                      history.begin()
+                          + static_cast<std::ptrdiff_t>(
+                              history.size() - max_history));
+    }
+}
+
+inline void remember_current_for_back(ExplorerState& state) {
+    if (state.current.empty())
+        return;
+    if (state.back_stack.empty()
+        || !same_path(state.back_stack.back(), state.current)) {
+        state.back_stack.push_back(state.current);
+        trim_history(state.back_stack);
+    }
+    state.forward_stack.clear();
+}
+
+inline void open_directory(
+        ExplorerState& state,
+        fs::path next,
+        std::string status,
+        bool record_history = true) {
+    if (!same_path(state.current, next)) {
+        if (record_history)
+            remember_current_for_back(state);
+        state.current = std::move(next);
+    }
+    state.selected_name.clear();
+    state.status = std::move(status);
+}
+
 inline bool matches_filter(std::string const& name, std::string const& filter) {
     auto needle = trim(filter);
     if (needle.empty())
@@ -298,6 +356,8 @@ inline Snapshot snapshot(ExplorerState const& state) {
     out.root = state.root;
     out.current = state.current;
     out.relative_location = relative_location(state.root, state.current);
+    out.can_go_back = !state.back_stack.empty();
+    out.can_go_forward = !state.forward_stack.empty();
     out.entries = list_entries(state.current, state.search);
     for (auto const& entry : out.entries) {
         if (entry.folder)
@@ -342,9 +402,10 @@ inline void select_location(ExplorerState& state, std::string_view id) {
         state.status = "Location is not available.";
         return;
     }
-    state.current = next;
-    state.selected_name.clear();
-    state.status = "Opened " + relative_location(state.root, state.current);
+    open_directory(
+        state,
+        next,
+        "Opened " + relative_location(state.root, next));
 }
 
 inline void go_up(ExplorerState& state) {
@@ -352,18 +413,54 @@ inline void go_up(ExplorerState& state) {
         state.status = "Already at the demo root.";
         return;
     }
-    state.current = state.current.parent_path();
-    state.selected_name.clear();
-    state.status = "Moved up to " + relative_location(state.root, state.current);
+    auto next = state.current.parent_path();
+    open_directory(
+        state,
+        next,
+        "Moved up to " + relative_location(state.root, next));
+}
+
+inline void go_back(ExplorerState& state) {
+    if (state.back_stack.empty()) {
+        state.status = "No previous location.";
+        return;
+    }
+    if (!state.current.empty()) {
+        state.forward_stack.push_back(state.current);
+        trim_history(state.forward_stack);
+    }
+    auto next = state.back_stack.back();
+    state.back_stack.pop_back();
+    open_directory(
+        state,
+        next,
+        "Went back to " + relative_location(state.root, next),
+        false);
+}
+
+inline void go_forward(ExplorerState& state) {
+    if (state.forward_stack.empty()) {
+        state.status = "No forward location.";
+        return;
+    }
+    if (!state.current.empty()) {
+        state.back_stack.push_back(state.current);
+        trim_history(state.back_stack);
+    }
+    auto next = state.forward_stack.back();
+    state.forward_stack.pop_back();
+    open_directory(
+        state,
+        next,
+        "Went forward to " + relative_location(state.root, next),
+        false);
 }
 
 inline void select_entry(ExplorerState& state, std::string const& name) {
     std::error_code ec;
     auto path = state.current / name;
     if (fs::is_directory(path, ec)) {
-        state.current = path;
-        state.selected_name.clear();
-        state.status = "Opened " + name;
+        open_directory(state, path, "Opened " + name);
         return;
     }
     ec.clear();
@@ -432,6 +529,8 @@ inline void reset_demo_tree(ExplorerState& state, std::string_view profile) {
     state.search.clear();
     state.draft_name = "New Note.txt";
     state.draft_body = "Created from the phenotype file explorer demo.";
+    state.back_stack.clear();
+    state.forward_stack.clear();
     state.status = "Demo files reset.";
 }
 
@@ -476,6 +575,14 @@ inline void apply_startup_scenario(
         select_location(state, "documents");
         select_entry(state, "Project Notes.txt");
         state.mobile_tab = 1;
+        return;
+    }
+
+    if (name == "history-forward" || name == "history") {
+        select_location(state, "documents");
+        go_back(state);
+        go_forward(state);
+        state.mobile_tab = 0;
         return;
     }
 

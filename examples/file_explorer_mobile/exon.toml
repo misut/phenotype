@@ -19,4 +19,5 @@ ldflags = ["-framework", "Security", "-Wl,-framework,CoreFoundation"]
 "github.com/misut/cppx" = "1.9.0"
 
 [dependencies.path]
+file_explorer_shared = "../file_explorer_shared"
 phenotype = "../.."

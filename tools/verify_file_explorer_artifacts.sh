@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+SHARED_DIR="$ROOT/examples/file_explorer_shared"
 DESKTOP_DIR="$ROOT/examples/file_explorer_desktop"
 MOBILE_DIR="$ROOT/examples/file_explorer_mobile"
 DESKTOP_BUNDLE_ROOT="${PHENOTYPE_FILE_EXPLORER_DESKTOP_ARTIFACT_DIR:-}"
@@ -84,6 +85,10 @@ append_scenario_requirements() {
     "documents-preview")
       extra_args+=(--require-label-contains "Project Notes.txt")
       extra_args+=(--require-label-contains "Finder-like desktop layout")
+      ;;
+    "history-forward")
+      extra_args+=(--require-label-contains "Project Notes.txt")
+      extra_args+=(--require-label-contains "Went forward to Demo Root/Documents")
       ;;
     *)
       echo "error: unknown file explorer startup scenario: $scenario" >&2
@@ -227,12 +232,15 @@ verify_mobile_capture() {
   run_uv_python "${verify_args[@]}"
 }
 
+cd "$SHARED_DIR"
+run_exon test
+
 cd "$DESKTOP_DIR"
 run_exon build
 for mode in icon list column gallery; do
   verify_desktop_capture "$mode" "default" "$(desktop_bundle_for_case "$mode")"
 done
-for scenario in created-preview deleted-file documents-preview; do
+for scenario in created-preview deleted-file documents-preview history-forward; do
   verify_desktop_capture \
     "icon" \
     "$scenario" \
@@ -242,6 +250,6 @@ done
 cd "$MOBILE_DIR"
 run_exon build
 verify_mobile_capture "default" "$(mobile_bundle_for_case "default")"
-for scenario in created-preview deleted-file documents-preview; do
+for scenario in created-preview deleted-file documents-preview history-forward; do
   verify_mobile_capture "$scenario" "$(mobile_bundle_for_case "$scenario")"
 done

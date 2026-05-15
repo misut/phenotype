@@ -38,6 +38,6 @@ content surface has a machine-readable artifact contract.
 
 It also captures deterministic startup scenarios through
 `PHENOTYPE_FILE_EXPLORER_SCENARIO`: `created-preview`, `deleted-file`, and
-`documents-preview`. These scenarios make create, delete, navigation, and file
-preview behavior visible in the semantic artifact without requiring manual
-click playback.
+`documents-preview`, and `history-forward`. These scenarios make create,
+delete, navigation history, and file preview behavior visible in the semantic
+artifact without requiring manual click playback.
