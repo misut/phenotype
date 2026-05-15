@@ -49,6 +49,20 @@ int main() {
     assert(snap.selected_kind_label == "TXT File");
     assert(snap.selected_size_label != "--");
     assert(snap.action_summary.find("Selected README.txt") != std::string::npos);
+    bool saw_korean_pdf = false;
+    bool saw_japanese_pdf = false;
+    bool saw_chinese_pdf = false;
+    for (auto const& entry : snap.entries) {
+        if (entry.name == "1_필수_중도인출 신청서.pdf")
+            saw_korean_pdf = true;
+        if (entry.name == "契約書_サンプル.pdf")
+            saw_japanese_pdf = true;
+        if (entry.name == "资产证明.pdf")
+            saw_chinese_pdf = true;
+    }
+    assert(saw_korean_pdf);
+    assert(saw_japanese_pdf);
+    assert(saw_chinese_pdf);
 
     state.draft_name = "../ Launch Plan";
     state.draft_body = "Created from test_file_explorer_model.";

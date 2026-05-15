@@ -30,6 +30,11 @@
     "More",
     "Search Control",
     "Files",
+    "1_필수_중도인출 신청서.pdf",
+    "2_필수_운용지시서.pdf",
+    "작성예시3_선택_DC 탈퇴신청서.pdf",
+    "契約書_サンプル.pdf",
+    "资产证明.pdf",
     "Application Form 2.pdf",
     "Screen Recording 2025-11-04.mov",
     "Screen Recording 2025-11-07.mov",
@@ -129,6 +134,12 @@
   },
   "pixel_regions": [
     {
+      "name": "finder-titlebar-reserve",
+      "rect": [0.02, 0.02, 0.18, 0.08],
+      "min_luma_delta": 8.0,
+      "min_unique_colors": 16
+    },
+    {
       "name": "finder-sidebar",
       "rect": [0.02, 0.06, 0.18, 0.86],
       "min_luma_delta": 20.0,
@@ -151,6 +162,28 @@
       "rect": [0.35, 0.43, 0.12, 0.08],
       "min_luma_delta": 20.0,
       "min_unique_colors": 12
+    }
+  ],
+  "pixel_region_metrics": [
+    {
+      "region": "finder-titlebar-reserve",
+      "metric": "luma_stddev",
+      "lte": 4.0
+    },
+    {
+      "region": "finder-titlebar-reserve",
+      "metric": "edge_energy",
+      "lte": 1.2
+    },
+    {
+      "region": "finder-toolbar",
+      "metric": "edge_energy",
+      "gte": 2.0
+    },
+    {
+      "region": "finder-selected-label",
+      "metric": "luma_stddev",
+      "gte": 10.0
     }
   ]
 }

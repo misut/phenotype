@@ -170,6 +170,23 @@ inline fs::path ensure_demo_tree(std::string_view profile) {
     write_file_if_missing(
         root / "Application Form 2.pdf",
         "PDF placeholder for the Recents probe scene.\n");
+    if (profile == "desktop" || profile == "test-model-contract") {
+        write_file_if_missing(
+            root / "1_필수_중도인출 신청서.pdf",
+            "PDF placeholder with Korean filename for font fallback verification.\n");
+        write_file_if_missing(
+            root / "2_필수_운용지시서.pdf",
+            "PDF placeholder with Korean filename for font fallback verification.\n");
+        write_file_if_missing(
+            root / "작성예시3_선택_DC 탈퇴신청서.pdf",
+            "PDF placeholder with Korean filename for font fallback verification.\n");
+        write_file_if_missing(
+            root / "契約書_サンプル.pdf",
+            "PDF placeholder with Japanese filename for font fallback verification.\n");
+        write_file_if_missing(
+            root / "资产证明.pdf",
+            "PDF placeholder with Chinese filename for font fallback verification.\n");
+    }
     write_file_if_missing(
         root / "Withdrawal Notice.pdf",
         "PDF placeholder for the Recents probe scene.\n");
