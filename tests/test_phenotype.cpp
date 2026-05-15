@@ -1577,6 +1577,110 @@ void test_material_planner_backdrop_and_fallback_paths() {
     std::puts("PASS: material planner resolves backdrop and fallback paths");
 }
 
+void test_material_text_foreground_resolution() {
+    Theme theme{};
+    auto style = material_style_for_kind(MaterialKind::Regular, theme);
+    MaterialRequest request{
+        style,
+        MaterialGeometry{12.0f, 20.0f, 240.0f, 96.0f, 10.0f},
+    };
+
+    MaterialEnvironment env{};
+    env.capabilities.material_surfaces = true;
+    env.capabilities.material_backdrop_blur = true;
+    env.capabilities.shader_blur = true;
+    env.capabilities.frame_history = true;
+    env.backdrop.available = true;
+    env.backdrop.stable = true;
+    env.backdrop.source = "previous-presented-frame";
+    env.backdrop.luma_min = 0.84f;
+    env.backdrop.luma_max = 0.97f;
+    env.backdrop.luma_mean = 0.90f;
+    env.render_target.width = 520;
+    env.render_target.height = 760;
+    env.render_target.scale = 2.0f;
+
+    auto plan = plan_material_surface(request, env);
+    assert(plan.backdrop_sampling);
+    assert(plan.foreground.backdrop_driven);
+    std::vector<MaterialRuntimeRecord> records{
+        MaterialRuntimeRecord{plan, 4u},
+    };
+
+    auto primary = material_resolve_text_foreground(
+        records,
+        5u,
+        24.0f,
+        36.0f,
+        Color{theme.foreground.r, theme.foreground.g, theme.foreground.b, 96},
+        theme);
+    assert(primary.has_material);
+    assert(primary.remapped);
+    assert(std::string(primary.role) == "primary");
+    assert(primary.material_command_index == 4u);
+    assert(material_color_rgb_equal(primary.color, plan.foreground.primary));
+    assert(primary.color.a == 96);
+
+    auto secondary = material_resolve_text_foreground(
+        records,
+        5u,
+        24.0f,
+        36.0f,
+        theme.muted,
+        theme);
+    assert(secondary.has_material);
+    assert(secondary.remapped);
+    assert(std::string(secondary.role) == "secondary");
+    assert(material_color_rgb_equal(secondary.color, plan.foreground.secondary));
+
+    auto accent = material_resolve_text_foreground(
+        records,
+        5u,
+        24.0f,
+        36.0f,
+        theme.accent,
+        theme);
+    assert(accent.has_material);
+    assert(accent.remapped);
+    assert(std::string(accent.role) == "accent");
+    assert(material_color_rgb_equal(accent.color, plan.foreground.accent));
+
+    Color custom{12, 34, 56, 200};
+    auto custom_result = material_resolve_text_foreground(
+        records,
+        5u,
+        24.0f,
+        36.0f,
+        custom,
+        theme);
+    assert(custom_result.has_material);
+    assert(!custom_result.remapped);
+    assert(material_color_rgb_equal(custom_result.color, custom));
+    assert(custom_result.color.a == custom.a);
+
+    auto outside = material_resolve_text_foreground(
+        records,
+        5u,
+        400.0f,
+        36.0f,
+        theme.foreground,
+        theme);
+    assert(!outside.has_material);
+    assert(!outside.remapped);
+
+    auto before_material = material_resolve_text_foreground(
+        records,
+        3u,
+        24.0f,
+        36.0f,
+        theme.foreground,
+        theme);
+    assert(!before_material.has_material);
+    assert(!before_material.remapped);
+
+    std::puts("PASS: material text foreground resolution");
+}
+
 void test_material_surface_emits_material_rect_command() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -2886,6 +2990,7 @@ int main() {
     test_paint_only_props_invalidate_diff_cache();
     test_material_props_invalidate_diff_cache();
     test_material_planner_backdrop_and_fallback_paths();
+    test_material_text_foreground_resolution();
     test_material_surface_emits_material_rect_command();
     test_material_surface_shape_overrides();
     test_material_container_scope_emits_command_context();

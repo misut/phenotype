@@ -360,6 +360,8 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "material_upload_bytes": 0,
         "material_buffer_capacity_bytes": 0,
         "material_buffer_reallocations": 0,
+        "foreground_text_candidate_count": 1,
+        "foreground_text_remap_count": 1,
         "cpu_decode_ns": 100,
         "cpu_material_upload_ns": 0,
         "cpu_total_ns": 200,

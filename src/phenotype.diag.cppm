@@ -1477,6 +1477,16 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.material_buffer_reallocations)});
+        out.emplace(
+            "foreground_text_candidate_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.foreground_text_candidate_count)});
+        out.emplace(
+            "foreground_text_remap_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.foreground_text_remap_count)});
         out.emplace("cpu_decode_ns", json::Value{summary.cpu_decode_ns});
         out.emplace(
             "cpu_material_upload_ns",

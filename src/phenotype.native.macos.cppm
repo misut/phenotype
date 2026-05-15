@@ -1732,6 +1732,8 @@ struct FrameScratch {
     std::vector<PendingImageCmd> images;
     std::vector<std::string> overlay_text_storage;
     std::vector<MaterialRuntimeRecord> material_records;
+    std::uint32_t foreground_text_candidate_count = 0;
+    std::uint32_t foreground_text_remap_count = 0;
 
     // Per-FillPath scratch buffers, reused across every Cmd::FillPath
     // decode in a single frame. CAD HATCH-heavy content (e.g.
@@ -1765,6 +1767,8 @@ struct FrameScratch {
         overlay_text_instances.clear();
         overlay_text_storage.clear();
         material_records.clear();
+        foreground_text_candidate_count = 0;
+        foreground_text_remap_count = 0;
         overlay_text_first = 0;
         overlay_text_count = 0;
     }
@@ -2444,6 +2448,19 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     || !reader.read_text(text, text_len))
                     return false;
                 auto color = unpack_color(packed);
+                auto foreground = material_resolve_text_foreground(
+                    scratch.material_records,
+                    current_command_index,
+                    x,
+                    y,
+                    color,
+                    ::phenotype::detail::g_app.theme);
+                if (foreground.has_material)
+                    ++scratch.foreground_text_candidate_count;
+                if (foreground.remapped) {
+                    ++scratch.foreground_text_remap_count;
+                    color = foreground.color;
+                }
                 ParsedTextRun run{};
                 run.x = x;
                 run.y = y;
@@ -6447,6 +6464,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_summary.cpu_decode_ns = decode_ns;
     material_summary.plan_count =
         static_cast<std::uint32_t>(g_renderer.scratch.material_records.size());
+    material_summary.foreground_text_candidate_count =
+        g_renderer.scratch.foreground_text_candidate_count;
+    material_summary.foreground_text_remap_count =
+        g_renderer.scratch.foreground_text_remap_count;
     for (auto const& record : g_renderer.scratch.material_records) {
         if (!record.plan.backdrop_sampling || record.plan.fallback()) {
             ++material_summary.fallback_instance_count;

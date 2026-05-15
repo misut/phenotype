@@ -185,6 +185,8 @@ struct FrameScratch {
     // during decode, consumed during the post-decode text-atlas pass to
     // attribute glyph instances to the correct batch.
     std::vector<std::uint32_t> text_entries_batch_idx;
+    std::uint32_t foreground_text_candidate_count = 0;
+    std::uint32_t foreground_text_remap_count = 0;
 
     // Per-FillPath scratch buffers, reused across every Cmd::FillPath
     // decode in a single frame. CAD HATCH-heavy content (e.g.
@@ -4372,6 +4374,19 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 reinterpret_cast<char const*>(&buf[std::min(pos, len)]),
                 std::min(tlen, len > pos ? len - pos : 0u));
             skip_str(tlen);
+            auto foreground = ::phenotype::material_resolve_text_foreground(
+                out.material_records,
+                current_command_index,
+                x,
+                y,
+                cc,
+                ::phenotype::current_theme());
+            if (foreground.has_material)
+                ++out.foreground_text_candidate_count;
+            if (foreground.remapped) {
+                ++out.foreground_text_remap_count;
+                cc = foreground.color;
+            }
             prepare_batch_for_pipeline(out, 2);
             ::phenotype::native::TextEntry entry{};
             entry.x = x; entry.y = y;
@@ -4976,15 +4991,30 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                 out.batches.back().colors.push_back(inst);
             } else if constexpr (std::same_as<T, ::phenotype::DrawTextCmd>) {
                 prepare_batch_for_pipeline(out, 2);
+                auto color = c.color;
+                auto foreground =
+                    ::phenotype::material_resolve_text_foreground(
+                        out.material_records,
+                        current_command_index,
+                        c.x,
+                        c.y,
+                        color,
+                        ::phenotype::current_theme());
+                if (foreground.has_material)
+                    ++out.foreground_text_candidate_count;
+                if (foreground.remapped) {
+                    ++out.foreground_text_remap_count;
+                    color = foreground.color;
+                }
                 ::phenotype::native::TextEntry entry{};
                 entry.x = c.x;
                 entry.y = c.y;
                 entry.font_size = c.font_size;
                 entry.mono = c.mono;
-                entry.r = c.color.r / 255.0f;
-                entry.g = c.color.g / 255.0f;
-                entry.b = c.color.b / 255.0f;
-                entry.a = c.color.a / 255.0f;
+                entry.r = color.r / 255.0f;
+                entry.g = color.g / 255.0f;
+                entry.b = color.b / 255.0f;
+                entry.a = color.a / 255.0f;
                 entry.text = c.text;
                 entry.family = c.family;
                 entry.weight = c.weight;
@@ -5866,6 +5896,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_summary.plan_count =
         static_cast<std::uint32_t>(scratch.material_records.size());
     material_summary.fallback_instance_count = material_summary.plan_count;
+    material_summary.foreground_text_candidate_count =
+        scratch.foreground_text_candidate_count;
+    material_summary.foreground_text_remap_count =
+        scratch.foreground_text_remap_count;
     material_summary.cpu_decode_ns =
         std::chrono::duration_cast<std::chrono::nanoseconds>(
             t_decode_end - t_start).count();

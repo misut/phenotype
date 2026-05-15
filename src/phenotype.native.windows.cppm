@@ -2557,6 +2557,8 @@ struct DecodedFrame {
     std::vector<HitRegionCmd> hit_regions;
     std::vector<MaterialRuntimeRecord> material_records;
     std::vector<PendingImageCmd> images;
+    std::uint32_t foreground_text_candidate_count = 0;
+    std::uint32_t foreground_text_remap_count = 0;
 };
 
 inline bool decode_frame_commands(unsigned char const* buf,
@@ -2744,6 +2746,19 @@ inline bool decode_frame_commands(unsigned char const* buf,
             (void)rotation;
             (void)width_factor;
             auto color = unpack_color(packed);
+            auto foreground = material_resolve_text_foreground(
+                frame.material_records,
+                current_command_index,
+                x,
+                y,
+                color,
+                ::phenotype::detail::g_app.theme);
+            if (foreground.has_material)
+                ++frame.foreground_text_candidate_count;
+            if (foreground.remapped) {
+                ++frame.foreground_text_remap_count;
+                color = foreground.color;
+            }
             ::phenotype::native::TextEntry entry{};
             entry.x = x;
             entry.y = y;
@@ -4762,6 +4777,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_summary.plan_count =
         static_cast<std::uint32_t>(g_renderer.material_records.size());
     material_summary.fallback_instance_count = material_summary.plan_count;
+    material_summary.foreground_text_candidate_count =
+        decoded.foreground_text_candidate_count;
+    material_summary.foreground_text_remap_count =
+        decoded.foreground_text_remap_count;
     g_renderer.material_executor_summary = material_summary;
     suppress_focused_input_base_text_for_composition(decoded);
     (void)process_completed_images();

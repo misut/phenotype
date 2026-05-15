@@ -235,7 +235,10 @@ the foreground scheme/source, estimated background luminance, contrast ratios,
 the minimum contrast target, and whether the recommendation is backdrop-driven,
 high-contrast, vibrancy-enabled, and deterministic. Backends consume or expose
 this recommendation; they do not choose independent foreground policy for glass
-surfaces.
+surfaces. Native command decoders also use the same pure recommendation to
+remap default primary, secondary, and accent text tokens drawn inside a prior
+material surface. Custom text colors are left unchanged, and the original text
+alpha is preserved.
 `quality_policy` records the pure planner's resolved
 sampling/noise/shadow switches and caller quality limits, including
 `max_backdrop_pixels`. `render_target` records sanitized target dimensions,
@@ -301,9 +304,12 @@ radius not matching the backend-executed radius.
 Backends separately publish `renderer.material_executor_summary` for edge-only
 execution telemetry: material instances, fallback instances, material draw
 calls, upload bytes/capacity, framebuffer-history copy bounds, and CPU enqueue
-timings. These fields are not inputs to the pure planner. They let artifact
-gates prove the backend stayed inside deterministic resource limits while also
-leaving nondeterministic timing data available for post-failure diagnosis.
+timings. It also records `foreground_text_candidate_count` and
+`foreground_text_remap_count`, proving whether the backend consumed
+`MaterialPlan.foreground` for text commands without treating the counters as
+planner inputs. These fields let artifact gates prove the backend stayed inside
+deterministic resource limits while also leaving nondeterministic timing data
+available for post-failure diagnosis.
 Platform APIs, Metal/AppKit calls, shader compilation, texture capture, clocks,
 filesystem writes, and process execution stay outside this pure layer.
 

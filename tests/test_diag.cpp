@@ -978,6 +978,8 @@ void test_material_runtime_record_json_contract() {
     MaterialExecutorSummary executor_summary;
     executor_summary.plan_count = 1;
     executor_summary.fallback_instance_count = 1;
+    executor_summary.foreground_text_candidate_count = 2;
+    executor_summary.foreground_text_remap_count = 1;
     executor_summary.cpu_decode_ns = 120;
     auto executor = diag::detail::material_executor_summary_json(
         executor_summary);
@@ -988,6 +990,9 @@ void test_material_runtime_record_json_contract() {
     assert(executor_obj.at("material_draw_calls").as_integer() == 0);
     assert(executor_obj.at("material_max_sample_taps").as_integer() == 0);
     assert(executor_obj.at("material_total_sample_taps").as_integer() == 0);
+    assert(executor_obj.at("foreground_text_candidate_count").as_integer()
+           == 2);
+    assert(executor_obj.at("foreground_text_remap_count").as_integer() == 1);
     assert(executor_obj.at("cpu_decode_ns").as_integer() == 120);
 
     auto empty = diag::detail::empty_material_renderer_contract(

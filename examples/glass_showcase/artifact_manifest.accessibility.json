@@ -232,6 +232,16 @@
       "lte": 2000000
     },
     {
+      "path": "renderer.material_executor_summary.foreground_text_candidate_count",
+      "gte": 3,
+      "lte": 16
+    },
+    {
+      "path": "renderer.material_executor_summary.foreground_text_remap_count",
+      "gte": 3,
+      "lte": 16
+    },
+    {
       "path": "renderer.material_executor_summary.cpu_total_ns",
       "gte": 1,
       "lte": 100000000

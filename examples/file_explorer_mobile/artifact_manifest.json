@@ -90,6 +90,18 @@
       "equals": 550
     }
   ],
+  "require_runtime_numeric_bounds": [
+    {
+      "path": "renderer.material_executor_summary.foreground_text_candidate_count",
+      "gte": 12,
+      "lte": 40
+    },
+    {
+      "path": "renderer.material_executor_summary.foreground_text_remap_count",
+      "gte": 10,
+      "lte": 40
+    }
+  ],
   "require_material_resource_bounds": {
     "max_plan_blur_radius_lte": 36.0,
     "max_plan_sample_taps_lte": 25,
