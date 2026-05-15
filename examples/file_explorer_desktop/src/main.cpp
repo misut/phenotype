@@ -83,6 +83,7 @@ struct State {
 
 constexpr float k_pi = 3.14159265358979323846f;
 constexpr float k_tau = 6.28318530717958647692f;
+constexpr float k_integrated_titlebar_height = 56.0f;
 
 phenotype::Color rgba(int r, int g, int b, int a = 255) {
     return phenotype::Color{
@@ -493,7 +494,7 @@ void finder_sidebar(State const& state) {
         explorer.current);
     bool const in_root = relative == "Demo Root";
     layout::sidebar(252.0f, [&] {
-        layout::spacer(52);
+        layout::spacer(k_integrated_titlebar_height);
         sidebar_row("Recents", "recents", "root", in_root);
         sidebar_row("Shared", "folder", "shared",
                     relative == "Demo Root/Shared");
@@ -1255,6 +1256,11 @@ int main() {
 
     phenotype::native::WindowOptions window_options{
         .chrome = phenotype::native::WindowChromeStyle::IntegratedTitlebar,
+        .integrated_titlebar = {
+            .height = k_integrated_titlebar_height,
+            .drag_region_height = k_integrated_titlebar_height,
+            .trailing_control_reserved_width = 168.0f,
+        },
     };
 
     return phenotype::native::run_app<State, Msg>(

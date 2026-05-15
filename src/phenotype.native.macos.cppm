@@ -255,6 +255,11 @@ inline SEL sel_set_titlebar_appears_transparent() {
     return sel;
 }
 
+inline SEL sel_set_movable_by_window_background() {
+    static auto sel = sel_registerName("setMovableByWindowBackground:");
+    return sel;
+}
+
 inline SEL sel_conversation_identifier() {
     static auto sel = sel_registerName("conversationIdentifier");
     return sel;
@@ -6151,6 +6156,10 @@ inline void configure_window(native_surface_handle handle,
         ns_window,
         sel_set_title_visibility(),
         hidden_title);
+    objc_send<void>(
+        ns_window,
+        sel_set_movable_by_window_background(),
+        static_cast<ObjcBool>(1));
 }
 
 inline void renderer_init(native_surface_handle handle) {
