@@ -18,6 +18,11 @@ The toolbar itself is a borderless material shell with rounded material control
 groups, so the artifact keeps Finder-like chrome without duplicating native
 window controls.
 
+Startup frame artifacts intentionally capture phenotype content rather than the
+operating system's non-client controls. The top-left titlebar reserve must stay
+visually quiet in the artifact because AppKit/Win32 own the real close,
+minimize, maximize, and caption-button hit testing at runtime.
+
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-desktop`. The example never points at the user's real
 home folder.
