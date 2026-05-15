@@ -21,12 +21,7 @@ module;
 #include <variant>
 #include <vector>
 
-#include <GLFW/glfw3.h>
-
 #ifdef __APPLE__
-#define GLFW_EXPOSE_NATIVE_COCOA
-#include <GLFW/glfw3native.h>
-
 #define NS_PRIVATE_IMPLEMENTATION
 #define MTL_PRIVATE_IMPLEMENTATION
 #define CA_PRIVATE_IMPLEMENTATION
@@ -1641,7 +1636,6 @@ inline constexpr unsigned long long ns_event_phase_may_begin = 1ull << 5;
 inline bool g_force_disable_system_caret_for_tests = false;
 
 struct ImeState {
-    GLFWwindow* window = nullptr;
     id ns_window = nullptr;
     id content_view = nullptr;
     id editor_view = nullptr;
@@ -4124,19 +4118,11 @@ inline NativeSurfaceDescriptor* desktop_surface(native_surface_handle handle) {
     return static_cast<NativeSurfaceDescriptor*>(handle);
 }
 
-inline GLFWwindow* surface_glfw_window(NativeSurfaceDescriptor const* surface) {
-    return surface && surface->kind == NativeSurfaceKind::GlfwWindow
-        ? static_cast<GLFWwindow*>(surface->window)
-        : nullptr;
-}
-
 inline id surface_ns_window(NativeSurfaceDescriptor const* surface) {
     if (!surface)
         return nullptr;
     if (surface->kind == NativeSurfaceKind::MacOSWindow)
         return static_cast<id>(surface->window);
-    if (auto* window = surface_glfw_window(surface))
-        return static_cast<id>(glfwGetCocoaWindow(window));
     return nullptr;
 }
 
@@ -4150,25 +4136,9 @@ inline id surface_content_view(NativeSurfaceDescriptor const* surface) {
     return nullptr;
 }
 
-inline float current_backing_scale(GLFWwindow* window) {
-    if (!window) return 1.0f;
-    int fbw = 0;
-    int fbh = 0;
-    int winw = 0;
-    int winh = 0;
-    glfwGetFramebufferSize(window, &fbw, &fbh);
-    glfwGetWindowSize(window, &winw, &winh);
-    float sx = (winw > 0) ? static_cast<float>(fbw) / static_cast<float>(winw) : 1.0f;
-    float sy = (winh > 0) ? static_cast<float>(fbh) / static_cast<float>(winh) : 1.0f;
-    float scale = (sx > sy) ? sx : sy;
-    return (scale > 0.0f && std::isfinite(scale)) ? scale : 1.0f;
-}
-
 inline float surface_content_scale(NativeSurfaceDescriptor const* surface) {
     if (!surface)
         return 1.0f;
-    if (auto* window = surface_glfw_window(surface))
-        return current_backing_scale(window);
     float const scale = surface->content_scale;
     return (scale > 0.0f && std::isfinite(scale)) ? scale : 1.0f;
 }
@@ -4180,10 +4150,6 @@ inline void surface_framebuffer_size(NativeSurfaceDescriptor const* surface,
     height = 0;
     if (!surface)
         return;
-    if (auto* window = surface_glfw_window(surface)) {
-        glfwGetFramebufferSize(window, &width, &height);
-        return;
-    }
     width = surface->framebuffer_width;
     height = surface->framebuffer_height;
 }
@@ -4195,10 +4161,6 @@ inline void surface_logical_size(NativeSurfaceDescriptor const* surface,
     height = 0;
     if (!surface)
         return;
-    if (auto* window = surface_glfw_window(surface)) {
-        glfwGetWindowSize(window, &width, &height);
-        return;
-    }
     width = surface->logical_width;
     height = surface->logical_height;
 }
@@ -5841,8 +5803,6 @@ inline bool sync_scroll_tracking_state(unsigned long long phase,
 }
 
 inline float current_scroll_viewport_height() {
-    // shell.cppm's viewport_height() reads from the active host's cached
-    // size, which is kept up to date by the GLFW driver's resize callback.
     return viewport_height();
 }
 
@@ -5850,22 +5810,23 @@ inline float current_scroll_viewport_width() {
     return viewport_width();
 }
 
-// Read the cursor's content-area position via GLFW, which already
-// returns top-down logical pixels matching phenotype's paint coords.
-// Returns false when the window is unbound. Forward-declared here
-// because both `handle_local_scroll_event` (Stage-8 canvas pan/zoom
-// branch) and the magnify handler below need it.
-inline bool glfw_cursor_position(float& out_x, float& out_y) {
-    if (!g_ime.window) return false;
-    double cx = 0.0, cy = 0.0;
-    glfwGetCursorPos(g_ime.window, &cx, &cy);
-    out_x = static_cast<float>(cx);
-    out_y = static_cast<float>(cy);
+inline bool event_cursor_position(id event, float& out_x, float& out_y) {
+    if (!event || !g_ime.content_view)
+        return false;
+    auto point = objc_send<CGPoint>(event, sel_location_in_window());
+    auto converted = objc_send<CGPoint>(
+        g_ime.content_view,
+        sel_convert_point_from_view(),
+        point,
+        static_cast<id>(nullptr));
+    auto bounds = objc_send<CGRect>(g_ime.content_view, sel_bounds());
+    out_x = static_cast<float>(converted.x);
+    out_y = static_cast<float>(bounds.size.height - converted.y);
     return true;
 }
 
 inline bool handle_local_scroll_event(id event) {
-    if (!event || !g_ime.window || !g_ime.ns_window)
+    if (!event || !g_ime.ns_window)
         return false;
 
     auto event_window = objc_send<id>(event, sel_window());
@@ -5886,7 +5847,7 @@ inline bool handle_local_scroll_event(id event) {
         && (scrolling_delta_x != 0.0 || scrolling_delta_y != 0.0)
         && ::phenotype::detail::g_app.gesture_target_id != 0xFFFFFFFFu) {
         float cursor_x = 0.0f, cursor_y = 0.0f;
-        if (glfw_cursor_position(cursor_x, cursor_y)) {
+        if (event_cursor_position(event, cursor_x, cursor_y)) {
             auto modifier_flags =
                 objc_send<unsigned long long>(event, sel_modifier_flags());
             bool cmd_held = (modifier_flags & ns_event_modifier_command) != 0;
@@ -5959,7 +5920,7 @@ inline bool handle_local_scroll_event(id event) {
 // `1.0 + magnification` becomes the multiplicative scale factor we
 // expose in `GestureEvent::pinch_scale`.
 inline bool handle_local_magnify_event(id event) {
-    if (!event || !g_ime.window || !g_ime.ns_window)
+    if (!event || !g_ime.ns_window)
         return false;
 
     auto event_window = objc_send<id>(event, sel_window());
@@ -5971,7 +5932,7 @@ inline bool handle_local_magnify_event(id event) {
         return false;
 
     float cursor_x = 0.0f, cursor_y = 0.0f;
-    if (!glfw_cursor_position(cursor_x, cursor_y))
+    if (!event_cursor_position(event, cursor_x, cursor_y))
         return false;
 
     ::phenotype::GestureEvent ev{};
@@ -6021,8 +5982,8 @@ inline void install_local_scroll_monitor() {
     if (!event_class)
         return;
 
-    // Intercept local scroll events before GLFW normalizes them so macOS can
-    // preserve AppKit's precise-vs-line semantics.
+    // Intercept local scroll events directly so macOS can preserve AppKit's
+    // precise-vs-line semantics.
     g_ime.scroll_monitor = objc_send<id>(
         class_as_id(event_class),
         sel_add_local_monitor_for_events_matching_mask_handler(),
@@ -6048,9 +6009,7 @@ inline void remove_local_scroll_monitor() {
 
 inline void input_attach(native_surface_handle handle, void (*request_repaint)()) {
     auto* surface = desktop_surface(handle);
-    auto* window = surface_glfw_window(surface);
     g_images.request_repaint = request_repaint;
-    g_ime.window = window;
     g_ime.request_repaint = request_repaint;
     g_ime.ns_window = surface_ns_window(surface);
     g_ime.content_view = surface_content_view(surface);
@@ -6089,7 +6048,6 @@ inline void input_detach() {
         objc_send<void>(g_ime.editor_view, sel_release());
     }
     g_images.request_repaint = nullptr;
-    g_ime.window = nullptr;
     g_ime.ns_window = nullptr;
     g_ime.content_view = nullptr;
     g_ime.editor_view = nullptr;
@@ -6278,9 +6236,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     NS::AutoreleasePool* pool = NS::AutoreleasePool::alloc()->init();
     auto const flush_started = metrics::detail::now_ns();
     g_renderer.material_executor_summary = MaterialExecutorSummary{};
-    // Read the host-cached HiDPI scale so we don't poll GLFW twice per
-    // frame. The shell keeps cached_content_scale in sync with the
-    // framebuffer_size and content_scale callbacks.
+    // Read the host-cached HiDPI scale. The shell keeps cached_content_scale
+    // in sync with native viewport and content-scale changes.
     float frame_scale = 1.0f;
     if (auto* host = ::phenotype::native::detail::active_host())
         frame_scale = host->cached_content_scale;

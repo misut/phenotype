@@ -11,19 +11,7 @@ if(MSVC)
     add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
 endif()
 
-# GLFW
 include(FetchContent)
-set(GLFW_BUILD_DOCS OFF CACHE BOOL "" FORCE)
-set(GLFW_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
-set(GLFW_BUILD_TESTS OFF CACHE BOOL "" FORCE)
-FetchContent_Declare(glfw
-    GIT_REPOSITORY https://github.com/glfw/glfw.git
-    GIT_TAG 3.4
-    GIT_SHALLOW ON
-    EXCLUDE_FROM_ALL
-)
-FetchContent_MakeAvailable(glfw)
-
 if(APPLE)
     add_subdirectory(${CMAKE_CURRENT_SOURCE_DIR}/../../libs/metal-cpp
                      ${CMAKE_BINARY_DIR}/_deps/metal-cpp-build)
@@ -66,17 +54,42 @@ target_sources(phenotype
     ${PHENOTYPE_ROOT}/src/phenotype.native.platform.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.native.stub.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.native.shell.cppm
+    ${PHENOTYPE_ROOT}/src/phenotype.native.shell.macos.cppm
+    ${PHENOTYPE_ROOT}/src/phenotype.native.shell.windows.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.native.macos.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.native.windows.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.cppm
     ${PHENOTYPE_ROOT}/src/phenotype.native.cppm
 )
 target_link_libraries(phenotype PUBLIC
-    jsoncpp cppx txn glfw
+    jsoncpp cppx txn
 )
 
 if(APPLE)
-    target_link_libraries(phenotype PUBLIC metal-cpp)
+    target_link_libraries(phenotype PUBLIC
+        metal-cpp
+        "-framework AppKit"
+        "-framework CoreGraphics"
+        "-framework CoreText"
+        "-framework Foundation"
+        "-framework Metal"
+        "-framework QuartzCore"
+        "-framework Security"
+        "-framework CoreFoundation"
+    )
+elseif(WIN32)
+    target_link_libraries(phenotype PUBLIC
+        d3d12
+        d3dcompiler
+        dwmapi
+        dxgi
+        dwrite
+        gdi32
+        imm32
+        ole32
+        user32
+        windowscodecs
+    )
 endif()
 
 # example

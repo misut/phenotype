@@ -8,7 +8,7 @@ The core handles widgets, layout, state management, vDOM diff, and draw-command 
 
 - **Core modules**: types, material, state, layout, paint, commands, diag, theme_json
 - **Backend contract**: `phenotype_host.h` (5 host functions) + `phenotype.commands` (typed draw commands)
-- **Current backends**: WASM+JS (production), macOS native (GLFW shell + CoreText + Metal), Windows native (GLFW shell + DirectWrite + Direct3D 12), Linux stub native backend
+- **Current backends**: WASM+JS (production), macOS native (AppKit shell + CoreText + Metal), Windows native (Win32 shell + DirectWrite + Direct3D 12), Linux stub native backend
 - **Planned backends**: platform-specific native renderers/text systems behind the same shell + command-buffer contract
 
 ## Rendering pipeline
@@ -97,7 +97,7 @@ enough for this to matter; Clang was lenient).
 While any interpolation has `progress < 1.0`, `animate_value` sets
 `g_app.has_active_animations = true`. The runner clears the flag at
 the start of every view, so it reads as "did this frame's view
-request another tick?". The GLFW shell's main loop polls the flag and
+request another tick?". The native desktop shell loops poll the flag and
 re-enters `trigger_rebuild()` on a ~16 ms cadence whenever it stays
 set; once everything converges the flag stays false and the loop
 drops back to its idle wait. Other shells (Android, wasm) inherit the
@@ -297,9 +297,9 @@ This keeps the framework core pure while pushing side effects into thin adapters
 Desktop shells pass a `NativeSurfaceDescriptor` through the opaque
 `native_surface_handle`; platform renderers and input adapters consume OS
 handles (`NSWindow` / `NSView` or `HWND`) and viewport metadata from that
-descriptor instead of treating the handle itself as a `GLFWwindow*`. This is
-the migration boundary that lets AppKit and Win32 shell drivers replace GLFW
-without changing the renderer/input contracts again.
+descriptor instead of depending on any third-party window handle. AppKit and
+Win32 own the desktop event loops; the renderer/input contracts remain the
+same across both shells.
 
 ## Unified debug plane
 
@@ -317,8 +317,8 @@ material/runtime extensions.
 
 ### Current native backends
 
-- **macOS**: GLFW shell + CoreText text measurement/atlas + Metal renderer + native `DrawImage` for local files and async remote images. The current shell still owns the GLFW event loop, but it now passes a `NativeSurfaceDescriptor`; the Metal renderer/input edge reads `NSWindow` / `NSView` and viewport metadata from that descriptor. The shell exposes `WindowOptions`, and the macOS edge adapter maps `IntegratedTitlebar` to a transparent full-size AppKit titlebar so examples can extend content behind native window controls without drawing duplicate chrome. Empty non-monospace font requests prefer Pretendard before falling back to the system UI face.
-- **Windows**: GLFW shell + DirectWrite text measurement/atlas + Direct3D 12 renderer + IME composition overlay + native `DrawImage` for local files and async remote images. The current shell still owns the GLFW event loop, but it now passes a `NativeSurfaceDescriptor`; the Direct3D 12 renderer/input edge reads `HWND` and viewport metadata from that descriptor. The shell exposes the same `WindowOptions`; the Windows edge adapter maps `IntegratedTitlebar` to DWM frame extension as the first step toward a full Win32 shell, while deterministic fallback remains the standard system frame. Empty non-monospace font requests prefer Pretendard before falling back to Segoe UI.
+- **macOS**: AppKit shell + CoreText text measurement/atlas + Metal renderer + native `DrawImage` for local files and async remote images. The shell creates an `NSWindow`, passes `NSWindow` / `NSView` plus viewport metadata through `NativeSurfaceDescriptor`, and maps `IntegratedTitlebar` to a transparent full-size titlebar so examples can extend content behind native window controls without drawing duplicate chrome. Empty non-monospace font requests prefer Pretendard before falling back to the system UI face.
+- **Windows**: Win32 shell + DirectWrite text measurement/atlas + Direct3D 12 renderer + IME composition overlay + native `DrawImage` for local files and async remote images. The shell creates an `HWND`, passes it plus viewport metadata through `NativeSurfaceDescriptor`, and maps `IntegratedTitlebar` to DWM frame extension while deterministic fallback remains the standard system frame. Empty non-monospace font requests prefer Pretendard before falling back to Segoe UI.
 - **Android**: GameActivity-driven shell (`examples/android/`) + Vulkan renderer with three instanced pipelines: a color pipeline (FillRect / StrokeRect / RoundRect / DrawLine / Clear — same `ColorInstance { rect; color; params }` layout and `params.z` draw-type dispatch as the macOS / Windows color pipelines); a text pipeline that samples an R8 atlas rasterised via JNI into `android.graphics.Paint` / `Canvas` / `Bitmap` (UTF-8 → UTF-16 via `cppx::unicode::utf8_to_utf16` before `JNIEnv::NewString`, with empty non-monospace requests preferring Pretendard and relying on Android's deterministic default fallback when unavailable); and an image pipeline that samples a persistent 2048² RGBA8 atlas strip-packed from images decoded via NDK's `AImageDecoder` (PNG / JPEG / WebP / GIF / HEIF). Image URLs resolve through `asset://path` (bundled assets via `AAssetManager`) or absolute filesystem paths (`file://` prefix stripped); `http(s)://` renders a placeholder until Stage 7. Input routes GameActivity's `android_input_buffer` (motionEvents + keyEvents + ACTION_SCROLL axes) into `phenotype::native::detail::dispatch_*` via the `phenotype_android_dispatch_{pointer,key,char,scroll}` C ABI; the Android renderer snapshots each flushed command buffer so `renderer.hit_test` can walk the `HitRegionCmd` list in reverse without forcing another view pass. The example driver boots a baked-in counter demo via `phenotype_android_start_app`, which instantiates `detail::run_host<demo6::State, demo6::Msg>` so view/update runs entirely in-library. GLSL sources live at `src/phenotype.native.android.shaders/{color,text,image}.{vert,frag}` and are precompiled to SPIR-V via `tools/compile_android_shaders.sh` (NDK's bundled `glslc`) into `src/phenotype.native.android.shaders.inl`, which the native module includes directly. `debug_api` is feature-parity with macOS / Windows: every `renderer_flush` copies the presented swapchain image into a persistent `debug_capture_image` so `capture_frame_rgba()` reads a fresh snapshot on demand; `snapshot_json` + `write_artifact_bundle` delegate to the shared `::phenotype::diag::detail` helpers. Resume handling clears `last_paint_hash` and calls `trigger_rebuild()` from `phenotype_android_attach_surface` so the first post-`APP_CMD_INIT_WINDOW` frame paints instead of staying black. Emits `libphenotype-modules.a` via exon; the example Gradle project packages it into an APK together with `androidx.games:games-activity:3.0.5` and links `libjnigraphics.so` for both `AndroidBitmap_*` zero-copy pixel reads and the `AImageDecoder_*` family.
 - **Linux / other desktop**: shared stub backend
 
@@ -335,7 +335,7 @@ This means Metal, Direct3D, Vulkan, Skia, software raster, or another future ren
 
 - [x] Host interface abstraction — `src/phenotype_host.h` (PR #52)
 - [x] Command buffer C++ parser — `phenotype.commands` module (PR #53)
-- [x] Shared GLFW shell extracted from platform-specific native code
+- [x] Shared shell core extracted from platform-specific native code
 - [x] macOS native code isolated behind a dedicated platform module
 - [x] Windows backend wired into the native module graph
 - [x] Native text measurement on Windows (`text_api`) via DirectWrite
@@ -348,8 +348,9 @@ This means Metal, Direct3D, Vulkan, Skia, software raster, or another future ren
 - [x] `examples/native` positioned as the Windows native acceptance showcase
 - [ ] IME composition for native text input on macOS
 - [x] Native `DrawImage` support on macOS
-- [x] Shell core / GLFW driver split (`phenotype.native.shell` + `phenotype.native.shell.glfw`) to unblock non-GLFW shells
-- [x] Desktop `NativeSurfaceDescriptor` contract so macOS/Windows renderer and input adapters no longer consume raw `GLFWwindow*` handles
+- [x] AppKit desktop shell driver (`phenotype.native.shell.macos`)
+- [x] Win32 desktop shell driver (`phenotype.native.shell.windows`)
+- [x] Desktop `NativeSurfaceDescriptor` contract so macOS/Windows renderer and input adapters consume native OS handles directly
 - [x] `aarch64-linux-android` exon target with Android-stub platform (Stage 0)
 - [x] Android Vulkan clear-color backend + GameActivity example (Stage 2)
 - [x] Android color primitives pipeline (`FillRect` / `StrokeRect` / `RoundRect` / `DrawLine`) — Stage 3
@@ -375,7 +376,8 @@ phenotype (umbrella re-export)
 ├── phenotype.theme_json  — Theme ↔ JSON via txn auto-reflection
 ├── phenotype.native      — public native entrypoint, platform selection
 ├── phenotype.native.shell — shell-neutral host state + input translation
-├── phenotype.native.shell.glfw — current desktop GLFW event loop driver
+├── phenotype.native.shell.macos — AppKit event loop driver
+├── phenotype.native.shell.windows — Win32 event loop driver
 ├── phenotype.native.platform — shared native capability and surface contracts
 ├── phenotype.native.macos — macOS text + Metal renderer
 ├── phenotype.native.windows — Windows text + Direct3D 12 renderer
