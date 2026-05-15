@@ -7650,6 +7650,52 @@ inline json::Object macos_text_input_runtime_json() {
     return text_input;
 }
 
+inline json::Object macos_window_runtime_json() {
+    auto const* surface = g_renderer.surface;
+    bool const has_options = surface && surface->window_options_valid;
+    WindowChromeStyle const chrome =
+        has_options ? surface->window_chrome : WindowChromeStyle::System;
+    IntegratedTitlebarOptions const titlebar_options =
+        has_options ? surface->integrated_titlebar : IntegratedTitlebarOptions{};
+    bool const integrated =
+        chrome == WindowChromeStyle::IntegratedTitlebar;
+
+    json::Object titlebar;
+    titlebar.emplace(
+        "height",
+        json::Value{static_cast<double>(titlebar_options.height)});
+    titlebar.emplace(
+        "drag_region_height",
+        json::Value{
+            static_cast<double>(
+                titlebar_options.drag_region_height)});
+    titlebar.emplace(
+        "trailing_control_reserved_width",
+        json::Value{
+            static_cast<double>(
+                titlebar_options.trailing_control_reserved_width)});
+
+    json::Object window;
+    window.emplace(
+        "surface_kind",
+        json::Value{
+            surface ? native_surface_kind_name(surface->kind) : "unknown"});
+    window.emplace("window_options_present", json::Value{has_options});
+    window.emplace(
+        "chrome",
+        json::Value{window_chrome_style_name(chrome)});
+    window.emplace(
+        "integrated_titlebar",
+        json::Value{std::move(titlebar)});
+    window.emplace("native_controls_owned_by_os", json::Value{true});
+    window.emplace("toolkit_window_shim", json::Value{false});
+    window.emplace("uses_glfw", json::Value{false});
+    window.emplace("titlebar_transparent", json::Value{integrated});
+    window.emplace("full_size_content_view", json::Value{integrated});
+    window.emplace("background_drag_enabled", json::Value{integrated});
+    return window;
+}
+
 inline json::Value macos_platform_runtime_details_json_with_reason(
         std::string_view artifact_reason) {
 #ifdef __APPLE__
@@ -7657,6 +7703,7 @@ inline json::Value macos_platform_runtime_details_json_with_reason(
     runtime.emplace("renderer", json::Value{macos_renderer_runtime_json()});
     runtime.emplace("images", json::Value{macos_images_runtime_json()});
     runtime.emplace("text_input", json::Value{macos_text_input_runtime_json()});
+    runtime.emplace("window", json::Value{macos_window_runtime_json()});
     if (!artifact_reason.empty()) {
         runtime.emplace(
             "artifact_reason",

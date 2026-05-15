@@ -5350,6 +5350,52 @@ inline json::Object windows_images_runtime_json() {
     return images;
 }
 
+inline json::Object windows_window_runtime_json() {
+    auto const* surface = g_renderer.surface;
+    bool const has_options = surface && surface->window_options_valid;
+    WindowChromeStyle const chrome =
+        has_options ? surface->window_chrome : WindowChromeStyle::System;
+    IntegratedTitlebarOptions const titlebar_options =
+        has_options ? surface->integrated_titlebar : IntegratedTitlebarOptions{};
+    bool const integrated =
+        chrome == WindowChromeStyle::IntegratedTitlebar;
+
+    json::Object titlebar;
+    titlebar.emplace(
+        "height",
+        json::Value{static_cast<double>(titlebar_options.height)});
+    titlebar.emplace(
+        "drag_region_height",
+        json::Value{
+            static_cast<double>(
+                titlebar_options.drag_region_height)});
+    titlebar.emplace(
+        "trailing_control_reserved_width",
+        json::Value{
+            static_cast<double>(
+                titlebar_options.trailing_control_reserved_width)});
+
+    json::Object window;
+    window.emplace(
+        "surface_kind",
+        json::Value{
+            surface ? native_surface_kind_name(surface->kind) : "unknown"});
+    window.emplace("window_options_present", json::Value{has_options});
+    window.emplace(
+        "chrome",
+        json::Value{window_chrome_style_name(chrome)});
+    window.emplace(
+        "integrated_titlebar",
+        json::Value{std::move(titlebar)});
+    window.emplace("native_controls_owned_by_os", json::Value{true});
+    window.emplace("toolkit_window_shim", json::Value{false});
+    window.emplace("uses_glfw", json::Value{false});
+    window.emplace("dwm_custom_frame", json::Value{integrated});
+    window.emplace("caption_button_delegation", json::Value{integrated});
+    window.emplace("resize_hit_testing", json::Value{integrated});
+    return window;
+}
+
 inline json::Value windows_platform_runtime_details_json_with_reason(
         std::string_view artifact_reason) {
 #ifdef _WIN32
@@ -5357,6 +5403,7 @@ inline json::Value windows_platform_runtime_details_json_with_reason(
     runtime.emplace("renderer", json::Value{windows_renderer_runtime_json()});
     runtime.emplace("ime", json::Value{windows_ime_runtime_json()});
     runtime.emplace("images", json::Value{windows_images_runtime_json()});
+    runtime.emplace("window", json::Value{windows_window_runtime_json()});
     if (!artifact_reason.empty()) {
         runtime.emplace(
             "artifact_reason",
