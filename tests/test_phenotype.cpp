@@ -1085,6 +1085,13 @@ void test_material_props_invalidate_diff_cache() {
 
 void test_material_planner_backdrop_and_fallback_paths() {
     Theme theme{};
+    assert(material_resolve_sample_taps(0) == 0);
+    assert(material_resolve_sample_taps(4) == 1);
+    assert(material_resolve_sample_taps(7) == 5);
+    assert(material_resolve_sample_taps(10) == 9);
+    assert(material_resolve_sample_taps(24) == 13);
+    assert(material_resolve_sample_taps(25) == 25);
+
     auto style = material_style_for_kind(MaterialKind::Regular, theme);
     MaterialRequest request{
         style,
@@ -1341,8 +1348,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     budget_env.quality.allow_shadow = false;
     auto budget_plan = plan_material_surface(request, budget_env);
     assert(budget_plan.blur_radius == 12.0f);
-    assert(budget_plan.sample_taps == 7);
-    assert(budget_plan.primary_pass.sample_taps == 7);
+    assert(budget_plan.sample_taps == 5);
+    assert(budget_plan.primary_pass.sample_taps == 5);
     assert(budget_plan.noise_opacity == 0.0f);
     assert(budget_plan.shadow_alpha == 0.0f);
     assert(budget_plan.shadow_radius == 0.0f);
@@ -1352,7 +1359,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!budget_plan.quality_policy.allow_noise);
     assert(!budget_plan.quality_policy.allow_shadow);
     assert(budget_plan.resource_budget.max_blur_radius == 12.0f);
-    assert(budget_plan.resource_budget.max_sample_taps == 7);
+    assert(budget_plan.resource_budget.max_sample_taps == 5);
     assert(budget_plan.resource_budget.max_pass_count == 1);
     assert(budget_plan.resource_budget.max_backdrop_pixels == 600'000);
     assert(budget_plan.resource_budget.bounded_texture_copy);
@@ -1990,6 +1997,31 @@ inline NodeHandle build_button(ButtonVariant variant, bool disabled,
     assert(root.children.size() == 1);
     return root.children[0];
 }
+
+inline NodeHandle build_button_with_options(
+        ButtonStyleOptions options,
+        unsigned int hovered_id = 0xFFFFFFFFu,
+        unsigned int focused_id = 0xFFFFFFFFu) {
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+    detail::g_app.hovered_id = hovered_id;
+    detail::g_app.focused_id = focused_id;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::button<ButtonMsg>("Click", Click{}, options);
+    Scope::set_current(nullptr);
+
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    return root.children[0];
+}
 } // namespace button_test
 
 void test_button_default_variant() {
@@ -2108,6 +2140,54 @@ void test_button_disabled() {
         assert(btn.interaction_role == InteractionRole::Button);
     }
     std::puts("PASS: button disabled (both variants)");
+}
+
+void test_button_style_options_custom_chrome() {
+    ButtonStyleOptions options;
+    options.has_background = true;
+    options.background = Color{1, 2, 3, 4};
+    options.has_hover_background = true;
+    options.hover_background = Color{5, 6, 7, 8};
+    options.has_border_color = true;
+    options.border_color = Color{9, 10, 11, 12};
+    options.has_text_color = true;
+    options.text_color = Color{13, 14, 15, 16};
+    options.border_width = 0.0f;
+    options.border_radius = 11.0f;
+    options.font_size = 17.0f;
+    options.padding_top = 1.0f;
+    options.padding_right = 2.0f;
+    options.padding_bottom = 3.0f;
+    options.padding_left = 4.0f;
+    options.max_width = 120.0f;
+    options.fixed_height = 32.0f;
+    options.text_align = TextAlign::Center;
+
+    auto btn_h = button_test::build_button_with_options(options);
+    auto& btn = detail::node_at(btn_h);
+    assert(btn.background.r == 1 && btn.background.g == 2
+           && btn.background.b == 3 && btn.background.a == 4);
+    assert(btn.text_color.r == 13 && btn.text_color.a == 16);
+    assert(btn.border_color.r == 9 && btn.border_color.a == 12);
+    assert(btn.border_width == 0.0f);
+    assert(btn.border_radius == 11.0f);
+    assert(btn.font_size == 17.0f);
+    assert(btn.style.padding[0] == 1.0f);
+    assert(btn.style.padding[1] == 2.0f);
+    assert(btn.style.padding[2] == 3.0f);
+    assert(btn.style.padding[3] == 4.0f);
+    assert(btn.style.max_width == 120.0f);
+    assert(btn.style.fixed_height == 32.0f);
+    assert(btn.style.text_align == TextAlign::Center);
+    assert(btn.callback_id != 0xFFFFFFFFu);
+
+    auto hovered_h = button_test::build_button_with_options(
+        options, /*hovered_id=*/0u);
+    auto& hovered = detail::node_at(hovered_h);
+    assert(hovered.background.r == 5 && hovered.background.g == 6
+           && hovered.background.b == 7 && hovered.background.a == 8);
+
+    std::puts("PASS: button style options custom chrome");
 }
 
 namespace text_field_test {
@@ -2504,6 +2584,7 @@ int main() {
     test_button_focused_snaps_to_focus_ring_width();
     test_button_defocused_resting_border_width();
     test_button_disabled();
+    test_button_style_options_custom_chrome();
     test_text_field_default();
     test_text_field_default_placeholder();
     test_text_field_error();

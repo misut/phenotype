@@ -1,8 +1,8 @@
 # Desktop File Explorer Example
 
 This example is a Finder-style desktop workflow for phenotype's material
-system. It uses a glass toolbar, sidebar locations, a file list, a preview
-pane, search, create, delete, and reset actions.
+system. It uses a glass toolbar, translucent sidebar locations, a Recents icon
+grid with document thumbnails, search, create, delete, and reset actions.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-desktop`. The example never points at the user's real

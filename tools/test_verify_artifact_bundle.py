@@ -160,6 +160,57 @@ def material_plan(
     }
 
 
+def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
+    plan = material_plan(sample_taps=sample_taps, primary_sample_taps=sample_taps)
+    assert isinstance(plan["decision_trace"], dict)
+    assert isinstance(plan["backdrop"], dict)
+    assert isinstance(plan["primary_pass"], dict)
+    plan["plan_id"] = "material.regular.liquid-glass"
+    plan["backdrop_sampling"] = True
+    plan["fallback"] = False
+    plan["fallback_path"] = "none"
+    plan["fallback_reason"] = ""
+    plan["blur_radius"] = 22.0
+    plan["saturation"] = 1.08
+    plan["noise_opacity"] = 0.014
+    plan["decision_trace"].update({
+        "capability_material_backdrop_blur": True,
+        "capability_shader_blur": True,
+        "capability_frame_history": True,
+        "backend_supports_backdrop": True,
+        "backdrop_available": True,
+        "backdrop_stable": True,
+        "backdrop_source_ready": True,
+        "can_sample_backdrop": True,
+        "first_blocker": "none",
+    })
+    plan["backdrop"].update({
+        "available": True,
+        "stable": True,
+        "source": "previous-presented-frame",
+        "luminance_response": "neutral",
+    })
+    plan["primary_pass"].update({
+        "name": "backdrop-sample-blur",
+        "active": True,
+        "requires_backdrop": True,
+        "sample_taps": sample_taps,
+        "likely_layer": "material-blur-pass",
+        "executor": "backdrop-filter",
+        "max_texture_copy_pixels": 320 * 240,
+    })
+    plan["passes"] = [plan["primary_pass"]]
+    assert isinstance(plan["verifier"], dict)
+    plan["verifier"].update({
+        "require_backdrop_source": True,
+        "require_edge_highlight": True,
+        "min_luma_delta": 8.0,
+        "min_unique_colors": 4,
+        "likely_layer": "material-blur-pass",
+    })
+    return plan
+
+
 def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     budget = plan["resource_budget"]
     primary = plan["primary_pass"]
@@ -176,6 +227,7 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "total_pass_texture_copy_pixels": primary["max_texture_copy_pixels"],
         "max_plan_blur_radius": plan["blur_radius"],
         "max_plan_sample_taps": plan["sample_taps"],
+        "total_plan_sample_taps": plan["sample_taps"],
         "max_budget_blur_radius": budget["max_blur_radius"],
         "max_sample_taps": budget["max_sample_taps"],
         "max_pass_count": budget["max_pass_count"],
@@ -201,12 +253,15 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
 
 
 def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
+    sample_taps = 0 if plan["fallback"] else int(plan["sample_taps"])
     return {
         "plan_count": 1,
         "material_instance_count": 0 if plan["fallback"] else 1,
         "fallback_instance_count": 1 if plan["fallback"] else 0,
         "material_draw_calls": 0 if plan["fallback"] else 1,
         "backdrop_copy_count": 0,
+        "material_max_sample_taps": sample_taps,
+        "material_total_sample_taps": sample_taps,
         "backdrop_copy_pixels": 0,
         "material_upload_bytes": 0,
         "material_buffer_capacity_bytes": 0,
@@ -541,10 +596,13 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
             25)
-        self.assertEqual(report["failure_summary"]["count"], 1)
+        self.assertEqual(report["failure_summary"]["count"], 3)
         self.assertEqual(
             report["failure_summary"]["by_likely_pass"]["translucent-rounded-rect"],
             1)
+        self.assertEqual(
+            report["failure_summary"]["by_likely_pass"]["material-executor"],
+            2)
         self.assertEqual(
             report["failure_summary"]["by_path"][failure["path"]],
             1)
@@ -609,24 +667,29 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "require_material_resource_bounds": {
                 "max_plan_sample_taps_lte": 25,
                 "max_plan_sample_taps_gte": 25,
+                "total_plan_sample_taps_lte": 25,
+                "total_plan_sample_taps_gte": 25,
                 "total_runtime_passes_lte": 1,
                 "total_runtime_passes_gte": 1,
                 "active_runtime_passes_lte": 1,
                 "active_runtime_passes_gte": 1,
-                "backdrop_runtime_passes_lte": 0,
-                "backdrop_runtime_passes_gte": 0,
-                "max_pass_texture_copy_pixels_lte": 0,
-                "total_pass_texture_copy_pixels_lte": 0,
+                "backdrop_runtime_passes_lte": 1,
+                "backdrop_runtime_passes_gte": 1,
+                "max_pass_texture_copy_pixels_lte": 320 * 240,
+                "total_pass_texture_copy_pixels_lte": 320 * 240,
             }
         }
         code, report = self.run_verifier(
-            snapshot(material_plan(sample_taps=25, primary_sample_taps=25)),
+            snapshot(sampled_material_plan(sample_taps=25)),
             manifest)
 
         self.assertEqual(code, 0)
         self.assertTrue(report["ok"])
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
+            25)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"]["total_plan_sample_taps"],
             25)
 
     def test_manifest_can_require_fallback_reason_summary(self) -> None:
@@ -1049,6 +1112,31 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["failure_summary"]["top_likely_pass"],
             "material-executor")
+
+    def test_material_executor_sample_taps_mismatch_is_llm_actionable(self) -> None:
+        root = snapshot(sampled_material_plan(sample_taps=13))
+        renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+        assert isinstance(renderer, dict)
+        executor = renderer["material_executor_summary"]
+        assert isinstance(executor, dict)
+        executor["material_total_sample_taps"] = 25
+
+        code, report = self.run_verifier(root)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material executor summary material_total_sample_taps "
+                "matches plans"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_executor_summary"
+            ".material_total_sample_taps")
+        self.assertEqual(failure["expected"], 13)
+        self.assertEqual(failure["actual"], 25)
+        self.assertEqual(failure["likely_pass"], "material-executor")
+        self.assertIn("MaterialPlan.sample_taps", failure["hint"])
 
     def test_manifest_can_compare_pixel_region_metrics(self) -> None:
         manifest = {

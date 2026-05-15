@@ -873,6 +873,7 @@ void test_material_runtime_record_json_contract() {
     assert(pure_summary.max_pass_texture_copy_pixels == 0);
     assert(pure_summary.total_pass_texture_copy_pixels == 0);
     assert(pure_summary.max_plan_sample_taps == 0);
+    assert(pure_summary.total_plan_sample_taps == 0);
     assert(pure_summary.max_sample_taps == 9);
     assert(pure_summary.containered_count == 0);
     assert(pure_summary.unioned_count == 0);
@@ -888,6 +889,7 @@ void test_material_runtime_record_json_contract() {
     assert(summary_obj.at("max_pass_texture_copy_pixels").as_integer() == 0);
     assert(summary_obj.at("total_pass_texture_copy_pixels").as_integer() == 0);
     assert(summary_obj.at("max_plan_sample_taps").as_integer() == 0);
+    assert(summary_obj.at("total_plan_sample_taps").as_integer() == 0);
     assert(summary_obj.at("max_sample_taps").as_integer() == 9);
     assert(summary_obj.at("containered_count").as_integer() == 0);
     assert(summary_obj.at("unioned_count").as_integer() == 0);
@@ -906,6 +908,8 @@ void test_material_runtime_record_json_contract() {
     assert(executor_obj.at("material_instance_count").as_integer() == 0);
     assert(executor_obj.at("fallback_instance_count").as_integer() == 1);
     assert(executor_obj.at("material_draw_calls").as_integer() == 0);
+    assert(executor_obj.at("material_max_sample_taps").as_integer() == 0);
+    assert(executor_obj.at("material_total_sample_taps").as_integer() == 0);
     assert(executor_obj.at("cpu_decode_ns").as_integer() == 120);
 
     auto empty = diag::detail::empty_material_renderer_contract(

@@ -87,7 +87,7 @@ ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
     "not-sampled",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 5
+MATERIAL_PLAN_CONTRACT_VERSION = 6
 
 
 def suggested_action_for_failure(
@@ -1025,6 +1025,8 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
         "max_plan_blur_radius_lte",
         "max_plan_sample_taps_lte",
         "max_plan_sample_taps_gte",
+        "total_plan_sample_taps_lte",
+        "total_plan_sample_taps_gte",
         "max_budget_blur_radius_lte",
         "max_sample_taps_lte",
         "max_pass_count_lte",
@@ -1694,6 +1696,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "resource_bounds": {
             "max_plan_blur_radius": 0.0,
             "max_plan_sample_taps": 0,
+            "total_plan_sample_taps": 0,
             "max_budget_blur_radius": 0.0,
             "max_sample_taps": 0,
             "max_pass_count": 0,
@@ -2126,6 +2129,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             bounds["max_plan_sample_taps"] = max(
                 int(bounds["max_plan_sample_taps"]),
                 int(sample_taps))
+            bounds["total_plan_sample_taps"] = (
+                int(bounds["total_plan_sample_taps"]) + int(sample_taps))
 
         geometry = check_object_field(
             report,
@@ -3559,6 +3564,7 @@ def check_material_resource_bounds_requirements(
     field_map = {
         "max_plan_blur_radius_lte": "max_plan_blur_radius",
         "max_plan_sample_taps_lte": "max_plan_sample_taps",
+        "total_plan_sample_taps_lte": "total_plan_sample_taps",
         "max_budget_blur_radius_lte": "max_budget_blur_radius",
         "max_sample_taps_lte": "max_sample_taps",
         "max_pass_count_lte": "max_pass_count",
@@ -3586,6 +3592,7 @@ def check_material_resource_bounds_requirements(
             hint="Inspect MaterialResourceBudget in the resolved material plans.")
     min_field_map = {
         "max_plan_sample_taps_gte": "max_plan_sample_taps",
+        "total_plan_sample_taps_gte": "total_plan_sample_taps",
         "max_pass_texture_copy_pixels_gte": "max_pass_texture_copy_pixels",
         "max_container_spacing_gte": "max_container_spacing",
         "total_pass_texture_copy_pixels_gte": "total_pass_texture_copy_pixels",
@@ -3665,6 +3672,7 @@ def check_material_runtime_summary_contract(
             "total_pass_texture_copy_pixels"),
         "max_plan_blur_radius": bounds.get("max_plan_blur_radius"),
         "max_plan_sample_taps": bounds.get("max_plan_sample_taps"),
+        "total_plan_sample_taps": bounds.get("total_plan_sample_taps"),
         "max_budget_blur_radius": bounds.get("max_budget_blur_radius"),
         "max_sample_taps": bounds.get("max_sample_taps"),
         "max_pass_count": bounds.get("max_pass_count"),
@@ -3746,6 +3754,8 @@ def check_material_executor_summary_contract(
         "fallback_instance_count",
         "material_draw_calls",
         "backdrop_copy_count",
+        "material_max_sample_taps",
+        "material_total_sample_taps",
         "backdrop_copy_pixels",
         "material_upload_bytes",
         "material_buffer_capacity_bytes",
@@ -3791,6 +3801,27 @@ def check_material_executor_summary_contract(
                 "Material draw calls should stay within material instances "
                 "times MaterialResourceBudget.max_pass_count."))
 
+    bounds = summary.get("resource_bounds")
+    if not isinstance(bounds, dict):
+        bounds = {}
+    expected_sample_fields = {
+        "material_max_sample_taps": bounds.get("max_plan_sample_taps"),
+        "material_total_sample_taps": bounds.get("total_plan_sample_taps"),
+    }
+    for field, expected in expected_sample_fields.items():
+        actual = executor_summary.get(field)
+        report.check(
+            f"material executor summary {field} matches plans",
+            actual == expected,
+            path=f"{base_path}.{field}",
+            expected=expected,
+            actual=actual,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "The backend must encode the resolved MaterialPlan.sample_taps "
+                "into material instances instead of using a hidden shader default."))
+
     upload_bytes = executor_summary.get("material_upload_bytes")
     upload_capacity = executor_summary.get("material_buffer_capacity_bytes")
     if (isinstance(upload_bytes, (int, float))
@@ -3809,10 +3840,7 @@ def check_material_executor_summary_contract(
                 "The backend should grow the material instance buffer before "
                 "recording uploads."))
 
-    bounds = summary.get("resource_bounds")
-    max_backdrop_pixels = None
-    if isinstance(bounds, dict):
-        max_backdrop_pixels = bounds.get("max_backdrop_pixels")
+    max_backdrop_pixels = bounds.get("max_backdrop_pixels")
     copied_pixels = executor_summary.get("backdrop_copy_pixels")
     if (isinstance(copied_pixels, (int, float))
             and not isinstance(copied_pixels, bool)

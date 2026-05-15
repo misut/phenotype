@@ -4,7 +4,7 @@
 
 phenotype = **platform-agnostic core** (C++23 modules) + **platform backends**.
 
-The core handles widgets, layout, state management, vDOM diff, and draw-command emission. It knows nothing about windows, GPUs, or fonts — those are provided by the backend via a thin host interface.
+The core handles widgets, layout, state management, vDOM diff, and draw-command emission. It knows nothing about windows, GPUs, or font files — those are provided by the backend via a thin host interface.
 
 - **Core modules**: types, material, state, layout, paint, commands, diag, theme_json
 - **Backend contract**: `phenotype_host.h` (5 host functions) + `phenotype.commands` (typed draw commands)
@@ -139,6 +139,12 @@ diff-driven cache returns the moment everything converges.
 
 On WASM, a `PHENOTYPE_IMPORT` macro applies `__attribute__((import_module, import_name))` so the JS shim resolves them at link time. On native, the macro is empty and the backend provides implementations as regular C functions.
 
+The default proportional text stack prefers Pretendard and falls back to the
+platform sans stack when the face is unavailable. Monospace text keeps the
+platform monospace default. This keeps Korean, Chinese, and Japanese text closer
+to the intended product typography without requiring every example to pass an
+explicit `FontSpec`.
+
 ## Command buffer protocol
 
 The cmd buffer (`phenotype_cmd_buf[65536]`) uses a binary encoding with
@@ -197,17 +203,20 @@ executor role and maximum texture-copy pixels for that pass, so a backend
 artifact can prove whether it stayed within the render-target copy budget.
 `sample_taps` records the actual taps required by that resolved pass, so
 deterministic fallback plans use `sample_taps: 0` even when the quality budget
-allows more. Reduced-motion plans also disable material noise and cap backdrop
-sample taps before any backend executes the pass. `quality_policy`
-records the pure planner's resolved sampling/noise/shadow switches and quality
-limits, including `max_backdrop_pixels`. `render_target` records sanitized
-target dimensions, scale, pixel format, pixel count, readiness, and whether the
-target stays within that backdrop budget. `resource_budget` records the clamped
-blur/sample-tap limits, the same allowed backdrop-pixel budget, and whether
-texture copies and fallback behavior are bounded. Container spacing is also
-reported as `max_container_spacing`, so artifact gates can bound future
-container/union expansion work before a backend starts allocating extra backdrop
-passes.
+allows more. The pure planner normalizes caller tap limits to executable
+backdrop kernels of 1, 5, 9, 13, or 25 taps, selecting the largest kernel that
+does not exceed `quality_policy.max_sample_taps`. Reduced-motion plans also
+disable material noise and cap backdrop sample taps before any backend executes
+the pass. `quality_policy` records the pure planner's resolved
+sampling/noise/shadow switches and caller quality limits, including
+`max_backdrop_pixels`. `render_target` records sanitized target dimensions,
+scale, pixel format, pixel count, readiness, and whether the target stays
+within that backdrop budget. `resource_budget` records the clamped
+blur/executable sample-tap limits, the same allowed backdrop-pixel budget, and
+whether texture copies and fallback behavior are bounded. Container spacing is
+also reported as `max_container_spacing`, so artifact gates can bound future
+container/union expansion work before a backend starts allocating extra
+backdrop passes.
 `verifier` records the deterministic pixel-region contract derived from the
 same plan: whether a backdrop source or edge highlight must be present, the
 minimum luma/color thresholds for sampled or fallback rendering, the semantic
@@ -302,9 +311,9 @@ material/runtime extensions.
 
 ### Current native backends
 
-- **macOS**: GLFW shell + CoreText text measurement/atlas + Metal renderer + native `DrawImage` for local files and async remote images
-- **Windows**: GLFW shell + DirectWrite text measurement/atlas + Direct3D 12 renderer + IME composition overlay + native `DrawImage` for local files and async remote images
-- **Android**: GameActivity-driven shell (`examples/android/`) + Vulkan renderer with three instanced pipelines: a color pipeline (FillRect / StrokeRect / RoundRect / DrawLine / Clear — same `ColorInstance { rect; color; params }` layout and `params.z` draw-type dispatch as the macOS / Windows color pipelines); a text pipeline that samples an R8 atlas rasterised via JNI into `android.graphics.Paint` / `Canvas` / `Bitmap` (UTF-8 → UTF-16 via `cppx::unicode::utf8_to_utf16` before `JNIEnv::NewString`); and an image pipeline that samples a persistent 2048² RGBA8 atlas strip-packed from images decoded via NDK's `AImageDecoder` (PNG / JPEG / WebP / GIF / HEIF). Image URLs resolve through `asset://path` (bundled assets via `AAssetManager`) or absolute filesystem paths (`file://` prefix stripped); `http(s)://` renders a placeholder until Stage 7. Input routes GameActivity's `android_input_buffer` (motionEvents + keyEvents + ACTION_SCROLL axes) into `phenotype::native::detail::dispatch_*` via the `phenotype_android_dispatch_{pointer,key,char,scroll}` C ABI; the Android renderer snapshots each flushed command buffer so `renderer.hit_test` can walk the `HitRegionCmd` list in reverse without forcing another view pass. The example driver boots a baked-in counter demo via `phenotype_android_start_app`, which instantiates `detail::run_host<demo6::State, demo6::Msg>` so view/update runs entirely in-library. GLSL sources live at `src/phenotype.native.android.shaders/{color,text,image}.{vert,frag}` and are precompiled to SPIR-V via `tools/compile_android_shaders.sh` (NDK's bundled `glslc`) into `src/phenotype.native.android.shaders.inl`, which the native module includes directly. `debug_api` is feature-parity with macOS / Windows: every `renderer_flush` copies the presented swapchain image into a persistent `debug_capture_image` so `capture_frame_rgba()` reads a fresh snapshot on demand; `snapshot_json` + `write_artifact_bundle` delegate to the shared `::phenotype::diag::detail` helpers. Resume handling clears `last_paint_hash` and calls `trigger_rebuild()` from `phenotype_android_attach_surface` so the first post-`APP_CMD_INIT_WINDOW` frame paints instead of staying black. Emits `libphenotype-modules.a` via exon; the example Gradle project packages it into an APK together with `androidx.games:games-activity:3.0.5` and links `libjnigraphics.so` for both `AndroidBitmap_*` zero-copy pixel reads and the `AImageDecoder_*` family.
+- **macOS**: GLFW shell + CoreText text measurement/atlas + Metal renderer + native `DrawImage` for local files and async remote images. Empty non-monospace font requests prefer Pretendard before falling back to the system UI face.
+- **Windows**: GLFW shell + DirectWrite text measurement/atlas + Direct3D 12 renderer + IME composition overlay + native `DrawImage` for local files and async remote images. Empty non-monospace font requests prefer Pretendard before falling back to Segoe UI.
+- **Android**: GameActivity-driven shell (`examples/android/`) + Vulkan renderer with three instanced pipelines: a color pipeline (FillRect / StrokeRect / RoundRect / DrawLine / Clear — same `ColorInstance { rect; color; params }` layout and `params.z` draw-type dispatch as the macOS / Windows color pipelines); a text pipeline that samples an R8 atlas rasterised via JNI into `android.graphics.Paint` / `Canvas` / `Bitmap` (UTF-8 → UTF-16 via `cppx::unicode::utf8_to_utf16` before `JNIEnv::NewString`, with empty non-monospace requests preferring Pretendard and relying on Android's deterministic default fallback when unavailable); and an image pipeline that samples a persistent 2048² RGBA8 atlas strip-packed from images decoded via NDK's `AImageDecoder` (PNG / JPEG / WebP / GIF / HEIF). Image URLs resolve through `asset://path` (bundled assets via `AAssetManager`) or absolute filesystem paths (`file://` prefix stripped); `http(s)://` renders a placeholder until Stage 7. Input routes GameActivity's `android_input_buffer` (motionEvents + keyEvents + ACTION_SCROLL axes) into `phenotype::native::detail::dispatch_*` via the `phenotype_android_dispatch_{pointer,key,char,scroll}` C ABI; the Android renderer snapshots each flushed command buffer so `renderer.hit_test` can walk the `HitRegionCmd` list in reverse without forcing another view pass. The example driver boots a baked-in counter demo via `phenotype_android_start_app`, which instantiates `detail::run_host<demo6::State, demo6::Msg>` so view/update runs entirely in-library. GLSL sources live at `src/phenotype.native.android.shaders/{color,text,image}.{vert,frag}` and are precompiled to SPIR-V via `tools/compile_android_shaders.sh` (NDK's bundled `glslc`) into `src/phenotype.native.android.shaders.inl`, which the native module includes directly. `debug_api` is feature-parity with macOS / Windows: every `renderer_flush` copies the presented swapchain image into a persistent `debug_capture_image` so `capture_frame_rgba()` reads a fresh snapshot on demand; `snapshot_json` + `write_artifact_bundle` delegate to the shared `::phenotype::diag::detail` helpers. Resume handling clears `last_paint_hash` and calls `trigger_rebuild()` from `phenotype_android_attach_surface` so the first post-`APP_CMD_INIT_WINDOW` frame paints instead of staying black. Emits `libphenotype-modules.a` via exon; the example Gradle project packages it into an APK together with `androidx.games:games-activity:3.0.5` and links `libjnigraphics.so` for both `AndroidBitmap_*` zero-copy pixel reads and the `AImageDecoder_*` family.
 - **Linux / other desktop**: shared stub backend
 
 ### Modularity guarantee

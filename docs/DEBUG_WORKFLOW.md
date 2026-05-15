@@ -148,10 +148,13 @@ the request, while `MaterialPlan.container.morph_transitions` may be false when
 Reduce Motion disables morph expectations.
 `sample_taps` and `primary_pass.sample_taps` describe the actual resolved pass.
 Fallback plans therefore report `0` taps, while `quality_policy.max_sample_taps`
-and `resource_budget.max_sample_taps` preserve the allowed upper bound that led
-to the decision. Reduced-motion plans disable material noise and cap backdrop
-sample taps before a backend executes the pass; increased-contrast plans raise
-opacity and luminance legibility in the same pure layer.
+preserves the caller's upper bound and `resource_budget.max_sample_taps`
+records the executable kernel selected by the planner. The supported sampled
+backdrop kernels are 1, 5, 9, 13, and 25 taps; the planner chooses the largest
+kernel that does not exceed the policy limit. Reduced-motion plans disable
+material noise and cap backdrop sample taps before a backend executes the pass;
+increased-contrast plans raise opacity and luminance legibility in the same
+pure layer.
 `primary_pass.executor` and each `passes[].executor` use pure roles:
 `backdrop-filter` for sampled glass, `fallback-fill` for deterministic fallback,
 and `none` for inactive material work. `max_texture_copy_pixels` is non-zero
@@ -294,9 +297,10 @@ schema drift before a human has to infer it visually.
 Use `require_material_resource_bounds` when a material gate must prove the
 runtime stayed within the pure plan's performance budget. Supported limits are
 `max_plan_blur_radius_lte`, `max_plan_sample_taps_lte`,
-`max_plan_sample_taps_gte`, `max_budget_blur_radius_lte`,
-`max_sample_taps_lte`, `max_pass_count_lte`, `max_backdrop_pixels_lte`,
-`max_container_spacing_lte`/`gte`, `max_pass_texture_copy_pixels_lte`/`gte`,
+`max_plan_sample_taps_gte`, `total_plan_sample_taps_lte`/`gte`,
+`max_budget_blur_radius_lte`, `max_sample_taps_lte`, `max_pass_count_lte`,
+`max_backdrop_pixels_lte`, `max_container_spacing_lte`/`gte`,
+`max_pass_texture_copy_pixels_lte`/`gte`,
 `total_pass_texture_copy_pixels_lte`/`gte`,
 `total_runtime_passes_lte`/`gte`, `active_runtime_passes_lte`/`gte`, and
 `backdrop_runtime_passes_lte`/`gte`;
@@ -310,15 +314,17 @@ from `renderer.material_plans[]` and reports the exact summary field if the
 backend's view of executed material work drifts from the resolved plans.
 Backends also serialize `renderer.material_executor_summary` for edge-only
 work that cannot be derived from the pure plan, including material instance
-count, fallback instance count, material draw calls, upload bytes/capacity,
-framebuffer-history copy pixels, and CPU enqueue timings. Use
+count, fallback instance count, material draw calls, encoded material sample
+tap totals, upload bytes/capacity, framebuffer-history copy pixels, and CPU
+enqueue timings. Use
 `require_runtime_numeric_bounds` for CI-safe limits on those numeric runtime
 paths. Each entry names a path under `debug.platform_runtime.details` and can
 provide `equals`, `gte`, and/or `lte`; failures report the exact path plus the
 likely `material-executor` pass when the path targets the executor summary.
 Whenever material plans are present, the verifier also cross-checks executor
 counts against `renderer.material_plans#summary`: `plan_count`,
-`fallback_instance_count`, and `material_instance_count` must match the
+`fallback_instance_count`, `material_instance_count`,
+`material_max_sample_taps`, and `material_total_sample_taps` must match the
 resolved plan aggregate, draw calls must stay within material instances times
 the pure pass budget, upload bytes must fit the reported material buffer
 capacity, and copied backdrop pixels must stay within the pure resource budget.

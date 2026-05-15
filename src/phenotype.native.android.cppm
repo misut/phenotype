@@ -643,19 +643,37 @@ inline jobject acquire_paint(JNIEnv* env, FontPaintKey const& key) {
     jobject typeface_local = nullptr;
 
     if (key.family.empty()) {
+        // Empty non-mono family prefers Pretendard; Android silently maps
+        // unknown family names to DEFAULT, preserving deterministic fallback.
+        if (!key.mono) {
+            char const preferred[] = "Pretendard";
+            jstring jname = make_jstring_utf8(
+                env, preferred, static_cast<unsigned int>(sizeof(preferred) - 1));
+            if (jname) {
+                typeface_local = env->CallStaticObjectMethod(
+                    g_jni.typeface_class,
+                    g_jni.typeface_create_string,
+                    jname, style_bits);
+                env->DeleteLocalRef(jname);
+                if (check_and_clear_exception(env))
+                    typeface_local = nullptr;
+            }
+        }
         // Empty family → default sans (typeface_default) or default mono
         // (typeface_monospace) as the base; apply BOLD/ITALIC bits.
         jobject base = key.mono ? g_jni.typeface_monospace
                                 : g_jni.typeface_default;
-        if (style_bits == g_jni.typeface_normal) {
-            typeface_local = env->NewLocalRef(base);
-        } else {
-            typeface_local = env->CallStaticObjectMethod(
-                g_jni.typeface_class,
-                g_jni.typeface_create_typeface,
-                base, style_bits);
-            if (check_and_clear_exception(env))
-                typeface_local = nullptr;
+        if (!typeface_local) {
+            if (style_bits == g_jni.typeface_normal) {
+                typeface_local = env->NewLocalRef(base);
+            } else {
+                typeface_local = env->CallStaticObjectMethod(
+                    g_jni.typeface_class,
+                    g_jni.typeface_create_typeface,
+                    base, style_bits);
+                if (check_and_clear_exception(env))
+                    typeface_local = nullptr;
+            }
         }
     } else {
         // Runtime-registered face? text_register_font_file populates

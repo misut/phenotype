@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "5": 7
+      "6": 7
     },
     "roles": {
       "surface": 7
@@ -169,6 +169,14 @@
       "path": "renderer.material_executor_summary.material_draw_calls",
       "gte": 1,
       "lte": 7
+    },
+    {
+      "path": "renderer.material_executor_summary.material_max_sample_taps",
+      "equals": 25
+    },
+    {
+      "path": "renderer.material_executor_summary.material_total_sample_taps",
+      "equals": 175
     },
     {
       "path": "renderer.material_executor_summary.backdrop_copy_count",
