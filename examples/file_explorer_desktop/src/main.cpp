@@ -19,14 +19,12 @@ namespace {
 
 struct SelectLocation { std::string id; };
 struct SelectEntry { std::string name; };
-struct SearchChanged { std::string text; };
-struct DraftNameChanged { std::string text; };
-struct DraftBodyChanged { std::string text; };
 enum class FinderViewMode { Icon, List, Column, Gallery };
 struct SetViewMode { FinderViewMode mode; };
 struct ToolbarAction { std::string label; };
 struct CreateFile {};
 struct DeleteSelected {};
+struct DuplicateSelected {};
 struct GoBack {};
 struct GoForward {};
 struct GoUp {};
@@ -37,13 +35,11 @@ struct Resized { int width; int height; float scale; };
 using Msg = std::variant<
     SelectLocation,
     SelectEntry,
-    SearchChanged,
-    DraftNameChanged,
-    DraftBodyChanged,
     SetViewMode,
     ToolbarAction,
     CreateFile,
     DeleteSelected,
+    DuplicateSelected,
     GoBack,
     GoForward,
     GoUp,
@@ -302,9 +298,7 @@ void paint_item_thumbnail(phenotype::Painter& painter,
 }
 
 std::string finder_status(file_explorer_demo::Snapshot const& snap) {
-    std::string text = std::to_string(snap.file_count) + " files";
-    if (snap.folder_count > 0)
-        text += ", " + std::to_string(snap.folder_count) + " folders";
+    std::string text = snap.item_summary;
     if (snap.has_selection)
         text += " - selected " + snap.selected.name;
     return text;
@@ -346,36 +340,6 @@ std::vector<file_explorer_demo::Entry> finder_entries(
     return entries;
 }
 
-std::string entry_kind(file_explorer_demo::Entry const& entry) {
-    if (entry.folder)
-        return "Folder";
-    auto ext = extension_lower(entry.name);
-    if (ext.empty())
-        return "Document";
-    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::toupper(ch));
-    });
-    return ext + " File";
-}
-
-std::string entry_size_label(file_explorer_demo::Entry const& entry) {
-    return entry.folder
-        ? "--"
-        : file_explorer_demo::format_size(entry.size);
-}
-
-Msg on_search_changed(std::string text) {
-    return SearchChanged{std::move(text)};
-}
-
-Msg on_draft_name_changed(std::string text) {
-    return DraftNameChanged{std::move(text)};
-}
-
-Msg on_draft_body_changed(std::string text) {
-    return DraftBodyChanged{std::move(text)};
-}
-
 void update(State& state, Msg msg) {
     auto& explorer = state.explorer;
     std::visit([&](auto const& m) {
@@ -384,15 +348,6 @@ void update(State& state, Msg msg) {
             file_explorer_demo::select_location(explorer, m.id);
         } else if constexpr (std::same_as<T, SelectEntry>) {
             file_explorer_demo::select_entry(explorer, m.name);
-        } else if constexpr (std::same_as<T, SearchChanged>) {
-            explorer.search = m.text;
-            explorer.status = explorer.search.empty()
-                ? "Filter cleared."
-                : "Filtering by " + explorer.search;
-        } else if constexpr (std::same_as<T, DraftNameChanged>) {
-            explorer.draft_name = m.text;
-        } else if constexpr (std::same_as<T, DraftBodyChanged>) {
-            explorer.draft_body = m.text;
         } else if constexpr (std::same_as<T, SetViewMode>) {
             state.view_mode = m.mode;
             explorer.status = "Switched to " + view_mode_name(m.mode) + ".";
@@ -402,6 +357,8 @@ void update(State& state, Msg msg) {
             file_explorer_demo::create_file(explorer);
         } else if constexpr (std::same_as<T, DeleteSelected>) {
             file_explorer_demo::delete_selected(explorer);
+        } else if constexpr (std::same_as<T, DuplicateSelected>) {
+            file_explorer_demo::duplicate_selected(explorer);
         } else if constexpr (std::same_as<T, GoBack>) {
             file_explorer_demo::go_back(explorer);
         } else if constexpr (std::same_as<T, GoForward>) {
@@ -633,6 +590,29 @@ void paint_search_icon(phenotype::Painter& painter) {
     painter.line(25.0f, 21.0f, 33.0f, 29.0f, 2.4f, ink);
 }
 
+void paint_new_file_icon(phenotype::Painter& painter, bool enabled) {
+    auto ink = nav_icon_ink(enabled);
+    stroke_round(painter, 13.0f, 7.0f, 18.0f, 24.0f, 3.0f, 2.0f, ink);
+    painter.line(23.0f, 7.0f, 31.0f, 15.0f, 2.0f, ink);
+    painter.line(22.0f, 17.0f, 22.0f, 27.0f, 2.4f, ink);
+    painter.line(17.0f, 22.0f, 27.0f, 22.0f, 2.4f, ink);
+}
+
+void paint_duplicate_icon(phenotype::Painter& painter, bool enabled) {
+    auto ink = nav_icon_ink(enabled);
+    stroke_round(painter, 12.0f, 11.0f, 16.0f, 19.0f, 3.0f, 2.0f, ink);
+    stroke_round(painter, 17.0f, 6.0f, 16.0f, 19.0f, 3.0f, 2.0f, ink);
+}
+
+void paint_delete_icon(phenotype::Painter& painter, bool enabled) {
+    auto ink = nav_icon_ink(enabled);
+    stroke_round(painter, 15.0f, 12.0f, 14.0f, 18.0f, 2.0f, 2.0f, ink);
+    painter.line(12.0f, 12.0f, 32.0f, 12.0f, 2.2f, ink);
+    painter.line(18.0f, 8.0f, 26.0f, 8.0f, 2.2f, ink);
+    painter.line(19.0f, 16.0f, 19.0f, 27.0f, 1.8f, ink);
+    painter.line(25.0f, 16.0f, 25.0f, 27.0f, 1.8f, ink);
+}
+
 template<typename Paint>
 void view_mode_button(char const* label,
                       FinderViewMode mode,
@@ -670,6 +650,25 @@ void toolbar_action_button(char const* label,
 }
 
 template<typename Paint>
+void file_action_button(char const* label,
+                        Msg msg,
+                        bool enabled,
+                        Paint paint,
+                        std::uint64_t token) {
+    std::string semantic_label(label);
+    phenotype::widget::canvas_button<Msg>(
+        phenotype::str{semantic_label},
+        44.0f,
+        36.0f,
+        [paint, enabled](phenotype::Painter& painter) {
+            paint(painter, enabled);
+        },
+        std::move(msg),
+        toolbar_icon_button_options(false, !enabled),
+        token ^ (enabled ? 0x300000000ull : 0ull));
+}
+
+template<typename Paint>
 void navigation_button(char const* label,
                        Msg msg,
                        bool enabled,
@@ -691,7 +690,6 @@ void navigation_button(char const* label,
 void finder_toolbar(State const& state,
                     file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
-    auto const& explorer = state.explorer;
     layout::toolbar([&] {
         layout::material_surface(
             layout::MaterialSurfaceOptions{
@@ -749,6 +747,30 @@ void finder_toolbar(State const& state,
                 .gap = SpaceToken::Xs,
                 .cross_align = CrossAxisAlignment::Center,
                 .main_align = MainAxisAlignment::Start,
+                .max_width = 164.0f,
+                .fixed_height = 48.0f,
+                .semantic_label = "File Actions",
+            },
+            [&] {
+                file_action_button("New File", CreateFile{},
+                                   snap.can_create_file,
+                                   paint_new_file_icon, 0x6701u);
+                file_action_button("Duplicate", DuplicateSelected{},
+                                   snap.can_duplicate_selected,
+                                   paint_duplicate_icon, 0x6702u);
+                file_action_button("Delete", DeleteSelected{},
+                                   snap.can_delete_selected,
+                                   paint_delete_icon, 0x6703u);
+            });
+        layout::material_surface(
+            layout::MaterialSurfaceOptions{
+                .kind = MaterialKind::Thick,
+                .role = MaterialSurfaceRole::Toolbar,
+                .direction = FlexDirection::Row,
+                .padding = SpaceToken::Xs,
+                .gap = SpaceToken::Xs,
+                .cross_align = CrossAxisAlignment::Center,
+                .main_align = MainAxisAlignment::Start,
                 .max_width = 82.0f,
                 .fixed_height = 48.0f,
                 .semantic_label = "Group Sort",
@@ -792,9 +814,6 @@ void finder_toolbar(State const& state,
                 toolbar_action_button(
                     "Search Control", paint_search_icon, 0x6401u);
             });
-        layout::sized_box(144.0f, [&] {
-            widget::text_field<Msg>("Search", explorer.search, on_search_changed);
-        });
     }, MaterialKind::Clear, SpaceToken::Sm, SpaceToken::Sm);
 }
 
@@ -900,12 +919,12 @@ void finder_list(file_explorer_demo::Snapshot const& snap) {
                                     !selected);
                             });
                             layout::sized_box(160.0f, [&] {
-                                widget::text(entry_kind(entry),
+                                widget::text(file_explorer_demo::entry_kind_label(entry),
                                              TextSize::Small,
                                              TextColor::Muted);
                             });
                             layout::sized_box(120.0f, [&] {
-                                widget::text(entry_size_label(entry),
+                                widget::text(file_explorer_demo::entry_size_label(entry),
                                              TextSize::Small,
                                              TextColor::Muted);
                             });
@@ -993,7 +1012,7 @@ void finder_column_view(file_explorer_demo::Snapshot const& snap) {
                                 {},
                                 stable_token(snap.selected.name) ^ 0x440000u);
                             widget::text(snap.selected.name, TextSize::Heading);
-                            widget::text(entry_kind(snap.selected),
+                            widget::text(file_explorer_demo::entry_kind_label(snap.selected),
                                          TextSize::Small,
                                          TextColor::Muted);
                             widget::text(compact_preview(snap.preview),
@@ -1043,7 +1062,7 @@ void finder_gallery_view(file_explorer_demo::Snapshot const& snap) {
                 layout::weighted(1.0f, [&] {
                     layout::column([&] {
                         widget::text(hero.name, TextSize::Heading);
-                        widget::text(entry_kind(hero),
+                        widget::text(file_explorer_demo::entry_kind_label(hero),
                                      TextSize::Small,
                                      TextColor::Muted);
                         widget::text(snap.has_selection
@@ -1116,19 +1135,18 @@ void finder_status_bar(State const& state,
                                  TextColor::Muted);
                 }
             });
-            layout::sized_box(170.0f, [&] {
-                widget::text_field<Msg>("File name", explorer.draft_name,
-                                        on_draft_name_changed);
-            });
-            layout::sized_box(210.0f, [&] {
-                widget::text_field<Msg>("File contents", explorer.draft_body,
-                                        on_draft_body_changed);
-            });
-            widget::button<Msg>("Create", CreateFile{}, ButtonVariant::Primary);
-            widget::button<Msg>("Up", GoUp{});
-            widget::button<Msg>("Delete", DeleteSelected{});
-            widget::button<Msg>("Reset", ResetDemo{});
-            widget::button<Msg>("Refresh", Refresh{});
+            if (snap.has_selection) {
+                layout::sized_box(144.0f, [&] {
+                    widget::text(snap.selected_kind_label,
+                                 TextSize::Small,
+                                 TextColor::Muted);
+                });
+                layout::sized_box(96.0f, [&] {
+                    widget::text(snap.selected_size_label,
+                                 TextSize::Small,
+                                 TextColor::Muted);
+                });
+            }
         }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Start);
     }, MaterialKind::Clear, SpaceToken::Sm, SpaceToken::Xs);
 }

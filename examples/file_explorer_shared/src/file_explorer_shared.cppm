@@ -32,6 +32,15 @@ struct Snapshot {
     bool has_selection = false;
     bool can_go_back = false;
     bool can_go_forward = false;
+    bool can_create_file = false;
+    bool can_delete_selected = false;
+    bool can_duplicate_selected = false;
+    bool can_preview_selected = false;
+    std::string selected_kind_label;
+    std::string selected_size_label;
+    std::string selected_path_label;
+    std::string item_summary;
+    std::string action_summary;
     std::string preview;
     std::size_t file_count = 0;
     std::size_t folder_count = 0;
@@ -104,6 +113,17 @@ inline std::string sanitize_file_name(std::string_view input) {
     if (cleaned.find('.') == std::string::npos)
         cleaned += ".txt";
     return cleaned;
+}
+
+inline std::string extension_lower(std::string const& name) {
+    auto pos = name.rfind('.');
+    if (pos == std::string::npos)
+        return {};
+    auto ext = name.substr(pos + 1);
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return ext;
 }
 
 inline fs::path demo_root(std::string_view profile) {
@@ -213,6 +233,30 @@ inline std::string format_size(std::uintmax_t size) {
         return std::to_string(kib) + " KB";
     std::uintmax_t const mib = (kib + 1023) / 1024;
     return std::to_string(mib) + " MB";
+}
+
+inline std::string entry_kind_label(Entry const& entry) {
+    if (entry.folder)
+        return "Folder";
+    auto ext = extension_lower(entry.name);
+    if (ext == "pdf")
+        return "PDF Document";
+    if (ext == "png" || ext == "jpg" || ext == "jpeg")
+        return "Image";
+    if (ext == "mov" || ext == "mp4")
+        return "Movie";
+    if (ext == "zip")
+        return "Archive";
+    if (ext.empty())
+        return "Document";
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::toupper(ch));
+    });
+    return ext + " File";
+}
+
+inline std::string entry_size_label(Entry const& entry) {
+    return entry.folder ? "--" : format_size(entry.size);
 }
 
 inline std::string relative_location(fs::path const& root, fs::path const& current) {
@@ -358,6 +402,8 @@ inline Snapshot snapshot(ExplorerState const& state) {
     out.relative_location = relative_location(state.root, state.current);
     out.can_go_back = !state.back_stack.empty();
     out.can_go_forward = !state.forward_stack.empty();
+    std::error_code ec;
+    out.can_create_file = fs::is_directory(state.current, ec) && !ec;
     out.entries = list_entries(state.current, state.search);
     for (auto const& entry : out.entries) {
         if (entry.folder)
@@ -369,9 +415,22 @@ inline Snapshot snapshot(ExplorerState const& state) {
             out.has_selection = true;
         }
     }
+    out.item_summary = std::to_string(out.file_count) + " files";
+    if (out.folder_count > 0)
+        out.item_summary += ", " + std::to_string(out.folder_count) + " folders";
     if (out.has_selection) {
+        out.can_delete_selected = !out.selected.folder;
+        out.can_duplicate_selected = !out.selected.folder;
+        out.can_preview_selected = !out.selected.folder;
+        out.selected_kind_label = entry_kind_label(out.selected);
+        out.selected_size_label = entry_size_label(out.selected);
+        out.selected_path_label =
+            out.relative_location + "/" + out.selected.name;
+        out.action_summary = "Selected " + out.selected.name + " - "
+            + out.selected_kind_label + " - " + out.selected_size_label;
         out.preview = read_preview(state.current / out.selected.name);
     } else {
+        out.action_summary = "Select a file to read, duplicate, or delete it.";
         out.preview = "Select a file to read its contents.";
     }
     return out;
@@ -519,6 +578,30 @@ inline void delete_selected(ExplorerState& state) {
     state.selected_name.clear();
 }
 
+inline void duplicate_selected(ExplorerState& state) {
+    if (state.selected_name.empty()) {
+        state.status = "Select a file before duplicating.";
+        return;
+    }
+    auto source = state.current / state.selected_name;
+    std::error_code ec;
+    if (!fs::is_regular_file(source, ec)) {
+        state.status = "Only files can be duplicated in this demo.";
+        return;
+    }
+    auto candidate_name =
+        source.stem().string() + " copy" + source.extension().string();
+    auto target = unique_child_path(state.current, candidate_name);
+    ec.clear();
+    if (!fs::copy_file(source, target, fs::copy_options::none, ec) || ec) {
+        state.status = "Could not duplicate " + state.selected_name;
+        return;
+    }
+    auto previous = state.selected_name;
+    state.selected_name = target.filename().string();
+    state.status = "Duplicated " + previous + " to " + state.selected_name;
+}
+
 inline void reset_demo_tree(ExplorerState& state, std::string_view profile) {
     std::error_code ec;
     if (!state.root.empty())
@@ -568,6 +651,16 @@ inline void apply_startup_scenario(
         create_file(state);
         delete_selected(state);
         state.mobile_tab = 0;
+        return;
+    }
+
+    if (name == "duplicated-file" || name == "duplicate") {
+        select_location(state, "root");
+        remove_regular_file_if_present(state.current / "README copy.txt");
+        remove_regular_file_if_present(state.current / "README copy 2.txt");
+        select_entry(state, "README.txt");
+        duplicate_selected(state);
+        state.mobile_tab = 1;
         return;
     }
 

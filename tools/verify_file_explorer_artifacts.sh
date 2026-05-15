@@ -82,6 +82,11 @@ append_scenario_requirements() {
     "deleted-file")
       extra_args+=(--require-label-contains "Deleted Delete Me.txt")
       ;;
+    "duplicated-file")
+      extra_args+=(--require-label-contains "README copy.txt")
+      extra_args+=(--require-label-contains "Duplicated README.txt to README copy.txt")
+      extra_args+=(--require-label-contains "Phenotype File Explorer")
+      ;;
     "documents-preview")
       extra_args+=(--require-label-contains "Project Notes.txt")
       extra_args+=(--require-label-contains "Finder-like desktop layout")
@@ -146,7 +151,6 @@ verify_desktop_capture() {
       --require-frame
       --require-role button
       --require-role material
-      --require-role text_field
       --require-material-plan
       --require-material-semantic-runtime-match
     )
@@ -240,7 +244,7 @@ run_exon build
 for mode in icon list column gallery; do
   verify_desktop_capture "$mode" "default" "$(desktop_bundle_for_case "$mode")"
 done
-for scenario in created-preview deleted-file documents-preview history-forward; do
+for scenario in created-preview deleted-file duplicated-file documents-preview history-forward; do
   verify_desktop_capture \
     "icon" \
     "$scenario" \
@@ -250,6 +254,6 @@ done
 cd "$MOBILE_DIR"
 run_exon build
 verify_mobile_capture "default" "$(mobile_bundle_for_case "default")"
-for scenario in created-preview deleted-file documents-preview history-forward; do
+for scenario in created-preview deleted-file duplicated-file documents-preview history-forward; do
   verify_mobile_capture "$scenario" "$(mobile_bundle_for_case "$scenario")"
 done

@@ -18,6 +18,10 @@
     "List View",
     "Column View",
     "Gallery View",
+    "File Actions",
+    "New File",
+    "Duplicate",
+    "Delete",
     "Group Sort",
     "Share Tag More",
     "Share",
@@ -29,13 +33,11 @@
     "Screen Recording 2025-11-04.mov",
     "Screen Recording 2025-11-07.mov",
     "Archive.zip",
-    "README.txt",
-    "Create"
+    "README.txt"
   ],
   "require_roles": [
     "button",
-    "material",
-    "text_field"
+    "material"
   ],
   "require_material_kinds": [
     "clear",
@@ -53,29 +55,29 @@
   "require_material_plans": true,
   "require_material_semantic_runtime_match": true,
   "require_material_plan_summary": {
-    "count": 10,
+    "count": 11,
     "fallback": 0,
-    "backdrop_sampling": 10,
+    "backdrop_sampling": 11,
     "contract_versions": {
-      "6": 10
+      "6": 11
     },
     "roles": {
       "surface": 1,
-      "toolbar": 6,
+      "toolbar": 7,
       "sidebar": 1,
       "status_bar": 1,
       "content": 1
     },
     "container_modes": {
-      "container": 10
+      "container": 11
     },
     "container_ids": {
-      "2100": 10
+      "2100": 11
     },
-    "container_participating": 10,
+    "container_participating": 11,
     "container_unioned": 0,
     "container_interactive": 0,
-    "container_morph_transitions": 10
+    "container_morph_transitions": 11
   },
   "require_capabilities": [
     "material_backdrop_blur"
@@ -95,7 +97,7 @@
     },
     {
       "path": "renderer.material_executor_summary.material_total_sample_taps",
-      "equals": 250
+      "equals": 275
     }
   ],
   "require_material_resource_bounds": {
@@ -108,8 +110,8 @@
     "max_container_spacing_lte": 16.0,
     "max_container_spacing_gte": 16.0,
     "max_pass_texture_copy_pixels_lte": 4000000,
-    "total_plan_sample_taps_lte": 250,
-    "total_plan_sample_taps_gte": 250,
+    "total_plan_sample_taps_lte": 275,
+    "total_plan_sample_taps_gte": 275,
     "total_runtime_passes_gte": 1,
     "active_runtime_passes_gte": 1,
     "backdrop_runtime_passes_gte": 1,
