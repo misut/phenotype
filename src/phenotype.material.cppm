@@ -2,6 +2,7 @@ module;
 #include <algorithm>
 #include <cstdint>
 #include <cmath>
+#include <span>
 
 export module phenotype.material;
 
@@ -277,6 +278,14 @@ struct MaterialRuntimeRecord {
     std::uint32_t command_index = 0;
 };
 
+struct MaterialForegroundTextResolution {
+    Color color{};
+    char const* role = "none";
+    std::uint32_t material_command_index = 0;
+    bool has_material = false;
+    bool remapped = false;
+};
+
 struct MaterialRuntimeSummary {
     std::uint32_t plan_count = 0;
     std::uint32_t fallback_count = 0;
@@ -326,6 +335,8 @@ struct MaterialExecutorSummary {
     std::int64_t material_upload_bytes = 0;
     std::int64_t material_buffer_capacity_bytes = 0;
     std::uint32_t material_buffer_reallocations = 0;
+    std::uint32_t foreground_text_candidate_count = 0;
+    std::uint32_t foreground_text_remap_count = 0;
     std::int64_t cpu_decode_ns = 0;
     std::int64_t cpu_material_upload_ns = 0;
     std::int64_t cpu_total_ns = 0;
@@ -891,6 +902,84 @@ inline MaterialForegroundRecommendation material_resolve_foreground(
     foreground.accent_contrast_ratio =
         material_contrast_ratio(foreground.accent, foreground.background_luma);
     return foreground;
+}
+
+inline bool material_color_rgb_equal(Color a, Color b) noexcept {
+    return a.r == b.r && a.g == b.g && a.b == b.b;
+}
+
+inline Color material_preserve_text_alpha(Color resolved,
+                                          Color original) noexcept {
+    resolved.a = original.a;
+    return resolved;
+}
+
+inline bool material_point_inside_geometry(MaterialGeometry geometry,
+                                           float x,
+                                           float y) noexcept {
+    return geometry.w > 0.0f
+        && geometry.h > 0.0f
+        && x >= geometry.x
+        && y >= geometry.y
+        && x <= geometry.x + geometry.w
+        && y <= geometry.y + geometry.h;
+}
+
+inline MaterialForegroundTextResolution material_resolve_text_foreground(
+        std::span<MaterialRuntimeRecord const> records,
+        std::uint32_t text_command_index,
+        float text_x,
+        float text_y,
+        Color text_color,
+        Theme const& theme) noexcept {
+    MaterialForegroundTextResolution result{};
+    result.color = text_color;
+
+    for (auto it = records.rbegin(); it != records.rend(); ++it) {
+        auto const& record = *it;
+        auto const& plan = record.plan;
+        if (record.command_index >= text_command_index)
+            continue;
+        if (plan.kind == MaterialKind::None)
+            continue;
+        if (!material_point_inside_geometry(plan.geometry, text_x, text_y))
+            continue;
+
+        result.has_material = true;
+        result.material_command_index = record.command_index;
+        auto const style = material_style_for_kind(plan.kind, theme);
+
+        if (material_color_rgb_equal(text_color, style.foreground)) {
+            result.color = material_preserve_text_alpha(
+                plan.foreground.primary,
+                text_color);
+            result.role = "primary";
+            result.remapped = true;
+            return result;
+        }
+        if (material_color_rgb_equal(text_color, style.secondary_foreground)) {
+            result.color = material_preserve_text_alpha(
+                plan.foreground.secondary,
+                text_color);
+            result.role = "secondary";
+            result.remapped = true;
+            return result;
+        }
+        if (material_color_rgb_equal(text_color, style.accent_foreground)
+            || material_color_rgb_equal(
+                text_color,
+                style.strong_accent_foreground)) {
+            result.color = material_preserve_text_alpha(
+                plan.foreground.accent,
+                text_color);
+            result.role = "accent";
+            result.remapped = true;
+            return result;
+        }
+        return result;
+    }
+
+    return result;
 }
 
 inline MaterialBackdropAnalysis analyze_material_backdrop(

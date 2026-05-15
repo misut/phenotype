@@ -183,7 +183,11 @@ must report `backdrop_driven: true` and `uses_vibrancy: true`; deterministic
 fallback reports a fallback or accessibility source. The verifier checks that
 `primary_contrast_ratio` meets `minimum_contrast_ratio` and that scheme/source
 values are known, so foreground failures point at pure material policy before
-backend drawing.
+backend drawing. Native backends then apply this plan to primary, secondary,
+and accent text tokens whose draw origins fall inside a prior material command.
+Use `renderer.material_executor_summary.foreground_text_candidate_count` and
+`foreground_text_remap_count` to confirm that this execution step happened in
+the artifact; custom colors should count as candidates but remain unremapped.
 `primary_pass.executor` and each `passes[].executor` use pure roles:
 `backdrop-filter` for sampled glass, `fallback-fill` for deterministic fallback,
 and `none` for inactive material work. `max_texture_copy_pixels` is non-zero
@@ -365,7 +369,9 @@ Backends also serialize `renderer.material_executor_summary` for edge-only
 work that cannot be derived from the pure plan, including material instance
 count, fallback instance count, material draw calls, encoded material sample
 tap totals, upload bytes/capacity, framebuffer-history copy pixels, and CPU
-enqueue timings. Use
+enqueue timings. Foreground execution counters report how many text commands
+landed inside material surfaces and how many default material text tokens were
+remapped to `MaterialPlan.foreground`. Use
 `require_runtime_numeric_bounds` for CI-safe limits on those numeric runtime
 paths. Each entry names a path under `debug.platform_runtime.details` and can
 provide `equals`, `gte`, and/or `lte`; failures report the exact path plus the
@@ -377,6 +383,9 @@ counts against `renderer.material_plans#summary`: `plan_count`,
 resolved plan aggregate, draw calls must stay within material instances times
 the pure pass budget, upload bytes must fit the reported material buffer
 capacity, and copied backdrop pixels must stay within the pure resource budget.
+Foreground remaps must also be less than or equal to foreground text
+candidates, otherwise the backend has counted a remap without a material
+surface hit.
 Use `require_material_quality_policy` when a material gate must prove the
 resolved pure policy stayed enabled and bounded. It can require backdrop
 sampling, noise, and shadow to remain allowed for every plan, and can bound the

@@ -4640,6 +4640,8 @@ def check_material_executor_summary_contract(
         "material_upload_bytes",
         "material_buffer_capacity_bytes",
         "material_buffer_reallocations",
+        "foreground_text_candidate_count",
+        "foreground_text_remap_count",
         "cpu_decode_ns",
         "cpu_material_upload_ns",
         "cpu_total_ns",
@@ -4656,6 +4658,24 @@ def check_material_executor_summary_contract(
             likely_layer="platform-runtime",
             likely_pass="material-executor",
             hint="Executor telemetry must be numeric and non-negative.")
+
+    foreground_candidates = executor_summary.get("foreground_text_candidate_count")
+    foreground_remaps = executor_summary.get("foreground_text_remap_count")
+    if (isinstance(foreground_candidates, (int, float))
+            and not isinstance(foreground_candidates, bool)
+            and isinstance(foreground_remaps, (int, float))
+            and not isinstance(foreground_remaps, bool)):
+        report.check(
+            "material executor foreground remaps stay within candidates",
+            float(foreground_remaps) <= float(foreground_candidates),
+            path=f"{base_path}.foreground_text_remap_count",
+            expected={"<=": foreground_candidates},
+            actual=foreground_remaps,
+            likely_layer="material-foreground",
+            likely_pass="material-executor",
+            hint=(
+                "Foreground text remaps can only happen for text commands "
+                "inside a prior material surface."))
 
     draw_calls = executor_summary.get("material_draw_calls")
     if isinstance(draw_calls, (int, float)) and not isinstance(draw_calls, bool):
