@@ -409,11 +409,16 @@ inline LRESULT hit_test_integrated_chrome(Win32ShellState const& state,
     int const drag_height = logical_to_device_px(
         hwnd, state.integrated_titlebar.drag_region_height, 1);
     if (client_point.y >= 0 && client_point.y < drag_height) {
+        int const leading_reserved = logical_to_device_px(
+            hwnd, state.integrated_titlebar.leading_control_reserved_width, 0);
         int const reserved = logical_to_device_px(
             hwnd, state.integrated_titlebar.trailing_control_reserved_width, 0);
-        int const client_width = state.surface
-            ? state.surface->logical_width
-            : width;
+        RECT client_rect{};
+        int client_width = width;
+        if (GetClientRect(hwnd, &client_rect))
+            client_width = client_rect.right - client_rect.left;
+        if (leading_reserved > 0 && client_point.x < leading_reserved)
+            return HTCLIENT;
         if (reserved > 0 && client_point.x >= client_width - reserved)
             return HTCLIENT;
         if (phenotype_hit_region_at(

@@ -138,6 +138,10 @@ struct IntegratedTitlebarOptions {
     // Blank top-band pixels that should drag the native window when
     // no phenotype hit region is present there.
     float drag_region_height = 52.0f;
+    // Logical pixels at the top-left that are reserved for platform
+    // controls such as macOS traffic lights before app hit regions
+    // have been registered.
+    float leading_control_reserved_width = 0.0f;
     // Logical pixels at the top-right that are reserved for platform
     // caption controls before app hit regions have been registered.
     float trailing_control_reserved_width = 156.0f;

@@ -1321,6 +1321,7 @@ int main() {
         .integrated_titlebar = {
             .height = k_integrated_titlebar_height,
             .drag_region_height = k_integrated_titlebar_height,
+            .leading_control_reserved_width = 176.0f,
             .trailing_control_reserved_width = 168.0f,
         },
     };

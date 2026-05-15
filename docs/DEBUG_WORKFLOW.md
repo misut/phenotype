@@ -288,7 +288,8 @@ or an explicit environment override before the pure planner produced
 For Finder-style desktop windows, inspect
 `debug.platform_runtime.details.window`: `chrome=integrated_titlebar`,
 `window_options_present=true`, and matching `integrated_titlebar.*` metrics
-mean the example requested native integrated chrome. `native_controls_owned_by_os=true`
+mean the example requested native integrated chrome, including the leading
+traffic-light reserve and trailing caption-button reserve. `native_controls_owned_by_os=true`
 with `uses_glfw=false` confirms close/minimize/maximize controls and caption
 hit testing stay at the platform edge rather than being redrawn by phenotype.
 Plan-level failures route to `plan_material_surface` and runtime plan
