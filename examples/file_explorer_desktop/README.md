@@ -12,7 +12,8 @@ transparency/full-size content so the system traffic-light controls are
 integrated into the content area instead of being redrawn by the example. On
 Windows the native Win32 shell keeps the same contract through a DWM custom
 frame, using `WM_NCHITTEST` to preserve resize edges, caption-button behavior,
-blank-toolbar dragging, and phenotype toolbar hit regions.
+blank-toolbar dragging, phenotype toolbar hit regions, and native
+size/aspect-ratio constraints. The example does not use a toolkit window shim.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-desktop`. The example never points at the user's real

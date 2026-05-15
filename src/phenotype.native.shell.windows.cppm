@@ -254,6 +254,123 @@ inline int resize_border_px(HWND hwnd) {
     return border > 0 ? border : 8;
 }
 
+inline bool win32_sizing_edge_has_top(unsigned int edge) {
+    return edge == WMSZ_TOP
+        || edge == WMSZ_TOPLEFT
+        || edge == WMSZ_TOPRIGHT;
+}
+
+inline bool win32_sizing_edge_has_left(unsigned int edge) {
+    return edge == WMSZ_LEFT
+        || edge == WMSZ_TOPLEFT
+        || edge == WMSZ_BOTTOMLEFT;
+}
+
+inline bool win32_sizing_edge_uses_width(unsigned int edge) {
+    switch (edge) {
+        case WMSZ_LEFT:
+        case WMSZ_RIGHT:
+        case WMSZ_TOPLEFT:
+        case WMSZ_TOPRIGHT:
+        case WMSZ_BOTTOMLEFT:
+        case WMSZ_BOTTOMRIGHT:
+            return true;
+        case WMSZ_TOP:
+        case WMSZ_BOTTOM:
+            return false;
+        default:
+            return true;
+    }
+}
+
+inline bool adjust_win32_aspect_ratio_rect(RECT& rect,
+                                           unsigned int edge,
+                                           int aspect_w,
+                                           int aspect_h,
+                                           int frame_dx,
+                                           int frame_dy) {
+    if (aspect_w <= 0 || aspect_h <= 0)
+        return false;
+    int const outer_w = static_cast<int>(rect.right - rect.left);
+    int const outer_h = static_cast<int>(rect.bottom - rect.top);
+    if (outer_w <= 0 || outer_h <= 0)
+        return false;
+    if (frame_dx < 0)
+        frame_dx = 0;
+    if (frame_dy < 0)
+        frame_dy = 0;
+
+    if (win32_sizing_edge_uses_width(edge)) {
+        int client_w = outer_w - frame_dx;
+        if (client_w < 1)
+            client_w = 1;
+        int client_h = static_cast<int>(std::lround(
+            static_cast<double>(client_w) * static_cast<double>(aspect_h)
+            / static_cast<double>(aspect_w)));
+        if (client_h < 1)
+            client_h = 1;
+        int const adjusted_outer_h = client_h + frame_dy;
+        if (win32_sizing_edge_has_top(edge))
+            rect.top = rect.bottom - adjusted_outer_h;
+        else
+            rect.bottom = rect.top + adjusted_outer_h;
+        return true;
+    }
+
+    int client_h = outer_h - frame_dy;
+    if (client_h < 1)
+        client_h = 1;
+    int client_w = static_cast<int>(std::lround(
+        static_cast<double>(client_h) * static_cast<double>(aspect_w)
+        / static_cast<double>(aspect_h)));
+    if (client_w < 1)
+        client_w = 1;
+    int const adjusted_outer_w = client_w + frame_dx;
+    if (win32_sizing_edge_has_left(edge))
+        rect.left = rect.right - adjusted_outer_w;
+    else
+        rect.right = rect.left + adjusted_outer_w;
+    return true;
+}
+
+inline void win32_frame_deltas(HWND hwnd,
+                               bool integrated_chrome,
+                               int& frame_dx,
+                               int& frame_dy) {
+    frame_dx = 0;
+    frame_dy = 0;
+    if (!hwnd || integrated_chrome)
+        return;
+
+    auto const style = static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_STYLE));
+    auto const ex_style = static_cast<DWORD>(GetWindowLongPtrW(hwnd, GWL_EXSTYLE));
+    RECT rect{0, 0, 100, 100};
+    BOOL adjusted = FALSE;
+    if (auto* user32 = GetModuleHandleW(L"user32.dll")) {
+        using AdjustForDpiFn = BOOL(WINAPI*)(LPRECT, DWORD, BOOL, DWORD, UINT);
+        auto* adjust_for_dpi = reinterpret_cast<AdjustForDpiFn>(
+            GetProcAddress(user32, "AdjustWindowRectExForDpi"));
+        if (adjust_for_dpi) {
+            UINT dpi = static_cast<UINT>(
+                std::lround(static_cast<double>(dpi_scale_for_window(hwnd)) * 96.0));
+            if (dpi == 0)
+                dpi = 96;
+            adjusted = adjust_for_dpi(&rect, style, FALSE, ex_style, dpi);
+        }
+    }
+    if (!adjusted)
+        adjusted = AdjustWindowRectEx(&rect, style, FALSE, ex_style);
+    if (!adjusted)
+        return;
+
+    frame_dx = static_cast<int>((rect.right - rect.left) - 100);
+    frame_dy = static_cast<int>((rect.bottom - rect.top) - 100);
+    if (frame_dx < 0)
+        frame_dx = 0;
+    if (frame_dy < 0)
+        frame_dy = 0;
+}
+
 inline bool phenotype_hit_region_at(float x, float y) {
     auto hit = hit_test(x, y, g_app_state.scroll_x, g_app_state.scroll_y);
     return hit.has_value();
@@ -354,6 +471,25 @@ inline LRESULT CALLBACK win32_shell_wndproc(HWND hwnd,
                 if (state->max_h > 0)
                     info->ptMaxTrackSize.y = state->max_h;
                 return 0;
+            }
+            break;
+        case WM_SIZING:
+            if (state && state->aspect_w > 0 && state->aspect_h > 0
+                && lparam != 0) {
+                int frame_dx = 0;
+                int frame_dy = 0;
+                win32_frame_deltas(
+                    hwnd, state->integrated_chrome, frame_dx, frame_dy);
+                auto* rect = reinterpret_cast<RECT*>(lparam);
+                if (adjust_win32_aspect_ratio_rect(
+                        *rect,
+                        static_cast<unsigned int>(wparam),
+                        state->aspect_w,
+                        state->aspect_h,
+                        frame_dx,
+                        frame_dy)) {
+                    return TRUE;
+                }
             }
             break;
         case WM_SIZE:
