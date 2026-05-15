@@ -316,6 +316,24 @@ std::vector<file_explorer_demo::Entry> finder_entries(
     return entries;
 }
 
+std::string entry_kind(file_explorer_demo::Entry const& entry) {
+    if (entry.folder)
+        return "Folder";
+    auto ext = extension_lower(entry.name);
+    if (ext.empty())
+        return "Document";
+    std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::toupper(ch));
+    });
+    return ext + " File";
+}
+
+std::string entry_size_label(file_explorer_demo::Entry const& entry) {
+    return entry.folder
+        ? "--"
+        : file_explorer_demo::format_size(entry.size);
+}
+
 Msg on_search_changed(std::string text) {
     return SearchChanged{std::move(text)};
 }
@@ -752,6 +770,256 @@ void finder_grid(file_explorer_demo::Snapshot const& snap) {
         });
 }
 
+void finder_list(file_explorer_demo::Snapshot const& snap) {
+    using namespace phenotype;
+    auto entries = finder_entries(snap);
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::Regular,
+            .role = MaterialSurfaceRole::Content,
+            .direction = FlexDirection::Column,
+            .padding = SpaceToken::Lg,
+            .gap = SpaceToken::Sm,
+            .cross_align = CrossAxisAlignment::Start,
+            .main_align = MainAxisAlignment::Start,
+            .max_width = 0.0f,
+            .fixed_height = -1.0f,
+            .semantic_label = "Files",
+        },
+        [&] {
+            layout::row([&] {
+                layout::sized_box(420.0f, [&] {
+                    widget::text("Name", TextSize::Small, TextColor::Muted);
+                });
+                layout::sized_box(160.0f, [&] {
+                    widget::text("Kind", TextSize::Small, TextColor::Muted);
+                });
+                layout::sized_box(120.0f, [&] {
+                    widget::text("Size", TextSize::Small, TextColor::Muted);
+                });
+            }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Start);
+            if (entries.empty()) {
+                widget::text("No matching files.");
+                return;
+            }
+            layout::scroll_view(552.0f, [&] {
+                layout::column([&] {
+                    for (auto const& entry : entries) {
+                        bool const selected = snap.has_selection
+                            && snap.selected.name == entry.name;
+                        layout::row([&] {
+                            layout::sized_box(420.0f, [&] {
+                                finder_button(
+                                    entry.name,
+                                    SelectEntry{entry.name},
+                                    selected,
+                                    410.0f,
+                                    15.0f,
+                                    false,
+                                    !selected);
+                            });
+                            layout::sized_box(160.0f, [&] {
+                                widget::text(entry_kind(entry),
+                                             TextSize::Small,
+                                             TextColor::Muted);
+                            });
+                            layout::sized_box(120.0f, [&] {
+                                widget::text(entry_size_label(entry),
+                                             TextSize::Small,
+                                             TextColor::Muted);
+                            });
+                        }, SpaceToken::Sm,
+                           CrossAxisAlignment::Center,
+                           MainAxisAlignment::Start);
+                    }
+                }, SpaceToken::Xs);
+            }, SpaceToken::Sm);
+        });
+}
+
+void finder_column_view(file_explorer_demo::Snapshot const& snap) {
+    using namespace phenotype;
+    auto entries = finder_entries(snap);
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::Regular,
+            .role = MaterialSurfaceRole::Content,
+            .direction = FlexDirection::Column,
+            .padding = SpaceToken::Lg,
+            .gap = SpaceToken::Md,
+            .cross_align = CrossAxisAlignment::Start,
+            .main_align = MainAxisAlignment::Start,
+            .max_width = 0.0f,
+            .fixed_height = -1.0f,
+            .semantic_label = "Files",
+        },
+        [&] {
+            layout::row([&] {
+                layout::sized_box(210.0f, [&] {
+                    layout::column([&] {
+                        widget::text("Locations", TextSize::Small, TextColor::Muted);
+                        finder_button("Demo Root", SelectLocation{"root"},
+                                      snap.relative_location == "Demo Root",
+                                      190.0f, 14.0f, false, true);
+                        finder_button("Documents", SelectLocation{"documents"},
+                                      snap.relative_location == "Demo Root/Documents",
+                                      190.0f, 14.0f, false, true);
+                        finder_button("Pictures", SelectLocation{"pictures"},
+                                      snap.relative_location == "Demo Root/Pictures",
+                                      190.0f, 14.0f, false, true);
+                        finder_button("Shared", SelectLocation{"shared"},
+                                      snap.relative_location == "Demo Root/Shared",
+                                      190.0f, 14.0f, false, true);
+                    }, SpaceToken::Xs);
+                });
+                layout::sized_box(360.0f, [&] {
+                    layout::column([&] {
+                        widget::text(snap.relative_location,
+                                     TextSize::Small,
+                                     TextColor::Muted);
+                        if (entries.empty()) {
+                            widget::text("No matching files.");
+                            return;
+                        }
+                        layout::scroll_view(500.0f, [&] {
+                            layout::column([&] {
+                                for (auto const& entry : entries) {
+                                    bool const selected = snap.has_selection
+                                        && snap.selected.name == entry.name;
+                                    finder_button(
+                                        entry.folder
+                                            ? entry.name + " >"
+                                            : entry.name,
+                                        SelectEntry{entry.name},
+                                        selected,
+                                        330.0f,
+                                        14.0f,
+                                        false,
+                                        !selected);
+                                }
+                            }, SpaceToken::Xs);
+                        });
+                    }, SpaceToken::Xs);
+                });
+                layout::weighted(1.0f, [&] {
+                    layout::column([&] {
+                        widget::text("Preview", TextSize::Small, TextColor::Muted);
+                        if (snap.has_selection) {
+                            widget::canvas(160.0f, 110.0f,
+                                [entry = snap.selected](Painter& painter) {
+                                    paint_item_thumbnail(painter, entry, true);
+                                },
+                                {},
+                                stable_token(snap.selected.name) ^ 0x440000u);
+                            widget::text(snap.selected.name, TextSize::Heading);
+                            widget::text(entry_kind(snap.selected),
+                                         TextSize::Small,
+                                         TextColor::Muted);
+                            widget::text(compact_preview(snap.preview),
+                                         TextSize::Small,
+                                         TextColor::Muted);
+                        } else {
+                            widget::text("Select a file to preview.");
+                        }
+                    }, SpaceToken::Sm);
+                });
+            }, SpaceToken::Md, CrossAxisAlignment::Start, MainAxisAlignment::Start);
+        });
+}
+
+void finder_gallery_view(file_explorer_demo::Snapshot const& snap) {
+    using namespace phenotype;
+    auto entries = finder_entries(snap);
+    file_explorer_demo::Entry hero = snap.has_selection && !snap.selected.name.empty()
+        ? snap.selected
+        : (entries.empty() ? file_explorer_demo::Entry{} : entries.front());
+    bool const has_hero = !hero.name.empty();
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::Regular,
+            .role = MaterialSurfaceRole::Content,
+            .direction = FlexDirection::Column,
+            .padding = SpaceToken::Lg,
+            .gap = SpaceToken::Md,
+            .cross_align = CrossAxisAlignment::Start,
+            .main_align = MainAxisAlignment::Start,
+            .max_width = 0.0f,
+            .fixed_height = -1.0f,
+            .semantic_label = "Files",
+        },
+        [&] {
+            if (!has_hero) {
+                widget::text("No matching files.");
+                return;
+            }
+            layout::row([&] {
+                widget::canvas(220.0f, 150.0f,
+                    [hero](Painter& painter) {
+                        paint_item_thumbnail(painter, hero, true);
+                    },
+                    {},
+                    stable_token(hero.name) ^ 0x550000u);
+                layout::weighted(1.0f, [&] {
+                    layout::column([&] {
+                        widget::text(hero.name, TextSize::Heading);
+                        widget::text(entry_kind(hero),
+                                     TextSize::Small,
+                                     TextColor::Muted);
+                        widget::text(snap.has_selection
+                            ? compact_preview(snap.preview)
+                            : "Select a file below to read its preview.",
+                            TextSize::Small,
+                            TextColor::Muted);
+                    }, SpaceToken::Sm);
+                });
+            }, SpaceToken::Lg, CrossAxisAlignment::Center, MainAxisAlignment::Start);
+            layout::scroll_view(366.0f, [&] {
+                std::vector<float> columns{160.0f, 160.0f, 160.0f, 160.0f};
+                layout::grid(std::move(columns), 142.0f, [&] {
+                    for (auto const& entry : entries) {
+                        bool const selected = entry.name == hero.name;
+                        layout::column([&] {
+                            widget::canvas(128.0f, 76.0f,
+                                [entry, selected](Painter& painter) {
+                                    paint_item_thumbnail(painter, entry, selected);
+                                },
+                                {},
+                                stable_token(entry.name)
+                                    ^ (selected ? 0x560000u : 0u));
+                            finder_button(entry.name,
+                                          SelectEntry{entry.name},
+                                          selected,
+                                          150.0f,
+                                          14.0f,
+                                          true);
+                        }, SpaceToken::Xs,
+                           CrossAxisAlignment::Center,
+                           MainAxisAlignment::Start);
+                    }
+                }, 18.0f);
+            });
+        });
+}
+
+void finder_content(State const& state,
+                    file_explorer_demo::Snapshot const& snap) {
+    switch (state.view_mode) {
+        case FinderViewMode::List:
+            finder_list(snap);
+            return;
+        case FinderViewMode::Column:
+            finder_column_view(snap);
+            return;
+        case FinderViewMode::Gallery:
+            finder_gallery_view(snap);
+            return;
+        case FinderViewMode::Icon:
+        default:
+            finder_grid(snap);
+            return;
+    }
+}
+
 void finder_status_bar(State const& state,
                        file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
@@ -812,7 +1080,7 @@ void view(State const& state) {
                         layout::weighted(1.0f, [&] {
                             layout::column([&] {
                                 finder_toolbar(state, snap);
-                                finder_grid(snap);
+                                finder_content(state, snap);
                                 finder_status_bar(state, snap);
                             }, SpaceToken::Sm);
                         });
