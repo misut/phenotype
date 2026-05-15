@@ -249,6 +249,10 @@ backdrop-pixel budget, and whether texture copies and fallback behavior are
 bounded. Container spacing is also reported as `max_container_spacing`, so
 artifact gates can bound future container/union expansion work before a backend
 starts allocating extra backdrop passes.
+Backends use the pure `default_material_quality_policy()` and
+`sanitize_material_quality_policy()` helpers instead of owning hard-coded
+material quality limits locally, so policy changes stay visible in
+`MaterialPlan` tests and artifact JSON.
 `geometry` preserves the raw decoded `MaterialRect` rectangle, while `shape`
 records the pure executable shape: validity, surface area, min/max extent,
 radius limit, effective radius, normalized radius, rounded flag, and radius
