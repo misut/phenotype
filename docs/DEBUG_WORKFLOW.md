@@ -104,13 +104,13 @@ with any subset of tokens to exercise the pure accessibility downgrade paths.
 caller supplies a different value.
 
 Material frames also expose a resolved backend plan. Semantic material nodes
-describe the stable request (`kind`, opacity, blur intent, contrast intent, and
-fallback availability), while `debug.platform_runtime.details.renderer` records
+describe the stable request (`kind`, `role`, opacity, blur intent, contrast
+intent, and fallback availability), while `debug.platform_runtime.details.renderer` records
 the actual `material_plans` executed for the frame. Each plan includes:
 
-- `contract_version`, `plan_id`, `kind`, and `command_descriptor`, which
-  preserves the decoded `MaterialRect` material values before fallback or
-  luminance policy mutates the resolved plan;
+- `contract_version`, `plan_id`, `kind`, `role`, and `command_descriptor`,
+  which preserves the decoded `MaterialRect` material values and functional
+  surface role before fallback or luminance policy mutates the resolved plan;
 - geometry, tint, blur radius, saturation, luminance curve, edge highlight,
   noise, and shadow values for the resolved plan;
 - `render_target`, including target dimensions, scale, pixel format, pixel
@@ -132,6 +132,10 @@ UI emitted the expected material surface, then inspect
 `renderer.material_plans[]`. The verifier compares semantic material fields
 against `MaterialPlan.command_descriptor`, then separately reports whether the
 resolved plan ran the glass pass or a deterministic fallback.
+It also compares semantic material roles against runtime plan roles, so app
+chrome can prove that a glass surface was emitted as `toolbar`, `sidebar`,
+`status_bar`, `navigation`, `content`, `overlay`, or a generic `surface`
+without visual inspection.
 `sample_taps` and `primary_pass.sample_taps` describe the actual resolved pass.
 Fallback plans therefore report `0` taps, while `quality_policy.max_sample_taps`
 and `resource_budget.max_sample_taps` preserve the allowed upper bound that led
@@ -221,9 +225,9 @@ or an explicit environment override before the pure planner produced
 Plan-level failures route to `plan_material_surface` and runtime plan
 serialization; semantic/runtime contract failures route to semantic material
 nodes, `MaterialRect` command emission, and `renderer.material_plans[]` parity.
-The `MaterialRect` command carries the material node's numeric style descriptor
-to the backend, including saturation, luminance curve, edge highlight, noise,
-and shadow. Native command decoders convert this payload into
+The `MaterialRect` command carries the material node's style descriptor
+to the backend, including functional surface role, saturation, luminance curve,
+edge highlight, noise, and shadow. Native command decoders convert this payload into
 `MaterialCommandDescriptor` before building the pure `MaterialRequest`. If
 semantic material fields are correct but runtime plans drift, inspect the
 command descriptor decode path before changing backend policy.
@@ -238,7 +242,7 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 `decision_backend_supports_backdrop`, `decision_backdrop_source_ready`,
 `decision_reduced_transparency`, `decision_increase_contrast`,
 `decision_reduce_motion`, and
-exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`,
+exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `contract_versions`, `pass_names`, `backdrop_sources`, `luminance_responses`,
 `render_target_pixel_formats`, `pass_executors`, `decision_blockers`,
 `verifier_profiles`, and `verifier_region_layers`; it can also count
@@ -250,6 +254,8 @@ exceeding the pure backdrop budget, a pass switching executor roles, a decision
 trace naming the wrong blocker, an artifact emitting an unexpected material plan
 schema version, verifier expectations pointing at the wrong region/layer, or a
 quality/capability downgrade losing its LLM-actionable reason string.
+Use `require_material_surface_roles` when a scene must contain at least one
+semantic material node for each functional role.
 
 The plan schema check also treats `primary_pass` as a runtime contract. Its
 sample-tap count must match the plan, and the backend `passes[]` list must

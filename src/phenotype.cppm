@@ -1648,6 +1648,7 @@ void weighted(float grow, F&& builder) {
 
 struct MaterialSurfaceOptions {
     MaterialKind kind = MaterialKind::Regular;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
     FlexDirection direction = FlexDirection::Column;
     SpaceToken padding = SpaceToken::Lg;
     SpaceToken gap = SpaceToken::Md;
@@ -1662,6 +1663,7 @@ inline void configure_material_surface(LayoutNode& node,
                                        MaterialSurfaceOptions const& options) {
     auto const& t = detail::g_app.theme;
     node.material = material_style(options.kind);
+    node.material.role = options.role;
     node.background = node.material.tint;
     node.border_color = node.material.border;
     node.border_width = options.kind == MaterialKind::None ? 0.0f : 1.0f;
@@ -1713,6 +1715,7 @@ void toolbar(F&& builder,
     material_surface(
         MaterialSurfaceOptions{
             .kind = kind,
+            .role = MaterialSurfaceRole::Toolbar,
             .direction = FlexDirection::Row,
             .padding = padding,
             .gap = gap,
@@ -1733,6 +1736,7 @@ void sidebar(float max_width,
     material_surface(
         MaterialSurfaceOptions{
             .kind = kind,
+            .role = MaterialSurfaceRole::Sidebar,
             .direction = FlexDirection::Column,
             .padding = padding,
             .gap = gap,
@@ -1751,6 +1755,7 @@ void status_bar(F&& builder,
     material_surface(
         MaterialSurfaceOptions{
             .kind = kind,
+            .role = MaterialSurfaceRole::StatusBar,
             .direction = FlexDirection::Column,
             .padding = padding,
             .gap = gap,
@@ -3013,6 +3018,7 @@ inline void collect_semantic_nodes(NodeHandle node_h,
     if (has_material) {
         semantic.material = diag::SemanticNodeSnapshot::MaterialSnapshot{
             .kind = material_kind_name(node.material.kind),
+            .role = material_surface_role_name(node.material.role),
             .opacity = node.material.opacity,
             .blur_radius = node.material.blur_radius,
             .tint = node.material.tint,

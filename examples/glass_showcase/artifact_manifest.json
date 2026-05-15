@@ -20,6 +20,9 @@
     "regular",
     "thick"
   ],
+  "require_material_surface_roles": [
+    "surface"
+  ],
   "require_material_plans": true,
   "require_material_semantic_runtime_match": true,
   "require_material_plan_summary": {
@@ -31,7 +34,10 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "3": 7
+      "4": 7
+    },
+    "roles": {
+      "surface": 7
     },
     "kinds": {
       "clear": 1,

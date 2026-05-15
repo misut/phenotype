@@ -102,6 +102,7 @@ void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
     auto const& explorer = state.explorer;
     layout::material_surface(layout::MaterialSurfaceOptions{
         .kind = MaterialKind::Clear,
+        .role = MaterialSurfaceRole::Toolbar,
         .padding = SpaceToken::Md,
         .gap = SpaceToken::Sm,
         .semantic_label = "Toolbar",
@@ -125,6 +126,7 @@ void location_strip() {
     using namespace phenotype;
     layout::material_surface(layout::MaterialSurfaceOptions{
         .kind = MaterialKind::Thin,
+        .role = MaterialSurfaceRole::Navigation,
         .direction = FlexDirection::Row,
         .padding = SpaceToken::Sm,
         .gap = SpaceToken::Xs,

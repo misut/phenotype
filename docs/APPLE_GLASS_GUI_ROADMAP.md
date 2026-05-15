@@ -154,10 +154,10 @@ Backdrops also degrade through an explicit
 sets an unusable blur/tap budget, and when the render target exceeds the
 resolved `max_backdrop_pixels` budget. Backends execute the plan; they do not
 re-decide policy.
-`MaterialRect` commands carry the material node's numeric optics/effects
-descriptor into every backend as `MaterialCommandDescriptor`, so runtime plans
-no longer need to reconstruct saturation, luminance, edge, noise, or shadow
-values from the current theme.
+`MaterialRect` commands carry the material node's surface role plus numeric
+optics/effects descriptor into every backend as `MaterialCommandDescriptor`, so
+runtime plans no longer need to reconstruct app-chrome intent, saturation,
+luminance, edge, noise, or shadow values from the current theme.
 The macOS backend now reads AppKit accessibility display preferences at the
 edge and passes them as immutable planner inputs. Reduce Transparency resolves
 to the deterministic material fallback path, Increase Contrast adjusts opacity
@@ -390,8 +390,9 @@ Deliverables:
 - command protocol extension for material/backdrop region or a renderer-local
   material path that is fully represented in debug output;
 - macOS Metal implementation first: `MaterialRect` is resolved through the
-  pure `MaterialPlan`, samples the previous captured framebuffer as the
-  backdrop source, then applies blur, tint, saturation, luminance preservation,
+  pure `MaterialPlan`, preserves the functional `MaterialSurfaceRole`, samples
+  the previous captured framebuffer as the backdrop source, then applies blur,
+  tint, saturation, luminance preservation,
   edge highlight, deterministic noise, and depth/shadow values from the plan;
   runtime JSON mirrors the plan's `primary_pass`, resource budget, fallback
   reason, and verifier expectations so a CI failure points back to the likely

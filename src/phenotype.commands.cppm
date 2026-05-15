@@ -159,6 +159,7 @@ inline std::vector<DrawCommand> parse_commands(
             float x = read_f32(), y = read_f32(), w = read_f32(), h = read_f32();
             float r = read_f32();
             auto kind = static_cast<MaterialKind>(read_u32());
+            auto role = material_surface_role_from_wire(read_u32());
             float opacity = read_f32();
             float blur_radius = read_f32();
             auto tint = unpack(read_u32());
@@ -178,6 +179,7 @@ inline std::vector<DrawCommand> parse_commands(
                 r,
                 MaterialCommandDescriptor{
                     kind,
+                    role,
                     opacity,
                     blur_radius,
                     tint,

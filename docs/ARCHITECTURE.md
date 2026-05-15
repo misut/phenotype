@@ -154,7 +154,7 @@ append-only opcodes:
 | 6 | DrawLine | f32 x1, y1, x2, y2, thickness; u32 color |
 | 7 | HitRegion | f32 x, y, w, h; u32 callback_id, cursor_type |
 | 8 | DrawImage | f32 x, y, w, h; u32 len; bytes url (4-byte aligned) |
-| 15 | MaterialRect | f32 x, y, w, h, radius; u32 kind; f32 opacity, blur_radius; u32 tint; f32 saturation, luminance_floor, luminance_gain, edge_highlight, edge_width, noise_opacity, shadow_alpha, shadow_radius |
+| 15 | MaterialRect | f32 x, y, w, h, radius; u32 kind, role; f32 opacity, blur_radius; u32 tint; f32 saturation, luminance_floor, luminance_gain, edge_highlight, edge_width, noise_opacity, shadow_alpha, shadow_radius |
 
 All values are little-endian. Colors are packed as `(r << 24) | (g << 16) | (b << 8) | a`.
 
@@ -169,22 +169,22 @@ immutable edge inputs — capability snapshot, backdrop descriptor, render-targe
 metadata, debug seed, and quality policy — then execute the returned
 `MaterialPlan`.
 
-`Cmd::MaterialRect` carries the material node's numeric material command
-descriptor across the backend boundary: kind, opacity, blur, tint, saturation,
-luminance curve, edge highlight, edge width, noise opacity, and shadow. In C++
+`Cmd::MaterialRect` carries the material node's material command descriptor
+across the backend boundary: kind, functional surface role, opacity, blur, tint,
+saturation, luminance curve, edge highlight, edge width, noise opacity, and shadow. In C++
 this is represented as `MaterialCommandDescriptor`; backends reconstruct
 `MaterialRequest` from that descriptor plus geometry, then call the pure
-planner. They should not re-derive these style values from the current theme
-after the command has been emitted.
+planner. They should not re-derive these style values or functional roles from
+the current theme after the command has been emitted.
 
 ```cpp
 MaterialPlan plan = plan_material_surface(request, environment);
 ```
 
 The plan records its artifact `contract_version`, source
-`command_descriptor`, blur, tint, saturation, luminance curve, edge highlight,
-noise/dither, shadow, render-target analysis, backdrop sampling, backdrop
-analysis, decision trace, fallback path, debug metadata, pass expectations, the
+`command_descriptor`, material `role`, blur, tint, saturation, luminance curve,
+edge highlight, noise/dither, shadow, render-target analysis, backdrop sampling,
+backdrop analysis, decision trace, fallback path, debug metadata, pass expectations, the
 resolved quality policy, resource budgets, and verifier expectations.
 `decision_trace` records the pure gate booleans for geometry, target readiness,
 quality, backend capabilities, accessibility settings, backdrop-source
@@ -259,8 +259,11 @@ fallbacks rather than a claim to reproduce private system component behavior.
 The layout DSL exposes this boundary through `layout::material_surface` for
 low-level material containers and `layout::toolbar`, `layout::sidebar`, and
 `layout::status_bar` for common app chrome. Those helpers only configure
-layout and semantic labels; they still emit the same `MaterialRect` command and
-flow through the pure planner/backend executor contract above.
+layout, semantic labels, and `MaterialSurfaceRole`; they still emit the same
+`MaterialRect` command and flow through the pure planner/backend executor
+contract above. Artifact gates can require roles such as `toolbar`, `sidebar`,
+`status_bar`, `navigation`, or `surface` without changing backend rendering
+policy.
 
 ## Native backend structure
 

@@ -597,6 +597,7 @@ struct SemanticNodeSnapshot {
     std::string label;
     struct MaterialSnapshot {
         std::string kind;
+        std::string role;
         float opacity = 0.0f;
         float blur_radius = 0.0f;
         Color tint = {0, 0, 0, 0};
@@ -844,6 +845,10 @@ namespace detail {
             "kind",
             json::Value{material_kind_name(plan.command_descriptor.kind)});
         command_descriptor.emplace(
+            "role",
+            json::Value{
+                material_surface_role_name(plan.command_descriptor.role)});
+        command_descriptor.emplace(
             "opacity",
             json::Value{plan.command_descriptor.opacity});
         command_descriptor.emplace(
@@ -1015,6 +1020,9 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(plan.contract_version)});
         out.emplace("kind", json::Value{material_kind_name(plan.kind)});
+        out.emplace(
+            "role",
+            json::Value{material_surface_role_name(plan.role)});
         out.emplace("plan_id", json::Value{plan.plan_id});
         out.emplace(
             "command_descriptor",
@@ -1426,6 +1434,7 @@ inline json::Value semantic_node_to_json(SemanticNodeSnapshot const& node) {
     if (node.material.has_value()) {
         json::Object material;
         material.emplace("kind", json::Value{node.material->kind});
+        material.emplace("role", json::Value{node.material->role});
         material.emplace("opacity", json::Value{node.material->opacity});
         material.emplace("blur_radius", json::Value{node.material->blur_radius});
         json::Object tint;

@@ -605,6 +605,7 @@ void test_material_surface_semantic_debug_fields() {
     assert(material->contains("material"));
     auto const& material_debug = material->at("material").as_object();
     assert(material_debug.at("kind").as_string() == "regular");
+    assert(material_debug.at("role").as_string() == "surface");
     assert(material_debug.at("fallback").as_bool() == true);
     assert(material_debug.at("fallback_reason").as_string().find("fallback path")
            != std::string::npos);
@@ -663,9 +664,13 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
     assert(sidebar != nullptr);
     assert(status_bar != nullptr);
     assert(toolbar->at("material").as_object().at("kind").as_string() == "clear");
+    assert(toolbar->at("material").as_object().at("role").as_string() == "toolbar");
     assert(sidebar->at("material").as_object().at("kind").as_string() == "thin");
+    assert(sidebar->at("material").as_object().at("role").as_string() == "sidebar");
     assert(status_bar->at("material").as_object().at("kind").as_string()
            == "thick");
+    assert(status_bar->at("material").as_object().at("role").as_string()
+           == "status_bar");
     assert(find_semantic_descendant(*toolbar, "button", "New") != nullptr);
     assert(find_semantic_descendant(*sidebar, "text", "Locations") != nullptr);
     assert(find_semantic_descendant(*status_bar, "text", "Ready") != nullptr);
@@ -705,6 +710,7 @@ void test_overlay_semantic_debug_nodes_are_screen_fixed() {
     assert(material->at("visible").as_bool() == true);
     auto const& material_debug = material->at("material").as_object();
     assert(material_debug.at("kind").as_string() == "thin");
+    assert(material_debug.at("role").as_string() == "surface");
     assert(find_semantic_descendant(*material, "text", "Overlay glass") != nullptr);
     assert(find_semantic_descendant(*material, "button", "Overlay action") != nullptr);
 }
@@ -744,9 +750,11 @@ void test_material_runtime_record_json_contract() {
     assert(obj.at("contract_version").as_integer()
            == material_plan_contract_version);
     assert(obj.at("kind").as_string() == "thin");
+    assert(obj.at("role").as_string() == "surface");
     assert(obj.at("plan_id").as_string() == "material.thin.fallback");
     auto const& descriptor = obj.at("command_descriptor").as_object();
     assert(descriptor.at("kind").as_string() == "thin");
+    assert(descriptor.at("role").as_string() == "surface");
     assert(descriptor.at("opacity").as_float() == 0.5f);
     assert(descriptor.at("blur_radius").as_float() == 14.0f);
     auto const& descriptor_tint = descriptor.at("tint").as_object();

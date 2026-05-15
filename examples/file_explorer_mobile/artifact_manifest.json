@@ -24,6 +24,12 @@
     "regular",
     "thick"
   ],
+  "require_material_surface_roles": [
+    "surface",
+    "toolbar",
+    "navigation",
+    "status_bar"
+  ],
   "require_material_plans": true,
   "require_material_semantic_runtime_match": true,
   "require_capabilities": [
