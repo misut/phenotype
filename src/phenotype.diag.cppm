@@ -599,6 +599,7 @@ struct SemanticNodeSnapshot {
         std::string kind;
         float opacity = 0.0f;
         float blur_radius = 0.0f;
+        Color tint = {0, 0, 0, 0};
         float saturation = 1.0f;
         float luminance_floor = 0.0f;
         float luminance_gain = 1.0f;
@@ -820,6 +821,62 @@ namespace detail {
         tint.emplace("b", json::Value{static_cast<std::int64_t>(plan.tint.b)});
         tint.emplace("a", json::Value{static_cast<std::int64_t>(plan.tint.a)});
 
+        json::Object descriptor_tint;
+        descriptor_tint.emplace(
+            "r",
+            json::Value{
+                static_cast<std::int64_t>(plan.command_descriptor.tint.r)});
+        descriptor_tint.emplace(
+            "g",
+            json::Value{
+                static_cast<std::int64_t>(plan.command_descriptor.tint.g)});
+        descriptor_tint.emplace(
+            "b",
+            json::Value{
+                static_cast<std::int64_t>(plan.command_descriptor.tint.b)});
+        descriptor_tint.emplace(
+            "a",
+            json::Value{
+                static_cast<std::int64_t>(plan.command_descriptor.tint.a)});
+
+        json::Object command_descriptor;
+        command_descriptor.emplace(
+            "kind",
+            json::Value{material_kind_name(plan.command_descriptor.kind)});
+        command_descriptor.emplace(
+            "opacity",
+            json::Value{plan.command_descriptor.opacity});
+        command_descriptor.emplace(
+            "blur_radius",
+            json::Value{plan.command_descriptor.blur_radius});
+        command_descriptor.emplace(
+            "tint",
+            json::Value{std::move(descriptor_tint)});
+        command_descriptor.emplace(
+            "saturation",
+            json::Value{plan.command_descriptor.saturation});
+        command_descriptor.emplace(
+            "luminance_floor",
+            json::Value{plan.command_descriptor.luminance_floor});
+        command_descriptor.emplace(
+            "luminance_gain",
+            json::Value{plan.command_descriptor.luminance_gain});
+        command_descriptor.emplace(
+            "edge_highlight",
+            json::Value{plan.command_descriptor.edge_highlight});
+        command_descriptor.emplace(
+            "edge_width",
+            json::Value{plan.command_descriptor.edge_width});
+        command_descriptor.emplace(
+            "noise_opacity",
+            json::Value{plan.command_descriptor.noise_opacity});
+        command_descriptor.emplace(
+            "shadow_alpha",
+            json::Value{plan.command_descriptor.shadow_alpha});
+        command_descriptor.emplace(
+            "shadow_radius",
+            json::Value{plan.command_descriptor.shadow_radius});
+
         json::Object verifier;
         verifier.emplace(
             "require_backdrop_source",
@@ -959,6 +1016,9 @@ namespace detail {
                 static_cast<std::int64_t>(plan.contract_version)});
         out.emplace("kind", json::Value{material_kind_name(plan.kind)});
         out.emplace("plan_id", json::Value{plan.plan_id});
+        out.emplace(
+            "command_descriptor",
+            json::Value{std::move(command_descriptor)});
         out.emplace("geometry", json::Value{std::move(geometry)});
         out.emplace("render_target", json::Value{std::move(render_target)});
         out.emplace("decision_trace", json::Value{std::move(decision_trace)});
@@ -1368,6 +1428,20 @@ inline json::Value semantic_node_to_json(SemanticNodeSnapshot const& node) {
         material.emplace("kind", json::Value{node.material->kind});
         material.emplace("opacity", json::Value{node.material->opacity});
         material.emplace("blur_radius", json::Value{node.material->blur_radius});
+        json::Object tint;
+        tint.emplace(
+            "r",
+            json::Value{static_cast<std::int64_t>(node.material->tint.r)});
+        tint.emplace(
+            "g",
+            json::Value{static_cast<std::int64_t>(node.material->tint.g)});
+        tint.emplace(
+            "b",
+            json::Value{static_cast<std::int64_t>(node.material->tint.b)});
+        tint.emplace(
+            "a",
+            json::Value{static_cast<std::int64_t>(node.material->tint.a)});
+        material.emplace("tint", json::Value{std::move(tint)});
         material.emplace("saturation", json::Value{node.material->saturation});
         material.emplace(
             "luminance_floor",

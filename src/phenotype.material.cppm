@@ -9,7 +9,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 2;
+inline constexpr std::uint32_t material_plan_contract_version = 3;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -165,6 +165,7 @@ struct MaterialDecisionTrace {
 struct MaterialPlan {
     std::uint32_t contract_version = material_plan_contract_version;
     MaterialKind kind = MaterialKind::None;
+    MaterialCommandDescriptor command_descriptor{};
     MaterialGeometry geometry{};
     MaterialRenderTargetAnalysis render_target{};
     MaterialDecisionTrace decision_trace{};
@@ -404,6 +405,23 @@ inline MaterialStyle material_style_for_command(MaterialKind kind,
     return style;
 }
 
+inline MaterialCommandDescriptor material_command_descriptor(
+        MaterialStyle const& style) noexcept {
+    return MaterialCommandDescriptor{
+        style.kind,
+        style.opacity,
+        style.blur_radius,
+        style.tint,
+        style.saturation,
+        style.luminance_floor,
+        style.luminance_gain,
+        style.edge_highlight,
+        style.edge_width,
+        style.noise_opacity,
+        style.shadow_alpha,
+        style.shadow_radius};
+}
+
 inline MaterialStyle material_style_for_command(MaterialKind kind,
                                                 float opacity,
                                                 float blur_radius,
@@ -434,6 +452,25 @@ inline MaterialStyle material_style_for_command(MaterialKind kind,
     return style;
 }
 
+inline MaterialStyle material_style_for_command(
+        MaterialCommandDescriptor const& descriptor,
+        Theme const& theme) noexcept {
+    return material_style_for_command(
+        descriptor.kind,
+        descriptor.opacity,
+        descriptor.blur_radius,
+        descriptor.tint,
+        descriptor.saturation,
+        descriptor.luminance_floor,
+        descriptor.luminance_gain,
+        descriptor.edge_highlight,
+        descriptor.edge_width,
+        descriptor.noise_opacity,
+        descriptor.shadow_alpha,
+        descriptor.shadow_radius,
+        theme);
+}
+
 inline MaterialRequest material_request_for_command(MaterialKind kind,
                                                     float opacity,
                                                     float blur_radius,
@@ -442,6 +479,16 @@ inline MaterialRequest material_request_for_command(MaterialKind kind,
                                                     Theme const& theme) noexcept {
     return MaterialRequest{
         material_style_for_command(kind, opacity, blur_radius, tint, theme),
+        geometry,
+    };
+}
+
+inline MaterialRequest material_request_for_command(
+        MaterialCommandDescriptor const& descriptor,
+        MaterialGeometry geometry,
+        Theme const& theme) noexcept {
+    return MaterialRequest{
+        material_style_for_command(descriptor, theme),
         geometry,
     };
 }
@@ -460,8 +507,8 @@ inline MaterialRequest material_request_for_command(MaterialKind kind,
                                                     float shadow_radius,
                                                     MaterialGeometry geometry,
                                                     Theme const& theme) noexcept {
-    return MaterialRequest{
-        material_style_for_command(
+    return material_request_for_command(
+        MaterialCommandDescriptor{
             kind,
             opacity,
             blur_radius,
@@ -473,10 +520,9 @@ inline MaterialRequest material_request_for_command(MaterialKind kind,
             edge_width,
             noise_opacity,
             shadow_alpha,
-            shadow_radius,
-            theme),
+            shadow_radius},
         geometry,
-    };
+        theme);
 }
 
 inline std::uint32_t material_debug_seed(MaterialDebugSeed seed,
@@ -642,6 +688,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         0.0f,
         resolved_quality.max_blur_radius);
     plan.kind = style.kind;
+    plan.command_descriptor = material_command_descriptor(style);
     plan.geometry = request.geometry;
     plan.quality_policy = resolved_quality;
     plan.render_target = analyze_material_render_target(

@@ -2241,20 +2241,22 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 auto material_env_for_command = material_env;
                 material_env_for_command.debug_seed.node =
                     current_command_index;
+                MaterialCommandDescriptor descriptor{
+                    material_kind_from_wire(kind),
+                    opacity,
+                    blur_radius,
+                    unpack_color(packed),
+                    saturation,
+                    luminance_floor,
+                    luminance_gain,
+                    edge_highlight,
+                    edge_width,
+                    noise_opacity,
+                    shadow_alpha,
+                    shadow_radius};
                 auto plan = plan_material_surface(
                     material_request_for_command(
-                        material_kind_from_wire(kind),
-                        opacity,
-                        blur_radius,
-                        unpack_color(packed),
-                        saturation,
-                        luminance_floor,
-                        luminance_gain,
-                        edge_highlight,
-                        edge_width,
-                        noise_opacity,
-                        shadow_alpha,
-                        shadow_radius,
+                        descriptor,
                         MaterialGeometry{x, y, w, h, radius},
                         ::phenotype::detail::g_app.theme),
                     material_env_for_command);

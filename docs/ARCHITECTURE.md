@@ -169,22 +169,23 @@ immutable edge inputs — capability snapshot, backdrop descriptor, render-targe
 metadata, debug seed, and quality policy — then execute the returned
 `MaterialPlan`.
 
-`Cmd::MaterialRect` carries the material node's numeric `MaterialStyle`
+`Cmd::MaterialRect` carries the material node's numeric material command
 descriptor across the backend boundary: kind, opacity, blur, tint, saturation,
-luminance curve, edge highlight, edge width, noise opacity, and shadow. Backends
-reconstruct `MaterialRequest` from that descriptor plus geometry, then call the
-pure planner. They should not re-derive these style values from the current
-theme after the command has been emitted.
+luminance curve, edge highlight, edge width, noise opacity, and shadow. In C++
+this is represented as `MaterialCommandDescriptor`; backends reconstruct
+`MaterialRequest` from that descriptor plus geometry, then call the pure
+planner. They should not re-derive these style values from the current theme
+after the command has been emitted.
 
 ```cpp
 MaterialPlan plan = plan_material_surface(request, environment);
 ```
 
-The plan records its artifact `contract_version`, blur, tint, saturation,
-luminance curve, edge highlight, noise/dither, shadow, render-target analysis,
-backdrop sampling, backdrop analysis, decision trace, fallback path, debug
-metadata, pass expectations, the resolved quality policy, resource budgets, and
-verifier expectations.
+The plan records its artifact `contract_version`, source
+`command_descriptor`, blur, tint, saturation, luminance curve, edge highlight,
+noise/dither, shadow, render-target analysis, backdrop sampling, backdrop
+analysis, decision trace, fallback path, debug metadata, pass expectations, the
+resolved quality policy, resource budgets, and verifier expectations.
 `decision_trace` records the pure gate booleans for geometry, target readiness,
 quality, backend capabilities, accessibility settings, backdrop-source
 readiness, and the first fallback blocker. `primary_pass` states whether the

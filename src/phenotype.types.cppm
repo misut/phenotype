@@ -83,6 +83,21 @@ struct MaterialStyle {
     char const* verifier_profile = "none";
 };
 
+struct MaterialCommandDescriptor {
+    MaterialKind kind = MaterialKind::None;
+    float opacity = 0.0f;
+    float blur_radius = 0.0f;
+    Color tint = {0, 0, 0, 0};
+    float saturation = 1.0f;
+    float luminance_floor = 0.0f;
+    float luminance_gain = 1.0f;
+    float edge_highlight = 0.0f;
+    float edge_width = 1.0f;
+    float noise_opacity = 0.0f;
+    float shadow_alpha = 0.0f;
+    float shadow_radius = 0.0f;
+};
+
 // A solid convex quadrilateral in canvas-local coordinates. Intended
 // for CAD / chart workloads that need to emit thousands of already-
 // tessellated fills without paying PathBuilder + FillPath decode cost
