@@ -5,9 +5,9 @@ desktop and mobile file explorer examples.
 
 The module owns the sandboxed file model, deterministic demo tree,
 create/delete/duplicate/read/navigation behavior, selection action metadata,
-and artifact startup scenarios. Keeping it as a separate exon library makes the
-example UI packages depend on a normal module contract instead of a relative
-header include.
+operation receipts, and artifact startup scenarios. Keeping it as a separate
+exon library makes the example UI packages depend on a normal module contract
+instead of a relative header include.
 
 ## Run
 

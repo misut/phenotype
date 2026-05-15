@@ -77,18 +77,22 @@ append_scenario_requirements() {
     "created-preview")
       extra_args+=(--require-label-contains "Action Note.txt")
       extra_args+=(--require-label-contains "Created Action Note.txt")
+      extra_args+=(--require-label-contains "Operation: file_create ok - Action Note.txt")
       extra_args+=(--require-label-contains "Created from artifact scenario")
       ;;
     "deleted-file")
       extra_args+=(--require-label-contains "Deleted Delete Me.txt")
+      extra_args+=(--require-label-contains "Operation: file_delete ok - Delete Me.txt")
       ;;
     "duplicated-file")
       extra_args+=(--require-label-contains "README copy.txt")
       extra_args+=(--require-label-contains "Duplicated README.txt to README copy.txt")
+      extra_args+=(--require-label-contains "Operation: file_duplicate ok - README copy.txt")
       extra_args+=(--require-label-contains "Phenotype File Explorer")
       ;;
     "documents-preview")
       extra_args+=(--require-label-contains "Project Notes.txt")
+      extra_args+=(--require-label-contains "Operation: file_read ok - Project Notes.txt")
       extra_args+=(--require-label-contains "Finder-like desktop layout")
       ;;
     "history-forward")

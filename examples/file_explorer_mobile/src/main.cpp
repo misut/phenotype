@@ -287,6 +287,10 @@ void view(State const& state) {
                     layout::status_bar([&] {
                         widget::text("Status");
                         std::string detail = "Status: " + state.explorer.status;
+                        if (!snap.operation_label.empty()) {
+                            detail += "\n";
+                            detail += snap.operation_label;
+                        }
                         detail += "\nViewport: ";
                         detail += std::to_string(state.explorer.viewport_width);
                         detail += " x ";
