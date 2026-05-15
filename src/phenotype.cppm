@@ -1854,6 +1854,8 @@ struct MaterialSurfaceOptions {
     MainAxisAlignment main_align = MainAxisAlignment::Start;
     float max_width = 0.0f;
     float fixed_height = -1.0f;
+    float border_radius = -1.0f;
+    float border_width = -1.0f;
     char const* semantic_label = "";
     bool inherit_material_container = true;
     MaterialContainerDescriptor container{};
@@ -1869,8 +1871,12 @@ inline void configure_material_surface(LayoutNode& node,
         : options.container;
     node.background = node.material.tint;
     node.border_color = node.material.border;
-    node.border_width = options.kind == MaterialKind::None ? 0.0f : 1.0f;
-    node.border_radius = t.radius_lg;
+    node.border_width = options.border_width >= 0.0f
+        ? options.border_width
+        : (options.kind == MaterialKind::None ? 0.0f : 1.0f);
+    node.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : t.radius_lg;
     node.style.flex_direction = options.direction;
     node.style.gap = space_value(options.gap);
     node.style.cross_align = options.cross_align;

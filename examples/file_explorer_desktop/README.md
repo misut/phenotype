@@ -14,6 +14,9 @@ Windows the native Win32 shell keeps the same contract through a DWM custom
 frame, using `WM_NCHITTEST` to preserve resize edges, caption-button behavior,
 blank-toolbar dragging, phenotype toolbar hit regions, and native
 size/aspect-ratio constraints. The example does not use a toolkit window shim.
+The toolbar itself is a borderless material shell with rounded material control
+groups, so the artifact keeps Finder-like chrome without duplicating native
+window controls.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-desktop`. The example never points at the user's real
