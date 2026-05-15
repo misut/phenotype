@@ -151,9 +151,32 @@
     {
       "path": "window.uses_glfw",
       "equals": false
+    },
+    {
+      "path": "window.window_server_bounds.valid",
+      "equals": true
+    },
+    {
+      "path": "window.window_server_onscreen",
+      "equals": true
     }
   ],
   "require_runtime_numeric_bounds": [
+    {
+      "path": "window.window_server_bounds.w",
+      "gte": 1000,
+      "lte": 1400
+    },
+    {
+      "path": "window.window_server_bounds.h",
+      "gte": 700,
+      "lte": 820
+    },
+    {
+      "path": "window.window_server_surface_area",
+      "gte": 900000,
+      "lte": 1200000
+    },
     {
       "path": "renderer.material_executor_summary.foreground_text_candidate_count",
       "gte": 16,

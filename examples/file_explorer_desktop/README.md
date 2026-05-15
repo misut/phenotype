@@ -25,6 +25,9 @@ minimize, maximize, and caption-button hit testing at runtime.
 The manifest also checks `debug.platform_runtime.details.window` so CI can
 prove the example requested `IntegratedTitlebar`, preserved the expected
 titlebar metrics, and is not using GLFW or another toolkit window shim.
+On macOS it additionally checks WindowServer bounds and onscreen state, which
+catches regressions where the process owns a Dock icon but the ordered NSWindow
+is still 0x0 and therefore invisible.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-desktop`. The example never points at the user's real

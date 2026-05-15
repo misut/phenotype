@@ -613,6 +613,11 @@ inline SEL sel_window() {
     return sel;
 }
 
+inline SEL sel_window_number() {
+    static auto sel = sel_registerName("windowNumber");
+    return sel;
+}
+
 inline SEL sel_attributed_substring_for_range() {
     static auto sel =
         sel_registerName("attributedSubstringForProposedRange:actualRange:");
@@ -7650,8 +7655,61 @@ inline json::Object macos_text_input_runtime_json() {
     return text_input;
 }
 
+struct WindowServerSnapshot {
+    bool valid = false;
+    bool onscreen = false;
+    double x = 0.0;
+    double y = 0.0;
+    double w = 0.0;
+    double h = 0.0;
+};
+
+inline WindowServerSnapshot window_server_snapshot(id ns_window) {
+    WindowServerSnapshot snapshot;
+    if (!ns_window)
+        return snapshot;
+
+    auto number = objc_send<int>(ns_window, sel_window_number());
+    if (number <= 0)
+        return snapshot;
+
+    CFGuard<CFArrayRef> windows{
+        CGWindowListCopyWindowInfo(
+            kCGWindowListOptionIncludingWindow,
+            static_cast<CGWindowID>(number))};
+    if (!windows || CFArrayGetCount(windows) <= 0)
+        return snapshot;
+
+    auto info = static_cast<CFDictionaryRef>(CFArrayGetValueAtIndex(windows, 0));
+    if (!info || CFGetTypeID(info) != CFDictionaryGetTypeID())
+        return snapshot;
+
+    if (auto raw_onscreen = CFDictionaryGetValue(info, kCGWindowIsOnscreen)) {
+        if (CFGetTypeID(raw_onscreen) == CFBooleanGetTypeID())
+            snapshot.onscreen = CFBooleanGetValue(static_cast<CFBooleanRef>(raw_onscreen));
+    }
+
+    auto raw_bounds = CFDictionaryGetValue(info, kCGWindowBounds);
+    if (!raw_bounds || CFGetTypeID(raw_bounds) != CFDictionaryGetTypeID())
+        return snapshot;
+
+    CGRect rect{};
+    if (!CGRectMakeWithDictionaryRepresentation(
+            static_cast<CFDictionaryRef>(raw_bounds),
+            &rect))
+        return snapshot;
+
+    snapshot.valid = true;
+    snapshot.x = rect.origin.x;
+    snapshot.y = rect.origin.y;
+    snapshot.w = rect.size.width;
+    snapshot.h = rect.size.height;
+    return snapshot;
+}
+
 inline json::Object macos_window_runtime_json() {
     auto const* surface = g_renderer.surface;
+    auto ns_window = g_renderer.ns_window;
     bool const has_options = surface && surface->window_options_valid;
     WindowChromeStyle const chrome =
         has_options ? surface->window_chrome : WindowChromeStyle::System;
@@ -7693,6 +7751,21 @@ inline json::Object macos_window_runtime_json() {
     window.emplace("titlebar_transparent", json::Value{integrated});
     window.emplace("full_size_content_view", json::Value{integrated});
     window.emplace("background_drag_enabled", json::Value{integrated});
+
+    auto server = window_server_snapshot(ns_window);
+    json::Object server_bounds;
+    server_bounds.emplace("valid", json::Value{server.valid});
+    server_bounds.emplace("x", json::Value{server.x});
+    server_bounds.emplace("y", json::Value{server.y});
+    server_bounds.emplace("w", json::Value{server.w});
+    server_bounds.emplace("h", json::Value{server.h});
+    window.emplace("window_server_onscreen", json::Value{server.onscreen});
+    window.emplace(
+        "window_server_surface_area",
+        json::Value{server.w * server.h});
+    window.emplace(
+        "window_server_bounds",
+        json::Value{std::move(server_bounds)});
     return window;
 }
 
