@@ -1,9 +1,24 @@
 #include <cassert>
+#include <cstdlib>
 #include <cstdio>
 #include <filesystem>
+#include <iostream>
 #include <string>
 
-#include "../examples/file_explorer_shared/file_explorer_model.hpp"
+import file_explorer_shared;
+
+namespace {
+
+[[noreturn]] void fail_assert(char const* expression, char const* file, int line) {
+    std::cerr << "FAIL: " << file << ":" << line << ": " << expression << "\n";
+    std::exit(1);
+}
+
+} // namespace
+
+#undef assert
+#define assert(expression) \
+    ((expression) ? static_cast<void>(0) : fail_assert(#expression, __FILE__, __LINE__))
 
 int main() {
 #if defined(__wasi__) || defined(__ANDROID__)
@@ -62,12 +77,34 @@ int main() {
     assert(state.selected_name == "Project Notes.txt");
     assert(demo::snapshot(state).preview.find("Finder-like desktop layout")
         != std::string::npos);
+    assert(demo::snapshot(state).can_go_back);
+
+    demo::go_back(state);
+    assert(demo::same_path(state.current, state.root));
+    assert(state.status == "Went back to Demo Root");
+    assert(demo::snapshot(state).can_go_forward);
+
+    demo::go_forward(state);
+    assert(demo::relative_location(state.root, state.current)
+        == "Demo Root/Documents");
+    assert(state.status == "Went forward to Demo Root/Documents");
+    assert(demo::snapshot(state).can_go_back);
 
     demo::select_location(state, "documents");
     assert(demo::relative_location(state.root, state.current)
         == "Demo Root/Documents");
     demo::go_up(state);
-    assert(state.current == state.root);
+    assert(demo::same_path(state.current, state.root));
+    assert(state.forward_stack.empty());
+
+    demo::apply_startup_scenario(state, "history-forward");
+    assert(demo::relative_location(state.root, state.current)
+        == "Demo Root/Documents");
+    assert(state.status == "Went forward to Demo Root/Documents");
+
+    demo::reset_demo_tree(state, profile);
+    assert(!demo::snapshot(state).can_go_back);
+    assert(!demo::snapshot(state).can_go_forward);
 
     fs::remove_all(root, ec);
     std::puts("PASS: file explorer model contract");

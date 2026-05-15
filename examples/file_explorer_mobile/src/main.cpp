@@ -7,8 +7,7 @@
 #include <variant>
 #include <vector>
 
-#include "../../file_explorer_shared/file_explorer_model.hpp"
-
+import file_explorer_shared;
 import phenotype;
 import phenotype.native;
 
@@ -22,6 +21,8 @@ struct DraftBodyChanged { std::string text; };
 struct SelectTab { std::size_t value; };
 struct CreateFile {};
 struct DeleteSelected {};
+struct GoBack {};
+struct GoForward {};
 struct GoUp {};
 struct ResetDemo {};
 struct Resized { int width; int height; float scale; };
@@ -35,6 +36,8 @@ using Msg = std::variant<
     SelectTab,
     CreateFile,
     DeleteSelected,
+    GoBack,
+    GoForward,
     GoUp,
     ResetDemo,
     Resized>;
@@ -90,6 +93,12 @@ void update(State& state, Msg msg) {
             explorer.mobile_tab = 1;
         } else if constexpr (std::same_as<T, DeleteSelected>) {
             file_explorer_demo::delete_selected(explorer);
+            explorer.mobile_tab = 0;
+        } else if constexpr (std::same_as<T, GoBack>) {
+            file_explorer_demo::go_back(explorer);
+            explorer.mobile_tab = 0;
+        } else if constexpr (std::same_as<T, GoForward>) {
+            file_explorer_demo::go_forward(explorer);
             explorer.mobile_tab = 0;
         } else if constexpr (std::same_as<T, GoUp>) {
             file_explorer_demo::go_up(explorer);
@@ -158,6 +167,12 @@ void browse_tab(file_explorer_demo::Snapshot const& snap) {
                 std::string summary = std::to_string(snap.entries.size()) + " items";
                 widget::text(summary, TextSize::Small, TextColor::Muted);
             });
+            widget::button<Msg>("Back", GoBack{},
+                                ButtonVariant::Default,
+                                !snap.can_go_back);
+            widget::button<Msg>("Forward", GoForward{},
+                                ButtonVariant::Default,
+                                !snap.can_go_forward);
             widget::button<Msg>("Up", GoUp{});
         });
         layout::spacer(8);

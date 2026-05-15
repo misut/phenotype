@@ -1,0 +1,13 @@
+[package]
+name = "file_explorer_shared"
+version = "0.1.0"
+description = "Shared sandboxed file explorer model for phenotype examples"
+type = "lib"
+standard = 23
+platforms = [
+    { os = "macos", arch = "aarch64" },
+    { os = "windows", arch = "x86_64" },
+]
+
+[sync]
+cmake-in-root = false

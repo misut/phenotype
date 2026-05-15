@@ -16,6 +16,7 @@ jobs:
       code_tests: ${{ steps.classify.outputs.code_tests }}
       docs_build: ${{ steps.classify.outputs.docs_build }}
       tools_check: ${{ steps.classify.outputs.tools_check }}
+      file_explorer_examples: ${{ steps.classify.outputs.file_explorer_examples }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -39,6 +40,7 @@ jobs:
           code_tests=false
           docs_build=false
           tools_check=false
+          file_explorer_examples=false
 
           for path in "${files[@]}"; do
             case "$path" in
@@ -63,6 +65,12 @@ jobs:
             esac
 
             case "$path" in
+              examples/file_explorer_*/*)
+                file_explorer_examples=true
+                ;;
+            esac
+
+            case "$path" in
               examples/glass_showcase/artifact_manifest*.json)
                 continue
                 ;;
@@ -80,6 +88,7 @@ jobs:
             echo "code_tests=$code_tests"
             echo "docs_build=$docs_build"
             echo "tools_check=$tools_check"
+            echo "file_explorer_examples=$file_explorer_examples"
           } >> "$GITHUB_OUTPUT"
 
           printf 'Changed files:\n'
@@ -88,8 +97,8 @@ jobs:
           else
             printf '  %s\n' "${files[@]}"
           fi
-          printf 'code_tests=%s docs_build=%s tools_check=%s\n' \
-            "$code_tests" "$docs_build" "$tools_check"
+          printf 'code_tests=%s docs_build=%s tools_check=%s file_explorer_examples=%s\n' \
+            "$code_tests" "$docs_build" "$tools_check" "$file_explorer_examples"
 
   test:
     name: test (${{ matrix.os }}, ${{ matrix.target }})
@@ -202,6 +211,16 @@ jobs:
           eval "$(intron env)"
           exon test ${{ matrix.target_arg }}
 
+      - name: Test file explorer shared module
+        if: matrix.target == 'native' && needs.changes.outputs.file_explorer_examples == 'true'
+        env:
+          EXON_CXXFLAGS: ${{ matrix.cxxflags }}
+          EXON_LDFLAGS: ${{ matrix.ldflags }}
+        run: |
+          eval "$(intron env)"
+          cd examples/file_explorer_shared
+          exon test
+
       - name: Test artifact verifier contract
         if: matrix.target == 'native'
         run: |
@@ -280,6 +299,16 @@ jobs:
           $env:CC = "cl"
           $env:CXX = "cl"
           exon test
+
+      - name: Build file explorer shared module
+        if: needs.changes.outputs.file_explorer_examples == 'true'
+        shell: pwsh
+        run: |
+          Invoke-Expression (& intron env | Out-String)
+          $env:CC = "cl"
+          $env:CXX = "cl"
+          Set-Location examples/file_explorer_shared
+          exon build
 
       - name: Build native example
         shell: pwsh

@@ -11,8 +11,7 @@
 #include <variant>
 #include <vector>
 
-#include "../../file_explorer_shared/file_explorer_model.hpp"
-
+import file_explorer_shared;
 import phenotype;
 import phenotype.native;
 
@@ -28,6 +27,8 @@ struct SetViewMode { FinderViewMode mode; };
 struct ToolbarAction { std::string label; };
 struct CreateFile {};
 struct DeleteSelected {};
+struct GoBack {};
+struct GoForward {};
 struct GoUp {};
 struct Refresh {};
 struct ResetDemo {};
@@ -43,6 +44,8 @@ using Msg = std::variant<
     ToolbarAction,
     CreateFile,
     DeleteSelected,
+    GoBack,
+    GoForward,
     GoUp,
     Refresh,
     ResetDemo,
@@ -399,6 +402,10 @@ void update(State& state, Msg msg) {
             file_explorer_demo::create_file(explorer);
         } else if constexpr (std::same_as<T, DeleteSelected>) {
             file_explorer_demo::delete_selected(explorer);
+        } else if constexpr (std::same_as<T, GoBack>) {
+            file_explorer_demo::go_back(explorer);
+        } else if constexpr (std::same_as<T, GoForward>) {
+            file_explorer_demo::go_forward(explorer);
         } else if constexpr (std::same_as<T, GoUp>) {
             file_explorer_demo::go_up(explorer);
         } else if constexpr (std::same_as<T, Refresh>) {
@@ -507,16 +514,25 @@ void finder_sidebar(State const& state) {
     }, MaterialKind::Thin, SpaceToken::Lg, SpaceToken::Xs);
 }
 
-void paint_nav_buttons(phenotype::Painter& painter) {
-    fill_round(painter, 0.0f, 0.0f, 120.0f, 48.0f, 24.0f, rgba(255, 255, 255, 190));
-    painter.line(58.0f, 8.0f, 58.0f, 40.0f, 1.0f, rgba(225, 225, 225));
-    painter.line(39.0f, 15.0f, 27.0f, 24.0f, 3.0f, rgba(195, 199, 204));
-    painter.line(27.0f, 24.0f, 39.0f, 33.0f, 3.0f, rgba(195, 199, 204));
-    painter.line(82.0f, 15.0f, 94.0f, 24.0f, 3.0f, rgba(195, 199, 204));
-    painter.line(94.0f, 24.0f, 82.0f, 33.0f, 3.0f, rgba(195, 199, 204));
+phenotype::Color nav_icon_ink(bool enabled) {
+    return enabled ? rgba(88, 88, 92) : rgba(188, 192, 198);
 }
 
-phenotype::ButtonStyleOptions toolbar_icon_button_options(bool selected = false) {
+void paint_back_icon(phenotype::Painter& painter, bool enabled) {
+    auto ink = nav_icon_ink(enabled);
+    painter.line(27.0f, 10.0f, 17.0f, 18.0f, 3.0f, ink);
+    painter.line(17.0f, 18.0f, 27.0f, 26.0f, 3.0f, ink);
+}
+
+void paint_forward_icon(phenotype::Painter& painter, bool enabled) {
+    auto ink = nav_icon_ink(enabled);
+    painter.line(17.0f, 10.0f, 27.0f, 18.0f, 3.0f, ink);
+    painter.line(27.0f, 18.0f, 17.0f, 26.0f, 3.0f, ink);
+}
+
+phenotype::ButtonStyleOptions toolbar_icon_button_options(
+        bool selected = false,
+        bool disabled = false) {
     auto const& t = phenotype::current_theme();
     phenotype::ButtonStyleOptions options;
     options.has_background = true;
@@ -531,6 +547,7 @@ phenotype::ButtonStyleOptions toolbar_icon_button_options(bool selected = false)
     options.border_radius = 18.0f;
     options.max_width = 44.0f;
     options.fixed_height = 36.0f;
+    options.disabled = disabled;
     return options;
 }
 
@@ -652,12 +669,49 @@ void toolbar_action_button(char const* label,
         token);
 }
 
+template<typename Paint>
+void navigation_button(char const* label,
+                       Msg msg,
+                       bool enabled,
+                       Paint paint,
+                       std::uint64_t token) {
+    std::string semantic_label(label);
+    phenotype::widget::canvas_button<Msg>(
+        phenotype::str{semantic_label},
+        44.0f,
+        36.0f,
+        [paint, enabled](phenotype::Painter& painter) {
+            paint(painter, enabled);
+        },
+        std::move(msg),
+        toolbar_icon_button_options(false, !enabled),
+        token ^ (enabled ? 0x200000000ull : 0ull));
+}
+
 void finder_toolbar(State const& state,
                     file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
     layout::toolbar([&] {
-        widget::canvas(120.0f, 48.0f, paint_nav_buttons, {}, 0x62u);
+        layout::material_surface(
+            layout::MaterialSurfaceOptions{
+                .kind = MaterialKind::Thick,
+                .role = MaterialSurfaceRole::Toolbar,
+                .direction = FlexDirection::Row,
+                .padding = SpaceToken::Xs,
+                .gap = SpaceToken::Xs,
+                .cross_align = CrossAxisAlignment::Center,
+                .main_align = MainAxisAlignment::Start,
+                .max_width = 104.0f,
+                .fixed_height = 48.0f,
+                .semantic_label = "Navigation Controls",
+            },
+            [&] {
+                navigation_button("Back", GoBack{}, snap.can_go_back,
+                                  paint_back_icon, 0x6201u);
+                navigation_button("Forward", GoForward{}, snap.can_go_forward,
+                                  paint_forward_icon, 0x6202u);
+            });
         widget::text(snap.relative_location == "Demo Root"
             ? "Recents"
             : snap.relative_location,
