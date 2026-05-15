@@ -2022,6 +2022,41 @@ inline NodeHandle build_button_with_options(
     assert(root.children.size() == 1);
     return root.children[0];
 }
+
+inline NodeHandle build_canvas_button_with_options(
+        ButtonStyleOptions options,
+        std::uint64_t paint_token = 0xCAFEu) {
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.callback_roles.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::canvas_button<ButtonMsg>(
+        "Grid View",
+        44.0f,
+        36.0f,
+        [](Painter& p) {
+            p.line(12.0f, 12.0f, 32.0f, 24.0f,
+                   2.0f, Color{20, 20, 20, 255});
+        },
+        Click{},
+        options,
+        paint_token);
+    Scope::set_current(nullptr);
+
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    return root.children[0];
+}
 } // namespace button_test
 
 void test_button_default_variant() {
@@ -2188,6 +2223,66 @@ void test_button_style_options_custom_chrome() {
            && hovered.background.b == 7 && hovered.background.a == 8);
 
     std::puts("PASS: button style options custom chrome");
+}
+
+void test_canvas_button_semantic_and_layout_contract() {
+    ButtonStyleOptions options;
+    options.has_background = true;
+    options.background = Color{255, 255, 255, 0};
+    options.has_hover_background = true;
+    options.hover_background = Color{230, 230, 230, 255};
+    options.has_border_color = true;
+    options.border_color = Color{0, 0, 0, 0};
+    options.border_width = 0.0f;
+    options.border_radius = 18.0f;
+    options.max_width = 44.0f;
+    options.fixed_height = 36.0f;
+
+    auto btn_h = button_test::build_canvas_button_with_options(
+        options, 0xF00Du);
+    LAYOUT_NODE(btn_h, 100.0f);
+
+    auto& btn = detail::node_at(btn_h);
+    assert(btn.width == 44.0f);
+    assert(btn.height == 36.0f);
+    assert(btn.interaction_role == InteractionRole::Button);
+    assert(btn.debug_semantic_label == "Grid View");
+    assert(btn.callback_id == 0u);
+    assert(btn.focusable == true);
+    assert(btn.cursor_type == 1);
+    assert(detail::g_app.callbacks.size() == 1);
+    assert(detail::g_app.callback_roles.size() == 1);
+    assert(detail::g_app.callback_roles[0] == InteractionRole::Button);
+    assert(btn.children.size() == 1);
+
+    auto& canvas = detail::node_at(btn.children[0]);
+    assert(canvas.width == 44.0f);
+    assert(canvas.height == 36.0f);
+    assert(canvas.paint_fn);
+    assert(canvas.paint_token == 0xF00Du);
+    assert(canvas.debug_semantic_hidden == true);
+
+    std::puts("PASS: canvas_button semantic + layout contract");
+}
+
+void test_canvas_button_disabled_contract() {
+    ButtonStyleOptions options;
+    options.disabled = true;
+    options.max_width = 44.0f;
+    options.fixed_height = 36.0f;
+
+    auto btn_h = button_test::build_canvas_button_with_options(options);
+    auto& btn = detail::node_at(btn_h);
+    assert(btn.interaction_role == InteractionRole::Button);
+    assert(btn.debug_semantic_label == "Grid View");
+    assert(btn.debug_semantic_enabled == false);
+    assert(btn.callback_id == 0xFFFFFFFFu);
+    assert(btn.focusable == false);
+    assert(detail::g_app.callbacks.empty());
+    assert(btn.children.size() == 1);
+    assert(detail::node_at(btn.children[0]).paint_fn);
+
+    std::puts("PASS: canvas_button disabled contract");
 }
 
 namespace text_field_test {
@@ -2585,6 +2680,8 @@ int main() {
     test_button_defocused_resting_border_width();
     test_button_disabled();
     test_button_style_options_custom_chrome();
+    test_canvas_button_semantic_and_layout_contract();
+    test_canvas_button_disabled_contract();
     test_text_field_default();
     test_text_field_default_placeholder();
     test_text_field_error();

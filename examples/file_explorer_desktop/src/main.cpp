@@ -22,6 +22,9 @@ struct SelectEntry { std::string name; };
 struct SearchChanged { std::string text; };
 struct DraftNameChanged { std::string text; };
 struct DraftBodyChanged { std::string text; };
+enum class FinderViewMode { Icon, List, Column, Gallery };
+struct SetViewMode { FinderViewMode mode; };
+struct ToolbarAction { std::string label; };
 struct CreateFile {};
 struct DeleteSelected {};
 struct GoUp {};
@@ -35,6 +38,8 @@ using Msg = std::variant<
     SearchChanged,
     DraftNameChanged,
     DraftBodyChanged,
+    SetViewMode,
+    ToolbarAction,
     CreateFile,
     DeleteSelected,
     GoUp,
@@ -45,6 +50,7 @@ using Msg = std::variant<
 struct State {
     file_explorer_demo::ExplorerState explorer =
         file_explorer_demo::make_state("desktop");
+    FinderViewMode view_mode = FinderViewMode::Icon;
 };
 
 constexpr float k_pi = 3.14159265358979323846f;
@@ -274,6 +280,16 @@ std::string finder_status(file_explorer_demo::Snapshot const& snap) {
     return text;
 }
 
+std::string view_mode_name(FinderViewMode mode) {
+    switch (mode) {
+        case FinderViewMode::Icon: return "Icon View";
+        case FinderViewMode::List: return "List View";
+        case FinderViewMode::Column: return "Column View";
+        case FinderViewMode::Gallery: return "Gallery View";
+    }
+    return "Icon View";
+}
+
 std::string compact_preview(std::string text) {
     for (char& ch : text) {
         if (ch == '\n' || ch == '\t')
@@ -329,6 +345,11 @@ void update(State& state, Msg msg) {
             explorer.draft_name = m.text;
         } else if constexpr (std::same_as<T, DraftBodyChanged>) {
             explorer.draft_body = m.text;
+        } else if constexpr (std::same_as<T, SetViewMode>) {
+            state.view_mode = m.mode;
+            explorer.status = "Switched to " + view_mode_name(m.mode) + ".";
+        } else if constexpr (std::same_as<T, ToolbarAction>) {
+            explorer.status = m.label + " action is available in the native toolbar contract.";
         } else if constexpr (std::same_as<T, CreateFile>) {
             file_explorer_demo::create_file(explorer);
         } else if constexpr (std::same_as<T, DeleteSelected>) {
@@ -450,65 +471,140 @@ void paint_nav_buttons(phenotype::Painter& painter) {
     painter.line(94.0f, 24.0f, 82.0f, 33.0f, 3.0f, rgba(195, 199, 204));
 }
 
-void paint_view_cluster(phenotype::Painter& painter) {
-    fill_round(painter, 0.0f, 0.0f, 260.0f, 48.0f, 24.0f, rgba(255, 255, 255, 190));
-    fill_round(painter, 8.0f, 6.0f, 44.0f, 36.0f, 18.0f, rgba(229, 229, 234, 180));
+phenotype::ButtonStyleOptions toolbar_icon_button_options(bool selected = false) {
+    auto const& t = phenotype::current_theme();
+    phenotype::ButtonStyleOptions options;
+    options.has_background = true;
+    options.background = selected ? rgba(229, 229, 234, 180) : t.transparent;
+    options.has_hover_background = true;
+    options.hover_background = selected
+        ? rgba(216, 216, 222, 215)
+        : rgba(229, 229, 234, 120);
+    options.has_border_color = true;
+    options.border_color = t.transparent;
+    options.border_width = 0.0f;
+    options.border_radius = 18.0f;
+    options.max_width = 44.0f;
+    options.fixed_height = 36.0f;
+    return options;
+}
+
+phenotype::Color toolbar_icon_ink(bool selected = false) {
+    return selected ? rgba(42, 42, 42) : rgba(70, 70, 70);
+}
+
+void paint_icon_view(phenotype::Painter& painter, bool selected) {
+    auto ink = toolbar_icon_ink(selected);
     for (int col = 0; col < 2; ++col) {
         for (int row = 0; row < 2; ++row) {
             stroke_round(painter,
-                         20.0f + static_cast<float>(col) * 18.0f,
-                         13.0f + static_cast<float>(row) * 16.0f,
-                         10.0f, 10.0f, 2.0f, 2.0f, rgba(70, 70, 70));
+                         13.0f + static_cast<float>(col) * 15.0f,
+                         8.0f + static_cast<float>(row) * 14.0f,
+                         10.0f, 10.0f, 2.0f, 2.0f, ink);
         }
     }
-    for (int i = 0; i < 4; ++i) {
-        float y = 12.0f + static_cast<float>(i) * 7.5f;
-        painter.line(78.0f, y, 80.0f, y, 3.0f, rgba(70, 70, 70));
-        painter.line(91.0f, y, 122.0f, y, 2.2f, rgba(70, 70, 70));
-    }
-    for (int i = 0; i < 3; ++i) {
-        stroke_round(painter, 152.0f + static_cast<float>(i) * 15.0f,
-                     13.0f, 10.0f, 22.0f, 2.0f, 2.0f, rgba(70, 70, 70));
-    }
-    stroke_round(painter, 212.0f, 12.0f, 32.0f, 22.0f, 4.0f, 2.0f, rgba(70, 70, 70));
-    painter.line(214.0f, 39.0f, 244.0f, 39.0f, 3.0f, rgba(70, 70, 70));
 }
 
-void paint_group_sort_cluster(phenotype::Painter& painter) {
-    fill_round(painter, 0.0f, 0.0f, 82.0f, 48.0f, 24.0f, rgba(255, 255, 255, 190));
+void paint_list_view(phenotype::Painter& painter, bool selected) {
+    auto ink = toolbar_icon_ink(selected);
+    for (int i = 0; i < 4; ++i) {
+        float y = 8.0f + static_cast<float>(i) * 6.8f;
+        painter.line(11.0f, y, 13.0f, y, 3.0f, ink);
+        painter.line(20.0f, y, 34.0f, y, 2.2f, ink);
+    }
+}
+
+void paint_column_view(phenotype::Painter& painter, bool selected) {
+    auto ink = toolbar_icon_ink(selected);
+    for (int i = 0; i < 3; ++i) {
+        stroke_round(painter, 9.0f + static_cast<float>(i) * 10.5f,
+                     8.0f, 8.0f, 20.0f, 2.0f, 2.0f, ink);
+    }
+}
+
+void paint_gallery_view(phenotype::Painter& painter, bool selected) {
+    auto ink = toolbar_icon_ink(selected);
+    stroke_round(painter, 10.0f, 8.0f, 24.0f, 17.0f, 4.0f, 2.0f, ink);
+    painter.line(12.0f, 29.0f, 32.0f, 29.0f, 2.6f, ink);
+}
+
+void paint_group_sort_icon(phenotype::Painter& painter) {
+    auto ink = toolbar_icon_ink();
     for (int row = 0; row < 3; ++row) {
         for (int col = 0; col < 3; ++col) {
             stroke_round(painter,
-                         18.0f + static_cast<float>(col) * 10.0f,
-                         12.0f + static_cast<float>(row) * 8.5f,
-                         7.0f, 4.0f, 1.0f, 1.7f, rgba(70, 70, 70));
+                         9.0f + static_cast<float>(col) * 7.8f,
+                         7.0f + static_cast<float>(row) * 7.0f,
+                         7.0f, 4.0f, 1.0f, 1.7f, ink);
         }
     }
-    painter.line(60.0f, 20.0f, 66.0f, 26.0f, 2.2f, rgba(70, 70, 70));
-    painter.line(72.0f, 20.0f, 66.0f, 26.0f, 2.2f, rgba(70, 70, 70));
+    painter.line(33.0f, 15.0f, 37.0f, 19.0f, 2.2f, ink);
+    painter.line(41.0f, 15.0f, 37.0f, 19.0f, 2.2f, ink);
 }
 
-void paint_share_tag_more_cluster(phenotype::Painter& painter) {
-    fill_round(painter, 0.0f, 0.0f, 164.0f, 48.0f, 24.0f, rgba(255, 255, 255, 190));
-    painter.line(42.0f, 13.0f, 42.0f, 31.0f, 2.2f, rgba(170, 174, 181));
-    painter.line(36.0f, 19.0f, 42.0f, 13.0f, 2.2f, rgba(170, 174, 181));
-    painter.line(48.0f, 19.0f, 42.0f, 13.0f, 2.2f, rgba(170, 174, 181));
-    stroke_round(painter, 32.0f, 24.0f, 20.0f, 14.0f, 3.0f, 2.0f, rgba(170, 174, 181));
+void paint_share_icon(phenotype::Painter& painter) {
+    auto ink = rgba(170, 174, 181);
+    painter.line(22.0f, 8.0f, 22.0f, 23.0f, 2.2f, ink);
+    painter.line(16.0f, 14.0f, 22.0f, 8.0f, 2.2f, ink);
+    painter.line(28.0f, 14.0f, 22.0f, 8.0f, 2.2f, ink);
+    stroke_round(painter, 12.0f, 21.0f, 20.0f, 11.0f, 3.0f, 2.0f, ink);
+}
 
-    auto tag = rounded_rect_path(78.0f, 14.0f, 28.0f, 20.0f, 4.0f);
+void paint_tag_icon(phenotype::Painter& painter) {
+    auto ink = rgba(170, 174, 181);
+    auto tag = rounded_rect_path(8.0f, 9.0f, 28.0f, 18.0f, 4.0f);
     painter.stroke_path(tag, 2.0f, rgba(170, 174, 181));
-    painter.arc(84.0f, 20.0f, 2.4f, 0.0f, k_tau, 1.6f, rgba(170, 174, 181));
+    painter.arc(14.0f, 15.0f, 2.4f, 0.0f, k_tau, 1.6f, ink);
+}
 
+void paint_more_icon(phenotype::Painter& painter) {
+    auto ink = toolbar_icon_ink();
     for (int i = 0; i < 3; ++i) {
-        painter.arc(126.0f + static_cast<float>(i) * 11.0f,
-                    24.0f, 2.2f, 0.0f, k_tau, 1.8f, rgba(70, 70, 70));
+        painter.arc(15.0f + static_cast<float>(i) * 7.0f,
+                    18.0f, 2.2f, 0.0f, k_tau, 1.8f, ink);
     }
 }
 
 void paint_search_icon(phenotype::Painter& painter) {
-    fill_round(painter, 0.0f, 0.0f, 56.0f, 48.0f, 24.0f, rgba(255, 255, 255, 190));
-    painter.arc(23.0f, 21.0f, 9.0f, 0.0f, k_tau, 2.4f, rgba(70, 70, 70));
-    painter.line(29.5f, 28.0f, 38.0f, 36.0f, 2.4f, rgba(70, 70, 70));
+    auto ink = toolbar_icon_ink();
+    painter.arc(19.0f, 15.0f, 8.0f, 0.0f, k_tau, 2.4f, ink);
+    painter.line(25.0f, 21.0f, 33.0f, 29.0f, 2.4f, ink);
+}
+
+template<typename Paint>
+void view_mode_button(char const* label,
+                      FinderViewMode mode,
+                      FinderViewMode current,
+                      Paint paint,
+                      std::uint64_t token) {
+    bool const selected = mode == current;
+    std::string semantic_label(label);
+    phenotype::widget::canvas_button<Msg>(
+        phenotype::str{semantic_label},
+        44.0f,
+        36.0f,
+        [paint, selected](phenotype::Painter& painter) {
+            paint(painter, selected);
+        },
+        SetViewMode{mode},
+        toolbar_icon_button_options(selected),
+        token ^ (selected ? 0x100000000ull : 0ull));
+}
+
+void toolbar_action_button(char const* label,
+                           void (*paint)(phenotype::Painter&),
+                           std::uint64_t token) {
+    std::string semantic_label(label);
+    phenotype::widget::canvas_button<Msg>(
+        phenotype::str{semantic_label},
+        44.0f,
+        36.0f,
+        [paint](phenotype::Painter& painter) {
+            paint(painter);
+        },
+        ToolbarAction{semantic_label},
+        toolbar_icon_button_options(false),
+        token);
 }
 
 void finder_toolbar(State const& state,
@@ -535,8 +631,15 @@ void finder_toolbar(State const& state,
                 .fixed_height = 48.0f,
                 .semantic_label = "View Controls",
             },
-            [] {
-                widget::canvas(260.0f, 48.0f, paint_view_cluster, {}, 0x63u);
+            [&] {
+                view_mode_button("Icon View", FinderViewMode::Icon,
+                                 state.view_mode, paint_icon_view, 0x6301u);
+                view_mode_button("List View", FinderViewMode::List,
+                                 state.view_mode, paint_list_view, 0x6302u);
+                view_mode_button("Column View", FinderViewMode::Column,
+                                 state.view_mode, paint_column_view, 0x6303u);
+                view_mode_button("Gallery View", FinderViewMode::Gallery,
+                                 state.view_mode, paint_gallery_view, 0x6304u);
             });
         layout::material_surface(
             layout::MaterialSurfaceOptions{
@@ -552,7 +655,8 @@ void finder_toolbar(State const& state,
                 .semantic_label = "Group Sort",
             },
             [] {
-                widget::canvas(82.0f, 48.0f, paint_group_sort_cluster, {}, 0x65u);
+                toolbar_action_button(
+                    "Group Sort", paint_group_sort_icon, 0x6501u);
             });
         layout::material_surface(
             layout::MaterialSurfaceOptions{
@@ -568,7 +672,9 @@ void finder_toolbar(State const& state,
                 .semantic_label = "Share Tag More",
             },
             [] {
-                widget::canvas(164.0f, 48.0f, paint_share_tag_more_cluster, {}, 0x66u);
+                toolbar_action_button("Share", paint_share_icon, 0x6601u);
+                toolbar_action_button("Tag", paint_tag_icon, 0x6602u);
+                toolbar_action_button("More", paint_more_icon, 0x6603u);
             });
         layout::material_surface(
             layout::MaterialSurfaceOptions{
@@ -584,7 +690,8 @@ void finder_toolbar(State const& state,
                 .semantic_label = "Search Control",
             },
             [] {
-                widget::canvas(56.0f, 48.0f, paint_search_icon, {}, 0x64u);
+                toolbar_action_button(
+                    "Search Control", paint_search_icon, 0x6401u);
             });
         layout::sized_box(144.0f, [&] {
             widget::text_field<Msg>("Search", explorer.search, on_search_changed);
