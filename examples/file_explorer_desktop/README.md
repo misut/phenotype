@@ -58,8 +58,9 @@ content surface has a machine-readable artifact contract.
 
 It also captures deterministic startup scenarios through
 `PHENOTYPE_FILE_EXPLORER_SCENARIO`: `created-preview`, `deleted-file`,
-`duplicated-file`, `documents-preview`, and `history-forward`. These scenarios
-make create, delete, duplicate, navigation history, and file preview behavior
-visible in the semantic artifact without requiring manual click playback. File
-operation scenarios also expose an `Operation: ...` receipt in the status
-surface so the artifact can identify the action kind, target, and result.
+`duplicated-file`, `documents-preview`, `history-forward`, and `sorted-kind`.
+These scenarios make create, delete, duplicate, navigation history, file
+preview behavior, and sort state visible in the semantic artifact without
+requiring manual click playback. File operation scenarios also expose an
+`Operation: ...` receipt in the status surface so the artifact can identify the
+action kind, target, and result.
