@@ -86,6 +86,7 @@ int main() {
 
     demo::delete_selected(state);
     assert(!fs::exists(state.current / "Launch Plan.txt"));
+    assert(fs::exists(demo::trash_path(state.root) / "Launch Plan.txt"));
     assert(state.selected_name.empty());
     assert(demo::snapshot(state).operation_label
         .find("Operation: file_delete ok - Launch Plan.txt") != std::string::npos);
@@ -103,6 +104,7 @@ int main() {
 
     demo::delete_selected(state);
     assert(!fs::exists(state.current / "Review Folder"));
+    assert(fs::is_directory(demo::trash_path(state.root) / "Review Folder"));
     assert(state.selected_name.empty());
     assert(demo::snapshot(state).operation_label
         .find("Operation: folder_delete ok - Review Folder") != std::string::npos);
@@ -122,10 +124,28 @@ int main() {
 
     demo::apply_startup_scenario(state, "deleted-file");
     assert(!fs::exists(state.current / "Delete Me.txt"));
+    assert(fs::exists(demo::trash_path(state.root) / "Delete Me.txt"));
     assert(state.selected_name.empty());
-    assert(state.status == "Deleted Delete Me.txt");
+    assert(state.status == "Moved Delete Me.txt to Trash");
     assert(demo::snapshot(state).operation_label
         .find("Operation: file_delete ok - Delete Me.txt") != std::string::npos);
+
+    demo::apply_startup_scenario(state, "trash-view");
+    assert(demo::relative_location(state.root, state.current) == "Trash");
+    assert(fs::exists(demo::trash_path(state.root) / "Trash Note.txt"));
+    snap = demo::snapshot(state);
+    bool saw_trash_note = false;
+    for (auto const& entry : snap.entries) {
+        if (entry.name == "Trash Note.txt")
+            saw_trash_note = true;
+    }
+    assert(saw_trash_note);
+    assert(snap.operation_label
+        .find("Operation: file_delete ok - Trash Note.txt") != std::string::npos);
+    demo::select_entry(state, "Trash Note.txt");
+    demo::delete_selected(state);
+    assert(!fs::exists(demo::trash_path(state.root) / "Trash Note.txt"));
+    assert(state.status == "Deleted Trash Note.txt from Trash");
 
     demo::apply_startup_scenario(state, "created-folder");
     assert(state.selected_name == "Review Folder");
@@ -135,6 +155,7 @@ int main() {
 
     demo::apply_startup_scenario(state, "deleted-folder");
     assert(!fs::exists(state.current / "Trash Folder"));
+    assert(fs::is_directory(demo::trash_path(state.root) / "Trash Folder"));
     assert(state.selected_name.empty());
     assert(demo::snapshot(state).operation_label
         .find("Operation: folder_delete ok - Trash Folder") != std::string::npos);

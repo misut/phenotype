@@ -611,7 +611,7 @@ void finder_sidebar(State const& state) {
         sidebar_row("iCloud Drive", "cloud", "root");
         sidebar_row("kakao", "home", "root");
         sidebar_row("AirDrop", "airdrop", "shared");
-        sidebar_row("Trash", "trash", "root");
+        sidebar_row("Trash", "trash", "trash", relative == "Trash");
     }, MaterialKind::Thin, SpaceToken::Lg, SpaceToken::Xs);
 }
 

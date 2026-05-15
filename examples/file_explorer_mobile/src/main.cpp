@@ -175,6 +175,7 @@ void location_strip() {
             widget::button<Msg>("Docs", SelectLocation{"documents"});
             widget::button<Msg>("Pics", SelectLocation{"pictures"});
             widget::button<Msg>("Shared", SelectLocation{"shared"});
+            widget::button<Msg>("Trash", SelectLocation{"trash"});
         }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
     });
 }

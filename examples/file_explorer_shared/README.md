@@ -4,11 +4,11 @@ This package exports the `file_explorer_shared` C++ module used by the
 desktop and mobile file explorer examples.
 
 The module owns the sandboxed file model, deterministic demo tree,
-file/folder create and delete behavior, duplicate/read/navigation behavior,
-filename search, sort mode state, selection action metadata, operation
-receipts, and artifact startup scenarios. Keeping it as a separate exon
-library makes the example UI packages depend on a normal module contract
-instead of a relative header include.
+file/folder create and delete behavior, sandboxed Trash navigation,
+duplicate/read/navigation behavior, filename search, sort mode state,
+selection action metadata, operation receipts, and artifact startup scenarios.
+Keeping it as a separate exon library makes the example UI packages depend on
+a normal module contract instead of a relative header include.
 
 ## Run
 

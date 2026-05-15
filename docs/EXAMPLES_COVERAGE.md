@@ -128,8 +128,8 @@ themselves.
 |---|---|---|
 | `examples/native` | macOS, Windows | Compact desktop widget showcase for shared controls, input debug, local/remote images, scroll, resize, and manual acceptance |
 | `examples/glass_showcase` | macOS, Windows | Material and glass-debug acceptance scene for deterministic backdrop regions, macOS sampled backdrop, all material kinds, artifact capture, and pixel-region checks |
-| `examples/file_explorer_desktop` | macOS, Windows | Finder-style desktop product workflow with glass toolbar action clusters, sidebar locations, Recents icon grid, document/image/video/folder thumbnails, icon-revealed search, file/folder create, duplicate, delete, file preview, and sandboxed temp-root operations |
-| `examples/file_explorer_mobile` | macOS, Windows | Mobile file explorer layout with browse/preview/create tabs, compact location strip, material surfaces, search, file preview, file/folder create, duplicate, delete, and the same sandboxed model |
+| `examples/file_explorer_desktop` | macOS, Windows | Finder-style desktop product workflow with glass toolbar action clusters, sidebar locations, real sandboxed Trash, Recents icon grid, document/image/video/folder thumbnails, icon-revealed search, file/folder create, duplicate, delete, file preview, and sandboxed temp-root operations |
+| `examples/file_explorer_mobile` | macOS, Windows | Mobile file explorer layout with browse/preview/create tabs, compact location strip including Trash, material surfaces, search, file preview, file/folder create, duplicate, delete, and the same sandboxed model |
 | `examples/android` | Android | GameActivity/Vulkan packaging route, Android event dispatch, platform lifecycle, asset/local images, debug API, and logcat/manual device validation |
 | `docs` | WASI | Dogfooded documentation app, WASI build, JS shim integration, and web-facing DSL examples |
 
@@ -137,11 +137,12 @@ The file explorer examples deliberately keep filesystem side effects at the
 example edge. The shared model operates only under a deterministic temp
 directory (`phenotype-file-explorer-desktop` or
 `phenotype-file-explorer-mobile`) and never points at the user's real home
-folder. File create, folder create, read, duplicate, and file/folder delete
-actions produce operation receipts, and sort mode changes produce a shared
-`Sort: ...` status contract, that the desktop and mobile status surfaces expose
-to artifact verification. This keeps the examples useful for interactive
-product checks while preserving a stable startup artifact contract.
+folder. File create, folder create, read, duplicate, Trash movement, and
+permanent delete-from-Trash actions produce operation receipts, and sort mode
+changes produce a shared `Sort: ...` status contract, that the desktop and
+mobile status surfaces expose to artifact verification. This keeps the examples
+useful for interactive product checks while preserving a stable startup
+artifact contract.
 
 ## Widget coverage
 
@@ -339,8 +340,8 @@ Current status by example:
 |---|---|---|
 | `examples/native` | `mise exec -- exon build`, then `PHENOTYPE_ARTIFACT_DIR=/tmp/phenotype-native-startup PHENOTYPE_ARTIFACT_EXIT=1 .exon/debug/native` | Verified by `tools/verify_artifact_bundle.py`; scenario-specific pixel-region checks can be added as needed |
 | `examples/glass_showcase` | Same environment hook with `.exon/debug/glass_showcase` after the material scene startup frame renders | Verifies all public material kinds, macOS material capability, resolved material plan schema and contract version, surface-role summary, exact material/container/shape/foreground plan summary, semantic/runtime material parity, material quality policy, material resource bounds, foreground text execution counters, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; run the verifier locally before material PRs, while CI keeps only build-level artifact gates |
-| `examples/file_explorer_desktop` | Same environment hook with `.exon/debug/file_explorer_desktop`, or `tools/verify_file_explorer_artifacts.sh` from the repo root | Verifies a Finder-style desktop startup scene with glass toolbar/sidebar/icon-grid/status surfaces, stable document/image/video/folder thumbnail labels, stable create/duplicate/delete labels, operation receipts for file create/read/duplicate/delete scenarios, shared sort/search-state receipts, selection action metadata, semantic/runtime material parity, explicit material surface roles, material container identity, executable material shape validity, bounded material resource budgets, foreground text execution counters, and pixel-region checks for the sidebar, toolbar, icon grid, and selected-file label; local gate only by default |
-| `examples/file_explorer_mobile` | Same environment hook with `.exon/debug/file_explorer_mobile`, or `tools/verify_file_explorer_artifacts.sh` from the repo root | Verifies the compact mobile browse/preview/create startup scene with all material kinds, stable navigation labels, operation receipts for file create/read/duplicate/delete scenarios, shared sort/search-state receipts, duplicate/delete action metadata, semantic/runtime material parity, explicit toolbar/navigation/status material roles, material container identity, executable material shape validity, bounded material resource budgets, and foreground text execution counters; local gate only by default |
+| `examples/file_explorer_desktop` | Same environment hook with `.exon/debug/file_explorer_desktop`, or `tools/verify_file_explorer_artifacts.sh` from the repo root | Verifies a Finder-style desktop startup scene with glass toolbar/sidebar/icon-grid/status surfaces, stable document/image/video/folder thumbnail labels, stable create/duplicate/delete labels, a real sandboxed Trash location, operation receipts for file create/read/duplicate/delete and folder create/delete scenarios, shared sort/search-state receipts, selection action metadata, semantic/runtime material parity, explicit material surface roles, material container identity, executable material shape validity, bounded material resource budgets, foreground text execution counters, and pixel-region checks for the sidebar, toolbar, icon grid, and selected-file label; local gate only by default |
+| `examples/file_explorer_mobile` | Same environment hook with `.exon/debug/file_explorer_mobile`, or `tools/verify_file_explorer_artifacts.sh` from the repo root | Verifies the compact mobile browse/preview/create startup scene with all material kinds, stable navigation labels including Trash, operation receipts for file create/read/duplicate/delete and folder create/delete scenarios, shared sort/search-state receipts, duplicate/delete action metadata, semantic/runtime material parity, explicit toolbar/navigation/status material roles, material container identity, executable material shape validity, bounded material resource budgets, and foreground text execution counters; local gate only by default |
 | `examples/android` | `mise run android:contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | Verifies Android debug/runtime basics plus a real `MaterialRect` fallback plan, exact fallback material plan summary and contract version, semantic/runtime material role parity, material shape validity, material quality policy, and material resource bounds; CI device/emulator wiring remains future work |
 | `docs` | WASI snapshot bundle is available when the host preopens a writable directory | Default `exon test --target wasm32-wasi` does not preopen one |
 
