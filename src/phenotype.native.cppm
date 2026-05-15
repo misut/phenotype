@@ -242,6 +242,17 @@ int run_app(int width, int height, char const* title, View view, Update update) 
         std::move(view), std::move(update));
 }
 
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+int run_app(int width, int height, char const* title,
+            WindowOptions options,
+            View view, Update update) {
+    return detail::run_app_with_platform<State, Msg>(
+        current_platform(), width, height, title,
+        options, std::move(view), std::move(update));
+}
+
 // Six-argument overload: `make_viewport_msg(w, h, scale)` returns a Msg
 // emitted to the user's update() lambda whenever the window size or
 // content scale changes (and once at startup with the initial values).
@@ -261,6 +272,23 @@ int run_app(int width, int height, char const* title,
     return detail::run_app_with_platform<State, Msg>(
         current_platform(), width, height, title,
         std::move(view), std::move(update), std::move(thunk));
+}
+
+template<typename State, typename Msg, typename View, typename Update,
+         typename ResizeFactory>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+          && std::invocable<ResizeFactory, int, int, float>
+int run_app(int width, int height, char const* title,
+            WindowOptions options,
+            View view, Update update, ResizeFactory make_viewport_msg) {
+    std::function<void(int, int, float)> thunk =
+        [factory = std::move(make_viewport_msg)](int w, int h, float s) {
+            ::phenotype::detail::post<Msg>(factory(w, h, s));
+        };
+    return detail::run_app_with_platform<State, Msg>(
+        current_platform(), width, height, title,
+        options, std::move(view), std::move(update), std::move(thunk));
 }
 #endif
 

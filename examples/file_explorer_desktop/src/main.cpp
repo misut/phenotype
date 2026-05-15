@@ -136,12 +136,6 @@ void stroke_round(phenotype::Painter& painter,
     painter.stroke_path(path, thickness, color);
 }
 
-void paint_traffic_lights(phenotype::Painter& painter) {
-    painter.arc(16.0f, 12.0f, 6.0f, 0.0f, k_tau, 10.0f, rgba(255, 95, 86));
-    painter.arc(42.0f, 12.0f, 6.0f, 0.0f, k_tau, 10.0f, rgba(255, 189, 46));
-    painter.arc(68.0f, 12.0f, 6.0f, 0.0f, k_tau, 10.0f, rgba(39, 201, 63));
-}
-
 void paint_sidebar_icon(phenotype::Painter& painter, std::string_view id) {
     using phenotype::FontWeight;
     using phenotype::FontSpec;
@@ -450,8 +444,7 @@ void finder_sidebar(State const& state) {
         explorer.current);
     bool const in_root = relative == "Demo Root";
     layout::sidebar(252.0f, [&] {
-        widget::canvas(86.0f, 24.0f, paint_traffic_lights, {}, 0x51u);
-        layout::spacer(28);
+        layout::spacer(52);
         sidebar_row("Recents", "recents", "root", in_root);
         sidebar_row("Shared", "folder", "shared",
                     relative == "Demo Root/Shared");
@@ -1209,10 +1202,15 @@ int main() {
     theme.radius_lg = 22.0f;
     phenotype::set_theme(theme);
 
+    phenotype::native::WindowOptions window_options{
+        .chrome = phenotype::native::WindowChromeStyle::IntegratedTitlebar,
+    };
+
     return phenotype::native::run_app<State, Msg>(
         1300,
         760,
         "phenotype file explorer desktop",
+        window_options,
         view,
         update,
         [](int width, int height, float scale) -> Msg {

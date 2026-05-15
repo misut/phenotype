@@ -240,6 +240,26 @@ inline SEL sel_content_view() {
     return sel;
 }
 
+inline SEL sel_style_mask() {
+    static auto sel = sel_registerName("styleMask");
+    return sel;
+}
+
+inline SEL sel_set_style_mask() {
+    static auto sel = sel_registerName("setStyleMask:");
+    return sel;
+}
+
+inline SEL sel_set_title_visibility() {
+    static auto sel = sel_registerName("setTitleVisibility:");
+    return sel;
+}
+
+inline SEL sel_set_titlebar_appears_transparent() {
+    static auto sel = sel_registerName("setTitlebarAppearsTransparent:");
+    return sel;
+}
+
 inline SEL sel_conversation_identifier() {
     static auto sel = sel_registerName("conversationIdentifier");
     return sel;
@@ -6070,6 +6090,37 @@ inline bool input_dismiss_transient() {
     return true;
 }
 
+inline void configure_window(native_surface_handle handle,
+                             WindowOptions const* options) {
+    if (!handle || !options
+        || options->chrome != WindowChromeStyle::IntegratedTitlebar)
+        return;
+
+    auto* window = static_cast<GLFWwindow*>(handle);
+    auto ns_window = window ? static_cast<id>(glfwGetCocoaWindow(window))
+                            : nullptr;
+    if (!ns_window)
+        return;
+
+    constexpr unsigned long full_size_content_view_mask = 1ul << 15;
+    constexpr long hidden_title = 1;
+    using ObjcBool = signed char;
+
+    auto style = objc_send<unsigned long>(ns_window, sel_style_mask());
+    objc_send<void>(
+        ns_window,
+        sel_set_style_mask(),
+        style | full_size_content_view_mask);
+    objc_send<void>(
+        ns_window,
+        sel_set_titlebar_appears_transparent(),
+        static_cast<ObjcBool>(1));
+    objc_send<void>(
+        ns_window,
+        sel_set_title_visibility(),
+        hidden_title);
+}
+
 inline void renderer_init(native_surface_handle handle) {
     if (g_renderer.initialized) return;
     auto* window = static_cast<GLFWwindow*>(handle);
@@ -7695,6 +7746,9 @@ inline platform_api const& macos_platform() {
         nullptr,
         {
             detail::macos_dialog_open_file,
+        },
+        {
+            detail::configure_window,
         },
     };
     return api;

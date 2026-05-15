@@ -9,6 +9,7 @@ module;
 
 #define WIN32_LEAN_AND_MEAN
 #include <windows.h>
+#include <dwmapi.h>
 #include <imm.h>
 #include <wincodec.h>
 
@@ -22,6 +23,7 @@ module;
 
 #pragma comment(lib, "d3d12.lib")
 #pragma comment(lib, "d3dcompiler.lib")
+#pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "dwrite.lib")
 #pragma comment(lib, "gdi32.lib")
@@ -3334,6 +3336,34 @@ inline bool input_dismiss_transient() {
     return true;
 }
 
+inline void configure_window(native_surface_handle handle,
+                             WindowOptions const* options) {
+    if (!handle || !options
+        || options->chrome != WindowChromeStyle::IntegratedTitlebar)
+        return;
+
+    auto* window = static_cast<GLFWwindow*>(handle);
+    HWND hwnd = window ? glfwGetWin32Window(window) : nullptr;
+    if (!hwnd)
+        return;
+
+    MARGINS margins{0, 0, 48, 0};
+    HRESULT hr = DwmExtendFrameIntoClientArea(hwnd, &margins);
+    if (FAILED(hr)) {
+        std::fprintf(stderr,
+                     "[windows] failed to extend DWM frame into client area: 0x%08lx\n",
+                     static_cast<unsigned long>(hr));
+        return;
+    }
+
+    SetWindowPos(hwnd, nullptr, 0, 0, 0, 0,
+                 SWP_FRAMECHANGED
+                 | SWP_NOMOVE
+                 | SWP_NOSIZE
+                 | SWP_NOOWNERZORDER
+                 | SWP_NOZORDER);
+}
+
 inline std::expected<DecodedImage, std::string> decode_image_with_decoder(
         IWICImagingFactory* factory,
         IWICBitmapDecoder* decoder) {
@@ -5418,6 +5448,9 @@ inline platform_api const& windows_platform() {
         // dialog: file picker not yet implemented on Windows; the
         // wrapper synthesises a "user cancelled" outcome.
         {},
+        {
+            detail::configure_window,
+        },
     };
     return api;
 #else
