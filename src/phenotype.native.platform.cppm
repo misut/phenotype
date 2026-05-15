@@ -103,6 +103,20 @@ struct text_api {
 // the single entry point where they need it.
 using native_surface_handle = void*;
 
+enum class WindowChromeStyle {
+    System,
+    IntegratedTitlebar,
+};
+
+struct WindowOptions {
+    WindowChromeStyle chrome = WindowChromeStyle::System;
+};
+
+struct window_api {
+    void (*configure)(native_surface_handle surface,
+                      WindowOptions const* options) = nullptr;
+};
+
 struct renderer_api {
     void (*init)(native_surface_handle surface) = nullptr;
     void (*flush)(unsigned char const* buf, unsigned int len) = nullptr;
@@ -169,6 +183,7 @@ struct platform_api {
     void (*open_url)(char const* url, unsigned int len) = nullptr;
     char const* startup_message = nullptr;
     dialog_api dialog{};
+    window_api window{};
 };
 
 inline constexpr unsigned int invalid_callback_id = 0xFFFFFFFFu;

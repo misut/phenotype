@@ -299,6 +299,7 @@ template<typename State, typename Msg, typename View, typename Update>
           && std::invocable<Update, State&, Msg>
 int run_app_with_platform(platform_api const& platform,
                           int width, int height, char const* title,
+                          WindowOptions options,
                           View view, Update update,
                           std::function<void(int, int, float)> on_viewport = {}) {
     if (!platform.enabled) {
@@ -324,6 +325,8 @@ int run_app_with_platform(platform_api const& platform,
         glfwTerminate();
         return 1;
     }
+    if (platform.window.configure)
+        platform.window.configure(window, &options);
 
     native_host host;
     host.window = window;
@@ -400,6 +403,24 @@ int run_app_with_platform(platform_api const& platform,
 
     cleanup();
     return 0;
+}
+
+template<typename State, typename Msg, typename View, typename Update>
+    requires std::invocable<View, State const&>
+          && std::invocable<Update, State&, Msg>
+int run_app_with_platform(platform_api const& platform,
+                          int width, int height, char const* title,
+                          View view, Update update,
+                          std::function<void(int, int, float)> on_viewport = {}) {
+    return run_app_with_platform<State, Msg>(
+        platform,
+        width,
+        height,
+        title,
+        WindowOptions{},
+        std::move(view),
+        std::move(update),
+        std::move(on_viewport));
 }
 
 } // namespace detail
