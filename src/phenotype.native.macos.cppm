@@ -1418,6 +1418,8 @@ struct MaterialInstanceGPU {
     float effects[4]{};
     // blur step scale, kernel radius, reserved, reserved
     float sampling[4]{};
+    // gamma, midpoint, contrast, edge lift
+    float luminance_curve[4]{};
 };
 
 // Per-vertex GPU layout for the triangle pipeline (FillPath fast path).
@@ -1932,6 +1934,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.effects[3] = plan.noise_opacity;
     inst.sampling[0] = plan.sampling_kernel.blur_step_scale;
     inst.sampling[1] = static_cast<float>(plan.sampling_kernel.radius);
+    inst.luminance_curve[0] = plan.luminance_curve.gamma;
+    inst.luminance_curve[1] = plan.luminance_curve.midpoint;
+    inst.luminance_curve[2] = plan.luminance_curve.contrast;
+    inst.luminance_curve[3] = plan.luminance_curve.edge_lift;
     out.push_back(inst);
 }
 
@@ -3692,6 +3698,7 @@ struct MaterialVsOut {
     float4 optics;
     float4 effects;
     float4 sampling;
+    float4 luminance_curve;
 };
 
 struct MaterialInstance {
@@ -3701,6 +3708,7 @@ struct MaterialInstance {
     float4 optics;
     float4 effects;
     float4 sampling;
+    float4 luminance_curve;
 };
 
 vertex MaterialVsOut vs_material(
@@ -3729,6 +3737,7 @@ vertex MaterialVsOut vs_material(
     out.optics = inst.optics;
     out.effects = inst.effects;
     out.sampling = inst.sampling;
+    out.luminance_curve = inst.luminance_curve;
     return out;
 }
 
@@ -3787,13 +3796,21 @@ fragment float4 fs_material(
     float luminance_floor = clamp(in.optics.y, 0.0, 1.0);
     float luminance_gain = max(in.optics.z, 0.0);
     float3 backdrop_rgb = mix(float3(luma), blurred.rgb, saturation);
+    float gamma = clamp(in.luminance_curve.x, 0.25, 4.0);
+    float midpoint = clamp(in.luminance_curve.y, 0.0, 1.0);
+    float contrast = clamp(in.luminance_curve.z, 0.0, 4.0);
+    backdrop_rgb = pow(clamp(backdrop_rgb, 0.0, 1.0), float3(gamma));
+    backdrop_rgb = clamp((backdrop_rgb - midpoint) * contrast + midpoint,
+                         0.0,
+                         1.0);
     backdrop_rgb = clamp(max(backdrop_rgb * luminance_gain,
                             float3(luminance_floor)), 0.0, 1.0);
     float tint_strength = clamp(in.tint.a, 0.0, 1.0);
     float opacity = clamp(in.params.z, 0.0, 1.0);
     float3 rgb = mix(backdrop_rgb, in.tint.rgb, tint_strength);
     float edge = 1.0 - smoothstep(0.0, edge_width, signed_edge_distance);
-    rgb += float3(edge * clamp(in.optics.w, 0.0, 1.0));
+    float edge_lift = clamp(in.luminance_curve.w, 0.0, 1.0);
+    rgb += float3(edge * edge_lift);
     float shadow = smoothstep(0.45, 1.0, in.local_pos.y / max(in.rect_size.y, 1.0))
         * clamp(in.effects.y, 0.0, 0.4);
     rgb *= (1.0 - shadow);

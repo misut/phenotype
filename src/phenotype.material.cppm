@@ -9,7 +9,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 7;
+inline constexpr std::uint32_t material_plan_contract_version = 8;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -119,6 +119,18 @@ struct MaterialSamplingKernel {
     bool bounded = true;
 };
 
+struct MaterialLuminanceCurve {
+    char const* name = "fallback-flat";
+    float floor = 0.0f;
+    float gain = 1.0f;
+    float gamma = 1.0f;
+    float midpoint = 0.5f;
+    float contrast = 1.0f;
+    float edge_lift = 0.0f;
+    bool backdrop_driven = false;
+    bool bounded = true;
+};
+
 struct MaterialResourceBudget {
     float max_blur_radius = 0.0f;
     unsigned int max_sample_taps = 0;
@@ -204,6 +216,7 @@ struct MaterialPlan {
     float saturation = 1.0f;
     float luminance_floor = 0.0f;
     float luminance_gain = 1.0f;
+    MaterialLuminanceCurve luminance_curve{};
     float edge_highlight = 0.0f;
     float edge_width = 1.0f;
     float noise_opacity = 0.0f;
@@ -777,6 +790,43 @@ inline void apply_backdrop_luminance_policy(MaterialPlan& plan) noexcept {
         plan.edge_highlight - edge_before;
 }
 
+inline MaterialLuminanceCurve material_resolve_luminance_curve(
+        bool backdrop_sampling,
+        MaterialBackdropAnalysis backdrop,
+        float luminance_floor,
+        float luminance_gain,
+        float edge_highlight) noexcept {
+    MaterialLuminanceCurve curve{};
+    curve.floor = std::clamp(luminance_floor, 0.0f, 1.0f);
+    curve.gain = std::max(0.0f, luminance_gain);
+    curve.edge_lift = std::clamp(edge_highlight, 0.0f, 1.0f);
+    if (!backdrop_sampling)
+        return curve;
+
+    auto const luma_mean = std::clamp(backdrop.luma_mean, 0.0f, 1.0f);
+    auto const luma_span = std::clamp(backdrop.luma_span, 0.0f, 1.0f);
+    curve.name = "adaptive-backdrop-luma";
+    curve.backdrop_driven = true;
+    curve.midpoint = std::clamp(luma_mean, 0.25f, 0.75f);
+
+    if (luma_mean < 0.35f) {
+        auto const darkness =
+            std::clamp((0.35f - luma_mean) / 0.35f, 0.0f, 1.0f);
+        curve.gamma = 0.92f - 0.06f * darkness;
+    } else if (luma_mean > 0.72f) {
+        auto const brightness =
+            std::clamp((luma_mean - 0.72f) / 0.28f, 0.0f, 1.0f);
+        curve.gamma = 1.04f + 0.06f * brightness;
+    }
+
+    if (luma_span < 0.12f) {
+        auto const flatness =
+            std::clamp((0.12f - luma_span) / 0.12f, 0.0f, 1.0f);
+        curve.contrast = 1.0f + 0.12f * flatness;
+    }
+    return curve;
+}
+
 inline char const* material_plan_id(MaterialKind kind,
                                     bool backdrop_sampling) noexcept {
     switch (kind) {
@@ -987,6 +1037,12 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.luminance_floor = std::clamp(plan.luminance_floor + 0.05f, 0.0f, 1.0f);
         plan.saturation = std::min(plan.saturation, 1.0f);
     }
+    plan.luminance_curve = material_resolve_luminance_curve(
+        plan.backdrop_sampling,
+        plan.backdrop,
+        plan.luminance_floor,
+        plan.luminance_gain,
+        plan.edge_highlight);
 
     plan.plan_id = material_plan_id(style.kind, plan.backdrop_sampling);
     if (has_material && plan.backdrop_sampling && !plan.fallback()) {

@@ -150,7 +150,10 @@ The returned `MaterialPlan` describes the source command descriptor, blur
 radius, tint, saturation, luminance curve, edge highlight, noise/dither,
 shadow, material container analysis, backdrop sampling, fallback path, debug
 metadata, resolved quality policy, pass expectations, sampling kernel,
-resource budgets, and verifier expectations.
+resource budgets, and verifier expectations. The plan also carries a
+`luminance_curve` contract: sampled glass uses the backdrop-driven
+`adaptive-backdrop-luma` curve, while deterministic fallback uses
+`fallback-flat`.
 The current sampled-glass kernel is a pure `weighted-5x5-manhattan` descriptor
 with the resolved tap count, kernel radius, blur step scale, and weight profile;
 fallback plans serialize the inactive `none` kernel. This keeps blur spread and

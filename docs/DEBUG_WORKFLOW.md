@@ -161,6 +161,13 @@ serializer, verifier vocabulary, and docs together. Reduced-motion plans
 disable material noise and cap backdrop sample taps before a backend executes
 the pass; increased-contrast plans raise opacity and luminance legibility in
 the same pure layer.
+`luminance_curve` is the backend-executed contrast transform. Active sampled
+glass must use `adaptive-backdrop-luma` with `backdrop_driven: true`; fallback
+plans must use `fallback-flat` with `backdrop_driven: false`. `floor` and
+`gain` must match `MaterialPlan.luminance_floor` and
+`MaterialPlan.luminance_gain`, while `gamma`, `midpoint`, `contrast`, and
+`edge_lift` are bounded shader inputs. A curve failure should be debugged from
+`MaterialPlan.backdrop` first, then from the backend shader input upload.
 `primary_pass.executor` and each `passes[].executor` use pure roles:
 `backdrop-filter` for sampled glass, `fallback-fill` for deterministic fallback,
 and `none` for inactive material work. `max_texture_copy_pixels` is non-zero
@@ -268,9 +275,9 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `contract_versions`, `pass_names`, `backdrop_sources`, `luminance_responses`,
 `render_target_pixel_formats`, `pass_executors`, `sampling_kernels`,
-`sampling_weight_profiles`, `decision_blockers`, `verifier_profiles`,
-`verifier_region_layers`, `container_modes`, `container_ids`, and `union_ids`;
-it can also count
+`sampling_weight_profiles`, `luminance_curves`, `decision_blockers`,
+`verifier_profiles`, `verifier_region_layers`, `container_modes`,
+`container_ids`, and `union_ids`; it can also count
 `container_participating`, `container_unioned`, `container_interactive`,
 `container_morph_transitions`, `verifier_require_backdrop_source`,
 `verifier_require_edge_highlight`, `verifier_require_container_identity`, and
@@ -295,14 +302,15 @@ must report a non-empty `fallback_reason`, while non-fallback plans must leave
 `fallback_reason` empty so stale downgrade explanations cannot leak into glass
 artifacts.
 The verifier also treats material kind, fallback path, material pass names, and
-sampling kernel names as fixed vocabularies. Current fallback paths are `none`,
-`no-material`, `invalid-geometry`, `unsupported-backend`,
-`no-backdrop-source`, `reduced-transparency`, and `quality-policy`; current
-pass names are `none`, `backdrop-sample-blur`, and
+sampling kernel names, and luminance curve names as fixed vocabularies. Current
+fallback paths are `none`, `no-material`, `invalid-geometry`,
+`unsupported-backend`, `no-backdrop-source`, `reduced-transparency`, and
+`quality-policy`; current pass names are `none`, `backdrop-sample-blur`, and
 `translucent-rounded-rect`; current sampling kernels are `none` and
-`weighted-5x5-manhattan`. Add new planner/backend vocabulary to the verifier in
-the same patch that introduces it, so CI reports schema drift before a human has
-to infer it visually.
+`weighted-5x5-manhattan`; current luminance curves are
+`adaptive-backdrop-luma` and `fallback-flat`. Add new planner/backend
+vocabulary to the verifier in the same patch that introduces it, so CI reports
+schema drift before a human has to infer it visually.
 
 Use `require_material_resource_bounds` when a material gate must prove the
 runtime stayed within the pure plan's performance budget. Supported limits are

@@ -1148,6 +1148,22 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "none");
     assert(!fallback_plan.sampling_kernel.requires_backdrop);
     assert(fallback_plan.sampling_kernel.bounded);
+    assert(std::string(fallback_plan.luminance_curve.name)
+           == "fallback-flat");
+    assert(std::fabs(fallback_plan.luminance_curve.floor
+                     - fallback_plan.luminance_floor) < 0.0001f);
+    assert(std::fabs(fallback_plan.luminance_curve.gain
+                     - fallback_plan.luminance_gain) < 0.0001f);
+    assert(std::fabs(fallback_plan.luminance_curve.gamma - 1.0f)
+           < 0.0001f);
+    assert(std::fabs(fallback_plan.luminance_curve.midpoint - 0.5f)
+           < 0.0001f);
+    assert(std::fabs(fallback_plan.luminance_curve.contrast - 1.0f)
+           < 0.0001f);
+    assert(std::fabs(fallback_plan.luminance_curve.edge_lift
+                     - fallback_plan.edge_highlight) < 0.0001f);
+    assert(!fallback_plan.luminance_curve.backdrop_driven);
+    assert(fallback_plan.luminance_curve.bounded);
     assert(std::string(fallback_plan.backdrop.source) == "none");
     assert(std::string(fallback_plan.backdrop.luminance_response)
            == "not-sampled");
@@ -1208,6 +1224,22 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "center4-cardinal2-diagonal1");
     assert(glass_plan.sampling_kernel.requires_backdrop);
     assert(glass_plan.sampling_kernel.bounded);
+    assert(std::string(glass_plan.luminance_curve.name)
+           == "adaptive-backdrop-luma");
+    assert(std::fabs(glass_plan.luminance_curve.floor
+                     - glass_plan.luminance_floor) < 0.0001f);
+    assert(std::fabs(glass_plan.luminance_curve.gain
+                     - glass_plan.luminance_gain) < 0.0001f);
+    assert(std::fabs(glass_plan.luminance_curve.gamma - 1.0f)
+           < 0.0001f);
+    assert(std::fabs(glass_plan.luminance_curve.midpoint - 0.5f)
+           < 0.0001f);
+    assert(std::fabs(glass_plan.luminance_curve.contrast - 1.0f)
+           < 0.0001f);
+    assert(std::fabs(glass_plan.luminance_curve.edge_lift
+                     - glass_plan.edge_highlight) < 0.0001f);
+    assert(glass_plan.luminance_curve.backdrop_driven);
+    assert(glass_plan.luminance_curve.bounded);
     assert(glass_plan.resource_budget.max_sampling_kernel_radius == 2);
     assert(glass_plan.backdrop.available);
     assert(glass_plan.backdrop.stable);
@@ -1272,6 +1304,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(dark_backdrop_plan.backdrop.luminance_floor_delta > 0.0f);
     assert(dark_backdrop_plan.backdrop.luminance_gain_delta > 0.0f);
     assert(dark_backdrop_plan.backdrop.edge_highlight_delta > 0.0f);
+    assert(dark_backdrop_plan.luminance_curve.gamma < 1.0f);
+    assert(dark_backdrop_plan.luminance_curve.midpoint < 0.35f);
 
     MaterialEnvironment bright_backdrop_env = glass_env;
     bright_backdrop_env.backdrop.luma_min = 0.84f;
@@ -1288,6 +1322,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "bright");
     assert(bright_backdrop_plan.backdrop.luminance_gain_delta < 0.0f);
     assert(bright_backdrop_plan.backdrop.edge_highlight_delta > 0.0f);
+    assert(bright_backdrop_plan.luminance_curve.gamma > 1.0f);
+    assert(bright_backdrop_plan.luminance_curve.midpoint > 0.70f);
 
     MaterialEnvironment flat_backdrop_env = glass_env;
     flat_backdrop_env.backdrop.luma_min = 0.46f;
@@ -1304,6 +1340,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::fabs(flat_backdrop_plan.backdrop.luminance_gain_delta)
            < 0.0001f);
     assert(flat_backdrop_plan.backdrop.edge_highlight_delta > 0.0f);
+    assert(flat_backdrop_plan.luminance_curve.contrast > 1.0f);
 
     MaterialEnvironment contrast_motion_env = glass_env;
     contrast_motion_env.capabilities.increase_contrast = true;

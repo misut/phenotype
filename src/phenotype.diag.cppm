@@ -1076,6 +1076,35 @@ namespace detail {
             "bounded",
             json::Value{plan.sampling_kernel.bounded});
 
+        json::Object luminance_curve;
+        luminance_curve.emplace(
+            "name",
+            json::Value{plan.luminance_curve.name});
+        luminance_curve.emplace(
+            "floor",
+            json::Value{plan.luminance_curve.floor});
+        luminance_curve.emplace(
+            "gain",
+            json::Value{plan.luminance_curve.gain});
+        luminance_curve.emplace(
+            "gamma",
+            json::Value{plan.luminance_curve.gamma});
+        luminance_curve.emplace(
+            "midpoint",
+            json::Value{plan.luminance_curve.midpoint});
+        luminance_curve.emplace(
+            "contrast",
+            json::Value{plan.luminance_curve.contrast});
+        luminance_curve.emplace(
+            "edge_lift",
+            json::Value{plan.luminance_curve.edge_lift});
+        luminance_curve.emplace(
+            "backdrop_driven",
+            json::Value{plan.luminance_curve.backdrop_driven});
+        luminance_curve.emplace(
+            "bounded",
+            json::Value{plan.luminance_curve.bounded});
+
         json::Array passes;
         {
             json::Object pass;
@@ -1129,6 +1158,9 @@ namespace detail {
         out.emplace("saturation", json::Value{plan.saturation});
         out.emplace("luminance_floor", json::Value{plan.luminance_floor});
         out.emplace("luminance_gain", json::Value{plan.luminance_gain});
+        out.emplace(
+            "luminance_curve",
+            json::Value{std::move(luminance_curve)});
         out.emplace("edge_highlight", json::Value{plan.edge_highlight});
         out.emplace("edge_width", json::Value{plan.edge_width});
         out.emplace("noise_opacity", json::Value{plan.noise_opacity});

@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "7": 7
+      "8": 7
     },
     "roles": {
       "surface": 7
@@ -73,6 +73,9 @@
     },
     "sampling_weight_profiles": {
       "center4-cardinal2-diagonal1": 7
+    },
+    "luminance_curves": {
+      "adaptive-backdrop-luma": 7
     },
     "backdrop_available": 7,
     "backdrop_stable": 7,

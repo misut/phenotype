@@ -104,6 +104,17 @@ def material_plan(
         "saturation": 1.0,
         "luminance_floor": 0.08,
         "luminance_gain": 1.08,
+        "luminance_curve": {
+            "name": "fallback-flat",
+            "floor": 0.08,
+            "gain": 1.08,
+            "gamma": 1.0,
+            "midpoint": 0.5,
+            "contrast": 1.0,
+            "edge_lift": 0.34,
+            "backdrop_driven": False,
+            "bounded": True,
+        },
         "edge_highlight": 0.34,
         "edge_width": 1.0,
         "noise_opacity": 0.0,
@@ -176,6 +187,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     assert isinstance(plan["backdrop"], dict)
     assert isinstance(plan["primary_pass"], dict)
     assert isinstance(plan["sampling_kernel"], dict)
+    assert isinstance(plan["luminance_curve"], dict)
     plan["plan_id"] = "material.regular.liquid-glass"
     plan["backdrop_sampling"] = True
     plan["fallback"] = False
@@ -218,6 +230,10 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "weight_profile": "center4-cardinal2-diagonal1",
         "requires_backdrop": True,
         "bounded": True,
+    })
+    plan["luminance_curve"].update({
+        "name": "adaptive-backdrop-luma",
+        "backdrop_driven": True,
     })
     assert isinstance(plan["resource_budget"], dict)
     plan["resource_budget"]["max_sampling_kernel_radius"] = 2
@@ -471,6 +487,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["pass_executors"],
             {"fallback-fill": 1})
+        self.assertEqual(
+            report["material_plans"]["luminance_curves"],
+            {"fallback-flat": 1})
+        self.assertEqual(
+            report["material_plans"]["luminance_curve_backdrop_driven"],
+            0)
         self.assertEqual(
             report["material_plans"]["resource_bounds"][
                 "max_pass_texture_copy_pixels"],
@@ -741,6 +763,26 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["likely_pass"], "sampling-kernel")
         self.assertIn("MaterialPlan.sampling_kernel", failure["suggested_action"])
 
+    def test_luminance_curve_mismatch_is_llm_actionable(self) -> None:
+        plan = sampled_material_plan(sample_taps=25)
+        assert isinstance(plan["luminance_curve"], dict)
+        plan["luminance_curve"]["name"] = "fallback-flat"
+        plan["luminance_curve"]["backdrop_driven"] = False
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material sampled backdrop uses adaptive luminance curve"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".luminance_curve")
+        self.assertEqual(failure["likely_pass"], "luminance-curve")
+        self.assertIn("MaterialPlan.luminance_curve", failure["suggested_action"])
+
     def test_manifest_can_require_fallback_reason_summary(self) -> None:
         manifest = {
             "require_material_plan_summary": {
@@ -769,6 +811,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "roles": {"surface": 1},
                 "backdrop_sources": {"none": 1},
                 "luminance_responses": {"not-sampled": 1},
+                "luminance_curves": {"fallback-flat": 1},
                 "luminance_adapted": 0,
                 "render_target_ready": 1,
                 "render_target_within_backdrop_budget": 1,
@@ -799,6 +842,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["backdrop"]["luminance_responses"],
             {"not-sampled": 1})
+        self.assertEqual(
+            report["material_plans"]["luminance_curves"],
+            {"fallback-flat": 1})
         self.assertEqual(
             report["material_plans"]["render_target"]["pixel_formats"],
             {"rgba8unorm": 1})

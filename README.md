@@ -97,7 +97,7 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 | `grid(columns, row_height, builder)` | Rigid `columns × N` grid; children are placed row-major into fixed tracks |
 | `scaffold(top, content, bottom)` | Page layout with hero header, max-width content, and footer |
 | `card(builder)` | Rounded white container with padding |
-| `material_surface(kind, builder)` | Debug-visible material container with clear/thin/regular/thick semantics, macOS sampled-backdrop rendering through the pure sampling-kernel contract, and resolved deterministic fallback plans elsewhere |
+| `material_surface(kind, builder)` | Debug-visible material container with clear/thin/regular/thick semantics, macOS sampled-backdrop rendering through pure sampling-kernel and luminance-curve contracts, and resolved deterministic fallback plans elsewhere |
 | `scroll_view(fixed_height, builder)` | Per-node scroll viewport that catches wheel events inside its bounds |
 | `overlay(builder)` | Top-of-stack layer that paints after the main tree (foundation for dialogs, popovers, tooltips) |
 | `dialog(builder, max_width=360, top_padding=96)` | Centered modal card on top of an `overlay` |
