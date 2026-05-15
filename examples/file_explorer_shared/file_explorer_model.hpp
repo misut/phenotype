@@ -92,6 +92,7 @@ inline std::string sanitize_file_name(std::string_view input) {
     cleaned = trim(cleaned);
     while (!cleaned.empty() && cleaned.front() == '.')
         cleaned.erase(cleaned.begin());
+    cleaned = trim(cleaned);
     if (cleaned.empty())
         cleaned = "New Note.txt";
     if (cleaned.find('.') == std::string::npos)
@@ -162,8 +163,23 @@ inline fs::path ensure_demo_tree(std::string_view profile) {
         root / "Screen Recording 2025-11-04.mov",
         "MOV placeholder rendered as a wide video thumbnail.\n");
     write_file_if_missing(
+        root / "Screen Recording 2025-11-05.mov",
+        "MOV placeholder rendered as a wide video thumbnail.\n");
+    write_file_if_missing(
+        root / "Screen Recording 2025-11-06.mov",
+        "MOV placeholder rendered as a wide video thumbnail.\n");
+    write_file_if_missing(
+        root / "Screen Recording 2025-11-07.mov",
+        "MOV placeholder rendered as a wide video thumbnail.\n");
+    write_file_if_missing(
         root / "Screenshot 2025-11-05.png",
         "PNG screenshot placeholder for the Finder-like icon grid.\n");
+    write_file_if_missing(
+        root / "Screenshot 2025-11-06.png",
+        "PNG screenshot placeholder for the Finder-like icon grid.\n");
+    write_file_if_missing(
+        root / "Archive.zip",
+        "ZIP placeholder rendered as a text-style fallback thumbnail.\n");
     write_file_if_missing(
         root / "Documents" / "Project Notes.txt",
         "Finder-like desktop layout\n"

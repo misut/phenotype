@@ -274,6 +274,19 @@ std::string finder_status(file_explorer_demo::Snapshot const& snap) {
     return text;
 }
 
+std::string compact_preview(std::string text) {
+    for (char& ch : text) {
+        if (ch == '\n' || ch == '\t')
+            ch = ' ';
+    }
+    text.erase(std::unique(text.begin(), text.end(), [](char a, char b) {
+        return a == ' ' && b == ' ';
+    }), text.end());
+    if (text.size() > 96)
+        text = text.substr(0, 93) + "...";
+    return text;
+}
+
 std::vector<file_explorer_demo::Entry> finder_entries(
         file_explorer_demo::Snapshot const& snap) {
     auto entries = snap.entries;
@@ -395,7 +408,7 @@ void sidebar_row(std::string_view label,
             178.0f,
             17.0f,
             false,
-            true);
+            false);
     }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
 }
 
@@ -439,6 +452,7 @@ void paint_nav_buttons(phenotype::Painter& painter) {
 
 void paint_view_cluster(phenotype::Painter& painter) {
     fill_round(painter, 0.0f, 0.0f, 260.0f, 48.0f, 24.0f, rgba(255, 255, 255, 190));
+    fill_round(painter, 8.0f, 6.0f, 44.0f, 36.0f, 18.0f, rgba(229, 229, 234, 180));
     for (int col = 0; col < 2; ++col) {
         for (int row = 0; row < 2; ++row) {
             stroke_round(painter,
@@ -458,6 +472,37 @@ void paint_view_cluster(phenotype::Painter& painter) {
     }
     stroke_round(painter, 212.0f, 12.0f, 32.0f, 22.0f, 4.0f, 2.0f, rgba(70, 70, 70));
     painter.line(214.0f, 39.0f, 244.0f, 39.0f, 3.0f, rgba(70, 70, 70));
+}
+
+void paint_group_sort_cluster(phenotype::Painter& painter) {
+    fill_round(painter, 0.0f, 0.0f, 82.0f, 48.0f, 24.0f, rgba(255, 255, 255, 190));
+    for (int row = 0; row < 3; ++row) {
+        for (int col = 0; col < 3; ++col) {
+            stroke_round(painter,
+                         18.0f + static_cast<float>(col) * 10.0f,
+                         12.0f + static_cast<float>(row) * 8.5f,
+                         7.0f, 4.0f, 1.0f, 1.7f, rgba(70, 70, 70));
+        }
+    }
+    painter.line(60.0f, 20.0f, 66.0f, 26.0f, 2.2f, rgba(70, 70, 70));
+    painter.line(72.0f, 20.0f, 66.0f, 26.0f, 2.2f, rgba(70, 70, 70));
+}
+
+void paint_share_tag_more_cluster(phenotype::Painter& painter) {
+    fill_round(painter, 0.0f, 0.0f, 164.0f, 48.0f, 24.0f, rgba(255, 255, 255, 190));
+    painter.line(42.0f, 13.0f, 42.0f, 31.0f, 2.2f, rgba(170, 174, 181));
+    painter.line(36.0f, 19.0f, 42.0f, 13.0f, 2.2f, rgba(170, 174, 181));
+    painter.line(48.0f, 19.0f, 42.0f, 13.0f, 2.2f, rgba(170, 174, 181));
+    stroke_round(painter, 32.0f, 24.0f, 20.0f, 14.0f, 3.0f, 2.0f, rgba(170, 174, 181));
+
+    auto tag = rounded_rect_path(78.0f, 14.0f, 28.0f, 20.0f, 4.0f);
+    painter.stroke_path(tag, 2.0f, rgba(170, 174, 181));
+    painter.arc(84.0f, 20.0f, 2.4f, 0.0f, k_tau, 1.6f, rgba(170, 174, 181));
+
+    for (int i = 0; i < 3; ++i) {
+        painter.arc(126.0f + static_cast<float>(i) * 11.0f,
+                    24.0f, 2.2f, 0.0f, k_tau, 1.8f, rgba(70, 70, 70));
+    }
 }
 
 void paint_search_icon(phenotype::Painter& painter) {
@@ -493,10 +538,57 @@ void finder_toolbar(State const& state,
             [] {
                 widget::canvas(260.0f, 48.0f, paint_view_cluster, {}, 0x63u);
             });
-        layout::sized_box(172.0f, [&] {
+        layout::material_surface(
+            layout::MaterialSurfaceOptions{
+                .kind = MaterialKind::Thick,
+                .role = MaterialSurfaceRole::Toolbar,
+                .direction = FlexDirection::Row,
+                .padding = SpaceToken::Xs,
+                .gap = SpaceToken::Xs,
+                .cross_align = CrossAxisAlignment::Center,
+                .main_align = MainAxisAlignment::Start,
+                .max_width = 82.0f,
+                .fixed_height = 48.0f,
+                .semantic_label = "Group Sort",
+            },
+            [] {
+                widget::canvas(82.0f, 48.0f, paint_group_sort_cluster, {}, 0x65u);
+            });
+        layout::material_surface(
+            layout::MaterialSurfaceOptions{
+                .kind = MaterialKind::Thick,
+                .role = MaterialSurfaceRole::Toolbar,
+                .direction = FlexDirection::Row,
+                .padding = SpaceToken::Xs,
+                .gap = SpaceToken::Xs,
+                .cross_align = CrossAxisAlignment::Center,
+                .main_align = MainAxisAlignment::Start,
+                .max_width = 164.0f,
+                .fixed_height = 48.0f,
+                .semantic_label = "Share Tag More",
+            },
+            [] {
+                widget::canvas(164.0f, 48.0f, paint_share_tag_more_cluster, {}, 0x66u);
+            });
+        layout::material_surface(
+            layout::MaterialSurfaceOptions{
+                .kind = MaterialKind::Thick,
+                .role = MaterialSurfaceRole::Toolbar,
+                .direction = FlexDirection::Row,
+                .padding = SpaceToken::Xs,
+                .gap = SpaceToken::Xs,
+                .cross_align = CrossAxisAlignment::Center,
+                .main_align = MainAxisAlignment::Start,
+                .max_width = 56.0f,
+                .fixed_height = 48.0f,
+                .semantic_label = "Search Control",
+            },
+            [] {
+                widget::canvas(56.0f, 48.0f, paint_search_icon, {}, 0x64u);
+            });
+        layout::sized_box(144.0f, [&] {
             widget::text_field<Msg>("Search", explorer.search, on_search_changed);
         });
-        widget::canvas(56.0f, 48.0f, paint_search_icon, {}, 0x64u);
     }, MaterialKind::Clear, SpaceToken::Sm, SpaceToken::Sm);
 }
 
@@ -521,11 +613,11 @@ void finder_grid(file_explorer_demo::Snapshot const& snap) {
                 widget::text("No matching files.");
                 return;
             }
-            layout::scroll_view(560.0f, [&] {
+            layout::scroll_view(552.0f, [&] {
                 std::vector<float> columns{
-                    150.0f, 150.0f, 150.0f, 150.0f, 150.0f, 150.0f,
+                    142.0f, 142.0f, 142.0f, 142.0f, 142.0f, 142.0f,
                 };
-                layout::grid(std::move(columns), 170.0f, [&] {
+                layout::grid(std::move(columns), 166.0f, [&] {
                     for (auto const& entry : entries) {
                         bool const selected = snap.has_selection
                             && snap.selected.name == entry.name;
@@ -562,14 +654,16 @@ void finder_status_bar(State const& state,
             layout::weighted(1.0f, [&] {
                 widget::text(finder_status(snap), TextSize::Small, TextColor::Muted);
                 if (snap.has_selection) {
-                    widget::text(snap.preview, TextSize::Small, TextColor::Muted);
+                    widget::text(compact_preview(snap.preview),
+                                 TextSize::Small,
+                                 TextColor::Muted);
                 }
             });
-            layout::sized_box(180.0f, [&] {
+            layout::sized_box(170.0f, [&] {
                 widget::text_field<Msg>("File name", explorer.draft_name,
                                         on_draft_name_changed);
             });
-            layout::sized_box(230.0f, [&] {
+            layout::sized_box(210.0f, [&] {
                 widget::text_field<Msg>("File contents", explorer.draft_body,
                                         on_draft_body_changed);
             });
