@@ -122,6 +122,18 @@ inline void glfw_set_hover_cursor(bool pointing) {
     glfw_update_cursor(g_active_glfw_window, pointing);
 }
 
+inline NativeSurfaceDescriptor* glfw_surface(native_surface_handle handle) {
+    auto* surface = static_cast<NativeSurfaceDescriptor*>(handle);
+    return surface && surface->kind == NativeSurfaceKind::GlfwWindow
+        ? surface
+        : nullptr;
+}
+
+inline GLFWwindow* glfw_window_from_surface(native_surface_handle handle) {
+    auto* surface = glfw_surface(handle);
+    return surface ? static_cast<GLFWwindow*>(surface->window) : nullptr;
+}
+
 inline bool env_flag_enabled(char const* name) {
     auto const* value = std::getenv(name);
     return value && value[0] != '\0' && value[0] != '0';
@@ -167,15 +179,27 @@ inline bool write_startup_artifact_bundle(platform_api const& platform,
 }
 
 inline void refresh_cached_canvas_size(::phenotype::native::native_host& host,
-                                       GLFWwindow* window) {
+                                       GLFWwindow* window,
+                                       NativeSurfaceDescriptor* surface) {
     if (!window)
         return;
     int w = 0;
     int h = 0;
+    int fbw = 0;
+    int fbh = 0;
     glfwGetWindowSize(window, &w, &h);
+    glfwGetFramebufferSize(window, &fbw, &fbh);
+    float const scale = glfw_backing_scale(window);
     host.cached_width_px = w;
     host.cached_height_px = h;
-    host.cached_content_scale = glfw_backing_scale(window);
+    host.cached_content_scale = scale;
+    if (surface) {
+        surface->logical_width = w;
+        surface->logical_height = h;
+        surface->framebuffer_width = fbw;
+        surface->framebuffer_height = fbh;
+        surface->content_scale = scale;
+    }
 }
 
 // Backward-compatible int-typed dispatch adapters so test fixtures and any
@@ -236,10 +260,21 @@ inline void on_framebuffer_size(GLFWwindow* window, int /*fb_w*/, int /*fb_h*/) 
     if (host) {
         int win_w = 0;
         int win_h = 0;
+        int fb_w = 0;
+        int fb_h = 0;
         glfwGetWindowSize(window, &win_w, &win_h);
+        glfwGetFramebufferSize(window, &fb_w, &fb_h);
+        auto scale = glfw_backing_scale(window);
         host->cached_width_px = win_w;
         host->cached_height_px = win_h;
-        host->cached_content_scale = glfw_backing_scale(window);
+        host->cached_content_scale = scale;
+        if (auto* surface = glfw_surface(host->window)) {
+            surface->logical_width = win_w;
+            surface->logical_height = win_h;
+            surface->framebuffer_width = fb_w;
+            surface->framebuffer_height = fb_h;
+            surface->content_scale = scale;
+        }
         ::phenotype::native::detail::notify_viewport_changed(
             host, win_w, win_h, host->cached_content_scale);
     }
@@ -253,6 +288,8 @@ inline void on_window_content_scale(GLFWwindow*, float sx, float sy) {
         if (!(scale > 0.0f) || !std::isfinite(scale))
             scale = 1.0f;
         host->cached_content_scale = scale;
+        if (auto* surface = glfw_surface(host->window))
+            surface->content_scale = scale;
         ::phenotype::native::detail::notify_viewport_changed(
             host,
             host->cached_width_px,
@@ -325,16 +362,20 @@ int run_app_with_platform(platform_api const& platform,
         glfwTerminate();
         return 1;
     }
-    if (platform.window.configure)
-        platform.window.configure(window, &options);
+    NativeSurfaceDescriptor surface{
+        .kind = NativeSurfaceKind::GlfwWindow,
+        .window = window,
+    };
 
     native_host host;
-    host.window = window;
+    host.window = &surface;
     host.platform = &platform;
     host.set_hover_cursor = &glfw_set_hover_cursor;
     host.on_viewport_changed = std::move(on_viewport);
     g_active_glfw_window = window;
-    refresh_cached_canvas_size(host, window);
+    refresh_cached_canvas_size(host, window, &surface);
+    if (platform.window.configure)
+        platform.window.configure(&surface, &options);
 
     ::phenotype::native::detail::bind_host(host, 0.0f);
     install_callbacks(window);
@@ -441,24 +482,30 @@ inline void set_window_size_limits(int min_w, int min_h,
     auto* host = ::phenotype::native::detail::active_host();
     if (!host || !host->window)
         return;
-    glfwSetWindowSizeLimits(static_cast<GLFWwindow*>(host->window),
-                            min_w, min_h, max_w, max_h);
+    auto* window = detail::glfw_window_from_surface(host->window);
+    if (!window)
+        return;
+    glfwSetWindowSizeLimits(window, min_w, min_h, max_w, max_h);
 }
 
 inline void set_window_aspect_ratio(int numerator, int denominator) {
     auto* host = ::phenotype::native::detail::active_host();
     if (!host || !host->window)
         return;
-    glfwSetWindowAspectRatio(static_cast<GLFWwindow*>(host->window),
-                             numerator, denominator);
+    auto* window = detail::glfw_window_from_surface(host->window);
+    if (!window)
+        return;
+    glfwSetWindowAspectRatio(window, numerator, denominator);
 }
 
 inline void clear_window_aspect_ratio() {
     auto* host = ::phenotype::native::detail::active_host();
     if (!host || !host->window)
         return;
-    glfwSetWindowAspectRatio(static_cast<GLFWwindow*>(host->window),
-                             GLFW_DONT_CARE, GLFW_DONT_CARE);
+    auto* window = detail::glfw_window_from_surface(host->window);
+    if (!window)
+        return;
+    glfwSetWindowAspectRatio(window, GLFW_DONT_CARE, GLFW_DONT_CARE);
 }
 
 inline float content_scale() {

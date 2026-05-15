@@ -4104,7 +4104,9 @@ struct RendererState {
     std::vector<HitRegionCmd> hit_regions;
     FrameScratch scratch;
     TextAtlasCache text_cache;
-    GLFWwindow* window = nullptr;
+    NativeSurfaceDescriptor* surface = nullptr;
+    id ns_window = nullptr;
+    id content_view = nullptr;
     int drawable_width = 0;
     int drawable_height = 0;
     int last_render_width = 0;
@@ -4118,6 +4120,36 @@ struct RendererState {
 
 inline RendererState g_renderer;
 
+inline NativeSurfaceDescriptor* desktop_surface(native_surface_handle handle) {
+    return static_cast<NativeSurfaceDescriptor*>(handle);
+}
+
+inline GLFWwindow* surface_glfw_window(NativeSurfaceDescriptor const* surface) {
+    return surface && surface->kind == NativeSurfaceKind::GlfwWindow
+        ? static_cast<GLFWwindow*>(surface->window)
+        : nullptr;
+}
+
+inline id surface_ns_window(NativeSurfaceDescriptor const* surface) {
+    if (!surface)
+        return nullptr;
+    if (surface->kind == NativeSurfaceKind::MacOSWindow)
+        return static_cast<id>(surface->window);
+    if (auto* window = surface_glfw_window(surface))
+        return static_cast<id>(glfwGetCocoaWindow(window));
+    return nullptr;
+}
+
+inline id surface_content_view(NativeSurfaceDescriptor const* surface) {
+    if (!surface)
+        return nullptr;
+    if (surface->view)
+        return static_cast<id>(surface->view);
+    if (auto ns_window = surface_ns_window(surface))
+        return objc_send<id>(ns_window, sel_content_view());
+    return nullptr;
+}
+
 inline float current_backing_scale(GLFWwindow* window) {
     if (!window) return 1.0f;
     int fbw = 0;
@@ -4130,6 +4162,45 @@ inline float current_backing_scale(GLFWwindow* window) {
     float sy = (winh > 0) ? static_cast<float>(fbh) / static_cast<float>(winh) : 1.0f;
     float scale = (sx > sy) ? sx : sy;
     return (scale > 0.0f && std::isfinite(scale)) ? scale : 1.0f;
+}
+
+inline float surface_content_scale(NativeSurfaceDescriptor const* surface) {
+    if (!surface)
+        return 1.0f;
+    if (auto* window = surface_glfw_window(surface))
+        return current_backing_scale(window);
+    float const scale = surface->content_scale;
+    return (scale > 0.0f && std::isfinite(scale)) ? scale : 1.0f;
+}
+
+inline void surface_framebuffer_size(NativeSurfaceDescriptor const* surface,
+                                     int& width,
+                                     int& height) {
+    width = 0;
+    height = 0;
+    if (!surface)
+        return;
+    if (auto* window = surface_glfw_window(surface)) {
+        glfwGetFramebufferSize(window, &width, &height);
+        return;
+    }
+    width = surface->framebuffer_width;
+    height = surface->framebuffer_height;
+}
+
+inline void surface_logical_size(NativeSurfaceDescriptor const* surface,
+                                 int& width,
+                                 int& height) {
+    width = 0;
+    height = 0;
+    if (!surface)
+        return;
+    if (auto* window = surface_glfw_window(surface)) {
+        glfwGetWindowSize(window, &width, &height);
+        return;
+    }
+    width = surface->logical_width;
+    height = surface->logical_height;
 }
 
 inline MTL::RenderPipelineState* create_pipeline(
@@ -5976,16 +6047,13 @@ inline void remove_local_scroll_monitor() {
 }
 
 inline void input_attach(native_surface_handle handle, void (*request_repaint)()) {
-    auto* window = static_cast<GLFWwindow*>(handle);
+    auto* surface = desktop_surface(handle);
+    auto* window = surface_glfw_window(surface);
     g_images.request_repaint = request_repaint;
     g_ime.window = window;
     g_ime.request_repaint = request_repaint;
-    g_ime.ns_window = window
-        ? static_cast<id>(glfwGetCocoaWindow(window))
-        : nullptr;
-    g_ime.content_view = g_ime.ns_window
-        ? objc_send<id>(g_ime.ns_window, sel_content_view())
-        : nullptr;
+    g_ime.ns_window = surface_ns_window(surface);
+    g_ime.content_view = surface_content_view(surface);
     g_ime.focused_callback_id = ::phenotype::native::invalid_callback_id;
     g_ime.scroll_tracking_active = false;
     g_ime.last_host_frame = CGRectNull;
@@ -6096,9 +6164,7 @@ inline void configure_window(native_surface_handle handle,
         || options->chrome != WindowChromeStyle::IntegratedTitlebar)
         return;
 
-    auto* window = static_cast<GLFWwindow*>(handle);
-    auto ns_window = window ? static_cast<id>(glfwGetCocoaWindow(window))
-                            : nullptr;
+    auto ns_window = surface_ns_window(desktop_surface(handle));
     if (!ns_window)
         return;
 
@@ -6123,8 +6189,14 @@ inline void configure_window(native_surface_handle handle,
 
 inline void renderer_init(native_surface_handle handle) {
     if (g_renderer.initialized) return;
-    auto* window = static_cast<GLFWwindow*>(handle);
-    g_renderer.window = window;
+    auto* surface = desktop_surface(handle);
+    g_renderer.surface = surface;
+    g_renderer.ns_window = surface_ns_window(surface);
+    g_renderer.content_view = surface_content_view(surface);
+    if (!g_renderer.ns_window || !g_renderer.content_view) {
+        std::fprintf(stderr, "[metal] no NSWindow/NSView surface\n");
+        return;
+    }
 
     g_renderer.device = MTL::CreateSystemDefaultDevice();
     if (!g_renderer.device) {
@@ -6133,11 +6205,9 @@ inline void renderer_init(native_surface_handle handle) {
     }
     g_renderer.queue = g_renderer.device->newCommandQueue();
 
-    void* nswin = glfwGetCocoaWindow(window);
-    auto sel_cv = sel_registerName("contentView");
     auto sel_wl = sel_registerName("setWantsLayer:");
     auto sel_sl = sel_registerName("setLayer:");
-    void* view = reinterpret_cast<void*(*)(void*, SEL)>(objc_msgSend)(nswin, sel_cv);
+    void* view = g_renderer.content_view;
     reinterpret_cast<void(*)(void*, SEL, bool)>(objc_msgSend)(view, sel_wl, true);
 
     g_renderer.layer = CA::MetalLayer::layer()->retain();
@@ -6147,14 +6217,14 @@ inline void renderer_init(native_surface_handle handle) {
 
     int fbw = 0;
     int fbh = 0;
-    glfwGetFramebufferSize(window, &fbw, &fbh);
+    surface_framebuffer_size(surface, fbw, fbh);
     sync_drawable_size(fbw, fbh);
 
     // Prime the host's cached content scale even when the host bypassed
     // refresh_cached_canvas_size (e.g. test harnesses that wire the
     // host directly instead of going through run_app_with_platform).
     if (auto* host = ::phenotype::native::detail::active_host())
-        host->cached_content_scale = current_backing_scale(window);
+        host->cached_content_scale = surface_content_scale(surface);
 
     reinterpret_cast<void(*)(void*, SEL, void*)>(objc_msgSend)(
         view, sel_sl, static_cast<void*>(g_renderer.layer));
@@ -6198,7 +6268,7 @@ inline void renderer_init(native_surface_handle handle) {
 
     int winw = 0;
     int winh = 0;
-    glfwGetWindowSize(window, &winw, &winh);
+    surface_logical_size(surface, winw, winh);
     std::printf("[phenotype-native] Metal initialized (%dx%d)\n", winw, winh);
 }
 
@@ -6215,7 +6285,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (auto* host = ::phenotype::native::detail::active_host())
         frame_scale = host->cached_content_scale;
     if (!(frame_scale > 0.0f))
-        frame_scale = current_backing_scale(g_renderer.window);
+        frame_scale = surface_content_scale(g_renderer.surface);
     float text_scale = frame_scale;
     float line_height_ratio = ::phenotype::detail::g_app.theme.line_height_ratio;
 
@@ -6226,7 +6296,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     (void)process_completed_images();
     int fbw = 0;
     int fbh = 0;
-    glfwGetFramebufferSize(g_renderer.window, &fbw, &fbh);
+    surface_framebuffer_size(g_renderer.surface, fbw, fbh);
     if (fbw == 0 || fbh == 0) {
         pool->release();
         return;
@@ -6317,7 +6387,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     int winw = 0;
     int winh = 0;
-    glfwGetWindowSize(g_renderer.window, &winw, &winh);
+    surface_logical_size(g_renderer.surface, winw, winh);
     float uniforms[4] = {
         static_cast<float>(winw),
         static_cast<float>(winh),
@@ -6738,7 +6808,9 @@ inline void renderer_shutdown() {
     g_renderer.material_frame_sequence = 0;
     g_renderer.material_executor_summary = MaterialExecutorSummary{};
     g_renderer.last_frame_available = false;
-    g_renderer.window = nullptr;
+    g_renderer.surface = nullptr;
+    g_renderer.ns_window = nullptr;
+    g_renderer.content_view = nullptr;
     g_renderer.initialized = false;
 }
 

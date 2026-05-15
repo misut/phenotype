@@ -69,10 +69,9 @@ enum class Key : int {
 };
 
 struct native_host {
-    // Opaque native surface handle. Carries a GLFWwindow* on macOS /
-    // Windows; an ANativeWindow* on Android; etc. The backend casts
-    // back to its own type on receipt from `platform_api::init` /
-    // `platform_api::attach`.
+    // Opaque native surface handle. Desktop shells pass a
+    // NativeSurfaceDescriptor* carrying the OS window/view and viewport
+    // metadata; Android keeps passing its ANativeWindow* directly.
     native_surface_handle window = nullptr;
     platform_api const* platform = nullptr;
 
