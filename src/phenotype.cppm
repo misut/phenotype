@@ -18,6 +18,7 @@ export module phenotype;
 
 export import phenotype.diag;
 export import phenotype.types;
+export import phenotype.resources;
 export import phenotype.material;
 export import phenotype.state;
 export import phenotype.layout;
