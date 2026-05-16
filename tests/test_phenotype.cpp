@@ -1260,6 +1260,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
            >= fallback_plan.foreground.minimum_contrast_ratio);
     assert(std::string(fallback_plan.verifier.likely_layer)
            == "material-fallback-pass");
+    assert(std::string(fallback_plan.verifier.likely_pass)
+           == "translucent-rounded-rect");
 
     MaterialEnvironment unsupported_large_env = fallback_env;
     unsupported_large_env.render_target.width = 2400;
@@ -1359,6 +1361,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
            >= glass_plan.foreground.minimum_contrast_ratio);
     assert(std::string(glass_plan.verifier.likely_layer)
            == "material-blur-pass");
+    assert(std::string(glass_plan.verifier.likely_pass)
+           == "backdrop-sample-blur");
 
     MaterialRequest container_request = request;
     container_request.style.container = MaterialContainerDescriptor{
@@ -1583,6 +1587,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!invalid_plan.primary_pass.active);
     assert(std::string(invalid_plan.primary_pass.executor) == "none");
     assert(invalid_plan.primary_pass.max_texture_copy_pixels == 0);
+    assert(std::string(invalid_plan.verifier.likely_pass) == "none");
     assert(!invalid_plan.shape.valid);
     assert(!invalid_plan.shape.rounded);
     assert(invalid_plan.shape.effective_radius == 0.0f);

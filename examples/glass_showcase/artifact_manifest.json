@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "10": 7
+      "11": 7
     },
     "roles": {
       "surface": 7
@@ -131,6 +131,12 @@
       "thin-balanced-backdrop": "material-blur-pass",
       "regular-legibility-backdrop": "material-blur-pass",
       "thick-high-contrast-backdrop": "material-blur-pass"
+    },
+    "verifier_region_passes": {
+      "clear-over-rich-backdrop": "backdrop-sample-blur",
+      "thin-balanced-backdrop": "backdrop-sample-blur",
+      "regular-legibility-backdrop": "backdrop-sample-blur",
+      "thick-high-contrast-backdrop": "backdrop-sample-blur"
     }
   },
   "require_material_resource_bounds": {

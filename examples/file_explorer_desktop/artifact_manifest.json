@@ -66,7 +66,7 @@
     "fallback": 0,
     "backdrop_sampling": 11,
     "contract_versions": {
-      "10": 11
+      "11": 11
     },
     "roles": {
       "surface": 1,
@@ -87,11 +87,23 @@
     "container_morph_transitions": 11,
     "shape_valid": 11,
     "shape_radius_clamped": 0,
+    "pass_names": {
+      "backdrop-sample-blur": 11
+    },
+    "pass_executors": {
+      "backdrop-filter": 11
+    },
     "sampling_kernels": {
       "weighted-5x5-manhattan": 11
     },
     "sampling_weight_profiles": {
       "center4-cardinal2-diagonal1": 11
+    },
+    "verifier_region_passes": {
+      "clear-over-rich-backdrop": "backdrop-sample-blur",
+      "thin-balanced-backdrop": "backdrop-sample-blur",
+      "regular-legibility-backdrop": "backdrop-sample-blur",
+      "thick-high-contrast-backdrop": "backdrop-sample-blur"
     },
     "luminance_curves": {
       "adaptive-backdrop-luma": 11

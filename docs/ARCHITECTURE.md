@@ -263,7 +263,7 @@ shader-local or fallback-local policy.
 same plan: whether a backdrop source or edge highlight must be present, the
 minimum luma/color thresholds for sampled or fallback rendering, the semantic
 profile name, whether material container identity/morph contracts are expected,
-and the likely pass layer that a failure should inspect first.
+and the likely layer/pass that a failure should inspect first.
 `MaterialContainerAnalysis` records whether a surface is isolated, participates
 in a named material container, or belongs to a shape union. Reduced Motion keeps
 container identity intact but disables morph-transition expectations in the pure

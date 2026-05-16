@@ -32,7 +32,7 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "10": 1
+      "11": 1
     },
     "roles": {
       "surface": 1
@@ -96,6 +96,9 @@
     },
     "verifier_region_layers": {
       "regular-legibility-backdrop": "material-fallback-pass"
+    },
+    "verifier_region_passes": {
+      "regular-legibility-backdrop": "translucent-rounded-rect"
     }
   },
   "require_material_resource_bounds": {
