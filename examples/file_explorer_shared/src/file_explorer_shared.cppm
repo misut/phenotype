@@ -5,6 +5,8 @@ module;
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <initializer_list>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -82,6 +84,57 @@ struct ExplorerState {
     int viewport_height = 0;
     float viewport_scale = 1.0f;
     std::size_t mobile_tab = 0;
+};
+
+enum class ExplorerInputKind {
+    Noop,
+    SelectLocation,
+    SelectEntry,
+    Search,
+    DraftName,
+    DraftFolderName,
+    DraftBody,
+    CreateFile,
+    CreateFolder,
+    DeleteSelected,
+    DuplicateSelected,
+    GoBack,
+    GoForward,
+    GoUp,
+    Sort,
+    CycleSort,
+    Reset,
+    Scenario,
+};
+
+struct ExplorerInput {
+    ExplorerInputKind kind = ExplorerInputKind::Noop;
+    std::string value;
+    SortMode sort_mode = SortMode::Name;
+};
+
+struct ExplorerInputParseResult {
+    bool ok = false;
+    ExplorerInput input{};
+    std::string error;
+};
+
+struct ExplorerInputTrace {
+    ExplorerInput input{};
+    std::string status;
+    std::string relative_location;
+    std::string selected_name;
+    std::string operation_label;
+    OperationReceipt operation;
+    std::size_t visible_entries = 0;
+    bool has_selection = false;
+};
+
+struct ExplorerDriveResult {
+    std::string profile;
+    ExplorerState state;
+    Snapshot snapshot;
+    std::vector<ExplorerInputTrace> trace;
 };
 
 inline std::string lower_copy(std::string text) {
@@ -349,6 +402,144 @@ inline SortMode next_sort_mode(SortMode mode) {
         case SortMode::Size:
         default: return SortMode::Name;
     }
+}
+
+inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
+    switch (kind) {
+        case ExplorerInputKind::Noop: return "noop";
+        case ExplorerInputKind::SelectLocation: return "select_location";
+        case ExplorerInputKind::SelectEntry: return "select_entry";
+        case ExplorerInputKind::Search: return "search";
+        case ExplorerInputKind::DraftName: return "draft_name";
+        case ExplorerInputKind::DraftFolderName: return "draft_folder_name";
+        case ExplorerInputKind::DraftBody: return "draft_body";
+        case ExplorerInputKind::CreateFile: return "create_file";
+        case ExplorerInputKind::CreateFolder: return "create_folder";
+        case ExplorerInputKind::DeleteSelected: return "delete_selected";
+        case ExplorerInputKind::DuplicateSelected: return "duplicate_selected";
+        case ExplorerInputKind::GoBack: return "go_back";
+        case ExplorerInputKind::GoForward: return "go_forward";
+        case ExplorerInputKind::GoUp: return "go_up";
+        case ExplorerInputKind::Sort: return "sort";
+        case ExplorerInputKind::CycleSort: return "cycle_sort";
+        case ExplorerInputKind::Reset: return "reset";
+        case ExplorerInputKind::Scenario: return "scenario";
+    }
+    return "noop";
+}
+
+inline std::string explorer_input_label(ExplorerInput const& input) {
+    auto label = explorer_input_kind_name(input.kind);
+    if (input.kind == ExplorerInputKind::Sort)
+        return label + ":" + sort_mode_label(input.sort_mode);
+    if (!input.value.empty())
+        return label + ":" + input.value;
+    return label;
+}
+
+inline SortMode sort_mode_from_name(std::string_view value) {
+    auto name = lower_copy(trim(value));
+    if (name == "kind")
+        return SortMode::Kind;
+    if (name == "size")
+        return SortMode::Size;
+    return SortMode::Name;
+}
+
+inline ExplorerInputParseResult parsed_input(ExplorerInput input) {
+    return ExplorerInputParseResult{
+        .ok = true,
+        .input = std::move(input),
+    };
+}
+
+inline ExplorerInputParseResult input_parse_error(std::string message) {
+    return ExplorerInputParseResult{
+        .ok = false,
+        .error = std::move(message),
+    };
+}
+
+inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
+    auto text = trim(raw);
+    if (text.empty())
+        return parsed_input({});
+
+    auto separator = text.find(':');
+    if (separator == std::string::npos)
+        separator = text.find('=');
+    auto name = lower_copy(trim(separator == std::string::npos
+        ? std::string_view{text}
+        : std::string_view{text}.substr(0, separator)));
+    auto value = separator == std::string::npos
+        ? std::string{}
+        : trim(std::string_view{text}.substr(separator + 1));
+
+    auto require_value = [&](ExplorerInputKind kind) -> ExplorerInputParseResult {
+        if (value.empty()) {
+            return input_parse_error(
+                "input '" + name + "' requires a value");
+        }
+        return parsed_input(ExplorerInput{
+            .kind = kind,
+            .value = value,
+        });
+    };
+
+    if (name == "noop")
+        return parsed_input({});
+    if (name == "location" || name == "loc"
+        || name == "select-location") {
+        return require_value(ExplorerInputKind::SelectLocation);
+    }
+    if (name == "select" || name == "entry" || name == "open"
+        || name == "select-entry" || name == "read") {
+        return require_value(ExplorerInputKind::SelectEntry);
+    }
+    if (name == "search")
+        return require_value(ExplorerInputKind::Search);
+    if (name == "draft-name" || name == "file-name" || name == "name")
+        return require_value(ExplorerInputKind::DraftName);
+    if (name == "draft-folder" || name == "folder-name")
+        return require_value(ExplorerInputKind::DraftFolderName);
+    if (name == "draft-body" || name == "body" || name == "contents")
+        return require_value(ExplorerInputKind::DraftBody);
+    if (name == "create-file" || name == "touch")
+        return parsed_input({.kind = ExplorerInputKind::CreateFile});
+    if (name == "create-folder" || name == "mkdir")
+        return parsed_input({.kind = ExplorerInputKind::CreateFolder});
+    if (name == "delete" || name == "trash" || name == "delete-selected")
+        return parsed_input({.kind = ExplorerInputKind::DeleteSelected});
+    if (name == "duplicate" || name == "copy")
+        return parsed_input({.kind = ExplorerInputKind::DuplicateSelected});
+    if (name == "back")
+        return parsed_input({.kind = ExplorerInputKind::GoBack});
+    if (name == "forward")
+        return parsed_input({.kind = ExplorerInputKind::GoForward});
+    if (name == "up")
+        return parsed_input({.kind = ExplorerInputKind::GoUp});
+    if (name == "sort") {
+        if (value.empty())
+            return input_parse_error("input 'sort' requires name, kind, or size");
+        auto lowered = lower_copy(value);
+        if (lowered != "name" && lowered != "kind" && lowered != "size") {
+            return input_parse_error(
+                "input 'sort' accepts only name, kind, or size");
+        }
+        return parsed_input({
+            .kind = ExplorerInputKind::Sort,
+            .value = value,
+            .sort_mode = sort_mode_from_name(value),
+        });
+    }
+    if (name == "cycle-sort")
+        return parsed_input({.kind = ExplorerInputKind::CycleSort});
+    if (name == "reset")
+        return parsed_input({.kind = ExplorerInputKind::Reset});
+    if (name == "scenario")
+        return require_value(ExplorerInputKind::Scenario);
+
+    return input_parse_error("unknown file explorer input: " + name);
 }
 
 inline void record_operation(
@@ -1112,6 +1303,102 @@ inline void apply_startup_scenario(
     }
 
     state.status = "Unknown startup scenario: " + std::string(scenario);
+}
+
+inline void apply_explorer_input(
+        ExplorerState& state,
+        ExplorerInput const& input,
+        std::string_view profile) {
+    switch (input.kind) {
+        case ExplorerInputKind::Noop:
+            state.status = "No input applied.";
+            return;
+        case ExplorerInputKind::SelectLocation:
+            select_location(state, input.value);
+            return;
+        case ExplorerInputKind::SelectEntry:
+            select_entry(state, input.value);
+            return;
+        case ExplorerInputKind::Search:
+            set_search_filter(state, input.value);
+            return;
+        case ExplorerInputKind::DraftName:
+            state.draft_name = input.value;
+            state.status = "Draft file name set.";
+            return;
+        case ExplorerInputKind::DraftFolderName:
+            state.draft_folder_name = input.value;
+            state.status = "Draft folder name set.";
+            return;
+        case ExplorerInputKind::DraftBody:
+            state.draft_body = input.value;
+            state.status = "Draft body set.";
+            return;
+        case ExplorerInputKind::CreateFile:
+            create_file(state);
+            return;
+        case ExplorerInputKind::CreateFolder:
+            create_folder(state);
+            return;
+        case ExplorerInputKind::DeleteSelected:
+            delete_selected(state);
+            return;
+        case ExplorerInputKind::DuplicateSelected:
+            duplicate_selected(state);
+            return;
+        case ExplorerInputKind::GoBack:
+            go_back(state);
+            return;
+        case ExplorerInputKind::GoForward:
+            go_forward(state);
+            return;
+        case ExplorerInputKind::GoUp:
+            go_up(state);
+            return;
+        case ExplorerInputKind::Sort:
+            set_sort_mode(state, input.sort_mode);
+            return;
+        case ExplorerInputKind::CycleSort:
+            cycle_sort_mode(state);
+            return;
+        case ExplorerInputKind::Reset:
+            reset_demo_tree(state, profile);
+            return;
+        case ExplorerInputKind::Scenario:
+            apply_startup_scenario(state, input.value);
+            return;
+    }
+}
+
+inline ExplorerInputTrace explorer_input_trace(
+        ExplorerState const& state,
+        ExplorerInput const& input) {
+    auto snap = snapshot(state);
+    return ExplorerInputTrace{
+        .input = input,
+        .status = state.status,
+        .relative_location = snap.relative_location,
+        .selected_name = state.selected_name,
+        .operation_label = snap.operation_label,
+        .operation = state.last_operation,
+        .visible_entries = snap.entries.size(),
+        .has_selection = snap.has_selection,
+    };
+}
+
+inline ExplorerDriveResult drive_explorer(
+        std::string_view profile,
+        std::span<ExplorerInput const> inputs) {
+    ExplorerDriveResult result;
+    result.profile = profile.empty() ? "desktop" : std::string{profile};
+    result.state = make_state(result.profile);
+    result.trace.reserve(inputs.size());
+    for (auto const& input : inputs) {
+        apply_explorer_input(result.state, input, result.profile);
+        result.trace.push_back(explorer_input_trace(result.state, input));
+    }
+    result.snapshot = snapshot(result.state);
+    return result;
 }
 
 inline std::string entry_label(Entry const& entry) {

@@ -14,6 +14,7 @@ platforms = [
 "github.com/misut/cppx" = "1.13.0"
 
 [dependencies.path]
+file_explorer_shared = "../../examples/file_explorer_shared"
 phenotype_resources = "../../packages/phenotype_resources"
 
 [sync]

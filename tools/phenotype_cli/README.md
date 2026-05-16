@@ -24,10 +24,26 @@ The initial scope is intentionally narrow:
 - `phenotype package list <root>` scans for package manifests below a root and
   emits a compact package catalog for CI or future bundling, including resource
   counts and catalog diagnostic counts.
+- `phenotype drive file-explorer` applies deterministic typed inputs to the
+  shared desktop/mobile file explorer model without opening a native window.
+  JSON output includes the input trace, sandbox root/current paths, visible
+  entries, selection capabilities, operation receipts, and preview excerpts.
 - `phenotype commands --json` emits machine-readable command metadata from
   `cppx.cli`.
 
 The CLI keeps process execution, artifact writes, device access, and renderer
-control outside the first pass. Future commands can call those edge adapters
-explicitly while preserving the input and output abstraction model documented
-in `docs/PHENOTYPE_CLI_ROADMAP.md`.
+control outside the first pass except for commands that explicitly wrap local
+edge gates. Future commands can call those edge adapters while preserving the
+input and output abstraction model documented in
+`docs/PHENOTYPE_CLI_ROADMAP.md`.
+
+Example:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input select:README.txt \
+  --input duplicate \
+  --input delete
+```

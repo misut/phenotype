@@ -112,6 +112,23 @@ These commands wrap the existing shell gates and report the script exit status,
 timeout state, and output tail as JSON. They are local verification commands,
 not default PR CI jobs.
 
+For file explorer workflow debugging that does not need a native window, use
+the deterministic drive command:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input select:README.txt \
+  --input duplicate \
+  --input delete
+```
+
+The drive output reports the typed input trace, sandbox paths, visible entries,
+selection capabilities, operation receipts, and preview excerpt. It is useful
+for validating view/read/create/duplicate/delete model behavior before running
+the slower desktop/mobile artifact capture gate.
+
 ## Desktop example artifact hook
 
 Native desktop examples can write a startup artifact bundle without adding

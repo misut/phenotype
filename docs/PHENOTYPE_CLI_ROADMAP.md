@@ -119,6 +119,7 @@ Current commands:
 | `phenotype artifact verify-file-explorer` | implemented | Local-only edge wrapper around the desktop/mobile Finder-style artifact gate. This keeps the future replacement command shape visible while shell compatibility remains. |
 | `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, package resource directories, and artifact manifest presence. |
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
+| `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs and emits a stable observation JSON with trace, entries, capabilities, operation receipt, and preview excerpt fields. |
 
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, textual asset placeholders, English/Korean
@@ -204,6 +205,15 @@ without a visible window:
   actual value, region summary, and suggested owner layer without requiring a
   human screenshot comparison.
 
+`phenotype drive file-explorer` is the first concrete runtime-drive command.
+It intentionally starts with the example's shared model rather than a hidden
+native event injector: `ExplorerInput` is the neutral input value, the sandboxed
+file model applies the same operations used by the desktop and mobile UIs, and
+the CLI serializes a final `Snapshot` plus per-input `ExplorerInputTrace`
+records. This gives CI and future agents a cheap way to verify file view,
+read, create, duplicate, delete, sort, and scenario behavior before launching
+slow native artifact captures.
+
 ## Performance and release posture
 
 The CLI should not make production rendering slower:
@@ -233,7 +243,10 @@ The CLI should not make production rendering slower:
    Initial inspect-only parsing now builds the shared pure `ResourceCatalog`;
    bundle output and runtime resource injection still need to adopt it.
 5. Add deterministic CLI input scripts and output observations for
-   `glass_showcase` and `file_explorer_desktop`.
+   `glass_showcase` and `file_explorer_desktop`. Initial
+   `file_explorer_desktop`/mobile model driving is complete through
+   `phenotype drive file-explorer`; native command-buffer observation and
+   `glass_showcase` input scripts remain.
 6. Replace CI and docs references to shell/Python tools with CLI commands.
 7. Remove compatibility wrappers once the CLI covers Android, artifact, and
    package workflows.

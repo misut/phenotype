@@ -73,6 +73,12 @@ jobs:
             esac
 
             case "$path" in
+              examples/file_explorer_shared/*)
+                cli_check=true
+                ;;
+            esac
+
+            case "$path" in
               tools/*|pyproject.toml|uv.lock|.python-version)
                 tools_check=true
                 ;;
@@ -396,7 +402,7 @@ jobs:
           path: |
             tools/phenotype_cli/.exon
             ~/.exon/cache
-          key: cli-package-${{ runner.os }}-${{ hashFiles('mise.toml', 'tools/phenotype_cli/exon.toml') }}
+          key: cli-package-${{ runner.os }}-${{ hashFiles('mise.toml', 'tools/phenotype_cli/exon.toml', 'examples/file_explorer_shared/exon.toml', 'packages/phenotype_resources/exon.toml') }}
           restore-keys: |
             cli-package-${{ runner.os }}-
 
@@ -443,6 +449,8 @@ jobs:
           "$cli" package list --json examples | python3 -m json.tool >/dev/null
           "$cli" package inspect --json examples/file_explorer_desktop | python3 -m json.tool >/dev/null
           "$cli" package inspect --json examples/file_explorer_mobile | python3 -m json.tool >/dev/null
+          "$cli" drive file-explorer --json --input select:README.txt --input duplicate --input delete | python3 -m json.tool >/dev/null
+          "$cli" drive file-explorer --json --profile mobile --scenario created-preview | python3 -m json.tool >/dev/null
 
       - name: Save CLI build artifacts
         if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
