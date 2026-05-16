@@ -175,8 +175,9 @@ mise exec -- exon build
 Pull-request CI does not run these slow startup artifact captures. Code changes
 run the root test matrix, docs changes run the docs WASI build, Python verifier
 tooling changes run the uv-managed verifier checks, and CLI/package-resource
-changes run a lightweight Linux `phenotype_cli` build, package inspection, and
-deterministic file explorer drive check without the root C++ test matrix. The
+changes run a lightweight Linux `phenotype_cli` build, package inspection,
+deterministic file explorer drive check, deterministic glass showcase drive
+check, and targeted shared-package tests without the root C++ test matrix. The
 main-branch push workflow only runs artifact/docs build gates, not the full
 code test matrix or glass artifact capture. WASI root tests, docs builds, and
 CLI package checks run on Linux runners; native artifact builds remain
