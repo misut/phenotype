@@ -83,7 +83,8 @@ The first durable CLI should expose a small command tree with stable JSON:
 | `phenotype artifact verify-file-explorer` | Validate desktop/mobile file explorer artifact contracts. | `tools/verify_file_explorer_artifacts.sh` |
 | `phenotype android doctor/run/install/logs/screencap/contract` | Keep Android workflows under one command namespace. | `tools/android/*.sh` |
 | `phenotype package inspect` | Validate package manifests, assets, locales, fonts, and platform bundle metadata. | new |
-| `phenotype package bundle` | Produce macOS `.app`/`.dmg`, Windows bundle metadata, Android package inputs, and debug-resource inventories. | new |
+| `phenotype package bundle` | Produce staged resource bundles, integrity manifests, and future macOS `.app`/`.dmg`, Windows, Android, and web package inputs. | new |
+| `phenotype package verify-bundle` | Recompute staged bundle resource integrity without the original package root. | new |
 | `phenotype drive <script>` | Feed deterministic CLI input frames into the same input abstraction used by native shells. | new |
 | `phenotype observe <artifact-or-run>` | Emit semantic tree, material plans, runtime summaries, pixel-region summaries, and likely failing pass/layer. | new |
 
@@ -120,7 +121,8 @@ Current commands:
 | `phenotype android doctor/devices/emu-start/emu-stop/build/apk/install/launch/stop/run/logs/screencap/contract/clean` | implemented | Stable CLI namespace over the existing Android edge scripts and Android build command. `--json` emits a process/script result envelope, `--serial` forwards `ANDROID_SERIAL`, and `--state-dir`/`--avd`/`--apk` keep device state explicit. |
 | `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, package resource directories, and artifact manifest presence. |
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
-| `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, and debug manifest references. |
+| `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, debug manifest references, byte counts, content metadata, and SHA-256 digests. |
+| `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource, and reports the same package checks plus bundle integrity totals. |
 | `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs and emits a stable observation JSON with trace, entries, viewport, pure Finder chrome/grid metrics, capabilities, operation receipt, and preview excerpt fields. |
 | `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, and emits a stable JSON launch receipt with build/run output tails, timeout state, artifact bundle summary, and explicit environment overrides. |
 
@@ -200,12 +202,22 @@ resource diagnostics.
 `phenotype package bundle` is the first staging implementation. It keeps
 platform-specific `.app`, `.dmg`, MSI, Android, and web packaging out of scope,
 but copies every declared package resource into an output directory, rejects
-unsafe or package-escaping source paths, and writes a machine-readable
-`phenotype.bundle.json` manifest. The manifest records application identity,
-platform list, default locale/font, debug probe metadata, copied resource
-destinations relative to the output root, byte counts, package checks, and
-structured errors. This gives CI and future native packagers one stable
-resource inventory without requiring native window startup.
+unsafe or package-escaping source paths, computes SHA-256 at the CLI edge, and
+writes a machine-readable `phenotype.bundle.json` manifest. The manifest
+records application identity, platform list, default locale/font, debug probe
+metadata, copied resource destinations relative to the output root, byte
+counts, content metadata, resource intent flags, SHA-256 digests, package
+checks, bundle integrity totals, and structured errors. This gives CI and
+future native packagers one stable resource inventory without requiring native
+window startup.
+
+`phenotype package verify-bundle` makes the staging output self-checking. It
+uses the copied `phenotype.package.toml` as the bundle-local source of truth,
+checks that `phenotype.bundle.json` exists, recomputes SHA-256 for every
+declared asset, locale, font, and debug artifact manifest, and reports exact
+per-file integrity errors. This mirrors Dioxus-style asset collection while
+keeping the filesystem and checksum work in the CLI edge adapter rather than
+in `phenotype.resources`.
 
 ## Diagnostic migration
 
@@ -285,5 +297,8 @@ The CLI should not make production rendering slower:
    `phenotype drive file-explorer`; native command-buffer observation and
    `glass_showcase` input scripts remain.
 6. Replace CI and docs references to shell/Python tools with CLI commands.
+   PR CLI/package checks now parse JSON through `uv run --frozen python`
+   instead of direct `python3`, and staged package bundles are verified through
+   `phenotype package verify-bundle`.
 7. Remove compatibility wrappers once the CLI covers Android, artifact, and
    package workflows.

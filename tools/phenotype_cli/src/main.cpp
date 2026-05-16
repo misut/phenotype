@@ -1,4 +1,6 @@
 import cppx.cli;
+import cppx.checksum;
+import cppx.checksum.system;
 import cppx.process;
 import cppx.process.system;
 import cppx.terminal;
@@ -68,20 +70,31 @@ struct PackageSummary {
 struct BundleFileRecord {
     std::string kind;
     std::string name;
+    std::string content_type;
     fs::path source;
     fs::path destination;
     std::uintmax_t bytes = 0;
+    bool present = false;
     bool copied = false;
+    bool preload = false;
+    bool runtime_visible = false;
+    std::string sha256;
+    std::string integrity_error;
     std::string error;
 };
 
 struct BundleSummary {
+    std::string command = "package bundle";
     fs::path package_root;
     fs::path output_root;
     fs::path manifest_path;
     PackageSummary package;
     std::vector<BundleFileRecord> files;
     std::vector<Check> checks;
+    std::uintmax_t total_bytes = 0;
+    std::size_t verified_file_count = 0;
+    bool bundle_manifest_present = false;
+    std::uintmax_t bundle_manifest_bytes = 0;
     bool ok = false;
     std::string error;
 };
@@ -479,6 +492,18 @@ auto spec() -> cppx::cli::CommandSpec {
                             "phenotype package bundle --json examples/file_explorer_mobile --output /tmp/phenotype-mobile",
                         },
                     },
+                    {
+                        .name = "verify-bundle",
+                        .summary = "Verify a staged package bundle directory",
+                        .options = {help_option(), json_option()},
+                        .positional_name = "path",
+                        .positional_description =
+                            "Bundle directory containing phenotype.bundle.json and staged resources.",
+                        .examples = {
+                            "phenotype package verify-bundle /tmp/phenotype-file-explorer",
+                            "phenotype package verify-bundle --json /tmp/phenotype-mobile",
+                        },
+                    },
                 },
                 .allow_positionals = false,
                 .category = "packaging",
@@ -658,6 +683,17 @@ auto write_text_file(fs::path const& path,
         return false;
     }
     return true;
+}
+
+auto sha256_file_or_error(fs::path const& path)
+    -> std::expected<std::string, std::string> {
+    auto digest = cppx::checksum::system::sha256_file(path);
+    if (digest)
+        return *digest;
+    return std::unexpected{std::format(
+        "{}: {}",
+        cppx::checksum::to_string(digest.error().code),
+        digest.error().message)};
 }
 
 auto trim_copy(std::string_view text) -> std::string {
@@ -1654,16 +1690,65 @@ auto bundle_file_json(BundleFileRecord const& file,
     auto ec = std::error_code{};
     auto relative_destination = fs::relative(file.destination, output_root, ec);
     return std::format(
-        "{{\"kind\":{},\"name\":{},\"source\":{},\"destination\":{},"
-        "\"bytes\":{},\"copied\":{},\"error\":{}}}",
+        "{{\"kind\":{},\"name\":{},\"content_type\":{},"
+        "\"source\":{},\"destination\":{},\"bytes\":{},"
+        "\"present\":{},\"copied\":{},\"preload\":{},"
+        "\"runtime_visible\":{},\"integrity\":{{\"algorithm\":\"sha256\","
+        "\"digest\":{},\"ok\":{},\"error\":{}}},\"error\":{}}}",
         json_string(file.kind),
         json_string(file.name),
+        json_string(file.content_type),
         json_string(path_string(file.source)),
         json_string(ec ? path_string(file.destination)
                        : path_string(relative_destination)),
         file.bytes,
+        file.present ? "true" : "false",
         file.copied ? "true" : "false",
+        file.preload ? "true" : "false",
+        file.runtime_visible ? "true" : "false",
+        json_string(file.sha256),
+        (!file.sha256.empty() && file.integrity_error.empty())
+            ? "true" : "false",
+        json_string(file.integrity_error),
         json_string(file.error));
+}
+
+auto bundle_file_integrity_ok(BundleFileRecord const& file,
+                              bool require_copied) -> bool {
+    return file.present
+        && (!require_copied || file.copied)
+        && file.error.empty()
+        && file.integrity_error.empty()
+        && !file.sha256.empty();
+}
+
+auto bundle_files_integrity_ok(std::span<BundleFileRecord const> files,
+                               bool require_copied) -> bool {
+    return std::ranges::all_of(files, [&](auto const& file) {
+        return bundle_file_integrity_ok(file, require_copied);
+    });
+}
+
+auto bundle_total_bytes(std::span<BundleFileRecord const> files)
+    -> std::uintmax_t {
+    auto total = std::uintmax_t{0};
+    for (auto const& file : files) {
+        if (file.present)
+            total += file.bytes;
+    }
+    return total;
+}
+
+auto bundle_verified_file_count(std::span<BundleFileRecord const> files)
+    -> std::size_t {
+    return static_cast<std::size_t>(std::ranges::count_if(
+        files,
+        [](auto const& file) {
+            return file.present
+                && file.error.empty()
+                && file.integrity_error.empty()
+                && !file.sha256.empty();
+        }));
 }
 
 auto bundle_files_json(std::span<BundleFileRecord const> files,
@@ -1680,14 +1765,19 @@ auto bundle_files_json(std::span<BundleFileRecord const> files,
 
 auto bundle_json(BundleSummary const& summary) -> std::string {
     return std::format(
-        "{{\"schema_version\":1,\"command\":\"package bundle\","
+        "{{\"schema_version\":1,\"command\":{},"
         "\"ok\":{},\"package_root\":{},\"output_root\":{},"
         "\"bundle_manifest\":{},\"application\":{{\"id\":{},"
         "\"display_name\":{},\"version\":{},\"entry\":{},"
         "\"platforms\":{}}},\"defaults\":{{\"locale\":{},"
         "\"font_family\":{}}},\"debug\":{{\"artifact_manifest\":{},"
-        "\"probe_scene\":{},\"verifier\":{}}},\"file_count\":{},"
+        "\"probe_scene\":{},\"verifier\":{}}},"
+        "\"integrity\":{{\"algorithm\":\"sha256\",\"ok\":{},"
+        "\"file_count\":{},\"verified_file_count\":{},"
+        "\"total_bytes\":{},\"bundle_manifest\":{{\"present\":{},"
+        "\"bytes\":{}}}}},\"file_count\":{},"
         "\"files\":{},\"checks\":{},\"error\":{}}}",
+        json_string(summary.command),
         summary.ok ? "true" : "false",
         json_string(path_string(summary.package_root)),
         json_string(path_string(summary.output_root)),
@@ -1702,6 +1792,13 @@ auto bundle_json(BundleSummary const& summary) -> std::string {
         json_string(summary.package.catalog.debug.artifact_manifest),
         json_string(summary.package.catalog.debug.probe_scene),
         json_string(summary.package.catalog.debug.verifier),
+        bundle_files_integrity_ok(summary.files, summary.command == "package bundle")
+            ? "true" : "false",
+        summary.files.size(),
+        summary.verified_file_count,
+        summary.total_bytes,
+        summary.bundle_manifest_present ? "true" : "false",
+        summary.bundle_manifest_bytes,
         summary.files.size(),
         bundle_files_json(summary.files, summary.output_root),
         checks_json(summary.checks),
@@ -1739,12 +1836,18 @@ auto copy_bundle_file(fs::path const& package_root,
                       fs::path const& output_root,
                       std::string kind,
                       std::string name,
-                      fs::path relative_source) -> BundleFileRecord {
+                      fs::path relative_source,
+                      std::string content_type = {},
+                      bool preload = false,
+                      bool runtime_visible = false) -> BundleFileRecord {
     BundleFileRecord record{
         .kind = std::move(kind),
         .name = std::move(name),
+        .content_type = std::move(content_type),
         .source = package_root / relative_source,
         .destination = output_root / relative_source,
+        .preload = preload,
+        .runtime_visible = runtime_visible,
     };
 
     if (!safe_relative_path(relative_source)) {
@@ -1760,6 +1863,7 @@ auto copy_bundle_file(fs::path const& package_root,
         record.error = ec ? ec.message() : "source file is missing";
         return record;
     }
+    record.present = true;
 
     fs::create_directories(record.destination.parent_path(), ec);
     if (ec) {
@@ -1780,7 +1884,125 @@ auto copy_bundle_file(fs::path const& package_root,
 
     record.bytes = file_size_or_zero(record.destination);
     record.copied = true;
+    if (auto digest = sha256_file_or_error(record.destination)) {
+        record.sha256 = *digest;
+    } else {
+        record.integrity_error = digest.error();
+    }
     return record;
+}
+
+auto inspect_bundle_file(fs::path const& bundle_root,
+                         std::string kind,
+                         std::string name,
+                         fs::path relative_source,
+                         std::string content_type = {},
+                         bool preload = false,
+                         bool runtime_visible = false) -> BundleFileRecord {
+    BundleFileRecord record{
+        .kind = std::move(kind),
+        .name = std::move(name),
+        .content_type = std::move(content_type),
+        .source = bundle_root / relative_source,
+        .destination = bundle_root / relative_source,
+        .preload = preload,
+        .runtime_visible = runtime_visible,
+    };
+
+    if (!safe_relative_path(relative_source)) {
+        record.error = "source path must be a safe relative path";
+        return record;
+    }
+
+    if (!path_stays_under_root(bundle_root, record.destination, record.error))
+        return record;
+
+    auto ec = std::error_code{};
+    if (!fs::is_regular_file(record.destination, ec) || ec) {
+        record.error = ec ? ec.message() : "bundle file is missing";
+        return record;
+    }
+
+    record.present = true;
+    record.bytes = file_size_or_zero(record.destination);
+    if (auto digest = sha256_file_or_error(record.destination)) {
+        record.sha256 = *digest;
+    } else {
+        record.integrity_error = digest.error();
+    }
+    return record;
+}
+
+void append_expected_package_files(BundleSummary& bundle, bool copy_files) {
+    auto append = [&](std::string kind,
+                      std::string name,
+                      fs::path source,
+                      std::string content_type = {},
+                      bool preload = false,
+                      bool runtime_visible = false) {
+        if (copy_files) {
+            bundle.files.push_back(copy_bundle_file(
+                bundle.package_root,
+                bundle.output_root,
+                std::move(kind),
+                std::move(name),
+                std::move(source),
+                std::move(content_type),
+                preload,
+                runtime_visible));
+        } else {
+            bundle.files.push_back(inspect_bundle_file(
+                bundle.output_root,
+                std::move(kind),
+                std::move(name),
+                std::move(source),
+                std::move(content_type),
+                preload,
+                runtime_visible));
+        }
+    };
+
+    append("manifest",
+           "phenotype.package.toml",
+           "phenotype.package.toml",
+           "application/toml");
+
+    for (auto const& asset : bundle.package.catalog.assets) {
+        append("asset",
+               asset.name,
+               asset.source,
+               asset.content_type,
+               asset.preload,
+               asset.runtime_visible);
+    }
+    for (auto const& locale : bundle.package.catalog.locales) {
+        append("locale", locale.tag, locale.source, "application/toml");
+    }
+    for (auto const& font : bundle.package.catalog.fonts) {
+        append("font", font.family, font.source, "application/toml");
+    }
+    if (!bundle.package.catalog.debug.artifact_manifest.empty()) {
+        append("debug",
+               "artifact_manifest",
+               bundle.package.catalog.debug.artifact_manifest,
+               "application/json");
+    }
+}
+
+bool write_bundle_manifest(BundleSummary& bundle) {
+    bundle.bundle_manifest_present = true;
+    for (int attempt = 0; attempt < 4; ++attempt) {
+        auto manifest = bundle_json(bundle);
+        if (!write_text_file(bundle.manifest_path, manifest, bundle.error)) {
+            bundle.bundle_manifest_present = false;
+            return false;
+        }
+        auto bytes = file_size_or_zero(bundle.manifest_path);
+        if (bytes == bundle.bundle_manifest_bytes)
+            return true;
+        bundle.bundle_manifest_bytes = bytes;
+    }
+    return true;
 }
 
 auto build_package_bundle(fs::path package_root,
@@ -1803,61 +2025,58 @@ auto build_package_bundle(fs::path package_root,
         return bundle;
     }
 
-    bundle.files.push_back(copy_bundle_file(
-        bundle.package_root,
-        bundle.output_root,
-        "manifest",
-        "phenotype.package.toml",
-        "phenotype.package.toml"));
+    append_expected_package_files(bundle, true);
+    bundle.total_bytes = bundle_total_bytes(bundle.files);
+    bundle.verified_file_count = bundle_verified_file_count(bundle.files);
 
-    for (auto const& asset : bundle.package.catalog.assets) {
-        bundle.files.push_back(copy_bundle_file(
-            bundle.package_root,
-            bundle.output_root,
-            "asset",
-            asset.name,
-            asset.source));
-    }
-    for (auto const& locale : bundle.package.catalog.locales) {
-        bundle.files.push_back(copy_bundle_file(
-            bundle.package_root,
-            bundle.output_root,
-            "locale",
-            locale.tag,
-            locale.source));
-    }
-    for (auto const& font : bundle.package.catalog.fonts) {
-        bundle.files.push_back(copy_bundle_file(
-            bundle.package_root,
-            bundle.output_root,
-            "font",
-            font.family,
-            font.source));
-    }
-    if (!bundle.package.catalog.debug.artifact_manifest.empty()) {
-        bundle.files.push_back(copy_bundle_file(
-            bundle.package_root,
-            bundle.output_root,
-            "debug",
-            "artifact_manifest",
-            bundle.package.catalog.debug.artifact_manifest));
-    }
-
-    auto copied = std::ranges::all_of(bundle.files, [](auto const& file) {
-        return file.copied;
-    });
-    if (!copied) {
-        bundle.error = "one or more package resources failed to copy";
+    if (!bundle_files_integrity_ok(bundle.files, true)) {
+        bundle.error = "one or more package resources failed to copy or verify";
         return bundle;
     }
 
     bundle.manifest_path = bundle.output_root / "phenotype.bundle.json";
     bundle.ok = true;
-    auto manifest = bundle_json(bundle);
-    if (!write_text_file(bundle.manifest_path, manifest, bundle.error)) {
+    if (!write_bundle_manifest(bundle)) {
         bundle.ok = false;
         return bundle;
     }
+    return bundle;
+}
+
+auto verify_package_bundle(fs::path bundle_root) -> BundleSummary {
+    BundleSummary bundle{
+        .command = "package verify-bundle",
+        .package_root = bundle_root,
+        .output_root = std::move(bundle_root),
+    };
+    bundle.manifest_path = bundle.output_root / "phenotype.bundle.json";
+    bundle.package = package_summary(bundle.output_root);
+    bundle.checks = package_checks(bundle.package);
+    bundle.bundle_manifest_present = path_exists(bundle.manifest_path);
+    bundle.bundle_manifest_bytes = file_size_or_zero(bundle.manifest_path);
+    bundle.checks.push_back({
+        .name = "bundle_manifest",
+        .ok = bundle.bundle_manifest_present && bundle.bundle_manifest_bytes > 0,
+        .detail = std::format("phenotype.bundle.json ({} bytes)",
+                              bundle.bundle_manifest_bytes),
+        .hint = "Run phenotype package bundle before verifying a bundle directory.",
+    });
+
+    if (!all_ok(bundle.checks)) {
+        bundle.error = "bundle package checks failed";
+        return bundle;
+    }
+
+    append_expected_package_files(bundle, false);
+    bundle.total_bytes = bundle_total_bytes(bundle.files);
+    bundle.verified_file_count = bundle_verified_file_count(bundle.files);
+
+    if (!bundle_files_integrity_ok(bundle.files, false)) {
+        bundle.error = "one or more staged package resources failed integrity validation";
+        return bundle;
+    }
+
+    bundle.ok = true;
     return bundle;
 }
 
@@ -3102,9 +3321,8 @@ int run_package_bundle(cppx::cli::Invocation const& invocation) {
                                  : cppx::terminal::StatusKind::skip},
             {.label = "files",
              .value = std::format("{}", bundle.files.size()),
-             .status = std::ranges::all_of(bundle.files, [](auto const& file) {
-                 return file.copied;
-             }) ? cppx::terminal::StatusKind::ok
+             .status = bundle_files_integrity_ok(bundle.files, true)
+                ? cppx::terminal::StatusKind::ok
                 : cppx::terminal::StatusKind::fail},
         };
         std::println("phenotype package bundle");
@@ -3115,6 +3333,53 @@ int run_package_bundle(cppx::cli::Invocation const& invocation) {
                              .severity = cppx::terminal::DiagnosticSeverity::error,
                              .message = bundle.error,
                              .context = "package bundle",
+                         }));
+        }
+    }
+    return bundle.ok ? 0 : 1;
+}
+
+int run_package_verify_bundle(cppx::cli::Invocation const& invocation) {
+    auto path = first_positional_or_error(invocation, "package verify-bundle");
+    if (!path) {
+        return print_error(
+            "package verify-bundle",
+            path.error(),
+            invocation.has("json"));
+    }
+
+    auto bundle = verify_package_bundle(fs::path{*path});
+    if (invocation.has("json")) {
+        std::println("{}", bundle_json(bundle));
+    } else {
+        auto lines = std::vector<cppx::terminal::StatusLine>{
+            {.label = "bundle",
+             .value = path_string(bundle.output_root),
+             .status = all_ok(bundle.checks)
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::fail},
+            {.label = "manifest",
+             .value = path_string(bundle.manifest_path),
+             .status = bundle.bundle_manifest_present
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::fail},
+            {.label = "integrity",
+             .value = std::format("{}/{} files, {} bytes",
+                                  bundle.verified_file_count,
+                                  bundle.files.size(),
+                                  bundle.total_bytes),
+             .status = bundle_files_integrity_ok(bundle.files, false)
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::fail},
+        };
+        std::println("phenotype package verify-bundle");
+        std::println("{}", cppx::terminal::format_status_frame(lines, false));
+        if (!bundle.error.empty()) {
+            std::println("{}",
+                         cppx::terminal::format_diagnostic({
+                             .severity = cppx::terminal::DiagnosticSeverity::error,
+                             .message = bundle.error,
+                             .context = "package verify-bundle",
                          }));
         }
     }
@@ -3456,6 +3721,9 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "package", "bundle"})
         return run_package_bundle(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "package", "verify-bundle"})
+        return run_package_verify_bundle(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "drive", "file-explorer"})
         return run_drive_file_explorer(*parsed);
