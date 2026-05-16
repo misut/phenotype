@@ -73,6 +73,14 @@ jobs:
             esac
 
             case "$path" in
+              packages/phenotype_resources/*)
+                cli_check=true
+                package_resource_check=true
+                continue
+                ;;
+            esac
+
+            case "$path" in
               tools/android/*)
                 tools_check=true
                 cli_check=true
@@ -483,6 +491,12 @@ jobs:
           eval "$(intron env)"
           cd tools/phenotype_cli
           exon build
+
+      - name: Test phenotype resources package
+        run: |
+          eval "$(intron env)"
+          cd packages/phenotype_resources
+          exon test
 
       - name: Validate CLI JSON commands
         run: |

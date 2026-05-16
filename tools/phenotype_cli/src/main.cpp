@@ -809,71 +809,6 @@ auto quoted_value_for_key(std::string_view line, std::string_view key)
     return std::nullopt;
 }
 
-auto quoted_array_for_key(std::string_view line, std::string_view key)
-    -> std::optional<std::vector<std::string>> {
-    auto trimmed = strip_toml_comment(line);
-    if (!trimmed.starts_with(key))
-        return std::nullopt;
-    auto rest = trim_copy(std::string_view{trimmed}.substr(key.size()));
-    if (!rest.starts_with("="))
-        return std::nullopt;
-    rest = trim_copy(std::string_view{rest}.substr(1));
-    if (rest.size() < 2 || rest.front() != '[' || rest.back() != ']')
-        return std::nullopt;
-
-    auto values = std::vector<std::string>{};
-    auto token = std::string{};
-    auto in_string = false;
-    auto escaped = false;
-    for (std::size_t i = 1; i + 1 < rest.size(); ++i) {
-        auto ch = rest[i];
-        if (!in_string) {
-            if (ch == '"') {
-                in_string = true;
-                token.clear();
-            }
-            continue;
-        }
-        if (escaped) {
-            switch (ch) {
-            case 'n': token.push_back('\n'); break;
-            case 'r': token.push_back('\r'); break;
-            case 't': token.push_back('\t'); break;
-            default: token.push_back(ch); break;
-            }
-            escaped = false;
-            continue;
-        }
-        if (ch == '\\') {
-            escaped = true;
-            continue;
-        }
-        if (ch == '"') {
-            values.push_back(token);
-            in_string = false;
-            continue;
-        }
-        token.push_back(ch);
-    }
-    return values;
-}
-
-auto bool_value_for_key(std::string_view line, std::string_view key)
-    -> std::optional<bool> {
-    auto trimmed = strip_toml_comment(line);
-    if (!trimmed.starts_with(key))
-        return std::nullopt;
-    auto rest = trim_copy(std::string_view{trimmed}.substr(key.size()));
-    if (!rest.starts_with("="))
-        return std::nullopt;
-    rest = trim_copy(std::string_view{rest}.substr(1));
-    if (rest == "true")
-        return true;
-    if (rest == "false")
-        return false;
-    return std::nullopt;
-}
-
 auto count_regular_files(fs::path const& root) -> std::size_t {
     if (!path_is_directory(root))
         return 0;
@@ -915,38 +850,7 @@ auto join_path(fs::path const& base, fs::path const& child) -> std::string {
 
 auto parse_locale_strings(fs::path const& path)
     -> std::vector<phenotype::LocaleString> {
-    auto strings = std::vector<phenotype::LocaleString>{};
-    auto text = read_text_file(path);
-    auto input = std::istringstream{text};
-    auto line = std::string{};
-    auto section = std::string{};
-    while (std::getline(input, line)) {
-        auto trimmed = strip_toml_comment(line);
-        if (trimmed.empty())
-            continue;
-        if (trimmed.size() >= 2 && trimmed.front() == '['
-            && trimmed.back() == ']') {
-            section = trim_copy(std::string_view{trimmed}.substr(
-                1,
-                trimmed.size() - 2));
-            continue;
-        }
-        auto eq = trimmed.find('=');
-        if (eq == std::string::npos)
-            continue;
-        auto key = trim_copy(std::string_view{trimmed}.substr(0, eq));
-        if (key.empty())
-            continue;
-        auto value = quoted_value_for_key(trimmed, key);
-        if (!value)
-            continue;
-        auto full_key = section.empty() ? key : section + "." + key;
-        strings.push_back({
-            .key = std::move(full_key),
-            .value = std::move(*value),
-        });
-    }
-    return strings;
+    return phenotype::parse_resource_locale_strings(read_text_file(path));
 }
 
 auto doctor_checks() -> std::vector<Check> {
@@ -1163,177 +1067,18 @@ auto package_summary(fs::path root) -> PackageSummary {
 
     if (summary.manifest) {
         auto text = read_text_file(manifest_path);
-        auto input = std::istringstream{text};
-        auto line = std::string{};
-        enum class Section {
-            None,
-            Application,
-            Resources,
-            Debug,
-            Asset,
-            Locale,
-            Font,
-        };
-        auto section = Section::None;
-        while (std::getline(input, line)) {
-            auto trimmed = strip_toml_comment(line);
-            if (trimmed.empty())
-                continue;
-
-            if (trimmed == "[application]") {
-                summary.application_section = true;
-                section = Section::Application;
-                continue;
-            }
-            if (trimmed == "[resources]") {
-                summary.resources_section = true;
-                section = Section::Resources;
-                continue;
-            }
-            if (trimmed == "[debug]") {
-                summary.debug_section = true;
-                section = Section::Debug;
-                continue;
-            }
-            if (trimmed == "[[assets]]") {
-                summary.catalog.assets.push_back({});
-                section = Section::Asset;
-                continue;
-            }
-            if (trimmed == "[[locales]]") {
-                summary.catalog.locales.push_back({});
-                section = Section::Locale;
-                continue;
-            }
-            if (trimmed == "[[fonts]]") {
-                summary.catalog.fonts.push_back({});
-                section = Section::Font;
-                continue;
-            }
-
-            if (section == Section::Application) {
-                if (auto value = quoted_value_for_key(trimmed, "id")) {
-                    summary.catalog.application.id = *value;
-                    continue;
-                }
-                if (auto value = quoted_value_for_key(trimmed, "display_name")) {
-                    summary.catalog.application.display_name = *value;
-                    continue;
-                }
-                if (auto value = quoted_value_for_key(trimmed, "version")) {
-                    summary.catalog.application.version = *value;
-                    continue;
-                }
-                if (auto value = quoted_value_for_key(trimmed, "entry")) {
-                    summary.catalog.application.entry = *value;
-                    continue;
-                }
-                if (auto value = quoted_array_for_key(trimmed, "platforms")) {
-                    summary.catalog.application.platforms = std::move(*value);
-                    continue;
-                }
-            }
-            if (section == Section::Resources) {
-                if (auto value = quoted_value_for_key(trimmed, "default_locale")) {
-                    summary.catalog.default_locale = *value;
-                    continue;
-                }
-                if (auto value = quoted_value_for_key(trimmed, "default_font_family")) {
-                    summary.catalog.default_font_family = *value;
-                    continue;
-                }
-                if (auto value = quoted_value_for_key(trimmed, "artifact_manifest")) {
-                    summary.artifact_manifest = *value;
-                    summary.artifact_manifest_exists =
-                        path_exists(summary.root / *value);
-                    continue;
-                }
-            }
-            if (section == Section::Debug) {
-                if (auto value = quoted_value_for_key(trimmed, "probe_scene")) {
-                    summary.catalog.debug.probe_scene = *value;
-                    continue;
-                }
-                if (auto value = quoted_value_for_key(trimmed, "verifier")) {
-                    summary.catalog.debug.verifier = *value;
-                    continue;
-                }
-                if (auto value = quoted_value_for_key(trimmed, "artifact_manifest")) {
-                    summary.catalog.debug.artifact_manifest = *value;
-                    if (summary.artifact_manifest.empty()) {
-                        summary.artifact_manifest = *value;
-                        summary.artifact_manifest_exists =
-                            path_exists(summary.root / *value);
-                    }
-                    continue;
-                }
-            }
-            if (section == Section::Asset && !summary.catalog.assets.empty()) {
-                auto& asset = summary.catalog.assets.back();
-                if (auto value = quoted_value_for_key(trimmed, "name")) {
-                    asset.name = *value;
-                    continue;
-                }
-                if (auto value = quoted_value_for_key(trimmed, "source")) {
-                    asset.source = *value;
-                    ++summary.source_reference_count;
-                    if (!path_exists(summary.root / *value))
-                        summary.missing_sources.push_back(*value);
-                    continue;
-                }
-                if (auto value = quoted_value_for_key(trimmed, "content_type")) {
-                    asset.content_type = *value;
-                    continue;
-                }
-                if (auto value = bool_value_for_key(trimmed, "preload")) {
-                    asset.preload = *value;
-                    continue;
-                }
-                if (auto value = bool_value_for_key(trimmed, "runtime_visible")) {
-                    asset.runtime_visible = *value;
-                    continue;
-                }
-            }
-            if (section == Section::Locale && !summary.catalog.locales.empty()) {
-                auto& locale = summary.catalog.locales.back();
-                if (auto value = quoted_value_for_key(trimmed, "tag")) {
-                    locale.tag = *value;
-                    continue;
-                }
-                if (auto value = quoted_value_for_key(trimmed, "source")) {
-                    locale.source = *value;
-                    ++summary.source_reference_count;
-                    if (!path_exists(summary.root / *value))
-                        summary.missing_sources.push_back(*value);
-                    continue;
-                }
-                if (auto value = quoted_array_for_key(trimmed, "fallback")) {
-                    locale.fallback = std::move(*value);
-                    continue;
-                }
-            }
-            if (section == Section::Font && !summary.catalog.fonts.empty()) {
-                auto& font = summary.catalog.fonts.back();
-                if (auto value = quoted_value_for_key(trimmed, "family")) {
-                    font.family = *value;
-                    continue;
-                }
-                if (auto value = quoted_value_for_key(trimmed, "source")) {
-                    font.source = *value;
-                    ++summary.source_reference_count;
-                    if (!path_exists(summary.root / *value))
-                        summary.missing_sources.push_back(*value);
-                    continue;
-                }
-                if (auto value = bool_value_for_key(trimmed, "register")) {
-                    font.register_font = *value;
-                    continue;
-                }
-                if (auto value = quoted_array_for_key(trimmed, "fallback")) {
-                    font.fallback = std::move(*value);
-                    continue;
-                }
-            }
+        auto parsed = phenotype::parse_resource_manifest(text);
+        summary.catalog = std::move(parsed.catalog);
+        summary.application_section = parsed.application_section;
+        summary.resources_section = parsed.resources_section;
+        summary.debug_section = parsed.debug_section;
+        summary.artifact_manifest = std::move(parsed.artifact_manifest);
+        summary.artifact_manifest_exists = !summary.artifact_manifest.empty()
+            && path_exists(summary.root / summary.artifact_manifest);
+        summary.source_reference_count = parsed.source_references.size();
+        for (auto const& source : parsed.source_references) {
+            if (!path_exists(summary.root / source))
+                summary.missing_sources.push_back(source);
         }
     }
     summary.application_id = summary.catalog.application.id;

@@ -189,13 +189,13 @@ must become structured CLI diagnostics before launch, not late renderer
 surprises.
 
 `phenotype.resources` now owns that pure snapshot shape as the internal
-`packages/phenotype_resources` path package. Package parsers and bundle builders
-remain edge adapters, while core code and CLI commands receive a
-`ResourceCatalog` with application metadata, logical assets, locale tables,
-font descriptors, and debug-resource descriptors. The module validates
-duplicates, required locale-key coverage, default locale/font references,
-artifact manifest metadata, and verifier metadata without reading files. The
-CLI manifest parser now constructs this shared catalog before launch or future
+`packages/phenotype_resources` path package. Filesystem reads and bundle writes
+remain CLI edge effects, while manifest and locale parsing are pure
+text-to-value transformations. The module parses `phenotype.package.toml` text
+into a `ResourceCatalog`, parses locale TOML text into `LocaleString` entries,
+and validates duplicates, required locale-key coverage, default locale/font
+references, artifact manifest metadata, and verifier metadata without reading
+files. CLI commands receive this shared catalog before launch or future
 bundling, and `package inspect --json` exposes the normalized catalog plus
 resource diagnostics.
 

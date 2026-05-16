@@ -71,6 +71,73 @@ int main() {
     auto diagnostics = phenotype::validate_resource_catalog(catalog, required);
     assert(diagnostics.empty());
 
+    auto parsed = phenotype::parse_resource_manifest(R"(
+[application]
+id = "com.misut.phenotype.parser-test"
+display_name = "Parser Test"
+version = "1.2.3"
+platforms = ["macos", "windows"]
+entry = "parser_test"
+
+[resources]
+default_locale = "en"
+default_font_family = "Pretendard"
+artifact_manifest = "artifact_manifest.json"
+
+[[assets]]
+name = "app.icon"
+source = "assets/icon.txt"
+content_type = "text/plain"
+preload = true
+runtime_visible = false
+
+[[locales]]
+tag = "en"
+source = "locales/en.toml"
+fallback = []
+
+[[locales]]
+tag = "ko"
+source = "locales/ko.toml"
+fallback = ["en"]
+
+[[fonts]]
+family = "Pretendard"
+source = "fonts/pretendard.alias.toml"
+register = false
+fallback = ["system-ui", "Apple SD Gothic Neo"]
+
+[debug]
+artifact_manifest = "artifact_manifest.json"
+probe_scene = "parser-probe"
+verifier = "tools/verify_file_explorer_artifacts.sh"
+)");
+    assert(parsed.application_section);
+    assert(parsed.resources_section);
+    assert(parsed.debug_section);
+    assert(parsed.artifact_manifest == "artifact_manifest.json");
+    assert(parsed.source_references.size() == 4);
+    assert(parsed.catalog.application.id == "com.misut.phenotype.parser-test");
+    assert(parsed.catalog.application.platforms.size() == 2);
+    assert(parsed.catalog.assets.size() == 1);
+    assert(parsed.catalog.assets[0].preload);
+    assert(!parsed.catalog.assets[0].runtime_visible);
+    assert(parsed.catalog.locales.size() == 2);
+    assert(parsed.catalog.locales[1].fallback.size() == 1);
+    assert(parsed.catalog.fonts.size() == 1);
+    assert(parsed.catalog.fonts[0].fallback.size() == 2);
+    assert(parsed.catalog.debug.probe_scene == "parser-probe");
+
+    parsed.catalog.locales[0].strings =
+        phenotype::parse_resource_locale_strings(R"(
+title = "Files"
+[actions]
+delete = "Move to Trash"
+)");
+    assert(parsed.catalog.locales[0].strings.size() == 2);
+    assert(parsed.catalog.locales[0].strings[0].key == "title");
+    assert(parsed.catalog.locales[0].strings[1].key == "actions.delete");
+
     catalog.assets.push_back({
         .name = "app.icon",
         .source = "assets/duplicate.txt",

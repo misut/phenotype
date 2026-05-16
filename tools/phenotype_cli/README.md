@@ -26,7 +26,8 @@ The initial scope is intentionally narrow:
   application/debug metadata, declared resource counts, referenced `source`
   files, Pretendard default-font policy, asset layout, locale layout, and font
   layout. JSON output includes the normalized `ResourceCatalog` produced by the
-  shared pure `phenotype.resources` path package.
+  shared pure `phenotype.resources` path package; the CLI only reads files and
+  checks paths, while manifest and locale text parsing stay in the pure package.
 - `phenotype package list <root>` scans for package manifests below a root and
   emits a compact package catalog for CI or future bundling, including resource
   counts and catalog diagnostic counts.
