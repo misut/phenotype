@@ -2704,9 +2704,11 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                                         float x2, float y2) {
                     float dx = x2 - x1;
                     float dy = y2 - y1;
-                    if (dx == 0.0f && dy == 0.0f) return;
+                    float line_len = std::sqrt(dx * dx + dy * dy);
+                    if (line_len <= 0.0f || thickness <= 0.0f)
+                        return;
+                    float half_th = thickness * 0.5f;
                     if (dx == 0.0f || dy == 0.0f) {
-                        float line_len = std::sqrt(dx * dx + dy * dy);
                         float w = (dy == 0.0f) ? line_len : thickness;
                         float h = (dx == 0.0f) ? line_len : thickness;
                         float x = (dx == 0.0f)
@@ -2718,15 +2720,13 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                         append_color_instance(
                             scratch.batches.back().colors,
                             x, y, w, h, cr, cg, cb, ca,
-                            0.0f, 0.0f, 3.0f);
+                            half_th, 0.0f, 2.0f);
                     } else {
-                        float line_len = std::sqrt(dx * dx + dy * dy);
                         float step = thickness * 0.5f;
                         if (step < 0.5f) step = 0.5f;
                         int n_steps = static_cast<int>(
                             std::ceil(line_len / step));
                         if (n_steps < 1) n_steps = 1;
-                        float half_th = thickness * 0.5f;
                         auto& dst = scratch.batches.back().colors;
                         for (int i = 0; i <= n_steps; ++i) {
                             float t = static_cast<float>(i)
@@ -2737,7 +2737,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                                 dst,
                                 ccx - half_th, ccy - half_th,
                                 thickness, thickness,
-                                cr, cg, cb, ca, 0.0f, 0.0f, 0.0f);
+                                cr, cg, cb, ca, half_th, 0.0f, 2.0f);
                         }
                     }
                 };
