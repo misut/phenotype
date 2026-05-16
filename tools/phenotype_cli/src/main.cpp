@@ -2,6 +2,7 @@ import cppx.cli;
 import cppx.process;
 import cppx.process.system;
 import cppx.terminal;
+import phenotype.resources;
 import std;
 
 namespace {
@@ -49,12 +50,15 @@ struct PackageSummary {
     std::string artifact_manifest;
     std::string debug_probe_scene;
     std::string debug_verifier;
+    phenotype::ResourceCatalog catalog;
+    std::vector<phenotype::ResourceDiagnostic> catalog_diagnostics;
     std::vector<std::string> missing_sources;
     std::uintmax_t manifest_bytes = 0;
     std::size_t manifest_asset_count = 0;
     std::size_t manifest_locale_count = 0;
     std::size_t manifest_font_count = 0;
     std::size_t source_reference_count = 0;
+    std::size_t locale_string_count = 0;
     std::size_t asset_file_count = 0;
     std::size_t locale_file_count = 0;
     std::size_t font_file_count = 0;
@@ -454,6 +458,22 @@ auto quoted_array_for_key(std::string_view line, std::string_view key)
     return values;
 }
 
+auto bool_value_for_key(std::string_view line, std::string_view key)
+    -> std::optional<bool> {
+    auto trimmed = strip_toml_comment(line);
+    if (!trimmed.starts_with(key))
+        return std::nullopt;
+    auto rest = trim_copy(std::string_view{trimmed}.substr(key.size()));
+    if (!rest.starts_with("="))
+        return std::nullopt;
+    rest = trim_copy(std::string_view{rest}.substr(1));
+    if (rest == "true")
+        return true;
+    if (rest == "false")
+        return false;
+    return std::nullopt;
+}
+
 auto count_regular_files(fs::path const& root) -> std::size_t {
     if (!path_is_directory(root))
         return 0;
@@ -491,6 +511,42 @@ auto find_repo_root(fs::path start) -> std::optional<fs::path> {
 auto join_path(fs::path const& base, fs::path const& child) -> std::string {
     auto ec = std::error_code{};
     return path_string(fs::relative(base / child, base, ec));
+}
+
+auto parse_locale_strings(fs::path const& path)
+    -> std::vector<phenotype::LocaleString> {
+    auto strings = std::vector<phenotype::LocaleString>{};
+    auto text = read_text_file(path);
+    auto input = std::istringstream{text};
+    auto line = std::string{};
+    auto section = std::string{};
+    while (std::getline(input, line)) {
+        auto trimmed = strip_toml_comment(line);
+        if (trimmed.empty())
+            continue;
+        if (trimmed.size() >= 2 && trimmed.front() == '['
+            && trimmed.back() == ']') {
+            section = trim_copy(std::string_view{trimmed}.substr(
+                1,
+                trimmed.size() - 2));
+            continue;
+        }
+        auto eq = trimmed.find('=');
+        if (eq == std::string::npos)
+            continue;
+        auto key = trim_copy(std::string_view{trimmed}.substr(0, eq));
+        if (key.empty())
+            continue;
+        auto value = quoted_value_for_key(trimmed, key);
+        if (!value)
+            continue;
+        auto full_key = section.empty() ? key : section + "." + key;
+        strings.push_back({
+            .key = std::move(full_key),
+            .value = std::move(*value),
+        });
+    }
+    return strings;
 }
 
 auto doctor_checks() -> std::vector<Check> {
@@ -693,6 +749,8 @@ auto package_summary(fs::path root) -> PackageSummary {
     auto summary = PackageSummary{.root = std::move(root)};
     summary.exists = path_exists(summary.root);
     summary.is_directory = path_is_directory(summary.root);
+    summary.catalog.default_locale = "en";
+    summary.catalog.default_font_family = "Pretendard";
     auto manifest_path = summary.root / "phenotype.package.toml";
     summary.manifest = path_exists(manifest_path);
     summary.manifest_bytes = file_size_or_zero(manifest_path);
@@ -738,44 +796,52 @@ auto package_summary(fs::path root) -> PackageSummary {
                 continue;
             }
             if (trimmed == "[[assets]]") {
-                ++summary.manifest_asset_count;
+                summary.catalog.assets.push_back({});
                 section = Section::Asset;
                 continue;
             }
             if (trimmed == "[[locales]]") {
-                ++summary.manifest_locale_count;
+                summary.catalog.locales.push_back({});
                 section = Section::Locale;
                 continue;
             }
             if (trimmed == "[[fonts]]") {
-                ++summary.manifest_font_count;
+                summary.catalog.fonts.push_back({});
                 section = Section::Font;
                 continue;
             }
 
             if (section == Section::Application) {
                 if (auto value = quoted_value_for_key(trimmed, "id")) {
-                    summary.application_id = *value;
+                    summary.catalog.application.id = *value;
                     continue;
                 }
                 if (auto value = quoted_value_for_key(trimmed, "display_name")) {
-                    summary.display_name = *value;
+                    summary.catalog.application.display_name = *value;
                     continue;
                 }
                 if (auto value = quoted_value_for_key(trimmed, "version")) {
-                    summary.version = *value;
+                    summary.catalog.application.version = *value;
                     continue;
                 }
                 if (auto value = quoted_value_for_key(trimmed, "entry")) {
-                    summary.entry = *value;
+                    summary.catalog.application.entry = *value;
                     continue;
                 }
                 if (auto value = quoted_array_for_key(trimmed, "platforms")) {
-                    summary.platforms = std::move(*value);
+                    summary.catalog.application.platforms = std::move(*value);
                     continue;
                 }
             }
             if (section == Section::Resources) {
+                if (auto value = quoted_value_for_key(trimmed, "default_locale")) {
+                    summary.catalog.default_locale = *value;
+                    continue;
+                }
+                if (auto value = quoted_value_for_key(trimmed, "default_font_family")) {
+                    summary.catalog.default_font_family = *value;
+                    continue;
+                }
                 if (auto value = quoted_value_for_key(trimmed, "artifact_manifest")) {
                     summary.artifact_manifest = *value;
                     summary.artifact_manifest_exists =
@@ -785,14 +851,15 @@ auto package_summary(fs::path root) -> PackageSummary {
             }
             if (section == Section::Debug) {
                 if (auto value = quoted_value_for_key(trimmed, "probe_scene")) {
-                    summary.debug_probe_scene = *value;
+                    summary.catalog.debug.probe_scene = *value;
                     continue;
                 }
                 if (auto value = quoted_value_for_key(trimmed, "verifier")) {
-                    summary.debug_verifier = *value;
+                    summary.catalog.debug.verifier = *value;
                     continue;
                 }
                 if (auto value = quoted_value_for_key(trimmed, "artifact_manifest")) {
+                    summary.catalog.debug.artifact_manifest = *value;
                     if (summary.artifact_manifest.empty()) {
                         summary.artifact_manifest = *value;
                         summary.artifact_manifest_exists =
@@ -801,18 +868,115 @@ auto package_summary(fs::path root) -> PackageSummary {
                     continue;
                 }
             }
-            if (auto value = quoted_value_for_key(trimmed, "default_font_family")) {
-                summary.default_font_family = *value;
-                summary.default_font_pretendard = *value == "Pretendard";
-                continue;
+            if (section == Section::Asset && !summary.catalog.assets.empty()) {
+                auto& asset = summary.catalog.assets.back();
+                if (auto value = quoted_value_for_key(trimmed, "name")) {
+                    asset.name = *value;
+                    continue;
+                }
+                if (auto value = quoted_value_for_key(trimmed, "source")) {
+                    asset.source = *value;
+                    ++summary.source_reference_count;
+                    if (!path_exists(summary.root / *value))
+                        summary.missing_sources.push_back(*value);
+                    continue;
+                }
+                if (auto value = quoted_value_for_key(trimmed, "content_type")) {
+                    asset.content_type = *value;
+                    continue;
+                }
+                if (auto value = bool_value_for_key(trimmed, "preload")) {
+                    asset.preload = *value;
+                    continue;
+                }
+                if (auto value = bool_value_for_key(trimmed, "runtime_visible")) {
+                    asset.runtime_visible = *value;
+                    continue;
+                }
             }
-            if (auto value = quoted_value_for_key(trimmed, "source")) {
-                ++summary.source_reference_count;
-                if (!path_exists(summary.root / *value))
-                    summary.missing_sources.push_back(*value);
+            if (section == Section::Locale && !summary.catalog.locales.empty()) {
+                auto& locale = summary.catalog.locales.back();
+                if (auto value = quoted_value_for_key(trimmed, "tag")) {
+                    locale.tag = *value;
+                    continue;
+                }
+                if (auto value = quoted_value_for_key(trimmed, "source")) {
+                    locale.source = *value;
+                    ++summary.source_reference_count;
+                    if (!path_exists(summary.root / *value))
+                        summary.missing_sources.push_back(*value);
+                    continue;
+                }
+                if (auto value = quoted_array_for_key(trimmed, "fallback")) {
+                    locale.fallback = std::move(*value);
+                    continue;
+                }
+            }
+            if (section == Section::Font && !summary.catalog.fonts.empty()) {
+                auto& font = summary.catalog.fonts.back();
+                if (auto value = quoted_value_for_key(trimmed, "family")) {
+                    font.family = *value;
+                    continue;
+                }
+                if (auto value = quoted_value_for_key(trimmed, "source")) {
+                    font.source = *value;
+                    ++summary.source_reference_count;
+                    if (!path_exists(summary.root / *value))
+                        summary.missing_sources.push_back(*value);
+                    continue;
+                }
+                if (auto value = bool_value_for_key(trimmed, "register")) {
+                    font.register_font = *value;
+                    continue;
+                }
+                if (auto value = quoted_array_for_key(trimmed, "fallback")) {
+                    font.fallback = std::move(*value);
+                    continue;
+                }
             }
         }
     }
+    summary.application_id = summary.catalog.application.id;
+    summary.display_name = summary.catalog.application.display_name;
+    summary.version = summary.catalog.application.version;
+    summary.entry = summary.catalog.application.entry;
+    summary.platforms = summary.catalog.application.platforms;
+    summary.default_font_family = summary.catalog.default_font_family;
+    summary.default_font_pretendard =
+        summary.catalog.default_font_family == "Pretendard";
+    summary.debug_probe_scene = summary.catalog.debug.probe_scene;
+    summary.debug_verifier = summary.catalog.debug.verifier;
+    summary.manifest_asset_count = summary.catalog.assets.size();
+    summary.manifest_locale_count = summary.catalog.locales.size();
+    summary.manifest_font_count = summary.catalog.fonts.size();
+
+    for (auto& locale : summary.catalog.locales) {
+        if (locale.source.empty())
+            continue;
+        auto source_path = summary.root / locale.source;
+        if (!path_exists(source_path))
+            continue;
+        locale.strings = parse_locale_strings(source_path);
+        summary.locale_string_count += locale.strings.size();
+    }
+    if (summary.catalog.debug.artifact_manifest.empty()
+        && !summary.artifact_manifest.empty()) {
+        summary.catalog.debug.artifact_manifest = summary.artifact_manifest;
+    }
+
+    auto required_keys = std::vector<std::string>{};
+    if (auto locale = phenotype::find_locale(
+            summary.catalog,
+            summary.catalog.default_locale)) {
+        for (auto const& text : locale->get().strings)
+            required_keys.push_back(text.key);
+    }
+    auto required_views = std::vector<std::string_view>{};
+    required_views.reserve(required_keys.size());
+    for (auto const& key : required_keys)
+        required_views.push_back(key);
+    summary.catalog_diagnostics =
+        phenotype::validate_resource_catalog(summary.catalog, required_views);
     return summary;
 }
 
@@ -855,6 +1019,12 @@ auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
                                summary.manifest_locale_count,
                                summary.manifest_font_count),
          .hint = "Expected at least one asset, locale, and font declaration."},
+        {.name = "resource_catalog",
+         .ok = summary.catalog_diagnostics.empty(),
+         .detail = std::format("{} diagnostics, {} locale strings",
+                               summary.catalog_diagnostics.size(),
+                               summary.locale_string_count),
+         .hint = "Fix the manifest fields reported by ResourceCatalog diagnostics."},
         {.name = "manifest_sources",
          .ok = summary.source_reference_count > 0
              && summary.missing_sources.empty(),
@@ -903,6 +1073,145 @@ auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
     };
 }
 
+auto resource_diagnostic_json(phenotype::ResourceDiagnostic const& diagnostic)
+    -> std::string {
+    return std::format(
+        "{{\"severity\":{},\"kind\":{},\"path\":{},\"message\":{},"
+        "\"expected\":{},\"actual\":{}}}",
+        json_string(phenotype::resource_diagnostic_severity_name(
+            diagnostic.severity)),
+        json_string(phenotype::resource_diagnostic_kind_name(diagnostic.kind)),
+        json_string(diagnostic.path),
+        json_string(diagnostic.message),
+        json_string(diagnostic.expected),
+        json_string(diagnostic.actual));
+}
+
+auto resource_diagnostics_json(
+        std::span<phenotype::ResourceDiagnostic const> diagnostics)
+    -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < diagnostics.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += resource_diagnostic_json(diagnostics[i]);
+    }
+    out += "]";
+    return out;
+}
+
+auto locale_key_array_json(
+        std::span<phenotype::LocaleString const> strings) -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < strings.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += json_string(strings[i].key);
+    }
+    out += "]";
+    return out;
+}
+
+auto assets_catalog_json(
+        std::span<phenotype::AssetDescriptor const> assets) -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < assets.size(); ++i) {
+        auto const& asset = assets[i];
+        if (i > 0)
+            out += ",";
+        out += std::format(
+            "{{\"name\":{},\"source\":{},\"content_type\":{},"
+            "\"preload\":{},\"runtime_visible\":{}}}",
+            json_string(asset.name),
+            json_string(asset.source),
+            json_string(asset.content_type),
+            asset.preload ? "true" : "false",
+            asset.runtime_visible ? "true" : "false");
+    }
+    out += "]";
+    return out;
+}
+
+auto locales_catalog_json(
+        std::span<phenotype::LocaleDescriptor const> locales) -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < locales.size(); ++i) {
+        auto const& locale = locales[i];
+        if (i > 0)
+            out += ",";
+        out += std::format(
+            "{{\"tag\":{},\"source\":{},\"fallback\":{},"
+            "\"string_count\":{},\"keys\":{}}}",
+            json_string(locale.tag),
+            json_string(locale.source),
+            string_array_json(locale.fallback),
+            locale.strings.size(),
+            locale_key_array_json(locale.strings));
+    }
+    out += "]";
+    return out;
+}
+
+auto fonts_catalog_json(
+        std::span<phenotype::FontDescriptor const> fonts) -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < fonts.size(); ++i) {
+        auto const& font = fonts[i];
+        if (i > 0)
+            out += ",";
+        out += std::format(
+            "{{\"family\":{},\"source\":{},\"register\":{},"
+            "\"fallback\":{}}}",
+            json_string(font.family),
+            json_string(font.source),
+            font.register_font ? "true" : "false",
+            string_array_json(font.fallback));
+    }
+    out += "]";
+    return out;
+}
+
+auto resource_catalog_json(PackageSummary const& summary) -> std::string {
+    auto const& catalog = summary.catalog;
+    return std::format(
+        "{{\"application\":{{\"id\":{},\"display_name\":{},\"version\":{},"
+        "\"entry\":{},\"platforms\":{}}},"
+        "\"defaults\":{{\"locale\":{},\"font_family\":{}}},"
+        "\"assets\":{},\"locales\":{},\"fonts\":{},"
+        "\"debug\":{{\"artifact_manifest\":{},\"probe_scene\":{},"
+        "\"verifier\":{}}},\"diagnostics\":{}}}",
+        json_string(catalog.application.id),
+        json_string(catalog.application.display_name),
+        json_string(catalog.application.version),
+        json_string(catalog.application.entry),
+        string_array_json(catalog.application.platforms),
+        json_string(catalog.default_locale),
+        json_string(catalog.default_font_family),
+        assets_catalog_json(catalog.assets),
+        locales_catalog_json(catalog.locales),
+        fonts_catalog_json(catalog.fonts),
+        json_string(catalog.debug.artifact_manifest),
+        json_string(catalog.debug.probe_scene),
+        json_string(catalog.debug.verifier),
+        resource_diagnostics_json(summary.catalog_diagnostics));
+}
+
+auto resource_catalog_summary_json(PackageSummary const& summary)
+    -> std::string {
+    auto const& catalog = summary.catalog;
+    return std::format(
+        "{{\"default_locale\":{},\"default_font_family\":{},"
+        "\"assets\":{},\"locales\":{},\"locale_strings\":{},"
+        "\"fonts\":{},\"diagnostics\":{}}}",
+        json_string(catalog.default_locale),
+        json_string(catalog.default_font_family),
+        catalog.assets.size(),
+        catalog.locales.size(),
+        summary.locale_string_count,
+        catalog.fonts.size(),
+        summary.catalog_diagnostics.size());
+}
+
 auto package_json(PackageSummary const& summary,
                   std::span<Check const> checks) -> std::string {
     return std::format(
@@ -914,12 +1223,14 @@ auto package_json(PackageSummary const& summary,
         "\"sections\":{{\"application\":{},\"resources\":{},\"debug\":{}}},"
         "\"declared_resources\":{{\"assets\":{},\"locales\":{},\"fonts\":{}}},"
         "\"source_reference_count\":{},\"missing_sources\":{},"
+        "\"locale_string_count\":{},"
         "\"artifact_manifest\":{{\"path\":{},\"present\":{}}},"
         "\"debug\":{{\"probe_scene\":{},\"verifier\":{}}},"
         "\"default_font_family\":{},\"default_font_pretendard\":{}}},"
         "\"assets\":{{\"present\":{},\"file_count\":{}}},"
         "\"locales\":{{\"present\":{},\"file_count\":{}}},"
-        "\"fonts\":{{\"present\":{},\"file_count\":{}}},\"checks\":{}}}",
+        "\"fonts\":{{\"present\":{},\"file_count\":{}}},"
+        "\"resource_catalog\":{},\"checks\":{}}}",
         all_ok(checks) ? "true" : "false",
         json_string(path_string(summary.root)),
         summary.manifest ? "true" : "false",
@@ -937,6 +1248,7 @@ auto package_json(PackageSummary const& summary,
         summary.manifest_font_count,
         summary.source_reference_count,
         string_array_json(summary.missing_sources),
+        summary.locale_string_count,
         json_string(summary.artifact_manifest),
         summary.artifact_manifest_exists ? "true" : "false",
         json_string(summary.debug_probe_scene),
@@ -949,6 +1261,7 @@ auto package_json(PackageSummary const& summary,
         summary.locale_file_count,
         summary.fonts_directory ? "true" : "false",
         summary.font_file_count,
+        resource_catalog_json(summary),
         checks_json(checks));
 }
 
@@ -958,7 +1271,7 @@ auto package_entry_json(PackageSummary const& summary,
         "{{\"root\":{},\"ok\":{},\"application_id\":{},"
         "\"display_name\":{},\"entry\":{},\"platforms\":{},"
         "\"default_font_family\":{},\"artifact_manifest\":{},"
-        "\"debug_verifier\":{},\"checks\":{}}}",
+        "\"debug_verifier\":{},\"resource_catalog\":{},\"checks\":{}}}",
         json_string(path_string(summary.root)),
         all_ok(checks) ? "true" : "false",
         json_string(summary.application_id),
@@ -968,6 +1281,7 @@ auto package_entry_json(PackageSummary const& summary,
         json_string(summary.default_font_family),
         json_string(summary.artifact_manifest),
         json_string(summary.debug_verifier),
+        resource_catalog_summary_json(summary),
         checks_json(checks));
 }
 

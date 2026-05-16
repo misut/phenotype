@@ -19,9 +19,11 @@ The initial scope is intentionally narrow:
 - `phenotype package inspect <path>` checks the proposed package manifest,
   application/debug metadata, declared resource counts, referenced `source`
   files, Pretendard default-font policy, asset layout, locale layout, and font
-  layout.
+  layout. JSON output includes the normalized `ResourceCatalog` produced by the
+  shared pure `phenotype.resources` path package.
 - `phenotype package list <root>` scans for package manifests below a root and
-  emits a compact package catalog for CI or future bundling.
+  emits a compact package catalog for CI or future bundling, including resource
+  counts and catalog diagnostic counts.
 - `phenotype commands --json` emits machine-readable command metadata from
   `cppx.cli`.
 

@@ -18,6 +18,9 @@ platforms = [
 "github.com/misut/cppx" = "1.9.0"
 "github.com/misut/txn" = "0.7.0"
 
+[dependencies.path]
+phenotype_resources = "packages/phenotype_resources"
+
 [target.'cfg(os = "macos")'.dependencies.path]
 metal-cpp = "libs/metal-cpp"
 

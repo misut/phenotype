@@ -67,6 +67,14 @@ inline void attach_to_scope(NodeHandle h) {
 }
 } // namespace detail
 
+inline auto theme_with_resource_defaults(
+        Theme theme,
+        ResourceCatalog const& catalog) -> Theme {
+    if (!catalog.default_font_family.empty())
+        theme.default_font_family = catalog.default_font_family;
+    return theme;
+}
+
 // phenotype::keyed(id, builder) — opt in to keyed reconciliation for
 // the next widget emitted by `builder`. Typically used inside a list
 // loop so that rows survive reorder / insert / delete without losing
