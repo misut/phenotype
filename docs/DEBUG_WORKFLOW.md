@@ -165,8 +165,9 @@ running the slower desktop/mobile artifact capture gate.
 Native file explorer artifact bundles expose the same model state under
 `debug.application.file_explorer`: profile, location, status, sort mode, view
 mode, selected entry, operation receipt, entry counts, and pure chrome metrics.
-The desktop payload includes Finder chrome counts and icon-grid density metrics
-such as column width, row height, pitch, visible rows, and visible capacity. The
+The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
+traffic-light marker coordinates, and icon-grid density metrics such as column
+width, row height, pitch, visible rows, and visible capacity. The
 verifier can assert those paths with `require_debug_details`, which keeps
 Finder workflow failures debuggable without relying on a screenshot guess.
 
@@ -508,7 +509,10 @@ hit testing stay at the platform edge rather than being redrawn by phenotype.
 The file explorer's `debug.application.file_explorer.chrome` additionally
 publishes `content_window_control_markers=true` and three titlebar-control marker
 metrics; these describe the deterministic visual marker used in startup
-artifacts, not an input-capable duplicate of OS controls.
+artifacts, not an input-capable duplicate of OS controls. The same chrome object
+publishes sidebar symbol size, symbol leading, label leading, section gap, and
+selected-row radius so Finder sidebar density can fail as a JSON contract before
+a pixel-region summary is needed.
 On macOS, `titlebar_transparent=true`, `full_size_content_view=true`,
 `title_hidden=true`, and `background_drag_enabled=true` are read back from the
 live `NSWindow`, not inferred from the request, so a Finder-style artifact can

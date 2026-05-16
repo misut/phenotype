@@ -245,6 +245,22 @@ constexpr float k_sidebar_row_height =
     file_explorer_demo::k_desktop_sidebar_row_height;
 constexpr float k_sidebar_heading_height =
     file_explorer_demo::k_desktop_sidebar_heading_height;
+constexpr float k_sidebar_icon_size =
+    file_explorer_demo::k_desktop_sidebar_icon_size;
+constexpr float k_sidebar_icon_leading =
+    file_explorer_demo::k_desktop_sidebar_icon_leading;
+constexpr float k_sidebar_label_leading =
+    file_explorer_demo::k_desktop_sidebar_label_leading;
+constexpr float k_sidebar_label_top =
+    file_explorer_demo::k_desktop_sidebar_label_top;
+constexpr float k_sidebar_heading_label_leading =
+    file_explorer_demo::k_desktop_sidebar_heading_label_leading;
+constexpr float k_sidebar_heading_label_top =
+    file_explorer_demo::k_desktop_sidebar_heading_label_top;
+constexpr float k_sidebar_section_gap =
+    file_explorer_demo::k_desktop_sidebar_section_gap;
+constexpr float k_sidebar_selected_row_radius =
+    file_explorer_demo::k_desktop_sidebar_selected_row_radius;
 constexpr float k_content_radius = 0.0f;
 constexpr float k_window_radius = file_explorer_demo::k_desktop_window_radius;
 constexpr float k_toolbar_group_radius =
@@ -261,6 +277,10 @@ constexpr float k_titlebar_control_diameter =
     file_explorer_demo::k_desktop_titlebar_control_diameter;
 constexpr float k_titlebar_control_spacing =
     file_explorer_demo::k_desktop_titlebar_control_spacing;
+constexpr float k_titlebar_control_start_x =
+    file_explorer_demo::k_desktop_titlebar_control_start_x;
+constexpr float k_titlebar_control_top =
+    file_explorer_demo::k_desktop_titlebar_control_top;
 
 phenotype::Color rgba(int r, int g, int b, int a = 255) {
     return phenotype::Color{
@@ -402,49 +422,82 @@ void stroke_round(phenotype::Painter& painter,
                 k_pi, 1.5f * k_pi, thickness, color);
 }
 
-void paint_sidebar_icon(phenotype::Painter& painter, std::string_view id) {
+void paint_sidebar_icon(phenotype::Painter& painter,
+                        std::string_view id,
+                        float origin_x,
+                        float origin_y) {
     auto ink = rgba(30, 30, 30);
     if (id == "recents")
         ink = rgba(0, 122, 255);
+    auto line = [&](float x1, float y1, float x2, float y2,
+                    float thickness, phenotype::Color color) {
+        painter.line(origin_x + x1, origin_y + y1,
+                     origin_x + x2, origin_y + y2,
+                     thickness, color);
+    };
+    auto arc = [&](float x, float y, float r,
+                   float start, float end,
+                   float thickness, phenotype::Color color) {
+        painter.arc(origin_x + x, origin_y + y, r,
+                    start, end, thickness, color);
+    };
+    auto fill = [&](float x, float y, float w, float h, float r,
+                    phenotype::Color color) {
+        fill_round(painter, origin_x + x, origin_y + y, w, h, r, color);
+    };
+    auto stroke = [&](float x, float y, float w, float h, float r,
+                      float thickness, phenotype::Color color) {
+        stroke_round(painter, origin_x + x, origin_y + y, w, h, r,
+                     thickness, color);
+    };
     if (id == "folder") {
-        fill_round(painter, 2.0f, 9.0f, 22.0f, 14.0f, 3.0f, rgba(255, 255, 255, 235));
-        stroke_round(painter, 2.0f, 9.0f, 22.0f, 14.0f, 3.0f, 2.0f, ink);
-        painter.line(4.0f, 8.0f, 12.0f, 8.0f, 2.0f, ink);
+        fill(2.0f, 10.0f, 21.0f, 13.0f, 3.5f, rgba(255, 255, 255, 235));
+        stroke(2.0f, 10.0f, 21.0f, 13.0f, 3.5f, 2.0f, ink);
+        line(4.0f, 9.0f, 12.0f, 9.0f, 2.0f, ink);
+        arc(21.0f, 8.0f, 3.8f, 0.0f, k_tau, 1.75f, ink);
+        line(18.8f, 14.0f, 23.2f, 14.0f, 1.7f, ink);
     } else if (id == "recents") {
-        painter.arc(13.0f, 13.0f, 10.0f, 0.0f, k_tau, 2.2f, ink);
-        painter.line(13.0f, 13.0f, 13.0f, 5.5f, 2.2f, ink);
-        painter.line(13.0f, 13.0f, 6.8f, 13.0f, 2.2f, ink);
+        arc(13.0f, 13.0f, 10.0f, 0.0f, k_tau, 2.2f, ink);
+        line(13.0f, 13.0f, 13.0f, 5.5f, 2.2f, ink);
+        line(13.0f, 13.0f, 6.8f, 13.0f, 2.2f, ink);
     } else if (id == "app") {
-        painter.text(3.0f, 0.0f, "A", 1, 24.0f, ink,
-                     finder_font(phenotype::FontWeight::Bold));
-        painter.line(4.0f, 22.0f, 21.0f, 22.0f, 2.0f, ink);
+        line(6.0f, 22.0f, 13.0f, 5.0f, 2.5f, ink);
+        line(20.0f, 22.0f, 13.0f, 5.0f, 2.5f, ink);
+        line(8.4f, 15.4f, 17.6f, 15.4f, 2.2f, ink);
+        line(4.0f, 22.5f, 22.0f, 22.5f, 2.0f, ink);
     } else if (id == "desktop") {
-        stroke_round(painter, 3.0f, 7.0f, 20.0f, 14.0f, 3.0f, 2.0f, ink);
-        painter.line(7.0f, 17.0f, 19.0f, 17.0f, 2.0f, ink);
+        stroke(3.0f, 6.0f, 20.0f, 14.0f, 3.0f, 2.0f, ink);
+        line(10.0f, 20.0f, 16.0f, 20.0f, 2.0f, ink);
+        line(7.0f, 23.0f, 19.0f, 23.0f, 2.0f, ink);
     } else if (id == "doc") {
-        stroke_round(painter, 6.0f, 3.0f, 15.0f, 20.0f, 2.0f, 2.0f, ink);
-        painter.line(14.0f, 3.0f, 21.0f, 10.0f, 2.0f, ink);
+        stroke(6.0f, 3.0f, 15.0f, 20.0f, 2.0f, 2.0f, ink);
+        line(14.0f, 3.0f, 21.0f, 10.0f, 2.0f, ink);
+        line(14.0f, 10.0f, 21.0f, 10.0f, 1.8f, ink);
     } else if (id == "download") {
-        painter.arc(13.0f, 13.0f, 10.0f, 0.0f, k_tau, 2.0f, ink);
-        painter.line(13.0f, 5.0f, 13.0f, 17.0f, 2.0f, ink);
-        painter.line(8.0f, 13.5f, 13.0f, 18.0f, 2.0f, ink);
-        painter.line(18.0f, 13.5f, 13.0f, 18.0f, 2.0f, ink);
+        arc(13.0f, 13.0f, 10.0f, 0.0f, k_tau, 2.0f, ink);
+        line(13.0f, 5.0f, 13.0f, 17.0f, 2.0f, ink);
+        line(8.0f, 13.5f, 13.0f, 18.0f, 2.0f, ink);
+        line(18.0f, 13.5f, 13.0f, 18.0f, 2.0f, ink);
     } else if (id == "cloud") {
-        painter.arc(9.0f, 16.0f, 6.0f, k_pi, k_tau, 2.0f, ink);
-        painter.arc(16.0f, 13.0f, 8.0f, k_pi, k_tau, 2.0f, ink);
-        painter.line(5.0f, 17.0f, 24.0f, 17.0f, 2.0f, ink);
+        arc(8.5f, 16.5f, 5.6f, k_pi, k_tau, 2.0f, ink);
+        arc(15.8f, 13.2f, 7.8f, 1.1f * k_pi, k_tau, 2.0f, ink);
+        arc(20.5f, 17.0f, 4.6f, 1.35f * k_pi, 2.18f * k_pi, 2.0f, ink);
+        line(5.0f, 17.8f, 23.5f, 17.8f, 2.0f, ink);
     } else if (id == "home") {
-        painter.line(4.0f, 14.0f, 13.0f, 5.0f, 2.0f, ink);
-        painter.line(13.0f, 5.0f, 22.0f, 14.0f, 2.0f, ink);
-        stroke_round(painter, 7.0f, 13.0f, 12.0f, 10.0f, 1.0f, 2.0f, ink);
+        line(4.0f, 14.0f, 13.0f, 5.0f, 2.0f, ink);
+        line(13.0f, 5.0f, 22.0f, 14.0f, 2.0f, ink);
+        stroke(7.0f, 13.0f, 12.0f, 10.0f, 1.0f, 2.0f, ink);
+        line(11.0f, 23.0f, 11.0f, 18.0f, 1.8f, ink);
     } else if (id == "airdrop") {
-        painter.arc(13.0f, 14.0f, 9.0f, k_pi, k_tau, 1.8f, ink);
-        painter.arc(13.0f, 14.0f, 5.5f, k_pi, k_tau, 1.8f, ink);
-        painter.arc(13.0f, 14.0f, 2.5f, 0.0f, k_tau, 2.0f, ink);
+        arc(13.0f, 14.0f, 10.0f, 0.0f, k_tau, 1.6f, ink);
+        arc(13.0f, 14.0f, 6.5f, 0.0f, k_tau, 1.6f, ink);
+        arc(13.0f, 14.0f, 2.5f, 0.0f, k_tau, 2.0f, ink);
     } else if (id == "trash") {
-        stroke_round(painter, 7.0f, 8.0f, 12.0f, 16.0f, 1.5f, 2.0f, ink);
-        painter.line(5.0f, 8.0f, 21.0f, 8.0f, 2.0f, ink);
-        painter.line(9.0f, 5.0f, 17.0f, 5.0f, 2.0f, ink);
+        stroke(7.0f, 8.0f, 12.0f, 16.0f, 1.5f, 2.0f, ink);
+        line(5.0f, 8.0f, 21.0f, 8.0f, 2.0f, ink);
+        line(9.0f, 5.0f, 17.0f, 5.0f, 2.0f, ink);
+        line(10.5f, 11.0f, 10.5f, 22.0f, 1.4f, ink);
+        line(15.5f, 11.0f, 15.5f, 22.0f, 1.4f, ink);
     }
 }
 
@@ -871,7 +924,7 @@ void sidebar_row(std::string_view label,
     options.has_border_color = true;
     options.border_color = rgba(0, 0, 0, 0);
     options.border_width = 0.0f;
-    options.border_radius = 8.0f;
+    options.border_radius = k_sidebar_selected_row_radius;
     options.max_width = k_sidebar_row_width;
     options.fixed_height = k_sidebar_row_height;
 
@@ -882,10 +935,16 @@ void sidebar_row(std::string_view label,
         k_sidebar_row_width,
         k_sidebar_row_height,
         [label_text, icon_name, selected](Painter& painter) {
-            paint_sidebar_icon(painter, icon_name);
+            float const icon_top =
+                (k_sidebar_row_height - k_sidebar_icon_size) * 0.5f;
+            paint_sidebar_icon(
+                painter,
+                icon_name,
+                k_sidebar_icon_leading,
+                icon_top);
             auto ink = selected ? rgba(0, 122, 255) : rgba(30, 30, 30);
-            painter.text(44.0f,
-                         8.0f,
+            painter.text(k_sidebar_label_leading,
+                         k_sidebar_label_top,
                          label_text.c_str(),
                          static_cast<unsigned int>(label_text.size()),
                          15.0f,
@@ -917,8 +976,8 @@ void sidebar_heading(std::string_view label) {
         k_sidebar_row_width,
         k_sidebar_heading_height,
         [label_text](Painter& painter) {
-            painter.text(8.0f,
-                         7.0f,
+            painter.text(k_sidebar_heading_label_leading,
+                         k_sidebar_heading_label_top,
                          label_text.c_str(),
                          static_cast<unsigned int>(label_text.size()),
                          13.0f,
@@ -964,24 +1023,22 @@ void titlebar_control_markers() {
         k_sidebar_row_width,
         k_titlebar_control_cluster_height,
         [](phenotype::Painter& painter) {
-            constexpr float start_x = 20.0f;
-            constexpr float top = 16.0f;
             paint_titlebar_control_marker(
                 painter,
-                start_x,
-                top,
+                k_titlebar_control_start_x,
+                k_titlebar_control_top,
                 rgba(255, 95, 86),
                 rgba(223, 70, 66));
             paint_titlebar_control_marker(
                 painter,
-                start_x + k_titlebar_control_spacing,
-                top,
+                k_titlebar_control_start_x + k_titlebar_control_spacing,
+                k_titlebar_control_top,
                 rgba(255, 189, 46),
                 rgba(222, 158, 38));
             paint_titlebar_control_marker(
                 painter,
-                start_x + k_titlebar_control_spacing * 2.0f,
-                top,
+                k_titlebar_control_start_x + k_titlebar_control_spacing * 2.0f,
+                k_titlebar_control_top,
                 rgba(39, 201, 63),
                 rgba(34, 162, 53));
         },
@@ -1002,14 +1059,14 @@ void finder_sidebar(State const& state) {
         sidebar_row(labels.sidebar_recents, "recents", "root", in_root);
         sidebar_row(labels.sidebar_shared, "folder", "shared",
                     relative == "Demo Root/Shared");
-        layout::spacer(14);
+        layout::spacer(k_sidebar_section_gap);
         sidebar_heading(labels.favorites);
         sidebar_row(labels.applications, "app", "root");
         sidebar_row(labels.desktop, "desktop", "root");
         sidebar_row(labels.documents, "doc", "documents",
                     relative == "Demo Root/Documents");
         sidebar_row(labels.downloads, "download", "root");
-        layout::spacer(14);
+        layout::spacer(k_sidebar_section_gap);
         sidebar_heading(labels.locations);
         sidebar_row(labels.icloud_drive, "cloud", "root");
         sidebar_row(labels.home, "home", "root");
