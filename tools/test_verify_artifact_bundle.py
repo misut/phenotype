@@ -65,6 +65,24 @@ def material_plan(
             "shared_backdrop_scope": False,
             "shape_union_expected": False,
         },
+        "reference_model": {
+            "technology": "liquid-glass",
+            "variant": "regular",
+            "shape": "rounded-rectangle",
+            "shape_scope": "view-bounds",
+            "blending_scope": "deterministic-fallback",
+            "semantic_thickness": "regular",
+            "view_bounds_anchored": True,
+            "shape_matches_geometry": True,
+            "tint_applied": True,
+            "interactive_response": False,
+            "container_grouped": False,
+            "container_union": False,
+            "container_morphing": False,
+            "legibility_preserved": True,
+            "vibrancy_expected": False,
+            "deterministic_degradation": True,
+        },
         "plan_id": "material.regular.fallback",
         "command_descriptor": command_descriptor,
         "geometry": {"x": 12.0, "y": 20.0, "w": 240.0, "h": 96.0, "radius": 10.0},
@@ -226,7 +244,54 @@ def material_plan(
     return plan
 
 
+def refresh_reference_model(plan: dict[str, object]) -> None:
+    kind = str(plan["kind"])
+    shape = plan["shape"]
+    tint = plan["tint"]
+    container = plan["container"]
+    foreground = plan["foreground"]
+    budget = plan["resource_budget"]
+    assert isinstance(shape, dict)
+    assert isinstance(tint, dict)
+    assert isinstance(container, dict)
+    assert isinstance(foreground, dict)
+    assert isinstance(budget, dict)
+    shape_valid = bool(shape["valid"])
+    blending_scope = "none"
+    if kind != "none" and bool(plan["backdrop_sampling"]):
+        blending_scope = "sampled-backdrop"
+    elif kind != "none" and bool(plan["fallback"]):
+        blending_scope = "deterministic-fallback"
+    minimum = float(foreground["minimum_contrast_ratio"])
+    legibility_preserved = (
+        float(foreground["primary_contrast_ratio"]) >= minimum
+        and float(foreground["secondary_contrast_ratio"]) >= minimum
+        and float(foreground["accent_contrast_ratio"]) >= minimum)
+    plan["reference_model"] = {
+        "technology": "liquid-glass",
+        "variant": kind,
+        "shape": (
+            "invalid"
+            if not shape_valid
+            else "rounded-rectangle" if bool(shape["rounded"]) else "rectangle"),
+        "shape_scope": "view-bounds",
+        "blending_scope": blending_scope,
+        "semantic_thickness": kind,
+        "view_bounds_anchored": kind != "none" and shape_valid,
+        "shape_matches_geometry": kind != "none" and shape_valid,
+        "tint_applied": kind != "none" and int(tint["a"]) > 0,
+        "interactive_response": bool(container["interactive"]),
+        "container_grouped": bool(container["participates"]),
+        "container_union": bool(container["shape_union_expected"]),
+        "container_morphing": bool(container["morph_transitions"]),
+        "legibility_preserved": legibility_preserved,
+        "vibrancy_expected": bool(foreground["uses_vibrancy"]),
+        "deterministic_degradation": bool(budget["deterministic_fallback"]),
+    }
+
+
 def refresh_observation_contract(plan: dict[str, object]) -> None:
+    refresh_reference_model(plan)
     primary = plan["primary_pass"]
     stages = plan["execution_stages"]
     budget = plan["resource_budget"]
@@ -705,8 +770,69 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["shape"]["max_effective_radius"],
             10.0)
         self.assertEqual(
+            report["material_plans"]["reference_model"]["technologies"],
+            {"liquid-glass": 1})
+        self.assertEqual(
+            report["material_plans"]["reference_model"]["blending_scopes"],
+            {"deterministic-fallback": 1})
+        self.assertEqual(
+            report["material_plans"]["reference_model"]["view_bounds_anchored"],
+            1)
+        self.assertEqual(
+            report["material_plans"]["reference_model"][
+                "deterministic_degradation"],
+            1)
+        self.assertEqual(
             report["semantic_tree"]["material_descriptor_missing"],
             0)
+
+    def test_reference_model_failure_points_to_pure_planner(self) -> None:
+        plan = material_plan()
+        reference_model = plan["reference_model"]
+        assert isinstance(reference_model, dict)
+        reference_model["blending_scope"] = "sampled-backdrop"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material reference blending_scope is derived")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".reference_model.blending_scope")
+        self.assertEqual(failure["expected"], "deterministic-fallback")
+        self.assertEqual(failure["actual"], "sampled-backdrop")
+        self.assertEqual(failure["likely_layer"], "material-reference")
+        self.assertIn("MaterialPlan.reference_model", failure["suggested_action"])
+
+    def test_manifest_can_pin_reference_model_summary(self) -> None:
+        manifest = {
+            "require_material_plan_summary": {
+                "reference_technologies": {"liquid-glass": 1},
+                "reference_variants": {"regular": 1},
+                "reference_shapes": {"rounded-rectangle": 1},
+                "reference_shape_scopes": {"view-bounds": 1},
+                "reference_blending_scopes": {"deterministic-fallback": 1},
+                "reference_semantic_thickness": {"regular": 1},
+                "reference_view_bounds_anchored": 1,
+                "reference_shape_matches_geometry": 1,
+                "reference_tint_applied": 1,
+                "reference_interactive_response": 0,
+                "reference_container_grouped": 0,
+                "reference_container_union": 0,
+                "reference_container_morphing": 0,
+                "reference_legibility_preserved": 1,
+                "reference_vibrancy_expected": 0,
+                "reference_deterministic_degradation": 1,
+            }
+        }
+
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
 
     def test_command_descriptor_mismatch_points_to_material_command(self) -> None:
         plan = material_plan()
@@ -806,6 +932,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         verifier_contract["require_container_identity"] = True
         verifier_contract["require_container_morph_contract"] = False
         resource_budget["max_container_spacing"] = 12.0
+        refresh_reference_model(plan)
 
         root = snapshot(plan)
         material_node = root["debug"]["semantic_tree"]["children"][0]

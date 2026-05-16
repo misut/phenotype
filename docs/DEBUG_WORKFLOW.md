@@ -183,6 +183,11 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `container`, including isolated/container/union mode, container id, union id,
   spacing, interactive flag, morph-transition expectation, shared backdrop
   scope, and shape-union expectation;
+- `reference_model`, the pure Apple Liquid Glass alignment contract: technology
+  name, semantic variant/thickness, view-bounds shape scope, resolved shape,
+  sampled-backdrop or deterministic-fallback blending scope, tint participation,
+  interactive response, container grouping/union/morph expectations, foreground
+  legibility preservation, vibrancy expectation, and deterministic degradation;
 - raw `geometry`, derived `shape` analysis, tint, blur radius, saturation,
   luminance curve, edge highlight, noise, and shadow values for the resolved
   plan. `shape.effective_radius` is the clamped radius the backend executes;
@@ -235,6 +240,14 @@ scope propagation, `MaterialRect` encoding, or command decode before it points
 at backend drawing. `command_descriptor.container.morph_transitions` preserves
 the request, while `MaterialPlan.container.morph_transitions` may be false when
 Reduce Motion disables morph expectations.
+`MaterialPlan.reference_model` is the next stop after container checks. It
+normalizes the Apple guidance that Liquid Glass applies to a view-bounds shape,
+can be tinted, can react to interaction, and can participate in grouped
+container/union/morph behavior. It also mirrors HIG-style semantic thickness and
+foreground legibility/vibrancy expectations. The verifier derives each
+reference field from the surrounding `MaterialPlan`; a mismatch points at
+`renderer.material_plans[n].reference_model.*` and suggests inspecting
+`plan_material_surface` before changing a backend.
 `MaterialPlan.geometry` preserves the raw decoded rectangle. `MaterialPlan.shape`
 is the pure executable shape contract: validity, surface area, min/max extent,
 radius limit, effective radius, normalized radius, rounded flag, and whether the
@@ -297,6 +310,14 @@ The same summary can pin `container_modes`, `container_ids`, `union_ids`,
 `container_participating`, `container_unioned`, `container_interactive`,
 `container_morph_transitions`, `verifier_require_container_identity`, and
 `verifier_require_container_morph_contract`.
+Reference-model gates can pin `reference_technologies`, `reference_variants`,
+`reference_shapes`, `reference_shape_scopes`, `reference_blending_scopes`,
+`reference_semantic_thickness`, `reference_view_bounds_anchored`,
+`reference_shape_matches_geometry`, `reference_tint_applied`,
+`reference_interactive_response`, `reference_container_grouped`,
+`reference_container_union`, `reference_container_morphing`,
+`reference_legibility_preserved`, `reference_vibrancy_expected`, and
+`reference_deterministic_degradation`.
 Foreground gates can pin `foreground_schemes`, `foreground_sources`,
 `foreground_backdrop_driven`, `foreground_high_contrast`,
 `foreground_vibrant`, `foreground_deterministic`,
@@ -438,14 +459,17 @@ changing material policy. Fallback metadata is similarly strict: fallback plans
 must report a non-empty `fallback_reason`, while non-fallback plans must leave
 `fallback_reason` empty so stale downgrade explanations cannot leak into glass
 artifacts.
-The verifier also treats material kind, fallback path, material pass names, and
-sampling kernel names, and luminance curve names as fixed vocabularies. Current
-fallback paths are `none`, `no-material`, `invalid-geometry`,
+The verifier also treats material kind, fallback path, reference-model strings,
+material pass names, sampling kernel names, and luminance curve names as fixed
+vocabularies. Current fallback paths are `none`, `no-material`, `invalid-geometry`,
 `unsupported-backend`, `no-backdrop-source`, `reduced-transparency`, and
 `quality-policy`; current pass names are `none`, `backdrop-sample-blur`, and
 `translucent-rounded-rect`; current sampling kernels are `none` and
 `weighted-5x5-manhattan`; current luminance curves are
-`adaptive-backdrop-luma` and `fallback-flat`. Add new planner/backend
+`adaptive-backdrop-luma` and `fallback-flat`. Current reference blending scopes
+are `none`, `sampled-backdrop`, and `deterministic-fallback`; current reference
+shapes are `none`, `invalid`, `rectangle`, and `rounded-rectangle`. Add new
+planner/backend
 vocabulary to the verifier in the same patch that introduces it, so CI reports
 schema drift before a human has to infer it visually.
 

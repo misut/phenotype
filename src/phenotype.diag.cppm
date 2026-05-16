@@ -950,6 +950,56 @@ namespace detail {
             "shadow_radius",
             json::Value{plan.command_descriptor.shadow_radius});
 
+        json::Object reference_model;
+        reference_model.emplace(
+            "technology",
+            json::Value{plan.reference_model.technology});
+        reference_model.emplace(
+            "variant",
+            json::Value{plan.reference_model.variant});
+        reference_model.emplace(
+            "shape",
+            json::Value{plan.reference_model.shape});
+        reference_model.emplace(
+            "shape_scope",
+            json::Value{plan.reference_model.shape_scope});
+        reference_model.emplace(
+            "blending_scope",
+            json::Value{plan.reference_model.blending_scope});
+        reference_model.emplace(
+            "semantic_thickness",
+            json::Value{plan.reference_model.semantic_thickness});
+        reference_model.emplace(
+            "view_bounds_anchored",
+            json::Value{plan.reference_model.view_bounds_anchored});
+        reference_model.emplace(
+            "shape_matches_geometry",
+            json::Value{plan.reference_model.shape_matches_geometry});
+        reference_model.emplace(
+            "tint_applied",
+            json::Value{plan.reference_model.tint_applied});
+        reference_model.emplace(
+            "interactive_response",
+            json::Value{plan.reference_model.interactive_response});
+        reference_model.emplace(
+            "container_grouped",
+            json::Value{plan.reference_model.container_grouped});
+        reference_model.emplace(
+            "container_union",
+            json::Value{plan.reference_model.container_union});
+        reference_model.emplace(
+            "container_morphing",
+            json::Value{plan.reference_model.container_morphing});
+        reference_model.emplace(
+            "legibility_preserved",
+            json::Value{plan.reference_model.legibility_preserved});
+        reference_model.emplace(
+            "vibrancy_expected",
+            json::Value{plan.reference_model.vibrancy_expected});
+        reference_model.emplace(
+            "deterministic_degradation",
+            json::Value{plan.reference_model.deterministic_degradation});
+
         json::Object verifier;
         verifier.emplace(
             "require_backdrop_source",
@@ -1348,6 +1398,7 @@ namespace detail {
         out.emplace(
             "container",
             material_container_analysis_json(plan.container));
+        out.emplace("reference_model", json::Value{std::move(reference_model)});
         out.emplace("plan_id", json::Value{plan.plan_id});
         out.emplace(
             "command_descriptor",

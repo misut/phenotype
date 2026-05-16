@@ -36,7 +36,7 @@
       "reduced transparency disables backdrop sampling": 7
     },
     "contract_versions": {
-      "14": 7
+      "15": 7
     },
     "roles": {
       "surface": 7
@@ -58,6 +58,40 @@
     "container_unioned": 1,
     "container_interactive": 1,
     "container_morph_transitions": 0,
+    "reference_technologies": {
+      "liquid-glass": 7
+    },
+    "reference_variants": {
+      "clear": 1,
+      "thin": 2,
+      "regular": 2,
+      "thick": 2
+    },
+    "reference_shapes": {
+      "rounded-rectangle": 7
+    },
+    "reference_shape_scopes": {
+      "view-bounds": 7
+    },
+    "reference_blending_scopes": {
+      "deterministic-fallback": 7
+    },
+    "reference_semantic_thickness": {
+      "clear": 1,
+      "thin": 2,
+      "regular": 2,
+      "thick": 2
+    },
+    "reference_view_bounds_anchored": 7,
+    "reference_shape_matches_geometry": 7,
+    "reference_tint_applied": 7,
+    "reference_interactive_response": 1,
+    "reference_container_grouped": 6,
+    "reference_container_union": 1,
+    "reference_container_morphing": 0,
+    "reference_legibility_preserved": 7,
+    "reference_vibrancy_expected": 0,
+    "reference_deterministic_degradation": 7,
     "shape_valid": 7,
     "shape_rounded": 7,
     "shape_radius_clamped": 0,

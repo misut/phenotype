@@ -201,10 +201,18 @@ The plan records its artifact `contract_version`, source
 saturation, luminance curve, edge highlight, noise/dither, shadow, render-target
 analysis, pure shape analysis, backdrop sampling, backdrop analysis, decision
 trace, fallback path, debug metadata, pass expectations, the resolved quality
-policy, foreground legibility/vibrancy recommendation, resource budgets, the
-resolved sampling kernel, bounded execution stages, verifier expectations, and
-an `observation_contract` that mirrors the pure facts the artifact verifier must
-observe at runtime.
+policy, foreground legibility/vibrancy recommendation, an Apple Liquid Glass
+`reference_model`, resource budgets, the resolved sampling kernel, bounded
+execution stages, verifier expectations, and an `observation_contract` that
+mirrors the pure facts the artifact verifier must observe at runtime.
+`reference_model` is intentionally pure. It records that the surface follows the
+Liquid Glass-style model, the semantic thickness variant, view-bounds shape
+scope, resolved shape, tint participation, interactive/container/union/morph
+expectations, blending scope, vibrancy expectation, legibility preservation, and
+deterministic degradation policy. This keeps the Apple-reference alignment out
+of AppKit, Metal, Direct3D, Vulkan, and snapshot writers; those adapters execute
+or report the resolved plan instead of re-deciding whether a surface behaves
+like glass.
 `decision_trace` records the pure gate booleans for geometry, target readiness,
 quality, backend capabilities, accessibility settings, backdrop-source
 readiness, and the first fallback blocker. `primary_pass` states whether the

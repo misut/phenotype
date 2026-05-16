@@ -140,7 +140,28 @@ ALLOWED_MATERIAL_FOREGROUND_SOURCES = {
     "theme",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 14
+ALLOWED_MATERIAL_REFERENCE_TECHNOLOGIES = {
+    "liquid-glass",
+}
+
+ALLOWED_MATERIAL_REFERENCE_SHAPES = {
+    "invalid",
+    "none",
+    "rectangle",
+    "rounded-rectangle",
+}
+
+ALLOWED_MATERIAL_REFERENCE_SHAPE_SCOPES = {
+    "view-bounds",
+}
+
+ALLOWED_MATERIAL_REFERENCE_BLENDING_SCOPES = {
+    "deterministic-fallback",
+    "none",
+    "sampled-backdrop",
+}
+
+MATERIAL_PLAN_CONTRACT_VERSION = 15
 
 
 def suggested_action_for_failure(
@@ -222,6 +243,10 @@ def suggested_action_for_failure(
         return (
             "Inspect MaterialPlan.foreground, foreground contrast selection, "
             "and the material style theme tokens used by the pure planner.")
+    if likely_layer == "material-reference":
+        return (
+            "Inspect MaterialPlan.reference_model, plan_material_surface, and "
+            "the Apple Liquid Glass alignment fields before changing backend policy.")
     if likely_layer == "material-render-target":
         return (
             "Inspect MaterialPlan.render_target and backend render-target "
@@ -487,6 +512,8 @@ def material_failure_context(
             material_plan_summary.get("roles"))
         material_contract["plan_container"] = (
             material_plan_summary.get("container"))
+        material_contract["plan_reference_model"] = (
+            material_plan_summary.get("reference_model"))
         material_contract["plan_shape"] = material_plan_summary.get("shape")
         material_contract["fallback_paths"] = material_plan_summary.get(
             "fallback_paths")
@@ -978,6 +1005,22 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "container_unioned",
         "container_interactive",
         "container_morph_transitions",
+        "reference_view_bounds_anchored",
+        "reference_shape_matches_geometry",
+        "reference_tint_applied",
+        "reference_interactive_response",
+        "reference_container_grouped",
+        "reference_container_union",
+        "reference_container_morphing",
+        "reference_legibility_preserved",
+        "reference_vibrancy_expected",
+        "reference_deterministic_degradation",
+        "reference_technologies",
+        "reference_variants",
+        "reference_shapes",
+        "reference_shape_scopes",
+        "reference_blending_scopes",
+        "reference_semantic_thickness",
         "shape_valid",
         "shape_rounded",
         "shape_radius_clamped",
@@ -1053,6 +1096,16 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "container_unioned",
             "container_interactive",
             "container_morph_transitions",
+            "reference_view_bounds_anchored",
+            "reference_shape_matches_geometry",
+            "reference_tint_applied",
+            "reference_interactive_response",
+            "reference_container_grouped",
+            "reference_container_union",
+            "reference_container_morphing",
+            "reference_legibility_preserved",
+            "reference_vibrancy_expected",
+            "reference_deterministic_degradation",
             "shape_valid",
             "shape_rounded",
             "shape_radius_clamped",
@@ -1088,6 +1141,12 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "kinds": ALLOWED_MATERIAL_KINDS,
         "roles": ALLOWED_MATERIAL_SURFACE_ROLES,
         "container_modes": ALLOWED_MATERIAL_CONTAINER_MODES,
+        "reference_technologies": ALLOWED_MATERIAL_REFERENCE_TECHNOLOGIES,
+        "reference_variants": ALLOWED_MATERIAL_KINDS,
+        "reference_shapes": ALLOWED_MATERIAL_REFERENCE_SHAPES,
+        "reference_shape_scopes": ALLOWED_MATERIAL_REFERENCE_SHAPE_SCOPES,
+        "reference_blending_scopes": ALLOWED_MATERIAL_REFERENCE_BLENDING_SCOPES,
+        "reference_semantic_thickness": ALLOWED_MATERIAL_KINDS,
         "pass_names": ALLOWED_MATERIAL_PASS_NAMES,
         "pass_executors": ALLOWED_MATERIAL_PASS_EXECUTORS,
         "stage_names": ALLOWED_MATERIAL_STAGE_NAMES,
@@ -1665,6 +1724,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "role",
     "plan_id",
     "container",
+    "reference_model",
     "command_descriptor",
     "geometry",
     "shape",
@@ -2129,6 +2189,24 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "morph_transitions": 0,
             "max_spacing": 0.0,
         },
+        "reference_model": {
+            "technologies": {},
+            "variants": {},
+            "shapes": {},
+            "shape_scopes": {},
+            "blending_scopes": {},
+            "semantic_thickness": {},
+            "view_bounds_anchored": 0,
+            "shape_matches_geometry": 0,
+            "tint_applied": 0,
+            "interactive_response": 0,
+            "container_grouped": 0,
+            "container_union": 0,
+            "container_morphing": 0,
+            "legibility_preserved": 0,
+            "vibrancy_expected": 0,
+            "deterministic_degradation": 0,
+        },
         "shape": {
             "valid": 0,
             "rounded": 0,
@@ -2445,6 +2523,216 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     likely_layer="material-container",
                     hint="MaterialContainerDescriptor.mode should be derived from container_id and union_id.",
                     record_success=False)
+
+        reference_model = check_object_field(
+            report,
+            plan,
+            "reference_model",
+            plan_path,
+            likely_layer="material-reference",
+            hint=(
+                "MaterialPlan.reference_model should expose Apple Liquid Glass "
+                "alignment as pure planner output."))
+        if reference_model is not None:
+            reference_summary = summary["reference_model"]
+            string_specs = {
+                "technology": (
+                    "technologies",
+                    ALLOWED_MATERIAL_REFERENCE_TECHNOLOGIES),
+                "variant": ("variants", ALLOWED_MATERIAL_KINDS),
+                "shape": ("shapes", ALLOWED_MATERIAL_REFERENCE_SHAPES),
+                "shape_scope": (
+                    "shape_scopes",
+                    ALLOWED_MATERIAL_REFERENCE_SHAPE_SCOPES),
+                "blending_scope": (
+                    "blending_scopes",
+                    ALLOWED_MATERIAL_REFERENCE_BLENDING_SCOPES),
+                "semantic_thickness": (
+                    "semantic_thickness",
+                    ALLOWED_MATERIAL_KINDS),
+            }
+            reference_values: JsonObject = {}
+            for key, (summary_key, allowed) in string_specs.items():
+                value = check_string_field(
+                    report,
+                    reference_model,
+                    key,
+                    f"{plan_path}.reference_model",
+                    likely_layer="material-reference",
+                    hint="Keep MaterialPlan.reference_model vocabulary aligned with the verifier.")
+                if isinstance(value, str):
+                    reference_values[key] = value
+                    bucket = reference_summary[summary_key]
+                    bucket[value] = bucket.get(value, 0) + 1
+                    report.check(
+                        f"material reference {key} is known",
+                        value in allowed,
+                        path=f"{plan_path}.reference_model.{key}",
+                        expected=sorted(allowed),
+                        actual=value,
+                        likely_layer="material-reference",
+                        hint="Update reference_model verifier vocabulary with the pure planner.",
+                        record_success=False)
+            for key in (
+                    "view_bounds_anchored",
+                    "shape_matches_geometry",
+                    "tint_applied",
+                    "interactive_response",
+                    "container_grouped",
+                    "container_union",
+                    "container_morphing",
+                    "legibility_preserved",
+                    "vibrancy_expected",
+                    "deterministic_degradation"):
+                value = check_bool_field(
+                    report,
+                    reference_model,
+                    key,
+                    f"{plan_path}.reference_model",
+                    likely_layer="material-reference",
+                    hint="Reference model booleans must stay explicit.")
+                if value is True:
+                    reference_summary[key] += 1
+
+            if isinstance(kind, str):
+                for key in ("variant", "semantic_thickness"):
+                    if key in reference_values:
+                        report.check(
+                            f"material reference {key} matches kind",
+                            reference_values[key] == kind,
+                            path=f"{plan_path}.reference_model.{key}",
+                            expected=kind,
+                            actual=reference_values[key],
+                            likely_layer="material-reference",
+                            hint="Material reference variant and thickness should mirror MaterialPlan.kind.",
+                            record_success=False)
+
+            shape_obj = plan.get("shape")
+            shape_valid = bool_at(shape_obj, "valid") if isinstance(shape_obj, dict) else None
+            shape_rounded = bool_at(shape_obj, "rounded") if isinstance(shape_obj, dict) else None
+            if shape_valid is not None and "shape" in reference_values:
+                expected_shape = "invalid"
+                if shape_valid:
+                    expected_shape = "rounded-rectangle" if shape_rounded else "rectangle"
+                report.check(
+                    "material reference shape matches geometry analysis",
+                    reference_values["shape"] == expected_shape,
+                    path=f"{plan_path}.reference_model.shape",
+                    expected=expected_shape,
+                    actual=reference_values["shape"],
+                    likely_layer="material-reference",
+                    hint="MaterialReferenceModel.shape should be derived from MaterialPlan.shape.",
+                    record_success=False)
+            if isinstance(kind, str) and shape_valid is not None:
+                expected_anchor = kind != "none" and shape_valid
+                for key in ("view_bounds_anchored", "shape_matches_geometry"):
+                    if isinstance(reference_model.get(key), bool):
+                        report.check(
+                            f"material reference {key} is derived",
+                            reference_model.get(key) is expected_anchor,
+                            path=f"{plan_path}.reference_model.{key}",
+                            expected=expected_anchor,
+                            actual=reference_model.get(key),
+                            likely_layer="material-reference",
+                            hint="Liquid Glass reference shape anchoring should follow valid view bounds.",
+                            record_success=False)
+
+            tint_obj = plan.get("tint")
+            tint_alpha = number_at(tint_obj, "a") if isinstance(tint_obj, dict) else None
+            if isinstance(kind, str) and tint_alpha is not None:
+                expected_tint = kind != "none" and int(tint_alpha) > 0
+                report.check(
+                    "material reference tint_applied is derived",
+                    reference_model.get("tint_applied") is expected_tint,
+                    path=f"{plan_path}.reference_model.tint_applied",
+                    expected=expected_tint,
+                    actual=reference_model.get("tint_applied"),
+                    likely_layer="material-reference",
+                    hint="Tint metadata should mirror the resolved MaterialPlan tint alpha.",
+                    record_success=False)
+
+            if isinstance(plan_container, dict):
+                for reference_key, container_key in (
+                        ("interactive_response", "interactive"),
+                        ("container_grouped", "participates"),
+                        ("container_union", "shape_union_expected"),
+                        ("container_morphing", "morph_transitions")):
+                    expected = plan_container.get(container_key)
+                    if isinstance(expected, bool):
+                        report.check(
+                            f"material reference {reference_key} mirrors container",
+                            reference_model.get(reference_key) is expected,
+                            path=f"{plan_path}.reference_model.{reference_key}",
+                            expected=expected,
+                            actual=reference_model.get(reference_key),
+                            likely_layer="material-reference",
+                            hint="Liquid Glass container metadata should be pure and backend-independent.",
+                            record_success=False)
+
+            fallback = bool_at(plan, "fallback")
+            backdrop_sampling = bool_at(plan, "backdrop_sampling")
+            if isinstance(kind, str) and fallback is not None and backdrop_sampling is not None:
+                expected_scope = "none"
+                if kind != "none" and backdrop_sampling:
+                    expected_scope = "sampled-backdrop"
+                elif kind != "none" and fallback:
+                    expected_scope = "deterministic-fallback"
+                if "blending_scope" in reference_values:
+                    report.check(
+                        "material reference blending_scope is derived",
+                        reference_values["blending_scope"] == expected_scope,
+                        path=f"{plan_path}.reference_model.blending_scope",
+                        expected=expected_scope,
+                        actual=reference_values["blending_scope"],
+                        likely_layer="material-reference",
+                        hint="Reference blending scope should mirror fallback and backdrop_sampling.",
+                        record_success=False)
+
+            foreground = plan.get("foreground")
+            if isinstance(foreground, dict):
+                uses_vibrancy = bool_at(foreground, "uses_vibrancy")
+                if uses_vibrancy is not None:
+                    report.check(
+                        "material reference vibrancy_expected mirrors foreground",
+                        reference_model.get("vibrancy_expected") is uses_vibrancy,
+                        path=f"{plan_path}.reference_model.vibrancy_expected",
+                        expected=uses_vibrancy,
+                        actual=reference_model.get("vibrancy_expected"),
+                        likely_layer="material-reference",
+                        hint="Reference vibrancy expectation should mirror MaterialPlan.foreground.",
+                        record_success=False)
+                minimum = number_at(foreground, "minimum_contrast_ratio")
+                primary = number_at(foreground, "primary_contrast_ratio")
+                secondary = number_at(foreground, "secondary_contrast_ratio")
+                accent = number_at(foreground, "accent_contrast_ratio")
+                if None not in (minimum, primary, secondary, accent):
+                    expected_legibility = (
+                        float(primary) >= float(minimum)
+                        and float(secondary) >= float(minimum)
+                        and float(accent) >= float(minimum))
+                    report.check(
+                        "material reference legibility_preserved is derived",
+                        reference_model.get("legibility_preserved") is expected_legibility,
+                        path=f"{plan_path}.reference_model.legibility_preserved",
+                        expected=expected_legibility,
+                        actual=reference_model.get("legibility_preserved"),
+                        likely_layer="material-reference",
+                        hint="Reference legibility should mirror foreground contrast guarantees.",
+                        record_success=False)
+
+            budget = plan.get("resource_budget")
+            if isinstance(budget, dict):
+                deterministic = bool_at(budget, "deterministic_fallback")
+                if deterministic is not None:
+                    report.check(
+                        "material reference deterministic_degradation mirrors resource budget",
+                        reference_model.get("deterministic_degradation") is deterministic,
+                        path=f"{plan_path}.reference_model.deterministic_degradation",
+                        expected=deterministic,
+                        actual=reference_model.get("deterministic_degradation"),
+                        likely_layer="material-reference",
+                        hint="Reference fallback policy should mirror MaterialPlan.resource_budget.",
+                        record_success=False)
 
         command_descriptor = check_object_field(
             report,
@@ -4771,6 +5059,16 @@ def check_material_plan_summary_requirements(
             "container_unioned",
             "container_interactive",
             "container_morph_transitions",
+            "reference_view_bounds_anchored",
+            "reference_shape_matches_geometry",
+            "reference_tint_applied",
+            "reference_interactive_response",
+            "reference_container_grouped",
+            "reference_container_union",
+            "reference_container_morphing",
+            "reference_legibility_preserved",
+            "reference_vibrancy_expected",
+            "reference_deterministic_degradation",
             "shape_valid",
             "shape_rounded",
             "shape_radius_clamped",
@@ -4839,6 +5137,19 @@ def check_material_plan_summary_requirements(
                     nested_field = "unioned"
                 actual = container_summary.get(nested_field)
                 summary_path = f"{base_path}.container.{nested_field}"
+            elif field.startswith("reference_") and field not in (
+                    "reference_technologies",
+                    "reference_variants",
+                    "reference_shapes",
+                    "reference_shape_scopes",
+                    "reference_blending_scopes",
+                    "reference_semantic_thickness"):
+                reference_summary = summary.get("reference_model")
+                if not isinstance(reference_summary, dict):
+                    reference_summary = {}
+                nested_field = field.removeprefix("reference_")
+                actual = reference_summary.get(nested_field)
+                summary_path = f"{base_path}.reference_model.{nested_field}"
             elif field in (
                     "shape_valid",
                     "shape_rounded",
@@ -4947,6 +5258,24 @@ def check_material_plan_summary_requirements(
         "union_ids": (
             "material-container",
             "Inspect MaterialPlan.container.union_id and unioned glass surfaces."),
+        "reference_technologies": (
+            "material-reference",
+            "Inspect MaterialPlan.reference_model.technology and the pure planner schema."),
+        "reference_variants": (
+            "material-reference",
+            "Inspect MaterialPlan.reference_model.variant and MaterialPlan.kind."),
+        "reference_shapes": (
+            "material-reference",
+            "Inspect MaterialPlan.reference_model.shape and MaterialPlan.shape."),
+        "reference_shape_scopes": (
+            "material-reference",
+            "Inspect MaterialPlan.reference_model.shape_scope."),
+        "reference_blending_scopes": (
+            "material-reference",
+            "Inspect MaterialPlan.reference_model.blending_scope and fallback/backdrop policy."),
+        "reference_semantic_thickness": (
+            "material-reference",
+            "Inspect MaterialPlan.reference_model.semantic_thickness and MaterialPlan.kind."),
         "pass_names": (
             "material-pass",
             "Inspect MaterialPlan.primary_pass and runtime pass serialization."),
@@ -5005,6 +5334,12 @@ def check_material_plan_summary_requirements(
             "container_modes",
             "container_ids",
             "union_ids",
+            "reference_technologies",
+            "reference_variants",
+            "reference_shapes",
+            "reference_shape_scopes",
+            "reference_blending_scopes",
+            "reference_semantic_thickness",
             "pass_names",
             "pass_executors",
             "sampling_kernels",
@@ -5033,7 +5368,21 @@ def check_material_plan_summary_requirements(
                 }[field]
                 actual = container_summary.get(nested)
                 summary_path = f"{base_path}.container.{nested}"
-            if field == "backdrop_sources":
+            elif field.startswith("reference_"):
+                reference_summary = summary.get("reference_model")
+                if not isinstance(reference_summary, dict):
+                    reference_summary = {}
+                nested = {
+                    "reference_technologies": "technologies",
+                    "reference_variants": "variants",
+                    "reference_shapes": "shapes",
+                    "reference_shape_scopes": "shape_scopes",
+                    "reference_blending_scopes": "blending_scopes",
+                    "reference_semantic_thickness": "semantic_thickness",
+                }[field]
+                actual = reference_summary.get(nested)
+                summary_path = f"{base_path}.reference_model.{nested}"
+            elif field == "backdrop_sources":
                 backdrop_summary = summary.get("backdrop")
                 if not isinstance(backdrop_summary, dict):
                     backdrop_summary = {}
