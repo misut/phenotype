@@ -192,6 +192,10 @@
     {
       "path": "window.window_main",
       "equals": true
+    },
+    {
+      "path": "window.moves_to_active_space",
+      "equals": true
     }
   ],
   "require_runtime_numeric_bounds": [

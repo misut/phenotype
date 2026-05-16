@@ -1509,6 +1509,49 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(summary.backdrop_copy_count)});
         out.emplace(
+            "execution_stage_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.execution_stage_count)});
+        out.emplace(
+            "active_execution_stage_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.active_execution_stage_count)});
+        out.emplace(
+            "backdrop_execution_stage_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.backdrop_execution_stage_count)});
+        out.emplace(
+            "primary_execution_stage_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.primary_execution_stage_count)});
+        out.emplace(
+            "backdrop_filter_stage_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.backdrop_filter_stage_count)});
+        out.emplace(
+            "fallback_fill_stage_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.fallback_fill_stage_count)});
+        out.emplace(
+            "shadow_stage_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.shadow_stage_count)});
+        out.emplace(
+            "edge_highlight_stage_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.edge_highlight_stage_count)});
+        out.emplace(
+            "noise_dither_stage_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.noise_dither_stage_count)});
+        out.emplace(
             "material_max_sample_taps",
             json::Value{
                 static_cast<std::int64_t>(

@@ -312,6 +312,9 @@ inline id create_appkit_window(int width,
     objc_send<void>(window, sel("setReleasedWhenClosed:"), static_cast<signed char>(0));
     objc_send<void>(window, sel("setTitle:"), ns_string(title));
     objc_send<void>(window, sel("setAcceptsMouseMovedEvents:"), static_cast<signed char>(1));
+    constexpr unsigned long move_to_active_space = 1ul << 1;
+    objc_send<void>(window, sel("setCollectionBehavior:"), move_to_active_space);
+    objc_send<void>(window, sel("center"));
     return window;
 }
 

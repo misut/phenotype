@@ -31,9 +31,10 @@ prove the example requested `IntegratedTitlebar`, preserved the expected
 titlebar/control reserve metrics, and is not using GLFW or another toolkit
 window shim.
 On macOS it additionally checks WindowServer bounds, onscreen state, app
-activation, and key/main window state, which catches regressions where the
-process owns a Dock icon but the ordered NSWindow is still hidden, backgrounded,
-or not eligible for foreground interaction.
+activation, active-Space collection behavior, and key/main window state, which
+catches regressions where the process owns a Dock icon but the ordered NSWindow
+is still hidden, backgrounded, in another Space, or not eligible for foreground
+interaction.
 
 The toolbar search control starts as a Finder-style icon button. Activating it
 reveals a search field wired to the shared file model, so desktop and mobile

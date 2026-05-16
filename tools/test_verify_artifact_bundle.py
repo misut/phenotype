@@ -388,12 +388,55 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
 
 def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
     sample_taps = 0 if plan["fallback"] else int(plan["sample_taps"])
+    stages = plan["execution_stages"]
+    assert isinstance(stages, list)
+    active_stages = [
+        stage for stage in stages
+        if isinstance(stage, dict) and stage["active"]
+    ]
+    backdrop_stages = [
+        stage for stage in stages
+        if isinstance(stage, dict) and stage["requires_backdrop"]
+    ]
+    primary = plan["primary_pass"]
+    assert isinstance(primary, dict)
+    primary_stages = [
+        stage for stage in stages
+        if isinstance(stage, dict)
+        and all(
+            stage.get(key) == primary.get(key)
+            for key in verifier.MATERIAL_PASS_FIELDS)
+    ]
     return {
         "plan_count": 1,
         "material_instance_count": 0 if plan["fallback"] else 1,
         "fallback_instance_count": 1 if plan["fallback"] else 0,
         "material_draw_calls": 0 if plan["fallback"] else 1,
         "backdrop_copy_count": 0,
+        "execution_stage_count": len(stages),
+        "active_execution_stage_count": len(active_stages),
+        "backdrop_execution_stage_count": len(backdrop_stages),
+        "primary_execution_stage_count": len(primary_stages),
+        "backdrop_filter_stage_count": sum(
+            1 for stage in stages
+            if isinstance(stage, dict) and stage["executor"] == "backdrop-filter"
+        ),
+        "fallback_fill_stage_count": sum(
+            1 for stage in stages
+            if isinstance(stage, dict) and stage["executor"] == "fallback-fill"
+        ),
+        "shadow_stage_count": sum(
+            1 for stage in stages
+            if isinstance(stage, dict) and stage["name"] == "shape-shadow"
+        ),
+        "edge_highlight_stage_count": sum(
+            1 for stage in stages
+            if isinstance(stage, dict) and stage["name"] == "edge-highlight"
+        ),
+        "noise_dither_stage_count": sum(
+            1 for stage in stages
+            if isinstance(stage, dict) and stage["name"] == "noise-dither"
+        ),
         "material_max_sample_taps": sample_taps,
         "material_total_sample_taps": sample_taps,
         "backdrop_copy_pixels": 0,
@@ -1508,6 +1551,32 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["actual"], 25)
         self.assertEqual(failure["likely_pass"], "material-executor")
         self.assertIn("MaterialPlan.sample_taps", failure["hint"])
+
+    def test_material_executor_stage_count_mismatch_is_llm_actionable(self) -> None:
+        root = snapshot(sampled_material_plan(sample_taps=13))
+        renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+        assert isinstance(renderer, dict)
+        executor = renderer["material_executor_summary"]
+        assert isinstance(executor, dict)
+        executor["execution_stage_count"] = 0
+
+        code, report = self.run_verifier(root)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material executor summary execution_stage_count "
+                "matches plans"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_executor_summary"
+            ".execution_stage_count")
+        self.assertEqual(failure["expected"], 1)
+        self.assertEqual(failure["actual"], 0)
+        self.assertEqual(failure["likely_layer"], "platform-runtime")
+        self.assertEqual(failure["likely_pass"], "material-executor")
+        self.assertIn("renderer.material_plans", failure["hint"])
 
     def test_manifest_can_compare_pixel_region_metrics(self) -> None:
         manifest = {

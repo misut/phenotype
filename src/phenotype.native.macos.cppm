@@ -643,6 +643,11 @@ inline SEL sel_is_main_window() {
     return sel;
 }
 
+inline SEL sel_collection_behavior() {
+    static auto sel = sel_registerName("collectionBehavior");
+    return sel;
+}
+
 inline SEL sel_attributed_substring_for_range() {
     static auto sel =
         sel_registerName("attributedSubstringForProposedRange:actualRange:");
@@ -6490,22 +6495,14 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     MaterialExecutorSummary material_summary;
     material_summary.cpu_decode_ns = decode_ns;
-    material_summary.plan_count =
-        static_cast<std::uint32_t>(g_renderer.scratch.material_records.size());
     material_summary.foreground_text_candidate_count =
         g_renderer.scratch.foreground_text_candidate_count;
     material_summary.foreground_text_remap_count =
         g_renderer.scratch.foreground_text_remap_count;
     for (auto const& record : g_renderer.scratch.material_records) {
-        if (!record.plan.backdrop_sampling || record.plan.fallback()) {
-            ++material_summary.fallback_instance_count;
-        } else {
-            material_summary.material_max_sample_taps = std::max(
-                material_summary.material_max_sample_taps,
-                record.plan.sample_taps);
-            material_summary.material_total_sample_taps +=
-                record.plan.sample_taps;
-        }
+        accumulate_material_executor_plan_summary(
+            material_summary,
+            record.plan);
     }
 
     int winw = 0;
@@ -7743,6 +7740,10 @@ inline json::Object macos_window_runtime_json() {
         has_options ? surface->integrated_titlebar : IntegratedTitlebarOptions{};
     bool const integrated =
         chrome == WindowChromeStyle::IntegratedTitlebar;
+    constexpr unsigned long move_to_active_space = 1ul << 1;
+    unsigned long const collection_behavior = ns_window
+        ? objc_send<unsigned long>(ns_window, sel_collection_behavior())
+        : 0ul;
 
     json::Object titlebar;
     titlebar.emplace(
@@ -7794,6 +7795,12 @@ inline json::Object macos_window_runtime_json() {
     window.emplace(
         "window_main",
         json::Value{ns_window && objc_send<bool>(ns_window, sel_is_main_window())});
+    window.emplace(
+        "collection_behavior",
+        json::Value{static_cast<double>(collection_behavior)});
+    window.emplace(
+        "moves_to_active_space",
+        json::Value{(collection_behavior & move_to_active_space) != 0});
 
     auto server = window_server_snapshot(ns_window);
     json::Object server_bounds;
