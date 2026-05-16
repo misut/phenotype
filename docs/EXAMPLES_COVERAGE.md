@@ -217,6 +217,9 @@ viewport, pure Finder chrome/grid metrics, capabilities, operation receipt,
 selected preview excerpt, and final snapshot. It is the lightweight
 CI-friendly counterpart to the local
 desktop/mobile artifact capture gate.
+File-operation inputs are resolved as direct child entry names in the current
+sandbox folder; path traversal or hidden-entry names produce failed operation
+receipts that can be asserted with `--expect operation:...:fail`.
 
 The glass showcase has the same headless model path through
 `examples/glass_showcase_shared` and `phenotype drive glass-showcase`. The
