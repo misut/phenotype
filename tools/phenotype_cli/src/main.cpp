@@ -65,6 +65,27 @@ struct PackageSummary {
     std::size_t font_file_count = 0;
 };
 
+struct BundleFileRecord {
+    std::string kind;
+    std::string name;
+    fs::path source;
+    fs::path destination;
+    std::uintmax_t bytes = 0;
+    bool copied = false;
+    std::string error;
+};
+
+struct BundleSummary {
+    fs::path package_root;
+    fs::path output_root;
+    fs::path manifest_path;
+    PackageSummary package;
+    std::vector<BundleFileRecord> files;
+    std::vector<Check> checks;
+    bool ok = false;
+    std::string error;
+};
+
 auto help_option() -> cppx::cli::OptionSpec {
     return {.name = "help", .short_name = 'h', .description = "Show help"};
 }
@@ -256,6 +277,25 @@ auto spec() -> cppx::cli::CommandSpec {
                             "phenotype package list --json examples",
                         },
                     },
+                    {
+                        .name = "bundle",
+                        .summary = "Stage package resources into a bundle directory",
+                        .options = {
+                            help_option(),
+                            json_option(),
+                            {.name = "output",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "dir",
+                             .description = "Output staging directory for copied resources"},
+                        },
+                        .positional_name = "path",
+                        .positional_description =
+                            "Directory expected to contain phenotype.package.toml.",
+                        .examples = {
+                            "phenotype package bundle examples/file_explorer_desktop --output /tmp/phenotype-file-explorer",
+                            "phenotype package bundle --json examples/file_explorer_mobile --output /tmp/phenotype-mobile",
+                        },
+                    },
                 },
                 .allow_positionals = false,
                 .category = "packaging",
@@ -371,6 +411,28 @@ auto read_text_file(fs::path const& path) -> std::string {
     return out.str();
 }
 
+auto write_text_file(fs::path const& path,
+                     std::string_view text,
+                     std::string& error) -> bool {
+    auto ec = std::error_code{};
+    fs::create_directories(path.parent_path(), ec);
+    if (ec) {
+        error = ec.message();
+        return false;
+    }
+    auto out = std::ofstream{path, std::ios::binary};
+    if (!out) {
+        error = "failed to open file for writing";
+        return false;
+    }
+    out << text;
+    if (!out) {
+        error = "failed to write file";
+        return false;
+    }
+    return true;
+}
+
 auto trim_copy(std::string_view text) -> std::string {
     auto begin = text.begin();
     auto end = text.end();
@@ -383,6 +445,45 @@ auto trim_copy(std::string_view text) -> std::string {
         --end;
     }
     return std::string{begin, end};
+}
+
+auto safe_relative_path(fs::path const& path) -> bool {
+    if (path.empty() || path.is_absolute())
+        return false;
+    for (auto const& part : path.lexically_normal()) {
+        if (part == "..")
+            return false;
+    }
+    return true;
+}
+
+auto path_stays_under_root(fs::path const& root,
+                           fs::path const& path,
+                           std::string& error) -> bool {
+    auto ec = std::error_code{};
+    auto canonical_root = fs::weakly_canonical(root, ec);
+    if (ec) {
+        error = ec.message();
+        return false;
+    }
+    auto canonical_path = fs::weakly_canonical(path, ec);
+    if (ec) {
+        error = ec.message();
+        return false;
+    }
+
+    auto relative = canonical_path.lexically_relative(canonical_root);
+    if (relative.empty()) {
+        error = "source path must stay under the package root";
+        return false;
+    }
+    for (auto const& part : relative) {
+        if (part == "..") {
+            error = "source path must stay under the package root";
+            return false;
+        }
+    }
+    return true;
 }
 
 auto strip_toml_comment(std::string_view line) -> std::string {
@@ -1321,6 +1422,65 @@ auto package_entry_json(PackageSummary const& summary,
         checks_json(checks));
 }
 
+auto bundle_file_json(BundleFileRecord const& file,
+                      fs::path const& output_root) -> std::string {
+    auto ec = std::error_code{};
+    auto relative_destination = fs::relative(file.destination, output_root, ec);
+    return std::format(
+        "{{\"kind\":{},\"name\":{},\"source\":{},\"destination\":{},"
+        "\"bytes\":{},\"copied\":{},\"error\":{}}}",
+        json_string(file.kind),
+        json_string(file.name),
+        json_string(path_string(file.source)),
+        json_string(ec ? path_string(file.destination)
+                       : path_string(relative_destination)),
+        file.bytes,
+        file.copied ? "true" : "false",
+        json_string(file.error));
+}
+
+auto bundle_files_json(std::span<BundleFileRecord const> files,
+                       fs::path const& output_root) -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < files.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += bundle_file_json(files[i], output_root);
+    }
+    out += "]";
+    return out;
+}
+
+auto bundle_json(BundleSummary const& summary) -> std::string {
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"package bundle\","
+        "\"ok\":{},\"package_root\":{},\"output_root\":{},"
+        "\"bundle_manifest\":{},\"application\":{{\"id\":{},"
+        "\"display_name\":{},\"version\":{},\"entry\":{},"
+        "\"platforms\":{}}},\"defaults\":{{\"locale\":{},"
+        "\"font_family\":{}}},\"debug\":{{\"artifact_manifest\":{},"
+        "\"probe_scene\":{},\"verifier\":{}}},\"file_count\":{},"
+        "\"files\":{},\"checks\":{},\"error\":{}}}",
+        summary.ok ? "true" : "false",
+        json_string(path_string(summary.package_root)),
+        json_string(path_string(summary.output_root)),
+        json_string(path_string(summary.manifest_path)),
+        json_string(summary.package.application_id),
+        json_string(summary.package.display_name),
+        json_string(summary.package.version),
+        json_string(summary.package.entry),
+        string_array_json(summary.package.platforms),
+        json_string(summary.package.catalog.default_locale),
+        json_string(summary.package.catalog.default_font_family),
+        json_string(summary.package.catalog.debug.artifact_manifest),
+        json_string(summary.package.catalog.debug.probe_scene),
+        json_string(summary.package.catalog.debug.verifier),
+        summary.files.size(),
+        bundle_files_json(summary.files, summary.output_root),
+        checks_json(summary.checks),
+        json_string(summary.error));
+}
+
 auto package_manifest_roots(fs::path root) -> std::vector<fs::path> {
     auto roots = std::vector<fs::path>{};
     if (!path_is_directory(root))
@@ -1346,6 +1506,132 @@ auto package_manifest_roots(fs::path root) -> std::vector<fs::path> {
     }
     std::ranges::sort(roots);
     return roots;
+}
+
+auto copy_bundle_file(fs::path const& package_root,
+                      fs::path const& output_root,
+                      std::string kind,
+                      std::string name,
+                      fs::path relative_source) -> BundleFileRecord {
+    BundleFileRecord record{
+        .kind = std::move(kind),
+        .name = std::move(name),
+        .source = package_root / relative_source,
+        .destination = output_root / relative_source,
+    };
+
+    if (!safe_relative_path(relative_source)) {
+        record.error = "source path must be a safe relative path";
+        return record;
+    }
+
+    if (!path_stays_under_root(package_root, record.source, record.error))
+        return record;
+
+    auto ec = std::error_code{};
+    if (!fs::is_regular_file(record.source, ec) || ec) {
+        record.error = ec ? ec.message() : "source file is missing";
+        return record;
+    }
+
+    fs::create_directories(record.destination.parent_path(), ec);
+    if (ec) {
+        record.error = ec.message();
+        return record;
+    }
+
+    ec.clear();
+    fs::copy_file(
+        record.source,
+        record.destination,
+        fs::copy_options::overwrite_existing,
+        ec);
+    if (ec) {
+        record.error = ec.message();
+        return record;
+    }
+
+    record.bytes = file_size_or_zero(record.destination);
+    record.copied = true;
+    return record;
+}
+
+auto build_package_bundle(fs::path package_root,
+                          fs::path output_root) -> BundleSummary {
+    BundleSummary bundle{
+        .package_root = std::move(package_root),
+        .output_root = std::move(output_root),
+    };
+    bundle.package = package_summary(bundle.package_root);
+    bundle.checks = package_checks(bundle.package);
+    if (!all_ok(bundle.checks)) {
+        bundle.error = "package inspect checks failed";
+        return bundle;
+    }
+
+    auto ec = std::error_code{};
+    fs::create_directories(bundle.output_root, ec);
+    if (ec) {
+        bundle.error = ec.message();
+        return bundle;
+    }
+
+    bundle.files.push_back(copy_bundle_file(
+        bundle.package_root,
+        bundle.output_root,
+        "manifest",
+        "phenotype.package.toml",
+        "phenotype.package.toml"));
+
+    for (auto const& asset : bundle.package.catalog.assets) {
+        bundle.files.push_back(copy_bundle_file(
+            bundle.package_root,
+            bundle.output_root,
+            "asset",
+            asset.name,
+            asset.source));
+    }
+    for (auto const& locale : bundle.package.catalog.locales) {
+        bundle.files.push_back(copy_bundle_file(
+            bundle.package_root,
+            bundle.output_root,
+            "locale",
+            locale.tag,
+            locale.source));
+    }
+    for (auto const& font : bundle.package.catalog.fonts) {
+        bundle.files.push_back(copy_bundle_file(
+            bundle.package_root,
+            bundle.output_root,
+            "font",
+            font.family,
+            font.source));
+    }
+    if (!bundle.package.catalog.debug.artifact_manifest.empty()) {
+        bundle.files.push_back(copy_bundle_file(
+            bundle.package_root,
+            bundle.output_root,
+            "debug",
+            "artifact_manifest",
+            bundle.package.catalog.debug.artifact_manifest));
+    }
+
+    auto copied = std::ranges::all_of(bundle.files, [](auto const& file) {
+        return file.copied;
+    });
+    if (!copied) {
+        bundle.error = "one or more package resources failed to copy";
+        return bundle;
+    }
+
+    bundle.manifest_path = bundle.output_root / "phenotype.bundle.json";
+    bundle.ok = true;
+    auto manifest = bundle_json(bundle);
+    if (!write_text_file(bundle.manifest_path, manifest, bundle.error)) {
+        bundle.ok = false;
+        return bundle;
+    }
+    return bundle;
 }
 
 auto output_line_count(std::string_view text) -> std::size_t {
@@ -1887,6 +2173,59 @@ int run_package_list(cppx::cli::Invocation const& invocation) {
     return ok ? 0 : 1;
 }
 
+int run_package_bundle(cppx::cli::Invocation const& invocation) {
+    auto path = first_positional_or_error(invocation, "package bundle");
+    if (!path)
+        return print_error("package bundle", path.error(), invocation.has("json"));
+    auto output = invocation.value("output");
+    if (!output) {
+        return print_error(
+            "package bundle",
+            "package bundle requires --output <dir>",
+            invocation.has("json"));
+    }
+
+    auto bundle = build_package_bundle(
+        fs::path{*path},
+        fs::path{std::string{*output}});
+    if (invocation.has("json")) {
+        std::println("{}", bundle_json(bundle));
+    } else {
+        auto lines = std::vector<cppx::terminal::StatusLine>{
+            {.label = "package",
+             .value = path_string(bundle.package_root),
+             .status = all_ok(bundle.checks)
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::fail},
+            {.label = "output",
+             .value = path_string(bundle.output_root),
+             .status = bundle.ok ? cppx::terminal::StatusKind::ok
+                                 : cppx::terminal::StatusKind::fail},
+            {.label = "manifest",
+             .value = path_string(bundle.manifest_path),
+             .status = bundle.ok ? cppx::terminal::StatusKind::ok
+                                 : cppx::terminal::StatusKind::skip},
+            {.label = "files",
+             .value = std::format("{}", bundle.files.size()),
+             .status = std::ranges::all_of(bundle.files, [](auto const& file) {
+                 return file.copied;
+             }) ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::fail},
+        };
+        std::println("phenotype package bundle");
+        std::println("{}", cppx::terminal::format_status_frame(lines, false));
+        if (!bundle.error.empty()) {
+            std::println("{}",
+                         cppx::terminal::format_diagnostic({
+                             .severity = cppx::terminal::DiagnosticSeverity::error,
+                             .message = bundle.error,
+                             .context = "package bundle",
+                         }));
+        }
+    }
+    return bundle.ok ? 0 : 1;
+}
+
 int run_drive_file_explorer(cppx::cli::Invocation const& invocation) {
     auto profile = std::string{"desktop"};
     if (auto value = invocation.value("profile")) {
@@ -2031,6 +2370,9 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "package", "list"})
         return run_package_list(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "package", "bundle"})
+        return run_package_bundle(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "drive", "file-explorer"})
         return run_drive_file_explorer(*parsed);

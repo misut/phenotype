@@ -119,6 +119,7 @@ Current commands:
 | `phenotype artifact verify-file-explorer` | implemented | Local-only edge wrapper around the desktop/mobile Finder-style artifact gate. This keeps the future replacement command shape visible while shell compatibility remains. |
 | `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, package resource directories, and artifact manifest presence. |
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
+| `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, and debug manifest references. |
 | `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs and emits a stable observation JSON with trace, entries, capabilities, operation receipt, and preview excerpt fields. |
 
 The desktop and mobile file explorer examples now include inspectable
@@ -171,6 +172,16 @@ artifact manifest metadata, and verifier metadata without reading files. The
 CLI manifest parser now constructs this shared catalog before launch or future
 bundling, and `package inspect --json` exposes the normalized catalog plus
 resource diagnostics.
+
+`phenotype package bundle` is the first staging implementation. It keeps
+platform-specific `.app`, `.dmg`, MSI, Android, and web packaging out of scope,
+but copies every declared package resource into an output directory, rejects
+unsafe or package-escaping source paths, and writes a machine-readable
+`phenotype.bundle.json` manifest. The manifest records application identity,
+platform list, default locale/font, debug probe metadata, copied resource
+destinations relative to the output root, byte counts, package checks, and
+structured errors. This gives CI and future native packagers one stable
+resource inventory without requiring native window startup.
 
 ## Diagnostic migration
 
@@ -240,8 +251,9 @@ The CLI should not make production rendering slower:
    Python fixture parity tests until the old verifier can be retired.
 4. Add package manifest parsing for assets, locales, fonts, and debug
    resources. Start with inspect-only validation before producing bundles.
-   Initial inspect-only parsing now builds the shared pure `ResourceCatalog`;
-   bundle output and runtime resource injection still need to adopt it.
+   Initial parsing now builds the shared pure `ResourceCatalog`; bundle
+   staging is implemented through `phenotype package bundle`, while runtime
+   resource injection and platform-native installers still need to adopt it.
 5. Add deterministic CLI input scripts and output observations for
    `glass_showcase` and `file_explorer_desktop`. Initial
    `file_explorer_desktop`/mobile model driving is complete through

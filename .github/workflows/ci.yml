@@ -449,6 +449,14 @@ jobs:
           "$cli" package list --json examples | python3 -m json.tool >/dev/null
           "$cli" package inspect --json examples/file_explorer_desktop | python3 -m json.tool >/dev/null
           "$cli" package inspect --json examples/file_explorer_mobile | python3 -m json.tool >/dev/null
+          bundle_root="$(mktemp -d)"
+          "$cli" package bundle --json examples/file_explorer_desktop --output "$bundle_root/desktop" | python3 -m json.tool >/dev/null
+          python3 -m json.tool "$bundle_root/desktop/phenotype.bundle.json" >/dev/null
+          test -f "$bundle_root/desktop/assets/file-explorer-icon.txt"
+          test -f "$bundle_root/desktop/locales/ko.toml"
+          "$cli" package bundle --json examples/file_explorer_mobile --output "$bundle_root/mobile" | python3 -m json.tool >/dev/null
+          python3 -m json.tool "$bundle_root/mobile/phenotype.bundle.json" >/dev/null
+          test -f "$bundle_root/mobile/fonts/pretendard.alias.toml"
           "$cli" drive file-explorer --json --input select:README.txt --input duplicate --input delete | python3 -m json.tool >/dev/null
           "$cli" drive file-explorer --json --profile mobile --scenario created-preview | python3 -m json.tool >/dev/null
 
