@@ -144,18 +144,22 @@ local product-workflow smoke tests instead of a default CI gate:
 cd tools/phenotype_cli
 mise exec -- exon build
 .exon/debug/phenotype_cli artifact verify-file-explorer --json
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input select:README.txt \
+  --input duplicate \
+  --input delete
 ```
 
 Pull-request CI does not run these slow startup artifact captures. Code changes
 run the root test matrix, docs changes run the docs WASI build, Python verifier
 tooling changes run the uv-managed verifier checks, and CLI/package-resource
-changes run a lightweight Linux `phenotype_cli` build plus package inspection
-without the root C++ test matrix. The main-branch push workflow only runs
-artifact/docs build gates, not the full code test matrix or glass artifact
-capture. WASI root tests, docs builds, and CLI package checks run on Linux
-runners; native artifact builds remain macOS-only. Workflow-file changes
-deliberately enable all relevant gates so runner policy edits validate
-themselves.
+changes run a lightweight Linux `phenotype_cli` build, package inspection, and
+deterministic file explorer drive check without the root C++ test matrix. The
+main-branch push workflow only runs artifact/docs build gates, not the full
+code test matrix or glass artifact capture. WASI root tests, docs builds, and
+CLI package checks run on Linux runners; native artifact builds remain
+macOS-only. Workflow-file changes deliberately enable all relevant gates so
+runner policy edits validate themselves.
 
 ## Example roles
 
@@ -178,6 +182,13 @@ changes produce a shared `Sort: ...` status contract, that the desktop and
 mobile status surfaces expose to artifact verification. This keeps the examples
 useful for interactive product checks while preserving a stable startup
 artifact contract.
+
+The same shared model is available without a native window through
+`phenotype drive file-explorer`. That command applies typed inputs to the
+sandboxed model and emits JSON containing the input trace, visible entries,
+capabilities, operation receipt, selected preview excerpt, and final snapshot.
+It is the lightweight CI-friendly counterpart to the local desktop/mobile
+artifact capture gate.
 
 The desktop and mobile file explorer examples also carry initial
 `phenotype.package.toml` manifests plus `assets/`, `locales/`, and `fonts/`

@@ -10,6 +10,14 @@ selection action metadata, operation receipts, and artifact startup scenarios.
 Keeping it as a separate exon library makes the example UI packages depend on
 a normal module contract instead of a relative header include.
 
+The module also owns the typed input/observation contract used by
+`phenotype drive file-explorer`. `ExplorerInput` describes operations such as
+location selection, file selection, search, draft body updates, create,
+duplicate, delete, sort, reset, and startup scenarios. `drive_explorer()`
+applies those inputs to the sandboxed model and returns `ExplorerInputTrace`
+records plus a final `Snapshot`, so the CLI can observe the same workflow
+without opening a native AppKit or Win32 window.
+
 The module also provides the pure file explorer `ResourceCatalog` fixture and
 locale label resolver used by the desktop and mobile examples. Package/locale
 files are still inspected by the CLI at the edge, but runtime examples consume
@@ -21,4 +29,13 @@ longer hard-coded separately in each UI.
 ```sh
 cd examples/file_explorer_shared
 mise exec -- exon test
+```
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input select:README.txt \
+  --input duplicate \
+  --input delete
 ```

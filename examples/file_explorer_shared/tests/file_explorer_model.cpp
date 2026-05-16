@@ -4,6 +4,7 @@
 #include <filesystem>
 #include <iostream>
 #include <string>
+#include <vector>
 
 import file_explorer_shared;
 
@@ -40,6 +41,18 @@ int main() {
     assert(demo::file_explorer_labels("ja", "desktop").sidebar_recents
         == "Recents");
     assert(demo::file_explorer_labels("ko", "mobile").tab_create == "만들기");
+
+    auto parsed_location = demo::parse_explorer_input("location:documents");
+    assert(parsed_location.ok);
+    assert(parsed_location.input.kind == demo::ExplorerInputKind::SelectLocation);
+    assert(parsed_location.input.value == "documents");
+    auto parsed_sort = demo::parse_explorer_input("sort:kind");
+    assert(parsed_sort.ok);
+    assert(parsed_sort.input.kind == demo::ExplorerInputKind::Sort);
+    assert(parsed_sort.input.sort_mode == demo::SortMode::Kind);
+    auto parsed_bad = demo::parse_explorer_input("sort:date");
+    assert(!parsed_bad.ok);
+    assert(parsed_bad.error.find("sort") != std::string::npos);
 
     std::string const profile = "test-model-contract";
     auto root = demo::demo_root(profile);
@@ -270,6 +283,40 @@ int main() {
     assert(state.selected_name == "README copy.txt");
     assert(fs::exists(state.current / "README copy.txt"));
     assert(state.status == "Duplicated README.txt to README copy.txt");
+
+    std::string const drive_profile = "test-cli-drive";
+    auto drive_root = demo::demo_root(drive_profile);
+    fs::remove_all(drive_root, ec);
+    std::vector<demo::ExplorerInput> inputs{
+        {.kind = demo::ExplorerInputKind::DraftName, .value = "CLI Note"},
+        {.kind = demo::ExplorerInputKind::DraftBody,
+         .value = "Created from typed CLI input."},
+        {.kind = demo::ExplorerInputKind::CreateFile},
+        {.kind = demo::ExplorerInputKind::DuplicateSelected},
+        {.kind = demo::ExplorerInputKind::DeleteSelected},
+        {.kind = demo::ExplorerInputKind::SelectLocation, .value = "trash"},
+        {.kind = demo::ExplorerInputKind::Sort,
+         .value = "kind",
+         .sort_mode = demo::SortMode::Kind},
+    };
+    auto driven = demo::drive_explorer(drive_profile, inputs);
+    assert(driven.profile == drive_profile);
+    assert(driven.trace.size() == inputs.size());
+    assert(driven.trace[2].operation.kind == "file_create");
+    assert(driven.trace[2].operation.ok);
+    assert(driven.trace[3].operation.kind == "file_duplicate");
+    assert(driven.trace[3].operation.ok);
+    assert(driven.trace[4].operation.kind == "file_delete");
+    assert(driven.trace[4].operation.ok);
+    assert(driven.snapshot.relative_location == "Trash");
+    assert(driven.snapshot.sort_label == "Sort: Kind");
+    bool saw_cli_note_copy = false;
+    for (auto const& entry : driven.snapshot.entries) {
+        if (entry.name == "CLI Note copy.txt")
+            saw_cli_note_copy = true;
+    }
+    assert(saw_cli_note_copy);
+    fs::remove_all(drive_root, ec);
 
     demo::reset_demo_tree(state, profile);
     assert(!demo::snapshot(state).can_go_back);

@@ -2,6 +2,7 @@ import cppx.cli;
 import cppx.process;
 import cppx.process.system;
 import cppx.terminal;
+import file_explorer_shared;
 import phenotype.resources;
 import std;
 
@@ -258,6 +259,41 @@ auto spec() -> cppx::cli::CommandSpec {
                 },
                 .allow_positionals = false,
                 .category = "packaging",
+            },
+            {
+                .name = "drive",
+                .summary = "Drive deterministic app input contracts",
+                .options = {help_option()},
+                .subcommands = {
+                    {
+                        .name = "file-explorer",
+                        .summary = "Drive the shared file explorer model without a native window",
+                        .options = {
+                            help_option(),
+                            json_option(),
+                            {.name = "profile",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "desktop|mobile",
+                             .description = "Demo profile. Defaults to desktop"},
+                            {.name = "scenario",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "name",
+                             .description = "Startup scenario to apply before explicit inputs"},
+                            {.name = "input",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "kind[:value]",
+                             .description = "Typed input such as select:README.txt, create-file, delete, sort:kind"},
+                        },
+                        .allow_positionals = false,
+                        .examples = {
+                            "phenotype drive file-explorer --json --input select:README.txt --input duplicate",
+                            "phenotype drive file-explorer --profile mobile --scenario created-preview --json",
+                        },
+                    },
+                },
+                .allow_positionals = false,
+                .category = "runtime",
             },
             {
                 .name = "commands",
@@ -1325,6 +1361,132 @@ auto output_tail(std::string_view text, std::size_t max_bytes = 16384)
     return text.substr(text.size() - max_bytes);
 }
 
+auto operation_receipt_json(
+        file_explorer_demo::OperationReceipt const& receipt) -> std::string {
+    return std::format(
+        "{{\"kind\":{},\"target\":{},\"ok\":{},\"detail\":{}}}",
+        json_string(receipt.kind),
+        json_string(receipt.target),
+        receipt.ok ? "true" : "false",
+        json_string(receipt.detail));
+}
+
+auto explorer_input_json(file_explorer_demo::ExplorerInput const& input)
+    -> std::string {
+    return std::format(
+        "{{\"kind\":{},\"value\":{},\"sort_mode\":{},\"label\":{}}}",
+        json_string(file_explorer_demo::explorer_input_kind_name(input.kind)),
+        json_string(input.value),
+        json_string(file_explorer_demo::sort_mode_label(input.sort_mode)),
+        json_string(file_explorer_demo::explorer_input_label(input)));
+}
+
+auto explorer_entry_json(file_explorer_demo::Entry const& entry)
+    -> std::string {
+    return std::format(
+        "{{\"name\":{},\"folder\":{},\"size\":{},\"kind\":{}}}",
+        json_string(entry.name),
+        entry.folder ? "true" : "false",
+        entry.size,
+        json_string(file_explorer_demo::entry_kind_label(entry)));
+}
+
+auto explorer_entries_json(
+        std::span<file_explorer_demo::Entry const> entries) -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += explorer_entry_json(entries[i]);
+    }
+    out += "]";
+    return out;
+}
+
+auto explorer_trace_json(
+        file_explorer_demo::ExplorerInputTrace const& trace,
+        std::size_t index) -> std::string {
+    return std::format(
+        "{{\"index\":{},\"input\":{},\"status\":{},"
+        "\"relative_location\":{},\"selected_name\":{},"
+        "\"visible_entries\":{},\"has_selection\":{},"
+        "\"operation_label\":{},\"operation\":{}}}",
+        index,
+        explorer_input_json(trace.input),
+        json_string(trace.status),
+        json_string(trace.relative_location),
+        json_string(trace.selected_name),
+        trace.visible_entries,
+        trace.has_selection ? "true" : "false",
+        json_string(trace.operation_label),
+        operation_receipt_json(trace.operation));
+}
+
+auto explorer_trace_array_json(
+        std::span<file_explorer_demo::ExplorerInputTrace const> trace)
+    -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < trace.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += explorer_trace_json(trace[i], i);
+    }
+    out += "]";
+    return out;
+}
+
+auto explorer_drive_ok(file_explorer_demo::ExplorerDriveResult const& result)
+    -> bool {
+    return std::ranges::all_of(result.trace, [](auto const& trace) {
+        return trace.operation.kind.empty() || trace.operation.ok;
+    });
+}
+
+auto explorer_drive_json(file_explorer_demo::ExplorerDriveResult const& result)
+    -> std::string {
+    auto const& snap = result.snapshot;
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"drive file-explorer\","
+        "\"ok\":{},\"profile\":{},\"input_count\":{},"
+        "\"root\":{},\"current\":{},\"relative_location\":{},"
+        "\"status\":{},\"sort_label\":{},"
+        "\"selected\":{{\"present\":{},\"name\":{},\"kind\":{},"
+        "\"size\":{},\"path_label\":{},\"preview_excerpt\":{}}},"
+        "\"counts\":{{\"visible_entries\":{},\"files\":{},\"folders\":{}}},"
+        "\"capabilities\":{{\"can_go_back\":{},\"can_go_forward\":{},"
+        "\"can_create_file\":{},\"can_create_folder\":{},"
+        "\"can_delete_selected\":{},\"can_duplicate_selected\":{},"
+        "\"can_preview_selected\":{}}},"
+        "\"operation\":{},\"entries\":{},\"trace\":{}}}",
+        explorer_drive_ok(result) ? "true" : "false",
+        json_string(result.profile),
+        result.trace.size(),
+        json_string(path_string(result.state.root)),
+        json_string(path_string(result.state.current)),
+        json_string(snap.relative_location),
+        json_string(result.state.status),
+        json_string(snap.sort_label),
+        snap.has_selection ? "true" : "false",
+        json_string(snap.has_selection ? snap.selected.name : ""),
+        json_string(snap.selected_kind_label),
+        json_string(snap.selected_size_label),
+        json_string(snap.selected_path_label),
+        json_string(output_tail(snap.preview, 512)),
+        snap.entries.size(),
+        snap.file_count,
+        snap.folder_count,
+        snap.can_go_back ? "true" : "false",
+        snap.can_go_forward ? "true" : "false",
+        snap.can_create_file ? "true" : "false",
+        snap.can_create_folder ? "true" : "false",
+        snap.can_delete_selected ? "true" : "false",
+        snap.can_duplicate_selected ? "true" : "false",
+        snap.can_preview_selected ? "true" : "false",
+        operation_receipt_json(result.state.last_operation),
+        explorer_entries_json(snap.entries),
+        explorer_trace_array_json(result.trace));
+}
+
 auto script_result_json(std::string_view command,
                         fs::path const& script,
                         cppx::process::CapturedProcessResult const& result)
@@ -1725,6 +1887,89 @@ int run_package_list(cppx::cli::Invocation const& invocation) {
     return ok ? 0 : 1;
 }
 
+int run_drive_file_explorer(cppx::cli::Invocation const& invocation) {
+    auto profile = std::string{"desktop"};
+    if (auto value = invocation.value("profile")) {
+        profile = std::string{*value};
+    }
+    auto normalized_profile = file_explorer_demo::lower_copy(profile);
+    if (normalized_profile != "desktop" && normalized_profile != "mobile") {
+        return print_error(
+            "drive file-explorer",
+            "profile must be 'desktop' or 'mobile'",
+            invocation.has("json"));
+    }
+
+    auto inputs = std::vector<file_explorer_demo::ExplorerInput>{};
+    if (auto scenario = invocation.value("scenario")) {
+        inputs.push_back({
+            .kind = file_explorer_demo::ExplorerInputKind::Scenario,
+            .value = std::string{*scenario},
+        });
+    }
+    for (auto const& raw : invocation.values("input")) {
+        auto parsed = file_explorer_demo::parse_explorer_input(raw);
+        if (!parsed.ok) {
+            return print_error(
+                "drive file-explorer",
+                parsed.error,
+                invocation.has("json"));
+        }
+        inputs.push_back(std::move(parsed.input));
+    }
+
+    auto result = file_explorer_demo::drive_explorer(normalized_profile, inputs);
+    if (invocation.has("json")) {
+        std::println("{}", explorer_drive_json(result));
+    } else {
+        auto const& snap = result.snapshot;
+        auto lines = std::vector<cppx::terminal::StatusLine>{
+            {.label = "profile",
+             .value = result.profile,
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "location",
+             .value = snap.relative_location,
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "selected",
+             .value = snap.has_selection ? snap.selected.name : "<none>",
+             .status = snap.has_selection ? cppx::terminal::StatusKind::ok
+                                          : cppx::terminal::StatusKind::skip},
+            {.label = "entries",
+             .value = std::format("{} files, {} folders",
+                                  snap.file_count,
+                                  snap.folder_count),
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "status",
+             .value = result.state.status,
+             .status = explorer_drive_ok(result)
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::fail},
+        };
+        if (!result.state.last_operation.kind.empty()) {
+            lines.push_back({
+                .label = "operation",
+                .value = file_explorer_demo::operation_label(
+                    result.state.last_operation),
+                .status = result.state.last_operation.ok
+                    ? cppx::terminal::StatusKind::ok
+                    : cppx::terminal::StatusKind::fail,
+            });
+        }
+        std::println("phenotype drive file-explorer");
+        std::println("{}", cppx::terminal::format_status_frame(lines, false));
+        if (!result.trace.empty()) {
+            std::println("inputs:");
+            for (auto const& trace : result.trace) {
+                std::println("  - {} -> {}",
+                             file_explorer_demo::explorer_input_label(
+                                 trace.input),
+                             trace.status);
+            }
+        }
+    }
+    return explorer_drive_ok(result) ? 0 : 1;
+}
+
 int run_commands(cppx::cli::CommandSpec const& root,
                  cppx::cli::Invocation const& invocation) {
     if (invocation.has("json")) {
@@ -1786,6 +2031,9 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "package", "list"})
         return run_package_list(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "drive", "file-explorer"})
+        return run_drive_file_explorer(*parsed);
     if (parsed->command_path == std::vector<std::string>{"phenotype", "commands"})
         return run_commands(root, *parsed);
 
