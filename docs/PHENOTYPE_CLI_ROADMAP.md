@@ -122,6 +122,7 @@ Current commands:
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
 | `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, and debug manifest references. |
 | `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs and emits a stable observation JSON with trace, entries, viewport, pure Finder chrome/grid metrics, capabilities, operation receipt, and preview excerpt fields. |
+| `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, and emits a stable JSON launch receipt with build/run output tails, timeout state, artifact bundle summary, and explicit environment overrides. |
 
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, textual asset placeholders, English/Korean
@@ -144,6 +145,16 @@ from artifact and Android contract gates are still uv-managed, but wrappers set
 `UV_PROJECT_ENVIRONMENT` to `PHENOTYPE_UV_PROJECT_ENVIRONMENT` or a temporary
 default so the verifier environment remains explicit and does not dirty the
 repository root.
+
+`phenotype run` is intentionally an edge adapter, not a second app runtime. It
+performs path resolution, process execution, timeout enforcement, and artifact
+environment injection outside the core renderer. Example code still receives
+only ordinary environment variables such as `PHENOTYPE_ARTIFACT_DIR`,
+`PHENOTYPE_ARTIFACT_EXIT`, `PHENOTYPE_ARTIFACT_REASON`, and app-specific
+contract inputs like `PHENOTYPE_FILE_EXPLORER_VIEW`. This keeps the long-term
+input/output abstraction model compatible with production builds: the CLI can
+drive or observe examples, while native shells continue to translate platform
+input directly into phenotype.
 
 ## Packaging contract
 

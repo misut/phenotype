@@ -86,6 +86,24 @@ struct BundleSummary {
     std::string error;
 };
 
+struct ExampleRunSummary {
+    std::string example;
+    fs::path example_root;
+    std::string package_name;
+    fs::path executable;
+    fs::path artifact_dir;
+    bool build_requested = true;
+    bool run_requested = true;
+    bool artifact_requested = false;
+    bool artifact_exit = false;
+    std::optional<std::chrono::milliseconds> run_timeout;
+    std::optional<cppx::process::CapturedProcessResult> build_result;
+    std::optional<cppx::process::CapturedProcessResult> run_result;
+    std::optional<ArtifactSummary> artifact;
+    bool ok = false;
+    std::string error;
+};
+
 auto help_option() -> cppx::cli::OptionSpec {
     return {.name = "help", .short_name = 'h', .description = "Show help"};
 }
@@ -499,6 +517,49 @@ auto spec() -> cppx::cli::CommandSpec {
                 },
                 .allow_positionals = false,
                 .category = "runtime",
+            },
+            {
+                .name = "run",
+                .summary = "Build and run a repository example",
+                .options = {
+                    help_option(),
+                    json_option(),
+                    {.name = "no-build",
+                     .arity = cppx::cli::OptionArity::none,
+                     .description = "Run the existing .exon/debug binary without rebuilding"},
+                    {.name = "artifact-dir",
+                     .arity = cppx::cli::OptionArity::one,
+                     .value_name = "dir",
+                     .description = "Set PHENOTYPE_ARTIFACT_DIR for startup capture"},
+                    {.name = "artifact-exit",
+                     .arity = cppx::cli::OptionArity::none,
+                     .description = "Set PHENOTYPE_ARTIFACT_EXIT=1"},
+                    {.name = "artifact-reason",
+                     .arity = cppx::cli::OptionArity::one,
+                     .value_name = "text",
+                     .description = "Set PHENOTYPE_ARTIFACT_REASON"},
+                    {.name = "accessibility-display",
+                     .arity = cppx::cli::OptionArity::one,
+                     .value_name = "mode",
+                     .description = "Set PHENOTYPE_ACCESSIBILITY_DISPLAY"},
+                    {.name = "env",
+                     .arity = cppx::cli::OptionArity::one,
+                     .repeatable = true,
+                     .value_name = "KEY=VALUE",
+                     .description = "Add an environment override for the example process"},
+                    {.name = "timeout-seconds",
+                     .arity = cppx::cli::OptionArity::one,
+                     .value_name = "seconds",
+                     .description = "Kill the example if it does not exit before the timeout"},
+                },
+                .category = "runtime",
+                .positional_name = "example",
+                .positional_description =
+                    "Example name such as glass_showcase or path such as examples/file_explorer_desktop.",
+                .examples = {
+                    "phenotype run glass_showcase --artifact-dir /tmp/phenotype-glass --artifact-exit",
+                    "phenotype run examples/file_explorer_desktop --env PHENOTYPE_FILE_EXPLORER_VIEW=icon",
+                },
             },
             android_command_spec(),
             {
@@ -2034,6 +2095,313 @@ auto process_result_json(std::string_view command,
         json_string(output_tail(result.stderr_text)));
 }
 
+auto process_result_detail_json(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+    -> std::string {
+    if (!result)
+        return "{\"executed\":false}";
+    return std::format(
+        "{{\"executed\":true,\"ok\":{},\"exit_code\":{},\"timed_out\":{},"
+        "\"stdout_line_count\":{},\"stderr_line_count\":{},"
+        "\"stdout_tail\":{},\"stderr_tail\":{}}}",
+        (!result->timed_out && result->exit_code == 0) ? "true" : "false",
+        result->exit_code,
+        result->timed_out ? "true" : "false",
+        output_line_count(result->stdout_text),
+        output_line_count(result->stderr_text),
+        json_string(output_tail(result->stdout_text)),
+        json_string(output_tail(result->stderr_text)));
+}
+
+auto executable_filename(std::string const& package_name) -> std::string {
+#if defined(_WIN32)
+    return package_name + ".exe";
+#else
+    return package_name;
+#endif
+}
+
+auto parse_seconds(std::string_view text, std::string_view option_name)
+    -> std::expected<std::optional<std::chrono::milliseconds>, std::string> {
+    if (text.empty()) {
+        return std::unexpected{
+            std::format("{} requires a numeric value", option_name)};
+    }
+    long long value = 0;
+    auto first = text.data();
+    auto last = text.data() + text.size();
+    auto [ptr, ec] = std::from_chars(first, last, value);
+    if (ec != std::errc{} || ptr != last || value < 0 || value > 86400) {
+        return std::unexpected{
+            std::format("{} must be an integer from 0 to 86400", option_name)};
+    }
+    if (value == 0)
+        return std::optional<std::chrono::milliseconds>{};
+    return std::optional<std::chrono::milliseconds>{
+        std::chrono::seconds{value}};
+}
+
+auto valid_env_name(std::string_view name) -> bool {
+    if (name.empty())
+        return false;
+    auto first = static_cast<unsigned char>(name.front());
+    if (!(std::isalpha(first) || name.front() == '_'))
+        return false;
+    return std::ranges::all_of(name.substr(1), [](char ch) {
+        auto uch = static_cast<unsigned char>(ch);
+        return std::isalnum(uch) || ch == '_';
+    });
+}
+
+auto parse_env_overrides(cppx::cli::Invocation const& invocation)
+    -> std::expected<std::map<std::string, std::string>, std::string> {
+    auto env = std::map<std::string, std::string>{};
+    for (auto const& raw : invocation.values("env")) {
+        auto pos = raw.find('=');
+        if (pos == std::string::npos) {
+            return std::unexpected{
+                "--env values must use KEY=VALUE syntax"};
+        }
+        auto name = raw.substr(0, pos);
+        if (!valid_env_name(name)) {
+            return std::unexpected{
+                std::format("--env key is not a portable environment name: {}", name)};
+        }
+        env[name] = raw.substr(pos + 1);
+    }
+    return env;
+}
+
+auto resolve_example_root(fs::path const& repo_root,
+                          fs::path const& current_path,
+                          std::string_view raw)
+    -> std::expected<fs::path, std::string> {
+    if (raw.empty())
+        return std::unexpected{"run requires one example name or path"};
+
+    auto input = fs::path{std::string{raw}};
+    auto candidate = fs::path{};
+    if (input.is_absolute()) {
+        candidate = input;
+    } else if (input.has_parent_path() || raw == ".") {
+        candidate = current_path / input;
+    } else {
+        candidate = repo_root / "examples" / input;
+    }
+
+    auto ec = std::error_code{};
+    candidate = fs::weakly_canonical(candidate, ec);
+    if (ec)
+        return std::unexpected{std::format("could not resolve example path: {}", ec.message())};
+
+    auto root_error = std::string{};
+    if (!path_stays_under_root(repo_root, candidate, root_error)) {
+        return std::unexpected{
+            std::format("example path must stay under the repository root: {}", root_error)};
+    }
+    if (!path_is_directory(candidate)) {
+        return std::unexpected{
+            std::format("example path is not a directory: {}", path_string(candidate))};
+    }
+    if (!path_exists(candidate / "exon.toml")) {
+        return std::unexpected{
+            std::format("example path does not contain exon.toml: {}", path_string(candidate))};
+    }
+    return candidate;
+}
+
+auto exon_package_name(fs::path const& example_root)
+    -> std::expected<std::string, std::string> {
+    auto text = read_text_file(example_root / "exon.toml");
+    if (text.empty())
+        return std::unexpected{"exon.toml is empty or unreadable"};
+
+    auto input = std::istringstream{text};
+    auto line = std::string{};
+    auto in_package = false;
+    while (std::getline(input, line)) {
+        auto trimmed = strip_toml_comment(line);
+        if (trimmed.empty())
+            continue;
+        if (trimmed.size() >= 2 && trimmed.front() == '['
+            && trimmed.back() == ']') {
+            in_package = trimmed == "[package]";
+            continue;
+        }
+        if (!in_package)
+            continue;
+        if (auto value = quoted_value_for_key(trimmed, "name")) {
+            if (value->empty())
+                return std::unexpected{"[package].name is empty"};
+            return *value;
+        }
+    }
+    return std::unexpected{"exon.toml does not define [package].name"};
+}
+
+auto run_example_build(fs::path const& example_root)
+    -> std::expected<cppx::process::CapturedProcessResult,
+                     cppx::process::process_error> {
+    auto spec = cppx::process::ProcessSpec{
+        .program = "mise",
+        .args = {"exec", "--", "exon", "build"},
+        .cwd = example_root,
+        .timeout = std::chrono::minutes{45},
+    };
+    return cppx::process::system::capture(spec);
+}
+
+auto run_example_binary(fs::path const& executable,
+                        fs::path const& example_root,
+                        std::map<std::string, std::string> env,
+                        std::optional<std::chrono::milliseconds> timeout)
+    -> std::expected<cppx::process::CapturedProcessResult,
+                     cppx::process::process_error> {
+    auto spec = cppx::process::ProcessSpec{
+        .program = path_string(executable),
+        .cwd = example_root,
+        .timeout = timeout,
+        .env_overrides = std::move(env),
+    };
+    return cppx::process::system::capture(spec);
+}
+
+auto example_run_json(ExampleRunSummary const& summary) -> std::string {
+    auto artifact = std::string{"null"};
+    if (summary.artifact) {
+        artifact = std::format(
+            "{{\"requested\":{},\"bundle\":{},\"snapshot_json\":{{\"present\":{},"
+            "\"bytes\":{}}},\"frame_bmp\":{{\"present\":{},\"bytes\":{}}},"
+            "\"platform\":{{\"present\":{},\"file_count\":{}}}}}",
+            summary.artifact_requested ? "true" : "false",
+            json_string(path_string(summary.artifact->bundle)),
+            summary.artifact->snapshot_json ? "true" : "false",
+            summary.artifact->snapshot_bytes,
+            summary.artifact->frame_bmp ? "true" : "false",
+            summary.artifact->frame_bytes,
+            summary.artifact->platform_directory ? "true" : "false",
+            summary.artifact->platform_file_count);
+    } else if (summary.artifact_requested) {
+        artifact = std::format(
+            "{{\"requested\":true,\"bundle\":{}}}",
+            json_string(path_string(summary.artifact_dir)));
+    }
+
+    auto timeout_seconds = std::string{"null"};
+    if (summary.run_timeout) {
+        timeout_seconds = std::format(
+            "{}",
+            std::chrono::duration_cast<std::chrono::seconds>(
+                *summary.run_timeout).count());
+    }
+
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"run\",\"ok\":{},"
+        "\"example\":{},\"example_root\":{},\"package_name\":{},"
+        "\"executable\":{},\"build_requested\":{},\"run_requested\":{},"
+        "\"artifact_exit\":{},\"timeout_seconds\":{},"
+        "\"build\":{},\"run_result\":{},\"artifact\":{},\"error\":{}}}",
+        summary.ok ? "true" : "false",
+        json_string(summary.example),
+        json_string(path_string(summary.example_root)),
+        json_string(summary.package_name),
+        json_string(path_string(summary.executable)),
+        summary.build_requested ? "true" : "false",
+        summary.run_requested ? "true" : "false",
+        summary.artifact_exit ? "true" : "false",
+        timeout_seconds,
+        process_result_detail_json(summary.build_result),
+        process_result_detail_json(summary.run_result),
+        artifact,
+        json_string(summary.error));
+}
+
+void print_captured_output(cppx::process::CapturedProcessResult const& result) {
+    if (!result.stdout_text.empty()) {
+        std::print("{}", result.stdout_text);
+        if (!result.stdout_text.ends_with('\n'))
+            std::println("");
+    }
+    if (!result.stderr_text.empty()) {
+        std::print(std::cerr, "{}", result.stderr_text);
+        if (!result.stderr_text.ends_with('\n'))
+            std::println(std::cerr, "");
+    }
+}
+
+void print_example_run(ExampleRunSummary const& summary) {
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "example",
+         .value = summary.example,
+         .status = summary.error.empty() ? cppx::terminal::StatusKind::ok
+                                         : cppx::terminal::StatusKind::fail},
+        {.label = "root",
+         .value = path_string(summary.example_root),
+         .status = path_is_directory(summary.example_root)
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "executable",
+         .value = path_string(summary.executable),
+         .status = path_exists(summary.executable)
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+    };
+    if (summary.build_requested) {
+        auto status = cppx::terminal::StatusKind::skip;
+        auto value = std::string{"not run"};
+        if (summary.build_result) {
+            status = (!summary.build_result->timed_out
+                      && summary.build_result->exit_code == 0)
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::fail;
+            value = summary.build_result->timed_out
+                ? "timed out"
+                : std::format("exit {}", summary.build_result->exit_code);
+        }
+        lines.push_back({.label = "build", .value = value, .status = status});
+    }
+    if (summary.run_requested) {
+        auto status = cppx::terminal::StatusKind::skip;
+        auto value = std::string{"not run"};
+        if (summary.run_result) {
+            status = (!summary.run_result->timed_out
+                      && summary.run_result->exit_code == 0)
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::fail;
+            value = summary.run_result->timed_out
+                ? "timed out"
+                : std::format("exit {}", summary.run_result->exit_code);
+        }
+        lines.push_back({.label = "run", .value = value, .status = status});
+    }
+    if (summary.artifact_requested) {
+        auto status = cppx::terminal::StatusKind::skip;
+        auto value = path_string(summary.artifact_dir);
+        if (summary.artifact) {
+            status = summary.artifact->snapshot_json
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::fail;
+            value = std::format(
+                "{} snapshot={} frame={} platform_files={}",
+                path_string(summary.artifact->bundle),
+                summary.artifact->snapshot_json ? "true" : "false",
+                summary.artifact->frame_bmp ? "true" : "false",
+                summary.artifact->platform_file_count);
+        }
+        lines.push_back({.label = "artifact", .value = value, .status = status});
+    }
+    std::println("phenotype run");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    if (!summary.error.empty()) {
+        std::println("{}",
+                     cppx::terminal::format_diagnostic({
+                         .severity = cppx::terminal::DiagnosticSeverity::error,
+                         .message = summary.error,
+                         .context = "run",
+                     }));
+    }
+}
+
 int print_error(std::string_view command, std::string_view message, bool json);
 
 int run_repo_process(
@@ -2294,6 +2662,21 @@ auto comma_join(std::span<std::string const> values) -> std::string {
     return result;
 }
 
+auto uv_project_environment() -> std::string {
+    if (auto const* explicit_env =
+            std::getenv("PHENOTYPE_UV_PROJECT_ENVIRONMENT")) {
+        if (explicit_env[0] != '\0')
+            return explicit_env;
+    }
+    auto base = std::string{"/tmp"};
+    if (auto const* tmp = std::getenv("TMPDIR")) {
+        if (tmp[0] != '\0')
+            base = tmp;
+    }
+    auto path = fs::path{base} / "phenotype-uv-tools";
+    return path_string(path);
+}
+
 int run_artifact_verify(cppx::cli::Invocation const& invocation) {
     auto path = first_positional_or_error(invocation, "artifact verify");
     if (!path)
@@ -2335,6 +2718,9 @@ int run_artifact_verify(cppx::cli::Invocation const& invocation) {
         .args = std::move(args),
         .cwd = *root,
         .timeout = std::chrono::minutes{5},
+        .env_overrides = {
+            {"UV_PROJECT_ENVIRONMENT", uv_project_environment()},
+        },
     };
 
     auto result = cppx::process::system::capture(spec);
@@ -2820,6 +3206,186 @@ int run_drive_file_explorer(cppx::cli::Invocation const& invocation) {
     return explorer_drive_ok(result) ? 0 : 1;
 }
 
+int run_example(cppx::cli::Invocation const& invocation) {
+    auto root = find_repo_root(fs::current_path());
+    if (!root) {
+        return print_error(
+            "run",
+            "could not find phenotype repository root from current directory",
+            invocation.has("json"));
+    }
+    if (invocation.positionals.empty()) {
+        return print_error(
+            "run",
+            "run requires one example name or path",
+            invocation.has("json"));
+    }
+    if (invocation.positionals.size() > 1) {
+        return print_error(
+            "run",
+            "run accepts exactly one example name or path",
+            invocation.has("json"));
+    }
+
+    auto summary = ExampleRunSummary{
+        .example = invocation.positionals.front(),
+        .build_requested = !invocation.has("no-build"),
+        .artifact_exit = invocation.has("artifact-exit"),
+    };
+
+    auto example_root = resolve_example_root(
+        *root,
+        fs::current_path(),
+        invocation.positionals.front());
+    if (!example_root) {
+        return print_error("run", example_root.error(), invocation.has("json"));
+    }
+    summary.example_root = *example_root;
+
+    auto package_name = exon_package_name(summary.example_root);
+    if (!package_name) {
+        return print_error("run", package_name.error(), invocation.has("json"));
+    }
+    summary.package_name = *package_name;
+    summary.executable =
+        summary.example_root / ".exon" / "debug" / executable_filename(*package_name);
+
+    auto env = parse_env_overrides(invocation);
+    if (!env) {
+        return print_error("run", env.error(), invocation.has("json"));
+    }
+
+    if (auto value = invocation.value("artifact-dir")) {
+        summary.artifact_requested = true;
+        summary.artifact_dir =
+            fs::path{absolute_path_string(fs::path{std::string{*value}})};
+        (*env)["PHENOTYPE_ARTIFACT_DIR"] = path_string(summary.artifact_dir);
+    }
+    if (summary.artifact_exit) {
+        (*env)["PHENOTYPE_ARTIFACT_EXIT"] = "1";
+    }
+    if (auto value = invocation.value("artifact-reason")) {
+        (*env)["PHENOTYPE_ARTIFACT_REASON"] = std::string{*value};
+    } else if (summary.artifact_requested) {
+        (*env)["PHENOTYPE_ARTIFACT_REASON"] =
+            std::format("phenotype-run-{}", summary.package_name);
+    }
+    if (auto value = invocation.value("accessibility-display")) {
+        (*env)["PHENOTYPE_ACCESSIBILITY_DISPLAY"] = std::string{*value};
+    }
+
+    if (auto value = invocation.value("timeout-seconds")) {
+        auto parsed_timeout = parse_seconds(*value, "--timeout-seconds");
+        if (!parsed_timeout) {
+            return print_error(
+                "run",
+                parsed_timeout.error(),
+                invocation.has("json"));
+        }
+        summary.run_timeout = *parsed_timeout;
+    } else if (summary.artifact_exit) {
+        summary.run_timeout = std::chrono::seconds{120};
+    }
+
+    if (summary.build_requested) {
+        auto build = run_example_build(summary.example_root);
+        if (!build) {
+            summary.error = std::format(
+                "failed to run exon build: {}",
+                cppx::process::to_string(build.error()));
+            if (invocation.has("json")) {
+                std::println("{}", example_run_json(summary));
+            } else {
+                print_example_run(summary);
+            }
+            return 2;
+        }
+        summary.build_result = std::move(*build);
+        if (summary.build_result->timed_out
+            || summary.build_result->exit_code != 0) {
+            summary.error = "exon build failed";
+            if (invocation.has("json")) {
+                std::println("{}", example_run_json(summary));
+            } else {
+                print_captured_output(*summary.build_result);
+                print_example_run(summary);
+            }
+            return summary.build_result->timed_out
+                ? 124
+                : summary.build_result->exit_code;
+        }
+    }
+
+    if (!path_exists(summary.executable)) {
+        summary.error = std::format(
+            "expected executable was not found: {}",
+            path_string(summary.executable));
+        if (invocation.has("json")) {
+            std::println("{}", example_run_json(summary));
+        } else {
+            if (summary.build_result)
+                print_captured_output(*summary.build_result);
+            print_example_run(summary);
+        }
+        return 1;
+    }
+
+    auto run = run_example_binary(
+        summary.executable,
+        summary.example_root,
+        std::move(*env),
+        summary.run_timeout);
+    if (!run) {
+        summary.error = std::format(
+            "failed to run example: {}",
+            cppx::process::to_string(run.error()));
+        if (invocation.has("json")) {
+            std::println("{}", example_run_json(summary));
+        } else {
+            if (summary.build_result)
+                print_captured_output(*summary.build_result);
+            print_example_run(summary);
+        }
+        return 2;
+    }
+    summary.run_result = std::move(*run);
+    if (summary.artifact_requested)
+        summary.artifact = artifact_summary(summary.artifact_dir);
+    summary.ok = !summary.run_result->timed_out
+        && summary.run_result->exit_code == 0
+        && (!summary.artifact_requested
+            || (summary.artifact && summary.artifact->snapshot_json));
+    if (!summary.ok && summary.error.empty()) {
+        if (summary.run_result->timed_out) {
+            summary.error = "example timed out";
+        } else if (summary.run_result->exit_code != 0) {
+            summary.error = std::format(
+                "example exited with {}",
+                summary.run_result->exit_code);
+        } else if (summary.artifact_requested) {
+            summary.error = "artifact bundle did not contain snapshot.json";
+        }
+    }
+
+    if (invocation.has("json")) {
+        std::println("{}", example_run_json(summary));
+    } else {
+        if (summary.build_result)
+            print_captured_output(*summary.build_result);
+        if (summary.run_result)
+            print_captured_output(*summary.run_result);
+        print_example_run(summary);
+    }
+
+    if (summary.run_result->timed_out)
+        return summary.run_result->exit_code == 0
+            ? 124
+            : summary.run_result->exit_code;
+    return summary.ok ? 0 : (summary.run_result->exit_code == 0
+        ? 1
+        : summary.run_result->exit_code);
+}
+
 int run_commands(cppx::cli::CommandSpec const& root,
                  cppx::cli::Invocation const& invocation) {
     if (invocation.has("json")) {
@@ -2887,6 +3453,8 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "drive", "file-explorer"})
         return run_drive_file_explorer(*parsed);
+    if (parsed->command_path == std::vector<std::string>{"phenotype", "run"})
+        return run_example(*parsed);
     if (parsed->command_path.size() == 3
         && parsed->command_path[0] == "phenotype"
         && parsed->command_path[1] == "android")

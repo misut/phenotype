@@ -136,8 +136,21 @@ slower desktop/mobile artifact capture gate.
 ## Desktop example artifact hook
 
 Native desktop examples can write a startup artifact bundle without adding
-example-specific code. Set `PHENOTYPE_ARTIFACT_DIR` before launching the
-example:
+example-specific code. Prefer the CLI launch wrapper so build output, process
+exit state, timeout state, and artifact summary are captured in one receipt:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli run ../../examples/native \
+  --artifact-dir /tmp/phenotype-native-startup \
+  --artifact-reason native-startup \
+  --artifact-exit \
+  --timeout-seconds 120
+```
+
+The lower-level environment contract remains available when debugging the
+example binary directly:
 
 ```sh
 cd examples/native
