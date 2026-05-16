@@ -44,6 +44,7 @@ int main() {
     assert(snap.selected.name == "README.txt");
     assert(snap.file_count >= 15);
     assert(snap.folder_count == 3);
+    assert(!demo::deletable_directory(state.root, demo::trash_path(state.root)));
     assert(snap.can_create_file);
     assert(snap.can_create_folder);
     assert(snap.can_delete_selected);
@@ -101,10 +102,17 @@ int main() {
     assert(snap.operation_label
         .find("Operation: folder_create ok - Review Folder") != std::string::npos);
     assert(snap.preview.find("Open this folder") != std::string::npos);
+    demo::write_file_if_missing(
+        state.current / state.selected_name / "Nested Note.txt",
+        "Nested file proves folder deletion moves contents to Trash.\n");
+    snap = demo::snapshot(state);
+    assert(snap.can_delete_selected);
 
     demo::delete_selected(state);
     assert(!fs::exists(state.current / "Review Folder"));
     assert(fs::is_directory(demo::trash_path(state.root) / "Review Folder"));
+    assert(fs::exists(demo::trash_path(state.root)
+        / "Review Folder" / "Nested Note.txt"));
     assert(state.selected_name.empty());
     assert(demo::snapshot(state).operation_label
         .find("Operation: folder_delete ok - Review Folder") != std::string::npos);
@@ -156,6 +164,8 @@ int main() {
     demo::apply_startup_scenario(state, "deleted-folder");
     assert(!fs::exists(state.current / "Trash Folder"));
     assert(fs::is_directory(demo::trash_path(state.root) / "Trash Folder"));
+    assert(fs::exists(demo::trash_path(state.root)
+        / "Trash Folder" / "Nested Note.txt"));
     assert(state.selected_name.empty());
     assert(demo::snapshot(state).operation_label
         .find("Operation: folder_delete ok - Trash Folder") != std::string::npos);

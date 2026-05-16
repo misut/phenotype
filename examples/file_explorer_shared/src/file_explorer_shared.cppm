@@ -454,7 +454,8 @@ inline bool matches_filter(std::string const& name, std::string const& filter) {
 }
 
 inline bool protected_root_folder(std::string_view name) {
-    return name == "Documents" || name == "Pictures" || name == "Shared";
+    return name == "Documents" || name == "Pictures" || name == "Shared"
+        || name == ".Trash";
 }
 
 inline bool path_inside_root(fs::path const& root, fs::path const& path) {
@@ -464,7 +465,7 @@ inline bool path_inside_root(fs::path const& root, fs::path const& path) {
     return rel != ".." && !rel.starts_with("../");
 }
 
-inline bool deletable_empty_directory(
+inline bool deletable_directory(
         fs::path const& root,
         fs::path const& path) {
     std::error_code ec;
@@ -476,8 +477,7 @@ inline bool deletable_empty_directory(
         && protected_root_folder(path.filename().string())) {
         return false;
     }
-    ec.clear();
-    return fs::is_empty(path, ec) && !ec;
+    return true;
 }
 
 inline std::vector<Entry> list_entries(
@@ -590,7 +590,7 @@ inline Snapshot snapshot(ExplorerState const& state) {
     if (out.has_selection) {
         auto const selected_path = state.current / out.selected.name;
         out.can_delete_selected = out.selected.folder
-            ? deletable_empty_directory(state.root, selected_path)
+            ? deletable_directory(state.root, selected_path)
             : true;
         out.can_duplicate_selected = !out.selected.folder;
         out.can_preview_selected = true;
@@ -808,8 +808,8 @@ inline void delete_selected(ExplorerState& state) {
     bool const deleting_from_trash = same_path(state.current, trash);
     std::error_code ec;
     if (fs::is_directory(path, ec)) {
-        if (!deletable_empty_directory(state.root, path)) {
-            state.status = "Only empty demo folders can be deleted.";
+        if (!deletable_directory(state.root, path)) {
+            state.status = "Only sandbox folders can be deleted.";
             record_operation(
                 state,
                 "folder_delete",
@@ -820,7 +820,8 @@ inline void delete_selected(ExplorerState& state) {
         }
         ec.clear();
         if (deleting_from_trash) {
-            if (!fs::remove(path, ec) || ec) {
+            auto const removed = fs::remove_all(path, ec);
+            if (ec || removed == 0) {
                 state.status = "Could not delete folder " + state.selected_name;
                 record_operation(
                     state,
@@ -868,7 +869,7 @@ inline void delete_selected(ExplorerState& state) {
     }
     ec.clear();
     if (!fs::is_regular_file(path, ec)) {
-        state.status = "Only files or empty demo folders can be deleted.";
+        state.status = "Only files or sandbox folders can be deleted.";
         record_operation(
             state,
             "file_delete",
@@ -1062,6 +1063,9 @@ inline void apply_startup_scenario(
         remove_directory_if_present(trash_path(state.root) / "Trash Folder");
         state.draft_folder_name = "Trash Folder";
         create_folder(state);
+        write_file_if_missing(
+            state.current / state.selected_name / "Nested Note.txt",
+            "Nested file proves folders move to Trash recursively.\n");
         delete_selected(state);
         state.mobile_tab = 0;
         return;

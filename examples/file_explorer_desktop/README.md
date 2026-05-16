@@ -4,10 +4,10 @@ This example is a Finder-style desktop workflow for phenotype's material
 system. It uses a glass toolbar with Finder-like semantic view/action/search
 buttons, translucent sidebar locations, icon/list/column/gallery file views,
 document, image, video, and folder thumbnails, read/create/duplicate/delete
-file actions, empty-folder create/delete actions, and compact Finder-style
+file actions, folder create/delete actions, and compact Finder-style
 selection status. The sidebar Trash item is backed by a hidden `.Trash`
-directory inside the demo sandbox, so delete actions move files and empty
-folders to Trash before any permanent removal behavior is exercised.
+directory inside the demo sandbox, so delete actions move files and folders to
+Trash before any permanent removal behavior is exercised.
 
 The desktop window requests `WindowChromeStyle::IntegratedTitlebar` with
 explicit titlebar, leading-control, and trailing-control reserve metrics. On

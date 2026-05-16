@@ -5,7 +5,7 @@ explorer, but presents it as a compact mobile workflow with Browse, Preview,
 and Create tabs plus a location strip. The shared filename search filter is
 available from the top bar. The Preview tab exposes the same shared selection
 action contract as the desktop example, including duplicate and delete
-availability, while the Create tab can create either a file or an empty folder.
+availability, while the Create tab can create either a file or a folder.
 The compact location strip includes the same sandboxed Trash location as the
 desktop sidebar.
 
