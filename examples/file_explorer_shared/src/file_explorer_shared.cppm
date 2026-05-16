@@ -176,10 +176,12 @@ struct ExplorerChromeMetrics {
     int toolbar_group_count = 0;
     int toolbar_separator_count = 0;
     int toolbar_icon_button_count = 0;
+    int overflow_action_button_count = 0;
     bool integrated_titlebar = true;
     bool native_window_controls = true;
     bool duplicate_window_controls = false;
     bool finder_segmented_toolbar = false;
+    bool more_actions_open = false;
 };
 
 struct ExplorerInputTrace {
@@ -804,7 +806,9 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("toolbar_group_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_group_count)});
     out.emplace("toolbar_separator_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_separator_count)});
     out.emplace("toolbar_icon_button_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_icon_button_count)});
+    out.emplace("overflow_action_button_count", json::Value{static_cast<std::int64_t>(chrome.overflow_action_button_count)});
     out.emplace("finder_segmented_toolbar", json::Value{chrome.finder_segmented_toolbar});
+    out.emplace("more_actions_open", json::Value{chrome.more_actions_open});
     out.emplace("native_window", json::Value{std::move(native_window)});
     return json::Value{std::move(out)};
 }

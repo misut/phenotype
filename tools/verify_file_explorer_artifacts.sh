@@ -181,9 +181,32 @@ append_scenario_requirements() {
       extra_args+=(--require-label-contains "Screen Recording")
       extra_args+=(--require-label-contains "Screenshot")
       ;;
+    "more-actions-open")
+      extra_args+=(--require-label "More Actions Menu")
+      extra_args+=(--require-label "New File")
+      extra_args+=(--require-label "New Folder")
+      extra_args+=(--require-label "Duplicate")
+      extra_args+=(--require-label "Delete")
+      extra_args+=(--require-label-contains "Selected README.txt")
+      extra_args+=(--require-debug-detail "application.file_explorer.chrome.more_actions_open=true")
+      extra_args+=(--require-debug-detail "application.file_explorer.chrome.overflow_action_button_count=4")
+      extra_args+=(--require-debug-detail "application.file_explorer.selection.present=true")
+      extra_args+=(--require-debug-detail "application.file_explorer.selection.name=\"README.txt\"")
+      ;;
     *)
       echo "error: unknown file explorer startup scenario: $scenario" >&2
       exit 1
+      ;;
+  esac
+}
+
+is_desktop_only_scenario() {
+  case "$1" in
+    "more-actions-open")
+      return 0
+      ;;
+    *)
+      return 1
       ;;
   esac
 }
@@ -251,7 +274,12 @@ verify_desktop_capture() {
     "PHENOTYPE_ARTIFACT_EXIT=1"
   )
   if [[ -n "$scenario" && "$scenario" != "default" ]]; then
-    env_args+=("PHENOTYPE_FILE_EXPLORER_SCENARIO=$scenario")
+    if [[ "$scenario" == "more-actions-open" ]]; then
+      env_args+=("PHENOTYPE_FILE_EXPLORER_MORE_ACTIONS=1")
+      env_args+=("PHENOTYPE_FILE_EXPLORER_INPUTS=select:README.txt")
+    else
+      env_args+=("PHENOTYPE_FILE_EXPLORER_SCENARIO=$scenario")
+    fi
   fi
 
   reset_demo_profile "desktop"
@@ -347,6 +375,9 @@ if [[ "$PROFILE" == "all" || "$PROFILE" == "mobile" ]]; then
   verify_mobile_capture "default" "$(mobile_bundle_for_case "default")"
   for scenario in "${SCENARIOS[@]}"; do
     [[ "$scenario" == "default" ]] && continue
+    if is_desktop_only_scenario "$scenario"; then
+      continue
+    fi
     verify_mobile_capture "$scenario" "$(mobile_bundle_for_case "$scenario")"
   done
 fi

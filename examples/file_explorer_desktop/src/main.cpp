@@ -32,6 +32,7 @@ struct CreateFile {};
 struct CreateFolder {};
 struct DeleteSelected {};
 struct DuplicateSelected {};
+struct ToggleMoreActions {};
 struct GoBack {};
 struct GoForward {};
 struct GoUp {};
@@ -52,6 +53,7 @@ using Msg = std::variant<
     CreateFolder,
     DeleteSelected,
     DuplicateSelected,
+    ToggleMoreActions,
     GoBack,
     GoForward,
     GoUp,
@@ -134,6 +136,21 @@ std::string initial_locale() {
     return raw && *raw ? std::string{raw} : std::string{"en"};
 }
 
+bool env_truthy(char const* raw) {
+    if (!raw || !*raw)
+        return false;
+    auto value = std::string{raw};
+    std::ranges::transform(value, value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value == "1" || value == "true" || value == "yes"
+        || value == "open";
+}
+
+bool initial_more_actions_open() {
+    return env_truthy(std::getenv("PHENOTYPE_FILE_EXPLORER_MORE_ACTIONS"));
+}
+
 fs::path initial_package_root() {
     if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT")) {
         if (*raw)
@@ -178,13 +195,15 @@ struct State {
     file_explorer_demo::ExplorerState explorer;
     file_explorer_demo::ExplorerLabels labels;
     bool search_visible = false;
+    bool more_actions_open = false;
 
     State()
         : explorer(initial_explorer_state()),
           labels(file_explorer_demo::file_explorer_labels(
               initial_locale(),
               runtime_resource_catalog())),
-          search_visible(!explorer.search.empty()) {
+          search_visible(!explorer.search.empty()),
+          more_actions_open(initial_more_actions_open()) {
     }
 };
 
@@ -205,6 +224,10 @@ auto file_explorer_application_debug_payload() {
     auto chrome = file_explorer_demo::explorer_chrome_metrics(
         g_debug_state->explorer,
         "desktop");
+    chrome.more_actions_open = g_debug_state->more_actions_open;
+    chrome.overflow_action_button_count = g_debug_state->more_actions_open
+        ? 4
+        : 0;
     return file_explorer_demo::file_explorer_application_debug_json(
         g_debug_state->explorer,
         snap,
@@ -661,10 +684,13 @@ void update(State& state, Msg msg) {
     std::visit([&](auto const& m) {
         using T = std::decay_t<decltype(m)>;
         if constexpr (std::same_as<T, SelectLocation>) {
+            state.more_actions_open = false;
             file_explorer_demo::select_location(explorer, m.id);
         } else if constexpr (std::same_as<T, SelectEntry>) {
+            state.more_actions_open = false;
             file_explorer_demo::activate_entry(explorer, m.name);
         } else if constexpr (std::same_as<T, SetViewMode>) {
+            state.more_actions_open = false;
             file_explorer_demo::apply_explorer_input(
                 explorer,
                 {
@@ -674,11 +700,13 @@ void update(State& state, Msg msg) {
                 },
                 "desktop");
         } else if constexpr (std::same_as<T, ToolbarAction>) {
+            state.more_actions_open = false;
             explorer.status = m.label + " action is available in the native toolbar contract.";
         } else if constexpr (std::same_as<T, SearchChanged>) {
             file_explorer_demo::set_search_filter(explorer, m.text);
             state.search_visible = true;
         } else if constexpr (std::same_as<T, ToggleSearch>) {
+            state.more_actions_open = false;
             state.search_visible = !state.search_visible;
             if (!state.search_visible) {
                 file_explorer_demo::set_search_filter(explorer, {});
@@ -686,26 +714,41 @@ void update(State& state, Msg msg) {
                 explorer.status = "Search ready.";
             }
         } else if constexpr (std::same_as<T, CreateFile>) {
+            state.more_actions_open = false;
             file_explorer_demo::create_file(explorer);
         } else if constexpr (std::same_as<T, CreateFolder>) {
+            state.more_actions_open = false;
             file_explorer_demo::create_folder(explorer);
         } else if constexpr (std::same_as<T, DeleteSelected>) {
+            state.more_actions_open = false;
             file_explorer_demo::delete_selected(explorer);
         } else if constexpr (std::same_as<T, DuplicateSelected>) {
+            state.more_actions_open = false;
             file_explorer_demo::duplicate_selected(explorer);
+        } else if constexpr (std::same_as<T, ToggleMoreActions>) {
+            state.more_actions_open = !state.more_actions_open;
+            explorer.status = state.more_actions_open
+                ? "More actions ready."
+                : "Ready";
         } else if constexpr (std::same_as<T, GoBack>) {
+            state.more_actions_open = false;
             file_explorer_demo::go_back(explorer);
         } else if constexpr (std::same_as<T, GoForward>) {
+            state.more_actions_open = false;
             file_explorer_demo::go_forward(explorer);
         } else if constexpr (std::same_as<T, GoUp>) {
+            state.more_actions_open = false;
             file_explorer_demo::go_up(explorer);
         } else if constexpr (std::same_as<T, CycleSort>) {
+            state.more_actions_open = false;
             file_explorer_demo::cycle_sort_mode(explorer);
         } else if constexpr (std::same_as<T, Refresh>) {
+            state.more_actions_open = false;
             explorer.status = "Refreshed " + file_explorer_demo::relative_location(
                 explorer.root,
                 explorer.current);
         } else if constexpr (std::same_as<T, ResetDemo>) {
+            state.more_actions_open = false;
             file_explorer_demo::reset_demo_tree(explorer, "desktop");
         } else if constexpr (std::same_as<T, Resized>) {
             explorer.viewport_width = m.width;
@@ -1107,6 +1150,24 @@ void toolbar_action_button(char const* label,
         token);
 }
 
+void toolbar_message_button(char const* label,
+                            void (*paint)(phenotype::Painter&),
+                            Msg msg,
+                            std::uint64_t token,
+                            bool selected = false) {
+    std::string semantic_label(label);
+    phenotype::widget::canvas_button<Msg>(
+        phenotype::str{semantic_label},
+        k_toolbar_icon_button_width,
+        k_toolbar_icon_button_height,
+        [paint](phenotype::Painter& painter) {
+            paint(painter);
+        },
+        std::move(msg),
+        toolbar_icon_button_options(selected),
+        token ^ (selected ? 0x500000000ull : 0ull));
+}
+
 Msg on_search_changed(std::string text) {
     return SearchChanged{std::move(text)};
 }
@@ -1218,10 +1279,13 @@ void finder_toolbar(State const& state,
             });
         layout::toolbar(
             toolbar_group_options("Share Tag More", 128.0f),
-            [] {
+            [&] {
                 toolbar_action_button("Share", paint_share_icon, 0x6601u);
                 toolbar_action_button("Tag", paint_tag_icon, 0x6602u);
-                toolbar_action_button("More", paint_more_icon, 0x6603u);
+                toolbar_message_button("More", paint_more_icon,
+                                       ToggleMoreActions{},
+                                       0x6603u,
+                                       state.more_actions_open);
             });
         layout::toolbar(
             toolbar_group_options(
@@ -1237,6 +1301,79 @@ void finder_toolbar(State const& state,
                 }
             });
     });
+}
+
+template<typename Paint>
+void more_action_item(char const* label,
+                      Msg msg,
+                      bool enabled,
+                      Paint paint,
+                      std::uint64_t token) {
+    using namespace phenotype;
+    layout::sized_box(84.0f, [&] {
+        layout::column([&] {
+            file_action_button(label,
+                               std::move(msg),
+                               enabled,
+                               paint,
+                               token);
+            auto label_text = std::string{label};
+            widget::text(label_text,
+                         TextSize::Small,
+                         enabled ? TextColor::Default : TextColor::Muted);
+        },
+        SpaceToken::Xs,
+        CrossAxisAlignment::Center,
+        MainAxisAlignment::Start);
+    });
+}
+
+void finder_more_actions(State const& state,
+                         file_explorer_demo::Snapshot const& snap) {
+    using namespace phenotype;
+    layout::row([&] {
+        layout::weighted(1.0f, [] {});
+        layout::material_surface(
+            layout::MaterialSurfaceOptions{
+                .kind = MaterialKind::Regular,
+                .role = MaterialSurfaceRole::Toolbar,
+                .direction = FlexDirection::Row,
+                .padding = SpaceToken::Sm,
+                .gap = SpaceToken::Xs,
+                .cross_align = CrossAxisAlignment::Center,
+                .main_align = MainAxisAlignment::Start,
+                .max_width = 376.0f,
+                .fixed_height = 72.0f,
+                .border_radius = k_toolbar_group_radius,
+                .border_width = 0.0f,
+                .semantic_label = "More Actions Menu",
+            },
+            [&] {
+                more_action_item(state.labels.create_file.c_str(),
+                                 CreateFile{},
+                                 snap.can_create_file,
+                                 paint_new_file_icon,
+                                 0x6701u);
+                more_action_item(state.labels.create_folder.c_str(),
+                                 CreateFolder{},
+                                 snap.can_create_folder,
+                                 paint_new_folder_icon,
+                                 0x6702u);
+                more_action_item(state.labels.duplicate.c_str(),
+                                 DuplicateSelected{},
+                                 snap.can_duplicate_selected,
+                                 paint_duplicate_icon,
+                                 0x6703u);
+                more_action_item(state.labels.delete_action.c_str(),
+                                 DeleteSelected{},
+                                 snap.can_delete_selected,
+                                 paint_delete_icon,
+                                 0x6704u);
+            });
+    },
+    SpaceToken::Xs,
+    CrossAxisAlignment::Center,
+    MainAxisAlignment::Start);
 }
 
 void finder_grid(State const& state,
@@ -1587,6 +1724,8 @@ void view(State const& state) {
                     layout::weighted(1.0f, [&] {
                         layout::column([&] {
                             finder_toolbar(state, snap);
+                            if (state.more_actions_open)
+                                finder_more_actions(state, snap);
                             finder_content(state, snap);
                             finder_status_bar(state, snap);
                         }, SpaceToken::Sm);

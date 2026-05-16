@@ -27,8 +27,8 @@ a toolkit window shim.
 The toolbar itself is a borderless material shell with rounded material control
 groups, so the artifact keeps Finder-like chrome without duplicating native
 window controls. File create, read, duplicate, and delete behavior is still
-covered through the shared model, CLI inputs, and startup scenarios rather than
-adding an always-visible extra action group to the default Finder chrome.
+covered through the shared model, CLI inputs, startup scenarios, and the
+Finder-style `More` overflow instead of an always-visible extra action group.
 
 Startup frame artifacts intentionally capture phenotype content rather than the
 operating system's non-client controls. The top-left titlebar reserve must stay
@@ -66,6 +66,11 @@ The toolbar search control starts as a Finder-style icon button. Activating it
 reveals a search field wired to the shared file model, so desktop and mobile
 examples use the same deterministic filename filter and startup artifact
 scenario.
+The toolbar `More` button opens a compact material overflow menu for file and
+folder creation, duplicate, and delete actions. The default artifact keeps that
+menu closed to preserve Finder's neutral chrome, while
+`PHENOTYPE_FILE_EXPLORER_SCENARIOS=more-actions-open` captures the menu and
+asserts its debug payload.
 Folder clicks use the shared desktop activation contract: the first click
 selects the folder so the status and delete capability are observable, while a
 second activation opens it. The CLI can exercise the same behavior with
@@ -151,9 +156,11 @@ It also captures deterministic startup scenarios through
 `PHENOTYPE_FILE_EXPLORER_SCENARIO`: `created-preview`, `deleted-file`,
 `trash-view`, `created-folder`, `deleted-folder`, `duplicated-file`,
 `documents-preview`, `history-forward`, `sorted-kind`, and `search-active`.
-These scenarios make create, Trash movement, duplicate, folder operation,
-navigation history, file preview behavior, sort state, and active search
-visible in the semantic artifact without requiring manual click playback. File
-and folder operation scenarios also expose an `Operation: ...` receipt in the
+Set `PHENOTYPE_FILE_EXPLORER_SCENARIOS=more-actions-open` when the desktop-only
+More overflow contract needs a local artifact. These scenarios make create,
+Trash movement, duplicate, folder operation, navigation history, file preview
+behavior, sort state, active search, and overflow action availability visible
+in the semantic artifact without requiring manual click playback. File and
+folder operation scenarios also expose an `Operation: ...` receipt in the
 status surface so the artifact can identify the action kind, target, and
 result.
