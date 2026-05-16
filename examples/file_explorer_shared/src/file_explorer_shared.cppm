@@ -38,6 +38,7 @@ struct OperationReceipt {
 };
 
 enum class SortMode {
+    Recent,
     Name,
     Kind,
     Size,
@@ -65,6 +66,7 @@ struct Snapshot {
     std::string operation_label;
     std::string sort_label;
     std::string preview;
+    SortMode sort_mode = SortMode::Name;
     std::size_t file_count = 0;
     std::size_t folder_count = 0;
 };
@@ -72,7 +74,7 @@ struct Snapshot {
 struct ExplorerState {
     fs::path root;
     fs::path current;
-    std::string selected_name = "README.txt";
+    std::string selected_name;
     std::string search;
     std::string draft_name = "New Note.txt";
     std::string draft_folder_name = "New Folder";
@@ -233,6 +235,10 @@ inline constexpr float k_desktop_icon_grid_column_pitch = 166.0f;
 
 inline bool mobile_profile(std::string_view profile) {
     return profile == "mobile";
+}
+
+inline SortMode default_sort_mode(std::string_view profile) {
+    return mobile_profile(profile) ? SortMode::Name : SortMode::Recent;
 }
 
 inline ExplorerViewport default_viewport(std::string_view profile) {
@@ -540,6 +546,12 @@ inline fs::path ensure_demo_tree(std::string_view profile) {
             root / "작성예시3_선택_DC 탈퇴신청서.pdf",
             "PDF placeholder with Korean filename for font fallback verification.\n");
         write_file_if_missing(
+            root / "작성예시2_필수_운용지시서.pdf",
+            "PDF placeholder with Korean filename for Finder recents ordering.\n");
+        write_file_if_missing(
+            root / "작성예시1_필수_중도인출 신청서.pdf",
+            "PDF placeholder with Korean filename for Finder recents ordering.\n");
+        write_file_if_missing(
             root / "契約書_サンプル.pdf",
             "PDF placeholder with Japanese filename for font fallback verification.\n");
         write_file_if_missing(
@@ -637,6 +649,7 @@ inline std::string entry_size_label(Entry const& entry) {
 
 inline std::string sort_mode_label(SortMode mode) {
     switch (mode) {
+        case SortMode::Recent: return "Recent";
         case SortMode::Kind: return "Kind";
         case SortMode::Size: return "Size";
         case SortMode::Name:
@@ -646,6 +659,7 @@ inline std::string sort_mode_label(SortMode mode) {
 
 inline SortMode next_sort_mode(SortMode mode) {
     switch (mode) {
+        case SortMode::Recent: return SortMode::Name;
         case SortMode::Name: return SortMode::Kind;
         case SortMode::Kind: return SortMode::Size;
         case SortMode::Size:
@@ -839,6 +853,8 @@ inline std::string viewport_value_label(int width, int height, float scale) {
 
 inline SortMode sort_mode_from_name(std::string_view value) {
     auto name = lower_copy(trim(value));
+    if (name == "recent" || name == "recents")
+        return SortMode::Recent;
     if (name == "kind")
         return SortMode::Kind;
     if (name == "size")
@@ -966,11 +982,13 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         return parsed_input({.kind = ExplorerInputKind::GoUp});
     if (name == "sort") {
         if (value.empty())
-            return input_parse_error("input 'sort' requires name, kind, or size");
-        auto lowered = lower_copy(value);
-        if (lowered != "name" && lowered != "kind" && lowered != "size") {
             return input_parse_error(
-                "input 'sort' accepts only name, kind, or size");
+                "input 'sort' requires recent, name, kind, or size");
+        auto lowered = lower_copy(value);
+        if (lowered != "recent" && lowered != "recents"
+            && lowered != "name" && lowered != "kind" && lowered != "size") {
+            return input_parse_error(
+                "input 'sort' accepts only recent, name, kind, or size");
         }
         return parsed_input({
             .kind = ExplorerInputKind::Sort,
@@ -1097,6 +1115,54 @@ inline bool protected_root_folder(std::string_view name) {
         || name == ".Trash";
 }
 
+inline int finder_recents_rank(std::string_view name) {
+    if (name == "작성예시3_선택_DC 탈퇴신청서.pdf")
+        return 0;
+    if (name == "작성예시2_필수_운용지시서.pdf")
+        return 1;
+    if (name == "작성예시1_필수_중도인출 신청서.pdf")
+        return 2;
+    if (name == "2_필수_운용지시서.pdf")
+        return 3;
+    if (name == "1_필수_중도인출 신청서.pdf")
+        return 4;
+    if (name == "Withdrawal Notice.pdf")
+        return 5;
+    if (name == "Operating Guide.pdf")
+        return 6;
+    if (name == "line_2.png")
+        return 7;
+    if (name == "line_23.png")
+        return 8;
+    if (name == "line_8.png")
+        return 9;
+    if (name == "Screen Recording 2025-11-04.mov")
+        return 10;
+    if (name == "Screen Recording 2025-11-05.mov")
+        return 11;
+    if (name == "Screen Recording 2025-11-06.mov")
+        return 12;
+    if (name == "Screen Recording 2025-11-07.mov")
+        return 13;
+    if (name == "Screenshot 2025-11-05.png")
+        return 14;
+    if (name == "Screenshot 2025-11-06.png")
+        return 15;
+    if (name == "README.txt")
+        return 16;
+    if (name == "Application Form 3.pdf")
+        return 17;
+    if (name == "Application Form 2.pdf")
+        return 18;
+    if (name == "Archive.zip")
+        return 19;
+    if (name == "契約書_サンプル.pdf")
+        return 20;
+    if (name == "资产证明.pdf")
+        return 21;
+    return 1000;
+}
+
 inline bool path_inside_root(fs::path const& root, fs::path const& path) {
     auto rel = path.lexically_relative(root).generic_string();
     if (rel.empty() || rel == ".")
@@ -1152,6 +1218,15 @@ inline std::vector<Entry> list_entries(
         entries.push_back(entry);
     }
     std::sort(entries.begin(), entries.end(), [sort_mode](Entry const& a, Entry const& b) {
+        if (sort_mode == SortMode::Recent) {
+            auto lhs_rank = finder_recents_rank(a.name);
+            auto rhs_rank = finder_recents_rank(b.name);
+            if (lhs_rank != rhs_rank)
+                return lhs_rank < rhs_rank;
+            if (a.folder != b.folder)
+                return !a.folder && b.folder;
+            return lower_copy(a.name) < lower_copy(b.name);
+        }
         if (a.folder != b.folder)
             return a.folder && !b.folder;
         if (sort_mode == SortMode::Kind) {
@@ -1212,6 +1287,7 @@ inline Snapshot snapshot(ExplorerState const& state) {
     out.can_create_folder = out.can_create_file;
     out.entries = list_entries(state.current, state.search, state.sort_mode);
     out.operation_label = operation_label(state.last_operation);
+    out.sort_mode = state.sort_mode;
     out.sort_label = "Sort: " + sort_mode_label(state.sort_mode);
     for (auto const& entry : out.entries) {
         if (entry.folder)
@@ -1251,7 +1327,8 @@ inline ExplorerState make_state(std::string_view profile) {
     ExplorerState state;
     state.root = ensure_demo_tree(profile);
     state.current = state.root;
-    state.selected_name = "README.txt";
+    state.selected_name.clear();
+    state.sort_mode = default_sort_mode(profile);
     apply_default_viewport(state, profile);
     return state;
 }
@@ -1614,7 +1691,7 @@ inline void reset_demo_tree(ExplorerState& state, std::string_view profile) {
         fs::remove_all(state.root, ec);
     state.root = ensure_demo_tree(profile);
     state.current = state.root;
-    state.selected_name = "README.txt";
+    state.selected_name.clear();
     state.search.clear();
     state.draft_name = "New Note.txt";
     state.draft_folder_name = "New Folder";
@@ -1622,7 +1699,7 @@ inline void reset_demo_tree(ExplorerState& state, std::string_view profile) {
     state.back_stack.clear();
     state.forward_stack.clear();
     state.last_operation = {};
-    state.sort_mode = SortMode::Name;
+    state.sort_mode = default_sort_mode(profile);
     state.status = "Demo files reset.";
 }
 

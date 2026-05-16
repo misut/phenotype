@@ -223,8 +223,7 @@ verify_desktop_capture() {
         extra_args+=(--require-label "Demo Root")
         ;;
       gallery)
-        extra_args+=(--require-label "TXT File")
-        extra_args+=(--require-label-contains "Phenotype File Explorer")
+        extra_args+=(--require-label "Select a file to preview.")
         ;;
     esac
   fi
