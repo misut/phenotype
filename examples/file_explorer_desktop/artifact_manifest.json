@@ -170,6 +170,22 @@
       "equals": false
     },
     {
+      "path": "window.titlebar_transparent",
+      "equals": true
+    },
+    {
+      "path": "window.full_size_content_view",
+      "equals": true
+    },
+    {
+      "path": "window.title_hidden",
+      "equals": true
+    },
+    {
+      "path": "window.background_drag_enabled",
+      "equals": true
+    },
+    {
       "path": "window.window_server_bounds.valid",
       "equals": true
     },

@@ -63,6 +63,32 @@ inline float sanitize_scale(double scale) {
         : 1.0f;
 }
 
+inline void apply_appkit_window_chrome(id window,
+                                       WindowOptions const& options) {
+    if (!window || options.chrome != WindowChromeStyle::IntegratedTitlebar)
+        return;
+
+    constexpr unsigned long full_size_content_view_mask = 1ul << 15;
+    constexpr long hidden_title = 1;
+    auto style = objc_send<unsigned long>(window, sel("styleMask"));
+    objc_send<void>(
+        window,
+        sel("setStyleMask:"),
+        style | full_size_content_view_mask);
+    objc_send<void>(
+        window,
+        sel("setTitlebarAppearsTransparent:"),
+        static_cast<signed char>(1));
+    objc_send<void>(
+        window,
+        sel("setTitleVisibility:"),
+        hidden_title);
+    objc_send<void>(
+        window,
+        sel("setMovableByWindowBackground:"),
+        static_cast<signed char>(1));
+}
+
 inline void sync_appkit_surface(native_host& host,
                                 NativeSurfaceDescriptor& surface,
                                 id window,
@@ -298,7 +324,6 @@ inline id create_appkit_window(int width,
     constexpr unsigned long miniaturizable = 1ul << 2;
     constexpr unsigned long resizable = 1ul << 3;
     unsigned long style = titled | closable | miniaturizable | resizable;
-    (void)options;
 
     id window = objc_send<id>(
         objc_send<id>(class_id("NSWindow"), sel("alloc")),
@@ -312,6 +337,7 @@ inline id create_appkit_window(int width,
     objc_send<void>(window, sel("setReleasedWhenClosed:"), static_cast<signed char>(0));
     objc_send<void>(window, sel("setTitle:"), ns_string(title));
     objc_send<void>(window, sel("setAcceptsMouseMovedEvents:"), static_cast<signed char>(1));
+    apply_appkit_window_chrome(window, options);
     constexpr unsigned long move_to_active_space = 1ul << 1;
     objc_send<void>(window, sel("setCollectionBehavior:"), move_to_active_space);
     objc_send<void>(window, sel("center"));
@@ -583,6 +609,7 @@ int run_app_with_macos_platform(platform_api const& platform,
 
     if (platform.window.configure)
         platform.window.configure(&surface, &options);
+    sync_appkit_surface(host, surface, window, false);
 
     bind_host(host, 0.0f);
     notify_viewport_changed(

@@ -30,6 +30,10 @@ The manifest also checks `debug.platform_runtime.details.window` so CI can
 prove the example requested `IntegratedTitlebar`, preserved the expected
 titlebar/control reserve metrics, and is not using GLFW or another toolkit
 window shim.
+On macOS, the same runtime object reports live `NSWindow` chrome state:
+transparent titlebar, full-size content view, hidden native title, and
+background dragging must all be enabled. These fields are actual platform
+readbacks, not request echoes.
 On macOS it additionally checks WindowServer bounds, onscreen state, app
 activation, active-Space collection behavior, and key/main window state, which
 catches regressions where the process owns a Dock icon but the ordered NSWindow
