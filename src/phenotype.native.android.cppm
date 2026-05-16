@@ -5889,9 +5889,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     auto const t_end = std::chrono::steady_clock::now();
     MaterialExecutorSummary material_summary;
-    material_summary.plan_count =
-        static_cast<std::uint32_t>(scratch.material_records.size());
-    material_summary.fallback_instance_count = material_summary.plan_count;
+    for (auto const& record : scratch.material_records) {
+        accumulate_material_executor_plan_summary(
+            material_summary,
+            record.plan);
+    }
     material_summary.foreground_text_candidate_count =
         scratch.foreground_text_candidate_count;
     material_summary.foreground_text_remap_count =

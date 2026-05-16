@@ -401,12 +401,15 @@ Whenever material plans are present, the verifier also cross-checks executor
 counts against `renderer.material_plans#summary`: `plan_count`,
 `fallback_instance_count`, `material_instance_count`,
 `material_max_sample_taps`, and `material_total_sample_taps` must match the
-resolved plan aggregate, draw calls must stay within material instances times
-the pure pass budget, upload bytes must fit the reported material buffer
-capacity, and copied backdrop pixels must stay within the pure resource budget.
-Foreground remaps must also be less than or equal to foreground text
-candidates, otherwise the backend has counted a remap without a material
-surface hit.
+resolved plan aggregate. Executor stage counters must also match the pure
+`execution_stages` summary: total stages, active stages, backdrop-dependent
+stages, primary runtime stages, backdrop-filter stages, fallback-fill stages,
+shape-shadow stages, edge-highlight stages, and noise/dither stages. Draw calls
+must stay within material instances times the pure pass budget, upload bytes
+must fit the reported material buffer capacity, and copied backdrop pixels must
+stay within the pure resource budget. Foreground remaps must also be less than
+or equal to foreground text candidates, otherwise the backend has counted a
+remap without a material surface hit.
 Use `require_material_quality_policy` when a material gate must prove the
 resolved pure policy stayed enabled and bounded. It can require backdrop
 sampling, noise, and shadow to remain allowed for every plan, and can bound the

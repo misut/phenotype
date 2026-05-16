@@ -4956,6 +4956,29 @@ def check_material_executor_summary_contract(
         "fallback_instance_count": fallback,
         "material_instance_count": material_instances,
     }
+    bounds = summary.get("resource_bounds")
+    if not isinstance(bounds, dict):
+        bounds = {}
+    stage_names = summary.get("stage_names")
+    if not isinstance(stage_names, dict):
+        stage_names = {}
+    stage_executors = summary.get("stage_executors")
+    if not isinstance(stage_executors, dict):
+        stage_executors = {}
+    expected_stage_fields = {
+        "execution_stage_count": bounds.get("total_execution_stages"),
+        "active_execution_stage_count": bounds.get("active_execution_stages"),
+        "backdrop_execution_stage_count": bounds.get(
+            "backdrop_execution_stages"),
+        "primary_execution_stage_count": bounds.get("active_runtime_passes"),
+        "backdrop_filter_stage_count": stage_executors.get(
+            "backdrop-filter", 0),
+        "fallback_fill_stage_count": stage_executors.get("fallback-fill", 0),
+        "shadow_stage_count": stage_names.get("shape-shadow", 0),
+        "edge_highlight_stage_count": stage_names.get("edge-highlight", 0),
+        "noise_dither_stage_count": stage_names.get("noise-dither", 0),
+    }
+    expected_fields.update(expected_stage_fields)
     for field, expected in expected_fields.items():
         actual = executor_summary.get(field)
         report.check(
@@ -4976,6 +4999,15 @@ def check_material_executor_summary_contract(
         "fallback_instance_count",
         "material_draw_calls",
         "backdrop_copy_count",
+        "execution_stage_count",
+        "active_execution_stage_count",
+        "backdrop_execution_stage_count",
+        "primary_execution_stage_count",
+        "backdrop_filter_stage_count",
+        "fallback_fill_stage_count",
+        "shadow_stage_count",
+        "edge_highlight_stage_count",
+        "noise_dither_stage_count",
         "material_max_sample_taps",
         "material_total_sample_taps",
         "backdrop_copy_pixels",
@@ -5043,9 +5075,6 @@ def check_material_executor_summary_contract(
                 "Material draw calls should stay within material instances "
                 "times MaterialResourceBudget.max_pass_count."))
 
-    bounds = summary.get("resource_bounds")
-    if not isinstance(bounds, dict):
-        bounds = {}
     expected_sample_fields = {
         "material_max_sample_taps": bounds.get("max_plan_sample_taps"),
         "material_total_sample_taps": bounds.get("total_plan_sample_taps"),

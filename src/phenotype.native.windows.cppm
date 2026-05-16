@@ -4772,9 +4772,11 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     }
     g_renderer.material_records = decoded.material_records;
     MaterialExecutorSummary material_summary;
-    material_summary.plan_count =
-        static_cast<std::uint32_t>(g_renderer.material_records.size());
-    material_summary.fallback_instance_count = material_summary.plan_count;
+    for (auto const& record : g_renderer.material_records) {
+        accumulate_material_executor_plan_summary(
+            material_summary,
+            record.plan);
+    }
     material_summary.foreground_text_candidate_count =
         decoded.foreground_text_candidate_count;
     material_summary.foreground_text_remap_count =

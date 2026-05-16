@@ -3,6 +3,7 @@ module;
 #include <cstdint>
 #include <cmath>
 #include <span>
+#include <string_view>
 
 export module phenotype.material;
 
@@ -374,6 +375,15 @@ struct MaterialExecutorSummary {
     std::uint32_t fallback_instance_count = 0;
     std::uint32_t material_draw_calls = 0;
     std::uint32_t backdrop_copy_count = 0;
+    std::uint32_t execution_stage_count = 0;
+    std::uint32_t active_execution_stage_count = 0;
+    std::uint32_t backdrop_execution_stage_count = 0;
+    std::uint32_t primary_execution_stage_count = 0;
+    std::uint32_t backdrop_filter_stage_count = 0;
+    std::uint32_t fallback_fill_stage_count = 0;
+    std::uint32_t shadow_stage_count = 0;
+    std::uint32_t edge_highlight_stage_count = 0;
+    std::uint32_t noise_dither_stage_count = 0;
     std::uint32_t material_max_sample_taps = 0;
     std::int64_t material_total_sample_taps = 0;
     std::int64_t backdrop_copy_pixels = 0;
@@ -386,6 +396,58 @@ struct MaterialExecutorSummary {
     std::int64_t cpu_material_upload_ns = 0;
     std::int64_t cpu_total_ns = 0;
 };
+
+inline bool material_stage_matches(
+        char const* actual,
+        std::string_view expected) noexcept {
+    return actual && std::string_view{actual} == expected;
+}
+
+inline void accumulate_material_executor_plan_summary(
+        MaterialExecutorSummary& summary,
+        MaterialPlan const& plan) noexcept {
+    ++summary.plan_count;
+    if (!plan.backdrop_sampling || plan.fallback()) {
+        ++summary.fallback_instance_count;
+    } else {
+        summary.material_max_sample_taps = std::max(
+            summary.material_max_sample_taps,
+            plan.sample_taps);
+        summary.material_total_sample_taps += plan.sample_taps;
+    }
+    for (unsigned int i = 0; i < plan.execution_stage_count; ++i) {
+        auto const& stage = plan.execution_stages[i];
+        ++summary.execution_stage_count;
+        if (stage.active)
+            ++summary.active_execution_stage_count;
+        if (stage.requires_backdrop)
+            ++summary.backdrop_execution_stage_count;
+        if (plan.primary_pass.active) {
+            auto const primary_stage =
+                material_stage_matches(stage.name, plan.primary_pass.name)
+                && stage.requires_backdrop == plan.primary_pass.requires_backdrop
+                && stage.sample_taps == plan.primary_pass.sample_taps
+                && material_stage_matches(stage.likely_layer,
+                                          plan.primary_pass.likely_layer)
+                && material_stage_matches(stage.executor,
+                                          plan.primary_pass.executor)
+                && stage.max_texture_copy_pixels
+                    == plan.primary_pass.max_texture_copy_pixels;
+            if (primary_stage)
+                ++summary.primary_execution_stage_count;
+        }
+        if (material_stage_matches(stage.executor, "backdrop-filter"))
+            ++summary.backdrop_filter_stage_count;
+        if (material_stage_matches(stage.executor, "fallback-fill"))
+            ++summary.fallback_fill_stage_count;
+        if (material_stage_matches(stage.name, "shape-shadow"))
+            ++summary.shadow_stage_count;
+        if (material_stage_matches(stage.name, "edge-highlight"))
+            ++summary.edge_highlight_stage_count;
+        if (material_stage_matches(stage.name, "noise-dither"))
+            ++summary.noise_dither_stage_count;
+    }
+}
 
 inline void accumulate_material_runtime_summary(
         MaterialRuntimeSummary& summary,

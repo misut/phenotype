@@ -153,6 +153,42 @@
       "equals": 1
     },
     {
+      "path": "renderer.material_executor_summary.execution_stage_count",
+      "equals": 3
+    },
+    {
+      "path": "renderer.material_executor_summary.active_execution_stage_count",
+      "equals": 3
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_execution_stage_count",
+      "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.primary_execution_stage_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_filter_stage_count",
+      "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.fallback_fill_stage_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.shadow_stage_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.edge_highlight_stage_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.noise_dither_stage_count",
+      "equals": 0
+    },
+    {
       "path": "renderer.material_executor_summary.material_draw_calls",
       "equals": 0
     },
