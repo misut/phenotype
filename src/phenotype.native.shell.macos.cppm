@@ -318,6 +318,48 @@ inline id create_appkit_window(int width,
 inline id g_active_appkit_window = nullptr;
 inline NativeSurfaceDescriptor* g_active_appkit_surface = nullptr;
 
+inline bool appkit_app_is_active(id app) {
+    return app && objc_send<signed char>(app, sel("isActive")) != 0;
+}
+
+inline bool appkit_window_is_visible(id window) {
+    return window && objc_send<signed char>(window, sel("isVisible")) != 0;
+}
+
+inline bool activate_current_running_application() {
+    id running_app = objc_send<id>(
+        class_id("NSRunningApplication"),
+        sel("currentApplication"));
+    if (!running_app)
+        return false;
+
+    constexpr unsigned long activate_all_windows = 1ul << 0;
+    constexpr unsigned long activate_ignoring_other_apps = 1ul << 1;
+    return objc_send<signed char>(
+        running_app,
+        sel("activateWithOptions:"),
+        activate_all_windows | activate_ignoring_other_apps) != 0;
+}
+
+inline void request_appkit_window_front(id app, id window) {
+    if (!window)
+        return;
+
+    // Activation is asynchronous for command-line AppKit apps. Request app
+    // focus and window key/main status as a single idempotent publish step so
+    // the startup path and retry loop cannot drift apart.
+    activate_current_running_application();
+    if (app) {
+        objc_send<void>(app, sel("activate"));
+        objc_send<void>(
+            app,
+            sel("activateIgnoringOtherApps:"),
+            static_cast<signed char>(1));
+    }
+    objc_send<void>(window, sel("makeKeyAndOrderFront:"), nullptr);
+    objc_send<void>(window, sel("orderFrontRegardless"));
+}
+
 inline void prime_appkit_window_ordering(id app) {
     if (!app)
         return;
@@ -397,6 +439,12 @@ inline bool appkit_window_server_surface_ready(id window) {
     return surface.valid && surface.onscreen;
 }
 
+inline bool appkit_window_front_ready(id app, id window) {
+    return appkit_window_server_surface_ready(window)
+        && appkit_window_is_visible(window)
+        && appkit_app_is_active(app);
+}
+
 inline void pump_appkit_ordering_once(id app, double timeout_seconds) {
     if (!app)
         return;
@@ -421,6 +469,19 @@ inline void wait_for_appkit_window_server_surface(id app, id window) {
     while (!appkit_window_server_surface_ready(window)) {
         if (std::chrono::steady_clock::now() >= deadline)
             return;
+        pump_appkit_ordering_once(app, 0.016);
+    }
+}
+
+inline void wait_for_appkit_window_front(id app, id window) {
+    if (!app || !window)
+        return;
+    auto const deadline =
+        std::chrono::steady_clock::now() + std::chrono::milliseconds(1500);
+    while (!appkit_window_front_ready(app, window)) {
+        if (std::chrono::steady_clock::now() >= deadline)
+            return;
+        request_appkit_window_front(app, window);
         pump_appkit_ordering_once(app, 0.016);
     }
 }
@@ -528,11 +589,9 @@ int run_app_with_macos_platform(platform_api const& platform,
         surface.content_scale);
     run_host<State, Msg>(host, std::move(view), std::move(update));
 
-    objc_send<void>(app, sel("activateIgnoringOtherApps:"), static_cast<signed char>(1));
-    objc_send<void>(window, sel("makeKeyAndOrderFront:"), nullptr);
-    objc_send<void>(window, sel("orderFrontRegardless"));
+    request_appkit_window_front(app, window);
     prime_appkit_window_ordering(app);
-    wait_for_appkit_window_server_surface(app, window);
+    wait_for_appkit_window_front(app, window);
 
     auto const* artifact_dir = std::getenv("PHENOTYPE_ARTIFACT_DIR");
     bool const artifact_requested = artifact_dir && artifact_dir[0] != '\0';
@@ -540,7 +599,7 @@ int run_app_with_macos_platform(platform_api const& platform,
         && platform.debug.capabilities().material_backdrop_blur) {
         ::phenotype::detail::g_app.last_paint_hash = 0;
         repaint_current();
-        wait_for_appkit_window_server_surface(app, window);
+        wait_for_appkit_window_front(app, window);
     }
     bool const artifact_ok = artifact_requested
         ? write_startup_artifact_bundle(platform, artifact_dir)
