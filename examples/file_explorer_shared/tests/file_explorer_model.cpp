@@ -38,6 +38,8 @@ int main() {
     assert(catalog.default_font_family == "Pretendard");
     assert(demo::file_explorer_labels("ko", "desktop").sidebar_recents
         == "최근 항목");
+    assert(demo::file_explorer_labels("ko", catalog).sidebar_recents
+        == "최근 항목");
     assert(demo::file_explorer_labels("ja", "desktop").sidebar_recents
         == "Recents");
     assert(demo::file_explorer_labels("ko", "mobile").tab_create == "만들기");
@@ -63,6 +65,21 @@ int main() {
     auto parsed_bad = demo::parse_explorer_input("sort:date");
     assert(!parsed_bad.ok);
     assert(parsed_bad.error.find("sort") != std::string::npos);
+    auto expected_selected =
+        demo::parse_explorer_expectation("selected:README.txt");
+    assert(expected_selected.ok);
+    assert(expected_selected.expectation.kind
+        == demo::ExplorerExpectationKind::Selected);
+    auto expected_operation =
+        demo::parse_explorer_expectation("operation:file_delete:ok");
+    assert(expected_operation.ok);
+    assert(expected_operation.expectation.expects_operation_ok);
+    assert(expected_operation.expectation.operation_ok);
+    auto expected_missing =
+        demo::parse_explorer_expectation("missing-entry:Ghost.txt");
+    assert(expected_missing.ok);
+    auto bad_expectation = demo::parse_explorer_expectation("selected");
+    assert(!bad_expectation.ok);
 
     std::string const profile = "test-model-contract";
     auto root = demo::demo_root(profile);
@@ -383,6 +400,31 @@ int main() {
             saw_cli_note_copy = true;
     }
     assert(saw_cli_note_copy);
+    std::vector<demo::ExplorerExpectation> expectations{
+        {.kind = demo::ExplorerExpectationKind::Location, .value = "Trash"},
+        {.kind = demo::ExplorerExpectationKind::Entry,
+         .value = "CLI Note copy.txt"},
+        {.kind = demo::ExplorerExpectationKind::MissingEntry,
+         .value = "CLI Note.txt"},
+        {.kind = demo::ExplorerExpectationKind::Operation,
+         .value = "file_delete",
+         .expects_operation_ok = true,
+         .operation_ok = true},
+        {.kind = demo::ExplorerExpectationKind::StatusContains,
+         .value = "Sorted"},
+    };
+    auto checked = demo::check_explorer_expectations(driven, expectations);
+    assert(checked.size() == expectations.size());
+    assert(demo::explorer_expectations_ok(checked));
+    assert(checked[0].actual == "Trash");
+    assert(checked[1].actual == "CLI Note copy.txt");
+    assert(checked[2].actual == "<missing>");
+    auto failed_expectation = demo::check_explorer_expectation(
+        driven,
+        {.kind = demo::ExplorerExpectationKind::Selected,
+         .value = "CLI Note.txt"});
+    assert(!failed_expectation.ok);
+    assert(failed_expectation.actual == "<none>");
     fs::remove_all(drive_root, ec);
 
     demo::reset_demo_tree(state, profile);
