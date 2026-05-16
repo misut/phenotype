@@ -213,6 +213,26 @@
       "equals": 23.0
     },
     {
+      "path": "application.file_explorer.chrome.icon_grid_column_width",
+      "equals": 126.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_grid_row_height",
+      "equals": 148.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_grid_column_pitch",
+      "equals": 150.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_grid_columns",
+      "equals": 6
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_grid_visible_capacity",
+      "equals": 18
+    },
+    {
       "path": "application.file_explorer.chrome.content_window_control_markers",
       "equals": true
     },

@@ -261,9 +261,9 @@ inline constexpr float k_desktop_titlebar_control_cluster_height = 52.0f;
 inline constexpr float k_desktop_titlebar_control_diameter = 13.0f;
 inline constexpr float k_desktop_titlebar_control_spacing = 23.0f;
 inline constexpr int k_desktop_titlebar_control_count = 3;
-inline constexpr float k_desktop_icon_grid_column_width = 142.0f;
-inline constexpr float k_desktop_icon_grid_row_height = 166.0f;
-inline constexpr float k_desktop_icon_grid_column_pitch = 166.0f;
+inline constexpr float k_desktop_icon_grid_column_width = 126.0f;
+inline constexpr float k_desktop_icon_grid_row_height = 148.0f;
+inline constexpr float k_desktop_icon_grid_column_pitch = 150.0f;
 
 inline bool mobile_profile(std::string_view profile) {
     return profile == "mobile";
@@ -823,6 +823,10 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("titlebar_control_diameter", json::Value{chrome.titlebar_control_diameter});
     out.emplace("titlebar_control_spacing", json::Value{chrome.titlebar_control_spacing});
     out.emplace("window_radius", json::Value{chrome.window_radius});
+    out.emplace("icon_grid_column_width", json::Value{chrome.icon_grid_column_width});
+    out.emplace("icon_grid_row_height", json::Value{chrome.icon_grid_row_height});
+    out.emplace("icon_grid_column_pitch", json::Value{chrome.icon_grid_column_pitch});
+    out.emplace("icon_grid_scroll_height", json::Value{chrome.icon_grid_scroll_height});
     out.emplace("icon_grid_columns", json::Value{static_cast<std::int64_t>(chrome.icon_grid_columns)});
     out.emplace("icon_grid_visible_rows", json::Value{static_cast<std::int64_t>(chrome.icon_grid_visible_rows)});
     out.emplace("icon_grid_visible_capacity", json::Value{static_cast<std::int64_t>(chrome.icon_grid_visible_capacity)});

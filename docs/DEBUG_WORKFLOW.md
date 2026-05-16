@@ -165,7 +165,9 @@ running the slower desktop/mobile artifact capture gate.
 Native file explorer artifact bundles expose the same model state under
 `debug.application.file_explorer`: profile, location, status, sort mode, view
 mode, selected entry, operation receipt, entry counts, and pure chrome metrics.
-The verifier can assert those paths with `require_debug_details`, which keeps
+The desktop payload includes Finder chrome counts and icon-grid density metrics
+such as column width, row height, pitch, visible rows, and visible capacity. The
+verifier can assert those paths with `require_debug_details`, which keeps
 Finder workflow failures debuggable without relying on a screenshot guess.
 
 For material probe input debugging that does not need a native window, use the
