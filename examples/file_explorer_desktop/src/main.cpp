@@ -472,18 +472,18 @@ void paint_pdf_thumbnail(phenotype::Painter& painter,
                          std::string const& name,
                          bool selected) {
     auto accent = selected ? rgba(0, 122, 255) : rgba(38, 132, 255);
-    fill_round(painter, 36.0f, 5.0f, 58.0f, 76.0f, 4.0f, rgba(0, 0, 0, 24));
-    fill_round(painter, 34.0f, 3.0f, 58.0f, 76.0f, 4.0f, rgba(255, 255, 255, 250));
-    stroke_round(painter, 34.0f, 3.0f, 58.0f, 76.0f, 4.0f, 1.0f, rgba(210, 214, 220));
-    fill_rect(painter, 36.0f, 7.0f, 34.0f, 5.0f, accent);
-    fill_rect(painter, 38.0f, 16.0f, 47.0f, 3.0f, rgba(207, 214, 225));
-    fill_rect(painter, 38.0f, 23.0f, 42.0f, 3.0f, rgba(229, 124, 124, 170));
-    fill_rect(painter, 38.0f, 31.0f, 48.0f, 2.0f, rgba(207, 214, 225));
-    fill_rect(painter, 38.0f, 38.0f, 42.0f, 2.0f, rgba(207, 214, 225));
-    fill_rect(painter, 38.0f, 45.0f, 48.0f, 2.0f, rgba(207, 214, 225));
-    fill_rect(painter, 38.0f, 55.0f, 26.0f, 8.0f, rgba(255, 231, 125, 210));
+    fill_round(painter, 39.0f, 5.0f, 46.0f, 61.0f, 4.0f, rgba(0, 0, 0, 24));
+    fill_round(painter, 37.0f, 3.0f, 46.0f, 61.0f, 4.0f, rgba(255, 255, 255, 250));
+    stroke_round(painter, 37.0f, 3.0f, 46.0f, 61.0f, 4.0f, 1.0f, rgba(210, 214, 220));
+    fill_rect(painter, 39.0f, 7.0f, 28.0f, 4.0f, accent);
+    fill_rect(painter, 41.0f, 15.0f, 35.0f, 2.5f, rgba(207, 214, 225));
+    fill_rect(painter, 41.0f, 21.0f, 31.0f, 2.5f, rgba(229, 124, 124, 170));
+    fill_rect(painter, 41.0f, 28.0f, 36.0f, 2.0f, rgba(207, 214, 225));
+    fill_rect(painter, 41.0f, 35.0f, 31.0f, 2.0f, rgba(207, 214, 225));
+    fill_rect(painter, 41.0f, 42.0f, 36.0f, 2.0f, rgba(207, 214, 225));
+    fill_rect(painter, 41.0f, 51.0f, 22.0f, 7.0f, rgba(255, 231, 125, 210));
     auto tag = extension_lower(name);
-    painter.text(40.0f, 64.0f, tag.c_str(),
+    painter.text(42.0f, 54.0f, tag.c_str(),
                  static_cast<unsigned int>(tag.size()),
                  9.0f, rgba(80, 87, 96), finder_font());
 }
@@ -491,35 +491,35 @@ void paint_pdf_thumbnail(phenotype::Painter& painter,
 void paint_image_thumbnail(phenotype::Painter& painter,
                            bool selected) {
     auto border = selected ? rgba(0, 122, 255) : rgba(224, 228, 234);
-    fill_round(painter, 18.0f, 30.0f, 92.0f, 22.0f, 8.0f, rgba(0, 0, 0, 20));
-    fill_round(painter, 16.0f, 28.0f, 92.0f, 22.0f, 8.0f, rgba(255, 255, 255, 248));
+    fill_round(painter, 24.0f, 27.0f, 78.0f, 20.0f, 8.0f, rgba(0, 0, 0, 20));
+    fill_round(painter, 22.0f, 25.0f, 78.0f, 20.0f, 8.0f, rgba(255, 255, 255, 248));
     painter.linear_gradient_rect(
-        18.0f, 30.0f, 88.0f, 18.0f,
+        24.0f, 27.0f, 74.0f, 16.0f,
         rgba(248, 250, 252),
         rgba(226, 232, 240),
         phenotype::GradientAxis::Horizontal,
         12);
-    stroke_round(painter, 16.0f, 28.0f, 92.0f, 22.0f, 8.0f, 1.0f, border);
-    fill_round(painter, 29.0f, 33.0f, 24.0f, 12.0f, 6.0f, rgba(214, 217, 222));
-    fill_round(painter, 56.0f, 33.0f, 18.0f, 12.0f, 6.0f, rgba(188, 193, 201));
-    fill_round(painter, 77.0f, 33.0f, 18.0f, 12.0f, 6.0f, rgba(231, 233, 237));
+    stroke_round(painter, 22.0f, 25.0f, 78.0f, 20.0f, 8.0f, 1.0f, border);
+    fill_round(painter, 33.0f, 30.0f, 20.0f, 10.0f, 5.0f, rgba(214, 217, 222));
+    fill_round(painter, 56.0f, 30.0f, 16.0f, 10.0f, 5.0f, rgba(188, 193, 201));
+    fill_round(painter, 75.0f, 30.0f, 16.0f, 10.0f, 5.0f, rgba(231, 233, 237));
 }
 
 void paint_video_thumbnail(phenotype::Painter& painter,
                            bool selected) {
     auto border = selected ? rgba(0, 122, 255) : rgba(204, 211, 221);
-    fill_round(painter, 15.0f, 22.0f, 96.0f, 40.0f, 7.0f, rgba(0, 0, 0, 30));
-    fill_round(painter, 13.0f, 20.0f, 96.0f, 40.0f, 7.0f, rgba(245, 248, 251));
-    stroke_round(painter, 13.0f, 20.0f, 96.0f, 40.0f, 7.0f, 1.0f, border);
+    fill_round(painter, 20.0f, 20.0f, 86.0f, 36.0f, 7.0f, rgba(0, 0, 0, 30));
+    fill_round(painter, 18.0f, 18.0f, 86.0f, 36.0f, 7.0f, rgba(245, 248, 251));
+    stroke_round(painter, 18.0f, 18.0f, 86.0f, 36.0f, 7.0f, 1.0f, border);
     painter.linear_gradient_rect(
-        15.0f, 22.0f, 92.0f, 9.0f,
+        20.0f, 20.0f, 82.0f, 8.0f,
         rgba(42, 123, 222, 210),
         rgba(99, 102, 241, 190),
         phenotype::GradientAxis::Horizontal,
         10);
     for (int i = 0; i < 6; ++i) {
-        float x = 19.0f + static_cast<float>(i) * 14.0f;
-        fill_rect(painter, x, 34.0f, 9.0f, 18.0f,
+        float x = 25.0f + static_cast<float>(i) * 11.0f;
+        fill_rect(painter, x, 32.0f, 8.0f, 14.0f,
                   (i % 2 == 0) ? rgba(212, 219, 228) : rgba(235, 239, 244));
     }
 }
@@ -527,12 +527,12 @@ void paint_video_thumbnail(phenotype::Painter& painter,
 void paint_text_thumbnail(phenotype::Painter& painter,
                           bool selected) {
     auto border = selected ? rgba(0, 122, 255) : rgba(220, 224, 231);
-    fill_round(painter, 38.0f, 6.0f, 52.0f, 72.0f, 4.0f, rgba(0, 0, 0, 22));
-    fill_round(painter, 36.0f, 4.0f, 52.0f, 72.0f, 4.0f, rgba(255, 255, 255, 250));
-    stroke_round(painter, 36.0f, 4.0f, 52.0f, 72.0f, 4.0f, 1.0f, border);
+    fill_round(painter, 41.0f, 5.0f, 44.0f, 61.0f, 4.0f, rgba(0, 0, 0, 22));
+    fill_round(painter, 39.0f, 3.0f, 44.0f, 61.0f, 4.0f, rgba(255, 255, 255, 250));
+    stroke_round(painter, 39.0f, 3.0f, 44.0f, 61.0f, 4.0f, 1.0f, border);
     for (int i = 0; i < 7; ++i) {
-        fill_rect(painter, 42.0f, 16.0f + static_cast<float>(i) * 7.0f,
-                  (i % 3 == 0) ? 30.0f : 39.0f,
+        fill_rect(painter, 44.0f, 14.0f + static_cast<float>(i) * 6.0f,
+                  (i % 3 == 0) ? 26.0f : 33.0f,
                   2.0f,
                   rgba(204, 211, 221));
     }
@@ -1463,7 +1463,7 @@ void finder_grid(State const& state,
                         bool const selected = snap.has_selection
                             && snap.selected.name == entry.name;
                         layout::column([&] {
-                            widget::canvas(126.0f, 86.0f,
+                            widget::canvas(118.0f, 72.0f,
                                 [entry, selected](Painter& painter) {
                                     paint_item_thumbnail(painter, entry, selected);
                                 },
@@ -1474,7 +1474,7 @@ void finder_grid(State const& state,
                                 entry.name,
                                 selected,
                                 chrome.icon_grid_column_width,
-                                15.0f);
+                                14.0f);
                         }, SpaceToken::Xs,
                            CrossAxisAlignment::Center,
                            MainAxisAlignment::Start);

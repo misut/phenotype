@@ -48,7 +48,8 @@ mode, selection state, operation receipt, entry counts, and
 `ExplorerChromeMetrics`. The manifest asserts this payload before visual
 regions, so an LLM can distinguish model-state drift from renderer/capture
 drift without guessing from pixels. The desktop manifest also asserts the
-Finder toolbar group, separator, and icon-button counts from that payload.
+Finder toolbar group, separator, icon-button, and compact Recents icon-grid
+density metrics from that payload.
 On macOS, the same runtime object reports live `NSWindow` chrome state:
 transparent titlebar, full-size content view, hidden native title, and
 background dragging must all be enabled. These fields are actual platform
