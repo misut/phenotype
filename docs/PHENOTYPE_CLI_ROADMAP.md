@@ -114,6 +114,7 @@ Current commands:
 | `phenotype doctor` | implemented | Read-only repository checks for `mise.toml`, verifier tools, Android contract script, CLI roadmap, and file explorer shared package presence. |
 | `phenotype commands --json` | implemented | Emits a recursive command tree with `cppx.cli` command metadata, stable paths, and schema version `1`. |
 | `phenotype artifact summary <bundle>` | implemented | Read-only structural summary for `snapshot.json`, `frame.bmp`, and platform runtime files. This does not replace semantic verification yet. |
+| `phenotype artifact verify <bundle>` | implemented | Edge wrapper that runs the uv-managed Python verifier through `mise` and forwards the verifier JSON report. |
 | `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, and package resource directories. |
 
 The desktop and mobile file explorer examples now include inspectable
@@ -207,8 +208,8 @@ The CLI should not make production rendering slower:
 1. Document the CLI and packaging contract, then keep the existing Python and
    shell tools green. Initial state is complete.
 2. Add a `phenotype_cli` package that uses `cppx.cli` and exposes `help`,
-   command metadata, `doctor`, and read-only artifact summary commands. Initial
-   state is complete.
+   command metadata, `doctor`, read-only artifact summary, and verifier wrapper
+   commands. Initial state is complete.
 3. Move artifact verification into a reusable C++ verifier surface and add
    Python fixture parity tests until the old verifier can be retired.
 4. Add package manifest parsing for assets, locales, fonts, and debug

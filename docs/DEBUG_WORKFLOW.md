@@ -83,6 +83,21 @@ Use it to confirm bundle layout and file presence before handing the bundle to
 the semantic verifier. The Python verifier remains the authoritative contract
 checker until the CLI has verifier parity.
 
+The CLI also exposes the verifier through an edge wrapper:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli artifact verify --json /tmp/phenotype-glass-showcase \
+  --manifest ../../examples/glass_showcase/artifact_manifest.json \
+  --expect-platform macos
+```
+
+`artifact verify` runs `mise exec -- uv run --frozen python
+tools/verify_artifact_bundle.py` from the repository root and forwards the
+verifier's JSON report. This keeps Python managed by `mise`/`uv` while moving
+the developer-facing entry point under the CLI.
+
 ## Desktop example artifact hook
 
 Native desktop examples can write a startup artifact bundle without adding
