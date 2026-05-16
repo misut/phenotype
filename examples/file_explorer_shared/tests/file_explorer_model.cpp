@@ -243,6 +243,15 @@ duplicate
            == demo::k_desktop_icon_grid_row_height);
     assert(chrome.icon_grid_column_pitch
            == demo::k_desktop_icon_grid_column_pitch);
+    assert(chrome.icon_grid_thumbnail_width
+           == demo::k_desktop_icon_grid_thumbnail_width);
+    assert(chrome.icon_grid_thumbnail_height
+           == demo::k_desktop_icon_grid_thumbnail_height);
+    assert(chrome.icon_grid_label_height
+           == demo::k_desktop_icon_grid_label_height);
+    assert(chrome.icon_grid_label_font_size
+           == demo::k_desktop_icon_grid_label_font_size);
+    assert(chrome.icon_grid_gap == demo::k_desktop_icon_grid_gap);
     assert(chrome.toolbar_group_count == 5);
     assert(chrome.toolbar_separator_count == 3);
     assert(chrome.toolbar_icon_button_count == 11);
@@ -376,6 +385,8 @@ duplicate
     assert(debug_text.find("\"view_mode\"") != std::string::npos);
     assert(debug_text.find("\"Gallery View\"") != std::string::npos);
     assert(debug_text.find("\"icon_grid_column_pitch\"") != std::string::npos);
+    assert(debug_text.find("\"icon_grid_thumbnail_width\"") != std::string::npos);
+    assert(debug_text.find("\"icon_grid_label_font_size\"") != std::string::npos);
     assert(debug_text.find("\"sidebar_icon_size\"") != std::string::npos);
     assert(debug_text.find("\"sidebar_label_leading\"") != std::string::npos);
     assert(debug_text.find("\"titlebar_control_start_x\"") != std::string::npos);

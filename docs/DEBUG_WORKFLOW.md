@@ -166,7 +166,8 @@ Native file explorer artifact bundles expose the same model state under
 mode, selected entry, operation receipt, entry counts, and pure chrome metrics.
 The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
 traffic-light marker coordinates, and icon-grid density metrics such as column
-width, row height, pitch, visible rows, and visible capacity. The
+width, row height, pitch, thumbnail canvas size, label size, gap, visible rows,
+and visible capacity. The
 verifier can assert those paths with `require_debug_details`, which keeps
 Finder workflow failures debuggable without relying on a screenshot guess.
 

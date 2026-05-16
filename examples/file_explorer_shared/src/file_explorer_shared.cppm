@@ -182,6 +182,11 @@ struct ExplorerChromeMetrics {
     float icon_grid_column_width = 0.0f;
     float icon_grid_row_height = 0.0f;
     float icon_grid_column_pitch = 0.0f;
+    float icon_grid_thumbnail_width = 0.0f;
+    float icon_grid_thumbnail_height = 0.0f;
+    float icon_grid_label_height = 0.0f;
+    float icon_grid_label_font_size = 0.0f;
+    float icon_grid_gap = 0.0f;
     float icon_grid_scroll_height = 0.0f;
     int icon_grid_columns = 0;
     int icon_grid_visible_rows = 0;
@@ -284,6 +289,11 @@ inline constexpr int k_desktop_titlebar_control_count = 3;
 inline constexpr float k_desktop_icon_grid_column_width = 126.0f;
 inline constexpr float k_desktop_icon_grid_row_height = 148.0f;
 inline constexpr float k_desktop_icon_grid_column_pitch = 150.0f;
+inline constexpr float k_desktop_icon_grid_thumbnail_width = 118.0f;
+inline constexpr float k_desktop_icon_grid_thumbnail_height = 72.0f;
+inline constexpr float k_desktop_icon_grid_label_height = 46.0f;
+inline constexpr float k_desktop_icon_grid_label_font_size = 14.0f;
+inline constexpr float k_desktop_icon_grid_gap = 24.0f;
 
 inline bool mobile_profile(std::string_view profile) {
     return profile == "mobile";
@@ -395,6 +405,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_grid_column_width = 0.0f,
             .icon_grid_row_height = 0.0f,
             .icon_grid_column_pitch = 0.0f,
+            .icon_grid_thumbnail_width = 0.0f,
+            .icon_grid_thumbnail_height = 0.0f,
+            .icon_grid_label_height = 0.0f,
+            .icon_grid_label_font_size = 0.0f,
+            .icon_grid_gap = 0.0f,
             .icon_grid_scroll_height = 0.0f,
             .icon_grid_columns = 0,
             .icon_grid_visible_rows = 0,
@@ -448,6 +463,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_grid_column_width = k_desktop_icon_grid_column_width,
         .icon_grid_row_height = k_desktop_icon_grid_row_height,
         .icon_grid_column_pitch = k_desktop_icon_grid_column_pitch,
+        .icon_grid_thumbnail_width = k_desktop_icon_grid_thumbnail_width,
+        .icon_grid_thumbnail_height = k_desktop_icon_grid_thumbnail_height,
+        .icon_grid_label_height = k_desktop_icon_grid_label_height,
+        .icon_grid_label_font_size = k_desktop_icon_grid_label_font_size,
+        .icon_grid_gap = k_desktop_icon_grid_gap,
         .icon_grid_scroll_height = scroll_height,
         .icon_grid_columns = columns,
         .icon_grid_visible_rows = visible_rows,
@@ -877,6 +897,11 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("icon_grid_column_width", json::Value{chrome.icon_grid_column_width});
     out.emplace("icon_grid_row_height", json::Value{chrome.icon_grid_row_height});
     out.emplace("icon_grid_column_pitch", json::Value{chrome.icon_grid_column_pitch});
+    out.emplace("icon_grid_thumbnail_width", json::Value{chrome.icon_grid_thumbnail_width});
+    out.emplace("icon_grid_thumbnail_height", json::Value{chrome.icon_grid_thumbnail_height});
+    out.emplace("icon_grid_label_height", json::Value{chrome.icon_grid_label_height});
+    out.emplace("icon_grid_label_font_size", json::Value{chrome.icon_grid_label_font_size});
+    out.emplace("icon_grid_gap", json::Value{chrome.icon_grid_gap});
     out.emplace("icon_grid_scroll_height", json::Value{chrome.icon_grid_scroll_height});
     out.emplace("icon_grid_columns", json::Value{static_cast<std::int64_t>(chrome.icon_grid_columns)});
     out.emplace("icon_grid_visible_rows", json::Value{static_cast<std::int64_t>(chrome.icon_grid_visible_rows)});

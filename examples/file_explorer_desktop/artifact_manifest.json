@@ -265,6 +265,26 @@
       "equals": 150.0
     },
     {
+      "path": "application.file_explorer.chrome.icon_grid_thumbnail_width",
+      "equals": 118.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_grid_thumbnail_height",
+      "equals": 72.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_grid_label_height",
+      "equals": 46.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_grid_label_font_size",
+      "equals": 14.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_grid_gap",
+      "equals": 24.0
+    },
+    {
       "path": "application.file_explorer.chrome.icon_grid_columns",
       "equals": 6
     },
