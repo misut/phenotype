@@ -215,13 +215,22 @@ duplicate
            == demo::k_desktop_toolbar_icon_button_width);
     assert(chrome.toolbar_icon_button_height
            == demo::k_desktop_toolbar_icon_button_height);
+    assert(chrome.titlebar_control_cluster_height
+           == demo::k_desktop_titlebar_control_cluster_height);
+    assert(chrome.titlebar_control_diameter
+           == demo::k_desktop_titlebar_control_diameter);
+    assert(chrome.titlebar_control_spacing
+           == demo::k_desktop_titlebar_control_spacing);
     assert(chrome.toolbar_group_count == 5);
     assert(chrome.toolbar_separator_count == 3);
     assert(chrome.toolbar_icon_button_count == 11);
+    assert(chrome.titlebar_control_count
+           == demo::k_desktop_titlebar_control_count);
     assert(chrome.finder_segmented_toolbar);
     assert(chrome.integrated_titlebar);
     assert(chrome.native_window_controls);
     assert(!chrome.duplicate_window_controls);
+    assert(chrome.content_window_control_markers);
     assert(demo::explorer_icon_grid_columns(chrome).size() == 6);
     fs::remove_all(demo::demo_root("mobile"), ec);
     auto mobile_state = demo::make_state("mobile");
@@ -235,6 +244,8 @@ duplicate
     assert(mobile_chrome.toolbar_group_count == 0);
     assert(mobile_chrome.toolbar_separator_count == 0);
     assert(mobile_chrome.toolbar_icon_button_count == 0);
+    assert(mobile_chrome.titlebar_control_count == 0);
+    assert(!mobile_chrome.content_window_control_markers);
     assert(!mobile_chrome.finder_segmented_toolbar);
     fs::remove_all(mobile_state.root, ec);
     auto snap = demo::snapshot(state);

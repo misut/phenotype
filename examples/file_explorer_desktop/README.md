@@ -19,8 +19,11 @@ The desktop window requests `WindowChromeStyle::IntegratedTitlebar` with
 explicit titlebar, leading-control, and trailing-control reserve metrics. On
 macOS the backend uses native AppKit titlebar transparency/full-size content so
 the system traffic-light controls are integrated into the content area instead
-of being redrawn by the example. On Windows the native Win32 shell keeps the
-same contract through a DWM custom frame, using `WM_NCHITTEST` to preserve
+of being duplicated as interactive phenotype controls. The example paints a
+small non-interactive traffic-light marker in the reserved sidebar/titlebar
+area so startup artifacts show the same Finder-like chrome that the OS owns at
+runtime. On Windows the native Win32 shell keeps the same contract through a
+DWM custom frame, using `WM_NCHITTEST` to preserve
 resize edges, caption-button behavior, blank-toolbar dragging, phenotype toolbar
 hit regions, and native size/aspect-ratio constraints. The example does not use
 a toolkit window shim.
@@ -31,9 +34,10 @@ covered through the shared model, CLI inputs, startup scenarios, and the
 Finder-style `More` overflow instead of an always-visible extra action group.
 
 Startup frame artifacts intentionally capture phenotype content rather than the
-operating system's non-client controls. The top-left titlebar reserve must stay
-visually quiet in the artifact because AppKit/Win32 own the real close,
-minimize, maximize, and caption-button hit testing at runtime.
+operating system's non-client controls. The top-left titlebar reserve therefore
+contains only a deterministic non-interactive traffic-light marker; AppKit/Win32
+still own the real close, minimize, maximize, and caption-button hit testing at
+runtime.
 The manifest also checks `debug.platform_runtime.details.window` so CI can
 prove the example requested `IntegratedTitlebar`, preserved the expected
 titlebar/control reserve metrics, and is not using GLFW or another toolkit
@@ -59,8 +63,8 @@ interaction. The artifact also records WindowServer z-order fields
 "no NSWindow", "offscreen/minimized NSWindow", and "created but covered by
 another app window". The AppKit shell installs a small native application
 delegate that reorders the existing window when the app becomes active or the
-Dock icon is reopened; the example does not emulate traffic-light controls in
-phenotype content.
+Dock icon is reopened; the example's traffic-light marker is visual-only and is
+not wired to phenotype input.
 
 The toolbar search control starts as a Finder-style icon button. Activating it
 reveals a search field wired to the shared file model, so desktop and mobile

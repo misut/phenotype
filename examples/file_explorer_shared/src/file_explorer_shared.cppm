@@ -165,6 +165,9 @@ struct ExplorerChromeMetrics {
     float toolbar_group_radius = 0.0f;
     float toolbar_icon_button_width = 0.0f;
     float toolbar_icon_button_height = 0.0f;
+    float titlebar_control_cluster_height = 0.0f;
+    float titlebar_control_diameter = 0.0f;
+    float titlebar_control_spacing = 0.0f;
     float window_radius = 0.0f;
     float icon_grid_column_width = 0.0f;
     float icon_grid_row_height = 0.0f;
@@ -176,10 +179,12 @@ struct ExplorerChromeMetrics {
     int toolbar_group_count = 0;
     int toolbar_separator_count = 0;
     int toolbar_icon_button_count = 0;
+    int titlebar_control_count = 0;
     int overflow_action_button_count = 0;
     bool integrated_titlebar = true;
     bool native_window_controls = true;
     bool duplicate_window_controls = false;
+    bool content_window_control_markers = false;
     bool finder_segmented_toolbar = false;
     bool more_actions_open = false;
 };
@@ -252,6 +257,10 @@ inline constexpr float k_desktop_toolbar_group_radius = 22.0f;
 inline constexpr float k_desktop_toolbar_group_height = 46.0f;
 inline constexpr float k_desktop_toolbar_icon_button_width = 38.0f;
 inline constexpr float k_desktop_toolbar_icon_button_height = 36.0f;
+inline constexpr float k_desktop_titlebar_control_cluster_height = 52.0f;
+inline constexpr float k_desktop_titlebar_control_diameter = 13.0f;
+inline constexpr float k_desktop_titlebar_control_spacing = 23.0f;
+inline constexpr int k_desktop_titlebar_control_count = 3;
 inline constexpr float k_desktop_icon_grid_column_width = 142.0f;
 inline constexpr float k_desktop_icon_grid_row_height = 166.0f;
 inline constexpr float k_desktop_icon_grid_column_pitch = 166.0f;
@@ -349,6 +358,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .toolbar_group_radius = 0.0f,
             .toolbar_icon_button_width = 0.0f,
             .toolbar_icon_button_height = 0.0f,
+            .titlebar_control_cluster_height = 0.0f,
+            .titlebar_control_diameter = 0.0f,
+            .titlebar_control_spacing = 0.0f,
             .window_radius = 0.0f,
             .icon_grid_column_width = 0.0f,
             .icon_grid_row_height = 0.0f,
@@ -360,9 +372,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .toolbar_group_count = 0,
             .toolbar_separator_count = 0,
             .toolbar_icon_button_count = 0,
+            .titlebar_control_count = 0,
             .integrated_titlebar = false,
             .native_window_controls = false,
             .duplicate_window_controls = false,
+            .content_window_control_markers = false,
             .finder_segmented_toolbar = false,
         };
     }
@@ -387,6 +401,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .toolbar_group_radius = k_desktop_toolbar_group_radius,
         .toolbar_icon_button_width = k_desktop_toolbar_icon_button_width,
         .toolbar_icon_button_height = k_desktop_toolbar_icon_button_height,
+        .titlebar_control_cluster_height = k_desktop_titlebar_control_cluster_height,
+        .titlebar_control_diameter = k_desktop_titlebar_control_diameter,
+        .titlebar_control_spacing = k_desktop_titlebar_control_spacing,
         .window_radius = k_desktop_window_radius,
         .icon_grid_column_width = k_desktop_icon_grid_column_width,
         .icon_grid_row_height = k_desktop_icon_grid_row_height,
@@ -398,9 +415,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .toolbar_group_count = 5,
         .toolbar_separator_count = 3,
         .toolbar_icon_button_count = 11,
+        .titlebar_control_count = k_desktop_titlebar_control_count,
         .integrated_titlebar = true,
         .native_window_controls = true,
         .duplicate_window_controls = false,
+        .content_window_control_markers = true,
         .finder_segmented_toolbar = true,
     };
 }
@@ -788,6 +807,7 @@ inline json::Value explorer_chrome_debug_json(
     native_window.emplace("integrated_titlebar", json::Value{chrome.integrated_titlebar});
     native_window.emplace("native_window_controls", json::Value{chrome.native_window_controls});
     native_window.emplace("duplicate_window_controls", json::Value{chrome.duplicate_window_controls});
+    native_window.emplace("content_window_control_markers", json::Value{chrome.content_window_control_markers});
 
     json::Object out;
     out.emplace("viewport", json::Value{std::move(viewport)});
@@ -799,6 +819,9 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("toolbar_group_radius", json::Value{chrome.toolbar_group_radius});
     out.emplace("toolbar_icon_button_width", json::Value{chrome.toolbar_icon_button_width});
     out.emplace("toolbar_icon_button_height", json::Value{chrome.toolbar_icon_button_height});
+    out.emplace("titlebar_control_cluster_height", json::Value{chrome.titlebar_control_cluster_height});
+    out.emplace("titlebar_control_diameter", json::Value{chrome.titlebar_control_diameter});
+    out.emplace("titlebar_control_spacing", json::Value{chrome.titlebar_control_spacing});
     out.emplace("window_radius", json::Value{chrome.window_radius});
     out.emplace("icon_grid_columns", json::Value{static_cast<std::int64_t>(chrome.icon_grid_columns)});
     out.emplace("icon_grid_visible_rows", json::Value{static_cast<std::int64_t>(chrome.icon_grid_visible_rows)});
@@ -806,7 +829,9 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("toolbar_group_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_group_count)});
     out.emplace("toolbar_separator_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_separator_count)});
     out.emplace("toolbar_icon_button_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_icon_button_count)});
+    out.emplace("titlebar_control_count", json::Value{static_cast<std::int64_t>(chrome.titlebar_control_count)});
     out.emplace("overflow_action_button_count", json::Value{static_cast<std::int64_t>(chrome.overflow_action_button_count)});
+    out.emplace("content_window_control_markers", json::Value{chrome.content_window_control_markers});
     out.emplace("finder_segmented_toolbar", json::Value{chrome.finder_segmented_toolbar});
     out.emplace("more_actions_open", json::Value{chrome.more_actions_open});
     out.emplace("native_window", json::Value{std::move(native_window)});

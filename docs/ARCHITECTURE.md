@@ -439,6 +439,10 @@ artifact/runtime debugging. macOS and Windows serialize those fields under
 metrics, leading/trailing native-control reserves, whether native OS controls
 own the caption-button/traffic-light territory, and explicit `uses_glfw=false`
 / `toolkit_window_shim=false` markers.
+Finder-style startup artifacts may render deterministic visual markers for the
+traffic-light reserve so screenshots match the product shell, but those markers
+are model/debug data only; input and caption-button ownership stay in AppKit or
+Win32.
 
 ## Unified debug plane
 
