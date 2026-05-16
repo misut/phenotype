@@ -244,6 +244,8 @@ duplicate
     assert(snap.entries[2].name == "작성예시1_필수_중도인출 신청서.pdf");
     assert(snap.entries[3].name == "2_필수_운용지시서.pdf");
     assert(snap.entries[4].name == "1_필수_중도인출 신청서.pdf");
+    assert(snap.entries[5].name == "※해당 시 필독_①무주택자인 경우.pdf");
+    assert(snap.entries[6].name == "[카카오] 퇴직금 지급 기준.pdf");
 
     demo::select_entry(state, "README.txt");
     snap = demo::snapshot(state);
