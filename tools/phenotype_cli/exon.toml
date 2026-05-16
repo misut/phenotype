@@ -13,5 +13,8 @@ platforms = [
 [dependencies]
 "github.com/misut/cppx" = "1.13.0"
 
+[dependencies.path]
+phenotype_resources = "../../packages/phenotype_resources"
+
 [sync]
 cmake-in-root = false

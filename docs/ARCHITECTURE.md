@@ -353,15 +353,17 @@ endpoints unless the package manifest explicitly requests them. See
 `docs/PHENOTYPE_CLI_ROADMAP.md` for the command surface and migration plan.
 
 `phenotype.resources` is the pure value boundary between package manifests and
-runtime code. It defines immutable application, asset, locale, font, debug, and
-`ResourceCatalog` descriptors plus lookup/fallback/diagnostic functions. It
+runtime code. It lives in the internal `packages/phenotype_resources` path
+package so both the root framework and the Linux-capable CLI consume the same
+catalog contract. It defines immutable application, asset, locale, font, debug,
+and `ResourceCatalog` descriptors plus lookup/fallback/diagnostic functions. It
 does not parse TOML, touch the filesystem, register fonts, copy assets, or
 probe platform bundles. CLI/package adapters build a catalog snapshot at the
 edge, then core code can resolve logical asset names, locale fallback chains,
 required translation keys, and package default typography without depending on
-where those files live. `theme_with_resource_defaults` applies packaged
-typography such as Pretendard by returning a new `Theme`; it does not mutate
-global theme state.
+where those files live. The root `phenotype` umbrella provides
+`theme_with_resource_defaults` as a thin framework helper that returns a new
+`Theme`; the pure catalog package stays independent from UI types.
 
 Apple's Human Interface Guidelines distinguish Liquid Glass from standard
 materials: Liquid Glass belongs primarily to functional control/navigation
@@ -472,7 +474,7 @@ This means Metal, Direct3D, Vulkan, Skia, software raster, or another future ren
 ```
 phenotype (umbrella re-export)
 ├── phenotype.types       — Color, Cmd, Style, LayoutNode, NodeHandle, Decoration
-├── phenotype.resources   — pure ResourceCatalog descriptors, lookup, fallback, diagnostics
+├── phenotype.resources   — path package with pure ResourceCatalog descriptors, lookup, fallback, diagnostics
 ├── phenotype.state       — Arena, AppState, Scope, InputHandler, message queue
 ├── phenotype.diag        — OTel-shaped Counter, Gauge, Histogram, log ring, JSON snapshot
 ├── phenotype.layout      — flexbox engine, measure_text cache, vDOM diff

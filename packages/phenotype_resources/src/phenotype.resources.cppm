@@ -10,8 +10,6 @@ module;
 
 export module phenotype.resources;
 
-import phenotype.types;
-
 export namespace phenotype {
 
 enum class ResourceDiagnosticSeverity {
@@ -266,14 +264,6 @@ inline auto localized_string(
         }
     }
     return std::nullopt;
-}
-
-inline auto theme_with_resource_defaults(
-        Theme theme,
-        ResourceCatalog const& catalog) -> Theme {
-    if (!catalog.default_font_family.empty())
-        theme.default_font_family = catalog.default_font_family;
-    return theme;
 }
 
 inline void add_resource_diagnostic(
