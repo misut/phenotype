@@ -201,13 +201,16 @@ saturation, luminance curve, edge highlight, noise/dither, shadow, render-target
 analysis, pure shape analysis, backdrop sampling, backdrop analysis, decision
 trace, fallback path, debug metadata, pass expectations, the resolved quality
 policy, foreground legibility/vibrancy recommendation, resource budgets, the
-resolved sampling kernel, and verifier expectations.
+resolved sampling kernel, bounded execution stages, and verifier expectations.
 `decision_trace` records the pure gate booleans for geometry, target readiness,
 quality, backend capabilities, accessibility settings, backdrop-source
 readiness, and the first fallback blocker. `primary_pass` states whether the
 backend should run a backdrop
-blur pass or deterministic translucent fallback. It also records the pure
-executor role and maximum texture-copy pixels for that pass, so a backend
+blur pass or deterministic translucent fallback. `execution_stages` then expands
+that primary pass into a bounded pure list of shadow, blur/fallback, edge, and
+noise stages so artifacts can explain material work before visual inspection.
+`primary_pass` also records the pure executor role and maximum texture-copy
+pixels for that pass, so a backend
 artifact can prove whether it stayed within the render-target copy budget.
 `sample_taps` records the actual taps required by that resolved pass, so
 deterministic fallback plans use `sample_taps: 0` even when the quality budget

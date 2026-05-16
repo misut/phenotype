@@ -1307,6 +1307,26 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "backdrop-filter");
     assert(glass_plan.primary_pass.max_texture_copy_pixels
            == glass_plan.render_target.pixel_count);
+    assert(glass_plan.resource_budget.max_execution_stages == 4);
+    assert(glass_plan.execution_stage_count == 4);
+    assert(std::string(glass_plan.execution_stages[0].name)
+           == "shape-shadow");
+    assert(!glass_plan.execution_stages[0].requires_backdrop);
+    assert(std::string(glass_plan.execution_stages[1].name)
+           == "backdrop-sample-blur");
+    assert(glass_plan.execution_stages[1].requires_backdrop);
+    assert(glass_plan.execution_stages[1].sample_taps
+           == glass_plan.sample_taps);
+    assert(glass_plan.execution_stages[1].max_texture_copy_pixels
+           == glass_plan.render_target.pixel_count);
+    assert(std::string(glass_plan.execution_stages[2].name)
+           == "edge-highlight");
+    assert(std::string(glass_plan.execution_stages[3].name)
+           == "noise-dither");
+    for (unsigned int i = 0; i < glass_plan.execution_stage_count; ++i) {
+        assert(glass_plan.execution_stages[i].active);
+        assert(glass_plan.execution_stages[i].bounded);
+    }
     assert(std::string(glass_plan.sampling_kernel.name)
            == "weighted-5x5-manhattan");
     assert(glass_plan.sampling_kernel.radius == 2);
@@ -1504,6 +1524,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(reduced_plan.noise_opacity == 0.0f);
     assert(std::string(reduced_plan.primary_pass.name)
            == "translucent-rounded-rect");
+    assert(reduced_plan.execution_stage_count == 3);
+    assert(std::string(reduced_plan.execution_stages[1].name)
+           == "translucent-rounded-rect");
+    assert(!reduced_plan.execution_stages[1].requires_backdrop);
 
     glass_env.capabilities.reduce_transparency = false;
     MaterialEnvironment disabled_quality_env = glass_env;
@@ -1555,9 +1579,15 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(budget_plan.resource_budget.max_sample_taps == 5);
     assert(budget_plan.resource_budget.max_sampling_kernel_radius == 2);
     assert(budget_plan.resource_budget.max_pass_count == 1);
+    assert(budget_plan.resource_budget.max_execution_stages == 4);
     assert(budget_plan.resource_budget.max_backdrop_pixels == 600'000);
     assert(budget_plan.resource_budget.bounded_texture_copy);
     assert(budget_plan.resource_budget.deterministic_fallback);
+    assert(budget_plan.execution_stage_count == 2);
+    assert(std::string(budget_plan.execution_stages[0].name)
+           == "backdrop-sample-blur");
+    assert(std::string(budget_plan.execution_stages[1].name)
+           == "edge-highlight");
 
     MaterialEnvironment oversize_env = glass_env;
     oversize_env.quality.max_backdrop_pixels = 100;
@@ -1588,6 +1618,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(invalid_plan.primary_pass.executor) == "none");
     assert(invalid_plan.primary_pass.max_texture_copy_pixels == 0);
     assert(std::string(invalid_plan.verifier.likely_pass) == "none");
+    assert(invalid_plan.execution_stage_count == 0);
     assert(!invalid_plan.shape.valid);
     assert(!invalid_plan.shape.rounded);
     assert(invalid_plan.shape.effective_radius == 0.0f);

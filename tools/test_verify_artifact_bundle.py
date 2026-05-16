@@ -189,6 +189,7 @@ def material_plan(
             "max_sample_taps": 25,
             "max_sampling_kernel_radius": 0,
             "max_pass_count": 1,
+            "max_execution_stages": 4,
             "max_backdrop_pixels": 320 * 240,
             "max_container_spacing": 0.0,
             "bounded_texture_copy": True,
@@ -206,6 +207,18 @@ def material_plan(
             "likely_pass": "translucent-rounded-rect",
         },
         "passes": [primary],
+        "execution_stages": [
+            {
+                "name": "translucent-rounded-rect",
+                "active": True,
+                "requires_backdrop": False,
+                "sample_taps": 0,
+                "likely_layer": "material-fallback-pass",
+                "executor": "fallback-fill",
+                "max_texture_copy_pixels": 0,
+                "bounded": True,
+            }
+        ],
     }
 
 
@@ -273,6 +286,18 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     assert isinstance(plan["resource_budget"], dict)
     plan["resource_budget"]["max_sampling_kernel_radius"] = 2
     plan["passes"] = [plan["primary_pass"]]
+    plan["execution_stages"] = [
+        {
+            "name": "backdrop-sample-blur",
+            "active": True,
+            "requires_backdrop": True,
+            "sample_taps": sample_taps,
+            "likely_layer": "material-blur-pass",
+            "executor": "backdrop-filter",
+            "max_texture_copy_pixels": 320 * 240,
+            "bounded": True,
+        }
+    ]
     assert isinstance(plan["verifier"], dict)
     plan["verifier"].update({
         "require_backdrop_source": True,
@@ -289,9 +314,11 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     budget = plan["resource_budget"]
     primary = plan["primary_pass"]
     shape = plan["shape"]
+    execution_stages = plan["execution_stages"]
     assert isinstance(budget, dict)
     assert isinstance(primary, dict)
     assert isinstance(shape, dict)
+    assert isinstance(execution_stages, list)
     return {
         "plan_count": 1,
         "fallback_count": 1 if plan["fallback"] else 0,
@@ -299,6 +326,16 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "total_runtime_passes": 1,
         "active_runtime_passes": 1 if primary["active"] else 0,
         "backdrop_runtime_passes": 1 if primary["requires_backdrop"] else 0,
+        "total_execution_stages": len(execution_stages),
+        "active_execution_stages": sum(
+            1 for stage in execution_stages
+            if isinstance(stage, dict) and stage["active"]
+        ),
+        "backdrop_execution_stages": sum(
+            1 for stage in execution_stages
+            if isinstance(stage, dict) and stage["requires_backdrop"]
+        ),
+        "max_execution_stage_count": len(execution_stages),
         "max_pass_texture_copy_pixels": primary["max_texture_copy_pixels"],
         "total_pass_texture_copy_pixels": primary["max_texture_copy_pixels"],
         "max_plan_blur_radius": plan["blur_radius"],
@@ -308,6 +345,7 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "max_sample_taps": budget["max_sample_taps"],
         "max_sampling_kernel_radius": budget["max_sampling_kernel_radius"],
         "max_pass_count": budget["max_pass_count"],
+        "max_execution_stages": budget["max_execution_stages"],
         "max_backdrop_pixels": budget["max_backdrop_pixels"],
         "max_container_spacing": budget["max_container_spacing"],
         "containered_count": (
@@ -839,6 +877,16 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "active_runtime_passes_gte": 1,
                 "backdrop_runtime_passes_lte": 1,
                 "backdrop_runtime_passes_gte": 1,
+                "total_execution_stages_lte": 1,
+                "total_execution_stages_gte": 1,
+                "active_execution_stages_lte": 1,
+                "active_execution_stages_gte": 1,
+                "backdrop_execution_stages_lte": 1,
+                "backdrop_execution_stages_gte": 1,
+                "max_execution_stage_count_lte": 1,
+                "max_execution_stage_count_gte": 1,
+                "max_execution_stages_lte": 4,
+                "max_execution_stages_gte": 4,
                 "max_pass_texture_copy_pixels_lte": 320 * 240,
                 "total_pass_texture_copy_pixels_lte": 320 * 240,
             }
@@ -859,6 +907,88 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["resource_bounds"][
                 "max_sampling_kernel_radius"],
             2)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "total_execution_stages"],
+            1)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "max_execution_stages"],
+            4)
+
+    def test_manifest_can_require_execution_stage_summary(self) -> None:
+        manifest = {
+            "require_material_plan_summary": {
+                "stage_names": {
+                    "translucent-rounded-rect": 1,
+                },
+                "stage_executors": {
+                    "fallback-fill": 1,
+                },
+            },
+        }
+        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(
+            report["material_plans"]["stage_names"],
+            {"translucent-rounded-rect": 1})
+        self.assertEqual(
+            report["material_plans"]["stage_executors"],
+            {"fallback-fill": 1})
+
+    def test_missing_primary_execution_stage_points_to_stage_contract(self) -> None:
+        plan = sampled_material_plan(sample_taps=25)
+        plan["execution_stages"] = []
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        primary_failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material execution stages include primary pass")
+        self.assertEqual(
+            primary_failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".execution_stages")
+        self.assertEqual(primary_failure["likely_pass"], "backdrop-sample-blur")
+        self.assertIn("primary render pass", primary_failure["hint"])
+        backdrop_failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material backdrop sampling has backdrop execution stage"))
+        self.assertEqual(backdrop_failure["likely_pass"], "backdrop-sample-blur")
+        self.assertIn("Backdrop sampling", backdrop_failure["hint"])
+
+    def test_fallback_backdrop_execution_stage_points_to_stage_contract(self) -> None:
+        plan = material_plan()
+        stages = plan["execution_stages"]
+        assert isinstance(stages, list)
+        stages.append({
+            "name": "noise-dither",
+            "active": True,
+            "requires_backdrop": True,
+            "sample_taps": 0,
+            "likely_layer": "material-noise-pass",
+            "executor": "ordered-dither",
+            "max_texture_copy_pixels": 1,
+            "bounded": True,
+        })
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material fallback execution stages avoid backdrop work"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".execution_stages")
+        self.assertEqual(failure["likely_pass"], "translucent-rounded-rect")
+        self.assertIn("Fallback material stages", failure["hint"])
 
     def test_sampling_kernel_mismatch_is_llm_actionable(self) -> None:
         plan = sampled_material_plan(sample_taps=13)

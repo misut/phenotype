@@ -71,11 +71,30 @@ ALLOWED_MATERIAL_PASS_EXECUTORS = {
     "none",
 }
 
+ALLOWED_MATERIAL_STAGE_NAMES = {
+    "backdrop-sample-blur",
+    "edge-highlight",
+    "noise-dither",
+    "shape-shadow",
+    "translucent-rounded-rect",
+}
+
+ALLOWED_MATERIAL_STAGE_EXECUTORS = {
+    "backdrop-filter",
+    "edge-highlight",
+    "fallback-fill",
+    "ordered-dither",
+    "shape-shadow",
+}
+
 ALLOWED_MATERIAL_LIKELY_LAYERS = {
     "material-blur-pass",
+    "material-edge-pass",
     "material-fallback",
     "material-fallback-pass",
     "material-foreground",
+    "material-noise-pass",
+    "material-shadow-pass",
 }
 
 ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
@@ -121,7 +140,7 @@ ALLOWED_MATERIAL_FOREGROUND_SOURCES = {
     "theme",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 11
+MATERIAL_PLAN_CONTRACT_VERSION = 12
 
 
 def suggested_action_for_failure(
@@ -968,6 +987,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "shape_max_normalized_radius_gte",
         "pass_names",
         "pass_executors",
+        "stage_names",
+        "stage_executors",
         "sampling_kernels",
         "sampling_weight_profiles",
         "luminance_curves",
@@ -1065,6 +1086,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "container_modes": ALLOWED_MATERIAL_CONTAINER_MODES,
         "pass_names": ALLOWED_MATERIAL_PASS_NAMES,
         "pass_executors": ALLOWED_MATERIAL_PASS_EXECUTORS,
+        "stage_names": ALLOWED_MATERIAL_STAGE_NAMES,
+        "stage_executors": ALLOWED_MATERIAL_STAGE_EXECUTORS,
         "sampling_kernels": ALLOWED_MATERIAL_SAMPLING_KERNELS,
         "sampling_weight_profiles": ALLOWED_MATERIAL_SAMPLING_WEIGHT_PROFILES,
         "luminance_curves": ALLOWED_MATERIAL_LUMINANCE_CURVES,
@@ -1153,6 +1176,16 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
         "active_runtime_passes_gte",
         "backdrop_runtime_passes_lte",
         "backdrop_runtime_passes_gte",
+        "total_execution_stages_lte",
+        "total_execution_stages_gte",
+        "active_execution_stages_lte",
+        "active_execution_stages_gte",
+        "backdrop_execution_stages_lte",
+        "backdrop_execution_stages_gte",
+        "max_execution_stage_count_lte",
+        "max_execution_stage_count_gte",
+        "max_execution_stages_lte",
+        "max_execution_stages_gte",
     }
     bool_fields = {
         "require_bounded_texture_copy",
@@ -1655,6 +1688,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "resource_budget",
     "verifier",
     "passes",
+    "execution_stages",
 )
 
 MATERIAL_PLAN_NUMERIC_FIELDS = (
@@ -1749,6 +1783,7 @@ MATERIAL_PASS_FIELDS = (
     "executor",
     "max_texture_copy_pixels",
 )
+MATERIAL_EXECUTION_STAGE_FIELDS = MATERIAL_PASS_FIELDS + ("bounded",)
 MATERIAL_SAMPLING_KERNEL_FIELDS = (
     "name",
     "radius",
@@ -1829,6 +1864,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         },
         "pass_names": {},
         "pass_executors": {},
+        "stage_names": {},
+        "stage_executors": {},
         "sampling_kernels": {},
         "sampling_weight_profiles": {},
         "luminance_curves": {},
@@ -1891,11 +1928,16 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "max_sample_taps": 0,
             "max_sampling_kernel_radius": 0,
             "max_pass_count": 0,
+            "max_execution_stages": 0,
             "max_backdrop_pixels": 0,
             "max_container_spacing": 0.0,
             "total_runtime_passes": 0,
             "active_runtime_passes": 0,
             "backdrop_runtime_passes": 0,
+            "total_execution_stages": 0,
+            "active_execution_stages": 0,
+            "backdrop_execution_stages": 0,
+            "max_execution_stage_count": 0,
             "max_pass_texture_copy_pixels": 0,
             "total_pass_texture_copy_pixels": 0,
             "unbounded_texture_copy": 0,
@@ -3608,6 +3650,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             likely_layer=likely_layer,
             hint="Material plans must expose bounded resource policy for CI debugging.")
         max_pass_count: int | float | None = None
+        max_execution_stages: int | float | None = None
         if resource_budget is not None:
             bounds = summary["resource_bounds"]
             max_blur_radius = check_number_field(
@@ -3646,6 +3689,18 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 bounds["max_pass_count"] = max(
                     int(bounds["max_pass_count"]),
                     int(max_pass_count))
+            max_execution_stages = check_number_field(
+                report,
+                resource_budget,
+                "max_execution_stages",
+                f"{plan_path}.resource_budget",
+                min_value=0.0,
+                likely_layer=likely_layer,
+                hint="Material execution stage count should be bounded in the pure plan.")
+            if isinstance(max_execution_stages, (int, float)):
+                bounds["max_execution_stages"] = max(
+                    int(bounds["max_execution_stages"]),
+                    int(max_execution_stages))
             max_backdrop_pixels = check_number_field(
                 report,
                 resource_budget,
@@ -4015,6 +4070,227 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     hint="Runtime pass details should include the primary pass unchanged.",
                     record_success=False)
 
+        execution_stages = plan.get("execution_stages")
+        report.check(
+            "material execution stages is array",
+            isinstance(execution_stages, list),
+            path=f"{plan_path}.execution_stages",
+            expected="array",
+            actual=type(execution_stages).__name__,
+            likely_layer=likely_layer,
+            hint=(
+                "MaterialPlan.execution_stages should explain shadow, blur, "
+                "edge, noise, or fallback work without backend policy guessing."),
+            record_success=False)
+        if isinstance(execution_stages, list):
+            bounds = summary["resource_bounds"]
+            bounds["total_execution_stages"] = int(
+                bounds["total_execution_stages"]) + len(execution_stages)
+            bounds["max_execution_stage_count"] = max(
+                int(bounds["max_execution_stage_count"]),
+                len(execution_stages))
+            if isinstance(max_execution_stages, (int, float)):
+                report.check(
+                    "material execution stage count is within budget",
+                    len(execution_stages) <= int(max_execution_stages),
+                    path=f"{plan_path}.execution_stages",
+                    expected={"length<=": int(max_execution_stages)},
+                    actual=len(execution_stages),
+                    likely_layer=likely_layer,
+                    hint=(
+                        "Keep execution stages within "
+                        "MaterialResourceBudget.max_execution_stages."),
+                    record_success=False)
+            has_primary_stage = False
+            has_backdrop_stage = False
+            for stage_index, stage_entry in enumerate(execution_stages):
+                stage_path = f"{plan_path}.execution_stages[{stage_index}]"
+                report.check(
+                    "material execution stage entry is object",
+                    isinstance(stage_entry, dict),
+                    path=stage_path,
+                    expected="object",
+                    actual=type(stage_entry).__name__,
+                    likely_layer=likely_layer,
+                    hint="Execution stage entries should be structured objects.",
+                    record_success=False)
+                if not isinstance(stage_entry, dict):
+                    continue
+                stage_name_for_hint = string_at(stage_entry, "name") or primary_pass_name
+                stage_requires_backdrop = stage_entry.get("requires_backdrop")
+                stage_active = stage_entry.get("active")
+                stage_texture_copy_pixels: int | None = None
+                if stage_active is True:
+                    bounds["active_execution_stages"] = int(
+                        bounds["active_execution_stages"]) + 1
+                if stage_requires_backdrop is True:
+                    has_backdrop_stage = True
+                    bounds["backdrop_execution_stages"] = int(
+                        bounds["backdrop_execution_stages"]) + 1
+                for key in MATERIAL_EXECUTION_STAGE_FIELDS:
+                    if key in ("active", "requires_backdrop", "bounded"):
+                        value = check_bool_field(
+                            report,
+                            stage_entry,
+                            key,
+                            stage_path,
+                            likely_layer=likely_layer,
+                            likely_pass=stage_name_for_hint,
+                            hint="Execution stage booleans must be explicit.")
+                        if key == "bounded" and value is False:
+                            report.check(
+                                "material execution stage is bounded",
+                                False,
+                                path=f"{stage_path}.bounded",
+                                expected=True,
+                                actual=False,
+                                likely_layer=likely_layer,
+                                likely_pass=stage_name_for_hint,
+                                hint="Material stages on hot paths must expose bounded work.",
+                                record_success=False)
+                    elif key == "sample_taps":
+                        check_number_field(
+                            report,
+                            stage_entry,
+                            key,
+                            stage_path,
+                            min_value=0.0,
+                            likely_layer=likely_layer,
+                            likely_pass=stage_name_for_hint,
+                            hint="Execution stage sample taps must be numeric.")
+                    elif key == "max_texture_copy_pixels":
+                        value = check_number_field(
+                            report,
+                            stage_entry,
+                            key,
+                            stage_path,
+                            min_value=0.0,
+                            likely_layer=likely_layer,
+                            likely_pass=stage_name_for_hint,
+                            hint="Execution stage texture-copy bounds must be numeric.")
+                        if isinstance(value, (int, float)):
+                            stage_texture_copy_pixels = int(value)
+                    else:
+                        stage_value = check_string_field(
+                            report,
+                            stage_entry,
+                            key,
+                            stage_path,
+                            likely_layer=likely_layer,
+                            hint="Execution stages must name their layer for debugging.")
+                        if key == "name" and isinstance(stage_value, str):
+                            stage_names = summary["stage_names"]
+                            stage_names[stage_value] = (
+                                stage_names.get(stage_value, 0) + 1)
+                            report.check(
+                                "material execution stage name is known",
+                                stage_value in ALLOWED_MATERIAL_STAGE_NAMES,
+                                path=f"{stage_path}.name",
+                                expected=sorted(ALLOWED_MATERIAL_STAGE_NAMES),
+                                actual=stage_value,
+                                likely_layer=likely_layer,
+                                likely_pass=stage_value,
+                                hint="Add intentional material stages to the verifier contract.",
+                                record_success=False)
+                        if key == "likely_layer" and isinstance(stage_value, str):
+                            report.check(
+                                "material execution stage likely layer is known",
+                                stage_value in ALLOWED_MATERIAL_LIKELY_LAYERS,
+                                path=f"{stage_path}.likely_layer",
+                                expected=sorted(ALLOWED_MATERIAL_LIKELY_LAYERS),
+                                actual=stage_value,
+                                likely_layer=stage_value,
+                                likely_pass=stage_name_for_hint,
+                                hint="Stage likely_layer should identify a debuggable backend layer.",
+                                record_success=False)
+                        if key == "executor" and isinstance(stage_value, str):
+                            stage_executors = summary["stage_executors"]
+                            stage_executors[stage_value] = (
+                                stage_executors.get(stage_value, 0) + 1)
+                            report.check(
+                                "material execution stage executor is known",
+                                stage_value in ALLOWED_MATERIAL_STAGE_EXECUTORS,
+                                path=f"{stage_path}.executor",
+                                expected=sorted(ALLOWED_MATERIAL_STAGE_EXECUTORS),
+                                actual=stage_value,
+                                likely_layer=likely_layer,
+                                likely_pass=stage_name_for_hint,
+                                hint="Add intentional material stage executors to the verifier contract.",
+                                record_success=False)
+                if stage_texture_copy_pixels is not None:
+                    if stage_active is False:
+                        report.check(
+                            "material inactive execution stage has no texture copy",
+                            stage_texture_copy_pixels == 0,
+                            path=f"{stage_path}.max_texture_copy_pixels",
+                            expected=0,
+                            actual=stage_texture_copy_pixels,
+                            likely_layer=likely_layer,
+                            likely_pass=stage_name_for_hint,
+                            hint="Inactive execution stages must not reserve texture-copy work.",
+                            record_success=False)
+                    if stage_requires_backdrop is False:
+                        report.check(
+                            "material non-backdrop execution stage has no texture copy",
+                            stage_texture_copy_pixels == 0,
+                            path=f"{stage_path}.max_texture_copy_pixels",
+                            expected=0,
+                            actual=stage_texture_copy_pixels,
+                            likely_layer=likely_layer,
+                            likely_pass=stage_name_for_hint,
+                            hint="Only backdrop stages should reserve texture-copy work.",
+                            record_success=False)
+                    elif render_target_pixel_count is not None:
+                        report.check(
+                            "material backdrop execution stage texture copy is within render target",
+                            0 < stage_texture_copy_pixels <= render_target_pixel_count,
+                            path=f"{stage_path}.max_texture_copy_pixels",
+                            expected={">": 0, "<=": render_target_pixel_count},
+                            actual=stage_texture_copy_pixels,
+                            likely_layer=likely_layer,
+                            likely_pass=stage_name_for_hint,
+                            hint=(
+                                "Backdrop stage texture-copy bounds should be "
+                                "derived from MaterialPlan.render_target.pixel_count."),
+                            record_success=False)
+                if isinstance(primary_pass, dict) and primary_pass.get("active") is True:
+                    has_primary_stage = has_primary_stage or all(
+                        stage_entry.get(key) == primary_pass.get(key)
+                        for key in MATERIAL_PASS_FIELDS)
+            if isinstance(primary_pass, dict) and primary_pass.get("active") is True:
+                report.check(
+                    "material execution stages include primary pass",
+                    has_primary_stage,
+                    path=f"{plan_path}.execution_stages",
+                    expected=primary_pass,
+                    actual=execution_stages,
+                    likely_layer=likely_layer,
+                    likely_pass=primary_pass_name,
+                    hint="Execution stages should include the primary render pass unchanged.",
+                    record_success=False)
+            if backdrop_sampling is True:
+                report.check(
+                    "material backdrop sampling has backdrop execution stage",
+                    has_backdrop_stage,
+                    path=f"{plan_path}.execution_stages",
+                    expected={"requires_backdrop": True},
+                    actual=execution_stages,
+                    likely_layer=likely_layer,
+                    likely_pass=primary_pass_name,
+                    hint="Backdrop sampling plans must include a backdrop execution stage.",
+                    record_success=False)
+            elif execution_stages:
+                report.check(
+                    "material fallback execution stages avoid backdrop work",
+                    not has_backdrop_stage,
+                    path=f"{plan_path}.execution_stages",
+                    expected={"requires_backdrop": False},
+                    actual=execution_stages,
+                    likely_layer=likely_layer,
+                    likely_pass=primary_pass_name,
+                    hint="Fallback material stages must degrade without backdrop texture work.",
+                    record_success=False)
+
         if fallback is True:
             report.check(
                 "material fallback path is not none",
@@ -4320,6 +4596,12 @@ def check_material_plan_summary_requirements(
         "pass_executors": (
             "material-pass",
             "Inspect MaterialPlan.primary_pass.executor and runtime pass roles."),
+        "stage_names": (
+            "material-stage",
+            "Inspect MaterialPlan.execution_stages[].name and pure stage planning."),
+        "stage_executors": (
+            "material-stage",
+            "Inspect MaterialPlan.execution_stages[].executor and backend stage roles."),
         "sampling_kernels": (
             "sampling-kernel",
             "Inspect MaterialPlan.sampling_kernel.name and the backend blur shader contract."),
@@ -4468,6 +4750,11 @@ def check_material_resource_bounds_requirements(
         "total_runtime_passes_lte": "total_runtime_passes",
         "active_runtime_passes_lte": "active_runtime_passes",
         "backdrop_runtime_passes_lte": "backdrop_runtime_passes",
+        "total_execution_stages_lte": "total_execution_stages",
+        "active_execution_stages_lte": "active_execution_stages",
+        "backdrop_execution_stages_lte": "backdrop_execution_stages",
+        "max_execution_stage_count_lte": "max_execution_stage_count",
+        "max_execution_stages_lte": "max_execution_stages",
     }
     for spec_field, summary_field in field_map.items():
         if spec_field not in spec:
@@ -4493,6 +4780,11 @@ def check_material_resource_bounds_requirements(
         "total_runtime_passes_gte": "total_runtime_passes",
         "active_runtime_passes_gte": "active_runtime_passes",
         "backdrop_runtime_passes_gte": "backdrop_runtime_passes",
+        "total_execution_stages_gte": "total_execution_stages",
+        "active_execution_stages_gte": "active_execution_stages",
+        "backdrop_execution_stages_gte": "backdrop_execution_stages",
+        "max_execution_stage_count_gte": "max_execution_stage_count",
+        "max_execution_stages_gte": "max_execution_stages",
     }
     for spec_field, summary_field in min_field_map.items():
         if spec_field not in spec:
@@ -4560,6 +4852,10 @@ def check_material_runtime_summary_contract(
         "total_runtime_passes": bounds.get("total_runtime_passes"),
         "active_runtime_passes": bounds.get("active_runtime_passes"),
         "backdrop_runtime_passes": bounds.get("backdrop_runtime_passes"),
+        "total_execution_stages": bounds.get("total_execution_stages"),
+        "active_execution_stages": bounds.get("active_execution_stages"),
+        "backdrop_execution_stages": bounds.get("backdrop_execution_stages"),
+        "max_execution_stage_count": bounds.get("max_execution_stage_count"),
         "max_pass_texture_copy_pixels": bounds.get(
             "max_pass_texture_copy_pixels"),
         "total_pass_texture_copy_pixels": bounds.get(
@@ -4572,6 +4868,7 @@ def check_material_runtime_summary_contract(
         "max_sampling_kernel_radius": bounds.get(
             "max_sampling_kernel_radius"),
         "max_pass_count": bounds.get("max_pass_count"),
+        "max_execution_stages": bounds.get("max_execution_stages"),
         "max_backdrop_pixels": bounds.get("max_backdrop_pixels"),
         "max_container_spacing": bounds.get("max_container_spacing"),
         "containered_count": summary.get("container", {}).get("participating")
