@@ -646,7 +646,7 @@ auto spec() -> cppx::cli::CommandSpec {
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "kind[:value]",
-                             .description = "Typed input such as viewport:900x620@2, select:README.txt, create-file, delete, sort:recent"},
+                             .description = "Typed input such as viewport:900x620@2, select:README.txt, open:Documents, activate:Documents, create-file, delete, sort:recent"},
                             {.name = "expect",
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
@@ -664,6 +664,7 @@ auto spec() -> cppx::cli::CommandSpec {
                         .allow_positionals = false,
                         .examples = {
                             "phenotype drive file-explorer --json --input select:README.txt --input duplicate",
+                            "phenotype drive file-explorer --json --input open:Documents --input select:'Project Notes.txt'",
                             "phenotype drive file-explorer --profile mobile --scenario created-preview --json",
                             "phenotype drive file-explorer --script explorer.drive --expect operation:file_create:ok --json",
                         },

@@ -595,7 +595,7 @@ void update(State& state, Msg msg) {
         if constexpr (std::same_as<T, SelectLocation>) {
             file_explorer_demo::select_location(explorer, m.id);
         } else if constexpr (std::same_as<T, SelectEntry>) {
-            file_explorer_demo::select_entry(explorer, m.name);
+            file_explorer_demo::activate_entry(explorer, m.name);
         } else if constexpr (std::same_as<T, SetViewMode>) {
             state.view_mode = m.mode;
             explorer.status = "Switched to " + view_mode_name(m.mode) + ".";
