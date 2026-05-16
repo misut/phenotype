@@ -29,4 +29,5 @@ ldflags = [
 "github.com/misut/cppx" = "1.9.0"
 
 [dependencies.path]
+glass_showcase_shared = "../glass_showcase_shared"
 phenotype = "../.."

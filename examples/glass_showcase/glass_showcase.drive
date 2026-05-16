@@ -1,0 +1,6 @@
+# Deterministic glass showcase input script for phenotype drive glass-showcase.
+input viewport:640x820@2
+input backdrop:high
+input density:dense
+input inspector:open
+input note:Scripted material probe state

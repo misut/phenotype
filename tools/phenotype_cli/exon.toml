@@ -16,6 +16,7 @@ platforms = [
 
 [dependencies.path]
 file_explorer_shared = "../../examples/file_explorer_shared"
+glass_showcase_shared = "../../examples/glass_showcase_shared"
 phenotype_resources = "../../packages/phenotype_resources"
 
 [sync]

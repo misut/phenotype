@@ -153,6 +153,24 @@ receipts, and preview excerpt. It is useful for validating
 view/read/create/duplicate/delete/resize model behavior before running the
 slower desktop/mobile artifact capture gate.
 
+For material probe input debugging that does not need a native window, use the
+matching glass showcase drive command:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli drive glass-showcase --json \
+  --script ../../examples/glass_showcase/glass_showcase.drive \
+  --expect backdrop:high \
+  --expect density:dense \
+  --expect material-count:7
+```
+
+The output reports the shared glass state, per-input trace, public material
+kinds, expected material plan count, backdrop/inspector/density/viewport state,
+and expectation results. It is useful for validating the probe scene's input
+abstraction before running `phenotype artifact verify-glass-showcase`.
+
 ## Desktop example artifact hook
 
 Native desktop examples can write a startup artifact bundle without adding
