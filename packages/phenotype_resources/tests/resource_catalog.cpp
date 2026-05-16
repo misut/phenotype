@@ -70,6 +70,23 @@ int main() {
     };
     auto diagnostics = phenotype::validate_resource_catalog(catalog, required);
     assert(diagnostics.empty());
+    auto contract = phenotype::resource_catalog_contract(catalog, required);
+    assert(contract.asset_count == 1);
+    assert(contract.preload_asset_count == 1);
+    assert(contract.runtime_visible_asset_count == 0);
+    assert(contract.locale_count == 2);
+    assert(contract.locale_string_count == 3);
+    assert(contract.font_count == 1);
+    assert(contract.default_locale_declared);
+    assert(contract.default_font_declared);
+    assert(contract.debug_artifact_manifest_declared);
+    assert(contract.debug_verifier_declared);
+    assert(contract.locale_coverage.size() == 2);
+    assert(contract.locale_coverage[1].tag == "ko");
+    assert(contract.locale_coverage[1].fallback_chain.size() == 2);
+    assert(contract.locale_coverage[1].required_key_count == 2);
+    assert(contract.locale_coverage[1].resolved_key_count == 2);
+    assert(contract.locale_coverage[1].missing_keys.empty());
 
     auto parsed = phenotype::parse_resource_manifest(R"(
 [application]

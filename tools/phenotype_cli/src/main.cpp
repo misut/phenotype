@@ -126,12 +126,14 @@ struct PackageSummary {
     std::string debug_verifier;
     phenotype::ResourceCatalog catalog;
     std::vector<phenotype::ResourceDiagnostic> catalog_diagnostics;
+    phenotype::ResourceCatalogContract resource_contract;
     std::vector<std::string> missing_sources;
     std::uintmax_t manifest_bytes = 0;
     std::size_t manifest_asset_count = 0;
     std::size_t manifest_locale_count = 0;
     std::size_t manifest_font_count = 0;
     std::size_t source_reference_count = 0;
+    std::size_t required_locale_key_count = 0;
     std::size_t locale_string_count = 0;
     std::size_t asset_file_count = 0;
     std::size_t locale_file_count = 0;
@@ -154,6 +156,26 @@ struct BundleFileRecord {
     std::string error;
 };
 
+struct BundleManifestRecord {
+    std::string destination;
+    std::string digest;
+};
+
+struct StoredBundleManifest {
+    bool present = false;
+    bool parse_ok = false;
+    std::string parse_error;
+    std::int64_t schema_version = -1;
+    std::string command;
+    std::int64_t file_count = -1;
+    std::int64_t total_bytes = -1;
+    bool integrity_ok = false;
+    std::vector<BundleManifestRecord> records;
+    std::size_t matched_digest_count = 0;
+    std::size_t missing_record_count = 0;
+    std::size_t digest_mismatch_count = 0;
+};
+
 struct BundleSummary {
     std::string command = "package bundle";
     fs::path package_root;
@@ -166,6 +188,7 @@ struct BundleSummary {
     std::size_t verified_file_count = 0;
     bool bundle_manifest_present = false;
     std::uintmax_t bundle_manifest_bytes = 0;
+    StoredBundleManifest stored_manifest;
     bool ok = false;
     std::string error;
 };
@@ -1699,13 +1722,42 @@ auto package_summary(fs::path root) -> PackageSummary {
     required_views.reserve(required_keys.size());
     for (auto const& key : required_keys)
         required_views.push_back(key);
+    summary.required_locale_key_count = required_views.size();
     summary.catalog_diagnostics =
         phenotype::validate_resource_catalog(summary.catalog, required_views);
+    summary.resource_contract =
+        phenotype::resource_catalog_contract(summary.catalog, required_views);
     return summary;
 }
 
 bool debug_verifier_uses_cli(std::string_view verifier) {
     return verifier.starts_with("phenotype ");
+}
+
+auto locale_coverage_missing_key_count(PackageSummary const& summary)
+    -> std::size_t {
+    auto count = std::size_t{0};
+    for (auto const& coverage : summary.resource_contract.locale_coverage)
+        count += coverage.missing_keys.size();
+    return count;
+}
+
+bool locale_coverage_ok(PackageSummary const& summary) {
+    return summary.required_locale_key_count > 0
+        && !summary.resource_contract.locale_coverage.empty()
+        && locale_coverage_missing_key_count(summary) == 0;
+}
+
+bool resource_contract_ok(PackageSummary const& summary) {
+    auto const& contract = summary.resource_contract;
+    return contract.default_locale_declared
+        && contract.default_font_declared
+        && contract.debug_artifact_manifest_declared
+        && contract.debug_probe_scene_declared
+        && contract.debug_verifier_declared
+        && contract.asset_count == summary.manifest_asset_count
+        && contract.locale_count == summary.manifest_locale_count
+        && contract.font_count == summary.manifest_font_count;
 }
 
 auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
@@ -1753,6 +1805,30 @@ auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
                                summary.catalog_diagnostics.size(),
                                summary.locale_string_count),
          .hint = "Fix the manifest fields reported by ResourceCatalog diagnostics."},
+        {.name = "resource_contract",
+         .ok = resource_contract_ok(summary),
+         .detail = std::format(
+             "default_locale={} default_font={} debug_manifest={} verifier={}",
+             summary.resource_contract.default_locale_declared ? "true" : "false",
+             summary.resource_contract.default_font_declared ? "true" : "false",
+             summary.resource_contract.debug_artifact_manifest_declared ? "true" : "false",
+             summary.resource_contract.debug_verifier_declared ? "true" : "false"),
+         .hint = "The pure ResourceCatalog contract should resolve defaults and debug metadata before launch."},
+        {.name = "locale_coverage",
+         .ok = locale_coverage_ok(summary),
+         .detail = std::format("{} required keys, {} locales, {} missing",
+                               summary.required_locale_key_count,
+                               summary.resource_contract.locale_coverage.size(),
+                               locale_coverage_missing_key_count(summary)),
+         .hint = "Every declared locale fallback chain must resolve the default locale key set."},
+        {.name = "resource_intent",
+         .ok = summary.resource_contract.preload_asset_count > 0
+             && summary.resource_contract.font_count > 0,
+         .detail = std::format("preload_assets={} runtime_visible_assets={} fonts={}",
+                               summary.resource_contract.preload_asset_count,
+                               summary.resource_contract.runtime_visible_asset_count,
+                               summary.resource_contract.font_count),
+         .hint = "Packages should declare preload intent and at least one UI font descriptor."},
         {.name = "manifest_sources",
          .ok = summary.source_reference_count > 0
              && summary.missing_sources.empty(),
@@ -1905,6 +1981,62 @@ auto fonts_catalog_json(
     return out;
 }
 
+auto locale_coverage_json(
+        std::span<phenotype::LocaleCoverage const> locales) -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < locales.size(); ++i) {
+        auto const& locale = locales[i];
+        if (i > 0)
+            out += ",";
+        out += std::format(
+            "{{\"tag\":{},\"default_locale\":{},\"fallback_chain\":{},"
+            "\"declared_string_count\":{},\"required_key_count\":{},"
+            "\"resolved_key_count\":{},\"missing_keys\":{},\"ok\":{}}}",
+            json_string(locale.tag),
+            locale.default_locale ? "true" : "false",
+            string_array_json(locale.fallback_chain),
+            locale.declared_string_count,
+            locale.required_key_count,
+            locale.resolved_key_count,
+            string_array_json(locale.missing_keys),
+            locale.missing_keys.empty() ? "true" : "false");
+    }
+    out += "]";
+    return out;
+}
+
+auto resource_contract_json(PackageSummary const& summary) -> std::string {
+    auto const& contract = summary.resource_contract;
+    return std::format(
+        "{{\"asset_count\":{},\"preload_asset_count\":{},"
+        "\"runtime_visible_asset_count\":{},\"locale_count\":{},"
+        "\"locale_string_count\":{},\"font_count\":{},"
+        "\"registered_font_count\":{},"
+        "\"default_locale_declared\":{},\"default_font_declared\":{},"
+        "\"debug_artifact_manifest_declared\":{},"
+        "\"debug_probe_scene_declared\":{},\"debug_verifier_declared\":{},"
+        "\"required_locale_key_count\":{},\"missing_locale_key_count\":{},"
+        "\"locale_coverage\":{},\"ok\":{}}}",
+        contract.asset_count,
+        contract.preload_asset_count,
+        contract.runtime_visible_asset_count,
+        contract.locale_count,
+        contract.locale_string_count,
+        contract.font_count,
+        contract.registered_font_count,
+        contract.default_locale_declared ? "true" : "false",
+        contract.default_font_declared ? "true" : "false",
+        contract.debug_artifact_manifest_declared ? "true" : "false",
+        contract.debug_probe_scene_declared ? "true" : "false",
+        contract.debug_verifier_declared ? "true" : "false",
+        summary.required_locale_key_count,
+        locale_coverage_missing_key_count(summary),
+        locale_coverage_json(contract.locale_coverage),
+        (resource_contract_ok(summary) && locale_coverage_ok(summary))
+            ? "true"
+            : "false");
+}
+
 auto resource_catalog_json(PackageSummary const& summary) -> std::string {
     auto const& catalog = summary.catalog;
     return std::format(
@@ -1936,14 +2068,22 @@ auto resource_catalog_summary_json(PackageSummary const& summary)
     return std::format(
         "{{\"default_locale\":{},\"default_font_family\":{},"
         "\"assets\":{},\"locales\":{},\"locale_strings\":{},"
-        "\"fonts\":{},\"diagnostics\":{}}}",
+        "\"fonts\":{},\"diagnostics\":{},"
+        "\"preload_assets\":{},\"runtime_visible_assets\":{},"
+        "\"missing_locale_keys\":{},\"contract_ok\":{}}}",
         json_string(catalog.default_locale),
         json_string(catalog.default_font_family),
         catalog.assets.size(),
         catalog.locales.size(),
         summary.locale_string_count,
         catalog.fonts.size(),
-        summary.catalog_diagnostics.size());
+        summary.catalog_diagnostics.size(),
+        summary.resource_contract.preload_asset_count,
+        summary.resource_contract.runtime_visible_asset_count,
+        locale_coverage_missing_key_count(summary),
+        (resource_contract_ok(summary) && locale_coverage_ok(summary))
+            ? "true"
+            : "false");
 }
 
 auto package_json(PackageSummary const& summary,
@@ -1964,7 +2104,7 @@ auto package_json(PackageSummary const& summary,
         "\"assets\":{{\"present\":{},\"file_count\":{}}},"
         "\"locales\":{{\"present\":{},\"file_count\":{}}},"
         "\"fonts\":{{\"present\":{},\"file_count\":{}}},"
-        "\"resource_catalog\":{},\"checks\":{}}}",
+        "\"resource_catalog\":{},\"resource_contract\":{},\"checks\":{}}}",
         all_ok(checks) ? "true" : "false",
         json_string(path_string(summary.root)),
         summary.manifest ? "true" : "false",
@@ -1996,6 +2136,7 @@ auto package_json(PackageSummary const& summary,
         summary.fonts_directory ? "true" : "false",
         summary.font_file_count,
         resource_catalog_json(summary),
+        resource_contract_json(summary),
         checks_json(checks));
 }
 
@@ -2005,7 +2146,8 @@ auto package_entry_json(PackageSummary const& summary,
         "{{\"root\":{},\"ok\":{},\"application_id\":{},"
         "\"display_name\":{},\"entry\":{},\"platforms\":{},"
         "\"default_font_family\":{},\"artifact_manifest\":{},"
-        "\"debug_verifier\":{},\"resource_catalog\":{},\"checks\":{}}}",
+        "\"debug_verifier\":{},\"resource_catalog\":{},"
+        "\"resource_contract\":{},\"checks\":{}}}",
         json_string(path_string(summary.root)),
         all_ok(checks) ? "true" : "false",
         json_string(summary.application_id),
@@ -2016,13 +2158,20 @@ auto package_entry_json(PackageSummary const& summary,
         json_string(summary.artifact_manifest),
         json_string(summary.debug_verifier),
         resource_catalog_summary_json(summary),
+        resource_contract_json(summary),
         checks_json(checks));
+}
+
+auto bundle_relative_destination(BundleFileRecord const& file,
+                                 fs::path const& output_root) -> std::string {
+    auto ec = std::error_code{};
+    auto relative_destination = fs::relative(file.destination, output_root, ec);
+    return ec ? path_string(file.destination) : path_string(relative_destination);
 }
 
 auto bundle_file_json(BundleFileRecord const& file,
                       fs::path const& output_root) -> std::string {
-    auto ec = std::error_code{};
-    auto relative_destination = fs::relative(file.destination, output_root, ec);
+    auto relative_destination = bundle_relative_destination(file, output_root);
     return std::format(
         "{{\"kind\":{},\"name\":{},\"content_type\":{},"
         "\"source\":{},\"destination\":{},\"bytes\":{},"
@@ -2033,8 +2182,7 @@ auto bundle_file_json(BundleFileRecord const& file,
         json_string(file.name),
         json_string(file.content_type),
         json_string(path_string(file.source)),
-        json_string(ec ? path_string(file.destination)
-                       : path_string(relative_destination)),
+        json_string(relative_destination),
         file.bytes,
         file.present ? "true" : "false",
         file.copied ? "true" : "false",
@@ -2097,6 +2245,146 @@ auto bundle_files_json(std::span<BundleFileRecord const> files,
     return out;
 }
 
+auto stored_bundle_manifest_json(StoredBundleManifest const& manifest)
+    -> std::string {
+    return std::format(
+        "{{\"present\":{},\"parse_ok\":{},\"parse_error\":{},"
+        "\"schema_version\":{},\"command\":{},\"file_count\":{},"
+        "\"total_bytes\":{},\"integrity_ok\":{},\"record_count\":{},"
+        "\"matched_digest_count\":{},\"missing_record_count\":{},"
+        "\"digest_mismatch_count\":{},\"ok\":{}}}",
+        manifest.present ? "true" : "false",
+        manifest.parse_ok ? "true" : "false",
+        json_string(manifest.parse_error),
+        manifest.schema_version,
+        json_string(manifest.command),
+        manifest.file_count,
+        manifest.total_bytes,
+        manifest.integrity_ok ? "true" : "false",
+        manifest.records.size(),
+        manifest.matched_digest_count,
+        manifest.missing_record_count,
+        manifest.digest_mismatch_count,
+        (manifest.present && manifest.parse_ok
+         && manifest.schema_version == 1
+         && manifest.command == "package bundle"
+         && manifest.integrity_ok
+         && manifest.file_count == static_cast<std::int64_t>(manifest.records.size())
+         && manifest.matched_digest_count == manifest.records.size()
+         && manifest.missing_record_count == 0
+         && manifest.digest_mismatch_count == 0)
+            ? "true"
+            : "false");
+}
+
+auto read_stored_bundle_manifest(fs::path const& manifest_path)
+    -> StoredBundleManifest {
+    auto manifest = StoredBundleManifest{};
+    manifest.present = path_exists(manifest_path);
+    if (!manifest.present) {
+        manifest.parse_error = "phenotype.bundle.json is missing";
+        return manifest;
+    }
+
+    try {
+        auto parsed = json::parse(read_text_file(manifest_path));
+        manifest.parse_ok = true;
+        if (auto schema = json_integer_at(parsed, {"schema_version"}))
+            manifest.schema_version = *schema;
+        if (auto command = json_string_at(parsed, {"command"}))
+            manifest.command = *command;
+        if (auto count = json_integer_at(parsed, {"integrity", "file_count"}))
+            manifest.file_count = *count;
+        if (auto bytes = json_integer_at(parsed, {"integrity", "total_bytes"}))
+            manifest.total_bytes = *bytes;
+        if (auto ok = json_bool_at(parsed, {"integrity", "ok"}))
+            manifest.integrity_ok = *ok;
+        if (auto const* files = json_array_at(parsed, {"files"})) {
+            for (auto const& file : *files) {
+                auto destination = json_string_at(file, {"destination"});
+                auto digest = json_string_at(file, {"integrity", "digest"});
+                if (destination && digest) {
+                    manifest.records.push_back({
+                        .destination = *destination,
+                        .digest = *digest,
+                    });
+                }
+            }
+        }
+    } catch (std::exception const& error) {
+        manifest.parse_error = error.what();
+    }
+    return manifest;
+}
+
+auto find_stored_bundle_record(StoredBundleManifest const& manifest,
+                               std::string_view destination)
+    -> BundleManifestRecord const* {
+    auto found = std::ranges::find_if(
+        manifest.records,
+        [&](BundleManifestRecord const& record) {
+            return record.destination == destination;
+        });
+    return found == manifest.records.end() ? nullptr : &*found;
+}
+
+void compare_stored_bundle_manifest(BundleSummary& summary) {
+    summary.stored_manifest = read_stored_bundle_manifest(summary.manifest_path);
+    auto& manifest = summary.stored_manifest;
+    if (!manifest.parse_ok)
+        return;
+
+    for (auto const& file : summary.files) {
+        auto destination = bundle_relative_destination(file, summary.output_root);
+        auto const* record = find_stored_bundle_record(manifest, destination);
+        if (!record) {
+            ++manifest.missing_record_count;
+            continue;
+        }
+        if (record->digest == file.sha256) {
+            ++manifest.matched_digest_count;
+        } else {
+            ++manifest.digest_mismatch_count;
+        }
+    }
+}
+
+bool stored_bundle_manifest_ok(BundleSummary const& summary) {
+    auto const& manifest = summary.stored_manifest;
+    return manifest.present
+        && manifest.parse_ok
+        && manifest.schema_version == 1
+        && manifest.command == "package bundle"
+        && manifest.file_count == static_cast<std::int64_t>(summary.files.size())
+        && manifest.total_bytes == static_cast<std::int64_t>(summary.total_bytes)
+        && manifest.integrity_ok
+        && manifest.records.size() == summary.files.size()
+        && manifest.matched_digest_count == summary.files.size()
+        && manifest.missing_record_count == 0
+        && manifest.digest_mismatch_count == 0;
+}
+
+auto stored_bundle_manifest_check(BundleSummary const& summary) -> Check {
+    auto const& manifest = summary.stored_manifest;
+    return {
+        .name = "bundle_manifest_contract",
+        .ok = stored_bundle_manifest_ok(summary),
+        .detail = std::format(
+            "schema={} command={} files={}/{} bytes={}/{} digests={}/{} missing={} mismatched={}",
+            manifest.schema_version,
+            manifest.command.empty() ? "<missing>" : manifest.command,
+            manifest.file_count,
+            summary.files.size(),
+            manifest.total_bytes,
+            summary.total_bytes,
+            manifest.matched_digest_count,
+            summary.files.size(),
+            manifest.missing_record_count,
+            manifest.digest_mismatch_count),
+        .hint = "Rebuild the staged bundle; phenotype.bundle.json must match every staged resource digest.",
+    };
+}
+
 auto bundle_json(BundleSummary const& summary) -> std::string {
     return std::format(
         "{{\"schema_version\":1,\"command\":{},"
@@ -2106,11 +2394,12 @@ auto bundle_json(BundleSummary const& summary) -> std::string {
         "\"platforms\":{}}},\"defaults\":{{\"locale\":{},"
         "\"font_family\":{}}},\"debug\":{{\"artifact_manifest\":{},"
         "\"probe_scene\":{},\"verifier\":{}}},"
+        "\"resource_contract\":{},"
         "\"integrity\":{{\"algorithm\":\"sha256\",\"ok\":{},"
         "\"file_count\":{},\"verified_file_count\":{},"
         "\"total_bytes\":{},\"bundle_manifest\":{{\"present\":{},"
         "\"bytes\":{}}}}},\"file_count\":{},"
-        "\"files\":{},\"checks\":{},\"error\":{}}}",
+        "\"files\":{},\"stored_manifest\":{},\"checks\":{},\"error\":{}}}",
         json_string(summary.command),
         summary.ok ? "true" : "false",
         json_string(path_string(summary.package_root)),
@@ -2126,6 +2415,7 @@ auto bundle_json(BundleSummary const& summary) -> std::string {
         json_string(summary.package.catalog.debug.artifact_manifest),
         json_string(summary.package.catalog.debug.probe_scene),
         json_string(summary.package.catalog.debug.verifier),
+        resource_contract_json(summary.package),
         bundle_files_integrity_ok(summary.files, summary.command == "package bundle")
             ? "true" : "false",
         summary.files.size(),
@@ -2135,6 +2425,7 @@ auto bundle_json(BundleSummary const& summary) -> std::string {
         summary.bundle_manifest_bytes,
         summary.files.size(),
         bundle_files_json(summary.files, summary.output_root),
+        stored_bundle_manifest_json(summary.stored_manifest),
         checks_json(summary.checks),
         json_string(summary.error));
 }
@@ -2374,6 +2665,12 @@ auto build_package_bundle(fs::path package_root,
         bundle.ok = false;
         return bundle;
     }
+    compare_stored_bundle_manifest(bundle);
+    bundle.checks.push_back(stored_bundle_manifest_check(bundle));
+    if (!stored_bundle_manifest_ok(bundle)) {
+        bundle.ok = false;
+        bundle.error = "staged bundle manifest did not match copied resources";
+    }
     return bundle;
 }
 
@@ -2404,9 +2701,15 @@ auto verify_package_bundle(fs::path bundle_root) -> BundleSummary {
     append_expected_package_files(bundle, false);
     bundle.total_bytes = bundle_total_bytes(bundle.files);
     bundle.verified_file_count = bundle_verified_file_count(bundle.files);
+    compare_stored_bundle_manifest(bundle);
+    bundle.checks.push_back(stored_bundle_manifest_check(bundle));
 
     if (!bundle_files_integrity_ok(bundle.files, false)) {
         bundle.error = "one or more staged package resources failed integrity validation";
+        return bundle;
+    }
+    if (!stored_bundle_manifest_ok(bundle)) {
+        bundle.error = "staged bundle manifest did not match copied resources";
         return bundle;
     }
 
