@@ -255,8 +255,23 @@ inline SEL sel_set_titlebar_appears_transparent() {
     return sel;
 }
 
+inline SEL sel_titlebar_appears_transparent() {
+    static auto sel = sel_registerName("titlebarAppearsTransparent");
+    return sel;
+}
+
+inline SEL sel_title_visibility() {
+    static auto sel = sel_registerName("titleVisibility");
+    return sel;
+}
+
 inline SEL sel_set_movable_by_window_background() {
     static auto sel = sel_registerName("setMovableByWindowBackground:");
+    return sel;
+}
+
+inline SEL sel_is_movable_by_window_background() {
+    static auto sel = sel_registerName("isMovableByWindowBackground");
     return sel;
 }
 
@@ -7738,12 +7753,24 @@ inline json::Object macos_window_runtime_json() {
         has_options ? surface->window_chrome : WindowChromeStyle::System;
     IntegratedTitlebarOptions const titlebar_options =
         has_options ? surface->integrated_titlebar : IntegratedTitlebarOptions{};
-    bool const integrated =
-        chrome == WindowChromeStyle::IntegratedTitlebar;
     constexpr unsigned long move_to_active_space = 1ul << 1;
+    constexpr unsigned long full_size_content_view_mask = 1ul << 15;
+    constexpr long hidden_title = 1;
     unsigned long const collection_behavior = ns_window
         ? objc_send<unsigned long>(ns_window, sel_collection_behavior())
         : 0ul;
+    unsigned long const style_mask = ns_window
+        ? objc_send<unsigned long>(ns_window, sel_style_mask())
+        : 0ul;
+    bool const full_size_content_view =
+        (style_mask & full_size_content_view_mask) != 0;
+    bool const titlebar_transparent = ns_window
+        && objc_send<bool>(ns_window, sel_titlebar_appears_transparent());
+    long const title_visibility = ns_window
+        ? objc_send<long>(ns_window, sel_title_visibility())
+        : 0;
+    bool const background_drag_enabled = ns_window
+        && objc_send<bool>(ns_window, sel_is_movable_by_window_background());
 
     json::Object titlebar;
     titlebar.emplace(
@@ -7780,9 +7807,11 @@ inline json::Object macos_window_runtime_json() {
     window.emplace("native_controls_owned_by_os", json::Value{true});
     window.emplace("toolkit_window_shim", json::Value{false});
     window.emplace("uses_glfw", json::Value{false});
-    window.emplace("titlebar_transparent", json::Value{integrated});
-    window.emplace("full_size_content_view", json::Value{integrated});
-    window.emplace("background_drag_enabled", json::Value{integrated});
+    window.emplace("style_mask", json::Value{static_cast<double>(style_mask)});
+    window.emplace("titlebar_transparent", json::Value{titlebar_transparent});
+    window.emplace("full_size_content_view", json::Value{full_size_content_view});
+    window.emplace("title_hidden", json::Value{title_visibility == hidden_title});
+    window.emplace("background_drag_enabled", json::Value{background_drag_enabled});
     window.emplace(
         "app_active",
         json::Value{ns_app && objc_send<bool>(ns_app, sel_is_active())});
