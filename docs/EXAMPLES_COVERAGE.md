@@ -93,6 +93,24 @@ mise exec -- uv run --frozen python tools/verify_artifact_bundle.py /tmp/phenoty
   --require-material-fallback
 ```
 
+Or use the CLI edge wrapper, which runs the same uv-managed verifier:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli artifact verify --json /tmp/phenotype-native-startup \
+  --expect-platform macos \
+  --require-frame \
+  --require-label "Control States" \
+  --require-label "Material Surface" \
+  --require-label "Paint Command Showcase" \
+  --require-role button \
+  --require-role material \
+  --require-role text_field \
+  --require-material-kind regular \
+  --require-material-fallback
+```
+
 For `examples/glass_showcase`, use the checked-in manifest:
 
 ```sh

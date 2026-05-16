@@ -1,4 +1,6 @@
 import cppx.cli;
+import cppx.process;
+import cppx.process.system;
 import cppx.terminal;
 import std;
 
@@ -82,6 +84,72 @@ auto spec() -> cppx::cli::CommandSpec {
                 .options = {help_option()},
                 .subcommands = {
                     {
+                        .name = "verify",
+                        .summary = "Run the artifact verifier through mise and uv",
+                        .options = {
+                            help_option(),
+                            json_option(),
+                            {.name = "manifest",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "path",
+                             .description = "Verifier manifest JSON"},
+                            {.name = "expect-platform",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "name",
+                             .description = "Expected platform name"},
+                            {.name = "require-frame",
+                             .arity = cppx::cli::OptionArity::none,
+                             .description = "Require frame.bmp"},
+                            {.name = "require-label",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "label",
+                             .description = "Require an exact semantic label"},
+                            {.name = "require-role",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "role",
+                             .description = "Require a semantic role"},
+                            {.name = "require-material-kind",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "kind",
+                             .description = "Require a material kind"},
+                            {.name = "require-material-surface-role",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "role",
+                             .description = "Require a material surface role"},
+                            {.name = "require-capability",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "name",
+                             .description = "Require a platform capability"},
+                            {.name = "require-runtime-detail",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "path=json",
+                             .description = "Require a runtime detail value"},
+                            {.name = "require-pixel-region",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "spec",
+                             .description = "Require a pixel region contract"},
+                            {.name = "require-pixel-region-metric",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "spec",
+                             .description = "Require a pixel metric bound"},
+                        },
+                        .positional_name = "bundle",
+                        .positional_description =
+                            "Artifact bundle directory passed to tools/verify_artifact_bundle.py.",
+                        .examples = {
+                            "phenotype artifact verify /tmp/phenotype-glass-showcase --manifest examples/glass_showcase/artifact_manifest.json",
+                            "phenotype artifact verify --json /tmp/phenotype-bundle --expect-platform macos --require-frame",
+                        },
+                    },
+                    {
                         .name = "summary",
                         .summary = "Summarize one artifact bundle",
                         .options = {help_option(), json_option()},
@@ -162,6 +230,12 @@ auto json_string(std::string_view text) -> std::string {
 
 auto path_string(fs::path const& path) -> std::string {
     return path.lexically_normal().generic_string();
+}
+
+auto absolute_path_string(fs::path const& path) -> std::string {
+    auto ec = std::error_code{};
+    auto absolute = fs::absolute(path, ec);
+    return ec ? path_string(path) : path_string(absolute);
 }
 
 auto path_exists(fs::path const& path) -> bool {
@@ -739,6 +813,117 @@ int run_artifact_summary(cppx::cli::Invocation const& invocation) {
     return all_ok(checks) ? 0 : 1;
 }
 
+void append_option_arg(std::vector<std::string>& args,
+                       cppx::cli::Invocation const& invocation,
+                       std::string_view name) {
+    if (auto value = invocation.value(name)) {
+        auto option = std::string{"--"};
+        option += name;
+        args.push_back(std::move(option));
+        args.push_back(std::string{*value});
+    }
+}
+
+void append_path_option_arg(std::vector<std::string>& args,
+                            cppx::cli::Invocation const& invocation,
+                            std::string_view name) {
+    if (auto value = invocation.value(name)) {
+        auto option = std::string{"--"};
+        option += name;
+        args.push_back(std::move(option));
+        args.push_back(absolute_path_string(fs::path{std::string{*value}}));
+    }
+}
+
+void append_flag_arg(std::vector<std::string>& args,
+                     cppx::cli::Invocation const& invocation,
+                     std::string_view name) {
+    if (!invocation.has(name))
+        return;
+    auto option = std::string{"--"};
+    option += name;
+    args.push_back(std::move(option));
+}
+
+void append_repeatable_arg(std::vector<std::string>& args,
+                           cppx::cli::Invocation const& invocation,
+                           std::string_view name) {
+    for (auto const& value : invocation.values(name)) {
+        auto option = std::string{"--"};
+        option += name;
+        args.push_back(std::move(option));
+        args.push_back(value);
+    }
+}
+
+int run_artifact_verify(cppx::cli::Invocation const& invocation) {
+    auto path = first_positional_or_error(invocation, "artifact verify");
+    if (!path)
+        return print_error("artifact verify", path.error(), invocation.has("json"));
+
+    auto root = find_repo_root(fs::current_path());
+    if (!root) {
+        return print_error(
+            "artifact verify",
+            "could not find phenotype repository root from current directory",
+            invocation.has("json"));
+    }
+
+    auto args = std::vector<std::string>{
+        "exec",
+        "--",
+        "uv",
+        "run",
+        "--frozen",
+        "python",
+        "tools/verify_artifact_bundle.py",
+        absolute_path_string(*path),
+    };
+
+    append_path_option_arg(args, invocation, "manifest");
+    append_option_arg(args, invocation, "expect-platform");
+    append_flag_arg(args, invocation, "require-frame");
+    append_repeatable_arg(args, invocation, "require-label");
+    append_repeatable_arg(args, invocation, "require-role");
+    append_repeatable_arg(args, invocation, "require-material-kind");
+    append_repeatable_arg(args, invocation, "require-material-surface-role");
+    append_repeatable_arg(args, invocation, "require-capability");
+    append_repeatable_arg(args, invocation, "require-runtime-detail");
+    append_repeatable_arg(args, invocation, "require-pixel-region");
+    append_repeatable_arg(args, invocation, "require-pixel-region-metric");
+
+    auto spec = cppx::process::ProcessSpec{
+        .program = "mise",
+        .args = std::move(args),
+        .cwd = *root,
+        .timeout = std::chrono::minutes{5},
+    };
+
+    auto result = cppx::process::system::capture(spec);
+    if (!result) {
+        return print_error(
+            "artifact verify",
+            std::format("failed to run mise/uv verifier: {}",
+                        cppx::process::to_string(result.error())),
+            invocation.has("json"));
+    }
+
+    if (!result->stdout_text.empty()) {
+        std::print("{}", result->stdout_text);
+        if (!result->stdout_text.ends_with('\n'))
+            std::println("");
+    }
+    if (!result->stderr_text.empty()) {
+        std::print(std::cerr, "{}", result->stderr_text);
+        if (!result->stderr_text.ends_with('\n'))
+            std::println(std::cerr, "");
+    }
+
+    if (result->timed_out)
+        return result->exit_code == 0 ? 124 : result->exit_code;
+    return result->exit_code;
+}
+
 int run_package_inspect(cppx::cli::Invocation const& invocation) {
     auto path = first_positional_or_error(invocation, "package inspect");
     if (!path)
@@ -800,6 +985,9 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "artifact", "summary"})
         return run_artifact_summary(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "artifact", "verify"})
+        return run_artifact_verify(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "package", "inspect"})
         return run_package_inspect(*parsed);

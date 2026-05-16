@@ -126,7 +126,6 @@ jobs:
   test:
     name: test (${{ matrix.os }}, ${{ matrix.target }})
     needs: changes
-    if: needs.changes.outputs.code_tests == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -148,9 +147,16 @@ jobs:
             ldflags: -fsanitize=address,undefined
     runs-on: ${{ matrix.os }}
     steps:
+      - name: Skip code tests
+        if: needs.changes.outputs.code_tests != 'true'
+        shell: bash
+        run: echo "No root code-test paths changed; required check passes without build."
+
       - uses: actions/checkout@v6
+        if: needs.changes.outputs.code_tests == 'true'
 
       - name: Resolve tool versions
+        if: needs.changes.outputs.code_tests == 'true'
         id: tool-versions
         shell: bash
         run: |
@@ -158,6 +164,7 @@ jobs:
           sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
 
       - name: Restore toolchains
+        if: needs.changes.outputs.code_tests == 'true'
         id: toolchain-cache
         uses: actions/cache/restore@v5
         with:
@@ -165,6 +172,7 @@ jobs:
           key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
 
       - name: Restore build artifacts
+        if: needs.changes.outputs.code_tests == 'true'
         id: build-cache
         uses: actions/cache/restore@v5
         with:
@@ -176,6 +184,7 @@ jobs:
             build-${{ matrix.os }}-${{ matrix.target }}-
 
       - name: Install intron
+        if: needs.changes.outputs.code_tests == 'true'
         run: |
           gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-${{ matrix.platform }}.tar.gz"
           tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
@@ -183,6 +192,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Install toolchains
+        if: needs.changes.outputs.code_tests == 'true'
         run: |
           intron install llvm 22.1.2
           intron install cmake 4.3.1
@@ -194,13 +204,14 @@ jobs:
           fi
 
       - name: Save toolchains
-        if: github.ref == 'refs/heads/main' && matrix.target == 'native' && steps.toolchain-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.code_tests == 'true' && github.ref == 'refs/heads/main' && matrix.target == 'native' && steps.toolchain-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: ~/.intron/toolchains
           key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
 
       - name: Install exon
+        if: needs.changes.outputs.code_tests == 'true'
         run: |
           gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-${{ matrix.platform }}.tar.gz"
           tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
@@ -208,17 +219,18 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Install uv
-        if: matrix.target == 'native'
+        if: needs.changes.outputs.code_tests == 'true' && matrix.target == 'native'
         uses: astral-sh/setup-uv@v8.1.0
         with:
           version: "0.11.14"
           enable-cache: true
 
       - name: Install Python for tools
-        if: matrix.target == 'native'
+        if: needs.changes.outputs.code_tests == 'true' && matrix.target == 'native'
         run: uv python install
 
       - name: Build
+        if: needs.changes.outputs.code_tests == 'true'
         env:
           EXON_CXXFLAGS: ${{ matrix.cxxflags }}
           EXON_LDFLAGS: ${{ matrix.ldflags }}
@@ -227,6 +239,7 @@ jobs:
           exon build ${{ matrix.target_arg }}
 
       - name: Test
+        if: needs.changes.outputs.code_tests == 'true'
         env:
           EXON_CXXFLAGS: ${{ matrix.cxxflags }}
           EXON_LDFLAGS: ${{ matrix.ldflags }}
@@ -235,7 +248,7 @@ jobs:
           exon test ${{ matrix.target_arg }}
 
       - name: Test file explorer shared module
-        if: matrix.target == 'native' && needs.changes.outputs.file_explorer_examples == 'true'
+        if: needs.changes.outputs.code_tests == 'true' && matrix.target == 'native' && needs.changes.outputs.file_explorer_examples == 'true'
         env:
           EXON_CXXFLAGS: ${{ matrix.cxxflags }}
           EXON_LDFLAGS: ${{ matrix.ldflags }}
@@ -245,12 +258,12 @@ jobs:
           exon test
 
       - name: Test artifact verifier contract
-        if: matrix.target == 'native'
+        if: needs.changes.outputs.code_tests == 'true' && matrix.target == 'native'
         run: |
           uv run --frozen python tools/test_verify_artifact_bundle.py
 
       - name: Save build artifacts
-        if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
+        if: needs.changes.outputs.code_tests == 'true' && github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
         uses: actions/cache/save@v5
         with:
           path: |
@@ -261,12 +274,18 @@ jobs:
   windows-native:
     name: test (windows-2022, native)
     needs: changes
-    if: needs.changes.outputs.code_tests == 'true'
     runs-on: windows-2022
     steps:
+      - name: Skip code tests
+        if: needs.changes.outputs.code_tests != 'true'
+        shell: pwsh
+        run: Write-Output "No root code-test paths changed; required check passes without build."
+
       - uses: actions/checkout@v6
+        if: needs.changes.outputs.code_tests == 'true'
 
       - name: Resolve tool versions
+        if: needs.changes.outputs.code_tests == 'true'
         id: tool-versions
         shell: bash
         run: |
@@ -274,6 +293,7 @@ jobs:
           sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
 
       - name: Install intron
+        if: needs.changes.outputs.code_tests == 'true'
         shell: pwsh
         run: |
           gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-x86_64-pc-windows-msvc.zip"
@@ -286,6 +306,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Install toolchains
+        if: needs.changes.outputs.code_tests == 'true'
         shell: pwsh
         run: |
           intron install msvc 2022
@@ -296,6 +317,7 @@ jobs:
           echo "$env:USERPROFILE\.intron\toolchains\ninja\1.13.2" >> $env:GITHUB_PATH
 
       - name: Install exon
+        if: needs.changes.outputs.code_tests == 'true'
         shell: pwsh
         run: |
           gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-x86_64-pc-windows-msvc.zip"
@@ -308,6 +330,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
 
       - name: Build
+        if: needs.changes.outputs.code_tests == 'true'
         shell: pwsh
         run: |
           Invoke-Expression (& intron env | Out-String)
@@ -316,6 +339,7 @@ jobs:
           exon build
 
       - name: Test
+        if: needs.changes.outputs.code_tests == 'true'
         shell: pwsh
         run: |
           Invoke-Expression (& intron env | Out-String)
@@ -324,7 +348,7 @@ jobs:
           exon test
 
       - name: Build file explorer shared module
-        if: needs.changes.outputs.file_explorer_examples == 'true'
+        if: needs.changes.outputs.code_tests == 'true' && needs.changes.outputs.file_explorer_examples == 'true'
         shell: pwsh
         run: |
           Invoke-Expression (& intron env | Out-String)
@@ -334,6 +358,7 @@ jobs:
           exon build
 
       - name: Build native example
+        if: needs.changes.outputs.code_tests == 'true'
         shell: pwsh
         run: |
           Invoke-Expression (& intron env | Out-String)

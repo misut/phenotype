@@ -10,6 +10,8 @@ The initial scope is intentionally narrow:
 - `phenotype doctor` checks repository-local tool and documentation surfaces.
 - `phenotype artifact summary <bundle>` summarizes a debug artifact bundle
   without replacing the Python verifier yet.
+- `phenotype artifact verify <bundle>` runs the uv-managed Python verifier
+  through `mise` and preserves its JSON report shape.
 - `phenotype package inspect <path>` checks the proposed package manifest,
   declared resource counts, referenced `source` files, Pretendard default-font
   policy, asset layout, locale layout, and font layout.
