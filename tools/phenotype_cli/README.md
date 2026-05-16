@@ -12,6 +12,12 @@ The initial scope is intentionally narrow:
   without replacing the Python verifier yet.
 - `phenotype artifact verify <bundle>` runs the uv-managed Python verifier
   through `mise` and preserves its JSON report shape.
+- `phenotype observe <bundle>` emits one output-observation envelope for an
+  artifact bundle. It parses `snapshot.json` in C++, reports semantic tree and
+  platform-runtime presence, material plan counts, material kinds/roles,
+  fallback and backdrop capture reasons, executor summaries, likely
+  layer/pass hints, frame/platform file state, and optional uv-managed verifier
+  output when `--manifest` or `--verify` is supplied.
 - `phenotype artifact verify-glass-showcase` and
   `phenotype artifact verify-file-explorer` run the local contract gates from
   the CLI surface. They are intentionally local-only gates by default because
@@ -97,6 +103,10 @@ mise exec -- exon build
   --profile desktop \
   --view-mode icon \
   --scenario search-active
+.exon/debug/phenotype_cli observe --json /tmp/phenotype-glass-showcase \
+  --manifest ../../examples/glass_showcase/artifact_manifest.json \
+  --expect-platform macos \
+  --require-frame
 .exon/debug/phenotype_cli run glass_showcase \
   --artifact-dir /tmp/phenotype-glass-showcase \
   --artifact-exit \
