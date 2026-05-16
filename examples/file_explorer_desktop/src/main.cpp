@@ -81,19 +81,6 @@ FinderViewMode initial_view_mode() {
     return raw ? view_mode_from_name(raw) : FinderViewMode::Icon;
 }
 
-file_explorer_demo::ExplorerState initial_explorer_state() {
-    auto state = file_explorer_demo::make_state("desktop");
-    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_SCENARIO")) {
-        file_explorer_demo::apply_startup_scenario(state, raw);
-    }
-    return state;
-}
-
-std::string initial_locale() {
-    char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_LOCALE");
-    return raw && *raw ? std::string{raw} : std::string{"en"};
-}
-
 std::string read_text_file(fs::path const& path) {
     auto input = std::ifstream{path, std::ios::binary};
     if (!input)
@@ -101,6 +88,63 @@ std::string read_text_file(fs::path const& path) {
     auto out = std::ostringstream{};
     out << input.rdbuf();
     return out.str();
+}
+
+void apply_startup_inputs(file_explorer_demo::ExplorerState& state,
+                          std::string_view profile) {
+    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_SCENARIO")) {
+        file_explorer_demo::apply_startup_scenario(state, raw);
+    }
+    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_INPUTS")) {
+        if (*raw) {
+            auto parsed = file_explorer_demo::parse_explorer_input_sequence(
+                raw,
+                "PHENOTYPE_FILE_EXPLORER_INPUTS");
+            if (parsed.ok) {
+                file_explorer_demo::apply_explorer_inputs(
+                    state,
+                    parsed.inputs,
+                    profile);
+            } else {
+                state.status = parsed.error;
+                return;
+            }
+        }
+    }
+    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_SCRIPT")) {
+        if (*raw) {
+            auto path = fs::path{raw};
+            auto text = read_text_file(path);
+            if (text.empty()) {
+                state.status = "Input script is empty or unreadable: "
+                    + path.string();
+                return;
+            }
+            auto parsed = file_explorer_demo::parse_explorer_input_lines(
+                text,
+                path.string());
+            if (parsed.ok) {
+                file_explorer_demo::apply_explorer_inputs(
+                    state,
+                    parsed.inputs,
+                    profile);
+            } else {
+                state.status = parsed.error;
+                return;
+            }
+        }
+    }
+}
+
+file_explorer_demo::ExplorerState initial_explorer_state() {
+    auto state = file_explorer_demo::make_state("desktop");
+    apply_startup_inputs(state, "desktop");
+    return state;
+}
+
+std::string initial_locale() {
+    char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_LOCALE");
+    return raw && *raw ? std::string{raw} : std::string{"en"};
 }
 
 fs::path initial_package_root() {

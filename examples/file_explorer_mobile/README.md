@@ -51,6 +51,24 @@ At runtime the example reads `phenotype.package.toml` and locale files from
 `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`, `PHENOTYPE_PACKAGE_ROOT`, or the current
 working directory. `phenotype run file_explorer_mobile` sets the package-root
 environment automatically.
+The same command can feed deterministic native startup input through the shared
+model parser:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli run file_explorer_mobile \
+  --artifact-dir /tmp/phenotype-file-explorer-mobile-input \
+  --artifact-exit \
+  --input open:Documents \
+  --input select:Project\ Notes.txt
+```
+
+For direct launches, `PHENOTYPE_FILE_EXPLORER_INPUTS` accepts newline- or
+semicolon-separated inputs, and `PHENOTYPE_FILE_EXPLORER_SCRIPT` points at the
+same line-based script format used by `phenotype drive file-explorer
+--script`. File reads and environment access remain example edge work; parsing
+and input application stay in `file_explorer_shared`.
 
 The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity, and

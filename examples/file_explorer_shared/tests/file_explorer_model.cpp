@@ -129,6 +129,28 @@ fallback = []
     auto parsed_bad = demo::parse_explorer_input("sort:date");
     assert(!parsed_bad.ok);
     assert(parsed_bad.error.find("sort") != std::string::npos);
+    auto parsed_lines = demo::parse_explorer_input_lines(R"(
+# Native startup script.
+input viewport:760x540@2
+input select:README.txt
+duplicate
+)");
+    assert(parsed_lines.ok);
+    assert(parsed_lines.inputs.size() == 3);
+    assert(parsed_lines.inputs[0].kind == demo::ExplorerInputKind::Viewport);
+    assert(parsed_lines.inputs[1].kind == demo::ExplorerInputKind::SelectEntry);
+    assert(parsed_lines.inputs[2].kind
+           == demo::ExplorerInputKind::DuplicateSelected);
+    auto parsed_sequence =
+        demo::parse_explorer_input_sequence("select:README.txt;duplicate");
+    assert(parsed_sequence.ok);
+    assert(parsed_sequence.inputs.size() == 2);
+    auto parsed_line_error =
+        demo::parse_explorer_input_lines("select:README.txt\nsort:date\n",
+                                         "startup.drive");
+    assert(!parsed_line_error.ok);
+    assert(parsed_line_error.line == 2);
+    assert(parsed_line_error.error.find("startup.drive:2") != std::string::npos);
     auto expected_selected =
         demo::parse_explorer_expectation("selected:README.txt");
     assert(expected_selected.ok);
@@ -149,6 +171,17 @@ fallback = []
     auto root = demo::demo_root(profile);
     std::error_code ec;
     fs::remove_all(root, ec);
+
+    std::string const startup_profile = "test-startup-inputs";
+    fs::remove_all(demo::demo_root(startup_profile), ec);
+    auto startup_state = demo::make_state(startup_profile);
+    demo::apply_explorer_inputs(
+        startup_state,
+        parsed_sequence.inputs,
+        startup_profile);
+    assert(startup_state.selected_name == "README copy.txt");
+    assert(startup_state.last_operation.kind == "file_duplicate");
+    fs::remove_all(startup_state.root, ec);
 
     auto state = demo::make_state(profile);
     assert(state.viewport_width == demo::k_desktop_default_viewport_width);

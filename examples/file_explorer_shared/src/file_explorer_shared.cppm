@@ -129,6 +129,13 @@ struct ExplorerInputParseResult {
     std::string error;
 };
 
+struct ExplorerInputSequenceParseResult {
+    bool ok = false;
+    std::vector<ExplorerInput> inputs;
+    std::string error;
+    std::size_t line = 0;
+};
+
 struct ExplorerViewport {
     int width = 0;
     int height = 0;
@@ -1012,6 +1019,43 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         return require_value(ExplorerInputKind::Scenario);
 
     return input_parse_error("unknown file explorer input: " + name);
+}
+
+inline ExplorerInputSequenceParseResult parse_explorer_input_lines(
+        std::string_view text,
+        std::string_view source_label = "file explorer input script") {
+    auto result = ExplorerInputSequenceParseResult{};
+    auto lines = std::istringstream{std::string{text}};
+    auto line = std::string{};
+    auto line_number = std::size_t{0};
+    while (std::getline(lines, line)) {
+        ++line_number;
+        auto trimmed = trim(line);
+        if (trimmed.empty() || trimmed.starts_with("#"))
+            continue;
+        if (trimmed.starts_with("input "))
+            trimmed = trim(std::string_view{trimmed}.substr(6));
+        auto parsed = parse_explorer_input(trimmed);
+        if (!parsed.ok) {
+            result.ok = false;
+            result.line = line_number;
+            result.error = std::string{source_label}
+                + ":" + std::to_string(line_number)
+                + ": " + parsed.error;
+            return result;
+        }
+        result.inputs.push_back(std::move(parsed.input));
+    }
+    result.ok = true;
+    return result;
+}
+
+inline ExplorerInputSequenceParseResult parse_explorer_input_sequence(
+        std::string_view text,
+        std::string_view source_label = "file explorer input sequence") {
+    auto normalized = std::string{text};
+    std::replace(normalized.begin(), normalized.end(), ';', '\n');
+    return parse_explorer_input_lines(normalized, source_label);
 }
 
 inline void record_operation(
@@ -1952,6 +1996,14 @@ inline void apply_explorer_input(
             apply_startup_scenario(state, input.value);
             return;
     }
+}
+
+inline void apply_explorer_inputs(
+        ExplorerState& state,
+        std::span<ExplorerInput const> inputs,
+        std::string_view profile) {
+    for (auto const& input : inputs)
+        apply_explorer_input(state, input, profile);
 }
 
 inline ExplorerInputTrace explorer_input_trace(

@@ -189,6 +189,9 @@ struct ExampleRunSummary {
     bool run_requested = true;
     bool artifact_requested = false;
     bool artifact_exit = false;
+    std::size_t file_explorer_input_count = 0;
+    std::size_t file_explorer_script_input_count = 0;
+    fs::path file_explorer_script;
     std::optional<std::chrono::milliseconds> run_timeout;
     std::optional<cppx::process::CapturedProcessResult> build_result;
     std::optional<cppx::process::CapturedProcessResult> run_result;
@@ -725,6 +728,15 @@ auto spec() -> cppx::cli::CommandSpec {
                      .arity = cppx::cli::OptionArity::one,
                      .value_name = "mode",
                      .description = "Set PHENOTYPE_ACCESSIBILITY_DISPLAY"},
+                    {.name = "script",
+                     .arity = cppx::cli::OptionArity::one,
+                     .value_name = "path",
+                     .description = "Apply a file explorer input script before startup capture"},
+                    {.name = "input",
+                     .arity = cppx::cli::OptionArity::one,
+                     .repeatable = true,
+                     .value_name = "kind[:value]",
+                     .description = "Apply file explorer input before startup capture"},
                     {.name = "env",
                      .arity = cppx::cli::OptionArity::one,
                      .repeatable = true,
@@ -741,7 +753,7 @@ auto spec() -> cppx::cli::CommandSpec {
                     "Example name such as glass_showcase or path such as examples/file_explorer_desktop.",
                 .examples = {
                     "phenotype run glass_showcase --artifact-dir /tmp/phenotype-glass --artifact-exit",
-                    "phenotype run examples/file_explorer_desktop --env PHENOTYPE_FILE_EXPLORER_VIEW=icon",
+                    "phenotype run examples/file_explorer_desktop --artifact-exit --input select:README.txt",
                 },
             },
             android_command_spec(),
@@ -3037,12 +3049,19 @@ auto example_run_json(ExampleRunSummary const& summary) -> std::string {
             std::chrono::duration_cast<std::chrono::seconds>(
                 *summary.run_timeout).count());
     }
+    auto file_explorer_input = std::format(
+        "{{\"direct_count\":{},\"script_count\":{},\"script\":{}}}",
+        summary.file_explorer_input_count,
+        summary.file_explorer_script_input_count,
+        summary.file_explorer_script.empty()
+            ? std::string{"null"}
+            : json_string(path_string(summary.file_explorer_script)));
 
     return std::format(
         "{{\"schema_version\":1,\"command\":\"run\",\"ok\":{},"
         "\"example\":{},\"example_root\":{},\"package_name\":{},"
         "\"executable\":{},\"build_requested\":{},\"run_requested\":{},"
-        "\"artifact_exit\":{},\"timeout_seconds\":{},"
+        "\"artifact_exit\":{},\"file_explorer_input\":{},\"timeout_seconds\":{},"
         "\"build\":{},\"run_result\":{},\"artifact\":{},\"error\":{}}}",
         summary.ok ? "true" : "false",
         json_string(summary.example),
@@ -3052,6 +3071,7 @@ auto example_run_json(ExampleRunSummary const& summary) -> std::string {
         summary.build_requested ? "true" : "false",
         summary.run_requested ? "true" : "false",
         summary.artifact_exit ? "true" : "false",
+        file_explorer_input,
         timeout_seconds,
         process_result_detail_json(summary.build_result),
         process_result_detail_json(summary.run_result),
@@ -3102,6 +3122,22 @@ void print_example_run(ExampleRunSummary const& summary) {
                 : std::format("exit {}", summary.build_result->exit_code);
         }
         lines.push_back({.label = "build", .value = value, .status = status});
+    }
+    if (summary.file_explorer_input_count > 0
+        || summary.file_explorer_script_input_count > 0
+        || !summary.file_explorer_script.empty()) {
+        auto value = std::format(
+            "direct={} script_inputs={} script={}",
+            summary.file_explorer_input_count,
+            summary.file_explorer_script_input_count,
+            summary.file_explorer_script.empty()
+                ? std::string{"<none>"}
+                : path_string(summary.file_explorer_script));
+        lines.push_back({
+            .label = "input",
+            .value = std::move(value),
+            .status = cppx::terminal::StatusKind::ok,
+        });
     }
     if (summary.run_requested) {
         auto status = cppx::terminal::StatusKind::skip;
@@ -4163,28 +4199,23 @@ auto parse_explorer_input_script(fs::path const& path)
             std::format("input script does not exist: {}", path_string(path))};
     }
     auto text = read_text_file(path);
-    auto inputs = std::vector<file_explorer_demo::ExplorerInput>{};
-    auto lines = std::istringstream{text};
-    auto line = std::string{};
-    auto line_number = std::size_t{0};
-    while (std::getline(lines, line)) {
-        ++line_number;
-        auto trimmed = trim_copy(line);
-        if (trimmed.empty() || trimmed.starts_with("#"))
-            continue;
-        if (trimmed.starts_with("input "))
-            trimmed = trim_copy(std::string_view{trimmed}.substr(6));
-        auto parsed = file_explorer_demo::parse_explorer_input(trimmed);
-        if (!parsed.ok) {
-            return std::unexpected{std::format(
-                "{}:{}: {}",
-                path_string(path),
-                line_number,
-                parsed.error)};
-        }
-        inputs.push_back(std::move(parsed.input));
+    auto parsed = file_explorer_demo::parse_explorer_input_lines(
+        text,
+        path_string(path));
+    if (!parsed.ok)
+        return std::unexpected{parsed.error};
+    return std::move(parsed.inputs);
+}
+
+auto join_explorer_input_lines(std::span<std::string const> inputs)
+    -> std::string {
+    auto out = std::string{};
+    for (auto const& input : inputs) {
+        if (!out.empty())
+            out.push_back('\n');
+        out += input;
     }
-    return inputs;
+    return out;
 }
 
 auto parse_glass_input_script(fs::path const& path)
@@ -4579,6 +4610,57 @@ int run_example(cppx::cli::Invocation const& invocation) {
             && !env->contains("PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT")) {
             (*env)["PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT"] = package_root;
         }
+    }
+    auto const is_file_explorer_example =
+        summary.package_name.starts_with("file_explorer_");
+    auto direct_inputs = invocation.values("input");
+    auto script_input = invocation.value("script");
+    if ((!direct_inputs.empty() || script_input) && !is_file_explorer_example) {
+        return print_error(
+            "run",
+            "--input and --script are only supported for file_explorer examples",
+            invocation.has("json"));
+    }
+    if (!direct_inputs.empty()) {
+        if (env->contains("PHENOTYPE_FILE_EXPLORER_INPUTS")) {
+            return print_error(
+                "run",
+                "--input cannot be combined with PHENOTYPE_FILE_EXPLORER_INPUTS",
+                invocation.has("json"));
+        }
+        for (auto const& raw : direct_inputs) {
+            auto parsed = file_explorer_demo::parse_explorer_input(raw);
+            if (!parsed.ok) {
+                return print_error(
+                    "run",
+                    parsed.error,
+                    invocation.has("json"));
+            }
+        }
+        summary.file_explorer_input_count = direct_inputs.size();
+        (*env)["PHENOTYPE_FILE_EXPLORER_INPUTS"] =
+            join_explorer_input_lines(direct_inputs);
+    }
+    if (script_input) {
+        if (env->contains("PHENOTYPE_FILE_EXPLORER_SCRIPT")) {
+            return print_error(
+                "run",
+                "--script cannot be combined with PHENOTYPE_FILE_EXPLORER_SCRIPT",
+                invocation.has("json"));
+        }
+        auto script_path = fs::path{absolute_path_string(
+            fs::path{std::string{*script_input}})};
+        auto parsed = parse_explorer_input_script(script_path);
+        if (!parsed) {
+            return print_error(
+                "run",
+                parsed.error(),
+                invocation.has("json"));
+        }
+        summary.file_explorer_script = script_path;
+        summary.file_explorer_script_input_count = parsed->size();
+        (*env)["PHENOTYPE_FILE_EXPLORER_SCRIPT"] =
+            path_string(summary.file_explorer_script);
     }
 
     if (auto value = invocation.value("artifact-dir")) {
