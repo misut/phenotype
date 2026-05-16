@@ -54,7 +54,13 @@ jobs:
             esac
 
             case "$path" in
-              src/*|examples/glass_showcase/*|tools/verify_artifact_bundle.py|tools/verify_glass_showcase*.sh|pyproject.toml|uv.lock|.python-version|exon.toml|exon.lock|mise.toml|.intron.toml)
+              examples/glass_showcase/*.drive)
+                continue
+                ;;
+            esac
+
+            case "$path" in
+              src/*|examples/glass_showcase/*|examples/glass_showcase_shared/*|tools/verify_artifact_bundle.py|tools/verify_glass_showcase*.sh|pyproject.toml|uv.lock|.python-version|exon.toml|exon.lock|mise.toml|.intron.toml)
                 artifact_build=true
                 ;;
             esac
@@ -179,8 +185,9 @@ jobs:
         with:
           path: |
             examples/glass_showcase/.exon
+            examples/glass_showcase_shared/.exon
             ~/.exon/cache
-          key: main-artifact-${{ runner.os }}-${{ hashFiles('mise.toml', 'examples/glass_showcase/exon.toml', 'exon.lock') }}
+          key: main-artifact-${{ runner.os }}-${{ hashFiles('mise.toml', 'examples/glass_showcase/exon.toml', 'examples/glass_showcase_shared/exon.toml', 'exon.lock') }}
           restore-keys: |
             main-artifact-${{ runner.os }}-
 
@@ -223,5 +230,6 @@ jobs:
         with:
           path: |
             examples/glass_showcase/.exon
+            examples/glass_showcase_shared/.exon
             ~/.exon/cache
           key: ${{ steps.build-cache.outputs.cache-primary-key }}

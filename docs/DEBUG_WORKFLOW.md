@@ -671,7 +671,9 @@ Run them before changing material rendering, artifact manifests, or verifier
 expectations. PR CI deliberately does not run the slow macOS glass showcase
 capture; docs-only and tools-only PRs avoid the root C++ test matrix, docs
 changes run the docs WASI build, and tooling changes run the verifier's Python
-contract checks. The main-branch push workflow only runs docs builds and native
+contract checks. Shared model-only file explorer and glass showcase changes run
+their targeted shared-package tests plus CLI JSON smoke instead of the full
+root matrix. The main-branch push workflow only runs docs builds and native
 artifact builds; it does not repeat root code tests or slow glass artifact
 capture after merge. WASI root tests and docs builds run on Linux runners.
 Workflow-file changes deliberately enable code, docs, and tooling gates so

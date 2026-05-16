@@ -19,6 +19,7 @@ jobs:
       cli_check: ${{ steps.classify.outputs.cli_check }}
       package_resource_check: ${{ steps.classify.outputs.package_resource_check }}
       file_explorer_examples: ${{ steps.classify.outputs.file_explorer_examples }}
+      glass_showcase_examples: ${{ steps.classify.outputs.glass_showcase_examples }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -45,6 +46,7 @@ jobs:
           cli_check=false
           package_resource_check=false
           file_explorer_examples=false
+          glass_showcase_examples=false
 
           for path in "${files[@]}"; do
             case "$path" in
@@ -97,6 +99,22 @@ jobs:
             esac
 
             case "$path" in
+              examples/glass_showcase_shared/*)
+                cli_check=true
+                glass_showcase_examples=true
+                continue
+                ;;
+            esac
+
+            case "$path" in
+              examples/glass_showcase/*.drive)
+                cli_check=true
+                glass_showcase_examples=true
+                continue
+                ;;
+            esac
+
+            case "$path" in
               tools/*|pyproject.toml|uv.lock|.python-version)
                 tools_check=true
                 ;;
@@ -112,6 +130,12 @@ jobs:
             case "$path" in
               examples/file_explorer_*/*)
                 file_explorer_examples=true
+                ;;
+            esac
+
+            case "$path" in
+              examples/glass_showcase/*)
+                glass_showcase_examples=true
                 ;;
             esac
 
@@ -136,6 +160,7 @@ jobs:
             echo "cli_check=$cli_check"
             echo "package_resource_check=$package_resource_check"
             echo "file_explorer_examples=$file_explorer_examples"
+            echo "glass_showcase_examples=$glass_showcase_examples"
           } >> "$GITHUB_OUTPUT"
 
           printf 'Changed files:\n'
@@ -144,8 +169,8 @@ jobs:
           else
             printf '  %s\n' "${files[@]}"
           fi
-          printf 'code_tests=%s docs_build=%s tools_check=%s cli_check=%s package_resource_check=%s file_explorer_examples=%s\n' \
-            "$code_tests" "$docs_build" "$tools_check" "$cli_check" "$package_resource_check" "$file_explorer_examples"
+          printf 'code_tests=%s docs_build=%s tools_check=%s cli_check=%s package_resource_check=%s file_explorer_examples=%s glass_showcase_examples=%s\n' \
+            "$code_tests" "$docs_build" "$tools_check" "$cli_check" "$package_resource_check" "$file_explorer_examples" "$glass_showcase_examples"
 
   test:
     name: test (${{ matrix.os }}, ${{ matrix.target }})
@@ -282,6 +307,16 @@ jobs:
           cd examples/file_explorer_shared
           exon test
 
+      - name: Test glass showcase shared module
+        if: needs.changes.outputs.code_tests == 'true' && matrix.target == 'native' && needs.changes.outputs.glass_showcase_examples == 'true'
+        env:
+          EXON_CXXFLAGS: ${{ matrix.cxxflags }}
+          EXON_LDFLAGS: ${{ matrix.ldflags }}
+        run: |
+          eval "$(intron env)"
+          cd examples/glass_showcase_shared
+          exon test
+
       - name: Test artifact verifier contract
         if: needs.changes.outputs.code_tests == 'true' && matrix.target == 'native'
         run: |
@@ -400,6 +435,16 @@ jobs:
           Set-Location examples/file_explorer_shared
           exon build
 
+      - name: Build glass showcase shared module
+        if: needs.changes.outputs.code_tests == 'true' && needs.changes.outputs.glass_showcase_examples == 'true'
+        shell: pwsh
+        run: |
+          Invoke-Expression (& intron env | Out-String)
+          $env:CC = "cl"
+          $env:CXX = "cl"
+          Set-Location examples/glass_showcase_shared
+          exon build
+
       - name: Build native example
         if: needs.changes.outputs.code_tests == 'true'
         shell: pwsh
@@ -448,7 +493,7 @@ jobs:
           path: |
             tools/phenotype_cli/.exon
             ~/.exon/cache
-          key: cli-package-${{ runner.os }}-${{ hashFiles('mise.toml', 'tools/phenotype_cli/exon.toml', 'examples/file_explorer_shared/exon.toml', 'packages/phenotype_resources/exon.toml') }}
+          key: cli-package-${{ runner.os }}-${{ hashFiles('mise.toml', 'tools/phenotype_cli/exon.toml', 'examples/file_explorer_shared/exon.toml', 'examples/glass_showcase_shared/exon.toml', 'packages/phenotype_resources/exon.toml') }}
           restore-keys: |
             cli-package-${{ runner.os }}-
 
@@ -507,6 +552,13 @@ jobs:
           cd examples/file_explorer_shared
           exon test
 
+      - name: Test glass showcase shared module
+        if: needs.changes.outputs.glass_showcase_examples == 'true'
+        run: |
+          eval "$(intron env)"
+          cd examples/glass_showcase_shared
+          exon test
+
       - name: Validate CLI JSON commands
         run: |
           set -euo pipefail
@@ -533,6 +585,11 @@ jobs:
           test -f "$bundle_root/mobile/fonts/pretendard.alias.toml"
           "$cli" drive file-explorer --json --input select:README.txt --input duplicate --input delete | json_tool >/dev/null
           "$cli" drive file-explorer --json --profile mobile --scenario created-preview | json_tool >/dev/null
+          "$cli" drive glass-showcase --json \
+            --script examples/glass_showcase/glass_showcase.drive \
+            --expect backdrop:high \
+            --expect density:dense \
+            --expect material-count:7 | json_tool >/dev/null
           script="$RUNNER_TEMP/file-explorer.drive"
           printf '%s\n' \
             '# deterministic CLI input script' \
