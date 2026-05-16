@@ -808,6 +808,24 @@ void test_material_runtime_record_json_contract() {
     assert(container.at("participates").as_bool() == false);
     assert(container.at("shared_backdrop_scope").as_bool() == false);
     assert(container.at("shape_union_expected").as_bool() == false);
+    auto const& reference_model = obj.at("reference_model").as_object();
+    assert(reference_model.at("technology").as_string() == "liquid-glass");
+    assert(reference_model.at("variant").as_string() == "thin");
+    assert(reference_model.at("shape").as_string() == "rounded-rectangle");
+    assert(reference_model.at("shape_scope").as_string() == "view-bounds");
+    assert(reference_model.at("blending_scope").as_string()
+           == "deterministic-fallback");
+    assert(reference_model.at("semantic_thickness").as_string() == "thin");
+    assert(reference_model.at("view_bounds_anchored").as_bool() == true);
+    assert(reference_model.at("shape_matches_geometry").as_bool() == true);
+    assert(reference_model.at("tint_applied").as_bool() == true);
+    assert(reference_model.at("interactive_response").as_bool() == false);
+    assert(reference_model.at("container_grouped").as_bool() == false);
+    assert(reference_model.at("container_union").as_bool() == false);
+    assert(reference_model.at("container_morphing").as_bool() == false);
+    assert(reference_model.at("legibility_preserved").as_bool() == true);
+    assert(reference_model.at("vibrancy_expected").as_bool() == false);
+    assert(reference_model.at("deterministic_degradation").as_bool() == true);
     auto const& shape = obj.at("shape").as_object();
     assert(shape.at("valid").as_bool() == true);
     assert(shape.at("rounded").as_bool() == true);

@@ -1261,6 +1261,25 @@ void test_material_planner_backdrop_and_fallback_paths() {
            >= fallback_plan.foreground.minimum_contrast_ratio);
     assert(fallback_plan.foreground.accent_contrast_ratio
            >= fallback_plan.foreground.minimum_contrast_ratio);
+    assert(std::string(fallback_plan.reference_model.technology)
+           == "liquid-glass");
+    assert(std::string(fallback_plan.reference_model.variant) == "regular");
+    assert(std::string(fallback_plan.reference_model.shape)
+           == "rounded-rectangle");
+    assert(std::string(fallback_plan.reference_model.shape_scope)
+           == "view-bounds");
+    assert(std::string(fallback_plan.reference_model.blending_scope)
+           == "deterministic-fallback");
+    assert(fallback_plan.reference_model.view_bounds_anchored);
+    assert(fallback_plan.reference_model.shape_matches_geometry);
+    assert(fallback_plan.reference_model.tint_applied);
+    assert(!fallback_plan.reference_model.interactive_response);
+    assert(!fallback_plan.reference_model.container_grouped);
+    assert(!fallback_plan.reference_model.container_union);
+    assert(!fallback_plan.reference_model.container_morphing);
+    assert(fallback_plan.reference_model.legibility_preserved);
+    assert(!fallback_plan.reference_model.vibrancy_expected);
+    assert(fallback_plan.reference_model.deterministic_degradation);
     assert(std::string(fallback_plan.verifier.likely_layer)
            == "material-fallback-pass");
     assert(std::string(fallback_plan.verifier.likely_pass)
@@ -1413,6 +1432,20 @@ void test_material_planner_backdrop_and_fallback_paths() {
            >= glass_plan.foreground.minimum_contrast_ratio);
     assert(glass_plan.foreground.accent_contrast_ratio
            >= glass_plan.foreground.minimum_contrast_ratio);
+    assert(std::string(glass_plan.reference_model.blending_scope)
+           == "sampled-backdrop");
+    assert(std::string(glass_plan.reference_model.semantic_thickness)
+           == "regular");
+    assert(glass_plan.reference_model.view_bounds_anchored);
+    assert(glass_plan.reference_model.shape_matches_geometry);
+    assert(glass_plan.reference_model.tint_applied);
+    assert(!glass_plan.reference_model.interactive_response);
+    assert(!glass_plan.reference_model.container_grouped);
+    assert(!glass_plan.reference_model.container_union);
+    assert(!glass_plan.reference_model.container_morphing);
+    assert(glass_plan.reference_model.legibility_preserved);
+    assert(glass_plan.reference_model.vibrancy_expected);
+    assert(glass_plan.reference_model.deterministic_degradation);
     assert(std::string(glass_plan.verifier.likely_layer)
            == "material-blur-pass");
     assert(std::string(glass_plan.verifier.likely_pass)
@@ -1458,6 +1491,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(container_plan.resource_budget.max_container_spacing == 24.0f);
     assert(container_plan.verifier.require_container_identity);
     assert(container_plan.verifier.require_container_morph_contract);
+    assert(container_plan.reference_model.interactive_response);
+    assert(container_plan.reference_model.container_grouped);
+    assert(container_plan.reference_model.container_union);
+    assert(container_plan.reference_model.container_morphing);
 
     MaterialRequest clamped_shape_request = request;
     clamped_shape_request.geometry.radius = 200.0f;
@@ -1683,6 +1720,11 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!invalid_plan.shape.valid);
     assert(!invalid_plan.shape.rounded);
     assert(invalid_plan.shape.effective_radius == 0.0f);
+    assert(std::string(invalid_plan.reference_model.shape) == "invalid");
+    assert(!invalid_plan.reference_model.view_bounds_anchored);
+    assert(!invalid_plan.reference_model.shape_matches_geometry);
+    assert(!invalid_plan.reference_model.tint_applied);
+    assert(invalid_plan.reference_model.deterministic_degradation);
     assert(!invalid_plan.decision_trace.has_geometry);
     assert(!invalid_plan.decision_trace.has_material);
     assert(std::string(invalid_plan.decision_trace.first_blocker)

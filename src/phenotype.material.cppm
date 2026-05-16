@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 14;
+inline constexpr std::uint32_t material_plan_contract_version = 15;
 inline constexpr unsigned int material_max_execution_stages = 4;
 
 struct MaterialGeometry {
@@ -260,6 +260,25 @@ struct MaterialContainerAnalysis {
     bool shape_union_expected = false;
 };
 
+struct MaterialReferenceModel {
+    char const* technology = "liquid-glass";
+    char const* variant = "none";
+    char const* shape = "none";
+    char const* shape_scope = "view-bounds";
+    char const* blending_scope = "none";
+    char const* semantic_thickness = "none";
+    bool view_bounds_anchored = false;
+    bool shape_matches_geometry = false;
+    bool tint_applied = false;
+    bool interactive_response = false;
+    bool container_grouped = false;
+    bool container_union = false;
+    bool container_morphing = false;
+    bool legibility_preserved = true;
+    bool vibrancy_expected = false;
+    bool deterministic_degradation = true;
+};
+
 struct MaterialDecisionTrace {
     bool has_geometry = false;
     bool has_material = false;
@@ -291,6 +310,7 @@ struct MaterialPlan {
     MaterialShapeAnalysis shape{};
     MaterialRenderTargetAnalysis render_target{};
     MaterialContainerAnalysis container{};
+    MaterialReferenceModel reference_model{};
     MaterialDecisionTrace decision_trace{};
     float opacity = 0.0f;
     float blur_radius = 0.0f;
@@ -1392,6 +1412,54 @@ inline char const* material_plan_id(MaterialKind kind,
     }
 }
 
+inline char const* material_reference_shape_name(
+        MaterialShapeAnalysis shape) noexcept {
+    if (!shape.valid)
+        return "invalid";
+    return shape.rounded ? "rounded-rectangle" : "rectangle";
+}
+
+inline char const* material_reference_blending_scope(
+        MaterialPlan const& plan) noexcept {
+    if (plan.kind == MaterialKind::None)
+        return "none";
+    if (plan.backdrop_sampling)
+        return "sampled-backdrop";
+    if (plan.fallback())
+        return "deterministic-fallback";
+    return "none";
+}
+
+inline MaterialReferenceModel material_resolve_reference_model(
+        MaterialPlan const& plan) noexcept {
+    MaterialReferenceModel model{};
+    model.variant = material_kind_name(plan.kind);
+    model.shape = material_reference_shape_name(plan.shape);
+    model.blending_scope = material_reference_blending_scope(plan);
+    model.semantic_thickness = material_kind_name(plan.kind);
+    model.view_bounds_anchored = plan.kind != MaterialKind::None
+        && plan.shape.valid;
+    model.shape_matches_geometry = model.view_bounds_anchored
+        && plan.shape.effective_radius <= plan.shape.radius_limit;
+    model.tint_applied = plan.kind != MaterialKind::None
+        && plan.tint.a > 0;
+    model.interactive_response = plan.container.interactive;
+    model.container_grouped = plan.container.participates;
+    model.container_union = plan.container.shape_union_expected;
+    model.container_morphing = plan.container.morph_transitions;
+    model.legibility_preserved =
+        plan.foreground.primary_contrast_ratio
+            >= plan.foreground.minimum_contrast_ratio
+        && plan.foreground.secondary_contrast_ratio
+            >= plan.foreground.minimum_contrast_ratio
+        && plan.foreground.accent_contrast_ratio
+            >= plan.foreground.minimum_contrast_ratio;
+    model.vibrancy_expected = plan.foreground.uses_vibrancy;
+    model.deterministic_degradation =
+        plan.resource_budget.deterministic_fallback;
+    return model;
+}
+
 inline MaterialPlan plan_material_surface(MaterialRequest request,
                                           MaterialEnvironment environment) noexcept {
     MaterialPlan plan{};
@@ -1584,6 +1652,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan,
         style,
         environment.capabilities);
+    plan.reference_model = material_resolve_reference_model(plan);
 
     plan.plan_id = material_plan_id(style.kind, plan.backdrop_sampling);
     if (has_material && plan.backdrop_sampling && !plan.fallback()) {

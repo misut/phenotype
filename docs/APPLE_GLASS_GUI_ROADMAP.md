@@ -163,15 +163,32 @@ accepts immutable inputs:
 - quality policy
 - accessibility display inputs
 
+The current reference alignment follows Apple's Liquid Glass documentation:
+custom views apply glass to an explicit view shape with optional tint and
+interactivity, related glass surfaces should be grouped so the system can
+combine and morph effects efficiently, HIG materials are semantic choices that
+must preserve legibility and vibrancy, and Metal work must remain bounded by
+runtime capability/resource limits. The corresponding phenotype fields live in
+the pure `MaterialPlan.reference_model`; backend adapters only execute or
+serialize the result.
+
 The returned `MaterialPlan` describes the source command descriptor, blur
 radius, tint, saturation, luminance curve, edge highlight, noise/dither,
 shadow, material container analysis, pure shape analysis, backdrop sampling,
 fallback path, debug metadata, resolved quality policy, pass expectations,
 sampling kernel, foreground legibility/vibrancy recommendation, resource
-budgets, and verifier expectations. The plan also carries a
+budgets, a pure Apple reference alignment model, and verifier expectations. The
+plan also carries a
 `luminance_curve` contract: sampled glass uses the backdrop-driven
 `adaptive-backdrop-luma` curve, while deterministic fallback uses
 `fallback-flat`.
+`MaterialPlan.reference_model` maps the current Apple references into a
+backend-independent product contract: Liquid Glass is bound to a view's shape,
+uses semantic clear/thin/regular/thick thickness, may apply tint and
+interaction, may be grouped for container/union/morph behavior, must preserve
+foreground legibility/vibrancy expectations, and must degrade deterministically
+when backdrop blur is unavailable. The macOS, Windows, Android, and WASI
+adapters consume or serialize this resolved model; they do not own the policy.
 The current sampled-glass kernel is a pure `weighted-5x5-manhattan` descriptor
 with the resolved tap count, kernel radius, blur step scale, and weight profile;
 fallback plans serialize the inactive `none` kernel. This keeps blur spread and
