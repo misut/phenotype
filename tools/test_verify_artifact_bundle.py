@@ -203,6 +203,7 @@ def material_plan(
             "min_unique_colors": 2,
             "region_name": "regular-legibility-backdrop",
             "likely_layer": "material-fallback-pass",
+            "likely_pass": "translucent-rounded-rect",
         },
         "passes": [primary],
     }
@@ -279,6 +280,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "min_luma_delta": 8.0,
         "min_unique_colors": 4,
         "likely_layer": "material-blur-pass",
+        "likely_pass": "backdrop-sample-blur",
     })
     return plan
 
@@ -945,6 +947,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "verifier_region_layers": {
                     "regular-legibility-backdrop": "material-fallback-pass",
                 },
+                "verifier_region_passes": {
+                    "regular-legibility-backdrop": "translucent-rounded-rect",
+                },
             },
         }
         code, report = self.run_verifier(snapshot(material_plan()), manifest)
@@ -969,6 +974,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["verifier_profiles"],
             {"regular-legibility-backdrop": 1})
+        self.assertEqual(
+            report["material_plans"]["region_passes"],
+            {"regular-legibility-backdrop": "translucent-rounded-rect"})
         self.assertEqual(
             report["material_plans"]["region_layers"],
             {"regular-legibility-backdrop": "material-fallback-pass"})
@@ -1048,6 +1056,28 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             ".verifier.likely_layer")
         self.assertEqual(failure["expected"], "material-fallback-pass")
         self.assertEqual(failure["actual"], "material-blur-pass")
+        self.assertEqual(failure["likely_pass"], "translucent-rounded-rect")
+        self.assertIn("primary_pass", failure["hint"])
+
+    def test_verifier_pass_mismatch_points_to_primary_pass(self) -> None:
+        plan = material_plan()
+        verifier_contract = plan["verifier"]
+        assert isinstance(verifier_contract, dict)
+        verifier_contract["likely_pass"] = "backdrop-sample-blur"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material verifier likely pass matches primary pass"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".verifier.likely_pass")
+        self.assertEqual(failure["expected"], "translucent-rounded-rect")
+        self.assertEqual(failure["actual"], "backdrop-sample-blur")
         self.assertEqual(failure["likely_pass"], "translucent-rounded-rect")
         self.assertIn("primary_pass", failure["hint"])
 

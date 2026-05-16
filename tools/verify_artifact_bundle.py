@@ -121,7 +121,7 @@ ALLOWED_MATERIAL_FOREGROUND_SOURCES = {
     "theme",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 10
+MATERIAL_PLAN_CONTRACT_VERSION = 11
 
 
 def suggested_action_for_failure(
@@ -186,7 +186,7 @@ def suggested_action_for_failure(
     if likely_layer == "material-verifier":
         return (
             "Inspect MaterialPlan.verifier, semantic verifier_profile, and "
-            "primary_pass.likely_layer.")
+            "primary_pass.likely_layer/name.")
     if likely_layer == "material-pass":
         return (
             "Inspect MaterialPlan.primary_pass and renderer.material_plans[].passes "
@@ -1000,6 +1000,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "verifier_require_container_morph_contract",
         "verifier_profiles",
         "verifier_region_layers",
+        "verifier_region_passes",
     }
     unknown = sorted(set(value) - allowed)
     if unknown:
@@ -1115,6 +1116,11 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             value["verifier_region_layers"],
             "require_material_plan_summary.verifier_region_layers",
             ALLOWED_MATERIAL_LIKELY_LAYERS)
+    if "verifier_region_passes" in value:
+        spec["verifier_region_passes"] = string_string_map(
+            value["verifier_region_passes"],
+            "require_material_plan_summary.verifier_region_passes",
+            ALLOWED_MATERIAL_PASS_NAMES)
     return spec
 
 
@@ -1732,6 +1738,7 @@ MATERIAL_VERIFIER_FIELDS = (
     "min_unique_colors",
     "region_name",
     "likely_layer",
+    "likely_pass",
 )
 MATERIAL_PASS_FIELDS = (
     "name",
@@ -1831,6 +1838,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "command_descriptors": [],
         "contract_versions": {},
         "region_layers": {},
+        "region_passes": {},
         "verifier_profiles": {},
         "verifier_require_backdrop_source": 0,
         "verifier_require_edge_highlight": 0,
@@ -3365,14 +3373,14 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         verifier_values[key] = value
                         if value:
                             summary[key.replace("require_", "verifier_require_")] += 1
-                elif key in ("region_name", "likely_layer"):
+                elif key in ("region_name", "likely_layer", "likely_pass"):
                     value = check_string_field(
                         report,
                         verifier,
                         key,
                         f"{plan_path}.verifier",
                         likely_layer=likely_layer,
-                        hint="Verifier expectations must name the failing region/layer.")
+                        hint="Verifier expectations must name the failing region/layer/pass.")
                     if isinstance(value, str):
                         verifier_values[key] = value
                         if key == "likely_layer":
@@ -3387,6 +3395,19 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                                     "Verifier likely layers should stay aligned "
                                     "with material pass layer names."),
                                 record_success=False)
+                        if key == "likely_pass":
+                            report.check(
+                                "material verifier likely pass is known",
+                                value in ALLOWED_MATERIAL_PASS_NAMES,
+                                path=f"{plan_path}.verifier.likely_pass",
+                                expected=sorted(ALLOWED_MATERIAL_PASS_NAMES),
+                                actual=value,
+                                likely_layer=likely_layer,
+                                likely_pass=value,
+                                hint=(
+                                    "Verifier likely passes should stay aligned "
+                                    "with MaterialPlan.primary_pass names."),
+                                record_success=False)
                 else:
                     value = check_number_field(
                         report,
@@ -3400,11 +3421,14 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         verifier_values[key] = value
             region_name = string_at(verifier, "region_name")
             region_layer = string_at(verifier, "likely_layer")
+            region_pass = string_at(verifier, "likely_pass")
             if region_name:
                 profiles = summary["verifier_profiles"]
                 profiles[region_name] = profiles.get(region_name, 0) + 1
             if region_name and region_layer:
                 summary["region_layers"][region_name] = region_layer
+            if region_name and region_pass:
+                summary["region_passes"][region_name] = region_pass
             if "require_backdrop_source" in verifier_values:
                 expected = backdrop_sampling is True
                 report.check(
@@ -3509,6 +3533,20 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         hint=(
                             "Verifier failures should point at the same "
                             "likely layer as MaterialPlan.primary_pass."),
+                        record_success=False)
+                expected_pass = string_at(primary_pass_for_verifier, "name")
+                if expected_pass and "likely_pass" in verifier_values:
+                    report.check(
+                        "material verifier likely pass matches primary pass",
+                        verifier_values["likely_pass"] == expected_pass,
+                        path=f"{plan_path}.verifier.likely_pass",
+                        expected=expected_pass,
+                        actual=verifier_values["likely_pass"],
+                        likely_layer=likely_layer,
+                        likely_pass=expected_pass,
+                        hint=(
+                            "Verifier failures should point at the same "
+                            "pass name as MaterialPlan.primary_pass."),
                         record_success=False)
 
         quality_policy = check_object_field(
@@ -4309,6 +4347,9 @@ def check_material_plan_summary_requirements(
         "verifier_region_layers": (
             "material-verifier",
             "Inspect MaterialPlan.verifier.likely_layer and primary_pass.likely_layer."),
+        "verifier_region_passes": (
+            "material-verifier",
+            "Inspect MaterialPlan.verifier.likely_pass and primary_pass.name."),
         "foreground_schemes": (
             "material-foreground",
             "Inspect MaterialPlan.foreground.scheme and pure contrast policy."),
@@ -4336,6 +4377,7 @@ def check_material_plan_summary_requirements(
             "decision_blockers",
             "verifier_profiles",
             "verifier_region_layers",
+            "verifier_region_passes",
             "foreground_schemes",
             "foreground_sources"):
         if field in spec:
@@ -4379,6 +4421,9 @@ def check_material_plan_summary_requirements(
             elif field == "verifier_region_layers":
                 actual = summary.get("region_layers")
                 summary_path = f"{base_path}.region_layers"
+            elif field == "verifier_region_passes":
+                actual = summary.get("region_passes")
+                summary_path = f"{base_path}.region_passes"
             elif field in ("foreground_schemes", "foreground_sources"):
                 foreground_summary = summary.get("foreground")
                 if not isinstance(foreground_summary, dict):
@@ -5356,13 +5401,18 @@ def verify(args: argparse.Namespace) -> int:
                 region["min_unique_colors"] = min_unique
                 pixel_regions.append(region)
                 region_layers: JsonObject = {}
+                region_passes: JsonObject = {}
                 if material_plan_summary is not None:
                     layers = material_plan_summary.get("region_layers")
                     if isinstance(layers, dict):
                         region_layers = layers
+                    passes = material_plan_summary.get("region_passes")
+                    if isinstance(passes, dict):
+                        region_passes = passes
                 likely_layer = str(region_layers.get(
                     name,
                     "material-or-backdrop-pass"))
+                likely_pass = str(region_passes.get(name, ""))
                 report.check(
                     f"pixel region is non-empty: {name}",
                     region["sampled_pixels"] > 0 and region["width"] > 0 and region["height"] > 0,
@@ -5382,6 +5432,7 @@ def verify(args: argparse.Namespace) -> int:
                     actual=region,
                     region=name,
                     likely_layer=likely_layer,
+                    likely_pass=likely_pass,
                     hint="If this is a material region, inspect renderer.material_plans and backdrop pass output.")
                 report.check(
                     f"pixel region has color variety: {name}",
@@ -5392,6 +5443,7 @@ def verify(args: argparse.Namespace) -> int:
                     actual=region,
                     region=name,
                     likely_layer=likely_layer,
+                    likely_pass=likely_pass,
                     hint="A flat region usually means the fallback layer or capture pass replaced the expected scene detail.")
             except ValueError as exc:
                 report.check(
@@ -5442,10 +5494,14 @@ def verify(args: argparse.Namespace) -> int:
             if not isinstance(actual, (int, float)) or isinstance(actual, bool):
                 continue
             likely_layer = "material-or-backdrop-pass"
+            likely_pass = ""
             if material_plan_summary is not None:
                 layers = material_plan_summary.get("region_layers")
                 if isinstance(layers, dict):
                     likely_layer = str(layers.get(region_name, likely_layer))
+                passes = material_plan_summary.get("region_passes")
+                if isinstance(passes, dict):
+                    likely_pass = str(passes.get(region_name, likely_pass))
             for bound, symbol in (("gte", ">="), ("lte", "<=")):
                 if bound not in spec:
                     continue
@@ -5460,6 +5516,7 @@ def verify(args: argparse.Namespace) -> int:
                     actual=region,
                     region=region_name,
                     likely_layer=likely_layer,
+                    likely_pass=likely_pass,
                     hint=(
                         "For blur probes, inspect renderer.material_plans, "
                         "the backdrop sample pass, and whether the manifest "
@@ -5525,10 +5582,14 @@ def verify(args: argparse.Namespace) -> int:
             ):
                 continue
             likely_layer = "material-or-backdrop-pass"
+            likely_pass = ""
             if material_plan_summary is not None:
                 layers = material_plan_summary.get("region_layers")
                 if isinstance(layers, dict):
                     likely_layer = str(layers.get(region_name, likely_layer))
+                passes = material_plan_summary.get("region_passes")
+                if isinstance(passes, dict):
+                    likely_pass = str(passes.get(region_name, likely_pass))
             for bound, symbol in (("gte_ratio", ">="), ("lte_ratio", "<=")):
                 if bound not in spec:
                     continue
@@ -5566,6 +5627,7 @@ def verify(args: argparse.Namespace) -> int:
                     },
                     region=region_name,
                     likely_layer=likely_layer,
+                    likely_pass=likely_pass,
                     hint=(
                         "For blur comparisons, the material probe should be "
                         "smoother than the named backdrop reference; inspect "

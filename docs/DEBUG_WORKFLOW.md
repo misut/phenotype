@@ -212,10 +212,12 @@ same artifact schema version without requiring a per-plan object.
 The adjacent `verifier` object is also derived from the same plan:
 `require_backdrop_source` mirrors `backdrop_sampling`,
 `require_edge_highlight` is true only for non-fallback plans with a positive
-edge highlight, and `likely_layer` must match `primary_pass.likely_layer`.
-Manifests can pin `verifier_profiles` and `verifier_region_layers` in
+edge highlight, `likely_layer` must match `primary_pass.likely_layer`, and
+`likely_pass` must match `primary_pass.name`.
+Manifests can pin `verifier_profiles`, `verifier_region_layers`, and
+`verifier_region_passes` in
 `require_material_plan_summary` so a pixel-region failure reports the expected
-region contract and layer before anyone opens the frame visually.
+region contract, layer, and pass before anyone opens the frame visually.
 The same summary can pin `container_modes`, `container_ids`, `union_ids`,
 `container_participating`, `container_unioned`, `container_interactive`,
 `container_morph_transitions`, `verifier_require_container_identity`, and
@@ -317,7 +319,8 @@ exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `render_target_pixel_formats`, `pass_executors`, `sampling_kernels`,
 `sampling_weight_profiles`, `luminance_curves`, `decision_blockers`,
 `foreground_schemes`, `foreground_sources`, `verifier_profiles`,
-`verifier_region_layers`, `container_modes`, `container_ids`, and `union_ids`;
+`verifier_region_layers`, `verifier_region_passes`, `container_modes`,
+`container_ids`, and `union_ids`;
 it can also count
 `container_participating`, `container_unioned`, `container_interactive`,
 `container_morph_transitions`, `verifier_require_backdrop_source`,
@@ -334,7 +337,7 @@ blur to fallback, a fallback backend reporting the wrong deterministic pass, a
 sampled scene losing its previous-frame backdrop source, a render target
 exceeding the pure backdrop budget, a pass switching executor roles, a decision
 trace naming the wrong blocker, an artifact emitting an unexpected material plan
-schema version, verifier expectations pointing at the wrong region/layer, a
+schema version, verifier expectations pointing at the wrong region/layer/pass, a
 material container losing its identity/union grouping, a backend using raw
 radius instead of the pure effective shape radius, a blur kernel drifting out of
 sync with the backend shader, a foreground contrast recommendation falling

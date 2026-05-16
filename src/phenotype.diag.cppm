@@ -972,6 +972,7 @@ namespace detail {
                 static_cast<std::int64_t>(plan.verifier.min_unique_colors)});
         verifier.emplace("region_name", json::Value{plan.verifier.region_name});
         verifier.emplace("likely_layer", json::Value{plan.verifier.likely_layer});
+        verifier.emplace("likely_pass", json::Value{plan.verifier.likely_pass});
 
         json::Object primary_pass;
         primary_pass.emplace("name", json::Value{plan.primary_pass.name});

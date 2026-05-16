@@ -10,7 +10,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 10;
+inline constexpr std::uint32_t material_plan_contract_version = 11;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -123,6 +123,7 @@ struct MaterialVerifierExpectation {
     int min_unique_colors = 1;
     char const* region_name = "material";
     char const* likely_layer = "material-fallback";
+    char const* likely_pass = "none";
 };
 
 struct MaterialPassExpectation {
@@ -1446,6 +1447,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.verifier.likely_layer = plan.backdrop_sampling
         ? "material-blur-pass"
         : "material-fallback-pass";
+    plan.verifier.likely_pass = plan.primary_pass.name;
     return plan;
 }
 
