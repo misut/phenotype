@@ -215,9 +215,9 @@ duplicate
            == demo::k_desktop_toolbar_icon_button_width);
     assert(chrome.toolbar_icon_button_height
            == demo::k_desktop_toolbar_icon_button_height);
-    assert(chrome.toolbar_group_count == 6);
+    assert(chrome.toolbar_group_count == 5);
     assert(chrome.toolbar_separator_count == 3);
-    assert(chrome.toolbar_icon_button_count == 15);
+    assert(chrome.toolbar_icon_button_count == 11);
     assert(chrome.finder_segmented_toolbar);
     assert(chrome.integrated_titlebar);
     assert(chrome.native_window_controls);

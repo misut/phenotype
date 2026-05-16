@@ -1212,22 +1212,6 @@ void finder_toolbar(State const& state,
                                  state.explorer.view_mode, paint_gallery_view, 0x6304u);
             });
         layout::toolbar(
-            toolbar_group_options("File Actions", 172.0f),
-            [&] {
-                file_action_button(state.labels.create_file.c_str(), CreateFile{},
-                                   snap.can_create_file,
-                                   paint_new_file_icon, 0x6701u);
-                file_action_button(state.labels.create_folder.c_str(), CreateFolder{},
-                                   snap.can_create_folder,
-                                   paint_new_folder_icon, 0x6704u);
-                file_action_button(state.labels.duplicate.c_str(), DuplicateSelected{},
-                                   snap.can_duplicate_selected,
-                                   paint_duplicate_icon, 0x6702u);
-                file_action_button(state.labels.delete_action.c_str(), DeleteSelected{},
-                                   snap.can_delete_selected,
-                                   paint_delete_icon, 0x6703u);
-            });
-        layout::toolbar(
             toolbar_group_options("Group Sort", 48.0f),
             [&] {
                 sort_action_button(snap);

@@ -19,11 +19,6 @@
     "List View",
     "Column View",
     "Gallery View",
-    "File Actions",
-    "New File",
-    "New Folder",
-    "Duplicate",
-    "Delete",
     "Group Sort",
     "Share Tag More",
     "Share",
@@ -49,7 +44,7 @@
     "button",
     "material"
   ],
-  "require_disabled_count": 4,
+  "require_disabled_count": 2,
   "require_material_kinds": [
     "clear",
     "thin",
@@ -66,62 +61,62 @@
   "require_material_plans": true,
   "require_material_semantic_runtime_match": true,
   "require_material_plan_summary": {
-    "count": 11,
+    "count": 10,
     "fallback": 0,
-    "backdrop_sampling": 11,
+    "backdrop_sampling": 10,
     "contract_versions": {
-      "17": 11
+      "17": 10
     },
     "roles": {
       "surface": 1,
-      "toolbar": 7,
+      "toolbar": 6,
       "sidebar": 1,
       "status_bar": 1,
       "content": 1
     },
     "container_modes": {
-      "container": 11
+      "container": 10
     },
     "container_ids": {
-      "2100": 11
+      "2100": 10
     },
-    "container_participating": 11,
+    "container_participating": 10,
     "container_unioned": 0,
     "container_interactive": 0,
-    "container_morph_transitions": 11,
-    "shape_valid": 11,
+    "container_morph_transitions": 10,
+    "shape_valid": 10,
     "shape_radius_clamped": 0,
     "pass_names": {
-      "backdrop-sample-blur": 11
+      "backdrop-sample-blur": 10
     },
     "pass_executors": {
-      "backdrop-filter": 11
+      "backdrop-filter": 10
     },
     "sampling_kernels": {
-      "weighted-5x5-manhattan": 11
+      "weighted-5x5-manhattan": 10
     },
     "sampling_weight_profiles": {
-      "center4-cardinal2-diagonal1": 11
+      "center4-cardinal2-diagonal1": 10
     },
-    "backdrop_access_required": 11,
-    "backdrop_access_stable_required": 11,
-    "backdrop_access_frame_history_required": 11,
-    "backdrop_access_shared_frame_capture": 11,
-    "backdrop_access_next_frame_capture_required": 11,
-    "backdrop_access_bounded": 11,
+    "backdrop_access_required": 10,
+    "backdrop_access_stable_required": 10,
+    "backdrop_access_frame_history_required": 10,
+    "backdrop_access_shared_frame_capture": 10,
+    "backdrop_access_next_frame_capture_required": 10,
+    "backdrop_access_bounded": 10,
     "backdrop_access_sources": {
-      "previous-presented-frame": 11
+      "previous-presented-frame": 10
     },
     "backdrop_capture_scopes": {
-      "shared-frame": 11
+      "shared-frame": 10
     },
     "backdrop_capture_reasons": {
-      "sample-current-frame": 11
+      "sample-current-frame": 10
     },
-    "decision_can_sample_backdrop": 11,
-    "decision_backend_supports_backdrop": 11,
-    "decision_backdrop_source_ready": 11,
-    "decision_next_frame_capture_required": 11,
+    "decision_can_sample_backdrop": 10,
+    "decision_backend_supports_backdrop": 10,
+    "decision_backdrop_source_ready": 10,
+    "decision_next_frame_capture_required": 10,
     "decision_reduced_transparency": 0,
     "verifier_region_passes": {
       "clear-over-rich-backdrop": "backdrop-sample-blur",
@@ -130,7 +125,7 @@
       "thick-high-contrast-backdrop": "backdrop-sample-blur"
     },
     "luminance_curves": {
-      "adaptive-backdrop-luma": 11
+      "adaptive-backdrop-luma": 10
     }
   },
   "require_capabilities": [
@@ -184,6 +179,18 @@
     {
       "path": "application.file_explorer.chrome.native_window.duplicate_window_controls",
       "equals": false
+    },
+    {
+      "path": "application.file_explorer.chrome.toolbar_group_count",
+      "equals": 5
+    },
+    {
+      "path": "application.file_explorer.chrome.toolbar_separator_count",
+      "equals": 3
+    },
+    {
+      "path": "application.file_explorer.chrome.toolbar_icon_button_count",
+      "equals": 11
     }
   ],
   "require_runtime_details": [
@@ -201,7 +208,7 @@
     },
     {
       "path": "renderer.material_executor_summary.material_total_sample_taps",
-      "equals": 275
+      "equals": 250
     },
     {
       "path": "window.surface_kind",
@@ -357,17 +364,17 @@
     "total_surface_sample_pixels_gte": 1,
     "max_surface_sample_pixels_lte": 4000000,
     "max_surface_sample_pixels_gte": 1,
-    "total_plan_sample_taps_lte": 275,
-    "total_plan_sample_taps_gte": 275,
+    "total_plan_sample_taps_lte": 250,
+    "total_plan_sample_taps_gte": 250,
     "total_runtime_passes_gte": 1,
     "active_runtime_passes_gte": 1,
     "backdrop_runtime_passes_gte": 1,
-    "total_execution_stages_lte": 44,
-    "total_execution_stages_gte": 44,
-    "active_execution_stages_lte": 44,
-    "active_execution_stages_gte": 44,
-    "backdrop_execution_stages_lte": 11,
-    "backdrop_execution_stages_gte": 11,
+    "total_execution_stages_lte": 40,
+    "total_execution_stages_gte": 40,
+    "active_execution_stages_lte": 40,
+    "active_execution_stages_gte": 40,
+    "backdrop_execution_stages_lte": 10,
+    "backdrop_execution_stages_gte": 10,
     "dropped_execution_stages_lte": 0,
     "dropped_execution_stages_gte": 0,
     "max_execution_stage_count_lte": 4,

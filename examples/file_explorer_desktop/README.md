@@ -1,8 +1,9 @@
 # Desktop File Explorer Example
 
 This example is a Finder-style desktop workflow for phenotype's material
-system. It uses a glass toolbar with Finder-like semantic view/action/search
-buttons, translucent sidebar locations, icon/list/column/gallery file views,
+system. It uses a glass toolbar with Finder-like semantic navigation, view,
+group/sort, share/tag/more, and search controls, translucent sidebar locations,
+icon/list/column/gallery file views,
 document, image, video, and folder thumbnails, separate select/open semantics
 for files and folders, read/create/duplicate/delete file actions, folder
 create/delete actions, and compact Finder-style status.
@@ -25,7 +26,9 @@ hit regions, and native size/aspect-ratio constraints. The example does not use
 a toolkit window shim.
 The toolbar itself is a borderless material shell with rounded material control
 groups, so the artifact keeps Finder-like chrome without duplicating native
-window controls.
+window controls. File create, read, duplicate, and delete behavior is still
+covered through the shared model, CLI inputs, and startup scenarios rather than
+adding an always-visible extra action group to the default Finder chrome.
 
 Startup frame artifacts intentionally capture phenotype content rather than the
 operating system's non-client controls. The top-left titlebar reserve must stay
@@ -40,7 +43,8 @@ model payload containing the current profile, location, status, sort mode, view
 mode, selection state, operation receipt, entry counts, and
 `ExplorerChromeMetrics`. The manifest asserts this payload before visual
 regions, so an LLM can distinguish model-state drift from renderer/capture
-drift without guessing from pixels.
+drift without guessing from pixels. The desktop manifest also asserts the
+Finder toolbar group, separator, and icon-button counts from that payload.
 On macOS, the same runtime object reports live `NSWindow` chrome state:
 transparent titlebar, full-size content view, hidden native title, and
 background dragging must all be enabled. These fields are actual platform
