@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 13;
+inline constexpr std::uint32_t material_plan_contract_version = 14;
 inline constexpr unsigned int material_max_execution_stages = 4;
 
 struct MaterialGeometry {
@@ -123,6 +123,29 @@ struct MaterialVerifierExpectation {
     bool require_container_morph_contract = false;
     float min_luma_delta = 0.0f;
     int min_unique_colors = 1;
+    char const* region_name = "material";
+    char const* likely_layer = "material-fallback";
+    char const* likely_pass = "none";
+};
+
+struct MaterialObservationContract {
+    std::uint32_t schema_version = material_plan_contract_version;
+    bool semantic_material_required = false;
+    bool runtime_plan_required = false;
+    bool fallback_expected = false;
+    bool backdrop_sampling_expected = false;
+    bool stable_backdrop_required = false;
+    bool bounded_texture_copy_required = true;
+    bool deterministic_fallback_required = true;
+    char const* fallback_path = "none";
+    char const* fallback_reason = "";
+    char const* primary_pass = "none";
+    char const* primary_executor = "none";
+    std::uint32_t expected_runtime_passes = 0;
+    std::uint32_t expected_execution_stages = 0;
+    std::uint32_t expected_active_execution_stages = 0;
+    std::uint32_t expected_backdrop_execution_stages = 0;
+    std::int64_t max_texture_copy_pixels = 0;
     char const* region_name = "material";
     char const* likely_layer = "material-fallback";
     char const* likely_pass = "none";
@@ -300,6 +323,7 @@ struct MaterialPlan {
     MaterialExecutionStage
         execution_stages[material_max_execution_stages]{};
     MaterialVerifierExpectation verifier{};
+    MaterialObservationContract observation_contract{};
 
     constexpr bool fallback() const noexcept {
         return fallback_path != MaterialFallbackPath::None;
@@ -323,6 +347,41 @@ inline void append_material_execution_stage(
         return;
     }
     plan.execution_stages[plan.execution_stage_count++] = stage;
+}
+
+inline MaterialObservationContract material_observation_contract(
+        MaterialPlan const& plan) noexcept {
+    MaterialObservationContract contract{};
+    contract.schema_version = plan.contract_version;
+    contract.semantic_material_required = plan.kind != MaterialKind::None;
+    contract.runtime_plan_required = plan.kind != MaterialKind::None;
+    contract.fallback_expected = plan.fallback();
+    contract.backdrop_sampling_expected = plan.backdrop_sampling;
+    contract.stable_backdrop_required = plan.backdrop_sampling;
+    contract.bounded_texture_copy_required =
+        plan.resource_budget.bounded_texture_copy;
+    contract.deterministic_fallback_required =
+        plan.resource_budget.deterministic_fallback;
+    contract.fallback_path =
+        material_fallback_path_name(plan.fallback_path);
+    contract.fallback_reason = plan.fallback_reason;
+    contract.primary_pass = plan.primary_pass.name;
+    contract.primary_executor = plan.primary_pass.executor;
+    contract.expected_runtime_passes = 1;
+    contract.expected_execution_stages = plan.execution_stage_count;
+    contract.max_texture_copy_pixels =
+        plan.primary_pass.max_texture_copy_pixels;
+    contract.region_name = plan.verifier.region_name;
+    contract.likely_layer = plan.verifier.likely_layer;
+    contract.likely_pass = plan.verifier.likely_pass;
+    for (unsigned int i = 0; i < plan.execution_stage_count; ++i) {
+        auto const& stage = plan.execution_stages[i];
+        if (stage.active)
+            ++contract.expected_active_execution_stages;
+        if (stage.requires_backdrop)
+            ++contract.expected_backdrop_execution_stages;
+    }
+    return contract;
 }
 
 struct MaterialForegroundTextResolution {
@@ -1628,6 +1687,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         ? "material-blur-pass"
         : "material-fallback-pass";
     plan.verifier.likely_pass = plan.primary_pass.name;
+    plan.observation_contract = material_observation_contract(plan);
     return plan;
 }
 

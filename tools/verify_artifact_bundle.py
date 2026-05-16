@@ -140,7 +140,7 @@ ALLOWED_MATERIAL_FOREGROUND_SOURCES = {
     "theme",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 13
+MATERIAL_PLAN_CONTRACT_VERSION = 14
 
 
 def suggested_action_for_failure(
@@ -206,6 +206,10 @@ def suggested_action_for_failure(
         return (
             "Inspect MaterialPlan.verifier, semantic verifier_profile, and "
             "primary_pass.likely_layer/name.")
+    if likely_layer == "material-observation":
+        return (
+            "Inspect MaterialPlan.observation_contract, the pure plan fields it "
+            "mirrors, and the runtime material plan serializer.")
     if likely_layer == "material-pass":
         return (
             "Inspect MaterialPlan.primary_pass and renderer.material_plans[].passes "
@@ -1693,6 +1697,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "execution_stage_capacity",
     "dropped_execution_stage_count",
     "verifier",
+    "observation_contract",
     "passes",
     "execution_stages",
 )
@@ -1790,6 +1795,32 @@ MATERIAL_PASS_FIELDS = (
     "max_texture_copy_pixels",
 )
 MATERIAL_EXECUTION_STAGE_FIELDS = MATERIAL_PASS_FIELDS + ("bounded",)
+MATERIAL_OBSERVATION_BOOL_FIELDS = (
+    "semantic_material_required",
+    "runtime_plan_required",
+    "fallback_expected",
+    "backdrop_sampling_expected",
+    "stable_backdrop_required",
+    "bounded_texture_copy_required",
+    "deterministic_fallback_required",
+)
+MATERIAL_OBSERVATION_INT_FIELDS = (
+    "schema_version",
+    "expected_runtime_passes",
+    "expected_execution_stages",
+    "expected_active_execution_stages",
+    "expected_backdrop_execution_stages",
+    "max_texture_copy_pixels",
+)
+MATERIAL_OBSERVATION_STRING_FIELDS = (
+    "fallback_path",
+    "fallback_reason",
+    "primary_pass",
+    "primary_executor",
+    "region_name",
+    "likely_layer",
+    "likely_pass",
+)
 MATERIAL_SAMPLING_KERNEL_FIELDS = (
     "name",
     "radius",
@@ -1838,6 +1869,245 @@ MATERIAL_QUALITY_POLICY_NUMBER_FIELDS = (
     "max_sample_taps",
     "max_backdrop_pixels",
 )
+
+
+def check_material_observation_contract(
+    report: Report,
+    plan: JsonObject,
+    plan_path: str,
+    likely_layer: str,
+) -> None:
+    observation = check_object_field(
+        report,
+        plan,
+        "observation_contract",
+        plan_path,
+        likely_layer="material-observation",
+        hint=(
+            "MaterialPlan.observation_contract should mirror the pure plan "
+            "facts the artifact verifier must observe."))
+    if observation is None:
+        return
+
+    observation_path = f"{plan_path}.observation_contract"
+    likely_pass = string_at(observation, "likely_pass") or ""
+    for key in MATERIAL_OBSERVATION_BOOL_FIELDS:
+        check_bool_field(
+            report,
+            observation,
+            key,
+            observation_path,
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Observation booleans must be explicit pure-plan facts.")
+    for key in MATERIAL_OBSERVATION_INT_FIELDS:
+        check_number_field(
+            report,
+            observation,
+            key,
+            observation_path,
+            min_value=0.0,
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Observation numeric bounds must be non-negative.")
+    for key in MATERIAL_OBSERVATION_STRING_FIELDS:
+        check_string_field(
+            report,
+            observation,
+            key,
+            observation_path,
+            allow_empty=key == "fallback_reason",
+            likely_layer="material-observation",
+            hint="Observation strings should identify the debuggable plan path.")
+
+    contract_version = plan.get("contract_version")
+    schema_version = observation.get("schema_version")
+    report.check(
+        "material observation schema version matches plan",
+        schema_version == contract_version,
+        path=f"{observation_path}.schema_version",
+        expected=contract_version,
+        actual=schema_version,
+        likely_layer="material-observation",
+        likely_pass=likely_pass,
+        hint="Keep MaterialPlan.contract_version and observation_contract.schema_version synchronized.",
+        record_success=False)
+    report.check(
+        "material observation schema version is supported",
+        schema_version == MATERIAL_PLAN_CONTRACT_VERSION,
+        path=f"{observation_path}.schema_version",
+        expected=MATERIAL_PLAN_CONTRACT_VERSION,
+        actual=schema_version,
+        likely_layer="material-observation",
+        likely_pass=likely_pass,
+        hint="Update the observation contract verifier when the material plan schema changes.",
+        record_success=False)
+
+    kind = string_at(plan, "kind")
+    if kind is not None:
+        expects_material = kind != "none"
+        for key in ("semantic_material_required", "runtime_plan_required"):
+            report.check(
+                f"material observation {key} follows material kind",
+                observation.get(key) == expects_material,
+                path=f"{observation_path}.{key}",
+                expected=expects_material,
+                actual=observation.get(key),
+                likely_layer="material-observation",
+                likely_pass=likely_pass,
+                hint="Observation material requirements should be derived from MaterialPlan.kind.",
+                record_success=False)
+
+    fallback = bool_at(plan, "fallback")
+    backdrop_sampling = bool_at(plan, "backdrop_sampling")
+    if fallback is not None:
+        report.check(
+            "material observation fallback flag matches plan",
+            observation.get("fallback_expected") == fallback,
+            path=f"{observation_path}.fallback_expected",
+            expected=fallback,
+            actual=observation.get("fallback_expected"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Observation fallback must mirror MaterialPlan.fallback.",
+            record_success=False)
+    if backdrop_sampling is not None:
+        report.check(
+            "material observation backdrop flag matches plan",
+            observation.get("backdrop_sampling_expected") == backdrop_sampling,
+            path=f"{observation_path}.backdrop_sampling_expected",
+            expected=backdrop_sampling,
+            actual=observation.get("backdrop_sampling_expected"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Observation backdrop sampling must mirror MaterialPlan.backdrop_sampling.",
+            record_success=False)
+        report.check(
+            "material observation stable backdrop requirement matches sampling",
+            observation.get("stable_backdrop_required") == backdrop_sampling,
+            path=f"{observation_path}.stable_backdrop_required",
+            expected=backdrop_sampling,
+            actual=observation.get("stable_backdrop_required"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Only sampled backdrop plans should require a stable backdrop source.",
+            record_success=False)
+
+    for key in ("fallback_path", "fallback_reason"):
+        report.check(
+            f"material observation {key} matches plan",
+            observation.get(key) == plan.get(key),
+            path=f"{observation_path}.{key}",
+            expected=plan.get(key),
+            actual=observation.get(key),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint=f"Observation {key} should be copied from MaterialPlan.{key}.",
+            record_success=False)
+
+    primary_pass = plan.get("primary_pass")
+    if isinstance(primary_pass, dict):
+        report.check(
+            "material observation primary pass matches plan",
+            observation.get("primary_pass") == primary_pass.get("name"),
+            path=f"{observation_path}.primary_pass",
+            expected=primary_pass.get("name"),
+            actual=observation.get("primary_pass"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Observation primary_pass should mirror MaterialPlan.primary_pass.name.",
+            record_success=False)
+        report.check(
+            "material observation primary executor matches plan",
+            observation.get("primary_executor") == primary_pass.get("executor"),
+            path=f"{observation_path}.primary_executor",
+            expected=primary_pass.get("executor"),
+            actual=observation.get("primary_executor"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Observation primary_executor should mirror MaterialPlan.primary_pass.executor.",
+            record_success=False)
+        report.check(
+            "material observation texture-copy bound matches primary pass",
+            observation.get("max_texture_copy_pixels")
+            == primary_pass.get("max_texture_copy_pixels"),
+            path=f"{observation_path}.max_texture_copy_pixels",
+            expected=primary_pass.get("max_texture_copy_pixels"),
+            actual=observation.get("max_texture_copy_pixels"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Observation texture-copy bound should mirror MaterialPlan.primary_pass.",
+            record_success=False)
+
+    passes = plan.get("passes")
+    if isinstance(passes, list):
+        report.check(
+            "material observation runtime pass count matches plan",
+            observation.get("expected_runtime_passes") == len(passes),
+            path=f"{observation_path}.expected_runtime_passes",
+            expected=len(passes),
+            actual=observation.get("expected_runtime_passes"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Observation pass count should mirror renderer.material_plans[].passes.",
+            record_success=False)
+
+    execution_stages = plan.get("execution_stages")
+    if isinstance(execution_stages, list):
+        active_stages = sum(
+            1 for stage in execution_stages
+            if isinstance(stage, dict) and stage.get("active") is True)
+        backdrop_stages = sum(
+            1 for stage in execution_stages
+            if isinstance(stage, dict)
+            and stage.get("requires_backdrop") is True)
+        for key, expected in (
+                ("expected_execution_stages", len(execution_stages)),
+                ("expected_active_execution_stages", active_stages),
+                ("expected_backdrop_execution_stages", backdrop_stages)):
+            report.check(
+                f"material observation {key} matches stages",
+                observation.get(key) == expected,
+                path=f"{observation_path}.{key}",
+                expected=expected,
+                actual=observation.get(key),
+                likely_layer="material-observation",
+                likely_pass=likely_pass,
+                hint="Observation stage counts should mirror MaterialPlan.execution_stages.",
+                record_success=False)
+
+    resource_budget = plan.get("resource_budget")
+    if isinstance(resource_budget, dict):
+        for observation_key, budget_key in (
+                ("bounded_texture_copy_required", "bounded_texture_copy"),
+                ("deterministic_fallback_required", "deterministic_fallback")):
+            report.check(
+                f"material observation {observation_key} matches resource budget",
+                observation.get(observation_key) == resource_budget.get(budget_key),
+                path=f"{observation_path}.{observation_key}",
+                expected=resource_budget.get(budget_key),
+                actual=observation.get(observation_key),
+                likely_layer="material-observation",
+                likely_pass=likely_pass,
+                hint="Observation safety flags should mirror MaterialPlan.resource_budget.",
+                record_success=False)
+
+    verifier = plan.get("verifier")
+    if isinstance(verifier, dict):
+        for observation_key, verifier_key in (
+                ("region_name", "region_name"),
+                ("likely_layer", "likely_layer"),
+                ("likely_pass", "likely_pass")):
+            report.check(
+                f"material observation {observation_key} matches verifier",
+                observation.get(observation_key) == verifier.get(verifier_key),
+                path=f"{observation_path}.{observation_key}",
+                expected=verifier.get(verifier_key),
+                actual=observation.get(observation_key),
+                likely_layer="material-observation",
+                likely_pass=likely_pass,
+                hint="Observation region hints should mirror MaterialPlan.verifier.",
+                record_success=False)
 
 
 def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObject:
@@ -4451,6 +4721,11 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 likely_pass=primary_pass_name,
                 hint="The backend likely planned glass but did not record the blur pass.",
                 record_success=False)
+        check_material_observation_contract(
+            report,
+            plan,
+            plan_path,
+            likely_layer)
     return summary
 
 
