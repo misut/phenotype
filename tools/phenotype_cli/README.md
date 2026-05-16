@@ -12,9 +12,16 @@ The initial scope is intentionally narrow:
   without replacing the Python verifier yet.
 - `phenotype artifact verify <bundle>` runs the uv-managed Python verifier
   through `mise` and preserves its JSON report shape.
+- `phenotype artifact verify-glass-showcase` and
+  `phenotype artifact verify-file-explorer` run the local contract gates from
+  the CLI surface. They are intentionally local-only gates by default because
+  they launch native examples and can be slow on CI.
 - `phenotype package inspect <path>` checks the proposed package manifest,
-  declared resource counts, referenced `source` files, Pretendard default-font
-  policy, asset layout, locale layout, and font layout.
+  application/debug metadata, declared resource counts, referenced `source`
+  files, Pretendard default-font policy, asset layout, locale layout, and font
+  layout.
+- `phenotype package list <root>` scans for package manifests below a root and
+  emits a compact package catalog for CI or future bundling.
 - `phenotype commands --json` emits machine-readable command metadata from
   `cppx.cli`.
 

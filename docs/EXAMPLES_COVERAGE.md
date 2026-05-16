@@ -55,6 +55,7 @@ For the first CLI/package contract:
 cd tools/phenotype_cli
 mise exec -- exon build
 .exon/debug/phenotype_cli doctor --json
+.exon/debug/phenotype_cli package list --json ../../examples
 .exon/debug/phenotype_cli package inspect --json ../../examples/file_explorer_desktop
 .exon/debug/phenotype_cli package inspect --json ../../examples/file_explorer_mobile
 ```
@@ -122,23 +123,27 @@ mise exec -- uv run --frozen python tools/verify_artifact_bundle.py /tmp/phenoty
 The repo-local gate wraps build, startup capture, and manifest verification:
 
 ```sh
-tools/verify_glass_showcase_artifact.sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli artifact verify-glass-showcase --json
 ```
 
 The gate pins `PHENOTYPE_ACCESSIBILITY_DISPLAY=standard` by default so local or
 runner Accessibility settings cannot turn the showcase into a reduced
 transparency fallback. Override that environment variable when deliberately
 capturing accessibility-response artifacts.
-Use `tools/verify_glass_showcase_accessibility_artifact.sh` for the committed
-accessibility-response gate; it runs the same scene with reduced transparency,
-increased contrast, and reduced motion enabled, then applies
+Use `phenotype artifact verify-glass-showcase --accessibility --json` for the
+committed accessibility-response gate; it runs the same scene with reduced
+transparency, increased contrast, and reduced motion enabled, then applies
 `examples/glass_showcase/artifact_manifest.accessibility.json`.
 
 The file explorer examples use the same artifact contract, but are intended as
 local product-workflow smoke tests instead of a default CI gate:
 
 ```sh
-tools/verify_file_explorer_artifacts.sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli artifact verify-file-explorer --json
 ```
 
 Pull-request CI does not run these slow startup artifact captures. Code changes

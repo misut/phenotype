@@ -440,6 +440,7 @@ jobs:
           cli="tools/phenotype_cli/.exon/debug/phenotype_cli"
           "$cli" doctor --json | python3 -m json.tool >/dev/null
           "$cli" commands --json | python3 -m json.tool >/dev/null
+          "$cli" package list --json examples | python3 -m json.tool >/dev/null
           "$cli" package inspect --json examples/file_explorer_desktop | python3 -m json.tool >/dev/null
           "$cli" package inspect --json examples/file_explorer_mobile | python3 -m json.tool >/dev/null
 
