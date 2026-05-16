@@ -133,9 +133,10 @@ mise exec -- exon build
 `artifact verify-glass-showcase` now owns the glass example build, native
 artifact capture, and uv-managed verifier call directly. Its JSON includes
 build/run/verifier exit state, artifact bundle presence, manifest path,
-expected platform, and accessibility display policy. The file explorer command
-still uses the compatibility shell gate for its multi-profile capture flow.
-Both commands are local verification commands, not default PR CI jobs.
+expected platform, and accessibility display policy. `artifact
+verify-file-explorer` owns the shared-model test, desktop/mobile builds,
+deterministic native captures, and uv-managed verifier calls directly. Both
+commands are local verification commands, not default PR CI jobs.
 
 For file explorer workflow debugging that does not need a native window, use
 the deterministic drive command:
@@ -450,10 +451,9 @@ Python tool environment. Use `mise run tools:artifact:test` for the verifier's
 contract tests and `mise run tools:artifact:pycompile` for syntax checks.
 Use `tools/phenotype_cli` for new diagnostic entry points; shell/Python tools
 should become compatibility wrappers only after matching CLI commands exist.
-The CLI owns `artifact verify-glass-showcase` directly and exposes
-`artifact verify-file-explorer` for the file explorer local gate, so new docs
-and automation should prefer those command names while shell scripts remain as
-stable local wrappers.
+The CLI owns `artifact verify-glass-showcase` and `artifact
+verify-file-explorer` directly, so new docs and automation should prefer those
+command names while shell scripts remain as stable local wrappers.
 Use the verifier command to validate the bundle before handing it to an LLM,
 attaching it to an issue, or comparing it in CI. The verifier checks the common
 debug schema, platform capabilities,

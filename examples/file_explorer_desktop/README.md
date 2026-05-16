@@ -110,8 +110,13 @@ mise exec -- exon run
 From the repo root:
 
 ```sh
-tools/verify_file_explorer_artifacts.sh
+(cd tools/phenotype_cli && mise exec -- exon build)
+tools/phenotype_cli/.exon/debug/phenotype_cli artifact verify-file-explorer \
+  --profile desktop
 ```
+
+`tools/verify_file_explorer_artifacts.sh` remains a compatibility wrapper for
+existing local scripts.
 
 For the package-resource contract:
 
