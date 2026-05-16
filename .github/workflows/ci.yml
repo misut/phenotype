@@ -140,6 +140,7 @@ jobs:
   test:
     name: test (${{ matrix.os }}, ${{ matrix.target }})
     needs: changes
+    if: needs.changes.outputs.code_tests == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -285,9 +286,27 @@ jobs:
             ~/.exon/cache
           key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
+  test-skip:
+    name: test (${{ matrix.os }}, ${{ matrix.target }})
+    needs: changes
+    if: needs.changes.outputs.code_tests != 'true'
+    runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-24.04
+            target: wasm32-wasi
+          - os: macos-15
+            target: native
+    steps:
+      - name: Skip code tests
+        run: echo "No root code-test paths changed; required check passes without allocating the target runner."
+
   windows-native:
     name: test (windows-2022, native)
     needs: changes
+    if: needs.changes.outputs.code_tests == 'true'
     runs-on: windows-2022
     steps:
       - name: Skip code tests
@@ -380,6 +399,15 @@ jobs:
           $env:CXX = "cl"
           Set-Location examples/native
           exon build
+
+  windows-native-skip:
+    name: test (windows-2022, native)
+    needs: changes
+    if: needs.changes.outputs.code_tests != 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Skip code tests
+        run: echo "No root code-test paths changed; required check passes without allocating a Windows runner."
 
   cli-package:
     name: cli package checks (ubuntu-24.04)

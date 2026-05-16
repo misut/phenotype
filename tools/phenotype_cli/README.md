@@ -39,6 +39,10 @@ The initial scope is intentionally narrow:
   JSON output includes the input trace, sandbox root/current paths, visible
   entries, viewport, pure Finder chrome/grid metrics, selection capabilities,
   operation receipts, and preview excerpts.
+- `phenotype run <example>` builds and runs a repository example from one
+  command, with `--json`, explicit environment overrides, artifact capture
+  environment, and an optional timeout. This is the first CLI-owned launch path
+  for observing native examples without adding another shell wrapper.
 - `phenotype android ...` is the single Android workflow namespace for
   repository-local doctor/devices/emulator/build/APK/install/run/logs/screencap
   and artifact-contract commands. The implementation still delegates to the
@@ -72,6 +76,14 @@ mise exec -- exon build
   --profile desktop \
   --view-mode icon \
   --scenario search-active
+.exon/debug/phenotype_cli run glass_showcase \
+  --artifact-dir /tmp/phenotype-glass-showcase \
+  --artifact-exit \
+  --timeout-seconds 120
+.exon/debug/phenotype_cli run file_explorer_desktop \
+  --artifact-dir /tmp/phenotype-file-explorer \
+  --artifact-exit \
+  --env PHENOTYPE_FILE_EXPLORER_VIEW=icon
 .exon/debug/phenotype_cli android doctor --json
 .exon/debug/phenotype_cli android devices --json
 .exon/debug/phenotype_cli android contract --json \
