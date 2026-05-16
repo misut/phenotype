@@ -6,6 +6,7 @@ module;
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
+#include <optional>
 #include <span>
 #include <sstream>
 #include <string>
@@ -91,6 +92,7 @@ enum class ExplorerInputKind {
     SelectLocation,
     SelectEntry,
     Search,
+    Viewport,
     DraftName,
     DraftFolderName,
     DraftBody,
@@ -111,6 +113,9 @@ struct ExplorerInput {
     ExplorerInputKind kind = ExplorerInputKind::Noop;
     std::string value;
     SortMode sort_mode = SortMode::Name;
+    int viewport_width = 0;
+    int viewport_height = 0;
+    float viewport_scale = 1.0f;
 };
 
 struct ExplorerInputParseResult {
@@ -410,6 +415,7 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::SelectLocation: return "select_location";
         case ExplorerInputKind::SelectEntry: return "select_entry";
         case ExplorerInputKind::Search: return "search";
+        case ExplorerInputKind::Viewport: return "viewport";
         case ExplorerInputKind::DraftName: return "draft_name";
         case ExplorerInputKind::DraftFolderName: return "draft_folder_name";
         case ExplorerInputKind::DraftBody: return "draft_body";
@@ -437,6 +443,36 @@ inline std::string explorer_input_label(ExplorerInput const& input) {
     return label;
 }
 
+inline std::optional<int> parse_positive_int(std::string_view text) {
+    auto trimmed = trim(text);
+    if (trimmed.empty())
+        return std::nullopt;
+    char* end = nullptr;
+    long value = std::strtol(trimmed.c_str(), &end, 10);
+    if (end != trimmed.c_str() + trimmed.size() || value <= 0 || value > 100000)
+        return std::nullopt;
+    return static_cast<int>(value);
+}
+
+inline std::optional<float> parse_positive_float(std::string_view text) {
+    auto trimmed = trim(text);
+    if (trimmed.empty())
+        return std::nullopt;
+    char* end = nullptr;
+    float value = std::strtof(trimmed.c_str(), &end);
+    if (end != trimmed.c_str() + trimmed.size() || value <= 0.0f || value > 16.0f)
+        return std::nullopt;
+    return value;
+}
+
+inline std::string viewport_value_label(int width, int height, float scale) {
+    std::ostringstream out;
+    out << width << "x" << height;
+    if (scale != 1.0f)
+        out << "@" << scale;
+    return out.str();
+}
+
 inline SortMode sort_mode_from_name(std::string_view value) {
     auto name = lower_copy(trim(value));
     if (name == "kind")
@@ -458,6 +494,47 @@ inline ExplorerInputParseResult input_parse_error(std::string message) {
         .ok = false,
         .error = std::move(message),
     };
+}
+
+inline ExplorerInputParseResult parse_viewport_input(std::string_view value) {
+    auto text = trim(value);
+    auto scale = 1.0f;
+    auto scale_separator = text.find('@');
+    if (scale_separator != std::string::npos) {
+        auto parsed_scale = parse_positive_float(
+            std::string_view{text}.substr(scale_separator + 1));
+        if (!parsed_scale) {
+            return input_parse_error(
+                "input 'viewport' scale must be a positive number");
+        }
+        scale = *parsed_scale;
+        text = trim(std::string_view{text}.substr(0, scale_separator));
+    }
+
+    auto separator = text.find('x');
+    if (separator == std::string::npos)
+        separator = text.find('X');
+    if (separator == std::string::npos)
+        separator = text.find(',');
+    if (separator == std::string::npos) {
+        return input_parse_error(
+            "input 'viewport' requires WIDTHxHEIGHT or WIDTHxHEIGHT@SCALE");
+    }
+
+    auto width = parse_positive_int(std::string_view{text}.substr(0, separator));
+    auto height = parse_positive_int(std::string_view{text}.substr(separator + 1));
+    if (!width || !height) {
+        return input_parse_error(
+            "input 'viewport' width and height must be positive integers");
+    }
+
+    return parsed_input({
+        .kind = ExplorerInputKind::Viewport,
+        .value = viewport_value_label(*width, *height, scale),
+        .viewport_width = *width,
+        .viewport_height = *height,
+        .viewport_scale = scale,
+    });
 }
 
 inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
@@ -498,6 +575,11 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
     }
     if (name == "search")
         return require_value(ExplorerInputKind::Search);
+    if (name == "viewport" || name == "resize" || name == "size") {
+        if (value.empty())
+            return input_parse_error("input 'viewport' requires a value");
+        return parse_viewport_input(value);
+    }
     if (name == "draft-name" || name == "file-name" || name == "name")
         return require_value(ExplorerInputKind::DraftName);
     if (name == "draft-folder" || name == "folder-name")
@@ -1321,6 +1403,12 @@ inline void apply_explorer_input(
             return;
         case ExplorerInputKind::Search:
             set_search_filter(state, input.value);
+            return;
+        case ExplorerInputKind::Viewport:
+            state.viewport_width = input.viewport_width;
+            state.viewport_height = input.viewport_height;
+            state.viewport_scale = input.viewport_scale;
+            state.status = "Viewport set to " + input.value;
             return;
         case ExplorerInputKind::DraftName:
             state.draft_name = input.value;

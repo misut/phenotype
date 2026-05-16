@@ -31,7 +31,8 @@ The initial scope is intentionally narrow:
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible
-  entries, selection capabilities, operation receipts, and preview excerpts.
+  entries, viewport, selection capabilities, operation receipts, and preview
+  excerpts.
 - `phenotype commands --json` emits machine-readable command metadata from
   `cppx.cli`.
 
@@ -47,6 +48,7 @@ Example:
 cd tools/phenotype_cli
 mise exec -- exon build
 .exon/debug/phenotype_cli drive file-explorer --json \
+  --input viewport:900x620@2 \
   --input select:README.txt \
   --input duplicate \
   --input delete

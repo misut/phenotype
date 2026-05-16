@@ -1,5 +1,6 @@
 #include <algorithm>
 #include <cctype>
+#include <cmath>
 #include <concepts>
 #include <cstdlib>
 #include <cstddef>
@@ -117,6 +118,9 @@ constexpr float k_content_radius = 0.0f;
 constexpr float k_window_radius = 18.0f;
 constexpr float k_toolbar_group_radius = 20.0f;
 constexpr float k_toolbar_group_height = 40.0f;
+constexpr float k_icon_grid_column_width = 142.0f;
+constexpr float k_icon_grid_row_height = 166.0f;
+constexpr float k_icon_grid_column_pitch = 166.0f;
 
 phenotype::Color rgba(int r, int g, int b, int a = 255) {
     return phenotype::Color{
@@ -454,6 +458,24 @@ float finder_scroll_height(file_explorer_demo::ExplorerState const& explorer,
                            float maximum) {
     float height = viewport_height_or_default(explorer) - chrome_budget;
     return std::clamp(height, minimum, maximum);
+}
+
+int responsive_icon_column_count(int viewport_width) {
+    float const window_width = viewport_width > 0
+        ? static_cast<float>(viewport_width)
+        : 1300.0f;
+    float const available = std::max(
+        k_icon_grid_column_pitch * 2.0f,
+        window_width - k_sidebar_width - 80.0f);
+    int columns = static_cast<int>(
+        std::floor(available / k_icon_grid_column_pitch));
+    return std::clamp(columns, 2, 7);
+}
+
+std::vector<float> icon_grid_columns(int viewport_width) {
+    return std::vector<float>(
+        static_cast<std::size_t>(responsive_icon_column_count(viewport_width)),
+        k_icon_grid_column_width);
 }
 
 void update(State& state, Msg msg) {
@@ -997,10 +1019,8 @@ void finder_grid(State const& state,
             }
             layout::spacer(18.0f);
             layout::scroll_view(scroll_height, [&] {
-                std::vector<float> columns{
-                    142.0f, 142.0f, 142.0f, 142.0f, 142.0f, 142.0f,
-                };
-                layout::grid(std::move(columns), 166.0f, [&] {
+                auto columns = icon_grid_columns(state.explorer.viewport_width);
+                layout::grid(std::move(columns), k_icon_grid_row_height, [&] {
                     for (auto const& entry : entries) {
                         bool const selected = snap.has_selection
                             && snap.selected.name == entry.name;
@@ -1016,7 +1036,7 @@ void finder_grid(State const& state,
                                 entry.name,
                                 SelectEntry{entry.name},
                                 selected,
-                                142.0f,
+                                k_icon_grid_column_width,
                                 15.0f,
                                 true);
                         }, SpaceToken::Xs,
