@@ -1959,6 +1959,35 @@ void toolbar(F&& builder,
 
 template<typename F>
     requires std::is_invocable_v<F>
+void navigation(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::Navigation;
+    options.semantic_label = chrome_label_or(options.semantic_label,
+                                             "Navigation");
+    material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void navigation(F&& builder,
+                MaterialKind kind = MaterialKind::Thin,
+                SpaceToken padding = SpaceToken::Sm,
+                SpaceToken gap = SpaceToken::Xs) {
+    material_surface(
+        MaterialSurfaceOptions{
+            .kind = kind,
+            .role = MaterialSurfaceRole::Navigation,
+            .direction = FlexDirection::Row,
+            .padding = padding,
+            .gap = gap,
+            .cross_align = CrossAxisAlignment::Center,
+            .main_align = MainAxisAlignment::Start,
+            .semantic_label = "Navigation",
+        },
+        std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
 void sidebar(MaterialSurfaceOptions options, F&& builder) {
     options.role = MaterialSurfaceRole::Sidebar;
     options.semantic_label = chrome_label_or(options.semantic_label, "Sidebar");

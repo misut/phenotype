@@ -389,20 +389,21 @@ contract language. Backends may render an Apple-inspired glass effect, but the
 core material API remains a cross-platform semantic contract with explicit
 fallbacks rather than a claim to reproduce private system component behavior.
 The layout DSL exposes this boundary through `layout::material_surface` for
-low-level material containers and `layout::toolbar`, `layout::sidebar`, and
-`layout::status_bar` for common app chrome. Those helpers only configure
-layout, semantic labels, and `MaterialSurfaceRole`; they still emit the same
-`MaterialRect` command and flow through the pure planner/backend executor
-contract above. Artifact gates can require roles such as `toolbar`, `sidebar`,
-`status_bar`, `navigation`, or `surface` without changing backend rendering
-policy. `MaterialSurfaceOptions` also carries explicit border radius and
-border width overrides; these are view/layout chrome decisions that shape the
-emitted command while leaving material optics, fallback decisions, and pass
-selection in the pure planner/backend executor contract.
+low-level material containers and `layout::toolbar`, `layout::navigation`,
+`layout::sidebar`, and `layout::status_bar` for common app chrome. Those
+helpers only configure layout, semantic labels, and `MaterialSurfaceRole`; they
+still emit the same `MaterialRect` command and flow through the pure
+planner/backend executor contract above. Artifact gates can require roles such
+as `toolbar`, `sidebar`, `status_bar`, `navigation`, or `surface` without
+changing backend rendering policy. `MaterialSurfaceOptions` also carries
+explicit border radius and border width overrides; these are view/layout chrome
+decisions that shape the emitted command while leaving material optics,
+fallback decisions, and pass selection in the pure planner/backend executor
+contract.
 The chrome helpers also accept `MaterialSurfaceOptions` directly, so app-like
 examples can keep custom Finder-style dimensions, radii, and border decisions
-while still going through the typed toolbar/sidebar/status-bar semantic path
-instead of hand-rolling role assignment.
+while still going through the typed toolbar/navigation/sidebar/status-bar
+semantic path instead of hand-rolling role assignment.
 
 ## Native backend structure
 

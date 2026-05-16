@@ -349,8 +349,9 @@ Apple-style glass interface while preserving platform parity:
   the glass contract into an app-like file-management workflow with toolbar,
   sidebar/location navigation, list content, preview, search, create, and
   delete actions;
-- first-class material app-chrome helpers for toolbar, sidebar, and status bar
-  surfaces so examples do not need to hand-roll every glass container shape;
+- first-class material app-chrome helpers for toolbar, navigation, sidebar, and
+  status bar surfaces so examples do not need to hand-roll every glass
+  container shape;
 - tests that cover command encoding, parser behavior, fallback policy, and at
   least one captured-frame invariant on native backends.
 

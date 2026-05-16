@@ -176,9 +176,8 @@ void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
 
 void location_strip(file_explorer_demo::ExplorerLabels const& labels) {
     using namespace phenotype;
-    layout::material_surface(layout::MaterialSurfaceOptions{
+    layout::navigation(layout::MaterialSurfaceOptions{
         .kind = MaterialKind::Thin,
-        .role = MaterialSurfaceRole::Navigation,
         .direction = FlexDirection::Row,
         .padding = SpaceToken::Sm,
         .gap = SpaceToken::Xs,

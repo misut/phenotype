@@ -917,7 +917,7 @@ void finder_toolbar(State const& state,
                     file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     layout::toolbar(toolbar_shell_options(), [&] {
-        layout::material_surface(
+        layout::toolbar(
             toolbar_group_options("Navigation Controls", 92.0f),
             [&] {
                 navigation_button(state.labels.back.c_str(), GoBack{}, snap.can_go_back,
@@ -931,7 +931,7 @@ void finder_toolbar(State const& state,
             : snap.relative_location,
             TextSize::Heading);
         layout::weighted(1.0f, [] {});
-        layout::material_surface(
+        layout::toolbar(
             toolbar_group_options("View Controls", 216.0f),
             [&] {
                 view_mode_button("Icon View", FinderViewMode::Icon,
@@ -945,7 +945,7 @@ void finder_toolbar(State const& state,
                 view_mode_button("Gallery View", FinderViewMode::Gallery,
                                  state.view_mode, paint_gallery_view, 0x6304u);
             });
-        layout::material_surface(
+        layout::toolbar(
             toolbar_group_options("File Actions", 172.0f),
             [&] {
                 file_action_button(state.labels.create_file.c_str(), CreateFile{},
@@ -961,19 +961,19 @@ void finder_toolbar(State const& state,
                                    snap.can_delete_selected,
                                    paint_delete_icon, 0x6703u);
             });
-        layout::material_surface(
+        layout::toolbar(
             toolbar_group_options("Group Sort", 48.0f),
             [&] {
                 sort_action_button(snap);
             });
-        layout::material_surface(
+        layout::toolbar(
             toolbar_group_options("Share Tag More", 128.0f),
             [] {
                 toolbar_action_button("Share", paint_share_icon, 0x6601u);
                 toolbar_action_button("Tag", paint_tag_icon, 0x6602u);
                 toolbar_action_button("More", paint_more_icon, 0x6603u);
             });
-        layout::material_surface(
+        layout::toolbar(
             toolbar_group_options(
                 "Search Control",
                 state.search_visible ? 220.0f : 48.0f),
