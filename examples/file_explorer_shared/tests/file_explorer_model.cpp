@@ -70,6 +70,29 @@ int main() {
     fs::remove_all(root, ec);
 
     auto state = demo::make_state(profile);
+    assert(state.viewport_width == demo::k_desktop_default_viewport_width);
+    assert(state.viewport_height == demo::k_desktop_default_viewport_height);
+    assert(state.viewport_scale == 1.0f);
+    auto chrome = demo::explorer_chrome_metrics(state, profile);
+    assert(chrome.viewport.width == demo::k_desktop_default_viewport_width);
+    assert(chrome.viewport.height == demo::k_desktop_default_viewport_height);
+    assert(chrome.icon_grid_columns == 6);
+    assert(chrome.icon_grid_visible_rows == 3);
+    assert(chrome.icon_grid_visible_capacity == 18);
+    assert(chrome.integrated_titlebar);
+    assert(chrome.native_window_controls);
+    assert(!chrome.duplicate_window_controls);
+    assert(demo::explorer_icon_grid_columns(chrome).size() == 6);
+    fs::remove_all(demo::demo_root("mobile"), ec);
+    auto mobile_state = demo::make_state("mobile");
+    auto mobile_chrome = demo::explorer_chrome_metrics(mobile_state, "mobile");
+    assert(mobile_state.viewport_width == demo::k_mobile_default_viewport_width);
+    assert(mobile_state.viewport_height == demo::k_mobile_default_viewport_height);
+    assert(mobile_state.viewport_scale == 2.0f);
+    assert(!mobile_chrome.integrated_titlebar);
+    assert(!mobile_chrome.native_window_controls);
+    assert(mobile_chrome.icon_grid_columns == 0);
+    fs::remove_all(mobile_state.root, ec);
     auto snap = demo::snapshot(state);
     assert(snap.has_selection);
     assert(snap.selected.name == "README.txt");
@@ -299,7 +322,7 @@ int main() {
     fs::remove_all(drive_root, ec);
     std::vector<demo::ExplorerInput> inputs{
         {.kind = demo::ExplorerInputKind::Viewport,
-         .value = "900x620",
+         .value = "900x620@2",
          .viewport_width = 900,
          .viewport_height = 620,
          .viewport_scale = 2.0f},
@@ -320,7 +343,13 @@ int main() {
     assert(driven.state.viewport_width == 900);
     assert(driven.state.viewport_height == 620);
     assert(driven.state.viewport_scale == 2.0f);
-    assert(driven.trace[0].status == "Viewport set to 900x620");
+    assert(driven.chrome.viewport.width == 900);
+    assert(driven.chrome.viewport.height == 620);
+    assert(driven.chrome.viewport.scale == 2.0f);
+    assert(driven.chrome.icon_grid_columns == 3);
+    assert(driven.trace[0].chrome.viewport.width == 900);
+    assert(driven.trace[0].chrome.icon_grid_columns == 3);
+    assert(driven.trace[0].status == "Viewport set to 900x620@2");
     assert(driven.trace[3].operation.kind == "file_create");
     assert(driven.trace[3].operation.ok);
     assert(driven.trace[4].operation.kind == "file_duplicate");

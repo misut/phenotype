@@ -126,9 +126,10 @@ mise exec -- exon build
 ```
 
 The drive output reports the typed input trace, sandbox paths, visible entries,
-viewport, selection capabilities, operation receipts, and preview excerpt. It
-is useful for validating view/read/create/duplicate/delete/resize model
-behavior before running the slower desktop/mobile artifact capture gate.
+viewport, pure Finder chrome/grid metrics, selection capabilities, operation
+receipts, and preview excerpt. It is useful for validating
+view/read/create/duplicate/delete/resize model behavior before running the
+slower desktop/mobile artifact capture gate.
 
 ## Desktop example artifact hook
 

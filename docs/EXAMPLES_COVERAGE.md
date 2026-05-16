@@ -191,8 +191,9 @@ artifact contract.
 The same shared model is available without a native window through
 `phenotype drive file-explorer`. That command applies typed inputs to the
 sandboxed model and emits JSON containing the input trace, visible entries,
-viewport, capabilities, operation receipt, selected preview excerpt, and final
-snapshot. It is the lightweight CI-friendly counterpart to the local
+viewport, pure Finder chrome/grid metrics, capabilities, operation receipt,
+selected preview excerpt, and final snapshot. It is the lightweight
+CI-friendly counterpart to the local
 desktop/mobile artifact capture gate.
 
 `phenotype package bundle` is the lightweight packaging counterpart. It stages

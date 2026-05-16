@@ -15,8 +15,10 @@ The module also owns the typed input/observation contract used by
 location selection, file selection, search, viewport updates, draft body
 updates, create, duplicate, delete, sort, reset, and startup scenarios.
 `drive_explorer()` applies those inputs to the sandboxed model and returns
-`ExplorerInputTrace` records plus a final `Snapshot`, so the CLI can observe
-the same workflow without opening a native AppKit or Win32 window.
+`ExplorerInputTrace` records plus a final `Snapshot` and pure
+`ExplorerChromeMetrics`, so the CLI can observe the same workflow and
+viewport-derived Finder chrome/grid contract without opening a native AppKit or
+Win32 window.
 
 The module also provides the pure file explorer `ResourceCatalog` fixture and
 locale label resolver used by the desktop and mobile examples. Package/locale
