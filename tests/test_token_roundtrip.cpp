@@ -9,7 +9,7 @@
 // Note: the literals here are the same JSON content as the fixture
 // files but emitted in compact form (one row per Color / scalar) to
 // keep this test file readable. The `test_token_vocabulary_parity`
-// case is what actually compares key sets to phenotype's Theme; the
+// case is what actually compares key sets to phenotype's serialized Theme; the
 // shape of the JSON literal does not have to match the fixture file
 // byte-for-byte, only the key set and the values.
 //
@@ -29,7 +29,6 @@
 
 import phenotype;
 import json;
-import cppx.reflect;
 
 using namespace phenotype;
 
@@ -265,6 +264,7 @@ constexpr char const* DEFAULT_THEME_JSON = R"json({
     "b": 38,
     "a": 255
   },
+  "default_font_family": "Pretendard",
   "body_font_size": 16,
   "heading_font_size": 22.4,
   "hero_title_size": 40,
@@ -501,6 +501,7 @@ constexpr char const* DARK_THEME_JSON = R"json({
     "b": 68,
     "a": 255
   },
+  "default_font_family": "Pretendard",
   "body_font_size": 16,
   "heading_font_size": 22.4,
   "hero_title_size": 40,
@@ -737,6 +738,7 @@ constexpr char const* WARM_THEME_JSON = R"json({
     "b": 38,
     "a": 255
   },
+  "default_font_family": "Pretendard",
   "body_font_size": 16,
   "heading_font_size": 22.4,
   "hero_title_size": 40,
@@ -973,6 +975,7 @@ constexpr char const* DENSE_THEME_JSON = R"json({
     "b": 38,
     "a": 255
   },
+  "default_font_family": "Pretendard",
   "body_font_size": 14,
   "heading_font_size": 19.6,
   "hero_title_size": 32,
@@ -1151,14 +1154,16 @@ void test_dense_theme_roundtrip() {
 
 void test_token_vocabulary_parity() {
     // partial-mode deserialization would silently swallow drift between
-    // phenotype's Theme and any committed fixture (extra Theme fields
-    // fall back to C++ defaults, unknown JSON keys are ignored). This
+    // phenotype's serialized Theme and any committed fixture (extra Theme
+    // fields fall back to C++ defaults, unknown JSON keys are ignored). This
     // guard catches both directions explicitly across every theme.
 
+    auto default_theme_value = json::parse(theme_to_json(Theme{}));
+    assert(default_theme_value.is_object());
     std::set<std::string> theme_fields;
-    [&]<std::size_t... Is>(std::index_sequence<Is...>) {
-        (theme_fields.insert(std::string(cppx::reflect::name_of<Theme, Is>())), ...);
-    }(std::make_index_sequence<cppx::reflect::tuple_size_v<Theme>>{});
+    for (auto const& [name, _] : default_theme_value.as_object()) {
+        theme_fields.insert(name);
+    }
 
     bool any_failed = false;
     for (auto const& fixture : THEME_FIXTURES) {

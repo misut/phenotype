@@ -121,6 +121,17 @@ inline void clear_measure_cache() noexcept {
     measure_cache().clear();
 }
 
+inline FontSpec default_text_font(bool mono) noexcept {
+    if (mono)
+        return FontSpec{ {}, FontWeight::Regular, FontStyle::Upright, true };
+    return FontSpec{
+        g_app.theme.default_font_family,
+        FontWeight::Regular,
+        FontStyle::Upright,
+        false,
+    };
+}
+
 struct TextLayout {
     std::vector<std::string> lines;
     float width;
@@ -129,13 +140,13 @@ struct TextLayout {
 
 template <text_measurer M>
 float measure(M const& measurer, str text, float font_size, bool mono) {
-    FontSpec const font{ {}, FontWeight::Regular, FontStyle::Upright, mono };
+    FontSpec const font = default_text_font(mono);
     return measure_text_cached(measurer, font_size, font, text.data, text.len);
 }
 
 template <text_measurer M>
 TextLayout layout_text(M const& measurer, std::string const& text,
-                       float font_size, bool mono, float max_width,
+                       float font_size, FontSpec const& font, float max_width,
                        float line_height) {
     TextLayout result;
     result.width = 0;
@@ -152,7 +163,6 @@ TextLayout layout_text(M const& measurer, std::string const& text,
         }
     }
 
-    FontSpec const lt_font{ {}, FontWeight::Regular, FontStyle::Upright, mono };
     for (auto const& para : paragraphs) {
         if (para.empty()) {
             result.lines.push_back("");
@@ -173,9 +183,9 @@ TextLayout layout_text(M const& measurer, std::string const& text,
             while (i < para.size() && para[i] == ' ') ++i;
 
             float space_width = current_line.empty() ? 0
-                : measure_text_cached(measurer, font_size, lt_font, " ", 1);
+                : measure_text_cached(measurer, font_size, font, " ", 1);
             float word_width = measure_text_cached(
-                measurer, font_size, lt_font, word.c_str(),
+                measurer, font_size, font, word.c_str(),
                 static_cast<unsigned int>(word.size()));
 
             if (!current_line.empty() && current_width + space_width + word_width > max_width) {
@@ -437,7 +447,8 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
     // Text leaf
     if (!node.text.empty() && node.children.empty()) {
         float line_height = node.font_size * g_app.theme.line_height_ratio;
-        auto tl = layout_text(measurer, node.text, node.font_size, node.mono,
+        auto tl = layout_text(measurer, node.text, node.font_size,
+                              default_text_font(node.mono),
                               inner_width, line_height);
         node.text_lines = std::move(tl.lines);
         node.height = tl.height + s.padding[0] + s.padding[2];
@@ -599,8 +610,7 @@ void layout_node(M const& measurer, NodeHandle node_h, float available_width) {
             if (child.style.flex_grow > 0)
                 total_explicit_grow += child.style.flex_grow;
             if (is_text_leaf) {
-                FontSpec const child_font{ {}, FontWeight::Regular,
-                                           FontStyle::Upright, child.mono };
+                FontSpec const child_font = default_text_font(child.mono);
                 float measured = measure_text_cached(
                     measurer, child.font_size, child_font,
                     child.text.c_str(), static_cast<unsigned int>(child.text.size()));
@@ -720,7 +730,7 @@ namespace phenotype::detail {
 export namespace phenotype::detail {
 
 inline float measure(str text, float font_size, bool mono) {
-    FontSpec const font{ {}, FontWeight::Regular, FontStyle::Upright, mono };
+    FontSpec const font = default_text_font(mono);
     return measure_text_cached(g_wasi_measurer, font_size, font,
                                text.data, text.len);
 }

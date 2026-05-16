@@ -209,6 +209,7 @@
     "b": 38,
     "a": 255
   },
+  "default_font_family": "Pretendard",
   "body_font_size": 14,
   "heading_font_size": 19.6,
   "hero_title_size": 32,

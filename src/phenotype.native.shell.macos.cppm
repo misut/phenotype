@@ -611,6 +611,8 @@ int run_app_with_macos_platform(platform_api const& platform,
         platform.window.configure(&surface, &options);
     sync_appkit_surface(host, surface, window, false);
 
+    request_appkit_window_front(app, window);
+
     bind_host(host, 0.0f);
     notify_viewport_changed(
         &host,
@@ -622,6 +624,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     request_appkit_window_front(app, window);
     prime_appkit_window_ordering(app);
     wait_for_appkit_window_front(app, window);
+    repaint_current_after_surface_presented();
 
     auto const* artifact_dir = std::getenv("PHENOTYPE_ARTIFACT_DIR");
     bool const artifact_requested = artifact_dir && artifact_dir[0] != '\0';

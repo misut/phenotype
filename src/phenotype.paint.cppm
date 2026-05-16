@@ -702,6 +702,17 @@ inline void flush_if_changed() { flush_if_changed(detail::g_wasi); }
 
 export namespace phenotype::detail {
 
+inline FontSpec paint_default_text_font(bool mono) noexcept {
+    if (mono)
+        return FontSpec{ {}, FontWeight::Regular, FontStyle::Upright, true };
+    return FontSpec{
+        g_app.theme.default_font_family,
+        FontWeight::Regular,
+        FontStyle::Upright,
+        false,
+    };
+}
+
 template <render_backend R>
 void reset_paint_scissor_boundary(R& r) {
     g_app.paint_scissor_depth = 0;
@@ -724,8 +735,7 @@ void emit_focused_input_selection(R& r,
 
     float base_x = snapshot.x + snapshot.padding[3] - scroll_x;
     float draw_y = snapshot.y - scroll_y + snapshot.padding[0];
-    FontSpec const input_font{ {}, FontWeight::Regular, FontStyle::Upright,
-                               snapshot.mono };
+    FontSpec const input_font = paint_default_text_font(snapshot.mono);
     float start_x = base_x + measurer.measure_text(
         snapshot.font_size, input_font,
         snapshot.value.data(),
@@ -1000,8 +1010,7 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         if (inner_height > text_block_height)
             vertical_offset = (inner_height - text_block_height) / 2.0f;
         float ty = draw_y + node.style.padding[0] + vertical_offset;
-        FontSpec const node_font{ {}, FontWeight::Regular, FontStyle::Upright,
-                                  node.mono };
+        FontSpec const node_font = paint_default_text_font(node.mono);
         unsigned int const node_flags = pack_font_flags(node_font);
         for (auto const& line : node.text_lines) {
             if (!line.empty()) {

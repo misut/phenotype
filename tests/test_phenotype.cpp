@@ -2177,6 +2177,7 @@ void test_theme_json_roundtrip() {
     assert(parsed->background.r == original.background.r);
     assert(parsed->background.g == original.background.g);
     assert(parsed->foreground.r == original.foreground.r);
+    assert(parsed->default_font_family == original.default_font_family);
     assert(parsed->body_font_size == original.body_font_size);
     assert(parsed->line_height_ratio == original.line_height_ratio);
     assert(parsed->max_content_width == original.max_content_width);
@@ -2202,6 +2203,7 @@ void test_theme_json_partial_keeps_defaults() {
     assert(parsed->border.r      == defaults.border.r);
     assert(parsed->code_bg.r     == defaults.code_bg.r);
     assert(parsed->hero_bg.r     == defaults.hero_bg.r);
+    assert(parsed->default_font_family == defaults.default_font_family);
     assert(parsed->body_font_size    == defaults.body_font_size);
     assert(parsed->heading_font_size == defaults.heading_font_size);
     assert(parsed->line_height_ratio == defaults.line_height_ratio);
@@ -2212,6 +2214,7 @@ void test_theme_json_partial_keeps_defaults() {
     assert(empty_overlay.has_value());
     assert(empty_overlay->accent.r == defaults.accent.r);
     assert(empty_overlay->background.r == defaults.background.r);
+    assert(empty_overlay->default_font_family == defaults.default_font_family);
     assert(empty_overlay->body_font_size == defaults.body_font_size);
 
     std::puts("PASS: theme JSON partial keeps defaults");
@@ -2344,6 +2347,7 @@ void test_theme_json_mixed_overlay() {
     auto parsed = theme_from_json(R"({
         "accent": "#0abab5",
         "background": {"r":244,"g":244,"b":245,"a":255},
+        "default_font_family": "Pretendard",
         "body_font_size": 18.0,
         "max_content_width": 960
     })");
@@ -2360,6 +2364,7 @@ void test_theme_json_mixed_overlay() {
     assert(parsed->background.b == 245);
     assert(parsed->background.a == 255);
     // Float overrides.
+    assert(parsed->default_font_family == "Pretendard");
     assert(parsed->body_font_size == 18.0f);
     assert(parsed->max_content_width == 960.0f);
     // Untouched fields still hold defaults.
@@ -3035,6 +3040,37 @@ void test_draw_text_roundtrip_with_fontspec() {
     std::puts("PASS: DrawText round-trips with FontSpec");
 }
 
+void test_widget_text_uses_theme_default_font_family() {
+    set_theme(Theme{});
+    detail::g_app.arena.reset();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::text("Pretendard default");
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 400.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    bool found = false;
+    for (auto const& cmd : cmds) {
+        if (auto const* text = std::get_if<DrawTextCmd>(&cmd)) {
+            if (text->text == "Pretendard default") {
+                found = true;
+                assert(!text->mono);
+                assert(text->family == "Pretendard");
+            }
+        }
+    }
+    assert(found);
+    std::puts("PASS: widget text uses Theme::default_font_family");
+}
+
 // ============================================================
 // Runner
 // ============================================================
@@ -3098,6 +3134,7 @@ int main() {
     test_column_props_default_and_override();
     test_row_props_default_and_override();
     test_draw_text_roundtrip_with_fontspec();
+    test_widget_text_uses_theme_default_font_family();
     std::puts("\nAll tests passed.");
     return 0;
 }

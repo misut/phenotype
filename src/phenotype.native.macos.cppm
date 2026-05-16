@@ -81,6 +81,14 @@ struct FontCacheKey {
     bool                     mono   = false;
 };
 
+inline FontCacheKey default_text_font_key(bool mono) {
+    FontCacheKey key{};
+    key.mono = mono;
+    if (!mono)
+        key.family = ::phenotype::detail::g_app.theme.default_font_family;
+    return key;
+}
+
 struct FontCacheKeyLess {
     bool operator()(FontCacheKey const& l, FontCacheKey const& r) const noexcept {
         if (l.family != r.family) return l.family < r.family;
@@ -678,8 +686,7 @@ inline float text_measure(float font_size, FontCacheKey const& key,
 
 inline float text_measure(float font_size, bool mono,
                           char const* text_ptr, unsigned int len) {
-    FontCacheKey key{};
-    key.mono = mono;
+    FontCacheKey key = default_text_font_key(mono);
     return text_measure(font_size, key, text_ptr, len);
 }
 
@@ -860,19 +867,25 @@ inline CTFontRef acquire_base_font(FontCacheKey const& key) {
         if (auto it = g_text.registered_aliases.find(key.family);
             it != g_text.registered_aliases.end()) {
             lookup_name = it->second;
+        } else if (!key.mono && key.family == "Pretendard") {
+            base = g_text.sans
+                ? static_cast<CTFontRef>(CFRetain(g_text.sans))
+                : nullptr;
         }
-        auto cf_name = CFGuard<CFStringRef>(CFStringCreateWithBytes(
-            kCFAllocatorDefault,
-            reinterpret_cast<UInt8 const*>(lookup_name.data()),
-            static_cast<CFIndex>(lookup_name.size()),
-            kCFStringEncodingUTF8,
-            false));
-        if (!cf_name) {
-            CTFontRef fb = fallback("CFString create failed");
-            if (fb) g_text.cache.emplace(key, static_cast<CTFontRef>(CFRetain(fb)));
-            return fb;
+        if (!base) {
+            auto cf_name = CFGuard<CFStringRef>(CFStringCreateWithBytes(
+                kCFAllocatorDefault,
+                reinterpret_cast<UInt8 const*>(lookup_name.data()),
+                static_cast<CFIndex>(lookup_name.size()),
+                kCFStringEncodingUTF8,
+                false));
+            if (!cf_name) {
+                CTFontRef fb = fallback("CFString create failed");
+                if (fb) g_text.cache.emplace(key, static_cast<CTFontRef>(CFRetain(fb)));
+                return fb;
+            }
+            base = CTFontCreateWithName(cf_name, 16.0, nullptr);
         }
-        base = CTFontCreateWithName(cf_name, 16.0, nullptr);
     }
     if (!base) {
         CTFontRef fb = fallback("CTFontCreateWithName returned null");
@@ -1014,8 +1027,7 @@ inline CFGuard<CTFontRef> copy_text_font(float font_size, FontCacheKey const& ke
 }
 
 inline CFGuard<CTFontRef> copy_text_font(float font_size, bool mono) {
-    FontCacheKey key{};
-    key.mono = mono;
+    FontCacheKey key = default_text_font_key(mono);
     return copy_text_font(font_size, key);
 }
 
