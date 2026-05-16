@@ -41,8 +41,9 @@ tools/phenotype_cli/.exon/debug/phenotype_cli artifact verify-file-explorer \
   --profile mobile
 ```
 
-`tools/verify_file_explorer_artifacts.sh` remains a compatibility wrapper for
-existing local scripts.
+`tools/verify_file_explorer_artifacts.sh` is a thin compatibility wrapper for
+existing local scripts; it builds the CLI when needed and delegates to the same
+command.
 
 For the package-resource contract:
 
@@ -54,7 +55,7 @@ mise exec -- exon build
 
 The package metadata's debug verifier is the CLI command
 `phenotype artifact verify-file-explorer`; the shell script remains only as a
-compatibility wrapper for older local run configurations.
+thin wrapper for older local run configurations.
 
 At runtime the example reads `phenotype.package.toml` and locale files from
 `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`, `PHENOTYPE_PACKAGE_ROOT`, or the current

@@ -30,7 +30,8 @@ The initial scope is intentionally narrow:
   invokes the uv-managed verifier without delegating to the shell wrapper. The
   gate can be narrowed with `--profile`, repeated `--view-mode`, and repeated
   `--scenario` options for faster local iteration before running the full gate;
-  `tools/verify_file_explorer_artifacts.sh` remains a compatibility wrapper.
+  `tools/verify_file_explorer_artifacts.sh` is a thin compatibility wrapper
+  that builds and delegates to this command.
 - `phenotype package inspect <path>` checks the proposed package manifest,
   application/debug metadata, declared resource counts, referenced `source`
   files, Pretendard default-font policy, CLI-owned debug verifier metadata,
