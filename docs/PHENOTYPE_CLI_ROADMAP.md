@@ -160,6 +160,16 @@ through an immutable `ResourceCatalog` snapshot. Missing assets and locale keys
 must become structured CLI diagnostics before launch, not late renderer
 surprises.
 
+`phenotype.resources` now owns that pure snapshot shape. It intentionally starts
+below the CLI: package parsers and bundle builders remain edge adapters, while
+core code receives a `ResourceCatalog` with application metadata, logical
+assets, locale tables, font descriptors, and debug-resource descriptors. The
+module validates duplicates, required locale-key coverage, default locale/font
+references, artifact manifest metadata, and verifier metadata without reading
+files. CLI commands should gradually switch their hand-written manifest checks
+to this shared value layer once the package parser is moved out of
+`tools/phenotype_cli/src/main.cpp`.
+
 ## Diagnostic migration
 
 Python remains acceptable while it is managed through `mise` and `uv`, but it
@@ -219,6 +229,8 @@ The CLI should not make production rendering slower:
    Python fixture parity tests until the old verifier can be retired.
 4. Add package manifest parsing for assets, locales, fonts, and debug
    resources. Start with inspect-only validation before producing bundles.
+   The pure `phenotype.resources` catalog layer is in place; the parser/bundler
+   edge still needs to adopt it.
 5. Add deterministic CLI input scripts and output observations for
    `glass_showcase` and `file_explorer_desktop`.
 6. Replace CI and docs references to shell/Python tools with CLI commands.

@@ -1,9 +1,12 @@
+#include <algorithm>
+#include <array>
 #include <cassert>
 #include <cmath>
 #include <cstdio>
 #include <cstring>
 #include <memory>
 #include <string>
+#include <string_view>
 #include <variant>
 #include <vector>
 import phenotype;
@@ -3071,6 +3074,162 @@ void test_widget_text_uses_theme_default_font_family() {
     std::puts("PASS: widget text uses Theme::default_font_family");
 }
 
+ResourceCatalog make_test_resource_catalog() {
+    ResourceCatalog catalog;
+    catalog.application = {
+        .id = "com.misut.phenotype.examples.file-explorer-desktop",
+        .display_name = "Phenotype File Explorer",
+        .version = "0.1.0",
+        .entry = "file_explorer_desktop",
+        .platforms = {"macos", "windows"},
+    };
+    catalog.default_locale = "en";
+    catalog.default_font_family = "Pretendard";
+    catalog.assets = {
+        {
+            .name = "app.icon",
+            .source = "assets/file-explorer-icon.txt",
+            .content_type = "text/plain",
+            .preload = true,
+            .runtime_visible = false,
+        },
+    };
+    catalog.locales = {
+        {
+            .tag = "en",
+            .source = "locales/en.toml",
+            .strings = {
+                {.key = "window.title", .value = "Recents"},
+                {.key = "sidebar.recents", .value = "Recents"},
+                {.key = "action.delete", .value = "Delete"},
+            },
+        },
+        {
+            .tag = "ko",
+            .source = "locales/ko.toml",
+            .fallback = {"en"},
+            .strings = {
+                {.key = "window.title", .value = "최근 항목"},
+                {.key = "sidebar.recents", .value = "최근 항목"},
+            },
+        },
+    };
+    catalog.fonts = {
+        {
+            .family = "Pretendard",
+            .source = "fonts/pretendard.alias.toml",
+            .register_font = false,
+            .fallback = {"system-ui", "Apple SD Gothic Neo", "Segoe UI"},
+        },
+    };
+    catalog.debug = {
+        .artifact_manifest = "artifact_manifest.json",
+        .probe_scene = "finder-style-startup",
+        .verifier = "phenotype artifact verify-file-explorer",
+    };
+    return catalog;
+}
+
+void test_resource_catalog_lookup_and_locale_fallback() {
+    auto catalog = make_test_resource_catalog();
+
+    auto required = std::array<std::string_view, 3>{
+        "window.title",
+        "sidebar.recents",
+        "action.delete",
+    };
+    auto diagnostics = validate_resource_catalog(catalog, required);
+    assert(diagnostics.empty());
+    assert(resource_catalog_ok(catalog));
+
+    auto asset = find_asset(catalog, "app.icon");
+    assert(asset);
+    assert(asset->get().source == "assets/file-explorer-icon.txt");
+
+    auto font = find_font(catalog, "Pretendard");
+    assert(font);
+    assert(font->get().fallback.size() == 3);
+
+    auto ko_delete = localized_string(catalog, "action.delete", "ko");
+    assert(ko_delete);
+    assert(ko_delete->tag == "en");
+    assert(ko_delete->value == "Delete");
+    assert(ko_delete->fallback);
+
+    auto chain = locale_fallback_chain(catalog, "ko");
+    assert(chain.size() == 2);
+    assert(chain[0] == "ko");
+    assert(chain[1] == "en");
+
+    std::puts("PASS: resource catalog lookup and locale fallback");
+}
+
+void test_resource_catalog_diagnostics_are_actionable() {
+    auto catalog = make_test_resource_catalog();
+    catalog.application.id.clear();
+    catalog.assets.push_back({
+        .name = "app.icon",
+        .source = "assets/duplicate-icon.txt",
+        .content_type = "text/plain",
+    });
+    catalog.debug.artifact_manifest.clear();
+
+    auto required = std::array<std::string_view, 1>{"action.archive"};
+    auto diagnostics = validate_resource_catalog(catalog, required);
+
+    auto has_kind = [&](ResourceDiagnosticKind kind,
+                        std::string_view path) {
+        return std::ranges::any_of(
+            diagnostics,
+            [&](ResourceDiagnostic const& diagnostic) {
+                return diagnostic.kind == kind
+                    && diagnostic.path == path
+                    && diagnostic.severity == ResourceDiagnosticSeverity::Error
+                    && !diagnostic.message.empty();
+            });
+    };
+
+    assert(has_kind(ResourceDiagnosticKind::MissingApplicationId,
+                    "application.id"));
+    assert(has_kind(ResourceDiagnosticKind::DuplicateAssetName,
+                    "assets[1].name"));
+    assert(has_kind(ResourceDiagnosticKind::MissingArtifactManifest,
+                    "debug.artifact_manifest"));
+    assert(has_kind(ResourceDiagnosticKind::MissingLocaleKey,
+                    "locales.en.action.archive"));
+    assert(has_kind(ResourceDiagnosticKind::MissingLocaleKey,
+                    "locales.ko.action.archive"));
+    assert(!resource_catalog_ok(catalog));
+
+    assert(std::string{
+        resource_diagnostic_kind_name(
+            ResourceDiagnosticKind::DuplicateAssetName)}
+        == "duplicate_asset_name");
+    assert(std::string{
+        resource_diagnostic_severity_name(
+            ResourceDiagnosticSeverity::Error)}
+        == "error");
+
+    std::puts("PASS: resource catalog diagnostics are actionable");
+}
+
+void test_resource_catalog_theme_defaults() {
+    auto catalog = make_test_resource_catalog();
+    catalog.default_font_family = "Pretendard";
+
+    Theme theme{};
+    theme.default_font_family = "System";
+    auto themed = theme_with_resource_defaults(theme, catalog);
+    assert(themed.default_font_family == "Pretendard");
+    assert(theme.default_font_family == "System");
+
+    catalog.default_font_family.clear();
+    auto unchanged = theme_with_resource_defaults(theme, catalog);
+    assert(unchanged.default_font_family == "System");
+
+    std::puts("PASS: resource catalog theme defaults");
+}
+
 // ============================================================
 // Runner
 // ============================================================
@@ -3135,6 +3294,9 @@ int main() {
     test_row_props_default_and_override();
     test_draw_text_roundtrip_with_fontspec();
     test_widget_text_uses_theme_default_font_family();
+    test_resource_catalog_lookup_and_locale_fallback();
+    test_resource_catalog_diagnostics_are_actionable();
+    test_resource_catalog_theme_defaults();
     std::puts("\nAll tests passed.");
     return 0;
 }
