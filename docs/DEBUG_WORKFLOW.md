@@ -222,6 +222,25 @@ continues running. `examples/glass_showcase` uses the same route for
 material-focused checks, including macOS sampled-backdrop rendering and fallback
 metadata. The desktop and mobile file explorer examples use the same route for
 product-style material workflow artifacts.
+File explorer examples can also replay deterministic startup input through the
+same shared model parser used by `phenotype drive file-explorer`:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli run file_explorer_desktop \
+  --artifact-dir /tmp/phenotype-file-explorer-input \
+  --artifact-exit \
+  --input select:README.txt \
+  --input duplicate
+```
+
+The CLI validates those inputs before launch, reports direct/script input
+counts in the run receipt, and passes only
+`PHENOTYPE_FILE_EXPLORER_INPUTS`/`PHENOTYPE_FILE_EXPLORER_SCRIPT` into the
+native process. This keeps file reads, process execution, and environment
+access at the edge while allowing artifact bundles to prove the result of GUI
+input replay.
 The macOS native backend reads accessibility display preferences from
 `NSWorkspace` by default. For deterministic artifact capture, set
 `PHENOTYPE_ACCESSIBILITY_DISPLAY=standard` to disable those inputs, or set

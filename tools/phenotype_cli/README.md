@@ -69,7 +69,11 @@ The initial scope is intentionally narrow:
   example owns `phenotype.package.toml`, the run command passes
   `PHENOTYPE_PACKAGE_ROOT`, and file explorer examples also receive
   `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`, so runtime labels and font defaults
-  can come from the packaged manifest/locales.
+  can come from the packaged manifest/locales. File explorer runs can also take
+  repeated `--input` values or one line-based `--script`; the CLI validates
+  those inputs through `file_explorer_shared`, then passes them to the native
+  example through `PHENOTYPE_FILE_EXPLORER_INPUTS` and
+  `PHENOTYPE_FILE_EXPLORER_SCRIPT` before startup artifact capture.
 - `phenotype android ...` is the single Android workflow namespace for
   repository-local doctor/devices/emulator/build/APK/install/run/logs/screencap
   and artifact-contract commands. The implementation still delegates to the
@@ -132,7 +136,9 @@ mise exec -- exon build
 .exon/debug/phenotype_cli run file_explorer_desktop \
   --artifact-dir /tmp/phenotype-file-explorer \
   --artifact-exit \
-  --env PHENOTYPE_FILE_EXPLORER_VIEW=icon
+  --env PHENOTYPE_FILE_EXPLORER_VIEW=icon \
+  --input select:README.txt \
+  --input duplicate
 .exon/debug/phenotype_cli android doctor --json
 .exon/debug/phenotype_cli android devices --json
 .exon/debug/phenotype_cli android contract --json \

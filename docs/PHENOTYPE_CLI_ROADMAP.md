@@ -127,7 +127,7 @@ Current commands:
 | `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource, and reports the same package checks plus bundle integrity totals. |
 | `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs or line-based scripts and emits a stable observation JSON with trace, entries, viewport, pure Finder chrome/grid metrics, capabilities, operation receipt, preview excerpt fields, localized labels, package-resource metadata, and optional expectation results. |
 | `phenotype drive glass-showcase` | implemented | Drives the shared material probe model from typed CLI inputs or line-based scripts and emits a stable observation JSON with final state, trace, public material kinds, expected material plan count, backdrop/inspector/density/viewport state, progress value, and optional expectation results. |
-| `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, passes package-root environment when a manifest exists, and emits a stable JSON launch receipt with build/run output tails, timeout state, artifact bundle summary, and explicit environment overrides. |
+| `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, passes package-root environment when a manifest exists, validates file explorer `--input`/`--script` through the shared model, and emits a stable JSON launch receipt with build/run output tails, input counts, timeout state, artifact bundle summary, and explicit environment overrides. |
 
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, textual asset placeholders, English/Korean
@@ -167,6 +167,15 @@ contract inputs like `PHENOTYPE_FILE_EXPLORER_VIEW`. This keeps the long-term
 input/output abstraction model compatible with production builds: the CLI can
 drive or observe examples, while native shells continue to translate platform
 input directly into phenotype.
+For file explorer examples, `phenotype run` also bridges CLI input into the
+same shared abstraction used by `phenotype drive file-explorer`: repeated
+`--input` values are validated by `file_explorer_shared`, one `--script` file is
+parsed with the same line/diagnostic rules, and the native process receives
+only `PHENOTYPE_FILE_EXPLORER_INPUTS` plus
+`PHENOTYPE_FILE_EXPLORER_SCRIPT`. The desktop/mobile examples read those edge
+values at startup and call the shared parser/apply functions before the first
+artifact frame. This keeps deterministic GUI input replay available to CI and
+LLM debugging without introducing a second native event stack.
 
 ## Packaging contract
 
