@@ -5,6 +5,7 @@ description = "Host CLI for phenotype packaging, diagnostics, and artifact inspe
 type = "bin"
 standard = 23
 platforms = [
+    { os = "linux", arch = "x86_64" },
     { os = "macos", arch = "aarch64" },
     { os = "windows", arch = "x86_64" },
 ]

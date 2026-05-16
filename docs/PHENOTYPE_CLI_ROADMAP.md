@@ -114,13 +114,15 @@ Current commands:
 | `phenotype doctor` | implemented | Read-only repository checks for `mise.toml`, verifier tools, Android contract script, CLI roadmap, and file explorer shared package presence. |
 | `phenotype commands --json` | implemented | Emits a recursive command tree with `cppx.cli` command metadata, stable paths, and schema version `1`. |
 | `phenotype artifact summary <bundle>` | implemented | Read-only structural summary for `snapshot.json`, `frame.bmp`, and platform runtime files. This does not replace semantic verification yet. |
-| `phenotype package inspect <path>` | implemented | Checks for `phenotype.package.toml`, `assets/`, `locales/`, and `fonts/` directories with file counts. |
+| `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, and package resource directories. |
 
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, textual asset placeholders, English/Korean
 locale files, and a Pretendard alias descriptor. These resources are package
 contract fixtures only; the runtime examples still use the existing hard-coded
 view text until the resource catalog layer lands.
+Pull-request CI routes CLI and file explorer package-resource edits through a
+lightweight Linux CLI/package job instead of the full root native matrix.
 
 ## Packaging contract
 

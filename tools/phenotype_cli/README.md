@@ -11,7 +11,8 @@ The initial scope is intentionally narrow:
 - `phenotype artifact summary <bundle>` summarizes a debug artifact bundle
   without replacing the Python verifier yet.
 - `phenotype package inspect <path>` checks the proposed package manifest,
-  asset, locale, and font layout.
+  declared resource counts, referenced `source` files, Pretendard default-font
+  policy, asset layout, locale layout, and font layout.
 - `phenotype commands --json` emits machine-readable command metadata from
   `cppx.cli`.
 
