@@ -28,7 +28,10 @@ The module also provides the pure file explorer `ResourceCatalog` fixture and
 locale label resolver used by the desktop and mobile examples. Package/locale
 files are still inspected by the CLI at the edge, but runtime examples consume
 the same immutable resource shape so labels and Pretendard defaults are no
-longer hard-coded separately in each UI.
+longer hard-coded separately in each UI. The shared `phenotype.resources`
+package also computes `ResourceCatalogContract`, so CLI package inspection can
+report default locale/font resolution, asset preload intent, and per-locale
+fallback coverage without opening a native window or reading platform APIs.
 
 ## Run
 

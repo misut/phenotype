@@ -157,6 +157,32 @@ struct LocalizedString {
     bool fallback = false;
 };
 
+struct LocaleCoverage {
+    std::string tag;
+    bool default_locale = false;
+    std::vector<std::string> fallback_chain;
+    std::size_t declared_string_count = 0;
+    std::size_t required_key_count = 0;
+    std::size_t resolved_key_count = 0;
+    std::vector<std::string> missing_keys;
+};
+
+struct ResourceCatalogContract {
+    std::size_t asset_count = 0;
+    std::size_t preload_asset_count = 0;
+    std::size_t runtime_visible_asset_count = 0;
+    std::size_t locale_count = 0;
+    std::size_t locale_string_count = 0;
+    std::size_t font_count = 0;
+    std::size_t registered_font_count = 0;
+    bool default_locale_declared = false;
+    bool default_font_declared = false;
+    bool debug_artifact_manifest_declared = false;
+    bool debug_probe_scene_declared = false;
+    bool debug_verifier_declared = false;
+    std::vector<LocaleCoverage> locale_coverage;
+};
+
 struct ResourceManifestParseResult {
     ResourceCatalog catalog;
     bool application_section = false;
@@ -640,6 +666,58 @@ inline auto localized_string(
         }
     }
     return std::nullopt;
+}
+
+inline auto resource_catalog_contract(
+        ResourceCatalog const& catalog,
+        std::span<std::string_view const> required_locale_keys = {})
+    -> ResourceCatalogContract {
+    auto contract = ResourceCatalogContract{};
+    contract.asset_count = catalog.assets.size();
+    contract.locale_count = catalog.locales.size();
+    contract.font_count = catalog.fonts.size();
+    contract.default_locale_declared =
+        !catalog.default_locale.empty()
+        && find_locale(catalog, catalog.default_locale).has_value();
+    contract.default_font_declared =
+        !catalog.default_font_family.empty()
+        && find_font(catalog, catalog.default_font_family).has_value();
+    contract.debug_artifact_manifest_declared =
+        !catalog.debug.artifact_manifest.empty();
+    contract.debug_probe_scene_declared = !catalog.debug.probe_scene.empty();
+    contract.debug_verifier_declared = !catalog.debug.verifier.empty();
+
+    for (auto const& asset : catalog.assets) {
+        if (asset.preload)
+            ++contract.preload_asset_count;
+        if (asset.runtime_visible)
+            ++contract.runtime_visible_asset_count;
+    }
+    for (auto const& font : catalog.fonts) {
+        if (font.register_font)
+            ++contract.registered_font_count;
+    }
+    for (auto const& locale : catalog.locales) {
+        contract.locale_string_count += locale.strings.size();
+        auto coverage = LocaleCoverage{
+            .tag = locale.tag,
+            .default_locale = same_resource_key(locale.tag, catalog.default_locale),
+            .fallback_chain = locale_fallback_chain(catalog, locale.tag),
+            .declared_string_count = locale.strings.size(),
+        };
+        for (auto key : required_locale_keys) {
+            if (key.empty())
+                continue;
+            ++coverage.required_key_count;
+            if (localized_string(catalog, key, locale.tag)) {
+                ++coverage.resolved_key_count;
+            } else {
+                coverage.missing_keys.push_back(std::string{key});
+            }
+        }
+        contract.locale_coverage.push_back(std::move(coverage));
+    }
+    return contract;
 }
 
 inline void add_resource_diagnostic(

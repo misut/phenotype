@@ -121,10 +121,10 @@ Current commands:
 | `phenotype artifact verify-file-explorer` | implemented | Local-only edge wrapper around the desktop/mobile Finder-style artifact gate. Legacy `tools/verify_file_explorer_artifacts.sh` now delegates to this command unless the CLI invokes it in compatibility mode. `--profile`, repeated `--view-mode`, and repeated `--scenario` narrow the capture set for faster local iteration before the full gate. |
 | `phenotype observe <bundle>` | implemented | C++ artifact observation envelope for LLM-actionable debugging. It parses `snapshot.json`, summarizes semantic/platform/runtime/material plan presence, material kinds/roles, fallback and backdrop capture reasons, executor counts, likely layer/pass hints, frame/platform files, and optionally embeds the uv-managed verifier report when `--manifest` or `--verify` is supplied. |
 | `phenotype android doctor/devices/emu-start/emu-stop/build/apk/install/launch/stop/run/logs/screencap/contract/clean` | implemented | Stable CLI namespace over the existing Android edge scripts and Android build command. `--json` emits a process/script result envelope, `--serial` forwards `ANDROID_SERIAL`, and `--state-dir`/`--avd`/`--apk` keep device state explicit. |
-| `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, CLI-owned debug verifier metadata, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, package resource directories, and artifact manifest presence. |
+| `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, CLI-owned debug verifier metadata, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, package resource directories, artifact manifest presence, pure resource-contract defaults, asset preload intent, and locale fallback coverage. |
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
-| `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, debug manifest references, byte counts, content metadata, and SHA-256 digests. |
-| `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource, and reports the same package checks plus bundle integrity totals. |
+| `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, debug manifest references, byte counts, content metadata, the pure resource contract, and SHA-256 digests. |
+| `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource, compares stored manifest records against the staged files, and reports the same package checks plus bundle integrity totals. |
 | `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs or line-based scripts and emits a stable observation JSON with trace, entries, viewport, view mode, pure Finder chrome/grid metrics, capabilities, operation receipt, preview excerpt fields, localized labels, package-resource metadata, and optional expectation results. |
 | `phenotype drive glass-showcase` | implemented | Drives the shared material probe model from typed CLI inputs or line-based scripts and emits a stable observation JSON with final state, trace, public material kinds, expected material plan count, backdrop/inspector/density/viewport state, progress value, and optional expectation results. |
 | `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, passes package-root environment when a manifest exists, validates file explorer `--input`/`--script` through the shared model, and emits a stable JSON launch receipt with build/run output tails, input counts, timeout state, artifact bundle summary, and explicit environment overrides. |
@@ -220,11 +220,14 @@ surprises.
 remain CLI edge effects, while manifest and locale parsing are pure
 text-to-value transformations. The module parses `phenotype.package.toml` text
 into a `ResourceCatalog`, parses locale TOML text into `LocaleString` entries,
-and validates duplicates, required locale-key coverage, default locale/font
-references, artifact manifest metadata, and verifier metadata without reading
-files. CLI commands receive this shared catalog before launch or future
-bundling, and `package inspect --json` exposes the normalized catalog plus
-resource diagnostics.
+computes a `ResourceCatalogContract`, and validates duplicates, required
+locale-key coverage, default locale/font references, artifact manifest
+metadata, and verifier metadata without reading files. The contract records
+asset counts, preload/runtime-visible intent, default locale/font resolution,
+debug metadata presence, and per-locale fallback-chain coverage. CLI commands
+receive this shared catalog before launch or future bundling, and
+`package inspect --json` exposes the normalized catalog, contract, and resource
+diagnostics.
 
 `phenotype package bundle` is the first staging implementation. It keeps
 platform-specific `.app`, `.dmg`, MSI, Android, and web packaging out of scope,
@@ -241,10 +244,11 @@ window startup.
 `phenotype package verify-bundle` makes the staging output self-checking. It
 uses the copied `phenotype.package.toml` as the bundle-local source of truth,
 checks that `phenotype.bundle.json` exists, recomputes SHA-256 for every
-declared asset, locale, font, and debug artifact manifest, and reports exact
-per-file integrity errors. This mirrors Dioxus-style asset collection while
-keeping the filesystem and checksum work in the CLI edge adapter rather than
-in `phenotype.resources`.
+declared asset, locale, font, and debug artifact manifest, and compares stored
+manifest schema, command, file count, total bytes, relative destinations, and
+digests against the staged files. This mirrors Dioxus-style asset collection
+while keeping the filesystem and checksum work in the CLI edge adapter rather
+than in `phenotype.resources`.
 
 `phenotype run <example>` is the first runtime injection point. It keeps process
 launching at the CLI edge, but if the selected example contains

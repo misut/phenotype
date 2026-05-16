@@ -36,20 +36,25 @@ The initial scope is intentionally narrow:
   files, Pretendard default-font policy, CLI-owned debug verifier metadata,
   asset layout, locale layout, and font layout. JSON output includes the
   normalized `ResourceCatalog` produced by the shared pure
-  `phenotype.resources` path package; the CLI only reads files and checks
-  paths, while manifest and locale text parsing stay in the pure package.
+  `phenotype.resources` path package plus its pure `ResourceCatalogContract`.
+  The contract reports asset preload/runtime-visible intent, default
+  locale/font resolution, debug metadata presence, and per-locale fallback
+  coverage for the default key set; the CLI only reads files and checks paths,
+  while manifest and locale text parsing stay in the pure package.
 - `phenotype package list <root>` scans for package manifests below a root and
   emits a compact package catalog for CI or future bundling, including resource
   counts and catalog diagnostic counts.
 - `phenotype package bundle <path> --output <dir>` stages the package manifest,
   assets, locales, fonts, and debug artifact manifest into a bundle directory
   and writes `phenotype.bundle.json` with copied-file records, content metadata,
-  SHA-256 digests, byte counts, and bundle-level integrity totals for CI and
-  future platform packagers.
+  the pure resource contract, SHA-256 digests, byte counts, and bundle-level
+  integrity totals for CI and future platform packagers.
 - `phenotype package verify-bundle <dir>` re-opens a staged bundle directory,
   rebuilds the package resource contract from the copied manifest, checks that
-  every declared resource is present, and recomputes SHA-256 digests without
-  needing the original source package root.
+  every declared resource is present, recomputes SHA-256 digests, and compares
+  the stored `phenotype.bundle.json` schema, command, file count, byte total,
+  relative destinations, and digests without needing the original source
+  package root.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible
