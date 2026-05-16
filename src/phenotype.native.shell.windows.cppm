@@ -772,6 +772,7 @@ int run_app_with_windows_platform(platform_api const& platform,
 
     ShowWindow(hwnd, SW_SHOW);
     UpdateWindow(hwnd);
+    repaint_current_after_surface_presented();
 
     auto const* artifact_dir = std::getenv("PHENOTYPE_ARTIFACT_DIR");
     bool const artifact_requested = artifact_dir && artifact_dir[0] != '\0';

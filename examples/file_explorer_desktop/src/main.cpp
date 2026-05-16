@@ -78,6 +78,9 @@ FinderViewMode initial_view_mode() {
 
 file_explorer_demo::ExplorerState initial_explorer_state() {
     auto state = file_explorer_demo::make_state("desktop");
+    state.viewport_width = 1300;
+    state.viewport_height = 760;
+    state.viewport_scale = 1.0f;
     if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_SCENARIO")) {
         file_explorer_demo::apply_startup_scenario(state, raw);
     }
@@ -112,6 +115,14 @@ phenotype::Color rgba(int r, int g, int b, int a = 255) {
         static_cast<unsigned char>(g),
         static_cast<unsigned char>(b),
         static_cast<unsigned char>(a),
+    };
+}
+
+phenotype::FontSpec finder_font(
+        phenotype::FontWeight weight = phenotype::FontWeight::Regular) {
+    return phenotype::FontSpec{
+        .family = "Pretendard",
+        .weight = weight,
     };
 }
 
@@ -214,8 +225,6 @@ void stroke_round(phenotype::Painter& painter,
 }
 
 void paint_sidebar_icon(phenotype::Painter& painter, std::string_view id) {
-    using phenotype::FontWeight;
-    using phenotype::FontSpec;
     auto ink = rgba(30, 30, 30);
     if (id == "recents")
         ink = rgba(0, 122, 255);
@@ -229,7 +238,7 @@ void paint_sidebar_icon(phenotype::Painter& painter, std::string_view id) {
         painter.line(13.0f, 13.0f, 6.8f, 13.0f, 2.2f, ink);
     } else if (id == "app") {
         painter.text(3.0f, 0.0f, "A", 1, 24.0f, ink,
-                     FontSpec{.weight = FontWeight::Bold});
+                     finder_font(phenotype::FontWeight::Bold));
         painter.line(4.0f, 22.0f, 21.0f, 22.0f, 2.0f, ink);
     } else if (id == "desktop") {
         stroke_round(painter, 3.0f, 7.0f, 20.0f, 14.0f, 3.0f, 2.0f, ink);
@@ -298,7 +307,7 @@ void paint_pdf_thumbnail(phenotype::Painter& painter,
     auto tag = extension_lower(name);
     painter.text(40.0f, 64.0f, tag.c_str(),
                  static_cast<unsigned int>(tag.size()),
-                 9.0f, rgba(80, 87, 96));
+                 9.0f, rgba(80, 87, 96), finder_font());
 }
 
 void paint_image_thumbnail(phenotype::Painter& painter,
@@ -422,6 +431,20 @@ std::vector<file_explorer_demo::Entry> finder_entries(
             < file_explorer_demo::lower_copy(b.name);
     });
     return entries;
+}
+
+float viewport_height_or_default(file_explorer_demo::ExplorerState const& explorer) {
+    return explorer.viewport_height > 0
+        ? static_cast<float>(explorer.viewport_height)
+        : 760.0f;
+}
+
+float finder_scroll_height(file_explorer_demo::ExplorerState const& explorer,
+                           float chrome_budget,
+                           float minimum,
+                           float maximum) {
+    float height = viewport_height_or_default(explorer) - chrome_budget;
+    return std::clamp(height, minimum, maximum);
 }
 
 void update(State& state, Msg msg) {
@@ -548,7 +571,8 @@ void sidebar_row(std::string_view label,
                          label_text.c_str(),
                          static_cast<unsigned int>(label_text.size()),
                          16.0f,
-                         ink);
+                         ink,
+                         finder_font());
         },
         SelectLocation{std::move(location_id)},
         options,
@@ -580,7 +604,8 @@ void sidebar_heading(std::string_view label) {
                          label_text.c_str(),
                          static_cast<unsigned int>(label_text.size()),
                          14.0f,
-                         rgba(82, 82, 86));
+                         rgba(82, 82, 86),
+                         finder_font(phenotype::FontWeight::Bold));
         },
         Noop{},
         options,
@@ -947,9 +972,12 @@ void finder_toolbar(State const& state,
     });
 }
 
-void finder_grid(file_explorer_demo::Snapshot const& snap) {
+void finder_grid(State const& state,
+                 file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto entries = finder_entries(snap);
+    float const scroll_height = finder_scroll_height(
+        state.explorer, 176.0f, 528.0f, 660.0f);
     layout::material_surface(
         content_surface_options(),
         [&] {
@@ -958,7 +986,7 @@ void finder_grid(file_explorer_demo::Snapshot const& snap) {
                 return;
             }
             layout::spacer(18.0f);
-            layout::scroll_view(528.0f, [&] {
+            layout::scroll_view(scroll_height, [&] {
                 std::vector<float> columns{
                     142.0f, 142.0f, 142.0f, 142.0f, 142.0f, 142.0f,
                 };
@@ -990,9 +1018,12 @@ void finder_grid(file_explorer_demo::Snapshot const& snap) {
         });
 }
 
-void finder_list(file_explorer_demo::Snapshot const& snap) {
+void finder_list(State const& state,
+                 file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto entries = finder_entries(snap);
+    float const scroll_height = finder_scroll_height(
+        state.explorer, 164.0f, 552.0f, 676.0f);
     layout::material_surface(
         content_surface_options(SpaceToken::Sm),
         [&] {
@@ -1011,7 +1042,7 @@ void finder_list(file_explorer_demo::Snapshot const& snap) {
                 widget::text("No matching files.");
                 return;
             }
-            layout::scroll_view(552.0f, [&] {
+            layout::scroll_view(scroll_height, [&] {
                 layout::column([&] {
                     for (auto const& entry : entries) {
                         bool const selected = snap.has_selection
@@ -1046,9 +1077,12 @@ void finder_list(file_explorer_demo::Snapshot const& snap) {
         });
 }
 
-void finder_column_view(file_explorer_demo::Snapshot const& snap) {
+void finder_column_view(State const& state,
+                        file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto entries = finder_entries(snap);
+    float const column_height = finder_scroll_height(
+        state.explorer, 224.0f, 500.0f, 620.0f);
     layout::material_surface(
         content_surface_options(),
         [&] {
@@ -1079,7 +1113,7 @@ void finder_column_view(file_explorer_demo::Snapshot const& snap) {
                             widget::text("No matching files.");
                             return;
                         }
-                        layout::scroll_view(500.0f, [&] {
+                        layout::scroll_view(column_height, [&] {
                             layout::column([&] {
                                 for (auto const& entry : entries) {
                                     bool const selected = snap.has_selection
@@ -1125,9 +1159,12 @@ void finder_column_view(file_explorer_demo::Snapshot const& snap) {
         });
 }
 
-void finder_gallery_view(file_explorer_demo::Snapshot const& snap) {
+void finder_gallery_view(State const& state,
+                         file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto entries = finder_entries(snap);
+    float const gallery_height = finder_scroll_height(
+        state.explorer, 352.0f, 366.0f, 520.0f);
     file_explorer_demo::Entry hero = snap.has_selection && !snap.selected.name.empty()
         ? snap.selected
         : (entries.empty() ? file_explorer_demo::Entry{} : entries.front());
@@ -1160,7 +1197,7 @@ void finder_gallery_view(file_explorer_demo::Snapshot const& snap) {
                     }, SpaceToken::Sm);
                 });
             }, SpaceToken::Lg, CrossAxisAlignment::Center, MainAxisAlignment::Start);
-            layout::scroll_view(366.0f, [&] {
+            layout::scroll_view(gallery_height, [&] {
                 std::vector<float> columns{160.0f, 160.0f, 160.0f, 160.0f};
                 layout::grid(std::move(columns), 142.0f, [&] {
                     for (auto const& entry : entries) {
@@ -1192,17 +1229,17 @@ void finder_content(State const& state,
                     file_explorer_demo::Snapshot const& snap) {
     switch (state.view_mode) {
         case FinderViewMode::List:
-            finder_list(snap);
+            finder_list(state, snap);
             return;
         case FinderViewMode::Column:
-            finder_column_view(snap);
+            finder_column_view(state, snap);
             return;
         case FinderViewMode::Gallery:
-            finder_gallery_view(snap);
+            finder_gallery_view(state, snap);
             return;
         case FinderViewMode::Icon:
         default:
-            finder_grid(snap);
+            finder_grid(state, snap);
             return;
     }
 }
@@ -1259,41 +1296,39 @@ void finder_status_bar(State const& state,
 void view(State const& state) {
     using namespace phenotype;
     auto snap = file_explorer_demo::snapshot(state.explorer);
-    layout::padded(SpaceToken::Sm, [&] {
-        layout::material_container(
-            layout::MaterialContainerOptions{
-                .container_id = 2100u,
-                .spacing = 16.0f,
-                .morph_transitions = true,
-            },
-            [&] {
-                layout::material_surface(
-                    layout::MaterialSurfaceOptions{
-                        .kind = MaterialKind::Clear,
-                        .role = MaterialSurfaceRole::Surface,
-                        .direction = FlexDirection::Row,
-                        .padding = SpaceToken::Xs,
-                        .gap = SpaceToken::Sm,
-                        .cross_align = CrossAxisAlignment::Start,
-                        .main_align = MainAxisAlignment::Start,
-                        .max_width = 0.0f,
-                        .fixed_height = -1.0f,
-                        .border_radius = k_window_radius,
-                        .border_width = 0.0f,
-                        .semantic_label = "Finder Window",
-                    },
-                    [&] {
-                        finder_sidebar(state);
-                        layout::weighted(1.0f, [&] {
-                            layout::column([&] {
-                                finder_toolbar(state, snap);
-                                finder_content(state, snap);
-                                finder_status_bar(state, snap);
-                            }, SpaceToken::Sm);
-                        });
+    layout::material_container(
+        layout::MaterialContainerOptions{
+            .container_id = 2100u,
+            .spacing = 16.0f,
+            .morph_transitions = true,
+        },
+        [&] {
+            layout::material_surface(
+                layout::MaterialSurfaceOptions{
+                    .kind = MaterialKind::Clear,
+                    .role = MaterialSurfaceRole::Surface,
+                    .direction = FlexDirection::Row,
+                    .padding = SpaceToken::Xs,
+                    .gap = SpaceToken::Sm,
+                    .cross_align = CrossAxisAlignment::Start,
+                    .main_align = MainAxisAlignment::Start,
+                    .max_width = 0.0f,
+                    .fixed_height = -1.0f,
+                    .border_radius = k_window_radius,
+                    .border_width = 0.0f,
+                    .semantic_label = "Finder Window",
+                },
+                [&] {
+                    finder_sidebar(state);
+                    layout::weighted(1.0f, [&] {
+                        layout::column([&] {
+                            finder_toolbar(state, snap);
+                            finder_content(state, snap);
+                            finder_status_bar(state, snap);
+                        }, SpaceToken::Sm);
                     });
-            });
-    });
+                });
+        });
 }
 
 } // namespace

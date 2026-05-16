@@ -139,11 +139,12 @@ diff-driven cache returns the moment everything converges.
 
 On WASM, a `PHENOTYPE_IMPORT` macro applies `__attribute__((import_module, import_name))` so the JS shim resolves them at link time. On native, the macro is empty and the backend provides implementations as regular C functions.
 
-The default proportional text stack prefers Pretendard and falls back to the
-platform sans stack when the face is unavailable. Monospace text keeps the
-platform monospace default. This keeps Korean, Chinese, and Japanese text closer
-to the intended product typography without requiring every example to pass an
-explicit `FontSpec`.
+`Theme::default_font_family` defaults to `Pretendard`; widget text measurement
+and draw-command emission use that family for proportional text and fall back
+through the platform sans stack when the face is unavailable. Monospace text
+keeps the platform monospace default. This keeps Korean, Chinese, and Japanese
+text closer to the intended product typography without requiring every widget to
+pass an explicit `FontSpec`.
 
 ## Command buffer protocol
 

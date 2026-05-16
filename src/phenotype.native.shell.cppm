@@ -329,6 +329,13 @@ inline void repaint_current() {
     g_app_state.repaint_in_progress = false;
 }
 
+inline void repaint_current_after_surface_presented() {
+    // The initial run() paint can occur before a native drawable is visible.
+    // Force one startup repaint once the platform confirms the surface is shown.
+    ::phenotype::detail::g_app.last_paint_hash = 0;
+    repaint_current();
+}
+
 inline void bind_host(native_host& host,
                       float scroll_x = 0.0f,
                       float scroll_y = 0.0f) {

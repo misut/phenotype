@@ -158,7 +158,7 @@ themselves.
 |---|---|---|
 | `examples/native` | macOS, Windows | Compact desktop widget showcase for shared controls, input debug, local/remote images, scroll, resize, and manual acceptance |
 | `examples/glass_showcase` | macOS, Windows | Material and glass-debug acceptance scene for deterministic backdrop regions, macOS sampled backdrop, all material kinds, artifact capture, and pixel-region checks |
-| `examples/file_explorer_desktop` | macOS, Windows | Finder-style desktop product workflow with glass toolbar action clusters, sidebar locations, real sandboxed Trash, Recents icon grid, document/image/video/folder thumbnails, icon-revealed search, file/folder create, duplicate, delete, file preview, and sandboxed temp-root operations |
+| `examples/file_explorer_desktop` | macOS, Windows | Finder-style desktop product workflow with native integrated chrome, viewport-aware icon/list/column/gallery panes, glass toolbar action clusters, sidebar locations, real sandboxed Trash, Recents icon grid, document/image/video/folder thumbnails, icon-revealed search, file/folder create, duplicate, delete, file preview, and sandboxed temp-root operations |
 | `examples/file_explorer_mobile` | macOS, Windows | Mobile file explorer layout with browse/preview/create tabs, compact location strip including Trash, material surfaces, search, file preview, file/folder create, duplicate, delete, and the same sandboxed model |
 | `examples/android` | Android | GameActivity/Vulkan packaging route, Android event dispatch, platform lifecycle, asset/local images, debug API, and logcat/manual device validation |
 | `docs` | WASI | Dogfooded documentation app, WASI build, JS shim integration, and web-facing DSL examples |
@@ -177,8 +177,10 @@ artifact contract.
 The desktop and mobile file explorer examples also carry initial
 `phenotype.package.toml` manifests plus `assets/`, `locales/`, and `fonts/`
 fixtures. These package resources are inspectable by `tools/phenotype_cli` and
-document the future asset/i18n/Pretendard default-font bundle contract, but the
-current runtime examples still render from the existing code-defined labels.
+document the future asset/i18n bundle contract. Runtime widget text now flows
+through `Theme::default_font_family` (`Pretendard` by default), while the
+example-specific canvas labels pass the same family explicitly so the Finder
+scene and package manifest agree on typography.
 
 ## Widget coverage
 

@@ -287,6 +287,7 @@ struct Theme {
     Color transparent   = {  0,   0,   0,   0};
 
     // Typography
+    std::string default_font_family = "Pretendard";
     float body_font_size     = 16.0f;
     float heading_font_size  = 22.4f;  // 1.4rem
     float hero_title_size    = 40.0f;  // 2.5rem
