@@ -124,14 +124,15 @@ Current commands:
 | `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, debug manifest references, byte counts, content metadata, and SHA-256 digests. |
 | `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource, and reports the same package checks plus bundle integrity totals. |
 | `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs or line-based scripts and emits a stable observation JSON with trace, entries, viewport, pure Finder chrome/grid metrics, capabilities, operation receipt, preview excerpt fields, localized labels, package-resource metadata, and optional expectation results. |
-| `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, and emits a stable JSON launch receipt with build/run output tails, timeout state, artifact bundle summary, and explicit environment overrides. |
+| `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, passes package-root environment when a manifest exists, and emits a stable JSON launch receipt with build/run output tails, timeout state, artifact bundle summary, and explicit environment overrides. |
 
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, textual asset placeholders, English/Korean
-locale files, and a Pretendard alias descriptor. The native examples still
-construct their default resource snapshot in-process, but the CLI drive path can
-now read the manifest/locales from `--package`, resolve labels with `--locale`,
-and include that resource source in the output observation.
+locale files, and a Pretendard alias descriptor. The native examples load those
+manifest/locales at startup from `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`,
+`PHENOTYPE_PACKAGE_ROOT`, or their working directory, then resolve labels and
+font defaults through the same pure `ResourceCatalog` path used by
+`phenotype drive file-explorer --package`.
 Pull-request CI routes CLI and file explorer package-resource edits through a
 lightweight Linux CLI/package job instead of the full root native matrix.
 The PR gate only validates command metadata and resource catalogs for the slow
@@ -220,6 +221,13 @@ per-file integrity errors. This mirrors Dioxus-style asset collection while
 keeping the filesystem and checksum work in the CLI edge adapter rather than
 in `phenotype.resources`.
 
+`phenotype run <example>` is the first runtime injection point. It keeps process
+launching at the CLI edge, but if the selected example contains
+`phenotype.package.toml`, the child process receives `PHENOTYPE_PACKAGE_ROOT`.
+File explorer examples also receive `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`.
+The examples read package files at startup, call the pure manifest/locale
+parsers, and fall back to the built-in catalog when files are unavailable.
+
 ## Diagnostic migration
 
 Python remains acceptable while it is managed through `mise` and `uv`, but it
@@ -299,8 +307,10 @@ The CLI should not make production rendering slower:
 4. Add package manifest parsing for assets, locales, fonts, and debug
    resources. Start with inspect-only validation before producing bundles.
    Initial parsing now builds the shared pure `ResourceCatalog`; bundle
-   staging is implemented through `phenotype package bundle`, while runtime
-   resource injection and platform-native installers still need to adopt it.
+   staging is implemented through `phenotype package bundle`, and
+   `phenotype run` now injects package roots for examples that can consume
+   runtime resources. Platform-native installers still need to adopt the staged
+   bundle format.
 5. Add deterministic CLI input scripts and output observations for
    `glass_showcase` and `file_explorer_desktop`. Initial
    `file_explorer_desktop`/mobile model driving is complete through

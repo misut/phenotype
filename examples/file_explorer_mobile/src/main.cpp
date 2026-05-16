@@ -1,6 +1,9 @@
 #include <concepts>
 #include <cstdlib>
 #include <cstddef>
+#include <filesystem>
+#include <fstream>
+#include <sstream>
 #include <string>
 #include <type_traits>
 #include <utility>
@@ -12,6 +15,8 @@ import phenotype;
 import phenotype.native;
 
 namespace {
+
+namespace fs = std::filesystem;
 
 struct SelectLocation { std::string id; };
 struct SelectEntry { std::string name; };
@@ -63,10 +68,61 @@ std::string initial_locale() {
     return raw && *raw ? std::string{raw} : std::string{"en"};
 }
 
+std::string read_text_file(fs::path const& path) {
+    auto input = std::ifstream{path, std::ios::binary};
+    if (!input)
+        return {};
+    auto out = std::ostringstream{};
+    out << input.rdbuf();
+    return out.str();
+}
+
+fs::path initial_package_root() {
+    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT")) {
+        if (*raw)
+            return fs::path{raw};
+    }
+    if (char const* raw = std::getenv("PHENOTYPE_PACKAGE_ROOT")) {
+        if (*raw)
+            return fs::path{raw};
+    }
+    std::error_code ec;
+    auto current = fs::current_path(ec);
+    return ec ? fs::path{} : current;
+}
+
+phenotype::ResourceCatalog runtime_resource_catalog() {
+    auto fallback = file_explorer_demo::file_explorer_resource_catalog("mobile");
+    auto root = initial_package_root();
+    if (root.empty())
+        return fallback;
+    auto manifest_text = read_text_file(root / "phenotype.package.toml");
+    if (manifest_text.empty())
+        return fallback;
+
+    auto parsed = phenotype::parse_resource_manifest(manifest_text);
+    auto locale_texts = std::vector<file_explorer_demo::PackageResourceText>{};
+    locale_texts.reserve(parsed.catalog.locales.size());
+    for (auto const& locale : parsed.catalog.locales) {
+        if (locale.source.empty())
+            continue;
+        locale_texts.push_back({
+            .source = locale.source,
+            .text = read_text_file(root / locale.source),
+        });
+    }
+    return file_explorer_demo::file_explorer_resource_catalog_from_package_texts(
+        "mobile",
+        manifest_text,
+        locale_texts);
+}
+
 struct State {
     file_explorer_demo::ExplorerState explorer = initial_explorer_state();
     file_explorer_demo::ExplorerLabels labels =
-        file_explorer_demo::file_explorer_labels(initial_locale(), "mobile");
+        file_explorer_demo::file_explorer_labels(
+            initial_locale(),
+            runtime_resource_catalog());
 };
 
 Msg on_search_changed(std::string text) {
@@ -363,7 +419,7 @@ int main() {
     phenotype::Theme theme = phenotype::current_theme();
     theme = phenotype::theme_with_resource_defaults(
         theme,
-        file_explorer_demo::file_explorer_resource_catalog("mobile"));
+        runtime_resource_catalog());
     phenotype::set_theme(theme);
 
     return phenotype::native::run_app<State, Msg>(

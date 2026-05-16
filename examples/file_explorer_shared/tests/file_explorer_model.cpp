@@ -43,6 +43,58 @@ int main() {
     assert(demo::file_explorer_labels("ja", "desktop").sidebar_recents
         == "Recents");
     assert(demo::file_explorer_labels("ko", "mobile").tab_create == "만들기");
+    auto packaged_texts = std::vector<demo::PackageResourceText>{
+        {.source = "locales/ko.toml",
+         .text = R"(
+[app]
+sidebar_recents = "패키지 최근 항목"
+
+[actions]
+create_file = "패키지 새 파일"
+)"},
+        {.source = "locales/en.toml",
+         .text = R"(
+[app]
+sidebar_recents = "Packaged Recents"
+
+[actions]
+create_file = "Packaged New File"
+)"},
+    };
+    auto packaged_catalog =
+        demo::file_explorer_resource_catalog_from_package_texts(
+            "desktop",
+            R"(
+[application]
+id = "com.example.file-explorer"
+display_name = "Packaged Explorer"
+version = "0.1.0"
+entry = "file_explorer_desktop"
+platforms = ["macos"]
+
+[resources]
+default_locale = "ko"
+default_font_family = "Pretendard"
+
+[[locales]]
+tag = "ko"
+source = "locales/ko.toml"
+fallback = ["en"]
+
+[[locales]]
+tag = "en"
+source = "locales/en.toml"
+fallback = []
+)",
+            packaged_texts);
+    assert(packaged_catalog.application.display_name == "Packaged Explorer");
+    assert(packaged_catalog.default_locale == "ko");
+    assert(demo::file_explorer_labels("ko", packaged_catalog).sidebar_recents
+        == "패키지 최근 항목");
+    assert(demo::file_explorer_labels("ko", packaged_catalog).create_file
+        == "패키지 새 파일");
+    assert(demo::file_explorer_labels("ja", packaged_catalog).sidebar_recents
+        == "패키지 최근 항목");
 
     auto parsed_location = demo::parse_explorer_input("location:documents");
     assert(parsed_location.ok);

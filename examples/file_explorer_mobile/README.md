@@ -45,6 +45,11 @@ mise exec -- exon build
 .exon/debug/phenotype_cli package inspect --json ../../examples/file_explorer_mobile
 ```
 
+At runtime the example reads `phenotype.package.toml` and locale files from
+`PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`, `PHENOTYPE_PACKAGE_ROOT`, or the current
+working directory. `phenotype run file_explorer_mobile` sets the package-root
+environment automatically.
+
 The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity, and
 bounded material resource budgets.

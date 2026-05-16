@@ -51,7 +51,11 @@ The initial scope is intentionally narrow:
 - `phenotype run <example>` builds and runs a repository example from one
   command, with `--json`, explicit environment overrides, artifact capture
   environment, and an optional timeout. This is the first CLI-owned launch path
-  for observing native examples without adding another shell wrapper.
+  for observing native examples without adding another shell wrapper. When an
+  example owns `phenotype.package.toml`, the run command passes
+  `PHENOTYPE_PACKAGE_ROOT`, and file explorer examples also receive
+  `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`, so runtime labels and font defaults
+  can come from the packaged manifest/locales.
 - `phenotype android ...` is the single Android workflow namespace for
   repository-local doctor/devices/emulator/build/APK/install/run/logs/screencap
   and artifact-contract commands. The implementation still delegates to the
