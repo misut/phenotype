@@ -190,7 +190,15 @@ the actual `material_plans` executed for the frame. Each plan includes:
   nonzero dropped-stage count means the pure plan exceeded its fixed stage
   capacity before any backend ran it, so the verifier fails at the exact plan
   path instead of letting the missing stage become a visual guess;
-- verifier expectations for region checks.
+- verifier expectations for region checks;
+- `observation_contract`, a pure audit contract that repeats the runtime facts
+  the verifier must observe: fallback/backdrop expectations, fallback reason,
+  primary pass/executor, expected pass and execution-stage counts, texture-copy
+  bounds, safety flags, and the region/layer/pass hints. The Python verifier
+  checks this object against the rest of the same `MaterialPlan`, so stale JSON
+  writers or backend-local policy decisions are reported at
+  `renderer.material_plans[n].observation_contract.*` before visual thresholds
+  are considered.
 
 When debugging a material failure, read the semantic node first to confirm the
 UI emitted the expected material surface, then inspect

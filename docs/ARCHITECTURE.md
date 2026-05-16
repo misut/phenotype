@@ -202,7 +202,9 @@ saturation, luminance curve, edge highlight, noise/dither, shadow, render-target
 analysis, pure shape analysis, backdrop sampling, backdrop analysis, decision
 trace, fallback path, debug metadata, pass expectations, the resolved quality
 policy, foreground legibility/vibrancy recommendation, resource budgets, the
-resolved sampling kernel, bounded execution stages, and verifier expectations.
+resolved sampling kernel, bounded execution stages, verifier expectations, and
+an `observation_contract` that mirrors the pure facts the artifact verifier must
+observe at runtime.
 `decision_trace` records the pure gate booleans for geometry, target readiness,
 quality, backend capabilities, accessibility settings, backdrop-source
 readiness, and the first fallback blocker. `primary_pass` states whether the
@@ -214,6 +216,13 @@ noise stages so artifacts can explain material work before visual inspection.
 `dropped_execution_stage_count` records overflow explicitly; any nonzero drop is
 treated as a verifier failure, which forces future stage additions to update the
 pure capacity and artifact contract instead of silently disappearing.
+`observation_contract` repeats only debuggability-critical facts from the same
+plan: fallback expectation and reason, backdrop sampling expectation, stable
+backdrop requirement, primary pass/executor, execution-stage counts,
+texture-copy bounds, safety flags, and region/layer/pass hints. The verifier
+cross-checks it against the surrounding `MaterialPlan`, so stale serializers or
+backend-local policy drift fail at a single JSON path before pixel-region
+checks need human interpretation.
 `primary_pass` also records the pure executor role and maximum texture-copy
 pixels for that pass, so a backend
 artifact can prove whether it stayed within the render-target copy budget.

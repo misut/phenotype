@@ -910,6 +910,39 @@ void test_material_runtime_record_json_contract() {
     assert(obj.at("dropped_execution_stage_count").as_integer() == 0);
     assert(obj.at("verifier").as_object().at("likely_layer").as_string()
            == "material-fallback-pass");
+    auto const& observation =
+        obj.at("observation_contract").as_object();
+    assert(observation.at("schema_version").as_integer()
+           == material_plan_contract_version);
+    assert(observation.at("semantic_material_required").as_bool() == true);
+    assert(observation.at("runtime_plan_required").as_bool() == true);
+    assert(observation.at("fallback_expected").as_bool() == true);
+    assert(observation.at("backdrop_sampling_expected").as_bool() == false);
+    assert(observation.at("stable_backdrop_required").as_bool() == false);
+    assert(observation.at("bounded_texture_copy_required").as_bool() == true);
+    assert(observation.at("deterministic_fallback_required").as_bool()
+           == true);
+    assert(observation.at("fallback_path").as_string()
+           == "unsupported-backend");
+    assert(observation.at("fallback_reason").as_string()
+           == "backend reports no material backdrop blur support");
+    assert(observation.at("primary_pass").as_string()
+           == "translucent-rounded-rect");
+    assert(observation.at("primary_executor").as_string()
+           == "fallback-fill");
+    assert(observation.at("expected_runtime_passes").as_integer() == 1);
+    assert(observation.at("expected_execution_stages").as_integer() == 3);
+    assert(observation.at("expected_active_execution_stages").as_integer()
+           == 3);
+    assert(observation.at("expected_backdrop_execution_stages").as_integer()
+           == 0);
+    assert(observation.at("max_texture_copy_pixels").as_integer() == 0);
+    assert(observation.at("region_name").as_string()
+           == "thin-balanced-backdrop");
+    assert(observation.at("likely_layer").as_string()
+           == "material-fallback-pass");
+    assert(observation.at("likely_pass").as_string()
+           == "translucent-rounded-rect");
 
     std::vector<MaterialRuntimeRecord> records{record};
     auto plans = diag::detail::material_plans_runtime_json(records);

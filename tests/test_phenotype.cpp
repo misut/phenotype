@@ -1265,6 +1265,35 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "material-fallback-pass");
     assert(std::string(fallback_plan.verifier.likely_pass)
            == "translucent-rounded-rect");
+    assert(fallback_plan.observation_contract.schema_version
+           == material_plan_contract_version);
+    assert(fallback_plan.observation_contract.semantic_material_required);
+    assert(fallback_plan.observation_contract.runtime_plan_required);
+    assert(fallback_plan.observation_contract.fallback_expected);
+    assert(!fallback_plan.observation_contract.backdrop_sampling_expected);
+    assert(!fallback_plan.observation_contract.stable_backdrop_required);
+    assert(fallback_plan.observation_contract.bounded_texture_copy_required);
+    assert(fallback_plan.observation_contract.deterministic_fallback_required);
+    assert(std::string(fallback_plan.observation_contract.fallback_path)
+           == "unsupported-backend");
+    assert(std::string(fallback_plan.observation_contract.fallback_reason)
+           == fallback_plan.fallback_reason);
+    assert(std::string(fallback_plan.observation_contract.primary_pass)
+           == "translucent-rounded-rect");
+    assert(std::string(fallback_plan.observation_contract.primary_executor)
+           == "fallback-fill");
+    assert(fallback_plan.observation_contract.expected_runtime_passes == 1);
+    assert(fallback_plan.observation_contract.expected_execution_stages
+           == fallback_plan.execution_stage_count);
+    assert(fallback_plan.observation_contract.expected_backdrop_execution_stages
+           == 0);
+    assert(fallback_plan.observation_contract.max_texture_copy_pixels == 0);
+    assert(std::string(fallback_plan.observation_contract.region_name)
+           == fallback_plan.verifier.region_name);
+    assert(std::string(fallback_plan.observation_contract.likely_layer)
+           == fallback_plan.verifier.likely_layer);
+    assert(std::string(fallback_plan.observation_contract.likely_pass)
+           == fallback_plan.verifier.likely_pass);
 
     MaterialEnvironment unsupported_large_env = fallback_env;
     unsupported_large_env.render_target.width = 2400;
@@ -1388,6 +1417,23 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "material-blur-pass");
     assert(std::string(glass_plan.verifier.likely_pass)
            == "backdrop-sample-blur");
+    assert(glass_plan.observation_contract.schema_version
+           == material_plan_contract_version);
+    assert(glass_plan.observation_contract.semantic_material_required);
+    assert(glass_plan.observation_contract.runtime_plan_required);
+    assert(!glass_plan.observation_contract.fallback_expected);
+    assert(glass_plan.observation_contract.backdrop_sampling_expected);
+    assert(glass_plan.observation_contract.stable_backdrop_required);
+    assert(glass_plan.observation_contract.expected_runtime_passes == 1);
+    assert(glass_plan.observation_contract.expected_execution_stages == 4);
+    assert(glass_plan.observation_contract.expected_active_execution_stages == 4);
+    assert(glass_plan.observation_contract.expected_backdrop_execution_stages == 1);
+    assert(glass_plan.observation_contract.max_texture_copy_pixels
+           == glass_plan.render_target.pixel_count);
+    assert(std::string(glass_plan.observation_contract.primary_pass)
+           == "backdrop-sample-blur");
+    assert(std::string(glass_plan.observation_contract.primary_executor)
+           == "backdrop-filter");
 
     MaterialRequest container_request = request;
     container_request.style.container = MaterialContainerDescriptor{
@@ -1627,6 +1673,13 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(invalid_plan.verifier.likely_pass) == "none");
     assert(invalid_plan.execution_stage_count == 0);
     assert(invalid_plan.dropped_execution_stage_count == 0);
+    assert(invalid_plan.observation_contract.fallback_expected);
+    assert(!invalid_plan.observation_contract.backdrop_sampling_expected);
+    assert(std::string(invalid_plan.observation_contract.fallback_path)
+           == "invalid-geometry");
+    assert(std::string(invalid_plan.observation_contract.primary_pass)
+           == "none");
+    assert(invalid_plan.observation_contract.expected_execution_stages == 0);
     assert(!invalid_plan.shape.valid);
     assert(!invalid_plan.shape.rounded);
     assert(invalid_plan.shape.effective_radius == 0.0f);

@@ -1,10 +1,10 @@
 # Apple Glass GUI Roadmap
 
 Status: implementation baseline for `origin/main` after
-`feat: expose material shape execution contracts`. This includes the pure
+`feat(material): add material observation contracts`. This includes the pure
 material-planning boundary, macOS sampled-backdrop execution, deterministic
-fallback contracts on non-macOS backends, edge executor telemetry, and the
-artifact verifier gates described below.
+fallback contracts on non-macOS backends, edge executor telemetry, pure
+observation contracts, and the artifact verifier gates described below.
 
 This document turns the current long-term goal into concrete deliverables:
 
@@ -269,7 +269,8 @@ The current debug plane already provides important pieces:
 - remote image queue/debug state on macOS and Windows.
 - resolved material plans with pass expectations, quality policy, foreground
   contrast recommendations, resource budgets, fallback paths/reasons, verifier
-  expectations, derived runtime summaries, and backend executor counters.
+  expectations, pure observation contracts, derived runtime summaries, and
+  backend executor counters.
 
 This is now strong enough for the current material CI gates: an LLM can inspect
 the manifest failure path, material plan summary, fallback reason distribution,
@@ -377,7 +378,7 @@ Done means `examples/` is a local acceptance suite, not just demos:
 |---|---|---|
 | Analyze current phenotype progress | This document, `README.md`, `docs/ARCHITECTURE.md`, `docs/DEBUG_WORKFLOW.md`, examples and tests | Keep updated as milestones land |
 | Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, material container/union identity, macOS sampled-backdrop rendering, resolved runtime fallback plans on Windows/Android, snapshot fallback contracts elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
-| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, bounded material execution stages, explicit stage-capacity/drop counters, startup bundle verifier, optional pixel-region checks, material/container/shape/foreground plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, foreground text execution counters, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
+| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, pure material observation contracts, bounded material execution stages, explicit stage-capacity/drop counters, startup bundle verifier, optional pixel-region checks, material/container/shape/foreground plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, foreground text execution counters, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
 | Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, execution stage count/capacity, dropped-stage count, backdrop pixels, bounded texture copies, deterministic fallback, pure effective-radius shape bounds, backend `material_runtime_summary` counters cross-checked by the verifier, and backend `material_executor_summary` budget/timing/stage telemetry guarded by artifact manifests | Keep tightening backend timing budgets as more native material renderers land |
 | Runnable examples under `examples/` | Native, glass showcase, desktop/mobile file explorer, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |

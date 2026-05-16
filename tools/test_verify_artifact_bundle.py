@@ -55,7 +55,7 @@ def material_plan(
         "shadow_alpha": 0.14,
         "shadow_radius": 14.0,
     }
-    return {
+    plan: dict[str, object] = {
         "contract_version": verifier.MATERIAL_PLAN_CONTRACT_VERSION,
         "kind": "regular",
         "role": "surface",
@@ -222,6 +222,45 @@ def material_plan(
             }
         ],
     }
+    refresh_observation_contract(plan)
+    return plan
+
+
+def refresh_observation_contract(plan: dict[str, object]) -> None:
+    primary = plan["primary_pass"]
+    stages = plan["execution_stages"]
+    budget = plan["resource_budget"]
+    verifier_contract = plan["verifier"]
+    assert isinstance(primary, dict)
+    assert isinstance(stages, list)
+    assert isinstance(budget, dict)
+    assert isinstance(verifier_contract, dict)
+    plan["observation_contract"] = {
+        "schema_version": plan["contract_version"],
+        "semantic_material_required": plan["kind"] != "none",
+        "runtime_plan_required": plan["kind"] != "none",
+        "fallback_expected": plan["fallback"],
+        "backdrop_sampling_expected": plan["backdrop_sampling"],
+        "stable_backdrop_required": plan["backdrop_sampling"],
+        "bounded_texture_copy_required": budget["bounded_texture_copy"],
+        "deterministic_fallback_required": budget["deterministic_fallback"],
+        "fallback_path": plan["fallback_path"],
+        "fallback_reason": plan["fallback_reason"],
+        "primary_pass": primary["name"],
+        "primary_executor": primary["executor"],
+        "expected_runtime_passes": len(plan["passes"]),
+        "expected_execution_stages": len(stages),
+        "expected_active_execution_stages": sum(
+            1 for stage in stages
+            if isinstance(stage, dict) and stage["active"]),
+        "expected_backdrop_execution_stages": sum(
+            1 for stage in stages
+            if isinstance(stage, dict) and stage["requires_backdrop"]),
+        "max_texture_copy_pixels": primary["max_texture_copy_pixels"],
+        "region_name": verifier_contract["region_name"],
+        "likely_layer": verifier_contract["likely_layer"],
+        "likely_pass": verifier_contract["likely_pass"],
+    }
 
 
 def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
@@ -309,6 +348,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "likely_layer": "material-blur-pass",
         "likely_pass": "backdrop-sample-blur",
     })
+    refresh_observation_contract(plan)
     return plan
 
 
@@ -1300,6 +1340,30 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["actual"], "backdrop-sample-blur")
         self.assertEqual(failure["likely_pass"], "translucent-rounded-rect")
         self.assertIn("primary_pass", failure["hint"])
+
+    def test_observation_contract_mismatch_points_to_pure_contract(self) -> None:
+        plan = sampled_material_plan()
+        observation = plan["observation_contract"]
+        assert isinstance(observation, dict)
+        observation["expected_backdrop_execution_stages"] = 0
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material observation expected_backdrop_execution_stages "
+                "matches stages"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".observation_contract.expected_backdrop_execution_stages")
+        self.assertEqual(failure["expected"], 1)
+        self.assertEqual(failure["actual"], 0)
+        self.assertEqual(failure["likely_layer"], "material-observation")
+        self.assertEqual(failure["likely_pass"], "backdrop-sample-blur")
+        self.assertIn("Observation stage counts", failure["hint"])
 
     def test_fallback_pass_texture_copy_points_to_pass_contract(self) -> None:
         plan = material_plan()
