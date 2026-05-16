@@ -90,17 +90,20 @@ Rejected and failed URLs render a light-gray placeholder with a darker
 From the phenotype repo root:
 
 ```sh
-mise run android:doctor   # verify SDK / NDK / JDK / AVD are wired up
-mise run android          # boot emu -> build -> apk -> install -> launch
-mise run android:logs     # live-tail logcat filtered to phenotype
-mise run android:contract # pull and verify a debug artifact bundle
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli android doctor --json   # SDK / NDK / JDK / AVD
+.exon/debug/phenotype_cli android run --json      # boot emu -> build -> install -> launch
+.exon/debug/phenotype_cli android logs --json     # bounded recent logcat sample
+.exon/debug/phenotype_cli android contract --json # pull and verify a debug artifact bundle
 ```
 
-`mise run android` is an alias for `mise run android:run`. Individual
-stages are independently runnable — see `mise tasks ls | grep android`
-for the full list. The pipeline and every single-step script live in
-[`tools/android/`](../../tools/android/); override defaults via these
-environment variables:
+The legacy `mise run android:*` tasks and scripts under
+[`tools/android/`](../../tools/android/) remain available for compatibility.
+New automation should prefer `phenotype android ...` so command names, JSON
+output, and device-state overrides are stable. Override defaults via these
+environment variables or the CLI options `--serial`, `--avd`, `--state-dir`,
+and `--apk`:
 
 | env | default | purpose |
 |---|---|---|
@@ -134,7 +137,9 @@ adb logcat | grep phenotype
 For automated debug-plane validation on an attached device or emulator:
 
 ```sh
-mise run android:contract
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli android contract --json
 ```
 
 The contract runner enables the example's opt-in artifact hook with

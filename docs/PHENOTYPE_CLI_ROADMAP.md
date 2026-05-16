@@ -117,6 +117,7 @@ Current commands:
 | `phenotype artifact verify <bundle>` | implemented | Edge wrapper that runs the uv-managed Python verifier through `mise` and forwards the verifier JSON report. |
 | `phenotype artifact verify-glass-showcase` | implemented | Local-only edge wrapper around the glass showcase build/capture/verifier gate, including accessibility mode. PR CI should not run this slow native capture gate by default. |
 | `phenotype artifact verify-file-explorer` | implemented | Local-only edge wrapper around the desktop/mobile Finder-style artifact gate. This keeps the future replacement command shape visible while shell compatibility remains. |
+| `phenotype android doctor/devices/emu-start/emu-stop/build/apk/install/launch/stop/run/logs/screencap/contract/clean` | implemented | Stable CLI namespace over the existing Android edge scripts and Android build command. `--json` emits a process/script result envelope, `--serial` forwards `ANDROID_SERIAL`, and `--state-dir`/`--avd`/`--apk` keep device state explicit. |
 | `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, package resource directories, and artifact manifest presence. |
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
 | `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, and debug manifest references. |
@@ -131,6 +132,14 @@ Pull-request CI routes CLI and file explorer package-resource edits through a
 lightweight Linux CLI/package job instead of the full root native matrix.
 The PR gate only validates command metadata and resource catalogs for the slow
 native artifact commands; full glass/file-explorer captures remain local gates.
+
+Android workflows now follow the same CLI-first rule. The shell scripts under
+`tools/android` remain as the edge adapter implementation because they already
+encode repository-local SDK/NDK/JDK discovery and because Android device access
+is inherently an edge effect. New automation should call `phenotype android ...`
+instead of invoking those scripts directly. The CLI intentionally exposes
+bounded `android logs` output by default so CI and LLM agents can observe recent
+runtime output without hanging on a live `logcat` stream.
 
 ## Packaging contract
 

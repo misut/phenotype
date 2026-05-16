@@ -81,7 +81,7 @@ fi
 if [ -f "$PHENOTYPE_ANDROID_APK" ]; then
     ok "apk              = $PHENOTYPE_ANDROID_APK"
 else
-    warn "apk not built yet — \`mise run android:apk\` will produce $PHENOTYPE_ANDROID_APK"
+    warn "apk not built yet — \`phenotype android apk\` will produce $PHENOTYPE_ANDROID_APK"
 fi
 
 # Running device summary

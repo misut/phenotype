@@ -36,10 +36,12 @@ mise exec -- exon run
 ```
 
 ```sh
-mise run android:doctor
-mise run android
-mise run android:logs
-mise run android:contract
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli android doctor --json
+.exon/debug/phenotype_cli android run --json
+.exon/debug/phenotype_cli android logs --json
+.exon/debug/phenotype_cli android contract --json
 ```
 
 For docs/WASI dogfooding:
@@ -371,7 +373,7 @@ Gaps:
   `MaterialRect` command as deterministic translucent fallback and still write
   `renderer.material_plans[]` with fallback path/pass metadata.
 - Android has a local device/emulator contract runner via
-  `mise run android:contract`; CI wiring remains a separate policy decision.
+  `phenotype android contract`; CI wiring remains a separate policy decision.
 
 ## Platform image coverage
 
@@ -411,7 +413,7 @@ Current status by example:
 | `examples/glass_showcase` | Same environment hook with `.exon/debug/glass_showcase` after the material scene startup frame renders | Verifies all public material kinds, macOS material capability, resolved material plan schema and contract version, material execution stages, explicit stage capacity/drop counters, surface-role summary, exact material/container/shape/foreground plan summary, semantic/runtime material parity, material quality policy, material resource bounds, foreground text execution counters, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; run the verifier locally before material PRs, while CI keeps only build-level artifact gates |
 | `examples/file_explorer_desktop` | Same environment hook with `.exon/debug/file_explorer_desktop`, or `tools/verify_file_explorer_artifacts.sh` from the repo root | Verifies a Finder-style desktop startup scene with glass toolbar/sidebar/icon-grid/status surfaces, stable document/image/video/folder thumbnail labels, stable create/duplicate/delete labels, a real sandboxed Trash location, operation receipts for file create/read/duplicate/delete and folder create/delete scenarios, shared sort/search-state receipts, selection action metadata, semantic/runtime material parity, explicit material surface roles, material container identity, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, foreground text execution counters, macOS active-Space/key-window diagnostics, and pixel-region checks for the sidebar, toolbar, icon grid, and selected-file label; local gate only by default |
 | `examples/file_explorer_mobile` | Same environment hook with `.exon/debug/file_explorer_mobile`, or `tools/verify_file_explorer_artifacts.sh` from the repo root | Verifies the compact mobile browse/preview/create startup scene with all material kinds, stable navigation labels including Trash, operation receipts for file create/read/duplicate/delete and folder create/delete scenarios, shared sort/search-state receipts, duplicate/delete action metadata, semantic/runtime material parity, explicit toolbar/navigation/status material roles, material container identity, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, and foreground text execution counters; local gate only by default |
-| `examples/android` | `mise run android:contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | Verifies Android debug/runtime basics plus a real `MaterialRect` fallback plan, exact fallback material plan summary and contract version, semantic/runtime material role parity, material shape validity, material quality policy, material resource bounds, and explicit zero dropped-stage count; CI device/emulator wiring remains future work |
+| `examples/android` | `phenotype android contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | Verifies Android debug/runtime basics plus a real `MaterialRect` fallback plan, exact fallback material plan summary and contract version, semantic/runtime material role parity, material shape validity, material quality policy, material resource bounds, and explicit zero dropped-stage count; CI device/emulator wiring remains future work |
 | `docs` | WASI snapshot bundle is available when the host preopens a writable directory | Default `exon test --target wasm32-wasi` does not preopen one |
 
 The verifier milestone now consumes startup bundles and reports schema,

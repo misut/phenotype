@@ -33,6 +33,11 @@ The initial scope is intentionally narrow:
   JSON output includes the input trace, sandbox root/current paths, visible
   entries, viewport, pure Finder chrome/grid metrics, selection capabilities,
   operation receipts, and preview excerpts.
+- `phenotype android ...` is the single Android workflow namespace for
+  repository-local doctor/devices/emulator/build/APK/install/run/logs/screencap
+  and artifact-contract commands. The implementation still delegates to the
+  compatibility scripts under `tools/android`, but the CLI owns the stable
+  command names and JSON result envelope.
 - `phenotype commands --json` emits machine-readable command metadata from
   `cppx.cli`.
 
@@ -55,4 +60,9 @@ mise exec -- exon build
 .exon/debug/phenotype_cli package bundle --json \
   ../../examples/file_explorer_desktop \
   --output /tmp/phenotype-file-explorer
+.exon/debug/phenotype_cli android doctor --json
+.exon/debug/phenotype_cli android devices --json
+.exon/debug/phenotype_cli android contract --json \
+  --state-dir /tmp/phenotype-android \
+  --contract-out /tmp/phenotype-android/contract-bundle
 ```

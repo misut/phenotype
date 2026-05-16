@@ -49,7 +49,6 @@ jobs:
           for path in "${files[@]}"; do
             case "$path" in
               .github/workflows/*)
-                code_tests=true
                 docs_build=true
                 tools_check=true
                 cli_check=true
@@ -59,8 +58,9 @@ jobs:
             esac
 
             case "$path" in
-              docs/*|README.md)
+              docs/*|README.md|examples/*/README.md|tools/*/README.md)
                 docs_build=true
+                continue
                 ;;
             esac
 
@@ -68,6 +68,14 @@ jobs:
               tools/phenotype_cli/*)
                 cli_check=true
                 package_resource_check=true
+                continue
+                ;;
+            esac
+
+            case "$path" in
+              tools/android/*)
+                tools_check=true
+                cli_check=true
                 continue
                 ;;
             esac

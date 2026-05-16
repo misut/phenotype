@@ -96,6 +96,156 @@ auto json_option() -> cppx::cli::OptionSpec {
             .description = "Emit machine-readable JSON"};
 }
 
+auto android_common_options(std::vector<cppx::cli::OptionSpec> extra = {})
+    -> std::vector<cppx::cli::OptionSpec> {
+    auto options = std::vector<cppx::cli::OptionSpec>{
+        help_option(),
+        json_option(),
+        {.name = "serial",
+         .arity = cppx::cli::OptionArity::one,
+         .value_name = "adb-serial",
+         .description = "ADB serial forwarded through ANDROID_SERIAL"},
+        {.name = "avd",
+         .arity = cppx::cli::OptionArity::one,
+         .value_name = "name",
+         .description = "Android virtual device name"},
+        {.name = "state-dir",
+         .arity = cppx::cli::OptionArity::one,
+         .value_name = "dir",
+         .description = "Android workflow state directory"},
+        {.name = "apk",
+         .arity = cppx::cli::OptionArity::one,
+         .value_name = "path",
+         .description = "Debug APK path override"},
+    };
+    options.insert(options.end(), extra.begin(), extra.end());
+    return options;
+}
+
+auto android_command_spec() -> cppx::cli::CommandSpec {
+    return {
+        .name = "android",
+        .summary = "Build, install, run, and observe the Android example",
+        .options = {help_option()},
+        .subcommands = {
+            {
+                .name = "doctor",
+                .summary = "Check Android SDK, NDK, JDK, adb, emulator, and AVDs",
+                .options = android_common_options(),
+                .allow_positionals = false,
+                .examples = {"phenotype android doctor --json"},
+            },
+            {
+                .name = "devices",
+                .summary = "List configured AVDs and online adb devices",
+                .options = android_common_options(),
+                .allow_positionals = false,
+                .examples = {"phenotype android devices --json"},
+            },
+            {
+                .name = "emu-start",
+                .summary = "Start or reuse the selected Android emulator",
+                .options = android_common_options(),
+                .allow_positionals = false,
+                .examples = {"phenotype android emu-start --avd Pixel_8"},
+            },
+            {
+                .name = "emu-stop",
+                .summary = "Stop the running Android emulator",
+                .options = android_common_options(),
+                .allow_positionals = false,
+                .examples = {"phenotype android emu-stop"},
+            },
+            {
+                .name = "build",
+                .summary = "Build phenotype for aarch64-linux-android",
+                .options = android_common_options(),
+                .allow_positionals = false,
+                .examples = {"phenotype android build --json"},
+            },
+            {
+                .name = "apk",
+                .summary = "Build the Android debug APK",
+                .options = android_common_options(),
+                .allow_positionals = false,
+                .examples = {"phenotype android apk --json"},
+            },
+            {
+                .name = "install",
+                .summary = "Install the Android debug APK on the selected target",
+                .options = android_common_options(),
+                .allow_positionals = false,
+                .examples = {"phenotype android install --serial emulator-5554"},
+            },
+            {
+                .name = "launch",
+                .summary = "Launch the Android example activity",
+                .options = android_common_options(),
+                .allow_positionals = false,
+                .examples = {"phenotype android launch"},
+            },
+            {
+                .name = "stop",
+                .summary = "Force-stop the Android example app",
+                .options = android_common_options(),
+                .allow_positionals = false,
+                .examples = {"phenotype android stop"},
+            },
+            {
+                .name = "run",
+                .summary = "Build, install, force-stop, launch, and sample logs",
+                .options = android_common_options(),
+                .allow_positionals = false,
+                .examples = {"phenotype android run --json"},
+            },
+            {
+                .name = "logs",
+                .summary = "Dump recent filtered Android logs",
+                .options = android_common_options({
+                    {.name = "lines",
+                     .arity = cppx::cli::OptionArity::one,
+                     .value_name = "count",
+                     .description = "Recent logcat line count. Defaults to 160"},
+                }),
+                .allow_positionals = false,
+                .examples = {"phenotype android logs --lines 240 --json"},
+            },
+            {
+                .name = "screencap",
+                .summary = "Capture an Android screenshot into the state directory",
+                .options = android_common_options(),
+                .allow_positionals = false,
+                .examples = {"phenotype android screencap --json"},
+            },
+            {
+                .name = "contract",
+                .summary = "Run the Android artifact contract on a device or emulator",
+                .options = android_common_options({
+                    {.name = "contract-out",
+                     .arity = cppx::cli::OptionArity::one,
+                     .value_name = "dir",
+                     .description = "Pulled contract artifact bundle directory"},
+                    {.name = "contract-timeout",
+                     .arity = cppx::cli::OptionArity::one,
+                     .value_name = "seconds",
+                     .description = "Artifact wait timeout in seconds"},
+                }),
+                .allow_positionals = false,
+                .examples = {"phenotype android contract --json"},
+            },
+            {
+                .name = "clean",
+                .summary = "Clean Android Gradle/exon outputs and stop emulator",
+                .options = android_common_options(),
+                .allow_positionals = false,
+                .examples = {"phenotype android clean"},
+            },
+        },
+        .allow_positionals = false,
+        .category = "android",
+    };
+}
+
 auto spec() -> cppx::cli::CommandSpec {
     return {
         .name = "phenotype",
@@ -335,6 +485,7 @@ auto spec() -> cppx::cli::CommandSpec {
                 .allow_positionals = false,
                 .category = "runtime",
             },
+            android_command_spec(),
             {
                 .name = "commands",
                 .summary = "Print CLI command metadata",
@@ -1837,7 +1988,86 @@ auto script_result_json(std::string_view command,
         json_string(output_tail(result.stderr_text)));
 }
 
+auto process_result_json(std::string_view command,
+                         std::string_view program,
+                         std::span<std::string const> args,
+                         fs::path const& cwd,
+                         cppx::process::CapturedProcessResult const& result)
+    -> std::string {
+    return std::format(
+        "{{\"schema_version\":1,\"command\":{},\"ok\":{},"
+        "\"program\":{},\"args\":{},\"cwd\":{},"
+        "\"exit_code\":{},\"timed_out\":{},"
+        "\"stdout_line_count\":{},\"stderr_line_count\":{},"
+        "\"stdout_tail\":{},\"stderr_tail\":{}}}",
+        json_string(command),
+        (!result.timed_out && result.exit_code == 0) ? "true" : "false",
+        json_string(program),
+        string_array_json(args),
+        json_string(path_string(cwd)),
+        result.exit_code,
+        result.timed_out ? "true" : "false",
+        output_line_count(result.stdout_text),
+        output_line_count(result.stderr_text),
+        json_string(output_tail(result.stdout_text)),
+        json_string(output_tail(result.stderr_text)));
+}
+
 int print_error(std::string_view command, std::string_view message, bool json);
+
+int run_repo_process(
+        std::string_view command,
+        std::string program,
+        std::vector<std::string> args,
+        cppx::cli::Invocation const& invocation,
+        std::map<std::string, std::string> env_overrides,
+        std::chrono::milliseconds timeout) {
+    auto root = find_repo_root(fs::current_path());
+    if (!root) {
+        return print_error(
+            command,
+            "could not find phenotype repository root from current directory",
+            invocation.has("json"));
+    }
+
+    auto spec = cppx::process::ProcessSpec{
+        .program = program,
+        .args = args,
+        .cwd = *root,
+        .timeout = timeout,
+        .env_overrides = std::move(env_overrides),
+    };
+
+    auto result = cppx::process::system::capture(spec);
+    if (!result) {
+        return print_error(
+            command,
+            std::format("failed to run process: {}",
+                        cppx::process::to_string(result.error())),
+            invocation.has("json"));
+    }
+
+    if (invocation.has("json")) {
+        std::println(
+            "{}",
+            process_result_json(command, program, args, *root, *result));
+    } else {
+        if (!result->stdout_text.empty()) {
+            std::print("{}", result->stdout_text);
+            if (!result->stdout_text.ends_with('\n'))
+                std::println("");
+        }
+        if (!result->stderr_text.empty()) {
+            std::print(std::cerr, "{}", result->stderr_text);
+            if (!result->stderr_text.ends_with('\n'))
+                std::println(std::cerr, "");
+        }
+    }
+
+    if (result->timed_out)
+        return result->exit_code == 0 ? 124 : result->exit_code;
+    return result->exit_code;
+}
 
 int run_repo_script(
         std::string_view command,
@@ -2145,6 +2375,175 @@ int run_artifact_verify_file_explorer(
         std::chrono::minutes{45});
 }
 
+auto android_env_overrides(cppx::cli::Invocation const& invocation)
+    -> std::map<std::string, std::string> {
+    auto env = std::map<std::string, std::string>{};
+    if (auto value = invocation.value("serial")) {
+        env["ANDROID_SERIAL"] = std::string{*value};
+    }
+    if (auto value = invocation.value("avd")) {
+        env["PHENOTYPE_ANDROID_AVD"] = std::string{*value};
+    }
+    if (auto value = invocation.value("state-dir")) {
+        env["PHENOTYPE_ANDROID_STATE_DIR"] =
+            absolute_path_string(fs::path{std::string{*value}});
+    }
+    if (auto value = invocation.value("apk")) {
+        env["PHENOTYPE_ANDROID_APK"] =
+            absolute_path_string(fs::path{std::string{*value}});
+    }
+    if (auto value = invocation.value("contract-out")) {
+        env["PHENOTYPE_ANDROID_CONTRACT_OUT"] =
+            absolute_path_string(fs::path{std::string{*value}});
+    }
+    if (auto value = invocation.value("contract-timeout")) {
+        env["PHENOTYPE_ANDROID_CONTRACT_TIMEOUT"] = std::string{*value};
+    }
+    return env;
+}
+
+int run_android_script(cppx::cli::Invocation const& invocation,
+                       std::string_view command,
+                       fs::path script,
+                       std::chrono::milliseconds timeout,
+                       std::map<std::string, std::string> env = {}) {
+    auto base = android_env_overrides(invocation);
+    base.insert(env.begin(), env.end());
+    return run_repo_script(
+        command,
+        std::move(script),
+        invocation,
+        std::move(base),
+        timeout);
+}
+
+int run_android_build(cppx::cli::Invocation const& invocation) {
+    return run_repo_process(
+        "android build",
+        "mise",
+        {"exec", "--", "exon", "build", "--target", "aarch64-linux-android"},
+        invocation,
+        android_env_overrides(invocation),
+        std::chrono::minutes{30});
+}
+
+int run_android_logs(cppx::cli::Invocation const& invocation) {
+    auto env = std::map<std::string, std::string>{
+        {"PHENOTYPE_ANDROID_LOG_DUMP", "1"},
+        {"PHENOTYPE_ANDROID_LOG_LINES", "160"},
+    };
+    if (auto value = invocation.value("lines")) {
+        env["PHENOTYPE_ANDROID_LOG_LINES"] = std::string{*value};
+    }
+    return run_android_script(
+        invocation,
+        "android logs",
+        "tools/android/logs.sh",
+        std::chrono::minutes{2},
+        std::move(env));
+}
+
+int run_android_command(cppx::cli::Invocation const& invocation) {
+    auto const& path = invocation.command_path;
+    auto const command = [&] {
+        return path.size() >= 3 ? path[2] : std::string{};
+    }();
+
+    if (command == "doctor") {
+        return run_android_script(
+            invocation,
+            "android doctor",
+            "tools/android/doctor.sh",
+            std::chrono::minutes{2});
+    }
+    if (command == "devices") {
+        return run_android_script(
+            invocation,
+            "android devices",
+            "tools/android/emu_list.sh",
+            std::chrono::minutes{2});
+    }
+    if (command == "emu-start") {
+        return run_android_script(
+            invocation,
+            "android emu-start",
+            "tools/android/emu_start.sh",
+            std::chrono::minutes{5});
+    }
+    if (command == "emu-stop") {
+        return run_android_script(
+            invocation,
+            "android emu-stop",
+            "tools/android/emu_stop.sh",
+            std::chrono::minutes{2});
+    }
+    if (command == "build")
+        return run_android_build(invocation);
+    if (command == "apk") {
+        return run_android_script(
+            invocation,
+            "android apk",
+            "tools/android/apk.sh",
+            std::chrono::minutes{45});
+    }
+    if (command == "install") {
+        return run_android_script(
+            invocation,
+            "android install",
+            "tools/android/install.sh",
+            std::chrono::minutes{5});
+    }
+    if (command == "launch") {
+        return run_android_script(
+            invocation,
+            "android launch",
+            "tools/android/launch.sh",
+            std::chrono::minutes{2});
+    }
+    if (command == "stop") {
+        return run_android_script(
+            invocation,
+            "android stop",
+            "tools/android/stop.sh",
+            std::chrono::minutes{2});
+    }
+    if (command == "run") {
+        return run_android_script(
+            invocation,
+            "android run",
+            "tools/android/run.sh",
+            std::chrono::minutes{60});
+    }
+    if (command == "logs")
+        return run_android_logs(invocation);
+    if (command == "screencap") {
+        return run_android_script(
+            invocation,
+            "android screencap",
+            "tools/android/screencap.sh",
+            std::chrono::minutes{2});
+    }
+    if (command == "contract") {
+        return run_android_script(
+            invocation,
+            "android contract",
+            "tools/android/contract.sh",
+            std::chrono::minutes{75});
+    }
+    if (command == "clean") {
+        return run_android_script(
+            invocation,
+            "android clean",
+            "tools/android/clean.sh",
+            std::chrono::minutes{20});
+    }
+
+    return print_error(
+        "android",
+        "unknown Android command",
+        invocation.has("json"));
+}
+
 int run_package_inspect(cppx::cli::Invocation const& invocation) {
     auto path = first_positional_or_error(invocation, "package inspect");
     if (!path)
@@ -2428,6 +2827,10 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "drive", "file-explorer"})
         return run_drive_file_explorer(*parsed);
+    if (parsed->command_path.size() == 3
+        && parsed->command_path[0] == "phenotype"
+        && parsed->command_path[1] == "android")
+        return run_android_command(*parsed);
     if (parsed->command_path == std::vector<std::string>{"phenotype", "commands"})
         return run_commands(root, *parsed);
 

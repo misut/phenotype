@@ -35,4 +35,4 @@ step "last 2s of logcat"
 "$ADB" logcat -d -t 120 -v brief \
     -s phenotype:V AndroidRuntime:E DEBUG:F ActivityManager:I || true
 
-printf '\nandroid:run done — tail live logs with: mise run android:logs\n'
+printf '\nandroid:run done — inspect recent logs with: phenotype android logs\n'
