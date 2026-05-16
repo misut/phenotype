@@ -16,6 +16,8 @@ jobs:
       code_tests: ${{ steps.classify.outputs.code_tests }}
       docs_build: ${{ steps.classify.outputs.docs_build }}
       tools_check: ${{ steps.classify.outputs.tools_check }}
+      cli_check: ${{ steps.classify.outputs.cli_check }}
+      package_resource_check: ${{ steps.classify.outputs.package_resource_check }}
       file_explorer_examples: ${{ steps.classify.outputs.file_explorer_examples }}
     steps:
       - uses: actions/checkout@v6
@@ -40,6 +42,8 @@ jobs:
           code_tests=false
           docs_build=false
           tools_check=false
+          cli_check=false
+          package_resource_check=false
           file_explorer_examples=false
 
           for path in "${files[@]}"; do
@@ -48,6 +52,8 @@ jobs:
                 code_tests=true
                 docs_build=true
                 tools_check=true
+                cli_check=true
+                package_resource_check=true
                 continue
                 ;;
             esac
@@ -59,8 +65,23 @@ jobs:
             esac
 
             case "$path" in
+              tools/phenotype_cli/*)
+                cli_check=true
+                package_resource_check=true
+                continue
+                ;;
+            esac
+
+            case "$path" in
               tools/*|pyproject.toml|uv.lock|.python-version)
                 tools_check=true
+                ;;
+            esac
+
+            case "$path" in
+              examples/file_explorer_*/README.md|examples/file_explorer_*/phenotype.package.toml|examples/file_explorer_*/assets/*|examples/file_explorer_*/fonts/*|examples/file_explorer_*/locales/*)
+                package_resource_check=true
+                continue
                 ;;
             esac
 
@@ -88,6 +109,8 @@ jobs:
             echo "code_tests=$code_tests"
             echo "docs_build=$docs_build"
             echo "tools_check=$tools_check"
+            echo "cli_check=$cli_check"
+            echo "package_resource_check=$package_resource_check"
             echo "file_explorer_examples=$file_explorer_examples"
           } >> "$GITHUB_OUTPUT"
 
@@ -97,8 +120,8 @@ jobs:
           else
             printf '  %s\n' "${files[@]}"
           fi
-          printf 'code_tests=%s docs_build=%s tools_check=%s file_explorer_examples=%s\n' \
-            "$code_tests" "$docs_build" "$tools_check" "$file_explorer_examples"
+          printf 'code_tests=%s docs_build=%s tools_check=%s cli_check=%s package_resource_check=%s file_explorer_examples=%s\n' \
+            "$code_tests" "$docs_build" "$tools_check" "$cli_check" "$package_resource_check" "$file_explorer_examples"
 
   test:
     name: test (${{ matrix.os }}, ${{ matrix.target }})
@@ -318,6 +341,91 @@ jobs:
           $env:CXX = "cl"
           Set-Location examples/native
           exon build
+
+  cli-package:
+    name: cli package checks (ubuntu-24.04)
+    needs: changes
+    if: needs.changes.outputs.cli_check == 'true' || needs.changes.outputs.package_resource_check == 'true'
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Resolve tool versions
+        id: tool-versions
+        shell: bash
+        run: |
+          sed -n 's/^"vfox:misut\/mise-intron"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/intron=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+          sed -n 's/^"vfox:misut\/mise-exon"[[:space:]]*=[[:space:]]*"\([^"]*\)"$/exon=\1/p' mise.toml >> "$GITHUB_OUTPUT"
+
+      - name: Restore toolchains
+        id: toolchain-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: ~/.intron/toolchains
+          key: intron-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('mise.toml', '.intron.toml') }}
+
+      - name: Restore CLI build artifacts
+        id: build-cache
+        uses: actions/cache/restore@v5
+        with:
+          path: |
+            tools/phenotype_cli/.exon
+            ~/.exon/cache
+          key: cli-package-${{ runner.os }}-${{ hashFiles('mise.toml', 'tools/phenotype_cli/exon.toml') }}
+          restore-keys: |
+            cli-package-${{ runner.os }}-
+
+      - name: Install intron
+        run: |
+          gh release download v${{ steps.tool-versions.outputs.intron }} -R misut/intron -p "intron-*-x86_64-linux-gnu.tar.gz"
+          tar xzf intron-*.tar.gz && sudo mv intron /usr/local/bin/ && rm intron-*.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Install toolchains
+        run: |
+          intron install llvm 22.1.2
+          intron install cmake 4.3.1
+          intron install ninja 1.13.2
+
+      - name: Save toolchains
+        if: github.ref == 'refs/heads/main' && steps.toolchain-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: ~/.intron/toolchains
+          key: ${{ steps.toolchain-cache.outputs.cache-primary-key }}
+
+      - name: Install exon
+        run: |
+          gh release download v${{ steps.tool-versions.outputs.exon }} -R misut/exon -p "exon-*-x86_64-linux-gnu.tar.gz"
+          tar xzf exon-*.tar.gz && sudo mv exon /usr/local/bin/ && rm exon-*.tar.gz
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Build phenotype CLI
+        run: |
+          eval "$(intron env)"
+          cd tools/phenotype_cli
+          exon build
+
+      - name: Validate CLI JSON commands
+        run: |
+          set -euo pipefail
+          eval "$(intron env)"
+          cli="tools/phenotype_cli/.exon/debug/phenotype_cli"
+          "$cli" doctor --json | python3 -m json.tool >/dev/null
+          "$cli" commands --json | python3 -m json.tool >/dev/null
+          "$cli" package inspect --json examples/file_explorer_desktop | python3 -m json.tool >/dev/null
+          "$cli" package inspect --json examples/file_explorer_mobile | python3 -m json.tool >/dev/null
+
+      - name: Save CLI build artifacts
+        if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v5
+        with:
+          path: |
+            tools/phenotype_cli/.exon
+            ~/.exon/cache
+          key: ${{ steps.build-cache.outputs.cache-primary-key }}
 
   docs:
     name: docs build (wasm32-wasi)

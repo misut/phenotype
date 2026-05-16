@@ -30,9 +30,20 @@ struct PackageSummary {
     bool exists = false;
     bool is_directory = false;
     bool manifest = false;
+    bool application_section = false;
+    bool resources_section = false;
+    bool debug_section = false;
+    bool default_font_pretendard = false;
     bool assets_directory = false;
     bool locales_directory = false;
     bool fonts_directory = false;
+    std::string default_font_family;
+    std::vector<std::string> missing_sources;
+    std::uintmax_t manifest_bytes = 0;
+    std::size_t manifest_asset_count = 0;
+    std::size_t manifest_locale_count = 0;
+    std::size_t manifest_font_count = 0;
+    std::size_t source_reference_count = 0;
     std::size_t asset_file_count = 0;
     std::size_t locale_file_count = 0;
     std::size_t font_file_count = 0;
@@ -167,6 +178,89 @@ auto file_size_or_zero(fs::path const& path) -> std::uintmax_t {
     auto ec = std::error_code{};
     auto size = fs::file_size(path, ec);
     return ec ? 0 : size;
+}
+
+auto read_text_file(fs::path const& path) -> std::string {
+    auto input = std::ifstream{path, std::ios::binary};
+    if (!input)
+        return {};
+    auto out = std::ostringstream{};
+    out << input.rdbuf();
+    return out.str();
+}
+
+auto trim_copy(std::string_view text) -> std::string {
+    auto begin = text.begin();
+    auto end = text.end();
+    while (begin != end
+           && std::isspace(static_cast<unsigned char>(*begin))) {
+        ++begin;
+    }
+    while (begin != end
+           && std::isspace(static_cast<unsigned char>(*(end - 1)))) {
+        --end;
+    }
+    return std::string{begin, end};
+}
+
+auto strip_toml_comment(std::string_view line) -> std::string {
+    auto in_string = false;
+    auto escaped = false;
+    for (std::size_t i = 0; i < line.size(); ++i) {
+        auto ch = line[i];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (ch == '\\' && in_string) {
+            escaped = true;
+            continue;
+        }
+        if (ch == '"') {
+            in_string = !in_string;
+            continue;
+        }
+        if (ch == '#' && !in_string)
+            return trim_copy(line.substr(0, i));
+    }
+    return trim_copy(line);
+}
+
+auto quoted_value_for_key(std::string_view line, std::string_view key)
+    -> std::optional<std::string> {
+    auto trimmed = strip_toml_comment(line);
+    if (!trimmed.starts_with(key))
+        return std::nullopt;
+    auto rest = trim_copy(std::string_view{trimmed}.substr(key.size()));
+    if (!rest.starts_with("="))
+        return std::nullopt;
+    rest = trim_copy(std::string_view{rest}.substr(1));
+    if (rest.size() < 2 || rest.front() != '"')
+        return std::nullopt;
+
+    auto value = std::string{};
+    auto escaped = false;
+    for (std::size_t i = 1; i < rest.size(); ++i) {
+        auto ch = rest[i];
+        if (escaped) {
+            switch (ch) {
+            case 'n': value.push_back('\n'); break;
+            case 'r': value.push_back('\r'); break;
+            case 't': value.push_back('\t'); break;
+            default: value.push_back(ch); break;
+            }
+            escaped = false;
+            continue;
+        }
+        if (ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch == '"')
+            return value;
+        value.push_back(ch);
+    }
+    return std::nullopt;
 }
 
 auto count_regular_files(fs::path const& root) -> std::size_t {
@@ -408,13 +502,62 @@ auto package_summary(fs::path root) -> PackageSummary {
     auto summary = PackageSummary{.root = std::move(root)};
     summary.exists = path_exists(summary.root);
     summary.is_directory = path_is_directory(summary.root);
-    summary.manifest = path_exists(summary.root / "phenotype.package.toml");
+    auto manifest_path = summary.root / "phenotype.package.toml";
+    summary.manifest = path_exists(manifest_path);
+    summary.manifest_bytes = file_size_or_zero(manifest_path);
     summary.assets_directory = path_is_directory(summary.root / "assets");
     summary.locales_directory = path_is_directory(summary.root / "locales");
     summary.fonts_directory = path_is_directory(summary.root / "fonts");
     summary.asset_file_count = count_regular_files(summary.root / "assets");
     summary.locale_file_count = count_regular_files(summary.root / "locales");
     summary.font_file_count = count_regular_files(summary.root / "fonts");
+
+    if (summary.manifest) {
+        auto text = read_text_file(manifest_path);
+        auto input = std::istringstream{text};
+        auto line = std::string{};
+        while (std::getline(input, line)) {
+            auto trimmed = strip_toml_comment(line);
+            if (trimmed.empty())
+                continue;
+
+            if (trimmed == "[application]") {
+                summary.application_section = true;
+                continue;
+            }
+            if (trimmed == "[resources]") {
+                summary.resources_section = true;
+                continue;
+            }
+            if (trimmed == "[debug]") {
+                summary.debug_section = true;
+                continue;
+            }
+            if (trimmed == "[[assets]]") {
+                ++summary.manifest_asset_count;
+                continue;
+            }
+            if (trimmed == "[[locales]]") {
+                ++summary.manifest_locale_count;
+                continue;
+            }
+            if (trimmed == "[[fonts]]") {
+                ++summary.manifest_font_count;
+                continue;
+            }
+
+            if (auto value = quoted_value_for_key(trimmed, "default_font_family")) {
+                summary.default_font_family = *value;
+                summary.default_font_pretendard = *value == "Pretendard";
+                continue;
+            }
+            if (auto value = quoted_value_for_key(trimmed, "source")) {
+                ++summary.source_reference_count;
+                if (!path_exists(summary.root / *value))
+                    summary.missing_sources.push_back(*value);
+            }
+        }
+    }
     return summary;
 }
 
@@ -425,9 +568,40 @@ auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
          .detail = path_string(summary.root),
          .hint = "Pass a directory that owns phenotype package resources."},
         {.name = "manifest",
-         .ok = summary.manifest,
-         .detail = "phenotype.package.toml",
+         .ok = summary.manifest && summary.manifest_bytes > 0,
+         .detail = std::format("phenotype.package.toml ({} bytes)",
+                               summary.manifest_bytes),
          .hint = "Add phenotype.package.toml before using CLI packaging."},
+        {.name = "manifest_sections",
+         .ok = summary.application_section && summary.resources_section
+             && summary.debug_section,
+         .detail = std::format("application={} resources={} debug={}",
+                               summary.application_section ? "true" : "false",
+                               summary.resources_section ? "true" : "false",
+                               summary.debug_section ? "true" : "false"),
+         .hint = "Expected [application], [resources], and [debug] sections."},
+        {.name = "manifest_resources",
+         .ok = summary.manifest_asset_count > 0
+             && summary.manifest_locale_count > 0
+             && summary.manifest_font_count > 0,
+         .detail = std::format("assets={} locales={} fonts={}",
+                               summary.manifest_asset_count,
+                               summary.manifest_locale_count,
+                               summary.manifest_font_count),
+         .hint = "Expected at least one asset, locale, and font declaration."},
+        {.name = "manifest_sources",
+         .ok = summary.source_reference_count > 0
+             && summary.missing_sources.empty(),
+         .detail = std::format("{} sources, {} missing",
+                               summary.source_reference_count,
+                               summary.missing_sources.size()),
+         .hint = "Every manifest source path must exist relative to the package root."},
+        {.name = "default_font",
+         .ok = summary.default_font_pretendard,
+         .detail = summary.default_font_family.empty()
+             ? "default_font_family=<missing>"
+             : std::format("default_font_family={}", summary.default_font_family),
+         .hint = "Package resources should default to Pretendard for UI text."},
         {.name = "assets",
          .ok = summary.assets_directory,
          .detail = std::format("{} files", summary.asset_file_count),
@@ -447,13 +621,29 @@ auto package_json(PackageSummary const& summary,
                   std::span<Check const> checks) -> std::string {
     return std::format(
         "{{\"schema_version\":1,\"command\":\"package inspect\",\"ok\":{},"
-        "\"root\":{},\"manifest\":{},"
+        "\"root\":{},"
+        "\"manifest\":{{\"present\":{},\"bytes\":{},"
+        "\"sections\":{{\"application\":{},\"resources\":{},\"debug\":{}}},"
+        "\"declared_resources\":{{\"assets\":{},\"locales\":{},\"fonts\":{}}},"
+        "\"source_reference_count\":{},\"missing_sources\":{},"
+        "\"default_font_family\":{},\"default_font_pretendard\":{}}},"
         "\"assets\":{{\"present\":{},\"file_count\":{}}},"
         "\"locales\":{{\"present\":{},\"file_count\":{}}},"
         "\"fonts\":{{\"present\":{},\"file_count\":{}}},\"checks\":{}}}",
         all_ok(checks) ? "true" : "false",
         json_string(path_string(summary.root)),
         summary.manifest ? "true" : "false",
+        summary.manifest_bytes,
+        summary.application_section ? "true" : "false",
+        summary.resources_section ? "true" : "false",
+        summary.debug_section ? "true" : "false",
+        summary.manifest_asset_count,
+        summary.manifest_locale_count,
+        summary.manifest_font_count,
+        summary.source_reference_count,
+        string_array_json(summary.missing_sources),
+        json_string(summary.default_font_family),
+        summary.default_font_pretendard ? "true" : "false",
         summary.assets_directory ? "true" : "false",
         summary.asset_file_count,
         summary.locales_directory ? "true" : "false",

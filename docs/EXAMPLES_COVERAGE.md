@@ -124,11 +124,13 @@ tools/verify_file_explorer_artifacts.sh
 ```
 
 Pull-request CI does not run these slow startup artifact captures. Code changes
-run the root test matrix, docs changes run the docs WASI build, and tooling-only
-changes run the uv-managed verifier checks without root C++ tests. The
-main-branch push workflow only runs artifact/docs build gates, not the full code
-test matrix or glass artifact capture. WASI root tests and docs builds run on
-Linux runners; native artifact builds remain macOS-only. Workflow-file changes
+run the root test matrix, docs changes run the docs WASI build, Python verifier
+tooling changes run the uv-managed verifier checks, and CLI/package-resource
+changes run a lightweight Linux `phenotype_cli` build plus package inspection
+without the root C++ test matrix. The main-branch push workflow only runs
+artifact/docs build gates, not the full code test matrix or glass artifact
+capture. WASI root tests, docs builds, and CLI package checks run on Linux
+runners; native artifact builds remain macOS-only. Workflow-file changes
 deliberately enable all relevant gates so runner policy edits validate
 themselves.
 
