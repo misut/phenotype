@@ -228,16 +228,16 @@ inline constexpr int k_desktop_default_viewport_width = 1300;
 inline constexpr int k_desktop_default_viewport_height = 760;
 inline constexpr int k_mobile_default_viewport_width = 390;
 inline constexpr int k_mobile_default_viewport_height = 844;
-inline constexpr float k_desktop_integrated_titlebar_height = 56.0f;
+inline constexpr float k_desktop_integrated_titlebar_height = 64.0f;
 inline constexpr float k_desktop_sidebar_width = 224.0f;
 inline constexpr float k_desktop_sidebar_row_width = 188.0f;
-inline constexpr float k_desktop_sidebar_row_height = 32.0f;
-inline constexpr float k_desktop_sidebar_heading_height = 26.0f;
+inline constexpr float k_desktop_sidebar_row_height = 38.0f;
+inline constexpr float k_desktop_sidebar_heading_height = 30.0f;
 inline constexpr float k_desktop_window_radius = 18.0f;
-inline constexpr float k_desktop_toolbar_group_radius = 19.0f;
-inline constexpr float k_desktop_toolbar_group_height = 38.0f;
-inline constexpr float k_desktop_toolbar_icon_button_width = 34.0f;
-inline constexpr float k_desktop_toolbar_icon_button_height = 30.0f;
+inline constexpr float k_desktop_toolbar_group_radius = 22.0f;
+inline constexpr float k_desktop_toolbar_group_height = 46.0f;
+inline constexpr float k_desktop_toolbar_icon_button_width = 38.0f;
+inline constexpr float k_desktop_toolbar_icon_button_height = 36.0f;
 inline constexpr float k_desktop_icon_grid_column_width = 142.0f;
 inline constexpr float k_desktop_icon_grid_row_height = 166.0f;
 inline constexpr float k_desktop_icon_grid_column_pitch = 166.0f;
@@ -523,6 +523,29 @@ inline void write_file_if_missing(fs::path const& path, std::string_view body) {
     out << body;
 }
 
+inline void remove_file_if_body_matches(fs::path const& path,
+                                        std::string_view expected_body) {
+    std::error_code ec;
+    if (!fs::is_regular_file(path, ec) || ec)
+        return;
+    ec.clear();
+    auto const size = fs::file_size(path, ec);
+    if (ec || size != expected_body.size())
+        return;
+
+    std::ifstream in(path, std::ios::binary);
+    if (!in)
+        return;
+    std::string body(expected_body.size(), '\0');
+    in.read(body.data(), static_cast<std::streamsize>(body.size()));
+    if (in.gcount() != static_cast<std::streamsize>(body.size()))
+        return;
+    if (body != expected_body)
+        return;
+
+    fs::remove(path, ec);
+}
+
 inline fs::path ensure_demo_tree(std::string_view profile) {
     std::error_code ec;
     auto root = demo_root(profile);
@@ -568,9 +591,15 @@ inline fs::path ensure_demo_tree(std::string_view profile) {
             "PDF placeholder with Chinese filename for font fallback verification.\n");
     }
     write_file_if_missing(
+        root / "※해당 시 필독_①무주택자인 경우.pdf",
+        "PDF placeholder matching the Finder-style Korean Recents probe scene.\n");
+    write_file_if_missing(
+        root / "[카카오] 퇴직금 지급 기준.pdf",
+        "PDF placeholder matching the Finder-style Korean Recents probe scene.\n");
+    remove_file_if_body_matches(
         root / "Withdrawal Notice.pdf",
         "PDF placeholder for the Recents probe scene.\n");
-    write_file_if_missing(
+    remove_file_if_body_matches(
         root / "Operating Guide.pdf",
         "PDF placeholder for the Recents probe scene.\n");
     write_file_if_missing(
@@ -1178,9 +1207,9 @@ inline int finder_recents_rank(std::string_view name) {
         return 3;
     if (name == "1_필수_중도인출 신청서.pdf")
         return 4;
-    if (name == "Withdrawal Notice.pdf")
+    if (name == "※해당 시 필독_①무주택자인 경우.pdf")
         return 5;
-    if (name == "Operating Guide.pdf")
+    if (name == "[카카오] 퇴직금 지급 기준.pdf")
         return 6;
     if (name == "line_2.png")
         return 7;

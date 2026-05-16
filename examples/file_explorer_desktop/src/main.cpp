@@ -831,7 +831,7 @@ void sidebar_row(std::string_view label,
             paint_sidebar_icon(painter, icon_name);
             auto ink = selected ? rgba(0, 122, 255) : rgba(30, 30, 30);
             painter.text(44.0f,
-                         5.0f,
+                         8.0f,
                          label_text.c_str(),
                          static_cast<unsigned int>(label_text.size()),
                          15.0f,

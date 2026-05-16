@@ -167,11 +167,11 @@
     },
     {
       "path": "window.integrated_titlebar.height",
-      "equals": 56.0
+      "equals": 64.0
     },
     {
       "path": "window.integrated_titlebar.drag_region_height",
-      "equals": 56.0
+      "equals": 64.0
     },
     {
       "path": "window.integrated_titlebar.leading_control_reserved_width",
