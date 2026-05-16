@@ -2366,11 +2366,12 @@ auto operation_receipt_json(
 auto explorer_input_json(file_explorer_demo::ExplorerInput const& input)
     -> std::string {
     return std::format(
-        "{{\"kind\":{},\"value\":{},\"sort_mode\":{},"
+        "{{\"kind\":{},\"value\":{},\"sort_mode\":{},\"view_mode\":{},"
         "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},\"label\":{}}}",
         json_string(file_explorer_demo::explorer_input_kind_name(input.kind)),
         json_string(input.value),
         json_string(file_explorer_demo::sort_mode_label(input.sort_mode)),
+        json_string(file_explorer_demo::view_mode_value_name(input.view_mode)),
         input.viewport_width,
         input.viewport_height,
         input.viewport_scale,
@@ -2627,6 +2628,7 @@ auto explorer_drive_json(
         "\"resources\":{},\"labels\":{},"
         "\"root\":{},\"current\":{},\"relative_location\":{},"
         "\"status\":{},\"sort_label\":{},"
+        "\"view_mode\":{{\"value\":{},\"label\":{}}},"
         "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
         "\"chrome\":{},"
         "\"selected\":{{\"present\":{},\"name\":{},\"kind\":{},"
@@ -2648,6 +2650,8 @@ auto explorer_drive_json(
         json_string(snap.relative_location),
         json_string(result.state.status),
         json_string(snap.sort_label),
+        json_string(file_explorer_demo::view_mode_value_name(snap.view_mode)),
+        json_string(file_explorer_demo::view_mode_label(snap.view_mode)),
         result.state.viewport_width,
         result.state.viewport_height,
         result.state.viewport_scale,
@@ -4406,6 +4410,9 @@ int run_drive_file_explorer(cppx::cli::Invocation const& invocation) {
              .value = std::format("{} files, {} folders",
                                   snap.file_count,
                                   snap.folder_count),
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "view",
+             .value = file_explorer_demo::view_mode_label(snap.view_mode),
              .status = cppx::terminal::StatusKind::ok},
             {.label = "chrome",
              .value = std::format("{} cols x {} rows, viewport {}x{}@{}",

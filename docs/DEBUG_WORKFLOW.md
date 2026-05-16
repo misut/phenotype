@@ -141,6 +141,7 @@ the deterministic drive command:
 cd tools/phenotype_cli
 mise exec -- exon build
 .exon/debug/phenotype_cli drive file-explorer --json \
+  --input view:gallery \
   --input viewport:900x620@2 \
   --input select:README.txt \
   --input duplicate \
@@ -153,10 +154,10 @@ mise exec -- exon build
 ```
 
 The drive output reports the typed input trace, sandbox paths, visible entries,
-viewport, pure Finder chrome/grid metrics, selection capabilities, operation
-receipts, and preview excerpt. It is useful for validating
-select/open/read/create/duplicate/delete/resize model behavior before running the
-slower desktop/mobile artifact capture gate.
+viewport, view mode, pure Finder chrome/grid metrics, selection capabilities,
+operation receipts, and preview excerpt. It is useful for validating
+select/open/read/create/duplicate/delete/view-mode/resize model behavior before
+running the slower desktop/mobile artifact capture gate.
 
 For material probe input debugging that does not need a native window, use the
 matching glass showcase drive command:
@@ -231,6 +232,7 @@ mise exec -- exon build
 .exon/debug/phenotype_cli run file_explorer_desktop \
   --artifact-dir /tmp/phenotype-file-explorer-input \
   --artifact-exit \
+  --input view:gallery \
   --input select:README.txt \
   --input duplicate
 ```

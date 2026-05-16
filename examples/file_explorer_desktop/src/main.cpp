@@ -24,8 +24,7 @@ namespace fs = std::filesystem;
 
 struct SelectLocation { std::string id; };
 struct SelectEntry { std::string name; };
-enum class FinderViewMode { Icon, List, Column, Gallery };
-struct SetViewMode { FinderViewMode mode; };
+struct SetViewMode { file_explorer_demo::ExplorerViewMode mode; };
 struct ToolbarAction { std::string label; };
 struct SearchChanged { std::string text; };
 struct ToggleSearch {};
@@ -61,25 +60,6 @@ using Msg = std::variant<
     ResetDemo,
     Resized,
     Noop>;
-
-FinderViewMode view_mode_from_name(std::string_view value) {
-    std::string mode(value);
-    std::transform(mode.begin(), mode.end(), mode.begin(), [](unsigned char ch) {
-        return static_cast<char>(std::tolower(ch));
-    });
-    if (mode == "list")
-        return FinderViewMode::List;
-    if (mode == "column")
-        return FinderViewMode::Column;
-    if (mode == "gallery")
-        return FinderViewMode::Gallery;
-    return FinderViewMode::Icon;
-}
-
-FinderViewMode initial_view_mode() {
-    char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_VIEW");
-    return raw ? view_mode_from_name(raw) : FinderViewMode::Icon;
-}
 
 std::string read_text_file(fs::path const& path) {
     auto input = std::ifstream{path, std::ios::binary};
@@ -139,6 +119,13 @@ void apply_startup_inputs(file_explorer_demo::ExplorerState& state,
 file_explorer_demo::ExplorerState initial_explorer_state() {
     auto state = file_explorer_demo::make_state("desktop");
     apply_startup_inputs(state, "desktop");
+    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_VIEW")) {
+        if (*raw) {
+            state.view_mode = file_explorer_demo::known_view_mode_name(raw)
+                ? file_explorer_demo::view_mode_from_name(raw)
+                : file_explorer_demo::ExplorerViewMode::Icon;
+        }
+    }
     return state;
 }
 
@@ -190,7 +177,6 @@ phenotype::ResourceCatalog runtime_resource_catalog() {
 struct State {
     file_explorer_demo::ExplorerState explorer;
     file_explorer_demo::ExplorerLabels labels;
-    FinderViewMode view_mode;
     bool search_visible = false;
 
     State()
@@ -198,7 +184,6 @@ struct State {
           labels(file_explorer_demo::file_explorer_labels(
               initial_locale(),
               runtime_resource_catalog())),
-          view_mode(initial_view_mode()),
           search_visible(!explorer.search.empty()) {
     }
 };
@@ -537,16 +522,6 @@ std::string finder_status(file_explorer_demo::Snapshot const& snap) {
     return text;
 }
 
-std::string view_mode_name(FinderViewMode mode) {
-    switch (mode) {
-        case FinderViewMode::Icon: return "Icon View";
-        case FinderViewMode::List: return "List View";
-        case FinderViewMode::Column: return "Column View";
-        case FinderViewMode::Gallery: return "Gallery View";
-    }
-    return "Icon View";
-}
-
 std::string compact_preview(std::string text) {
     for (char& ch : text) {
         if (ch == '\n' || ch == '\t')
@@ -666,8 +641,14 @@ void update(State& state, Msg msg) {
         } else if constexpr (std::same_as<T, SelectEntry>) {
             file_explorer_demo::activate_entry(explorer, m.name);
         } else if constexpr (std::same_as<T, SetViewMode>) {
-            state.view_mode = m.mode;
-            explorer.status = "Switched to " + view_mode_name(m.mode) + ".";
+            file_explorer_demo::apply_explorer_input(
+                explorer,
+                {
+                    .kind = file_explorer_demo::ExplorerInputKind::ViewMode,
+                    .value = file_explorer_demo::view_mode_value_name(m.mode),
+                    .view_mode = m.mode,
+                },
+                "desktop");
         } else if constexpr (std::same_as<T, ToolbarAction>) {
             explorer.status = m.label + " action is available in the native toolbar contract.";
         } else if constexpr (std::same_as<T, SearchChanged>) {
@@ -1068,8 +1049,8 @@ void paint_delete_icon(phenotype::Painter& painter, bool enabled) {
 
 template<typename Paint>
 void view_mode_button(char const* label,
-                      FinderViewMode mode,
-                      FinderViewMode current,
+                      file_explorer_demo::ExplorerViewMode mode,
+                      file_explorer_demo::ExplorerViewMode current,
                       Paint paint,
                       std::uint64_t token) {
     bool const selected = mode == current;
@@ -1195,16 +1176,16 @@ void finder_toolbar(State const& state,
         layout::toolbar(
             toolbar_group_options("View Controls", 216.0f),
             [&] {
-                view_mode_button("Icon View", FinderViewMode::Icon,
-                                 state.view_mode, paint_icon_view, 0x6301u);
-                view_mode_button("List View", FinderViewMode::List,
-                                 state.view_mode, paint_list_view, 0x6302u);
+                view_mode_button("Icon View", file_explorer_demo::ExplorerViewMode::Icon,
+                                 state.explorer.view_mode, paint_icon_view, 0x6301u);
+                view_mode_button("List View", file_explorer_demo::ExplorerViewMode::List,
+                                 state.explorer.view_mode, paint_list_view, 0x6302u);
                 toolbar_separator();
-                view_mode_button("Column View", FinderViewMode::Column,
-                                 state.view_mode, paint_column_view, 0x6303u);
+                view_mode_button("Column View", file_explorer_demo::ExplorerViewMode::Column,
+                                 state.explorer.view_mode, paint_column_view, 0x6303u);
                 toolbar_separator();
-                view_mode_button("Gallery View", FinderViewMode::Gallery,
-                                 state.view_mode, paint_gallery_view, 0x6304u);
+                view_mode_button("Gallery View", file_explorer_demo::ExplorerViewMode::Gallery,
+                                 state.explorer.view_mode, paint_gallery_view, 0x6304u);
             });
         layout::toolbar(
             toolbar_group_options("File Actions", 172.0f),
@@ -1502,17 +1483,17 @@ void finder_gallery_view(State const& state,
 
 void finder_content(State const& state,
                     file_explorer_demo::Snapshot const& snap) {
-    switch (state.view_mode) {
-        case FinderViewMode::List:
+    switch (state.explorer.view_mode) {
+        case file_explorer_demo::ExplorerViewMode::List:
             finder_list(state, snap);
             return;
-        case FinderViewMode::Column:
+        case file_explorer_demo::ExplorerViewMode::Column:
             finder_column_view(state, snap);
             return;
-        case FinderViewMode::Gallery:
+        case file_explorer_demo::ExplorerViewMode::Gallery:
             finder_gallery_view(state, snap);
             return;
-        case FinderViewMode::Icon:
+        case file_explorer_demo::ExplorerViewMode::Icon:
         default:
             finder_grid(state, snap);
             return;
