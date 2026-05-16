@@ -12,6 +12,7 @@ module;
 #include <functional>
 #include <optional>
 #include <string>
+#include <string_view>
 #include <utility>
 
 #include <CoreGraphics/CoreGraphics.h>
@@ -355,6 +356,14 @@ inline bool appkit_window_is_visible(id window) {
     return window && objc_send<signed char>(window, sel("isVisible")) != 0;
 }
 
+inline bool appkit_window_is_key(id window) {
+    return window && objc_send<signed char>(window, sel("isKeyWindow")) != 0;
+}
+
+inline bool appkit_window_is_main(id window) {
+    return window && objc_send<signed char>(window, sel("isMainWindow")) != 0;
+}
+
 inline bool activate_current_running_application() {
     id running_app = objc_send<id>(
         class_id("NSRunningApplication"),
@@ -507,10 +516,27 @@ inline bool appkit_window_server_surface_ready(id window) {
     return surface.valid && surface.onscreen;
 }
 
+inline char const* appkit_window_front_state(id app, id window) {
+    if (!window)
+        return "missing-window";
+    if (!appkit_window_is_visible(window))
+        return "window-not-visible";
+    auto surface = appkit_window_server_surface(window);
+    if (!surface.valid)
+        return "window-server-bounds-missing";
+    if (!surface.onscreen)
+        return "window-server-offscreen";
+    if (!appkit_app_is_active(app))
+        return "app-not-active";
+    if (!appkit_window_is_key(window))
+        return "window-not-key";
+    if (!appkit_window_is_main(window))
+        return "window-not-main";
+    return "ready";
+}
+
 inline bool appkit_window_front_ready(id app, id window) {
-    return appkit_window_server_surface_ready(window)
-        && appkit_window_is_visible(window)
-        && appkit_app_is_active(app);
+    return std::string_view{appkit_window_front_state(app, window)} == "ready";
 }
 
 inline void pump_appkit_ordering_once(id app, double timeout_seconds) {
@@ -552,6 +578,20 @@ inline void wait_for_appkit_window_front(id app, id window) {
         request_appkit_window_front(app, window);
         pump_appkit_ordering_once(app, 0.016);
     }
+}
+
+inline void warn_if_appkit_window_not_front(id app, id window) {
+    auto const* state = appkit_window_front_state(app, window);
+    if (std::string_view{state} == "ready")
+        return;
+    std::fprintf(
+        stderr,
+        "[appkit] window fronting incomplete: state=%s visible=%d active=%d key=%d main=%d\n",
+        state,
+        appkit_window_is_visible(window) ? 1 : 0,
+        appkit_app_is_active(app) ? 1 : 0,
+        appkit_window_is_key(window) ? 1 : 0,
+        appkit_window_is_main(window) ? 1 : 0);
 }
 
 inline void appkit_set_hover_cursor(bool pointing) {
@@ -667,6 +707,7 @@ int run_app_with_macos_platform(platform_api const& platform,
     request_appkit_window_front(app, window);
     prime_appkit_window_ordering(app);
     wait_for_appkit_window_front(app, window);
+    warn_if_appkit_window_not_front(app, window);
     repaint_current_after_surface_presented();
 
     auto const* artifact_dir = std::getenv("PHENOTYPE_ARTIFACT_DIR");

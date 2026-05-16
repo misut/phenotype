@@ -66,10 +66,13 @@ interaction. The artifact also records WindowServer z-order fields
 (`window_server_order_index`, `window_server_app_order_index`, and
 `window_server_occluded_by_front_app_window`) so a launch failure can distinguish
 "no NSWindow", "offscreen/minimized NSWindow", and "created but covered by
-another app window". The AppKit shell installs a small native application
-delegate that reorders the existing window when the app becomes active or the
-Dock icon is reopened; the example's traffic-light marker is visual-only and is
-not wired to phenotype input.
+another app window". The consolidated `visibility_state` and
+`ready_for_user_interaction` fields summarize the same readbacks for humans and
+CI. The AppKit shell installs a small native application delegate that reorders
+the existing window when the app becomes active or the Dock icon is reopened;
+if the launch path still cannot make the window visible/key/main, stderr names
+the exact state before the event loop continues. The example's traffic-light
+marker is visual-only and is not wired to phenotype input.
 
 The toolbar search control starts as a Finder-style icon button. Activating it
 reveals a search field wired to the shared file model, so desktop and mobile

@@ -5375,6 +5375,7 @@ inline json::Object windows_images_runtime_json() {
 
 inline json::Object windows_window_runtime_json() {
     auto const* surface = g_renderer.surface;
+    auto hwnd = surface ? static_cast<HWND>(surface->window) : nullptr;
     bool const has_options = surface && surface->window_options_valid;
     WindowChromeStyle const chrome =
         has_options ? surface->window_chrome : WindowChromeStyle::System;
@@ -5382,6 +5383,20 @@ inline json::Object windows_window_runtime_json() {
         has_options ? surface->integrated_titlebar : IntegratedTitlebarOptions{};
     bool const integrated =
         chrome == WindowChromeStyle::IntegratedTitlebar;
+    bool const window_exists = hwnd && IsWindow(hwnd) != 0;
+    bool const window_visible = window_exists && IsWindowVisible(hwnd) != 0;
+    bool const window_iconic = window_exists && IsIconic(hwnd) != 0;
+    bool const window_zoomed = window_exists && IsZoomed(hwnd) != 0;
+    RECT client_rect{};
+    RECT window_rect{};
+    bool const client_rect_valid =
+        window_exists && GetClientRect(hwnd, &client_rect) != 0;
+    bool const window_rect_valid =
+        window_exists && GetWindowRect(hwnd, &window_rect) != 0;
+    auto const client_width = client_rect.right - client_rect.left;
+    auto const client_height = client_rect.bottom - client_rect.top;
+    auto const window_width = window_rect.right - window_rect.left;
+    auto const window_height = window_rect.bottom - window_rect.top;
 
     json::Object titlebar;
     titlebar.emplace(
@@ -5421,6 +5436,49 @@ inline json::Object windows_window_runtime_json() {
     window.emplace("dwm_custom_frame", json::Value{integrated});
     window.emplace("caption_button_delegation", json::Value{integrated});
     window.emplace("resize_hit_testing", json::Value{integrated});
+    window.emplace("window_handle_present", json::Value{window_exists});
+    window.emplace("window_visible", json::Value{window_visible});
+    window.emplace("window_iconic", json::Value{window_iconic});
+    window.emplace("window_zoomed", json::Value{window_zoomed});
+
+    json::Object client;
+    client.emplace("valid", json::Value{client_rect_valid});
+    client.emplace("w", json::Value{static_cast<double>(client_width)});
+    client.emplace("h", json::Value{static_cast<double>(client_height)});
+    window.emplace("client_bounds", json::Value{std::move(client)});
+
+    json::Object bounds;
+    bounds.emplace("valid", json::Value{window_rect_valid});
+    bounds.emplace("x", json::Value{static_cast<double>(window_rect.left)});
+    bounds.emplace("y", json::Value{static_cast<double>(window_rect.top)});
+    bounds.emplace("w", json::Value{static_cast<double>(window_width)});
+    bounds.emplace("h", json::Value{static_cast<double>(window_height)});
+    window.emplace("window_bounds", json::Value{std::move(bounds)});
+
+    bool const ready_for_user_interaction =
+        window_exists
+        && window_visible
+        && !window_iconic
+        && client_rect_valid
+        && client_width > 0
+        && client_height > 0;
+    auto const* visibility_state = "ready";
+    if (!window_exists) {
+        visibility_state = "missing-window";
+    } else if (!window_visible) {
+        visibility_state = "window-not-visible";
+    } else if (window_iconic) {
+        visibility_state = "window-minimized";
+    } else if (!client_rect_valid || client_width <= 0 || client_height <= 0) {
+        visibility_state = "invalid-client-bounds";
+    }
+    window.emplace(
+        "ready_for_user_interaction",
+        json::Value{ready_for_user_interaction});
+    window.emplace("visibility_state", json::Value{visibility_state});
+    window.emplace(
+        "launch_visibility_contract",
+        json::Value{"visible-restored-native-window"});
     return window;
 }
 

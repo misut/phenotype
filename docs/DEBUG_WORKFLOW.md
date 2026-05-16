@@ -49,7 +49,9 @@ The common snapshot schema remains the source of truth for all platforms:
   and front-window occlusion state, so a native app that owns a Dock icon but
   ordered a 0x0 window, stayed behind another app window, or failed to move into
   the active Space fails the artifact contract with an exact runtime path
-  instead of a visual-only symptom.
+  instead of a visual-only symptom. `visibility_state` and
+  `ready_for_user_interaction` condense those platform readbacks into a single
+  launch-health contract for direct-run failures.
 
 `phenotype_diag_export()` remains the WASI export surface for the snapshot JSON.
 
@@ -170,6 +172,10 @@ width, row height, pitch, thumbnail canvas size, label size, gap, visible rows,
 and visible capacity. The
 verifier can assert those paths with `require_debug_details`, which keeps
 Finder workflow failures debuggable without relying on a screenshot guess.
+The native runtime window payload also reports `visibility_state` and
+`ready_for_user_interaction`; when a Dock icon exists without a usable window,
+the failure should point at `debug.platform_runtime.details.window.*` before
+any pixel-region analysis starts.
 
 For material probe input debugging that does not need a native window, use the
 matching glass showcase drive command:

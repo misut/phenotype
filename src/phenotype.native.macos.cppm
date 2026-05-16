@@ -7858,6 +7858,14 @@ inline json::Object macos_window_runtime_json() {
         : 0;
     bool const background_drag_enabled = ns_window
         && objc_send<bool>(ns_window, sel_is_movable_by_window_background());
+    bool const app_active = ns_app
+        && objc_send<bool>(ns_app, sel_is_active());
+    bool const window_visible = ns_window
+        && objc_send<bool>(ns_window, sel_is_visible());
+    bool const window_key = ns_window
+        && objc_send<bool>(ns_window, sel_is_key_window());
+    bool const window_main = ns_window
+        && objc_send<bool>(ns_window, sel_is_main_window());
 
     json::Object titlebar;
     titlebar.emplace(
@@ -7899,18 +7907,10 @@ inline json::Object macos_window_runtime_json() {
     window.emplace("full_size_content_view", json::Value{full_size_content_view});
     window.emplace("title_hidden", json::Value{title_visibility == hidden_title});
     window.emplace("background_drag_enabled", json::Value{background_drag_enabled});
-    window.emplace(
-        "app_active",
-        json::Value{ns_app && objc_send<bool>(ns_app, sel_is_active())});
-    window.emplace(
-        "window_visible",
-        json::Value{ns_window && objc_send<bool>(ns_window, sel_is_visible())});
-    window.emplace(
-        "window_key",
-        json::Value{ns_window && objc_send<bool>(ns_window, sel_is_key_window())});
-    window.emplace(
-        "window_main",
-        json::Value{ns_window && objc_send<bool>(ns_window, sel_is_main_window())});
+    window.emplace("app_active", json::Value{app_active});
+    window.emplace("window_visible", json::Value{window_visible});
+    window.emplace("window_key", json::Value{window_key});
+    window.emplace("window_main", json::Value{window_main});
     window.emplace(
         "collection_behavior",
         json::Value{static_cast<double>(collection_behavior)});
@@ -7947,6 +7947,43 @@ inline json::Object macos_window_runtime_json() {
     window.emplace(
         "window_server_occluded_by_front_app_window",
         json::Value{server.occluded_by_front_app_window});
+    bool const ready_for_user_interaction =
+        ns_window
+        && window_visible
+        && window_key
+        && window_main
+        && app_active
+        && server.valid
+        && server.onscreen
+        && server.frontmost_app_window
+        && !server.occluded_by_front_app_window;
+    auto const* visibility_state = "ready";
+    if (!ns_window) {
+        visibility_state = "missing-window";
+    } else if (!window_visible) {
+        visibility_state = "window-not-visible";
+    } else if (!server.valid) {
+        visibility_state = "window-server-bounds-missing";
+    } else if (!server.onscreen) {
+        visibility_state = "window-server-offscreen";
+    } else if (!app_active) {
+        visibility_state = "app-not-active";
+    } else if (!window_key) {
+        visibility_state = "window-not-key";
+    } else if (!window_main) {
+        visibility_state = "window-not-main";
+    } else if (server.occluded_by_front_app_window) {
+        visibility_state = "occluded-by-front-app-window";
+    } else if (!server.frontmost_app_window) {
+        visibility_state = "not-frontmost-app-window";
+    }
+    window.emplace(
+        "ready_for_user_interaction",
+        json::Value{ready_for_user_interaction});
+    window.emplace("visibility_state", json::Value{visibility_state});
+    window.emplace(
+        "launch_visibility_contract",
+        json::Value{"visible-key-main-frontmost-native-window"});
     return window;
 }
 
