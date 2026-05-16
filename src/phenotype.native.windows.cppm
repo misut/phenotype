@@ -2793,20 +2793,43 @@ inline bool decode_frame_commands(unsigned char const* buf,
             float dx = x2 - x1;
             float dy = y2 - y1;
             float line_len = std::sqrt(dx * dx + dy * dy);
-            float w = (dy == 0.0f) ? line_len : thickness;
-            float h = (dx == 0.0f) ? line_len : thickness;
-            float x = (dx == 0.0f)
-                ? x1 - thickness / 2.0f
-                : (x1 < x2 ? x1 : x2);
-            float y = (dy == 0.0f)
-                ? y1 - thickness / 2.0f
-                : (y1 < y2 ? y1 : y2);
-            append_color_instance(
-                frame.color_data,
-                x, y, w, h,
-                color.r / 255.0f, color.g / 255.0f,
-                color.b / 255.0f, color.a / 255.0f,
-                0.0f, 0.0f, 3.0f);
+            if (line_len <= 0.0f || thickness <= 0.0f)
+                break;
+            float half_th = thickness * 0.5f;
+            if (dx == 0.0f || dy == 0.0f) {
+                float w = (dy == 0.0f) ? line_len : thickness;
+                float h = (dx == 0.0f) ? line_len : thickness;
+                float x = (dx == 0.0f)
+                    ? x1 - thickness / 2.0f
+                    : (x1 < x2 ? x1 : x2);
+                float y = (dy == 0.0f)
+                    ? y1 - thickness / 2.0f
+                    : (y1 < y2 ? y1 : y2);
+                append_color_instance(
+                    frame.color_data,
+                    x, y, w, h,
+                    color.r / 255.0f, color.g / 255.0f,
+                    color.b / 255.0f, color.a / 255.0f,
+                    half_th, 0.0f, 2.0f);
+            } else {
+                float step = thickness * 0.5f;
+                if (step < 0.5f) step = 0.5f;
+                int n_steps = static_cast<int>(std::ceil(line_len / step));
+                if (n_steps < 1) n_steps = 1;
+                for (int i = 0; i <= n_steps; ++i) {
+                    float t = static_cast<float>(i)
+                              / static_cast<float>(n_steps);
+                    float cx = x1 + dx * t;
+                    float cy = y1 + dy * t;
+                    append_color_instance(
+                        frame.color_data,
+                        cx - half_th, cy - half_th,
+                        thickness, thickness,
+                        color.r / 255.0f, color.g / 255.0f,
+                        color.b / 255.0f, color.a / 255.0f,
+                        half_th, 0.0f, 2.0f);
+                }
+            }
             break;
         }
         case Cmd::HitRegion: {

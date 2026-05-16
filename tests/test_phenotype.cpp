@@ -2746,6 +2746,32 @@ void test_button_disabled() {
     std::puts("PASS: button disabled (both variants)");
 }
 
+void test_button_disabled_custom_chrome() {
+    ButtonStyleOptions options;
+    options.disabled = true;
+    options.has_background = true;
+    options.background = Color{1, 2, 3, 4};
+    options.has_border_color = true;
+    options.border_color = Color{5, 6, 7, 8};
+    options.has_text_color = true;
+    options.text_color = Color{9, 10, 11, 12};
+    options.border_width = 0.0f;
+
+    auto btn_h = button_test::build_button_with_options(options);
+    auto& btn = detail::node_at(btn_h);
+    assert(btn.background.r == 1 && btn.background.a == 4);
+    assert(btn.border_color.r == 5 && btn.border_color.a == 8);
+    assert(btn.text_color.r == 9 && btn.text_color.a == 12);
+    assert(btn.border_width == 0.0f);
+    assert(btn.cursor_type == 0);
+    assert(btn.focusable == false);
+    assert(btn.callback_id == 0xFFFFFFFFu);
+    assert(btn.debug_semantic_enabled == false);
+    assert(detail::g_app.callbacks.empty());
+
+    std::puts("PASS: button disabled custom chrome");
+}
+
 void test_button_style_options_custom_chrome() {
     ButtonStyleOptions options;
     options.has_background = true;
@@ -2852,6 +2878,31 @@ void test_canvas_button_disabled_contract() {
     assert(detail::node_at(btn.children[0]).paint_fn);
 
     std::puts("PASS: canvas_button disabled contract");
+}
+
+void test_canvas_button_disabled_custom_chrome() {
+    ButtonStyleOptions options;
+    options.disabled = true;
+    options.has_background = true;
+    options.background = Color{1, 2, 3, 0};
+    options.has_border_color = true;
+    options.border_color = Color{4, 5, 6, 0};
+    options.border_width = 0.0f;
+    options.max_width = 44.0f;
+    options.fixed_height = 36.0f;
+
+    auto btn_h = button_test::build_canvas_button_with_options(options);
+    auto& btn = detail::node_at(btn_h);
+    assert(btn.background.r == 1 && btn.background.a == 0);
+    assert(btn.border_color.r == 4 && btn.border_color.a == 0);
+    assert(btn.border_width == 0.0f);
+    assert(btn.debug_semantic_enabled == false);
+    assert(btn.callback_id == 0xFFFFFFFFu);
+    assert(btn.focusable == false);
+    assert(detail::g_app.callbacks.empty());
+    assert(btn.children.size() == 1);
+
+    std::puts("PASS: canvas_button disabled custom chrome");
 }
 
 namespace text_field_test {
@@ -3438,9 +3489,11 @@ int main() {
     test_button_focused_snaps_to_focus_ring_width();
     test_button_defocused_resting_border_width();
     test_button_disabled();
+    test_button_disabled_custom_chrome();
     test_button_style_options_custom_chrome();
     test_canvas_button_semantic_and_layout_contract();
     test_canvas_button_disabled_contract();
+    test_canvas_button_disabled_custom_chrome();
     test_text_field_default();
     test_text_field_default_placeholder();
     test_text_field_error();
