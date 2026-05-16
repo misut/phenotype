@@ -40,7 +40,7 @@
     "fallback": 0,
     "backdrop_sampling": 22,
     "contract_versions": {
-      "15": 22
+      "16": 22
     },
     "roles": {
       "surface": 19,
@@ -71,6 +71,17 @@
     },
     "sampling_weight_profiles": {
       "center4-cardinal2-diagonal1": 22
+    },
+    "backdrop_access_required": 22,
+    "backdrop_access_stable_required": 22,
+    "backdrop_access_frame_history_required": 22,
+    "backdrop_access_shared_frame_capture": 22,
+    "backdrop_access_bounded": 22,
+    "backdrop_access_sources": {
+      "previous-presented-frame": 22
+    },
+    "backdrop_capture_scopes": {
+      "shared-frame": 22
     },
     "verifier_region_passes": {
       "clear-over-rich-backdrop": "backdrop-sample-blur",
@@ -127,6 +138,14 @@
     "max_container_spacing_lte": 12.0,
     "max_container_spacing_gte": 12.0,
     "max_pass_texture_copy_pixels_lte": 4000000,
+    "max_frame_capture_count_lte": 1,
+    "max_frame_capture_count_gte": 1,
+    "max_frame_capture_pixels_lte": 4000000,
+    "max_frame_capture_pixels_gte": 1,
+    "total_surface_sample_pixels_lte": 88000000,
+    "total_surface_sample_pixels_gte": 1,
+    "max_surface_sample_pixels_lte": 4000000,
+    "max_surface_sample_pixels_gte": 1,
     "total_plan_sample_taps_lte": 550,
     "total_plan_sample_taps_gte": 550,
     "total_runtime_passes_gte": 1,

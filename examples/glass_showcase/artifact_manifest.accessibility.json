@@ -36,7 +36,7 @@
       "reduced transparency disables backdrop sampling": 7
     },
     "contract_versions": {
-      "15": 7
+      "16": 7
     },
     "roles": {
       "surface": 7
@@ -131,6 +131,17 @@
     "backdrop_sources": {
       "previous-presented-frame": 7
     },
+    "backdrop_access_required": 0,
+    "backdrop_access_stable_required": 0,
+    "backdrop_access_frame_history_required": 0,
+    "backdrop_access_shared_frame_capture": 0,
+    "backdrop_access_bounded": 7,
+    "backdrop_access_sources": {
+      "none": 7
+    },
+    "backdrop_capture_scopes": {
+      "none": 7
+    },
     "luminance_responses": {
       "not-sampled": 7
     },
@@ -200,6 +211,14 @@
     "max_pass_texture_copy_pixels_gte": 0,
     "total_pass_texture_copy_pixels_lte": 0,
     "total_pass_texture_copy_pixels_gte": 0,
+    "max_frame_capture_count_lte": 0,
+    "max_frame_capture_count_gte": 0,
+    "max_frame_capture_pixels_lte": 0,
+    "max_frame_capture_pixels_gte": 0,
+    "total_surface_sample_pixels_lte": 0,
+    "total_surface_sample_pixels_gte": 0,
+    "max_surface_sample_pixels_lte": 0,
+    "max_surface_sample_pixels_gte": 0,
     "total_runtime_passes_lte": 7,
     "total_runtime_passes_gte": 7,
     "active_runtime_passes_lte": 7,

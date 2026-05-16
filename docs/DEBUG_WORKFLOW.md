@@ -215,6 +215,11 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `backdrop_sampling`, `fallback`, `fallback_path`, and `fallback_reason`;
 - `backdrop`, including source, readiness flags, sanitized luminance
   statistics, luminance response, and floor/gain/edge deltas;
+- `backdrop_access`, including whether the plan requires a stable frame-history
+  source, whether that source is a shared frame capture, the capture scope, the
+  maximum capture count, maximum capture pixels, maximum surface sample pixels,
+  and whether the access budget is bounded. Sampled plans use
+  `capture_scope: shared-frame`; fallback plans use `none` with zero budgets;
 - `foreground`, including primary/secondary/accent recommendations, scheme,
   source, estimated background luminance, contrast ratios, accessibility flags,
   and whether the recommendation was backdrop-driven or vibrancy-enabled;
@@ -233,7 +238,8 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `observation_contract`, a pure audit contract that repeats the runtime facts
   the verifier must observe: fallback/backdrop expectations, fallback reason,
   primary pass/executor, expected pass and execution-stage counts, texture-copy
-  bounds, safety flags, and the region/layer/pass hints. The Python verifier
+  bounds, shared frame capture expectations, capture/sample pixel bounds,
+  safety flags, and the region/layer/pass hints. The Python verifier
   checks this object against the rest of the same `MaterialPlan`, so stale JSON
   writers or backend-local policy decisions are reported at
   `renderer.material_plans[n].observation_contract.*` before visual thresholds
@@ -429,13 +435,17 @@ plans.
 Manifests can also set `require_material_plan_summary` to assert the resolved
 material aggregate, not just the per-plan schema. Supported keys are `count`,
 `min_count`, `fallback`, `backdrop_sampling`, `backdrop_available`,
-`backdrop_stable`, `luminance_adapted`, `render_target_ready`,
+`backdrop_stable`, `backdrop_access_required`,
+`backdrop_access_stable_required`, `backdrop_access_frame_history_required`,
+`backdrop_access_shared_frame_capture`, `backdrop_access_bounded`,
+`luminance_adapted`, `render_target_ready`,
 `render_target_within_backdrop_budget`, `decision_can_sample_backdrop`,
 `decision_backend_supports_backdrop`, `decision_backdrop_source_ready`,
 `decision_reduced_transparency`, `decision_increase_contrast`,
 `decision_reduce_motion`, and
 exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
-`contract_versions`, `pass_names`, `backdrop_sources`, `luminance_responses`,
+`contract_versions`, `pass_names`, `backdrop_sources`,
+`backdrop_access_sources`, `backdrop_capture_scopes`, `luminance_responses`,
 `render_target_pixel_formats`, `pass_executors`, `stage_names`,
 `stage_executors`, `sampling_kernels`,
 `sampling_weight_profiles`, `luminance_curves`, `decision_blockers`,
@@ -483,7 +493,8 @@ vocabularies. Current fallback paths are `none`, `no-material`, `invalid-geometr
 `weighted-5x5-manhattan`; current luminance curves are
 `adaptive-backdrop-luma` and `fallback-flat`. Current reference blending scopes
 are `none`, `sampled-backdrop`, and `deterministic-fallback`; current reference
-shapes are `none`, `invalid`, `rectangle`, and `rounded-rectangle`. Add new
+shapes are `none`, `invalid`, `rectangle`, and `rounded-rectangle`; current
+backdrop capture scopes are `none` and `shared-frame`. Add new
 planner/backend
 vocabulary to the verifier in the same patch that introduces it, so CI reports
 schema drift before a human has to infer it visually.
@@ -494,7 +505,11 @@ runtime stayed within the pure plan's performance budget. Supported limits are
 `max_plan_sample_taps_gte`, `total_plan_sample_taps_lte`/`gte`,
 `max_budget_blur_radius_lte`, `max_sample_taps_lte`,
 `max_sampling_kernel_radius_lte`/`gte`, `max_pass_count_lte`,
-`max_backdrop_pixels_lte`, `max_container_spacing_lte`/`gte`,
+`max_backdrop_pixels_lte`, `max_frame_capture_count_lte`/`gte`,
+`max_frame_capture_pixels_lte`/`gte`,
+`total_surface_sample_pixels_lte`/`gte`,
+`max_surface_sample_pixels_lte`/`gte`,
+`max_container_spacing_lte`/`gte`,
 `max_pass_texture_copy_pixels_lte`/`gte`,
 `total_pass_texture_copy_pixels_lte`/`gte`,
 `total_runtime_passes_lte`/`gte`, `active_runtime_passes_lte`/`gte`, and
@@ -510,7 +525,8 @@ backend's view of executed material work drifts from the resolved plans.
 Backends also serialize `renderer.material_executor_summary` for edge-only
 work that cannot be derived from the pure plan, including material instance
 count, fallback instance count, material draw calls, encoded material sample
-tap totals, upload bytes/capacity, framebuffer-history copy pixels, and CPU
+tap totals, planned shared frame capture count/pixels, planned surface sample
+pixels, upload bytes/capacity, framebuffer-history copy pixels, and CPU
 enqueue timings. Foreground execution counters report how many text commands
 landed inside material surfaces and how many default material text tokens were
 remapped to `MaterialPlan.foreground`. Use
@@ -526,7 +542,10 @@ resolved plan aggregate. Executor stage counters must also match the pure
 `execution_stages` summary: total stages, active stages, backdrop-dependent
 stages, dropped stages, primary runtime stages, backdrop-filter stages,
 fallback-fill stages, shape-shadow stages, edge-highlight stages, and
-noise/dither stages. The resource-bound gate can also require
+noise/dither stages. Backdrop access counters must match the pure
+`backdrop_access` aggregate, and any actual framebuffer-history copy must fit
+the planned shared capture count and pixel budget. The resource-bound gate can
+also require
 `max_execution_stage_capacity_*` and `dropped_execution_stages_*` so artifacts
 prove that stage growth stayed inside the serialized capacity. Draw calls must
 stay within material instances times the pure pass budget, upload bytes must
