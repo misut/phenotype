@@ -200,6 +200,24 @@ struct ExampleRunSummary {
     std::string error;
 };
 
+struct GlassArtifactGateSummary {
+    bool accessibility = false;
+    fs::path example_root;
+    std::string package_name;
+    fs::path executable;
+    fs::path artifact_dir;
+    fs::path manifest;
+    std::string expect_platform;
+    std::string accessibility_display;
+    std::optional<std::chrono::milliseconds> run_timeout;
+    std::optional<cppx::process::CapturedProcessResult> build_result;
+    std::optional<cppx::process::CapturedProcessResult> run_result;
+    std::optional<cppx::process::CapturedProcessResult> verifier_result;
+    std::optional<ArtifactSummary> artifact;
+    bool ok = false;
+    std::string error;
+};
+
 auto help_option() -> cppx::cli::OptionSpec {
     return {.name = "help", .short_name = 'h', .description = "Show help"};
 }
@@ -461,10 +479,22 @@ auto spec() -> cppx::cli::CommandSpec {
                              .arity = cppx::cli::OptionArity::one,
                              .value_name = "path",
                              .description = "Artifact bundle directory override"},
+                            {.name = "manifest",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "path",
+                             .description = "Verifier manifest JSON override"},
                             {.name = "expect-platform",
                              .arity = cppx::cli::OptionArity::one,
                              .value_name = "name",
                              .description = "Expected platform name"},
+                            {.name = "accessibility-display",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "flags",
+                             .description = "Accessibility display flags passed to the example"},
+                            {.name = "timeout-seconds",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "seconds",
+                             .description = "Native example run timeout"},
                         },
                         .examples = {
                             "phenotype artifact verify-glass-showcase",
@@ -1054,7 +1084,7 @@ auto doctor_checks() -> std::vector<Check> {
     add_path_check("artifact_verifier", "tools/verify_artifact_bundle.py",
                    "Keep the Python verifier until CLI parity is complete.");
     add_path_check("glass_showcase_gate", "tools/verify_glass_showcase_artifact.sh",
-                   "Local glass artifact verification still owns visual gates.");
+                   "Compatibility wrapper should delegate to phenotype artifact verify-glass-showcase.");
     add_path_check("android_contract_gate", "tools/android/contract.sh",
                    "Android backend contract coverage should remain callable.");
     add_path_check("cli_roadmap", "docs/PHENOTYPE_CLI_ROADMAP.md",
@@ -3380,6 +3410,234 @@ int run_doctor(cppx::cli::Invocation const& invocation) {
     return all_ok(checks) ? 0 : 1;
 }
 
+auto uv_project_environment() -> std::string;
+
+auto environment_value(std::string_view name) -> std::optional<std::string> {
+    auto key = std::string{name};
+    auto const* value = std::getenv(key.c_str());
+    if (value == nullptr || value[0] == '\0')
+        return std::nullopt;
+    return std::string{value};
+}
+
+auto repo_relative_path(fs::path const& root, std::string_view value) -> fs::path {
+    auto path = fs::path{std::string{value}};
+    if (path.is_relative())
+        path = root / path;
+    return path.lexically_normal();
+}
+
+auto make_temp_directory(std::string_view prefix)
+    -> std::expected<fs::path, std::string> {
+    auto ec = std::error_code{};
+    auto base = fs::temp_directory_path(ec);
+    if (ec) {
+        return std::unexpected{std::format(
+            "could not resolve temporary directory: {}",
+            ec.message())};
+    }
+
+    auto seed = static_cast<unsigned long long>(
+        std::chrono::steady_clock::now().time_since_epoch().count());
+    for (auto attempt = 0u; attempt < 64u; ++attempt) {
+        auto candidate = base / std::format(
+            "{}.{:x}.{}",
+            prefix,
+            seed,
+            attempt);
+        ec.clear();
+        if (fs::create_directory(candidate, ec))
+            return candidate.lexically_normal();
+        if (ec && !path_exists(candidate)) {
+            return std::unexpected{std::format(
+                "could not create temporary artifact directory {}: {}",
+                path_string(candidate),
+                ec.message())};
+        }
+    }
+    return std::unexpected{
+        "could not create a unique temporary artifact directory"};
+}
+
+auto glass_artifact_detail_json(ArtifactSummary const& artifact) -> std::string {
+    return std::format(
+        "{{\"bundle\":{},\"exists\":{},\"is_directory\":{},"
+        "\"snapshot_json\":{{\"present\":{},\"bytes\":{}}},"
+        "\"frame_bmp\":{{\"present\":{},\"bytes\":{}}},"
+        "\"platform\":{{\"present\":{},\"file_count\":{}}}}}",
+        json_string(path_string(artifact.bundle)),
+        artifact.exists ? "true" : "false",
+        artifact.is_directory ? "true" : "false",
+        artifact.snapshot_json ? "true" : "false",
+        artifact.snapshot_bytes,
+        artifact.frame_bmp ? "true" : "false",
+        artifact.frame_bytes,
+        artifact.platform_directory ? "true" : "false",
+        artifact.platform_file_count);
+}
+
+auto timeout_seconds_json(
+        std::optional<std::chrono::milliseconds> timeout) -> std::string {
+    if (!timeout)
+        return "null";
+    return std::format(
+        "{}",
+        std::chrono::duration_cast<std::chrono::seconds>(*timeout).count());
+}
+
+auto glass_gate_json(GlassArtifactGateSummary const& summary) -> std::string {
+    auto artifact = summary.artifact
+        ? glass_artifact_detail_json(*summary.artifact)
+        : std::string{"null"};
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"artifact verify-glass-showcase\","
+        "\"ok\":{},\"accessibility\":{},\"example_root\":{},"
+        "\"package_name\":{},\"executable\":{},\"artifact_dir\":{},"
+        "\"manifest\":{},\"expect_platform\":{},"
+        "\"accessibility_display\":{},\"timeout_seconds\":{},"
+        "\"build\":{},\"run_result\":{},\"verifier\":{},"
+        "\"artifact\":{},\"error\":{}}}",
+        summary.ok ? "true" : "false",
+        summary.accessibility ? "true" : "false",
+        json_string(path_string(summary.example_root)),
+        json_string(summary.package_name),
+        json_string(path_string(summary.executable)),
+        json_string(path_string(summary.artifact_dir)),
+        json_string(path_string(summary.manifest)),
+        json_string(summary.expect_platform),
+        json_string(summary.accessibility_display),
+        timeout_seconds_json(summary.run_timeout),
+        process_result_detail_json(summary.build_result),
+        process_result_detail_json(summary.run_result),
+        process_result_detail_json(summary.verifier_result),
+        artifact,
+        json_string(summary.error));
+}
+
+auto result_status(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+    -> cppx::terminal::StatusKind {
+    if (!result)
+        return cppx::terminal::StatusKind::skip;
+    return (!result->timed_out && result->exit_code == 0)
+        ? cppx::terminal::StatusKind::ok
+        : cppx::terminal::StatusKind::fail;
+}
+
+auto result_value(
+        std::optional<cppx::process::CapturedProcessResult> const& result)
+    -> std::string {
+    if (!result)
+        return "not run";
+    if (result->timed_out)
+        return "timed out";
+    return std::format("exit {}", result->exit_code);
+}
+
+void print_glass_gate(GlassArtifactGateSummary const& summary) {
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "mode",
+         .value = summary.accessibility ? "accessibility" : "standard",
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "example",
+         .value = path_string(summary.example_root),
+         .status = path_is_directory(summary.example_root)
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "artifact",
+         .value = summary.artifact
+            ? std::format("{} snapshot={} frame={}",
+                          path_string(summary.artifact->bundle),
+                          summary.artifact->snapshot_json ? "true" : "false",
+                          summary.artifact->frame_bmp ? "true" : "false")
+            : path_string(summary.artifact_dir),
+         .status = summary.artifact && summary.artifact->snapshot_json
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "manifest",
+         .value = path_string(summary.manifest),
+         .status = path_exists(summary.manifest)
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "build",
+         .value = result_value(summary.build_result),
+         .status = result_status(summary.build_result)},
+        {.label = "run",
+         .value = result_value(summary.run_result),
+         .status = result_status(summary.run_result)},
+        {.label = "verifier",
+         .value = result_value(summary.verifier_result),
+         .status = result_status(summary.verifier_result)},
+    };
+    std::println("phenotype artifact verify-glass-showcase");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    if (!summary.error.empty()) {
+        std::println("{}",
+                     cppx::terminal::format_diagnostic({
+                         .severity = cppx::terminal::DiagnosticSeverity::error,
+                         .message = summary.error,
+                         .context = "artifact verify-glass-showcase",
+                     }));
+    }
+    if (summary.verifier_result
+        && (summary.verifier_result->timed_out
+            || summary.verifier_result->exit_code != 0)
+        && !summary.verifier_result->stdout_text.empty()) {
+        std::println("verifier report tail:");
+        std::println("{}", output_tail(summary.verifier_result->stdout_text));
+    }
+}
+
+auto glass_verifier_args(fs::path const& bundle,
+                         fs::path const& manifest,
+                         std::string_view expect_platform)
+    -> std::vector<std::string> {
+    return {
+        "exec",
+        "--",
+        "uv",
+        "run",
+        "--frozen",
+        "python",
+        "tools/verify_artifact_bundle.py",
+        path_string(bundle),
+        "--manifest",
+        path_string(manifest),
+        "--expect-platform",
+        std::string{expect_platform},
+    };
+}
+
+auto run_glass_verifier(fs::path const& root,
+                        GlassArtifactGateSummary const& summary)
+    -> std::expected<cppx::process::CapturedProcessResult,
+                     cppx::process::process_error> {
+    auto spec = cppx::process::ProcessSpec{
+        .program = "mise",
+        .args = glass_verifier_args(
+            summary.artifact_dir,
+            summary.manifest,
+            summary.expect_platform),
+        .cwd = root,
+        .timeout = std::chrono::minutes{5},
+        .env_overrides = {
+            {"UV_PROJECT_ENVIRONMENT", uv_project_environment()},
+        },
+    };
+    return cppx::process::system::capture(spec);
+}
+
+int emit_glass_gate(GlassArtifactGateSummary const& summary,
+                    cppx::cli::Invocation const& invocation,
+                    int exit_code) {
+    if (invocation.has("json")) {
+        std::println("{}", glass_gate_json(summary));
+    } else {
+        print_glass_gate(summary);
+    }
+    return exit_code;
+}
+
 int run_artifact_summary(cppx::cli::Invocation const& invocation) {
     auto path = first_positional_or_error(invocation, "artifact summary");
     if (!path)
@@ -3788,24 +4046,180 @@ int run_observe(cppx::cli::Invocation const& invocation) {
 
 int run_artifact_verify_glass_showcase(
         cppx::cli::Invocation const& invocation) {
-    auto env = std::map<std::string, std::string>{};
-    env["PHENOTYPE_CLI_SCRIPT_COMPAT"] = "1";
+    auto root = find_repo_root(fs::current_path());
+    if (!root) {
+        return print_error(
+            "artifact verify-glass-showcase",
+            "could not find phenotype repository root from current directory",
+            invocation.has("json"));
+    }
+
+    auto summary = GlassArtifactGateSummary{
+        .accessibility = invocation.has("accessibility"),
+        .example_root = *root / "examples" / "glass_showcase",
+    };
+
+    auto package_name = exon_package_name(summary.example_root);
+    if (!package_name) {
+        summary.error = package_name.error();
+        return emit_glass_gate(summary, invocation, 2);
+    }
+    summary.package_name = *package_name;
+    summary.executable =
+        summary.example_root / ".exon" / "debug" / executable_filename(*package_name);
+
     if (auto value = invocation.value("bundle-dir")) {
-        env["PHENOTYPE_ARTIFACT_DIR"] =
-            absolute_path_string(fs::path{std::string{*value}});
+        summary.artifact_dir =
+            fs::path{absolute_path_string(fs::path{std::string{*value}})};
+    } else if (auto value = environment_value("PHENOTYPE_ARTIFACT_DIR")) {
+        summary.artifact_dir = fs::path{absolute_path_string(fs::path{*value})};
+    } else {
+        auto temp = make_temp_directory("phenotype-glass-showcase");
+        if (!temp) {
+            summary.error = temp.error();
+            return emit_glass_gate(summary, invocation, 2);
+        }
+        summary.artifact_dir = *temp;
     }
+
+    auto ec = std::error_code{};
+    fs::create_directories(summary.artifact_dir, ec);
+    if (ec) {
+        summary.error = std::format(
+            "could not create artifact directory {}: {}",
+            path_string(summary.artifact_dir),
+            ec.message());
+        return emit_glass_gate(summary, invocation, 2);
+    }
+
+    if (auto value = invocation.value("manifest")) {
+        summary.manifest =
+            fs::path{absolute_path_string(fs::path{std::string{*value}})};
+    } else if (auto value = environment_value("PHENOTYPE_ARTIFACT_MANIFEST")) {
+        summary.manifest = repo_relative_path(*root, *value);
+    } else {
+        summary.manifest = *root / "examples" / "glass_showcase"
+            / (summary.accessibility
+                   ? "artifact_manifest.accessibility.json"
+                   : "artifact_manifest.json");
+    }
+
     if (auto value = invocation.value("expect-platform")) {
-        env["PHENOTYPE_EXPECT_PLATFORM"] = std::string{*value};
+        summary.expect_platform = std::string{*value};
+    } else if (auto value = environment_value("PHENOTYPE_EXPECT_PLATFORM")) {
+        summary.expect_platform = *value;
+    } else {
+        summary.expect_platform = "macos";
     }
-    auto script = invocation.has("accessibility")
-        ? fs::path{"tools/verify_glass_showcase_accessibility_artifact.sh"}
-        : fs::path{"tools/verify_glass_showcase_artifact.sh"};
-    return run_repo_script(
-        "artifact verify-glass-showcase",
-        script,
-        invocation,
+
+    if (auto value = invocation.value("accessibility-display")) {
+        summary.accessibility_display = std::string{*value};
+    } else if (auto value = environment_value("PHENOTYPE_ACCESSIBILITY_DISPLAY")) {
+        summary.accessibility_display = *value;
+    } else if (summary.accessibility) {
+        summary.accessibility_display =
+            "reduce-transparency,increase-contrast,reduce-motion";
+    } else {
+        summary.accessibility_display = "standard";
+    }
+
+    if (auto value = invocation.value("timeout-seconds")) {
+        auto timeout = parse_seconds(*value, "--timeout-seconds");
+        if (!timeout) {
+            summary.error = timeout.error();
+            return emit_glass_gate(summary, invocation, 2);
+        }
+        summary.run_timeout = *timeout;
+    } else {
+        summary.run_timeout = std::chrono::seconds{120};
+    }
+
+    auto build = run_example_build(summary.example_root);
+    if (!build) {
+        summary.error = std::format(
+            "failed to run exon build: {}",
+            cppx::process::to_string(build.error()));
+        return emit_glass_gate(summary, invocation, 2);
+    }
+    summary.build_result = std::move(*build);
+    if (summary.build_result->timed_out
+        || summary.build_result->exit_code != 0) {
+        summary.error = "exon build failed";
+        auto code = summary.build_result->timed_out
+            ? 124
+            : summary.build_result->exit_code;
+        return emit_glass_gate(summary, invocation, code);
+    }
+
+    auto env = std::map<std::string, std::string>{
+        {"PHENOTYPE_ARTIFACT_DIR", path_string(summary.artifact_dir)},
+        {"PHENOTYPE_ARTIFACT_EXIT", "1"},
+        {"PHENOTYPE_ACCESSIBILITY_DISPLAY", summary.accessibility_display},
+    };
+    if (auto value = environment_value("PHENOTYPE_ARTIFACT_REASON")) {
+        env["PHENOTYPE_ARTIFACT_REASON"] = *value;
+    } else {
+        env["PHENOTYPE_ARTIFACT_REASON"] = summary.accessibility
+            ? "glass-showcase-accessibility-gate"
+            : "glass-showcase-gate";
+    }
+
+    auto run = run_example_binary(
+        summary.executable,
+        summary.example_root,
         std::move(env),
-        std::chrono::minutes{20});
+        summary.run_timeout);
+    if (!run) {
+        summary.error = std::format(
+            "failed to run glass showcase: {}",
+            cppx::process::to_string(run.error()));
+        return emit_glass_gate(summary, invocation, 2);
+    }
+    summary.run_result = std::move(*run);
+    summary.artifact = artifact_summary(summary.artifact_dir);
+    if (summary.run_result->timed_out
+        || summary.run_result->exit_code != 0) {
+        summary.error = summary.run_result->timed_out
+            ? "glass showcase timed out"
+            : std::format(
+                "glass showcase exited with {}",
+                summary.run_result->exit_code);
+        auto code = summary.run_result->timed_out
+            ? 124
+            : summary.run_result->exit_code;
+        return emit_glass_gate(summary, invocation, code);
+    }
+
+    auto verifier = run_glass_verifier(*root, summary);
+    if (!verifier) {
+        summary.error = std::format(
+            "failed to run mise/uv verifier: {}",
+            cppx::process::to_string(verifier.error()));
+        return emit_glass_gate(summary, invocation, 2);
+    }
+    summary.verifier_result = std::move(*verifier);
+    summary.ok = summary.artifact
+        && summary.artifact->snapshot_json
+        && !summary.verifier_result->timed_out
+        && summary.verifier_result->exit_code == 0;
+    if (!summary.ok && summary.error.empty()) {
+        if (!summary.artifact || !summary.artifact->snapshot_json) {
+            summary.error = "artifact bundle did not contain snapshot.json";
+        } else if (summary.verifier_result->timed_out) {
+            summary.error = "artifact verifier timed out";
+        } else {
+            summary.error = std::format(
+                "artifact verifier exited with {}",
+                summary.verifier_result->exit_code);
+        }
+    }
+
+    if (summary.verifier_result->timed_out)
+        return emit_glass_gate(summary, invocation, 124);
+    return emit_glass_gate(
+        summary,
+        invocation,
+        summary.ok ? 0 : summary.verifier_result->exit_code);
 }
 
 int run_artifact_verify_file_explorer(

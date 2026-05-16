@@ -18,14 +18,15 @@ The initial scope is intentionally narrow:
   fallback and backdrop capture reasons, executor summaries, likely
   layer/pass hints, frame/platform file state, and optional uv-managed verifier
   output when `--manifest` or `--verify` is supplied.
-- `phenotype artifact verify-glass-showcase` and
-  `phenotype artifact verify-file-explorer` run the local contract gates from
-  the CLI surface. They are intentionally local-only gates by default because
-  they launch native examples and can be slow on CI. The legacy
-  `tools/verify_glass_showcase_artifact.sh`,
-  `tools/verify_glass_showcase_accessibility_artifact.sh`, and
-  `tools/verify_file_explorer_artifacts.sh` entry points are compatibility
-  wrappers that build and delegate to these CLI commands. File explorer gates
+- `phenotype artifact verify-glass-showcase` owns the local glass showcase
+  build, native artifact capture, and uv-managed verifier flow directly. It is
+  intentionally local-only by default because native capture can be slow on CI;
+  `tools/verify_glass_showcase_artifact.sh` and
+  `tools/verify_glass_showcase_accessibility_artifact.sh` are compatibility
+  wrappers that build and delegate to this command.
+- `phenotype artifact verify-file-explorer` runs the local desktop/mobile file
+  explorer contract gate from the CLI surface while the multi-profile capture
+  flow still delegates to `tools/verify_file_explorer_artifacts.sh`. The gate
   can be narrowed with `--profile`, repeated `--view-mode`, and repeated
   `--scenario` options for faster local iteration before running the full gate.
 - `phenotype package inspect <path>` checks the proposed package manifest,
@@ -133,6 +134,8 @@ mise exec -- exon build
   --profile desktop \
   --view-mode icon \
   --scenario search-active
+.exon/debug/phenotype_cli artifact verify-glass-showcase --json \
+  --bundle-dir /tmp/phenotype-glass-showcase
 .exon/debug/phenotype_cli observe --json /tmp/phenotype-glass-showcase \
   --manifest ../../examples/glass_showcase/artifact_manifest.json \
   --expect-platform macos \

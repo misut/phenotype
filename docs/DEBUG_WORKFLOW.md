@@ -130,9 +130,12 @@ mise exec -- exon build
 .exon/debug/phenotype_cli artifact verify-file-explorer --json
 ```
 
-These commands wrap the existing shell gates and report the script exit status,
-timeout state, and output tail as JSON. They are local verification commands,
-not default PR CI jobs.
+`artifact verify-glass-showcase` now owns the glass example build, native
+artifact capture, and uv-managed verifier call directly. Its JSON includes
+build/run/verifier exit state, artifact bundle presence, manifest path,
+expected platform, and accessibility display policy. The file explorer command
+still uses the compatibility shell gate for its multi-profile capture flow.
+Both commands are local verification commands, not default PR CI jobs.
 
 For file explorer workflow debugging that does not need a native window, use
 the deterministic drive command:
@@ -253,8 +256,10 @@ The macOS native backend reads accessibility display preferences from
 `PHENOTYPE_ACCESSIBILITY_DISPLAY=standard` to disable those inputs, or set
 `PHENOTYPE_ACCESSIBILITY_DISPLAY=reduce-transparency,increase-contrast,reduce-motion`
 with any subset of tokens to exercise the pure accessibility downgrade paths.
-`tools/verify_glass_showcase_artifact.sh` defaults to `standard` unless the
-caller supplies a different value.
+`phenotype artifact verify-glass-showcase` defaults to `standard`, while its
+`--accessibility` mode defaults to
+`reduce-transparency,increase-contrast,reduce-motion` unless the caller supplies
+`--accessibility-display` or `PHENOTYPE_ACCESSIBILITY_DISPLAY`.
 
 Material frames also expose a resolved backend plan. Semantic material nodes
 describe the stable request (`kind`, `role`, opacity, blur intent, contrast
@@ -438,9 +443,10 @@ Python tool environment. Use `mise run tools:artifact:test` for the verifier's
 contract tests and `mise run tools:artifact:pycompile` for syntax checks.
 Use `tools/phenotype_cli` for new diagnostic entry points; shell/Python tools
 should become compatibility wrappers only after matching CLI commands exist.
-The CLI already exposes `artifact verify-glass-showcase` and
-`artifact verify-file-explorer`, so new docs and automation should prefer
-those command names while the shell scripts remain as stable local wrappers.
+The CLI owns `artifact verify-glass-showcase` directly and exposes
+`artifact verify-file-explorer` for the file explorer local gate, so new docs
+and automation should prefer those command names while shell scripts remain as
+stable local wrappers.
 Use the verifier command to validate the bundle before handing it to an LLM,
 attaching it to an issue, or comparing it in CI. The verifier checks the common
 debug schema, platform capabilities,
@@ -676,17 +682,22 @@ Or run the local gate, which builds the example, launches the startup artifact
 hook, and applies the manifest in one command:
 
 ```sh
-tools/verify_glass_showcase_artifact.sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli artifact verify-glass-showcase --json
 ```
 
-The command emits a deterministic JSON report and exits non-zero when an
-invariant fails.
+The command emits a deterministic JSON report with build, run, verifier, and
+artifact details, and exits non-zero when an invariant fails. The legacy
+`tools/verify_glass_showcase_artifact.sh` wrapper delegates to the same CLI
+command for local compatibility.
 
 To validate the accessibility downgrade contract end to end, run the companion
 gate:
 
 ```sh
-tools/verify_glass_showcase_accessibility_artifact.sh
+cd tools/phenotype_cli
+.exon/debug/phenotype_cli artifact verify-glass-showcase --accessibility --json
 ```
 
 It launches the same scene with
