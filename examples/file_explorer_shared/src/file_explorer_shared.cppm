@@ -208,6 +208,11 @@ struct ExplorerExpectationResult {
     std::string detail;
 };
 
+struct PackageResourceText {
+    std::string source;
+    std::string text;
+};
+
 inline constexpr int k_desktop_default_viewport_width = 1300;
 inline constexpr int k_desktop_default_viewport_height = 760;
 inline constexpr int k_mobile_default_viewport_width = 390;
@@ -2153,6 +2158,37 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         ? "mobile-file-workflow"
         : "finder-style-startup";
     catalog.debug.verifier = "tools/verify_file_explorer_artifacts.sh";
+    return catalog;
+}
+
+inline phenotype::ResourceCatalog file_explorer_resource_catalog_from_package_texts(
+        std::string_view profile,
+        std::string_view manifest_text,
+        std::span<PackageResourceText const> locale_texts) {
+    auto fallback = file_explorer_resource_catalog(profile);
+    if (trim(manifest_text).empty())
+        return fallback;
+
+    auto parsed = phenotype::parse_resource_manifest(manifest_text);
+    if (!parsed.application_section || !parsed.resources_section)
+        return fallback;
+
+    auto catalog = std::move(parsed.catalog);
+    if (catalog.default_locale.empty())
+        catalog.default_locale = fallback.default_locale;
+    if (catalog.default_font_family.empty())
+        catalog.default_font_family = fallback.default_font_family;
+    for (auto& locale : catalog.locales) {
+        auto found = std::ranges::find_if(
+            locale_texts,
+            [&](PackageResourceText const& text) {
+                return text.source == locale.source;
+            });
+        if (found != locale_texts.end()) {
+            locale.strings =
+                phenotype::parse_resource_locale_strings(found->text);
+        }
+    }
     return catalog;
 }
 

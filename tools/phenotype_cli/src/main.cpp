@@ -3565,6 +3565,15 @@ int run_example(cppx::cli::Invocation const& invocation) {
     if (!env) {
         return print_error("run", env.error(), invocation.has("json"));
     }
+    if (path_exists(summary.example_root / "phenotype.package.toml")) {
+        auto package_root = path_string(summary.example_root);
+        if (!env->contains("PHENOTYPE_PACKAGE_ROOT"))
+            (*env)["PHENOTYPE_PACKAGE_ROOT"] = package_root;
+        if (summary.package_name.starts_with("file_explorer_")
+            && !env->contains("PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT")) {
+            (*env)["PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT"] = package_root;
+        }
+    }
 
     if (auto value = invocation.value("artifact-dir")) {
         summary.artifact_requested = true;
