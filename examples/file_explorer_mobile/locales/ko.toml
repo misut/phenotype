@@ -1,5 +1,19 @@
 [app]
-title = "둘러보기"
+title = "최근 항목"
+mobile_title = "파일"
+sidebar_recents = "최근 항목"
+sidebar_shared = "공유"
+favorites = "즐겨찾기"
+locations = "위치"
+applications = "응용 프로그램"
+desktop = "데스크탑"
+documents = "문서"
+pictures = "사진"
+downloads = "다운로드"
+icloud_drive = "iCloud Drive"
+home = "kakao"
+airdrop = "AirDrop"
+trash = "휴지통"
 tab_browse = "둘러보기"
 tab_preview = "미리보기"
 tab_create = "만들기"
@@ -10,5 +24,36 @@ status_ready = "준비됨"
 create_file = "새 파일"
 create_folder = "새 폴더"
 duplicate = "복제"
-delete = "휴지통으로 이동"
+duplicate_file = "파일 복제"
+delete = "삭제"
+delete_selected = "선택 항목 삭제"
 preview = "미리보기"
+
+[nav]
+root = "루트"
+docs = "문서"
+pics = "사진"
+back = "뒤로"
+forward = "앞으로"
+up = "위로"
+sort = "정렬"
+
+[table]
+name = "이름"
+kind = "종류"
+size = "크기"
+
+[state]
+no_matching_files = "일치하는 파일이 없습니다."
+select_file_to_preview = "미리 볼 파일을 선택하세요."
+select_file_from_browse = "둘러보기에서 파일을 선택하세요."
+
+[create]
+hint = "파일과 폴더는 데모 루트 안에만 기록됩니다."
+file_name = "파일 이름"
+contents = "내용"
+folder_name = "폴더 이름"
+reset_demo_files = "데모 파일 초기화"
+
+[status]
+title = "상태"

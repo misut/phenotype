@@ -9,5 +9,8 @@ platforms = [
     { os = "windows", arch = "x86_64" },
 ]
 
+[dependencies.path]
+phenotype_resources = "../../packages/phenotype_resources"
+
 [sync]
 cmake-in-root = false
