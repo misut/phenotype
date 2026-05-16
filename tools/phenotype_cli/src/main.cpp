@@ -99,6 +99,15 @@ struct BundleSummary {
     std::string error;
 };
 
+struct ExplorerDriveResources {
+    std::string source = "builtin";
+    fs::path package_root;
+    std::string locale = "en";
+    phenotype::ResourceCatalog catalog;
+    std::vector<phenotype::ResourceDiagnostic> diagnostics;
+    std::vector<Check> checks;
+};
+
 struct ExampleRunSummary {
     std::string example;
     fs::path example_root;
@@ -527,16 +536,35 @@ auto spec() -> cppx::cli::CommandSpec {
                              .arity = cppx::cli::OptionArity::one,
                              .value_name = "name",
                              .description = "Startup scenario to apply before explicit inputs"},
+                            {.name = "script",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "path",
+                             .description = "Line-based input script; blank lines and # comments are ignored"},
                             {.name = "input",
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "kind[:value]",
                              .description = "Typed input such as viewport:900x620@2, select:README.txt, create-file, delete, sort:kind"},
+                            {.name = "expect",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "kind:value",
+                             .description = "Assert final output, such as selected:README.txt, entry:Note.txt, operation:file_delete:ok"},
+                            {.name = "locale",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "tag",
+                             .description = "Locale used for observed labels. Defaults to package/default locale"},
+                            {.name = "package",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "path",
+                             .description = "Package root whose manifest/locales provide observed resources"},
                         },
                         .allow_positionals = false,
                         .examples = {
                             "phenotype drive file-explorer --json --input select:README.txt --input duplicate",
                             "phenotype drive file-explorer --profile mobile --scenario created-preview --json",
+                            "phenotype drive file-explorer --script explorer.drive --expect operation:file_create:ok --json",
                         },
                     },
                 },
@@ -1884,6 +1912,73 @@ auto explorer_entries_json(
     return out;
 }
 
+auto explorer_labels_json(file_explorer_demo::ExplorerLabels const& labels)
+    -> std::string {
+    return std::format(
+        "{{\"title\":{},\"mobile_title\":{},\"sidebar_recents\":{},"
+        "\"sidebar_shared\":{},\"favorites\":{},\"locations\":{},"
+        "\"applications\":{},\"desktop\":{},\"documents\":{},"
+        "\"pictures\":{},\"downloads\":{},\"icloud_drive\":{},"
+        "\"home\":{},\"airdrop\":{},\"trash\":{},"
+        "\"search_placeholder\":{},\"status_ready\":{},"
+        "\"tab_browse\":{},\"tab_preview\":{},\"tab_create\":{},"
+        "\"create_file\":{},\"create_folder\":{},\"duplicate\":{},"
+        "\"duplicate_file\":{},\"delete\":{},\"delete_selected\":{},"
+        "\"preview\":{},\"root\":{},\"docs\":{},\"pics\":{},"
+        "\"back\":{},\"forward\":{},\"up\":{},\"sort\":{},"
+        "\"name\":{},\"kind\":{},\"size\":{},"
+        "\"no_matching_files\":{},\"select_file_to_preview\":{},"
+        "\"select_file_from_browse\":{},\"create_hint\":{},"
+        "\"file_name\":{},\"contents\":{},\"folder_name\":{},"
+        "\"reset_demo_files\":{},\"status\":{}}}",
+        json_string(labels.title),
+        json_string(labels.mobile_title),
+        json_string(labels.sidebar_recents),
+        json_string(labels.sidebar_shared),
+        json_string(labels.favorites),
+        json_string(labels.locations),
+        json_string(labels.applications),
+        json_string(labels.desktop),
+        json_string(labels.documents),
+        json_string(labels.pictures),
+        json_string(labels.downloads),
+        json_string(labels.icloud_drive),
+        json_string(labels.home),
+        json_string(labels.airdrop),
+        json_string(labels.trash),
+        json_string(labels.search_placeholder),
+        json_string(labels.status_ready),
+        json_string(labels.tab_browse),
+        json_string(labels.tab_preview),
+        json_string(labels.tab_create),
+        json_string(labels.create_file),
+        json_string(labels.create_folder),
+        json_string(labels.duplicate),
+        json_string(labels.duplicate_file),
+        json_string(labels.delete_action),
+        json_string(labels.delete_selected),
+        json_string(labels.preview),
+        json_string(labels.root),
+        json_string(labels.docs),
+        json_string(labels.pics),
+        json_string(labels.back),
+        json_string(labels.forward),
+        json_string(labels.up),
+        json_string(labels.sort),
+        json_string(labels.name),
+        json_string(labels.kind),
+        json_string(labels.size),
+        json_string(labels.no_matching_files),
+        json_string(labels.select_file_to_preview),
+        json_string(labels.select_file_from_browse),
+        json_string(labels.create_hint),
+        json_string(labels.file_name),
+        json_string(labels.contents),
+        json_string(labels.folder_name),
+        json_string(labels.reset_demo_files),
+        json_string(labels.status));
+}
+
 auto explorer_chrome_json(
         file_explorer_demo::ExplorerChromeMetrics const& chrome) -> std::string {
     return std::format(
@@ -1969,12 +2064,77 @@ auto explorer_drive_ok(file_explorer_demo::ExplorerDriveResult const& result)
     });
 }
 
-auto explorer_drive_json(file_explorer_demo::ExplorerDriveResult const& result)
+auto explorer_expectation_json(
+        file_explorer_demo::ExplorerExpectationResult const& expectation)
+    -> std::string {
+    return std::format(
+        "{{\"kind\":{},\"value\":{},\"expects_operation_ok\":{},"
+        "\"operation_ok\":{},\"label\":{},\"ok\":{},\"actual\":{},"
+        "\"detail\":{}}}",
+        json_string(file_explorer_demo::explorer_expectation_kind_name(
+            expectation.expectation.kind)),
+        json_string(expectation.expectation.value),
+        expectation.expectation.expects_operation_ok ? "true" : "false",
+        expectation.expectation.operation_ok ? "true" : "false",
+        json_string(file_explorer_demo::explorer_expectation_label(
+            expectation.expectation)),
+        expectation.ok ? "true" : "false",
+        json_string(expectation.actual),
+        json_string(expectation.detail));
+}
+
+auto explorer_expectations_json(
+        std::span<file_explorer_demo::ExplorerExpectationResult const>
+            expectations) -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < expectations.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += explorer_expectation_json(expectations[i]);
+    }
+    out += "]";
+    return out;
+}
+
+auto explorer_resources_json(ExplorerDriveResources const& resources)
+    -> std::string {
+    return std::format(
+        "{{\"source\":{},\"package_root\":{},\"locale\":{},"
+        "\"application_id\":{},\"display_name\":{},\"entry\":{},"
+        "\"default_locale\":{},\"default_font_family\":{},"
+        "\"diagnostics\":{},\"checks\":{}}}",
+        json_string(resources.source),
+        json_string(path_string(resources.package_root)),
+        json_string(resources.locale),
+        json_string(resources.catalog.application.id),
+        json_string(resources.catalog.application.display_name),
+        json_string(resources.catalog.application.entry),
+        json_string(resources.catalog.default_locale),
+        json_string(resources.catalog.default_font_family),
+        resource_diagnostics_json(resources.diagnostics),
+        checks_json(resources.checks));
+}
+
+auto explorer_contract_ok(
+        file_explorer_demo::ExplorerDriveResult const& result,
+        std::span<file_explorer_demo::ExplorerExpectationResult const>
+            expectations) -> bool {
+    return explorer_drive_ok(result)
+        && file_explorer_demo::explorer_expectations_ok(expectations);
+}
+
+auto explorer_drive_json(
+        file_explorer_demo::ExplorerDriveResult const& result,
+        ExplorerDriveResources const& resources,
+        file_explorer_demo::ExplorerLabels const& labels,
+        std::span<file_explorer_demo::ExplorerExpectationResult const>
+            expectations)
     -> std::string {
     auto const& snap = result.snapshot;
     return std::format(
         "{{\"schema_version\":1,\"command\":\"drive file-explorer\","
         "\"ok\":{},\"profile\":{},\"input_count\":{},"
+        "\"resources\":{},\"labels\":{},"
         "\"root\":{},\"current\":{},\"relative_location\":{},"
         "\"status\":{},\"sort_label\":{},"
         "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
@@ -1986,10 +2146,13 @@ auto explorer_drive_json(file_explorer_demo::ExplorerDriveResult const& result)
         "\"can_create_file\":{},\"can_create_folder\":{},"
         "\"can_delete_selected\":{},\"can_duplicate_selected\":{},"
         "\"can_preview_selected\":{}}},"
-        "\"operation\":{},\"entries\":{},\"trace\":{}}}",
-        explorer_drive_ok(result) ? "true" : "false",
+        "\"operation\":{},\"entries\":{},\"trace\":{},"
+        "\"expectations\":{}}}",
+        explorer_contract_ok(result, expectations) ? "true" : "false",
         json_string(result.profile),
         result.trace.size(),
+        explorer_resources_json(resources),
+        explorer_labels_json(labels),
         json_string(path_string(result.state.root)),
         json_string(path_string(result.state.current)),
         json_string(snap.relative_location),
@@ -2017,7 +2180,8 @@ auto explorer_drive_json(file_explorer_demo::ExplorerDriveResult const& result)
         snap.can_preview_selected ? "true" : "false",
         operation_receipt_json(result.state.last_operation),
         explorer_entries_json(snap.entries),
-        explorer_trace_array_json(result.trace));
+        explorer_trace_array_json(result.trace),
+        explorer_expectations_json(expectations));
 }
 
 auto script_result_json(std::string_view command,
@@ -3131,6 +3295,80 @@ int run_package_verify_bundle(cppx::cli::Invocation const& invocation) {
     return bundle.ok ? 0 : 1;
 }
 
+auto parse_explorer_input_script(fs::path const& path)
+    -> std::expected<std::vector<file_explorer_demo::ExplorerInput>, std::string> {
+    if (!path_exists(path)) {
+        return std::unexpected{
+            std::format("input script does not exist: {}", path_string(path))};
+    }
+    auto text = read_text_file(path);
+    auto inputs = std::vector<file_explorer_demo::ExplorerInput>{};
+    auto lines = std::istringstream{text};
+    auto line = std::string{};
+    auto line_number = std::size_t{0};
+    while (std::getline(lines, line)) {
+        ++line_number;
+        auto trimmed = trim_copy(line);
+        if (trimmed.empty() || trimmed.starts_with("#"))
+            continue;
+        if (trimmed.starts_with("input "))
+            trimmed = trim_copy(std::string_view{trimmed}.substr(6));
+        auto parsed = file_explorer_demo::parse_explorer_input(trimmed);
+        if (!parsed.ok) {
+            return std::unexpected{std::format(
+                "{}:{}: {}",
+                path_string(path),
+                line_number,
+                parsed.error)};
+        }
+        inputs.push_back(std::move(parsed.input));
+    }
+    return inputs;
+}
+
+auto explorer_drive_resources(
+        std::string_view profile,
+        cppx::cli::Invocation const& invocation)
+    -> std::expected<ExplorerDriveResources, std::string> {
+    auto resources = ExplorerDriveResources{};
+    resources.catalog = file_explorer_demo::file_explorer_resource_catalog(profile);
+
+    if (auto package_root = invocation.value("package")) {
+        auto package = package_summary(fs::path{std::string{*package_root}});
+        auto checks = package_checks(package);
+        if (!all_ok(checks)) {
+            return std::unexpected{std::format(
+                "package resources failed checks: {}",
+                path_string(package.root))};
+        }
+        resources.source = "package";
+        resources.package_root = package.root;
+        resources.catalog = std::move(package.catalog);
+        resources.diagnostics = std::move(package.catalog_diagnostics);
+        resources.checks = std::move(checks);
+    }
+
+    resources.locale = resources.catalog.default_locale.empty()
+        ? "en"
+        : resources.catalog.default_locale;
+    if (auto locale = invocation.value("locale"))
+        resources.locale = std::string{*locale};
+    return resources;
+}
+
+auto parse_explorer_expectations(cppx::cli::Invocation const& invocation)
+    -> std::expected<std::vector<file_explorer_demo::ExplorerExpectation>,
+                     std::string> {
+    auto expectations = std::vector<file_explorer_demo::ExplorerExpectation>{};
+    for (auto const& raw : invocation.values("expect")) {
+        auto parsed = file_explorer_demo::parse_explorer_expectation(raw);
+        if (!parsed.ok)
+            return std::unexpected{parsed.error};
+        expectations.push_back(std::move(parsed.expectation));
+    }
+    return expectations;
+}
+
 int run_drive_file_explorer(cppx::cli::Invocation const& invocation) {
     auto profile = std::string{"desktop"};
     if (auto value = invocation.value("profile")) {
@@ -3151,6 +3389,18 @@ int run_drive_file_explorer(cppx::cli::Invocation const& invocation) {
             .value = std::string{*scenario},
         });
     }
+    for (auto const& script : invocation.values("script")) {
+        auto parsed = parse_explorer_input_script(fs::path{script});
+        if (!parsed) {
+            return print_error(
+                "drive file-explorer",
+                parsed.error(),
+                invocation.has("json"));
+        }
+        inputs.insert(inputs.end(),
+                      std::make_move_iterator(parsed->begin()),
+                      std::make_move_iterator(parsed->end()));
+    }
     for (auto const& raw : invocation.values("input")) {
         auto parsed = file_explorer_demo::parse_explorer_input(raw);
         if (!parsed.ok) {
@@ -3162,14 +3412,49 @@ int run_drive_file_explorer(cppx::cli::Invocation const& invocation) {
         inputs.push_back(std::move(parsed.input));
     }
 
+    auto resources = explorer_drive_resources(normalized_profile, invocation);
+    if (!resources) {
+        return print_error(
+            "drive file-explorer",
+            resources.error(),
+            invocation.has("json"));
+    }
+    auto labels = file_explorer_demo::file_explorer_labels(
+        resources->locale,
+        resources->catalog);
+    auto expectations = parse_explorer_expectations(invocation);
+    if (!expectations) {
+        return print_error(
+            "drive file-explorer",
+            expectations.error(),
+            invocation.has("json"));
+    }
+
     auto result = file_explorer_demo::drive_explorer(normalized_profile, inputs);
+    auto checked_expectations =
+        file_explorer_demo::check_explorer_expectations(
+            result,
+            *expectations);
     if (invocation.has("json")) {
-        std::println("{}", explorer_drive_json(result));
+        std::println("{}",
+                     explorer_drive_json(
+                         result,
+                         *resources,
+                         labels,
+                         checked_expectations));
     } else {
         auto const& snap = result.snapshot;
         auto lines = std::vector<cppx::terminal::StatusLine>{
             {.label = "profile",
              .value = result.profile,
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "locale",
+             .value = resources->locale,
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "resources",
+             .value = resources->source == "package"
+                ? path_string(resources->package_root)
+                : "builtin",
              .status = cppx::terminal::StatusKind::ok},
             {.label = "location",
              .value = snap.relative_location,
@@ -3209,6 +3494,16 @@ int run_drive_file_explorer(cppx::cli::Invocation const& invocation) {
         }
         std::println("phenotype drive file-explorer");
         std::println("{}", cppx::terminal::format_status_frame(lines, false));
+        if (!checked_expectations.empty()) {
+            std::println("expectations:");
+            for (auto const& expectation : checked_expectations) {
+                std::println("  - {} -> {} ({})",
+                             file_explorer_demo::explorer_expectation_label(
+                                 expectation.expectation),
+                             expectation.ok ? "ok" : "failed",
+                             expectation.actual);
+            }
+        }
         if (!result.trace.empty()) {
             std::println("inputs:");
             for (auto const& trace : result.trace) {
@@ -3219,7 +3514,7 @@ int run_drive_file_explorer(cppx::cli::Invocation const& invocation) {
             }
         }
     }
-    return explorer_drive_ok(result) ? 0 : 1;
+    return explorer_contract_ok(result, checked_expectations) ? 0 : 1;
 }
 
 int run_example(cppx::cli::Invocation const& invocation) {

@@ -123,14 +123,15 @@ Current commands:
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
 | `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, debug manifest references, byte counts, content metadata, and SHA-256 digests. |
 | `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource, and reports the same package checks plus bundle integrity totals. |
-| `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs and emits a stable observation JSON with trace, entries, viewport, pure Finder chrome/grid metrics, capabilities, operation receipt, and preview excerpt fields. |
+| `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs or line-based scripts and emits a stable observation JSON with trace, entries, viewport, pure Finder chrome/grid metrics, capabilities, operation receipt, preview excerpt fields, localized labels, package-resource metadata, and optional expectation results. |
 | `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, and emits a stable JSON launch receipt with build/run output tails, timeout state, artifact bundle summary, and explicit environment overrides. |
 
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, textual asset placeholders, English/Korean
-locale files, and a Pretendard alias descriptor. These resources are package
-contract fixtures only; the runtime examples still use the existing hard-coded
-view text until the resource catalog layer lands.
+locale files, and a Pretendard alias descriptor. The native examples still
+construct their default resource snapshot in-process, but the CLI drive path can
+now read the manifest/locales from `--package`, resolve labels with `--locale`,
+and include that resource source in the output observation.
 Pull-request CI routes CLI and file explorer package-resource edits through a
 lightweight Linux CLI/package job instead of the full root native matrix.
 The PR gate only validates command metadata and resource catalogs for the slow
@@ -244,6 +245,10 @@ without a visible window:
 - Input scripts are JSONL frames with a timestamp or tick, viewport state,
   capability snapshot, pointer/key/text/scroll events, and optional seeded
   image/resource responses.
+- The current file explorer driver accepts a smaller line-based script format
+  for model-level input. Each non-empty, non-comment line uses the same
+  `kind[:value]` grammar as `--input`; this keeps CI smoke and local repros
+  readable until the full JSONL native-event injector exists.
 - The shell translates AppKit, Win32, Android, WASI, and CLI events into the
   same neutral event types before calling app update code.
 - Output observations include command-buffer summaries, semantic material
@@ -258,9 +263,14 @@ It intentionally starts with the example's shared model rather than a hidden
 native event injector: `ExplorerInput` is the neutral input value, the sandboxed
 file model applies the same operations used by the desktop and mobile UIs, and
 the CLI serializes a final `Snapshot` plus per-input `ExplorerInputTrace`
-records. This gives CI and future agents a cheap way to verify file view,
-read, create, duplicate, delete, sort, viewport-derived Finder chrome/grid
-metrics, and scenario behavior before launching slow native artifact captures.
+records. The command also accepts pure `ExplorerExpectation` contracts such as
+`location:Trash`, `entry:CI Note copy.txt`,
+`missing-entry:CI Note.txt`, and `operation:file_delete:ok`; failures make the
+command exit non-zero and report expected versus actual state in JSON. This
+gives CI and future agents a cheap way to verify file view, read, create,
+duplicate, delete, sort, localized package labels, viewport-derived Finder
+chrome/grid metrics, and scenario behavior before launching slow native
+artifact captures.
 
 ## Performance and release posture
 

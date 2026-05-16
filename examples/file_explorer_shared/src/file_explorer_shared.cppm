@@ -179,6 +179,35 @@ struct ExplorerDriveResult {
     std::vector<ExplorerInputTrace> trace;
 };
 
+enum class ExplorerExpectationKind {
+    Selected,
+    Location,
+    Entry,
+    MissingEntry,
+    Operation,
+    StatusContains,
+};
+
+struct ExplorerExpectation {
+    ExplorerExpectationKind kind = ExplorerExpectationKind::Selected;
+    std::string value;
+    bool expects_operation_ok = false;
+    bool operation_ok = false;
+};
+
+struct ExplorerExpectationParseResult {
+    bool ok = false;
+    ExplorerExpectation expectation{};
+    std::string error;
+};
+
+struct ExplorerExpectationResult {
+    ExplorerExpectation expectation{};
+    bool ok = false;
+    std::string actual;
+    std::string detail;
+};
+
 inline constexpr int k_desktop_default_viewport_width = 1300;
 inline constexpr int k_desktop_default_viewport_height = 760;
 inline constexpr int k_mobile_default_viewport_width = 390;
@@ -651,6 +680,126 @@ inline std::string explorer_input_label(ExplorerInput const& input) {
     if (!input.value.empty())
         return label + ":" + input.value;
     return label;
+}
+
+inline std::string explorer_expectation_kind_name(ExplorerExpectationKind kind) {
+    switch (kind) {
+        case ExplorerExpectationKind::Selected:       return "selected";
+        case ExplorerExpectationKind::Location:       return "location";
+        case ExplorerExpectationKind::Entry:          return "entry";
+        case ExplorerExpectationKind::MissingEntry:   return "missing-entry";
+        case ExplorerExpectationKind::Operation:      return "operation";
+        case ExplorerExpectationKind::StatusContains: return "status-contains";
+    }
+    return "selected";
+}
+
+inline std::string explorer_expectation_label(
+        ExplorerExpectation const& expectation) {
+    auto label = explorer_expectation_kind_name(expectation.kind) + ":"
+        + expectation.value;
+    if (expectation.kind == ExplorerExpectationKind::Operation
+        && expectation.expects_operation_ok) {
+        label += expectation.operation_ok ? ":ok" : ":fail";
+    }
+    return label;
+}
+
+inline ExplorerExpectationParseResult parsed_expectation(
+        ExplorerExpectation expectation) {
+    return ExplorerExpectationParseResult{
+        .ok = true,
+        .expectation = std::move(expectation),
+    };
+}
+
+inline ExplorerExpectationParseResult expectation_parse_error(
+        std::string message) {
+    return ExplorerExpectationParseResult{
+        .ok = false,
+        .error = std::move(message),
+    };
+}
+
+inline ExplorerExpectationParseResult parse_explorer_expectation(
+        std::string_view raw) {
+    auto text = trim(raw);
+    auto separator = text.find(':');
+    if (separator == std::string::npos)
+        separator = text.find('=');
+    if (text.empty() || separator == std::string::npos) {
+        return expectation_parse_error(
+            "expectation requires kind:value, such as selected:README.txt");
+    }
+
+    auto name = lower_copy(trim(std::string_view{text}.substr(0, separator)));
+    auto value = trim(std::string_view{text}.substr(separator + 1));
+    if (value.empty()) {
+        return expectation_parse_error(
+            "expectation '" + name + "' requires a value");
+    }
+
+    if (name == "selected" || name == "selection") {
+        return parsed_expectation({
+            .kind = ExplorerExpectationKind::Selected,
+            .value = value,
+        });
+    }
+    if (name == "location" || name == "loc") {
+        return parsed_expectation({
+            .kind = ExplorerExpectationKind::Location,
+            .value = value,
+        });
+    }
+    if (name == "entry" || name == "has-entry" || name == "has_entry") {
+        return parsed_expectation({
+            .kind = ExplorerExpectationKind::Entry,
+            .value = value,
+        });
+    }
+    if (name == "missing-entry" || name == "missing_entry"
+        || name == "no-entry" || name == "no_entry") {
+        return parsed_expectation({
+            .kind = ExplorerExpectationKind::MissingEntry,
+            .value = value,
+        });
+    }
+    if (name == "status" || name == "status-contains"
+        || name == "status_contains") {
+        return parsed_expectation({
+            .kind = ExplorerExpectationKind::StatusContains,
+            .value = value,
+        });
+    }
+    if (name == "operation" || name == "op") {
+        auto op_kind = value;
+        auto expected_ok = std::optional<bool>{};
+        auto op_separator = op_kind.rfind(':');
+        if (op_separator != std::string::npos) {
+            auto suffix = lower_copy(trim(
+                std::string_view{op_kind}.substr(op_separator + 1)));
+            if (suffix == "ok" || suffix == "success" || suffix == "true") {
+                expected_ok = true;
+                op_kind = trim(std::string_view{op_kind}.substr(0, op_separator));
+            } else if (suffix == "fail" || suffix == "failure"
+                       || suffix == "false") {
+                expected_ok = false;
+                op_kind = trim(std::string_view{op_kind}.substr(0, op_separator));
+            }
+        }
+        if (op_kind.empty()) {
+            return expectation_parse_error(
+                "expectation 'operation' requires an operation kind");
+        }
+        return parsed_expectation({
+            .kind = ExplorerExpectationKind::Operation,
+            .value = op_kind,
+            .expects_operation_ok = expected_ok.has_value(),
+            .operation_ok = expected_ok.value_or(false),
+        });
+    }
+
+    return expectation_parse_error("unknown file explorer expectation: " + name);
 }
 
 inline std::optional<int> parse_positive_int(std::string_view text) {
@@ -1706,6 +1855,97 @@ inline ExplorerDriveResult drive_explorer(
     return result;
 }
 
+inline bool snapshot_has_entry(Snapshot const& snapshot, std::string_view name) {
+    return std::ranges::any_of(snapshot.entries, [&](Entry const& entry) {
+        return entry.name == name;
+    });
+}
+
+inline ExplorerExpectationResult check_explorer_expectation(
+        ExplorerDriveResult const& result,
+        ExplorerExpectation const& expectation) {
+    auto const& snap = result.snapshot;
+    auto checked = ExplorerExpectationResult{
+        .expectation = expectation,
+    };
+    switch (expectation.kind) {
+        case ExplorerExpectationKind::Selected:
+            checked.actual = snap.has_selection ? snap.selected.name : "<none>";
+            checked.ok = snap.has_selection && snap.selected.name == expectation.value;
+            checked.detail = checked.ok
+                ? "selected entry matched"
+                : "selected entry did not match";
+            return checked;
+        case ExplorerExpectationKind::Location:
+            checked.actual = snap.relative_location;
+            checked.ok = snap.relative_location == expectation.value;
+            checked.detail = checked.ok
+                ? "location matched"
+                : "relative location did not match";
+            return checked;
+        case ExplorerExpectationKind::Entry:
+            checked.actual = snapshot_has_entry(snap, expectation.value)
+                ? expectation.value
+                : "<missing>";
+            checked.ok = checked.actual == expectation.value;
+            checked.detail = checked.ok
+                ? "entry was visible"
+                : "entry was not visible in the final snapshot";
+            return checked;
+        case ExplorerExpectationKind::MissingEntry:
+            checked.actual = snapshot_has_entry(snap, expectation.value)
+                ? expectation.value
+                : "<missing>";
+            checked.ok = checked.actual == "<missing>";
+            checked.detail = checked.ok
+                ? "entry was absent"
+                : "entry was unexpectedly visible in the final snapshot";
+            return checked;
+        case ExplorerExpectationKind::Operation:
+            checked.actual = result.state.last_operation.kind.empty()
+                ? "<none>"
+                : result.state.last_operation.kind
+                    + (result.state.last_operation.ok ? ":ok" : ":fail");
+            checked.ok = result.state.last_operation.kind == expectation.value;
+            if (expectation.expects_operation_ok) {
+                checked.ok = checked.ok
+                    && result.state.last_operation.ok == expectation.operation_ok;
+            }
+            checked.detail = checked.ok
+                ? "last operation matched"
+                : "last operation did not match";
+            return checked;
+        case ExplorerExpectationKind::StatusContains:
+            checked.actual = result.state.status;
+            checked.ok = result.state.status.find(expectation.value)
+                != std::string::npos;
+            checked.detail = checked.ok
+                ? "status contained expected text"
+                : "status did not contain expected text";
+            return checked;
+    }
+    checked.actual = "<unknown>";
+    checked.detail = "unknown expectation";
+    return checked;
+}
+
+inline std::vector<ExplorerExpectationResult> check_explorer_expectations(
+        ExplorerDriveResult const& result,
+        std::span<ExplorerExpectation const> expectations) {
+    auto checked = std::vector<ExplorerExpectationResult>{};
+    checked.reserve(expectations.size());
+    for (auto const& expectation : expectations)
+        checked.push_back(check_explorer_expectation(result, expectation));
+    return checked;
+}
+
+inline bool explorer_expectations_ok(
+        std::span<ExplorerExpectationResult const> expectations) {
+    return std::ranges::all_of(expectations, [](auto const& expectation) {
+        return expectation.ok;
+    });
+}
+
 inline std::string entry_label(Entry const& entry) {
     std::string label = entry.folder ? "[Folder] " : "[File] ";
     label += entry.name;
@@ -1928,8 +2168,7 @@ inline std::string localized_or(
 
 inline ExplorerLabels file_explorer_labels(
         std::string_view locale,
-        std::string_view profile) {
-    auto catalog = file_explorer_resource_catalog(profile);
+        phenotype::ResourceCatalog const& catalog) {
     ExplorerLabels labels;
     auto get = [&](std::string_view key, std::string_view fallback) {
         return localized_or(catalog, locale, key, fallback);
@@ -1985,6 +2224,12 @@ inline ExplorerLabels file_explorer_labels(
     labels.reset_demo_files = get("create.reset_demo_files", labels.reset_demo_files);
     labels.status = get("status.title", labels.status);
     return labels;
+}
+
+inline ExplorerLabels file_explorer_labels(
+        std::string_view locale,
+        std::string_view profile) {
+    return file_explorer_labels(locale, file_explorer_resource_catalog(profile));
 }
 
 } // namespace file_explorer_demo
