@@ -58,6 +58,10 @@ mise exec -- exon build
 .exon/debug/phenotype_cli package list --json ../../examples
 .exon/debug/phenotype_cli package inspect --json ../../examples/file_explorer_desktop
 .exon/debug/phenotype_cli package inspect --json ../../examples/file_explorer_mobile
+.exon/debug/phenotype_cli package bundle --json ../../examples/file_explorer_desktop \
+  --output /tmp/phenotype-file-explorer-desktop-bundle
+.exon/debug/phenotype_cli package bundle --json ../../examples/file_explorer_mobile \
+  --output /tmp/phenotype-file-explorer-mobile-bundle
 ```
 
 For LLM-debuggable native startup artifacts:
@@ -189,6 +193,13 @@ sandboxed model and emits JSON containing the input trace, visible entries,
 capabilities, operation receipt, selected preview excerpt, and final snapshot.
 It is the lightweight CI-friendly counterpart to the local desktop/mobile
 artifact capture gate.
+
+`phenotype package bundle` is the lightweight packaging counterpart. It stages
+the package manifest, declared assets, locales, Pretendard alias descriptor,
+and debug artifact manifest into an output directory, then writes
+`phenotype.bundle.json` with copied-file records and package checks. This is
+not a platform installer yet, but it gives CI and future packagers a concrete
+resource inventory to validate without launching a native window.
 
 The desktop and mobile file explorer examples also carry initial
 `phenotype.package.toml` manifests plus `assets/`, `locales/`, and `fonts/`

@@ -24,6 +24,10 @@ The initial scope is intentionally narrow:
 - `phenotype package list <root>` scans for package manifests below a root and
   emits a compact package catalog for CI or future bundling, including resource
   counts and catalog diagnostic counts.
+- `phenotype package bundle <path> --output <dir>` stages the package manifest,
+  assets, locales, fonts, and debug artifact manifest into a bundle directory
+  and writes `phenotype.bundle.json` with copied-file records for CI and future
+  platform packagers.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible
@@ -46,4 +50,7 @@ mise exec -- exon build
   --input select:README.txt \
   --input duplicate \
   --input delete
+.exon/debug/phenotype_cli package bundle --json \
+  ../../examples/file_explorer_desktop \
+  --output /tmp/phenotype-file-explorer
 ```
