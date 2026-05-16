@@ -14,6 +14,8 @@ module;
 
 export module file_explorer_shared;
 
+import phenotype.resources;
+
 export namespace file_explorer_demo {
 
 namespace fs = std::filesystem;
@@ -1116,6 +1118,281 @@ inline std::string entry_label(Entry const& entry) {
     std::string label = entry.folder ? "[Folder] " : "[File] ";
     label += entry.name;
     return label;
+}
+
+struct ExplorerLabels {
+    std::string title = "Recents";
+    std::string mobile_title = "Files";
+    std::string sidebar_recents = "Recents";
+    std::string sidebar_shared = "Shared";
+    std::string favorites = "Favorites";
+    std::string locations = "Locations";
+    std::string applications = "Applications";
+    std::string desktop = "Desktop";
+    std::string documents = "Documents";
+    std::string pictures = "Pictures";
+    std::string downloads = "Downloads";
+    std::string icloud_drive = "iCloud Drive";
+    std::string home = "kakao";
+    std::string airdrop = "AirDrop";
+    std::string trash = "Trash";
+    std::string search_placeholder = "Search";
+    std::string status_ready = "Ready";
+    std::string tab_browse = "Browse";
+    std::string tab_preview = "Preview";
+    std::string tab_create = "Create";
+    std::string create_file = "New File";
+    std::string create_folder = "New Folder";
+    std::string duplicate = "Duplicate";
+    std::string duplicate_file = "Duplicate File";
+    std::string delete_action = "Delete";
+    std::string delete_selected = "Delete Selected";
+    std::string preview = "Preview";
+    std::string root = "Root";
+    std::string docs = "Docs";
+    std::string pics = "Pics";
+    std::string back = "Back";
+    std::string forward = "Forward";
+    std::string up = "Up";
+    std::string sort = "Sort";
+    std::string name = "Name";
+    std::string kind = "Kind";
+    std::string size = "Size";
+    std::string no_matching_files = "No matching files.";
+    std::string select_file_to_preview = "Select a file to preview.";
+    std::string select_file_from_browse = "Select a file from Browse.";
+    std::string create_hint =
+        "Files and folders are written only inside the demo root.";
+    std::string file_name = "File name";
+    std::string contents = "Contents";
+    std::string folder_name = "Folder name";
+    std::string reset_demo_files = "Reset Demo Files";
+    std::string status = "Status";
+};
+
+inline void add_locale_strings(
+        phenotype::LocaleDescriptor& locale,
+        std::initializer_list<std::pair<std::string_view, std::string_view>> values) {
+    for (auto const& [key, value] : values) {
+        locale.strings.push_back({
+            .key = std::string{key},
+            .value = std::string{value},
+        });
+    }
+}
+
+inline phenotype::ResourceCatalog file_explorer_resource_catalog(
+        std::string_view profile) {
+    phenotype::ResourceCatalog catalog;
+    bool const mobile = profile == "mobile";
+    catalog.application.id = mobile
+        ? "com.misut.phenotype.examples.file-explorer-mobile"
+        : "com.misut.phenotype.examples.file-explorer-desktop";
+    catalog.application.display_name = mobile
+        ? "Phenotype Mobile File Explorer"
+        : "Phenotype File Explorer";
+    catalog.application.version = "0.1.0";
+    catalog.application.entry = mobile
+        ? "file_explorer_mobile"
+        : "file_explorer_desktop";
+    catalog.application.platforms = {"macos", "windows"};
+    catalog.default_locale = "en";
+    catalog.default_font_family = "Pretendard";
+    catalog.assets.push_back({
+        .name = "app.icon",
+        .source = "assets/file-explorer-icon.txt",
+        .content_type = "text/plain",
+        .preload = true,
+    });
+
+    phenotype::LocaleDescriptor en{
+        .tag = "en",
+        .source = "locales/en.toml",
+    };
+    add_locale_strings(en, {
+        {"app.title", "Recents"},
+        {"app.mobile_title", "Files"},
+        {"app.sidebar_recents", "Recents"},
+        {"app.sidebar_shared", "Shared"},
+        {"app.favorites", "Favorites"},
+        {"app.locations", "Locations"},
+        {"app.applications", "Applications"},
+        {"app.desktop", "Desktop"},
+        {"app.documents", "Documents"},
+        {"app.pictures", "Pictures"},
+        {"app.downloads", "Downloads"},
+        {"app.icloud_drive", "iCloud Drive"},
+        {"app.home", "kakao"},
+        {"app.airdrop", "AirDrop"},
+        {"app.trash", "Trash"},
+        {"app.search_placeholder", "Search"},
+        {"app.status_ready", "Ready"},
+        {"app.tab_browse", "Browse"},
+        {"app.tab_preview", "Preview"},
+        {"app.tab_create", "Create"},
+        {"actions.create_file", "New File"},
+        {"actions.create_folder", "New Folder"},
+        {"actions.duplicate", "Duplicate"},
+        {"actions.duplicate_file", "Duplicate File"},
+        {"actions.delete", "Delete"},
+        {"actions.delete_selected", "Delete Selected"},
+        {"actions.preview", "Preview"},
+        {"nav.root", "Root"},
+        {"nav.docs", "Docs"},
+        {"nav.pics", "Pics"},
+        {"nav.back", "Back"},
+        {"nav.forward", "Forward"},
+        {"nav.up", "Up"},
+        {"nav.sort", "Sort"},
+        {"table.name", "Name"},
+        {"table.kind", "Kind"},
+        {"table.size", "Size"},
+        {"state.no_matching_files", "No matching files."},
+        {"state.select_file_to_preview", "Select a file to preview."},
+        {"state.select_file_from_browse", "Select a file from Browse."},
+        {"create.hint", "Files and folders are written only inside the demo root."},
+        {"create.file_name", "File name"},
+        {"create.contents", "Contents"},
+        {"create.folder_name", "Folder name"},
+        {"create.reset_demo_files", "Reset Demo Files"},
+        {"status.title", "Status"},
+    });
+    phenotype::LocaleDescriptor ko{
+        .tag = "ko",
+        .source = "locales/ko.toml",
+        .fallback = {"en"},
+    };
+    add_locale_strings(ko, {
+        {"app.title", "최근 항목"},
+        {"app.mobile_title", "파일"},
+        {"app.sidebar_recents", "최근 항목"},
+        {"app.sidebar_shared", "공유"},
+        {"app.favorites", "즐겨찾기"},
+        {"app.locations", "위치"},
+        {"app.applications", "응용 프로그램"},
+        {"app.desktop", "데스크탑"},
+        {"app.documents", "문서"},
+        {"app.pictures", "사진"},
+        {"app.downloads", "다운로드"},
+        {"app.icloud_drive", "iCloud Drive"},
+        {"app.home", "kakao"},
+        {"app.airdrop", "AirDrop"},
+        {"app.trash", "휴지통"},
+        {"app.search_placeholder", "검색"},
+        {"app.status_ready", "준비됨"},
+        {"app.tab_browse", "둘러보기"},
+        {"app.tab_preview", "미리보기"},
+        {"app.tab_create", "만들기"},
+        {"actions.create_file", "새 파일"},
+        {"actions.create_folder", "새 폴더"},
+        {"actions.duplicate", "복제"},
+        {"actions.duplicate_file", "파일 복제"},
+        {"actions.delete", "삭제"},
+        {"actions.delete_selected", "선택 항목 삭제"},
+        {"actions.preview", "미리보기"},
+        {"nav.root", "루트"},
+        {"nav.docs", "문서"},
+        {"nav.pics", "사진"},
+        {"nav.back", "뒤로"},
+        {"nav.forward", "앞으로"},
+        {"nav.up", "위로"},
+        {"nav.sort", "정렬"},
+        {"table.name", "이름"},
+        {"table.kind", "종류"},
+        {"table.size", "크기"},
+        {"state.no_matching_files", "일치하는 파일이 없습니다."},
+        {"state.select_file_to_preview", "미리 볼 파일을 선택하세요."},
+        {"state.select_file_from_browse", "둘러보기에서 파일을 선택하세요."},
+        {"create.hint", "파일과 폴더는 데모 루트 안에만 기록됩니다."},
+        {"create.file_name", "파일 이름"},
+        {"create.contents", "내용"},
+        {"create.folder_name", "폴더 이름"},
+        {"create.reset_demo_files", "데모 파일 초기화"},
+        {"status.title", "상태"},
+    });
+    catalog.locales = {std::move(en), std::move(ko)};
+    catalog.fonts.push_back({
+        .family = "Pretendard",
+        .source = "fonts/pretendard.alias.toml",
+        .fallback = {"system-ui", "Apple SD Gothic Neo", "Segoe UI", "Noto Sans CJK"},
+    });
+    catalog.debug.artifact_manifest = "artifact_manifest.json";
+    catalog.debug.probe_scene = mobile
+        ? "mobile-file-workflow"
+        : "finder-style-startup";
+    catalog.debug.verifier = "tools/verify_file_explorer_artifacts.sh";
+    return catalog;
+}
+
+inline std::string localized_or(
+        phenotype::ResourceCatalog const& catalog,
+        std::string_view locale,
+        std::string_view key,
+        std::string_view fallback) {
+    if (auto value = phenotype::localized_string(catalog, key, locale))
+        return value->value;
+    return std::string{fallback};
+}
+
+inline ExplorerLabels file_explorer_labels(
+        std::string_view locale,
+        std::string_view profile) {
+    auto catalog = file_explorer_resource_catalog(profile);
+    ExplorerLabels labels;
+    auto get = [&](std::string_view key, std::string_view fallback) {
+        return localized_or(catalog, locale, key, fallback);
+    };
+    labels.title = get("app.title", labels.title);
+    labels.mobile_title = get("app.mobile_title", labels.mobile_title);
+    labels.sidebar_recents = get("app.sidebar_recents", labels.sidebar_recents);
+    labels.sidebar_shared = get("app.sidebar_shared", labels.sidebar_shared);
+    labels.favorites = get("app.favorites", labels.favorites);
+    labels.locations = get("app.locations", labels.locations);
+    labels.applications = get("app.applications", labels.applications);
+    labels.desktop = get("app.desktop", labels.desktop);
+    labels.documents = get("app.documents", labels.documents);
+    labels.pictures = get("app.pictures", labels.pictures);
+    labels.downloads = get("app.downloads", labels.downloads);
+    labels.icloud_drive = get("app.icloud_drive", labels.icloud_drive);
+    labels.home = get("app.home", labels.home);
+    labels.airdrop = get("app.airdrop", labels.airdrop);
+    labels.trash = get("app.trash", labels.trash);
+    labels.search_placeholder = get("app.search_placeholder", labels.search_placeholder);
+    labels.status_ready = get("app.status_ready", labels.status_ready);
+    labels.tab_browse = get("app.tab_browse", labels.tab_browse);
+    labels.tab_preview = get("app.tab_preview", labels.tab_preview);
+    labels.tab_create = get("app.tab_create", labels.tab_create);
+    labels.create_file = get("actions.create_file", labels.create_file);
+    labels.create_folder = get("actions.create_folder", labels.create_folder);
+    labels.duplicate = get("actions.duplicate", labels.duplicate);
+    labels.duplicate_file = get("actions.duplicate_file", labels.duplicate_file);
+    labels.delete_action = get("actions.delete", labels.delete_action);
+    labels.delete_selected = get("actions.delete_selected", labels.delete_selected);
+    labels.preview = get("actions.preview", labels.preview);
+    labels.root = get("nav.root", labels.root);
+    labels.docs = get("nav.docs", labels.docs);
+    labels.pics = get("nav.pics", labels.pics);
+    labels.back = get("nav.back", labels.back);
+    labels.forward = get("nav.forward", labels.forward);
+    labels.up = get("nav.up", labels.up);
+    labels.sort = get("nav.sort", labels.sort);
+    labels.name = get("table.name", labels.name);
+    labels.kind = get("table.kind", labels.kind);
+    labels.size = get("table.size", labels.size);
+    labels.no_matching_files = get("state.no_matching_files", labels.no_matching_files);
+    labels.select_file_to_preview = get(
+        "state.select_file_to_preview",
+        labels.select_file_to_preview);
+    labels.select_file_from_browse = get(
+        "state.select_file_from_browse",
+        labels.select_file_from_browse);
+    labels.create_hint = get("create.hint", labels.create_hint);
+    labels.file_name = get("create.file_name", labels.file_name);
+    labels.contents = get("create.contents", labels.contents);
+    labels.folder_name = get("create.folder_name", labels.folder_name);
+    labels.reset_demo_files = get("create.reset_demo_files", labels.reset_demo_files);
+    labels.status = get("status.title", labels.status);
+    return labels;
 }
 
 } // namespace file_explorer_demo

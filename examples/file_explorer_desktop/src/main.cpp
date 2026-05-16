@@ -87,13 +87,22 @@ file_explorer_demo::ExplorerState initial_explorer_state() {
     return state;
 }
 
+std::string initial_locale() {
+    char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_LOCALE");
+    return raw && *raw ? std::string{raw} : std::string{"en"};
+}
+
 struct State {
     file_explorer_demo::ExplorerState explorer;
+    file_explorer_demo::ExplorerLabels labels;
     FinderViewMode view_mode;
     bool search_visible = false;
 
     State()
         : explorer(initial_explorer_state()),
+          labels(file_explorer_demo::file_explorer_labels(
+              initial_locale(),
+              "desktop")),
           view_mode(initial_view_mode()),
           search_visible(!explorer.search.empty()) {
     }
@@ -619,24 +628,25 @@ void finder_sidebar(State const& state) {
         explorer.root,
         explorer.current);
     bool const in_root = relative == "Demo Root";
+    auto const& labels = state.labels;
     layout::sidebar(k_sidebar_width, [&] {
         layout::spacer(k_integrated_titlebar_height);
-        sidebar_row("Recents", "recents", "root", in_root);
-        sidebar_row("Shared", "folder", "shared",
+        sidebar_row(labels.sidebar_recents, "recents", "root", in_root);
+        sidebar_row(labels.sidebar_shared, "folder", "shared",
                     relative == "Demo Root/Shared");
         layout::spacer(16);
-        sidebar_heading("Favorites");
-        sidebar_row("Applications", "app", "root");
-        sidebar_row("Desktop", "desktop", "root");
-        sidebar_row("Documents", "doc", "documents",
+        sidebar_heading(labels.favorites);
+        sidebar_row(labels.applications, "app", "root");
+        sidebar_row(labels.desktop, "desktop", "root");
+        sidebar_row(labels.documents, "doc", "documents",
                     relative == "Demo Root/Documents");
-        sidebar_row("Downloads", "download", "root");
+        sidebar_row(labels.downloads, "download", "root");
         layout::spacer(16);
-        sidebar_heading("Locations");
-        sidebar_row("iCloud Drive", "cloud", "root");
-        sidebar_row("kakao", "home", "root");
-        sidebar_row("AirDrop", "airdrop", "shared");
-        sidebar_row("Trash", "trash", "trash", relative == "Trash");
+        sidebar_heading(labels.locations);
+        sidebar_row(labels.icloud_drive, "cloud", "root");
+        sidebar_row(labels.home, "home", "root");
+        sidebar_row(labels.airdrop, "airdrop", "shared");
+        sidebar_row(labels.trash, "trash", "trash", relative == "Trash");
     }, MaterialKind::Thin, SpaceToken::Lg, SpaceToken::Xs);
 }
 
@@ -906,13 +916,13 @@ void finder_toolbar(State const& state,
         layout::material_surface(
             toolbar_group_options("Navigation Controls", 92.0f),
             [&] {
-                navigation_button("Back", GoBack{}, snap.can_go_back,
+                navigation_button(state.labels.back.c_str(), GoBack{}, snap.can_go_back,
                                   paint_back_icon, 0x6201u);
-                navigation_button("Forward", GoForward{}, snap.can_go_forward,
+                navigation_button(state.labels.forward.c_str(), GoForward{}, snap.can_go_forward,
                                   paint_forward_icon, 0x6202u);
             });
         widget::text(snap.relative_location == "Demo Root"
-            ? "Recents"
+            ? state.labels.title
             : snap.relative_location,
             TextSize::Heading);
         layout::weighted(1.0f, [] {});
@@ -931,16 +941,16 @@ void finder_toolbar(State const& state,
         layout::material_surface(
             toolbar_group_options("File Actions", 184.0f),
             [&] {
-                file_action_button("New File", CreateFile{},
+                file_action_button(state.labels.create_file.c_str(), CreateFile{},
                                    snap.can_create_file,
                                    paint_new_file_icon, 0x6701u);
-                file_action_button("New Folder", CreateFolder{},
+                file_action_button(state.labels.create_folder.c_str(), CreateFolder{},
                                    snap.can_create_folder,
                                    paint_new_folder_icon, 0x6704u);
-                file_action_button("Duplicate", DuplicateSelected{},
+                file_action_button(state.labels.duplicate.c_str(), DuplicateSelected{},
                                    snap.can_duplicate_selected,
                                    paint_duplicate_icon, 0x6702u);
-                file_action_button("Delete", DeleteSelected{},
+                file_action_button(state.labels.delete_action.c_str(), DeleteSelected{},
                                    snap.can_delete_selected,
                                    paint_delete_icon, 0x6703u);
             });
@@ -964,7 +974,7 @@ void finder_toolbar(State const& state,
                 search_toggle_button(state.search_visible);
                 if (state.search_visible) {
                     widget::text_field<Msg>(
-                        "Search",
+                        state.labels.search_placeholder,
                         state.explorer.search,
                         on_search_changed);
                 }
@@ -982,7 +992,7 @@ void finder_grid(State const& state,
         content_surface_options(),
         [&] {
             if (entries.empty()) {
-                widget::text("No matching files.");
+                widget::text(state.labels.no_matching_files);
                 return;
             }
             layout::spacer(18.0f);
@@ -1029,17 +1039,17 @@ void finder_list(State const& state,
         [&] {
             layout::row([&] {
                 layout::sized_box(420.0f, [&] {
-                    widget::text("Name", TextSize::Small, TextColor::Muted);
+                    widget::text(state.labels.name, TextSize::Small, TextColor::Muted);
                 });
                 layout::sized_box(160.0f, [&] {
-                    widget::text("Kind", TextSize::Small, TextColor::Muted);
+                    widget::text(state.labels.kind, TextSize::Small, TextColor::Muted);
                 });
                 layout::sized_box(120.0f, [&] {
-                    widget::text("Size", TextSize::Small, TextColor::Muted);
+                    widget::text(state.labels.size, TextSize::Small, TextColor::Muted);
                 });
             }, SpaceToken::Sm, CrossAxisAlignment::Center, MainAxisAlignment::Start);
             if (entries.empty()) {
-                widget::text("No matching files.");
+                widget::text(state.labels.no_matching_files);
                 return;
             }
             layout::scroll_view(scroll_height, [&] {
@@ -1089,17 +1099,17 @@ void finder_column_view(State const& state,
             layout::row([&] {
                 layout::sized_box(210.0f, [&] {
                     layout::column([&] {
-                        widget::text("Locations", TextSize::Small, TextColor::Muted);
+                        widget::text(state.labels.locations, TextSize::Small, TextColor::Muted);
                         finder_button("Demo Root", SelectLocation{"root"},
                                       snap.relative_location == "Demo Root",
                                       190.0f, 14.0f, false, true);
-                        finder_button("Documents", SelectLocation{"documents"},
+                        finder_button(state.labels.documents, SelectLocation{"documents"},
                                       snap.relative_location == "Demo Root/Documents",
                                       190.0f, 14.0f, false, true);
-                        finder_button("Pictures", SelectLocation{"pictures"},
+                        finder_button(state.labels.pictures, SelectLocation{"pictures"},
                                       snap.relative_location == "Demo Root/Pictures",
                                       190.0f, 14.0f, false, true);
-                        finder_button("Shared", SelectLocation{"shared"},
+                        finder_button(state.labels.sidebar_shared, SelectLocation{"shared"},
                                       snap.relative_location == "Demo Root/Shared",
                                       190.0f, 14.0f, false, true);
                     }, SpaceToken::Xs);
@@ -1110,7 +1120,7 @@ void finder_column_view(State const& state,
                                      TextSize::Small,
                                      TextColor::Muted);
                         if (entries.empty()) {
-                            widget::text("No matching files.");
+                            widget::text(state.labels.no_matching_files);
                             return;
                         }
                         layout::scroll_view(column_height, [&] {
@@ -1135,7 +1145,7 @@ void finder_column_view(State const& state,
                 });
                 layout::weighted(1.0f, [&] {
                     layout::column([&] {
-                        widget::text("Preview", TextSize::Small, TextColor::Muted);
+                        widget::text(state.labels.preview, TextSize::Small, TextColor::Muted);
                         if (snap.has_selection) {
                             widget::canvas(160.0f, 110.0f,
                                 [entry = snap.selected](Painter& painter) {
@@ -1151,7 +1161,7 @@ void finder_column_view(State const& state,
                                          TextSize::Small,
                                          TextColor::Muted);
                         } else {
-                            widget::text("Select a file to preview.");
+                            widget::text(state.labels.select_file_to_preview);
                         }
                     }, SpaceToken::Sm);
                 });
@@ -1173,7 +1183,7 @@ void finder_gallery_view(State const& state,
         content_surface_options(),
         [&] {
             if (!has_hero) {
-                widget::text("No matching files.");
+                widget::text(state.labels.no_matching_files);
                 return;
             }
             layout::row([&] {
@@ -1191,7 +1201,7 @@ void finder_gallery_view(State const& state,
                                      TextColor::Muted);
                         widget::text(snap.has_selection
                             ? compact_preview(snap.preview)
-                            : "Select a file below to read its preview.",
+                            : state.labels.select_file_to_preview,
                             TextSize::Small,
                             TextColor::Muted);
                     }, SpaceToken::Sm);
@@ -1335,6 +1345,9 @@ void view(State const& state) {
 
 int main() {
     phenotype::Theme theme = phenotype::current_theme();
+    theme = phenotype::theme_with_resource_defaults(
+        theme,
+        file_explorer_demo::file_explorer_resource_catalog("desktop"));
     theme.background = rgba(246, 246, 246);
     theme.foreground = rgba(29, 29, 31);
     theme.accent = rgba(0, 122, 255);

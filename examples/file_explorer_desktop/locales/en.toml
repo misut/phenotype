@@ -1,15 +1,59 @@
 [app]
 title = "Recents"
+mobile_title = "Files"
 sidebar_recents = "Recents"
 sidebar_shared = "Shared"
 favorites = "Favorites"
 locations = "Locations"
+applications = "Applications"
+desktop = "Desktop"
+documents = "Documents"
+pictures = "Pictures"
+downloads = "Downloads"
+icloud_drive = "iCloud Drive"
+home = "kakao"
+airdrop = "AirDrop"
+trash = "Trash"
 search_placeholder = "Search"
 status_ready = "Ready"
+tab_browse = "Browse"
+tab_preview = "Preview"
+tab_create = "Create"
 
 [actions]
 create_file = "New File"
 create_folder = "New Folder"
 duplicate = "Duplicate"
-delete = "Move to Trash"
+duplicate_file = "Duplicate File"
+delete = "Delete"
+delete_selected = "Delete Selected"
 preview = "Preview"
+
+[nav]
+root = "Root"
+docs = "Docs"
+pics = "Pics"
+back = "Back"
+forward = "Forward"
+up = "Up"
+sort = "Sort"
+
+[table]
+name = "Name"
+kind = "Kind"
+size = "Size"
+
+[state]
+no_matching_files = "No matching files."
+select_file_to_preview = "Select a file to preview."
+select_file_from_browse = "Select a file from Browse."
+
+[create]
+hint = "Files and folders are written only inside the demo root."
+file_name = "File name"
+contents = "Contents"
+folder_name = "Folder name"
+reset_demo_files = "Reset Demo Files"
+
+[status]
+title = "Status"

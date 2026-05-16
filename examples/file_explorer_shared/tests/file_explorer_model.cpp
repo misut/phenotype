@@ -33,6 +33,14 @@ int main() {
     assert(demo::sanitize_folder_name("../ Drafts:v1") == "Draftsv1");
     assert(demo::sanitize_folder_name("  Review   Folder  ") == "Review Folder");
 
+    auto catalog = demo::file_explorer_resource_catalog("desktop");
+    assert(catalog.default_font_family == "Pretendard");
+    assert(demo::file_explorer_labels("ko", "desktop").sidebar_recents
+        == "최근 항목");
+    assert(demo::file_explorer_labels("ja", "desktop").sidebar_recents
+        == "Recents");
+    assert(demo::file_explorer_labels("ko", "mobile").tab_create == "만들기");
+
     std::string const profile = "test-model-contract";
     auto root = demo::demo_root(profile);
     std::error_code ec;

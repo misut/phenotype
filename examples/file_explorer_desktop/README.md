@@ -51,9 +51,11 @@ home folder.
 
 The directory also includes an initial `phenotype.package.toml` plus `assets/`,
 `locales/`, and `fonts/` fixtures. These are consumed by the new
-`tools/phenotype_cli package inspect` command and describe the future
-asset/i18n/Pretendard bundle contract; the current example still renders its
-labels from code.
+`tools/phenotype_cli package inspect` command and describe the
+asset/i18n/Pretendard bundle contract. Runtime labels are resolved through the
+shared pure `ResourceCatalog` helper in `file_explorer_shared`, while file
+reads and package inspection remain CLI/example edge work. Set
+`PHENOTYPE_FILE_EXPLORER_LOCALE=ko` to smoke the Korean label path.
 
 ## Run
 

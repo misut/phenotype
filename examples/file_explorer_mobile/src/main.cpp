@@ -58,8 +58,15 @@ file_explorer_demo::ExplorerState initial_explorer_state() {
     return state;
 }
 
+std::string initial_locale() {
+    char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_LOCALE");
+    return raw && *raw ? std::string{raw} : std::string{"en"};
+}
+
 struct State {
     file_explorer_demo::ExplorerState explorer = initial_explorer_state();
+    file_explorer_demo::ExplorerLabels labels =
+        file_explorer_demo::file_explorer_labels(initial_locale(), "mobile");
 };
 
 Msg on_search_changed(std::string text) {
@@ -144,22 +151,31 @@ void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
         .gap = SpaceToken::Sm,
         .semantic_label = "Toolbar",
     }, [&] {
-        widget::text("Files");
+        widget::text(state.labels.mobile_title);
         widget::text(snap.relative_location, TextSize::Small, TextColor::Muted);
         layout::spacer(8);
-        widget::text_field<Msg>("Search", explorer.search, on_search_changed);
+        widget::text_field<Msg>(
+            state.labels.search_placeholder,
+            explorer.search,
+            on_search_changed);
         layout::spacer(8);
         std::vector<phenotype::str> tabs;
-        tabs.emplace_back("Browse", 6u);
-        tabs.emplace_back("Preview", 7u);
-        tabs.emplace_back("Create", 6u);
+        tabs.emplace_back(
+            state.labels.tab_browse.c_str(),
+            static_cast<unsigned int>(state.labels.tab_browse.size()));
+        tabs.emplace_back(
+            state.labels.tab_preview.c_str(),
+            static_cast<unsigned int>(state.labels.tab_preview.size()));
+        tabs.emplace_back(
+            state.labels.tab_create.c_str(),
+            static_cast<unsigned int>(state.labels.tab_create.size()));
         widget::tabs<Msg>(tabs, explorer.mobile_tab, [](std::size_t index) -> Msg {
             return SelectTab{index};
         });
     });
 }
 
-void location_strip() {
+void location_strip(file_explorer_demo::ExplorerLabels const& labels) {
     using namespace phenotype;
     layout::material_surface(layout::MaterialSurfaceOptions{
         .kind = MaterialKind::Thin,
@@ -171,17 +187,20 @@ void location_strip() {
         .semantic_label = "Locations",
     }, [&] {
         layout::row([&] {
-            widget::button<Msg>("Root", SelectLocation{"root"});
-            widget::button<Msg>("Docs", SelectLocation{"documents"});
-            widget::button<Msg>("Pics", SelectLocation{"pictures"});
-            widget::button<Msg>("Shared", SelectLocation{"shared"});
-            widget::button<Msg>("Trash", SelectLocation{"trash"});
+            widget::button<Msg>(labels.root, SelectLocation{"root"});
+            widget::button<Msg>(labels.docs, SelectLocation{"documents"});
+            widget::button<Msg>(labels.pics, SelectLocation{"pictures"});
+            widget::button<Msg>(labels.sidebar_shared, SelectLocation{"shared"});
+            widget::button<Msg>(labels.trash, SelectLocation{"trash"});
         }, SpaceToken::Xs, CrossAxisAlignment::Center, MainAxisAlignment::Start);
     });
 }
 
-void browse_tab(file_explorer_demo::Snapshot const& snap) {
+void browse_tab(
+        State const& state,
+        file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
+    auto const& labels = state.labels;
     layout::material_surface(MaterialKind::Regular, [&] {
         layout::row([&] {
             layout::weighted(1.0f, [&] {
@@ -190,19 +209,19 @@ void browse_tab(file_explorer_demo::Snapshot const& snap) {
                     summary += " - " + snap.sort_label;
                 widget::text(summary, TextSize::Small, TextColor::Muted);
             });
-            widget::button<Msg>("Sort", CycleSort{});
-            widget::button<Msg>("Back", GoBack{},
+            widget::button<Msg>(labels.sort, CycleSort{});
+            widget::button<Msg>(labels.back, GoBack{},
                                 ButtonVariant::Default,
                                 !snap.can_go_back);
-            widget::button<Msg>("Forward", GoForward{},
+            widget::button<Msg>(labels.forward, GoForward{},
                                 ButtonVariant::Default,
                                 !snap.can_go_forward);
-            widget::button<Msg>("Up", GoUp{});
+            widget::button<Msg>(labels.up, GoUp{});
         });
         layout::spacer(8);
         layout::scroll_view(430.0f, [&] {
             if (snap.entries.empty()) {
-                widget::text("No matching files.");
+                widget::text(labels.no_matching_files);
                 return;
             }
             for (auto const& entry : snap.entries) {
@@ -235,7 +254,7 @@ void preview_tab(
     using namespace phenotype;
     auto const& explorer = state.explorer;
     layout::material_surface(MaterialKind::Thick, [&] {
-        widget::text("Preview");
+        widget::text(state.labels.preview);
         layout::spacer(4);
         if (snap.has_selection) {
             widget::text(snap.selected.name);
@@ -244,17 +263,17 @@ void preview_tab(
                          TextSize::Small,
                          TextColor::Muted);
         } else {
-            widget::text("Select a file from Browse.");
+            widget::text(state.labels.select_file_from_browse);
         }
         layout::spacer(8);
         widget::code(snap.preview);
         layout::spacer(12);
-        widget::button<Msg>("Duplicate File",
+        widget::button<Msg>(state.labels.duplicate_file,
                             DuplicateSelected{},
                             ButtonVariant::Default,
                             !snap.can_duplicate_selected);
         layout::spacer(8);
-        widget::button<Msg>("Delete Selected",
+        widget::button<Msg>(state.labels.delete_selected,
                             DeleteSelected{},
                             ButtonVariant::Default,
                             !snap.can_delete_selected);
@@ -267,25 +286,37 @@ void create_tab(State const& state) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
     layout::material_surface(MaterialKind::Regular, [&] {
-        widget::text("Create");
-        widget::text("Files and folders are written only inside the demo root.",
+        widget::text(state.labels.tab_create);
+        widget::text(state.labels.create_hint,
                      TextSize::Small,
                      TextColor::Muted);
         layout::spacer(8);
-        widget::text_field<Msg>("File name", explorer.draft_name, on_draft_name_changed);
+        widget::text_field<Msg>(
+            state.labels.file_name,
+            explorer.draft_name,
+            on_draft_name_changed);
         layout::spacer(8);
-        widget::text_field<Msg>("Contents", explorer.draft_body, on_draft_body_changed);
+        widget::text_field<Msg>(
+            state.labels.contents,
+            explorer.draft_body,
+            on_draft_body_changed);
         layout::spacer(10);
-        widget::button<Msg>("Create File", CreateFile{}, ButtonVariant::Primary);
+        widget::button<Msg>(
+            state.labels.create_file,
+            CreateFile{},
+            ButtonVariant::Primary);
         layout::spacer(10);
         widget::text_field<Msg>(
-            "Folder name",
+            state.labels.folder_name,
             explorer.draft_folder_name,
             on_draft_folder_name_changed);
         layout::spacer(8);
-        widget::button<Msg>("Create Folder", CreateFolder{}, ButtonVariant::Default);
+        widget::button<Msg>(
+            state.labels.create_folder,
+            CreateFolder{},
+            ButtonVariant::Default);
         layout::spacer(6);
-        widget::button<Msg>("Reset Demo Files", ResetDemo{});
+        widget::button<Msg>(state.labels.reset_demo_files, ResetDemo{});
     }, SpaceToken::Md, SpaceToken::Sm);
 }
 
@@ -302,16 +333,16 @@ void view(State const& state) {
             [&] {
                 layout::column([&] {
                     top_bar(state, snap);
-                    location_strip();
+                    location_strip(state.labels);
                     if (state.explorer.mobile_tab == 0) {
-                        browse_tab(snap);
+                        browse_tab(state, snap);
                     } else if (state.explorer.mobile_tab == 1) {
                         preview_tab(state, snap);
                     } else {
                         create_tab(state);
                     }
                     layout::status_bar([&] {
-                        widget::text("Status");
+                        widget::text(state.labels.status);
                         std::string detail = "Status: " + state.explorer.status;
                         if (!snap.operation_label.empty()) {
                             detail += "\n";
@@ -331,6 +362,12 @@ void view(State const& state) {
 } // namespace
 
 int main() {
+    phenotype::Theme theme = phenotype::current_theme();
+    theme = phenotype::theme_with_resource_defaults(
+        theme,
+        file_explorer_demo::file_explorer_resource_catalog("mobile"));
+    phenotype::set_theme(theme);
+
     return phenotype::native::run_app<State, Msg>(
         390,
         780,
