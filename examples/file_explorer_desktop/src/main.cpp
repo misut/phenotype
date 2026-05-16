@@ -1,6 +1,5 @@
 #include <algorithm>
 #include <cctype>
-#include <cmath>
 #include <concepts>
 #include <cstdlib>
 #include <cstddef>
@@ -79,9 +78,6 @@ FinderViewMode initial_view_mode() {
 
 file_explorer_demo::ExplorerState initial_explorer_state() {
     auto state = file_explorer_demo::make_state("desktop");
-    state.viewport_width = 1300;
-    state.viewport_height = 760;
-    state.viewport_scale = 1.0f;
     if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_SCENARIO")) {
         file_explorer_demo::apply_startup_scenario(state, raw);
     }
@@ -111,16 +107,16 @@ struct State {
 
 constexpr float k_pi = 3.14159265358979323846f;
 constexpr float k_tau = 6.28318530717958647692f;
-constexpr float k_integrated_titlebar_height = 56.0f;
-constexpr float k_sidebar_width = 224.0f;
-constexpr float k_sidebar_row_width = 188.0f;
+constexpr float k_integrated_titlebar_height =
+    file_explorer_demo::k_desktop_integrated_titlebar_height;
+constexpr float k_sidebar_width = file_explorer_demo::k_desktop_sidebar_width;
+constexpr float k_sidebar_row_width = file_explorer_demo::k_desktop_sidebar_row_width;
 constexpr float k_content_radius = 0.0f;
-constexpr float k_window_radius = 18.0f;
-constexpr float k_toolbar_group_radius = 20.0f;
-constexpr float k_toolbar_group_height = 40.0f;
-constexpr float k_icon_grid_column_width = 142.0f;
-constexpr float k_icon_grid_row_height = 166.0f;
-constexpr float k_icon_grid_column_pitch = 166.0f;
+constexpr float k_window_radius = file_explorer_demo::k_desktop_window_radius;
+constexpr float k_toolbar_group_radius =
+    file_explorer_demo::k_desktop_toolbar_group_radius;
+constexpr float k_toolbar_group_height =
+    file_explorer_demo::k_desktop_toolbar_group_height;
 
 phenotype::Color rgba(int r, int g, int b, int a = 255) {
     return phenotype::Color{
@@ -444,38 +440,6 @@ std::vector<file_explorer_demo::Entry> finder_entries(
             < file_explorer_demo::lower_copy(b.name);
     });
     return entries;
-}
-
-float viewport_height_or_default(file_explorer_demo::ExplorerState const& explorer) {
-    return explorer.viewport_height > 0
-        ? static_cast<float>(explorer.viewport_height)
-        : 760.0f;
-}
-
-float finder_scroll_height(file_explorer_demo::ExplorerState const& explorer,
-                           float chrome_budget,
-                           float minimum,
-                           float maximum) {
-    float height = viewport_height_or_default(explorer) - chrome_budget;
-    return std::clamp(height, minimum, maximum);
-}
-
-int responsive_icon_column_count(int viewport_width) {
-    float const window_width = viewport_width > 0
-        ? static_cast<float>(viewport_width)
-        : 1300.0f;
-    float const available = std::max(
-        k_icon_grid_column_pitch * 2.0f,
-        window_width - k_sidebar_width - 80.0f);
-    int columns = static_cast<int>(
-        std::floor(available / k_icon_grid_column_pitch));
-    return std::clamp(columns, 2, 7);
-}
-
-std::vector<float> icon_grid_columns(int viewport_width) {
-    return std::vector<float>(
-        static_cast<std::size_t>(responsive_icon_column_count(viewport_width)),
-        k_icon_grid_column_width);
 }
 
 void update(State& state, Msg msg) {
@@ -1008,8 +972,9 @@ void finder_grid(State const& state,
                  file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto entries = finder_entries(snap);
-    float const scroll_height = finder_scroll_height(
-        state.explorer, 176.0f, 528.0f, 660.0f);
+    auto const chrome = file_explorer_demo::explorer_chrome_metrics(
+        state.explorer,
+        "desktop");
     layout::material_surface(
         content_surface_options(),
         [&] {
@@ -1018,9 +983,9 @@ void finder_grid(State const& state,
                 return;
             }
             layout::spacer(18.0f);
-            layout::scroll_view(scroll_height, [&] {
-                auto columns = icon_grid_columns(state.explorer.viewport_width);
-                layout::grid(std::move(columns), k_icon_grid_row_height, [&] {
+            layout::scroll_view(chrome.icon_grid_scroll_height, [&] {
+                auto columns = file_explorer_demo::explorer_icon_grid_columns(chrome);
+                layout::grid(std::move(columns), chrome.icon_grid_row_height, [&] {
                     for (auto const& entry : entries) {
                         bool const selected = snap.has_selection
                             && snap.selected.name == entry.name;
@@ -1036,7 +1001,7 @@ void finder_grid(State const& state,
                                 entry.name,
                                 SelectEntry{entry.name},
                                 selected,
-                                k_icon_grid_column_width,
+                                chrome.icon_grid_column_width,
                                 15.0f,
                                 true);
                         }, SpaceToken::Xs,
@@ -1052,7 +1017,7 @@ void finder_list(State const& state,
                  file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto entries = finder_entries(snap);
-    float const scroll_height = finder_scroll_height(
+    float const scroll_height = file_explorer_demo::desktop_scroll_height(
         state.explorer, 164.0f, 552.0f, 676.0f);
     layout::material_surface(
         content_surface_options(SpaceToken::Sm),
@@ -1111,7 +1076,7 @@ void finder_column_view(State const& state,
                         file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto entries = finder_entries(snap);
-    float const column_height = finder_scroll_height(
+    float const column_height = file_explorer_demo::desktop_scroll_height(
         state.explorer, 224.0f, 500.0f, 620.0f);
     layout::material_surface(
         content_surface_options(),
@@ -1193,7 +1158,7 @@ void finder_gallery_view(State const& state,
                          file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto entries = finder_entries(snap);
-    float const gallery_height = finder_scroll_height(
+    float const gallery_height = file_explorer_demo::desktop_scroll_height(
         state.explorer, 352.0f, 366.0f, 520.0f);
     file_explorer_demo::Entry hero = snap.has_selection && !snap.selected.name.empty()
         ? snap.selected

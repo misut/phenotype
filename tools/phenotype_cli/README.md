@@ -31,8 +31,8 @@ The initial scope is intentionally narrow:
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible
-  entries, viewport, selection capabilities, operation receipts, and preview
-  excerpts.
+  entries, viewport, pure Finder chrome/grid metrics, selection capabilities,
+  operation receipts, and preview excerpts.
 - `phenotype commands --json` emits machine-readable command metadata from
   `cppx.cli`.
 

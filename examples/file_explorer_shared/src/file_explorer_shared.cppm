@@ -3,6 +3,7 @@ module;
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <initializer_list>
@@ -124,8 +125,35 @@ struct ExplorerInputParseResult {
     std::string error;
 };
 
+struct ExplorerViewport {
+    int width = 0;
+    int height = 0;
+    float scale = 1.0f;
+};
+
+struct ExplorerChromeMetrics {
+    ExplorerViewport viewport{};
+    float integrated_titlebar_height = 0.0f;
+    float sidebar_width = 0.0f;
+    float sidebar_row_width = 0.0f;
+    float toolbar_group_height = 0.0f;
+    float toolbar_group_radius = 0.0f;
+    float window_radius = 0.0f;
+    float icon_grid_column_width = 0.0f;
+    float icon_grid_row_height = 0.0f;
+    float icon_grid_column_pitch = 0.0f;
+    float icon_grid_scroll_height = 0.0f;
+    int icon_grid_columns = 0;
+    int icon_grid_visible_rows = 0;
+    int icon_grid_visible_capacity = 0;
+    bool integrated_titlebar = true;
+    bool native_window_controls = true;
+    bool duplicate_window_controls = false;
+};
+
 struct ExplorerInputTrace {
     ExplorerInput input{};
+    ExplorerChromeMetrics chrome{};
     std::string status;
     std::string relative_location;
     std::string selected_name;
@@ -139,8 +167,162 @@ struct ExplorerDriveResult {
     std::string profile;
     ExplorerState state;
     Snapshot snapshot;
+    ExplorerChromeMetrics chrome{};
     std::vector<ExplorerInputTrace> trace;
 };
+
+inline constexpr int k_desktop_default_viewport_width = 1300;
+inline constexpr int k_desktop_default_viewport_height = 760;
+inline constexpr int k_mobile_default_viewport_width = 390;
+inline constexpr int k_mobile_default_viewport_height = 844;
+inline constexpr float k_desktop_integrated_titlebar_height = 56.0f;
+inline constexpr float k_desktop_sidebar_width = 224.0f;
+inline constexpr float k_desktop_sidebar_row_width = 188.0f;
+inline constexpr float k_desktop_window_radius = 18.0f;
+inline constexpr float k_desktop_toolbar_group_radius = 20.0f;
+inline constexpr float k_desktop_toolbar_group_height = 40.0f;
+inline constexpr float k_desktop_icon_grid_column_width = 142.0f;
+inline constexpr float k_desktop_icon_grid_row_height = 166.0f;
+inline constexpr float k_desktop_icon_grid_column_pitch = 166.0f;
+
+inline bool mobile_profile(std::string_view profile) {
+    return profile == "mobile";
+}
+
+inline ExplorerViewport default_viewport(std::string_view profile) {
+    return mobile_profile(profile)
+        ? ExplorerViewport{
+            .width = k_mobile_default_viewport_width,
+            .height = k_mobile_default_viewport_height,
+            .scale = 2.0f,
+        }
+        : ExplorerViewport{
+            .width = k_desktop_default_viewport_width,
+            .height = k_desktop_default_viewport_height,
+            .scale = 1.0f,
+        };
+}
+
+inline ExplorerViewport effective_viewport(
+        ExplorerState const& state,
+        std::string_view profile) {
+    auto viewport = default_viewport(profile);
+    if (state.viewport_width > 0)
+        viewport.width = state.viewport_width;
+    if (state.viewport_height > 0)
+        viewport.height = state.viewport_height;
+    if (state.viewport_scale > 0.0f)
+        viewport.scale = state.viewport_scale;
+    return viewport;
+}
+
+inline void apply_default_viewport(
+        ExplorerState& state,
+        std::string_view profile) {
+    auto viewport = default_viewport(profile);
+    state.viewport_width = viewport.width;
+    state.viewport_height = viewport.height;
+    state.viewport_scale = viewport.scale;
+}
+
+inline float desktop_scroll_height_for_viewport(
+        ExplorerViewport const& viewport,
+        float chrome_budget,
+        float minimum,
+        float maximum) {
+    float height = static_cast<float>(viewport.height) - chrome_budget;
+    return std::clamp(height, minimum, maximum);
+}
+
+inline float desktop_scroll_height(
+        ExplorerState const& state,
+        float chrome_budget,
+        float minimum,
+        float maximum) {
+    return desktop_scroll_height_for_viewport(
+        effective_viewport(state, "desktop"),
+        chrome_budget,
+        minimum,
+        maximum);
+}
+
+inline int desktop_icon_grid_column_count(ExplorerViewport const& viewport) {
+    float const window_width = viewport.width > 0
+        ? static_cast<float>(viewport.width)
+        : static_cast<float>(k_desktop_default_viewport_width);
+    float const available = std::max(
+        k_desktop_icon_grid_column_pitch * 2.0f,
+        window_width - k_desktop_sidebar_width - 80.0f);
+    int columns = static_cast<int>(
+        available / k_desktop_icon_grid_column_pitch);
+    return std::clamp(columns, 2, 7);
+}
+
+inline ExplorerChromeMetrics explorer_chrome_metrics(
+        ExplorerState const& state,
+        std::string_view profile) {
+    auto viewport = effective_viewport(state, profile);
+    if (mobile_profile(profile)) {
+        return ExplorerChromeMetrics{
+            .viewport = viewport,
+            .integrated_titlebar_height = 0.0f,
+            .sidebar_width = 0.0f,
+            .sidebar_row_width = 0.0f,
+            .toolbar_group_height = 0.0f,
+            .toolbar_group_radius = 0.0f,
+            .window_radius = 0.0f,
+            .icon_grid_column_width = 0.0f,
+            .icon_grid_row_height = 0.0f,
+            .icon_grid_column_pitch = 0.0f,
+            .icon_grid_scroll_height = 0.0f,
+            .icon_grid_columns = 0,
+            .icon_grid_visible_rows = 0,
+            .icon_grid_visible_capacity = 0,
+            .integrated_titlebar = false,
+            .native_window_controls = false,
+            .duplicate_window_controls = false,
+        };
+    }
+    auto columns = desktop_icon_grid_column_count(viewport);
+    auto scroll_height = desktop_scroll_height_for_viewport(
+        viewport,
+        176.0f,
+        528.0f,
+        660.0f);
+    int visible_rows = static_cast<int>(
+        scroll_height / k_desktop_icon_grid_row_height);
+    if (visible_rows < 1)
+        visible_rows = 1;
+    return ExplorerChromeMetrics{
+        .viewport = viewport,
+        .integrated_titlebar_height = k_desktop_integrated_titlebar_height,
+        .sidebar_width = k_desktop_sidebar_width,
+        .sidebar_row_width = k_desktop_sidebar_row_width,
+        .toolbar_group_height = k_desktop_toolbar_group_height,
+        .toolbar_group_radius = k_desktop_toolbar_group_radius,
+        .window_radius = k_desktop_window_radius,
+        .icon_grid_column_width = k_desktop_icon_grid_column_width,
+        .icon_grid_row_height = k_desktop_icon_grid_row_height,
+        .icon_grid_column_pitch = k_desktop_icon_grid_column_pitch,
+        .icon_grid_scroll_height = scroll_height,
+        .icon_grid_columns = columns,
+        .icon_grid_visible_rows = visible_rows,
+        .icon_grid_visible_capacity = columns * visible_rows,
+        .integrated_titlebar = true,
+        .native_window_controls = true,
+        .duplicate_window_controls = false,
+    };
+}
+
+inline std::vector<float> explorer_icon_grid_columns(
+        ExplorerChromeMetrics const& chrome) {
+    int count = chrome.icon_grid_columns > 0 ? chrome.icon_grid_columns : 2;
+    return std::vector<float>(
+        static_cast<std::size_t>(count),
+        chrome.icon_grid_column_width > 0.0f
+            ? chrome.icon_grid_column_width
+            : k_desktop_icon_grid_column_width);
+}
 
 inline std::string lower_copy(std::string text) {
     std::transform(text.begin(), text.end(), text.begin(), [](unsigned char ch) {
@@ -888,6 +1070,7 @@ inline ExplorerState make_state(std::string_view profile) {
     state.root = ensure_demo_tree(profile);
     state.current = state.root;
     state.selected_name = "README.txt";
+    apply_default_viewport(state, profile);
     return state;
 }
 
@@ -1460,10 +1643,12 @@ inline void apply_explorer_input(
 
 inline ExplorerInputTrace explorer_input_trace(
         ExplorerState const& state,
-        ExplorerInput const& input) {
+        ExplorerInput const& input,
+        std::string_view profile) {
     auto snap = snapshot(state);
     return ExplorerInputTrace{
         .input = input,
+        .chrome = explorer_chrome_metrics(state, profile),
         .status = state.status,
         .relative_location = snap.relative_location,
         .selected_name = state.selected_name,
@@ -1483,9 +1668,13 @@ inline ExplorerDriveResult drive_explorer(
     result.trace.reserve(inputs.size());
     for (auto const& input : inputs) {
         apply_explorer_input(result.state, input, result.profile);
-        result.trace.push_back(explorer_input_trace(result.state, input));
+        result.trace.push_back(explorer_input_trace(
+            result.state,
+            input,
+            result.profile));
     }
     result.snapshot = snapshot(result.state);
+    result.chrome = explorer_chrome_metrics(result.state, result.profile);
     return result;
 }
 

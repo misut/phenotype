@@ -323,7 +323,7 @@ auto spec() -> cppx::cli::CommandSpec {
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "kind[:value]",
-                             .description = "Typed input such as select:README.txt, create-file, delete, sort:kind"},
+                             .description = "Typed input such as viewport:900x620@2, select:README.txt, create-file, delete, sort:kind"},
                         },
                         .allow_positionals = false,
                         .examples = {
@@ -1693,16 +1693,50 @@ auto explorer_entries_json(
     return out;
 }
 
+auto explorer_chrome_json(
+        file_explorer_demo::ExplorerChromeMetrics const& chrome) -> std::string {
+    return std::format(
+        "{{\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
+        "\"integrated_titlebar_height\":{},\"sidebar_width\":{},"
+        "\"sidebar_row_width\":{},\"toolbar_group_height\":{},"
+        "\"toolbar_group_radius\":{},\"window_radius\":{},"
+        "\"icon_grid\":{{\"columns\":{},\"visible_rows\":{},"
+        "\"visible_capacity\":{},\"column_width\":{},\"row_height\":{},"
+        "\"column_pitch\":{},\"scroll_height\":{}}},"
+        "\"native_window\":{{\"integrated_titlebar\":{},"
+        "\"native_window_controls\":{},\"duplicate_window_controls\":{}}}}}",
+        chrome.viewport.width,
+        chrome.viewport.height,
+        chrome.viewport.scale,
+        chrome.integrated_titlebar_height,
+        chrome.sidebar_width,
+        chrome.sidebar_row_width,
+        chrome.toolbar_group_height,
+        chrome.toolbar_group_radius,
+        chrome.window_radius,
+        chrome.icon_grid_columns,
+        chrome.icon_grid_visible_rows,
+        chrome.icon_grid_visible_capacity,
+        chrome.icon_grid_column_width,
+        chrome.icon_grid_row_height,
+        chrome.icon_grid_column_pitch,
+        chrome.icon_grid_scroll_height,
+        chrome.integrated_titlebar ? "true" : "false",
+        chrome.native_window_controls ? "true" : "false",
+        chrome.duplicate_window_controls ? "true" : "false");
+}
+
 auto explorer_trace_json(
         file_explorer_demo::ExplorerInputTrace const& trace,
         std::size_t index) -> std::string {
     return std::format(
-        "{{\"index\":{},\"input\":{},\"status\":{},"
+        "{{\"index\":{},\"input\":{},\"chrome\":{},\"status\":{},"
         "\"relative_location\":{},\"selected_name\":{},"
         "\"visible_entries\":{},\"has_selection\":{},"
         "\"operation_label\":{},\"operation\":{}}}",
         index,
         explorer_input_json(trace.input),
+        explorer_chrome_json(trace.chrome),
         json_string(trace.status),
         json_string(trace.relative_location),
         json_string(trace.selected_name),
@@ -1741,6 +1775,7 @@ auto explorer_drive_json(file_explorer_demo::ExplorerDriveResult const& result)
         "\"root\":{},\"current\":{},\"relative_location\":{},"
         "\"status\":{},\"sort_label\":{},"
         "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
+        "\"chrome\":{},"
         "\"selected\":{{\"present\":{},\"name\":{},\"kind\":{},"
         "\"size\":{},\"path_label\":{},\"preview_excerpt\":{}}},"
         "\"counts\":{{\"visible_entries\":{},\"files\":{},\"folders\":{}}},"
@@ -1760,6 +1795,7 @@ auto explorer_drive_json(file_explorer_demo::ExplorerDriveResult const& result)
         result.state.viewport_width,
         result.state.viewport_height,
         result.state.viewport_scale,
+        explorer_chrome_json(result.chrome),
         snap.has_selection ? "true" : "false",
         json_string(snap.has_selection ? snap.selected.name : ""),
         json_string(snap.selected_kind_label),
@@ -2285,6 +2321,14 @@ int run_drive_file_explorer(cppx::cli::Invocation const& invocation) {
              .value = std::format("{} files, {} folders",
                                   snap.file_count,
                                   snap.folder_count),
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "chrome",
+             .value = std::format("{} cols x {} rows, viewport {}x{}@{}",
+                                  result.chrome.icon_grid_columns,
+                                  result.chrome.icon_grid_visible_rows,
+                                  result.chrome.viewport.width,
+                                  result.chrome.viewport.height,
+                                  result.chrome.viewport.scale),
              .status = cppx::terminal::StatusKind::ok},
             {.label = "status",
              .value = result.state.status,
