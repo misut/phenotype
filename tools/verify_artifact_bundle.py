@@ -122,6 +122,11 @@ ALLOWED_MATERIAL_LUMINANCE_CURVES = {
     "fallback-flat",
 }
 
+ALLOWED_MATERIAL_BACKDROP_CAPTURE_SCOPES = {
+    "none",
+    "shared-frame",
+}
+
 ALLOWED_MATERIAL_FOREGROUND_SCHEMES = {
     "high-contrast",
     "none",
@@ -161,7 +166,7 @@ ALLOWED_MATERIAL_REFERENCE_BLENDING_SCOPES = {
     "sampled-backdrop",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 15
+MATERIAL_PLAN_CONTRACT_VERSION = 16
 
 
 def suggested_action_for_failure(
@@ -1041,7 +1046,14 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "luminance_curves",
         "backdrop_available",
         "backdrop_stable",
+        "backdrop_access_required",
+        "backdrop_access_stable_required",
+        "backdrop_access_frame_history_required",
+        "backdrop_access_shared_frame_capture",
+        "backdrop_access_bounded",
         "backdrop_sources",
+        "backdrop_access_sources",
+        "backdrop_capture_scopes",
         "luminance_responses",
         "luminance_adapted",
         "foreground_schemes",
@@ -1083,6 +1095,11 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "backdrop_sampling",
             "backdrop_available",
             "backdrop_stable",
+            "backdrop_access_required",
+            "backdrop_access_stable_required",
+            "backdrop_access_frame_history_required",
+            "backdrop_access_shared_frame_capture",
+            "backdrop_access_bounded",
             "luminance_adapted",
             "render_target_ready",
             "render_target_within_backdrop_budget",
@@ -1154,6 +1171,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "sampling_kernels": ALLOWED_MATERIAL_SAMPLING_KERNELS,
         "sampling_weight_profiles": ALLOWED_MATERIAL_SAMPLING_WEIGHT_PROFILES,
         "luminance_curves": ALLOWED_MATERIAL_LUMINANCE_CURVES,
+        "backdrop_capture_scopes": ALLOWED_MATERIAL_BACKDROP_CAPTURE_SCOPES,
         "luminance_responses": ALLOWED_MATERIAL_LUMINANCE_RESPONSES,
         "foreground_schemes": ALLOWED_MATERIAL_FOREGROUND_SCHEMES,
         "foreground_sources": ALLOWED_MATERIAL_FOREGROUND_SOURCES,
@@ -1184,6 +1202,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         spec["backdrop_sources"] = string_int_map(
             value["backdrop_sources"],
             "require_material_plan_summary.backdrop_sources")
+    if "backdrop_access_sources" in value:
+        spec["backdrop_access_sources"] = string_int_map(
+            value["backdrop_access_sources"],
+            "require_material_plan_summary.backdrop_access_sources")
     if "render_target_pixel_formats" in value:
         spec["render_target_pixel_formats"] = string_int_map(
             value["render_target_pixel_formats"],
@@ -1227,6 +1249,14 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
         "max_sampling_kernel_radius_gte",
         "max_pass_count_lte",
         "max_backdrop_pixels_lte",
+        "max_frame_capture_count_lte",
+        "max_frame_capture_count_gte",
+        "max_frame_capture_pixels_lte",
+        "max_frame_capture_pixels_gte",
+        "total_surface_sample_pixels_lte",
+        "total_surface_sample_pixels_gte",
+        "max_surface_sample_pixels_lte",
+        "max_surface_sample_pixels_gte",
         "max_container_spacing_lte",
         "max_container_spacing_gte",
         "max_pass_texture_copy_pixels_lte",
@@ -1744,6 +1774,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "shadow_radius",
     "backdrop_sampling",
     "backdrop",
+    "backdrop_access",
     "foreground",
     "fallback",
     "fallback_path",
@@ -1861,6 +1892,7 @@ MATERIAL_OBSERVATION_BOOL_FIELDS = (
     "fallback_expected",
     "backdrop_sampling_expected",
     "stable_backdrop_required",
+    "shared_frame_capture_required",
     "bounded_texture_copy_required",
     "deterministic_fallback_required",
 )
@@ -1870,9 +1902,13 @@ MATERIAL_OBSERVATION_INT_FIELDS = (
     "expected_execution_stages",
     "expected_active_execution_stages",
     "expected_backdrop_execution_stages",
+    "max_frame_capture_count",
+    "max_frame_capture_pixels",
+    "max_surface_sample_pixels",
     "max_texture_copy_pixels",
 )
 MATERIAL_OBSERVATION_STRING_FIELDS = (
+    "backdrop_capture_scope",
     "fallback_path",
     "fallback_reason",
     "primary_pass",
@@ -1928,6 +1964,22 @@ MATERIAL_QUALITY_POLICY_NUMBER_FIELDS = (
     "max_blur_radius",
     "max_sample_taps",
     "max_backdrop_pixels",
+)
+MATERIAL_BACKDROP_ACCESS_BOOL_FIELDS = (
+    "required",
+    "stable_required",
+    "frame_history_required",
+    "shared_frame_capture",
+    "bounded",
+)
+MATERIAL_BACKDROP_ACCESS_NUMBER_FIELDS = (
+    "max_frame_capture_count",
+    "max_frame_capture_pixels",
+    "max_surface_sample_pixels",
+)
+MATERIAL_BACKDROP_ACCESS_STRING_FIELDS = (
+    "source",
+    "capture_scope",
 )
 
 
@@ -2053,6 +2105,45 @@ def check_material_observation_contract(
             hint="Only sampled backdrop plans should require a stable backdrop source.",
             record_success=False)
 
+    backdrop_access = plan.get("backdrop_access")
+    if isinstance(backdrop_access, dict):
+        report.check(
+            "material observation shared capture requirement matches access",
+            observation.get("shared_frame_capture_required")
+            == backdrop_access.get("shared_frame_capture"),
+            path=f"{observation_path}.shared_frame_capture_required",
+            expected=backdrop_access.get("shared_frame_capture"),
+            actual=observation.get("shared_frame_capture_required"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Observation shared capture must mirror MaterialPlan.backdrop_access.",
+            record_success=False)
+        report.check(
+            "material observation capture scope matches access",
+            observation.get("backdrop_capture_scope")
+            == backdrop_access.get("capture_scope"),
+            path=f"{observation_path}.backdrop_capture_scope",
+            expected=backdrop_access.get("capture_scope"),
+            actual=observation.get("backdrop_capture_scope"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Observation capture scope must mirror MaterialPlan.backdrop_access.",
+            record_success=False)
+        for key in (
+                "max_frame_capture_count",
+                "max_frame_capture_pixels",
+                "max_surface_sample_pixels"):
+            report.check(
+                f"material observation {key} matches access",
+                observation.get(key) == backdrop_access.get(key),
+                path=f"{observation_path}.{key}",
+                expected=backdrop_access.get(key),
+                actual=observation.get(key),
+                likely_layer="material-observation",
+                likely_pass=likely_pass,
+                hint="Observation backdrop access bounds should mirror MaterialPlan.backdrop_access.",
+                record_success=False)
+
     for key in ("fallback_path", "fallback_reason"):
         report.check(
             f"material observation {key} matches plan",
@@ -2150,6 +2241,20 @@ def check_material_observation_contract(
                 likely_layer="material-observation",
                 likely_pass=likely_pass,
                 hint="Observation safety flags should mirror MaterialPlan.resource_budget.",
+                record_success=False)
+        for observation_key, budget_key in (
+                ("max_frame_capture_count", "max_frame_capture_count"),
+                ("max_frame_capture_pixels", "max_frame_capture_pixels"),
+                ("max_surface_sample_pixels", "max_surface_sample_pixels")):
+            report.check(
+                f"material observation {observation_key} matches resource budget",
+                observation.get(observation_key) == resource_budget.get(budget_key),
+                path=f"{observation_path}.{observation_key}",
+                expected=resource_budget.get(budget_key),
+                actual=observation.get(observation_key),
+                likely_layer="material-observation",
+                likely_pass=likely_pass,
+                hint="Observation access bounds should mirror MaterialPlan.resource_budget.",
                 record_success=False)
 
     verifier = plan.get("verifier")
@@ -2261,6 +2366,19 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "max_abs_gain_delta": 0.0,
             "max_abs_edge_delta": 0.0,
         },
+        "backdrop_access": {
+            "required": 0,
+            "stable_required": 0,
+            "frame_history_required": 0,
+            "shared_frame_capture": 0,
+            "bounded": 0,
+            "sources": {},
+            "capture_scopes": {},
+            "max_frame_capture_count": 0,
+            "max_frame_capture_pixels": 0,
+            "total_surface_sample_pixels": 0,
+            "max_surface_sample_pixels": 0,
+        },
         "foreground": {
             "schemes": {},
             "sources": {},
@@ -2284,6 +2402,10 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "max_pass_count": 0,
             "max_execution_stages": 0,
             "max_backdrop_pixels": 0,
+            "max_frame_capture_count": 0,
+            "max_frame_capture_pixels": 0,
+            "total_surface_sample_pixels": 0,
+            "max_surface_sample_pixels": 0,
             "max_container_spacing": 0.0,
             "total_runtime_passes": 0,
             "active_runtime_passes": 0,
@@ -3959,6 +4081,129 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     hint="Fallback plans should not report sampled luminance policy.",
                     record_success=False)
 
+        backdrop_access = check_object_field(
+            report,
+            plan,
+            "backdrop_access",
+            plan_path,
+            likely_layer="material-backdrop",
+            hint=(
+                "MaterialPlan.backdrop_access should describe shared frame "
+                "capture and surface sampling bounds without backend policy."))
+        if backdrop_access is not None:
+            access_summary = summary["backdrop_access"]
+            access_required = None
+            shared_capture = None
+            for key in MATERIAL_BACKDROP_ACCESS_BOOL_FIELDS:
+                value = check_bool_field(
+                    report,
+                    backdrop_access,
+                    key,
+                    f"{plan_path}.backdrop_access",
+                    likely_layer="material-backdrop",
+                    hint="Backdrop access booleans must be explicit pure-plan facts.")
+                if value is True:
+                    access_summary[key] = int(access_summary[key]) + 1
+                if key == "required":
+                    access_required = value
+                elif key == "shared_frame_capture":
+                    shared_capture = value
+            access_numbers: dict[str, int | float] = {}
+            for key in MATERIAL_BACKDROP_ACCESS_NUMBER_FIELDS:
+                value = check_number_field(
+                    report,
+                    backdrop_access,
+                    key,
+                    f"{plan_path}.backdrop_access",
+                    min_value=0.0,
+                    likely_layer="material-backdrop",
+                    hint="Backdrop access resource bounds must be non-negative.")
+                if isinstance(value, (int, float)):
+                    access_numbers[key] = value
+                    if key == "max_frame_capture_count":
+                        access_summary["max_frame_capture_count"] = max(
+                            int(access_summary["max_frame_capture_count"]),
+                            int(value))
+                    elif key == "max_frame_capture_pixels":
+                        access_summary["max_frame_capture_pixels"] = max(
+                            int(access_summary["max_frame_capture_pixels"]),
+                            int(value))
+                    elif key == "max_surface_sample_pixels":
+                        access_summary["total_surface_sample_pixels"] = int(
+                            access_summary["total_surface_sample_pixels"]) + int(value)
+                        access_summary["max_surface_sample_pixels"] = max(
+                            int(access_summary["max_surface_sample_pixels"]),
+                            int(value))
+            access_source = check_string_field(
+                report,
+                backdrop_access,
+                "source",
+                f"{plan_path}.backdrop_access",
+                likely_layer="material-backdrop",
+                hint="Backdrop access source should name the edge input used by the plan.")
+            if isinstance(access_source, str):
+                sources = access_summary["sources"]
+                sources[access_source] = sources.get(access_source, 0) + 1
+            capture_scope = check_string_field(
+                report,
+                backdrop_access,
+                "capture_scope",
+                f"{plan_path}.backdrop_access",
+                likely_layer="material-backdrop",
+                hint="Capture scope should be none or a shared-frame contract.")
+            if isinstance(capture_scope, str):
+                scopes = access_summary["capture_scopes"]
+                scopes[capture_scope] = scopes.get(capture_scope, 0) + 1
+                report.check(
+                    "material backdrop access capture scope is known",
+                    capture_scope in ALLOWED_MATERIAL_BACKDROP_CAPTURE_SCOPES,
+                    path=f"{plan_path}.backdrop_access.capture_scope",
+                    expected=sorted(ALLOWED_MATERIAL_BACKDROP_CAPTURE_SCOPES),
+                    actual=capture_scope,
+                    likely_layer="material-backdrop",
+                    hint="Update the verifier vocabulary for intentional capture scopes.",
+                    record_success=False)
+            if backdrop_sampling is True:
+                report.check(
+                    "material sampled backdrop has required access",
+                    access_required is True and shared_capture is True,
+                    path=f"{plan_path}.backdrop_access",
+                    expected={"required": True, "shared_frame_capture": True},
+                    actual={
+                        "required": access_required,
+                        "shared_frame_capture": shared_capture,
+                    },
+                    likely_layer="material-backdrop",
+                    hint=(
+                        "Sampled plans should declare a shared frame capture "
+                        "rather than hiding the copy at the backend edge."),
+                    record_success=False)
+                max_capture_pixels = access_numbers.get("max_frame_capture_pixels")
+                if (isinstance(max_capture_pixels, (int, float))
+                        and render_target_pixel_count is not None):
+                    report.check(
+                        "material backdrop access capture pixels match render target",
+                        int(max_capture_pixels) == render_target_pixel_count,
+                        path=f"{plan_path}.backdrop_access.max_frame_capture_pixels",
+                        expected=render_target_pixel_count,
+                        actual=max_capture_pixels,
+                        likely_layer="material-backdrop",
+                        hint="Shared frame capture budget should be derived from render_target.pixel_count.",
+                        record_success=False)
+            elif backdrop_sampling is False:
+                report.check(
+                    "material fallback backdrop access is inactive",
+                    access_required is False and shared_capture is False,
+                    path=f"{plan_path}.backdrop_access",
+                    expected={"required": False, "shared_frame_capture": False},
+                    actual={
+                        "required": access_required,
+                        "shared_frame_capture": shared_capture,
+                    },
+                    likely_layer="material-backdrop",
+                    hint="Fallback plans must not reserve backdrop capture work.",
+                    record_success=False)
+
         verifier = check_object_field(
             report,
             plan,
@@ -4279,6 +4524,45 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 bounds["max_backdrop_pixels"] = max(
                     int(bounds["max_backdrop_pixels"]),
                     int(max_backdrop_pixels))
+            max_frame_capture_count = check_number_field(
+                report,
+                resource_budget,
+                "max_frame_capture_count",
+                f"{plan_path}.resource_budget",
+                min_value=0.0,
+                likely_layer="material-backdrop",
+                hint="Shared frame capture count should be bounded in the pure plan.")
+            if isinstance(max_frame_capture_count, (int, float)):
+                bounds["max_frame_capture_count"] = max(
+                    int(bounds["max_frame_capture_count"]),
+                    int(max_frame_capture_count))
+            max_frame_capture_pixels = check_number_field(
+                report,
+                resource_budget,
+                "max_frame_capture_pixels",
+                f"{plan_path}.resource_budget",
+                min_value=0.0,
+                likely_layer="material-backdrop",
+                hint="Shared frame capture pixel budget should be explicit.")
+            if isinstance(max_frame_capture_pixels, (int, float)):
+                bounds["max_frame_capture_pixels"] = max(
+                    int(bounds["max_frame_capture_pixels"]),
+                    int(max_frame_capture_pixels))
+            max_surface_sample_pixels = check_number_field(
+                report,
+                resource_budget,
+                "max_surface_sample_pixels",
+                f"{plan_path}.resource_budget",
+                min_value=0.0,
+                likely_layer="material-backdrop",
+                hint="Surface sampling pixel budget should be explicit.")
+            if isinstance(max_surface_sample_pixels, (int, float)):
+                bounds["total_surface_sample_pixels"] = int(
+                    bounds["total_surface_sample_pixels"]) + int(
+                        max_surface_sample_pixels)
+                bounds["max_surface_sample_pixels"] = max(
+                    int(bounds["max_surface_sample_pixels"]),
+                    int(max_surface_sample_pixels))
             max_container_spacing = check_number_field(
                 report,
                 resource_budget,
@@ -5090,6 +5374,13 @@ def check_material_plan_summary_requirements(
                 nested_field = field.removeprefix("backdrop_")
                 actual = backdrop_summary.get(nested_field)
                 summary_path = f"{base_path}.backdrop.{nested_field}"
+            elif field.startswith("backdrop_access_"):
+                access_summary = summary.get("backdrop_access")
+                if not isinstance(access_summary, dict):
+                    access_summary = {}
+                nested_field = field.removeprefix("backdrop_access_")
+                actual = access_summary.get(nested_field)
+                summary_path = f"{base_path}.backdrop_access.{nested_field}"
             elif field == "luminance_adapted":
                 backdrop_summary = summary.get("backdrop")
                 if not isinstance(backdrop_summary, dict):
@@ -5300,6 +5591,12 @@ def check_material_plan_summary_requirements(
         "backdrop_sources": (
             "material-backdrop",
             "Inspect MaterialPlan.backdrop.source and the backend backdrop descriptor."),
+        "backdrop_access_sources": (
+            "material-backdrop",
+            "Inspect MaterialPlan.backdrop_access.source and shared capture planning."),
+        "backdrop_capture_scopes": (
+            "material-backdrop",
+            "Inspect MaterialPlan.backdrop_access.capture_scope and backend frame-history policy."),
         "luminance_responses": (
             "material-backdrop",
             "Inspect MaterialPlan.backdrop.luminance_response and pure contrast policy."),
@@ -5346,6 +5643,8 @@ def check_material_plan_summary_requirements(
             "sampling_weight_profiles",
             "luminance_curves",
             "backdrop_sources",
+            "backdrop_access_sources",
+            "backdrop_capture_scopes",
             "luminance_responses",
             "render_target_pixel_formats",
             "decision_blockers",
@@ -5388,6 +5687,16 @@ def check_material_plan_summary_requirements(
                     backdrop_summary = {}
                 actual = backdrop_summary.get("sources")
                 summary_path = f"{base_path}.backdrop.sources"
+            elif field in ("backdrop_access_sources", "backdrop_capture_scopes"):
+                access_summary = summary.get("backdrop_access")
+                if not isinstance(access_summary, dict):
+                    access_summary = {}
+                nested = {
+                    "backdrop_access_sources": "sources",
+                    "backdrop_capture_scopes": "capture_scopes",
+                }[field]
+                actual = access_summary.get(nested)
+                summary_path = f"{base_path}.backdrop_access.{nested}"
             elif field == "luminance_responses":
                 backdrop_summary = summary.get("backdrop")
                 if not isinstance(backdrop_summary, dict):
@@ -5450,6 +5759,10 @@ def check_material_resource_bounds_requirements(
         "max_sampling_kernel_radius_lte": "max_sampling_kernel_radius",
         "max_pass_count_lte": "max_pass_count",
         "max_backdrop_pixels_lte": "max_backdrop_pixels",
+        "max_frame_capture_count_lte": "max_frame_capture_count",
+        "max_frame_capture_pixels_lte": "max_frame_capture_pixels",
+        "total_surface_sample_pixels_lte": "total_surface_sample_pixels",
+        "max_surface_sample_pixels_lte": "max_surface_sample_pixels",
         "max_container_spacing_lte": "max_container_spacing",
         "max_pass_texture_copy_pixels_lte": "max_pass_texture_copy_pixels",
         "total_pass_texture_copy_pixels_lte": "total_pass_texture_copy_pixels",
@@ -5482,6 +5795,10 @@ def check_material_resource_bounds_requirements(
         "max_plan_sample_taps_gte": "max_plan_sample_taps",
         "total_plan_sample_taps_gte": "total_plan_sample_taps",
         "max_sampling_kernel_radius_gte": "max_sampling_kernel_radius",
+        "max_frame_capture_count_gte": "max_frame_capture_count",
+        "max_frame_capture_pixels_gte": "max_frame_capture_pixels",
+        "total_surface_sample_pixels_gte": "total_surface_sample_pixels",
+        "max_surface_sample_pixels_gte": "max_surface_sample_pixels",
         "max_pass_texture_copy_pixels_gte": "max_pass_texture_copy_pixels",
         "max_container_spacing_gte": "max_container_spacing",
         "total_pass_texture_copy_pixels_gte": "total_pass_texture_copy_pixels",
@@ -5573,6 +5890,15 @@ def check_material_runtime_summary_contract(
             "max_pass_texture_copy_pixels"),
         "total_pass_texture_copy_pixels": bounds.get(
             "total_pass_texture_copy_pixels"),
+        "backdrop_access_count": summary.get("backdrop_access", {}).get("required")
+            if isinstance(summary.get("backdrop_access"), dict) else None,
+        "shared_frame_capture_plan_count": summary.get(
+            "backdrop_access", {}).get("shared_frame_capture")
+            if isinstance(summary.get("backdrop_access"), dict) else None,
+        "max_frame_capture_count": bounds.get("max_frame_capture_count"),
+        "max_frame_capture_pixels": bounds.get("max_frame_capture_pixels"),
+        "total_surface_sample_pixels": bounds.get("total_surface_sample_pixels"),
+        "max_surface_sample_pixels": bounds.get("max_surface_sample_pixels"),
         "max_plan_blur_radius": bounds.get("max_plan_blur_radius"),
         "max_plan_sample_taps": bounds.get("max_plan_sample_taps"),
         "total_plan_sample_taps": bounds.get("total_plan_sample_taps"),
@@ -5694,6 +6020,17 @@ def check_material_executor_summary_contract(
         "noise_dither_stage_count": stage_names.get("noise-dither", 0),
     }
     expected_fields.update(expected_stage_fields)
+    access_summary = summary.get("backdrop_access")
+    if not isinstance(access_summary, dict):
+        access_summary = {}
+    expected_access_fields = {
+        "backdrop_access_plan_count": access_summary.get("required"),
+        "planned_frame_capture_count": bounds.get("max_frame_capture_count"),
+        "planned_frame_capture_pixels": bounds.get("max_frame_capture_pixels"),
+        "planned_surface_sample_pixels": bounds.get(
+            "total_surface_sample_pixels"),
+    }
+    expected_fields.update(expected_access_fields)
     for field, expected in expected_fields.items():
         actual = executor_summary.get(field)
         report.check(
@@ -5724,6 +6061,10 @@ def check_material_executor_summary_contract(
         "shadow_stage_count",
         "edge_highlight_stage_count",
         "noise_dither_stage_count",
+        "backdrop_access_plan_count",
+        "planned_frame_capture_count",
+        "planned_frame_capture_pixels",
+        "planned_surface_sample_pixels",
         "material_max_sample_taps",
         "material_total_sample_taps",
         "backdrop_copy_pixels",
@@ -5844,6 +6185,42 @@ def check_material_executor_summary_contract(
             hint=(
                 "Compare the backend framebuffer-history copy with "
                 "MaterialResourceBudget.max_backdrop_pixels."))
+
+    planned_capture_count = executor_summary.get("planned_frame_capture_count")
+    copied_count = executor_summary.get("backdrop_copy_count")
+    if (isinstance(planned_capture_count, (int, float))
+            and not isinstance(planned_capture_count, bool)
+            and isinstance(copied_count, (int, float))
+            and not isinstance(copied_count, bool)
+            and planned_capture_count > 0):
+        report.check(
+            "material executor backdrop copies stay within shared capture plan",
+            float(copied_count) <= float(planned_capture_count),
+            path=f"{base_path}.backdrop_copy_count",
+            expected={"<=": planned_capture_count},
+            actual=copied_count,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "The macOS edge should copy the previous frame once and share "
+                "that capture across all backdrop-sampling material plans."))
+    planned_capture_pixels = executor_summary.get("planned_frame_capture_pixels")
+    if (isinstance(planned_capture_pixels, (int, float))
+            and not isinstance(planned_capture_pixels, bool)
+            and isinstance(copied_pixels, (int, float))
+            and not isinstance(copied_pixels, bool)
+            and planned_capture_pixels > 0):
+        report.check(
+            "material executor backdrop copy pixels fit shared capture plan",
+            float(copied_pixels) <= float(planned_capture_pixels),
+            path=f"{base_path}.backdrop_copy_pixels",
+            expected={"<=": planned_capture_pixels},
+            actual=copied_pixels,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "Shared frame capture pixel budget should mirror the largest "
+                "MaterialPlan.backdrop_access.max_frame_capture_pixels."))
 
 
 def check_material_quality_policy_requirements(

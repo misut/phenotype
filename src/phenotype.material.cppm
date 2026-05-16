@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 15;
+inline constexpr std::uint32_t material_plan_contract_version = 16;
 inline constexpr unsigned int material_max_execution_stages = 4;
 
 struct MaterialGeometry {
@@ -135,8 +135,10 @@ struct MaterialObservationContract {
     bool fallback_expected = false;
     bool backdrop_sampling_expected = false;
     bool stable_backdrop_required = false;
+    bool shared_frame_capture_required = false;
     bool bounded_texture_copy_required = true;
     bool deterministic_fallback_required = true;
+    char const* backdrop_capture_scope = "none";
     char const* fallback_path = "none";
     char const* fallback_reason = "";
     char const* primary_pass = "none";
@@ -145,6 +147,9 @@ struct MaterialObservationContract {
     std::uint32_t expected_execution_stages = 0;
     std::uint32_t expected_active_execution_stages = 0;
     std::uint32_t expected_backdrop_execution_stages = 0;
+    std::uint32_t max_frame_capture_count = 0;
+    std::int64_t max_frame_capture_pixels = 0;
+    std::int64_t max_surface_sample_pixels = 0;
     std::int64_t max_texture_copy_pixels = 0;
     char const* region_name = "material";
     char const* likely_layer = "material-fallback";
@@ -190,6 +195,9 @@ struct MaterialResourceBudget {
     unsigned int max_pass_count = 1;
     unsigned int max_execution_stages = material_max_execution_stages;
     std::int64_t max_backdrop_pixels = 0;
+    std::uint32_t max_frame_capture_count = 0;
+    std::int64_t max_frame_capture_pixels = 0;
+    std::int64_t max_surface_sample_pixels = 0;
     float max_container_spacing = 0.0f;
     bool bounded_texture_copy = true;
     bool deterministic_fallback = true;
@@ -218,6 +226,19 @@ struct MaterialBackdropAnalysis {
     float luminance_floor_delta = 0.0f;
     float luminance_gain_delta = 0.0f;
     float edge_highlight_delta = 0.0f;
+};
+
+struct MaterialBackdropAccess {
+    bool required = false;
+    bool stable_required = false;
+    bool frame_history_required = false;
+    bool shared_frame_capture = false;
+    char const* source = "none";
+    char const* capture_scope = "none";
+    std::uint32_t max_frame_capture_count = 0;
+    std::int64_t max_frame_capture_pixels = 0;
+    std::int64_t max_surface_sample_pixels = 0;
+    bool bounded = true;
 };
 
 struct MaterialForegroundRecommendation {
@@ -326,6 +347,7 @@ struct MaterialPlan {
     float shadow_radius = 0.0f;
     bool backdrop_sampling = false;
     MaterialBackdropAnalysis backdrop{};
+    MaterialBackdropAccess backdrop_access{};
     MaterialForegroundRecommendation foreground{};
     MaterialFallbackPath fallback_path = MaterialFallbackPath::None;
     char const* fallback_reason = "";
@@ -378,10 +400,13 @@ inline MaterialObservationContract material_observation_contract(
     contract.fallback_expected = plan.fallback();
     contract.backdrop_sampling_expected = plan.backdrop_sampling;
     contract.stable_backdrop_required = plan.backdrop_sampling;
+    contract.shared_frame_capture_required =
+        plan.backdrop_access.shared_frame_capture;
     contract.bounded_texture_copy_required =
         plan.resource_budget.bounded_texture_copy;
     contract.deterministic_fallback_required =
         plan.resource_budget.deterministic_fallback;
+    contract.backdrop_capture_scope = plan.backdrop_access.capture_scope;
     contract.fallback_path =
         material_fallback_path_name(plan.fallback_path);
     contract.fallback_reason = plan.fallback_reason;
@@ -389,6 +414,12 @@ inline MaterialObservationContract material_observation_contract(
     contract.primary_executor = plan.primary_pass.executor;
     contract.expected_runtime_passes = 1;
     contract.expected_execution_stages = plan.execution_stage_count;
+    contract.max_frame_capture_count =
+        plan.backdrop_access.max_frame_capture_count;
+    contract.max_frame_capture_pixels =
+        plan.backdrop_access.max_frame_capture_pixels;
+    contract.max_surface_sample_pixels =
+        plan.backdrop_access.max_surface_sample_pixels;
     contract.max_texture_copy_pixels =
         plan.primary_pass.max_texture_copy_pixels;
     contract.region_name = plan.verifier.region_name;
@@ -428,6 +459,12 @@ struct MaterialRuntimeSummary {
     unsigned int max_execution_stage_capacity = 0;
     std::int64_t max_pass_texture_copy_pixels = 0;
     std::int64_t total_pass_texture_copy_pixels = 0;
+    std::uint32_t backdrop_access_count = 0;
+    std::uint32_t shared_frame_capture_plan_count = 0;
+    std::uint32_t max_frame_capture_count = 0;
+    std::int64_t max_frame_capture_pixels = 0;
+    std::int64_t total_surface_sample_pixels = 0;
+    std::int64_t max_surface_sample_pixels = 0;
     float max_plan_blur_radius = 0.0f;
     unsigned int max_plan_sample_taps = 0;
     std::int64_t total_plan_sample_taps = 0;
@@ -472,6 +509,10 @@ struct MaterialExecutorSummary {
     std::uint32_t shadow_stage_count = 0;
     std::uint32_t edge_highlight_stage_count = 0;
     std::uint32_t noise_dither_stage_count = 0;
+    std::uint32_t backdrop_access_plan_count = 0;
+    std::uint32_t planned_frame_capture_count = 0;
+    std::int64_t planned_frame_capture_pixels = 0;
+    std::int64_t planned_surface_sample_pixels = 0;
     std::uint32_t material_max_sample_taps = 0;
     std::int64_t material_total_sample_taps = 0;
     std::int64_t backdrop_copy_pixels = 0;
@@ -537,6 +578,18 @@ inline void accumulate_material_executor_plan_summary(
     }
     summary.dropped_execution_stage_count +=
         plan.dropped_execution_stage_count;
+    if (plan.backdrop_access.required)
+        ++summary.backdrop_access_plan_count;
+    if (plan.backdrop_access.shared_frame_capture) {
+        summary.planned_frame_capture_count = std::max(
+            summary.planned_frame_capture_count,
+            plan.backdrop_access.max_frame_capture_count);
+        summary.planned_frame_capture_pixels = std::max(
+            summary.planned_frame_capture_pixels,
+            plan.backdrop_access.max_frame_capture_pixels);
+    }
+    summary.planned_surface_sample_pixels +=
+        plan.backdrop_access.max_surface_sample_pixels;
 }
 
 inline void accumulate_material_runtime_summary(
@@ -577,6 +630,21 @@ inline void accumulate_material_runtime_summary(
         plan.primary_pass.max_texture_copy_pixels);
     summary.total_pass_texture_copy_pixels +=
         plan.primary_pass.max_texture_copy_pixels;
+    if (plan.backdrop_access.required)
+        ++summary.backdrop_access_count;
+    if (plan.backdrop_access.shared_frame_capture)
+        ++summary.shared_frame_capture_plan_count;
+    summary.max_frame_capture_count = std::max(
+        summary.max_frame_capture_count,
+        plan.backdrop_access.max_frame_capture_count);
+    summary.max_frame_capture_pixels = std::max(
+        summary.max_frame_capture_pixels,
+        plan.backdrop_access.max_frame_capture_pixels);
+    summary.total_surface_sample_pixels +=
+        plan.backdrop_access.max_surface_sample_pixels;
+    summary.max_surface_sample_pixels = std::max(
+        summary.max_surface_sample_pixels,
+        plan.backdrop_access.max_surface_sample_pixels);
 
     summary.max_plan_blur_radius =
         std::max(summary.max_plan_blur_radius, plan.blur_radius);
@@ -597,6 +665,15 @@ inline void accumulate_material_runtime_summary(
     summary.max_backdrop_pixels = std::max(
         summary.max_backdrop_pixels,
         plan.resource_budget.max_backdrop_pixels);
+    summary.max_frame_capture_count = std::max(
+        summary.max_frame_capture_count,
+        plan.resource_budget.max_frame_capture_count);
+    summary.max_frame_capture_pixels = std::max(
+        summary.max_frame_capture_pixels,
+        plan.resource_budget.max_frame_capture_pixels);
+    summary.max_surface_sample_pixels = std::max(
+        summary.max_surface_sample_pixels,
+        plan.resource_budget.max_surface_sample_pixels);
     summary.max_container_spacing = std::max(
         summary.max_container_spacing,
         plan.resource_budget.max_container_spacing);
@@ -1239,6 +1316,23 @@ inline MaterialRenderTargetAnalysis analyze_material_render_target(
     return analysis;
 }
 
+inline std::int64_t material_estimate_surface_sample_pixels(
+        MaterialShapeAnalysis shape,
+        MaterialRenderTargetAnalysis target) noexcept {
+    if (!shape.valid || !target.ready)
+        return 0;
+    auto const scaled =
+        static_cast<double>(shape.surface_area)
+        * static_cast<double>(target.scale)
+        * static_cast<double>(target.scale);
+    if (!std::isfinite(scaled) || scaled <= 0.0)
+        return 0;
+    auto const bounded = std::min(
+        scaled,
+        static_cast<double>(target.pixel_count));
+    return static_cast<std::int64_t>(std::ceil(bounded));
+}
+
 inline MaterialShapeAnalysis analyze_material_shape(
         MaterialGeometry geometry) noexcept {
     MaterialShapeAnalysis analysis{};
@@ -1352,6 +1446,29 @@ inline void apply_backdrop_luminance_policy(MaterialPlan& plan) noexcept {
         plan.luminance_gain - gain_before;
     plan.backdrop.edge_highlight_delta =
         plan.edge_highlight - edge_before;
+}
+
+inline MaterialBackdropAccess material_resolve_backdrop_access(
+        MaterialPlan const& plan) noexcept {
+    MaterialBackdropAccess access{};
+    if (!plan.backdrop_sampling)
+        return access;
+    access.required = true;
+    access.stable_required = true;
+    access.frame_history_required = true;
+    access.shared_frame_capture = true;
+    access.source = plan.backdrop.source && plan.backdrop.source[0]
+        ? plan.backdrop.source
+        : "previous-presented-frame";
+    access.capture_scope = "shared-frame";
+    access.max_frame_capture_count = 1;
+    access.max_frame_capture_pixels = plan.render_target.pixel_count;
+    access.max_surface_sample_pixels =
+        material_estimate_surface_sample_pixels(
+            plan.shape,
+            plan.render_target);
+    access.bounded = true;
+    return access;
 }
 
 inline MaterialLuminanceCurve material_resolve_luminance_curve(
@@ -1512,6 +1629,9 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.resource_budget.max_execution_stages = material_max_execution_stages;
     plan.resource_budget.max_backdrop_pixels =
         resolved_quality.max_backdrop_pixels;
+    plan.resource_budget.max_frame_capture_count = 0;
+    plan.resource_budget.max_frame_capture_pixels = 0;
+    plan.resource_budget.max_surface_sample_pixels = 0;
     plan.resource_budget.max_container_spacing = plan.container.spacing;
     plan.resource_budget.bounded_texture_copy = true;
     plan.resource_budget.deterministic_fallback = true;
@@ -1634,6 +1754,13 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.sample_taps);
     plan.resource_budget.max_sampling_kernel_radius =
         plan.sampling_kernel.radius;
+    plan.backdrop_access = material_resolve_backdrop_access(plan);
+    plan.resource_budget.max_frame_capture_count =
+        plan.backdrop_access.max_frame_capture_count;
+    plan.resource_budget.max_frame_capture_pixels =
+        plan.backdrop_access.max_frame_capture_pixels;
+    plan.resource_budget.max_surface_sample_pixels =
+        plan.backdrop_access.max_surface_sample_pixels;
     if (environment.capabilities.reduce_motion) {
         plan.noise_opacity = 0.0f;
     }

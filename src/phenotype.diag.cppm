@@ -1046,11 +1046,17 @@ namespace detail {
             "stable_backdrop_required",
             json::Value{observation.stable_backdrop_required});
         observation_contract.emplace(
+            "shared_frame_capture_required",
+            json::Value{observation.shared_frame_capture_required});
+        observation_contract.emplace(
             "bounded_texture_copy_required",
             json::Value{observation.bounded_texture_copy_required});
         observation_contract.emplace(
             "deterministic_fallback_required",
             json::Value{observation.deterministic_fallback_required});
+        observation_contract.emplace(
+            "backdrop_capture_scope",
+            json::Value{observation.backdrop_capture_scope});
         observation_contract.emplace(
             "fallback_path",
             json::Value{observation.fallback_path});
@@ -1083,6 +1089,17 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     observation.expected_backdrop_execution_stages)});
+        observation_contract.emplace(
+            "max_frame_capture_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    observation.max_frame_capture_count)});
+        observation_contract.emplace(
+            "max_frame_capture_pixels",
+            json::Value{observation.max_frame_capture_pixels});
+        observation_contract.emplace(
+            "max_surface_sample_pixels",
+            json::Value{observation.max_surface_sample_pixels});
         observation_contract.emplace(
             "max_texture_copy_pixels",
             json::Value{observation.max_texture_copy_pixels});
@@ -1144,6 +1161,17 @@ namespace detail {
             "max_backdrop_pixels",
             json::Value{plan.resource_budget.max_backdrop_pixels});
         resource_budget.emplace(
+            "max_frame_capture_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.resource_budget.max_frame_capture_count)});
+        resource_budget.emplace(
+            "max_frame_capture_pixels",
+            json::Value{plan.resource_budget.max_frame_capture_pixels});
+        resource_budget.emplace(
+            "max_surface_sample_pixels",
+            json::Value{plan.resource_budget.max_surface_sample_pixels});
+        resource_budget.emplace(
             "max_container_spacing",
             json::Value{plan.resource_budget.max_container_spacing});
         resource_budget.emplace(
@@ -1173,6 +1201,40 @@ namespace detail {
         backdrop.emplace(
             "edge_highlight_delta",
             json::Value{plan.backdrop.edge_highlight_delta});
+
+        json::Object backdrop_access;
+        backdrop_access.emplace(
+            "required",
+            json::Value{plan.backdrop_access.required});
+        backdrop_access.emplace(
+            "stable_required",
+            json::Value{plan.backdrop_access.stable_required});
+        backdrop_access.emplace(
+            "frame_history_required",
+            json::Value{plan.backdrop_access.frame_history_required});
+        backdrop_access.emplace(
+            "shared_frame_capture",
+            json::Value{plan.backdrop_access.shared_frame_capture});
+        backdrop_access.emplace(
+            "source",
+            json::Value{plan.backdrop_access.source});
+        backdrop_access.emplace(
+            "capture_scope",
+            json::Value{plan.backdrop_access.capture_scope});
+        backdrop_access.emplace(
+            "max_frame_capture_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.backdrop_access.max_frame_capture_count)});
+        backdrop_access.emplace(
+            "max_frame_capture_pixels",
+            json::Value{plan.backdrop_access.max_frame_capture_pixels});
+        backdrop_access.emplace(
+            "max_surface_sample_pixels",
+            json::Value{plan.backdrop_access.max_surface_sample_pixels});
+        backdrop_access.emplace(
+            "bounded",
+            json::Value{plan.backdrop_access.bounded});
 
         json::Object foreground_primary;
         foreground_primary.emplace(
@@ -1423,6 +1485,9 @@ namespace detail {
         out.emplace("shadow_radius", json::Value{plan.shadow_radius});
         out.emplace("backdrop_sampling", json::Value{plan.backdrop_sampling});
         out.emplace("backdrop", json::Value{std::move(backdrop)});
+        out.emplace(
+            "backdrop_access",
+            json::Value{std::move(backdrop_access)});
         out.emplace("foreground", json::Value{std::move(foreground)});
         out.emplace("fallback", json::Value{plan.fallback()});
         out.emplace(
@@ -1528,6 +1593,28 @@ namespace detail {
         out.emplace(
             "total_pass_texture_copy_pixels",
             json::Value{summary.total_pass_texture_copy_pixels});
+        out.emplace(
+            "backdrop_access_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.backdrop_access_count)});
+        out.emplace(
+            "shared_frame_capture_plan_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.shared_frame_capture_plan_count)});
+        out.emplace(
+            "max_frame_capture_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.max_frame_capture_count)});
+        out.emplace(
+            "max_frame_capture_pixels",
+            json::Value{summary.max_frame_capture_pixels});
+        out.emplace(
+            "total_surface_sample_pixels",
+            json::Value{summary.total_surface_sample_pixels});
+        out.emplace(
+            "max_surface_sample_pixels",
+            json::Value{summary.max_surface_sample_pixels});
         out.emplace("max_plan_blur_radius",
                     json::Value{summary.max_plan_blur_radius});
         out.emplace(
@@ -1700,6 +1787,22 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.noise_dither_stage_count)});
+        out.emplace(
+            "backdrop_access_plan_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.backdrop_access_plan_count)});
+        out.emplace(
+            "planned_frame_capture_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.planned_frame_capture_count)});
+        out.emplace(
+            "planned_frame_capture_pixels",
+            json::Value{summary.planned_frame_capture_pixels});
+        out.emplace(
+            "planned_surface_sample_pixels",
+            json::Value{summary.planned_surface_sample_pixels});
         out.emplace(
             "material_max_sample_taps",
             json::Value{

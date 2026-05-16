@@ -163,6 +163,18 @@ def material_plan(
             "luminance_gain_delta": 0.0,
             "edge_highlight_delta": 0.0,
         },
+        "backdrop_access": {
+            "required": False,
+            "stable_required": False,
+            "frame_history_required": False,
+            "shared_frame_capture": False,
+            "source": "none",
+            "capture_scope": "none",
+            "max_frame_capture_count": 0,
+            "max_frame_capture_pixels": 0,
+            "max_surface_sample_pixels": 0,
+            "bounded": True,
+        },
         "foreground": {
             "primary": {"r": 17, "g": 24, "b": 39, "a": 255},
             "secondary": {"r": 71, "g": 85, "b": 105, "a": 255},
@@ -209,6 +221,9 @@ def material_plan(
             "max_pass_count": 1,
             "max_execution_stages": 4,
             "max_backdrop_pixels": 320 * 240,
+            "max_frame_capture_count": 0,
+            "max_frame_capture_pixels": 0,
+            "max_surface_sample_pixels": 0,
             "max_container_spacing": 0.0,
             "bounded_texture_copy": True,
             "deterministic_fallback": True,
@@ -295,10 +310,12 @@ def refresh_observation_contract(plan: dict[str, object]) -> None:
     primary = plan["primary_pass"]
     stages = plan["execution_stages"]
     budget = plan["resource_budget"]
+    backdrop_access = plan["backdrop_access"]
     verifier_contract = plan["verifier"]
     assert isinstance(primary, dict)
     assert isinstance(stages, list)
     assert isinstance(budget, dict)
+    assert isinstance(backdrop_access, dict)
     assert isinstance(verifier_contract, dict)
     plan["observation_contract"] = {
         "schema_version": plan["contract_version"],
@@ -307,8 +324,10 @@ def refresh_observation_contract(plan: dict[str, object]) -> None:
         "fallback_expected": plan["fallback"],
         "backdrop_sampling_expected": plan["backdrop_sampling"],
         "stable_backdrop_required": plan["backdrop_sampling"],
+        "shared_frame_capture_required": backdrop_access["shared_frame_capture"],
         "bounded_texture_copy_required": budget["bounded_texture_copy"],
         "deterministic_fallback_required": budget["deterministic_fallback"],
+        "backdrop_capture_scope": backdrop_access["capture_scope"],
         "fallback_path": plan["fallback_path"],
         "fallback_reason": plan["fallback_reason"],
         "primary_pass": primary["name"],
@@ -321,6 +340,9 @@ def refresh_observation_contract(plan: dict[str, object]) -> None:
         "expected_backdrop_execution_stages": sum(
             1 for stage in stages
             if isinstance(stage, dict) and stage["requires_backdrop"]),
+        "max_frame_capture_count": backdrop_access["max_frame_capture_count"],
+        "max_frame_capture_pixels": backdrop_access["max_frame_capture_pixels"],
+        "max_surface_sample_pixels": backdrop_access["max_surface_sample_pixels"],
         "max_texture_copy_pixels": primary["max_texture_copy_pixels"],
         "region_name": verifier_contract["region_name"],
         "likely_layer": verifier_contract["likely_layer"],
@@ -332,6 +354,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     plan = material_plan(sample_taps=sample_taps, primary_sample_taps=sample_taps)
     assert isinstance(plan["decision_trace"], dict)
     assert isinstance(plan["backdrop"], dict)
+    assert isinstance(plan["backdrop_access"], dict)
     assert isinstance(plan["primary_pass"], dict)
     assert isinstance(plan["sampling_kernel"], dict)
     assert isinstance(plan["luminance_curve"], dict)
@@ -360,6 +383,18 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "stable": True,
         "source": "previous-presented-frame",
         "luminance_response": "neutral",
+    })
+    plan["backdrop_access"].update({
+        "required": True,
+        "stable_required": True,
+        "frame_history_required": True,
+        "shared_frame_capture": True,
+        "source": "previous-presented-frame",
+        "capture_scope": "shared-frame",
+        "max_frame_capture_count": 1,
+        "max_frame_capture_pixels": 320 * 240,
+        "max_surface_sample_pixels": 240 * 96,
+        "bounded": True,
     })
     plan["primary_pass"].update({
         "name": "backdrop-sample-blur",
@@ -391,6 +426,9 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     })
     assert isinstance(plan["resource_budget"], dict)
     plan["resource_budget"]["max_sampling_kernel_radius"] = 2
+    plan["resource_budget"]["max_frame_capture_count"] = 1
+    plan["resource_budget"]["max_frame_capture_pixels"] = 320 * 240
+    plan["resource_budget"]["max_surface_sample_pixels"] = 240 * 96
     plan["passes"] = [plan["primary_pass"]]
     plan["execution_stages"] = [
         {
@@ -421,10 +459,12 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     budget = plan["resource_budget"]
     primary = plan["primary_pass"]
     shape = plan["shape"]
+    backdrop_access = plan["backdrop_access"]
     execution_stages = plan["execution_stages"]
     assert isinstance(budget, dict)
     assert isinstance(primary, dict)
     assert isinstance(shape, dict)
+    assert isinstance(backdrop_access, dict)
     assert isinstance(execution_stages, list)
     return {
         "plan_count": 1,
@@ -447,6 +487,14 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "max_execution_stage_capacity": plan["execution_stage_capacity"],
         "max_pass_texture_copy_pixels": primary["max_texture_copy_pixels"],
         "total_pass_texture_copy_pixels": primary["max_texture_copy_pixels"],
+        "backdrop_access_count": 1 if backdrop_access["required"] else 0,
+        "shared_frame_capture_plan_count": (
+            1 if backdrop_access["shared_frame_capture"] else 0
+        ),
+        "max_frame_capture_count": budget["max_frame_capture_count"],
+        "max_frame_capture_pixels": budget["max_frame_capture_pixels"],
+        "total_surface_sample_pixels": budget["max_surface_sample_pixels"],
+        "max_surface_sample_pixels": budget["max_surface_sample_pixels"],
         "max_plan_blur_radius": plan["blur_radius"],
         "max_plan_sample_taps": plan["sample_taps"],
         "total_plan_sample_taps": plan["sample_taps"],
@@ -508,7 +556,9 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         if isinstance(stage, dict) and stage["requires_backdrop"]
     ]
     primary = plan["primary_pass"]
+    backdrop_access = plan["backdrop_access"]
     assert isinstance(primary, dict)
+    assert isinstance(backdrop_access, dict)
     primary_stages = [
         stage for stage in stages
         if isinstance(stage, dict)
@@ -547,6 +597,11 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
             1 for stage in stages
             if isinstance(stage, dict) and stage["name"] == "noise-dither"
         ),
+        "backdrop_access_plan_count": 1 if backdrop_access["required"] else 0,
+        "planned_frame_capture_count": backdrop_access["max_frame_capture_count"],
+        "planned_frame_capture_pixels": backdrop_access["max_frame_capture_pixels"],
+        "planned_surface_sample_pixels": backdrop_access[
+            "max_surface_sample_pixels"],
         "material_max_sample_taps": sample_taps,
         "material_total_sample_taps": sample_taps,
         "backdrop_copy_pixels": 0,
@@ -750,6 +805,16 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["resource_bounds"][
                 "total_pass_texture_copy_pixels"],
+            0)
+        self.assertEqual(
+            report["material_plans"]["backdrop_access"]["required"],
+            0)
+        self.assertEqual(
+            report["material_plans"]["backdrop_access"]["capture_scopes"],
+            {"none": 1})
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "max_frame_capture_count"],
             0)
         self.assertEqual(
             report["material_plans"]["decision_trace"]["first_blockers"],
@@ -1106,6 +1171,14 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "max_execution_stage_capacity_gte": 4,
                 "max_execution_stages_lte": 4,
                 "max_execution_stages_gte": 4,
+                "max_frame_capture_count_lte": 1,
+                "max_frame_capture_count_gte": 1,
+                "max_frame_capture_pixels_lte": 320 * 240,
+                "max_frame_capture_pixels_gte": 320 * 240,
+                "total_surface_sample_pixels_lte": 240 * 96,
+                "total_surface_sample_pixels_gte": 240 * 96,
+                "max_surface_sample_pixels_lte": 240 * 96,
+                "max_surface_sample_pixels_gte": 240 * 96,
                 "max_pass_texture_copy_pixels_lte": 320 * 240,
                 "total_pass_texture_copy_pixels_lte": 320 * 240,
             }
@@ -1142,6 +1215,20 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["resource_bounds"][
                 "max_execution_stage_capacity"],
             4)
+        self.assertEqual(
+            report["material_plans"]["backdrop_access"]["required"],
+            1)
+        self.assertEqual(
+            report["material_plans"]["backdrop_access"]["capture_scopes"],
+            {"shared-frame": 1})
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "max_frame_capture_pixels"],
+            320 * 240)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "total_surface_sample_pixels"],
+            240 * 96)
 
     def test_manifest_can_require_execution_stage_summary(self) -> None:
         manifest = {
@@ -1164,6 +1251,34 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["stage_executors"],
             {"fallback-fill": 1})
+
+    def test_manifest_can_require_backdrop_access_summary(self) -> None:
+        manifest = {
+            "require_material_plan_summary": {
+                "backdrop_access_required": 1,
+                "backdrop_access_stable_required": 1,
+                "backdrop_access_frame_history_required": 1,
+                "backdrop_access_shared_frame_capture": 1,
+                "backdrop_access_bounded": 1,
+                "backdrop_access_sources": {
+                    "previous-presented-frame": 1,
+                },
+                "backdrop_capture_scopes": {
+                    "shared-frame": 1,
+                },
+            },
+        }
+
+        code, report = self.run_verifier(
+            snapshot(sampled_material_plan()),
+            manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(
+            report["material_plans"]["backdrop_access"][
+                "shared_frame_capture"],
+            1)
 
     def test_missing_primary_execution_stage_points_to_stage_contract(self) -> None:
         plan = sampled_material_plan(sample_taps=25)

@@ -199,7 +199,8 @@ MaterialPlan plan = plan_material_surface(request, environment);
 The plan records its artifact `contract_version`, source
 `command_descriptor`, material `role`, material container analysis, blur, tint,
 saturation, luminance curve, edge highlight, noise/dither, shadow, render-target
-analysis, pure shape analysis, backdrop sampling, backdrop analysis, decision
+analysis, pure shape analysis, backdrop sampling, backdrop analysis, backdrop
+access/capture bounds, decision
 trace, fallback path, debug metadata, pass expectations, the resolved quality
 policy, foreground legibility/vibrancy recommendation, an Apple Liquid Glass
 `reference_model`, resource budgets, the resolved sampling kernel, bounded
@@ -226,8 +227,9 @@ treated as a verifier failure, which forces future stage additions to update the
 pure capacity and artifact contract instead of silently disappearing.
 `observation_contract` repeats only debuggability-critical facts from the same
 plan: fallback expectation and reason, backdrop sampling expectation, stable
-backdrop requirement, primary pass/executor, execution-stage counts,
-texture-copy bounds, safety flags, and region/layer/pass hints. The verifier
+backdrop requirement, shared frame capture expectation, primary pass/executor,
+execution-stage counts, texture-copy bounds, capture/sample pixel bounds,
+safety flags, and region/layer/pass hints. The verifier
 cross-checks it against the surrounding `MaterialPlan`, so stale serializers or
 backend-local policy drift fail at a single JSON path before pixel-region
 checks need human interpretation.
@@ -270,8 +272,12 @@ sampling/noise/shadow switches and caller quality limits, including
 scale, pixel format, pixel count, readiness, and whether the target stays
 within that backdrop budget. `resource_budget` records the clamped
 blur/executable sample-tap limits, max sampling kernel radius, the same allowed
-backdrop-pixel budget, and whether texture copies and fallback behavior are
-bounded. Container spacing is also reported as `max_container_spacing`, so
+backdrop-pixel budget, max shared frame capture count/pixels, max surface sample
+pixels, and whether texture copies and fallback behavior are bounded.
+`backdrop_access` mirrors the active shared frame contract per plan:
+sampled-backdrop plans require `capture_scope: shared-frame` with one bounded
+frame-history copy and fallback plans keep capture/sample budgets at zero.
+Container spacing is also reported as `max_container_spacing`, so
 artifact gates can bound future container/union expansion work before a backend
 starts allocating extra backdrop passes.
 Backends use the pure `default_material_quality_policy()` and
@@ -332,7 +338,8 @@ growth, stage-capacity overflow, texture-copy budget drift, and material shape
 drift such as a clamped radius not matching the backend-executed radius.
 Backends separately publish `renderer.material_executor_summary` for edge-only
 execution telemetry: material instances, fallback instances, material draw
-calls, upload bytes/capacity, framebuffer-history copy bounds, and CPU enqueue
+calls, planned shared frame capture count/pixels, planned surface sample
+pixels, upload bytes/capacity, framebuffer-history copy bounds, and CPU enqueue
 timings. It also records `foreground_text_candidate_count` and
 `foreground_text_remap_count`, proving whether the backend consumed
 `MaterialPlan.foreground` for text commands without treating the counters as

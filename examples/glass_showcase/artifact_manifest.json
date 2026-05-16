@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "15": 7
+      "16": 7
     },
     "roles": {
       "surface": 7
@@ -131,6 +131,17 @@
     "backdrop_sources": {
       "previous-presented-frame": 7
     },
+    "backdrop_access_required": 7,
+    "backdrop_access_stable_required": 7,
+    "backdrop_access_frame_history_required": 7,
+    "backdrop_access_shared_frame_capture": 7,
+    "backdrop_access_bounded": 7,
+    "backdrop_access_sources": {
+      "previous-presented-frame": 7
+    },
+    "backdrop_capture_scopes": {
+      "shared-frame": 7
+    },
     "luminance_responses": {
       "neutral": 7
     },
@@ -201,6 +212,14 @@
     "max_pass_texture_copy_pixels_gte": 1,
     "total_pass_texture_copy_pixels_lte": 28000000,
     "total_pass_texture_copy_pixels_gte": 1,
+    "max_frame_capture_count_lte": 1,
+    "max_frame_capture_count_gte": 1,
+    "max_frame_capture_pixels_lte": 4000000,
+    "max_frame_capture_pixels_gte": 1,
+    "total_surface_sample_pixels_lte": 28000000,
+    "total_surface_sample_pixels_gte": 1,
+    "max_surface_sample_pixels_lte": 4000000,
+    "max_surface_sample_pixels_gte": 1,
     "total_runtime_passes_lte": 7,
     "total_runtime_passes_gte": 7,
     "active_runtime_passes_lte": 7,
