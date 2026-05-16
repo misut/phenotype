@@ -158,6 +158,11 @@ viewport, view mode, pure Finder chrome/grid metrics, selection capabilities,
 operation receipts, and preview excerpt. It is useful for validating
 select/open/read/create/duplicate/delete/view-mode/resize model behavior before
 running the slower desktop/mobile artifact capture gate.
+Native file explorer artifact bundles expose the same model state under
+`debug.application.file_explorer`: profile, location, status, sort mode, view
+mode, selected entry, operation receipt, entry counts, and pure chrome metrics.
+The verifier can assert those paths with `require_debug_details`, which keeps
+Finder workflow failures debuggable without relying on a screenshot guess.
 
 For material probe input debugging that does not need a native window, use the
 matching glass showcase drive command:

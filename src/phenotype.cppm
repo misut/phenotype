@@ -3464,9 +3464,13 @@ inline diag::DebugPlaneSnapshot build_debug_plane_snapshot(
 inline json::Value build_debug_plane_snapshot_json(
         std::optional<diag::PlatformCapabilitiesSnapshot> platform_override = std::nullopt,
         std::optional<json::Value> runtime_details_override = std::nullopt) {
-    return diag::debug_plane_snapshot_to_json(build_debug_plane_snapshot(
+    auto debug = diag::debug_plane_snapshot_to_json(build_debug_plane_snapshot(
         std::move(platform_override),
         std::move(runtime_details_override)));
+    if (auto provider = diag::detail::current_application_debug_provider()) {
+        debug.as_object().emplace("application", provider());
+    }
+    return debug;
 }
 
 inline json::Value build_diag_snapshot_with_debug(

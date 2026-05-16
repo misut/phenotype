@@ -8,6 +8,7 @@
 #include <vector>
 
 import file_explorer_shared;
+import json;
 
 namespace {
 
@@ -332,6 +333,17 @@ duplicate
     snap = demo::snapshot(state);
     assert(snap.view_mode == demo::ExplorerViewMode::Gallery);
     assert(state.status == "Switched to Gallery View.");
+    auto debug_payload = demo::file_explorer_application_debug_json(
+        state,
+        snap,
+        demo::explorer_chrome_metrics(state, profile),
+        profile);
+    auto debug_text = json::emit(debug_payload);
+    assert(debug_text.find("\"file_explorer\"") != std::string::npos);
+    assert(debug_text.find("\"view_mode\"") != std::string::npos);
+    assert(debug_text.find("\"Gallery View\"") != std::string::npos);
+    assert(debug_text.find("\"profile\"") != std::string::npos);
+    assert(debug_text.find(profile) != std::string::npos);
 
     state.draft_name = "../ Launch Plan";
     state.draft_body = "Created from test_file_explorer_model.";
