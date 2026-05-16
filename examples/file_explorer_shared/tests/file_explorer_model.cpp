@@ -50,6 +50,16 @@ int main() {
     assert(parsed_sort.ok);
     assert(parsed_sort.input.kind == demo::ExplorerInputKind::Sort);
     assert(parsed_sort.input.sort_mode == demo::SortMode::Kind);
+    auto parsed_viewport = demo::parse_explorer_input("viewport:900x620@2");
+    assert(parsed_viewport.ok);
+    assert(parsed_viewport.input.kind == demo::ExplorerInputKind::Viewport);
+    assert(parsed_viewport.input.viewport_width == 900);
+    assert(parsed_viewport.input.viewport_height == 620);
+    assert(parsed_viewport.input.viewport_scale == 2.0f);
+    assert(parsed_viewport.input.value == "900x620@2");
+    auto parsed_bad_viewport = demo::parse_explorer_input("viewport:900");
+    assert(!parsed_bad_viewport.ok);
+    assert(parsed_bad_viewport.error.find("viewport") != std::string::npos);
     auto parsed_bad = demo::parse_explorer_input("sort:date");
     assert(!parsed_bad.ok);
     assert(parsed_bad.error.find("sort") != std::string::npos);
@@ -288,6 +298,11 @@ int main() {
     auto drive_root = demo::demo_root(drive_profile);
     fs::remove_all(drive_root, ec);
     std::vector<demo::ExplorerInput> inputs{
+        {.kind = demo::ExplorerInputKind::Viewport,
+         .value = "900x620",
+         .viewport_width = 900,
+         .viewport_height = 620,
+         .viewport_scale = 2.0f},
         {.kind = demo::ExplorerInputKind::DraftName, .value = "CLI Note"},
         {.kind = demo::ExplorerInputKind::DraftBody,
          .value = "Created from typed CLI input."},
@@ -302,12 +317,16 @@ int main() {
     auto driven = demo::drive_explorer(drive_profile, inputs);
     assert(driven.profile == drive_profile);
     assert(driven.trace.size() == inputs.size());
-    assert(driven.trace[2].operation.kind == "file_create");
-    assert(driven.trace[2].operation.ok);
-    assert(driven.trace[3].operation.kind == "file_duplicate");
+    assert(driven.state.viewport_width == 900);
+    assert(driven.state.viewport_height == 620);
+    assert(driven.state.viewport_scale == 2.0f);
+    assert(driven.trace[0].status == "Viewport set to 900x620");
+    assert(driven.trace[3].operation.kind == "file_create");
     assert(driven.trace[3].operation.ok);
-    assert(driven.trace[4].operation.kind == "file_delete");
+    assert(driven.trace[4].operation.kind == "file_duplicate");
     assert(driven.trace[4].operation.ok);
+    assert(driven.trace[5].operation.kind == "file_delete");
+    assert(driven.trace[5].operation.ok);
     assert(driven.snapshot.relative_location == "Trash");
     assert(driven.snapshot.sort_label == "Sort: Kind");
     bool saw_cli_note_copy = false;

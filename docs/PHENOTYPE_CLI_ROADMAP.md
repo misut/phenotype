@@ -120,7 +120,7 @@ Current commands:
 | `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, package resource directories, and artifact manifest presence. |
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
 | `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, and debug manifest references. |
-| `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs and emits a stable observation JSON with trace, entries, capabilities, operation receipt, and preview excerpt fields. |
+| `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs and emits a stable observation JSON with trace, entries, viewport, capabilities, operation receipt, and preview excerpt fields. |
 
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, textual asset placeholders, English/Korean
@@ -222,8 +222,8 @@ native event injector: `ExplorerInput` is the neutral input value, the sandboxed
 file model applies the same operations used by the desktop and mobile UIs, and
 the CLI serializes a final `Snapshot` plus per-input `ExplorerInputTrace`
 records. This gives CI and future agents a cheap way to verify file view,
-read, create, duplicate, delete, sort, and scenario behavior before launching
-slow native artifact captures.
+read, create, duplicate, delete, sort, viewport, and scenario behavior before
+launching slow native artifact captures.
 
 ## Performance and release posture
 

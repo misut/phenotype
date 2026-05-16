@@ -149,6 +149,7 @@ cd tools/phenotype_cli
 mise exec -- exon build
 .exon/debug/phenotype_cli artifact verify-file-explorer --json
 .exon/debug/phenotype_cli drive file-explorer --json \
+  --input viewport:900x620@2 \
   --input select:README.txt \
   --input duplicate \
   --input delete
@@ -190,9 +191,9 @@ artifact contract.
 The same shared model is available without a native window through
 `phenotype drive file-explorer`. That command applies typed inputs to the
 sandboxed model and emits JSON containing the input trace, visible entries,
-capabilities, operation receipt, selected preview excerpt, and final snapshot.
-It is the lightweight CI-friendly counterpart to the local desktop/mobile
-artifact capture gate.
+viewport, capabilities, operation receipt, selected preview excerpt, and final
+snapshot. It is the lightweight CI-friendly counterpart to the local
+desktop/mobile artifact capture gate.
 
 `phenotype package bundle` is the lightweight packaging counterpart. It stages
 the package manifest, declared assets, locales, Pretendard alias descriptor,

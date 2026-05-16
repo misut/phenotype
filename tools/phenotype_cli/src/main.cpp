@@ -1660,10 +1660,14 @@ auto operation_receipt_json(
 auto explorer_input_json(file_explorer_demo::ExplorerInput const& input)
     -> std::string {
     return std::format(
-        "{{\"kind\":{},\"value\":{},\"sort_mode\":{},\"label\":{}}}",
+        "{{\"kind\":{},\"value\":{},\"sort_mode\":{},"
+        "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},\"label\":{}}}",
         json_string(file_explorer_demo::explorer_input_kind_name(input.kind)),
         json_string(input.value),
         json_string(file_explorer_demo::sort_mode_label(input.sort_mode)),
+        input.viewport_width,
+        input.viewport_height,
+        input.viewport_scale,
         json_string(file_explorer_demo::explorer_input_label(input)));
 }
 
@@ -1736,6 +1740,7 @@ auto explorer_drive_json(file_explorer_demo::ExplorerDriveResult const& result)
         "\"ok\":{},\"profile\":{},\"input_count\":{},"
         "\"root\":{},\"current\":{},\"relative_location\":{},"
         "\"status\":{},\"sort_label\":{},"
+        "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
         "\"selected\":{{\"present\":{},\"name\":{},\"kind\":{},"
         "\"size\":{},\"path_label\":{},\"preview_excerpt\":{}}},"
         "\"counts\":{{\"visible_entries\":{},\"files\":{},\"folders\":{}}},"
@@ -1752,6 +1757,9 @@ auto explorer_drive_json(file_explorer_demo::ExplorerDriveResult const& result)
         json_string(snap.relative_location),
         json_string(result.state.status),
         json_string(snap.sort_label),
+        result.state.viewport_width,
+        result.state.viewport_height,
+        result.state.viewport_scale,
         snap.has_selection ? "true" : "false",
         json_string(snap.has_selection ? snap.selected.name : ""),
         json_string(snap.selected_kind_label),
