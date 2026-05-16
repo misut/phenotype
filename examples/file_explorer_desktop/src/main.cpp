@@ -916,7 +916,7 @@ void navigation_button(char const* label,
 void finder_toolbar(State const& state,
                     file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
-    layout::material_surface(toolbar_shell_options(), [&] {
+    layout::toolbar(toolbar_shell_options(), [&] {
         layout::material_surface(
             toolbar_group_options("Navigation Controls", 92.0f),
             [&] {
@@ -1264,10 +1264,9 @@ void finder_status_bar(State const& state,
                        file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
-    layout::material_surface(
+    layout::status_bar(
         layout::MaterialSurfaceOptions{
             .kind = MaterialKind::Clear,
-            .role = MaterialSurfaceRole::StatusBar,
             .direction = FlexDirection::Column,
             .padding = SpaceToken::Xs,
             .gap = SpaceToken::Xs,

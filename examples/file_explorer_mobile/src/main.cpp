@@ -144,9 +144,8 @@ void update(State& state, Msg msg) {
 void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
-    layout::material_surface(layout::MaterialSurfaceOptions{
+    layout::toolbar(layout::MaterialSurfaceOptions{
         .kind = MaterialKind::Clear,
-        .role = MaterialSurfaceRole::Toolbar,
         .padding = SpaceToken::Md,
         .gap = SpaceToken::Sm,
         .semantic_label = "Toolbar",
