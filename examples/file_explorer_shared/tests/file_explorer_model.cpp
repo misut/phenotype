@@ -104,6 +104,10 @@ fallback = []
     assert(parsed_sort.ok);
     assert(parsed_sort.input.kind == demo::ExplorerInputKind::Sort);
     assert(parsed_sort.input.sort_mode == demo::SortMode::Kind);
+    auto parsed_recent_sort = demo::parse_explorer_input("sort:recent");
+    assert(parsed_recent_sort.ok);
+    assert(parsed_recent_sort.input.kind == demo::ExplorerInputKind::Sort);
+    assert(parsed_recent_sort.input.sort_mode == demo::SortMode::Recent);
     auto parsed_viewport = demo::parse_explorer_input("viewport:900x620@2");
     assert(parsed_viewport.ok);
     assert(parsed_viewport.input.kind == demo::ExplorerInputKind::Viewport);
@@ -182,20 +186,36 @@ fallback = []
     assert(!mobile_chrome.finder_segmented_toolbar);
     fs::remove_all(mobile_state.root, ec);
     auto snap = demo::snapshot(state);
-    assert(snap.has_selection);
-    assert(snap.selected.name == "README.txt");
+    assert(!snap.has_selection);
     assert(snap.file_count >= 15);
     assert(snap.folder_count == 3);
     assert(!demo::deletable_directory(state.root, demo::trash_path(state.root)));
     assert(snap.can_create_file);
     assert(snap.can_create_folder);
+    assert(!snap.can_delete_selected);
+    assert(!snap.can_duplicate_selected);
+    assert(!snap.can_preview_selected);
+    assert(snap.action_summary.find("Select a file") != std::string::npos);
+    assert(snap.sort_label == "Sort: Recent");
+    assert(snap.entries.size() >= 5);
+    assert(snap.entries[0].name == "작성예시3_선택_DC 탈퇴신청서.pdf");
+    assert(snap.entries[1].name == "작성예시2_필수_운용지시서.pdf");
+    assert(snap.entries[2].name == "작성예시1_필수_중도인출 신청서.pdf");
+    assert(snap.entries[3].name == "2_필수_운용지시서.pdf");
+    assert(snap.entries[4].name == "1_필수_중도인출 신청서.pdf");
+
+    demo::select_entry(state, "README.txt");
+    snap = demo::snapshot(state);
+    assert(snap.has_selection);
+    assert(snap.selected.name == "README.txt");
     assert(snap.can_delete_selected);
     assert(snap.can_duplicate_selected);
     assert(snap.can_preview_selected);
     assert(snap.selected_kind_label == "TXT File");
     assert(snap.selected_size_label != "--");
     assert(snap.action_summary.find("Selected README.txt") != std::string::npos);
-    assert(snap.sort_label == "Sort: Name");
+    demo::set_sort_mode(state, demo::SortMode::Name);
+    snap = demo::snapshot(state);
     bool saw_file_after_folder = false;
     for (auto const& entry : snap.entries) {
         if (!entry.folder)
@@ -207,6 +227,8 @@ fallback = []
     bool saw_chinese_pdf = false;
     for (auto const& entry : snap.entries) {
         if (entry.name == "1_필수_중도인출 신청서.pdf")
+            saw_korean_pdf = true;
+        if (entry.name == "작성예시1_필수_중도인출 신청서.pdf")
             saw_korean_pdf = true;
         if (entry.name == "契約書_サンプル.pdf")
             saw_japanese_pdf = true;

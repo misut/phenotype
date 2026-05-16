@@ -545,7 +545,7 @@ auto spec() -> cppx::cli::CommandSpec {
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "kind[:value]",
-                             .description = "Typed input such as viewport:900x620@2, select:README.txt, create-file, delete, sort:kind"},
+                             .description = "Typed input such as viewport:900x620@2, select:README.txt, create-file, delete, sort:recent"},
                             {.name = "expect",
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,

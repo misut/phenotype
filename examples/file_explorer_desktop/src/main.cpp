@@ -491,9 +491,93 @@ std::string compact_preview(std::string text) {
     return text;
 }
 
+bool icon_label_break_char(char ch) {
+    return ch == ' ' || ch == '_' || ch == '-';
+}
+
+std::string trim_icon_label_line(std::string line) {
+    while (!line.empty() && icon_label_break_char(line.back()))
+        line.pop_back();
+    while (!line.empty() && line.front() == ' ')
+        line.erase(line.begin());
+    return line;
+}
+
+std::vector<std::string> icon_label_tokens(std::string const& label) {
+    std::vector<std::string> tokens;
+    std::size_t start = 0;
+    for (std::size_t i = 0; i < label.size(); ++i) {
+        if (!icon_label_break_char(label[i]))
+            continue;
+        tokens.push_back(label.substr(start, i - start + 1));
+        start = i + 1;
+    }
+    if (start < label.size())
+        tokens.push_back(label.substr(start));
+    return tokens;
+}
+
+void pop_utf8_codepoint(std::string& text) {
+    if (text.empty())
+        return;
+    std::size_t start = text.size() - 1;
+    while (start > 0
+           && (static_cast<unsigned char>(text[start]) & 0xc0) == 0x80) {
+        --start;
+    }
+    text.erase(start);
+}
+
+std::vector<std::string> finder_icon_label_lines(
+        phenotype::Painter& painter,
+        std::string const& label,
+        float max_width,
+        float font_size) {
+    auto const font = finder_font();
+    auto width_of = [&](std::string const& text) {
+        return painter.measure_text(
+            text.c_str(),
+            static_cast<unsigned int>(text.size()),
+            font_size,
+            font);
+    };
+    std::vector<std::string> lines;
+    std::string current;
+    for (auto const& token : icon_label_tokens(label)) {
+        auto candidate = current + token;
+        if (!current.empty() && width_of(candidate) > max_width) {
+            lines.push_back(trim_icon_label_line(std::move(current)));
+            current = token;
+            if (lines.size() == 2)
+                break;
+        } else {
+            current = std::move(candidate);
+        }
+    }
+    if (lines.size() < 2 && !current.empty())
+        lines.push_back(trim_icon_label_line(std::move(current)));
+    if (lines.empty())
+        lines.push_back(label);
+    if (lines.size() > 2)
+        lines.resize(2);
+    if (lines.size() == 2) {
+        auto& tail = lines.back();
+        bool truncated = false;
+        while (width_of(tail) > max_width && tail.size() > 4) {
+            pop_utf8_codepoint(tail);
+            truncated = true;
+        }
+        if (truncated && width_of(tail + "...") <= max_width)
+            tail += "...";
+    }
+    return lines;
+}
+
 std::vector<file_explorer_demo::Entry> finder_entries(
         file_explorer_demo::Snapshot const& snap) {
     auto entries = snap.entries;
+    if (snap.sort_mode == file_explorer_demo::SortMode::Recent)
+        return entries;
     std::stable_sort(entries.begin(), entries.end(),
                      [](auto const& a, auto const& b) {
         if (a.folder != b.folder)
@@ -591,6 +675,60 @@ void finder_button(std::string label,
         options.text_align = phenotype::TextAlign::Center;
 
     phenotype::widget::button<Msg>(label, std::move(msg), options);
+}
+
+void finder_icon_label_button(std::string const& label,
+                              bool selected,
+                              float max_width,
+                              float font_size) {
+    auto const& t = phenotype::current_theme();
+    phenotype::ButtonStyleOptions options;
+    options.has_background = true;
+    options.background = selected ? t.accent : t.transparent;
+    options.has_hover_background = true;
+    options.hover_background = selected
+        ? t.accent_strong
+        : rgba(255, 255, 255, 110);
+    options.has_border_color = true;
+    options.border_color = t.transparent;
+    options.has_text_color = true;
+    options.text_color = selected ? t.state_active_fg : t.foreground;
+    options.border_width = 0.0f;
+    options.border_radius = 10.0f;
+    options.fixed_height = 46.0f;
+    options.max_width = max_width;
+    phenotype::widget::canvas_button<Msg>(
+        phenotype::str{label},
+        max_width,
+        46.0f,
+        [label, selected, max_width, font_size](phenotype::Painter& painter) {
+            auto const ink = selected ? rgba(255, 255, 255) : rgba(28, 28, 30);
+            auto const lines = finder_icon_label_lines(
+                painter,
+                label,
+                max_width - 12.0f,
+                font_size);
+            float y = lines.size() == 1 ? 12.0f : 4.0f;
+            for (auto const& line : lines) {
+                auto const width = painter.measure_text(
+                    line.c_str(),
+                    static_cast<unsigned int>(line.size()),
+                    font_size,
+                    finder_font());
+                painter.text(
+                    std::max(0.0f, (max_width - width) * 0.5f),
+                    y,
+                    line.c_str(),
+                    static_cast<unsigned int>(line.size()),
+                    font_size,
+                    ink,
+                    finder_font());
+                y += 19.0f;
+            }
+        },
+        SelectEntry{label},
+        options,
+        stable_token(label) ^ (selected ? 0x1f1f00u : 0x1f1000u));
 }
 
 void sidebar_row(std::string_view label,
@@ -1072,13 +1210,11 @@ void finder_grid(State const& state,
                                 {},
                                 stable_token(entry.name)
                                     ^ (selected ? 0x100000u : 0u));
-                            finder_button(
+                            finder_icon_label_button(
                                 entry.name,
-                                SelectEntry{entry.name},
                                 selected,
                                 chrome.icon_grid_column_width,
-                                15.0f,
-                                true);
+                                15.0f);
                         }, SpaceToken::Xs,
                            CrossAxisAlignment::Center,
                            MainAxisAlignment::Start);

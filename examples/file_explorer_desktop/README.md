@@ -4,10 +4,14 @@ This example is a Finder-style desktop workflow for phenotype's material
 system. It uses a glass toolbar with Finder-like semantic view/action/search
 buttons, translucent sidebar locations, icon/list/column/gallery file views,
 document, image, video, and folder thumbnails, read/create/duplicate/delete
-file actions, folder create/delete actions, and compact Finder-style
-selection status. The sidebar Trash item is backed by a hidden `.Trash`
-directory inside the demo sandbox, so delete actions move files and folders to
-Trash before any permanent removal behavior is exercised.
+file actions, folder create/delete actions, and compact Finder-style status.
+The startup view intentionally leaves the file grid unselected, matching
+Finder's neutral Recents presentation, and starts in a deterministic
+`Sort: Recent` order whose first row mirrors the reference Finder-style Korean
+PDF probe scene; read, duplicate, and delete flows are covered by deterministic
+startup scenarios and explicit model inputs. The sidebar Trash item is backed
+by a hidden `.Trash` directory inside the demo sandbox, so delete actions move
+files and folders to Trash before any permanent removal behavior is exercised.
 
 The desktop window requests `WindowChromeStyle::IntegratedTitlebar` with
 explicit titlebar, leading-control, and trailing-control reserve metrics. On
@@ -100,8 +104,10 @@ environment automatically.
 The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity,
 semantic toolbar button labels, bounded material resource budgets, and
-pixel-region checks for the sidebar, toolbar, icon grid, and selected-file
-label.
+pixel-region checks for the sidebar, toolbar, and icon grid. The default icon
+artifact also requires the neutral `Sort: Recent` status label so accidental
+default file selection or sort drift is caught without relying on a human
+screenshot comparison.
 
 The gate captures the desktop example in `icon`, `list`, `column`, and
 `gallery` modes through `PHENOTYPE_FILE_EXPLORER_VIEW` so each Finder-style
