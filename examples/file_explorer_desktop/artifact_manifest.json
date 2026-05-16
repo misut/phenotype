@@ -191,6 +191,14 @@
     {
       "path": "application.file_explorer.chrome.toolbar_icon_button_count",
       "equals": 11
+    },
+    {
+      "path": "application.file_explorer.chrome.more_actions_open",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.chrome.overflow_action_button_count",
+      "equals": 0
     }
   ],
   "require_runtime_details": [

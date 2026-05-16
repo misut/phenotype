@@ -532,12 +532,14 @@ auto spec() -> cppx::cli::CommandSpec {
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "name",
-                             .description = "Startup scenario to capture"},
+                             .description =
+                                "Startup or desktop chrome scenario to capture"},
                         },
                         .examples = {
                             "phenotype artifact verify-file-explorer",
                             "phenotype artifact verify-file-explorer --json",
                             "phenotype artifact verify-file-explorer --profile desktop --view-mode icon --scenario search-active",
+                            "phenotype artifact verify-file-explorer --profile desktop --view-mode icon --scenario more-actions-open",
                         },
                     },
                     {
@@ -2510,7 +2512,8 @@ auto explorer_chrome_json(
         "\"visible_capacity\":{},\"column_width\":{},\"row_height\":{},"
         "\"column_pitch\":{},\"scroll_height\":{}}},"
         "\"toolbar\":{{\"group_count\":{},\"separator_count\":{},"
-        "\"icon_button_count\":{},\"finder_segmented\":{}}},"
+        "\"icon_button_count\":{},\"overflow_action_button_count\":{},"
+        "\"finder_segmented\":{},\"more_actions_open\":{}}},"
         "\"native_window\":{{\"integrated_titlebar\":{},"
         "\"native_window_controls\":{},\"duplicate_window_controls\":{}}}}}",
         chrome.viewport.width,
@@ -2536,7 +2539,9 @@ auto explorer_chrome_json(
         chrome.toolbar_group_count,
         chrome.toolbar_separator_count,
         chrome.toolbar_icon_button_count,
+        chrome.overflow_action_button_count,
         chrome.finder_segmented_toolbar ? "true" : "false",
+        chrome.more_actions_open ? "true" : "false",
         chrome.integrated_titlebar ? "true" : "false",
         chrome.native_window_controls ? "true" : "false",
         chrome.duplicate_window_controls ? "true" : "false");
