@@ -842,14 +842,14 @@ phenotype::Color nav_icon_ink(bool enabled) {
 
 void paint_back_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    painter.line(25.5f, 10.0f, 16.5f, 18.0f, 1.8f, ink);
-    painter.line(16.5f, 18.0f, 25.5f, 26.0f, 1.8f, ink);
+    painter.line(22.0f, 8.0f, 13.0f, 15.0f, 1.8f, ink);
+    painter.line(13.0f, 15.0f, 22.0f, 22.0f, 1.8f, ink);
 }
 
 void paint_forward_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    painter.line(18.5f, 10.0f, 27.5f, 18.0f, 1.8f, ink);
-    painter.line(27.5f, 18.0f, 18.5f, 26.0f, 1.8f, ink);
+    painter.line(14.0f, 8.0f, 23.0f, 15.0f, 1.8f, ink);
+    painter.line(23.0f, 15.0f, 14.0f, 22.0f, 1.8f, ink);
 }
 
 phenotype::ButtonStyleOptions toolbar_icon_button_options(
@@ -892,9 +892,9 @@ void paint_icon_view(phenotype::Painter& painter, bool selected) {
     for (int col = 0; col < 2; ++col) {
         for (int row = 0; row < 2; ++row) {
             stroke_round(painter,
-                         13.0f + static_cast<float>(col) * 15.0f,
-                         8.0f + static_cast<float>(row) * 14.0f,
-                         10.0f, 10.0f, 2.0f, 1.4f, ink);
+                         8.0f + static_cast<float>(col) * 12.0f,
+                         6.0f + static_cast<float>(row) * 11.0f,
+                         8.0f, 8.0f, 2.0f, 1.35f, ink);
         }
     }
 }
@@ -902,24 +902,24 @@ void paint_icon_view(phenotype::Painter& painter, bool selected) {
 void paint_list_view(phenotype::Painter& painter, bool selected) {
     auto ink = toolbar_icon_ink(selected);
     for (int i = 0; i < 4; ++i) {
-        float y = 8.0f + static_cast<float>(i) * 6.8f;
-        painter.line(11.0f, y, 13.0f, y, 1.8f, ink);
-        painter.line(20.0f, y, 34.0f, y, 1.45f, ink);
+        float y = 6.0f + static_cast<float>(i) * 5.8f;
+        painter.line(8.0f, y, 10.0f, y, 1.8f, ink);
+        painter.line(16.0f, y, 28.0f, y, 1.45f, ink);
     }
 }
 
 void paint_column_view(phenotype::Painter& painter, bool selected) {
     auto ink = toolbar_icon_ink(selected);
     for (int i = 0; i < 3; ++i) {
-        stroke_round(painter, 9.0f + static_cast<float>(i) * 10.5f,
-                     8.0f, 8.0f, 20.0f, 2.0f, 1.4f, ink);
+        stroke_round(painter, 6.0f + static_cast<float>(i) * 8.5f,
+                     6.0f, 7.0f, 18.0f, 2.0f, 1.35f, ink);
     }
 }
 
 void paint_gallery_view(phenotype::Painter& painter, bool selected) {
     auto ink = toolbar_icon_ink(selected);
-    stroke_round(painter, 10.0f, 8.0f, 24.0f, 17.0f, 4.0f, 1.4f, ink);
-    painter.line(12.0f, 29.0f, 32.0f, 29.0f, 1.7f, ink);
+    stroke_round(painter, 7.0f, 6.0f, 20.0f, 16.0f, 4.0f, 1.35f, ink);
+    painter.line(9.0f, 25.0f, 25.0f, 25.0f, 1.7f, ink);
 }
 
 void paint_group_sort_icon(phenotype::Painter& painter) {
@@ -927,74 +927,74 @@ void paint_group_sort_icon(phenotype::Painter& painter) {
     for (int row = 0; row < 3; ++row) {
         for (int col = 0; col < 3; ++col) {
             stroke_round(painter,
-                         9.0f + static_cast<float>(col) * 7.8f,
-                         7.0f + static_cast<float>(row) * 7.0f,
-                         7.0f, 4.0f, 1.0f, 1.35f, ink);
+                         6.0f + static_cast<float>(col) * 6.6f,
+                         5.0f + static_cast<float>(row) * 6.2f,
+                         5.4f, 3.6f, 1.0f, 1.25f, ink);
         }
     }
-    painter.line(31.0f, 15.0f, 34.5f, 18.5f, 1.65f, ink);
-    painter.line(38.0f, 15.0f, 34.5f, 18.5f, 1.65f, ink);
+    painter.line(26.0f, 12.0f, 29.0f, 15.0f, 1.55f, ink);
+    painter.line(32.0f, 12.0f, 29.0f, 15.0f, 1.55f, ink);
 }
 
 void paint_share_icon(phenotype::Painter& painter) {
     auto ink = rgba(170, 174, 181);
-    painter.line(22.0f, 8.0f, 22.0f, 23.0f, 1.7f, ink);
-    painter.line(16.0f, 14.0f, 22.0f, 8.0f, 1.7f, ink);
-    painter.line(28.0f, 14.0f, 22.0f, 8.0f, 1.7f, ink);
-    stroke_round(painter, 12.0f, 21.0f, 20.0f, 11.0f, 3.0f, 1.5f, ink);
+    painter.line(17.0f, 5.0f, 17.0f, 19.0f, 1.65f, ink);
+    painter.line(11.0f, 11.0f, 17.0f, 5.0f, 1.65f, ink);
+    painter.line(23.0f, 11.0f, 17.0f, 5.0f, 1.65f, ink);
+    stroke_round(painter, 8.0f, 18.0f, 18.0f, 10.0f, 3.0f, 1.45f, ink);
 }
 
 void paint_tag_icon(phenotype::Painter& painter) {
     auto ink = rgba(170, 174, 181);
-    auto tag = rounded_rect_path(8.0f, 9.0f, 28.0f, 18.0f, 4.0f);
+    auto tag = rounded_rect_path(5.0f, 7.0f, 24.0f, 17.0f, 4.0f);
     painter.stroke_path(tag, 1.5f, rgba(170, 174, 181));
-    painter.arc(14.0f, 15.0f, 2.4f, 0.0f, k_tau, 1.3f, ink);
+    painter.arc(11.0f, 13.0f, 2.3f, 0.0f, k_tau, 1.25f, ink);
 }
 
 void paint_more_icon(phenotype::Painter& painter) {
     auto ink = toolbar_icon_ink();
     for (int i = 0; i < 3; ++i) {
-        painter.arc(15.0f + static_cast<float>(i) * 7.0f,
-                    18.0f, 2.2f, 0.0f, k_tau, 1.35f, ink);
+        painter.arc(11.0f + static_cast<float>(i) * 6.0f,
+                    15.0f, 2.0f, 0.0f, k_tau, 1.3f, ink);
     }
 }
 
 void paint_search_icon(phenotype::Painter& painter) {
     auto ink = toolbar_icon_ink();
-    painter.arc(19.0f, 15.0f, 8.0f, 0.0f, k_tau, 1.8f, ink);
-    painter.line(25.0f, 21.0f, 33.0f, 29.0f, 1.8f, ink);
+    painter.arc(15.0f, 12.0f, 7.5f, 0.0f, k_tau, 1.75f, ink);
+    painter.line(20.0f, 17.0f, 28.0f, 25.0f, 1.75f, ink);
 }
 
 void paint_new_file_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    stroke_round(painter, 13.0f, 7.0f, 18.0f, 24.0f, 3.0f, 1.5f, ink);
-    painter.line(23.0f, 7.0f, 31.0f, 15.0f, 1.5f, ink);
-    painter.line(22.0f, 17.0f, 22.0f, 27.0f, 1.8f, ink);
-    painter.line(17.0f, 22.0f, 27.0f, 22.0f, 1.8f, ink);
+    stroke_round(painter, 10.0f, 5.0f, 16.0f, 22.0f, 3.0f, 1.45f, ink);
+    painter.line(19.0f, 5.0f, 26.0f, 12.0f, 1.45f, ink);
+    painter.line(18.0f, 15.0f, 18.0f, 24.0f, 1.75f, ink);
+    painter.line(13.5f, 19.5f, 22.5f, 19.5f, 1.75f, ink);
 }
 
 void paint_new_folder_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    stroke_round(painter, 9.0f, 12.0f, 26.0f, 17.0f, 4.0f, 1.5f, ink);
-    painter.line(11.0f, 12.0f, 16.0f, 8.0f, 1.5f, ink);
-    painter.line(16.0f, 8.0f, 24.0f, 8.0f, 1.5f, ink);
-    painter.line(22.0f, 17.0f, 22.0f, 27.0f, 1.7f, ink);
-    painter.line(17.0f, 22.0f, 27.0f, 22.0f, 1.7f, ink);
+    stroke_round(painter, 6.0f, 11.0f, 22.0f, 15.0f, 4.0f, 1.45f, ink);
+    painter.line(8.0f, 11.0f, 13.0f, 7.0f, 1.45f, ink);
+    painter.line(13.0f, 7.0f, 21.0f, 7.0f, 1.45f, ink);
+    painter.line(18.0f, 15.0f, 18.0f, 23.0f, 1.65f, ink);
+    painter.line(14.0f, 19.0f, 22.0f, 19.0f, 1.65f, ink);
 }
 
 void paint_duplicate_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    stroke_round(painter, 12.0f, 11.0f, 16.0f, 19.0f, 3.0f, 1.5f, ink);
-    stroke_round(painter, 17.0f, 6.0f, 16.0f, 19.0f, 3.0f, 1.5f, ink);
+    stroke_round(painter, 8.0f, 10.0f, 14.0f, 17.0f, 3.0f, 1.45f, ink);
+    stroke_round(painter, 13.0f, 5.0f, 14.0f, 17.0f, 3.0f, 1.45f, ink);
 }
 
 void paint_delete_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    stroke_round(painter, 15.0f, 12.0f, 14.0f, 18.0f, 2.0f, 1.5f, ink);
-    painter.line(12.0f, 12.0f, 32.0f, 12.0f, 1.7f, ink);
-    painter.line(18.0f, 8.0f, 26.0f, 8.0f, 1.7f, ink);
-    painter.line(19.0f, 16.0f, 19.0f, 27.0f, 1.35f, ink);
-    painter.line(25.0f, 16.0f, 25.0f, 27.0f, 1.35f, ink);
+    stroke_round(painter, 11.0f, 11.0f, 13.0f, 16.0f, 2.0f, 1.45f, ink);
+    painter.line(8.0f, 11.0f, 28.0f, 11.0f, 1.65f, ink);
+    painter.line(14.0f, 7.0f, 22.0f, 7.0f, 1.65f, ink);
+    painter.line(15.0f, 15.0f, 15.0f, 24.0f, 1.3f, ink);
+    painter.line(21.0f, 15.0f, 21.0f, 24.0f, 1.3f, ink);
 }
 
 template<typename Paint>

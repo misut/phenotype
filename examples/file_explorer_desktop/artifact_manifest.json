@@ -49,6 +49,7 @@
     "button",
     "material"
   ],
+  "require_disabled_count": 4,
   "require_material_kinds": [
     "clear",
     "thin",

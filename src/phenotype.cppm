@@ -295,8 +295,9 @@ inline void cell(str content,
 //
 //   variant=Default  — surface chrome that fades to state_hover_bg on hover.
 //   variant=Primary  — accent-filled, white text, hover darkens to accent_strong.
-//   disabled=true    — chrome switches to state_disabled_*, click and Tab focus
-//                      are suppressed (no callback registered, focusable=false).
+//   disabled=true    — click and Tab focus are suppressed. Chrome defaults to
+//                      state_disabled_* unless explicit ButtonStyleOptions
+//                      override it.
 //
 // Hover is a view-time fade rather than a paint-time branch: the
 // background colour interpolates over ~150ms via `animate_color`, which
@@ -338,10 +339,18 @@ inline void button(str label, Msg msg, ButtonStyleOptions options) {
     node.interaction_role = InteractionRole::Button;
 
     if (options.disabled) {
-        node.background = t.state_disabled_bg;
-        node.text_color = t.state_disabled_fg;
-        node.border_color = t.state_disabled_border;
-        node.border_width = 1;
+        node.background = options.has_background
+            ? options.background
+            : t.state_disabled_bg;
+        node.text_color = options.has_text_color
+            ? options.text_color
+            : t.state_disabled_fg;
+        node.border_color = options.has_border_color
+            ? options.border_color
+            : t.state_disabled_border;
+        node.border_width = options.border_width >= 0.0f
+            ? options.border_width
+            : 1.0f;
         node.cursor_type = 0;
         node.focusable = false;
         node.debug_semantic_enabled = false;
@@ -709,10 +718,18 @@ inline void canvas_button(str label,
     node.debug_semantic_label = std::string(label.data, label.len);
 
     if (options.disabled) {
-        node.background = t.state_disabled_bg;
-        node.text_color = t.state_disabled_fg;
-        node.border_color = t.state_disabled_border;
-        node.border_width = 1.0f;
+        node.background = options.has_background
+            ? options.background
+            : t.state_disabled_bg;
+        node.text_color = options.has_text_color
+            ? options.text_color
+            : t.state_disabled_fg;
+        node.border_color = options.has_border_color
+            ? options.border_color
+            : t.state_disabled_border;
+        node.border_width = options.border_width >= 0.0f
+            ? options.border_width
+            : 1.0f;
         node.cursor_type = 0;
         node.focusable = false;
         node.debug_semantic_enabled = false;

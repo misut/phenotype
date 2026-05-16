@@ -2562,9 +2562,12 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 auto color = unpack_color(packed);
                 float dx = x2 - x1;
                 float dy = y2 - y1;
+                float line_len = std::sqrt(dx * dx + dy * dy);
+                if (line_len <= 0.0f || thickness <= 0.0f)
+                    break;
+                float half_th = thickness * 0.5f;
                 if (dx == 0.0f || dy == 0.0f) {
                     // Axis-aligned: a single instance is exact.
-                    float line_len = std::sqrt(dx * dx + dy * dy);
                     float w = (dy == 0.0f) ? line_len : thickness;
                     float h = (dx == 0.0f) ? line_len : thickness;
                     float x = (dx == 0.0f)
@@ -2578,22 +2581,20 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                         x, y, w, h,
                         color.r / 255.0f, color.g / 255.0f,
                         color.b / 255.0f, color.a / 255.0f,
-                        0.0f, 0.0f, 3.0f);
+                        half_th, 0.0f, 2.0f);
                 } else {
                     // Diagonal: the instanced color pipeline can only fill
                     // axis-aligned rects, so decompose the segment into a
-                    // chain of overlapping `thickness × thickness` dots
-                    // along the line. Step is half the thickness so the
-                    // dots overlap and produce continuous coverage.
+                    // chain of overlapping rounded dots along the line.
+                    // Step is half the thickness so the dots overlap and
+                    // produce continuous coverage with round caps.
                     // O(line_len / thickness) instances per line; for
                     // thickness = 1 px and a 500 px diagonal this emits
                     // ~1000 dots, which the GPU handles trivially.
-                    float line_len = std::sqrt(dx * dx + dy * dy);
                     float step = thickness * 0.5f;
                     if (step < 0.5f) step = 0.5f;
                     int n_steps = static_cast<int>(std::ceil(line_len / step));
                     if (n_steps < 1) n_steps = 1;
-                    float half_th = thickness * 0.5f;
                     auto& dst = scratch.batches.back().colors;
                     for (int i = 0; i <= n_steps; ++i) {
                         float t = static_cast<float>(i)
@@ -2606,7 +2607,7 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                             thickness, thickness,
                             color.r / 255.0f, color.g / 255.0f,
                             color.b / 255.0f, color.a / 255.0f,
-                            0.0f, 0.0f, 0.0f);
+                            half_th, 0.0f, 2.0f);
                     }
                 }
                 break;
