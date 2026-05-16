@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "16": 7
+      "17": 7
     },
     "roles": {
       "surface": 7
@@ -135,12 +135,16 @@
     "backdrop_access_stable_required": 7,
     "backdrop_access_frame_history_required": 7,
     "backdrop_access_shared_frame_capture": 7,
+    "backdrop_access_next_frame_capture_required": 7,
     "backdrop_access_bounded": 7,
     "backdrop_access_sources": {
       "previous-presented-frame": 7
     },
     "backdrop_capture_scopes": {
       "shared-frame": 7
+    },
+    "backdrop_capture_reasons": {
+      "sample-current-frame": 7
     },
     "luminance_responses": {
       "neutral": 7
@@ -167,6 +171,7 @@
     "decision_can_sample_backdrop": 7,
     "decision_backend_supports_backdrop": 7,
     "decision_backdrop_source_ready": 7,
+    "decision_next_frame_capture_required": 7,
     "decision_reduced_transparency": 0,
     "decision_increase_contrast": 0,
     "decision_reduce_motion": 0,

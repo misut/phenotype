@@ -865,6 +865,10 @@ namespace detail {
             "backdrop_source_ready",
             json::Value{plan.decision_trace.backdrop_source_ready});
         decision_trace.emplace(
+            "next_frame_capture_required",
+            json::Value{
+                plan.decision_trace.next_frame_capture_required});
+        decision_trace.emplace(
             "reduced_transparency",
             json::Value{plan.decision_trace.reduced_transparency});
         decision_trace.emplace(
@@ -1049,6 +1053,9 @@ namespace detail {
             "shared_frame_capture_required",
             json::Value{observation.shared_frame_capture_required});
         observation_contract.emplace(
+            "next_frame_capture_required",
+            json::Value{observation.next_frame_capture_required});
+        observation_contract.emplace(
             "bounded_texture_copy_required",
             json::Value{observation.bounded_texture_copy_required});
         observation_contract.emplace(
@@ -1057,6 +1064,9 @@ namespace detail {
         observation_contract.emplace(
             "backdrop_capture_scope",
             json::Value{observation.backdrop_capture_scope});
+        observation_contract.emplace(
+            "backdrop_capture_reason",
+            json::Value{observation.backdrop_capture_reason});
         observation_contract.emplace(
             "fallback_path",
             json::Value{observation.fallback_path});
@@ -1216,11 +1226,17 @@ namespace detail {
             "shared_frame_capture",
             json::Value{plan.backdrop_access.shared_frame_capture});
         backdrop_access.emplace(
+            "next_frame_capture_required",
+            json::Value{plan.backdrop_access.next_frame_capture_required});
+        backdrop_access.emplace(
             "source",
             json::Value{plan.backdrop_access.source});
         backdrop_access.emplace(
             "capture_scope",
             json::Value{plan.backdrop_access.capture_scope});
+        backdrop_access.emplace(
+            "capture_reason",
+            json::Value{plan.backdrop_access.capture_reason});
         backdrop_access.emplace(
             "max_frame_capture_count",
             json::Value{
@@ -1603,6 +1619,11 @@ namespace detail {
                 static_cast<std::int64_t>(
                     summary.shared_frame_capture_plan_count)});
         out.emplace(
+            "next_frame_capture_plan_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.next_frame_capture_plan_count)});
+        out.emplace(
             "max_frame_capture_count",
             json::Value{
                 static_cast<std::int64_t>(summary.max_frame_capture_count)});
@@ -1792,6 +1813,11 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.backdrop_access_plan_count)});
+        out.emplace(
+            "next_frame_capture_plan_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.next_frame_capture_plan_count)});
         out.emplace(
             "planned_frame_capture_count",
             json::Value{

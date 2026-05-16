@@ -367,21 +367,26 @@ Gaps:
   stable labels, button/material/text-field roles, all material kinds, material
   surface roles, material plan output, semantic/runtime material parity,
   material container ids/spacing, backdrop access/capture summaries,
-  stage-capacity/drop counters, and bounded resource budgets.
+  next-frame capture reason summaries, stage-capacity/drop counters, and
+  bounded resource budgets.
 - `tools/verify_artifact_bundle.py` validates the common schema, semantic tree,
   disabled semantic state, material kind/fallback metadata, runtime viewport,
   platform diagnostics, backend runtime detail assertions, frame file, optional
   pixel-region contrast/color checks, resolved material plan schema and
   contract-version summary gates, material execution stages, explicit stage
   capacity and dropped-stage checks, backdrop access/capture checks, material
-  resource bounds, failure summaries, and reusable JSON manifests.
+  next-frame capture warmup checks, resource bounds, failure summaries, and
+  reusable JSON manifests.
   `tools/verify_glass_showcase_artifact.sh` is the local material showcase gate.
   Main-branch artifact workflow builds the glass showcase but does not capture
   or verify the slow startup artifact.
   `tools/verify_file_explorer_artifacts.sh` builds both file explorer examples
   and applies their manifests with the uv-managed verifier through `mise`.
 - Material surfaces render a macOS sampled-backdrop material path when the
-  previous frame capture is ready; Windows and Android consume the same
+  previous frame capture is ready. If a supported backend lacks that stable
+  source, the pure plan reports a deterministic `no-backdrop-source` fallback
+  with `capture_reason: warmup-next-frame` so the next frame can sample without
+  an invisible backend policy decision. Windows and Android consume the same
   `MaterialRect` command as deterministic translucent fallback and still write
   `renderer.material_plans[]` with fallback path/pass metadata.
 - Android has a local device/emulator contract runner via
@@ -422,7 +427,7 @@ Current status by example:
 | Example | Expected artifact route | Current gap |
 |---|---|---|
 | `examples/native` | `phenotype run examples/native --artifact-dir /tmp/phenotype-native-startup --artifact-exit`, or direct `.exon/debug/native` with the same environment variables | Verified by `tools/verify_artifact_bundle.py`; scenario-specific pixel-region checks can be added as needed |
-| `examples/glass_showcase` | `phenotype run glass_showcase --artifact-dir /tmp/phenotype-glass-showcase --artifact-exit`, or `phenotype artifact verify-glass-showcase` from the CLI | Verifies all public material kinds, macOS material capability, resolved material plan schema and contract version, material execution stages, explicit stage capacity/drop counters, surface-role summary, exact material/container/shape/foreground/backdrop-access plan summary, semantic/runtime material parity, material quality policy, material resource/capture bounds, foreground text execution counters, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; run the verifier locally before material PRs, while CI keeps only build-level artifact gates |
+| `examples/glass_showcase` | `phenotype run glass_showcase --artifact-dir /tmp/phenotype-glass-showcase --artifact-exit`, or `phenotype artifact verify-glass-showcase` from the CLI | Verifies all public material kinds, macOS material capability, resolved material plan schema and contract version, material execution stages, explicit stage capacity/drop counters, surface-role summary, exact material/container/shape/foreground/backdrop-access/capture-reason plan summary, semantic/runtime material parity, material quality policy, material resource/capture bounds, foreground text execution counters, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; run the verifier locally before material PRs, while CI keeps only build-level artifact gates |
 | `examples/file_explorer_desktop` | `phenotype run file_explorer_desktop --artifact-dir /tmp/phenotype-file-explorer --artifact-exit`, or `phenotype artifact verify-file-explorer` from the CLI | Verifies a Finder-style desktop startup scene with glass toolbar/sidebar/icon-grid/status surfaces, neutral unselected Recents startup status, deterministic recent ordering for the Korean PDF probe row, stable document/image/video/folder thumbnail labels, stable create/duplicate/delete labels, a real sandboxed Trash location, operation receipts for file create/read/duplicate/delete and folder create/delete scenarios, shared sort/search-state receipts, selection action metadata, Finder segmented toolbar group/separator/button metrics through `ExplorerChromeMetrics`, semantic/runtime material parity, explicit material surface roles, material container identity, backdrop access/capture bounds, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, foreground text execution counters, macOS active-Space/key-window diagnostics, and pixel-region checks for the sidebar, toolbar, and icon grid; local gate only by default |
 | `examples/file_explorer_mobile` | `phenotype run file_explorer_mobile --artifact-dir /tmp/phenotype-file-explorer-mobile --artifact-exit`, or `phenotype artifact verify-file-explorer` from the CLI | Verifies the compact mobile browse/preview/create startup scene with all material kinds, stable navigation labels including Trash, operation receipts for file create/read/duplicate/delete and folder create/delete scenarios, shared sort/search-state receipts, duplicate/delete action metadata, semantic/runtime material parity, explicit toolbar/navigation/status material roles, material container identity, backdrop access/capture bounds, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, and foreground text execution counters; local gate only by default |
 | `examples/android` | `phenotype android contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | Verifies Android debug/runtime basics plus a real `MaterialRect` fallback plan, exact fallback material plan summary and contract version, semantic/runtime material role parity, material shape validity, inactive backdrop access, material quality policy, material resource bounds, and explicit zero dropped-stage count; CI device/emulator wiring remains future work |

@@ -121,6 +121,7 @@ def material_plan(
             "backdrop_available": False,
             "backdrop_stable": False,
             "backdrop_source_ready": False,
+            "next_frame_capture_required": False,
             "reduced_transparency": False,
             "increase_contrast": False,
             "reduce_motion": False,
@@ -168,8 +169,10 @@ def material_plan(
             "stable_required": False,
             "frame_history_required": False,
             "shared_frame_capture": False,
+            "next_frame_capture_required": False,
             "source": "none",
             "capture_scope": "none",
+            "capture_reason": "not-required",
             "max_frame_capture_count": 0,
             "max_frame_capture_pixels": 0,
             "max_surface_sample_pixels": 0,
@@ -325,9 +328,13 @@ def refresh_observation_contract(plan: dict[str, object]) -> None:
         "backdrop_sampling_expected": plan["backdrop_sampling"],
         "stable_backdrop_required": plan["backdrop_sampling"],
         "shared_frame_capture_required": backdrop_access["shared_frame_capture"],
+        "next_frame_capture_required": (
+            backdrop_access["next_frame_capture_required"]
+        ),
         "bounded_texture_copy_required": budget["bounded_texture_copy"],
         "deterministic_fallback_required": budget["deterministic_fallback"],
         "backdrop_capture_scope": backdrop_access["capture_scope"],
+        "backdrop_capture_reason": backdrop_access["capture_reason"],
         "fallback_path": plan["fallback_path"],
         "fallback_reason": plan["fallback_reason"],
         "primary_pass": primary["name"],
@@ -375,6 +382,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "backdrop_available": True,
         "backdrop_stable": True,
         "backdrop_source_ready": True,
+        "next_frame_capture_required": True,
         "can_sample_backdrop": True,
         "first_blocker": "none",
     })
@@ -389,8 +397,10 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "stable_required": True,
         "frame_history_required": True,
         "shared_frame_capture": True,
+        "next_frame_capture_required": True,
         "source": "previous-presented-frame",
         "capture_scope": "shared-frame",
+        "capture_reason": "sample-current-frame",
         "max_frame_capture_count": 1,
         "max_frame_capture_pixels": 320 * 240,
         "max_surface_sample_pixels": 240 * 96,
@@ -490,6 +500,9 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "backdrop_access_count": 1 if backdrop_access["required"] else 0,
         "shared_frame_capture_plan_count": (
             1 if backdrop_access["shared_frame_capture"] else 0
+        ),
+        "next_frame_capture_plan_count": (
+            1 if backdrop_access["next_frame_capture_required"] else 0
         ),
         "max_frame_capture_count": budget["max_frame_capture_count"],
         "max_frame_capture_pixels": budget["max_frame_capture_pixels"],
@@ -598,6 +611,9 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
             if isinstance(stage, dict) and stage["name"] == "noise-dither"
         ),
         "backdrop_access_plan_count": 1 if backdrop_access["required"] else 0,
+        "next_frame_capture_plan_count": (
+            1 if backdrop_access["next_frame_capture_required"] else 0
+        ),
         "planned_frame_capture_count": backdrop_access["max_frame_capture_count"],
         "planned_frame_capture_pixels": backdrop_access["max_frame_capture_pixels"],
         "planned_surface_sample_pixels": backdrop_access[

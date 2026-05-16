@@ -217,9 +217,13 @@ the actual `material_plans` executed for the frame. Each plan includes:
   statistics, luminance response, and floor/gain/edge deltas;
 - `backdrop_access`, including whether the plan requires a stable frame-history
   source, whether that source is a shared frame capture, the capture scope, the
-  maximum capture count, maximum capture pixels, maximum surface sample pixels,
-  and whether the access budget is bounded. Sampled plans use
-  `capture_scope: shared-frame`; fallback plans use `none` with zero budgets;
+  capture reason, maximum capture count, maximum capture pixels, maximum
+  surface sample pixels, and whether the access budget is bounded. Sampled
+  plans use `capture_scope: shared-frame` with
+  `capture_reason: sample-current-frame`. A supported first-frame fallback can
+  use `capture_reason: warmup-next-frame` with zero surface sample pixels so
+  the next frame has a debuggable history source; unsupported fallbacks use
+  `none` with zero budgets;
 - `foreground`, including primary/secondary/accent recommendations, scheme,
   source, estimated background luminance, contrast ratios, accessibility flags,
   and whether the recommendation was backdrop-driven or vibrancy-enabled;
@@ -238,8 +242,9 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `observation_contract`, a pure audit contract that repeats the runtime facts
   the verifier must observe: fallback/backdrop expectations, fallback reason,
   primary pass/executor, expected pass and execution-stage counts, texture-copy
-  bounds, shared frame capture expectations, capture/sample pixel bounds,
-  safety flags, and the region/layer/pass hints. The Python verifier
+  bounds, shared and next-frame capture expectations, capture reason,
+  capture/sample pixel bounds, safety flags, and the region/layer/pass hints.
+  The Python verifier
   checks this object against the rest of the same `MaterialPlan`, so stale JSON
   writers or backend-local policy decisions are reported at
   `renderer.material_plans[n].observation_contract.*` before visual thresholds
@@ -437,7 +442,8 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 `min_count`, `fallback`, `backdrop_sampling`, `backdrop_available`,
 `backdrop_stable`, `backdrop_access_required`,
 `backdrop_access_stable_required`, `backdrop_access_frame_history_required`,
-`backdrop_access_shared_frame_capture`, `backdrop_access_bounded`,
+`backdrop_access_shared_frame_capture`,
+`backdrop_access_next_frame_capture_required`, `backdrop_access_bounded`,
 `luminance_adapted`, `render_target_ready`,
 `render_target_within_backdrop_budget`, `decision_can_sample_backdrop`,
 `decision_backend_supports_backdrop`, `decision_backdrop_source_ready`,
@@ -445,7 +451,8 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 `decision_reduce_motion`, and
 exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `contract_versions`, `pass_names`, `backdrop_sources`,
-`backdrop_access_sources`, `backdrop_capture_scopes`, `luminance_responses`,
+`backdrop_access_sources`, `backdrop_capture_scopes`,
+`backdrop_capture_reasons`, `luminance_responses`,
 `render_target_pixel_formats`, `pass_executors`, `stage_names`,
 `stage_executors`, `sampling_kernels`,
 `sampling_weight_profiles`, `luminance_curves`, `decision_blockers`,
@@ -526,7 +533,8 @@ Backends also serialize `renderer.material_executor_summary` for edge-only
 work that cannot be derived from the pure plan, including material instance
 count, fallback instance count, material draw calls, encoded material sample
 tap totals, planned shared frame capture count/pixels, planned surface sample
-pixels, upload bytes/capacity, framebuffer-history copy pixels, and CPU
+pixels, next-frame capture plan count, upload bytes/capacity,
+framebuffer-history copy pixels, and CPU
 enqueue timings. Foreground execution counters report how many text commands
 landed inside material surfaces and how many default material text tokens were
 remapped to `MaterialPlan.foreground`. Use
@@ -543,8 +551,9 @@ resolved plan aggregate. Executor stage counters must also match the pure
 stages, dropped stages, primary runtime stages, backdrop-filter stages,
 fallback-fill stages, shape-shadow stages, edge-highlight stages, and
 noise/dither stages. Backdrop access counters must match the pure
-`backdrop_access` aggregate, and any actual framebuffer-history copy must fit
-the planned shared capture count and pixel budget. The resource-bound gate can
+`backdrop_access` aggregate, including next-frame warmup capture requests, and
+any actual framebuffer-history copy must fit the planned shared capture count
+and pixel budget. The resource-bound gate can
 also require
 `max_execution_stage_capacity_*` and `dropped_execution_stages_*` so artifacts
 prove that stage growth stayed inside the serialized capacity. Draw calls must

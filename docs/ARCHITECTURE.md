@@ -227,9 +227,9 @@ treated as a verifier failure, which forces future stage additions to update the
 pure capacity and artifact contract instead of silently disappearing.
 `observation_contract` repeats only debuggability-critical facts from the same
 plan: fallback expectation and reason, backdrop sampling expectation, stable
-backdrop requirement, shared frame capture expectation, primary pass/executor,
-execution-stage counts, texture-copy bounds, capture/sample pixel bounds,
-safety flags, and region/layer/pass hints. The verifier
+backdrop requirement, shared and next-frame capture expectations, capture
+reason, primary pass/executor, execution-stage counts, texture-copy bounds,
+capture/sample pixel bounds, safety flags, and region/layer/pass hints. The verifier
 cross-checks it against the surrounding `MaterialPlan`, so stale serializers or
 backend-local policy drift fail at a single JSON path before pixel-region
 checks need human interpretation.
@@ -275,8 +275,13 @@ blur/executable sample-tap limits, max sampling kernel radius, the same allowed
 backdrop-pixel budget, max shared frame capture count/pixels, max surface sample
 pixels, and whether texture copies and fallback behavior are bounded.
 `backdrop_access` mirrors the active shared frame contract per plan:
-sampled-backdrop plans require `capture_scope: shared-frame` with one bounded
-frame-history copy and fallback plans keep capture/sample budgets at zero.
+sampled-backdrop plans require `capture_scope: shared-frame` and
+`capture_reason: sample-current-frame` with one bounded frame-history copy.
+When a backend can support backdrop sampling but the stable previous frame is
+not ready yet, a deterministic `no-backdrop-source` fallback may still request
+`capture_reason: warmup-next-frame` so the next frame can sample without hiding
+that warmup copy in backend policy. Unsupported, reduced-transparency, invalid,
+and quality-policy fallbacks keep capture/sample budgets at zero.
 Container spacing is also reported as `max_container_spacing`, so
 artifact gates can bound future container/union expansion work before a backend
 starts allocating extra backdrop passes.

@@ -166,7 +166,7 @@ ALLOWED_MATERIAL_REFERENCE_BLENDING_SCOPES = {
     "sampled-backdrop",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 16
+MATERIAL_PLAN_CONTRACT_VERSION = 17
 
 
 def suggested_action_for_failure(
@@ -1050,10 +1050,12 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "backdrop_access_stable_required",
         "backdrop_access_frame_history_required",
         "backdrop_access_shared_frame_capture",
+        "backdrop_access_next_frame_capture_required",
         "backdrop_access_bounded",
         "backdrop_sources",
         "backdrop_access_sources",
         "backdrop_capture_scopes",
+        "backdrop_capture_reasons",
         "luminance_responses",
         "luminance_adapted",
         "foreground_schemes",
@@ -1070,6 +1072,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "decision_can_sample_backdrop",
         "decision_backend_supports_backdrop",
         "decision_backdrop_source_ready",
+        "decision_next_frame_capture_required",
         "decision_reduced_transparency",
         "decision_increase_contrast",
         "decision_reduce_motion",
@@ -1099,6 +1102,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "backdrop_access_stable_required",
             "backdrop_access_frame_history_required",
             "backdrop_access_shared_frame_capture",
+            "backdrop_access_next_frame_capture_required",
             "backdrop_access_bounded",
             "luminance_adapted",
             "render_target_ready",
@@ -1106,6 +1110,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "decision_can_sample_backdrop",
             "decision_backend_supports_backdrop",
             "decision_backdrop_source_ready",
+            "decision_next_frame_capture_required",
             "decision_reduced_transparency",
             "decision_increase_contrast",
             "decision_reduce_motion",
@@ -1206,6 +1211,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         spec["backdrop_access_sources"] = string_int_map(
             value["backdrop_access_sources"],
             "require_material_plan_summary.backdrop_access_sources")
+    if "backdrop_capture_reasons" in value:
+        spec["backdrop_capture_reasons"] = string_int_map(
+            value["backdrop_capture_reasons"],
+            "require_material_plan_summary.backdrop_capture_reasons")
     if "render_target_pixel_formats" in value:
         spec["render_target_pixel_formats"] = string_int_map(
             value["render_target_pixel_formats"],
@@ -1846,6 +1855,7 @@ MATERIAL_DECISION_TRACE_BOOL_FIELDS = (
     "backdrop_available",
     "backdrop_stable",
     "backdrop_source_ready",
+    "next_frame_capture_required",
     "reduced_transparency",
     "increase_contrast",
     "reduce_motion",
@@ -1893,6 +1903,7 @@ MATERIAL_OBSERVATION_BOOL_FIELDS = (
     "backdrop_sampling_expected",
     "stable_backdrop_required",
     "shared_frame_capture_required",
+    "next_frame_capture_required",
     "bounded_texture_copy_required",
     "deterministic_fallback_required",
 )
@@ -1909,6 +1920,7 @@ MATERIAL_OBSERVATION_INT_FIELDS = (
 )
 MATERIAL_OBSERVATION_STRING_FIELDS = (
     "backdrop_capture_scope",
+    "backdrop_capture_reason",
     "fallback_path",
     "fallback_reason",
     "primary_pass",
@@ -1970,6 +1982,7 @@ MATERIAL_BACKDROP_ACCESS_BOOL_FIELDS = (
     "stable_required",
     "frame_history_required",
     "shared_frame_capture",
+    "next_frame_capture_required",
     "bounded",
 )
 MATERIAL_BACKDROP_ACCESS_NUMBER_FIELDS = (
@@ -1980,6 +1993,7 @@ MATERIAL_BACKDROP_ACCESS_NUMBER_FIELDS = (
 MATERIAL_BACKDROP_ACCESS_STRING_FIELDS = (
     "source",
     "capture_scope",
+    "capture_reason",
 )
 
 
@@ -2119,6 +2133,17 @@ def check_material_observation_contract(
             hint="Observation shared capture must mirror MaterialPlan.backdrop_access.",
             record_success=False)
         report.check(
+            "material observation next-frame capture requirement matches access",
+            observation.get("next_frame_capture_required")
+            == backdrop_access.get("next_frame_capture_required"),
+            path=f"{observation_path}.next_frame_capture_required",
+            expected=backdrop_access.get("next_frame_capture_required"),
+            actual=observation.get("next_frame_capture_required"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Observation warmup capture must mirror MaterialPlan.backdrop_access.",
+            record_success=False)
+        report.check(
             "material observation capture scope matches access",
             observation.get("backdrop_capture_scope")
             == backdrop_access.get("capture_scope"),
@@ -2128,6 +2153,17 @@ def check_material_observation_contract(
             likely_layer="material-observation",
             likely_pass=likely_pass,
             hint="Observation capture scope must mirror MaterialPlan.backdrop_access.",
+            record_success=False)
+        report.check(
+            "material observation capture reason matches access",
+            observation.get("backdrop_capture_reason")
+            == backdrop_access.get("capture_reason"),
+            path=f"{observation_path}.backdrop_capture_reason",
+            expected=backdrop_access.get("capture_reason"),
+            actual=observation.get("backdrop_capture_reason"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint="Observation capture reason must mirror MaterialPlan.backdrop_access.",
             record_success=False)
         for key in (
                 "max_frame_capture_count",
@@ -2350,6 +2386,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "can_sample_backdrop": 0,
             "backend_supports_backdrop": 0,
             "backdrop_source_ready": 0,
+            "next_frame_capture_required": 0,
             "reduced_transparency": 0,
             "increase_contrast": 0,
             "reduce_motion": 0,
@@ -2371,9 +2408,11 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "stable_required": 0,
             "frame_history_required": 0,
             "shared_frame_capture": 0,
+            "next_frame_capture_required": 0,
             "bounded": 0,
             "sources": {},
             "capture_scopes": {},
+            "capture_reasons": {},
             "max_frame_capture_count": 0,
             "max_frame_capture_pixels": 0,
             "total_surface_sample_pixels": 0,
@@ -3752,6 +3791,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                             "can_sample_backdrop",
                             "backend_supports_backdrop",
                             "backdrop_source_ready",
+                            "next_frame_capture_required",
                             "reduced_transparency",
                             "increase_contrast",
                             "reduce_motion") and value:
@@ -3883,6 +3923,33 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         "can_sample_backdrop should be the conjunction of "
                         "material, target, quality, backend, frame-history, "
                         "backdrop-source, and reduced-transparency gates."),
+                    record_success=False)
+            next_frame_inputs = (
+                "has_material",
+                "target_ready",
+                "quality_allows_backdrop",
+                "backend_supports_backdrop",
+                "reduced_transparency",
+            )
+            if all(key in trace_values for key in next_frame_inputs):
+                expected_next_frame_capture = (
+                    trace_values["has_material"]
+                    and trace_values["target_ready"]
+                    and trace_values["quality_allows_backdrop"]
+                    and trace_values["backend_supports_backdrop"]
+                    and not trace_values["reduced_transparency"])
+                report.check(
+                    "material decision next-frame capture predicate is derived",
+                    trace_values.get("next_frame_capture_required")
+                    == expected_next_frame_capture,
+                    path=f"{plan_path}.decision_trace.next_frame_capture_required",
+                    expected=expected_next_frame_capture,
+                    actual=trace_values.get("next_frame_capture_required"),
+                    likely_layer=likely_layer,
+                    hint=(
+                        "next_frame_capture_required should be the pure "
+                        "material, target, quality, backend, and reduced-"
+                        "transparency gate for the edge frame-history copy."),
                     record_success=False)
 
         tint = check_object_field(
@@ -4081,6 +4148,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     hint="Fallback plans should not report sampled luminance policy.",
                     record_success=False)
 
+        next_frame_capture = None
+        capture_reason = None
         backdrop_access = check_object_field(
             report,
             plan,
@@ -4108,6 +4177,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     access_required = value
                 elif key == "shared_frame_capture":
                     shared_capture = value
+                elif key == "next_frame_capture_required":
+                    next_frame_capture = value
             access_numbers: dict[str, int | float] = {}
             for key in MATERIAL_BACKDROP_ACCESS_NUMBER_FIELDS:
                 value = check_number_field(
@@ -4163,15 +4234,34 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     likely_layer="material-backdrop",
                     hint="Update the verifier vocabulary for intentional capture scopes.",
                     record_success=False)
+            capture_reason = check_string_field(
+                report,
+                backdrop_access,
+                "capture_reason",
+                f"{plan_path}.backdrop_access",
+                likely_layer="material-backdrop",
+                hint=(
+                    "Capture reason should explain whether this plan samples "
+                    "the current frame or warms the next frame."))
+            if isinstance(capture_reason, str):
+                reasons = access_summary["capture_reasons"]
+                reasons[capture_reason] = reasons.get(capture_reason, 0) + 1
             if backdrop_sampling is True:
                 report.check(
                     "material sampled backdrop has required access",
-                    access_required is True and shared_capture is True,
+                    access_required is True
+                    and shared_capture is True
+                    and next_frame_capture is True,
                     path=f"{plan_path}.backdrop_access",
-                    expected={"required": True, "shared_frame_capture": True},
+                    expected={
+                        "required": True,
+                        "shared_frame_capture": True,
+                        "next_frame_capture_required": True,
+                    },
                     actual={
                         "required": access_required,
                         "shared_frame_capture": shared_capture,
+                        "next_frame_capture_required": next_frame_capture,
                     },
                     likely_layer="material-backdrop",
                     hint=(
@@ -4191,17 +4281,24 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         hint="Shared frame capture budget should be derived from render_target.pixel_count.",
                         record_success=False)
             elif backdrop_sampling is False:
+                expected_shared_capture = next_frame_capture is True
                 report.check(
-                    "material fallback backdrop access is inactive",
-                    access_required is False and shared_capture is False,
+                    "material fallback backdrop access follows warmup contract",
+                    access_required is False
+                    and shared_capture is expected_shared_capture,
                     path=f"{plan_path}.backdrop_access",
-                    expected={"required": False, "shared_frame_capture": False},
+                    expected={
+                        "required": False,
+                        "shared_frame_capture": expected_shared_capture,
+                    },
                     actual={
                         "required": access_required,
                         "shared_frame_capture": shared_capture,
                     },
                     likely_layer="material-backdrop",
-                    hint="Fallback plans must not reserve backdrop capture work.",
+                    hint=(
+                        "Fallback plans may reserve one shared frame copy only "
+                        "when they are warming a supported backend for the next frame."),
                     record_success=False)
 
         verifier = check_object_field(
@@ -4738,6 +4835,18 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                             likely_pass=primary_pass_name,
                             hint="Add new pure executor roles to the verifier contract when intentional.",
                             record_success=False)
+            if backdrop_sampling is False and next_frame_capture is True:
+                report.check(
+                    "material capture warmup fallback names its reason",
+                    capture_reason == "warmup-next-frame",
+                    path=f"{plan_path}.backdrop_access.capture_reason",
+                    expected="warmup-next-frame",
+                    actual=capture_reason,
+                    likely_layer="material-backdrop",
+                    hint=(
+                        "Fallback plans may request a frame-history copy only "
+                        "when warming a supported backend for the next frame."),
+                    record_success=False)
             pass_name = primary_pass_name
             if pass_name:
                 pass_names = summary["pass_names"]
@@ -5330,12 +5439,19 @@ def check_material_plan_summary_requirements(
             "backdrop_sampling",
             "backdrop_available",
             "backdrop_stable",
+            "backdrop_access_required",
+            "backdrop_access_stable_required",
+            "backdrop_access_frame_history_required",
+            "backdrop_access_shared_frame_capture",
+            "backdrop_access_next_frame_capture_required",
+            "backdrop_access_bounded",
             "luminance_adapted",
             "render_target_ready",
             "render_target_within_backdrop_budget",
             "decision_can_sample_backdrop",
             "decision_backend_supports_backdrop",
             "decision_backdrop_source_ready",
+            "decision_next_frame_capture_required",
             "decision_reduced_transparency",
             "decision_increase_contrast",
             "decision_reduce_motion",
@@ -5400,6 +5516,7 @@ def check_material_plan_summary_requirements(
                     "decision_can_sample_backdrop",
                     "decision_backend_supports_backdrop",
                     "decision_backdrop_source_ready",
+                    "decision_next_frame_capture_required",
                     "decision_reduced_transparency",
                     "decision_increase_contrast",
                     "decision_reduce_motion"):
@@ -5597,6 +5714,9 @@ def check_material_plan_summary_requirements(
         "backdrop_capture_scopes": (
             "material-backdrop",
             "Inspect MaterialPlan.backdrop_access.capture_scope and backend frame-history policy."),
+        "backdrop_capture_reasons": (
+            "material-backdrop",
+            "Inspect MaterialPlan.backdrop_access.capture_reason and frame-history warmup policy."),
         "luminance_responses": (
             "material-backdrop",
             "Inspect MaterialPlan.backdrop.luminance_response and pure contrast policy."),
@@ -5645,6 +5765,7 @@ def check_material_plan_summary_requirements(
             "backdrop_sources",
             "backdrop_access_sources",
             "backdrop_capture_scopes",
+            "backdrop_capture_reasons",
             "luminance_responses",
             "render_target_pixel_formats",
             "decision_blockers",
@@ -5687,13 +5808,17 @@ def check_material_plan_summary_requirements(
                     backdrop_summary = {}
                 actual = backdrop_summary.get("sources")
                 summary_path = f"{base_path}.backdrop.sources"
-            elif field in ("backdrop_access_sources", "backdrop_capture_scopes"):
+            elif field in (
+                    "backdrop_access_sources",
+                    "backdrop_capture_scopes",
+                    "backdrop_capture_reasons"):
                 access_summary = summary.get("backdrop_access")
                 if not isinstance(access_summary, dict):
                     access_summary = {}
                 nested = {
                     "backdrop_access_sources": "sources",
                     "backdrop_capture_scopes": "capture_scopes",
+                    "backdrop_capture_reasons": "capture_reasons",
                 }[field]
                 actual = access_summary.get(nested)
                 summary_path = f"{base_path}.backdrop_access.{nested}"
@@ -6025,6 +6150,8 @@ def check_material_executor_summary_contract(
         access_summary = {}
     expected_access_fields = {
         "backdrop_access_plan_count": access_summary.get("required"),
+        "next_frame_capture_plan_count": access_summary.get(
+            "next_frame_capture_required"),
         "planned_frame_capture_count": bounds.get("max_frame_capture_count"),
         "planned_frame_capture_pixels": bounds.get("max_frame_capture_pixels"),
         "planned_surface_sample_pixels": bounds.get(
@@ -6062,6 +6189,7 @@ def check_material_executor_summary_contract(
         "edge_highlight_stage_count",
         "noise_dither_stage_count",
         "backdrop_access_plan_count",
+        "next_frame_capture_plan_count",
         "planned_frame_capture_count",
         "planned_frame_capture_pixels",
         "planned_surface_sample_pixels",

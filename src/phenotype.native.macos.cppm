@@ -6469,7 +6469,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_env.capabilities.material_backdrop_blur =
         g_renderer.material_pipeline != nullptr;
     material_env.capabilities.shader_blur = g_renderer.material_pipeline != nullptr;
-    material_env.capabilities.frame_history = g_renderer.last_frame_available;
+    material_env.capabilities.frame_history = backdrop_ready;
     material_env.capabilities.reduce_transparency =
         accessibility.reduce_transparency;
     material_env.capabilities.increase_contrast =
@@ -6867,6 +6867,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     g_renderer.last_render_width = fbw;
     g_renderer.last_render_height = fbh;
     g_renderer.last_frame_available = false;
+    bool const capture_frame_history =
+        material_summary.planned_frame_capture_count > 0;
     if (ensure_debug_capture_texture(fbw, fbh)) {
         if (auto* blit = command_buffer->blitCommandEncoder()) {
             MTL::Origin origin{0, 0, 0};
@@ -6887,10 +6889,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 origin);
             blit->endEncoding();
             g_renderer.last_frame_available = true;
-            material_summary.backdrop_copy_count = 1;
-            material_summary.backdrop_copy_pixels =
-                static_cast<std::int64_t>(fbw)
-                * static_cast<std::int64_t>(fbh);
+            if (capture_frame_history) {
+                material_summary.backdrop_copy_count = 1;
+                material_summary.backdrop_copy_pixels =
+                    static_cast<std::int64_t>(fbw)
+                    * static_cast<std::int64_t>(fbh);
+            }
         }
     }
     command_buffer->presentDrawable(drawable);
