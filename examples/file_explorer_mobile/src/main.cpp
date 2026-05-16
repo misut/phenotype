@@ -149,7 +149,7 @@ void update(State& state, Msg msg) {
             file_explorer_demo::select_location(explorer, m.id);
             explorer.mobile_tab = 0;
         } else if constexpr (std::same_as<T, SelectEntry>) {
-            file_explorer_demo::select_entry(explorer, m.name);
+            file_explorer_demo::open_entry(explorer, m.name);
             if (!explorer.selected_name.empty())
                 explorer.mobile_tab = 1;
         } else if constexpr (std::same_as<T, SearchChanged>) {

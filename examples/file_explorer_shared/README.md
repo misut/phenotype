@@ -12,8 +12,9 @@ a normal module contract instead of a relative header include.
 
 The module also owns the typed input/observation contract used by
 `phenotype drive file-explorer`. `ExplorerInput` describes operations such as
-location selection, file selection, search, viewport updates, draft body
-updates, create, duplicate, delete, sort, reset, and startup scenarios.
+location selection, entry selection, explicit folder open, desktop-style
+activation, search, viewport updates, draft body updates, create, duplicate,
+delete, sort, reset, and startup scenarios.
 `drive_explorer()` applies those inputs to the sandboxed model and returns
 `ExplorerInputTrace` records plus a final `Snapshot` and pure
 `ExplorerChromeMetrics`, so the CLI can observe the same workflow and
@@ -44,4 +45,9 @@ mise exec -- exon build
   --input select:README.txt \
   --input duplicate \
   --input delete
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input open:Documents \
+  --input select:Project\ Notes.txt \
+  --expect location:Demo\ Root/Documents \
+  --expect selected:Project\ Notes.txt
 ```

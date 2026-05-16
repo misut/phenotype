@@ -3,8 +3,9 @@
 This example is a Finder-style desktop workflow for phenotype's material
 system. It uses a glass toolbar with Finder-like semantic view/action/search
 buttons, translucent sidebar locations, icon/list/column/gallery file views,
-document, image, video, and folder thumbnails, read/create/duplicate/delete
-file actions, folder create/delete actions, and compact Finder-style status.
+document, image, video, and folder thumbnails, separate select/open semantics
+for files and folders, read/create/duplicate/delete file actions, folder
+create/delete actions, and compact Finder-style status.
 The startup view intentionally leaves the file grid unselected, matching
 Finder's neutral Recents presentation, and starts in a deterministic
 `Sort: Recent` order whose first row mirrors the reference Finder-style Korean
@@ -55,6 +56,11 @@ The toolbar search control starts as a Finder-style icon button. Activating it
 reveals a search field wired to the shared file model, so desktop and mobile
 examples use the same deterministic filename filter and startup artifact
 scenario.
+Folder clicks use the shared desktop activation contract: the first click
+selects the folder so the status and delete capability are observable, while a
+second activation opens it. The CLI can exercise the same behavior with
+`activate:Folder`, or bypass it with `open:Folder` when a test wants direct
+navigation.
 The icon-grid column count, visible row budget, titlebar reserve, sidebar row
 metrics, and toolbar group/icon button metrics come from the shared pure
 `ExplorerChromeMetrics` contract, so `phenotype drive file-explorer --json`

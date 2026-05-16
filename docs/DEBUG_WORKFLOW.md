@@ -145,12 +145,17 @@ mise exec -- exon build
   --input select:README.txt \
   --input duplicate \
   --input delete
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input open:Documents \
+  --input select:Project\ Notes.txt \
+  --expect location:Demo\ Root/Documents \
+  --expect selected:Project\ Notes.txt
 ```
 
 The drive output reports the typed input trace, sandbox paths, visible entries,
 viewport, pure Finder chrome/grid metrics, selection capabilities, operation
 receipts, and preview excerpt. It is useful for validating
-view/read/create/duplicate/delete/resize model behavior before running the
+select/open/read/create/duplicate/delete/resize model behavior before running the
 slower desktop/mobile artifact capture gate.
 
 For material probe input debugging that does not need a native window, use the

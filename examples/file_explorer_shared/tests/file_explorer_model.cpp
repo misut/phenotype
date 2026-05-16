@@ -100,6 +100,14 @@ fallback = []
     assert(parsed_location.ok);
     assert(parsed_location.input.kind == demo::ExplorerInputKind::SelectLocation);
     assert(parsed_location.input.value == "documents");
+    auto parsed_open = demo::parse_explorer_input("open:Documents");
+    assert(parsed_open.ok);
+    assert(parsed_open.input.kind == demo::ExplorerInputKind::OpenEntry);
+    assert(parsed_open.input.value == "Documents");
+    auto parsed_activate = demo::parse_explorer_input("activate:Documents");
+    assert(parsed_activate.ok);
+    assert(parsed_activate.input.kind == demo::ExplorerInputKind::ActivateEntry);
+    assert(parsed_activate.input.value == "Documents");
     auto parsed_sort = demo::parse_explorer_input("sort:kind");
     assert(parsed_sort.ok);
     assert(parsed_sort.input.kind == demo::ExplorerInputKind::Sort);
@@ -266,6 +274,23 @@ fallback = []
     assert(snap.operation_label
         .find("Operation: folder_create ok - Review Folder") != std::string::npos);
     assert(snap.preview.find("Open this folder") != std::string::npos);
+
+    demo::select_entry(state, "Review Folder");
+    assert(demo::same_path(state.current, state.root));
+    snap = demo::snapshot(state);
+    assert(snap.has_selection);
+    assert(snap.selected.folder);
+    assert(snap.operation_label
+        .find("Operation: folder_select ok - Review Folder") != std::string::npos);
+
+    demo::activate_entry(state, "Review Folder");
+    assert(demo::relative_location(state.root, state.current)
+        == "Demo Root/Review Folder");
+    assert(state.selected_name.empty());
+    demo::go_back(state);
+    assert(demo::same_path(state.current, state.root));
+    demo::select_entry(state, "Review Folder");
+
     demo::write_file_if_missing(
         state.current / state.selected_name / "Nested Note.txt",
         "Nested file proves folder deletion moves contents to Trash.\n");
@@ -500,6 +525,38 @@ fallback = []
     assert(!failed_expectation.ok);
     assert(failed_expectation.actual == "<none>");
     fs::remove_all(drive_root, ec);
+
+    std::string const navigation_profile = "test-cli-navigation";
+    auto navigation_root = demo::demo_root(navigation_profile);
+    fs::remove_all(navigation_root, ec);
+    std::vector<demo::ExplorerInput> open_inputs{
+        {.kind = demo::ExplorerInputKind::OpenEntry, .value = "Documents"},
+        {.kind = demo::ExplorerInputKind::SelectEntry,
+         .value = "Project Notes.txt"},
+    };
+    auto opened = demo::drive_explorer(
+        navigation_profile,
+        open_inputs);
+    assert(opened.snapshot.relative_location == "Demo Root/Documents");
+    assert(opened.snapshot.has_selection);
+    assert(opened.snapshot.selected.name == "Project Notes.txt");
+    assert(opened.state.last_operation.kind == "file_read");
+
+    fs::remove_all(navigation_root, ec);
+    std::vector<demo::ExplorerInput> activate_inputs{
+        {.kind = demo::ExplorerInputKind::ActivateEntry, .value = "Documents"},
+        {.kind = demo::ExplorerInputKind::ActivateEntry, .value = "Documents"},
+    };
+    auto activated = demo::drive_explorer(
+        navigation_profile,
+        activate_inputs);
+    assert(activated.trace.size() == 2);
+    assert(activated.trace[0].selected_name == "Documents");
+    assert(activated.trace[0].operation.kind == "folder_select");
+    assert(activated.trace[1].operation.kind == "folder_open");
+    assert(activated.trace[1].operation.ok);
+    assert(activated.snapshot.relative_location == "Demo Root/Documents");
+    fs::remove_all(navigation_root, ec);
 
     demo::reset_demo_tree(state, profile);
     assert(!demo::snapshot(state).can_go_back);

@@ -95,6 +95,8 @@ enum class ExplorerInputKind {
     SelectLocation,
     SelectEntry,
     Search,
+    OpenEntry,
+    ActivateEntry,
     Viewport,
     DraftName,
     DraftFolderName,
@@ -673,6 +675,8 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::SelectLocation: return "select_location";
         case ExplorerInputKind::SelectEntry: return "select_entry";
         case ExplorerInputKind::Search: return "search";
+        case ExplorerInputKind::OpenEntry: return "open_entry";
+        case ExplorerInputKind::ActivateEntry: return "activate_entry";
         case ExplorerInputKind::Viewport: return "viewport";
         case ExplorerInputKind::DraftName: return "draft_name";
         case ExplorerInputKind::DraftFolderName: return "draft_folder_name";
@@ -949,10 +953,14 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         || name == "select-location") {
         return require_value(ExplorerInputKind::SelectLocation);
     }
-    if (name == "select" || name == "entry" || name == "open"
-        || name == "select-entry" || name == "read") {
+    if (name == "select" || name == "entry" || name == "select-entry"
+        || name == "read") {
         return require_value(ExplorerInputKind::SelectEntry);
     }
+    if (name == "open" || name == "open-entry")
+        return require_value(ExplorerInputKind::OpenEntry);
+    if (name == "activate" || name == "click" || name == "activate-entry")
+        return require_value(ExplorerInputKind::ActivateEntry);
     if (name == "search")
         return require_value(ExplorerInputKind::Search);
     if (name == "viewport" || name == "resize" || name == "size") {
@@ -1431,7 +1439,14 @@ inline void select_entry(ExplorerState& state, std::string const& name) {
     std::error_code ec;
     auto path = state.current / name;
     if (fs::is_directory(path, ec)) {
-        open_directory(state, path, "Opened " + name);
+        state.selected_name = name;
+        state.status = "Selected folder " + name;
+        record_operation(
+            state,
+            "folder_select",
+            name,
+            true,
+            "Selected " + name + " for folder actions");
         return;
     }
     ec.clear();
@@ -1453,6 +1468,39 @@ inline void select_entry(ExplorerState& state, std::string const& name) {
         name,
         false,
         state.status);
+}
+
+inline void open_entry(ExplorerState& state, std::string const& name) {
+    std::error_code ec;
+    auto path = state.current / name;
+    if (fs::is_directory(path, ec)) {
+        open_directory(state, path, "Opened " + name);
+        record_operation(
+            state,
+            "folder_open",
+            name,
+            true,
+            state.status);
+        return;
+    }
+    select_entry(state, name);
+}
+
+inline void activate_entry(ExplorerState& state, std::string const& name) {
+    std::error_code ec;
+    auto path = state.current / name;
+    bool const selected = state.selected_name == name;
+    if (selected && fs::is_directory(path, ec)) {
+        open_directory(state, path, "Opened " + name);
+        record_operation(
+            state,
+            "folder_open",
+            name,
+            true,
+            state.status);
+        return;
+    }
+    select_entry(state, name);
 }
 
 inline fs::path unique_child_path(fs::path const& parent, std::string name) {
@@ -1845,6 +1893,12 @@ inline void apply_explorer_input(
             return;
         case ExplorerInputKind::Search:
             set_search_filter(state, input.value);
+            return;
+        case ExplorerInputKind::OpenEntry:
+            open_entry(state, input.value);
+            return;
+        case ExplorerInputKind::ActivateEntry:
+            activate_entry(state, input.value);
             return;
         case ExplorerInputKind::Viewport:
             state.viewport_width = input.viewport_width;

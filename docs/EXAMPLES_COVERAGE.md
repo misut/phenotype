@@ -167,6 +167,10 @@ mise exec -- exon build
   --input select:README.txt \
   --input duplicate \
   --input delete
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input activate:Documents \
+  --input activate:Documents \
+  --expect location:Demo\ Root/Documents
 .exon/debug/phenotype_cli drive glass-showcase --json \
   --script ../../examples/glass_showcase/glass_showcase.drive \
   --expect material-count:7
@@ -190,8 +194,8 @@ runner policy edits validate themselves.
 |---|---|---|
 | `examples/native` | macOS, Windows | Compact desktop widget showcase for shared controls, input debug, local/remote images, scroll, resize, and manual acceptance |
 | `examples/glass_showcase` | macOS, Windows | Material and glass-debug acceptance scene for deterministic backdrop regions, macOS sampled backdrop, all material kinds, artifact capture, and pixel-region checks |
-| `examples/file_explorer_desktop` | macOS, Windows | Finder-style desktop product workflow with native integrated chrome, Finder-style segmented toolbar metrics, viewport-aware icon/list/column/gallery panes, glass toolbar action clusters, sidebar locations, real sandboxed Trash, Recents icon grid, document/image/video/folder thumbnails, icon-revealed search, file/folder create, duplicate, delete, file preview, and sandboxed temp-root operations |
-| `examples/file_explorer_mobile` | macOS, Windows | Mobile file explorer layout with browse/preview/create tabs, compact location strip including Trash, material surfaces, search, file preview, file/folder create, duplicate, delete, and the same sandboxed model |
+| `examples/file_explorer_desktop` | macOS, Windows | Finder-style desktop product workflow with native integrated chrome, Finder-style segmented toolbar metrics, viewport-aware icon/list/column/gallery panes, glass toolbar action clusters, sidebar locations, real sandboxed Trash, Recents icon grid, document/image/video/folder thumbnails, icon-revealed search, separate select/open activation, file/folder create, duplicate, delete, file preview, and sandboxed temp-root operations |
+| `examples/file_explorer_mobile` | macOS, Windows | Mobile file explorer layout with browse/preview/create tabs, compact location strip including Trash, material surfaces, search, direct folder open, file preview, file/folder create, duplicate, delete, and the same sandboxed model |
 | `examples/android` | Android | GameActivity/Vulkan packaging route, Android event dispatch, platform lifecycle, asset/local images, debug API, and logcat/manual device validation |
 | `docs` | WASI | Dogfooded documentation app, WASI build, JS shim integration, and web-facing DSL examples |
 
@@ -199,12 +203,12 @@ The file explorer examples deliberately keep filesystem side effects at the
 example edge. The shared model operates only under a deterministic temp
 directory (`phenotype-file-explorer-desktop` or
 `phenotype-file-explorer-mobile`) and never points at the user's real home
-folder. File create, folder create, read, duplicate, Trash movement, and
-permanent delete-from-Trash actions produce operation receipts, and sort mode
-changes produce a shared `Sort: ...` status contract, that the desktop and
-mobile status surfaces expose to artifact verification. This keeps the examples
-useful for interactive product checks while preserving a stable startup
-artifact contract.
+folder. File create, folder create, folder select/open, read, duplicate, Trash
+movement, and permanent delete-from-Trash actions produce operation receipts,
+and sort mode changes produce a shared `Sort: ...` status contract, that the
+desktop and mobile status surfaces expose to artifact verification. This keeps
+the examples useful for interactive product checks while preserving a stable
+startup artifact contract.
 
 The same shared model is available without a native window through
 `phenotype drive file-explorer`. That command applies typed inputs to the
@@ -440,8 +444,8 @@ Current status by example:
 |---|---|---|
 | `examples/native` | `phenotype run examples/native --artifact-dir /tmp/phenotype-native-startup --artifact-exit`, or direct `.exon/debug/native` with the same environment variables | Verified by `tools/verify_artifact_bundle.py`; scenario-specific pixel-region checks can be added as needed |
 | `examples/glass_showcase` | `phenotype run glass_showcase --artifact-dir /tmp/phenotype-glass-showcase --artifact-exit`, `phenotype artifact verify-glass-showcase` from the CLI, or `phenotype drive glass-showcase --script examples/glass_showcase/glass_showcase.drive` for headless input checks | Verifies all public material kinds, macOS material capability, resolved material plan schema and contract version, material execution stages, explicit stage capacity/drop counters, surface-role summary, exact material/container/shape/foreground/backdrop-access/capture-reason plan summary, semantic/runtime material parity, material quality policy, material resource/capture bounds, foreground text execution counters, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; the shared drive model verifies backdrop/density/inspector/viewport/material-count state without native capture; run the verifier locally before material PRs, while CI keeps only build-level artifact gates |
-| `examples/file_explorer_desktop` | `phenotype run file_explorer_desktop --artifact-dir /tmp/phenotype-file-explorer --artifact-exit`, or `phenotype artifact verify-file-explorer` from the CLI | Verifies a Finder-style desktop startup scene with glass toolbar/sidebar/icon-grid/status surfaces, neutral unselected Recents startup status, deterministic recent ordering for the Korean PDF probe row, stable document/image/video/folder thumbnail labels, stable create/duplicate/delete labels, a real sandboxed Trash location, operation receipts for file create/read/duplicate/delete and folder create/delete scenarios, shared sort/search-state receipts, selection action metadata, Finder segmented toolbar group/separator/button metrics through `ExplorerChromeMetrics`, semantic/runtime material parity, explicit material surface roles, material container identity, backdrop access/capture bounds, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, foreground text execution counters, macOS active-Space/key-window diagnostics, and pixel-region checks for the sidebar, toolbar, and icon grid; local gate only by default |
-| `examples/file_explorer_mobile` | `phenotype run file_explorer_mobile --artifact-dir /tmp/phenotype-file-explorer-mobile --artifact-exit`, or `phenotype artifact verify-file-explorer` from the CLI | Verifies the compact mobile browse/preview/create startup scene with all material kinds, stable navigation labels including Trash, operation receipts for file create/read/duplicate/delete and folder create/delete scenarios, shared sort/search-state receipts, duplicate/delete action metadata, semantic/runtime material parity, explicit toolbar/navigation/status material roles, material container identity, backdrop access/capture bounds, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, and foreground text execution counters; local gate only by default |
+| `examples/file_explorer_desktop` | `phenotype run file_explorer_desktop --artifact-dir /tmp/phenotype-file-explorer --artifact-exit`, or `phenotype artifact verify-file-explorer` from the CLI | Verifies a Finder-style desktop startup scene with glass toolbar/sidebar/icon-grid/status surfaces, neutral unselected Recents startup status, deterministic recent ordering for the Korean PDF probe row, stable document/image/video/folder thumbnail labels, stable create/duplicate/delete labels, a real sandboxed Trash location, operation receipts for file select/open/create/read/duplicate/delete and folder select/open/create/delete scenarios, shared sort/search-state receipts, selection action metadata, Finder segmented toolbar group/separator/button metrics through `ExplorerChromeMetrics`, semantic/runtime material parity, explicit material surface roles, material container identity, backdrop access/capture bounds, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, foreground text execution counters, macOS active-Space/key-window diagnostics, and pixel-region checks for the sidebar, toolbar, and icon grid; local gate only by default |
+| `examples/file_explorer_mobile` | `phenotype run file_explorer_mobile --artifact-dir /tmp/phenotype-file-explorer-mobile --artifact-exit`, or `phenotype artifact verify-file-explorer` from the CLI | Verifies the compact mobile browse/preview/create startup scene with all material kinds, stable navigation labels including Trash, operation receipts for file open/create/read/duplicate/delete and folder open/create/delete scenarios, shared sort/search-state receipts, duplicate/delete action metadata, semantic/runtime material parity, explicit toolbar/navigation/status material roles, material container identity, backdrop access/capture bounds, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, and foreground text execution counters; local gate only by default |
 | `examples/android` | `phenotype android contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | Verifies Android debug/runtime basics plus a real `MaterialRect` fallback plan, exact fallback material plan summary and contract version, semantic/runtime material role parity, material shape validity, inactive backdrop access, material quality policy, material resource bounds, and explicit zero dropped-stage count; CI device/emulator wiring remains future work |
 | `docs` | WASI snapshot bundle is available when the host preopens a writable directory | Default `exon test --target wasm32-wasi` does not preopen one |
 

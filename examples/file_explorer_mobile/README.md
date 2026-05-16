@@ -6,6 +6,8 @@ and Create tabs plus a location strip. The shared filename search filter is
 available from the top bar. The Preview tab exposes the same shared selection
 action contract as the desktop example, including duplicate and delete
 availability, while the Create tab can create either a file or a folder.
+Browse taps use the shared `open` contract so folders navigate immediately on
+mobile, while files move to the Preview tab for reading and actions.
 The compact location strip includes the same sandboxed Trash location as the
 desktop sidebar.
 

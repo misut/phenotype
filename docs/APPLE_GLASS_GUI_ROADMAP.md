@@ -328,7 +328,7 @@ Current runnable examples under `examples/`:
 |---|---|---|
 | `examples/native` | Native widget showcase | Best desktop acceptance scene for shared widgets, input debug, images, scrolling, resizing |
 | `examples/glass_showcase` | Material showcase | Exercises deterministic backdrop regions, macOS sampled backdrop material, all public material kinds, material foreground/vibrancy metadata, semantic material metadata, and startup artifact capture |
-| `examples/file_explorer_desktop` | Finder-style desktop app example | Exercises glass toolbar/sidebar/icon-grid composition, Finder-like action clusters, document/image/video/folder thumbnail probes, and sandboxed view/read/create/duplicate/delete file workflows |
+| `examples/file_explorer_desktop` | Finder-style desktop app example | Exercises glass toolbar/sidebar/icon-grid composition, Finder-like action clusters, document/image/video/folder thumbnail probes, and sandboxed select/open/read/create/duplicate/delete file workflows |
 | `examples/file_explorer_mobile` | Mobile file explorer app example | Exercises a compact browse/preview/create flow with the same sandboxed file model, duplicate/delete action metadata, and all material kinds |
 | `examples/android` | Android APK example | Exercises GameActivity/Vulkan/native Android route |
 
