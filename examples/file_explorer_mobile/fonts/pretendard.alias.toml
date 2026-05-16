@@ -1,0 +1,12 @@
+[font]
+family = "Pretendard"
+source = "system-or-bundled"
+register = false
+
+fallback = [
+  "system-ui",
+  "Apple SD Gothic Neo",
+  "Segoe UI",
+  "Noto Sans CJK",
+  "sans-serif",
+]

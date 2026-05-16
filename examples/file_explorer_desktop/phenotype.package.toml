@@ -1,0 +1,39 @@
+[application]
+id = "com.misut.phenotype.examples.file-explorer-desktop"
+display_name = "Phenotype File Explorer"
+version = "0.1.0"
+platforms = ["macos", "windows"]
+entry = "file_explorer_desktop"
+
+[resources]
+default_locale = "en"
+default_font_family = "Pretendard"
+artifact_manifest = "artifact_manifest.json"
+
+[[assets]]
+name = "app.icon"
+source = "assets/file-explorer-icon.txt"
+content_type = "text/plain"
+preload = true
+runtime_visible = false
+
+[[locales]]
+tag = "en"
+source = "locales/en.toml"
+fallback = []
+
+[[locales]]
+tag = "ko"
+source = "locales/ko.toml"
+fallback = ["en"]
+
+[[fonts]]
+family = "Pretendard"
+source = "fonts/pretendard.alias.toml"
+register = false
+fallback = ["system-ui", "Apple SD Gothic Neo", "Segoe UI", "Noto Sans CJK"]
+
+[debug]
+artifact_manifest = "artifact_manifest.json"
+probe_scene = "finder-style-startup"
+verifier = "tools/verify_file_explorer_artifacts.sh"

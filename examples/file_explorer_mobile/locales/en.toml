@@ -1,0 +1,14 @@
+[app]
+title = "Browse"
+tab_browse = "Browse"
+tab_preview = "Preview"
+tab_create = "Create"
+search_placeholder = "Search"
+status_ready = "Ready"
+
+[actions]
+create_file = "New File"
+create_folder = "New Folder"
+duplicate = "Duplicate"
+delete = "Move to Trash"
+preview = "Preview"

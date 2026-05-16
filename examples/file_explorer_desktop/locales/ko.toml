@@ -1,0 +1,15 @@
+[app]
+title = "최근 항목"
+sidebar_recents = "최근 항목"
+sidebar_shared = "공유"
+favorites = "즐겨찾기"
+locations = "위치"
+search_placeholder = "검색"
+status_ready = "준비됨"
+
+[actions]
+create_file = "새 파일"
+create_folder = "새 폴더"
+duplicate = "복제"
+delete = "휴지통으로 이동"
+preview = "미리보기"

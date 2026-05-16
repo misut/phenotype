@@ -1,0 +1,15 @@
+[app]
+title = "Recents"
+sidebar_recents = "Recents"
+sidebar_shared = "Shared"
+favorites = "Favorites"
+locations = "Locations"
+search_placeholder = "Search"
+status_ready = "Ready"
+
+[actions]
+create_file = "New File"
+create_folder = "New Folder"
+duplicate = "Duplicate"
+delete = "Move to Trash"
+preview = "Preview"
