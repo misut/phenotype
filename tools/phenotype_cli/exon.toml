@@ -12,6 +12,7 @@ platforms = [
 
 [dependencies]
 "github.com/misut/cppx" = "1.13.0"
+"github.com/misut/jsoncpp" = "0.1.4"
 
 [dependencies.path]
 file_explorer_shared = "../../examples/file_explorer_shared"

@@ -5,6 +5,7 @@ import cppx.process;
 import cppx.process.system;
 import cppx.terminal;
 import file_explorer_shared;
+import json;
 import phenotype.resources;
 import std;
 
@@ -29,6 +30,75 @@ struct ArtifactSummary {
     std::uintmax_t snapshot_bytes = 0;
     std::uintmax_t frame_bytes = 0;
     std::size_t platform_file_count = 0;
+};
+
+struct MaterialObservationSummary {
+    bool renderer_details_present = false;
+    bool runtime_summary_present = false;
+    std::int64_t contract_version = -1;
+    std::int64_t declared_plan_count = -1;
+    std::size_t plan_count = 0;
+    std::size_t fallback_count = 0;
+    std::size_t backdrop_sampling_count = 0;
+    std::size_t shared_frame_capture_count = 0;
+    std::size_t next_frame_capture_required_count = 0;
+    std::int64_t runtime_plan_count = -1;
+    std::int64_t runtime_backdrop_copy_count = -1;
+    std::int64_t runtime_next_frame_capture_plan_count = -1;
+    std::vector<std::string> kinds;
+    std::vector<std::string> roles;
+    std::vector<std::string> fallback_paths;
+    std::vector<std::string> fallback_reasons;
+    std::vector<std::string> backdrop_sources;
+    std::vector<std::string> backdrop_access_sources;
+    std::vector<std::string> backdrop_capture_reasons;
+    std::vector<std::string> primary_passes;
+    std::vector<std::string> primary_executors;
+    std::vector<std::string> likely_layers;
+    std::vector<std::string> likely_passes;
+    std::vector<std::string> decision_blockers;
+};
+
+struct SnapshotObservation {
+    bool present = false;
+    bool parse_ok = false;
+    std::string parse_error;
+    std::vector<std::string> top_level_keys;
+    bool debug_present = false;
+    bool semantic_tree_present = false;
+    bool platform_capabilities_present = false;
+    bool platform_runtime_present = false;
+    bool runtime_details_present = false;
+    bool renderer_details_present = false;
+    bool material_surfaces_capability = false;
+    bool material_backdrop_blur_capability = false;
+    bool frame_image_capability = false;
+    bool write_artifact_bundle_capability = false;
+    std::string platform_name;
+    MaterialObservationSummary material;
+};
+
+struct VerifierObservation {
+    bool requested = false;
+    bool executed = false;
+    bool ok = false;
+    int exit_code = 0;
+    bool timed_out = false;
+    std::string stdout_tail;
+    std::string stderr_tail;
+    std::optional<json::Value> report;
+    std::string report_error;
+};
+
+struct ArtifactObservation {
+    fs::path bundle;
+    ArtifactSummary artifact;
+    std::vector<Check> checks;
+    SnapshotObservation snapshot;
+    VerifierObservation verifier;
+    std::vector<std::string> likely_owner_layers;
+    std::vector<std::string> suggested_actions;
+    bool ok = false;
 };
 
 struct PackageSummary {
@@ -452,6 +522,36 @@ auto spec() -> cppx::cli::CommandSpec {
                 },
                 .allow_positionals = false,
                 .category = "artifacts",
+            },
+            {
+                .name = "observe",
+                .summary = "Emit a unified artifact output observation",
+                .options = {
+                    help_option(),
+                    json_option(),
+                    {.name = "manifest",
+                     .arity = cppx::cli::OptionArity::one,
+                     .value_name = "path",
+                     .description = "Verifier manifest JSON; implies --verify"},
+                    {.name = "verify",
+                     .arity = cppx::cli::OptionArity::none,
+                     .description = "Run the uv-managed artifact verifier and embed its report"},
+                    {.name = "expect-platform",
+                     .arity = cppx::cli::OptionArity::one,
+                     .value_name = "name",
+                     .description = "Expected platform name forwarded to the verifier"},
+                    {.name = "require-frame",
+                     .arity = cppx::cli::OptionArity::none,
+                     .description = "Require frame.bmp in structural and verifier checks"},
+                },
+                .positional_name = "bundle",
+                .positional_description =
+                    "Artifact bundle directory containing snapshot.json, frame.bmp, and platform details.",
+                .category = "runtime",
+                .examples = {
+                    "phenotype observe --json /tmp/phenotype-glass-showcase",
+                    "phenotype observe --json /tmp/phenotype-glass-showcase --manifest examples/glass_showcase/artifact_manifest.json",
+                },
             },
             {
                 .name = "package",
@@ -1075,6 +1175,349 @@ auto artifact_json(ArtifactSummary const& summary,
         summary.platform_directory ? "true" : "false",
         summary.platform_file_count,
         checks_json(checks));
+}
+
+auto json_object_member(json::Object const& object, std::string_view key)
+    -> json::Value const* {
+    auto found = object.find(std::string{key});
+    return found == object.end() ? nullptr : &found->second;
+}
+
+auto json_at(json::Value const& value,
+             std::initializer_list<std::string_view> path)
+    -> json::Value const* {
+    auto const* current = &value;
+    for (auto key : path) {
+        if (!current || !current->is_object())
+            return nullptr;
+        current = json_object_member(current->as_object(), key);
+    }
+    return current;
+}
+
+auto json_object_at(json::Value const& value,
+                    std::initializer_list<std::string_view> path)
+    -> json::Object const* {
+    auto const* found = json_at(value, path);
+    return found && found->is_object() ? &found->as_object() : nullptr;
+}
+
+auto json_array_at(json::Value const& value,
+                   std::initializer_list<std::string_view> path)
+    -> json::Array const* {
+    auto const* found = json_at(value, path);
+    return found && found->is_array() ? &found->as_array() : nullptr;
+}
+
+auto json_string_at(json::Value const& value,
+                    std::initializer_list<std::string_view> path)
+    -> std::optional<std::string> {
+    auto const* found = json_at(value, path);
+    if (!found || !found->is_string())
+        return std::nullopt;
+    return found->as_string();
+}
+
+auto json_integer_at(json::Value const& value,
+                     std::initializer_list<std::string_view> path)
+    -> std::optional<std::int64_t> {
+    auto const* found = json_at(value, path);
+    if (!found || !found->is_number())
+        return std::nullopt;
+    return found->as_integer();
+}
+
+auto json_bool_at(json::Value const& value,
+                  std::initializer_list<std::string_view> path)
+    -> std::optional<bool> {
+    auto const* found = json_at(value, path);
+    if (!found || !found->is_bool())
+        return std::nullopt;
+    return found->as_bool();
+}
+
+void append_unique(std::vector<std::string>& values, std::string value) {
+    if (value.empty())
+        return;
+    if (!std::ranges::contains(values, value))
+        values.push_back(std::move(value));
+}
+
+void append_json_string_field(json::Value const& value,
+                              std::initializer_list<std::string_view> path,
+                              std::vector<std::string>& out) {
+    if (auto text = json_string_at(value, path))
+        append_unique(out, *text);
+}
+
+auto json_report_or_null(std::optional<json::Value> const& value)
+    -> std::string {
+    return value ? json::emit(*value) : "null";
+}
+
+auto material_observation_from_snapshot(json::Value const& snapshot)
+    -> MaterialObservationSummary {
+    auto summary = MaterialObservationSummary{};
+    auto const* renderer = json_object_at(
+        snapshot,
+        {"debug", "platform_runtime", "details", "renderer"});
+    if (!renderer)
+        return summary;
+
+    summary.renderer_details_present = true;
+    auto renderer_value = json::Value{*renderer};
+    if (auto contract = json_integer_at(
+            renderer_value,
+            {"material_plan_contract_version"})) {
+        summary.contract_version = *contract;
+    }
+    if (auto count = json_integer_at(renderer_value, {"material_plan_count"})) {
+        summary.declared_plan_count = *count;
+    }
+
+    if (auto const* runtime = json_object_at(
+            renderer_value,
+            {"material_executor_summary"})) {
+        summary.runtime_summary_present = true;
+        auto runtime_value = json::Value{*runtime};
+        if (auto count = json_integer_at(runtime_value, {"plan_count"}))
+            summary.runtime_plan_count = *count;
+        if (auto count = json_integer_at(runtime_value, {"backdrop_copy_count"}))
+            summary.runtime_backdrop_copy_count = *count;
+        if (auto count = json_integer_at(
+                runtime_value,
+                {"next_frame_capture_plan_count"})) {
+            summary.runtime_next_frame_capture_plan_count = *count;
+        }
+    }
+
+    auto const* plans = json_array_at(renderer_value, {"material_plans"});
+    if (!plans)
+        return summary;
+
+    summary.plan_count = plans->size();
+    for (auto const& plan : *plans) {
+        if (!plan.is_object())
+            continue;
+        append_json_string_field(plan, {"kind"}, summary.kinds);
+        append_json_string_field(plan, {"role"}, summary.roles);
+        append_json_string_field(plan, {"fallback_path"}, summary.fallback_paths);
+        append_json_string_field(plan, {"fallback_reason"}, summary.fallback_reasons);
+        append_json_string_field(plan, {"backdrop", "source"}, summary.backdrop_sources);
+        append_json_string_field(
+            plan,
+            {"backdrop_access", "source"},
+            summary.backdrop_access_sources);
+        append_json_string_field(
+            plan,
+            {"backdrop_access", "capture_reason"},
+            summary.backdrop_capture_reasons);
+        append_json_string_field(plan, {"primary_pass", "name"}, summary.primary_passes);
+        append_json_string_field(
+            plan,
+            {"primary_pass", "executor"},
+            summary.primary_executors);
+        append_json_string_field(plan, {"verifier", "likely_layer"}, summary.likely_layers);
+        append_json_string_field(plan, {"verifier", "likely_pass"}, summary.likely_passes);
+        append_json_string_field(
+            plan,
+            {"decision_trace", "first_blocker"},
+            summary.decision_blockers);
+        if (auto fallback = json_bool_at(plan, {"fallback"}); fallback.value_or(false))
+            ++summary.fallback_count;
+        if (auto sampling = json_bool_at(plan, {"backdrop_sampling"});
+            sampling.value_or(false)) {
+            ++summary.backdrop_sampling_count;
+        }
+        if (auto shared = json_bool_at(
+                plan,
+                {"backdrop_access", "shared_frame_capture"});
+            shared.value_or(false)) {
+            ++summary.shared_frame_capture_count;
+        }
+        if (auto next = json_bool_at(
+                plan,
+                {"backdrop_access", "next_frame_capture_required"});
+            next.value_or(false)) {
+            ++summary.next_frame_capture_required_count;
+        }
+    }
+    return summary;
+}
+
+auto observe_snapshot(fs::path const& bundle) -> SnapshotObservation {
+    auto observation = SnapshotObservation{};
+    auto snapshot_path = bundle / "snapshot.json";
+    observation.present = path_exists(snapshot_path);
+    if (!observation.present)
+        return observation;
+
+    auto text = read_text_file(snapshot_path);
+    if (text.empty()) {
+        observation.parse_error = "snapshot.json is empty or unreadable";
+        return observation;
+    }
+
+    try {
+        auto snapshot = json::parse(text);
+        observation.parse_ok = true;
+        if (snapshot.is_object()) {
+            for (auto const& [key, _] : snapshot.as_object())
+                observation.top_level_keys.push_back(key);
+        }
+        observation.debug_present = json_object_at(snapshot, {"debug"}) != nullptr;
+        observation.semantic_tree_present =
+            json_object_at(snapshot, {"debug", "semantic_tree"}) != nullptr;
+        observation.platform_capabilities_present =
+            json_object_at(snapshot, {"debug", "platform_capabilities"}) != nullptr;
+        observation.platform_runtime_present =
+            json_object_at(snapshot, {"debug", "platform_runtime"}) != nullptr;
+        observation.runtime_details_present =
+            json_object_at(snapshot, {"debug", "platform_runtime", "details"}) != nullptr;
+        observation.renderer_details_present =
+            json_object_at(
+                snapshot,
+                {"debug", "platform_runtime", "details", "renderer"}) != nullptr;
+        observation.material_surfaces_capability =
+            json_bool_at(
+                snapshot,
+                {"debug", "platform_capabilities", "material_surfaces"})
+                .value_or(false);
+        observation.material_backdrop_blur_capability =
+            json_bool_at(
+                snapshot,
+                {"debug", "platform_capabilities", "material_backdrop_blur"})
+                .value_or(false);
+        observation.frame_image_capability =
+            json_bool_at(
+                snapshot,
+                {"debug", "platform_capabilities", "frame_image"})
+                .value_or(false);
+        observation.write_artifact_bundle_capability =
+            json_bool_at(
+                snapshot,
+                {"debug", "platform_capabilities", "write_artifact_bundle"})
+                .value_or(false);
+        if (auto platform = json_string_at(
+                snapshot,
+                {"debug", "platform_runtime", "platform"})) {
+            observation.platform_name = *platform;
+        }
+        observation.material = material_observation_from_snapshot(snapshot);
+    } catch (std::exception const& error) {
+        observation.parse_error = error.what();
+    }
+    return observation;
+}
+
+auto material_observation_json(MaterialObservationSummary const& summary)
+    -> std::string {
+    return std::format(
+        "{{\"renderer_details_present\":{},\"runtime_summary_present\":{},"
+        "\"contract_version\":{},\"declared_plan_count\":{},"
+        "\"plan_count\":{},\"fallback_count\":{},"
+        "\"backdrop_sampling_count\":{},"
+        "\"shared_frame_capture_count\":{},"
+        "\"next_frame_capture_required_count\":{},"
+        "\"runtime_plan_count\":{},\"runtime_backdrop_copy_count\":{},"
+        "\"runtime_next_frame_capture_plan_count\":{},"
+        "\"kinds\":{},\"roles\":{},\"fallback_paths\":{},"
+        "\"fallback_reasons\":{},\"backdrop_sources\":{},"
+        "\"backdrop_access_sources\":{},"
+        "\"backdrop_capture_reasons\":{},\"primary_passes\":{},"
+        "\"primary_executors\":{},\"likely_layers\":{},"
+        "\"likely_passes\":{},\"decision_blockers\":{}}}",
+        summary.renderer_details_present ? "true" : "false",
+        summary.runtime_summary_present ? "true" : "false",
+        summary.contract_version,
+        summary.declared_plan_count,
+        summary.plan_count,
+        summary.fallback_count,
+        summary.backdrop_sampling_count,
+        summary.shared_frame_capture_count,
+        summary.next_frame_capture_required_count,
+        summary.runtime_plan_count,
+        summary.runtime_backdrop_copy_count,
+        summary.runtime_next_frame_capture_plan_count,
+        string_array_json(summary.kinds),
+        string_array_json(summary.roles),
+        string_array_json(summary.fallback_paths),
+        string_array_json(summary.fallback_reasons),
+        string_array_json(summary.backdrop_sources),
+        string_array_json(summary.backdrop_access_sources),
+        string_array_json(summary.backdrop_capture_reasons),
+        string_array_json(summary.primary_passes),
+        string_array_json(summary.primary_executors),
+        string_array_json(summary.likely_layers),
+        string_array_json(summary.likely_passes),
+        string_array_json(summary.decision_blockers));
+}
+
+auto snapshot_observation_json(SnapshotObservation const& observation)
+    -> std::string {
+    return std::format(
+        "{{\"present\":{},\"parse_ok\":{},\"parse_error\":{},"
+        "\"top_level_keys\":{},\"debug_present\":{},"
+        "\"semantic_tree_present\":{},"
+        "\"platform_capabilities_present\":{},"
+        "\"platform_runtime_present\":{},"
+        "\"runtime_details_present\":{},"
+        "\"renderer_details_present\":{},"
+        "\"platform_name\":{},"
+        "\"capabilities\":{{\"material_surfaces\":{},"
+        "\"material_backdrop_blur\":{},\"frame_image\":{},"
+        "\"write_artifact_bundle\":{}}},"
+        "\"material\":{}}}",
+        observation.present ? "true" : "false",
+        observation.parse_ok ? "true" : "false",
+        json_string(observation.parse_error),
+        string_array_json(observation.top_level_keys),
+        observation.debug_present ? "true" : "false",
+        observation.semantic_tree_present ? "true" : "false",
+        observation.platform_capabilities_present ? "true" : "false",
+        observation.platform_runtime_present ? "true" : "false",
+        observation.runtime_details_present ? "true" : "false",
+        observation.renderer_details_present ? "true" : "false",
+        json_string(observation.platform_name),
+        observation.material_surfaces_capability ? "true" : "false",
+        observation.material_backdrop_blur_capability ? "true" : "false",
+        observation.frame_image_capability ? "true" : "false",
+        observation.write_artifact_bundle_capability ? "true" : "false",
+        material_observation_json(observation.material));
+}
+
+auto verifier_observation_json(VerifierObservation const& verifier)
+    -> std::string {
+    return std::format(
+        "{{\"requested\":{},\"executed\":{},\"ok\":{},"
+        "\"exit_code\":{},\"timed_out\":{},\"stdout_tail\":{},"
+        "\"stderr_tail\":{},\"report_error\":{},\"report\":{}}}",
+        verifier.requested ? "true" : "false",
+        verifier.executed ? "true" : "false",
+        verifier.ok ? "true" : "false",
+        verifier.exit_code,
+        verifier.timed_out ? "true" : "false",
+        json_string(verifier.stdout_tail),
+        json_string(verifier.stderr_tail),
+        json_string(verifier.report_error),
+        json_report_or_null(verifier.report));
+}
+
+auto artifact_observation_json(ArtifactObservation const& observation)
+    -> std::string {
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"observe artifact\","
+        "\"ok\":{},\"bundle\":{},\"artifact\":{},"
+        "\"snapshot\":{},\"verifier\":{},\"likely_owner_layers\":{},"
+        "\"suggested_actions\":{},\"checks\":{}}}",
+        observation.ok ? "true" : "false",
+        json_string(path_string(observation.bundle)),
+        artifact_json(observation.artifact, observation.checks),
+        snapshot_observation_json(observation.snapshot),
+        verifier_observation_json(observation.verifier),
+        string_array_json(observation.likely_owner_layers),
+        string_array_json(observation.suggested_actions),
+        checks_json(observation.checks));
 }
 
 auto package_summary(fs::path root) -> PackageSummary {
@@ -2811,19 +3254,9 @@ auto uv_project_environment() -> std::string {
     return path_string(path);
 }
 
-int run_artifact_verify(cppx::cli::Invocation const& invocation) {
-    auto path = first_positional_or_error(invocation, "artifact verify");
-    if (!path)
-        return print_error("artifact verify", path.error(), invocation.has("json"));
-
-    auto root = find_repo_root(fs::current_path());
-    if (!root) {
-        return print_error(
-            "artifact verify",
-            "could not find phenotype repository root from current directory",
-            invocation.has("json"));
-    }
-
+auto artifact_verify_args(fs::path const& bundle,
+                          cppx::cli::Invocation const& invocation)
+    -> std::vector<std::string> {
     auto args = std::vector<std::string>{
         "exec",
         "--",
@@ -2832,7 +3265,7 @@ int run_artifact_verify(cppx::cli::Invocation const& invocation) {
         "--frozen",
         "python",
         "tools/verify_artifact_bundle.py",
-        absolute_path_string(*path),
+        absolute_path_string(bundle),
     };
 
     append_path_option_arg(args, invocation, "manifest");
@@ -2846,10 +3279,95 @@ int run_artifact_verify(cppx::cli::Invocation const& invocation) {
     append_repeatable_arg(args, invocation, "require-runtime-detail");
     append_repeatable_arg(args, invocation, "require-pixel-region");
     append_repeatable_arg(args, invocation, "require-pixel-region-metric");
+    return args;
+}
+
+auto last_nonempty_line(std::string_view text) -> std::string {
+    auto end = text.size();
+    while (end > 0 && (text[end - 1] == '\n' || text[end - 1] == '\r'))
+        --end;
+    auto begin = text.rfind('\n', end == 0 ? 0 : end - 1);
+    if (begin == std::string_view::npos)
+        return std::string{text.substr(0, end)};
+    return std::string{text.substr(begin + 1, end - begin - 1)};
+}
+
+auto capture_artifact_verifier(fs::path const& bundle,
+                               cppx::cli::Invocation const& invocation)
+    -> std::expected<VerifierObservation, std::string> {
+    auto root = find_repo_root(fs::current_path());
+    if (!root) {
+        return std::unexpected{
+            "could not find phenotype repository root from current directory"};
+    }
 
     auto spec = cppx::process::ProcessSpec{
         .program = "mise",
-        .args = std::move(args),
+        .args = artifact_verify_args(bundle, invocation),
+        .cwd = *root,
+        .timeout = std::chrono::minutes{5},
+        .env_overrides = {
+            {"UV_PROJECT_ENVIRONMENT", uv_project_environment()},
+        },
+    };
+
+    auto result = cppx::process::system::capture(spec);
+    if (!result) {
+        return std::unexpected{std::format(
+            "failed to run mise/uv verifier: {}",
+            cppx::process::to_string(result.error()))};
+    }
+
+    auto verifier = VerifierObservation{
+        .requested = true,
+        .executed = true,
+        .ok = !result->timed_out && result->exit_code == 0,
+        .exit_code = result->exit_code,
+        .timed_out = result->timed_out,
+        .stdout_tail = std::string{output_tail(result->stdout_text)},
+        .stderr_tail = std::string{output_tail(result->stderr_text)},
+    };
+
+    if (!result->stdout_text.empty()) {
+        try {
+            verifier.report = json::parse(result->stdout_text);
+        } catch (std::exception const& error) {
+            verifier.report_error = error.what();
+        }
+    }
+    if (!verifier.report && !result->stdout_text.empty()) {
+        auto line = last_nonempty_line(result->stdout_text);
+        if (!line.empty() && line.front() == '{') {
+            try {
+                verifier.report = json::parse(line);
+                verifier.report_error.clear();
+            } catch (std::exception const&) {
+            }
+        }
+    }
+    if (!verifier.report && !result->stdout_text.empty()
+        && verifier.report_error.empty()) {
+        verifier.report_error = "verifier stdout did not contain a JSON object";
+    }
+    return verifier;
+}
+
+int run_artifact_verify(cppx::cli::Invocation const& invocation) {
+    auto path = first_positional_or_error(invocation, "artifact verify");
+    if (!path)
+        return print_error("artifact verify", path.error(), invocation.has("json"));
+
+    auto root = find_repo_root(fs::current_path());
+    if (!root) {
+        return print_error(
+            "artifact verify",
+            "could not find phenotype repository root from current directory",
+            invocation.has("json"));
+    }
+
+    auto spec = cppx::process::ProcessSpec{
+        .program = "mise",
+        .args = artifact_verify_args(*path, invocation),
         .cwd = *root,
         .timeout = std::chrono::minutes{5},
         .env_overrides = {
@@ -2880,6 +3398,183 @@ int run_artifact_verify(cppx::cli::Invocation const& invocation) {
     if (result->timed_out)
         return result->exit_code == 0 ? 124 : result->exit_code;
     return result->exit_code;
+}
+
+void append_artifact_observation_guidance(ArtifactObservation& observation) {
+    if (!observation.artifact.exists || !observation.artifact.is_directory) {
+        append_unique(
+            observation.likely_owner_layers,
+            "artifact-bundle");
+        append_unique(
+            observation.suggested_actions,
+            "Pass the artifact bundle directory produced by a phenotype runtime capture.");
+        return;
+    }
+    if (!observation.artifact.snapshot_json) {
+        append_unique(observation.likely_owner_layers, "snapshot-writer");
+        append_unique(
+            observation.suggested_actions,
+            "Run the example with PHENOTYPE_ARTIFACT_DIR and PHENOTYPE_ARTIFACT_EXIT=1, then inspect snapshot.json.");
+    }
+    if (observation.artifact.frame_bmp) {
+        // Structural frame presence is enough here; pixel metrics remain in the verifier.
+    } else {
+        append_unique(observation.likely_owner_layers, "frame-capture");
+        append_unique(
+            observation.suggested_actions,
+            "Inspect frame capture support and the backend artifact writer for missing frame.bmp.");
+    }
+    if (!observation.artifact.platform_directory) {
+        append_unique(observation.likely_owner_layers, "platform-runtime");
+        append_unique(
+            observation.suggested_actions,
+            "Inspect platform runtime detail writers; LLM-debuggable artifacts need platform/*.json files.");
+    }
+    if (observation.snapshot.present && !observation.snapshot.parse_ok) {
+        append_unique(observation.likely_owner_layers, "snapshot-json");
+        append_unique(
+            observation.suggested_actions,
+            "Inspect snapshot.json for truncation or malformed JSON before debugging renderer policy.");
+    }
+    if (observation.snapshot.parse_ok
+        && !observation.snapshot.semantic_tree_present) {
+        append_unique(observation.likely_owner_layers, "semantic-tree");
+        append_unique(
+            observation.suggested_actions,
+            "Inspect debug.semantic_tree serialization; material failures need semantic node context.");
+    }
+    if (observation.snapshot.parse_ok
+        && observation.snapshot.material.plan_count == 0) {
+        append_unique(observation.likely_owner_layers, "material-plan");
+        append_unique(
+            observation.suggested_actions,
+            "Inspect debug.platform_runtime.details.renderer.material_plans and layout material_surface calls.");
+    }
+    for (auto const& layer : observation.snapshot.material.likely_layers)
+        append_unique(observation.likely_owner_layers, layer);
+    if (observation.verifier.executed && !observation.verifier.ok) {
+        append_unique(observation.likely_owner_layers, "artifact-verifier");
+        append_unique(
+            observation.suggested_actions,
+            "Read verifier.report.failure_summary first, then follow the reported JSON path and likely pass.");
+    }
+}
+
+auto observe_artifact(fs::path bundle,
+                      cppx::cli::Invocation const& invocation)
+    -> ArtifactObservation {
+    auto observation = ArtifactObservation{
+        .bundle = std::move(bundle),
+    };
+    observation.artifact = artifact_summary(observation.bundle);
+    observation.checks = artifact_checks(observation.artifact);
+    if (!invocation.has("require-frame")) {
+        for (auto& check : observation.checks) {
+            if (check.name == "frame_bmp") {
+                check.ok = observation.artifact.frame_bmp
+                    ? observation.artifact.frame_bytes > 0
+                    : true;
+                check.hint.clear();
+            }
+        }
+    }
+    observation.snapshot = observe_snapshot(observation.bundle);
+
+    auto verifier_requested =
+        invocation.has("verify") || invocation.value("manifest").has_value();
+    observation.verifier.requested = verifier_requested;
+    if (verifier_requested) {
+        if (auto verifier = capture_artifact_verifier(
+                observation.bundle,
+                invocation)) {
+            observation.verifier = std::move(*verifier);
+        } else {
+            observation.verifier = VerifierObservation{
+                .requested = true,
+                .executed = false,
+                .ok = false,
+                .report_error = verifier.error(),
+            };
+        }
+    }
+
+    append_artifact_observation_guidance(observation);
+    observation.ok = all_ok(observation.checks)
+        && observation.snapshot.present
+        && observation.snapshot.parse_ok
+        && (!verifier_requested || observation.verifier.ok);
+    return observation;
+}
+
+void print_artifact_observation(ArtifactObservation const& observation) {
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "bundle",
+         .value = path_string(observation.bundle),
+         .status = observation.artifact.exists && observation.artifact.is_directory
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "snapshot",
+         .value = observation.snapshot.parse_ok
+            ? "parsed"
+            : (observation.snapshot.present ? "parse failed" : "missing"),
+         .status = observation.snapshot.parse_ok
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "material plans",
+         .value = std::format(
+             "{} plans, {} fallback, {} backdrop",
+             observation.snapshot.material.plan_count,
+             observation.snapshot.material.fallback_count,
+             observation.snapshot.material.backdrop_sampling_count),
+         .status = observation.snapshot.material.plan_count > 0
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::skip},
+        {.label = "platform",
+         .value = observation.snapshot.platform_name.empty()
+            ? "<unknown>"
+            : observation.snapshot.platform_name,
+         .status = observation.snapshot.platform_runtime_present
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::skip},
+        {.label = "frame",
+         .value = observation.artifact.frame_bmp
+            ? std::format("{} bytes", observation.artifact.frame_bytes)
+            : "not present",
+         .status = observation.artifact.frame_bmp
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::skip},
+        {.label = "verifier",
+         .value = observation.verifier.requested
+            ? (observation.verifier.executed
+                ? std::format("exit {}", observation.verifier.exit_code)
+                : observation.verifier.report_error)
+            : "not requested",
+         .status = !observation.verifier.requested
+            ? cppx::terminal::StatusKind::skip
+            : (observation.verifier.ok ? cppx::terminal::StatusKind::ok
+                                       : cppx::terminal::StatusKind::fail)},
+    };
+    std::println("phenotype observe artifact");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    if (!observation.suggested_actions.empty()) {
+        std::println("suggestions:");
+        for (auto const& suggestion : observation.suggested_actions)
+            std::println("  - {}", suggestion);
+    }
+}
+
+int run_observe(cppx::cli::Invocation const& invocation) {
+    auto path = first_positional_or_error(invocation, "observe");
+    if (!path)
+        return print_error("observe", path.error(), invocation.has("json"));
+
+    auto observation = observe_artifact(*path, invocation);
+    if (invocation.has("json")) {
+        std::println("{}", artifact_observation_json(observation));
+    } else {
+        print_artifact_observation(observation);
+    }
+    return observation.ok ? 0 : 1;
 }
 
 int run_artifact_verify_glass_showcase(
@@ -3761,6 +4456,8 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "artifact", "verify-file-explorer"})
         return run_artifact_verify_file_explorer(*parsed);
+    if (parsed->command_path == std::vector<std::string>{"phenotype", "observe"})
+        return run_observe(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "package", "inspect"})
         return run_package_inspect(*parsed);

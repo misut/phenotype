@@ -118,6 +118,7 @@ Current commands:
 | `phenotype artifact verify <bundle>` | implemented | Edge wrapper that runs the uv-managed Python verifier through `mise` and forwards the verifier JSON report. |
 | `phenotype artifact verify-glass-showcase` | implemented | Local-only edge wrapper around the glass showcase build/capture/verifier gate, including accessibility mode. PR CI should not run this slow native capture gate by default. Legacy `tools/verify_glass_showcase*.sh` entry points now delegate to this command unless the CLI invokes them in compatibility mode. |
 | `phenotype artifact verify-file-explorer` | implemented | Local-only edge wrapper around the desktop/mobile Finder-style artifact gate. Legacy `tools/verify_file_explorer_artifacts.sh` now delegates to this command unless the CLI invokes it in compatibility mode. `--profile`, repeated `--view-mode`, and repeated `--scenario` narrow the capture set for faster local iteration before the full gate. |
+| `phenotype observe <bundle>` | implemented | C++ artifact observation envelope for LLM-actionable debugging. It parses `snapshot.json`, summarizes semantic/platform/runtime/material plan presence, material kinds/roles, fallback and backdrop capture reasons, executor counts, likely layer/pass hints, frame/platform files, and optionally embeds the uv-managed verifier report when `--manifest` or `--verify` is supplied. |
 | `phenotype android doctor/devices/emu-start/emu-stop/build/apk/install/launch/stop/run/logs/screencap/contract/clean` | implemented | Stable CLI namespace over the existing Android edge scripts and Android build command. `--json` emits a process/script result envelope, `--serial` forwards `ANDROID_SERIAL`, and `--state-dir`/`--avd`/`--apk` keep device state explicit. |
 | `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, package resource directories, and artifact manifest presence. |
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
@@ -303,7 +304,10 @@ The CLI should not make production rendering slower:
    command metadata, `doctor`, read-only artifact summary, and verifier wrapper
    commands. Initial state is complete.
 3. Move artifact verification into a reusable C++ verifier surface and add
-   Python fixture parity tests until the old verifier can be retired.
+   Python fixture parity tests until the old verifier can be retired. Initial
+   artifact observation is now in C++ through `phenotype observe <bundle>`;
+   assertion-heavy pixel/schema verification still remains in the uv-managed
+   Python verifier until C++ parity is complete.
 4. Add package manifest parsing for assets, locales, fonts, and debug
    resources. Start with inspect-only validation before producing bundles.
    Initial parsing now builds the shared pure `ResourceCatalog`; bundle
@@ -314,7 +318,8 @@ The CLI should not make production rendering slower:
 5. Add deterministic CLI input scripts and output observations for
    `glass_showcase` and `file_explorer_desktop`. Initial
    `file_explorer_desktop`/mobile model driving is complete through
-   `phenotype drive file-explorer`; native command-buffer observation and
+   `phenotype drive file-explorer`; artifact output observation is complete
+   through `phenotype observe <bundle>`. Native command-buffer observation and
    `glass_showcase` input scripts remain.
 6. Replace CI and docs references to shell/Python tools with CLI commands.
    PR CLI/package checks now parse JSON through `uv run --frozen python`

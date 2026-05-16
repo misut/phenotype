@@ -85,6 +85,26 @@ Use it to confirm bundle layout and file presence before handing the bundle to
 the semantic verifier. The Python verifier remains the authoritative contract
 checker until the CLI has verifier parity.
 
+For LLM-actionable output observation, prefer the unified observe command:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli observe --json /tmp/phenotype-glass-showcase \
+  --manifest ../../examples/glass_showcase/artifact_manifest.json \
+  --expect-platform macos \
+  --require-frame
+```
+
+`observe` parses `snapshot.json` in C++ and reports semantic tree presence,
+platform capabilities, platform runtime details, material plan counts,
+material kinds and roles, fallback paths/reasons, backdrop sources and capture
+reasons, executor summary counts, frame/platform files, and likely
+layer/pass hints. Supplying `--manifest` or `--verify` also runs the
+uv-managed verifier and embeds its JSON report in the same envelope. Use this
+as the first artifact triage command when a CI log or local bundle needs one
+machine-readable explanation before deeper pixel-contract debugging.
+
 The CLI also exposes the verifier through an edge wrapper:
 
 ```sh
