@@ -1014,6 +1014,11 @@ namespace detail {
                 static_cast<std::int64_t>(
                     plan.resource_budget.max_pass_count)});
         resource_budget.emplace(
+            "max_execution_stages",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.resource_budget.max_execution_stages)});
+        resource_budget.emplace(
             "max_backdrop_pixels",
             json::Value{plan.resource_budget.max_backdrop_pixels});
         resource_budget.emplace(
@@ -1230,6 +1235,32 @@ namespace detail {
             passes.push_back(json::Value{std::move(pass)});
         }
 
+        json::Array execution_stages;
+        for (unsigned int i = 0; i < plan.execution_stage_count; ++i) {
+            auto const& stage = plan.execution_stages[i];
+            json::Object out_stage;
+            out_stage.emplace("name", json::Value{stage.name});
+            out_stage.emplace("active", json::Value{stage.active});
+            out_stage.emplace(
+                "requires_backdrop",
+                json::Value{stage.requires_backdrop});
+            out_stage.emplace(
+                "likely_layer",
+                json::Value{stage.likely_layer});
+            out_stage.emplace(
+                "sample_taps",
+                json::Value{
+                    static_cast<std::int64_t>(stage.sample_taps)});
+            out_stage.emplace(
+                "executor",
+                json::Value{stage.executor});
+            out_stage.emplace(
+                "max_texture_copy_pixels",
+                json::Value{stage.max_texture_copy_pixels});
+            out_stage.emplace("bounded", json::Value{stage.bounded});
+            execution_stages.push_back(json::Value{std::move(out_stage)});
+        }
+
         json::Object out;
         out.emplace(
             "command_index",
@@ -1290,6 +1321,7 @@ namespace detail {
         out.emplace("resource_budget", json::Value{std::move(resource_budget)});
         out.emplace("verifier", json::Value{std::move(verifier)});
         out.emplace("passes", json::Value{std::move(passes)});
+        out.emplace("execution_stages", json::Value{std::move(execution_stages)});
         return json::Value{std::move(out)};
     }
 
@@ -1326,6 +1358,26 @@ namespace detail {
             "backdrop_runtime_passes",
             json::Value{
                 static_cast<std::int64_t>(summary.backdrop_runtime_passes)});
+        out.emplace(
+            "total_execution_stages",
+            json::Value{
+                static_cast<std::int64_t>(summary.total_execution_stages)});
+        out.emplace(
+            "active_execution_stages",
+            json::Value{
+                static_cast<std::int64_t>(summary.active_execution_stages)});
+        out.emplace(
+            "backdrop_execution_stages",
+            json::Value{
+                static_cast<std::int64_t>(summary.backdrop_execution_stages)});
+        out.emplace(
+            "max_execution_stage_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.max_execution_stage_count)});
+        out.emplace(
+            "max_execution_stages",
+            json::Value{
+                static_cast<std::int64_t>(summary.max_execution_stages)});
         out.emplace(
             "max_pass_texture_copy_pixels",
             json::Value{summary.max_pass_texture_copy_pixels});

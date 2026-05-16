@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "11": 7
+      "12": 7
     },
     "roles": {
       "surface": 7
@@ -70,6 +70,18 @@
     },
     "pass_executors": {
       "backdrop-filter": 7
+    },
+    "stage_names": {
+      "shape-shadow": 7,
+      "backdrop-sample-blur": 7,
+      "edge-highlight": 7,
+      "noise-dither": 7
+    },
+    "stage_executors": {
+      "shape-shadow": 7,
+      "backdrop-filter": 7,
+      "edge-highlight": 7,
+      "ordered-dither": 7
     },
     "sampling_kernels": {
       "weighted-5x5-manhattan": 7

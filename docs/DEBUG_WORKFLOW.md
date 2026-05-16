@@ -139,9 +139,11 @@ the actual `material_plans` executed for the frame. Each plan includes:
   and whether the recommendation was backdrop-driven or vibrancy-enabled;
 - `sampling_kernel`, including the pure kernel name, radius, tap count, blur
   step scale, weight profile, backdrop dependency, and boundedness flag;
-- `quality_policy`, `primary_pass`, `resource_budget`, and the pass list the
-  backend attempted, including the likely layer name, pure executor role, and
-  maximum texture-copy pixels;
+- `quality_policy`, `primary_pass`, `resource_budget`, the pass list the
+  backend attempted, and `execution_stages`. The stage list is a bounded pure
+  description of shadow, primary blur/fallback, edge highlight, and
+  noise/dither work, including likely layer, executor role, backdrop
+  requirement, sample taps, texture-copy bound, and bounded-work flag;
 - verifier expectations for region checks.
 
 When debugging a material failure, read the semantic node first to confirm the
@@ -316,7 +318,8 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 `decision_reduce_motion`, and
 exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `contract_versions`, `pass_names`, `backdrop_sources`, `luminance_responses`,
-`render_target_pixel_formats`, `pass_executors`, `sampling_kernels`,
+`render_target_pixel_formats`, `pass_executors`, `stage_names`,
+`stage_executors`, `sampling_kernels`,
 `sampling_weight_profiles`, `luminance_curves`, `decision_blockers`,
 `foreground_schemes`, `foreground_sources`, `verifier_profiles`,
 `verifier_region_layers`, `verifier_region_passes`, `container_modes`,

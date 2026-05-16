@@ -66,7 +66,7 @@
     "fallback": 0,
     "backdrop_sampling": 11,
     "contract_versions": {
-      "11": 11
+      "12": 11
     },
     "roles": {
       "surface": 1,

@@ -10,7 +10,8 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 11;
+inline constexpr std::uint32_t material_plan_contract_version = 12;
+inline constexpr unsigned int material_max_execution_stages = 4;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -163,10 +164,22 @@ struct MaterialResourceBudget {
     unsigned int max_sample_taps = 0;
     unsigned int max_sampling_kernel_radius = 0;
     unsigned int max_pass_count = 1;
+    unsigned int max_execution_stages = material_max_execution_stages;
     std::int64_t max_backdrop_pixels = 0;
     float max_container_spacing = 0.0f;
     bool bounded_texture_copy = true;
     bool deterministic_fallback = true;
+};
+
+struct MaterialExecutionStage {
+    char const* name = "none";
+    bool active = false;
+    bool requires_backdrop = false;
+    unsigned int sample_taps = 0;
+    char const* likely_layer = "material-fallback-pass";
+    char const* executor = "none";
+    std::int64_t max_texture_copy_pixels = 0;
+    bool bounded = true;
 };
 
 struct MaterialBackdropAnalysis {
@@ -280,6 +293,9 @@ struct MaterialPlan {
     MaterialQualityPolicy quality_policy{};
     MaterialPassExpectation primary_pass{};
     MaterialResourceBudget resource_budget{};
+    unsigned int execution_stage_count = 0;
+    MaterialExecutionStage
+        execution_stages[material_max_execution_stages]{};
     MaterialVerifierExpectation verifier{};
 
     constexpr bool fallback() const noexcept {
@@ -291,6 +307,16 @@ struct MaterialRuntimeRecord {
     MaterialPlan plan{};
     std::uint32_t command_index = 0;
 };
+
+inline void append_material_execution_stage(
+        MaterialPlan& plan,
+        MaterialExecutionStage stage) noexcept {
+    if (!stage.active)
+        return;
+    if (plan.execution_stage_count >= material_max_execution_stages)
+        return;
+    plan.execution_stages[plan.execution_stage_count++] = stage;
+}
 
 struct MaterialForegroundTextResolution {
     Color color{};
@@ -307,6 +333,11 @@ struct MaterialRuntimeSummary {
     std::uint32_t total_runtime_passes = 0;
     std::uint32_t active_runtime_passes = 0;
     std::uint32_t backdrop_runtime_passes = 0;
+    std::uint32_t total_execution_stages = 0;
+    std::uint32_t active_execution_stages = 0;
+    std::uint32_t backdrop_execution_stages = 0;
+    unsigned int max_execution_stage_count = 0;
+    unsigned int max_execution_stages = 0;
     std::int64_t max_pass_texture_copy_pixels = 0;
     std::int64_t total_pass_texture_copy_pixels = 0;
     float max_plan_blur_radius = 0.0f;
@@ -371,6 +402,19 @@ inline void accumulate_material_runtime_summary(
         ++summary.active_runtime_passes;
     if (plan.primary_pass.requires_backdrop)
         ++summary.backdrop_runtime_passes;
+    summary.total_execution_stages += plan.execution_stage_count;
+    summary.max_execution_stage_count =
+        std::max(summary.max_execution_stage_count, plan.execution_stage_count);
+    summary.max_execution_stages =
+        std::max(summary.max_execution_stages,
+                 plan.resource_budget.max_execution_stages);
+    for (unsigned int i = 0; i < plan.execution_stage_count; ++i) {
+        auto const& stage = plan.execution_stages[i];
+        if (stage.active)
+            ++summary.active_execution_stages;
+        if (stage.requires_backdrop)
+            ++summary.backdrop_execution_stages;
+    }
     summary.max_pass_texture_copy_pixels = std::max(
         summary.max_pass_texture_copy_pixels,
         plan.primary_pass.max_texture_copy_pixels);
@@ -1260,6 +1304,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.resource_budget.max_sample_taps = plan.sample_taps;
     plan.resource_budget.max_sampling_kernel_radius = 0u;
     plan.resource_budget.max_pass_count = 1;
+    plan.resource_budget.max_execution_stages = material_max_execution_stages;
     plan.resource_budget.max_backdrop_pixels =
         resolved_quality.max_backdrop_pixels;
     plan.resource_budget.max_container_spacing = plan.container.spacing;
@@ -1434,6 +1479,63 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
             "none",
             0,
         };
+    }
+    if (has_material && plan.shadow_alpha > 0.0f) {
+        append_material_execution_stage(
+            plan,
+            MaterialExecutionStage{
+                "shape-shadow",
+                true,
+                false,
+                0u,
+                "material-shadow-pass",
+                "shape-shadow",
+                0,
+                true,
+            });
+    }
+    if (plan.primary_pass.active) {
+        append_material_execution_stage(
+            plan,
+            MaterialExecutionStage{
+                plan.primary_pass.name,
+                true,
+                plan.primary_pass.requires_backdrop,
+                plan.primary_pass.sample_taps,
+                plan.primary_pass.likely_layer,
+                plan.primary_pass.executor,
+                plan.primary_pass.max_texture_copy_pixels,
+                true,
+            });
+    }
+    if (has_material && plan.edge_highlight > 0.0f && plan.primary_pass.active) {
+        append_material_execution_stage(
+            plan,
+            MaterialExecutionStage{
+                "edge-highlight",
+                true,
+                false,
+                0u,
+                plan.backdrop_sampling ? "material-edge-pass"
+                                       : "material-fallback-pass",
+                "edge-highlight",
+                0,
+                true,
+            });
+    }
+    if (has_material && plan.noise_opacity > 0.0f && plan.backdrop_sampling) {
+        append_material_execution_stage(
+            plan,
+            MaterialExecutionStage{
+                "noise-dither",
+                true,
+                false,
+                0u,
+                "material-noise-pass",
+                "ordered-dither",
+                0,
+                true,
+            });
     }
     plan.verifier.require_backdrop_source = plan.backdrop_sampling;
     plan.verifier.require_edge_highlight = plan.edge_highlight > 0.0f

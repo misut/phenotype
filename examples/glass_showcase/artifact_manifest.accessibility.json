@@ -36,7 +36,7 @@
       "reduced transparency disables backdrop sampling": 7
     },
     "contract_versions": {
-      "11": 7
+      "12": 7
     },
     "roles": {
       "surface": 7
@@ -72,6 +72,16 @@
     },
     "pass_executors": {
       "fallback-fill": 7
+    },
+    "stage_names": {
+      "shape-shadow": 7,
+      "translucent-rounded-rect": 7,
+      "edge-highlight": 7
+    },
+    "stage_executors": {
+      "shape-shadow": 7,
+      "fallback-fill": 7,
+      "edge-highlight": 7
     },
     "sampling_kernels": {
       "none": 7
