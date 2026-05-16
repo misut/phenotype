@@ -163,6 +163,7 @@ cd tools/phenotype_cli
 mise exec -- exon build
 .exon/debug/phenotype_cli artifact verify-file-explorer --json
 .exon/debug/phenotype_cli drive file-explorer --json \
+  --input view:gallery \
   --input viewport:900x620@2 \
   --input select:README.txt \
   --input duplicate \
@@ -213,13 +214,17 @@ startup artifact contract.
 The same shared model is available without a native window through
 `phenotype drive file-explorer`. That command applies typed inputs to the
 sandboxed model and emits JSON containing the input trace, visible entries,
-viewport, pure Finder chrome/grid metrics, capabilities, operation receipt,
-selected preview excerpt, and final snapshot. It is the lightweight
+viewport, view mode, pure Finder chrome/grid metrics, capabilities, operation
+receipt, selected preview excerpt, and final snapshot. It is the lightweight
 CI-friendly counterpart to the local
 desktop/mobile artifact capture gate.
 File-operation inputs are resolved as direct child entry names in the current
 sandbox folder; path traversal or hidden-entry names produce failed operation
 receipts that can be asserted with `--expect operation:...:fail`.
+View-mode inputs (`view:icon`, `view:list`, `view:column`, or `view:gallery`)
+use the same shared state field as the desktop toolbar and
+`PHENOTYPE_FILE_EXPLORER_VIEW`, so headless CLI traces and native artifacts
+describe the same Finder pane contract.
 
 The glass showcase has the same headless model path through
 `examples/glass_showcase_shared` and `phenotype drive glass-showcase`. The
@@ -447,7 +452,7 @@ Current status by example:
 |---|---|---|
 | `examples/native` | `phenotype run examples/native --artifact-dir /tmp/phenotype-native-startup --artifact-exit`, or direct `.exon/debug/native` with the same environment variables | Verified by `tools/verify_artifact_bundle.py`; scenario-specific pixel-region checks can be added as needed |
 | `examples/glass_showcase` | `phenotype run glass_showcase --artifact-dir /tmp/phenotype-glass-showcase --artifact-exit`, `phenotype artifact verify-glass-showcase` from the CLI, or `phenotype drive glass-showcase --script examples/glass_showcase/glass_showcase.drive` for headless input checks | Verifies all public material kinds, macOS material capability, resolved material plan schema and contract version, material execution stages, explicit stage capacity/drop counters, surface-role summary, exact material/container/shape/foreground/backdrop-access/capture-reason plan summary, semantic/runtime material parity, material quality policy, material resource/capture bounds, foreground text execution counters, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; the shared drive model verifies backdrop/density/inspector/viewport/material-count state without native capture; run the verifier locally before material PRs, while CI keeps only build-level artifact gates |
-| `examples/file_explorer_desktop` | `phenotype run file_explorer_desktop --artifact-dir /tmp/phenotype-file-explorer --artifact-exit`, or `phenotype artifact verify-file-explorer` from the CLI | Verifies a Finder-style desktop startup scene with glass toolbar/sidebar/icon-grid/status surfaces, neutral unselected Recents startup status, deterministic recent ordering for the Korean PDF probe row, stable document/image/video/folder thumbnail labels, stable create/duplicate/delete labels, a real sandboxed Trash location, operation receipts for file select/open/create/read/duplicate/delete and folder select/open/create/delete scenarios, shared sort/search-state receipts, selection action metadata, Finder segmented toolbar group/separator/button metrics through `ExplorerChromeMetrics`, semantic/runtime material parity, explicit material surface roles, material container identity, backdrop access/capture bounds, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, foreground text execution counters, macOS active-Space/key-window diagnostics, and pixel-region checks for the sidebar, toolbar, and icon grid; local gate only by default |
+| `examples/file_explorer_desktop` | `phenotype run file_explorer_desktop --artifact-dir /tmp/phenotype-file-explorer --artifact-exit`, or `phenotype artifact verify-file-explorer` from the CLI | Verifies a Finder-style desktop startup scene with glass toolbar/sidebar/icon-grid/status surfaces, neutral unselected Recents startup status, deterministic recent ordering for the Korean PDF probe row, stable document/image/video/folder thumbnail labels, stable create/duplicate/delete labels, a real sandboxed Trash location, operation receipts for file select/open/create/read/duplicate/delete and folder select/open/create/delete scenarios, shared sort/search/view-mode receipts, selection action metadata, Finder segmented toolbar group/separator/button metrics through `ExplorerChromeMetrics`, semantic/runtime material parity, explicit material surface roles, material container identity, backdrop access/capture bounds, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, foreground text execution counters, macOS active-Space/key-window diagnostics, and pixel-region checks for the sidebar, toolbar, and icon grid; local gate only by default |
 | `examples/file_explorer_mobile` | `phenotype run file_explorer_mobile --artifact-dir /tmp/phenotype-file-explorer-mobile --artifact-exit`, or `phenotype artifact verify-file-explorer` from the CLI | Verifies the compact mobile browse/preview/create startup scene with all material kinds, stable navigation labels including Trash, operation receipts for file open/create/read/duplicate/delete and folder open/create/delete scenarios, shared sort/search-state receipts, duplicate/delete action metadata, semantic/runtime material parity, explicit toolbar/navigation/status material roles, material container identity, backdrop access/capture bounds, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, and foreground text execution counters; local gate only by default |
 | `examples/android` | `phenotype android contract` enables the app-private artifact hook, pulls `snapshot.json`, `frame.bmp`, and `platform/android-runtime.json` with `adb run-as`, then applies `examples/android/artifact_manifest.json` | Verifies Android debug/runtime basics plus a real `MaterialRect` fallback plan, exact fallback material plan summary and contract version, semantic/runtime material role parity, material shape validity, inactive backdrop access, material quality policy, material resource bounds, and explicit zero dropped-stage count; CI device/emulator wiring remains future work |
 | `docs` | WASI snapshot bundle is available when the host preopens a writable directory | Default `exon test --target wasm32-wasi` does not preopen one |

@@ -125,7 +125,7 @@ Current commands:
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
 | `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, debug manifest references, byte counts, content metadata, and SHA-256 digests. |
 | `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource, and reports the same package checks plus bundle integrity totals. |
-| `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs or line-based scripts and emits a stable observation JSON with trace, entries, viewport, pure Finder chrome/grid metrics, capabilities, operation receipt, preview excerpt fields, localized labels, package-resource metadata, and optional expectation results. |
+| `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs or line-based scripts and emits a stable observation JSON with trace, entries, viewport, view mode, pure Finder chrome/grid metrics, capabilities, operation receipt, preview excerpt fields, localized labels, package-resource metadata, and optional expectation results. |
 | `phenotype drive glass-showcase` | implemented | Drives the shared material probe model from typed CLI inputs or line-based scripts and emits a stable observation JSON with final state, trace, public material kinds, expected material plan count, backdrop/inspector/density/viewport state, progress value, and optional expectation results. |
 | `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, passes package-root environment when a manifest exists, validates file explorer `--input`/`--script` through the shared model, and emits a stable JSON launch receipt with build/run output tails, input counts, timeout state, artifact bundle summary, and explicit environment overrides. |
 
@@ -176,6 +176,10 @@ only `PHENOTYPE_FILE_EXPLORER_INPUTS` plus
 values at startup and call the shared parser/apply functions before the first
 artifact frame. This keeps deterministic GUI input replay available to CI and
 LLM debugging without introducing a second native event stack.
+The same path now owns Finder view-mode changes (`view:icon`, `view:list`,
+`view:column`, and `view:gallery`), so the desktop toolbar, startup environment,
+headless drive JSON, and artifact captures all observe one shared state field
+instead of separate UI-only mode storage.
 
 ## Packaging contract
 

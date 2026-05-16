@@ -109,6 +109,15 @@ fallback = []
     assert(parsed_activate.ok);
     assert(parsed_activate.input.kind == demo::ExplorerInputKind::ActivateEntry);
     assert(parsed_activate.input.value == "Documents");
+    auto parsed_view = demo::parse_explorer_input("view:gallery");
+    assert(parsed_view.ok);
+    assert(parsed_view.input.kind == demo::ExplorerInputKind::ViewMode);
+    assert(parsed_view.input.view_mode == demo::ExplorerViewMode::Gallery);
+    assert(parsed_view.input.value == "gallery");
+    assert(demo::explorer_input_label(parsed_view.input) == "view_mode:gallery");
+    auto parsed_bad_view = demo::parse_explorer_input("view:cover-flow");
+    assert(!parsed_bad_view.ok);
+    assert(parsed_bad_view.error.find("view") != std::string::npos);
     auto parsed_sort = demo::parse_explorer_input("sort:kind");
     assert(parsed_sort.ok);
     assert(parsed_sort.input.kind == demo::ExplorerInputKind::Sort);
@@ -239,6 +248,8 @@ duplicate
     assert(!snap.can_preview_selected);
     assert(snap.action_summary.find("Select a file") != std::string::npos);
     assert(snap.sort_label == "Sort: Recent");
+    assert(snap.view_mode == demo::ExplorerViewMode::Icon);
+    assert(demo::view_mode_label(snap.view_mode) == "Icon View");
     assert(snap.entries.size() >= 5);
     assert(snap.entries[0].name == "작성예시3_선택_DC 탈퇴신청서.pdf");
     assert(snap.entries[1].name == "작성예시2_필수_운용지시서.pdf");
@@ -316,6 +327,11 @@ duplicate
     assert(saw_korean_pdf);
     assert(saw_japanese_pdf);
     assert(saw_chinese_pdf);
+
+    demo::apply_explorer_input(state, parsed_view.input, profile);
+    snap = demo::snapshot(state);
+    assert(snap.view_mode == demo::ExplorerViewMode::Gallery);
+    assert(state.status == "Switched to Gallery View.");
 
     state.draft_name = "../ Launch Plan";
     state.draft_body = "Created from test_file_explorer_model.";
@@ -526,6 +542,9 @@ duplicate
     auto drive_root = demo::demo_root(drive_profile);
     fs::remove_all(drive_root, ec);
     std::vector<demo::ExplorerInput> inputs{
+        {.kind = demo::ExplorerInputKind::ViewMode,
+         .value = "list",
+         .view_mode = demo::ExplorerViewMode::List},
         {.kind = demo::ExplorerInputKind::Viewport,
          .value = "900x620@2",
          .viewport_width = 900,
@@ -545,6 +564,7 @@ duplicate
     auto driven = demo::drive_explorer(drive_profile, inputs);
     assert(driven.profile == drive_profile);
     assert(driven.trace.size() == inputs.size());
+    assert(driven.snapshot.view_mode == demo::ExplorerViewMode::List);
     assert(driven.state.viewport_width == 900);
     assert(driven.state.viewport_height == 620);
     assert(driven.state.viewport_scale == 2.0f);
@@ -552,15 +572,16 @@ duplicate
     assert(driven.chrome.viewport.height == 620);
     assert(driven.chrome.viewport.scale == 2.0f);
     assert(driven.chrome.icon_grid_columns == 3);
-    assert(driven.trace[0].chrome.viewport.width == 900);
-    assert(driven.trace[0].chrome.icon_grid_columns == 3);
-    assert(driven.trace[0].status == "Viewport set to 900x620@2");
-    assert(driven.trace[3].operation.kind == "file_create");
-    assert(driven.trace[3].operation.ok);
-    assert(driven.trace[4].operation.kind == "file_duplicate");
+    assert(driven.trace[0].status == "Switched to List View.");
+    assert(driven.trace[1].chrome.viewport.width == 900);
+    assert(driven.trace[1].chrome.icon_grid_columns == 3);
+    assert(driven.trace[1].status == "Viewport set to 900x620@2");
+    assert(driven.trace[4].operation.kind == "file_create");
     assert(driven.trace[4].operation.ok);
-    assert(driven.trace[5].operation.kind == "file_delete");
+    assert(driven.trace[5].operation.kind == "file_duplicate");
     assert(driven.trace[5].operation.ok);
+    assert(driven.trace[6].operation.kind == "file_delete");
+    assert(driven.trace[6].operation.ok);
     assert(driven.snapshot.relative_location == "Trash");
     assert(driven.snapshot.sort_label == "Sort: Kind");
     bool saw_cli_note_copy = false;

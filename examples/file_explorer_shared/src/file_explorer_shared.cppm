@@ -44,6 +44,13 @@ enum class SortMode {
     Size,
 };
 
+enum class ExplorerViewMode {
+    Icon,
+    List,
+    Column,
+    Gallery,
+};
+
 struct Snapshot {
     fs::path root;
     fs::path current;
@@ -67,6 +74,7 @@ struct Snapshot {
     std::string sort_label;
     std::string preview;
     SortMode sort_mode = SortMode::Name;
+    ExplorerViewMode view_mode = ExplorerViewMode::Icon;
     std::size_t file_count = 0;
     std::size_t folder_count = 0;
 };
@@ -84,6 +92,7 @@ struct ExplorerState {
     std::vector<fs::path> forward_stack;
     OperationReceipt last_operation;
     SortMode sort_mode = SortMode::Name;
+    ExplorerViewMode view_mode = ExplorerViewMode::Icon;
     int viewport_width = 0;
     int viewport_height = 0;
     float viewport_scale = 1.0f;
@@ -97,6 +106,7 @@ enum class ExplorerInputKind {
     Search,
     OpenEntry,
     ActivateEntry,
+    ViewMode,
     Viewport,
     DraftName,
     DraftFolderName,
@@ -118,6 +128,7 @@ struct ExplorerInput {
     ExplorerInputKind kind = ExplorerInputKind::Noop;
     std::string value;
     SortMode sort_mode = SortMode::Name;
+    ExplorerViewMode view_mode = ExplorerViewMode::Icon;
     int viewport_width = 0;
     int viewport_height = 0;
     float viewport_scale = 1.0f;
@@ -695,6 +706,43 @@ inline std::string sort_mode_label(SortMode mode) {
     }
 }
 
+inline std::string view_mode_value_name(ExplorerViewMode mode) {
+    switch (mode) {
+        case ExplorerViewMode::List: return "list";
+        case ExplorerViewMode::Column: return "column";
+        case ExplorerViewMode::Gallery: return "gallery";
+        case ExplorerViewMode::Icon:
+        default: return "icon";
+    }
+}
+
+inline std::string view_mode_label(ExplorerViewMode mode) {
+    switch (mode) {
+        case ExplorerViewMode::List: return "List View";
+        case ExplorerViewMode::Column: return "Column View";
+        case ExplorerViewMode::Gallery: return "Gallery View";
+        case ExplorerViewMode::Icon:
+        default: return "Icon View";
+    }
+}
+
+inline ExplorerViewMode view_mode_from_name(std::string_view value) {
+    auto mode = lower_copy(trim(value));
+    if (mode == "list")
+        return ExplorerViewMode::List;
+    if (mode == "column")
+        return ExplorerViewMode::Column;
+    if (mode == "gallery")
+        return ExplorerViewMode::Gallery;
+    return ExplorerViewMode::Icon;
+}
+
+inline bool known_view_mode_name(std::string_view value) {
+    auto mode = lower_copy(trim(value));
+    return mode == "icon" || mode == "list" || mode == "column"
+        || mode == "gallery";
+}
+
 inline SortMode next_sort_mode(SortMode mode) {
     switch (mode) {
         case SortMode::Recent: return SortMode::Name;
@@ -713,6 +761,7 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::Search: return "search";
         case ExplorerInputKind::OpenEntry: return "open_entry";
         case ExplorerInputKind::ActivateEntry: return "activate_entry";
+        case ExplorerInputKind::ViewMode: return "view_mode";
         case ExplorerInputKind::Viewport: return "viewport";
         case ExplorerInputKind::DraftName: return "draft_name";
         case ExplorerInputKind::DraftFolderName: return "draft_folder_name";
@@ -736,6 +785,8 @@ inline std::string explorer_input_label(ExplorerInput const& input) {
     auto label = explorer_input_kind_name(input.kind);
     if (input.kind == ExplorerInputKind::Sort)
         return label + ":" + sort_mode_label(input.sort_mode);
+    if (input.kind == ExplorerInputKind::ViewMode)
+        return label + ":" + view_mode_value_name(input.view_mode);
     if (!input.value.empty())
         return label + ":" + input.value;
     return label;
@@ -999,6 +1050,22 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         return require_value(ExplorerInputKind::ActivateEntry);
     if (name == "search")
         return require_value(ExplorerInputKind::Search);
+    if (name == "view" || name == "view-mode" || name == "view_mode"
+        || name == "mode") {
+        if (value.empty())
+            return input_parse_error(
+                "input 'view' requires icon, list, column, or gallery");
+        if (!known_view_mode_name(value)) {
+            return input_parse_error(
+                "input 'view' accepts only icon, list, column, or gallery");
+        }
+        auto mode = view_mode_from_name(value);
+        return parsed_input({
+            .kind = ExplorerInputKind::ViewMode,
+            .value = view_mode_value_name(mode),
+            .view_mode = mode,
+        });
+    }
     if (name == "viewport" || name == "resize" || name == "size") {
         if (value.empty())
             return input_parse_error("input 'viewport' requires a value");
@@ -1391,6 +1458,7 @@ inline Snapshot snapshot(ExplorerState const& state) {
     out.operation_label = operation_label(state.last_operation);
     out.sort_mode = state.sort_mode;
     out.sort_label = "Sort: " + sort_mode_label(state.sort_mode);
+    out.view_mode = state.view_mode;
     for (auto const& entry : out.entries) {
         if (entry.folder)
             ++out.folder_count;
@@ -1886,6 +1954,7 @@ inline void reset_demo_tree(ExplorerState& state, std::string_view profile) {
     state.forward_stack.clear();
     state.last_operation = {};
     state.sort_mode = default_sort_mode(profile);
+    state.view_mode = ExplorerViewMode::Icon;
     state.status = "Demo files reset.";
 }
 
@@ -2037,6 +2106,10 @@ inline void apply_explorer_input(
             return;
         case ExplorerInputKind::ActivateEntry:
             activate_entry(state, input.value);
+            return;
+        case ExplorerInputKind::ViewMode:
+            state.view_mode = input.view_mode;
+            state.status = "Switched to " + view_mode_label(input.view_mode) + ".";
             return;
         case ExplorerInputKind::Viewport:
             state.viewport_width = input.viewport_width;
