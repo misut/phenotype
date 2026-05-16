@@ -1308,7 +1308,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(glass_plan.primary_pass.max_texture_copy_pixels
            == glass_plan.render_target.pixel_count);
     assert(glass_plan.resource_budget.max_execution_stages == 4);
+    assert(glass_plan.execution_stage_capacity == 4);
     assert(glass_plan.execution_stage_count == 4);
+    assert(glass_plan.dropped_execution_stage_count == 0);
     assert(std::string(glass_plan.execution_stages[0].name)
            == "shape-shadow");
     assert(!glass_plan.execution_stages[0].requires_backdrop);
@@ -1580,10 +1582,12 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(budget_plan.resource_budget.max_sampling_kernel_radius == 2);
     assert(budget_plan.resource_budget.max_pass_count == 1);
     assert(budget_plan.resource_budget.max_execution_stages == 4);
+    assert(budget_plan.execution_stage_capacity == 4);
     assert(budget_plan.resource_budget.max_backdrop_pixels == 600'000);
     assert(budget_plan.resource_budget.bounded_texture_copy);
     assert(budget_plan.resource_budget.deterministic_fallback);
     assert(budget_plan.execution_stage_count == 2);
+    assert(budget_plan.dropped_execution_stage_count == 0);
     assert(std::string(budget_plan.execution_stages[0].name)
            == "backdrop-sample-blur");
     assert(std::string(budget_plan.execution_stages[1].name)
@@ -1619,6 +1623,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(invalid_plan.primary_pass.max_texture_copy_pixels == 0);
     assert(std::string(invalid_plan.verifier.likely_pass) == "none");
     assert(invalid_plan.execution_stage_count == 0);
+    assert(invalid_plan.dropped_execution_stage_count == 0);
     assert(!invalid_plan.shape.valid);
     assert(!invalid_plan.shape.rounded);
     assert(invalid_plan.shape.effective_radius == 0.0f);
@@ -1626,6 +1631,23 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!invalid_plan.decision_trace.has_material);
     assert(std::string(invalid_plan.decision_trace.first_blocker)
            == "invalid-geometry");
+
+    MaterialPlan capacity_plan;
+    capacity_plan.execution_stage_capacity = 1;
+    MaterialExecutionStage active_stage{
+        .name = "shape-shadow",
+        .active = true,
+        .requires_backdrop = false,
+        .sample_taps = 0,
+        .likely_layer = "material-shadow-pass",
+        .executor = "shape-shadow",
+        .max_texture_copy_pixels = 0,
+        .bounded = true,
+    };
+    append_material_execution_stage(capacity_plan, active_stage);
+    append_material_execution_stage(capacity_plan, active_stage);
+    assert(capacity_plan.execution_stage_count == 1);
+    assert(capacity_plan.dropped_execution_stage_count == 1);
 
     std::puts("PASS: material planner resolves backdrop and fallback paths");
 }

@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 12;
+inline constexpr std::uint32_t material_plan_contract_version = 13;
 inline constexpr unsigned int material_max_execution_stages = 4;
 
 struct MaterialGeometry {
@@ -294,7 +294,9 @@ struct MaterialPlan {
     MaterialQualityPolicy quality_policy{};
     MaterialPassExpectation primary_pass{};
     MaterialResourceBudget resource_budget{};
+    unsigned int execution_stage_capacity = material_max_execution_stages;
     unsigned int execution_stage_count = 0;
+    unsigned int dropped_execution_stage_count = 0;
     MaterialExecutionStage
         execution_stages[material_max_execution_stages]{};
     MaterialVerifierExpectation verifier{};
@@ -314,8 +316,12 @@ inline void append_material_execution_stage(
         MaterialExecutionStage stage) noexcept {
     if (!stage.active)
         return;
-    if (plan.execution_stage_count >= material_max_execution_stages)
+    auto const capacity =
+        std::min(plan.execution_stage_capacity, material_max_execution_stages);
+    if (plan.execution_stage_count >= capacity) {
+        ++plan.dropped_execution_stage_count;
         return;
+    }
     plan.execution_stages[plan.execution_stage_count++] = stage;
 }
 
@@ -337,8 +343,10 @@ struct MaterialRuntimeSummary {
     std::uint32_t total_execution_stages = 0;
     std::uint32_t active_execution_stages = 0;
     std::uint32_t backdrop_execution_stages = 0;
+    std::uint32_t dropped_execution_stages = 0;
     unsigned int max_execution_stage_count = 0;
     unsigned int max_execution_stages = 0;
+    unsigned int max_execution_stage_capacity = 0;
     std::int64_t max_pass_texture_copy_pixels = 0;
     std::int64_t total_pass_texture_copy_pixels = 0;
     float max_plan_blur_radius = 0.0f;
@@ -379,6 +387,7 @@ struct MaterialExecutorSummary {
     std::uint32_t active_execution_stage_count = 0;
     std::uint32_t backdrop_execution_stage_count = 0;
     std::uint32_t primary_execution_stage_count = 0;
+    std::uint32_t dropped_execution_stage_count = 0;
     std::uint32_t backdrop_filter_stage_count = 0;
     std::uint32_t fallback_fill_stage_count = 0;
     std::uint32_t shadow_stage_count = 0;
@@ -447,6 +456,8 @@ inline void accumulate_material_executor_plan_summary(
         if (material_stage_matches(stage.name, "noise-dither"))
             ++summary.noise_dither_stage_count;
     }
+    summary.dropped_execution_stage_count +=
+        plan.dropped_execution_stage_count;
 }
 
 inline void accumulate_material_runtime_summary(
@@ -465,11 +476,16 @@ inline void accumulate_material_runtime_summary(
     if (plan.primary_pass.requires_backdrop)
         ++summary.backdrop_runtime_passes;
     summary.total_execution_stages += plan.execution_stage_count;
+    summary.dropped_execution_stages +=
+        plan.dropped_execution_stage_count;
     summary.max_execution_stage_count =
         std::max(summary.max_execution_stage_count, plan.execution_stage_count);
     summary.max_execution_stages =
         std::max(summary.max_execution_stages,
                  plan.resource_budget.max_execution_stages);
+    summary.max_execution_stage_capacity =
+        std::max(summary.max_execution_stage_capacity,
+                 plan.execution_stage_capacity);
     for (unsigned int i = 0; i < plan.execution_stage_count; ++i) {
         auto const& stage = plan.execution_stages[i];
         if (stage.active)

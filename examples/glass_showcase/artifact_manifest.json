@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "12": 7
+      "13": 7
     },
     "roles": {
       "surface": 7
@@ -173,6 +173,20 @@
     "active_runtime_passes_gte": 7,
     "backdrop_runtime_passes_lte": 7,
     "backdrop_runtime_passes_gte": 7,
+    "total_execution_stages_lte": 28,
+    "total_execution_stages_gte": 28,
+    "active_execution_stages_lte": 28,
+    "active_execution_stages_gte": 28,
+    "backdrop_execution_stages_lte": 7,
+    "backdrop_execution_stages_gte": 7,
+    "dropped_execution_stages_lte": 0,
+    "dropped_execution_stages_gte": 0,
+    "max_execution_stage_count_lte": 4,
+    "max_execution_stage_count_gte": 4,
+    "max_execution_stage_capacity_lte": 4,
+    "max_execution_stage_capacity_gte": 4,
+    "max_execution_stages_lte": 4,
+    "max_execution_stages_gte": 4,
     "require_bounded_texture_copy": true,
     "require_deterministic_fallback": true
   },

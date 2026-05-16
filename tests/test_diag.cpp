@@ -906,6 +906,8 @@ void test_material_runtime_record_json_contract() {
                .at("max_container_spacing").as_float() == 0.0f);
     assert(obj.at("resource_budget").as_object()
                .at("deterministic_fallback").as_bool() == true);
+    assert(obj.at("execution_stage_capacity").as_integer() == 4);
+    assert(obj.at("dropped_execution_stage_count").as_integer() == 0);
     assert(obj.at("verifier").as_object().at("likely_layer").as_string()
            == "material-fallback-pass");
 
@@ -919,6 +921,8 @@ void test_material_runtime_record_json_contract() {
     assert(pure_summary.total_runtime_passes == 1);
     assert(pure_summary.active_runtime_passes == 1);
     assert(pure_summary.backdrop_runtime_passes == 0);
+    assert(pure_summary.dropped_execution_stages == 0);
+    assert(pure_summary.max_execution_stage_capacity == 4);
     assert(pure_summary.max_pass_texture_copy_pixels == 0);
     assert(pure_summary.total_pass_texture_copy_pixels == 0);
     assert(pure_summary.max_plan_sample_taps == 0);
@@ -948,6 +952,8 @@ void test_material_runtime_record_json_contract() {
     assert(summary_obj.at("total_runtime_passes").as_integer() == 1);
     assert(summary_obj.at("active_runtime_passes").as_integer() == 1);
     assert(summary_obj.at("backdrop_runtime_passes").as_integer() == 0);
+    assert(summary_obj.at("dropped_execution_stages").as_integer() == 0);
+    assert(summary_obj.at("max_execution_stage_capacity").as_integer() == 4);
     assert(summary_obj.at("max_pass_texture_copy_pixels").as_integer() == 0);
     assert(summary_obj.at("total_pass_texture_copy_pixels").as_integer() == 0);
     assert(summary_obj.at("max_plan_sample_taps").as_integer() == 0);
@@ -988,6 +994,7 @@ void test_material_runtime_record_json_contract() {
     assert(executor_obj.at("material_instance_count").as_integer() == 0);
     assert(executor_obj.at("fallback_instance_count").as_integer() == 1);
     assert(executor_obj.at("material_draw_calls").as_integer() == 0);
+    assert(executor_obj.at("dropped_execution_stage_count").as_integer() == 0);
     assert(executor_obj.at("material_max_sample_taps").as_integer() == 0);
     assert(executor_obj.at("material_total_sample_taps").as_integer() == 0);
     assert(executor_obj.at("foreground_text_candidate_count").as_integer()
@@ -1005,8 +1012,12 @@ void test_material_runtime_record_json_contract() {
     assert(empty.at("material_plans").as_array().empty());
     assert(empty.at("material_runtime_summary").as_object()
                .at("plan_count").as_integer() == 0);
+    assert(empty.at("material_runtime_summary").as_object()
+               .at("dropped_execution_stages").as_integer() == 0);
     assert(empty.at("material_executor_summary").as_object()
                .at("plan_count").as_integer() == 0);
+    assert(empty.at("material_executor_summary").as_object()
+               .at("dropped_execution_stage_count").as_integer() == 0);
     assert(empty.at("material_fallback_policy").as_string()
            == "test-semantic-fallback");
 }

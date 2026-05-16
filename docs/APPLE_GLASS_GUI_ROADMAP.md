@@ -13,6 +13,8 @@ This document turns the current long-term goal into concrete deliverables:
   performance;
 - make the GUI debuggable by LLMs from deterministic artifacts, not visual
   guesswork;
+- move artifact, Android, packaging, asset, and i18n diagnostics toward a
+  first-class `phenotype` CLI instead of scattered shell/Python entry points;
 - keep runnable examples under `examples/` that exercise the full supported
   feature surface locally.
 
@@ -61,6 +63,16 @@ References:
   https://developer.apple.com/design/human-interface-guidelines/toolbars
 - Apple Human Interface Guidelines, Search fields:
   https://developer.apple.com/design/human-interface-guidelines/search-fields
+- Dioxus Tools:
+  https://dioxuslabs.com/learn/0.7/guides/tools/
+- Dioxus Bundling:
+  https://dioxuslabs.com/learn/0.7/tutorial/bundle/
+- Dioxus Assets:
+  https://dioxuslabs.com/learn/0.7/essentials/ui/assets/
+- Dioxus Custom Renderer:
+  https://dioxuslabs.com/learn/0.7/guides/depth/custom_renderer/
+- Dioxus Internationalization:
+  https://dioxuslabs.com/learn/0.7/guides/utilities/internationalization/
 
 ## Current state
 
@@ -219,6 +231,28 @@ first-class `layout::toolbar`, `layout::sidebar`, and `layout::status_bar`
 helpers for app chrome. A richer glass-control style contract remains future
 work.
 
+### CLI and packaging direction
+
+The next product-level tool surface is a `phenotype` CLI inspired by Dioxus'
+integrated `dx` workflow: one command tree for doctor/build/run/bundle,
+machine-readable JSON output for automation, and explicit asset/package
+metadata. phenotype should not copy Dioxus' renderer model, but the same
+event/output split applies well to this engine:
+
+```text
+External input -> input abstraction -> phenotype -> output abstraction -> real renderer
+CLI input      -> input abstraction -> phenotype -> output abstraction -> CLI output
+```
+
+This keeps native platform APIs, Android device control, screenshots,
+filesystem writes, resource packaging, process execution, and Python/uv
+transitions at edge adapters. Core planning, layout, paint, material, and
+command parsing continue to receive immutable value inputs and return
+deterministic value outputs. The CLI roadmap is tracked in
+`docs/PHENOTYPE_CLI_ROADMAP.md`; existing shell/Python tools should remain only
+until the CLI reaches command parity and can emit equivalent structured
+failure shapes.
+
 ### Diagnostics and LLM debugging
 
 The current debug plane already provides important pieces:
@@ -343,9 +377,9 @@ Done means `examples/` is a local acceptance suite, not just demos:
 |---|---|---|
 | Analyze current phenotype progress | This document, `README.md`, `docs/ARCHITECTURE.md`, `docs/DEBUG_WORKFLOW.md`, examples and tests | Keep updated as milestones land |
 | Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, material container/union identity, macOS sampled-backdrop rendering, resolved runtime fallback plans on Windows/Android, snapshot fallback contracts elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
-| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, bounded material execution stages, startup bundle verifier, optional pixel-region checks, material/container/shape/foreground plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, foreground text execution counters, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
+| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, bounded material execution stages, explicit stage-capacity/drop counters, startup bundle verifier, optional pixel-region checks, material/container/shape/foreground plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, foreground text execution counters, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
-| Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, execution stage count, backdrop pixels, bounded texture copies, deterministic fallback, pure effective-radius shape bounds, backend `material_runtime_summary` counters cross-checked by the verifier, and backend `material_executor_summary` budget/timing/stage telemetry guarded by artifact manifests | Keep tightening backend timing budgets as more native material renderers land |
+| Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, execution stage count/capacity, dropped-stage count, backdrop pixels, bounded texture copies, deterministic fallback, pure effective-radius shape bounds, backend `material_runtime_summary` counters cross-checked by the verifier, and backend `material_executor_summary` budget/timing/stage telemetry guarded by artifact manifests | Keep tightening backend timing budgets as more native material renderers land |
 | Runnable examples under `examples/` | Native, glass showcase, desktop/mobile file explorer, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |
 | All phenotype features testable locally | `docs/EXAMPLES_COVERAGE.md` maps current examples/tests to public surfaces and artifact expectations; `tools/verify_artifact_bundle.py` validates startup bundles, optional pixel regions, exact material/container plan summaries, semantic/runtime material parity, material resource bounds, runtime numeric bounds, `examples/glass_showcase/artifact_manifest.json`, `examples/file_explorer_desktop/artifact_manifest.json`, `examples/file_explorer_mobile/artifact_manifest.json`, and `examples/android/artifact_manifest.json`; `tools/verify_glass_showcase_artifact.sh` wraps the glass gate; `tools/verify_file_explorer_artifacts.sh` wraps the local desktop/mobile file explorer gate; `mise run android:contract` wraps the Android device/emulator artifact route | Android CI wiring remains |
 
