@@ -503,6 +503,10 @@ mean the example requested native integrated chrome, including the leading
 traffic-light reserve and trailing caption-button reserve. `native_controls_owned_by_os=true`
 with `uses_glfw=false` confirms close/minimize/maximize controls and caption
 hit testing stay at the platform edge rather than being redrawn by phenotype.
+The file explorer's `debug.application.file_explorer.chrome` additionally
+publishes `content_window_control_markers=true` and three titlebar-control marker
+metrics; these describe the deterministic visual marker used in startup
+artifacts, not an input-capable duplicate of OS controls.
 On macOS, `titlebar_transparent=true`, `full_size_content_view=true`,
 `title_hidden=true`, and `background_drag_enabled=true` are read back from the
 live `NSWindow`, not inferred from the request, so a Finder-style artifact can

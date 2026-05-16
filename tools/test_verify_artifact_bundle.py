@@ -797,20 +797,44 @@ def write_synthetic_bmp(path: Path) -> None:
     path.write_bytes(header + pixel_data)
 
 
+def write_channel_probe_bmp(path: Path) -> None:
+    width = 3
+    height = 1
+    row = [
+        (255, 95, 86, 255),
+        (255, 189, 46, 255),
+        (39, 201, 63, 255),
+    ]
+    pixel_data = bytearray()
+    for r, g, b, a in row:
+        pixel_data.extend((b, g, r, a))
+    pixel_offset = 14 + 40
+    file_size = pixel_offset + len(pixel_data)
+    header = bytearray()
+    header.extend(b"BM")
+    header.extend(struct.pack("<IHHI", file_size, 0, 0, pixel_offset))
+    header.extend(struct.pack("<IiiHHIIiiII",
+                              40, width, -height, 1, 32, 0,
+                              len(pixel_data), 0, 0, 0, 0))
+    path.write_bytes(header + pixel_data)
+
+
 class ArtifactVerifierContractTest(unittest.TestCase):
     def run_verifier(
         self,
         snapshot_json: dict[str, object],
         manifest: dict[str, object] | None = None,
         write_frame: bool = False,
+        frame_writer=None,
     ) -> tuple[int, dict[str, object]]:
         with tempfile.TemporaryDirectory() as raw_dir:
             bundle = Path(raw_dir)
             (bundle / "snapshot.json").write_text(
                 json.dumps(snapshot_json),
                 encoding="utf-8")
-            if write_frame:
-                write_synthetic_bmp(bundle / "frame.bmp")
+            if write_frame or frame_writer is not None:
+                writer = frame_writer if frame_writer is not None else write_synthetic_bmp
+                writer(bundle / "frame.bmp")
             args = [
                 str(bundle),
                 "--require-material-plan",
@@ -2066,6 +2090,57 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["manifest"]["pixel_region_metric_comparisons"],
             1)
+
+    def test_pixel_region_metrics_include_rgb_channel_means(self) -> None:
+        manifest = {
+            "require_frame": True,
+            "pixel_regions": [
+                {
+                    "name": "close-control",
+                    "rect": [0.0, 0.0, 0.34, 1.0],
+                    "min_luma_delta": 0,
+                    "min_unique_colors": 1,
+                },
+                {
+                    "name": "zoom-control",
+                    "rect": [0.67, 0.0, 0.34, 1.0],
+                    "min_luma_delta": 0,
+                    "min_unique_colors": 1,
+                },
+            ],
+            "pixel_region_metrics": [
+                {
+                    "region": "close-control",
+                    "metric": "red_mean",
+                    "gte": 250,
+                },
+                {
+                    "region": "close-control",
+                    "metric": "green_mean",
+                    "lte": 100,
+                },
+                {
+                    "region": "zoom-control",
+                    "metric": "green_mean",
+                    "gte": 200,
+                },
+                {
+                    "region": "zoom-control",
+                    "metric": "red_mean",
+                    "lte": 40,
+                },
+            ],
+        }
+        code, report = self.run_verifier(
+            snapshot(material_plan()),
+            manifest,
+            frame_writer=write_channel_probe_bmp)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        regions = {item["name"]: item for item in report["pixel_regions"]}
+        self.assertEqual(regions["close-control"]["red_mean"], 255.0)
+        self.assertEqual(regions["zoom-control"]["green_mean"], 201.0)
 
     def test_pixel_region_metric_comparison_failure_is_llm_actionable(self) -> None:
         manifest = {

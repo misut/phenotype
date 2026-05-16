@@ -18,10 +18,14 @@ from typing import Any
 JsonObject = dict[str, Any]
 
 ALLOWED_PIXEL_REGION_METRICS = {
+    "alpha_mean",
+    "blue_mean",
     "edge_energy",
+    "green_mean",
     "luma_delta",
     "luma_mean",
     "luma_stddev",
+    "red_mean",
     "unique_colors",
 }
 
@@ -1628,6 +1632,10 @@ def analyze_bmp_region(path: Path, frame: JsonObject, rect: tuple[int, int, int,
     sampled = 0
     luma_sum = 0.0
     luma_square_sum = 0.0
+    red_sum = 0.0
+    green_sum = 0.0
+    blue_sum = 0.0
+    alpha_sum = 0.0
     edge_sum = 0.0
     edge_count = 0
     previous_row: list[float] | None = None
@@ -1650,6 +1658,10 @@ def analyze_bmp_region(path: Path, frame: JsonObject, rect: tuple[int, int, int,
             luma_max = max(luma_max, luma)
             luma_sum += luma
             luma_square_sum += luma * luma
+            red_sum += r
+            green_sum += g
+            blue_sum += b
+            alpha_sum += a
             alpha_min = min(alpha_min, a)
             alpha_max = max(alpha_max, a)
             if len(unique_colors) < 4096:
@@ -1672,15 +1684,19 @@ def analyze_bmp_region(path: Path, frame: JsonObject, rect: tuple[int, int, int,
         if sampled else 0.0)
 
     return {
+        "alpha_mean": round(alpha_sum / sampled, 3) if sampled else 0.0,
         "alpha_max": alpha_max,
         "alpha_min": alpha_min,
+        "blue_mean": round(blue_sum / sampled, 3) if sampled else 0.0,
         "edge_energy": round(edge_sum / edge_count, 3) if edge_count else 0.0,
+        "green_mean": round(green_sum / sampled, 3) if sampled else 0.0,
         "height": h,
         "luma_delta": round(luma_max - luma_min, 3),
         "luma_max": round(luma_max, 3),
         "luma_mean": round(luma_mean, 3),
         "luma_min": round(luma_min, 3),
         "luma_stddev": round(luma_variance ** 0.5, 3),
+        "red_mean": round(red_sum / sampled, 3) if sampled else 0.0,
         "sampled_pixels": sampled,
         "unique_colors": len(unique_colors),
         "width": w,
@@ -7500,8 +7516,9 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         metavar="REGION:METRIC:BOUND:VALUE",
         help=(
             "Require a previously named pixel region metric to satisfy a "
-            "numeric bound. METRIC is one of edge_energy, luma_delta, "
-            "luma_mean, luma_stddev, unique_colors. BOUND is gte or lte. "
+            "numeric bound. METRIC is one of alpha_mean, blue_mean, "
+            "edge_energy, green_mean, luma_delta, luma_mean, luma_stddev, "
+            "red_mean, unique_colors. BOUND is gte or lte. "
             "Repeatable."))
     parser.set_defaults(
         require_material_plan_summary=None,

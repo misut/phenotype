@@ -177,8 +177,16 @@
       "equals": true
     },
     {
+      "path": "application.file_explorer.chrome.native_window.native_window_controls",
+      "equals": true
+    },
+    {
       "path": "application.file_explorer.chrome.native_window.duplicate_window_controls",
       "equals": false
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.content_window_control_markers",
+      "equals": true
     },
     {
       "path": "application.file_explorer.chrome.toolbar_group_count",
@@ -191,6 +199,22 @@
     {
       "path": "application.file_explorer.chrome.toolbar_icon_button_count",
       "equals": 11
+    },
+    {
+      "path": "application.file_explorer.chrome.titlebar_control_count",
+      "equals": 3
+    },
+    {
+      "path": "application.file_explorer.chrome.titlebar_control_diameter",
+      "equals": 13.0
+    },
+    {
+      "path": "application.file_explorer.chrome.titlebar_control_spacing",
+      "equals": 23.0
+    },
+    {
+      "path": "application.file_explorer.chrome.content_window_control_markers",
+      "equals": true
     },
     {
       "path": "application.file_explorer.chrome.more_actions_open",
@@ -404,10 +428,34 @@
   },
   "pixel_regions": [
     {
-      "name": "finder-titlebar-reserve",
-      "rect": [0.02, 0.02, 0.16, 0.08],
-      "min_luma_delta": 8.0,
-      "min_unique_colors": 16
+      "name": "finder-titlebar-drag-reserve",
+      "rect": [0.105, 0.02, 0.05, 0.08],
+      "min_luma_delta": 2.0,
+      "min_unique_colors": 4
+    },
+    {
+      "name": "finder-titlebar-traffic-lights",
+      "rect": [0.026, 0.03, 0.065, 0.04],
+      "min_luma_delta": 70.0,
+      "min_unique_colors": 18
+    },
+    {
+      "name": "finder-titlebar-close-control",
+      "rect": [0.028, 0.034, 0.02, 0.034],
+      "min_luma_delta": 40.0,
+      "min_unique_colors": 8
+    },
+    {
+      "name": "finder-titlebar-minimize-control",
+      "rect": [0.046, 0.034, 0.02, 0.034],
+      "min_luma_delta": 40.0,
+      "min_unique_colors": 8
+    },
+    {
+      "name": "finder-titlebar-zoom-control",
+      "rect": [0.064, 0.034, 0.02, 0.034],
+      "min_luma_delta": 40.0,
+      "min_unique_colors": 8
     },
     {
       "name": "finder-sidebar",
@@ -430,14 +478,54 @@
   ],
   "pixel_region_metrics": [
     {
-      "region": "finder-titlebar-reserve",
+      "region": "finder-titlebar-drag-reserve",
       "metric": "luma_stddev",
       "lte": 4.0
     },
     {
-      "region": "finder-titlebar-reserve",
+      "region": "finder-titlebar-drag-reserve",
       "metric": "edge_energy",
       "lte": 1.2
+    },
+    {
+      "region": "finder-titlebar-traffic-lights",
+      "metric": "edge_energy",
+      "gte": 2.0
+    },
+    {
+      "region": "finder-titlebar-close-control",
+      "metric": "red_mean",
+      "gte": 190.0
+    },
+    {
+      "region": "finder-titlebar-close-control",
+      "metric": "green_mean",
+      "lte": 210.0
+    },
+    {
+      "region": "finder-titlebar-minimize-control",
+      "metric": "red_mean",
+      "gte": 190.0
+    },
+    {
+      "region": "finder-titlebar-minimize-control",
+      "metric": "green_mean",
+      "gte": 150.0
+    },
+    {
+      "region": "finder-titlebar-minimize-control",
+      "metric": "blue_mean",
+      "lte": 200.0
+    },
+    {
+      "region": "finder-titlebar-zoom-control",
+      "metric": "green_mean",
+      "gte": 160.0
+    },
+    {
+      "region": "finder-titlebar-zoom-control",
+      "metric": "red_mean",
+      "lte": 200.0
     },
     {
       "region": "finder-toolbar",

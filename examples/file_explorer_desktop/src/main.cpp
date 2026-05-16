@@ -255,6 +255,12 @@ constexpr float k_toolbar_icon_button_width =
     file_explorer_demo::k_desktop_toolbar_icon_button_width;
 constexpr float k_toolbar_icon_button_height =
     file_explorer_demo::k_desktop_toolbar_icon_button_height;
+constexpr float k_titlebar_control_cluster_height =
+    file_explorer_demo::k_desktop_titlebar_control_cluster_height;
+constexpr float k_titlebar_control_diameter =
+    file_explorer_demo::k_desktop_titlebar_control_diameter;
+constexpr float k_titlebar_control_spacing =
+    file_explorer_demo::k_desktop_titlebar_control_spacing;
 
 phenotype::Color rgba(int r, int g, int b, int a = 255) {
     return phenotype::Color{
@@ -924,6 +930,65 @@ void sidebar_heading(std::string_view label) {
         stable_token(label_text) ^ 0x520000u);
 }
 
+void paint_titlebar_control_marker(phenotype::Painter& painter,
+                                   float x,
+                                   float y,
+                                   phenotype::Color fill,
+                                   phenotype::Color border) {
+    fill_round(painter,
+               x,
+               y + 1.0f,
+               k_titlebar_control_diameter,
+               k_titlebar_control_diameter,
+               k_titlebar_control_diameter * 0.5f,
+               rgba(0, 0, 0, 24));
+    fill_round(painter,
+               x,
+               y,
+               k_titlebar_control_diameter,
+               k_titlebar_control_diameter,
+               k_titlebar_control_diameter * 0.5f,
+               fill);
+    stroke_round(painter,
+                 x,
+                 y,
+                 k_titlebar_control_diameter,
+                 k_titlebar_control_diameter,
+                 k_titlebar_control_diameter * 0.5f,
+                 1.0f,
+                 border);
+}
+
+void titlebar_control_markers() {
+    phenotype::widget::canvas(
+        k_sidebar_row_width,
+        k_titlebar_control_cluster_height,
+        [](phenotype::Painter& painter) {
+            constexpr float start_x = 20.0f;
+            constexpr float top = 16.0f;
+            paint_titlebar_control_marker(
+                painter,
+                start_x,
+                top,
+                rgba(255, 95, 86),
+                rgba(223, 70, 66));
+            paint_titlebar_control_marker(
+                painter,
+                start_x + k_titlebar_control_spacing,
+                top,
+                rgba(255, 189, 46),
+                rgba(222, 158, 38));
+            paint_titlebar_control_marker(
+                painter,
+                start_x + k_titlebar_control_spacing * 2.0f,
+                top,
+                rgba(39, 201, 63),
+                rgba(34, 162, 53));
+        },
+        {},
+        0x530000u);
+}
+
 void finder_sidebar(State const& state) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
@@ -933,7 +998,7 @@ void finder_sidebar(State const& state) {
     bool const in_root = relative == "Demo Root";
     auto const& labels = state.labels;
     layout::sidebar(k_sidebar_width, [&] {
-        layout::spacer(k_integrated_titlebar_height);
+        titlebar_control_markers();
         sidebar_row(labels.sidebar_recents, "recents", "root", in_root);
         sidebar_row(labels.sidebar_shared, "folder", "shared",
                     relative == "Demo Root/Shared");
