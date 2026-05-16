@@ -637,19 +637,19 @@ void finder_sidebar(State const& state) {
 }
 
 phenotype::Color nav_icon_ink(bool enabled) {
-    return enabled ? rgba(88, 88, 92) : rgba(188, 192, 198);
+    return enabled ? rgba(82, 82, 86) : rgba(190, 193, 198);
 }
 
 void paint_back_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    painter.line(27.0f, 10.0f, 17.0f, 18.0f, 3.0f, ink);
-    painter.line(17.0f, 18.0f, 27.0f, 26.0f, 3.0f, ink);
+    painter.line(27.0f, 10.0f, 17.0f, 18.0f, 2.4f, ink);
+    painter.line(17.0f, 18.0f, 27.0f, 26.0f, 2.4f, ink);
 }
 
 void paint_forward_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    painter.line(17.0f, 10.0f, 27.0f, 18.0f, 3.0f, ink);
-    painter.line(27.0f, 18.0f, 17.0f, 26.0f, 3.0f, ink);
+    painter.line(17.0f, 10.0f, 27.0f, 18.0f, 2.4f, ink);
+    painter.line(27.0f, 18.0f, 17.0f, 26.0f, 2.4f, ink);
 }
 
 phenotype::ButtonStyleOptions toolbar_icon_button_options(
@@ -674,7 +674,17 @@ phenotype::ButtonStyleOptions toolbar_icon_button_options(
 }
 
 phenotype::Color toolbar_icon_ink(bool selected = false) {
-    return selected ? rgba(42, 42, 42) : rgba(70, 70, 70);
+    return selected ? rgba(58, 58, 60) : rgba(88, 88, 92);
+}
+
+void toolbar_separator() {
+    phenotype::widget::canvas(1.0f, 28.0f,
+        [](phenotype::Painter& painter) {
+            fill_round(painter, 0.0f, 2.0f, 1.0f, 24.0f, 0.5f,
+                       rgba(205, 205, 210, 130));
+        },
+        {},
+        0x6901u);
 }
 
 void paint_icon_view(phenotype::Painter& painter, bool selected) {
@@ -684,7 +694,7 @@ void paint_icon_view(phenotype::Painter& painter, bool selected) {
             stroke_round(painter,
                          13.0f + static_cast<float>(col) * 15.0f,
                          8.0f + static_cast<float>(row) * 14.0f,
-                         10.0f, 10.0f, 2.0f, 2.0f, ink);
+                         10.0f, 10.0f, 2.0f, 1.8f, ink);
         }
     }
 }
@@ -693,8 +703,8 @@ void paint_list_view(phenotype::Painter& painter, bool selected) {
     auto ink = toolbar_icon_ink(selected);
     for (int i = 0; i < 4; ++i) {
         float y = 8.0f + static_cast<float>(i) * 6.8f;
-        painter.line(11.0f, y, 13.0f, y, 3.0f, ink);
-        painter.line(20.0f, y, 34.0f, y, 2.2f, ink);
+        painter.line(11.0f, y, 13.0f, y, 2.4f, ink);
+        painter.line(20.0f, y, 34.0f, y, 1.9f, ink);
     }
 }
 
@@ -702,14 +712,14 @@ void paint_column_view(phenotype::Painter& painter, bool selected) {
     auto ink = toolbar_icon_ink(selected);
     for (int i = 0; i < 3; ++i) {
         stroke_round(painter, 9.0f + static_cast<float>(i) * 10.5f,
-                     8.0f, 8.0f, 20.0f, 2.0f, 2.0f, ink);
+                     8.0f, 8.0f, 20.0f, 2.0f, 1.8f, ink);
     }
 }
 
 void paint_gallery_view(phenotype::Painter& painter, bool selected) {
     auto ink = toolbar_icon_ink(selected);
-    stroke_round(painter, 10.0f, 8.0f, 24.0f, 17.0f, 4.0f, 2.0f, ink);
-    painter.line(12.0f, 29.0f, 32.0f, 29.0f, 2.6f, ink);
+    stroke_round(painter, 10.0f, 8.0f, 24.0f, 17.0f, 4.0f, 1.8f, ink);
+    painter.line(12.0f, 29.0f, 32.0f, 29.0f, 2.2f, ink);
 }
 
 void paint_group_sort_icon(phenotype::Painter& painter) {
@@ -900,10 +910,11 @@ void finder_toolbar(State const& state,
     using namespace phenotype;
     layout::material_surface(toolbar_shell_options(), [&] {
         layout::material_surface(
-            toolbar_group_options("Navigation Controls", 92.0f),
+            toolbar_group_options("Navigation Controls", 100.0f),
             [&] {
                 navigation_button(state.labels.back.c_str(), GoBack{}, snap.can_go_back,
                                   paint_back_icon, 0x6201u);
+                toolbar_separator();
                 navigation_button(state.labels.forward.c_str(), GoForward{}, snap.can_go_forward,
                                   paint_forward_icon, 0x6202u);
             });
@@ -913,14 +924,16 @@ void finder_toolbar(State const& state,
             TextSize::Heading);
         layout::weighted(1.0f, [] {});
         layout::material_surface(
-            toolbar_group_options("View Controls", 224.0f),
+            toolbar_group_options("View Controls", 236.0f),
             [&] {
                 view_mode_button("Icon View", FinderViewMode::Icon,
                                  state.view_mode, paint_icon_view, 0x6301u);
                 view_mode_button("List View", FinderViewMode::List,
                                  state.view_mode, paint_list_view, 0x6302u);
+                toolbar_separator();
                 view_mode_button("Column View", FinderViewMode::Column,
                                  state.view_mode, paint_column_view, 0x6303u);
+                toolbar_separator();
                 view_mode_button("Gallery View", FinderViewMode::Gallery,
                                  state.view_mode, paint_gallery_view, 0x6304u);
             });

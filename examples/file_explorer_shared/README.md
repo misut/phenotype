@@ -18,7 +18,9 @@ updates, create, duplicate, delete, sort, reset, and startup scenarios.
 `ExplorerInputTrace` records plus a final `Snapshot` and pure
 `ExplorerChromeMetrics`, so the CLI can observe the same workflow and
 viewport-derived Finder chrome/grid contract without opening a native AppKit or
-Win32 window.
+Win32 window. The desktop chrome metrics include the integrated titlebar,
+native-control ownership, icon-grid capacity, and Finder-style segmented
+toolbar group/separator/button counts.
 
 The module also provides the pure file explorer `ResourceCatalog` fixture and
 locale label resolver used by the desktop and mobile examples. Package/locale

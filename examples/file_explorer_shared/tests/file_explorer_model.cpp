@@ -79,6 +79,10 @@ int main() {
     assert(chrome.icon_grid_columns == 6);
     assert(chrome.icon_grid_visible_rows == 3);
     assert(chrome.icon_grid_visible_capacity == 18);
+    assert(chrome.toolbar_group_count == 6);
+    assert(chrome.toolbar_separator_count == 3);
+    assert(chrome.toolbar_icon_button_count == 15);
+    assert(chrome.finder_segmented_toolbar);
     assert(chrome.integrated_titlebar);
     assert(chrome.native_window_controls);
     assert(!chrome.duplicate_window_controls);
@@ -92,6 +96,10 @@ int main() {
     assert(!mobile_chrome.integrated_titlebar);
     assert(!mobile_chrome.native_window_controls);
     assert(mobile_chrome.icon_grid_columns == 0);
+    assert(mobile_chrome.toolbar_group_count == 0);
+    assert(mobile_chrome.toolbar_separator_count == 0);
+    assert(mobile_chrome.toolbar_icon_button_count == 0);
+    assert(!mobile_chrome.finder_segmented_toolbar);
     fs::remove_all(mobile_state.root, ec);
     auto snap = demo::snapshot(state);
     assert(snap.has_selection);
