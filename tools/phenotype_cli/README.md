@@ -32,8 +32,13 @@ The initial scope is intentionally narrow:
   counts and catalog diagnostic counts.
 - `phenotype package bundle <path> --output <dir>` stages the package manifest,
   assets, locales, fonts, and debug artifact manifest into a bundle directory
-  and writes `phenotype.bundle.json` with copied-file records for CI and future
-  platform packagers.
+  and writes `phenotype.bundle.json` with copied-file records, content metadata,
+  SHA-256 digests, byte counts, and bundle-level integrity totals for CI and
+  future platform packagers.
+- `phenotype package verify-bundle <dir>` re-opens a staged bundle directory,
+  rebuilds the package resource contract from the copied manifest, checks that
+  every declared resource is present, and recomputes SHA-256 digests without
+  needing the original source package root.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible
@@ -72,6 +77,8 @@ mise exec -- exon build
 .exon/debug/phenotype_cli package bundle --json \
   ../../examples/file_explorer_desktop \
   --output /tmp/phenotype-file-explorer
+.exon/debug/phenotype_cli package verify-bundle --json \
+  /tmp/phenotype-file-explorer
 .exon/debug/phenotype_cli artifact verify-file-explorer \
   --profile desktop \
   --view-mode icon \

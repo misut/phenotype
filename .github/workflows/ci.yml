@@ -469,6 +469,15 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Install uv
+        uses: astral-sh/setup-uv@v8.1.0
+        with:
+          version: "0.11.14"
+          enable-cache: true
+
+      - name: Install Python
+        run: uv python install
+
       - name: Build phenotype CLI
         run: |
           eval "$(intron env)"
@@ -480,21 +489,27 @@ jobs:
           set -euo pipefail
           eval "$(intron env)"
           cli="tools/phenotype_cli/.exon/debug/phenotype_cli"
-          "$cli" doctor --json | python3 -m json.tool >/dev/null
-          "$cli" commands --json | python3 -m json.tool >/dev/null
-          "$cli" package list --json examples | python3 -m json.tool >/dev/null
-          "$cli" package inspect --json examples/file_explorer_desktop | python3 -m json.tool >/dev/null
-          "$cli" package inspect --json examples/file_explorer_mobile | python3 -m json.tool >/dev/null
+          json_tool() {
+            UV_PROJECT_ENVIRONMENT="$RUNNER_TEMP/phenotype-cli-json-venv" \
+              uv run --frozen python -m json.tool "$@"
+          }
+          "$cli" doctor --json | json_tool >/dev/null
+          "$cli" commands --json | json_tool >/dev/null
+          "$cli" package list --json examples | json_tool >/dev/null
+          "$cli" package inspect --json examples/file_explorer_desktop | json_tool >/dev/null
+          "$cli" package inspect --json examples/file_explorer_mobile | json_tool >/dev/null
           bundle_root="$(mktemp -d)"
-          "$cli" package bundle --json examples/file_explorer_desktop --output "$bundle_root/desktop" | python3 -m json.tool >/dev/null
-          python3 -m json.tool "$bundle_root/desktop/phenotype.bundle.json" >/dev/null
+          "$cli" package bundle --json examples/file_explorer_desktop --output "$bundle_root/desktop" | json_tool >/dev/null
+          json_tool "$bundle_root/desktop/phenotype.bundle.json" >/dev/null
+          "$cli" package verify-bundle --json "$bundle_root/desktop" | json_tool >/dev/null
           test -f "$bundle_root/desktop/assets/file-explorer-icon.txt"
           test -f "$bundle_root/desktop/locales/ko.toml"
-          "$cli" package bundle --json examples/file_explorer_mobile --output "$bundle_root/mobile" | python3 -m json.tool >/dev/null
-          python3 -m json.tool "$bundle_root/mobile/phenotype.bundle.json" >/dev/null
+          "$cli" package bundle --json examples/file_explorer_mobile --output "$bundle_root/mobile" | json_tool >/dev/null
+          json_tool "$bundle_root/mobile/phenotype.bundle.json" >/dev/null
+          "$cli" package verify-bundle --json "$bundle_root/mobile" | json_tool >/dev/null
           test -f "$bundle_root/mobile/fonts/pretendard.alias.toml"
-          "$cli" drive file-explorer --json --input select:README.txt --input duplicate --input delete | python3 -m json.tool >/dev/null
-          "$cli" drive file-explorer --json --profile mobile --scenario created-preview | python3 -m json.tool >/dev/null
+          "$cli" drive file-explorer --json --input select:README.txt --input duplicate --input delete | json_tool >/dev/null
+          "$cli" drive file-explorer --json --profile mobile --scenario created-preview | json_tool >/dev/null
 
       - name: Save CLI build artifacts
         if: github.ref == 'refs/heads/main' && steps.build-cache.outputs.cache-hit != 'true'
