@@ -4631,11 +4631,13 @@ inline void decode_android_color_commands(unsigned char const* buf,
                                     float x2, float y2) {
                 float dx = x2 - x1;
                 float dy = y2 - y1;
-                if (dx == 0.0f && dy == 0.0f) return;
+                float line_len = std::sqrt(dx * dx + dy * dy);
+                if (line_len <= 0.0f || thickness <= 0.0f)
+                    return;
+                float half_th = thickness * 0.5f;
                 prepare_batch_for_pipeline(out, 0);
                 auto& dst = out.batches.back().colors;
                 if (dx == 0.0f || dy == 0.0f) {
-                    float line_len = std::sqrt(dx * dx + dy * dy);
                     float w = (dy == 0.0f) ? line_len : thickness;
                     float h = (dx == 0.0f) ? line_len : thickness;
                     float x = (dx == 0.0f) ? x1 - thickness * 0.5f
@@ -4647,15 +4649,14 @@ inline void decode_android_color_commands(unsigned char const* buf,
                     inst.rect[2] = w; inst.rect[3] = h;
                     inst.color[0] = color4[0]; inst.color[1] = color4[1];
                     inst.color[2] = color4[2]; inst.color[3] = color4[3];
-                    inst.params[2] = 3.0f;
+                    inst.params[0] = half_th;
+                    inst.params[2] = 2.0f;
                     dst.push_back(inst);
                 } else {
-                    float line_len = std::sqrt(dx * dx + dy * dy);
                     float step = thickness * 0.5f;
                     if (step < 0.5f) step = 0.5f;
                     int n_steps = static_cast<int>(std::ceil(line_len / step));
                     if (n_steps < 1) n_steps = 1;
-                    float half_th = thickness * 0.5f;
                     for (int j = 0; j <= n_steps; ++j) {
                         float t = static_cast<float>(j)
                                   / static_cast<float>(n_steps);
@@ -4668,6 +4669,8 @@ inline void decode_android_color_commands(unsigned char const* buf,
                         inst.rect[3] = thickness;
                         inst.color[0] = color4[0]; inst.color[1] = color4[1];
                         inst.color[2] = color4[2]; inst.color[3] = color4[3];
+                        inst.params[0] = half_th;
+                        inst.params[2] = 2.0f;
                         dst.push_back(inst);
                     }
                 }
@@ -4964,29 +4967,50 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                 inst.params[2] = 2.0f; // draw_type = Round fallback
                 out.batches.back().colors.push_back(inst);
             } else if constexpr (std::same_as<T, ::phenotype::DrawLineCmd>) {
-                prepare_batch_for_pipeline(out, 0);
-                // Thickened axis-aligned rect — preserves desktop
-                // backends' DrawLine behavior including the
-                // draw_type = 3 fall-through to the Fill code path.
                 float dx = c.x2 - c.x1;
                 float dy = c.y2 - c.y1;
                 float line_len = std::sqrt(dx * dx + dy * dy);
-                float w = (dy == 0.0f) ? line_len : c.thickness;
-                float h = (dx == 0.0f) ? line_len : c.thickness;
-                float x = (dx == 0.0f)
-                    ? c.x1 - c.thickness * 0.5f
-                    : std::min(c.x1, c.x2);
-                float y = (dy == 0.0f)
-                    ? c.y1 - c.thickness * 0.5f
-                    : std::min(c.y1, c.y2);
-                ColorInstanceGPU inst{};
-                inst.rect[0] = x; inst.rect[1] = y;
-                inst.rect[2] = w; inst.rect[3] = h;
-                normalize_color(c.color, inst.color);
-                inst.params[0] = 0.0f;
-                inst.params[1] = 0.0f;
-                inst.params[2] = 3.0f; // matches macOS / Windows
-                out.batches.back().colors.push_back(inst);
+                if (line_len <= 0.0f || c.thickness <= 0.0f)
+                    return;
+                float half_th = c.thickness * 0.5f;
+                prepare_batch_for_pipeline(out, 0);
+                if (dx == 0.0f || dy == 0.0f) {
+                    float w = (dy == 0.0f) ? line_len : c.thickness;
+                    float h = (dx == 0.0f) ? line_len : c.thickness;
+                    float x = (dx == 0.0f)
+                        ? c.x1 - c.thickness * 0.5f
+                        : std::min(c.x1, c.x2);
+                    float y = (dy == 0.0f)
+                        ? c.y1 - c.thickness * 0.5f
+                        : std::min(c.y1, c.y2);
+                    ColorInstanceGPU inst{};
+                    inst.rect[0] = x; inst.rect[1] = y;
+                    inst.rect[2] = w; inst.rect[3] = h;
+                    normalize_color(c.color, inst.color);
+                    inst.params[0] = half_th;
+                    inst.params[2] = 2.0f;
+                    out.batches.back().colors.push_back(inst);
+                } else {
+                    float step = c.thickness * 0.5f;
+                    if (step < 0.5f) step = 0.5f;
+                    int n_steps = static_cast<int>(std::ceil(line_len / step));
+                    if (n_steps < 1) n_steps = 1;
+                    for (int i = 0; i <= n_steps; ++i) {
+                        float t = static_cast<float>(i)
+                                  / static_cast<float>(n_steps);
+                        float cx = c.x1 + dx * t;
+                        float cy = c.y1 + dy * t;
+                        ColorInstanceGPU inst{};
+                        inst.rect[0] = cx - half_th;
+                        inst.rect[1] = cy - half_th;
+                        inst.rect[2] = c.thickness;
+                        inst.rect[3] = c.thickness;
+                        normalize_color(c.color, inst.color);
+                        inst.params[0] = half_th;
+                        inst.params[2] = 2.0f;
+                        out.batches.back().colors.push_back(inst);
+                    }
+                }
             } else if constexpr (std::same_as<T, ::phenotype::DrawTextCmd>) {
                 prepare_batch_for_pipeline(out, 2);
                 auto color = c.color;
@@ -5091,21 +5115,20 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                 float sub_x = 0.0f, sub_y = 0.0f;
                 bool has_pen = false;
 
-                // Diagonal lines need to be decomposed into a chain of
-                // axis-aligned thickness×thickness dots — the color
-                // shader (color.frag) only renders rectangles, not
-                // arbitrary segments. macOS does the same in its
-                // Cmd::Path case; the existing DrawLineCmd path on
-                // Android is axis-aligned-only and is a separate issue.
+                // Diagonal lines use the same rounded-dot fallback as
+                // DrawLine so Path strokes keep platform parity without
+                // adding a dedicated arbitrary-segment pipeline.
                 auto emit_segment = [&](float x1, float y1,
                                         float x2, float y2) {
                     float dx = x2 - x1;
                     float dy = y2 - y1;
-                    if (dx == 0.0f && dy == 0.0f) return;
+                    float line_len = std::sqrt(dx * dx + dy * dy);
+                    if (line_len <= 0.0f || thickness <= 0.0f)
+                        return;
+                    float half_th = thickness * 0.5f;
                     prepare_batch_for_pipeline(out, 0);
                     auto& dst = out.batches.back().colors;
                     if (dx == 0.0f || dy == 0.0f) {
-                        float line_len = std::sqrt(dx * dx + dy * dy);
                         float w = (dy == 0.0f) ? line_len : thickness;
                         float h = (dx == 0.0f) ? line_len : thickness;
                         float x = (dx == 0.0f)
@@ -5119,18 +5142,16 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                         inst.rect[2] = w; inst.rect[3] = h;
                         inst.color[0] = color4[0]; inst.color[1] = color4[1];
                         inst.color[2] = color4[2]; inst.color[3] = color4[3];
-                        inst.params[0] = 0.0f;
+                        inst.params[0] = half_th;
                         inst.params[1] = 0.0f;
-                        inst.params[2] = 3.0f;  // matches macOS / Windows
+                        inst.params[2] = 2.0f;
                         dst.push_back(inst);
                     } else {
-                        float line_len = std::sqrt(dx * dx + dy * dy);
                         float step = thickness * 0.5f;
                         if (step < 0.5f) step = 0.5f;
                         int n_steps = static_cast<int>(
                             std::ceil(line_len / step));
                         if (n_steps < 1) n_steps = 1;
-                        float half_th = thickness * 0.5f;
                         for (int i = 0; i <= n_steps; ++i) {
                             float t = static_cast<float>(i)
                                       / static_cast<float>(n_steps);
@@ -5143,9 +5164,9 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                             inst.rect[3] = thickness;
                             inst.color[0] = color4[0]; inst.color[1] = color4[1];
                             inst.color[2] = color4[2]; inst.color[3] = color4[3];
-                            inst.params[0] = 0.0f;
+                            inst.params[0] = half_th;
                             inst.params[1] = 0.0f;
-                            inst.params[2] = 0.0f;
+                            inst.params[2] = 2.0f;
                             dst.push_back(inst);
                         }
                     }

@@ -291,8 +291,33 @@ void stroke_round(phenotype::Painter& painter,
                   float x, float y, float w, float h, float r,
                   float thickness,
                   phenotype::Color color) {
-    auto path = rounded_rect_path(x, y, w, h, r);
-    painter.stroke_path(path, thickness, color);
+    if (w <= 0.0f || h <= 0.0f || thickness <= 0.0f)
+        return;
+    float max_r = std::min(w, h) * 0.5f;
+    if (r < 0.0f)
+        r = 0.0f;
+    if (r > max_r)
+        r = max_r;
+    if (r <= 0.0f) {
+        painter.line(x, y, x + w, y, thickness, color);
+        painter.line(x + w, y, x + w, y + h, thickness, color);
+        painter.line(x + w, y + h, x, y + h, thickness, color);
+        painter.line(x, y + h, x, y, thickness, color);
+        return;
+    }
+
+    painter.line(x + r, y, x + w - r, y, thickness, color);
+    painter.arc(x + w - r, y + r, r,
+                -0.5f * k_pi, 0.0f, thickness, color);
+    painter.line(x + w, y + r, x + w, y + h - r, thickness, color);
+    painter.arc(x + w - r, y + h - r, r,
+                0.0f, 0.5f * k_pi, thickness, color);
+    painter.line(x + w - r, y + h, x + r, y + h, thickness, color);
+    painter.arc(x + r, y + h - r, r,
+                0.5f * k_pi, k_pi, thickness, color);
+    painter.line(x, y + h - r, x, y + r, thickness, color);
+    painter.arc(x + r, y + r, r,
+                k_pi, 1.5f * k_pi, thickness, color);
 }
 
 void paint_sidebar_icon(phenotype::Painter& painter, std::string_view id) {
