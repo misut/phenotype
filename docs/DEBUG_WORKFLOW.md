@@ -45,9 +45,11 @@ The common snapshot schema remains the source of truth for all platforms:
   native-control ownership, and `uses_glfw=false` / `toolkit_window_shim=false`
   so an artifact can prove whether the app is running through AppKit/Win32
   native chrome rather than guessing from a screenshot. macOS also records
-  WindowServer bounds and onscreen state, so a native app that owns a Dock
-  icon but ordered a 0x0 window fails the artifact contract with an exact
-  runtime path instead of a visual-only symptom.
+  WindowServer bounds, onscreen state, z-order index, app-window order index,
+  and front-window occlusion state, so a native app that owns a Dock icon but
+  ordered a 0x0 window, stayed behind another app window, or failed to move into
+  the active Space fails the artifact contract with an exact runtime path
+  instead of a visual-only symptom.
 
 `phenotype_diag_export()` remains the WASI export surface for the snapshot JSON.
 
