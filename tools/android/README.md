@@ -1,8 +1,18 @@
 # tools/android
 
-Shell helpers the `mise run android:*` tasks dispatch to. Every script
-sources `_env.sh` so `ANDROID_HOME`, `ANDROID_NDK_HOME`, `JAVA_HOME`,
-`ADB`, `EMULATOR`, and `PHENOTYPE_ANDROID_*` resolve consistently.
+Shell compatibility helpers used by `mise run android:*` and the
+`phenotype android ...` CLI namespace. Prefer the CLI for new docs, CI, and
+agent automation; these scripts remain the edge adapters that resolve
+`ANDROID_HOME`, `ANDROID_NDK_HOME`, `JAVA_HOME`, `ADB`, `EMULATOR`, and
+`PHENOTYPE_ANDROID_*` consistently.
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli android doctor --json
+.exon/debug/phenotype_cli android devices --json
+.exon/debug/phenotype_cli android contract --json
+```
 
 ## Tasks
 
@@ -39,9 +49,9 @@ Everything is scoped to `/tmp`, so nothing needs to be in `.gitignore`.
 
 ## Running scripts directly
 
-The scripts are self-contained and can be invoked outside of mise — e.g.
-from an IDE run-config — as long as `ANDROID_HOME`, `ANDROID_NDK_HOME`,
-and `JAVA_HOME` either have sensible defaults or are exported:
+Direct script execution is still supported for IDE run-configs and backward
+compatibility as long as `ANDROID_HOME`, `ANDROID_NDK_HOME`, and `JAVA_HOME`
+either have sensible defaults or are exported:
 
 ```sh
 ./tools/android/doctor.sh

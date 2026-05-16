@@ -399,7 +399,7 @@ Done means `examples/` is a local acceptance suite, not just demos:
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
 | Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, execution stage count/capacity, dropped-stage count, backdrop pixels, bounded texture copies, deterministic fallback, pure effective-radius shape bounds, backend `material_runtime_summary` counters cross-checked by the verifier, and backend `material_executor_summary` budget/timing/stage telemetry guarded by artifact manifests | Keep tightening backend timing budgets as more native material renderers land |
 | Runnable examples under `examples/` | Native, glass showcase, desktop/mobile file explorer, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |
-| All phenotype features testable locally | `docs/EXAMPLES_COVERAGE.md` maps current examples/tests to public surfaces and artifact expectations; `tools/verify_artifact_bundle.py` validates startup bundles, optional pixel regions, exact material/container plan summaries, semantic/runtime material parity, material resource bounds, runtime numeric bounds, `examples/glass_showcase/artifact_manifest.json`, `examples/file_explorer_desktop/artifact_manifest.json`, `examples/file_explorer_mobile/artifact_manifest.json`, and `examples/android/artifact_manifest.json`; `tools/verify_glass_showcase_artifact.sh` wraps the glass gate; `tools/verify_file_explorer_artifacts.sh` wraps the local desktop/mobile file explorer gate; `mise run android:contract` wraps the Android device/emulator artifact route | Android CI wiring remains |
+| All phenotype features testable locally | `docs/EXAMPLES_COVERAGE.md` maps current examples/tests to public surfaces and artifact expectations; `tools/verify_artifact_bundle.py` validates startup bundles, optional pixel regions, exact material/container plan summaries, semantic/runtime material parity, material resource bounds, runtime numeric bounds, `examples/glass_showcase/artifact_manifest.json`, `examples/file_explorer_desktop/artifact_manifest.json`, `examples/file_explorer_mobile/artifact_manifest.json`, and `examples/android/artifact_manifest.json`; `tools/verify_glass_showcase_artifact.sh` wraps the glass gate; `tools/verify_file_explorer_artifacts.sh` wraps the local desktop/mobile file explorer gate; `phenotype android contract` wraps the Android device/emulator artifact route | Android CI wiring remains |
 
 ## Implementation roadmap
 
@@ -553,7 +553,7 @@ Validation:
 
 Current seed:
 
-- `mise run android:contract` builds and installs the Android example, launches
+- `phenotype android contract` builds and installs the Android example, launches
   it with an opt-in artifact property, pulls the app-private bundle via
   `adb run-as`, and applies `examples/android/artifact_manifest.json`.
 - The runner is local/device-oriented for now; CI device/emulator wiring remains
