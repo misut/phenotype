@@ -35,11 +35,20 @@ struct PackageSummary {
     bool application_section = false;
     bool resources_section = false;
     bool debug_section = false;
+    bool artifact_manifest_exists = false;
     bool default_font_pretendard = false;
     bool assets_directory = false;
     bool locales_directory = false;
     bool fonts_directory = false;
+    std::string application_id;
+    std::string display_name;
+    std::string version;
+    std::string entry;
+    std::vector<std::string> platforms;
     std::string default_font_family;
+    std::string artifact_manifest;
+    std::string debug_probe_scene;
+    std::string debug_verifier;
     std::vector<std::string> missing_sources;
     std::uintmax_t manifest_bytes = 0;
     std::size_t manifest_asset_count = 0;
@@ -150,6 +159,53 @@ auto spec() -> cppx::cli::CommandSpec {
                         },
                     },
                     {
+                        .name = "verify-glass-showcase",
+                        .summary = "Run the local glass showcase artifact gate",
+                        .options = {
+                            help_option(),
+                            json_option(),
+                            {.name = "accessibility",
+                             .arity = cppx::cli::OptionArity::none,
+                             .description = "Run the accessibility glass gate"},
+                            {.name = "bundle-dir",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "path",
+                             .description = "Artifact bundle directory override"},
+                            {.name = "expect-platform",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "name",
+                             .description = "Expected platform name"},
+                        },
+                        .examples = {
+                            "phenotype artifact verify-glass-showcase",
+                            "phenotype artifact verify-glass-showcase --accessibility --json",
+                        },
+                    },
+                    {
+                        .name = "verify-file-explorer",
+                        .summary = "Run the local desktop/mobile file explorer artifact gate",
+                        .options = {
+                            help_option(),
+                            json_option(),
+                            {.name = "desktop-artifact-dir",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "path",
+                             .description = "Desktop artifact bundle root override"},
+                            {.name = "mobile-artifact-dir",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "path",
+                             .description = "Mobile artifact bundle root override"},
+                            {.name = "settle-seconds",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "seconds",
+                             .description = "Native window settle time before capture"},
+                        },
+                        .examples = {
+                            "phenotype artifact verify-file-explorer",
+                            "phenotype artifact verify-file-explorer --json",
+                        },
+                    },
+                    {
                         .name = "summary",
                         .summary = "Summarize one artifact bundle",
                         .options = {help_option(), json_option()},
@@ -181,6 +237,18 @@ auto spec() -> cppx::cli::CommandSpec {
                         .examples = {
                             "phenotype package inspect .",
                             "phenotype package inspect --json examples/file_explorer_desktop",
+                        },
+                    },
+                    {
+                        .name = "list",
+                        .summary = "List package manifests below a root",
+                        .options = {help_option(), json_option()},
+                        .positional_name = "root",
+                        .positional_description =
+                            "Directory to scan. Defaults to the current directory.",
+                        .examples = {
+                            "phenotype package list examples",
+                            "phenotype package list --json examples",
                         },
                     },
                 },
@@ -335,6 +403,55 @@ auto quoted_value_for_key(std::string_view line, std::string_view key)
         value.push_back(ch);
     }
     return std::nullopt;
+}
+
+auto quoted_array_for_key(std::string_view line, std::string_view key)
+    -> std::optional<std::vector<std::string>> {
+    auto trimmed = strip_toml_comment(line);
+    if (!trimmed.starts_with(key))
+        return std::nullopt;
+    auto rest = trim_copy(std::string_view{trimmed}.substr(key.size()));
+    if (!rest.starts_with("="))
+        return std::nullopt;
+    rest = trim_copy(std::string_view{rest}.substr(1));
+    if (rest.size() < 2 || rest.front() != '[' || rest.back() != ']')
+        return std::nullopt;
+
+    auto values = std::vector<std::string>{};
+    auto token = std::string{};
+    auto in_string = false;
+    auto escaped = false;
+    for (std::size_t i = 1; i + 1 < rest.size(); ++i) {
+        auto ch = rest[i];
+        if (!in_string) {
+            if (ch == '"') {
+                in_string = true;
+                token.clear();
+            }
+            continue;
+        }
+        if (escaped) {
+            switch (ch) {
+            case 'n': token.push_back('\n'); break;
+            case 'r': token.push_back('\r'); break;
+            case 't': token.push_back('\t'); break;
+            default: token.push_back(ch); break;
+            }
+            escaped = false;
+            continue;
+        }
+        if (ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch == '"') {
+            values.push_back(token);
+            in_string = false;
+            continue;
+        }
+        token.push_back(ch);
+    }
+    return values;
 }
 
 auto count_regular_files(fs::path const& root) -> std::size_t {
@@ -590,6 +707,16 @@ auto package_summary(fs::path root) -> PackageSummary {
         auto text = read_text_file(manifest_path);
         auto input = std::istringstream{text};
         auto line = std::string{};
+        enum class Section {
+            None,
+            Application,
+            Resources,
+            Debug,
+            Asset,
+            Locale,
+            Font,
+        };
+        auto section = Section::None;
         while (std::getline(input, line)) {
             auto trimmed = strip_toml_comment(line);
             if (trimmed.empty())
@@ -597,29 +724,83 @@ auto package_summary(fs::path root) -> PackageSummary {
 
             if (trimmed == "[application]") {
                 summary.application_section = true;
+                section = Section::Application;
                 continue;
             }
             if (trimmed == "[resources]") {
                 summary.resources_section = true;
+                section = Section::Resources;
                 continue;
             }
             if (trimmed == "[debug]") {
                 summary.debug_section = true;
+                section = Section::Debug;
                 continue;
             }
             if (trimmed == "[[assets]]") {
                 ++summary.manifest_asset_count;
+                section = Section::Asset;
                 continue;
             }
             if (trimmed == "[[locales]]") {
                 ++summary.manifest_locale_count;
+                section = Section::Locale;
                 continue;
             }
             if (trimmed == "[[fonts]]") {
                 ++summary.manifest_font_count;
+                section = Section::Font;
                 continue;
             }
 
+            if (section == Section::Application) {
+                if (auto value = quoted_value_for_key(trimmed, "id")) {
+                    summary.application_id = *value;
+                    continue;
+                }
+                if (auto value = quoted_value_for_key(trimmed, "display_name")) {
+                    summary.display_name = *value;
+                    continue;
+                }
+                if (auto value = quoted_value_for_key(trimmed, "version")) {
+                    summary.version = *value;
+                    continue;
+                }
+                if (auto value = quoted_value_for_key(trimmed, "entry")) {
+                    summary.entry = *value;
+                    continue;
+                }
+                if (auto value = quoted_array_for_key(trimmed, "platforms")) {
+                    summary.platforms = std::move(*value);
+                    continue;
+                }
+            }
+            if (section == Section::Resources) {
+                if (auto value = quoted_value_for_key(trimmed, "artifact_manifest")) {
+                    summary.artifact_manifest = *value;
+                    summary.artifact_manifest_exists =
+                        path_exists(summary.root / *value);
+                    continue;
+                }
+            }
+            if (section == Section::Debug) {
+                if (auto value = quoted_value_for_key(trimmed, "probe_scene")) {
+                    summary.debug_probe_scene = *value;
+                    continue;
+                }
+                if (auto value = quoted_value_for_key(trimmed, "verifier")) {
+                    summary.debug_verifier = *value;
+                    continue;
+                }
+                if (auto value = quoted_value_for_key(trimmed, "artifact_manifest")) {
+                    if (summary.artifact_manifest.empty()) {
+                        summary.artifact_manifest = *value;
+                        summary.artifact_manifest_exists =
+                            path_exists(summary.root / *value);
+                    }
+                    continue;
+                }
+            }
             if (auto value = quoted_value_for_key(trimmed, "default_font_family")) {
                 summary.default_font_family = *value;
                 summary.default_font_pretendard = *value == "Pretendard";
@@ -654,6 +835,17 @@ auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
                                summary.resources_section ? "true" : "false",
                                summary.debug_section ? "true" : "false"),
          .hint = "Expected [application], [resources], and [debug] sections."},
+        {.name = "application_metadata",
+         .ok = !summary.application_id.empty() && !summary.display_name.empty()
+             && !summary.version.empty() && !summary.entry.empty()
+             && !summary.platforms.empty(),
+         .detail = std::format("id={} entry={} platforms={}",
+                               summary.application_id.empty()
+                                   ? "<missing>"
+                                   : summary.application_id,
+                               summary.entry.empty() ? "<missing>" : summary.entry,
+                               summary.platforms.size()),
+         .hint = "Expected application id, display_name, version, entry, and platforms."},
         {.name = "manifest_resources",
          .ok = summary.manifest_asset_count > 0
              && summary.manifest_locale_count > 0
@@ -670,6 +862,26 @@ auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
                                summary.source_reference_count,
                                summary.missing_sources.size()),
          .hint = "Every manifest source path must exist relative to the package root."},
+        {.name = "artifact_manifest",
+         .ok = !summary.artifact_manifest.empty()
+             && summary.artifact_manifest_exists,
+         .detail = summary.artifact_manifest.empty()
+             ? "artifact_manifest=<missing>"
+             : std::format("{} present={}",
+                           summary.artifact_manifest,
+                           summary.artifact_manifest_exists ? "true" : "false"),
+         .hint = "Package debug resources should point at an existing artifact manifest."},
+        {.name = "debug_metadata",
+         .ok = !summary.debug_probe_scene.empty()
+             && !summary.debug_verifier.empty(),
+         .detail = std::format("probe_scene={} verifier={}",
+                               summary.debug_probe_scene.empty()
+                                   ? "<missing>"
+                                   : summary.debug_probe_scene,
+                               summary.debug_verifier.empty()
+                                   ? "<missing>"
+                                   : summary.debug_verifier),
+         .hint = "Expected [debug] probe_scene and verifier metadata."},
         {.name = "default_font",
          .ok = summary.default_font_pretendard,
          .detail = summary.default_font_family.empty()
@@ -697,9 +909,13 @@ auto package_json(PackageSummary const& summary,
         "{{\"schema_version\":1,\"command\":\"package inspect\",\"ok\":{},"
         "\"root\":{},"
         "\"manifest\":{{\"present\":{},\"bytes\":{},"
+        "\"application\":{{\"id\":{},\"display_name\":{},\"version\":{},"
+        "\"entry\":{},\"platforms\":{}}},"
         "\"sections\":{{\"application\":{},\"resources\":{},\"debug\":{}}},"
         "\"declared_resources\":{{\"assets\":{},\"locales\":{},\"fonts\":{}}},"
         "\"source_reference_count\":{},\"missing_sources\":{},"
+        "\"artifact_manifest\":{{\"path\":{},\"present\":{}}},"
+        "\"debug\":{{\"probe_scene\":{},\"verifier\":{}}},"
         "\"default_font_family\":{},\"default_font_pretendard\":{}}},"
         "\"assets\":{{\"present\":{},\"file_count\":{}}},"
         "\"locales\":{{\"present\":{},\"file_count\":{}}},"
@@ -708,6 +924,11 @@ auto package_json(PackageSummary const& summary,
         json_string(path_string(summary.root)),
         summary.manifest ? "true" : "false",
         summary.manifest_bytes,
+        json_string(summary.application_id),
+        json_string(summary.display_name),
+        json_string(summary.version),
+        json_string(summary.entry),
+        string_array_json(summary.platforms),
         summary.application_section ? "true" : "false",
         summary.resources_section ? "true" : "false",
         summary.debug_section ? "true" : "false",
@@ -716,6 +937,10 @@ auto package_json(PackageSummary const& summary,
         summary.manifest_font_count,
         summary.source_reference_count,
         string_array_json(summary.missing_sources),
+        json_string(summary.artifact_manifest),
+        summary.artifact_manifest_exists ? "true" : "false",
+        json_string(summary.debug_probe_scene),
+        json_string(summary.debug_verifier),
         json_string(summary.default_font_family),
         summary.default_font_pretendard ? "true" : "false",
         summary.assets_directory ? "true" : "false",
@@ -725,6 +950,139 @@ auto package_json(PackageSummary const& summary,
         summary.fonts_directory ? "true" : "false",
         summary.font_file_count,
         checks_json(checks));
+}
+
+auto package_entry_json(PackageSummary const& summary,
+                        std::span<Check const> checks) -> std::string {
+    return std::format(
+        "{{\"root\":{},\"ok\":{},\"application_id\":{},"
+        "\"display_name\":{},\"entry\":{},\"platforms\":{},"
+        "\"default_font_family\":{},\"artifact_manifest\":{},"
+        "\"debug_verifier\":{},\"checks\":{}}}",
+        json_string(path_string(summary.root)),
+        all_ok(checks) ? "true" : "false",
+        json_string(summary.application_id),
+        json_string(summary.display_name),
+        json_string(summary.entry),
+        string_array_json(summary.platforms),
+        json_string(summary.default_font_family),
+        json_string(summary.artifact_manifest),
+        json_string(summary.debug_verifier),
+        checks_json(checks));
+}
+
+auto package_manifest_roots(fs::path root) -> std::vector<fs::path> {
+    auto roots = std::vector<fs::path>{};
+    if (!path_is_directory(root))
+        return roots;
+
+    auto ec = std::error_code{};
+    auto options = fs::directory_options::skip_permission_denied;
+    for (auto it = fs::recursive_directory_iterator(root, options, ec);
+         !ec && it != fs::recursive_directory_iterator{};
+         it.increment(ec)) {
+        auto path = it->path();
+        auto name = path.filename().string();
+        if (it->is_directory(ec)) {
+            if (name == ".git" || name == ".exon" || name == "build") {
+                it.disable_recursion_pending();
+            }
+            continue;
+        }
+        ec.clear();
+        if (it->is_regular_file(ec) && name == "phenotype.package.toml") {
+            roots.push_back(path.parent_path());
+        }
+    }
+    std::ranges::sort(roots);
+    return roots;
+}
+
+auto output_line_count(std::string_view text) -> std::size_t {
+    return static_cast<std::size_t>(
+        std::ranges::count(text, '\n')
+        + (text.empty() || text.ends_with('\n') ? 0 : 1));
+}
+
+auto output_tail(std::string_view text, std::size_t max_bytes = 16384)
+    -> std::string_view {
+    if (text.size() <= max_bytes)
+        return text;
+    return text.substr(text.size() - max_bytes);
+}
+
+auto script_result_json(std::string_view command,
+                        fs::path const& script,
+                        cppx::process::CapturedProcessResult const& result)
+    -> std::string {
+    return std::format(
+        "{{\"schema_version\":1,\"command\":{},\"ok\":{},"
+        "\"script\":{},\"exit_code\":{},\"timed_out\":{},"
+        "\"stdout_line_count\":{},\"stderr_line_count\":{},"
+        "\"stdout_tail\":{},\"stderr_tail\":{}}}",
+        json_string(command),
+        (!result.timed_out && result.exit_code == 0) ? "true" : "false",
+        json_string(path_string(script)),
+        result.exit_code,
+        result.timed_out ? "true" : "false",
+        output_line_count(result.stdout_text),
+        output_line_count(result.stderr_text),
+        json_string(output_tail(result.stdout_text)),
+        json_string(output_tail(result.stderr_text)));
+}
+
+int print_error(std::string_view command, std::string_view message, bool json);
+
+int run_repo_script(
+        std::string_view command,
+        fs::path script,
+        cppx::cli::Invocation const& invocation,
+        std::map<std::string, std::string> env_overrides,
+        std::chrono::milliseconds timeout) {
+    auto root = find_repo_root(fs::current_path());
+    if (!root) {
+        return print_error(
+            command,
+            "could not find phenotype repository root from current directory",
+            invocation.has("json"));
+    }
+
+    script = *root / script;
+    auto spec = cppx::process::ProcessSpec{
+        .program = "bash",
+        .args = {path_string(script)},
+        .cwd = *root,
+        .timeout = timeout,
+        .env_overrides = std::move(env_overrides),
+    };
+
+    auto result = cppx::process::system::capture(spec);
+    if (!result) {
+        return print_error(
+            command,
+            std::format("failed to run script: {}",
+                        cppx::process::to_string(result.error())),
+            invocation.has("json"));
+    }
+
+    if (invocation.has("json")) {
+        std::println("{}", script_result_json(command, script, *result));
+    } else {
+        if (!result->stdout_text.empty()) {
+            std::print("{}", result->stdout_text);
+            if (!result->stdout_text.ends_with('\n'))
+                std::println("");
+        }
+        if (!result->stderr_text.empty()) {
+            std::print(std::cerr, "{}", result->stderr_text);
+            if (!result->stderr_text.ends_with('\n'))
+                std::println(std::cerr, "");
+        }
+    }
+
+    if (result->timed_out)
+        return result->exit_code == 0 ? 124 : result->exit_code;
+    return result->exit_code;
 }
 
 auto find_command(cppx::cli::CommandSpec const& root,
@@ -760,6 +1118,19 @@ auto first_positional_or_error(cppx::cli::Invocation const& invocation,
     if (invocation.positionals.size() > 1) {
         return std::unexpected{
             std::format("{} accepts exactly one positional path", command_name)};
+    }
+    return fs::path{invocation.positionals.front()};
+}
+
+auto optional_positional_or_error(cppx::cli::Invocation const& invocation,
+                                  std::string_view command_name,
+                                  fs::path fallback)
+    -> std::expected<fs::path, std::string> {
+    if (invocation.positionals.empty())
+        return fallback;
+    if (invocation.positionals.size() > 1) {
+        return std::unexpected{
+            std::format("{} accepts at most one positional path", command_name)};
     }
     return fs::path{invocation.positionals.front()};
 }
@@ -924,6 +1295,50 @@ int run_artifact_verify(cppx::cli::Invocation const& invocation) {
     return result->exit_code;
 }
 
+int run_artifact_verify_glass_showcase(
+        cppx::cli::Invocation const& invocation) {
+    auto env = std::map<std::string, std::string>{};
+    if (auto value = invocation.value("bundle-dir")) {
+        env["PHENOTYPE_ARTIFACT_DIR"] =
+            absolute_path_string(fs::path{std::string{*value}});
+    }
+    if (auto value = invocation.value("expect-platform")) {
+        env["PHENOTYPE_EXPECT_PLATFORM"] = std::string{*value};
+    }
+    auto script = invocation.has("accessibility")
+        ? fs::path{"tools/verify_glass_showcase_accessibility_artifact.sh"}
+        : fs::path{"tools/verify_glass_showcase_artifact.sh"};
+    return run_repo_script(
+        "artifact verify-glass-showcase",
+        script,
+        invocation,
+        std::move(env),
+        std::chrono::minutes{20});
+}
+
+int run_artifact_verify_file_explorer(
+        cppx::cli::Invocation const& invocation) {
+    auto env = std::map<std::string, std::string>{};
+    if (auto value = invocation.value("desktop-artifact-dir")) {
+        env["PHENOTYPE_FILE_EXPLORER_DESKTOP_ARTIFACT_DIR"] =
+            absolute_path_string(fs::path{std::string{*value}});
+    }
+    if (auto value = invocation.value("mobile-artifact-dir")) {
+        env["PHENOTYPE_FILE_EXPLORER_MOBILE_ARTIFACT_DIR"] =
+            absolute_path_string(fs::path{std::string{*value}});
+    }
+    if (auto value = invocation.value("settle-seconds")) {
+        env["PHENOTYPE_FILE_EXPLORER_CAPTURE_SETTLE_SECONDS"] =
+            std::string{*value};
+    }
+    return run_repo_script(
+        "artifact verify-file-explorer",
+        "tools/verify_file_explorer_artifacts.sh",
+        invocation,
+        std::move(env),
+        std::chrono::minutes{45});
+}
+
 int run_package_inspect(cppx::cli::Invocation const& invocation) {
     auto path = first_positional_or_error(invocation, "package inspect");
     if (!path)
@@ -937,6 +1352,63 @@ int run_package_inspect(cppx::cli::Invocation const& invocation) {
         print_checks("phenotype package inspect", checks);
     }
     return all_ok(checks) ? 0 : 1;
+}
+
+int run_package_list(cppx::cli::Invocation const& invocation) {
+    auto root = optional_positional_or_error(invocation, "package list", ".");
+    if (!root)
+        return print_error("package list", root.error(), invocation.has("json"));
+
+    auto manifests = package_manifest_roots(*root);
+    auto entries = std::vector<std::pair<PackageSummary, std::vector<Check>>>{};
+    entries.reserve(manifests.size());
+    auto ok = path_is_directory(*root) && !manifests.empty();
+    for (auto const& manifest_root : manifests) {
+        auto summary = package_summary(manifest_root);
+        auto checks = package_checks(summary);
+        ok = ok && all_ok(checks);
+        entries.push_back({std::move(summary), std::move(checks)});
+    }
+
+    if (invocation.has("json")) {
+        auto packages = std::string{"["};
+        for (std::size_t i = 0; i < entries.size(); ++i) {
+            if (i > 0)
+                packages += ",";
+            packages += package_entry_json(entries[i].first, entries[i].second);
+        }
+        packages += "]";
+        std::println(
+            "{{\"schema_version\":1,\"command\":\"package list\","
+            "\"ok\":{},\"root\":{},\"package_count\":{},\"packages\":{}}}",
+            ok ? "true" : "false",
+            json_string(path_string(*root)),
+            entries.size(),
+            packages);
+    } else {
+        auto lines = std::vector<cppx::terminal::StatusLine>{};
+        lines.reserve(entries.size());
+        for (auto const& [summary, checks] : entries) {
+            lines.push_back({
+                .label = summary.application_id.empty()
+                    ? path_string(summary.root)
+                    : summary.application_id,
+                .value = path_string(summary.root),
+                .status = all_ok(checks) ? cppx::terminal::StatusKind::ok
+                                         : cppx::terminal::StatusKind::fail,
+            });
+        }
+        if (lines.empty()) {
+            lines.push_back({
+                .label = "packages",
+                .value = "none",
+                .status = cppx::terminal::StatusKind::fail,
+            });
+        }
+        std::println("phenotype package list");
+        std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    }
+    return ok ? 0 : 1;
 }
 
 int run_commands(cppx::cli::CommandSpec const& root,
@@ -989,8 +1461,17 @@ int main(int argc, char** argv) {
         == std::vector<std::string>{"phenotype", "artifact", "verify"})
         return run_artifact_verify(*parsed);
     if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "artifact", "verify-glass-showcase"})
+        return run_artifact_verify_glass_showcase(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "artifact", "verify-file-explorer"})
+        return run_artifact_verify_file_explorer(*parsed);
+    if (parsed->command_path
         == std::vector<std::string>{"phenotype", "package", "inspect"})
         return run_package_inspect(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "package", "list"})
+        return run_package_list(*parsed);
     if (parsed->command_path == std::vector<std::string>{"phenotype", "commands"})
         return run_commands(root, *parsed);
 

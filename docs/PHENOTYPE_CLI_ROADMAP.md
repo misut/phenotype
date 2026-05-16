@@ -115,7 +115,10 @@ Current commands:
 | `phenotype commands --json` | implemented | Emits a recursive command tree with `cppx.cli` command metadata, stable paths, and schema version `1`. |
 | `phenotype artifact summary <bundle>` | implemented | Read-only structural summary for `snapshot.json`, `frame.bmp`, and platform runtime files. This does not replace semantic verification yet. |
 | `phenotype artifact verify <bundle>` | implemented | Edge wrapper that runs the uv-managed Python verifier through `mise` and forwards the verifier JSON report. |
-| `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, and package resource directories. |
+| `phenotype artifact verify-glass-showcase` | implemented | Local-only edge wrapper around the glass showcase build/capture/verifier gate, including accessibility mode. PR CI should not run this slow native capture gate by default. |
+| `phenotype artifact verify-file-explorer` | implemented | Local-only edge wrapper around the desktop/mobile Finder-style artifact gate. This keeps the future replacement command shape visible while shell compatibility remains. |
+| `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, package resource directories, and artifact manifest presence. |
+| `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
 
 The desktop and mobile file explorer examples now include inspectable
 `phenotype.package.toml` manifests, textual asset placeholders, English/Korean
@@ -124,6 +127,8 @@ contract fixtures only; the runtime examples still use the existing hard-coded
 view text until the resource catalog layer lands.
 Pull-request CI routes CLI and file explorer package-resource edits through a
 lightweight Linux CLI/package job instead of the full root native matrix.
+The PR gate only validates command metadata and resource catalogs for the slow
+native artifact commands; full glass/file-explorer captures remain local gates.
 
 ## Packaging contract
 

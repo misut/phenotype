@@ -98,6 +98,20 @@ tools/verify_artifact_bundle.py` from the repository root and forwards the
 verifier's JSON report. This keeps Python managed by `mise`/`uv` while moving
 the developer-facing entry point under the CLI.
 
+The slow local native gates are available through the same CLI surface:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli artifact verify-glass-showcase --json
+.exon/debug/phenotype_cli artifact verify-glass-showcase --accessibility --json
+.exon/debug/phenotype_cli artifact verify-file-explorer --json
+```
+
+These commands wrap the existing shell gates and report the script exit status,
+timeout state, and output tail as JSON. They are local verification commands,
+not default PR CI jobs.
+
 ## Desktop example artifact hook
 
 Native desktop examples can write a startup artifact bundle without adding
@@ -281,6 +295,9 @@ Python tool environment. Use `mise run tools:artifact:test` for the verifier's
 contract tests and `mise run tools:artifact:pycompile` for syntax checks.
 Use `tools/phenotype_cli` for new diagnostic entry points; shell/Python tools
 should become compatibility wrappers only after matching CLI commands exist.
+The CLI already exposes `artifact verify-glass-showcase` and
+`artifact verify-file-explorer`, so new docs and automation should prefer
+those command names while the shell scripts remain as stable local wrappers.
 Use the verifier command to validate the bundle before handing it to an LLM,
 attaching it to an issue, or comparing it in CI. The verifier checks the common
 debug schema, platform capabilities,
