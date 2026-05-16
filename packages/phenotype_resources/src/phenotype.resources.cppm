@@ -1,5 +1,6 @@
 module;
 #include <algorithm>
+#include <cctype>
 #include <functional>
 #include <optional>
 #include <span>
@@ -156,10 +157,385 @@ struct LocalizedString {
     bool fallback = false;
 };
 
+struct ResourceManifestParseResult {
+    ResourceCatalog catalog;
+    bool application_section = false;
+    bool resources_section = false;
+    bool debug_section = false;
+    std::string artifact_manifest;
+    std::vector<std::string> source_references;
+};
+
 inline bool same_resource_key(
         std::string_view lhs,
         std::string_view rhs) noexcept {
     return lhs == rhs;
+}
+
+inline auto trim_resource_copy(std::string_view text) -> std::string {
+    auto begin = text.begin();
+    auto end = text.end();
+    while (begin != end
+           && std::isspace(static_cast<unsigned char>(*begin))) {
+        ++begin;
+    }
+    while (begin != end
+           && std::isspace(static_cast<unsigned char>(*(end - 1)))) {
+        --end;
+    }
+    return std::string{begin, end};
+}
+
+inline auto strip_resource_toml_comment(std::string_view line)
+    -> std::string {
+    auto in_string = false;
+    auto escaped = false;
+    for (std::size_t i = 0; i < line.size(); ++i) {
+        auto ch = line[i];
+        if (escaped) {
+            escaped = false;
+            continue;
+        }
+        if (ch == '\\' && in_string) {
+            escaped = true;
+            continue;
+        }
+        if (ch == '"') {
+            in_string = !in_string;
+            continue;
+        }
+        if (ch == '#' && !in_string)
+            return trim_resource_copy(line.substr(0, i));
+    }
+    return trim_resource_copy(line);
+}
+
+inline auto resource_quoted_value_for_key(
+        std::string_view line,
+        std::string_view key) -> std::optional<std::string> {
+    auto trimmed = strip_resource_toml_comment(line);
+    if (!std::string_view{trimmed}.starts_with(key))
+        return std::nullopt;
+    auto rest = trim_resource_copy(std::string_view{trimmed}.substr(key.size()));
+    if (!std::string_view{rest}.starts_with("="))
+        return std::nullopt;
+    rest = trim_resource_copy(std::string_view{rest}.substr(1));
+    if (rest.size() < 2 || rest.front() != '"')
+        return std::nullopt;
+
+    auto value = std::string{};
+    auto escaped = false;
+    for (std::size_t i = 1; i < rest.size(); ++i) {
+        auto ch = rest[i];
+        if (escaped) {
+            switch (ch) {
+            case 'n': value.push_back('\n'); break;
+            case 'r': value.push_back('\r'); break;
+            case 't': value.push_back('\t'); break;
+            default: value.push_back(ch); break;
+            }
+            escaped = false;
+            continue;
+        }
+        if (ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch == '"')
+            return value;
+        value.push_back(ch);
+    }
+    return std::nullopt;
+}
+
+inline auto resource_quoted_array_for_key(
+        std::string_view line,
+        std::string_view key) -> std::optional<std::vector<std::string>> {
+    auto trimmed = strip_resource_toml_comment(line);
+    if (!std::string_view{trimmed}.starts_with(key))
+        return std::nullopt;
+    auto rest = trim_resource_copy(std::string_view{trimmed}.substr(key.size()));
+    if (!std::string_view{rest}.starts_with("="))
+        return std::nullopt;
+    rest = trim_resource_copy(std::string_view{rest}.substr(1));
+    if (rest.size() < 2 || rest.front() != '[' || rest.back() != ']')
+        return std::nullopt;
+
+    auto values = std::vector<std::string>{};
+    auto token = std::string{};
+    auto in_string = false;
+    auto escaped = false;
+    for (std::size_t i = 1; i + 1 < rest.size(); ++i) {
+        auto ch = rest[i];
+        if (!in_string) {
+            if (ch == '"') {
+                in_string = true;
+                token.clear();
+            }
+            continue;
+        }
+        if (escaped) {
+            switch (ch) {
+            case 'n': token.push_back('\n'); break;
+            case 'r': token.push_back('\r'); break;
+            case 't': token.push_back('\t'); break;
+            default: token.push_back(ch); break;
+            }
+            escaped = false;
+            continue;
+        }
+        if (ch == '\\') {
+            escaped = true;
+            continue;
+        }
+        if (ch == '"') {
+            values.push_back(token);
+            in_string = false;
+            continue;
+        }
+        token.push_back(ch);
+    }
+    return values;
+}
+
+inline auto resource_bool_value_for_key(
+        std::string_view line,
+        std::string_view key) -> std::optional<bool> {
+    auto trimmed = strip_resource_toml_comment(line);
+    if (!std::string_view{trimmed}.starts_with(key))
+        return std::nullopt;
+    auto rest = trim_resource_copy(std::string_view{trimmed}.substr(key.size()));
+    if (!std::string_view{rest}.starts_with("="))
+        return std::nullopt;
+    rest = trim_resource_copy(std::string_view{rest}.substr(1));
+    if (rest == "true")
+        return true;
+    if (rest == "false")
+        return false;
+    return std::nullopt;
+}
+
+template <typename Fn>
+inline void for_each_resource_line(std::string_view text, Fn&& fn) {
+    auto cursor = std::size_t{0};
+    while (cursor <= text.size()) {
+        auto next = text.find('\n', cursor);
+        auto line = text.substr(
+            cursor,
+            next == std::string_view::npos ? text.size() - cursor : next - cursor);
+        if (!line.empty() && line.back() == '\r')
+            line.remove_suffix(1);
+        fn(line);
+        if (next == std::string_view::npos)
+            break;
+        cursor = next + 1;
+    }
+}
+
+inline auto parse_resource_locale_strings(std::string_view text)
+    -> std::vector<LocaleString> {
+    auto strings = std::vector<LocaleString>{};
+    auto section = std::string{};
+    for_each_resource_line(text, [&](std::string_view line) {
+        auto trimmed = strip_resource_toml_comment(line);
+        if (trimmed.empty())
+            return;
+        if (trimmed.size() >= 2 && trimmed.front() == '['
+            && trimmed.back() == ']') {
+            section = trim_resource_copy(std::string_view{trimmed}.substr(
+                1,
+                trimmed.size() - 2));
+            return;
+        }
+        auto eq = trimmed.find('=');
+        if (eq == std::string::npos)
+            return;
+        auto key = trim_resource_copy(std::string_view{trimmed}.substr(0, eq));
+        if (key.empty())
+            return;
+        auto value = resource_quoted_value_for_key(trimmed, key);
+        if (!value)
+            return;
+        auto full_key = section.empty() ? key : section + "." + key;
+        strings.push_back({
+            .key = std::move(full_key),
+            .value = std::move(*value),
+        });
+    });
+    return strings;
+}
+
+inline auto parse_resource_manifest(std::string_view manifest_text)
+    -> ResourceManifestParseResult {
+    auto result = ResourceManifestParseResult{};
+    result.catalog.default_locale = "en";
+    result.catalog.default_font_family = "Pretendard";
+
+    enum class Section {
+        None,
+        Application,
+        Resources,
+        Debug,
+        Asset,
+        Locale,
+        Font,
+    };
+    auto section = Section::None;
+    for_each_resource_line(manifest_text, [&](std::string_view line) {
+        auto trimmed = strip_resource_toml_comment(line);
+        if (trimmed.empty())
+            return;
+
+        if (trimmed == "[application]") {
+            result.application_section = true;
+            section = Section::Application;
+            return;
+        }
+        if (trimmed == "[resources]") {
+            result.resources_section = true;
+            section = Section::Resources;
+            return;
+        }
+        if (trimmed == "[debug]") {
+            result.debug_section = true;
+            section = Section::Debug;
+            return;
+        }
+        if (trimmed == "[[assets]]") {
+            result.catalog.assets.push_back({});
+            section = Section::Asset;
+            return;
+        }
+        if (trimmed == "[[locales]]") {
+            result.catalog.locales.push_back({});
+            section = Section::Locale;
+            return;
+        }
+        if (trimmed == "[[fonts]]") {
+            result.catalog.fonts.push_back({});
+            section = Section::Font;
+            return;
+        }
+
+        if (section == Section::Application) {
+            if (auto value = resource_quoted_value_for_key(trimmed, "id")) {
+                result.catalog.application.id = *value;
+                return;
+            }
+            if (auto value = resource_quoted_value_for_key(trimmed, "display_name")) {
+                result.catalog.application.display_name = *value;
+                return;
+            }
+            if (auto value = resource_quoted_value_for_key(trimmed, "version")) {
+                result.catalog.application.version = *value;
+                return;
+            }
+            if (auto value = resource_quoted_value_for_key(trimmed, "entry")) {
+                result.catalog.application.entry = *value;
+                return;
+            }
+            if (auto value = resource_quoted_array_for_key(trimmed, "platforms")) {
+                result.catalog.application.platforms = std::move(*value);
+                return;
+            }
+        }
+        if (section == Section::Resources) {
+            if (auto value = resource_quoted_value_for_key(trimmed, "default_locale")) {
+                result.catalog.default_locale = *value;
+                return;
+            }
+            if (auto value = resource_quoted_value_for_key(trimmed, "default_font_family")) {
+                result.catalog.default_font_family = *value;
+                return;
+            }
+            if (auto value = resource_quoted_value_for_key(trimmed, "artifact_manifest")) {
+                result.artifact_manifest = *value;
+                return;
+            }
+        }
+        if (section == Section::Debug) {
+            if (auto value = resource_quoted_value_for_key(trimmed, "probe_scene")) {
+                result.catalog.debug.probe_scene = *value;
+                return;
+            }
+            if (auto value = resource_quoted_value_for_key(trimmed, "verifier")) {
+                result.catalog.debug.verifier = *value;
+                return;
+            }
+            if (auto value = resource_quoted_value_for_key(trimmed, "artifact_manifest")) {
+                result.catalog.debug.artifact_manifest = *value;
+                if (result.artifact_manifest.empty())
+                    result.artifact_manifest = *value;
+                return;
+            }
+        }
+        if (section == Section::Asset && !result.catalog.assets.empty()) {
+            auto& asset = result.catalog.assets.back();
+            if (auto value = resource_quoted_value_for_key(trimmed, "name")) {
+                asset.name = *value;
+                return;
+            }
+            if (auto value = resource_quoted_value_for_key(trimmed, "source")) {
+                asset.source = *value;
+                result.source_references.push_back(*value);
+                return;
+            }
+            if (auto value = resource_quoted_value_for_key(trimmed, "content_type")) {
+                asset.content_type = *value;
+                return;
+            }
+            if (auto value = resource_bool_value_for_key(trimmed, "preload")) {
+                asset.preload = *value;
+                return;
+            }
+            if (auto value = resource_bool_value_for_key(trimmed, "runtime_visible")) {
+                asset.runtime_visible = *value;
+                return;
+            }
+        }
+        if (section == Section::Locale && !result.catalog.locales.empty()) {
+            auto& locale = result.catalog.locales.back();
+            if (auto value = resource_quoted_value_for_key(trimmed, "tag")) {
+                locale.tag = *value;
+                return;
+            }
+            if (auto value = resource_quoted_value_for_key(trimmed, "source")) {
+                locale.source = *value;
+                result.source_references.push_back(*value);
+                return;
+            }
+            if (auto value = resource_quoted_array_for_key(trimmed, "fallback")) {
+                locale.fallback = std::move(*value);
+                return;
+            }
+        }
+        if (section == Section::Font && !result.catalog.fonts.empty()) {
+            auto& font = result.catalog.fonts.back();
+            if (auto value = resource_quoted_value_for_key(trimmed, "family")) {
+                font.family = *value;
+                return;
+            }
+            if (auto value = resource_quoted_value_for_key(trimmed, "source")) {
+                font.source = *value;
+                result.source_references.push_back(*value);
+                return;
+            }
+            if (auto value = resource_bool_value_for_key(trimmed, "register")) {
+                font.register_font = *value;
+                return;
+            }
+            if (auto value = resource_quoted_array_for_key(trimmed, "fallback")) {
+                font.fallback = std::move(*value);
+                return;
+            }
+        }
+    });
+
+    if (result.catalog.debug.artifact_manifest.empty()
+        && !result.artifact_manifest.empty()) {
+        result.catalog.debug.artifact_manifest = result.artifact_manifest;
+    }
+    return result;
 }
 
 inline auto find_asset(ResourceCatalog const& catalog, std::string_view name)
