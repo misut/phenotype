@@ -54,6 +54,13 @@ The initial scope is intentionally narrow:
   metadata, and optional expectation results. Repeated `--script` files feed
   line-based input sequences, and repeated `--expect` values make the command a
   small state verifier for file read/create/duplicate/delete workflows.
+- `phenotype drive glass-showcase` applies deterministic typed inputs to the
+  shared glass showcase model without opening a native window. JSON output
+  includes the final state, per-input trace, public material kinds, expected
+  material plan count, backdrop/inspector/density/viewport state, progress
+  value, and optional expectation results. The native example imports the same
+  shared module, so this command observes the probe scene's input abstraction
+  before running slow artifact capture.
 - `phenotype run <example>` builds and runs a repository example from one
   command, with `--json`, explicit environment overrides, artifact capture
   environment, and an optional timeout. This is the first CLI-owned launch path
@@ -94,6 +101,11 @@ mise exec -- exon build
   --locale ko \
   --expect location:Trash \
   --expect 'operation:file_delete:ok'
+.exon/debug/phenotype_cli drive glass-showcase --json \
+  --script ../../examples/glass_showcase/glass_showcase.drive \
+  --expect backdrop:high \
+  --expect density:dense \
+  --expect material-count:7
 .exon/debug/phenotype_cli package bundle --json \
   ../../examples/file_explorer_desktop \
   --output /tmp/phenotype-file-explorer

@@ -1,66 +1,14 @@
-#include <concepts>
 #include <string>
-#include <type_traits>
-#include <utility>
-#include <variant>
 #include <vector>
 
+import glass_showcase_shared;
 import phenotype;
 import phenotype.native;
 
-struct ToggleBackdrop {};
-struct ToggleInspector {};
-struct SelectDensity { std::size_t value; };
-struct NoteChanged { std::string text; };
-struct Resized { int width; int height; float scale; };
+namespace glass = glass_showcase_demo;
 
-using Msg = std::variant<
-    ToggleBackdrop,
-    ToggleInspector,
-    SelectDensity,
-    NoteChanged,
-    Resized>;
-
-struct State {
-    bool high_contrast_backdrop = false;
-    bool inspector_open = true;
-    std::size_t selected_density = 1;
-    std::string note = "Artifact-ready material contract";
-    int viewport_width = 0;
-    int viewport_height = 0;
-    float viewport_scale = 1.0f;
-};
-
-static void update(State& state, Msg msg) {
-    std::visit([&](auto const& m) {
-        using T = std::decay_t<decltype(m)>;
-        if constexpr (std::same_as<T, ToggleBackdrop>) {
-            state.high_contrast_backdrop = !state.high_contrast_backdrop;
-        } else if constexpr (std::same_as<T, ToggleInspector>) {
-            state.inspector_open = !state.inspector_open;
-        } else if constexpr (std::same_as<T, SelectDensity>) {
-            state.selected_density = m.value;
-        } else if constexpr (std::same_as<T, NoteChanged>) {
-            state.note = m.text;
-        } else if constexpr (std::same_as<T, Resized>) {
-            state.viewport_width = m.width;
-            state.viewport_height = m.height;
-            state.viewport_scale = m.scale;
-        }
-    }, msg);
-}
-
-static Msg on_note_changed(std::string text) {
-    return NoteChanged{std::move(text)};
-}
-
-static std::string density_label(std::size_t value) {
-    switch (value) {
-    case 0: return "Comfortable";
-    case 2: return "Dense";
-    default: return "Balanced";
-    }
-}
+using State = glass::State;
+using Msg = glass::Msg;
 
 static std::string material_contract_text(
     phenotype::MaterialKind kind,
@@ -176,9 +124,9 @@ static void view(State const& state) {
                 layout::row([&] {
                     widget::button<Msg>(
                         backdrop_label,
-                        ToggleBackdrop{},
+                        glass::ToggleBackdrop{},
                         ButtonVariant::Primary);
-                    widget::button<Msg>(inspector_label, ToggleInspector{});
+                    widget::button<Msg>(inspector_label, glass::ToggleInspector{});
                 });
             });
 
@@ -242,15 +190,15 @@ static void view(State const& state) {
                             tabs.emplace_back("Dense", 5u);
                             widget::tabs<Msg>(tabs, state.selected_density,
                                 [](std::size_t index) -> Msg {
-                                    return SelectDensity{index};
+                                    return glass::select_density(index);
                                 });
                         }
                         layout::spacer(8);
-                        widget::text(std::string("Density: ") + density_label(state.selected_density));
+                        widget::text(std::string("Density: ") + glass::density_label(state.selected_density));
                         layout::spacer(8);
-                        widget::text_field<Msg>("Debug note", state.note, on_note_changed);
+                        widget::text_field<Msg>("Debug note", state.note, glass::note_changed);
                         layout::spacer(8);
-                        widget::progress(state.high_contrast_backdrop ? 0.85f : 0.55f, 300.0f);
+                        widget::progress(glass::progress_value(state), 300.0f);
                         });
                 });
 
@@ -310,9 +258,11 @@ static void view(State const& state) {
 
 int main() {
     return phenotype::native::run_app<State, Msg>(
-        520, 760, "phenotype glass showcase",
-        view, update,
+        glass::k_default_viewport_width,
+        glass::k_default_viewport_height,
+        "phenotype glass showcase",
+        view, glass::update,
         [](int width, int height, float scale) -> Msg {
-            return Resized{width, height, scale};
+            return glass::resized(width, height, scale);
         });
 }

@@ -85,7 +85,8 @@ The first durable CLI should expose a small command tree with stable JSON:
 | `phenotype package inspect` | Validate package manifests, assets, locales, fonts, and platform bundle metadata. | new |
 | `phenotype package bundle` | Produce staged resource bundles, integrity manifests, and future macOS `.app`/`.dmg`, Windows, Android, and web package inputs. | new |
 | `phenotype package verify-bundle` | Recompute staged bundle resource integrity without the original package root. | new |
-| `phenotype drive <script>` | Feed deterministic CLI input frames into the same input abstraction used by native shells. | new |
+| `phenotype drive file-explorer` | Feed deterministic file workflow inputs into the shared desktop/mobile model. | new |
+| `phenotype drive glass-showcase` | Feed deterministic material probe inputs into the shared glass showcase model. | new |
 | `phenotype observe <artifact-or-run>` | Emit semantic tree, material plans, runtime summaries, pixel-region summaries, and likely failing pass/layer. | new |
 
 Every command that can be used by CI must support:
@@ -125,6 +126,7 @@ Current commands:
 | `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, debug manifest references, byte counts, content metadata, and SHA-256 digests. |
 | `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource, and reports the same package checks plus bundle integrity totals. |
 | `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs or line-based scripts and emits a stable observation JSON with trace, entries, viewport, pure Finder chrome/grid metrics, capabilities, operation receipt, preview excerpt fields, localized labels, package-resource metadata, and optional expectation results. |
+| `phenotype drive glass-showcase` | implemented | Drives the shared material probe model from typed CLI inputs or line-based scripts and emits a stable observation JSON with final state, trace, public material kinds, expected material plan count, backdrop/inspector/density/viewport state, progress value, and optional expectation results. |
 | `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, passes package-root environment when a manifest exists, and emits a stable JSON launch receipt with build/run output tails, timeout state, artifact bundle summary, and explicit environment overrides. |
 
 The desktop and mobile file explorer examples now include inspectable
@@ -134,6 +136,11 @@ manifest/locales at startup from `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`,
 `PHENOTYPE_PACKAGE_ROOT`, or their working directory, then resolve labels and
 font defaults through the same pure `ResourceCatalog` path used by
 `phenotype drive file-explorer --package`.
+The glass showcase now follows the same shared-model pattern through
+`examples/glass_showcase_shared`. The native scene imports that module for
+state, update, density, viewport, and material-count contracts, while
+`phenotype drive glass-showcase` applies the same typed inputs from the CLI and
+serializes the material probe contract without opening a native window.
 Pull-request CI routes CLI and file explorer package-resource edits through a
 lightweight Linux CLI/package job instead of the full root native matrix.
 The PR gate only validates command metadata and resource catalogs for the slow
@@ -254,10 +261,10 @@ without a visible window:
 - Input scripts are JSONL frames with a timestamp or tick, viewport state,
   capability snapshot, pointer/key/text/scroll events, and optional seeded
   image/resource responses.
-- The current file explorer driver accepts a smaller line-based script format
-  for model-level input. Each non-empty, non-comment line uses the same
-  `kind[:value]` grammar as `--input`; this keeps CI smoke and local repros
-  readable until the full JSONL native-event injector exists.
+- The current file explorer and glass showcase drivers accept a smaller
+  line-based script format for model-level input. Each non-empty, non-comment
+  line uses the same `kind[:value]` grammar as `--input`; this keeps CI smoke
+  and local repros readable until the full JSONL native-event injector exists.
 - The shell translates AppKit, Win32, Android, WASI, and CLI events into the
   same neutral event types before calling app update code.
 - Output observations include command-buffer summaries, semantic material
@@ -280,6 +287,16 @@ gives CI and future agents a cheap way to verify file view, read, create,
 duplicate, delete, sort, localized package labels, viewport-derived Finder
 chrome/grid metrics, and scenario behavior before launching slow native
 artifact captures.
+
+`phenotype drive glass-showcase` is the matching material-probe drive command.
+It starts with the example's shared pure state machine instead of native event
+injection: `GlassInput` describes backdrop, inspector, density, note, viewport,
+and reset operations; the shared update function is the same one imported by
+the native scene; and the CLI serializes a final `State`, per-input
+`GlassInputTrace`, public material kinds, expected material plan count, and
+`GlassExpectation` results. This is intentionally cheaper than the local
+macOS artifact gate, but it checks the probe scene's semantic input contract
+before any renderer/backend effects are involved.
 
 ## Performance and release posture
 
@@ -318,9 +335,10 @@ The CLI should not make production rendering slower:
 5. Add deterministic CLI input scripts and output observations for
    `glass_showcase` and `file_explorer_desktop`. Initial
    `file_explorer_desktop`/mobile model driving is complete through
-   `phenotype drive file-explorer`; artifact output observation is complete
-   through `phenotype observe <bundle>`. Native command-buffer observation and
-   `glass_showcase` input scripts remain.
+   `phenotype drive file-explorer`; glass showcase model driving is complete
+   through `phenotype drive glass-showcase`; artifact output observation is
+   complete through `phenotype observe <bundle>`. Native command-buffer
+   observation remains.
 6. Replace CI and docs references to shell/Python tools with CLI commands.
    PR CLI/package checks now parse JSON through `uv run --frozen python`
    instead of direct `python3`, and staged package bundles are verified through
