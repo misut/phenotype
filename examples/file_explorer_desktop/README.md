@@ -51,8 +51,8 @@ The toolbar search control starts as a Finder-style icon button. Activating it
 reveals a search field wired to the shared file model, so desktop and mobile
 examples use the same deterministic filename filter and startup artifact
 scenario.
-The icon-grid column count, visible row budget, titlebar reserve, sidebar
-width, and toolbar group metrics come from the shared pure
+The icon-grid column count, visible row budget, titlebar reserve, sidebar row
+metrics, and toolbar group/icon button metrics come from the shared pure
 `ExplorerChromeMetrics` contract, so `phenotype drive file-explorer --json`
 can report the same layout decisions without launching a native window.
 

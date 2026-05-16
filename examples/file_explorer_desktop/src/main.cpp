@@ -111,12 +111,20 @@ constexpr float k_integrated_titlebar_height =
     file_explorer_demo::k_desktop_integrated_titlebar_height;
 constexpr float k_sidebar_width = file_explorer_demo::k_desktop_sidebar_width;
 constexpr float k_sidebar_row_width = file_explorer_demo::k_desktop_sidebar_row_width;
+constexpr float k_sidebar_row_height =
+    file_explorer_demo::k_desktop_sidebar_row_height;
+constexpr float k_sidebar_heading_height =
+    file_explorer_demo::k_desktop_sidebar_heading_height;
 constexpr float k_content_radius = 0.0f;
 constexpr float k_window_radius = file_explorer_demo::k_desktop_window_radius;
 constexpr float k_toolbar_group_radius =
     file_explorer_demo::k_desktop_toolbar_group_radius;
 constexpr float k_toolbar_group_height =
     file_explorer_demo::k_desktop_toolbar_group_height;
+constexpr float k_toolbar_icon_button_width =
+    file_explorer_demo::k_desktop_toolbar_icon_button_width;
+constexpr float k_toolbar_icon_button_height =
+    file_explorer_demo::k_desktop_toolbar_icon_button_height;
 
 phenotype::Color rgba(int r, int g, int b, int a = 255) {
     return phenotype::Color{
@@ -550,22 +558,22 @@ void sidebar_row(std::string_view label,
     options.border_width = 0.0f;
     options.border_radius = 8.0f;
     options.max_width = k_sidebar_row_width;
-    options.fixed_height = 36.0f;
+    options.fixed_height = k_sidebar_row_height;
 
     std::string label_text(label);
     std::string icon_name(icon);
     widget::canvas_button<Msg>(
         str{label_text},
         k_sidebar_row_width,
-        36.0f,
+        k_sidebar_row_height,
         [label_text, icon_name, selected](Painter& painter) {
             paint_sidebar_icon(painter, icon_name);
             auto ink = selected ? rgba(0, 122, 255) : rgba(30, 30, 30);
             painter.text(44.0f,
-                         7.0f,
+                         5.0f,
                          label_text.c_str(),
                          static_cast<unsigned int>(label_text.size()),
-                         16.0f,
+                         15.0f,
                          ink,
                          finder_font());
         },
@@ -586,19 +594,19 @@ void sidebar_heading(std::string_view label) {
     options.border_width = 0.0f;
     options.border_radius = 0.0f;
     options.max_width = k_sidebar_row_width;
-    options.fixed_height = 28.0f;
+    options.fixed_height = k_sidebar_heading_height;
 
     std::string label_text(label);
     widget::canvas_button<Msg>(
         str{label_text},
         k_sidebar_row_width,
-        28.0f,
+        k_sidebar_heading_height,
         [label_text](Painter& painter) {
             painter.text(8.0f,
-                         8.0f,
+                         7.0f,
                          label_text.c_str(),
                          static_cast<unsigned int>(label_text.size()),
-                         14.0f,
+                         13.0f,
                          rgba(82, 82, 86),
                          finder_font(phenotype::FontWeight::Bold));
         },
@@ -620,14 +628,14 @@ void finder_sidebar(State const& state) {
         sidebar_row(labels.sidebar_recents, "recents", "root", in_root);
         sidebar_row(labels.sidebar_shared, "folder", "shared",
                     relative == "Demo Root/Shared");
-        layout::spacer(16);
+        layout::spacer(14);
         sidebar_heading(labels.favorites);
         sidebar_row(labels.applications, "app", "root");
         sidebar_row(labels.desktop, "desktop", "root");
         sidebar_row(labels.documents, "doc", "documents",
                     relative == "Demo Root/Documents");
         sidebar_row(labels.downloads, "download", "root");
-        layout::spacer(16);
+        layout::spacer(14);
         sidebar_heading(labels.locations);
         sidebar_row(labels.icloud_drive, "cloud", "root");
         sidebar_row(labels.home, "home", "root");
@@ -642,14 +650,14 @@ phenotype::Color nav_icon_ink(bool enabled) {
 
 void paint_back_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    painter.line(27.0f, 10.0f, 17.0f, 18.0f, 2.4f, ink);
-    painter.line(17.0f, 18.0f, 27.0f, 26.0f, 2.4f, ink);
+    painter.line(25.5f, 10.0f, 16.5f, 18.0f, 1.8f, ink);
+    painter.line(16.5f, 18.0f, 25.5f, 26.0f, 1.8f, ink);
 }
 
 void paint_forward_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    painter.line(17.0f, 10.0f, 27.0f, 18.0f, 2.4f, ink);
-    painter.line(27.0f, 18.0f, 17.0f, 26.0f, 2.4f, ink);
+    painter.line(18.5f, 10.0f, 27.5f, 18.0f, 1.8f, ink);
+    painter.line(27.5f, 18.0f, 18.5f, 26.0f, 1.8f, ink);
 }
 
 phenotype::ButtonStyleOptions toolbar_icon_button_options(
@@ -658,23 +666,23 @@ phenotype::ButtonStyleOptions toolbar_icon_button_options(
     auto const& t = phenotype::current_theme();
     phenotype::ButtonStyleOptions options;
     options.has_background = true;
-    options.background = selected ? rgba(229, 229, 234, 180) : t.transparent;
+    options.background = selected ? rgba(229, 229, 234, 150) : t.transparent;
     options.has_hover_background = true;
     options.hover_background = selected
-        ? rgba(216, 216, 222, 215)
+        ? rgba(216, 216, 222, 190)
         : rgba(229, 229, 234, 120);
     options.has_border_color = true;
     options.border_color = t.transparent;
     options.border_width = 0.0f;
-    options.border_radius = 16.0f;
-    options.max_width = 38.0f;
-    options.fixed_height = 32.0f;
+    options.border_radius = 15.0f;
+    options.max_width = k_toolbar_icon_button_width;
+    options.fixed_height = k_toolbar_icon_button_height;
     options.disabled = disabled;
     return options;
 }
 
 phenotype::Color toolbar_icon_ink(bool selected = false) {
-    return selected ? rgba(58, 58, 60) : rgba(88, 88, 92);
+    return selected ? rgba(58, 58, 60) : rgba(96, 96, 100);
 }
 
 void toolbar_separator() {
@@ -694,7 +702,7 @@ void paint_icon_view(phenotype::Painter& painter, bool selected) {
             stroke_round(painter,
                          13.0f + static_cast<float>(col) * 15.0f,
                          8.0f + static_cast<float>(row) * 14.0f,
-                         10.0f, 10.0f, 2.0f, 1.8f, ink);
+                         10.0f, 10.0f, 2.0f, 1.4f, ink);
         }
     }
 }
@@ -703,8 +711,8 @@ void paint_list_view(phenotype::Painter& painter, bool selected) {
     auto ink = toolbar_icon_ink(selected);
     for (int i = 0; i < 4; ++i) {
         float y = 8.0f + static_cast<float>(i) * 6.8f;
-        painter.line(11.0f, y, 13.0f, y, 2.4f, ink);
-        painter.line(20.0f, y, 34.0f, y, 1.9f, ink);
+        painter.line(11.0f, y, 13.0f, y, 1.8f, ink);
+        painter.line(20.0f, y, 34.0f, y, 1.45f, ink);
     }
 }
 
@@ -712,14 +720,14 @@ void paint_column_view(phenotype::Painter& painter, bool selected) {
     auto ink = toolbar_icon_ink(selected);
     for (int i = 0; i < 3; ++i) {
         stroke_round(painter, 9.0f + static_cast<float>(i) * 10.5f,
-                     8.0f, 8.0f, 20.0f, 2.0f, 1.8f, ink);
+                     8.0f, 8.0f, 20.0f, 2.0f, 1.4f, ink);
     }
 }
 
 void paint_gallery_view(phenotype::Painter& painter, bool selected) {
     auto ink = toolbar_icon_ink(selected);
-    stroke_round(painter, 10.0f, 8.0f, 24.0f, 17.0f, 4.0f, 1.8f, ink);
-    painter.line(12.0f, 29.0f, 32.0f, 29.0f, 2.2f, ink);
+    stroke_round(painter, 10.0f, 8.0f, 24.0f, 17.0f, 4.0f, 1.4f, ink);
+    painter.line(12.0f, 29.0f, 32.0f, 29.0f, 1.7f, ink);
 }
 
 void paint_group_sort_icon(phenotype::Painter& painter) {
@@ -729,72 +737,72 @@ void paint_group_sort_icon(phenotype::Painter& painter) {
             stroke_round(painter,
                          9.0f + static_cast<float>(col) * 7.8f,
                          7.0f + static_cast<float>(row) * 7.0f,
-                         7.0f, 4.0f, 1.0f, 1.7f, ink);
+                         7.0f, 4.0f, 1.0f, 1.35f, ink);
         }
     }
-    painter.line(31.5f, 15.0f, 35.0f, 18.5f, 2.2f, ink);
-    painter.line(38.5f, 15.0f, 35.0f, 18.5f, 2.2f, ink);
+    painter.line(31.0f, 15.0f, 34.5f, 18.5f, 1.65f, ink);
+    painter.line(38.0f, 15.0f, 34.5f, 18.5f, 1.65f, ink);
 }
 
 void paint_share_icon(phenotype::Painter& painter) {
     auto ink = rgba(170, 174, 181);
-    painter.line(22.0f, 8.0f, 22.0f, 23.0f, 2.2f, ink);
-    painter.line(16.0f, 14.0f, 22.0f, 8.0f, 2.2f, ink);
-    painter.line(28.0f, 14.0f, 22.0f, 8.0f, 2.2f, ink);
-    stroke_round(painter, 12.0f, 21.0f, 20.0f, 11.0f, 3.0f, 2.0f, ink);
+    painter.line(22.0f, 8.0f, 22.0f, 23.0f, 1.7f, ink);
+    painter.line(16.0f, 14.0f, 22.0f, 8.0f, 1.7f, ink);
+    painter.line(28.0f, 14.0f, 22.0f, 8.0f, 1.7f, ink);
+    stroke_round(painter, 12.0f, 21.0f, 20.0f, 11.0f, 3.0f, 1.5f, ink);
 }
 
 void paint_tag_icon(phenotype::Painter& painter) {
     auto ink = rgba(170, 174, 181);
     auto tag = rounded_rect_path(8.0f, 9.0f, 28.0f, 18.0f, 4.0f);
-    painter.stroke_path(tag, 2.0f, rgba(170, 174, 181));
-    painter.arc(14.0f, 15.0f, 2.4f, 0.0f, k_tau, 1.6f, ink);
+    painter.stroke_path(tag, 1.5f, rgba(170, 174, 181));
+    painter.arc(14.0f, 15.0f, 2.4f, 0.0f, k_tau, 1.3f, ink);
 }
 
 void paint_more_icon(phenotype::Painter& painter) {
     auto ink = toolbar_icon_ink();
     for (int i = 0; i < 3; ++i) {
         painter.arc(15.0f + static_cast<float>(i) * 7.0f,
-                    18.0f, 2.2f, 0.0f, k_tau, 1.8f, ink);
+                    18.0f, 2.2f, 0.0f, k_tau, 1.35f, ink);
     }
 }
 
 void paint_search_icon(phenotype::Painter& painter) {
     auto ink = toolbar_icon_ink();
-    painter.arc(19.0f, 15.0f, 8.0f, 0.0f, k_tau, 2.4f, ink);
-    painter.line(25.0f, 21.0f, 33.0f, 29.0f, 2.4f, ink);
+    painter.arc(19.0f, 15.0f, 8.0f, 0.0f, k_tau, 1.8f, ink);
+    painter.line(25.0f, 21.0f, 33.0f, 29.0f, 1.8f, ink);
 }
 
 void paint_new_file_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    stroke_round(painter, 13.0f, 7.0f, 18.0f, 24.0f, 3.0f, 2.0f, ink);
-    painter.line(23.0f, 7.0f, 31.0f, 15.0f, 2.0f, ink);
-    painter.line(22.0f, 17.0f, 22.0f, 27.0f, 2.4f, ink);
-    painter.line(17.0f, 22.0f, 27.0f, 22.0f, 2.4f, ink);
+    stroke_round(painter, 13.0f, 7.0f, 18.0f, 24.0f, 3.0f, 1.5f, ink);
+    painter.line(23.0f, 7.0f, 31.0f, 15.0f, 1.5f, ink);
+    painter.line(22.0f, 17.0f, 22.0f, 27.0f, 1.8f, ink);
+    painter.line(17.0f, 22.0f, 27.0f, 22.0f, 1.8f, ink);
 }
 
 void paint_new_folder_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    stroke_round(painter, 9.0f, 12.0f, 26.0f, 17.0f, 4.0f, 2.0f, ink);
-    painter.line(11.0f, 12.0f, 16.0f, 8.0f, 2.0f, ink);
-    painter.line(16.0f, 8.0f, 24.0f, 8.0f, 2.0f, ink);
-    painter.line(22.0f, 17.0f, 22.0f, 27.0f, 2.2f, ink);
-    painter.line(17.0f, 22.0f, 27.0f, 22.0f, 2.2f, ink);
+    stroke_round(painter, 9.0f, 12.0f, 26.0f, 17.0f, 4.0f, 1.5f, ink);
+    painter.line(11.0f, 12.0f, 16.0f, 8.0f, 1.5f, ink);
+    painter.line(16.0f, 8.0f, 24.0f, 8.0f, 1.5f, ink);
+    painter.line(22.0f, 17.0f, 22.0f, 27.0f, 1.7f, ink);
+    painter.line(17.0f, 22.0f, 27.0f, 22.0f, 1.7f, ink);
 }
 
 void paint_duplicate_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    stroke_round(painter, 12.0f, 11.0f, 16.0f, 19.0f, 3.0f, 2.0f, ink);
-    stroke_round(painter, 17.0f, 6.0f, 16.0f, 19.0f, 3.0f, 2.0f, ink);
+    stroke_round(painter, 12.0f, 11.0f, 16.0f, 19.0f, 3.0f, 1.5f, ink);
+    stroke_round(painter, 17.0f, 6.0f, 16.0f, 19.0f, 3.0f, 1.5f, ink);
 }
 
 void paint_delete_icon(phenotype::Painter& painter, bool enabled) {
     auto ink = nav_icon_ink(enabled);
-    stroke_round(painter, 15.0f, 12.0f, 14.0f, 18.0f, 2.0f, 2.0f, ink);
-    painter.line(12.0f, 12.0f, 32.0f, 12.0f, 2.2f, ink);
-    painter.line(18.0f, 8.0f, 26.0f, 8.0f, 2.2f, ink);
-    painter.line(19.0f, 16.0f, 19.0f, 27.0f, 1.8f, ink);
-    painter.line(25.0f, 16.0f, 25.0f, 27.0f, 1.8f, ink);
+    stroke_round(painter, 15.0f, 12.0f, 14.0f, 18.0f, 2.0f, 1.5f, ink);
+    painter.line(12.0f, 12.0f, 32.0f, 12.0f, 1.7f, ink);
+    painter.line(18.0f, 8.0f, 26.0f, 8.0f, 1.7f, ink);
+    painter.line(19.0f, 16.0f, 19.0f, 27.0f, 1.35f, ink);
+    painter.line(25.0f, 16.0f, 25.0f, 27.0f, 1.35f, ink);
 }
 
 template<typename Paint>
@@ -807,8 +815,8 @@ void view_mode_button(char const* label,
     std::string semantic_label(label);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        38.0f,
-        32.0f,
+        k_toolbar_icon_button_width,
+        k_toolbar_icon_button_height,
         [paint, selected](phenotype::Painter& painter) {
             paint(painter, selected);
         },
@@ -823,8 +831,8 @@ void toolbar_action_button(char const* label,
     std::string semantic_label(label);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        38.0f,
-        32.0f,
+        k_toolbar_icon_button_width,
+        k_toolbar_icon_button_height,
         [paint](phenotype::Painter& painter) {
             paint(painter);
         },
@@ -841,8 +849,8 @@ void search_toggle_button(bool selected) {
     std::string semantic_label = "Search Control";
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        38.0f,
-        32.0f,
+        k_toolbar_icon_button_width,
+        k_toolbar_icon_button_height,
         [](phenotype::Painter& painter) {
             paint_search_icon(painter);
         },
@@ -857,8 +865,8 @@ void sort_action_button(file_explorer_demo::Snapshot const& snap) {
         semantic_label += " (" + snap.sort_label + ")";
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        38.0f,
-        32.0f,
+        k_toolbar_icon_button_width,
+        k_toolbar_icon_button_height,
         [](phenotype::Painter& painter) {
             paint_group_sort_icon(painter);
         },
@@ -876,8 +884,8 @@ void file_action_button(char const* label,
     std::string semantic_label(label);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        38.0f,
-        32.0f,
+        k_toolbar_icon_button_width,
+        k_toolbar_icon_button_height,
         [paint, enabled](phenotype::Painter& painter) {
             paint(painter, enabled);
         },
@@ -895,8 +903,8 @@ void navigation_button(char const* label,
     std::string semantic_label(label);
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{semantic_label},
-        38.0f,
-        32.0f,
+        k_toolbar_icon_button_width,
+        k_toolbar_icon_button_height,
         [paint, enabled](phenotype::Painter& painter) {
             paint(painter, enabled);
         },
@@ -910,7 +918,7 @@ void finder_toolbar(State const& state,
     using namespace phenotype;
     layout::material_surface(toolbar_shell_options(), [&] {
         layout::material_surface(
-            toolbar_group_options("Navigation Controls", 100.0f),
+            toolbar_group_options("Navigation Controls", 92.0f),
             [&] {
                 navigation_button(state.labels.back.c_str(), GoBack{}, snap.can_go_back,
                                   paint_back_icon, 0x6201u);
@@ -924,7 +932,7 @@ void finder_toolbar(State const& state,
             TextSize::Heading);
         layout::weighted(1.0f, [] {});
         layout::material_surface(
-            toolbar_group_options("View Controls", 236.0f),
+            toolbar_group_options("View Controls", 216.0f),
             [&] {
                 view_mode_button("Icon View", FinderViewMode::Icon,
                                  state.view_mode, paint_icon_view, 0x6301u);
@@ -938,7 +946,7 @@ void finder_toolbar(State const& state,
                                  state.view_mode, paint_gallery_view, 0x6304u);
             });
         layout::material_surface(
-            toolbar_group_options("File Actions", 184.0f),
+            toolbar_group_options("File Actions", 172.0f),
             [&] {
                 file_action_button(state.labels.create_file.c_str(), CreateFile{},
                                    snap.can_create_file,
@@ -954,12 +962,12 @@ void finder_toolbar(State const& state,
                                    paint_delete_icon, 0x6703u);
             });
         layout::material_surface(
-            toolbar_group_options("Group Sort", 52.0f),
+            toolbar_group_options("Group Sort", 48.0f),
             [&] {
                 sort_action_button(snap);
             });
         layout::material_surface(
-            toolbar_group_options("Share Tag More", 140.0f),
+            toolbar_group_options("Share Tag More", 128.0f),
             [] {
                 toolbar_action_button("Share", paint_share_icon, 0x6601u);
                 toolbar_action_button("Tag", paint_tag_icon, 0x6602u);
@@ -968,7 +976,7 @@ void finder_toolbar(State const& state,
         layout::material_surface(
             toolbar_group_options(
                 "Search Control",
-                state.search_visible ? 236.0f : 52.0f),
+                state.search_visible ? 220.0f : 48.0f),
             [&] {
                 search_toggle_button(state.search_visible);
                 if (state.search_visible) {

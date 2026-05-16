@@ -79,6 +79,17 @@ int main() {
     assert(chrome.icon_grid_columns == 6);
     assert(chrome.icon_grid_visible_rows == 3);
     assert(chrome.icon_grid_visible_capacity == 18);
+    assert(chrome.sidebar_row_height == demo::k_desktop_sidebar_row_height);
+    assert(chrome.sidebar_heading_height
+           == demo::k_desktop_sidebar_heading_height);
+    assert(chrome.toolbar_group_height
+           == demo::k_desktop_toolbar_group_height);
+    assert(chrome.toolbar_group_radius
+           == demo::k_desktop_toolbar_group_radius);
+    assert(chrome.toolbar_icon_button_width
+           == demo::k_desktop_toolbar_icon_button_width);
+    assert(chrome.toolbar_icon_button_height
+           == demo::k_desktop_toolbar_icon_button_height);
     assert(chrome.toolbar_group_count == 6);
     assert(chrome.toolbar_separator_count == 3);
     assert(chrome.toolbar_icon_button_count == 15);
