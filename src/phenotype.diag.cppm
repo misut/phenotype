@@ -988,6 +988,12 @@ namespace detail {
             "semantic_thickness",
             json::Value{plan.reference_model.semantic_thickness});
         reference_model.emplace(
+            "accessibility_response",
+            json::Value{plan.reference_model.accessibility_response});
+        reference_model.emplace(
+            "performance_response",
+            json::Value{plan.reference_model.performance_response});
+        reference_model.emplace(
             "view_bounds_anchored",
             json::Value{plan.reference_model.view_bounds_anchored});
         reference_model.emplace(

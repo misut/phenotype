@@ -275,8 +275,9 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `reference_model`, the pure Apple Liquid Glass alignment contract: technology
   name, semantic variant/thickness, view-bounds shape scope, resolved shape,
   sampled-backdrop or deterministic-fallback blending scope, tint participation,
-  interactive response, container grouping/union/morph expectations, foreground
-  legibility preservation, vibrancy expectation, and deterministic degradation;
+  accessibility response, performance response, interactive response, container
+  grouping/union/morph expectations, foreground legibility preservation,
+  vibrancy expectation, and deterministic degradation;
 - raw `geometry`, derived `shape` analysis, tint, blur radius, saturation,
   luminance curve, edge highlight, noise, and shadow values for the resolved
   plan. `shape.effective_radius` is the clamped radius the backend executes;
@@ -347,7 +348,13 @@ container/union/morph behavior. It also mirrors HIG-style semantic thickness and
 foreground legibility/vibrancy expectations. The verifier derives each
 reference field from the surrounding `MaterialPlan`; a mismatch points at
 `renderer.material_plans[n].reference_model.*` and suggests inspecting
-`plan_material_surface` before changing a backend.
+`plan_material_surface` before changing a backend. `accessibility_response`
+summarizes the HIG material adaptations (`standard`, `reduced-transparency`,
+`increased-contrast`, `reduced-motion`, or `combined-accessibility`) while the
+raw `decision_trace` preserves each flag. `performance_response` summarizes
+whether the plan is inactive, running the standard sampled path, using bounded
+effect reductions, warming up frame history for the next frame, or taking a
+deterministic fallback.
 `MaterialPlan.geometry` preserves the raw decoded rectangle. `MaterialPlan.shape`
 is the pure executable shape contract: validity, surface area, min/max extent,
 radius limit, effective radius, normalized radius, rounded flag, and whether the

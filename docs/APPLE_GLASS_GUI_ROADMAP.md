@@ -186,9 +186,10 @@ plan also carries a
 backend-independent product contract: Liquid Glass is bound to a view's shape,
 uses semantic clear/thin/regular/thick thickness, may apply tint and
 interaction, may be grouped for container/union/morph behavior, must preserve
-foreground legibility/vibrancy expectations, and must degrade deterministically
-when backdrop blur is unavailable. The macOS, Windows, Android, and WASI
-adapters consume or serialize this resolved model; they do not own the policy.
+foreground legibility/vibrancy expectations, records accessibility/performance
+adaptation responses, and must degrade deterministically when backdrop blur is
+unavailable. The macOS, Windows, Android, and WASI adapters consume or serialize
+this resolved model; they do not own the policy.
 The current sampled-glass kernel is a pure `weighted-5x5-manhattan` descriptor
 with the resolved tap count, kernel radius, blur step scale, and weight profile;
 fallback plans serialize the inactive `none` kernel. This keeps blur spread and
