@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 17;
+inline constexpr std::uint32_t material_plan_contract_version = 18;
 inline constexpr unsigned int material_max_execution_stages = 4;
 
 struct MaterialGeometry {
@@ -292,6 +292,8 @@ struct MaterialReferenceModel {
     char const* shape_scope = "view-bounds";
     char const* blending_scope = "none";
     char const* semantic_thickness = "none";
+    char const* accessibility_response = "standard";
+    char const* performance_response = "inactive";
     bool view_bounds_anchored = false;
     bool shape_matches_geometry = false;
     bool tint_applied = false;
@@ -1572,6 +1574,50 @@ inline char const* material_reference_blending_scope(
     return "none";
 }
 
+inline char const* material_reference_accessibility_response(
+        MaterialPlan const& plan) noexcept {
+    unsigned int accessibility_adjustment_count = 0;
+    if (plan.decision_trace.reduced_transparency)
+        ++accessibility_adjustment_count;
+    if (plan.decision_trace.increase_contrast)
+        ++accessibility_adjustment_count;
+    if (plan.decision_trace.reduce_motion)
+        ++accessibility_adjustment_count;
+    if (accessibility_adjustment_count > 1u)
+        return "combined-accessibility";
+    if (plan.decision_trace.reduced_transparency)
+        return "reduced-transparency";
+    if (plan.decision_trace.increase_contrast)
+        return "increased-contrast";
+    if (plan.decision_trace.reduce_motion)
+        return "reduced-motion";
+    return "standard";
+}
+
+inline bool material_reference_uses_budgeted_effects(
+        MaterialPlan const& plan) noexcept {
+    return plan.backdrop_sampling
+        && (plan.resource_budget.max_blur_radius < 36.0f
+            || plan.resource_budget.max_sample_taps < 25u
+            || !plan.quality_policy.allow_noise
+            || !plan.quality_policy.allow_shadow);
+}
+
+inline char const* material_reference_performance_response(
+        MaterialPlan const& plan) noexcept {
+    if (plan.kind == MaterialKind::None)
+        return "inactive";
+    if (plan.backdrop_access.next_frame_capture_required
+        && !plan.backdrop_sampling
+        && plan.fallback_path == MaterialFallbackPath::NoBackdropSource)
+        return "warmup-capture";
+    if (plan.fallback())
+        return "deterministic-fallback";
+    if (material_reference_uses_budgeted_effects(plan))
+        return "budgeted-effects";
+    return "standard";
+}
+
 inline MaterialReferenceModel material_resolve_reference_model(
         MaterialPlan const& plan) noexcept {
     MaterialReferenceModel model{};
@@ -1579,6 +1625,10 @@ inline MaterialReferenceModel material_resolve_reference_model(
     model.shape = material_reference_shape_name(plan.shape);
     model.blending_scope = material_reference_blending_scope(plan);
     model.semantic_thickness = material_kind_name(plan.kind);
+    model.accessibility_response =
+        material_reference_accessibility_response(plan);
+    model.performance_response =
+        material_reference_performance_response(plan);
     model.view_bounds_anchored = plan.kind != MaterialKind::None
         && plan.shape.valid;
     model.shape_matches_geometry = model.view_bounds_anchored

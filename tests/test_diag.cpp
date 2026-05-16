@@ -894,6 +894,10 @@ void test_material_runtime_record_json_contract() {
     assert(reference_model.at("blending_scope").as_string()
            == "deterministic-fallback");
     assert(reference_model.at("semantic_thickness").as_string() == "thin");
+    assert(reference_model.at("accessibility_response").as_string()
+           == "standard");
+    assert(reference_model.at("performance_response").as_string()
+           == "deterministic-fallback");
     assert(reference_model.at("view_bounds_anchored").as_bool() == true);
     assert(reference_model.at("shape_matches_geometry").as_bool() == true);
     assert(reference_model.at("tint_applied").as_bool() == true);

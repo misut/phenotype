@@ -72,6 +72,8 @@ def material_plan(
             "shape_scope": "view-bounds",
             "blending_scope": "deterministic-fallback",
             "semantic_thickness": "regular",
+            "accessibility_response": "standard",
+            "performance_response": "deterministic-fallback",
             "view_bounds_anchored": True,
             "shape_matches_geometry": True,
             "tint_applied": True,
@@ -262,6 +264,49 @@ def material_plan(
     return plan
 
 
+def reference_accessibility_response(plan: dict[str, object]) -> str:
+    decision_trace = plan["decision_trace"]
+    assert isinstance(decision_trace, dict)
+    flags = {
+        "reduced_transparency": bool(decision_trace["reduced_transparency"]),
+        "increase_contrast": bool(decision_trace["increase_contrast"]),
+        "reduce_motion": bool(decision_trace["reduce_motion"]),
+    }
+    active = [name for name, enabled in flags.items() if enabled]
+    if len(active) > 1:
+        return "combined-accessibility"
+    if not active:
+        return "standard"
+    return {
+        "reduced_transparency": "reduced-transparency",
+        "increase_contrast": "increased-contrast",
+        "reduce_motion": "reduced-motion",
+    }[active[0]]
+
+
+def reference_performance_response(plan: dict[str, object]) -> str:
+    if str(plan["kind"]) == "none":
+        return "inactive"
+    backdrop_access = plan["backdrop_access"]
+    assert isinstance(backdrop_access, dict)
+    if (bool(backdrop_access["next_frame_capture_required"])
+            and not bool(plan["backdrop_sampling"])
+            and str(plan["fallback_path"]) == "no-backdrop-source"):
+        return "warmup-capture"
+    if bool(plan["fallback"]):
+        return "deterministic-fallback"
+    resource_budget = plan["resource_budget"]
+    quality_policy = plan["quality_policy"]
+    assert isinstance(resource_budget, dict)
+    assert isinstance(quality_policy, dict)
+    budgeted = (
+        float(resource_budget["max_blur_radius"]) < 36.0
+        or int(resource_budget["max_sample_taps"]) < 25
+        or not bool(quality_policy["allow_noise"])
+        or not bool(quality_policy["allow_shadow"]))
+    return "budgeted-effects" if budgeted else "standard"
+
+
 def refresh_reference_model(plan: dict[str, object]) -> None:
     kind = str(plan["kind"])
     shape = plan["shape"]
@@ -295,6 +340,8 @@ def refresh_reference_model(plan: dict[str, object]) -> None:
         "shape_scope": "view-bounds",
         "blending_scope": blending_scope,
         "semantic_thickness": kind,
+        "accessibility_response": reference_accessibility_response(plan),
+        "performance_response": reference_performance_response(plan),
         "view_bounds_anchored": kind != "none" and shape_valid,
         "shape_matches_geometry": kind != "none" and shape_valid,
         "tint_applied": kind != "none" and int(tint["a"]) > 0,
@@ -857,6 +904,14 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["reference_model"]["blending_scopes"],
             {"deterministic-fallback": 1})
         self.assertEqual(
+            report["material_plans"]["reference_model"][
+                "accessibility_responses"],
+            {"standard": 1})
+        self.assertEqual(
+            report["material_plans"]["reference_model"][
+                "performance_responses"],
+            {"deterministic-fallback": 1})
+        self.assertEqual(
             report["material_plans"]["reference_model"]["view_bounds_anchored"],
             1)
         self.assertEqual(
@@ -888,6 +943,26 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["likely_layer"], "material-reference")
         self.assertIn("MaterialPlan.reference_model", failure["suggested_action"])
 
+    def test_reference_accessibility_response_is_derived(self) -> None:
+        plan = material_plan()
+        decision_trace = plan["decision_trace"]
+        reference_model = plan["reference_model"]
+        assert isinstance(decision_trace, dict)
+        assert isinstance(reference_model, dict)
+        decision_trace["increase_contrast"] = True
+        reference_model["accessibility_response"] = "standard"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"]
+            == "material reference accessibility_response is derived")
+        self.assertEqual(failure["expected"], "increased-contrast")
+        self.assertEqual(failure["actual"], "standard")
+        self.assertEqual(failure["likely_layer"], "material-reference")
+
     def test_manifest_can_pin_reference_model_summary(self) -> None:
         manifest = {
             "require_material_plan_summary": {
@@ -897,6 +972,10 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "reference_shape_scopes": {"view-bounds": 1},
                 "reference_blending_scopes": {"deterministic-fallback": 1},
                 "reference_semantic_thickness": {"regular": 1},
+                "reference_accessibility_responses": {"standard": 1},
+                "reference_performance_responses": {
+                    "deterministic-fallback": 1
+                },
                 "reference_view_bounds_anchored": 1,
                 "reference_shape_matches_geometry": 1,
                 "reference_tint_applied": 1,

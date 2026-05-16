@@ -1277,6 +1277,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "view-bounds");
     assert(std::string(fallback_plan.reference_model.blending_scope)
            == "deterministic-fallback");
+    assert(std::string(fallback_plan.reference_model.accessibility_response)
+           == "standard");
+    assert(std::string(fallback_plan.reference_model.performance_response)
+           == "deterministic-fallback");
     assert(fallback_plan.reference_model.view_bounds_anchored);
     assert(fallback_plan.reference_model.shape_matches_geometry);
     assert(fallback_plan.reference_model.tint_applied);
@@ -1369,6 +1373,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(warmup_plan.resource_budget.max_surface_sample_pixels == 0);
     assert(warmup_plan.observation_contract.shared_frame_capture_required);
     assert(warmup_plan.observation_contract.next_frame_capture_required);
+    assert(std::string(warmup_plan.reference_model.performance_response)
+           == "warmup-capture");
     assert(std::string(warmup_plan.observation_contract.backdrop_capture_scope)
            == "shared-frame");
     assert(std::string(warmup_plan.observation_contract.backdrop_capture_reason)
@@ -1494,6 +1500,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "sampled-backdrop");
     assert(std::string(glass_plan.reference_model.semantic_thickness)
            == "regular");
+    assert(std::string(glass_plan.reference_model.accessibility_response)
+           == "standard");
+    assert(std::string(glass_plan.reference_model.performance_response)
+           == "standard");
     assert(glass_plan.reference_model.view_bounds_anchored);
     assert(glass_plan.reference_model.shape_matches_geometry);
     assert(glass_plan.reference_model.tint_applied);
@@ -1580,6 +1590,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(reduced_motion_container_plan.container.interactive);
     assert(!reduced_motion_container_plan.container.morph_transitions);
     assert(!reduced_motion_container_plan.verifier.require_container_morph_contract);
+    assert(std::string(
+               reduced_motion_container_plan.reference_model
+                   .accessibility_response)
+           == "reduced-motion");
 
     MaterialEnvironment dark_backdrop_env = glass_env;
     dark_backdrop_env.backdrop.luma_min = 0.02f;
@@ -1665,6 +1679,12 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(contrast_motion_plan.foreground.source)
            == "accessibility");
     assert(contrast_motion_plan.foreground.high_contrast);
+    assert(std::string(contrast_motion_plan.reference_model
+                           .accessibility_response)
+           == "combined-accessibility");
+    assert(std::string(contrast_motion_plan.reference_model
+                           .performance_response)
+           == "budgeted-effects");
 
     glass_env.capabilities.reduce_transparency = true;
     auto reduced_plan = plan_material_surface(request, glass_env);
@@ -1680,6 +1700,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(reduced_plan.execution_stages[1].name)
            == "translucent-rounded-rect");
     assert(!reduced_plan.execution_stages[1].requires_backdrop);
+    assert(std::string(reduced_plan.reference_model.accessibility_response)
+           == "reduced-transparency");
+    assert(std::string(reduced_plan.reference_model.performance_response)
+           == "deterministic-fallback");
 
     glass_env.capabilities.reduce_transparency = false;
     MaterialEnvironment disabled_quality_env = glass_env;
@@ -1738,6 +1762,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(budget_plan.resource_budget.deterministic_fallback);
     assert(budget_plan.execution_stage_count == 2);
     assert(budget_plan.dropped_execution_stage_count == 0);
+    assert(std::string(budget_plan.reference_model.performance_response)
+           == "budgeted-effects");
     assert(std::string(budget_plan.execution_stages[0].name)
            == "backdrop-sample-blur");
     assert(std::string(budget_plan.execution_stages[1].name)

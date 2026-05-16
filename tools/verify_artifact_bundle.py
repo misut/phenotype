@@ -166,7 +166,23 @@ ALLOWED_MATERIAL_REFERENCE_BLENDING_SCOPES = {
     "sampled-backdrop",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 17
+ALLOWED_MATERIAL_REFERENCE_ACCESSIBILITY_RESPONSES = {
+    "combined-accessibility",
+    "increased-contrast",
+    "reduced-motion",
+    "reduced-transparency",
+    "standard",
+}
+
+ALLOWED_MATERIAL_REFERENCE_PERFORMANCE_RESPONSES = {
+    "budgeted-effects",
+    "deterministic-fallback",
+    "inactive",
+    "standard",
+    "warmup-capture",
+}
+
+MATERIAL_PLAN_CONTRACT_VERSION = 18
 
 
 def suggested_action_for_failure(
@@ -1042,6 +1058,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "reference_shape_scopes",
         "reference_blending_scopes",
         "reference_semantic_thickness",
+        "reference_accessibility_responses",
+        "reference_performance_responses",
         "shape_valid",
         "shape_rounded",
         "shape_radius_clamped",
@@ -1185,6 +1203,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "reference_shape_scopes": ALLOWED_MATERIAL_REFERENCE_SHAPE_SCOPES,
         "reference_blending_scopes": ALLOWED_MATERIAL_REFERENCE_BLENDING_SCOPES,
         "reference_semantic_thickness": ALLOWED_MATERIAL_KINDS,
+        "reference_accessibility_responses": (
+            ALLOWED_MATERIAL_REFERENCE_ACCESSIBILITY_RESPONSES),
+        "reference_performance_responses": (
+            ALLOWED_MATERIAL_REFERENCE_PERFORMANCE_RESPONSES),
         "pass_names": ALLOWED_MATERIAL_PASS_NAMES,
         "pass_executors": ALLOWED_MATERIAL_PASS_EXECUTORS,
         "stage_names": ALLOWED_MATERIAL_STAGE_NAMES,
@@ -2334,6 +2356,73 @@ def check_material_observation_contract(
                 record_success=False)
 
 
+def expected_reference_accessibility_response(plan: JsonObject) -> str | None:
+    decision_trace = plan.get("decision_trace")
+    if not isinstance(decision_trace, dict):
+        return None
+    flags = {
+        "reduced_transparency": bool_at(decision_trace, "reduced_transparency"),
+        "increase_contrast": bool_at(decision_trace, "increase_contrast"),
+        "reduce_motion": bool_at(decision_trace, "reduce_motion"),
+    }
+    if any(value is None for value in flags.values()):
+        return None
+    active = [name for name, value in flags.items() if value]
+    if len(active) > 1:
+        return "combined-accessibility"
+    if not active:
+        return "standard"
+    return {
+        "reduced_transparency": "reduced-transparency",
+        "increase_contrast": "increased-contrast",
+        "reduce_motion": "reduced-motion",
+    }[active[0]]
+
+
+def material_plan_uses_budgeted_effects(plan: JsonObject) -> bool:
+    if bool_at(plan, "backdrop_sampling") is not True:
+        return False
+    resource_budget = plan.get("resource_budget")
+    quality_policy = plan.get("quality_policy")
+    if isinstance(resource_budget, dict):
+        max_blur = number_at(resource_budget, "max_blur_radius")
+        max_taps = number_at(resource_budget, "max_sample_taps")
+        if max_blur is not None and float(max_blur) < 36.0:
+            return True
+        if max_taps is not None and int(max_taps) < 25:
+            return True
+    if isinstance(quality_policy, dict):
+        if bool_at(quality_policy, "allow_noise") is False:
+            return True
+        if bool_at(quality_policy, "allow_shadow") is False:
+            return True
+    return False
+
+
+def expected_reference_performance_response(
+        plan: JsonObject,
+        kind: str | None) -> str | None:
+    if kind == "none":
+        return "inactive"
+    fallback = bool_at(plan, "fallback")
+    backdrop_sampling = bool_at(plan, "backdrop_sampling")
+    fallback_path = string_at(plan, "fallback_path")
+    backdrop_access = plan.get("backdrop_access")
+    if fallback is None or backdrop_sampling is None or fallback_path is None:
+        return None
+    if isinstance(backdrop_access, dict):
+        next_frame_capture = bool_at(backdrop_access, "next_frame_capture_required")
+        if (next_frame_capture is True
+                and not backdrop_sampling
+                and fallback_path == "no-backdrop-source"):
+            return "warmup-capture"
+    if fallback:
+        return "deterministic-fallback"
+    if material_plan_uses_budgeted_effects(plan):
+        return "budgeted-effects"
+    return "standard"
+
+
 def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObject:
     summary: JsonObject = {
         "count": 0,
@@ -2360,6 +2449,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "shape_scopes": {},
             "blending_scopes": {},
             "semantic_thickness": {},
+            "accessibility_responses": {},
+            "performance_responses": {},
             "view_bounds_anchored": 0,
             "shape_matches_geometry": 0,
             "tint_applied": 0,
@@ -2734,6 +2825,12 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 "semantic_thickness": (
                     "semantic_thickness",
                     ALLOWED_MATERIAL_KINDS),
+                "accessibility_response": (
+                    "accessibility_responses",
+                    ALLOWED_MATERIAL_REFERENCE_ACCESSIBILITY_RESPONSES),
+                "performance_response": (
+                    "performance_responses",
+                    ALLOWED_MATERIAL_REFERENCE_PERFORMANCE_RESPONSES),
             }
             reference_values: JsonObject = {}
             for key, (summary_key, allowed) in string_specs.items():
@@ -2790,6 +2887,36 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                             likely_layer="material-reference",
                             hint="Material reference variant and thickness should mirror MaterialPlan.kind.",
                             record_success=False)
+
+            expected_accessibility = expected_reference_accessibility_response(plan)
+            if (expected_accessibility is not None
+                    and "accessibility_response" in reference_values):
+                report.check(
+                    "material reference accessibility_response is derived",
+                    reference_values["accessibility_response"]
+                    == expected_accessibility,
+                    path=f"{plan_path}.reference_model.accessibility_response",
+                    expected=expected_accessibility,
+                    actual=reference_values["accessibility_response"],
+                    likely_layer="material-reference",
+                    hint="Reference accessibility response should mirror the pure decision_trace accessibility flags.",
+                    record_success=False)
+
+            expected_performance = expected_reference_performance_response(
+                plan,
+                kind)
+            if (expected_performance is not None
+                    and "performance_response" in reference_values):
+                report.check(
+                    "material reference performance_response is derived",
+                    reference_values["performance_response"]
+                    == expected_performance,
+                    path=f"{plan_path}.reference_model.performance_response",
+                    expected=expected_performance,
+                    actual=reference_values["performance_response"],
+                    likely_layer="material-reference",
+                    hint="Reference performance response should mirror fallback, warmup capture, and bounded effect policy.",
+                    record_success=False)
 
             shape_obj = plan.get("shape")
             shape_valid = bool_at(shape_obj, "valid") if isinstance(shape_obj, dict) else None
@@ -5707,6 +5834,12 @@ def check_material_plan_summary_requirements(
         "reference_semantic_thickness": (
             "material-reference",
             "Inspect MaterialPlan.reference_model.semantic_thickness and MaterialPlan.kind."),
+        "reference_accessibility_responses": (
+            "material-reference",
+            "Inspect MaterialPlan.reference_model.accessibility_response and decision_trace accessibility flags."),
+        "reference_performance_responses": (
+            "material-reference",
+            "Inspect MaterialPlan.reference_model.performance_response, fallback, warmup capture, and resource budget."),
         "pass_names": (
             "material-pass",
             "Inspect MaterialPlan.primary_pass and runtime pass serialization."),
@@ -5780,6 +5913,8 @@ def check_material_plan_summary_requirements(
             "reference_shape_scopes",
             "reference_blending_scopes",
             "reference_semantic_thickness",
+            "reference_accessibility_responses",
+            "reference_performance_responses",
             "pass_names",
             "pass_executors",
             "sampling_kernels",
@@ -5822,6 +5957,8 @@ def check_material_plan_summary_requirements(
                     "reference_shape_scopes": "shape_scopes",
                     "reference_blending_scopes": "blending_scopes",
                     "reference_semantic_thickness": "semantic_thickness",
+                    "reference_accessibility_responses": "accessibility_responses",
+                    "reference_performance_responses": "performance_responses",
                 }[field]
                 actual = reference_summary.get(nested)
                 summary_path = f"{base_path}.reference_model.{nested}"

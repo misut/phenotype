@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "17": 7
+      "18": 7
     },
     "roles": {
       "surface": 7
@@ -79,6 +79,12 @@
       "thin": 2,
       "regular": 2,
       "thick": 2
+    },
+    "reference_accessibility_responses": {
+      "standard": 7
+    },
+    "reference_performance_responses": {
+      "standard": 7
     },
     "reference_view_bounds_anchored": 7,
     "reference_shape_matches_geometry": 7,

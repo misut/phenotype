@@ -40,7 +40,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 17);
+    assert(material_plan_contract_version == 18);
     assert(plan.backdrop_sampling);
     assert(!plan.fallback());
     assert(plan.backdrop_access.required);
