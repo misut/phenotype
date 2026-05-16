@@ -131,6 +131,10 @@ mise exec -- exon build
 .exon/debug/phenotype_cli package inspect --json ../../examples/file_explorer_desktop
 ```
 
+The package metadata's debug verifier is the CLI command
+`phenotype artifact verify-file-explorer`; the shell script remains only as a
+compatibility wrapper for older local run configurations.
+
 At runtime the example reads `phenotype.package.toml` and locale files from
 `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`, `PHENOTYPE_PACKAGE_ROOT`, or the current
 working directory. `phenotype run file_explorer_desktop` sets the package-root

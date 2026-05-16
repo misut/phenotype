@@ -121,7 +121,7 @@ Current commands:
 | `phenotype artifact verify-file-explorer` | implemented | Local-only edge wrapper around the desktop/mobile Finder-style artifact gate. Legacy `tools/verify_file_explorer_artifacts.sh` now delegates to this command unless the CLI invokes it in compatibility mode. `--profile`, repeated `--view-mode`, and repeated `--scenario` narrow the capture set for faster local iteration before the full gate. |
 | `phenotype observe <bundle>` | implemented | C++ artifact observation envelope for LLM-actionable debugging. It parses `snapshot.json`, summarizes semantic/platform/runtime/material plan presence, material kinds/roles, fallback and backdrop capture reasons, executor counts, likely layer/pass hints, frame/platform files, and optionally embeds the uv-managed verifier report when `--manifest` or `--verify` is supplied. |
 | `phenotype android doctor/devices/emu-start/emu-stop/build/apk/install/launch/stop/run/logs/screencap/contract/clean` | implemented | Stable CLI namespace over the existing Android edge scripts and Android build command. `--json` emits a process/script result envelope, `--serial` forwards `ANDROID_SERIAL`, and `--state-dir`/`--avd`/`--apk` keep device state explicit. |
-| `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, package resource directories, and artifact manifest presence. |
+| `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, CLI-owned debug verifier metadata, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, package resource directories, and artifact manifest presence. |
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
 | `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, debug manifest references, byte counts, content metadata, and SHA-256 digests. |
 | `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource, and reports the same package checks plus bundle integrity totals. |
@@ -261,12 +261,13 @@ should become an implementation detail during migration:
 1. Keep `tools/verify_artifact_bundle.py` as the reference verifier until the
    CLI emits byte-for-byte equivalent failure shapes for representative
    fixtures.
-2. Add `phenotype artifact verify --json` backed by a C++ verifier library or a
-   temporary CLI edge wrapper. The long-term state is native C++ verification
-   so CI does not depend on Python for core artifact contracts.
+2. Keep `phenotype artifact verify --json` as the developer-facing verifier
+   command. It is currently a uv-managed CLI edge wrapper; the long-term state
+   is native C++ verification so CI does not depend on Python for core artifact
+   contracts.
 3. Convert shell scripts into thin compatibility wrappers that delegate to the
-   matching CLI command. The glass showcase wrappers are complete; the
-   file-explorer multi-profile gate is next.
+   matching CLI command. The glass showcase and file-explorer wrappers already
+   delegate to the CLI.
 4. Delete wrappers only after CI, docs, and local developer workflows use the
    CLI command directly.
 

@@ -144,8 +144,9 @@ mise exec -- exon build
 
 The contract runner enables the example's opt-in artifact hook with
 `debug.phenotype.contract`, waits for `snapshot.json` and `frame.bmp`, pulls the
-bundle from app-private storage with `adb run-as`, and validates it with
-`tools/verify_artifact_bundle.py --manifest examples/android/artifact_manifest.json`.
+bundle from app-private storage with `adb run-as`, and validates it through the
+CLI-owned Android contract command using
+`examples/android/artifact_manifest.json`.
 The pulled bundle lands in `$PHENOTYPE_ANDROID_STATE_DIR/contract-bundle` by
 default.
 

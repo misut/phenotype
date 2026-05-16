@@ -492,7 +492,7 @@ auto spec() -> cppx::cli::CommandSpec {
                         },
                         .positional_name = "bundle",
                         .positional_description =
-                            "Artifact bundle directory passed to tools/verify_artifact_bundle.py.",
+                            "Artifact bundle directory passed to the uv-managed verifier.",
                         .examples = {
                             "phenotype artifact verify /tmp/phenotype-glass-showcase --manifest examples/glass_showcase/artifact_manifest.json",
                             "phenotype artifact verify --json /tmp/phenotype-bundle --expect-platform macos --require-frame",
@@ -1704,6 +1704,10 @@ auto package_summary(fs::path root) -> PackageSummary {
     return summary;
 }
 
+bool debug_verifier_uses_cli(std::string_view verifier) {
+    return verifier.starts_with("phenotype ");
+}
+
 auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
     return {
         {.name = "package_root",
@@ -1776,6 +1780,12 @@ auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
                                    ? "<missing>"
                                    : summary.debug_verifier),
          .hint = "Expected [debug] probe_scene and verifier metadata."},
+        {.name = "debug_verifier_cli",
+         .ok = debug_verifier_uses_cli(summary.debug_verifier),
+         .detail = summary.debug_verifier.empty()
+             ? "verifier=<missing>"
+             : std::format("verifier={}", summary.debug_verifier),
+         .hint = "Use a phenotype CLI command; shell scripts are compatibility wrappers."},
         {.name = "default_font",
          .ok = summary.default_font_pretendard,
          .detail = summary.default_font_family.empty()

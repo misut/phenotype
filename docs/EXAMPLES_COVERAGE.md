@@ -82,11 +82,13 @@ across every public `MaterialKind`, including macOS sampled-backdrop rendering
 and fallback metadata. Use the desktop or mobile file explorer examples when
 the artifact should prove an app-like material workflow.
 
-From the repo root, verify a generated bundle before using it as a debugging
-artifact:
+From the repo root, verify a generated bundle through the CLI verifier edge
+before using it as a debugging artifact:
 
 ```sh
-mise exec -- uv run --frozen python tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli artifact verify --json /tmp/phenotype-native-startup \
   --expect-platform macos \
   --require-frame \
   --require-label "Control States" \
@@ -100,11 +102,14 @@ mise exec -- uv run --frozen python tools/verify_artifact_bundle.py /tmp/phenoty
   --require-material-fallback
 ```
 
-Or use the CLI edge wrapper, which runs the same uv-managed verifier:
+That CLI command runs the uv-managed Python verifier as an implementation
+detail. Direct `uv run tools/verify_artifact_bundle.py ...` is reserved for
+verifier development and fixture tests.
+
+The same command can be run from the CLI directory during local iteration:
 
 ```sh
 cd tools/phenotype_cli
-mise exec -- exon build
 .exon/debug/phenotype_cli artifact verify --json /tmp/phenotype-native-startup \
   --expect-platform macos \
   --require-frame \
@@ -121,9 +126,9 @@ mise exec -- exon build
 For `examples/glass_showcase`, use the checked-in manifest:
 
 ```sh
-mise exec -- uv run --frozen python tools/verify_artifact_bundle.py /tmp/phenotype-glass-showcase \
+.exon/debug/phenotype_cli artifact verify --json /tmp/phenotype-glass-showcase \
   --expect-platform macos \
-  --manifest examples/glass_showcase/artifact_manifest.json
+  --manifest ../../examples/glass_showcase/artifact_manifest.json
 ```
 
 The repo-local gate wraps build, startup capture, and manifest verification:
@@ -398,19 +403,19 @@ Gaps:
   material container ids/spacing, backdrop access/capture summaries,
   next-frame capture reason summaries, stage-capacity/drop counters, and
   bounded resource budgets.
-- `tools/verify_artifact_bundle.py` validates the common schema, semantic tree,
+- `phenotype artifact verify <bundle>` validates the common schema, semantic tree,
   disabled semantic state, material kind/fallback metadata, runtime viewport,
   platform diagnostics, backend runtime detail assertions, frame file, optional
   pixel-region contrast/color checks, resolved material plan schema and
   contract-version summary gates, material execution stages, explicit stage
   capacity and dropped-stage checks, backdrop access/capture checks, material
   next-frame capture warmup checks, resource bounds, failure summaries, and
-  reusable JSON manifests.
-  `tools/verify_glass_showcase_artifact.sh` is the local material showcase gate.
+  reusable JSON manifests through the uv-managed verifier implementation.
+  `phenotype artifact verify-glass-showcase` is the local material showcase gate.
   Main-branch artifact workflow builds the glass showcase but does not capture
   or verify the slow startup artifact.
-  `tools/verify_file_explorer_artifacts.sh` builds both file explorer examples
-  and applies their manifests with the uv-managed verifier through `mise`.
+  `phenotype artifact verify-file-explorer` builds both file explorer examples
+  and applies their manifests with the uv-managed verifier through the CLI.
 - Material surfaces render a macOS sampled-backdrop material path when the
   previous frame capture is ready. If a supported backend lacks that stable
   source, the pure plan reports a deterministic `no-backdrop-source` fallback
@@ -455,7 +460,7 @@ Current status by example:
 
 | Example | Expected artifact route | Current gap |
 |---|---|---|
-| `examples/native` | `phenotype run examples/native --artifact-dir /tmp/phenotype-native-startup --artifact-exit`, or direct `.exon/debug/native` with the same environment variables | Verified by `tools/verify_artifact_bundle.py`; scenario-specific pixel-region checks can be added as needed |
+| `examples/native` | `phenotype run examples/native --artifact-dir /tmp/phenotype-native-startup --artifact-exit`, or direct `.exon/debug/native` with the same environment variables | Verified by `phenotype artifact verify <bundle>`; scenario-specific pixel-region checks can be added as needed |
 | `examples/glass_showcase` | `phenotype run glass_showcase --artifact-dir /tmp/phenotype-glass-showcase --artifact-exit`, `phenotype artifact verify-glass-showcase` from the CLI, or `phenotype drive glass-showcase --script examples/glass_showcase/glass_showcase.drive` for headless input checks | Verifies all public material kinds, macOS material capability, resolved material plan schema and contract version, material execution stages, explicit stage capacity/drop counters, surface-role summary, exact material/container/shape/foreground/backdrop-access/capture-reason plan summary, semantic/runtime material parity, material quality policy, material resource/capture bounds, foreground text execution counters, fallback metadata, and startup-frame pixel regions through `examples/glass_showcase/artifact_manifest.json`; the shared drive model verifies backdrop/density/inspector/viewport/material-count state without native capture; run the verifier locally before material PRs, while CI keeps only build-level artifact gates |
 | `examples/file_explorer_desktop` | `phenotype run file_explorer_desktop --artifact-dir /tmp/phenotype-file-explorer --artifact-exit`, or `phenotype artifact verify-file-explorer` from the CLI | Verifies a Finder-style desktop startup scene with glass toolbar/sidebar/icon-grid/status surfaces, neutral unselected Recents startup status, deterministic recent ordering for the Korean PDF probe row, stable document/image/video/folder thumbnail labels, stable create/duplicate/delete labels, a real sandboxed Trash location, operation receipts for file select/open/create/read/duplicate/delete and folder select/open/create/delete scenarios, shared app-debug sort/search/view-mode receipts, selection action metadata, Finder segmented toolbar group/separator/button metrics, sidebar symbol/label/section metrics, and titlebar marker coordinates through `ExplorerChromeMetrics`, semantic/runtime material parity, explicit material surface roles, material container identity, backdrop access/capture bounds, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, foreground text execution counters, macOS active-Space/key-window diagnostics, and pixel-region checks for the sidebar, toolbar, and icon grid; local gate only by default |
 | `examples/file_explorer_mobile` | `phenotype run file_explorer_mobile --artifact-dir /tmp/phenotype-file-explorer-mobile --artifact-exit`, or `phenotype artifact verify-file-explorer` from the CLI | Verifies the compact mobile browse/preview/create startup scene with all material kinds, stable navigation labels including Trash, operation receipts for file open/create/read/duplicate/delete and folder open/create/delete scenarios, shared app-debug sort/search/view-mode receipts, duplicate/delete action metadata, semantic/runtime material parity, explicit toolbar/navigation/status material roles, material container identity, backdrop access/capture bounds, executable material shape validity, bounded material resource budgets including stage capacity/drop counters, and foreground text execution counters; local gate only by default |
