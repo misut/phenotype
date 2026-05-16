@@ -644,12 +644,38 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
                     widget::button<DebugPlaneMsg>("New", DebugPlaneNoop{});
                     widget::button<DebugPlaneMsg>("Delete", DebugPlaneNoop{});
                 });
+                layout::toolbar(
+                    layout::MaterialSurfaceOptions{
+                        .kind = MaterialKind::Thick,
+                        .direction = FlexDirection::Row,
+                        .padding = SpaceToken::Xs,
+                        .gap = SpaceToken::Xs,
+                        .border_radius = 9.0f,
+                        .border_width = 0.0f,
+                        .semantic_label = "Compact Toolbar",
+                    },
+                    [&] {
+                        widget::button<DebugPlaneMsg>("Compact",
+                                                       DebugPlaneNoop{});
+                    });
                 layout::sidebar(160.0f, [&] {
                     widget::text("Locations");
                 });
                 layout::status_bar([&] {
                     widget::text("Ready");
                 }, MaterialKind::Thick);
+                layout::status_bar(
+                    layout::MaterialSurfaceOptions{
+                        .kind = MaterialKind::Clear,
+                        .padding = SpaceToken::Xs,
+                        .gap = SpaceToken::Xs,
+                        .border_radius = 4.0f,
+                        .border_width = 0.0f,
+                        .semantic_label = "Compact Status",
+                    },
+                    [&] {
+                        widget::text("Compact Ready");
+                    });
             });
         },
         [](DiagState&, DebugPlaneMsg) {});
@@ -661,22 +687,40 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
         .at("children").as_array();
 
     auto const* toolbar = find_semantic_child(children, "material", "Toolbar");
+    auto const* compact_toolbar =
+        find_semantic_child(children, "material", "Compact Toolbar");
     auto const* sidebar = find_semantic_child(children, "material", "Sidebar");
     auto const* status_bar = find_semantic_child(children, "material", "Status Bar");
+    auto const* compact_status =
+        find_semantic_child(children, "material", "Compact Status");
     assert(toolbar != nullptr);
+    assert(compact_toolbar != nullptr);
     assert(sidebar != nullptr);
     assert(status_bar != nullptr);
+    assert(compact_status != nullptr);
     assert(toolbar->at("material").as_object().at("kind").as_string() == "clear");
     assert(toolbar->at("material").as_object().at("role").as_string() == "toolbar");
+    assert(compact_toolbar->at("material").as_object().at("kind").as_string()
+           == "thick");
+    assert(compact_toolbar->at("material").as_object().at("role").as_string()
+           == "toolbar");
     assert(sidebar->at("material").as_object().at("kind").as_string() == "thin");
     assert(sidebar->at("material").as_object().at("role").as_string() == "sidebar");
     assert(status_bar->at("material").as_object().at("kind").as_string()
            == "thick");
     assert(status_bar->at("material").as_object().at("role").as_string()
            == "status_bar");
+    assert(compact_status->at("material").as_object().at("kind").as_string()
+           == "clear");
+    assert(compact_status->at("material").as_object().at("role").as_string()
+           == "status_bar");
     assert(find_semantic_descendant(*toolbar, "button", "New") != nullptr);
+    assert(find_semantic_descendant(*compact_toolbar, "button", "Compact")
+           != nullptr);
     assert(find_semantic_descendant(*sidebar, "text", "Locations") != nullptr);
     assert(find_semantic_descendant(*status_bar, "text", "Ready") != nullptr);
+    assert(find_semantic_descendant(*compact_status, "text", "Compact Ready")
+           != nullptr);
 }
 
 void test_material_container_semantic_debug_fields() {

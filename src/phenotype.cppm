@@ -1924,6 +1924,19 @@ void material_surface(MaterialKind kind, F&& builder,
         std::forward<F>(builder));
 }
 
+inline char const* chrome_label_or(char const* label,
+                                   char const* fallback) noexcept {
+    return label && label[0] != '\0' ? label : fallback;
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void toolbar(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::Toolbar;
+    options.semantic_label = chrome_label_or(options.semantic_label, "Toolbar");
+    material_surface(options, std::forward<F>(builder));
+}
+
 template<typename F>
     requires std::is_invocable_v<F>
 void toolbar(F&& builder,
@@ -1946,6 +1959,14 @@ void toolbar(F&& builder,
 
 template<typename F>
     requires std::is_invocable_v<F>
+void sidebar(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::Sidebar;
+    options.semantic_label = chrome_label_or(options.semantic_label, "Sidebar");
+    material_surface(options, std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
 void sidebar(float max_width,
              F&& builder,
              MaterialKind kind = MaterialKind::Thin,
@@ -1962,6 +1983,15 @@ void sidebar(float max_width,
             .semantic_label = "Sidebar",
         },
         std::forward<F>(builder));
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void status_bar(MaterialSurfaceOptions options, F&& builder) {
+    options.role = MaterialSurfaceRole::StatusBar;
+    options.semantic_label = chrome_label_or(options.semantic_label,
+                                             "Status Bar");
+    material_surface(options, std::forward<F>(builder));
 }
 
 template<typename F>

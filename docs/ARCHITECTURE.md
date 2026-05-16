@@ -399,6 +399,10 @@ policy. `MaterialSurfaceOptions` also carries explicit border radius and
 border width overrides; these are view/layout chrome decisions that shape the
 emitted command while leaving material optics, fallback decisions, and pass
 selection in the pure planner/backend executor contract.
+The chrome helpers also accept `MaterialSurfaceOptions` directly, so app-like
+examples can keep custom Finder-style dimensions, radii, and border decisions
+while still going through the typed toolbar/sidebar/status-bar semantic path
+instead of hand-rolling role assignment.
 
 ## Native backend structure
 
