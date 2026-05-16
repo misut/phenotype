@@ -25,10 +25,12 @@ The initial scope is intentionally narrow:
   `tools/verify_glass_showcase_accessibility_artifact.sh` are compatibility
   wrappers that build and delegate to this command.
 - `phenotype artifact verify-file-explorer` runs the local desktop/mobile file
-  explorer contract gate from the CLI surface while the multi-profile capture
-  flow still delegates to `tools/verify_file_explorer_artifacts.sh`. The gate
-  can be narrowed with `--profile`, repeated `--view-mode`, and repeated
-  `--scenario` options for faster local iteration before running the full gate.
+  explorer contract gate from the CLI surface. It runs the shared model tests,
+  builds the selected native examples, captures deterministic artifacts, and
+  invokes the uv-managed verifier without delegating to the shell wrapper. The
+  gate can be narrowed with `--profile`, repeated `--view-mode`, and repeated
+  `--scenario` options for faster local iteration before running the full gate;
+  `tools/verify_file_explorer_artifacts.sh` remains a compatibility wrapper.
 - `phenotype package inspect <path>` checks the proposed package manifest,
   application/debug metadata, declared resource counts, referenced `source`
   files, Pretendard default-font policy, asset layout, locale layout, and font
