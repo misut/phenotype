@@ -15,7 +15,13 @@ The initial scope is intentionally narrow:
 - `phenotype artifact verify-glass-showcase` and
   `phenotype artifact verify-file-explorer` run the local contract gates from
   the CLI surface. They are intentionally local-only gates by default because
-  they launch native examples and can be slow on CI.
+  they launch native examples and can be slow on CI. The legacy
+  `tools/verify_glass_showcase_artifact.sh`,
+  `tools/verify_glass_showcase_accessibility_artifact.sh`, and
+  `tools/verify_file_explorer_artifacts.sh` entry points are compatibility
+  wrappers that build and delegate to these CLI commands. File explorer gates
+  can be narrowed with `--profile`, repeated `--view-mode`, and repeated
+  `--scenario` options for faster local iteration before running the full gate.
 - `phenotype package inspect <path>` checks the proposed package manifest,
   application/debug metadata, declared resource counts, referenced `source`
   files, Pretendard default-font policy, asset layout, locale layout, and font
@@ -45,7 +51,9 @@ The CLI keeps process execution, artifact writes, device access, and renderer
 control outside the first pass except for commands that explicitly wrap local
 edge gates. Future commands can call those edge adapters while preserving the
 input and output abstraction model documented in
-`docs/PHENOTYPE_CLI_ROADMAP.md`.
+`docs/PHENOTYPE_CLI_ROADMAP.md`. Python verifier calls go through `uv` and use
+`PHENOTYPE_UV_PROJECT_ENVIRONMENT` or a temp-directory default so local gates do
+not leave a project `.venv` behind.
 
 Example:
 
@@ -60,6 +68,10 @@ mise exec -- exon build
 .exon/debug/phenotype_cli package bundle --json \
   ../../examples/file_explorer_desktop \
   --output /tmp/phenotype-file-explorer
+.exon/debug/phenotype_cli artifact verify-file-explorer \
+  --profile desktop \
+  --view-mode icon \
+  --scenario search-active
 .exon/debug/phenotype_cli android doctor --json
 .exon/debug/phenotype_cli android devices --json
 .exon/debug/phenotype_cli android contract --json \
