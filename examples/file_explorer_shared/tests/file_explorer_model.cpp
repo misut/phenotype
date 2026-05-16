@@ -262,7 +262,18 @@ duplicate
     assert(chrome.native_window_controls);
     assert(!chrome.duplicate_window_controls);
     assert(chrome.content_window_control_markers);
+    assert(!chrome.status_bar_visible);
     assert(demo::explorer_icon_grid_columns(chrome).size() == 6);
+    std::string const viewport_profile = "test-status-bar-viewport";
+    auto viewport_state = demo::make_state(viewport_profile);
+    demo::apply_explorer_input(
+        viewport_state,
+        parsed_viewport.input,
+        viewport_profile);
+    assert(viewport_state.status == "Viewport set to 900x620@2");
+    assert(!demo::explorer_chrome_metrics(viewport_state, profile)
+        .status_bar_visible);
+    fs::remove_all(viewport_state.root, ec);
     fs::remove_all(demo::demo_root("mobile"), ec);
     auto mobile_state = demo::make_state("mobile");
     auto mobile_chrome = demo::explorer_chrome_metrics(mobile_state, "mobile");
@@ -278,6 +289,7 @@ duplicate
     assert(mobile_chrome.titlebar_control_count == 0);
     assert(!mobile_chrome.content_window_control_markers);
     assert(!mobile_chrome.finder_segmented_toolbar);
+    assert(!mobile_chrome.status_bar_visible);
     fs::remove_all(mobile_state.root, ec);
     auto snap = demo::snapshot(state);
     assert(!snap.has_selection);
@@ -337,6 +349,7 @@ duplicate
     fs::remove(outside, ec);
 
     demo::select_entry(state, "README.txt");
+    assert(demo::explorer_chrome_metrics(state, profile).status_bar_visible);
     snap = demo::snapshot(state);
     assert(snap.has_selection);
     assert(snap.selected.name == "README.txt");
@@ -587,6 +600,7 @@ duplicate
     snap = demo::snapshot(state);
     assert(state.search == "Screen");
     assert(state.status == "Searching for Screen");
+    assert(demo::explorer_chrome_metrics(state, profile).status_bar_visible);
     assert(!snap.has_selection);
     assert(!snap.entries.empty());
     for (auto const& entry : snap.entries) {
@@ -636,6 +650,7 @@ duplicate
     assert(driven.trace[1].chrome.viewport.width == 900);
     assert(driven.trace[1].chrome.icon_grid_columns == 3);
     assert(driven.trace[1].status == "Viewport set to 900x620@2");
+    assert(!driven.trace[1].chrome.status_bar_visible);
     assert(driven.trace[4].operation.kind == "file_create");
     assert(driven.trace[4].operation.ok);
     assert(driven.trace[5].operation.kind == "file_duplicate");

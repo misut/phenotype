@@ -22,7 +22,10 @@ viewport-derived Finder chrome/grid contract without opening a native AppKit or
 Win32 window. The desktop chrome metrics include the integrated titlebar,
 native-control ownership, icon-grid capacity, and Finder-style segmented
 toolbar group/separator/button counts plus the sidebar row, toolbar group, and
-toolbar icon button dimensions that the desktop example consumes.
+toolbar icon button dimensions that the desktop example consumes. They also
+carry `status_bar_visible`, keeping the default Recents surface clean while
+making search, selection, and file-operation receipts observable in both native
+artifacts and CLI output.
 
 The module also provides the pure file explorer `ResourceCatalog` fixture and
 locale label resolver used by the desktop and mobile examples. Package/locale

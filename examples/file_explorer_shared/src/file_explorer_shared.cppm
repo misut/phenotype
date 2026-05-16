@@ -202,6 +202,7 @@ struct ExplorerChromeMetrics {
     bool content_window_control_markers = false;
     bool finder_segmented_toolbar = false;
     bool more_actions_open = false;
+    bool status_bar_visible = false;
 };
 
 struct ExplorerInputTrace {
@@ -372,6 +373,21 @@ inline int desktop_icon_grid_column_count(ExplorerViewport const& viewport) {
     return std::clamp(columns, 2, 7);
 }
 
+inline bool desktop_status_bar_visible(ExplorerState const& state) {
+    if (!state.selected_name.empty()
+        || !state.last_operation.kind.empty()
+        || !state.search.empty())
+        return true;
+    if (state.status == "Ready")
+        return false;
+    if (state.status.starts_with("Viewport set to ")
+        || state.status.starts_with("Switched to ")
+        || state.status.starts_with("Sorted by ")
+        || state.status.starts_with("Draft "))
+        return false;
+    return true;
+}
+
 inline ExplorerChromeMetrics explorer_chrome_metrics(
         ExplorerState const& state,
         std::string_view profile) {
@@ -423,6 +439,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .duplicate_window_controls = false,
             .content_window_control_markers = false,
             .finder_segmented_toolbar = false,
+            .status_bar_visible = false,
         };
     }
     auto columns = desktop_icon_grid_column_count(viewport);
@@ -481,6 +498,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .duplicate_window_controls = false,
         .content_window_control_markers = true,
         .finder_segmented_toolbar = true,
+        .status_bar_visible = desktop_status_bar_visible(state),
     };
 }
 
@@ -914,6 +932,7 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("content_window_control_markers", json::Value{chrome.content_window_control_markers});
     out.emplace("finder_segmented_toolbar", json::Value{chrome.finder_segmented_toolbar});
     out.emplace("more_actions_open", json::Value{chrome.more_actions_open});
+    out.emplace("status_bar_visible", json::Value{chrome.status_bar_visible});
     out.emplace("native_window", json::Value{std::move(native_window)});
     return json::Value{std::move(out)};
 }

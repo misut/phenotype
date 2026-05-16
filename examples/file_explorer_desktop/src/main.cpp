@@ -1878,7 +1878,10 @@ void view(State const& state) {
                             if (state.more_actions_open)
                                 finder_more_actions(state, snap);
                             finder_content(state, snap);
-                            finder_status_bar(state, snap);
+                            if (file_explorer_demo::desktop_status_bar_visible(
+                                    state.explorer)) {
+                                finder_status_bar(state, snap);
+                            }
                         }, SpaceToken::Sm);
                     });
                 });

@@ -6,7 +6,7 @@ group/sort, share/tag/more, and search controls, translucent sidebar locations,
 icon/list/column/gallery file views,
 document, image, video, and folder thumbnails, separate select/open semantics
 for files and folders, read/create/duplicate/delete file actions, folder
-create/delete actions, and compact Finder-style status.
+create/delete actions, and contextual Finder-style status.
 The startup view intentionally leaves the file grid unselected, matching
 Finder's neutral Recents presentation, and starts in a deterministic
 `Sort: Recent` order whose first row mirrors the reference Finder-style Korean
@@ -32,6 +32,10 @@ groups, so the artifact keeps Finder-like chrome without duplicating native
 window controls. File create, read, duplicate, and delete behavior is still
 covered through the shared model, CLI inputs, startup scenarios, and the
 Finder-style `More` overflow instead of an always-visible extra action group.
+The default Recents artifact hides the status bar to match Finder's neutral
+icon-grid presentation. Search, selection, and file-operation scenarios reveal
+the status surface again so debug artifacts still expose action receipts and
+state transitions without adding persistent chrome to the startup view.
 
 Startup frame artifacts intentionally capture phenotype content rather than the
 operating system's non-client controls. The top-left titlebar reserve therefore
@@ -49,11 +53,11 @@ mode, selection state, operation receipt, entry counts, and
 regions, so an LLM can distinguish model-state drift from renderer/capture
 drift without guessing from pixels. The desktop manifest also asserts the
 Finder toolbar group, separator, icon-button, and compact Recents icon-grid
-density metrics from that payload, including thumbnail canvas, label, font, and
-grid-gap sizing. It also checks sidebar symbol and label placement, section
-spacing, selected-row radius, and traffic-light marker coordinates so Finder
-parity regressions are reported as structured chrome contract failures before
-pixel inspection.
+density metrics from that payload, including thumbnail canvas, label, font,
+grid-gap sizing, and contextual `status_bar_visible` state. It also checks
+sidebar symbol and label placement, section spacing, selected-row radius, and
+traffic-light marker coordinates so Finder parity regressions are reported as
+structured chrome contract failures before pixel inspection.
 On macOS, the same runtime object reports live `NSWindow` chrome state:
 transparent titlebar, full-size content view, hidden native title, and
 background dragging must all be enabled. These fields are actual platform
@@ -166,9 +170,9 @@ The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity,
 semantic toolbar button labels, bounded material resource budgets, and
 pixel-region checks for the sidebar, toolbar, and icon grid. The default icon
-artifact also requires the neutral `Sort: Recent` status label so accidental
-default file selection or sort drift is caught without relying on a human
-screenshot comparison.
+artifact also requires `status_bar_visible=false` and the neutral `Sort:
+Recent` model state, so accidental default file selection or sort drift is
+caught without relying on a persistent bottom status label.
 
 The gate captures the desktop example in `icon`, `list`, `column`, and
 `gallery` modes through `PHENOTYPE_FILE_EXPLORER_VIEW` so each Finder-style
