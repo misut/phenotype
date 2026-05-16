@@ -32,7 +32,7 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "12": 1
+      "13": 1
     },
     "roles": {
       "surface": 1
@@ -118,6 +118,20 @@
     "active_runtime_passes_gte": 1,
     "backdrop_runtime_passes_lte": 0,
     "backdrop_runtime_passes_gte": 0,
+    "total_execution_stages_lte": 3,
+    "total_execution_stages_gte": 3,
+    "active_execution_stages_lte": 3,
+    "active_execution_stages_gte": 3,
+    "backdrop_execution_stages_lte": 0,
+    "backdrop_execution_stages_gte": 0,
+    "dropped_execution_stages_lte": 0,
+    "dropped_execution_stages_gte": 0,
+    "max_execution_stage_count_lte": 3,
+    "max_execution_stage_count_gte": 3,
+    "max_execution_stage_capacity_lte": 4,
+    "max_execution_stage_capacity_gte": 4,
+    "max_execution_stages_lte": 4,
+    "max_execution_stages_gte": 4,
     "require_bounded_texture_copy": true,
     "require_deterministic_fallback": true
   },

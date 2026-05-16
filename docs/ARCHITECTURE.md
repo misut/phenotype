@@ -209,6 +209,10 @@ backend should run a backdrop
 blur pass or deterministic translucent fallback. `execution_stages` then expands
 that primary pass into a bounded pure list of shadow, blur/fallback, edge, and
 noise stages so artifacts can explain material work before visual inspection.
+`execution_stage_capacity` records the fixed plan storage capacity and
+`dropped_execution_stage_count` records overflow explicitly; any nonzero drop is
+treated as a verifier failure, which forces future stage additions to update the
+pure capacity and artifact contract instead of silently disappearing.
 `primary_pass` also records the pure executor role and maximum texture-copy
 pixels for that pass, so a backend
 artifact can prove whether it stayed within the render-target copy budget.
@@ -306,8 +310,8 @@ the same artifact schema. Backends also publish
 `renderer.material_runtime_summary`, a flat count/max summary derived from
 the same records; the artifact verifier recomputes it from
 `material_plans[]` so CI can catch summary drift, unexpected executor pass
-growth, texture-copy budget drift, and material shape drift such as a clamped
-radius not matching the backend-executed radius.
+growth, stage-capacity overflow, texture-copy budget drift, and material shape
+drift such as a clamped radius not matching the backend-executed radius.
 Backends separately publish `renderer.material_executor_summary` for edge-only
 execution telemetry: material instances, fallback instances, material draw
 calls, upload bytes/capacity, framebuffer-history copy bounds, and CPU enqueue
@@ -319,6 +323,33 @@ deterministic resource limits while also leaving nondeterministic timing data
 available for post-failure diagnosis.
 Platform APIs, Metal/AppKit calls, shader compilation, texture capture, clocks,
 filesystem writes, and process execution stay outside this pure layer.
+
+### CLI, input, and output observation boundary
+
+The long-term developer tool surface is a first-class `phenotype` CLI, not a
+set of unrelated shell and Python scripts. Its architecture follows the same
+edge-effect rule as material rendering:
+
+```text
+External input -> input abstraction -> phenotype -> output abstraction -> real renderer
+CLI input      -> input abstraction -> phenotype -> output abstraction -> CLI output
+```
+
+The abstraction layers are typed value boundaries, not a second runtime. Native
+platforms translate AppKit, Win32, Android, WASI, or JavaScript events into a
+neutral input frame before calling the app. The CLI will translate JSONL input
+scripts into the same shape for deterministic driving. Renderer backends
+consume the command stream and debug descriptors as usual; the CLI can instead
+emit command summaries, semantic nodes, material plans, runtime summaries,
+pixel-region samples, and verifier failures without showing a window.
+
+Packaging and diagnostics stay at the CLI edge. Asset discovery, i18n resource
+validation, font packaging, Android process control, screenshots, filesystem
+artifact writes, and toolchain probes must not leak into core layout, material
+planning, or paint code. Release builds may keep the neutral input/output
+types as thin value bridges while omitting artifact writers and driver
+endpoints unless the package manifest explicitly requests them. See
+`docs/PHENOTYPE_CLI_ROADMAP.md` for the command surface and migration plan.
 
 Apple's Human Interface Guidelines distinguish Liquid Glass from standard
 materials: Liquid Glass belongs primarily to functional control/navigation

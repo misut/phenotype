@@ -195,6 +195,8 @@ def material_plan(
             "bounded_texture_copy": True,
             "deterministic_fallback": True,
         },
+        "execution_stage_capacity": 4,
+        "dropped_execution_stage_count": 0,
         "verifier": {
             "require_backdrop_source": False,
             "require_edge_highlight": False,
@@ -335,7 +337,9 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
             1 for stage in execution_stages
             if isinstance(stage, dict) and stage["requires_backdrop"]
         ),
+        "dropped_execution_stages": plan["dropped_execution_stage_count"],
         "max_execution_stage_count": len(execution_stages),
+        "max_execution_stage_capacity": plan["execution_stage_capacity"],
         "max_pass_texture_copy_pixels": primary["max_texture_copy_pixels"],
         "total_pass_texture_copy_pixels": primary["max_texture_copy_pixels"],
         "max_plan_blur_radius": plan["blur_radius"],
@@ -417,6 +421,7 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "active_execution_stage_count": len(active_stages),
         "backdrop_execution_stage_count": len(backdrop_stages),
         "primary_execution_stage_count": len(primary_stages),
+        "dropped_execution_stage_count": plan["dropped_execution_stage_count"],
         "backdrop_filter_stage_count": sum(
             1 for stage in stages
             if isinstance(stage, dict) and stage["executor"] == "backdrop-filter"
@@ -926,8 +931,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "active_execution_stages_gte": 1,
                 "backdrop_execution_stages_lte": 1,
                 "backdrop_execution_stages_gte": 1,
+                "dropped_execution_stages_lte": 0,
+                "dropped_execution_stages_gte": 0,
                 "max_execution_stage_count_lte": 1,
                 "max_execution_stage_count_gte": 1,
+                "max_execution_stage_capacity_lte": 4,
+                "max_execution_stage_capacity_gte": 4,
                 "max_execution_stages_lte": 4,
                 "max_execution_stages_gte": 4,
                 "max_pass_texture_copy_pixels_lte": 320 * 240,
@@ -957,6 +966,14 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["resource_bounds"][
                 "max_execution_stages"],
+            4)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "dropped_execution_stages"],
+            0)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "max_execution_stage_capacity"],
             4)
 
     def test_manifest_can_require_execution_stage_summary(self) -> None:
@@ -1003,6 +1020,36 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "material backdrop sampling has backdrop execution stage"))
         self.assertEqual(backdrop_failure["likely_pass"], "backdrop-sample-blur")
         self.assertIn("Backdrop sampling", backdrop_failure["hint"])
+
+    def test_dropped_execution_stage_points_to_stage_capacity(self) -> None:
+        plan = sampled_material_plan()
+        plan["dropped_execution_stage_count"] = 1
+        root = snapshot(plan)
+        renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+        assert isinstance(renderer, dict)
+        runtime = renderer["material_runtime_summary"]
+        executor = renderer["material_executor_summary"]
+        assert isinstance(runtime, dict)
+        assert isinstance(executor, dict)
+        runtime["dropped_execution_stages"] = 1
+        executor["dropped_execution_stage_count"] = 1
+
+        code, report = self.run_verifier(root)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material execution stages did not overflow capacity"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".dropped_execution_stage_count")
+        self.assertEqual(failure["expected"], 0)
+        self.assertEqual(failure["actual"], 1)
+        self.assertEqual(failure["likely_layer"], "material-stage")
+        self.assertEqual(failure["likely_pass"], "stage-capacity")
+        self.assertIn("material_max_execution_stages", failure["hint"])
 
     def test_fallback_backdrop_execution_stage_points_to_stage_contract(self) -> None:
         plan = material_plan()

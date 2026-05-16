@@ -140,7 +140,7 @@ ALLOWED_MATERIAL_FOREGROUND_SOURCES = {
     "theme",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 12
+MATERIAL_PLAN_CONTRACT_VERSION = 13
 
 
 def suggested_action_for_failure(
@@ -1182,8 +1182,12 @@ def material_resource_bounds_spec_from_manifest(value: Any) -> JsonObject | None
         "active_execution_stages_gte",
         "backdrop_execution_stages_lte",
         "backdrop_execution_stages_gte",
+        "dropped_execution_stages_lte",
+        "dropped_execution_stages_gte",
         "max_execution_stage_count_lte",
         "max_execution_stage_count_gte",
+        "max_execution_stage_capacity_lte",
+        "max_execution_stage_capacity_gte",
         "max_execution_stages_lte",
         "max_execution_stages_gte",
     }
@@ -1686,6 +1690,8 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "quality_policy",
     "primary_pass",
     "resource_budget",
+    "execution_stage_capacity",
+    "dropped_execution_stage_count",
     "verifier",
     "passes",
     "execution_stages",
@@ -1937,7 +1943,9 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "total_execution_stages": 0,
             "active_execution_stages": 0,
             "backdrop_execution_stages": 0,
+            "dropped_execution_stages": 0,
             "max_execution_stage_count": 0,
+            "max_execution_stage_capacity": 0,
             "max_pass_texture_copy_pixels": 0,
             "total_pass_texture_copy_pixels": 0,
             "unbounded_texture_copy": 0,
@@ -3766,6 +3774,67 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     hint="Clamp sample taps in plan_material_surface.",
                     record_success=False)
 
+        execution_stage_capacity = check_number_field(
+            report,
+            plan,
+            "execution_stage_capacity",
+            plan_path,
+            min_value=0.0,
+            likely_layer="material-stage",
+            likely_pass="stage-capacity",
+            hint=(
+                "MaterialPlan must expose the fixed execution stage array "
+                "capacity so new stage work cannot disappear silently."))
+        if isinstance(execution_stage_capacity, (int, float)):
+            bounds = summary["resource_bounds"]
+            capacity = int(execution_stage_capacity)
+            bounds["max_execution_stage_capacity"] = max(
+                int(bounds["max_execution_stage_capacity"]),
+                capacity)
+            if isinstance(max_execution_stages, (int, float)):
+                report.check(
+                    "material execution stage capacity matches resource budget",
+                    capacity == int(max_execution_stages),
+                    path=f"{plan_path}.execution_stage_capacity",
+                    expected=int(max_execution_stages),
+                    actual=capacity,
+                    likely_layer="material-stage",
+                    likely_pass="stage-capacity",
+                    hint=(
+                        "Keep MaterialPlan.execution_stage_capacity and "
+                        "MaterialResourceBudget.max_execution_stages aligned."),
+                    record_success=False)
+
+        dropped_execution_stage_count = check_number_field(
+            report,
+            plan,
+            "dropped_execution_stage_count",
+            plan_path,
+            min_value=0.0,
+            likely_layer="material-stage",
+            likely_pass="stage-capacity",
+            hint=(
+                "Dropped execution stages mean a pure MaterialPlan exceeded "
+                "its fixed stage capacity before backend execution."))
+        if isinstance(dropped_execution_stage_count, (int, float)):
+            dropped = int(dropped_execution_stage_count)
+            bounds = summary["resource_bounds"]
+            bounds["dropped_execution_stages"] = (
+                int(bounds["dropped_execution_stages"]) + dropped)
+            report.check(
+                "material execution stages did not overflow capacity",
+                dropped == 0,
+                path=f"{plan_path}.dropped_execution_stage_count",
+                expected=0,
+                actual=dropped,
+                likely_layer="material-stage",
+                likely_pass="stage-capacity",
+                hint=(
+                    "Increase material_max_execution_stages and the artifact "
+                    "contract, or remove duplicate stage work in "
+                    "plan_material_surface."),
+                record_success=False)
+
         primary_pass = check_object_field(
             report,
             plan,
@@ -4100,6 +4169,19 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     hint=(
                         "Keep execution stages within "
                         "MaterialResourceBudget.max_execution_stages."),
+                    record_success=False)
+            if isinstance(execution_stage_capacity, (int, float)):
+                report.check(
+                    "material execution stage count is within serialized capacity",
+                    len(execution_stages) <= int(execution_stage_capacity),
+                    path=f"{plan_path}.execution_stages",
+                    expected={"length<=": int(execution_stage_capacity)},
+                    actual=len(execution_stages),
+                    likely_layer="material-stage",
+                    likely_pass="stage-capacity",
+                    hint=(
+                        "The serialized stage list must fit within "
+                        "MaterialPlan.execution_stage_capacity."),
                     record_success=False)
             has_primary_stage = False
             has_backdrop_stage = False
@@ -4753,7 +4835,9 @@ def check_material_resource_bounds_requirements(
         "total_execution_stages_lte": "total_execution_stages",
         "active_execution_stages_lte": "active_execution_stages",
         "backdrop_execution_stages_lte": "backdrop_execution_stages",
+        "dropped_execution_stages_lte": "dropped_execution_stages",
         "max_execution_stage_count_lte": "max_execution_stage_count",
+        "max_execution_stage_capacity_lte": "max_execution_stage_capacity",
         "max_execution_stages_lte": "max_execution_stages",
     }
     for spec_field, summary_field in field_map.items():
@@ -4783,7 +4867,9 @@ def check_material_resource_bounds_requirements(
         "total_execution_stages_gte": "total_execution_stages",
         "active_execution_stages_gte": "active_execution_stages",
         "backdrop_execution_stages_gte": "backdrop_execution_stages",
+        "dropped_execution_stages_gte": "dropped_execution_stages",
         "max_execution_stage_count_gte": "max_execution_stage_count",
+        "max_execution_stage_capacity_gte": "max_execution_stage_capacity",
         "max_execution_stages_gte": "max_execution_stages",
     }
     for spec_field, summary_field in min_field_map.items():
@@ -4855,7 +4941,10 @@ def check_material_runtime_summary_contract(
         "total_execution_stages": bounds.get("total_execution_stages"),
         "active_execution_stages": bounds.get("active_execution_stages"),
         "backdrop_execution_stages": bounds.get("backdrop_execution_stages"),
+        "dropped_execution_stages": bounds.get("dropped_execution_stages"),
         "max_execution_stage_count": bounds.get("max_execution_stage_count"),
+        "max_execution_stage_capacity": bounds.get(
+            "max_execution_stage_capacity"),
         "max_pass_texture_copy_pixels": bounds.get(
             "max_pass_texture_copy_pixels"),
         "total_pass_texture_copy_pixels": bounds.get(
@@ -4971,6 +5060,8 @@ def check_material_executor_summary_contract(
         "backdrop_execution_stage_count": bounds.get(
             "backdrop_execution_stages"),
         "primary_execution_stage_count": bounds.get("active_runtime_passes"),
+        "dropped_execution_stage_count": bounds.get(
+            "dropped_execution_stages"),
         "backdrop_filter_stage_count": stage_executors.get(
             "backdrop-filter", 0),
         "fallback_fill_stage_count": stage_executors.get("fallback-fill", 0),
@@ -5003,6 +5094,7 @@ def check_material_executor_summary_contract(
         "active_execution_stage_count",
         "backdrop_execution_stage_count",
         "primary_execution_stage_count",
+        "dropped_execution_stage_count",
         "backdrop_filter_stage_count",
         "fallback_fill_stage_count",
         "shadow_stage_count",

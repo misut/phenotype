@@ -1319,6 +1319,15 @@ namespace detail {
         out.emplace("quality_policy", json::Value{std::move(quality_policy)});
         out.emplace("primary_pass", json::Value{std::move(primary_pass)});
         out.emplace("resource_budget", json::Value{std::move(resource_budget)});
+        out.emplace(
+            "execution_stage_capacity",
+            json::Value{
+                static_cast<std::int64_t>(plan.execution_stage_capacity)});
+        out.emplace(
+            "dropped_execution_stage_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.dropped_execution_stage_count)});
         out.emplace("verifier", json::Value{std::move(verifier)});
         out.emplace("passes", json::Value{std::move(passes)});
         out.emplace("execution_stages", json::Value{std::move(execution_stages)});
@@ -1371,6 +1380,10 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(summary.backdrop_execution_stages)});
         out.emplace(
+            "dropped_execution_stages",
+            json::Value{
+                static_cast<std::int64_t>(summary.dropped_execution_stages)});
+        out.emplace(
             "max_execution_stage_count",
             json::Value{
                 static_cast<std::int64_t>(summary.max_execution_stage_count)});
@@ -1378,6 +1391,11 @@ namespace detail {
             "max_execution_stages",
             json::Value{
                 static_cast<std::int64_t>(summary.max_execution_stages)});
+        out.emplace(
+            "max_execution_stage_capacity",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.max_execution_stage_capacity)});
         out.emplace(
             "max_pass_texture_copy_pixels",
             json::Value{summary.max_pass_texture_copy_pixels});
@@ -1527,6 +1545,11 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.primary_execution_stage_count)});
+        out.emplace(
+            "dropped_execution_stage_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.dropped_execution_stage_count)});
         out.emplace(
             "backdrop_filter_stage_count",
             json::Value{
