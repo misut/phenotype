@@ -349,7 +349,7 @@
     },
     {
       "path": "renderer.material_executor_summary.backdrop_copy_count",
-      "equals": 1
+      "equals": 0
     },
     {
       "path": "renderer.material_executor_summary.backdrop_copy_pixels",

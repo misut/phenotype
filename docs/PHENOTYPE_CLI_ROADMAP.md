@@ -79,7 +79,7 @@ The first durable CLI should expose a small command tree with stable JSON:
 | `phenotype doctor` | Report toolchain, platform, renderer, Android, and artifact prerequisites. | `tools/android/doctor.sh` plus ad hoc setup checks |
 | `phenotype run <example>` | Build and run a local example with consistent logging and `--json`. | scattered `exon run` wrappers |
 | `phenotype artifact verify <bundle>` | Validate an artifact bundle and emit human or machine-readable failures. | `tools/verify_artifact_bundle.py` |
-| `phenotype artifact verify-glass-showcase` | Build or locate the glass showcase artifact, then run the contract gate. | `tools/verify_glass_showcase_artifact.sh` |
+| `phenotype artifact verify-glass-showcase` | Build, capture, and verify the glass showcase artifact, including accessibility mode. | `tools/verify_glass_showcase_artifact.sh` |
 | `phenotype artifact verify-file-explorer` | Validate desktop/mobile file explorer artifact contracts. | `tools/verify_file_explorer_artifacts.sh` |
 | `phenotype android doctor/run/install/logs/screencap/contract` | Keep Android workflows under one command namespace. | `tools/android/*.sh` |
 | `phenotype package inspect` | Validate package manifests, assets, locales, fonts, and platform bundle metadata. | new |
@@ -117,7 +117,7 @@ Current commands:
 | `phenotype commands --json` | implemented | Emits a recursive command tree with `cppx.cli` command metadata, stable paths, and schema version `1`. |
 | `phenotype artifact summary <bundle>` | implemented | Read-only structural summary for `snapshot.json`, `frame.bmp`, and platform runtime files. This does not replace semantic verification yet. |
 | `phenotype artifact verify <bundle>` | implemented | Edge wrapper that runs the uv-managed Python verifier through `mise` and forwards the verifier JSON report. |
-| `phenotype artifact verify-glass-showcase` | implemented | Local-only edge wrapper around the glass showcase build/capture/verifier gate, including accessibility mode. PR CI should not run this slow native capture gate by default. Legacy `tools/verify_glass_showcase*.sh` entry points now delegate to this command unless the CLI invokes them in compatibility mode. |
+| `phenotype artifact verify-glass-showcase` | implemented | Local-only CLI-owned glass showcase build/capture/verifier gate, including accessibility mode, manifest override, expected-platform override, explicit bundle directory, and structured JSON for build/run/verifier/artifact state. PR CI should not run this slow native capture gate by default. Legacy `tools/verify_glass_showcase*.sh` entry points are thin compatibility wrappers that build and delegate to this command. |
 | `phenotype artifact verify-file-explorer` | implemented | Local-only edge wrapper around the desktop/mobile Finder-style artifact gate. Legacy `tools/verify_file_explorer_artifacts.sh` now delegates to this command unless the CLI invokes it in compatibility mode. `--profile`, repeated `--view-mode`, and repeated `--scenario` narrow the capture set for faster local iteration before the full gate. |
 | `phenotype observe <bundle>` | implemented | C++ artifact observation envelope for LLM-actionable debugging. It parses `snapshot.json`, summarizes semantic/platform/runtime/material plan presence, material kinds/roles, fallback and backdrop capture reasons, executor counts, likely layer/pass hints, frame/platform files, and optionally embeds the uv-managed verifier report when `--manifest` or `--verify` is supplied. |
 | `phenotype android doctor/devices/emu-start/emu-stop/build/apk/install/launch/stop/run/logs/screencap/contract/clean` | implemented | Stable CLI namespace over the existing Android edge scripts and Android build command. `--json` emits a process/script result envelope, `--serial` forwards `ANDROID_SERIAL`, and `--state-dir`/`--avd`/`--apk` keep device state explicit. |
@@ -265,8 +265,8 @@ should become an implementation detail during migration:
    temporary CLI edge wrapper. The long-term state is native C++ verification
    so CI does not depend on Python for core artifact contracts.
 3. Convert shell scripts into thin compatibility wrappers that delegate to the
-   matching CLI command; the CLI may still invoke the old body with an explicit
-   compatibility env var while the verifier engine is being migrated.
+   matching CLI command. The glass showcase wrappers are complete; the
+   file-explorer multi-profile gate is next.
 4. Delete wrappers only after CI, docs, and local developer workflows use the
    CLI command directly.
 
@@ -359,6 +359,7 @@ The CLI should not make production rendering slower:
 6. Replace CI and docs references to shell/Python tools with CLI commands.
    PR CLI/package checks now parse JSON through `uv run --frozen python`
    instead of direct `python3`, and staged package bundles are verified through
-   `phenotype package verify-bundle`.
+   `phenotype package verify-bundle`. Glass showcase local docs now prefer
+   `phenotype artifact verify-glass-showcase`.
 7. Remove compatibility wrappers once the CLI covers Android, artifact, and
    package workflows.
