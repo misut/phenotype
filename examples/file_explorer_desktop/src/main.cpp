@@ -521,19 +521,41 @@ std::uint64_t stable_token(std::string const& value) {
     return h ? h : 1ull;
 }
 
+void paint_document_fold(phenotype::Painter& painter,
+                         float x,
+                         float y,
+                         float w,
+                         phenotype::Color border) {
+    phenotype::PathBuilder fold;
+    fold.move_to(x + w - 12.0f, y + 1.0f);
+    fold.line_to(x + w - 1.0f, y + 12.0f);
+    fold.line_to(x + w - 12.0f, y + 12.0f);
+    fold.close();
+    painter.fill_path(fold, rgba(238, 241, 245, 245));
+    painter.line(x + w - 12.0f, y + 1.0f,
+                 x + w - 1.0f, y + 12.0f,
+                 1.0f, border);
+    painter.line(x + w - 12.0f, y + 12.0f,
+                 x + w - 1.0f, y + 12.0f,
+                 1.0f, rgba(225, 229, 235));
+}
+
 void paint_pdf_thumbnail(phenotype::Painter& painter,
                          std::string const& name,
                          bool selected) {
     auto accent = selected ? rgba(0, 122, 255) : rgba(38, 132, 255);
+    auto border = selected ? rgba(0, 122, 255) : rgba(210, 214, 220);
     fill_round(painter, 39.0f, 5.0f, 46.0f, 61.0f, 4.0f, rgba(0, 0, 0, 24));
     fill_round(painter, 37.0f, 3.0f, 46.0f, 61.0f, 4.0f, rgba(255, 255, 255, 250));
-    stroke_round(painter, 37.0f, 3.0f, 46.0f, 61.0f, 4.0f, 1.0f, rgba(210, 214, 220));
+    stroke_round(painter, 37.0f, 3.0f, 46.0f, 61.0f, 4.0f, 1.0f, border);
+    paint_document_fold(painter, 37.0f, 3.0f, 46.0f, border);
     fill_rect(painter, 39.0f, 7.0f, 28.0f, 4.0f, accent);
-    fill_rect(painter, 41.0f, 15.0f, 35.0f, 2.5f, rgba(207, 214, 225));
-    fill_rect(painter, 41.0f, 21.0f, 31.0f, 2.5f, rgba(229, 124, 124, 170));
-    fill_rect(painter, 41.0f, 28.0f, 36.0f, 2.0f, rgba(207, 214, 225));
-    fill_rect(painter, 41.0f, 35.0f, 31.0f, 2.0f, rgba(207, 214, 225));
-    fill_rect(painter, 41.0f, 42.0f, 36.0f, 2.0f, rgba(207, 214, 225));
+    fill_rect(painter, 41.0f, 15.0f, 33.0f, 2.4f, rgba(207, 214, 225));
+    fill_rect(painter, 41.0f, 21.0f, 31.0f, 2.4f, rgba(229, 124, 124, 170));
+    fill_rect(painter, 41.0f, 27.0f, 35.0f, 2.0f, rgba(207, 214, 225));
+    fill_rect(painter, 41.0f, 33.0f, 30.0f, 2.0f, rgba(207, 214, 225));
+    fill_rect(painter, 41.0f, 39.0f, 36.0f, 2.0f, rgba(207, 214, 225));
+    fill_rect(painter, 41.0f, 45.0f, 28.0f, 2.0f, rgba(207, 214, 225));
     fill_rect(painter, 41.0f, 51.0f, 22.0f, 7.0f, rgba(255, 231, 125, 210));
     auto tag = extension_lower(name);
     painter.text(42.0f, 54.0f, tag.c_str(),
@@ -583,9 +605,10 @@ void paint_text_thumbnail(phenotype::Painter& painter,
     fill_round(painter, 41.0f, 5.0f, 44.0f, 61.0f, 4.0f, rgba(0, 0, 0, 22));
     fill_round(painter, 39.0f, 3.0f, 44.0f, 61.0f, 4.0f, rgba(255, 255, 255, 250));
     stroke_round(painter, 39.0f, 3.0f, 44.0f, 61.0f, 4.0f, 1.0f, border);
-    for (int i = 0; i < 7; ++i) {
-        fill_rect(painter, 44.0f, 14.0f + static_cast<float>(i) * 6.0f,
-                  (i % 3 == 0) ? 26.0f : 33.0f,
+    paint_document_fold(painter, 39.0f, 3.0f, 44.0f, border);
+    for (int i = 0; i < 8; ++i) {
+        fill_rect(painter, 44.0f, 14.0f + static_cast<float>(i) * 5.6f,
+                  (i % 3 == 0) ? 25.0f : 33.0f,
                   2.0f,
                   rgba(204, 211, 221));
     }
@@ -856,7 +879,8 @@ void finder_button(std::string label,
 void finder_icon_label_button(std::string const& label,
                               bool selected,
                               float max_width,
-                              float font_size) {
+                              float font_size,
+                              float fixed_height) {
     auto const& t = phenotype::current_theme();
     phenotype::ButtonStyleOptions options;
     options.has_background = true;
@@ -871,20 +895,23 @@ void finder_icon_label_button(std::string const& label,
     options.text_color = selected ? t.state_active_fg : t.foreground;
     options.border_width = 0.0f;
     options.border_radius = 10.0f;
-    options.fixed_height = 46.0f;
+    options.fixed_height = fixed_height;
     options.max_width = max_width;
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{label},
         max_width,
-        46.0f,
-        [label, selected, max_width, font_size](phenotype::Painter& painter) {
+        fixed_height,
+        [label, selected, max_width, font_size, fixed_height](
+                phenotype::Painter& painter) {
             auto const ink = selected ? rgba(255, 255, 255) : rgba(28, 28, 30);
             auto const lines = finder_icon_label_lines(
                 painter,
                 label,
                 max_width - 12.0f,
                 font_size);
-            float y = lines.size() == 1 ? 12.0f : 4.0f;
+            float y = lines.size() == 1
+                ? std::max(0.0f, (fixed_height - 20.0f) * 0.5f)
+                : 4.0f;
             for (auto const& line : lines) {
                 auto const width = painter.measure_text(
                     line.c_str(),
@@ -1520,7 +1547,8 @@ void finder_grid(State const& state,
                         bool const selected = snap.has_selection
                             && snap.selected.name == entry.name;
                         layout::column([&] {
-                            widget::canvas(118.0f, 72.0f,
+                            widget::canvas(chrome.icon_grid_thumbnail_width,
+                                chrome.icon_grid_thumbnail_height,
                                 [entry, selected](Painter& painter) {
                                     paint_item_thumbnail(painter, entry, selected);
                                 },
@@ -1531,12 +1559,13 @@ void finder_grid(State const& state,
                                 entry.name,
                                 selected,
                                 chrome.icon_grid_column_width,
-                                14.0f);
+                                chrome.icon_grid_label_font_size,
+                                chrome.icon_grid_label_height);
                         }, SpaceToken::Xs,
                            CrossAxisAlignment::Center,
                            MainAxisAlignment::Start);
                     }
-                }, 24.0f);
+                }, chrome.icon_grid_gap);
             }, SpaceToken::Sm);
         });
 }

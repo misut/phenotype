@@ -49,10 +49,11 @@ mode, selection state, operation receipt, entry counts, and
 regions, so an LLM can distinguish model-state drift from renderer/capture
 drift without guessing from pixels. The desktop manifest also asserts the
 Finder toolbar group, separator, icon-button, and compact Recents icon-grid
-density metrics from that payload. It also checks sidebar symbol and label
-placement, section spacing, selected-row radius, and traffic-light marker
-coordinates so Finder parity regressions are reported as structured chrome
-contract failures before pixel inspection.
+density metrics from that payload, including thumbnail canvas, label, font, and
+grid-gap sizing. It also checks sidebar symbol and label placement, section
+spacing, selected-row radius, and traffic-light marker coordinates so Finder
+parity regressions are reported as structured chrome contract failures before
+pixel inspection.
 On macOS, the same runtime object reports live `NSWindow` chrome state:
 transparent titlebar, full-size content view, hidden native title, and
 background dragging must all be enabled. These fields are actual platform
@@ -84,9 +85,9 @@ selects the folder so the status and delete capability are observable, while a
 second activation opens it. The CLI can exercise the same behavior with
 `activate:Folder`, or bypass it with `open:Folder` when a test wants direct
 navigation.
-The icon-grid column count, visible row budget, titlebar reserve, sidebar row
-metrics, sidebar icon/label placement, and toolbar group/icon button metrics
-come from the shared pure
+The icon-grid column count, visible row budget, thumbnail canvas, label size,
+titlebar reserve, sidebar row metrics, sidebar icon/label placement, and toolbar
+group/icon button metrics come from the shared pure
 `ExplorerChromeMetrics` contract, so `phenotype drive file-explorer --json`
 can report the same layout decisions without launching a native window.
 
