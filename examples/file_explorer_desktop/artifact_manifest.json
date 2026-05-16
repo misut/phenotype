@@ -164,6 +164,22 @@
     {
       "path": "window.window_server_onscreen",
       "equals": true
+    },
+    {
+      "path": "window.app_active",
+      "equals": true
+    },
+    {
+      "path": "window.window_visible",
+      "equals": true
+    },
+    {
+      "path": "window.window_key",
+      "equals": true
+    },
+    {
+      "path": "window.window_main",
+      "equals": true
     }
   ],
   "require_runtime_numeric_bounds": [

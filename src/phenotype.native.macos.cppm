@@ -618,6 +618,31 @@ inline SEL sel_window_number() {
     return sel;
 }
 
+inline SEL sel_shared_application() {
+    static auto sel = sel_registerName("sharedApplication");
+    return sel;
+}
+
+inline SEL sel_is_active() {
+    static auto sel = sel_registerName("isActive");
+    return sel;
+}
+
+inline SEL sel_is_visible() {
+    static auto sel = sel_registerName("isVisible");
+    return sel;
+}
+
+inline SEL sel_is_key_window() {
+    static auto sel = sel_registerName("isKeyWindow");
+    return sel;
+}
+
+inline SEL sel_is_main_window() {
+    static auto sel = sel_registerName("isMainWindow");
+    return sel;
+}
+
 inline SEL sel_attributed_substring_for_range() {
     static auto sel =
         sel_registerName("attributedSubstringForProposedRange:actualRange:");
@@ -7708,6 +7733,9 @@ inline WindowServerSnapshot window_server_snapshot(id ns_window) {
 inline json::Object macos_window_runtime_json() {
     auto const* surface = g_renderer.surface;
     auto ns_window = g_renderer.ns_window;
+    auto ns_app = objc_send<id>(
+        class_as_id(objc_getClass("NSApplication")),
+        sel_shared_application());
     bool const has_options = surface && surface->window_options_valid;
     WindowChromeStyle const chrome =
         has_options ? surface->window_chrome : WindowChromeStyle::System;
@@ -7754,6 +7782,18 @@ inline json::Object macos_window_runtime_json() {
     window.emplace("titlebar_transparent", json::Value{integrated});
     window.emplace("full_size_content_view", json::Value{integrated});
     window.emplace("background_drag_enabled", json::Value{integrated});
+    window.emplace(
+        "app_active",
+        json::Value{ns_app && objc_send<bool>(ns_app, sel_is_active())});
+    window.emplace(
+        "window_visible",
+        json::Value{ns_window && objc_send<bool>(ns_window, sel_is_visible())});
+    window.emplace(
+        "window_key",
+        json::Value{ns_window && objc_send<bool>(ns_window, sel_is_key_window())});
+    window.emplace(
+        "window_main",
+        json::Value{ns_window && objc_send<bool>(ns_window, sel_is_main_window())});
 
     auto server = window_server_snapshot(ns_window);
     json::Object server_bounds;
