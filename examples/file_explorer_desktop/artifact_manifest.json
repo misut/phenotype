@@ -395,6 +395,18 @@
       "equals": false
     },
     {
+      "path": "window.ready_for_user_interaction",
+      "equals": true
+    },
+    {
+      "path": "window.visibility_state",
+      "equals": "ready"
+    },
+    {
+      "path": "window.launch_visibility_contract",
+      "equals": "visible-key-main-frontmost-native-window"
+    },
+    {
       "path": "window.app_active",
       "equals": true
     },
