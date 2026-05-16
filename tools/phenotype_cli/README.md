@@ -51,10 +51,12 @@ The initial scope is intentionally narrow:
   JSON output includes the input trace, sandbox root/current paths, visible
   entries, viewport, pure Finder chrome/grid metrics, selection capabilities,
   operation receipts, preview excerpts, localized labels, package resource
-	  metadata, and optional expectation results. Repeated `--script` files feed
-	  line-based input sequences, and repeated `--expect` values make the command a
-	  small state verifier for file select/open/read/create/duplicate/delete
-	  workflows.
+  metadata, and optional expectation results. Repeated `--script` files feed
+  line-based input sequences, and repeated `--expect` values make the command a
+  small state verifier for file select/open/read/create/duplicate/delete
+  workflows. When expectations are present, the process exit code follows the
+  expectation results, so expected failure receipts can be asserted while the
+  JSON `operation.ok` field still records the failed operation.
 - `phenotype drive glass-showcase` applies deterministic typed inputs to the
   shared glass showcase model without opening a native window. JSON output
   includes the final state, per-input trace, public material kinds, expected
@@ -111,6 +113,10 @@ mise exec -- exon build
   --locale ko \
   --expect location:Trash \
   --expect 'operation:file_delete:ok'
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input 'select:../outside.txt' \
+  --expect 'operation:file_read:fail' \
+  --expect 'status:inside the current folder'
 .exon/debug/phenotype_cli drive glass-showcase --json \
   --script ../../examples/glass_showcase/glass_showcase.drive \
   --expect backdrop:high \

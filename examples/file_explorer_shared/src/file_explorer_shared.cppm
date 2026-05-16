@@ -1251,6 +1251,27 @@ inline bool path_inside_root(fs::path const& root, fs::path const& path) {
     return rel != ".." && !rel.starts_with("../");
 }
 
+inline bool direct_child_entry_name(std::string_view name) {
+    auto text = trim(name);
+    if (text.empty() || text != name || text == "." || text == "..")
+        return false;
+    if (text.front() == '.')
+        return false;
+    return text.find('/') == std::string::npos
+        && text.find('\\') == std::string::npos;
+}
+
+inline std::optional<fs::path> direct_child_entry_path(
+        ExplorerState const& state,
+        std::string_view name) {
+    if (!direct_child_entry_name(name))
+        return std::nullopt;
+    auto path = (state.current / std::string{name}).lexically_normal();
+    if (!path_inside_root(state.root, path))
+        return std::nullopt;
+    return path;
+}
+
 inline bool deletable_directory(
         fs::path const& root,
         fs::path const& path) {
@@ -1509,9 +1530,19 @@ inline void set_search_filter(ExplorerState& state, std::string text) {
 }
 
 inline void select_entry(ExplorerState& state, std::string const& name) {
+    auto resolved = direct_child_entry_path(state, name);
+    if (!resolved) {
+        state.status = "Entry name must stay inside the current folder.";
+        record_operation(
+            state,
+            "file_read",
+            name,
+            false,
+            state.status);
+        return;
+    }
     std::error_code ec;
-    auto path = state.current / name;
-    if (fs::is_directory(path, ec)) {
+    if (fs::is_directory(*resolved, ec)) {
         state.selected_name = name;
         state.status = "Selected folder " + name;
         record_operation(
@@ -1523,7 +1554,7 @@ inline void select_entry(ExplorerState& state, std::string const& name) {
         return;
     }
     ec.clear();
-    if (fs::is_regular_file(path, ec)) {
+    if (fs::is_regular_file(*resolved, ec)) {
         state.selected_name = name;
         state.status = "Selected " + name;
         record_operation(
@@ -1544,10 +1575,14 @@ inline void select_entry(ExplorerState& state, std::string const& name) {
 }
 
 inline void open_entry(ExplorerState& state, std::string const& name) {
+    auto resolved = direct_child_entry_path(state, name);
+    if (!resolved) {
+        select_entry(state, name);
+        return;
+    }
     std::error_code ec;
-    auto path = state.current / name;
-    if (fs::is_directory(path, ec)) {
-        open_directory(state, path, "Opened " + name);
+    if (fs::is_directory(*resolved, ec)) {
+        open_directory(state, *resolved, "Opened " + name);
         record_operation(
             state,
             "folder_open",
@@ -1560,11 +1595,15 @@ inline void open_entry(ExplorerState& state, std::string const& name) {
 }
 
 inline void activate_entry(ExplorerState& state, std::string const& name) {
+    auto resolved = direct_child_entry_path(state, name);
+    if (!resolved) {
+        select_entry(state, name);
+        return;
+    }
     std::error_code ec;
-    auto path = state.current / name;
     bool const selected = state.selected_name == name;
-    if (selected && fs::is_directory(path, ec)) {
-        open_directory(state, path, "Opened " + name);
+    if (selected && fs::is_directory(*resolved, ec)) {
+        open_directory(state, *resolved, "Opened " + name);
         record_operation(
             state,
             "folder_open",
@@ -1641,7 +1680,20 @@ inline void delete_selected(ExplorerState& state) {
         record_operation(state, "file_delete", {}, false, state.status);
         return;
     }
-    auto path = state.current / state.selected_name;
+    auto resolved = direct_child_entry_path(state, state.selected_name);
+    if (!resolved) {
+        auto rejected = state.selected_name;
+        state.selected_name.clear();
+        state.status = "Selected entry is outside the current folder.";
+        record_operation(
+            state,
+            "file_delete",
+            rejected,
+            false,
+            state.status);
+        return;
+    }
+    auto path = *resolved;
     auto trash = trash_path(state.root);
     bool const deleting_from_trash = same_path(state.current, trash);
     std::error_code ec;
@@ -1769,7 +1821,20 @@ inline void duplicate_selected(ExplorerState& state) {
         record_operation(state, "file_duplicate", {}, false, state.status);
         return;
     }
-    auto source = state.current / state.selected_name;
+    auto resolved = direct_child_entry_path(state, state.selected_name);
+    if (!resolved) {
+        auto rejected = state.selected_name;
+        state.selected_name.clear();
+        state.status = "Selected entry is outside the current folder.";
+        record_operation(
+            state,
+            "file_duplicate",
+            rejected,
+            false,
+            state.status);
+        return;
+    }
+    auto source = *resolved;
     std::error_code ec;
     if (!fs::is_regular_file(source, ec)) {
         state.status = "Only files can be duplicated in this demo.";

@@ -2606,8 +2606,11 @@ auto explorer_contract_ok(
         file_explorer_demo::ExplorerDriveResult const& result,
         std::span<file_explorer_demo::ExplorerExpectationResult const>
             expectations) -> bool {
-    return explorer_drive_ok(result)
-        && file_explorer_demo::explorer_expectations_ok(expectations);
+    auto const expectations_ok =
+        file_explorer_demo::explorer_expectations_ok(expectations);
+    if (!expectations.empty())
+        return expectations_ok;
+    return explorer_drive_ok(result);
 }
 
 auto explorer_drive_json(

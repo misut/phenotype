@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
+#include <fstream>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -246,6 +247,40 @@ duplicate
     assert(snap.entries[4].name == "1_필수_중도인출 신청서.pdf");
     assert(snap.entries[5].name == "※해당 시 필독_①무주택자인 경우.pdf");
     assert(snap.entries[6].name == "[카카오] 퇴직금 지급 기준.pdf");
+
+    auto outside = state.root.parent_path()
+        / "phenotype-file-explorer-outside.txt";
+    {
+        std::ofstream out(outside, std::ios::binary);
+        out << "This file must stay outside the demo sandbox.\n";
+    }
+    assert(fs::exists(outside));
+    demo::select_entry(state, "../phenotype-file-explorer-outside.txt");
+    assert(state.selected_name.empty());
+    assert(state.last_operation.kind == "file_read");
+    assert(!state.last_operation.ok);
+    assert(fs::exists(outside));
+    demo::select_entry(state, R"(..\phenotype-file-explorer-outside.txt)");
+    assert(state.selected_name.empty());
+    assert(!state.last_operation.ok);
+    assert(fs::exists(outside));
+    demo::select_entry(state, ".Trash");
+    assert(state.selected_name.empty());
+    assert(!state.last_operation.ok);
+    assert(fs::exists(outside));
+    state.selected_name = "../phenotype-file-explorer-outside.txt";
+    demo::delete_selected(state);
+    assert(state.selected_name.empty());
+    assert(state.last_operation.kind == "file_delete");
+    assert(!state.last_operation.ok);
+    assert(fs::exists(outside));
+    state.selected_name = "../phenotype-file-explorer-outside.txt";
+    demo::duplicate_selected(state);
+    assert(state.selected_name.empty());
+    assert(state.last_operation.kind == "file_duplicate");
+    assert(!state.last_operation.ok);
+    assert(fs::exists(outside));
+    fs::remove(outside, ec);
 
     demo::select_entry(state, "README.txt");
     snap = demo::snapshot(state);
