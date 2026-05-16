@@ -414,7 +414,7 @@ Done means `examples/` is a local acceptance suite, not just demos:
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
 | Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, execution stage count/capacity, dropped-stage count, backdrop pixels, shared frame capture count/pixels, surface sample pixels, bounded texture copies, deterministic fallback, pure effective-radius shape bounds, backend `material_runtime_summary` counters cross-checked by the verifier, and backend `material_executor_summary` budget/timing/stage telemetry guarded by artifact manifests | Keep tightening backend timing budgets as more native material renderers land |
 | Runnable examples under `examples/` | Native, glass showcase, desktop/mobile file explorer, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |
-| All phenotype features testable locally | `docs/EXAMPLES_COVERAGE.md` maps current examples/tests to public surfaces and artifact expectations; `tools/verify_artifact_bundle.py` validates startup bundles, optional pixel regions, exact material/container plan summaries, semantic/runtime material parity, material resource bounds, runtime numeric bounds, `examples/glass_showcase/artifact_manifest.json`, `examples/file_explorer_desktop/artifact_manifest.json`, `examples/file_explorer_mobile/artifact_manifest.json`, and `examples/android/artifact_manifest.json`; `phenotype artifact verify-glass-showcase` owns the local glass gate; `phenotype artifact verify-file-explorer` owns the local desktop/mobile file explorer gate; compatibility shell wrappers remain for existing scripts; `phenotype android contract` wraps the Android device/emulator artifact route | Android CI wiring remains |
+| All phenotype features testable locally | `docs/EXAMPLES_COVERAGE.md` maps current examples/tests to public surfaces and artifact expectations; `phenotype artifact verify <bundle>` validates startup bundles, optional pixel regions, exact material/container plan summaries, semantic/runtime material parity, material resource bounds, runtime numeric bounds, `examples/glass_showcase/artifact_manifest.json`, `examples/file_explorer_desktop/artifact_manifest.json`, `examples/file_explorer_mobile/artifact_manifest.json`, and `examples/android/artifact_manifest.json` through the uv-managed verifier; `phenotype artifact verify-glass-showcase` owns the local glass gate; `phenotype artifact verify-file-explorer` owns the local desktop/mobile file explorer gate; compatibility shell wrappers remain for existing scripts; `phenotype android contract` wraps the Android device/emulator artifact route | Android CI wiring remains |
 
 ## Implementation roadmap
 
@@ -477,7 +477,7 @@ Validation:
 - artifact bundle verifier using `examples/glass_showcase/artifact_manifest.json`
   to require clear, thin, regular, and thick material kinds, fallback metadata,
   and startup-frame pixel regions.
-- `tools/verify_glass_showcase_artifact.sh` as the local build/capture/verify
+- `phenotype artifact verify-glass-showcase` as the local build/capture/verify
   gate for the showcase.
 
 ### Milestone G3: backend material primitives
@@ -533,9 +533,9 @@ Current seed:
   same scene under reduced transparency, increased contrast, and reduced motion
   overrides so the artifact proves deterministic accessibility fallback
   behavior;
-- `tools/verify_glass_showcase_artifact.sh` builds the example, captures a
+- `phenotype artifact verify-glass-showcase` builds the example, captures a
   startup artifact bundle, and applies the manifest;
-- `tools/verify_glass_showcase_accessibility_artifact.sh` wraps the
+- `phenotype artifact verify-glass-showcase --accessibility` wraps the
   accessibility-response manifest without adding another default CI job;
 - PR CI keeps the slow macOS artifact capture as a local acceptance check rather
   than a required job; main-branch pushes run only artifact/docs build gates

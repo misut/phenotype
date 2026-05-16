@@ -38,6 +38,7 @@ int main() {
 
     auto catalog = demo::file_explorer_resource_catalog("desktop");
     assert(catalog.default_font_family == "Pretendard");
+    assert(catalog.debug.verifier == "phenotype artifact verify-file-explorer");
     assert(demo::file_explorer_labels("ko", "desktop").sidebar_recents
         == "최근 항목");
     assert(demo::file_explorer_labels("ko", catalog).sidebar_recents

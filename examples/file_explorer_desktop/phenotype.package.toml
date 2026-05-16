@@ -36,4 +36,4 @@ fallback = ["system-ui", "Apple SD Gothic Neo", "Segoe UI", "Noto Sans CJK"]
 [debug]
 artifact_manifest = "artifact_manifest.json"
 probe_scene = "finder-style-startup"
-verifier = "tools/verify_file_explorer_artifacts.sh"
+verifier = "phenotype artifact verify-file-explorer"

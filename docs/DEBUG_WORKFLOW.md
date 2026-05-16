@@ -80,10 +80,10 @@ mise exec -- exon build
 .exon/debug/phenotype_cli artifact summary --json /tmp/phenotype-glass-showcase
 ```
 
-This command intentionally does not replace `tools/verify_artifact_bundle.py`.
-Use it to confirm bundle layout and file presence before handing the bundle to
-the semantic verifier. The Python verifier remains the authoritative contract
-checker until the CLI has verifier parity.
+This command is structural only. Use `phenotype artifact verify` or
+`phenotype observe --verify` when the bundle also needs semantic verifier
+assertions. The Python verifier remains the reference implementation behind
+that CLI edge while C++ verifier parity is still being built.
 
 For LLM-actionable output observation, prefer the unified observe command:
 
@@ -115,10 +115,9 @@ mise exec -- exon build
   --expect-platform macos
 ```
 
-`artifact verify` runs `mise exec -- uv run --frozen python
-tools/verify_artifact_bundle.py` from the repository root and forwards the
-verifier's JSON report. This keeps Python managed by `mise`/`uv` while moving
-the developer-facing entry point under the CLI.
+`artifact verify` runs the uv-managed reference verifier from the repository
+root and forwards the verifier's JSON report. This keeps Python managed by
+`mise`/`uv` while moving the developer-facing entry point under the CLI.
 
 The slow local native gates are available through the same CLI surface:
 
@@ -447,13 +446,14 @@ machine-readable.
 
 ## Artifact verification
 
-From the repo root, run the verifier through the uv-managed Python environment:
-`mise exec -- uv run --frozen python tools/verify_artifact_bundle.py ...`.
-`mise.toml` pins Python and uv, while `pyproject.toml`/`uv.lock` define the
-Python tool environment. Use `mise run tools:artifact:test` for the verifier's
-contract tests and `mise run tools:artifact:pycompile` for syntax checks.
-Use `tools/phenotype_cli` for new diagnostic entry points; shell/Python tools
-should become compatibility wrappers only after matching CLI commands exist.
+From the repo root, prefer the CLI verifier edge:
+`tools/phenotype_cli/.exon/debug/phenotype_cli artifact verify ...`.
+That command runs the verifier through `mise` and `uv`; `mise.toml` pins Python
+and uv, while `pyproject.toml`/`uv.lock` define the Python tool environment.
+Use `mise run tools:artifact:test` for the verifier's contract tests and
+`mise run tools:artifact:pycompile` for syntax checks when changing the
+verifier implementation itself. Shell/Python tools should be treated as
+compatibility wrappers once a matching CLI command exists.
 The CLI owns `artifact verify-glass-showcase` and `artifact
 verify-file-explorer` directly, so new docs and automation should prefer those
 command names while shell scripts remain as stable local wrappers.
@@ -672,7 +672,8 @@ point at the material contract layer so the likely break is not confused with a
 pure pixel-capture failure.
 
 ```sh
-mise exec -- uv run --frozen python tools/verify_artifact_bundle.py /tmp/phenotype-native-startup \
+tools/phenotype_cli/.exon/debug/phenotype_cli artifact verify /tmp/phenotype-native-startup \
+  --json \
   --expect-platform macos \
   --require-frame \
   --require-label "Control States" \
@@ -690,7 +691,8 @@ mise exec -- uv run --frozen python tools/verify_artifact_bundle.py /tmp/phenoty
 For the material-focused showcase, require every public material kind:
 
 ```sh
-mise exec -- uv run --frozen python tools/verify_artifact_bundle.py /tmp/phenotype-glass-showcase \
+tools/phenotype_cli/.exon/debug/phenotype_cli artifact verify /tmp/phenotype-glass-showcase \
+  --json \
   --expect-platform macos \
   --manifest examples/glass_showcase/artifact_manifest.json
 ```

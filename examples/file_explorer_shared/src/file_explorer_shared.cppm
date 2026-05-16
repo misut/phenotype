@@ -2738,7 +2738,7 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
     catalog.debug.probe_scene = mobile
         ? "mobile-file-workflow"
         : "finder-style-startup";
-    catalog.debug.verifier = "tools/verify_file_explorer_artifacts.sh";
+    catalog.debug.verifier = "phenotype artifact verify-file-explorer";
     return catalog;
 }
 
