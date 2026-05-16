@@ -7705,11 +7705,46 @@ inline json::Object macos_text_input_runtime_json() {
 struct WindowServerSnapshot {
     bool valid = false;
     bool onscreen = false;
+    bool frontmost_app_window = false;
+    bool occluded_by_front_app_window = false;
+    std::int64_t window_number = 0;
+    int window_order_index = -1;
+    int app_window_order_index = -1;
     double x = 0.0;
     double y = 0.0;
     double w = 0.0;
     double h = 0.0;
 };
+
+inline std::optional<std::int64_t> cf_number_to_i64(CFTypeRef value) {
+    if (!value || CFGetTypeID(value) != CFNumberGetTypeID())
+        return std::nullopt;
+    std::int64_t out = 0;
+    if (!CFNumberGetValue(static_cast<CFNumberRef>(value),
+                          kCFNumberSInt64Type,
+                          &out))
+        return std::nullopt;
+    return out;
+}
+
+inline bool window_rects_intersect(CGRect const& a, CGRect const& b) {
+    return CGRectIntersectsRect(a, b) != 0;
+}
+
+inline std::optional<CGRect> window_bounds_from_info(CFDictionaryRef info) {
+    if (!info || CFGetTypeID(info) != CFDictionaryGetTypeID())
+        return std::nullopt;
+    auto raw_bounds = CFDictionaryGetValue(info, kCGWindowBounds);
+    if (!raw_bounds || CFGetTypeID(raw_bounds) != CFDictionaryGetTypeID())
+        return std::nullopt;
+
+    CGRect rect{};
+    if (!CGRectMakeWithDictionaryRepresentation(
+            static_cast<CFDictionaryRef>(raw_bounds),
+            &rect))
+        return std::nullopt;
+    return rect;
+}
 
 inline WindowServerSnapshot window_server_snapshot(id ns_window) {
     WindowServerSnapshot snapshot;
@@ -7719,6 +7754,7 @@ inline WindowServerSnapshot window_server_snapshot(id ns_window) {
     auto number = objc_send<int>(ns_window, sel_window_number());
     if (number <= 0)
         return snapshot;
+    snapshot.window_number = number;
 
     CFGuard<CFArrayRef> windows{
         CGWindowListCopyWindowInfo(
@@ -7736,21 +7772,55 @@ inline WindowServerSnapshot window_server_snapshot(id ns_window) {
             snapshot.onscreen = CFBooleanGetValue(static_cast<CFBooleanRef>(raw_onscreen));
     }
 
-    auto raw_bounds = CFDictionaryGetValue(info, kCGWindowBounds);
-    if (!raw_bounds || CFGetTypeID(raw_bounds) != CFDictionaryGetTypeID())
-        return snapshot;
-
-    CGRect rect{};
-    if (!CGRectMakeWithDictionaryRepresentation(
-            static_cast<CFDictionaryRef>(raw_bounds),
-            &rect))
+    auto target_bounds = window_bounds_from_info(info);
+    if (!target_bounds)
         return snapshot;
 
     snapshot.valid = true;
-    snapshot.x = rect.origin.x;
-    snapshot.y = rect.origin.y;
-    snapshot.w = rect.size.width;
-    snapshot.h = rect.size.height;
+    snapshot.x = target_bounds->origin.x;
+    snapshot.y = target_bounds->origin.y;
+    snapshot.w = target_bounds->size.width;
+    snapshot.h = target_bounds->size.height;
+
+    CFGuard<CFArrayRef> ordered_windows{
+        CGWindowListCopyWindowInfo(
+            kCGWindowListOptionOnScreenOnly,
+            kCGNullWindowID)};
+    if (!ordered_windows)
+        return snapshot;
+
+    int app_order = 0;
+    for (CFIndex i = 0; i < CFArrayGetCount(ordered_windows); ++i) {
+        auto ordered_info = static_cast<CFDictionaryRef>(
+            CFArrayGetValueAtIndex(ordered_windows, i));
+        if (!ordered_info || CFGetTypeID(ordered_info) != CFDictionaryGetTypeID())
+            continue;
+
+        auto layer = cf_number_to_i64(
+            CFDictionaryGetValue(ordered_info, kCGWindowLayer));
+        auto ordered_number = cf_number_to_i64(
+            CFDictionaryGetValue(ordered_info, kCGWindowNumber));
+        bool const app_window = layer && *layer == 0;
+        bool const target = ordered_number
+            && *ordered_number == snapshot.window_number;
+
+        if (target) {
+            snapshot.window_order_index = static_cast<int>(i);
+            if (app_window) {
+                snapshot.app_window_order_index = app_order;
+                snapshot.frontmost_app_window = app_order == 0;
+            }
+            break;
+        }
+
+        if (app_window) {
+            if (auto bounds = window_bounds_from_info(ordered_info)) {
+                if (window_rects_intersect(*bounds, *target_bounds))
+                    snapshot.occluded_by_front_app_window = true;
+            }
+            ++app_order;
+        }
+    }
     return snapshot;
 }
 
@@ -7857,6 +7927,21 @@ inline json::Object macos_window_runtime_json() {
     window.emplace(
         "window_server_bounds",
         json::Value{std::move(server_bounds)});
+    window.emplace(
+        "window_server_window_number",
+        json::Value{static_cast<std::int64_t>(server.window_number)});
+    window.emplace(
+        "window_server_order_index",
+        json::Value{static_cast<std::int64_t>(server.window_order_index)});
+    window.emplace(
+        "window_server_app_order_index",
+        json::Value{static_cast<std::int64_t>(server.app_window_order_index)});
+    window.emplace(
+        "window_server_frontmost_app_window",
+        json::Value{server.frontmost_app_window});
+    window.emplace(
+        "window_server_occluded_by_front_app_window",
+        json::Value{server.occluded_by_front_app_window});
     return window;
 }
 

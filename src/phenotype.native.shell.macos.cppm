@@ -389,6 +389,45 @@ inline void request_appkit_window_front(id app, id window) {
     objc_send<void>(window, sel("orderFrontRegardless"));
 }
 
+inline signed char appkit_should_handle_reopen(id, SEL, id app, signed char) {
+    request_appkit_window_front(app, g_active_appkit_window);
+    return static_cast<signed char>(1);
+}
+
+inline void appkit_did_become_active(id, SEL, id) {
+    id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
+    request_appkit_window_front(app, g_active_appkit_window);
+}
+
+inline id create_appkit_shell_delegate() {
+    static Class delegate_class = nullptr;
+    if (!delegate_class) {
+        Class base = reinterpret_cast<Class>(class_id("NSObject"));
+        delegate_class = objc_allocateClassPair(
+            base,
+            "PhenotypeAppKitShellDelegate",
+            0);
+        if (!delegate_class)
+            return nullptr;
+        class_addMethod(
+            delegate_class,
+            sel("applicationShouldHandleReopen:hasVisibleWindows:"),
+            reinterpret_cast<IMP>(appkit_should_handle_reopen),
+            "c@:@@c");
+        class_addMethod(
+            delegate_class,
+            sel("applicationDidBecomeActive:"),
+            reinterpret_cast<IMP>(appkit_did_become_active),
+            "v@:@");
+        objc_registerClassPair(delegate_class);
+    }
+    return objc_send<id>(
+        objc_send<id>(reinterpret_cast<id>(delegate_class), sel("alloc")),
+        sel("init"));
+}
+
+inline id g_appkit_shell_delegate = nullptr;
+
 inline void prime_appkit_window_ordering(id app) {
     if (!app)
         return;
@@ -579,6 +618,10 @@ int run_app_with_macos_platform(platform_api const& platform,
     id pool = objc_send<id>(objc_send<id>(class_id("NSAutoreleasePool"), sel("alloc")), sel("init"));
     id app = objc_send<id>(class_id("NSApplication"), sel("sharedApplication"));
     objc_send<void>(app, sel("setActivationPolicy:"), static_cast<long>(0));
+    if (!g_appkit_shell_delegate)
+        g_appkit_shell_delegate = create_appkit_shell_delegate();
+    if (g_appkit_shell_delegate)
+        objc_send<void>(app, sel("setDelegate:"), g_appkit_shell_delegate);
     objc_send<void>(app, sel("finishLaunching"));
 
     id window = create_appkit_window(width, height, title, options);

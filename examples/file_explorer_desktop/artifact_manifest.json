@@ -194,6 +194,14 @@
       "equals": true
     },
     {
+      "path": "window.window_server_frontmost_app_window",
+      "equals": true
+    },
+    {
+      "path": "window.window_server_occluded_by_front_app_window",
+      "equals": false
+    },
+    {
       "path": "window.app_active",
       "equals": true
     },
@@ -229,6 +237,20 @@
       "path": "window.window_server_surface_area",
       "gte": 900000,
       "lte": 1200000
+    },
+    {
+      "path": "window.window_server_window_number",
+      "gte": 1
+    },
+    {
+      "path": "window.window_server_order_index",
+      "gte": 0,
+      "lte": 64
+    },
+    {
+      "path": "window.window_server_app_order_index",
+      "gte": 0,
+      "lte": 0
     },
     {
       "path": "renderer.material_executor_summary.foreground_text_candidate_count",

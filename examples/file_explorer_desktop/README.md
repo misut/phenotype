@@ -38,7 +38,14 @@ On macOS it additionally checks WindowServer bounds, onscreen state, app
 activation, active-Space collection behavior, and key/main window state, which
 catches regressions where the process owns a Dock icon but the ordered NSWindow
 is still hidden, backgrounded, in another Space, or not eligible for foreground
-interaction.
+interaction. The artifact also records WindowServer z-order fields
+(`window_server_order_index`, `window_server_app_order_index`, and
+`window_server_occluded_by_front_app_window`) so a launch failure can distinguish
+"no NSWindow", "offscreen/minimized NSWindow", and "created but covered by
+another app window". The AppKit shell installs a small native application
+delegate that reorders the existing window when the app becomes active or the
+Dock icon is reopened; the example does not emulate traffic-light controls in
+phenotype content.
 
 The toolbar search control starts as a Finder-style icon button. Activating it
 reveals a search field wired to the shared file model, so desktop and mobile
