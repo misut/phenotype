@@ -18,6 +18,7 @@ module;
 
 export module file_explorer_shared;
 
+import json;
 import phenotype.resources;
 
 export namespace file_explorer_demo {
@@ -706,6 +707,16 @@ inline std::string sort_mode_label(SortMode mode) {
     }
 }
 
+inline std::string sort_mode_value_name(SortMode mode) {
+    switch (mode) {
+        case SortMode::Recent: return "recent";
+        case SortMode::Kind: return "kind";
+        case SortMode::Size: return "size";
+        case SortMode::Name:
+        default: return "name";
+    }
+}
+
 inline std::string view_mode_value_name(ExplorerViewMode mode) {
     switch (mode) {
         case ExplorerViewMode::List: return "list";
@@ -741,6 +752,142 @@ inline bool known_view_mode_name(std::string_view value) {
     auto mode = lower_copy(trim(value));
     return mode == "icon" || mode == "list" || mode == "column"
         || mode == "gallery";
+}
+
+inline json::Value entry_debug_json(Entry const& entry) {
+    json::Object out;
+    out.emplace("name", json::Value{entry.name});
+    out.emplace("kind", json::Value{entry_kind_label(entry)});
+    out.emplace("folder", json::Value{entry.folder});
+    out.emplace("size", json::Value{static_cast<std::int64_t>(entry.size)});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value operation_receipt_debug_json(
+        OperationReceipt const& receipt,
+        std::string const& label) {
+    json::Object out;
+    out.emplace("kind", json::Value{receipt.kind});
+    out.emplace("target", json::Value{receipt.target});
+    out.emplace("ok", json::Value{receipt.ok});
+    out.emplace("detail", json::Value{receipt.detail});
+    out.emplace("label", json::Value{label});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value explorer_chrome_debug_json(
+        ExplorerChromeMetrics const& chrome) {
+    json::Object viewport;
+    viewport.emplace("w", json::Value{static_cast<std::int64_t>(chrome.viewport.width)});
+    viewport.emplace("h", json::Value{static_cast<std::int64_t>(chrome.viewport.height)});
+    viewport.emplace("scale", json::Value{chrome.viewport.scale});
+
+    json::Object native_window;
+    native_window.emplace("integrated_titlebar", json::Value{chrome.integrated_titlebar});
+    native_window.emplace("native_window_controls", json::Value{chrome.native_window_controls});
+    native_window.emplace("duplicate_window_controls", json::Value{chrome.duplicate_window_controls});
+
+    json::Object out;
+    out.emplace("viewport", json::Value{std::move(viewport)});
+    out.emplace("integrated_titlebar_height", json::Value{chrome.integrated_titlebar_height});
+    out.emplace("sidebar_width", json::Value{chrome.sidebar_width});
+    out.emplace("sidebar_row_width", json::Value{chrome.sidebar_row_width});
+    out.emplace("sidebar_row_height", json::Value{chrome.sidebar_row_height});
+    out.emplace("toolbar_group_height", json::Value{chrome.toolbar_group_height});
+    out.emplace("toolbar_group_radius", json::Value{chrome.toolbar_group_radius});
+    out.emplace("toolbar_icon_button_width", json::Value{chrome.toolbar_icon_button_width});
+    out.emplace("toolbar_icon_button_height", json::Value{chrome.toolbar_icon_button_height});
+    out.emplace("window_radius", json::Value{chrome.window_radius});
+    out.emplace("icon_grid_columns", json::Value{static_cast<std::int64_t>(chrome.icon_grid_columns)});
+    out.emplace("icon_grid_visible_rows", json::Value{static_cast<std::int64_t>(chrome.icon_grid_visible_rows)});
+    out.emplace("icon_grid_visible_capacity", json::Value{static_cast<std::int64_t>(chrome.icon_grid_visible_capacity)});
+    out.emplace("toolbar_group_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_group_count)});
+    out.emplace("toolbar_separator_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_separator_count)});
+    out.emplace("toolbar_icon_button_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_icon_button_count)});
+    out.emplace("finder_segmented_toolbar", json::Value{chrome.finder_segmented_toolbar});
+    out.emplace("native_window", json::Value{std::move(native_window)});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value file_explorer_debug_json(
+        ExplorerState const& state,
+        Snapshot const& snap,
+        ExplorerChromeMetrics const& chrome,
+        std::string_view profile) {
+    json::Object selection;
+    selection.emplace("present", json::Value{snap.has_selection});
+    selection.emplace(
+        "name",
+        json::Value{snap.has_selection ? snap.selected.name : std::string{}});
+    selection.emplace(
+        "kind",
+        json::Value{snap.has_selection ? snap.selected_kind_label : std::string{}});
+    selection.emplace("size_label", json::Value{snap.selected_size_label});
+    selection.emplace("path_label", json::Value{snap.selected_path_label});
+    selection.emplace("can_preview", json::Value{snap.can_preview_selected});
+
+    json::Object counts;
+    counts.emplace("visible_entries", json::Value{static_cast<std::int64_t>(snap.entries.size())});
+    counts.emplace("files", json::Value{static_cast<std::int64_t>(snap.file_count)});
+    counts.emplace("folders", json::Value{static_cast<std::int64_t>(snap.folder_count)});
+
+    json::Object capabilities;
+    capabilities.emplace("can_go_back", json::Value{snap.can_go_back});
+    capabilities.emplace("can_go_forward", json::Value{snap.can_go_forward});
+    capabilities.emplace("can_create_file", json::Value{snap.can_create_file});
+    capabilities.emplace("can_create_folder", json::Value{snap.can_create_folder});
+    capabilities.emplace("can_delete_selected", json::Value{snap.can_delete_selected});
+    capabilities.emplace("can_duplicate_selected", json::Value{snap.can_duplicate_selected});
+    capabilities.emplace("can_preview_selected", json::Value{snap.can_preview_selected});
+
+    json::Object sort;
+    sort.emplace("value", json::Value{sort_mode_value_name(snap.sort_mode)});
+    sort.emplace("label", json::Value{snap.sort_label});
+
+    json::Object view_mode;
+    view_mode.emplace("value", json::Value{view_mode_value_name(snap.view_mode)});
+    view_mode.emplace("label", json::Value{view_mode_label(snap.view_mode)});
+
+    json::Array entries;
+    std::size_t const limit = std::min<std::size_t>(snap.entries.size(), 24);
+    for (std::size_t i = 0; i < limit; ++i)
+        entries.push_back(entry_debug_json(snap.entries[i]));
+
+    json::Object out;
+    out.emplace("schema_version", json::Value{1});
+    out.emplace("kind", json::Value{"file_explorer"});
+    out.emplace("profile", json::Value{std::string{profile}});
+    out.emplace("root", json::Value{snap.root.string()});
+    out.emplace("current", json::Value{snap.current.string()});
+    out.emplace("relative_location", json::Value{snap.relative_location});
+    out.emplace("status", json::Value{state.status});
+    out.emplace("search", json::Value{state.search});
+    out.emplace("item_summary", json::Value{snap.item_summary});
+    out.emplace("action_summary", json::Value{snap.action_summary});
+    out.emplace("sort", json::Value{std::move(sort)});
+    out.emplace("view_mode", json::Value{std::move(view_mode)});
+    out.emplace("counts", json::Value{std::move(counts)});
+    out.emplace("selection", json::Value{std::move(selection)});
+    out.emplace("capabilities", json::Value{std::move(capabilities)});
+    out.emplace(
+        "operation",
+        operation_receipt_debug_json(state.last_operation, snap.operation_label));
+    out.emplace("chrome", explorer_chrome_debug_json(chrome));
+    out.emplace("entries_sample", json::Value{std::move(entries)});
+    out.emplace("mobile_tab", json::Value{static_cast<std::int64_t>(state.mobile_tab)});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value file_explorer_application_debug_json(
+        ExplorerState const& state,
+        Snapshot const& snap,
+        ExplorerChromeMetrics const& chrome,
+        std::string_view profile) {
+    json::Object out;
+    out.emplace(
+        "file_explorer",
+        file_explorer_debug_json(state, snap, chrome, profile));
+    return json::Value{std::move(out)};
 }
 
 inline SortMode next_sort_mode(SortMode mode) {

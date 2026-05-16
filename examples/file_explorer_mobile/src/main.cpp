@@ -169,6 +169,30 @@ struct State {
             runtime_resource_catalog());
 };
 
+State const* g_debug_state = nullptr;
+
+auto file_explorer_application_debug_payload() {
+    if (!g_debug_state) {
+        file_explorer_demo::ExplorerState empty{};
+        auto snap = file_explorer_demo::snapshot(empty);
+        auto chrome = file_explorer_demo::explorer_chrome_metrics(empty, "mobile");
+        return file_explorer_demo::file_explorer_application_debug_json(
+            empty,
+            snap,
+            chrome,
+            "mobile");
+    }
+    auto snap = file_explorer_demo::snapshot(g_debug_state->explorer);
+    auto chrome = file_explorer_demo::explorer_chrome_metrics(
+        g_debug_state->explorer,
+        "mobile");
+    return file_explorer_demo::file_explorer_application_debug_json(
+        g_debug_state->explorer,
+        snap,
+        chrome,
+        "mobile");
+}
+
 Msg on_search_changed(std::string text) {
     return SearchChanged{std::move(text)};
 }
@@ -420,6 +444,7 @@ void create_tab(State const& state) {
 
 void view(State const& state) {
     using namespace phenotype;
+    g_debug_state = &state;
     auto snap = file_explorer_demo::snapshot(state.explorer);
     layout::padded(SpaceToken::Md, [&] {
         layout::material_container(
@@ -465,6 +490,8 @@ int main() {
         theme,
         runtime_resource_catalog());
     phenotype::set_theme(theme);
+    phenotype::diag::set_application_debug_provider(
+        file_explorer_application_debug_payload);
 
     return phenotype::native::run_app<State, Msg>(
         390,

@@ -256,6 +256,10 @@ def suggested_action_for_failure(
         return (
             "Inspect MaterialPlan.render_target and backend render-target "
             "metadata before checking blur output.")
+    if likely_layer == "application-debug":
+        return (
+            "Inspect the application debug payload provider, the shared model "
+            "snapshot serializer, and the artifact manifest path.")
     if likely_layer == "platform-runtime":
         return (
             "Inspect debug.platform_runtime.details and the backend runtime "
@@ -902,6 +906,18 @@ def runtime_detail_spec_from_manifest(entry: Any) -> str:
     return f"{path}={expected}"
 
 
+def debug_detail_spec_from_manifest(entry: Any) -> str:
+    if not isinstance(entry, dict):
+        raise ValueError("require_debug_details entries must be objects")
+    path = entry.get("path")
+    if not isinstance(path, str) or not path:
+        raise ValueError("debug detail path must be a non-empty string")
+    if "equals" not in entry:
+        raise ValueError("debug detail entry must contain equals")
+    expected = json.dumps(entry["equals"], separators=(",", ":"))
+    return f"{path}={expected}"
+
+
 def runtime_numeric_bound_spec_from_manifest(entry: Any, index: int) -> JsonObject:
     if not isinstance(entry, dict):
         raise ValueError("require_runtime_numeric_bounds entries must be objects")
@@ -1429,6 +1445,13 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
             raise ValueError("require_runtime_details must be a list")
         args.require_runtime_detail.extend(
             runtime_detail_spec_from_manifest(entry) for entry in runtime_details)
+        debug_details = manifest.get("require_debug_details", [])
+        if debug_details is None:
+            debug_details = []
+        if not isinstance(debug_details, list):
+            raise ValueError("require_debug_details must be a list")
+        args.require_debug_detail.extend(
+            debug_detail_spec_from_manifest(entry) for entry in debug_details)
         args.require_runtime_numeric_bound.extend(
             runtime_numeric_bound_specs_from_manifest(
                 manifest.get("require_runtime_numeric_bounds")))
@@ -6619,6 +6642,30 @@ def verify(args: argparse.Namespace) -> int:
             bool_at(capabilities, key) is True,
             repr(capabilities.get(key)))
 
+    if args.require_debug_detail:
+        report.check("debug details object exists", isinstance(debug, dict))
+    for spec in args.require_debug_detail:
+        if "=" not in spec:
+            report.check("debug detail spec is valid", False, spec)
+            continue
+        path, expected_raw = spec.split("=", 1)
+        try:
+            expected = json.loads(expected_raw)
+        except json.JSONDecodeError:
+            expected = expected_raw
+        exists, actual = value_at(debug, path) if isinstance(debug, dict) else (False, None)
+        report.check(
+            f"debug detail matches: {path}",
+            exists and actual == expected,
+            f"expected {expected!r}, got {actual!r}",
+            path=f"debug.{path}",
+            expected=expected,
+            actual=actual,
+            likely_layer="application-debug",
+            hint=(
+                "Check the app-specific debug payload provider and the "
+                "shared model snapshot it serializes."))
+
     details = runtime.get("details")
     if args.require_runtime_detail:
         report.check("runtime details object exists", isinstance(details, dict))
@@ -7290,6 +7337,15 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         help=(
             "Require debug.platform_runtime.details PATH to equal the JSON value. "
             "Example: renderer.material_pipeline_ready=true. Repeatable."))
+    parser.add_argument(
+        "--require-debug-detail",
+        action="append",
+        default=[],
+        metavar="PATH=JSON",
+        help=(
+            "Require debug PATH to equal the JSON value. "
+            "Example: application.file_explorer.view_mode.value=\"icon\". "
+            "Repeatable."))
     parser.add_argument(
         "--require-pixel-region",
         action="append",

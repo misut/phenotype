@@ -680,12 +680,18 @@ namespace detail {
     };
 
     using DebugPayloadBuilder = json::Value (*)();
+    using ApplicationDebugProvider = json::Value (*)();
     using PlatformCapabilitiesProvider = PlatformCapabilitiesSnapshot (*)();
     using PlatformRuntimeDetailsProvider = json::Value (*)();
 
     DebugPayloadBuilder& debug_payload_builder_storage() noexcept {
         static DebugPayloadBuilder builder = nullptr;
         return builder;
+    }
+
+    ApplicationDebugProvider& application_debug_provider_storage() noexcept {
+        static ApplicationDebugProvider provider = nullptr;
+        return provider;
     }
 
     PlatformCapabilitiesProvider& platform_capabilities_provider_storage() noexcept {
@@ -702,6 +708,10 @@ namespace detail {
         debug_payload_builder_storage() = builder;
     }
 
+    void set_application_debug_provider(ApplicationDebugProvider provider) noexcept {
+        application_debug_provider_storage() = provider;
+    }
+
     void set_platform_capabilities_provider(PlatformCapabilitiesProvider provider) noexcept {
         platform_capabilities_provider_storage() = provider;
     }
@@ -712,6 +722,10 @@ namespace detail {
 
     DebugPayloadBuilder current_debug_payload_builder() noexcept {
         return debug_payload_builder_storage();
+    }
+
+    ApplicationDebugProvider current_application_debug_provider() noexcept {
+        return application_debug_provider_storage();
     }
 
     PlatformCapabilitiesSnapshot current_platform_capabilities() {
@@ -2252,6 +2266,11 @@ inline json::Value debug_plane_snapshot_to_json(
         "platform_runtime",
         platform_runtime_to_json(snapshot.platform_runtime));
     return json::Value{std::move(out)};
+}
+
+inline void set_application_debug_provider(
+        json::Value (*provider)()) noexcept {
+    detail::set_application_debug_provider(provider);
 }
 
 inline json::Value attributes_to_json(std::vector<metrics::Attribute> const& attrs) {

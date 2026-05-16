@@ -188,6 +188,30 @@ struct State {
     }
 };
 
+State const* g_debug_state = nullptr;
+
+auto file_explorer_application_debug_payload() {
+    if (!g_debug_state) {
+        file_explorer_demo::ExplorerState empty{};
+        auto snap = file_explorer_demo::snapshot(empty);
+        auto chrome = file_explorer_demo::explorer_chrome_metrics(empty, "desktop");
+        return file_explorer_demo::file_explorer_application_debug_json(
+            empty,
+            snap,
+            chrome,
+            "desktop");
+    }
+    auto snap = file_explorer_demo::snapshot(g_debug_state->explorer);
+    auto chrome = file_explorer_demo::explorer_chrome_metrics(
+        g_debug_state->explorer,
+        "desktop");
+    return file_explorer_demo::file_explorer_application_debug_json(
+        g_debug_state->explorer,
+        snap,
+        chrome,
+        "desktop");
+}
+
 constexpr float k_pi = 3.14159265358979323846f;
 constexpr float k_tau = 6.28318530717958647692f;
 constexpr float k_integrated_titlebar_height =
@@ -1550,6 +1574,7 @@ void finder_status_bar(State const& state,
 
 void view(State const& state) {
     using namespace phenotype;
+    g_debug_state = &state;
     auto snap = file_explorer_demo::snapshot(state.explorer);
     layout::material_container(
         layout::MaterialContainerOptions{
@@ -1608,6 +1633,8 @@ int main() {
     theme.radius_md = 14.0f;
     theme.radius_lg = 22.0f;
     phenotype::set_theme(theme);
+    phenotype::diag::set_application_debug_provider(
+        file_explorer_application_debug_payload);
 
     phenotype::native::WindowOptions window_options{
         .chrome = phenotype::native::WindowChromeStyle::IntegratedTitlebar,

@@ -35,6 +35,12 @@ The manifest also checks `debug.platform_runtime.details.window` so CI can
 prove the example requested `IntegratedTitlebar`, preserved the expected
 titlebar/control reserve metrics, and is not using GLFW or another toolkit
 window shim.
+The artifact also includes `debug.application.file_explorer`, a pure shared
+model payload containing the current profile, location, status, sort mode, view
+mode, selection state, operation receipt, entry counts, and
+`ExplorerChromeMetrics`. The manifest asserts this payload before visual
+regions, so an LLM can distinguish model-state drift from renderer/capture
+drift without guessing from pixels.
 On macOS, the same runtime object reports live `NSWindow` chrome state:
 transparent titlebar, full-size content view, hidden native title, and
 background dragging must all be enabled. These fields are actual platform

@@ -105,6 +105,40 @@
   "require_capabilities": [
     "material_backdrop_blur"
   ],
+  "require_debug_details": [
+    {
+      "path": "application.file_explorer.schema_version",
+      "equals": 1
+    },
+    {
+      "path": "application.file_explorer.kind",
+      "equals": "file_explorer"
+    },
+    {
+      "path": "application.file_explorer.profile",
+      "equals": "mobile"
+    },
+    {
+      "path": "application.file_explorer.relative_location",
+      "equals": "Demo Root"
+    },
+    {
+      "path": "application.file_explorer.sort.value",
+      "equals": "name"
+    },
+    {
+      "path": "application.file_explorer.view_mode.value",
+      "equals": "icon"
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.integrated_titlebar",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.duplicate_window_controls",
+      "equals": false
+    }
+  ],
   "require_runtime_details": [
     {
       "path": "renderer.material_pipeline_ready",

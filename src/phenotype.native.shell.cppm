@@ -1138,6 +1138,7 @@ inline void shutdown_host(native_host& host) {
     if (host.platform && host.platform->text.shutdown)
         host.platform->text.shutdown();
     ::phenotype::detail::g_open_url = nullptr;
+    ::phenotype::diag::set_application_debug_provider(nullptr);
     detail::g_active_host = nullptr;
     detail::g_app_state = {};
 }
