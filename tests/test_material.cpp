@@ -40,17 +40,20 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 16);
+    assert(material_plan_contract_version == 17);
     assert(plan.backdrop_sampling);
     assert(!plan.fallback());
     assert(plan.backdrop_access.required);
     assert(plan.backdrop_access.stable_required);
     assert(plan.backdrop_access.frame_history_required);
     assert(plan.backdrop_access.shared_frame_capture);
+    assert(plan.backdrop_access.next_frame_capture_required);
     assert(std::string_view(plan.backdrop_access.source)
         == "previous-presented-frame");
     assert(std::string_view(plan.backdrop_access.capture_scope)
         == "shared-frame");
+    assert(std::string_view(plan.backdrop_access.capture_reason)
+        == "sample-current-frame");
     assert(plan.backdrop_access.max_frame_capture_count == 1);
     assert(plan.backdrop_access.max_frame_capture_pixels == 320 * 240);
     assert(plan.backdrop_access.max_surface_sample_pixels == 240 * 96);
@@ -58,8 +61,11 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.resource_budget.max_frame_capture_pixels == 320 * 240);
     assert(plan.resource_budget.max_surface_sample_pixels == 240 * 96);
     assert(plan.observation_contract.shared_frame_capture_required);
+    assert(plan.observation_contract.next_frame_capture_required);
     assert(std::string_view(plan.observation_contract.backdrop_capture_scope)
         == "shared-frame");
+    assert(std::string_view(plan.observation_contract.backdrop_capture_reason)
+        == "sample-current-frame");
     assert(plan.observation_contract.max_frame_capture_count == 1);
     assert(plan.observation_contract.max_frame_capture_pixels == 320 * 240);
     assert(plan.observation_contract.max_surface_sample_pixels == 240 * 96);
@@ -82,7 +88,10 @@ void test_fallback_backdrop_access_contract() {
     assert(plan.fallback_path == MaterialFallbackPath::UnsupportedBackend);
     assert(!plan.backdrop_access.required);
     assert(!plan.backdrop_access.shared_frame_capture);
+    assert(!plan.backdrop_access.next_frame_capture_required);
     assert(std::string_view(plan.backdrop_access.capture_scope) == "none");
+    assert(std::string_view(plan.backdrop_access.capture_reason)
+        == "not-required");
     assert(plan.backdrop_access.max_frame_capture_count == 0);
     assert(plan.backdrop_access.max_frame_capture_pixels == 0);
     assert(plan.backdrop_access.max_surface_sample_pixels == 0);
@@ -90,9 +99,52 @@ void test_fallback_backdrop_access_contract() {
     assert(plan.resource_budget.max_frame_capture_pixels == 0);
     assert(plan.resource_budget.max_surface_sample_pixels == 0);
     assert(!plan.observation_contract.shared_frame_capture_required);
+    assert(!plan.observation_contract.next_frame_capture_required);
     assert(std::string_view(plan.observation_contract.backdrop_capture_scope)
         == "none");
+    assert(std::string_view(plan.observation_contract.backdrop_capture_reason)
+        == "not-required");
     std::puts("PASS: fallback backdrop access contract");
+}
+
+void test_warmup_backdrop_access_contract() {
+    auto env = sampled_environment();
+    env.capabilities.frame_history = false;
+    env.backdrop.available = false;
+    env.backdrop.stable = false;
+    env.backdrop.source = "none";
+
+    auto plan = plan_material_surface(regular_request(), env);
+
+    assert(!plan.backdrop_sampling);
+    assert(plan.fallback());
+    assert(plan.fallback_path == MaterialFallbackPath::NoBackdropSource);
+    assert(plan.decision_trace.backend_supports_backdrop);
+    assert(plan.decision_trace.next_frame_capture_required);
+    assert(!plan.backdrop_access.required);
+    assert(!plan.backdrop_access.stable_required);
+    assert(!plan.backdrop_access.frame_history_required);
+    assert(plan.backdrop_access.shared_frame_capture);
+    assert(plan.backdrop_access.next_frame_capture_required);
+    assert(std::string_view(plan.backdrop_access.source)
+        == "previous-presented-frame");
+    assert(std::string_view(plan.backdrop_access.capture_scope)
+        == "shared-frame");
+    assert(std::string_view(plan.backdrop_access.capture_reason)
+        == "warmup-next-frame");
+    assert(plan.backdrop_access.max_frame_capture_count == 1);
+    assert(plan.backdrop_access.max_frame_capture_pixels == 320 * 240);
+    assert(plan.backdrop_access.max_surface_sample_pixels == 0);
+    assert(plan.resource_budget.max_frame_capture_count == 1);
+    assert(plan.resource_budget.max_frame_capture_pixels == 320 * 240);
+    assert(plan.resource_budget.max_surface_sample_pixels == 0);
+    assert(plan.observation_contract.shared_frame_capture_required);
+    assert(plan.observation_contract.next_frame_capture_required);
+    assert(std::string_view(plan.observation_contract.backdrop_capture_scope)
+        == "shared-frame");
+    assert(std::string_view(plan.observation_contract.backdrop_capture_reason)
+        == "warmup-next-frame");
+    std::puts("PASS: warmup backdrop access contract");
 }
 
 void test_surface_sample_pixels_are_scaled_and_bounded() {
@@ -118,6 +170,7 @@ void test_surface_sample_pixels_are_scaled_and_bounded() {
 int main() {
     test_sampled_backdrop_access_contract();
     test_fallback_backdrop_access_contract();
+    test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     std::puts("\nAll material tests passed.");
     return 0;

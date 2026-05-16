@@ -69,7 +69,7 @@
     "fallback": 0,
     "backdrop_sampling": 11,
     "contract_versions": {
-      "16": 11
+      "17": 11
     },
     "roles": {
       "surface": 1,
@@ -106,6 +106,7 @@
     "backdrop_access_stable_required": 11,
     "backdrop_access_frame_history_required": 11,
     "backdrop_access_shared_frame_capture": 11,
+    "backdrop_access_next_frame_capture_required": 11,
     "backdrop_access_bounded": 11,
     "backdrop_access_sources": {
       "previous-presented-frame": 11
@@ -113,6 +114,14 @@
     "backdrop_capture_scopes": {
       "shared-frame": 11
     },
+    "backdrop_capture_reasons": {
+      "sample-current-frame": 11
+    },
+    "decision_can_sample_backdrop": 11,
+    "decision_backend_supports_backdrop": 11,
+    "decision_backdrop_source_ready": 11,
+    "decision_next_frame_capture_required": 11,
+    "decision_reduced_transparency": 0,
     "verifier_region_passes": {
       "clear-over-rich-backdrop": "backdrop-sample-blur",
       "thin-balanced-backdrop": "backdrop-sample-blur",

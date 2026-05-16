@@ -1205,6 +1205,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(fallback_plan.decision_trace.target_ready);
     assert(!fallback_plan.decision_trace.backend_supports_backdrop);
     assert(!fallback_plan.decision_trace.can_sample_backdrop);
+    assert(!fallback_plan.decision_trace.next_frame_capture_required);
     assert(std::string(fallback_plan.decision_trace.first_blocker)
            == "unsupported-backend");
     assert(fallback_plan.fallback_path == MaterialFallbackPath::UnsupportedBackend);
@@ -1221,6 +1222,12 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(fallback_plan.resource_budget.max_sample_taps == 25);
     assert(fallback_plan.resource_budget.max_sampling_kernel_radius == 0);
     assert(fallback_plan.resource_budget.deterministic_fallback);
+    assert(!fallback_plan.backdrop_access.required);
+    assert(!fallback_plan.backdrop_access.shared_frame_capture);
+    assert(!fallback_plan.backdrop_access.next_frame_capture_required);
+    assert(std::string(fallback_plan.backdrop_access.capture_scope) == "none");
+    assert(std::string(fallback_plan.backdrop_access.capture_reason)
+           == "not-required");
     assert(std::string(fallback_plan.sampling_kernel.name) == "none");
     assert(fallback_plan.sampling_kernel.radius == 0);
     assert(fallback_plan.sampling_kernel.sample_taps == 0);
@@ -1291,12 +1298,18 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(fallback_plan.observation_contract.fallback_expected);
     assert(!fallback_plan.observation_contract.backdrop_sampling_expected);
     assert(!fallback_plan.observation_contract.stable_backdrop_required);
+    assert(!fallback_plan.observation_contract.shared_frame_capture_required);
+    assert(!fallback_plan.observation_contract.next_frame_capture_required);
     assert(fallback_plan.observation_contract.bounded_texture_copy_required);
     assert(fallback_plan.observation_contract.deterministic_fallback_required);
     assert(std::string(fallback_plan.observation_contract.fallback_path)
            == "unsupported-backend");
     assert(std::string(fallback_plan.observation_contract.fallback_reason)
            == fallback_plan.fallback_reason);
+    assert(std::string(fallback_plan.observation_contract.backdrop_capture_scope)
+           == "none");
+    assert(std::string(fallback_plan.observation_contract.backdrop_capture_reason)
+           == "not-required");
     assert(std::string(fallback_plan.observation_contract.primary_pass)
            == "translucent-rounded-rect");
     assert(std::string(fallback_plan.observation_contract.primary_executor)
@@ -1323,6 +1336,43 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(unsupported_large_plan.fallback_path
            == MaterialFallbackPath::UnsupportedBackend);
     assert(!unsupported_large_plan.render_target.within_backdrop_budget);
+
+    MaterialEnvironment warmup_env = fallback_env;
+    warmup_env.capabilities.material_backdrop_blur = true;
+    warmup_env.capabilities.shader_blur = true;
+    warmup_env.capabilities.frame_history = false;
+    warmup_env.backdrop.available = false;
+    warmup_env.backdrop.stable = false;
+    warmup_env.backdrop.source = "none";
+    auto warmup_plan = plan_material_surface(request, warmup_env);
+    assert(warmup_plan.fallback());
+    assert(warmup_plan.fallback_path == MaterialFallbackPath::NoBackdropSource);
+    assert(warmup_plan.decision_trace.backend_supports_backdrop);
+    assert(!warmup_plan.decision_trace.backdrop_source_ready);
+    assert(warmup_plan.decision_trace.next_frame_capture_required);
+    assert(!warmup_plan.backdrop_access.required);
+    assert(!warmup_plan.backdrop_access.stable_required);
+    assert(!warmup_plan.backdrop_access.frame_history_required);
+    assert(warmup_plan.backdrop_access.shared_frame_capture);
+    assert(warmup_plan.backdrop_access.next_frame_capture_required);
+    assert(std::string(warmup_plan.backdrop_access.capture_scope)
+           == "shared-frame");
+    assert(std::string(warmup_plan.backdrop_access.capture_reason)
+           == "warmup-next-frame");
+    assert(warmup_plan.backdrop_access.max_frame_capture_count == 1);
+    assert(warmup_plan.backdrop_access.max_frame_capture_pixels
+           == warmup_plan.render_target.pixel_count);
+    assert(warmup_plan.backdrop_access.max_surface_sample_pixels == 0);
+    assert(warmup_plan.resource_budget.max_frame_capture_count == 1);
+    assert(warmup_plan.resource_budget.max_frame_capture_pixels
+           == warmup_plan.render_target.pixel_count);
+    assert(warmup_plan.resource_budget.max_surface_sample_pixels == 0);
+    assert(warmup_plan.observation_contract.shared_frame_capture_required);
+    assert(warmup_plan.observation_contract.next_frame_capture_required);
+    assert(std::string(warmup_plan.observation_contract.backdrop_capture_scope)
+           == "shared-frame");
+    assert(std::string(warmup_plan.observation_contract.backdrop_capture_reason)
+           == "warmup-next-frame");
     assert(std::string(unsupported_large_plan.decision_trace.first_blocker)
            == "unsupported-backend");
 
@@ -1342,6 +1392,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(glass_plan.decision_trace.backend_supports_backdrop);
     assert(glass_plan.decision_trace.backdrop_source_ready);
     assert(glass_plan.decision_trace.can_sample_backdrop);
+    assert(glass_plan.decision_trace.next_frame_capture_required);
     assert(std::string(glass_plan.decision_trace.first_blocker) == "none");
     assert(glass_plan.render_target.ready);
     assert(glass_plan.render_target.within_backdrop_budget);
@@ -1407,6 +1458,13 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(glass_plan.luminance_curve.backdrop_driven);
     assert(glass_plan.luminance_curve.bounded);
     assert(glass_plan.resource_budget.max_sampling_kernel_radius == 2);
+    assert(glass_plan.backdrop_access.required);
+    assert(glass_plan.backdrop_access.shared_frame_capture);
+    assert(glass_plan.backdrop_access.next_frame_capture_required);
+    assert(std::string(glass_plan.backdrop_access.capture_scope)
+           == "shared-frame");
+    assert(std::string(glass_plan.backdrop_access.capture_reason)
+           == "sample-current-frame");
     assert(glass_plan.backdrop.available);
     assert(glass_plan.backdrop.stable);
     assert(std::string(glass_plan.backdrop.source)
@@ -1457,6 +1515,12 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!glass_plan.observation_contract.fallback_expected);
     assert(glass_plan.observation_contract.backdrop_sampling_expected);
     assert(glass_plan.observation_contract.stable_backdrop_required);
+    assert(glass_plan.observation_contract.shared_frame_capture_required);
+    assert(glass_plan.observation_contract.next_frame_capture_required);
+    assert(std::string(glass_plan.observation_contract.backdrop_capture_scope)
+           == "shared-frame");
+    assert(std::string(glass_plan.observation_contract.backdrop_capture_reason)
+           == "sample-current-frame");
     assert(glass_plan.observation_contract.expected_runtime_passes == 1);
     assert(glass_plan.observation_contract.expected_execution_stages == 4);
     assert(glass_plan.observation_contract.expected_active_execution_stages == 4);

@@ -201,13 +201,17 @@ resolved `max_backdrop_pixels` budget. Backends execute the plan; they do not
 re-decide policy.
 `MaterialPlan.backdrop_access` is the pure shared-capture contract for sampled
 glass. A sampled plan requires a stable previous-frame source, declares
-`capture_scope: shared-frame`, caps frame capture at one copy, records the
-maximum capture pixels from `render_target.pixel_count`, and separately records
-the bounded surface sample pixels for the material shape. Deterministic
-fallback plans keep this access contract inactive with zero capture/sample
-budgets. macOS performs the actual texture copy at the edge and reports it
-through `material_executor_summary`, while other backends can keep the same
-contract and explicitly fall back.
+`capture_scope: shared-frame` with `capture_reason: sample-current-frame`, caps
+frame capture at one copy, records the maximum capture pixels from
+`render_target.pixel_count`, and separately records the bounded surface sample
+pixels for the material shape. A supported backend that lacks a stable previous
+frame emits a deterministic `no-backdrop-source` fallback with
+`capture_reason: warmup-next-frame`; this explains the first-frame warmup copy
+that prepares sampling for the next frame. Unsupported, reduced-transparency,
+invalid, and quality-policy fallback plans keep this access contract inactive
+with zero capture/sample budgets. macOS performs the actual texture copy at the
+edge and reports it through `material_executor_summary`, while other backends
+can keep the same contract and explicitly fall back.
 `MaterialPlan.foreground` resolves primary, secondary, and accent foreground
 recommendations with a named scheme, source, estimated background luminance,
 contrast ratios, accessibility flags, and deterministic/vibrancy booleans. This

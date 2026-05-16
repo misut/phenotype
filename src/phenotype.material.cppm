@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 16;
+inline constexpr std::uint32_t material_plan_contract_version = 17;
 inline constexpr unsigned int material_max_execution_stages = 4;
 
 struct MaterialGeometry {
@@ -136,9 +136,11 @@ struct MaterialObservationContract {
     bool backdrop_sampling_expected = false;
     bool stable_backdrop_required = false;
     bool shared_frame_capture_required = false;
+    bool next_frame_capture_required = false;
     bool bounded_texture_copy_required = true;
     bool deterministic_fallback_required = true;
     char const* backdrop_capture_scope = "none";
+    char const* backdrop_capture_reason = "not-required";
     char const* fallback_path = "none";
     char const* fallback_reason = "";
     char const* primary_pass = "none";
@@ -233,8 +235,10 @@ struct MaterialBackdropAccess {
     bool stable_required = false;
     bool frame_history_required = false;
     bool shared_frame_capture = false;
+    bool next_frame_capture_required = false;
     char const* source = "none";
     char const* capture_scope = "none";
+    char const* capture_reason = "not-required";
     std::uint32_t max_frame_capture_count = 0;
     std::int64_t max_frame_capture_pixels = 0;
     std::int64_t max_surface_sample_pixels = 0;
@@ -315,6 +319,7 @@ struct MaterialDecisionTrace {
     bool backdrop_available = false;
     bool backdrop_stable = false;
     bool backdrop_source_ready = false;
+    bool next_frame_capture_required = false;
     bool reduced_transparency = false;
     bool increase_contrast = false;
     bool reduce_motion = false;
@@ -402,11 +407,14 @@ inline MaterialObservationContract material_observation_contract(
     contract.stable_backdrop_required = plan.backdrop_sampling;
     contract.shared_frame_capture_required =
         plan.backdrop_access.shared_frame_capture;
+    contract.next_frame_capture_required =
+        plan.backdrop_access.next_frame_capture_required;
     contract.bounded_texture_copy_required =
         plan.resource_budget.bounded_texture_copy;
     contract.deterministic_fallback_required =
         plan.resource_budget.deterministic_fallback;
     contract.backdrop_capture_scope = plan.backdrop_access.capture_scope;
+    contract.backdrop_capture_reason = plan.backdrop_access.capture_reason;
     contract.fallback_path =
         material_fallback_path_name(plan.fallback_path);
     contract.fallback_reason = plan.fallback_reason;
@@ -461,6 +469,7 @@ struct MaterialRuntimeSummary {
     std::int64_t total_pass_texture_copy_pixels = 0;
     std::uint32_t backdrop_access_count = 0;
     std::uint32_t shared_frame_capture_plan_count = 0;
+    std::uint32_t next_frame_capture_plan_count = 0;
     std::uint32_t max_frame_capture_count = 0;
     std::int64_t max_frame_capture_pixels = 0;
     std::int64_t total_surface_sample_pixels = 0;
@@ -510,6 +519,7 @@ struct MaterialExecutorSummary {
     std::uint32_t edge_highlight_stage_count = 0;
     std::uint32_t noise_dither_stage_count = 0;
     std::uint32_t backdrop_access_plan_count = 0;
+    std::uint32_t next_frame_capture_plan_count = 0;
     std::uint32_t planned_frame_capture_count = 0;
     std::int64_t planned_frame_capture_pixels = 0;
     std::int64_t planned_surface_sample_pixels = 0;
@@ -580,7 +590,10 @@ inline void accumulate_material_executor_plan_summary(
         plan.dropped_execution_stage_count;
     if (plan.backdrop_access.required)
         ++summary.backdrop_access_plan_count;
-    if (plan.backdrop_access.shared_frame_capture) {
+    if (plan.backdrop_access.next_frame_capture_required)
+        ++summary.next_frame_capture_plan_count;
+    if (plan.backdrop_access.shared_frame_capture
+        || plan.backdrop_access.next_frame_capture_required) {
         summary.planned_frame_capture_count = std::max(
             summary.planned_frame_capture_count,
             plan.backdrop_access.max_frame_capture_count);
@@ -634,6 +647,8 @@ inline void accumulate_material_runtime_summary(
         ++summary.backdrop_access_count;
     if (plan.backdrop_access.shared_frame_capture)
         ++summary.shared_frame_capture_plan_count;
+    if (plan.backdrop_access.next_frame_capture_required)
+        ++summary.next_frame_capture_plan_count;
     summary.max_frame_capture_count = std::max(
         summary.max_frame_capture_count,
         plan.backdrop_access.max_frame_capture_count);
@@ -1451,22 +1466,32 @@ inline void apply_backdrop_luminance_policy(MaterialPlan& plan) noexcept {
 inline MaterialBackdropAccess material_resolve_backdrop_access(
         MaterialPlan const& plan) noexcept {
     MaterialBackdropAccess access{};
-    if (!plan.backdrop_sampling)
+    if (!plan.backdrop_sampling
+        && !plan.decision_trace.next_frame_capture_required)
         return access;
-    access.required = true;
-    access.stable_required = true;
-    access.frame_history_required = true;
+    access.required = plan.backdrop_sampling;
+    access.stable_required = plan.backdrop_sampling;
+    access.frame_history_required = plan.backdrop_sampling;
     access.shared_frame_capture = true;
-    access.source = plan.backdrop.source && plan.backdrop.source[0]
+    access.next_frame_capture_required = true;
+    bool const has_named_backdrop_source =
+        plan.backdrop.source
+        && plan.backdrop.source[0]
+        && std::string_view{plan.backdrop.source} != "none";
+    access.source = has_named_backdrop_source
         ? plan.backdrop.source
         : "previous-presented-frame";
     access.capture_scope = "shared-frame";
+    access.capture_reason = plan.backdrop_sampling
+        ? "sample-current-frame"
+        : "warmup-next-frame";
     access.max_frame_capture_count = 1;
     access.max_frame_capture_pixels = plan.render_target.pixel_count;
-    access.max_surface_sample_pixels =
-        material_estimate_surface_sample_pixels(
+    access.max_surface_sample_pixels = plan.backdrop_sampling
+        ? material_estimate_surface_sample_pixels(
             plan.shape,
-            plan.render_target);
+            plan.render_target)
+        : 0;
     access.bounded = true;
     return access;
 }
@@ -1667,6 +1692,12 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         && environment.capabilities.frame_history
         && backdrop_source_ready
         && !environment.capabilities.reduce_transparency;
+    bool const next_frame_capture_required =
+        has_material
+        && target_ready
+        && quality_allows_backdrop
+        && backend_supports_backdrop
+        && !environment.capabilities.reduce_transparency;
     plan.decision_trace.has_geometry = has_geometry;
     plan.decision_trace.has_material = has_material;
     plan.decision_trace.target_ready = target_ready;
@@ -1687,6 +1718,8 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.decision_trace.backdrop_available = environment.backdrop.available;
     plan.decision_trace.backdrop_stable = environment.backdrop.stable;
     plan.decision_trace.backdrop_source_ready = backdrop_source_ready;
+    plan.decision_trace.next_frame_capture_required =
+        next_frame_capture_required;
     plan.decision_trace.reduced_transparency =
         environment.capabilities.reduce_transparency;
     plan.decision_trace.increase_contrast =

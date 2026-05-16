@@ -974,6 +974,7 @@ void test_material_runtime_record_json_contract() {
     assert(decision_trace.at("target_ready").as_bool() == true);
     assert(decision_trace.at("backend_supports_backdrop").as_bool() == false);
     assert(decision_trace.at("can_sample_backdrop").as_bool() == false);
+    assert(decision_trace.at("next_frame_capture_required").as_bool() == false);
     assert(decision_trace.at("reduced_transparency").as_bool() == false);
     assert(decision_trace.at("increase_contrast").as_bool() == false);
     assert(decision_trace.at("reduce_motion").as_bool() == false);
@@ -1015,6 +1016,8 @@ void test_material_runtime_record_json_contract() {
     assert(observation.at("fallback_expected").as_bool() == true);
     assert(observation.at("backdrop_sampling_expected").as_bool() == false);
     assert(observation.at("stable_backdrop_required").as_bool() == false);
+    assert(observation.at("shared_frame_capture_required").as_bool() == false);
+    assert(observation.at("next_frame_capture_required").as_bool() == false);
     assert(observation.at("bounded_texture_copy_required").as_bool() == true);
     assert(observation.at("deterministic_fallback_required").as_bool()
            == true);
@@ -1022,6 +1025,9 @@ void test_material_runtime_record_json_contract() {
            == "unsupported-backend");
     assert(observation.at("fallback_reason").as_string()
            == "backend reports no material backdrop blur support");
+    assert(observation.at("backdrop_capture_scope").as_string() == "none");
+    assert(observation.at("backdrop_capture_reason").as_string()
+           == "not-required");
     assert(observation.at("primary_pass").as_string()
            == "translucent-rounded-rect");
     assert(observation.at("primary_executor").as_string()
@@ -1050,6 +1056,7 @@ void test_material_runtime_record_json_contract() {
     assert(pure_summary.total_runtime_passes == 1);
     assert(pure_summary.active_runtime_passes == 1);
     assert(pure_summary.backdrop_runtime_passes == 0);
+    assert(pure_summary.next_frame_capture_plan_count == 0);
     assert(pure_summary.dropped_execution_stages == 0);
     assert(pure_summary.max_execution_stage_capacity == 4);
     assert(pure_summary.max_pass_texture_copy_pixels == 0);
@@ -1081,6 +1088,7 @@ void test_material_runtime_record_json_contract() {
     assert(summary_obj.at("total_runtime_passes").as_integer() == 1);
     assert(summary_obj.at("active_runtime_passes").as_integer() == 1);
     assert(summary_obj.at("backdrop_runtime_passes").as_integer() == 0);
+    assert(summary_obj.at("next_frame_capture_plan_count").as_integer() == 0);
     assert(summary_obj.at("dropped_execution_stages").as_integer() == 0);
     assert(summary_obj.at("max_execution_stage_capacity").as_integer() == 4);
     assert(summary_obj.at("max_pass_texture_copy_pixels").as_integer() == 0);
@@ -1124,6 +1132,7 @@ void test_material_runtime_record_json_contract() {
     assert(executor_obj.at("fallback_instance_count").as_integer() == 1);
     assert(executor_obj.at("material_draw_calls").as_integer() == 0);
     assert(executor_obj.at("dropped_execution_stage_count").as_integer() == 0);
+    assert(executor_obj.at("next_frame_capture_plan_count").as_integer() == 0);
     assert(executor_obj.at("material_max_sample_taps").as_integer() == 0);
     assert(executor_obj.at("material_total_sample_taps").as_integer() == 0);
     assert(executor_obj.at("foreground_text_candidate_count").as_integer()

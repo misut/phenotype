@@ -32,7 +32,7 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "16": 1
+      "17": 1
     },
     "roles": {
       "surface": 1
@@ -74,12 +74,16 @@
     "backdrop_access_stable_required": 0,
     "backdrop_access_frame_history_required": 0,
     "backdrop_access_shared_frame_capture": 0,
+    "backdrop_access_next_frame_capture_required": 0,
     "backdrop_access_bounded": 1,
     "backdrop_access_sources": {
       "none": 1
     },
     "backdrop_capture_scopes": {
       "none": 1
+    },
+    "backdrop_capture_reasons": {
+      "not-required": 1
     },
     "luminance_responses": {
       "not-sampled": 1
@@ -92,6 +96,7 @@
     "decision_can_sample_backdrop": 0,
     "decision_backend_supports_backdrop": 0,
     "decision_backdrop_source_ready": 0,
+    "decision_next_frame_capture_required": 0,
     "decision_reduced_transparency": 0,
     "decision_increase_contrast": 0,
     "decision_reduce_motion": 0,
