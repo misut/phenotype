@@ -658,6 +658,23 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
                         widget::button<DebugPlaneMsg>("Compact",
                                                        DebugPlaneNoop{});
                     });
+                layout::navigation([&] {
+                    widget::button<DebugPlaneMsg>("Root", DebugPlaneNoop{});
+                });
+                layout::navigation(
+                    layout::MaterialSurfaceOptions{
+                        .kind = MaterialKind::Regular,
+                        .direction = FlexDirection::Row,
+                        .padding = SpaceToken::Xs,
+                        .gap = SpaceToken::Xs,
+                        .border_radius = 8.0f,
+                        .border_width = 0.0f,
+                        .semantic_label = "Compact Navigation",
+                    },
+                    [&] {
+                        widget::button<DebugPlaneMsg>("Documents",
+                                                       DebugPlaneNoop{});
+                    });
                 layout::sidebar(160.0f, [&] {
                     widget::text("Locations");
                 });
@@ -689,12 +706,17 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
     auto const* toolbar = find_semantic_child(children, "material", "Toolbar");
     auto const* compact_toolbar =
         find_semantic_child(children, "material", "Compact Toolbar");
+    auto const* navigation = find_semantic_child(children, "material", "Navigation");
+    auto const* compact_navigation =
+        find_semantic_child(children, "material", "Compact Navigation");
     auto const* sidebar = find_semantic_child(children, "material", "Sidebar");
     auto const* status_bar = find_semantic_child(children, "material", "Status Bar");
     auto const* compact_status =
         find_semantic_child(children, "material", "Compact Status");
     assert(toolbar != nullptr);
     assert(compact_toolbar != nullptr);
+    assert(navigation != nullptr);
+    assert(compact_navigation != nullptr);
     assert(sidebar != nullptr);
     assert(status_bar != nullptr);
     assert(compact_status != nullptr);
@@ -704,6 +726,14 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
            == "thick");
     assert(compact_toolbar->at("material").as_object().at("role").as_string()
            == "toolbar");
+    assert(navigation->at("material").as_object().at("kind").as_string()
+           == "thin");
+    assert(navigation->at("material").as_object().at("role").as_string()
+           == "navigation");
+    assert(compact_navigation->at("material").as_object().at("kind").as_string()
+           == "regular");
+    assert(compact_navigation->at("material").as_object().at("role").as_string()
+           == "navigation");
     assert(sidebar->at("material").as_object().at("kind").as_string() == "thin");
     assert(sidebar->at("material").as_object().at("role").as_string() == "sidebar");
     assert(status_bar->at("material").as_object().at("kind").as_string()
@@ -716,6 +746,10 @@ void test_material_app_chrome_helpers_are_semantic_materials() {
            == "status_bar");
     assert(find_semantic_descendant(*toolbar, "button", "New") != nullptr);
     assert(find_semantic_descendant(*compact_toolbar, "button", "Compact")
+           != nullptr);
+    assert(find_semantic_descendant(*navigation, "button", "Root")
+           != nullptr);
+    assert(find_semantic_descendant(*compact_navigation, "button", "Documents")
            != nullptr);
     assert(find_semantic_descendant(*sidebar, "text", "Locations") != nullptr);
     assert(find_semantic_descendant(*status_bar, "text", "Ready") != nullptr);
