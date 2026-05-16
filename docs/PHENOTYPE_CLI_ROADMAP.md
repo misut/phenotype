@@ -115,8 +115,8 @@ Current commands:
 | `phenotype commands --json` | implemented | Emits a recursive command tree with `cppx.cli` command metadata, stable paths, and schema version `1`. |
 | `phenotype artifact summary <bundle>` | implemented | Read-only structural summary for `snapshot.json`, `frame.bmp`, and platform runtime files. This does not replace semantic verification yet. |
 | `phenotype artifact verify <bundle>` | implemented | Edge wrapper that runs the uv-managed Python verifier through `mise` and forwards the verifier JSON report. |
-| `phenotype artifact verify-glass-showcase` | implemented | Local-only edge wrapper around the glass showcase build/capture/verifier gate, including accessibility mode. PR CI should not run this slow native capture gate by default. |
-| `phenotype artifact verify-file-explorer` | implemented | Local-only edge wrapper around the desktop/mobile Finder-style artifact gate. This keeps the future replacement command shape visible while shell compatibility remains. |
+| `phenotype artifact verify-glass-showcase` | implemented | Local-only edge wrapper around the glass showcase build/capture/verifier gate, including accessibility mode. PR CI should not run this slow native capture gate by default. Legacy `tools/verify_glass_showcase*.sh` entry points now delegate to this command unless the CLI invokes them in compatibility mode. |
+| `phenotype artifact verify-file-explorer` | implemented | Local-only edge wrapper around the desktop/mobile Finder-style artifact gate. Legacy `tools/verify_file_explorer_artifacts.sh` now delegates to this command unless the CLI invokes it in compatibility mode. `--profile`, repeated `--view-mode`, and repeated `--scenario` narrow the capture set for faster local iteration before the full gate. |
 | `phenotype android doctor/devices/emu-start/emu-stop/build/apk/install/launch/stop/run/logs/screencap/contract/clean` | implemented | Stable CLI namespace over the existing Android edge scripts and Android build command. `--json` emits a process/script result envelope, `--serial` forwards `ANDROID_SERIAL`, and `--state-dir`/`--avd`/`--apk` keep device state explicit. |
 | `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, declared asset/locale/font counts, referenced `source` files, Pretendard default-font policy, package resource directories, and artifact manifest presence. |
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
@@ -139,7 +139,11 @@ encode repository-local SDK/NDK/JDK discovery and because Android device access
 is inherently an edge effect. New automation should call `phenotype android ...`
 instead of invoking those scripts directly. The CLI intentionally exposes
 bounded `android logs` output by default so CI and LLM agents can observe recent
-runtime output without hanging on a live `logcat` stream.
+runtime output without hanging on a live `logcat` stream. Python verifier calls
+from artifact and Android contract gates are still uv-managed, but wrappers set
+`UV_PROJECT_ENVIRONMENT` to `PHENOTYPE_UV_PROJECT_ENVIRONMENT` or a temporary
+default so the verifier environment remains explicit and does not dirty the
+repository root.
 
 ## Packaging contract
 
@@ -203,8 +207,9 @@ should become an implementation detail during migration:
 2. Add `phenotype artifact verify --json` backed by a C++ verifier library or a
    temporary CLI edge wrapper. The long-term state is native C++ verification
    so CI does not depend on Python for core artifact contracts.
-3. Convert shell scripts into thin compatibility wrappers that print the
-   matching CLI command and delegate to it.
+3. Convert shell scripts into thin compatibility wrappers that delegate to the
+   matching CLI command; the CLI may still invoke the old body with an explicit
+   compatibility env var while the verifier engine is being migrated.
 4. Delete wrappers only after CI, docs, and local developer workflows use the
    CLI command directly.
 

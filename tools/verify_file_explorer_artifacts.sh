@@ -2,11 +2,60 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+if [[ "${PHENOTYPE_CLI_SCRIPT_COMPAT:-}" != "1" ]]; then
+  CLI="$ROOT/tools/phenotype_cli/.exon/debug/phenotype_cli"
+  if [[ ! -x "$CLI" ]]; then
+    LOCK="$ROOT/tools/phenotype_cli/.exon/phenotype_cli_build.lock"
+    mkdir -p "$(dirname "$LOCK")"
+    while ! mkdir "$LOCK" 2>/dev/null; do
+      sleep 0.2
+      [[ -x "$CLI" ]] && break
+    done
+    if [[ ! -x "$CLI" ]]; then
+      trap 'rmdir "$LOCK" 2>/dev/null || true' EXIT
+      (cd "$ROOT/tools/phenotype_cli" && mise exec -- exon build)
+      rmdir "$LOCK"
+      trap - EXIT
+    fi
+  fi
+  exec "$CLI" artifact verify-file-explorer "$@"
+fi
+
 SHARED_DIR="$ROOT/examples/file_explorer_shared"
 DESKTOP_DIR="$ROOT/examples/file_explorer_desktop"
 MOBILE_DIR="$ROOT/examples/file_explorer_mobile"
 DESKTOP_BUNDLE_ROOT="${PHENOTYPE_FILE_EXPLORER_DESKTOP_ARTIFACT_DIR:-}"
 MOBILE_BUNDLE_ROOT="${PHENOTYPE_FILE_EXPLORER_MOBILE_ARTIFACT_DIR:-}"
+PROFILE="${PHENOTYPE_FILE_EXPLORER_PROFILE:-all}"
+DEFAULT_DESKTOP_MODES="icon list column gallery"
+DEFAULT_SCENARIOS="created-preview deleted-file trash-view created-folder deleted-folder duplicated-file documents-preview history-forward sorted-kind search-active"
+
+normalized_list() {
+  local value="$1"
+  local fallback="$2"
+  if [[ -z "$value" ]]; then
+    value="$fallback"
+  fi
+  value="${value//,/ }"
+  printf '%s\n' "$value"
+}
+
+case "$PROFILE" in
+  all|desktop|mobile)
+    ;;
+  *)
+    echo "error: PHENOTYPE_FILE_EXPLORER_PROFILE must be all, desktop, or mobile" >&2
+    exit 1
+    ;;
+esac
+
+DESKTOP_MODES=($(normalized_list \
+  "${PHENOTYPE_FILE_EXPLORER_DESKTOP_MODES:-}" \
+  "$DEFAULT_DESKTOP_MODES"))
+SCENARIOS=($(normalized_list \
+  "${PHENOTYPE_FILE_EXPLORER_SCENARIOS:-}" \
+  "$DEFAULT_SCENARIOS"))
 
 run_exon() {
   if [[ -n "${EXON:-}" ]]; then
@@ -19,12 +68,13 @@ run_exon() {
 }
 
 run_uv_python() {
+  local uv_env="${PHENOTYPE_UV_PROJECT_ENVIRONMENT:-${TMPDIR:-/tmp}/phenotype-uv-tools}"
   if [[ -n "${UV:-}" ]]; then
-    "$UV" run --frozen python "$@"
+    UV_PROJECT_ENVIRONMENT="$uv_env" "$UV" run --frozen python "$@"
   elif command -v mise >/dev/null 2>&1; then
-    mise exec -- uv run --frozen python "$@"
+    UV_PROJECT_ENVIRONMENT="$uv_env" mise exec -- uv run --frozen python "$@"
   elif command -v uv >/dev/null 2>&1; then
-    uv run --frozen python "$@"
+    UV_PROJECT_ENVIRONMENT="$uv_env" uv run --frozen python "$@"
   else
     echo "error: uv is required; run through 'mise exec -- uv run ...'" >&2
     exit 1
@@ -277,21 +327,27 @@ verify_mobile_capture() {
 cd "$SHARED_DIR"
 run_exon test
 
-cd "$DESKTOP_DIR"
-run_exon build
-for mode in icon list column gallery; do
-  verify_desktop_capture "$mode" "default" "$(desktop_bundle_for_case "$mode")"
-done
-for scenario in created-preview deleted-file trash-view created-folder deleted-folder duplicated-file documents-preview history-forward sorted-kind search-active; do
-  verify_desktop_capture \
-    "icon" \
-    "$scenario" \
-    "$(desktop_bundle_for_case "icon-$scenario")"
-done
+if [[ "$PROFILE" == "all" || "$PROFILE" == "desktop" ]]; then
+  cd "$DESKTOP_DIR"
+  run_exon build
+  for mode in "${DESKTOP_MODES[@]}"; do
+    verify_desktop_capture "$mode" "default" "$(desktop_bundle_for_case "$mode")"
+  done
+  for scenario in "${SCENARIOS[@]}"; do
+    [[ "$scenario" == "default" ]] && continue
+    verify_desktop_capture \
+      "icon" \
+      "$scenario" \
+      "$(desktop_bundle_for_case "icon-$scenario")"
+  done
+fi
 
-cd "$MOBILE_DIR"
-run_exon build
-verify_mobile_capture "default" "$(mobile_bundle_for_case "default")"
-for scenario in created-preview deleted-file trash-view created-folder deleted-folder duplicated-file documents-preview history-forward sorted-kind search-active; do
-  verify_mobile_capture "$scenario" "$(mobile_bundle_for_case "$scenario")"
-done
+if [[ "$PROFILE" == "all" || "$PROFILE" == "mobile" ]]; then
+  cd "$MOBILE_DIR"
+  run_exon build
+  verify_mobile_capture "default" "$(mobile_bundle_for_case "default")"
+  for scenario in "${SCENARIOS[@]}"; do
+    [[ "$scenario" == "default" ]] && continue
+    verify_mobile_capture "$scenario" "$(mobile_bundle_for_case "$scenario")"
+  done
+fi

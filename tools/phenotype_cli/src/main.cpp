@@ -375,10 +375,25 @@ auto spec() -> cppx::cli::CommandSpec {
                              .arity = cppx::cli::OptionArity::one,
                              .value_name = "seconds",
                              .description = "Native window settle time before capture"},
+                            {.name = "profile",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "all|desktop|mobile",
+                             .description = "Limit the gate to one file explorer profile"},
+                            {.name = "view-mode",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "mode",
+                             .description = "Desktop view mode to capture"},
+                            {.name = "scenario",
+                             .arity = cppx::cli::OptionArity::one,
+                             .repeatable = true,
+                             .value_name = "name",
+                             .description = "Startup scenario to capture"},
                         },
                         .examples = {
                             "phenotype artifact verify-file-explorer",
                             "phenotype artifact verify-file-explorer --json",
+                            "phenotype artifact verify-file-explorer --profile desktop --view-mode icon --scenario search-active",
                         },
                     },
                     {
@@ -2269,6 +2284,16 @@ void append_repeatable_arg(std::vector<std::string>& args,
     }
 }
 
+auto comma_join(std::span<std::string const> values) -> std::string {
+    auto result = std::string{};
+    for (auto const& value : values) {
+        if (!result.empty())
+            result += ",";
+        result += value;
+    }
+    return result;
+}
+
 int run_artifact_verify(cppx::cli::Invocation const& invocation) {
     auto path = first_positional_or_error(invocation, "artifact verify");
     if (!path)
@@ -2340,6 +2365,7 @@ int run_artifact_verify(cppx::cli::Invocation const& invocation) {
 int run_artifact_verify_glass_showcase(
         cppx::cli::Invocation const& invocation) {
     auto env = std::map<std::string, std::string>{};
+    env["PHENOTYPE_CLI_SCRIPT_COMPAT"] = "1";
     if (auto value = invocation.value("bundle-dir")) {
         env["PHENOTYPE_ARTIFACT_DIR"] =
             absolute_path_string(fs::path{std::string{*value}});
@@ -2361,6 +2387,34 @@ int run_artifact_verify_glass_showcase(
 int run_artifact_verify_file_explorer(
         cppx::cli::Invocation const& invocation) {
     auto env = std::map<std::string, std::string>{};
+    env["PHENOTYPE_CLI_SCRIPT_COMPAT"] = "1";
+    if (auto value = invocation.value("profile")) {
+        auto profile = std::string{*value};
+        if (profile != "all" && profile != "desktop" && profile != "mobile") {
+            return print_error(
+                "artifact verify-file-explorer",
+                "profile must be all, desktop, or mobile",
+                invocation.has("json"));
+        }
+        env["PHENOTYPE_FILE_EXPLORER_PROFILE"] = std::move(profile);
+    }
+    for (auto const& mode : invocation.values("view-mode")) {
+        if (mode != "icon" && mode != "list"
+            && mode != "column" && mode != "gallery") {
+            return print_error(
+                "artifact verify-file-explorer",
+                "view-mode must be icon, list, column, or gallery",
+                invocation.has("json"));
+        }
+    }
+    if (!invocation.values("view-mode").empty()) {
+        env["PHENOTYPE_FILE_EXPLORER_DESKTOP_MODES"] =
+            comma_join(invocation.values("view-mode"));
+    }
+    if (!invocation.values("scenario").empty()) {
+        env["PHENOTYPE_FILE_EXPLORER_SCENARIOS"] =
+            comma_join(invocation.values("scenario"));
+    }
     if (auto value = invocation.value("desktop-artifact-dir")) {
         env["PHENOTYPE_FILE_EXPLORER_DESKTOP_ARTIFACT_DIR"] =
             absolute_path_string(fs::path{std::string{*value}});
