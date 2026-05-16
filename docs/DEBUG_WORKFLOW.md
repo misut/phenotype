@@ -70,6 +70,19 @@ Rules:
 - `platform/<platform>-runtime.json` mirrors `platform_runtime.details` and adds
   `artifact_reason` when a reason is supplied.
 
+`tools/phenotype_cli` now provides a read-only structural check for bundles:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli artifact summary --json /tmp/phenotype-glass-showcase
+```
+
+This command intentionally does not replace `tools/verify_artifact_bundle.py`.
+Use it to confirm bundle layout and file presence before handing the bundle to
+the semantic verifier. The Python verifier remains the authoritative contract
+checker until the CLI has verifier parity.
+
 ## Desktop example artifact hook
 
 Native desktop examples can write a startup artifact bundle without adding
@@ -251,6 +264,8 @@ From the repo root, run the verifier through the uv-managed Python environment:
 `mise.toml` pins Python and uv, while `pyproject.toml`/`uv.lock` define the
 Python tool environment. Use `mise run tools:artifact:test` for the verifier's
 contract tests and `mise run tools:artifact:pycompile` for syntax checks.
+Use `tools/phenotype_cli` for new diagnostic entry points; shell/Python tools
+should become compatibility wrappers only after matching CLI commands exist.
 Use the verifier command to validate the bundle before handing it to an LLM,
 attaching it to an issue, or comparing it in CI. The verifier checks the common
 debug schema, platform capabilities,

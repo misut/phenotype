@@ -1,0 +1,14 @@
+[app]
+title = "둘러보기"
+tab_browse = "둘러보기"
+tab_preview = "미리보기"
+tab_create = "만들기"
+search_placeholder = "검색"
+status_ready = "준비됨"
+
+[actions]
+create_file = "새 파일"
+create_folder = "새 폴더"
+duplicate = "복제"
+delete = "휴지통으로 이동"
+preview = "미리보기"

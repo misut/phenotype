@@ -49,6 +49,16 @@ cd docs
 mise exec -- exon build --target wasm32-wasi
 ```
 
+For the first CLI/package contract:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli doctor --json
+.exon/debug/phenotype_cli package inspect --json ../../examples/file_explorer_desktop
+.exon/debug/phenotype_cli package inspect --json ../../examples/file_explorer_mobile
+```
+
 For LLM-debuggable native startup artifacts:
 
 ```sh
@@ -143,6 +153,12 @@ changes produce a shared `Sort: ...` status contract, that the desktop and
 mobile status surfaces expose to artifact verification. This keeps the examples
 useful for interactive product checks while preserving a stable startup
 artifact contract.
+
+The desktop and mobile file explorer examples also carry initial
+`phenotype.package.toml` manifests plus `assets/`, `locales/`, and `fonts/`
+fixtures. These package resources are inspectable by `tools/phenotype_cli` and
+document the future asset/i18n/Pretendard default-font bundle contract, but the
+current runtime examples still render from the existing code-defined labels.
 
 ## Widget coverage
 

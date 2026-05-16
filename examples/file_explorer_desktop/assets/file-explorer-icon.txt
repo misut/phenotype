@@ -1,0 +1,4 @@
+Phenotype desktop file explorer package icon placeholder.
+
+The first package contract keeps assets textual so CLI inspection can validate
+logical resources without adding binary fixtures.

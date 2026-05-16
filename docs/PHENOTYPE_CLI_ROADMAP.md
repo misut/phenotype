@@ -1,9 +1,9 @@
 # Phenotype CLI Roadmap
 
-Status: planned as part of the long-term Liquid Glass and native-example
-stabilization goal. The first CLI milestone must preserve the existing
-material/debug contracts while replacing shell and Python entry points only
-after command parity exists.
+Status: foundation in progress as part of the long-term Liquid Glass and
+native-example stabilization goal. The first CLI milestone preserves the
+existing material/debug contracts while replacing shell and Python entry points
+only after command parity exists.
 
 ## Reference baseline
 
@@ -95,6 +95,33 @@ Every command that can be used by CI must support:
 - a human path that uses `cppx.terminal` diagnostics;
 - a `--no-build` or `--artifact` mode when local artifacts already exist.
 
+## Implemented foundation
+
+`tools/phenotype_cli` is the first executable surface. The package is still
+named `phenotype_cli`, but help and command metadata present the command as
+`phenotype` so installation can later expose the stable command name without
+changing command contracts.
+
+Run the package through `mise exec -- exon build` from
+`tools/phenotype_cli`; compatibility root tasks can be added after CI path
+classification can distinguish task-only `mise.toml` edits from toolchain
+changes.
+
+Current commands:
+
+| Command | Status | Notes |
+|---|---|---|
+| `phenotype doctor` | implemented | Read-only repository checks for `mise.toml`, verifier tools, Android contract script, CLI roadmap, and file explorer shared package presence. |
+| `phenotype commands --json` | implemented | Emits a recursive command tree with `cppx.cli` command metadata, stable paths, and schema version `1`. |
+| `phenotype artifact summary <bundle>` | implemented | Read-only structural summary for `snapshot.json`, `frame.bmp`, and platform runtime files. This does not replace semantic verification yet. |
+| `phenotype package inspect <path>` | implemented | Checks for `phenotype.package.toml`, `assets/`, `locales/`, and `fonts/` directories with file counts. |
+
+The desktop and mobile file explorer examples now include inspectable
+`phenotype.package.toml` manifests, textual asset placeholders, English/Korean
+locale files, and a Pretendard alias descriptor. These resources are package
+contract fixtures only; the runtime examples still use the existing hard-coded
+view text until the resource catalog layer lands.
+
 ## Packaging contract
 
 The package layer should be data-driven and cross-platform:
@@ -176,9 +203,10 @@ The CLI should not make production rendering slower:
 ## Milestones
 
 1. Document the CLI and packaging contract, then keep the existing Python and
-   shell tools green.
+   shell tools green. Initial state is complete.
 2. Add a `phenotype_cli` package that uses `cppx.cli` and exposes `help`,
-   command metadata, `doctor`, and read-only artifact summary commands.
+   command metadata, `doctor`, and read-only artifact summary commands. Initial
+   state is complete.
 3. Move artifact verification into a reusable C++ verifier surface and add
    Python fixture parity tests until the old verifier can be retired.
 4. Add package manifest parsing for assets, locales, fonts, and debug
@@ -188,4 +216,3 @@ The CLI should not make production rendering slower:
 6. Replace CI and docs references to shell/Python tools with CLI commands.
 7. Remove compatibility wrappers once the CLI covers Android, artifact, and
    package workflows.
-
