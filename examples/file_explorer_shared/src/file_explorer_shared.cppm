@@ -146,9 +146,13 @@ struct ExplorerChromeMetrics {
     int icon_grid_columns = 0;
     int icon_grid_visible_rows = 0;
     int icon_grid_visible_capacity = 0;
+    int toolbar_group_count = 0;
+    int toolbar_separator_count = 0;
+    int toolbar_icon_button_count = 0;
     bool integrated_titlebar = true;
     bool native_window_controls = true;
     bool duplicate_window_controls = false;
+    bool finder_segmented_toolbar = false;
 };
 
 struct ExplorerInputTrace {
@@ -278,9 +282,13 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_grid_columns = 0,
             .icon_grid_visible_rows = 0,
             .icon_grid_visible_capacity = 0,
+            .toolbar_group_count = 0,
+            .toolbar_separator_count = 0,
+            .toolbar_icon_button_count = 0,
             .integrated_titlebar = false,
             .native_window_controls = false,
             .duplicate_window_controls = false,
+            .finder_segmented_toolbar = false,
         };
     }
     auto columns = desktop_icon_grid_column_count(viewport);
@@ -308,9 +316,13 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_grid_columns = columns,
         .icon_grid_visible_rows = visible_rows,
         .icon_grid_visible_capacity = columns * visible_rows,
+        .toolbar_group_count = 6,
+        .toolbar_separator_count = 3,
+        .toolbar_icon_button_count = 15,
         .integrated_titlebar = true,
         .native_window_controls = true,
         .duplicate_window_controls = false,
+        .finder_segmented_toolbar = true,
     };
 }
 

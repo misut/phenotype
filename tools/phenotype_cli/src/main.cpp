@@ -1854,6 +1854,8 @@ auto explorer_chrome_json(
         "\"icon_grid\":{{\"columns\":{},\"visible_rows\":{},"
         "\"visible_capacity\":{},\"column_width\":{},\"row_height\":{},"
         "\"column_pitch\":{},\"scroll_height\":{}}},"
+        "\"toolbar\":{{\"group_count\":{},\"separator_count\":{},"
+        "\"icon_button_count\":{},\"finder_segmented\":{}}},"
         "\"native_window\":{{\"integrated_titlebar\":{},"
         "\"native_window_controls\":{},\"duplicate_window_controls\":{}}}}}",
         chrome.viewport.width,
@@ -1872,6 +1874,10 @@ auto explorer_chrome_json(
         chrome.icon_grid_row_height,
         chrome.icon_grid_column_pitch,
         chrome.icon_grid_scroll_height,
+        chrome.toolbar_group_count,
+        chrome.toolbar_separator_count,
+        chrome.toolbar_icon_button_count,
+        chrome.finder_segmented_toolbar ? "true" : "false",
         chrome.integrated_titlebar ? "true" : "false",
         chrome.native_window_controls ? "true" : "false",
         chrome.duplicate_window_controls ? "true" : "false");
