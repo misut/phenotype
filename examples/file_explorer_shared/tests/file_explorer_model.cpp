@@ -207,6 +207,17 @@ duplicate
     assert(chrome.sidebar_row_height == demo::k_desktop_sidebar_row_height);
     assert(chrome.sidebar_heading_height
            == demo::k_desktop_sidebar_heading_height);
+    assert(chrome.sidebar_icon_size == demo::k_desktop_sidebar_icon_size);
+    assert(chrome.sidebar_icon_leading == demo::k_desktop_sidebar_icon_leading);
+    assert(chrome.sidebar_label_leading == demo::k_desktop_sidebar_label_leading);
+    assert(chrome.sidebar_label_top == demo::k_desktop_sidebar_label_top);
+    assert(chrome.sidebar_heading_label_leading
+           == demo::k_desktop_sidebar_heading_label_leading);
+    assert(chrome.sidebar_heading_label_top
+           == demo::k_desktop_sidebar_heading_label_top);
+    assert(chrome.sidebar_section_gap == demo::k_desktop_sidebar_section_gap);
+    assert(chrome.sidebar_selected_row_radius
+           == demo::k_desktop_sidebar_selected_row_radius);
     assert(chrome.toolbar_group_height
            == demo::k_desktop_toolbar_group_height);
     assert(chrome.toolbar_group_radius
@@ -221,6 +232,10 @@ duplicate
            == demo::k_desktop_titlebar_control_diameter);
     assert(chrome.titlebar_control_spacing
            == demo::k_desktop_titlebar_control_spacing);
+    assert(chrome.titlebar_control_start_x
+           == demo::k_desktop_titlebar_control_start_x);
+    assert(chrome.titlebar_control_top
+           == demo::k_desktop_titlebar_control_top);
     assert(chrome.icon_grid_column_width
            == demo::k_desktop_icon_grid_column_width);
     assert(chrome.icon_grid_row_height
@@ -360,6 +375,9 @@ duplicate
     assert(debug_text.find("\"view_mode\"") != std::string::npos);
     assert(debug_text.find("\"Gallery View\"") != std::string::npos);
     assert(debug_text.find("\"icon_grid_column_pitch\"") != std::string::npos);
+    assert(debug_text.find("\"sidebar_icon_size\"") != std::string::npos);
+    assert(debug_text.find("\"sidebar_label_leading\"") != std::string::npos);
+    assert(debug_text.find("\"titlebar_control_start_x\"") != std::string::npos);
     assert(debug_text.find("\"profile\"") != std::string::npos);
     assert(debug_text.find(profile) != std::string::npos);
 

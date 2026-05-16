@@ -161,6 +161,14 @@ struct ExplorerChromeMetrics {
     float sidebar_row_width = 0.0f;
     float sidebar_row_height = 0.0f;
     float sidebar_heading_height = 0.0f;
+    float sidebar_icon_size = 0.0f;
+    float sidebar_icon_leading = 0.0f;
+    float sidebar_label_leading = 0.0f;
+    float sidebar_label_top = 0.0f;
+    float sidebar_heading_label_leading = 0.0f;
+    float sidebar_heading_label_top = 0.0f;
+    float sidebar_section_gap = 0.0f;
+    float sidebar_selected_row_radius = 0.0f;
     float toolbar_group_height = 0.0f;
     float toolbar_group_radius = 0.0f;
     float toolbar_icon_button_width = 0.0f;
@@ -168,6 +176,8 @@ struct ExplorerChromeMetrics {
     float titlebar_control_cluster_height = 0.0f;
     float titlebar_control_diameter = 0.0f;
     float titlebar_control_spacing = 0.0f;
+    float titlebar_control_start_x = 0.0f;
+    float titlebar_control_top = 0.0f;
     float window_radius = 0.0f;
     float icon_grid_column_width = 0.0f;
     float icon_grid_row_height = 0.0f;
@@ -252,6 +262,14 @@ inline constexpr float k_desktop_sidebar_width = 224.0f;
 inline constexpr float k_desktop_sidebar_row_width = 188.0f;
 inline constexpr float k_desktop_sidebar_row_height = 38.0f;
 inline constexpr float k_desktop_sidebar_heading_height = 30.0f;
+inline constexpr float k_desktop_sidebar_icon_size = 26.0f;
+inline constexpr float k_desktop_sidebar_icon_leading = 12.0f;
+inline constexpr float k_desktop_sidebar_label_leading = 48.0f;
+inline constexpr float k_desktop_sidebar_label_top = 8.0f;
+inline constexpr float k_desktop_sidebar_heading_label_leading = 10.0f;
+inline constexpr float k_desktop_sidebar_heading_label_top = 7.0f;
+inline constexpr float k_desktop_sidebar_section_gap = 14.0f;
+inline constexpr float k_desktop_sidebar_selected_row_radius = 10.0f;
 inline constexpr float k_desktop_window_radius = 18.0f;
 inline constexpr float k_desktop_toolbar_group_radius = 22.0f;
 inline constexpr float k_desktop_toolbar_group_height = 46.0f;
@@ -260,6 +278,8 @@ inline constexpr float k_desktop_toolbar_icon_button_height = 36.0f;
 inline constexpr float k_desktop_titlebar_control_cluster_height = 52.0f;
 inline constexpr float k_desktop_titlebar_control_diameter = 13.0f;
 inline constexpr float k_desktop_titlebar_control_spacing = 23.0f;
+inline constexpr float k_desktop_titlebar_control_start_x = 20.0f;
+inline constexpr float k_desktop_titlebar_control_top = 16.0f;
 inline constexpr int k_desktop_titlebar_control_count = 3;
 inline constexpr float k_desktop_icon_grid_column_width = 126.0f;
 inline constexpr float k_desktop_icon_grid_row_height = 148.0f;
@@ -354,6 +374,14 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .sidebar_row_width = 0.0f,
             .sidebar_row_height = 0.0f,
             .sidebar_heading_height = 0.0f,
+            .sidebar_icon_size = 0.0f,
+            .sidebar_icon_leading = 0.0f,
+            .sidebar_label_leading = 0.0f,
+            .sidebar_label_top = 0.0f,
+            .sidebar_heading_label_leading = 0.0f,
+            .sidebar_heading_label_top = 0.0f,
+            .sidebar_section_gap = 0.0f,
+            .sidebar_selected_row_radius = 0.0f,
             .toolbar_group_height = 0.0f,
             .toolbar_group_radius = 0.0f,
             .toolbar_icon_button_width = 0.0f,
@@ -361,6 +389,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .titlebar_control_cluster_height = 0.0f,
             .titlebar_control_diameter = 0.0f,
             .titlebar_control_spacing = 0.0f,
+            .titlebar_control_start_x = 0.0f,
+            .titlebar_control_top = 0.0f,
             .window_radius = 0.0f,
             .icon_grid_column_width = 0.0f,
             .icon_grid_row_height = 0.0f,
@@ -397,6 +427,14 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .sidebar_row_width = k_desktop_sidebar_row_width,
         .sidebar_row_height = k_desktop_sidebar_row_height,
         .sidebar_heading_height = k_desktop_sidebar_heading_height,
+        .sidebar_icon_size = k_desktop_sidebar_icon_size,
+        .sidebar_icon_leading = k_desktop_sidebar_icon_leading,
+        .sidebar_label_leading = k_desktop_sidebar_label_leading,
+        .sidebar_label_top = k_desktop_sidebar_label_top,
+        .sidebar_heading_label_leading = k_desktop_sidebar_heading_label_leading,
+        .sidebar_heading_label_top = k_desktop_sidebar_heading_label_top,
+        .sidebar_section_gap = k_desktop_sidebar_section_gap,
+        .sidebar_selected_row_radius = k_desktop_sidebar_selected_row_radius,
         .toolbar_group_height = k_desktop_toolbar_group_height,
         .toolbar_group_radius = k_desktop_toolbar_group_radius,
         .toolbar_icon_button_width = k_desktop_toolbar_icon_button_width,
@@ -404,6 +442,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .titlebar_control_cluster_height = k_desktop_titlebar_control_cluster_height,
         .titlebar_control_diameter = k_desktop_titlebar_control_diameter,
         .titlebar_control_spacing = k_desktop_titlebar_control_spacing,
+        .titlebar_control_start_x = k_desktop_titlebar_control_start_x,
+        .titlebar_control_top = k_desktop_titlebar_control_top,
         .window_radius = k_desktop_window_radius,
         .icon_grid_column_width = k_desktop_icon_grid_column_width,
         .icon_grid_row_height = k_desktop_icon_grid_row_height,
@@ -815,6 +855,15 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("sidebar_width", json::Value{chrome.sidebar_width});
     out.emplace("sidebar_row_width", json::Value{chrome.sidebar_row_width});
     out.emplace("sidebar_row_height", json::Value{chrome.sidebar_row_height});
+    out.emplace("sidebar_heading_height", json::Value{chrome.sidebar_heading_height});
+    out.emplace("sidebar_icon_size", json::Value{chrome.sidebar_icon_size});
+    out.emplace("sidebar_icon_leading", json::Value{chrome.sidebar_icon_leading});
+    out.emplace("sidebar_label_leading", json::Value{chrome.sidebar_label_leading});
+    out.emplace("sidebar_label_top", json::Value{chrome.sidebar_label_top});
+    out.emplace("sidebar_heading_label_leading", json::Value{chrome.sidebar_heading_label_leading});
+    out.emplace("sidebar_heading_label_top", json::Value{chrome.sidebar_heading_label_top});
+    out.emplace("sidebar_section_gap", json::Value{chrome.sidebar_section_gap});
+    out.emplace("sidebar_selected_row_radius", json::Value{chrome.sidebar_selected_row_radius});
     out.emplace("toolbar_group_height", json::Value{chrome.toolbar_group_height});
     out.emplace("toolbar_group_radius", json::Value{chrome.toolbar_group_radius});
     out.emplace("toolbar_icon_button_width", json::Value{chrome.toolbar_icon_button_width});
@@ -822,6 +871,8 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("titlebar_control_cluster_height", json::Value{chrome.titlebar_control_cluster_height});
     out.emplace("titlebar_control_diameter", json::Value{chrome.titlebar_control_diameter});
     out.emplace("titlebar_control_spacing", json::Value{chrome.titlebar_control_spacing});
+    out.emplace("titlebar_control_start_x", json::Value{chrome.titlebar_control_start_x});
+    out.emplace("titlebar_control_top", json::Value{chrome.titlebar_control_top});
     out.emplace("window_radius", json::Value{chrome.window_radius});
     out.emplace("icon_grid_column_width", json::Value{chrome.icon_grid_column_width});
     out.emplace("icon_grid_row_height", json::Value{chrome.icon_grid_row_height});

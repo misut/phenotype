@@ -213,6 +213,46 @@
       "equals": 23.0
     },
     {
+      "path": "application.file_explorer.chrome.titlebar_control_start_x",
+      "equals": 20.0
+    },
+    {
+      "path": "application.file_explorer.chrome.titlebar_control_top",
+      "equals": 16.0
+    },
+    {
+      "path": "application.file_explorer.chrome.sidebar_icon_size",
+      "equals": 26.0
+    },
+    {
+      "path": "application.file_explorer.chrome.sidebar_icon_leading",
+      "equals": 12.0
+    },
+    {
+      "path": "application.file_explorer.chrome.sidebar_label_leading",
+      "equals": 48.0
+    },
+    {
+      "path": "application.file_explorer.chrome.sidebar_label_top",
+      "equals": 8.0
+    },
+    {
+      "path": "application.file_explorer.chrome.sidebar_heading_label_leading",
+      "equals": 10.0
+    },
+    {
+      "path": "application.file_explorer.chrome.sidebar_heading_label_top",
+      "equals": 7.0
+    },
+    {
+      "path": "application.file_explorer.chrome.sidebar_section_gap",
+      "equals": 14.0
+    },
+    {
+      "path": "application.file_explorer.chrome.sidebar_selected_row_radius",
+      "equals": 10.0
+    },
+    {
       "path": "application.file_explorer.chrome.icon_grid_column_width",
       "equals": 126.0
     },
