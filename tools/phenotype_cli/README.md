@@ -29,9 +29,13 @@ The initial scope is intentionally narrow:
 - `phenotype artifact verify-file-explorer` runs the local desktop/mobile file
   explorer contract gate from the CLI surface. It runs the shared model tests,
   builds the selected native examples, captures deterministic artifacts, and
-  invokes the uv-managed verifier without delegating to the shell wrapper. The
-  gate can be narrowed with `--profile`, repeated `--view-mode`, and repeated
-  `--scenario` options for faster local iteration before running the full gate;
+  invokes the uv-managed verifier without delegating to the shell wrapper. For
+  desktop captures, the gate injects
+  `PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS=1` so screenshots expose the
+  native window-control reserve; normal interactive launches leave that reserve
+  blank and rely only on OS-owned controls. The gate can be narrowed with
+  `--profile`, repeated `--view-mode`, and repeated `--scenario` options for
+  faster local iteration before running the full gate;
   `tools/verify_file_explorer_artifacts.sh` is a thin compatibility wrapper
   that builds and delegates to this command.
 - `phenotype package inspect <path>` checks the proposed package manifest,

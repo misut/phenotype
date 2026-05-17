@@ -339,7 +339,16 @@ duplicate
     assert(chrome.integrated_titlebar);
     assert(chrome.native_window_controls);
     assert(!chrome.duplicate_window_controls);
-    assert(chrome.content_window_control_markers);
+    assert(!chrome.content_window_control_markers);
+    assert(!chrome.artifact_window_control_markers);
+    assert(chrome.window_control_marker_mode == "runtime-native-controls");
+    auto artifact_chrome =
+        demo::explorer_chrome_with_artifact_window_markers(chrome);
+    assert(artifact_chrome.content_window_control_markers);
+    assert(artifact_chrome.artifact_window_control_markers);
+    assert(!artifact_chrome.duplicate_window_controls);
+    assert(artifact_chrome.window_control_marker_mode
+           == "artifact-probe-marker");
     assert(!chrome.status_bar_visible);
     assert(demo::explorer_icon_grid_columns(chrome).size() == 6);
     std::string const viewport_profile = "test-status-bar-viewport";
@@ -539,6 +548,11 @@ duplicate
     assert(debug_text.find("\"rendering_mode\":\"hierarchical\"")
            != std::string::npos);
     assert(debug_text.find("\"uses_sf_symbols_assets\":false")
+           != std::string::npos);
+    assert(debug_text.find(
+        "\"window_control_marker_mode\":\"runtime-native-controls\"")
+           != std::string::npos);
+    assert(debug_text.find("\"content_window_control_markers\":false")
            != std::string::npos);
     assert(debug_text.find("\"titlebar_control_start_x\"") != std::string::npos);
     assert(debug_text.find("\"profile\"") != std::string::npos);

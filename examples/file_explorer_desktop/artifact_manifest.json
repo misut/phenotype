@@ -190,6 +190,14 @@
       "equals": true
     },
     {
+      "path": "application.file_explorer.chrome.native_window.artifact_window_control_markers",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.window_control_marker_mode",
+      "equals": "artifact-probe-marker"
+    },
+    {
       "path": "application.file_explorer.chrome.toolbar_group_count",
       "equals": 5
     },
@@ -388,6 +396,14 @@
     {
       "path": "application.file_explorer.chrome.content_window_control_markers",
       "equals": true
+    },
+    {
+      "path": "application.file_explorer.chrome.artifact_window_control_markers",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.chrome.window_control_marker_mode",
+      "equals": "artifact-probe-marker"
     },
     {
       "path": "application.file_explorer.chrome.more_actions_open",

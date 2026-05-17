@@ -239,6 +239,7 @@ struct ExplorerChromeMetrics {
     bool icon_round_stroke_contract = false;
     bool icon_text_weight_aligned = false;
     bool icon_hierarchical_opacity = false;
+    bool artifact_window_control_markers = false;
     bool more_actions_open = false;
     bool status_bar_visible = false;
     std::string icon_module;
@@ -250,6 +251,7 @@ struct ExplorerChromeMetrics {
     std::string icon_rendering_mode;
     std::string icon_variant_policy;
     std::string icon_scale;
+    std::string window_control_marker_mode;
 };
 
 struct ExplorerInputTrace {
@@ -500,6 +502,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_round_stroke_contract = false,
             .icon_text_weight_aligned = false,
             .icon_hierarchical_opacity = false,
+            .artifact_window_control_markers = false,
             .status_bar_visible = false,
             .icon_module = "text_controls",
             .icon_style = "mobile_text_buttons",
@@ -510,6 +513,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_rendering_mode = "n/a",
             .icon_variant_policy = "n/a",
             .icon_scale = "n/a",
+            .window_control_marker_mode = "none",
         };
     }
     auto columns = desktop_icon_grid_column_count(viewport);
@@ -575,13 +579,14 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .integrated_titlebar = true,
         .native_window_controls = true,
         .duplicate_window_controls = false,
-        .content_window_control_markers = true,
+        .content_window_control_markers = false,
         .finder_segmented_toolbar = true,
         .owned_icon_assets = true,
         .uses_sf_symbols_assets = false,
         .icon_round_stroke_contract = true,
         .icon_text_weight_aligned = true,
         .icon_hierarchical_opacity = true,
+        .artifact_window_control_markers = false,
         .status_bar_visible = desktop_status_bar_visible(state),
         .icon_module = "phenotype.icons",
         .icon_style = "macos_rounded_outline_svg",
@@ -594,7 +599,18 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_rendering_mode = "hierarchical",
         .icon_variant_policy = "outline primary with filled action variants",
         .icon_scale = "medium",
+        .window_control_marker_mode = "runtime-native-controls",
     };
+}
+
+inline ExplorerChromeMetrics explorer_chrome_with_artifact_window_markers(
+        ExplorerChromeMetrics chrome) {
+    if (!chrome.native_window_controls || chrome.duplicate_window_controls)
+        return chrome;
+    chrome.content_window_control_markers = true;
+    chrome.artifact_window_control_markers = true;
+    chrome.window_control_marker_mode = "artifact-probe-marker";
+    return chrome;
 }
 
 inline std::vector<float> explorer_icon_grid_columns(
@@ -1068,6 +1084,8 @@ inline json::Value explorer_chrome_debug_json(
     native_window.emplace("native_window_controls", json::Value{chrome.native_window_controls});
     native_window.emplace("duplicate_window_controls", json::Value{chrome.duplicate_window_controls});
     native_window.emplace("content_window_control_markers", json::Value{chrome.content_window_control_markers});
+    native_window.emplace("artifact_window_control_markers", json::Value{chrome.artifact_window_control_markers});
+    native_window.emplace("window_control_marker_mode", json::Value{chrome.window_control_marker_mode});
 
     json::Object icon_system;
     icon_system.emplace("module", json::Value{chrome.icon_module});
@@ -1153,6 +1171,8 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("sidebar_symbol_count", json::Value{static_cast<std::int64_t>(chrome.sidebar_symbol_count)});
     out.emplace("toolbar_symbol_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_symbol_count)});
     out.emplace("content_window_control_markers", json::Value{chrome.content_window_control_markers});
+    out.emplace("artifact_window_control_markers", json::Value{chrome.artifact_window_control_markers});
+    out.emplace("window_control_marker_mode", json::Value{chrome.window_control_marker_mode});
     out.emplace("finder_segmented_toolbar", json::Value{chrome.finder_segmented_toolbar});
     out.emplace("more_actions_open", json::Value{chrome.more_actions_open});
     out.emplace("status_bar_visible", json::Value{chrome.status_bar_visible});
