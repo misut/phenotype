@@ -210,7 +210,9 @@ deterministic paint token so stable icons do not re-emit every frame. The
 generic `widget::svg_image` path uses the same parsed-document token contract,
 so app-owned SVG illustrations, package icons, and future generated symbols can
 stay static in the paint cache unless their document, size, or current color
-changes. The
+changes. `widget::svg_image` also marks the resulting node as a semantic
+`image`, so artifact snapshots can distinguish vector images from decorative
+canvas drawing without asking a backend to decode SVG files. The
 catalog encodes macOS-like rounded stroke caps and joins in each line icon's
 SVG source, records those attributes in `svg::Style`, uses bounded secondary
 opacity on detail strokes for SF Symbols-like hierarchical emphasis, and
@@ -260,7 +262,10 @@ continues to forbid copied Apple/SF Symbols vector artwork.
 Package app icons are separate resources, not part of the glyph catalog: they
 are declared as `app.icon` SVG assets in `phenotype.package.toml`, copied by the
 CLI bundle step, and validated by `phenotype.resources` before a platform
-packager maps them to `.app`, Windows, Android, or web icon formats.
+packager maps them to `.app`, Windows, Android, or web icon formats. Generic
+SVG assets use the same package contract (`image/svg+xml` plus a `.svg` source
+suffix), and `phenotype package inspect --json` reports total/preload/runtime
+SVG counts so asset regressions are visible in CI logs.
 
 ## Input Command Boundary
 
@@ -570,9 +575,10 @@ does not parse TOML, touch the filesystem, register fonts, copy assets, or
 probe platform bundles. CLI/package adapters build a catalog snapshot at the
 edge, then core code can resolve logical asset names, locale fallback chains,
 required translation keys, and package default typography without depending on
-where those files live. The pure contract also asserts a package-owned SVG
-`app.icon` asset and CJK-capable fallback for the Pretendard default UI font,
-so platform packagers can fail early before any native bundle work starts. The
+where those files live. The pure contract also asserts package-owned SVG asset
+counts, a package-owned SVG `app.icon` asset, and CJK-capable fallback for the
+Pretendard default UI font, so platform packagers can fail early before any
+native bundle work starts. The
 root `phenotype` umbrella provides
 `theme_with_resource_defaults` as a thin framework helper that returns a new
 `Theme`; the pure catalog package stays independent from UI types.

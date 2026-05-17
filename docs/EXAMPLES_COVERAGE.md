@@ -203,7 +203,7 @@ runner policy edits validate themselves.
 
 | Example | Platforms | Role |
 |---|---|---|
-| `examples/native` | macOS, Windows | Compact desktop widget showcase for shared controls, input debug, local/remote images, scroll, resize, and manual acceptance |
+| `examples/native` | macOS, Windows | Compact desktop widget showcase for shared controls, input debug, local/remote bitmap images, inline SVG vector image rendering, scroll, resize, and manual acceptance |
 | `examples/glass_showcase` | macOS, Windows | Material and glass-debug acceptance scene for deterministic backdrop regions, macOS sampled backdrop, all material kinds, artifact capture, and pixel-region checks |
 | `examples/file_explorer_desktop` | macOS, Windows | Finder-style desktop product workflow with native integrated chrome, phenotype-owned macOS-style SVG toolbar/sidebar icons and verifiable Apple-HIG/SF-Symbols-inspired catalog metadata, Finder-style segmented toolbar metrics, icon-led column location rows, viewport-aware icon/list/column/gallery panes, glass toolbar action clusters, sidebar locations, real sandboxed Trash, Recents icon grid, document/image/video/folder thumbnails, icon-revealed search, separate select/open activation, file/folder create, duplicate, delete, file preview, and sandboxed temp-root operations |
 | `examples/file_explorer_mobile` | macOS, Windows | Mobile file explorer layout with browse/preview/create tabs, compact location strip including Trash, material surfaces, search, direct folder open, file preview, file/folder create, duplicate, delete, and the same sandboxed model |
@@ -253,19 +253,21 @@ public material kinds, and expected material plan count. This keeps material
 probe input debugging cheap before running the local glass artifact gate.
 
 `phenotype package bundle` is the lightweight packaging counterpart. It stages
-the package manifest, declared SVG app icon, locales, Pretendard alias
-descriptor, and debug artifact manifest into an output directory, then writes
-`phenotype.bundle.json` with copied-file records and package checks. This is
-not a platform installer yet, but it gives CI and future packagers a concrete
-resource inventory to validate without launching a native window.
+the package manifest, declared SVG app icon, all declared SVG image assets,
+locales, Pretendard alias descriptor, and debug artifact manifest into an output
+directory, then writes `phenotype.bundle.json` with copied-file records and
+package checks. This is not a platform installer yet, but it gives CI and future
+packagers a concrete resource inventory to validate without launching a native
+window.
 
 The desktop and mobile file explorer examples also carry initial
 `phenotype.package.toml` manifests plus `assets/`, `locales/`, and `fonts/`
 fixtures. These package resources are inspectable by `tools/phenotype_cli` and
 document the future asset/i18n bundle contract. The package contract now
-requires `app.icon` to be a package-owned SVG asset and requires Pretendard's
-font descriptor to name a CJK-capable fallback. Runtime widget text now flows
-through `Theme::default_font_family` (`Pretendard` by default), while the
+requires package-owned SVG asset counts, requires `app.icon` to be a package-owned
+SVG asset, and requires Pretendard's font descriptor to name a CJK-capable
+fallback. Runtime widget text now flows through `Theme::default_font_family`
+(`Pretendard` by default), while the
 example-specific canvas labels pass the same family explicitly so the Finder
 scene and package manifest agree on typography.
 The desktop artifact manifest also verifies the built-in icon SVG subset,

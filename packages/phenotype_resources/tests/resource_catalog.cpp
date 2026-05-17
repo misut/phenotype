@@ -75,6 +75,9 @@ int main() {
     assert(contract.asset_count == 1);
     assert(contract.preload_asset_count == 1);
     assert(contract.runtime_visible_asset_count == 0);
+    assert(contract.svg_asset_count == 1);
+    assert(contract.preload_svg_asset_count == 1);
+    assert(contract.runtime_visible_svg_asset_count == 0);
     assert(contract.locale_count == 2);
     assert(contract.locale_string_count == 3);
     assert(contract.font_count == 1);
@@ -86,6 +89,9 @@ int main() {
     assert(contract.default_font_has_cjk_fallback);
     assert(contract.debug_artifact_manifest_declared);
     assert(contract.debug_verifier_declared);
+    assert(phenotype::resource_asset_declares_svg(catalog.assets[0]));
+    assert(phenotype::svg_asset_contract_policy()
+           == "package_svg_assets_must_declare_image_svg_xml_and_svg_source_suffix");
     assert(contract.locale_coverage.size() == 2);
     assert(contract.locale_coverage[1].tag == "ko");
     assert(contract.locale_coverage[1].fallback_chain.size() == 2);

@@ -71,7 +71,7 @@ inline auto default_glass_theme_contract() noexcept
         .material_policy =
             "pure material planner decides glass execution; theme provides portable tokens",
         .iconography_policy =
-            "macos_finder_rounded_outline_symbols_with_simplified_universal_metaphors",
+            "macos_finder_sf_symbols_aligned_rounded_outline_symbols_with_simplified_universal_metaphors",
         .icon_asset_policy =
             "phenotype_owned_svg_symbols_reference_sf_symbols_semantics_without_embedded_apple_artwork",
         .usage_policy =

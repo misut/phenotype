@@ -180,6 +180,9 @@ struct ResourceCatalogContract {
     std::size_t asset_count = 0;
     std::size_t preload_asset_count = 0;
     std::size_t runtime_visible_asset_count = 0;
+    std::size_t svg_asset_count = 0;
+    std::size_t preload_svg_asset_count = 0;
+    std::size_t runtime_visible_svg_asset_count = 0;
     std::size_t locale_count = 0;
     std::size_t locale_string_count = 0;
     std::size_t font_count = 0;
@@ -649,10 +652,17 @@ inline bool resource_has_suffix_case_insensitive(
         resource_ascii_lower_copy(suffix));
 }
 
-inline bool app_icon_asset_declares_svg(AssetDescriptor const& asset) {
-    return asset.name == "app.icon"
-        && resource_ascii_lower_copy(asset.content_type) == "image/svg+xml"
+inline bool resource_asset_declares_svg(AssetDescriptor const& asset) {
+    return resource_ascii_lower_copy(asset.content_type) == "image/svg+xml"
         && resource_has_suffix_case_insensitive(asset.source, ".svg");
+}
+
+inline bool app_icon_asset_declares_svg(AssetDescriptor const& asset) {
+    return asset.name == "app.icon" && resource_asset_declares_svg(asset);
+}
+
+inline auto svg_asset_contract_policy() noexcept -> std::string_view {
+    return "package_svg_assets_must_declare_image_svg_xml_and_svg_source_suffix";
 }
 
 inline bool font_fallback_covers_cjk(std::string_view family) {
@@ -750,10 +760,18 @@ inline auto resource_catalog_contract(
     contract.debug_verifier_declared = !catalog.debug.verifier.empty();
 
     for (auto const& asset : catalog.assets) {
+        auto const svg_asset = resource_asset_declares_svg(asset);
         if (asset.preload)
             ++contract.preload_asset_count;
         if (asset.runtime_visible)
             ++contract.runtime_visible_asset_count;
+        if (svg_asset) {
+            ++contract.svg_asset_count;
+            if (asset.preload)
+                ++contract.preload_svg_asset_count;
+            if (asset.runtime_visible)
+                ++contract.runtime_visible_svg_asset_count;
+        }
     }
     for (auto const& font : catalog.fonts) {
         if (font.register_font)

@@ -94,6 +94,13 @@ static Msg on_validation_changed(std::string s) { return ValidationChanged{std::
 
 static constexpr char kLocalImageAsset[] = "showcase-local.bmp";
 static constexpr char kRemoteImageAsset[] = "showcase.bmp";
+static constexpr char kInlineSvgImage[] =
+    R"SVG(<svg viewBox="0 0 64 64" fill="none" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round">
+<rect x="10" y="18" width="44" height="32" rx="8"/>
+<path d="M14 24 H28 L32 30 H50"/>
+<path d="M18 36 H46"/>
+<path d="M24 44 H40"/>
+</svg>)SVG";
 
 static std::string local_image_url() {
     namespace fs = std::filesystem;
@@ -526,6 +533,15 @@ void view(State const& state) {
             widget::text("Remote HTTP");
             layout::spacer(4);
             widget::image(remote_image_url(), 320.0f, 180.0f);
+            layout::spacer(10);
+            widget::text("Inline SVG vector");
+            layout::spacer(4);
+            widget::svg_image(
+                {kInlineSvgImage,
+                 static_cast<unsigned int>(sizeof(kInlineSvgImage) - 1)},
+                96.0f,
+                96.0f,
+                Color{0, 122, 255, 255});
             layout::spacer(8);
             widget::text("Expected state: show a placeholder first, replace it when the remote image succeeds, and keep the placeholder if the request never finishes.");
         });

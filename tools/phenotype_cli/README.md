@@ -41,13 +41,14 @@ The initial scope is intentionally narrow:
 - `phenotype package inspect <path>` checks the proposed package manifest,
   application/debug metadata, declared resource counts, referenced `source`
   files, CLI-owned debug verifier metadata, app-icon SVG policy, Pretendard
-  default-font policy, CJK fallback coverage, asset layout, locale layout, and
+  default-font policy, CJK fallback coverage, SVG asset layout, locale layout, and
   font layout. JSON output includes the normalized `ResourceCatalog` produced
   by the shared pure `phenotype.resources` path package plus its pure
   `ResourceCatalogContract`. The contract reports asset preload/runtime-visible
-  intent, `app.icon` SVG/preload state, default locale/font resolution, CJK
-  fallback state, debug metadata presence, and per-locale fallback coverage for
-  the default key set; the CLI only reads files and checks paths, while
+  intent, SVG asset counts and policy, `app.icon` SVG/preload state, default
+  locale/font resolution, CJK fallback state, debug metadata presence, and
+  per-locale fallback coverage for the default key set; the CLI only reads files
+  and checks paths, while
   manifest and locale text parsing stay in the pure package.
 - `phenotype package list <root>` scans for package manifests below a root and
   emits a compact package catalog for CI or future bundling, including resource

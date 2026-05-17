@@ -320,6 +320,8 @@ void test_default_theme_glass_contract() {
            != std::string_view::npos);
     assert(default_theme_iconography_policy().find("macos_finder")
            != std::string_view::npos);
+    assert(default_theme_iconography_policy().find("sf_symbols_aligned")
+           != std::string_view::npos);
     assert(default_theme_icon_asset_policy().find("without_embedded_apple_artwork")
            != std::string_view::npos);
     assert(default_theme_usage_policy().find("not_content_fill")
@@ -452,6 +454,7 @@ void test_svg_image_widget_uses_stable_paint_token() {
     assert(svg_node.width == 32.0f);
     assert(svg_node.height == 32.0f);
     assert(static_cast<bool>(svg_node.paint_fn));
+    assert(svg_node.debug_semantic_role == "image");
     assert(svg_node.paint_token == expected);
     assert(svg_node.paint_token != 0);
 
@@ -3539,6 +3542,14 @@ void test_resource_catalog_lookup_and_locale_fallback() {
     auto asset = find_asset(catalog, "app.icon");
     assert(asset);
     assert(asset->get().source == "assets/file-explorer-icon.svg");
+    assert(resource_asset_declares_svg(asset->get()));
+
+    auto contract = resource_catalog_contract(catalog, required);
+    assert(contract.svg_asset_count == 1);
+    assert(contract.preload_svg_asset_count == 1);
+    assert(contract.runtime_visible_svg_asset_count == 0);
+    assert(svg_asset_contract_policy()
+           == "package_svg_assets_must_declare_image_svg_xml_and_svg_source_suffix");
 
     auto font = find_font(catalog, "Pretendard");
     assert(font);
