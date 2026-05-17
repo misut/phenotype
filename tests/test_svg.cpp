@@ -316,6 +316,14 @@ void test_builtin_icons_parse() {
     assert(icons::reference_family() == "SF Symbols semantic reference");
     assert(icons::reference_policy().find("phenotype-owned")
            != std::string_view::npos);
+    assert(icons::interface_metaphor_policy()
+           == "familiar_simplified_macos_symbol_metaphors");
+    assert(icons::visual_consistency_policy()
+           == "consistent_size_stroke_detail_and_perspective");
+    assert(icons::toolbar_symbol_chrome_policy()
+           == "borderless_toolbar_symbols_inside_grouped_controls");
+    assert(icons::sidebar_symbol_color_policy()
+           == "accent_selected_user_tint_compatible_sidebar_symbols");
     assert(icons::presentation_policy()
            == "macos_role_aware_symbol_presentation");
     assert(icons::interaction_tone_policy()

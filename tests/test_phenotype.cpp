@@ -3574,6 +3574,10 @@ void test_icon_catalog_umbrella_export() {
            != std::string_view::npos);
     assert(phenotype::icon_catalog::stroke_geometry_policy()
            == "round_cap_round_join_svg_strokes");
+    assert(phenotype::icon_catalog::interface_metaphor_policy()
+           == "familiar_simplified_macos_symbol_metaphors");
+    assert(phenotype::icon_catalog::toolbar_symbol_chrome_policy()
+           == "borderless_toolbar_symbols_inside_grouped_controls");
     assert(phenotype::icon_catalog::svg_path_arc_symbol_count == 1);
     assert(phenotype::icon_catalog::round_stroke_symbol_count
            == phenotype::icon_catalog::outline_symbol_count);

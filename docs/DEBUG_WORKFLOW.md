@@ -193,6 +193,8 @@ The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
 the `phenotype.icon_catalog` / `phenotype.icons` style contract
 (`design_reference`, `asset_policy`, 24x24 alignment grid, stroke width,
 total/sidebar/toolbar/filled symbol counts, and
+`interface_metaphor_policy`, `visual_consistency_policy`,
+`toolbar_symbol_chrome_policy`, `sidebar_symbol_color_policy`,
 `interaction_tone_policy` / `file_type_color_policy`), traffic-light marker
 coordinates, and icon-grid density metrics such as column width, row height,
 pitch, thumbnail canvas size, label size, gap, visible rows, and visible

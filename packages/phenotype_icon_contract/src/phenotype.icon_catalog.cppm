@@ -330,6 +330,22 @@ inline auto file_type_color_policy() noexcept -> std::string_view {
     return "macos_finder_file_type_tints";
 }
 
+inline auto interface_metaphor_policy() noexcept -> std::string_view {
+    return "familiar_simplified_macos_symbol_metaphors";
+}
+
+inline auto visual_consistency_policy() noexcept -> std::string_view {
+    return "consistent_size_stroke_detail_and_perspective";
+}
+
+inline auto toolbar_symbol_chrome_policy() noexcept -> std::string_view {
+    return "borderless_toolbar_symbols_inside_grouped_controls";
+}
+
+inline auto sidebar_symbol_color_policy() noexcept -> std::string_view {
+    return "accent_selected_user_tint_compatible_sidebar_symbols";
+}
+
 inline auto default_scale_policy() noexcept -> std::string_view {
     return "medium";
 }

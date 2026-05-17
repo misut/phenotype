@@ -26,6 +26,14 @@ int main() {
     assert(icons::stroke_geometry_policy() == "round_cap_round_join_svg_strokes");
     assert(icons::stroke_cap_policy() == "round");
     assert(icons::stroke_join_policy() == "round");
+    assert(icons::interface_metaphor_policy()
+           == "familiar_simplified_macos_symbol_metaphors");
+    assert(icons::visual_consistency_policy()
+           == "consistent_size_stroke_detail_and_perspective");
+    assert(icons::toolbar_symbol_chrome_policy()
+           == "borderless_toolbar_symbols_inside_grouped_controls");
+    assert(icons::sidebar_symbol_color_policy()
+           == "accent_selected_user_tint_compatible_sidebar_symbols");
     assert(icons::all_symbol_count == 31);
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);
@@ -109,6 +117,8 @@ int main() {
                icons::default_scale(icons::SymbolPresentationRole::Sidebar))
            == "large");
     assert(icons::point_size(icons::SymbolScale::Medium) == 24.0f);
+    assert(icons::descriptor(icons::Symbol::Folder).layer_count
+           == icons::symbol_layer_count(icons::Symbol::Folder));
 
     std::puts("PASS: phenotype icon catalog contract is stable");
     return 0;
