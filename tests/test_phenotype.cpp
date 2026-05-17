@@ -461,6 +461,58 @@ void test_svg_image_widget_uses_stable_paint_token() {
     std::puts("PASS: widget::svg_image uses a stable paint token");
 }
 
+void test_svg_image_widget_options_contract() {
+    detail::g_app.arena.reset();
+
+    auto root_h = detail::alloc_node();
+    auto& root = detail::node_at(root_h);
+    root.style.flex_direction = FlexDirection::Row;
+
+    constexpr std::string_view source =
+        R"SVG(<svg viewBox="0 0 10 20" fill="none" stroke="currentColor"><path d="M0 0 L10 20"/></svg>)SVG";
+    auto const color = Color{255, 45, 85, 255};
+    auto options = SvgImageOptions{
+        .has_current_color = true,
+        .current_color = color,
+        .preserve_aspect_ratio = false,
+        .semantic_label = "runtime-svg-asset",
+    };
+    auto expected = svg::paint_token(
+        svg::parse(source),
+        40.0f,
+        20.0f,
+        color,
+        false);
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::svg_image(
+        {source.data(), static_cast<unsigned int>(source.size())},
+        40.0f,
+        20.0f,
+        options);
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 200.0f);
+
+    assert(root.children.size() == 1);
+    auto& svg_node = detail::node_at(root.children[0]);
+    assert(svg_node.width == 40.0f);
+    assert(svg_node.height == 20.0f);
+    assert(static_cast<bool>(svg_node.paint_fn));
+    assert(svg_node.debug_semantic_role == "image");
+    assert(svg_node.debug_semantic_label == "runtime-svg-asset");
+    assert(svg_node.paint_token == expected);
+    assert(svg_node.paint_token != svg::paint_token(
+        svg::parse(source),
+        40.0f,
+        20.0f,
+        color,
+        true));
+
+    std::puts("PASS: widget::svg_image options are renderer-visible");
+}
+
 void test_grid_cell_text_is_vertically_centered() {
     detail::g_app.arena.reset();
 
@@ -3930,6 +3982,7 @@ int main() {
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();
     test_svg_image_widget_uses_stable_paint_token();
+    test_svg_image_widget_options_contract();
     test_grid_cell_text_is_vertically_centered();
     test_canvas_widget_invokes_painter();
     test_canvas_linear_gradient_rect_emits_command();

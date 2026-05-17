@@ -690,21 +690,33 @@ inline void canvas(float width, float height,
 inline void svg_image(svg::Document document,
                       float width,
                       float height,
-                      Color current_color) {
+                      SvgImageOptions options) {
+    auto const current_color = options.has_current_color
+        ? options.current_color
+        : detail::g_app.theme.foreground;
     auto const paint_token =
-        svg::paint_token(document, width, height, current_color);
+        svg::paint_token(
+            document,
+            width,
+            height,
+            current_color,
+            options.preserve_aspect_ratio);
     auto h = detail::alloc_node();
     auto& node = detail::node_at(h);
     node.style.max_width = width;
     node.style.fixed_height = height;
     node.debug_semantic_role = "image";
+    if (!options.semantic_label.empty())
+        node.debug_semantic_label = std::string{options.semantic_label};
     node.paint_fn = [
         document = std::move(document),
         width,
         height,
-        current_color](Painter& painter) {
+        current_color,
+        preserve_aspect_ratio = options.preserve_aspect_ratio](
+            Painter& painter) {
         svg::paint(painter, document, 0.0f, 0.0f, width, height,
-                   svg::RenderOptions{current_color, true});
+                   svg::RenderOptions{current_color, preserve_aspect_ratio});
     };
     node.paint_token = paint_token;
     detail::attach_to_scope(h);
@@ -712,23 +724,50 @@ inline void svg_image(svg::Document document,
 
 inline void svg_image(svg::Document document,
                       float width,
+                      float height,
+                      Color current_color) {
+    svg_image(
+        std::move(document),
+        width,
+        height,
+        SvgImageOptions{
+            .has_current_color = true,
+            .current_color = current_color,
+        });
+}
+
+inline void svg_image(svg::Document document,
+                      float width,
                       float height) {
-    svg_image(std::move(document), width, height,
-              detail::g_app.theme.foreground);
+    svg_image(std::move(document), width, height, SvgImageOptions{});
+}
+
+inline void svg_image(str source,
+                      float width,
+                      float height,
+                      SvgImageOptions options) {
+    svg_image(svg::parse(std::string_view{source.data, source.len}),
+              width, height, options);
 }
 
 inline void svg_image(str source,
                       float width,
                       float height,
                       Color current_color) {
-    svg_image(svg::parse(std::string_view{source.data, source.len}),
-              width, height, current_color);
+    svg_image(
+        source,
+        width,
+        height,
+        SvgImageOptions{
+            .has_current_color = true,
+            .current_color = current_color,
+        });
 }
 
 inline void svg_image(str source,
                       float width,
                       float height) {
-    svg_image(source, width, height, detail::g_app.theme.foreground);
+    svg_image(source, width, height, SvgImageOptions{});
 }
 
 inline void icon(icons::Symbol symbol,

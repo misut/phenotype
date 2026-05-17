@@ -52,8 +52,11 @@ The initial scope is intentionally narrow:
   `ResourceCatalogContract`. The contract reports asset preload/runtime-visible
   intent, SVG asset counts and policy, `app.icon` SVG/preload state, default
   locale/font resolution, CJK fallback state, debug metadata presence, and
-  per-locale fallback coverage for the default key set; the CLI only reads files
-  and checks paths, while
+  per-locale fallback coverage for the default key set. The same command reads
+  each declared SVG asset at the CLI edge and reports
+  `svg_asset_inspections` with viewBox, shape count, paintability, unsupported
+  command count, diagnostics, and bytes from the pure SVG contract; the CLI
+  only reads files and checks paths, while
   manifest and locale text parsing stay in the pure package.
 - `phenotype package list <root>` scans for package manifests below a root and
   emits a compact package catalog for CI or future bundling, including resource
@@ -124,7 +127,9 @@ The initial scope is intentionally narrow:
   renderer-facing path.
   Filesystem reads stay at the CLI edge while the parser summary is pure app
   data, which makes SVG asset support observable without starting a native
-  renderer.
+  renderer. `phenotype package inspect --json` uses the same inspector for all
+  manifest-declared SVG assets, so packaged icons and runtime-visible SVG images
+  fail before a backend image cache or platform renderer is involved.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible
