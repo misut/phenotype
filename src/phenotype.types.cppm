@@ -273,17 +273,17 @@ inline Color lerp_color(Color from, Color to, float t) noexcept {
 
 struct Theme {
     // Color tokens
-    Color background    = {250, 250, 250, 255}; // #fafafa
-    Color foreground    = { 26,  26,  26, 255}; // #1a1a1a
-    Color accent        = { 10, 186, 181, 255}; // #0abab5 (Tiffany)
-    Color accent_strong = {  8, 128, 124, 255}; // #08807c
-    Color muted         = {107, 114, 128, 255}; // #6b7280
-    Color border        = {229, 231, 235, 255}; // #e5e7eb
-    Color surface       = {255, 255, 255, 255}; // #ffffff
-    Color code_bg       = {243, 244, 246, 255}; // #f3f4f6
-    Color hero_bg       = {244, 244, 245, 255}; // #f4f4f5
-    Color hero_fg       = { 24,  24,  27, 255}; // #18181b
-    Color hero_muted    = {113, 113, 122, 255}; // #71717a
+    Color background    = {242, 242, 247, 255}; // #f2f2f7
+    Color foreground    = { 28,  28,  30, 255}; // #1c1c1e
+    Color accent        = {  0, 122, 255, 255}; // #007aff
+    Color accent_strong = {  0,  90, 190, 255}; // #005abe
+    Color muted         = { 99,  99, 102, 255}; // #636366
+    Color border        = {209, 209, 214, 255}; // #d1d1d6
+    Color surface       = {255, 255, 255, 238}; // #ffffffee
+    Color code_bg       = {229, 229, 234, 255}; // #e5e5ea
+    Color hero_bg       = {242, 242, 247, 255}; // #f2f2f7
+    Color hero_fg       = { 28,  28,  30, 255}; // #1c1c1e
+    Color hero_muted    = { 99,  99, 102, 255}; // #636366
     Color transparent   = {  0,   0,   0,   0};
 
     // Typography
@@ -304,11 +304,11 @@ struct Theme {
     // 44 dp at app startup via phenotype::set_theme.
     float toggle_box_size    = 16.0f;
 
-    // Radius scale for compact native chrome.
-    float radius_xs   = 3.0f;
-    float radius_sm   = 2.0f;
-    float radius_md   = 3.0f;
-    float radius_lg   = 4.0f;
+    // Radius scale for Apple-like glass chrome.
+    float radius_xs   = 6.0f;
+    float radius_sm   = 10.0f;
+    float radius_md   = 14.0f;
+    float radius_lg   = 22.0f;
     float radius_full = 9999.0f;
 
     // Spacing scale
@@ -321,17 +321,17 @@ struct Theme {
     float space_3xl = 48.0f;
 
     // State tokens
-    Color state_hover_bg          = {229, 231, 235, 255}; // = border
-    Color state_hover_fg          = { 26,  26,  26, 255}; // = foreground
-    Color state_active_bg         = {  8, 128, 124, 255}; // = accent_strong
+    Color state_hover_bg          = {229, 229, 234, 255};
+    Color state_hover_fg          = { 28,  28,  30, 255}; // = foreground
+    Color state_active_bg         = {  0,  90, 190, 255}; // = accent_strong
     Color state_active_fg         = {255, 255, 255, 255};
-    Color state_disabled_bg       = {243, 244, 246, 255};
-    Color state_disabled_fg       = {156, 163, 175, 255};
-    Color state_disabled_border   = {229, 231, 235, 255}; // = border
+    Color state_disabled_bg       = {242, 242, 247, 255};
+    Color state_disabled_fg       = {142, 142, 147, 255};
+    Color state_disabled_border   = {209, 209, 214, 255}; // = border
     Color state_error_bg          = {254, 242, 242, 255};
     Color state_error_fg          = {185,  28,  28, 255};
     Color state_error_border      = {220,  38,  38, 255};
-    Color state_focus_ring        = { 10, 186, 181, 255}; // = accent (Tiffany)
+    Color state_focus_ring        = {  0, 122, 255, 255}; // = accent
     float state_focus_ring_width  = 2.0f;
 
     // Semantic colors reserved for downstream status widgets.

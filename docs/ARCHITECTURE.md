@@ -146,6 +146,30 @@ keeps the platform monospace default. This keeps Korean, Chinese, and Japanese
 text closer to the intended product typography without requiring every widget to
 pass an explicit `FontSpec`.
 
+The default theme uses an Apple-like glass palette: system blue for accent and
+focus affordances, neutral grouped-background grays, a translucent white
+surface token, and larger chrome radii. The values are phenotype-owned design
+tokens rather than Apple private API or copied platform assets, so examples can
+look native while remaining portable across macOS, Windows, Android, and WASI.
+
+`phenotype.svg` is a pure vector image layer. It parses a bounded SVG subset
+(`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,
+`polygon`, `fill`, `stroke`, `currentColor`, opacity, and stroke width) into a
+`svg::Document`. Rendering consumes only a `Painter`, target geometry, and an
+explicit `svg::RenderOptions`, then emits existing `Path` / `FillPath`
+commands. It never reads files, compiles shaders, probes platform SVG support,
+or mutates global state. File/package loading belongs to resource and backend
+edges; core SVG rendering starts from already-provided SVG text.
+
+`phenotype.icons` is a small built-in icon catalog defined as original 24x24
+SVG glyphs. It intentionally follows general Apple HIG-style optical
+proportions without copying SF Symbols artwork or names as assets. Apps can
+call `icons::document`, `icons::paint_symbol`, or `widget::icon`; the widget
+helper paints through `widget::canvas` and uses a deterministic paint token so
+stable icons do not re-emit every frame. The catalog encodes macOS-like rounded
+stroke caps and joins in each line icon's SVG source so future renderers can
+honor the same visual contract explicitly.
+
 ## Input Command Boundary
 
 Core application code can register hidden key commands with
@@ -188,6 +212,8 @@ append-only opcodes:
 | 16 | LinearGradientRect | f32 x, y, w, h; u32 from_color, to_color, axis, steps |
 
 All values are little-endian. Colors are packed as `(r << 24) | (g << 16) | (b << 8) | a`.
+SVG and built-in icon rendering deliberately reuse `Path` and `FillPath`; there
+is no SVG-specific backend opcode.
 
 The `phenotype.commands` module provides a C++ parser (`parse_commands(buf,
 len)`) that decodes these bytes into typed structs (`ClearCmd`, `FillRectCmd`,
@@ -530,6 +556,8 @@ This means Metal, Direct3D, Vulkan, Skia, software raster, or another future ren
 phenotype (umbrella re-export)
 ├── phenotype.types       — Color, Cmd, Style, LayoutNode, NodeHandle, Decoration
 ├── phenotype.resources   — path package with pure ResourceCatalog descriptors, lookup, fallback, diagnostics
+├── phenotype.svg         — pure SVG subset parser + Painter renderer
+├── phenotype.icons       — phenotype-owned SVG icon catalog
 ├── phenotype.state       — Arena, AppState, Scope, InputHandler, message queue
 ├── phenotype.diag        — OTel-shaped Counter, Gauge, Histogram, log ring, JSON snapshot
 ├── phenotype.layout      — flexbox engine, measure_text cache, vDOM diff

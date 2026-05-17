@@ -173,7 +173,7 @@ export namespace phenotype {
 
 // Deserialize a Theme from a JSON string. Missing fields keep their
 // C++ default values (txn::Mode::Partial), so callers can pass an
-// overlay like {"accent": "#0abab5"} and have every other field fall
+// overlay like {"accent": "#007aff"} and have every other field fall
 // back to the Theme defaults. Color fields accept either an
 // {r,g,b,a} object (back-compat) or one of the string forms
 // recognized by the ADL hook above (#rgb, #rrggbb, #rrggbbaa,
