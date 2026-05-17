@@ -3299,7 +3299,13 @@ auto icon_catalog_checks() -> std::vector<Check> {
          .ok = icon_catalog::style_reference().find("macOS Finder")
             != std::string_view::npos
             && icon_catalog::reference_family()
-                == std::string_view{"SF Symbols semantic reference"},
+                == std::string_view{"SF Symbols semantic reference"}
+            && icon_catalog::interface_metaphor_policy()
+                == std::string_view{
+                    "familiar_simplified_macos_symbol_metaphors"}
+            && icon_catalog::visual_consistency_policy()
+                == std::string_view{
+                    "consistent_size_stroke_detail_and_perspective"},
          .detail = std::string{icon_catalog::style_reference()},
          .hint =
              "Keep the icon catalog anchored to Apple HIG, macOS Finder, and SF Symbols semantic names."},
@@ -3362,6 +3368,12 @@ auto icon_catalog_checks() -> std::vector<Check> {
         {.name = "interaction_tone_policy",
          .ok = icon_catalog::interaction_tone_policy()
                 == std::string_view{"macos_finder_interaction_tones"}
+            && icon_catalog::toolbar_symbol_chrome_policy()
+                == std::string_view{
+                    "borderless_toolbar_symbols_inside_grouped_controls"}
+            && icon_catalog::sidebar_symbol_color_policy()
+                == std::string_view{
+                    "accent_selected_user_tint_compatible_sidebar_symbols"}
             && icon_catalog::macos_interaction_tone(
                    icon_catalog::SymbolPresentationRole::Sidebar,
                    icon_catalog::SymbolInteractionState{true, true})
@@ -3395,9 +3407,13 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"stroke_join_policy\":{},"
         "\"design_reference\":{},\"reference_family\":{},"
         "\"reference_policy\":{},\"asset_policy\":{},"
+        "\"interface_metaphor_policy\":{},"
+        "\"visual_consistency_policy\":{},"
         "\"alignment\":{},\"variant_policy\":{},"
         "\"presentation_policy\":{},\"tone_policy\":{},"
         "\"interaction_tone_policy\":{},"
+        "\"toolbar_symbol_chrome_policy\":{},"
+        "\"sidebar_symbol_color_policy\":{},"
         "\"file_type_color_policy\":{},\"default_scale\":{}}},"
         "\"counts\":{{\"all\":{},\"sidebar\":{},\"toolbar\":{},"
         "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
@@ -3418,11 +3434,15 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::reference_family()),
         json_string(icon_catalog::reference_policy()),
         json_string(icon_catalog::asset_policy()),
+        json_string(icon_catalog::interface_metaphor_policy()),
+        json_string(icon_catalog::visual_consistency_policy()),
         json_string(icon_catalog::alignment_policy()),
         json_string(icon_catalog::variant_policy()),
         json_string(icon_catalog::presentation_policy()),
         json_string(icon_catalog::tone_policy()),
         json_string(icon_catalog::interaction_tone_policy()),
+        json_string(icon_catalog::toolbar_symbol_chrome_policy()),
+        json_string(icon_catalog::sidebar_symbol_color_policy()),
         json_string(icon_catalog::file_type_color_policy()),
         json_string(icon_catalog::default_scale_policy()),
         icon_catalog::all_symbol_count,
@@ -3704,9 +3724,14 @@ auto explorer_chrome_json(
         "\"text_weight_aligned\":{},"
         "\"hierarchical_opacity\":{},\"design_reference\":{},"
         "\"reference_family\":{},\"reference_policy\":{},"
-        "\"asset_policy\":{},\"alignment\":{},\"rendering_mode\":{},"
+        "\"asset_policy\":{},"
+        "\"interface_metaphor_policy\":{},"
+        "\"visual_consistency_policy\":{},"
+        "\"alignment\":{},\"rendering_mode\":{},"
         "\"variant_policy\":{},\"presentation_policy\":{},"
         "\"tone_policy\":{},\"interaction_tone_policy\":{},"
+        "\"toolbar_symbol_chrome_policy\":{},"
+        "\"sidebar_symbol_color_policy\":{},"
         "\"interaction_tones\":{},"
         "\"file_type_color_policy\":{},\"scale\":{},"
         "\"sidebar_reference_symbols\":{},"
@@ -3802,12 +3827,16 @@ auto explorer_chrome_json(
         json_string(chrome.icon_reference_family),
         json_string(chrome.icon_reference_policy),
         json_string(chrome.icon_asset_policy),
+        json_string(chrome.icon_interface_metaphor_policy),
+        json_string(chrome.icon_visual_consistency_policy),
         json_string(chrome.icon_alignment),
         json_string(chrome.icon_rendering_mode),
         json_string(chrome.icon_variant_policy),
         json_string(chrome.icon_presentation_policy),
         json_string(chrome.icon_tone_policy),
         json_string(chrome.icon_interaction_tone_policy),
+        json_string(chrome.icon_toolbar_symbol_chrome_policy),
+        json_string(chrome.icon_sidebar_symbol_color_policy),
         icon_interaction_tones_json(
             chrome.icon_interaction_tone_policy != "n/a"),
         json_string(chrome.icon_file_type_color_policy),

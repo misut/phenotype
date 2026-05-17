@@ -209,6 +209,9 @@ verifiers can assert the style contract without pixel guessing.
 presentation policy: toolbar symbols use 24 pt secondary/selected tones,
 sidebar symbols use 26 pt primary/accent tones with a small optical vertical
 adjustment, and disabled/destructive tones are explicit pure values.
+The catalog also pins HIG-derived visual-language policies for familiar
+simplified metaphors, consistent size/stroke/detail/perspective, borderless
+toolbar symbols inside grouped controls, and accent-selected sidebar symbols.
 `icon_catalog::macos_interaction_tone` keeps selected and disabled toolbar,
 navigation, sidebar, file-type, and action tone choices in the same pure
 catalog instead of leaving those decisions inside examples or native backends.
