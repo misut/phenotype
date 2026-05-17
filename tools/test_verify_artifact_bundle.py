@@ -723,6 +723,7 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                 "source": "test",
                 "detail": "synthetic verifier self-test",
                 "result": "none",
+                "pressed_id": 4294967295,
                 "caret_rect": {"x": 0, "y": 0, "w": 0, "h": 0, "valid": False},
             },
             "semantic_tree": {
@@ -767,6 +768,7 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                 "backend": "synthetic",
                 "content_height": 240.0,
                 "viewport": {"x": 0, "y": 0, "w": 320, "h": 240, "valid": True},
+                "pressed_callback_id": None,
                 "details": {
                     "renderer": {
                         "material_plan_contract_version": (

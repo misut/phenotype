@@ -333,7 +333,9 @@ explorer artifact records those sizes and tone-policy names so the Finder-like
 icon treatment is checked as data, not as a screenshot guess. The same pure
 contract now covers symbol control chrome: selected, hover, and pressed
 background alpha, pressed symbol opacity/scale, borderless toolbar grouping,
-sidebar row radius, and hit-target policy.
+sidebar row radius, and hit-target policy. The desktop file explorer now routes
+that recipe through core `ButtonVisualState`, so the actual toolbar/sidebar
+renderer and the artifact JSON share one pressed-state source of truth.
 It also records the SVG subset and arc-lowering policy so a future icon
 regression can fail on an exact JSON path before anyone compares pixels. The
 AirDrop sidebar glyph now uses isolated circular SVG path arcs, so the example

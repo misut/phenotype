@@ -319,6 +319,16 @@ phenotype::Color rgba(int r, int g, int b, int a = 255) {
     };
 }
 
+phenotype::Color with_opacity(phenotype::Color color, float opacity) {
+    if (opacity < 0.0f)
+        opacity = 0.0f;
+    if (opacity > 1.0f)
+        opacity = 1.0f;
+    color.a = static_cast<unsigned char>(
+        static_cast<float>(color.a) * opacity + 0.5f);
+    return color;
+}
+
 phenotype::FontSpec finder_font(
         phenotype::FontWeight weight = phenotype::FontWeight::Regular) {
     return phenotype::FontSpec{
@@ -459,25 +469,46 @@ void paint_symbol_centered(
     phenotype::icons::paint_symbol(painter, presentation, x, y);
 }
 
-phenotype::Color sidebar_symbol_color(bool selected) {
-    return phenotype::icons::macos_control_chrome(
-        phenotype::icons::SymbolPresentationRole::Sidebar,
-        phenotype::icons::SymbolInteractionState{selected, true}).symbol_color;
+phenotype::icons::SymbolInteractionPhase icon_phase(
+        phenotype::ButtonVisualState state) {
+    if (state.pressed)
+        return phenotype::icons::SymbolInteractionPhase::Pressed;
+    if (state.hovered)
+        return phenotype::icons::SymbolInteractionPhase::Hovered;
+    return phenotype::icons::SymbolInteractionPhase::Normal;
+}
+
+phenotype::icons::SymbolPresentation icon_presentation_for_state(
+        phenotype::icons::Symbol symbol,
+        phenotype::icons::SymbolPresentationRole role,
+        bool selected,
+        phenotype::ButtonVisualState state) {
+    auto const recipe = phenotype::icons::macos_state_recipe(
+        role,
+        phenotype::icons::SymbolInteractionState{selected, state.enabled},
+        icon_phase(state));
+    auto presentation = phenotype::icons::presentation(
+        symbol,
+        role,
+        recipe.symbol_tone);
+    presentation.color = with_opacity(recipe.symbol_color, recipe.symbol_opacity);
+    presentation.point_size *= recipe.scale;
+    return presentation;
 }
 
 void paint_sidebar_icon(phenotype::Painter& painter,
                         std::string_view id,
                         bool selected,
+                        phenotype::ButtonVisualState state,
                         float origin_x,
                         float origin_y) {
     paint_symbol_centered(
         painter,
-        phenotype::icons::presentation(
+        icon_presentation_for_state(
             sidebar_symbol(id),
             phenotype::icons::SymbolPresentationRole::Sidebar,
-            phenotype::icons::macos_interaction_tone(
-                phenotype::icons::SymbolPresentationRole::Sidebar,
-                phenotype::icons::SymbolInteractionState{selected, true})),
+            selected,
+            state),
         origin_x,
         origin_y,
         k_sidebar_icon_size,
@@ -987,11 +1018,17 @@ void finder_column_location_button(std::string label,
     auto const chrome = phenotype::icons::macos_control_chrome(
         phenotype::icons::SymbolPresentationRole::Sidebar,
         phenotype::icons::SymbolInteractionState{selected, true});
+    auto const pressed = phenotype::icons::macos_state_recipe(
+        phenotype::icons::SymbolPresentationRole::Sidebar,
+        phenotype::icons::SymbolInteractionState{selected, true},
+        phenotype::icons::SymbolInteractionPhase::Pressed);
     phenotype::ButtonStyleOptions options;
     options.has_background = true;
     options.background = chrome.background_color;
     options.has_hover_background = true;
     options.hover_background = chrome.hover_background_color;
+    options.has_pressed_background = true;
+    options.pressed_background = pressed.background_color;
     options.has_border_color = true;
     options.border_color = rgba(0, 0, 0, 0);
     options.border_width = 0.0f;
@@ -1004,20 +1041,23 @@ void finder_column_location_button(std::string label,
         max_width,
         k_column_location_row_height,
         [label, icon, selected, max_width, font_size](
-                phenotype::Painter& painter) {
+                phenotype::Painter& painter,
+                phenotype::ButtonVisualState state) {
             float const icon_box = 22.0f;
             float const icon_x = 7.0f;
             float const icon_y =
                 (k_column_location_row_height - icon_box) * 0.5f;
             paint_symbol_centered(
                 painter,
-                sidebar_symbol(icon),
+                icon_presentation_for_state(
+                    sidebar_symbol(icon),
+                    phenotype::icons::SymbolPresentationRole::Sidebar,
+                    selected,
+                    state),
                 icon_x,
                 icon_y,
                 icon_box,
-                icon_box,
-                k_column_location_icon_size,
-                sidebar_symbol_color(selected));
+                icon_box);
 
             auto const ink = selected ? rgba(0, 122, 255)
                                       : rgba(28, 28, 30);
@@ -1182,11 +1222,17 @@ void sidebar_row(std::string_view label,
     auto const chrome = phenotype::icons::macos_control_chrome(
         phenotype::icons::SymbolPresentationRole::Sidebar,
         phenotype::icons::SymbolInteractionState{selected, true});
+    auto const pressed = phenotype::icons::macos_state_recipe(
+        phenotype::icons::SymbolPresentationRole::Sidebar,
+        phenotype::icons::SymbolInteractionState{selected, true},
+        phenotype::icons::SymbolInteractionPhase::Pressed);
     ButtonStyleOptions options;
     options.has_background = true;
     options.background = chrome.background_color;
     options.has_hover_background = true;
     options.hover_background = chrome.hover_background_color;
+    options.has_pressed_background = true;
+    options.pressed_background = pressed.background_color;
     options.has_border_color = true;
     options.border_color = rgba(0, 0, 0, 0);
     options.border_width = 0.0f;
@@ -1200,13 +1246,16 @@ void sidebar_row(std::string_view label,
         str{label_text},
         k_sidebar_row_width,
         k_sidebar_row_height,
-        [label_text, icon_name, selected](Painter& painter) {
+        [label_text, icon_name, selected](
+                Painter& painter,
+                phenotype::ButtonVisualState state) {
             float const icon_top =
                 (k_sidebar_row_height - k_sidebar_icon_size) * 0.5f;
             paint_sidebar_icon(
                 painter,
                 icon_name,
                 selected,
+                state,
                 k_sidebar_icon_leading,
                 icon_top);
             auto ink = selected ? rgba(0, 122, 255) : rgba(30, 30, 30);
@@ -1347,15 +1396,23 @@ void finder_sidebar(State const& state) {
 
 phenotype::ButtonStyleOptions toolbar_icon_button_options(
         bool selected = false,
-        bool disabled = false) {
+        bool disabled = false,
+        phenotype::icons::SymbolPresentationRole role =
+            phenotype::icons::SymbolPresentationRole::Toolbar) {
     auto const chrome = phenotype::icons::macos_control_chrome(
-        phenotype::icons::SymbolPresentationRole::Toolbar,
+        role,
         phenotype::icons::SymbolInteractionState{selected, !disabled});
+    auto const pressed = phenotype::icons::macos_state_recipe(
+        role,
+        phenotype::icons::SymbolInteractionState{selected, !disabled},
+        phenotype::icons::SymbolInteractionPhase::Pressed);
     phenotype::ButtonStyleOptions options;
     options.has_background = true;
     options.background = chrome.background_color;
     options.has_hover_background = true;
     options.hover_background = chrome.hover_background_color;
+    options.has_pressed_background = true;
+    options.pressed_background = pressed.background_color;
     options.has_border_color = true;
     options.border_color = rgba(0, 0, 0, 0);
     options.border_width = 0.0f;
@@ -1368,13 +1425,15 @@ phenotype::ButtonStyleOptions toolbar_icon_button_options(
 
 void paint_toolbar_symbol(phenotype::Painter& painter,
                           phenotype::icons::Symbol symbol,
-                          phenotype::icons::SymbolTone tone) {
+                          bool selected,
+                          phenotype::ButtonVisualState state) {
     paint_symbol_centered(
         painter,
-        phenotype::icons::presentation(
+        icon_presentation_for_state(
             symbol,
             phenotype::icons::SymbolPresentationRole::Toolbar,
-            tone),
+            selected,
+            state),
         0.0f,
         0.0f,
         k_toolbar_icon_button_width,
@@ -1383,27 +1442,22 @@ void paint_toolbar_symbol(phenotype::Painter& painter,
 
 void paint_toolbar_symbol(phenotype::Painter& painter,
                           phenotype::icons::Symbol symbol,
-                          bool selected = false) {
-    paint_toolbar_symbol(
-        painter,
-        symbol,
-        phenotype::icons::macos_interaction_tone(
-            phenotype::icons::SymbolPresentationRole::Toolbar,
-            phenotype::icons::SymbolInteractionState{selected, true}));
+                          phenotype::ButtonVisualState state) {
+    paint_toolbar_symbol(painter, symbol, false, state);
 }
 
 void paint_navigation_symbol(phenotype::Painter& painter,
                              phenotype::icons::Symbol symbol,
-                             bool enabled) {
-    auto const tone = phenotype::icons::macos_interaction_tone(
-        phenotype::icons::SymbolPresentationRole::Navigation,
-        phenotype::icons::SymbolInteractionState{false, enabled});
+                             bool enabled,
+                             phenotype::ButtonVisualState state) {
+    state.enabled = enabled;
     paint_symbol_centered(
         painter,
-        phenotype::icons::presentation(
+        icon_presentation_for_state(
             symbol,
             phenotype::icons::SymbolPresentationRole::Navigation,
-            tone),
+            false,
+            state),
         0.0f,
         0.0f,
         k_toolbar_icon_button_width,
@@ -1431,8 +1485,10 @@ void view_mode_button(char const* label,
         phenotype::str{semantic_label},
         k_toolbar_icon_button_width,
         k_toolbar_icon_button_height,
-        [symbol, selected](phenotype::Painter& painter) {
-            paint_toolbar_symbol(painter, symbol, selected);
+        [symbol, selected](
+                phenotype::Painter& painter,
+                phenotype::ButtonVisualState state) {
+            paint_toolbar_symbol(painter, symbol, selected, state);
         },
         SetViewMode{mode},
         toolbar_icon_button_options(selected),
@@ -1447,8 +1503,10 @@ void toolbar_action_button(char const* label,
         phenotype::str{semantic_label},
         k_toolbar_icon_button_width,
         k_toolbar_icon_button_height,
-        [symbol](phenotype::Painter& painter) {
-            paint_toolbar_symbol(painter, symbol);
+        [symbol](
+                phenotype::Painter& painter,
+                phenotype::ButtonVisualState state) {
+            paint_toolbar_symbol(painter, symbol, state);
         },
         ToolbarAction{semantic_label},
         toolbar_icon_button_options(false),
@@ -1465,8 +1523,10 @@ void toolbar_message_button(char const* label,
         phenotype::str{semantic_label},
         k_toolbar_icon_button_width,
         k_toolbar_icon_button_height,
-        [symbol, selected](phenotype::Painter& painter) {
-            paint_toolbar_symbol(painter, symbol, selected);
+        [symbol, selected](
+                phenotype::Painter& painter,
+                phenotype::ButtonVisualState state) {
+            paint_toolbar_symbol(painter, symbol, selected, state);
         },
         std::move(msg),
         toolbar_icon_button_options(selected),
@@ -1483,8 +1543,11 @@ void search_toggle_button(bool selected) {
         phenotype::str{semantic_label},
         k_toolbar_icon_button_width,
         k_toolbar_icon_button_height,
-        [](phenotype::Painter& painter) {
-            paint_toolbar_symbol(painter, phenotype::icons::Symbol::Search);
+        [](phenotype::Painter& painter, phenotype::ButtonVisualState state) {
+            paint_toolbar_symbol(
+                painter,
+                phenotype::icons::Symbol::Search,
+                state);
         },
         ToggleSearch{},
         toolbar_icon_button_options(selected),
@@ -1499,8 +1562,11 @@ void sort_action_button(file_explorer_demo::Snapshot const& snap) {
         phenotype::str{semantic_label},
         k_toolbar_icon_button_width,
         k_toolbar_icon_button_height,
-        [](phenotype::Painter& painter) {
-            paint_toolbar_symbol(painter, phenotype::icons::Symbol::SortGroup);
+        [](phenotype::Painter& painter, phenotype::ButtonVisualState state) {
+            paint_toolbar_symbol(
+                painter,
+                phenotype::icons::Symbol::SortGroup,
+                state);
         },
         CycleSort{},
         toolbar_icon_button_options(false),
@@ -1517,11 +1583,16 @@ void file_action_button(char const* label,
         phenotype::str{semantic_label},
         k_toolbar_icon_button_width,
         k_toolbar_icon_button_height,
-        [symbol, enabled](phenotype::Painter& painter) {
-            paint_navigation_symbol(painter, symbol, enabled);
+        [symbol, enabled](
+                phenotype::Painter& painter,
+                phenotype::ButtonVisualState state) {
+            paint_navigation_symbol(painter, symbol, enabled, state);
         },
         std::move(msg),
-        toolbar_icon_button_options(false, !enabled),
+        toolbar_icon_button_options(
+            false,
+            !enabled,
+            phenotype::icons::SymbolPresentationRole::Navigation),
         token ^ (enabled ? 0x300000000ull : 0ull));
 }
 
@@ -1535,11 +1606,16 @@ void navigation_button(char const* label,
         phenotype::str{semantic_label},
         k_toolbar_icon_button_width,
         k_toolbar_icon_button_height,
-        [symbol, enabled](phenotype::Painter& painter) {
-            paint_navigation_symbol(painter, symbol, enabled);
+        [symbol, enabled](
+                phenotype::Painter& painter,
+                phenotype::ButtonVisualState state) {
+            paint_navigation_symbol(painter, symbol, enabled, state);
         },
         std::move(msg),
-        toolbar_icon_button_options(false, !enabled),
+        toolbar_icon_button_options(
+            false,
+            !enabled,
+            phenotype::icons::SymbolPresentationRole::Navigation),
         token ^ (enabled ? 0x200000000ull : 0ull));
 }
 

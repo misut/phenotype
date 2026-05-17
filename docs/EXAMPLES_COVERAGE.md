@@ -284,7 +284,8 @@ arc-lowering policy, SF Symbols rendering-mode vocabulary, regular
 text-aligned weight policy, and explicit monochrome/hierarchical/palette/
 multicolor capability counts. It now also verifies normal/hovered/pressed
 state policy, toolbar/sidebar pressed background alpha, pressed symbol opacity,
-and pressed scale. That keeps Finder-style icon work tied to an engine feature
+and pressed scale. The desktop renderer consumes those recipes through core
+`ButtonVisualState`, so Finder-style icon work is tied to an engine feature
 instead of a one-off screenshot fixture. AirDrop uses isolated circular SVG
 path arcs in the sidebar, giving the artifact a concrete macOS-style native
 arc probe.

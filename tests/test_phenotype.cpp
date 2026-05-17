@@ -2729,7 +2729,8 @@ using ButtonMsg = std::variant<Click>;
 
 inline NodeHandle build_button(ButtonVariant variant, bool disabled,
                                unsigned int hovered_id = 0xFFFFFFFFu,
-                               unsigned int focused_id = 0xFFFFFFFFu) {
+                               unsigned int focused_id = 0xFFFFFFFFu,
+                               unsigned int pressed_id = 0xFFFFFFFFu) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::msg_queue().clear();
@@ -2740,6 +2741,7 @@ inline NodeHandle build_button(ButtonVariant variant, bool disabled,
     detail::bump_local_gen();
     detail::g_app.hovered_id = hovered_id;
     detail::g_app.focused_id = focused_id;
+    detail::g_app.pressed_id = pressed_id;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -2757,7 +2759,8 @@ inline NodeHandle build_button(ButtonVariant variant, bool disabled,
 inline NodeHandle build_button_with_options(
         ButtonStyleOptions options,
         unsigned int hovered_id = 0xFFFFFFFFu,
-        unsigned int focused_id = 0xFFFFFFFFu) {
+        unsigned int focused_id = 0xFFFFFFFFu,
+        unsigned int pressed_id = 0xFFFFFFFFu) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::msg_queue().clear();
@@ -2765,6 +2768,7 @@ inline NodeHandle build_button_with_options(
     detail::bump_local_gen();
     detail::g_app.hovered_id = hovered_id;
     detail::g_app.focused_id = focused_id;
+    detail::g_app.pressed_id = pressed_id;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -2781,15 +2785,19 @@ inline NodeHandle build_button_with_options(
 
 inline NodeHandle build_canvas_button_with_options(
         ButtonStyleOptions options,
-        std::uint64_t paint_token = 0xCAFEu) {
+        std::uint64_t paint_token = 0xCAFEu,
+        unsigned int hovered_id = 0xFFFFFFFFu,
+        unsigned int focused_id = 0xFFFFFFFFu,
+        unsigned int pressed_id = 0xFFFFFFFFu) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::g_app.callback_roles.clear();
     detail::msg_queue().clear();
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.hovered_id = 0xFFFFFFFFu;
-    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.hovered_id = hovered_id;
+    detail::g_app.focused_id = focused_id;
+    detail::g_app.pressed_id = pressed_id;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -2870,6 +2878,29 @@ void test_button_default_hovered_snaps_to_hover_bg() {
            btn.background.b == t.state_hover_bg.b);
     detail::g_app.hovered_id = 0xFFFFFFFFu;
     std::puts("PASS: button default snaps to hover bg when hovered");
+}
+
+void test_button_pressed_snaps_to_pressed_bg() {
+    ButtonStyleOptions options;
+    options.has_background = true;
+    options.background = Color{1, 2, 3, 255};
+    options.has_hover_background = true;
+    options.hover_background = Color{5, 6, 7, 255};
+    options.has_pressed_background = true;
+    options.pressed_background = Color{9, 10, 11, 255};
+
+    auto btn_h = button_test::build_button_with_options(
+        options,
+        /*hovered_id=*/0u,
+        /*focused_id=*/0xFFFFFFFFu,
+        /*pressed_id=*/0u);
+    auto& btn = detail::node_at(btn_h);
+    assert(btn.callback_id == 0u);
+    assert(btn.background.r == 9 && btn.background.g == 10
+           && btn.background.b == 11 && btn.background.a == 255);
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    std::puts("PASS: button snaps to pressed bg when pressed");
 }
 
 void test_button_primary_hovered_snaps_to_hover_bg() {
@@ -2965,6 +2996,8 @@ void test_button_style_options_custom_chrome() {
     options.background = Color{1, 2, 3, 4};
     options.has_hover_background = true;
     options.hover_background = Color{5, 6, 7, 8};
+    options.has_pressed_background = true;
+    options.pressed_background = Color{17, 18, 19, 20};
     options.has_border_color = true;
     options.border_color = Color{9, 10, 11, 12};
     options.has_text_color = true;
@@ -3003,6 +3036,15 @@ void test_button_style_options_custom_chrome() {
     auto& hovered = detail::node_at(hovered_h);
     assert(hovered.background.r == 5 && hovered.background.g == 6
            && hovered.background.b == 7 && hovered.background.a == 8);
+
+    auto pressed_h = button_test::build_button_with_options(
+        options,
+        /*hovered_id=*/0u,
+        /*focused_id=*/0xFFFFFFFFu,
+        /*pressed_id=*/0u);
+    auto& pressed = detail::node_at(pressed_h);
+    assert(pressed.background.r == 17 && pressed.background.g == 18
+           && pressed.background.b == 19 && pressed.background.a == 20);
 
     std::puts("PASS: button style options custom chrome");
 }
@@ -3045,6 +3087,66 @@ void test_canvas_button_semantic_and_layout_contract() {
     assert(canvas.debug_semantic_hidden == true);
 
     std::puts("PASS: canvas_button semantic + layout contract");
+}
+
+void test_canvas_button_visual_state_contract() {
+    ButtonStyleOptions options;
+    options.max_width = 44.0f;
+    options.fixed_height = 36.0f;
+    options.has_pressed_background = true;
+    options.pressed_background = Color{9, 10, 11, 255};
+
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.callback_roles.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+    detail::g_app.hovered_id = 0u;
+    detail::g_app.focused_id = 0u;
+    detail::g_app.pressed_id = 0u;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    bool observed_pressed = false;
+    bool observed_hovered = false;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::canvas_button<button_test::ButtonMsg>(
+        "Stateful",
+        44.0f,
+        36.0f,
+        [&observed_pressed, &observed_hovered](
+                Painter& p,
+                ButtonVisualState state) {
+            observed_pressed = state.pressed;
+            observed_hovered = state.hovered;
+            p.line(2.0f, 2.0f, state.pressed ? 24.0f : 12.0f, 12.0f,
+                   1.0f, Color{20, 20, 20, 255});
+        },
+        button_test::Click{},
+        options,
+        0xCAFEu);
+    Scope::set_current(nullptr);
+
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    auto& btn = detail::node_at(root.children[0]);
+    assert(btn.callback_id == 0u);
+    assert(btn.children.size() == 1);
+    auto& canvas = detail::node_at(btn.children[0]);
+    assert(canvas.paint_token != 0xCAFEu);
+
+    LAYOUT_NODE(root_h, 100.0f);
+    CMD_LEN = 0;
+    PAINT_NODE(root_h, 0, 0, 0, 100.0f);
+    assert(observed_pressed);
+    assert(observed_hovered);
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.pressed_id = 0xFFFFFFFFu;
+
+    std::puts("PASS: canvas_button visual state contract");
 }
 
 void test_canvas_button_disabled_contract() {
@@ -3852,12 +3954,14 @@ int main() {
     test_button_primary_variant();
     test_button_default_hovered_snaps_to_hover_bg();
     test_button_primary_hovered_snaps_to_hover_bg();
+    test_button_pressed_snaps_to_pressed_bg();
     test_button_focused_snaps_to_focus_ring_width();
     test_button_defocused_resting_border_width();
     test_button_disabled();
     test_button_disabled_custom_chrome();
     test_button_style_options_custom_chrome();
     test_canvas_button_semantic_and_layout_contract();
+    test_canvas_button_visual_state_contract();
     test_canvas_button_disabled_contract();
     test_canvas_button_disabled_custom_chrome();
     test_text_field_default();

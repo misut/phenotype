@@ -84,6 +84,9 @@ normal/hovered/pressed state policy, toolbar/sidebar pressed alpha, pressed
 symbol opacity/scale, toolbar button alpha/radius metrics, symbol counts, and
 the exact semantic reference arrays for the visible Finder-style toolbar/sidebar
 glyphs, plus the file-type symbol table used by icon-view fallback painters.
+The live toolbar and sidebar buttons consume the same state recipes through
+`ButtonVisualState`, so hover and press chrome affect both the button material
+and the glyph opacity/scale instead of remaining debug-only metadata.
 The desktop sidebar additionally exposes the pure `token -> symbol -> semantic
 reference` table used by the renderer (`recents -> recents -> clock`,
 `download -> download -> arrow.down.circle`, and so on), without depending on

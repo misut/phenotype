@@ -367,19 +367,21 @@ inline void button(str label, Msg msg, ButtonStyleOptions options) {
         return;
     }
 
-    // Predict the callback id we're about to push so the hover/focus
+    // Predict the callback id we're about to push so the hover/focus/press
     // samples mirror paint's own checks (phenotype.paint.cppm:632-636)
     // at view time.
     auto const id = static_cast<unsigned int>(
         detail::g_app.callbacks.size());
     bool const is_hovered = (id == detail::g_app.hovered_id);
     bool const is_focused = (id == detail::g_app.focused_id);
+    bool const is_pressed = (id == detail::g_app.pressed_id);
 
-    Color base_bg, hover_bg, base_border;
+    Color base_bg, hover_bg, pressed_bg, base_border;
     switch (options.variant) {
         case ButtonVariant::Primary:
             base_bg = t.accent;
             hover_bg = t.accent_strong;
+            pressed_bg = t.accent_strong;
             base_border = t.accent;
             node.text_color = t.state_active_fg;
             break;
@@ -387,6 +389,7 @@ inline void button(str label, Msg msg, ButtonStyleOptions options) {
         default:
             base_bg = t.surface;
             hover_bg = t.state_hover_bg;
+            pressed_bg = t.state_hover_bg;
             base_border = t.border;
             node.text_color = t.foreground;
             break;
@@ -395,6 +398,8 @@ inline void button(str label, Msg msg, ButtonStyleOptions options) {
         base_bg = options.background;
     if (options.has_hover_background)
         hover_bg = options.hover_background;
+    if (options.has_pressed_background)
+        pressed_bg = options.pressed_background;
     if (options.has_border_color)
         base_border = options.border_color;
     if (options.has_text_color)
@@ -406,7 +411,9 @@ inline void button(str label, Msg msg, ButtonStyleOptions options) {
     // `node.hover_background` stays unset so paint's
     // `(is_hovered && hover_background.a > 0)` guard falls through to
     // the animated `node.background` we just produced.
-    node.background = animate_color(is_hovered ? hover_bg : base_bg, 150);
+    auto const target_bg = is_pressed ? pressed_bg
+        : (is_hovered ? hover_bg : base_bg);
+    node.background = animate_color(target_bg, 150);
     // View-time focus ring: width grows from 1px to
     // `state_focus_ring_width`, colour cross-fades from the variant's
     // resting border to `state_focus_ring`. Paint reads both fields
@@ -748,11 +755,28 @@ inline void icon(icons::Symbol symbol, float size) {
     icon(symbol, size, detail::g_app.theme.foreground);
 }
 
-template<typename Msg>
+inline std::uint64_t button_visual_state_token(
+        std::uint64_t paint_token,
+        ButtonVisualState state) noexcept {
+    if (paint_token == 0)
+        return 0;
+    std::uint64_t token = paint_token;
+    if (state.hovered)
+        token ^= 0x9E3779B97F4A7C15ull;
+    if (state.focused)
+        token ^= 0xC2B2AE3D27D4EB4Full;
+    if (state.pressed)
+        token ^= 0x165667B19E3779F9ull;
+    if (!state.enabled)
+        token ^= 0x85EBCA77C2B2AE63ull;
+    return token;
+}
+
+template<typename Msg, typename PaintFn>
 inline void canvas_button(str label,
                           float width,
                           float height,
-                          std::function<void(Painter&)> paint_fn,
+                          PaintFn paint_fn,
                           Msg msg,
                           ButtonStyleOptions options = {},
                           std::uint64_t paint_token = 0) {
@@ -790,6 +814,12 @@ inline void canvas_button(str label,
         : t.radius_sm;
     node.interaction_role = InteractionRole::Button;
     node.debug_semantic_label = std::string(label.data, label.len);
+    ButtonVisualState visual_state{
+        .hovered = false,
+        .focused = false,
+        .pressed = false,
+        .enabled = !options.disabled,
+    };
 
     if (options.disabled) {
         node.background = options.has_background
@@ -813,12 +843,20 @@ inline void canvas_button(str label,
             detail::g_app.callbacks.size());
         bool const is_hovered = (id == detail::g_app.hovered_id);
         bool const is_focused = (id == detail::g_app.focused_id);
+        bool const is_pressed = (id == detail::g_app.pressed_id);
+        visual_state = ButtonVisualState{
+            .hovered = is_hovered,
+            .focused = is_focused,
+            .pressed = is_pressed,
+            .enabled = true,
+        };
 
-        Color base_bg, hover_bg, base_border;
+        Color base_bg, hover_bg, pressed_bg, base_border;
         switch (options.variant) {
             case ButtonVariant::Primary:
                 base_bg = t.accent;
                 hover_bg = t.accent_strong;
+                pressed_bg = t.accent_strong;
                 base_border = t.accent;
                 node.text_color = t.state_active_fg;
                 break;
@@ -826,6 +864,7 @@ inline void canvas_button(str label,
             default:
                 base_bg = t.surface;
                 hover_bg = t.state_hover_bg;
+                pressed_bg = t.state_hover_bg;
                 base_border = t.border;
                 node.text_color = t.foreground;
                 break;
@@ -834,6 +873,8 @@ inline void canvas_button(str label,
             base_bg = options.background;
         if (options.has_hover_background)
             hover_bg = options.hover_background;
+        if (options.has_pressed_background)
+            pressed_bg = options.pressed_background;
         if (options.has_border_color)
             base_border = options.border_color;
         if (options.has_text_color)
@@ -842,7 +883,9 @@ inline void canvas_button(str label,
             ? options.border_width
             : 1.0f;
 
-        node.background = animate_color(is_hovered ? hover_bg : base_bg, 150);
+        auto const target_bg = is_pressed ? pressed_bg
+            : (is_hovered ? hover_bg : base_bg);
+        node.background = animate_color(target_bg, 150);
         node.border_width = animate_float(
             is_focused ? t.state_focus_ring_width : base_border_width, 150);
         node.border_color = animate_color(
@@ -870,8 +913,16 @@ inline void canvas_button(str label,
     auto& canvas_node = detail::node_at(canvas_h);
     canvas_node.style.max_width = child_width;
     canvas_node.style.fixed_height = child_height;
-    canvas_node.paint_fn = std::move(paint_fn);
-    canvas_node.paint_token = paint_token;
+    canvas_node.paint_fn = [paint_fn = std::move(paint_fn), visual_state](
+            Painter& painter) mutable {
+        if constexpr (std::invocable<PaintFn&, Painter&, ButtonVisualState>) {
+            paint_fn(painter, visual_state);
+        } else {
+            paint_fn(painter);
+        }
+    };
+    canvas_node.paint_token =
+        button_visual_state_token(paint_token, visual_state);
     canvas_node.debug_semantic_hidden = true;
     detail::append_child(h, canvas_h);
 }
@@ -1458,6 +1509,8 @@ void run(Host& host, View view, Update update) {
     saved_update = std::move(update);
     detail::g_app.input_debug = {};
     detail::g_app.callback_roles.clear();
+    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
 
     detail::install_app_runner([] {
         auto& host = *saved_host;
@@ -1525,10 +1578,10 @@ void run(Host& host, View view, Update update) {
 
         // Paint-cache invalidation mask — subtrees whose callback_mask
         // intersects this bitset must re-walk instead of blitting from
-        // prev_cmd_buf. We include both the old and new hover/focus ids
-        // so that the subtree that USED to be hovered/focused redraws
-        // without its hover background, and the subtree that is now
-        // hovered/focused redraws WITH it. The focused id is always
+        // prev_cmd_buf. We include both the old and new hover/focus/press
+        // ids so that the subtree that USED to be hovered/focused/pressed
+        // redraws without its transient background, and the subtree that is
+        // now hovered/focused/pressed redraws WITH it. The focused id is always
         // included because focused inputs can receive caret/selection/
         // text changes that alter emitted bytes without the id itself
         // transitioning.
@@ -1542,7 +1595,11 @@ void run(Host& host, View view, Update update) {
         if (app.focused_id != app.prev_focused_id) {
             inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
         }
+        if (app.pressed_id != app.prev_pressed_id) {
+            inv |= mask_bit(app.pressed_id) | mask_bit(app.prev_pressed_id);
+        }
         inv |= mask_bit(app.focused_id);
+        inv |= mask_bit(app.pressed_id);
         // While any view-time interpolation is still advancing, the
         // animated `node.*` values change every frame without the
         // owning callback_id appearing in the diff above (e.g. a
@@ -1583,6 +1640,7 @@ void run(Host& host, View view, Update update) {
         app.prev_scroll_y   = app.scroll_y;
         app.prev_hovered_id = app.hovered_id;
         app.prev_focused_id = app.focused_id;
+        app.prev_pressed_id = app.pressed_id;
 
         auto total = t5 - t0;
         metrics::inst::frame_duration.record(total);
@@ -1608,6 +1666,8 @@ void run(View view, Update update) {
     saved_update = std::move(update);
     detail::g_app.input_debug = {};
     detail::g_app.callback_roles.clear();
+    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
 
     detail::install_app_runner([] {
         auto t0 = metrics::detail::now_ns();
@@ -1678,7 +1738,11 @@ void run(View view, Update update) {
         if (app.focused_id != app.prev_focused_id) {
             inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
         }
+        if (app.pressed_id != app.prev_pressed_id) {
+            inv |= mask_bit(app.pressed_id) | mask_bit(app.prev_pressed_id);
+        }
         inv |= mask_bit(app.focused_id);
+        inv |= mask_bit(app.pressed_id);
         // While any view-time interpolation is still advancing, the
         // animated `node.*` values change every frame without the
         // owning callback_id appearing in the diff above (e.g. a
@@ -1718,6 +1782,7 @@ void run(View view, Update update) {
         app.prev_scroll_y   = app.scroll_y;
         app.prev_hovered_id = app.hovered_id;
         app.prev_focused_id = app.focused_id;
+        app.prev_pressed_id = app.pressed_id;
 
         auto total = t5 - t0;
         metrics::inst::frame_duration.record(total);
@@ -2995,6 +3060,7 @@ inline void note_input_event(char const* event,
     snapshot.focused_id = g_app.focused_id;
     snapshot.focused_role = interaction_role_name(focused_role);
     snapshot.hovered_id = g_app.hovered_id;
+    snapshot.pressed_id = g_app.pressed_id;
     snapshot.scroll_x = g_app.scroll_x;
     snapshot.scroll_y = g_app.scroll_y;
     snapshot.caret_pos = g_app.caret_pos;
@@ -3084,6 +3150,18 @@ inline bool set_hover_id(unsigned int callback_id,
     return true;
 }
 
+inline bool set_pressed_id(unsigned int callback_id,
+                           char const* source = "core",
+                           char const* detail = "pointer-press") {
+    if (g_app.pressed_id == callback_id) {
+        note_input_event("press", source, detail, "ignored", callback_id);
+        return false;
+    }
+    g_app.pressed_id = callback_id;
+    note_input_event("press", source, detail, "handled", callback_id);
+    return true;
+}
+
 inline bool set_focus_id(unsigned int callback_id,
                          char const* source = "core",
                          char const* detail = "focus-change") {
@@ -3098,6 +3176,10 @@ inline bool set_focus_id(unsigned int callback_id,
 
 inline unsigned int get_focused_id() {
     return g_app.focused_id;
+}
+
+inline unsigned int get_pressed_id() {
+    return g_app.pressed_id;
 }
 
 inline float get_total_height() {
@@ -3318,6 +3400,7 @@ inline diag::InputDebugSnapshot materialize_input_debug_snapshot() {
     snapshot.focused_id = g_app.focused_id;
     snapshot.focused_role = interaction_role_name(callback_role(g_app.focused_id));
     snapshot.hovered_id = g_app.hovered_id;
+    snapshot.pressed_id = g_app.pressed_id;
     snapshot.scroll_x = g_app.scroll_x;
     snapshot.scroll_y = g_app.scroll_y;
     snapshot.caret_pos = g_app.caret_pos;
@@ -3438,6 +3521,7 @@ void repaint(Host& host, float scroll_x, float scroll_y) {
     app.prev_scroll_y   = app.scroll_y;
     app.prev_hovered_id = app.hovered_id;
     app.prev_focused_id = app.focused_id;
+    app.prev_pressed_id = app.pressed_id;
 }
 #else
 inline void repaint(float scroll_x, float scroll_y) {
@@ -3471,6 +3555,7 @@ inline void repaint(float scroll_x, float scroll_y) {
     app.prev_scroll_y   = app.scroll_y;
     app.prev_hovered_id = app.hovered_id;
     app.prev_focused_id = app.focused_id;
+    app.prev_pressed_id = app.pressed_id;
 }
 #endif
 
@@ -3703,6 +3788,7 @@ inline diag::PlatformRuntimeSnapshot build_platform_runtime_snapshot(
     runtime.content_height = get_total_height();
     runtime.focused_callback_id = optional_callback_id(g_app.focused_id);
     runtime.hovered_callback_id = optional_callback_id(g_app.hovered_id);
+    runtime.pressed_callback_id = optional_callback_id(g_app.pressed_id);
     runtime.details = runtime_details_override.has_value()
         ? *runtime_details_override
         : diag::detail::current_platform_runtime_details();

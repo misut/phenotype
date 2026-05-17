@@ -46,7 +46,7 @@ current interpolated value to drop into a `LayoutNode` field, and the
 runtime advances the interpolation automatically across rebuilds:
 
 ```cpp
-node.background  = animate_color(is_hovered ? hover : base, 150);
+node.background  = animate_color(is_pressed ? pressed : (is_hovered ? hover : base), 150);
 node.border_width = animate_float(is_focused ? 2.0f : 1.0f, 150);
 ```
 
@@ -107,7 +107,7 @@ auto-tick path as a follow-up.
 `trigger_rebuild` (not `repaint_current`) is the load-bearing
 choice — repaint just walks the existing arena, so without rebuilding
 the view the baked-in interpolated value would freeze at the start of
-the fade. The shell's hover, focus, and scroll dispatches all promote
+the fade. The shell's hover, press, focus, and scroll dispatches all promote
 to `trigger_rebuild` whenever a transition is in flight (scroll stays
 on the cheaper paint-only path while idle so the steady-state cost is
 unchanged).
@@ -115,7 +115,7 @@ unchanged).
 ### Paint cache invalidation while animating
 
 `paint_invalidation_mask` normally only includes the callback ids
-whose hover / focus state changed since the previous frame, so paint
+whose hover / focus / press state changed since the previous frame, so paint
 can blit cached subtree bytes for everything else. That falls down
 during a fade-out: the widget that just lost focus or hover is no
 longer in the diff, but its `node.border_width` /
@@ -246,8 +246,10 @@ catalog instead of leaving those decisions inside examples or native backends.
 hover background colors, corner radii, hit targets, and borderless/grouped
 control flags. `icon_catalog::macos_state_recipe` then resolves normal,
 hovered, pressed, selected, and disabled symbol states, including pressed
-background alpha, symbol opacity, and scale. Finder-like toolbar and sidebar
-symbol states therefore stay LLM-debuggable without consulting AppKit.
+background alpha, symbol opacity, and scale. `widget::canvas_button` exposes
+that core state as `ButtonVisualState`, so Finder-like toolbar and sidebar
+symbols can consume the pure recipe in the actual renderer while staying
+LLM-debuggable without consulting AppKit.
 The same pure catalog exposes a Finder-style file-type tint policy for
 folder/document/image/movie glyphs, which desktop examples use in list and
 column rows without asking a native icon service for platform artwork.
