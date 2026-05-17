@@ -799,6 +799,62 @@
       "equals": 72.0
     },
     {
+      "path": "application.file_explorer.chrome.thumbnail_system.visual_policy",
+      "equals": "finder_rich_preview_thumbnails_v1"
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.asset_policy",
+      "equals": "deterministic_vector_preview_painters_no_external_assets"
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.pdf_policy",
+      "equals": "page_preview_with_fold_header_table_rows_and_bottom_highlight"
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.image_policy",
+      "equals": "rounded_screenshot_strip_with_layered_blurred_content"
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.video_policy",
+      "equals": "wide_video_preview_with_filmstrip_and_content_bands"
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.shadow_policy",
+      "equals": "subtle_windowserver_like_drop_shadow"
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.uses_external_previews",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.pdf_page_width",
+      "equals": 50.0
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.pdf_page_height",
+      "equals": 64.0
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.media_preview_width",
+      "equals": 88.0
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.media_preview_height",
+      "equals": 38.0
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.pdf_detail_line_count",
+      "equals": 12
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.image_sample_block_count",
+      "equals": 7
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.video_strip_count",
+      "equals": 6
+    },
+    {
       "path": "application.file_explorer.chrome.icon_grid_label_height",
       "equals": 46.0
     },
@@ -1217,6 +1273,24 @@
       "rect": [0.23, 0.14, 0.74, 0.68],
       "min_luma_delta": 18.0,
       "min_unique_colors": 40
+    },
+    {
+      "name": "finder-pdf-thumbnail-preview",
+      "rect": [0.225, 0.155, 0.055, 0.095],
+      "min_luma_delta": 40.0,
+      "min_unique_colors": 80
+    },
+    {
+      "name": "finder-image-thumbnail-preview",
+      "rect": [0.325, 0.395, 0.075, 0.055],
+      "min_luma_delta": 24.0,
+      "min_unique_colors": 35
+    },
+    {
+      "name": "finder-video-thumbnail-preview",
+      "rect": [0.665, 0.395, 0.075, 0.055],
+      "min_luma_delta": 28.0,
+      "min_unique_colors": 45
     }
   ],
   "pixel_region_metrics": [
@@ -1304,6 +1378,21 @@
       "region": "finder-toolbar",
       "metric": "edge_energy",
       "gte": 1.8
+    },
+    {
+      "region": "finder-pdf-thumbnail-preview",
+      "metric": "edge_energy",
+      "gte": 3.0
+    },
+    {
+      "region": "finder-image-thumbnail-preview",
+      "metric": "edge_energy",
+      "gte": 1.2
+    },
+    {
+      "region": "finder-video-thumbnail-preview",
+      "metric": "edge_energy",
+      "gte": 1.5
     }
   ]
 }

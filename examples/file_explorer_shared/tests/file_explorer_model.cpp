@@ -332,6 +332,38 @@ duplicate
            == demo::k_desktop_icon_grid_thumbnail_width);
     assert(chrome.icon_grid_thumbnail_height
            == demo::k_desktop_icon_grid_thumbnail_height);
+    assert(chrome.thumbnail_pdf_page_width
+           == demo::k_desktop_thumbnail_pdf_page_width);
+    assert(chrome.thumbnail_pdf_page_height
+           == demo::k_desktop_thumbnail_pdf_page_height);
+    assert(chrome.thumbnail_pdf_page_radius
+           == demo::k_desktop_thumbnail_pdf_page_radius);
+    assert(chrome.thumbnail_pdf_fold_size
+           == demo::k_desktop_thumbnail_pdf_fold_size);
+    assert(chrome.thumbnail_media_preview_width
+           == demo::k_desktop_thumbnail_media_preview_width);
+    assert(chrome.thumbnail_media_preview_height
+           == demo::k_desktop_thumbnail_media_preview_height);
+    assert(chrome.thumbnail_media_preview_radius
+           == demo::k_desktop_thumbnail_media_preview_radius);
+    assert(chrome.thumbnail_pdf_detail_line_count
+           == demo::k_desktop_thumbnail_pdf_detail_line_count);
+    assert(chrome.thumbnail_image_sample_block_count
+           == demo::k_desktop_thumbnail_image_sample_block_count);
+    assert(chrome.thumbnail_video_strip_count
+           == demo::k_desktop_thumbnail_video_strip_count);
+    assert(!chrome.thumbnail_uses_external_previews);
+    assert(chrome.thumbnail_visual_policy
+           == demo::k_desktop_thumbnail_visual_policy);
+    assert(chrome.thumbnail_asset_policy
+           == demo::k_desktop_thumbnail_asset_policy);
+    assert(chrome.thumbnail_pdf_policy == demo::k_desktop_thumbnail_pdf_policy);
+    assert(chrome.thumbnail_image_policy
+           == demo::k_desktop_thumbnail_image_policy);
+    assert(chrome.thumbnail_video_policy
+           == demo::k_desktop_thumbnail_video_policy);
+    assert(chrome.thumbnail_shadow_policy
+           == demo::k_desktop_thumbnail_shadow_policy);
     assert(chrome.icon_grid_label_height
            == demo::k_desktop_icon_grid_label_height);
     assert(chrome.icon_grid_label_font_size
@@ -624,6 +656,11 @@ duplicate
     assert(debug_text.find("\"Gallery View\"") != std::string::npos);
     assert(debug_text.find("\"icon_grid_column_pitch\"") != std::string::npos);
     assert(debug_text.find("\"icon_grid_thumbnail_width\"") != std::string::npos);
+    assert(debug_text.find("\"thumbnail_system\"") != std::string::npos);
+    assert(debug_text.find("\"finder_rich_preview_thumbnails_v1\"")
+           != std::string::npos);
+    assert(debug_text.find("\"uses_external_previews\":false")
+           != std::string::npos);
     assert(debug_text.find("\"icon_grid_label_font_size\"") != std::string::npos);
     assert(debug_text.find("\"sidebar_icon_size\"") != std::string::npos);
     assert(debug_text.find("\"sidebar_label_leading\"") != std::string::npos);

@@ -528,20 +528,60 @@ void paint_pdf_thumbnail(phenotype::Painter& painter,
                          bool selected) {
     auto accent = selected ? rgba(0, 122, 255) : rgba(38, 132, 255);
     auto border = selected ? rgba(0, 122, 255) : rgba(210, 214, 220);
-    fill_round(painter, 39.0f, 5.0f, 46.0f, 61.0f, 4.0f, rgba(0, 0, 0, 24));
-    fill_round(painter, 37.0f, 3.0f, 46.0f, 61.0f, 4.0f, rgba(255, 255, 255, 250));
-    stroke_round(painter, 37.0f, 3.0f, 46.0f, 61.0f, 4.0f, 1.0f, border);
-    paint_document_fold(painter, 37.0f, 3.0f, 46.0f, border);
-    fill_rect(painter, 39.0f, 7.0f, 28.0f, 4.0f, accent);
-    fill_rect(painter, 41.0f, 15.0f, 33.0f, 2.4f, rgba(207, 214, 225));
-    fill_rect(painter, 41.0f, 21.0f, 31.0f, 2.4f, rgba(229, 124, 124, 170));
-    fill_rect(painter, 41.0f, 27.0f, 35.0f, 2.0f, rgba(207, 214, 225));
-    fill_rect(painter, 41.0f, 33.0f, 30.0f, 2.0f, rgba(207, 214, 225));
-    fill_rect(painter, 41.0f, 39.0f, 36.0f, 2.0f, rgba(207, 214, 225));
-    fill_rect(painter, 41.0f, 45.0f, 28.0f, 2.0f, rgba(207, 214, 225));
-    fill_rect(painter, 41.0f, 51.0f, 22.0f, 7.0f, rgba(255, 231, 125, 210));
+    float const page_w = file_explorer_demo::k_desktop_thumbnail_pdf_page_width;
+    float const page_h = file_explorer_demo::k_desktop_thumbnail_pdf_page_height;
+    float const page_x =
+        (file_explorer_demo::k_desktop_icon_grid_thumbnail_width - page_w) * 0.5f;
+    float const page_y = 3.0f;
+    fill_round(painter,
+               page_x + 2.0f,
+               page_y + 3.0f,
+               page_w,
+               page_h,
+               file_explorer_demo::k_desktop_thumbnail_pdf_page_radius,
+               rgba(0, 0, 0, 24));
+    fill_round(painter,
+               page_x,
+               page_y,
+               page_w,
+               page_h,
+               file_explorer_demo::k_desktop_thumbnail_pdf_page_radius,
+               rgba(255, 255, 255, 250));
+    stroke_round(painter,
+                 page_x,
+                 page_y,
+                 page_w,
+                 page_h,
+                 file_explorer_demo::k_desktop_thumbnail_pdf_page_radius,
+                 1.0f,
+                 border);
+    paint_document_fold(painter, page_x, page_y, page_w, border);
+    fill_rect(painter, page_x + 4.0f, page_y + 5.0f, 27.0f, 3.5f, accent);
+    fill_rect(painter, page_x + 5.0f, page_y + 13.0f, 38.0f, 1.6f,
+              rgba(196, 204, 215));
+    fill_rect(painter, page_x + 5.0f, page_y + 17.0f, 18.0f, 1.4f,
+              rgba(228, 118, 118, 170));
+    fill_rect(painter, page_x + 26.0f, page_y + 17.0f, 15.0f, 1.4f,
+              rgba(196, 204, 215));
+    for (int row = 0;
+         row < file_explorer_demo::k_desktop_thumbnail_pdf_detail_line_count / 2;
+         ++row) {
+        float y = page_y + 23.0f + static_cast<float>(row) * 5.0f;
+        fill_rect(painter, page_x + 5.0f, y, 16.0f, 1.2f,
+                  rgba(202, 210, 221));
+        fill_rect(painter, page_x + 24.0f, y, 19.0f, 1.2f,
+                  rgba(221, 226, 234));
+        if (row % 2 == 0) {
+            fill_rect(painter, page_x + 5.0f, y + 2.2f, 38.0f, 1.0f,
+                      rgba(232, 235, 240));
+        }
+    }
+    fill_rect(painter, page_x + 5.0f, page_y + 52.0f, 20.0f, 6.0f,
+              rgba(255, 231, 125, 210));
+    fill_rect(painter, page_x + 28.0f, page_y + 52.0f, 14.0f, 6.0f,
+              rgba(238, 243, 251));
     auto tag = extension_lower(name);
-    painter.text(42.0f, 54.0f, tag.c_str(),
+    painter.text(page_x + 8.0f, page_y + 55.0f, tag.c_str(),
                  static_cast<unsigned int>(tag.size()),
                  9.0f, rgba(80, 87, 96), finder_font());
 }
@@ -549,37 +589,64 @@ void paint_pdf_thumbnail(phenotype::Painter& painter,
 void paint_image_thumbnail(phenotype::Painter& painter,
                            bool selected) {
     auto border = selected ? rgba(0, 122, 255) : rgba(224, 228, 234);
-    fill_round(painter, 24.0f, 27.0f, 78.0f, 20.0f, 8.0f, rgba(0, 0, 0, 20));
-    fill_round(painter, 22.0f, 25.0f, 78.0f, 20.0f, 8.0f, rgba(255, 255, 255, 248));
+    float const w = file_explorer_demo::k_desktop_thumbnail_media_preview_width;
+    float const h = file_explorer_demo::k_desktop_thumbnail_media_preview_height;
+    float const x =
+        (file_explorer_demo::k_desktop_icon_grid_thumbnail_width - w) * 0.5f;
+    float const y = 19.0f;
+    float const radius =
+        file_explorer_demo::k_desktop_thumbnail_media_preview_radius;
+    fill_round(painter, x + 2.0f, y + 2.0f, w, h, radius, rgba(0, 0, 0, 22));
+    fill_round(painter, x, y, w, h, radius, rgba(255, 255, 255, 248));
     painter.linear_gradient_rect(
-        24.0f, 27.0f, 74.0f, 16.0f,
-        rgba(248, 250, 252),
-        rgba(226, 232, 240),
+        x + 3.0f, y + 7.0f, w - 6.0f, h - 10.0f,
+        rgba(247, 249, 252),
+        rgba(225, 230, 238),
         phenotype::GradientAxis::Horizontal,
         12);
-    stroke_round(painter, 22.0f, 25.0f, 78.0f, 20.0f, 8.0f, 1.0f, border);
-    fill_round(painter, 33.0f, 30.0f, 20.0f, 10.0f, 5.0f, rgba(214, 217, 222));
-    fill_round(painter, 56.0f, 30.0f, 16.0f, 10.0f, 5.0f, rgba(188, 193, 201));
-    fill_round(painter, 75.0f, 30.0f, 16.0f, 10.0f, 5.0f, rgba(231, 233, 237));
+    stroke_round(painter, x, y, w, h, radius, 1.0f, border);
+    fill_rect(painter, x + 3.0f, y + 4.0f, w - 6.0f, 2.0f,
+              rgba(235, 239, 245));
+    fill_round(painter, x + 10.0f, y + 13.0f, 26.0f, 10.0f, 4.0f,
+               rgba(210, 215, 224));
+    fill_round(painter, x + 40.0f, y + 13.0f, 18.0f, 10.0f, 4.0f,
+               rgba(184, 191, 202));
+    fill_round(painter, x + 61.0f, y + 13.0f, 16.0f, 10.0f, 4.0f,
+               rgba(232, 235, 240));
+    fill_rect(painter, x + 9.0f, y + 27.0f, 30.0f, 2.0f,
+              rgba(204, 211, 221));
+    fill_rect(painter, x + 44.0f, y + 27.0f, 33.0f, 2.0f,
+              rgba(222, 227, 234));
 }
 
 void paint_video_thumbnail(phenotype::Painter& painter,
                            bool selected) {
     auto border = selected ? rgba(0, 122, 255) : rgba(204, 211, 221);
-    fill_round(painter, 20.0f, 20.0f, 86.0f, 36.0f, 7.0f, rgba(0, 0, 0, 30));
-    fill_round(painter, 18.0f, 18.0f, 86.0f, 36.0f, 7.0f, rgba(245, 248, 251));
-    stroke_round(painter, 18.0f, 18.0f, 86.0f, 36.0f, 7.0f, 1.0f, border);
+    float const w = file_explorer_demo::k_desktop_thumbnail_media_preview_width;
+    float const h = file_explorer_demo::k_desktop_thumbnail_media_preview_height;
+    float const x =
+        (file_explorer_demo::k_desktop_icon_grid_thumbnail_width - w) * 0.5f;
+    float const y = 18.0f;
+    float const radius =
+        file_explorer_demo::k_desktop_thumbnail_media_preview_radius;
+    fill_round(painter, x + 2.0f, y + 2.0f, w, h, radius, rgba(0, 0, 0, 30));
+    fill_round(painter, x, y, w, h, radius, rgba(246, 248, 251));
+    stroke_round(painter, x, y, w, h, radius, 1.0f, border);
     painter.linear_gradient_rect(
-        20.0f, 20.0f, 82.0f, 8.0f,
-        rgba(42, 123, 222, 210),
-        rgba(99, 102, 241, 190),
+        x + 2.0f, y + 3.0f, w - 4.0f, 8.0f,
+        rgba(42, 123, 222, 185),
+        rgba(82, 96, 210, 160),
         phenotype::GradientAxis::Horizontal,
         10);
-    for (int i = 0; i < 6; ++i) {
-        float x = 25.0f + static_cast<float>(i) * 11.0f;
-        fill_rect(painter, x, 32.0f, 8.0f, 14.0f,
+    for (int i = 0;
+         i < file_explorer_demo::k_desktop_thumbnail_video_strip_count;
+         ++i) {
+        float const strip_x = x + 8.0f + static_cast<float>(i) * 12.0f;
+        fill_rect(painter, strip_x, y + 17.0f, 8.0f, 13.0f,
                   (i % 2 == 0) ? rgba(212, 219, 228) : rgba(235, 239, 244));
     }
+    fill_rect(painter, x + 7.0f, y + 32.0f, w - 14.0f, 2.0f,
+              rgba(198, 207, 219));
 }
 
 void paint_text_thumbnail(phenotype::Painter& painter,

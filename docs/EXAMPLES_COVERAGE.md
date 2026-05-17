@@ -81,6 +81,11 @@ Use `examples/glass_showcase` when the artifact should prove material semantics
 across every public `MaterialKind`, including macOS sampled-backdrop rendering
 and fallback metadata. Use the desktop or mobile file explorer examples when
 the artifact should prove an app-like material workflow.
+The desktop file explorer additionally gates Finder-style icon-grid previews:
+the shared model exposes `chrome.thumbnail_system` in CLI/debug JSON, and the
+desktop manifest samples PDF, image, and video thumbnail regions so visual drift
+is reported as concrete pixel-region metrics rather than a manual screenshot
+guess.
 
 From the repo root, verify a generated bundle through the CLI verifier edge
 before using it as a debugging artifact:
