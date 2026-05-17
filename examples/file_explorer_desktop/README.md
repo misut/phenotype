@@ -120,9 +120,12 @@ home folder.
 The directory also includes an initial `phenotype.package.toml` plus `assets/`,
 `locales/`, and `fonts/` fixtures. These are consumed by the new
 `tools/phenotype_cli package inspect` command and describe the
-asset/i18n/Pretendard bundle contract. Runtime labels are resolved through the
-shared pure `ResourceCatalog` helper in `file_explorer_shared`, while file
-reads and package inspection remain CLI/example edge work. Set
+asset/i18n/Pretendard bundle contract. The package icon is a phenotype-owned
+SVG asset with a macOS-like rounded document-window composition; the CLI checks
+that `app.icon` is SVG/preloaded and that Pretendard has a CJK-capable fallback.
+Runtime labels are resolved through the shared pure `ResourceCatalog` helper in
+`file_explorer_shared`, while file reads and package inspection remain
+CLI/example edge work. Set
 `PHENOTYPE_FILE_EXPLORER_LOCALE=ko` to smoke the Korean label path.
 
 ## Run

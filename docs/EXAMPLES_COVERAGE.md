@@ -248,8 +248,8 @@ public material kinds, and expected material plan count. This keeps material
 probe input debugging cheap before running the local glass artifact gate.
 
 `phenotype package bundle` is the lightweight packaging counterpart. It stages
-the package manifest, declared assets, locales, Pretendard alias descriptor,
-and debug artifact manifest into an output directory, then writes
+the package manifest, declared SVG app icon, locales, Pretendard alias
+descriptor, and debug artifact manifest into an output directory, then writes
 `phenotype.bundle.json` with copied-file records and package checks. This is
 not a platform installer yet, but it gives CI and future packagers a concrete
 resource inventory to validate without launching a native window.
@@ -257,7 +257,9 @@ resource inventory to validate without launching a native window.
 The desktop and mobile file explorer examples also carry initial
 `phenotype.package.toml` manifests plus `assets/`, `locales/`, and `fonts/`
 fixtures. These package resources are inspectable by `tools/phenotype_cli` and
-document the future asset/i18n bundle contract. Runtime widget text now flows
+document the future asset/i18n bundle contract. The package contract now
+requires `app.icon` to be a package-owned SVG asset and requires Pretendard's
+font descriptor to name a CJK-capable fallback. Runtime widget text now flows
 through `Theme::default_font_family` (`Pretendard` by default), while the
 example-specific canvas labels pass the same family explicitly so the Finder
 scene and package manifest agree on typography.

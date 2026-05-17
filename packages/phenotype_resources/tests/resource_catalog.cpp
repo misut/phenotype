@@ -1,4 +1,5 @@
 #include <array>
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstdlib>
@@ -28,8 +29,8 @@ int main() {
     catalog.default_font_family = "Pretendard";
     catalog.assets.push_back({
         .name = "app.icon",
-        .source = "assets/icon.txt",
-        .content_type = "text/plain",
+        .source = "assets/icon.svg",
+        .content_type = "image/svg+xml",
         .preload = true,
     });
     catalog.locales.push_back({
@@ -51,7 +52,7 @@ int main() {
     catalog.fonts.push_back({
         .family = "Pretendard",
         .source = "fonts/pretendard.alias.toml",
-        .fallback = {"system-ui"},
+        .fallback = {"system-ui", "Noto Sans CJK"},
     });
     catalog.debug.artifact_manifest = "artifact_manifest.json";
     catalog.debug.verifier = "tools/verify_file_explorer_artifacts.sh";
@@ -77,8 +78,12 @@ int main() {
     assert(contract.locale_count == 2);
     assert(contract.locale_string_count == 3);
     assert(contract.font_count == 1);
+    assert(contract.app_icon_declared);
+    assert(contract.app_icon_svg);
+    assert(contract.app_icon_preload);
     assert(contract.default_locale_declared);
     assert(contract.default_font_declared);
+    assert(contract.default_font_has_cjk_fallback);
     assert(contract.debug_artifact_manifest_declared);
     assert(contract.debug_verifier_declared);
     assert(contract.locale_coverage.size() == 2);
@@ -103,8 +108,8 @@ artifact_manifest = "artifact_manifest.json"
 
 [[assets]]
 name = "app.icon"
-source = "assets/icon.txt"
-content_type = "text/plain"
+source = "assets/icon.svg"
+content_type = "image/svg+xml"
 preload = true
 runtime_visible = false
 
@@ -155,9 +160,30 @@ delete = "Move to Trash"
     assert(parsed.catalog.locales[0].strings[0].key == "title");
     assert(parsed.catalog.locales[0].strings[1].key == "actions.delete");
 
+    auto has_kind = [](std::vector<phenotype::ResourceDiagnostic> const& values,
+                       phenotype::ResourceDiagnosticKind kind) {
+        return std::ranges::any_of(values, [&](auto const& diagnostic) {
+            return diagnostic.kind == kind;
+        });
+    };
+
+    auto invalid_policy_catalog = catalog;
+    invalid_policy_catalog.assets[0].source = "assets/icon.txt";
+    invalid_policy_catalog.assets[0].content_type = "text/plain";
+    invalid_policy_catalog.fonts[0].fallback = {"system-ui"};
+    diagnostics =
+        phenotype::validate_resource_catalog(invalid_policy_catalog, required);
+    assert(has_kind(
+        diagnostics,
+        phenotype::ResourceDiagnosticKind::InvalidAppIconSvg));
+    assert(has_kind(
+        diagnostics,
+        phenotype::ResourceDiagnosticKind::MissingDefaultFontCjkFallback));
+
     catalog.assets.push_back({
         .name = "app.icon",
-        .source = "assets/duplicate.txt",
+        .source = "assets/duplicate.svg",
+        .content_type = "image/svg+xml",
     });
     diagnostics = phenotype::validate_resource_catalog(catalog, required);
     auto duplicate = false;

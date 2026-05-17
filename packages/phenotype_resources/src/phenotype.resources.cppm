@@ -35,6 +35,9 @@ enum class ResourceDiagnosticKind {
     MissingEntry,
     MissingDefaultLocale,
     MissingDefaultFont,
+    MissingDefaultFontCjkFallback,
+    MissingAppIconAsset,
+    InvalidAppIconSvg,
     MissingAssetName,
     MissingAssetSource,
     DuplicateAssetName,
@@ -62,6 +65,12 @@ inline char const* resource_diagnostic_kind_name(
             return "missing_default_locale";
         case ResourceDiagnosticKind::MissingDefaultFont:
             return "missing_default_font";
+        case ResourceDiagnosticKind::MissingDefaultFontCjkFallback:
+            return "missing_default_font_cjk_fallback";
+        case ResourceDiagnosticKind::MissingAppIconAsset:
+            return "missing_app_icon_asset";
+        case ResourceDiagnosticKind::InvalidAppIconSvg:
+            return "invalid_app_icon_svg";
         case ResourceDiagnosticKind::MissingAssetName:
             return "missing_asset_name";
         case ResourceDiagnosticKind::MissingAssetSource:
@@ -175,8 +184,12 @@ struct ResourceCatalogContract {
     std::size_t locale_string_count = 0;
     std::size_t font_count = 0;
     std::size_t registered_font_count = 0;
+    bool app_icon_declared = false;
+    bool app_icon_svg = false;
+    bool app_icon_preload = false;
     bool default_locale_declared = false;
     bool default_font_declared = false;
+    bool default_font_has_cjk_fallback = false;
     bool debug_artifact_manifest_declared = false;
     bool debug_probe_scene_declared = false;
     bool debug_verifier_declared = false;
@@ -621,6 +634,46 @@ inline bool contains_text(
     });
 }
 
+inline auto resource_ascii_lower_copy(std::string_view text) -> std::string {
+    auto out = std::string{text};
+    std::ranges::transform(out, out.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return out;
+}
+
+inline bool resource_has_suffix_case_insensitive(
+        std::string_view text,
+        std::string_view suffix) {
+    return resource_ascii_lower_copy(text).ends_with(
+        resource_ascii_lower_copy(suffix));
+}
+
+inline bool app_icon_asset_declares_svg(AssetDescriptor const& asset) {
+    return asset.name == "app.icon"
+        && resource_ascii_lower_copy(asset.content_type) == "image/svg+xml"
+        && resource_has_suffix_case_insensitive(asset.source, ".svg");
+}
+
+inline bool font_fallback_covers_cjk(std::string_view family) {
+    auto lower = resource_ascii_lower_copy(family);
+    return lower.find("cjk") != std::string::npos
+        || lower.find("source han") != std::string::npos
+        || lower.find("noto sans") != std::string::npos
+        || lower.find("hiragino") != std::string::npos
+        || lower.find("pingfang") != std::string::npos
+        || lower.find("yu gothic") != std::string::npos
+        || lower.find("meiryo") != std::string::npos
+        || lower.find("malgun gothic") != std::string::npos
+        || lower.find("apple sd gothic") != std::string::npos;
+}
+
+inline bool font_has_cjk_fallback(FontDescriptor const& font) {
+    return std::ranges::any_of(font.fallback, [](std::string const& fallback) {
+        return font_fallback_covers_cjk(fallback);
+    });
+}
+
 inline void append_locale_chain(
         ResourceCatalog const& catalog,
         std::string_view tag,
@@ -682,6 +735,15 @@ inline auto resource_catalog_contract(
     contract.default_font_declared =
         !catalog.default_font_family.empty()
         && find_font(catalog, catalog.default_font_family).has_value();
+    if (auto app_icon = find_asset(catalog, "app.icon")) {
+        contract.app_icon_declared = true;
+        contract.app_icon_svg = app_icon_asset_declares_svg(app_icon->get());
+        contract.app_icon_preload = app_icon->get().preload;
+    }
+    if (auto default_font = find_font(catalog, catalog.default_font_family)) {
+        contract.default_font_has_cjk_fallback =
+            font_has_cjk_fallback(default_font->get());
+    }
     contract.debug_artifact_manifest_declared =
         !catalog.debug.artifact_manifest.empty();
     contract.debug_probe_scene_declared = !catalog.debug.probe_scene.empty();
@@ -800,6 +862,35 @@ inline auto validate_resource_catalog(
             "default font family must reference a font descriptor",
             "declared font family",
             catalog.default_font_family);
+    } else if (auto default_font = find_font(
+                   catalog,
+                   catalog.default_font_family);
+               default_font && !font_has_cjk_fallback(default_font->get())) {
+        add_resource_diagnostic(
+            diagnostics,
+            ResourceDiagnosticKind::MissingDefaultFontCjkFallback,
+            "resources.default_font_family",
+            "default UI font should declare a CJK-capable fallback",
+            "fallback containing Noto Sans CJK, Source Han, Hiragino, PingFang, Yu Gothic, Meiryo, Malgun Gothic, or Apple SD Gothic",
+            catalog.default_font_family);
+    }
+
+    auto app_icon = find_asset(catalog, "app.icon");
+    if (!app_icon) {
+        add_resource_diagnostic(
+            diagnostics,
+            ResourceDiagnosticKind::MissingAppIconAsset,
+            "assets.app_icon",
+            "application icon asset is required for packaging",
+            "asset named app.icon");
+    } else if (!app_icon_asset_declares_svg(app_icon->get())) {
+        add_resource_diagnostic(
+            diagnostics,
+            ResourceDiagnosticKind::InvalidAppIconSvg,
+            "assets.app_icon",
+            "application icon should be a package-owned SVG asset",
+            "source ending in .svg with content_type image/svg+xml",
+            app_icon->get().source + " / " + app_icon->get().content_type);
     }
 
     for (std::size_t i = 0; i < catalog.assets.size(); ++i) {

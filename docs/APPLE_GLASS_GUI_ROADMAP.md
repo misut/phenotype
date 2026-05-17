@@ -265,6 +265,9 @@ SVGs for Finder-like chrome and common app actions, following Apple-style
 proportions and macOS-like rounded stroke caps/joins without copying SF Symbols
 assets. The catalog exposes semantic metadata for toolbar, sidebar, action, and
 file-type roles so verifier artifacts can prove which icon policy was used.
+File explorer packages now declare `app.icon` as a package-owned SVG asset, so
+the same CLI bundle contract can later feed platform app-icon generation
+without embedding Apple artwork or depending on platform symbol fonts.
 
 Widgets currently cover:
 

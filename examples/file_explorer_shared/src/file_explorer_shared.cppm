@@ -3028,8 +3028,8 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
     catalog.default_font_family = "Pretendard";
     catalog.assets.push_back({
         .name = "app.icon",
-        .source = "assets/file-explorer-icon.txt",
-        .content_type = "text/plain",
+        .source = "assets/file-explorer-icon.svg",
+        .content_type = "image/svg+xml",
         .preload = true,
     });
 
