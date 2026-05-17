@@ -272,6 +272,8 @@ scene and package manifest agree on typography.
 | `widget::link` | yes | no | no | yes | no | yes |
 | `widget::image` local | yes | no | no | no | asset/local | yes |
 | `widget::image` remote | yes | no | no | no | no | macOS/Windows |
+| `widget::svg_image` | yes | candidate | candidate | no | yes | yes |
+| `widget::icon` / `phenotype.icons` | yes | candidate | candidate | no | yes | yes |
 | `widget::canvas` | yes | yes | yes | no | no | yes |
 | `widget::button` | yes | yes | yes | yes | yes | yes |
 | `ButtonVariant::Primary` | yes | yes | yes | no | no | yes |

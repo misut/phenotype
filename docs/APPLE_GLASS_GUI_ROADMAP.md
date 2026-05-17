@@ -247,9 +247,22 @@ Theme support has matured beyond the original small token set:
 - JSON parsing with partial overrides and string color forms;
 - structural widget snapshot tests for the core widget surface.
 
+The default theme now starts from an Apple-like glass baseline: Pretendard for
+product typography, system-blue accent/focus tokens, neutral grouped
+backgrounds, a translucent white surface token, and larger chrome radii. These
+are portable phenotype-owned tokens; platform materials still come from the
+material planner/backend contract rather than from private Apple APIs.
+
+SVG and built-in icons are first-class shared UI primitives. `phenotype.svg`
+parses a bounded pure SVG subset into `svg::Document` and renders through
+`Painter` path commands on every backend. `phenotype.icons` provides original
+24x24 glyph SVGs for Finder-like chrome and common app actions, following
+Apple-style proportions and macOS-like rounded stroke caps/joins without
+copying SF Symbols assets.
+
 Widgets currently cover:
 
-- text, code, link, image, canvas;
+- text, code, link, image, SVG image, icon, canvas;
 - button, checkbox, radio, switch, tabs;
 - progress and indeterminate progress;
 - text field;

@@ -7,6 +7,7 @@ module;
 #include <optional>
 #include <source_location>
 #include <string>
+#include <string_view>
 #include <type_traits>
 #include <utility>
 #include <variant>
@@ -19,6 +20,8 @@ export module phenotype;
 export import phenotype.diag;
 export import phenotype.types;
 export import phenotype.resources;
+export import phenotype.svg;
+export import phenotype.icons;
 export import phenotype.material;
 export import phenotype.state;
 export import phenotype.layout;
@@ -672,6 +675,56 @@ inline void canvas(float width, float height,
         node.gesture_callback_id = gid;
     }
     detail::attach_to_scope(h);
+}
+
+inline void svg_image(svg::Document document,
+                      float width,
+                      float height,
+                      Color current_color) {
+    canvas(width, height,
+           [document = std::move(document),
+            width,
+            height,
+            current_color](Painter& painter) {
+               svg::paint(painter, document, 0.0f, 0.0f, width, height,
+                          svg::RenderOptions{current_color, true});
+           });
+}
+
+inline void svg_image(svg::Document document,
+                      float width,
+                      float height) {
+    svg_image(std::move(document), width, height,
+              detail::g_app.theme.foreground);
+}
+
+inline void svg_image(str source,
+                      float width,
+                      float height,
+                      Color current_color) {
+    svg_image(svg::parse(std::string_view{source.data, source.len}),
+              width, height, current_color);
+}
+
+inline void svg_image(str source,
+                      float width,
+                      float height) {
+    svg_image(source, width, height, detail::g_app.theme.foreground);
+}
+
+inline void icon(icons::Symbol symbol,
+                 float size,
+                 Color color) {
+    canvas(size, size,
+           [symbol, size, color](Painter& painter) {
+               icons::paint_symbol(painter, symbol, 0.0f, 0.0f, size, color);
+           },
+           {},
+           icons::paint_token(symbol, size, color));
+}
+
+inline void icon(icons::Symbol symbol, float size) {
+    icon(symbol, size, detail::g_app.theme.foreground);
 }
 
 template<typename Msg>

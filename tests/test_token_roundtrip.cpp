@@ -55,69 +55,69 @@ namespace {
 
 constexpr char const* DEFAULT_THEME_JSON = R"json({
   "background": {
-    "r": 250,
-    "g": 250,
-    "b": 250,
+    "r": 242,
+    "g": 242,
+    "b": 247,
     "a": 255
   },
   "foreground": {
-    "r": 26,
-    "g": 26,
-    "b": 26,
+    "r": 28,
+    "g": 28,
+    "b": 30,
     "a": 255
   },
   "accent": {
-    "r": 10,
-    "g": 186,
-    "b": 183,
+    "r": 0,
+    "g": 122,
+    "b": 255,
     "a": 255
   },
   "accent_strong": {
-    "r": 8,
-    "g": 128,
-    "b": 126,
+    "r": 0,
+    "g": 90,
+    "b": 190,
     "a": 255
   },
   "muted": {
-    "r": 107,
-    "g": 114,
-    "b": 128,
+    "r": 99,
+    "g": 99,
+    "b": 102,
     "a": 255
   },
   "border": {
-    "r": 229,
-    "g": 231,
-    "b": 235,
+    "r": 209,
+    "g": 209,
+    "b": 214,
     "a": 255
   },
   "surface": {
     "r": 255,
     "g": 255,
     "b": 255,
-    "a": 255
+    "a": 238
   },
   "code_bg": {
-    "r": 243,
-    "g": 244,
-    "b": 246,
+    "r": 229,
+    "g": 229,
+    "b": 234,
     "a": 255
   },
   "hero_bg": {
-    "r": 244,
-    "g": 244,
-    "b": 245,
+    "r": 242,
+    "g": 242,
+    "b": 247,
     "a": 255
   },
   "hero_fg": {
-    "r": 24,
-    "g": 24,
-    "b": 27,
+    "r": 28,
+    "g": 28,
+    "b": 30,
     "a": 255
   },
   "hero_muted": {
-    "r": 113,
-    "g": 113,
-    "b": 122,
+    "r": 99,
+    "g": 99,
+    "b": 102,
     "a": 255
   },
   "transparent": {
@@ -128,20 +128,20 @@ constexpr char const* DEFAULT_THEME_JSON = R"json({
   },
   "state_hover_bg": {
     "r": 229,
-    "g": 231,
-    "b": 235,
+    "g": 229,
+    "b": 234,
     "a": 255
   },
   "state_hover_fg": {
-    "r": 26,
-    "g": 26,
-    "b": 26,
+    "r": 28,
+    "g": 28,
+    "b": 30,
     "a": 255
   },
   "state_active_bg": {
-    "r": 8,
-    "g": 128,
-    "b": 126,
+    "r": 0,
+    "g": 90,
+    "b": 190,
     "a": 255
   },
   "state_active_fg": {
@@ -151,21 +151,21 @@ constexpr char const* DEFAULT_THEME_JSON = R"json({
     "a": 255
   },
   "state_disabled_bg": {
-    "r": 243,
-    "g": 244,
-    "b": 246,
+    "r": 242,
+    "g": 242,
+    "b": 247,
     "a": 255
   },
   "state_disabled_fg": {
-    "r": 156,
-    "g": 163,
-    "b": 175,
+    "r": 142,
+    "g": 142,
+    "b": 147,
     "a": 255
   },
   "state_disabled_border": {
-    "r": 229,
-    "g": 231,
-    "b": 235,
+    "r": 209,
+    "g": 209,
+    "b": 214,
     "a": 255
   },
   "state_error_bg": {
@@ -187,39 +187,39 @@ constexpr char const* DEFAULT_THEME_JSON = R"json({
     "a": 255
   },
   "state_focus_ring": {
-    "r": 10,
-    "g": 186,
-    "b": 183,
+    "r": 0,
+    "g": 122,
+    "b": 255,
     "a": 255
   },
   "semantic_success_bg": {
-    "r": 236,
-    "g": 253,
-    "b": 245,
+    "r": 220,
+    "g": 252,
+    "b": 231,
     "a": 255
   },
   "semantic_success_fg": {
-    "r": 4,
-    "g": 120,
-    "b": 87,
+    "r": 22,
+    "g": 101,
+    "b": 52,
     "a": 255
   },
   "semantic_success_border": {
-    "r": 16,
-    "g": 185,
-    "b": 129,
+    "r": 34,
+    "g": 197,
+    "b": 94,
     "a": 255
   },
   "semantic_warning_bg": {
-    "r": 255,
-    "g": 251,
-    "b": 235,
+    "r": 254,
+    "g": 243,
+    "b": 199,
     "a": 255
   },
   "semantic_warning_fg": {
-    "r": 180,
-    "g": 83,
-    "b": 9,
+    "r": 146,
+    "g": 64,
+    "b": 14,
     "a": 255
   },
   "semantic_warning_border": {
@@ -229,15 +229,15 @@ constexpr char const* DEFAULT_THEME_JSON = R"json({
     "a": 255
   },
   "semantic_info_bg": {
-    "r": 239,
-    "g": 246,
-    "b": 255,
+    "r": 219,
+    "g": 234,
+    "b": 254,
     "a": 255
   },
   "semantic_info_fg": {
-    "r": 29,
-    "g": 78,
-    "b": 216,
+    "r": 30,
+    "g": 64,
+    "b": 175,
     "a": 255
   },
   "semantic_info_border": {
@@ -273,10 +273,10 @@ constexpr char const* DEFAULT_THEME_JSON = R"json({
   "small_font_size": 14.4,
   "max_content_width": 720,
   "toggle_box_size": 16,
-  "radius_xs": 3,
-  "radius_sm": 2,
-  "radius_md": 3,
-  "radius_lg": 4,
+  "radius_xs": 6,
+  "radius_sm": 10,
+  "radius_md": 14,
+  "radius_lg": 22,
   "radius_full": 9999,
   "space_xs": 4,
   "space_sm": 8,
@@ -1021,18 +1021,19 @@ void test_default_theme_roundtrip() {
 
     Theme const& t = *parsed;
 
-    // Base colors that match phenotype's own M0-3 default palette.
-    assert(t.background.r == 250 && t.background.g == 250 && t.background.b == 250);
-    assert(t.accent.r == 10 && t.accent.g == 186 && t.accent.b == 183); // Tiffany
-    assert(t.accent_strong.r == 8 && t.accent_strong.g == 128 && t.accent_strong.b == 126);
-    assert(t.surface.r == 255 && t.surface.g == 255 && t.surface.b == 255);
+    // Base colors that match phenotype's Apple-like glass default palette.
+    assert(t.background.r == 242 && t.background.g == 242 && t.background.b == 247);
+    assert(t.foreground.r == 28 && t.foreground.g == 28 && t.foreground.b == 30);
+    assert(t.accent.r == 0 && t.accent.g == 122 && t.accent.b == 255);
+    assert(t.accent_strong.r == 0 && t.accent_strong.g == 90 && t.accent_strong.b == 190);
+    assert(t.surface.r == 255 && t.surface.g == 255 && t.surface.b == 255 && t.surface.a == 238);
     assert(t.transparent.a == 0);
 
-    // Compact radius defaults.
-    assert(t.radius_xs == 3.0f);
-    assert(t.radius_sm == 2.0f);
-    assert(t.radius_md == 3.0f);
-    assert(t.radius_lg == 4.0f);
+    // Glass chrome radius defaults.
+    assert(t.radius_xs == 6.0f);
+    assert(t.radius_sm == 10.0f);
+    assert(t.radius_md == 14.0f);
+    assert(t.radius_lg == 22.0f);
     assert(t.radius_full == 9999.0f);
 
     // Spacing scale: guard all seven rungs against silently dropped fields.
@@ -1045,18 +1046,18 @@ void test_default_theme_roundtrip() {
     assert(t.space_3xl == 48.0f);
 
     // State tokens.
-    assert(t.state_hover_bg.r == 229 && t.state_hover_bg.g == 231 && t.state_hover_bg.b == 235);
-    assert(t.state_active_bg.r == 8 && t.state_active_bg.g == 128 && t.state_active_bg.b == 126);
+    assert(t.state_hover_bg.r == 229 && t.state_hover_bg.g == 229 && t.state_hover_bg.b == 234);
+    assert(t.state_active_bg.r == 0 && t.state_active_bg.g == 90 && t.state_active_bg.b == 190);
     assert(t.state_active_fg.r == 255 && t.state_active_fg.a == 255);
-    assert(t.state_disabled_fg.r == 156);
-    assert(t.state_focus_ring.r == 10 && t.state_focus_ring.g == 186);
+    assert(t.state_disabled_fg.r == 142);
+    assert(t.state_focus_ring.r == 0 && t.state_focus_ring.g == 122);
     assert(t.state_focus_ring_width == 2.0f);
     assert(t.state_error_border.r == 220 && t.state_error_border.g == 38);
 
     // Semantic colors (no widget consumer yet, so this guards the
     // serialization edge of the pipeline only).
-    assert(t.semantic_success_bg.r == 236 && t.semantic_success_bg.g == 253);
-    assert(t.semantic_warning_fg.r == 180 && t.semantic_warning_fg.g == 83);
+    assert(t.semantic_success_bg.r == 220 && t.semantic_success_bg.g == 252);
+    assert(t.semantic_warning_fg.r == 146 && t.semantic_warning_fg.g == 64);
     assert(t.semantic_info_border.r == 59 && t.semantic_info_border.b == 246);
     assert(t.semantic_error_fg.r == 185 && t.semantic_error_fg.b == 28);
 
