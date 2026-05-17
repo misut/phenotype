@@ -220,13 +220,21 @@ struct ExplorerChromeMetrics {
     int toolbar_icon_button_count = 0;
     int titlebar_control_count = 0;
     int overflow_action_button_count = 0;
+    int sidebar_symbol_count = 0;
+    int toolbar_symbol_count = 0;
     bool integrated_titlebar = true;
     bool native_window_controls = true;
     bool duplicate_window_controls = false;
     bool content_window_control_markers = false;
     bool finder_segmented_toolbar = false;
+    bool owned_icon_assets = false;
+    bool uses_sf_symbols_assets = false;
+    bool icon_round_stroke_contract = false;
     bool more_actions_open = false;
     bool status_bar_visible = false;
+    std::string icon_module;
+    std::string icon_style;
+    std::string icon_source_format;
 };
 
 struct ExplorerInputTrace {
@@ -458,12 +466,20 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .toolbar_separator_count = 0,
             .toolbar_icon_button_count = 0,
             .titlebar_control_count = 0,
+            .sidebar_symbol_count = 0,
+            .toolbar_symbol_count = 0,
             .integrated_titlebar = false,
             .native_window_controls = false,
             .duplicate_window_controls = false,
             .content_window_control_markers = false,
             .finder_segmented_toolbar = false,
+            .owned_icon_assets = false,
+            .uses_sf_symbols_assets = false,
+            .icon_round_stroke_contract = false,
             .status_bar_visible = false,
+            .icon_module = "text_controls",
+            .icon_style = "mobile_text_buttons",
+            .icon_source_format = "none",
         };
     }
     auto columns = desktop_icon_grid_column_count(viewport);
@@ -517,12 +533,20 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .toolbar_separator_count = 3,
         .toolbar_icon_button_count = 11,
         .titlebar_control_count = k_desktop_titlebar_control_count,
+        .sidebar_symbol_count = 10,
+        .toolbar_symbol_count = 15,
         .integrated_titlebar = true,
         .native_window_controls = true,
         .duplicate_window_controls = false,
         .content_window_control_markers = true,
         .finder_segmented_toolbar = true,
+        .owned_icon_assets = true,
+        .uses_sf_symbols_assets = false,
+        .icon_round_stroke_contract = true,
         .status_bar_visible = desktop_status_bar_visible(state),
+        .icon_module = "phenotype.icons",
+        .icon_style = "macos_rounded_outline_svg",
+        .icon_source_format = "svg",
     };
 }
 
@@ -998,6 +1022,20 @@ inline json::Value explorer_chrome_debug_json(
     native_window.emplace("duplicate_window_controls", json::Value{chrome.duplicate_window_controls});
     native_window.emplace("content_window_control_markers", json::Value{chrome.content_window_control_markers});
 
+    json::Object icon_system;
+    icon_system.emplace("module", json::Value{chrome.icon_module});
+    icon_system.emplace("style", json::Value{chrome.icon_style});
+    icon_system.emplace("source_format", json::Value{chrome.icon_source_format});
+    icon_system.emplace("owned_assets", json::Value{chrome.owned_icon_assets});
+    icon_system.emplace("uses_sf_symbols_assets", json::Value{chrome.uses_sf_symbols_assets});
+    icon_system.emplace("round_stroke_contract", json::Value{chrome.icon_round_stroke_contract});
+    icon_system.emplace(
+        "sidebar_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.sidebar_symbol_count)});
+    icon_system.emplace(
+        "toolbar_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.toolbar_symbol_count)});
+
     json::Object out;
     out.emplace("viewport", json::Value{std::move(viewport)});
     out.emplace("integrated_titlebar_height", json::Value{chrome.integrated_titlebar_height});
@@ -1040,11 +1078,14 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("toolbar_icon_button_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_icon_button_count)});
     out.emplace("titlebar_control_count", json::Value{static_cast<std::int64_t>(chrome.titlebar_control_count)});
     out.emplace("overflow_action_button_count", json::Value{static_cast<std::int64_t>(chrome.overflow_action_button_count)});
+    out.emplace("sidebar_symbol_count", json::Value{static_cast<std::int64_t>(chrome.sidebar_symbol_count)});
+    out.emplace("toolbar_symbol_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_symbol_count)});
     out.emplace("content_window_control_markers", json::Value{chrome.content_window_control_markers});
     out.emplace("finder_segmented_toolbar", json::Value{chrome.finder_segmented_toolbar});
     out.emplace("more_actions_open", json::Value{chrome.more_actions_open});
     out.emplace("status_bar_visible", json::Value{chrome.status_bar_visible});
     out.emplace("native_window", json::Value{std::move(native_window)});
+    out.emplace("icon_system", json::Value{std::move(icon_system)});
     return json::Value{std::move(out)};
 }
 

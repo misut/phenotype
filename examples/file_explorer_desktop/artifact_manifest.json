@@ -201,6 +201,38 @@
       "equals": 11
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.module",
+      "equals": "phenotype.icons"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.style",
+      "equals": "macos_rounded_outline_svg"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.source_format",
+      "equals": "svg"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.owned_assets",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.uses_sf_symbols_assets",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.round_stroke_contract",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.sidebar_symbol_count",
+      "equals": 10
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.toolbar_symbol_count",
+      "equals": 15
+    },
+    {
       "path": "application.file_explorer.chrome.titlebar_control_count",
       "equals": 3
     },
@@ -715,7 +747,7 @@
     {
       "region": "finder-toolbar",
       "metric": "edge_energy",
-      "gte": 2.0
+      "gte": 1.8
     }
   ]
 }

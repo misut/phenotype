@@ -124,6 +124,12 @@ void test_builtin_icons_parse() {
         icons::Symbol::Recents,
         icons::Symbol::Sidebar,
         icons::Symbol::NewFolder,
+        icons::Symbol::Applications,
+        icons::Symbol::Desktop,
+        icons::Symbol::Download,
+        icons::Symbol::SortGroup,
+        icons::Symbol::Duplicate,
+        icons::Symbol::NewDocument,
     };
 
     for (auto symbol : symbols) {

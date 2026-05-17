@@ -311,6 +311,14 @@ duplicate
     assert(chrome.toolbar_icon_button_count == 11);
     assert(chrome.titlebar_control_count
            == demo::k_desktop_titlebar_control_count);
+    assert(chrome.sidebar_symbol_count == 10);
+    assert(chrome.toolbar_symbol_count == 15);
+    assert(chrome.icon_module == "phenotype.icons");
+    assert(chrome.icon_style == "macos_rounded_outline_svg");
+    assert(chrome.icon_source_format == "svg");
+    assert(chrome.owned_icon_assets);
+    assert(!chrome.uses_sf_symbols_assets);
+    assert(chrome.icon_round_stroke_contract);
     assert(chrome.finder_segmented_toolbar);
     assert(chrome.integrated_titlebar);
     assert(chrome.native_window_controls);
@@ -507,6 +515,11 @@ duplicate
     assert(debug_text.find("\"icon_grid_label_font_size\"") != std::string::npos);
     assert(debug_text.find("\"sidebar_icon_size\"") != std::string::npos);
     assert(debug_text.find("\"sidebar_label_leading\"") != std::string::npos);
+    assert(debug_text.find("\"icon_system\"") != std::string::npos);
+    assert(debug_text.find("\"phenotype.icons\"") != std::string::npos);
+    assert(debug_text.find("\"macos_rounded_outline_svg\"") != std::string::npos);
+    assert(debug_text.find("\"uses_sf_symbols_assets\":false")
+           != std::string::npos);
     assert(debug_text.find("\"titlebar_control_start_x\"") != std::string::npos);
     assert(debug_text.find("\"profile\"") != std::string::npos);
     assert(debug_text.find(profile) != std::string::npos);
