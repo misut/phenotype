@@ -392,6 +392,13 @@ the actual `material_plans` executed for the frame. Each plan includes:
   use `capture_reason: warmup-next-frame` with zero surface sample pixels so
   the next frame has a debuggable history source; unsupported fallbacks use
   `none` with zero budgets;
+- `theme`, including the resolved material-style token source, profile name,
+  token policy, foreground, secondary foreground, accent, strong accent, tint,
+  border, and booleans that show whether each token family matches the default
+  Apple-like glass theme. Default-token plans report
+  `profile_name: apple-glass-light`; custom token plans report
+  `profile_name: custom`, so a verifier failure can distinguish theme drift
+  from backend drawing before looking at pixels;
 - `foreground`, including primary/secondary/accent recommendations, scheme,
   source, estimated background luminance, contrast ratios, accessibility flags,
   and whether the recommendation was backdrop-driven or vibrancy-enabled;
@@ -490,6 +497,12 @@ true` and `foreground_pass_after_backdrop_copy: true`. If text appears as a
 blurred ghost below current foreground text, inspect these fields first; a false
 value means the material backdrop source is sampling a final foreground frame
 instead of a foreground-excluded scene pass.
+`theme` is adjacent to `foreground` because text and icon color debugging often
+starts with the same token source. The verifier checks the theme object shape,
+byte-range color channels, string buckets, token-match booleans, and the
+`profile_name`/`default_glass_tokens` relationship. A theme failure points at
+`MaterialStyle` construction or `plan_material_surface`, not a native backend
+palette.
 `primary_pass.executor` and each `passes[].executor` use pure roles:
 `backdrop-filter` for sampled glass, `fallback-fill` for deterministic fallback,
 and `none` for inactive material work. `max_texture_copy_pixels` is non-zero
@@ -656,12 +669,16 @@ exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `sampling_weight_profiles`, `luminance_curves`, `decision_blockers`,
 `foreground_schemes`, `foreground_sources`, `verifier_profiles`,
 `verifier_region_layers`, `verifier_region_passes`, `container_modes`,
-`container_ids`, and `union_ids`;
+`container_ids`, `union_ids`, `theme_profile_names`, `theme_sources`, and
+`theme_token_policies`;
 it can also count
 `container_participating`, `container_unioned`, `container_interactive`,
 `container_morph_transitions`, `verifier_require_backdrop_source`,
 `verifier_require_edge_highlight`, `verifier_require_container_identity`, and
-`verifier_require_container_morph_contract`. Foreground gates can additionally
+`verifier_require_container_morph_contract`. Theme gates can additionally pin
+`theme_foreground_matches_theme`, `theme_accent_matches_theme`,
+`theme_tint_matches_surface`, `theme_border_matches_theme`, and
+`theme_default_glass_tokens`. Foreground gates can additionally
 pin `foreground_backdrop_driven`, `foreground_high_contrast`,
 `foreground_vibrant`, `foreground_deterministic`,
 `foreground_min_primary_contrast_gte`, and
@@ -676,7 +693,8 @@ trace naming the wrong blocker, an artifact emitting an unexpected material plan
 schema version, verifier expectations pointing at the wrong region/layer/pass, a
 material container losing its identity/union grouping, a backend using raw
 radius instead of the pure effective shape radius, a blur kernel drifting out of
-sync with the backend shader, a foreground contrast recommendation falling
+sync with the backend shader, a theme token snapshot drifting away from the
+default Apple-like glass contract, a foreground contrast recommendation falling
 below the pure minimum, or a quality/capability downgrade losing its
 LLM-actionable reason string.
 Use `require_material_surface_roles` when a scene must contain at least one

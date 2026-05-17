@@ -1211,6 +1211,13 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(fallback_plan.contract_version == material_plan_contract_version);
     assert(fallback_plan.kind == MaterialKind::Regular);
     assert(fallback_plan.role == MaterialSurfaceRole::Surface);
+    assert(fallback_plan.theme.default_glass_tokens);
+    assert(std::string(fallback_plan.theme.profile_name) == "apple-glass-light");
+    assert(std::string(fallback_plan.theme.source) == "material-style");
+    assert(fallback_plan.theme.foreground_matches_theme);
+    assert(fallback_plan.theme.accent_matches_theme);
+    assert(fallback_plan.theme.tint_matches_surface);
+    assert(fallback_plan.theme.border_matches_theme);
     assert(fallback_plan.command_descriptor.role == MaterialSurfaceRole::Surface);
     assert(fallback_plan.container.mode == MaterialContainerMode::Isolated);
     assert(std::string(fallback_plan.container.mode_name) == "isolated");

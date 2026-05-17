@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <string>
 #include <string_view>
 
 import phenotype.material;
@@ -41,7 +42,12 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 19);
+    assert(material_plan_contract_version == 20);
+    assert(plan.theme.default_glass_tokens);
+    assert(std::string(plan.theme.profile_name) == "apple-glass-light");
+    assert(std::string(plan.theme.source) == "material-style");
+    assert(plan.theme.tint_matches_surface);
+    assert(plan.theme.border_matches_theme);
     assert(plan.backdrop_sampling);
     assert(!plan.fallback());
     assert(plan.backdrop_access.required);
@@ -111,6 +117,45 @@ void test_fallback_backdrop_access_contract() {
     std::puts("PASS: fallback backdrop access contract");
 }
 
+void test_custom_theme_snapshot_contract() {
+    Theme theme{};
+    theme.accent = {255, 45, 85, 255};
+    theme.accent_strong = {196, 24, 56, 255};
+    theme.surface = {250, 250, 252, 238};
+    auto request = MaterialRequest{
+        material_style_for_kind(MaterialKind::Thin, theme),
+        MaterialGeometry{4.0f, 8.0f, 120.0f, 64.0f, 12.0f},
+    };
+
+    auto plan = plan_material_surface(request, sampled_environment());
+
+    assert(!plan.theme.default_glass_tokens);
+    assert(std::string(plan.theme.profile_name) == "custom");
+    assert(plan.theme.foreground_matches_theme);
+    assert(!plan.theme.accent_matches_theme);
+    assert(!plan.theme.tint_matches_surface);
+    assert(plan.theme.border_matches_theme);
+    std::puts("PASS: custom theme snapshot contract");
+}
+
+void test_command_material_preserves_theme_snapshot_contract() {
+    auto const descriptor = material_command_descriptor(
+        material_style_for_kind(MaterialKind::Regular, Theme{}));
+    auto request = MaterialRequest{
+        material_style_for_command(descriptor, Theme{}),
+        MaterialGeometry{4.0f, 8.0f, 120.0f, 64.0f, 12.0f},
+    };
+
+    auto plan = plan_material_surface(request, sampled_environment());
+
+    assert(plan.theme.default_glass_tokens);
+    assert(plan.theme.border_matches_theme);
+    assert(plan.theme.foreground_matches_theme);
+    assert(plan.theme.accent_matches_theme);
+    assert(plan.theme.tint_matches_surface);
+    std::puts("PASS: command material preserves theme snapshot contract");
+}
+
 void test_warmup_backdrop_access_contract() {
     auto env = sampled_environment();
     env.capabilities.frame_history = false;
@@ -176,6 +221,8 @@ void test_surface_sample_pixels_are_scaled_and_bounded() {
 int main() {
     test_sampled_backdrop_access_contract();
     test_fallback_backdrop_access_contract();
+    test_custom_theme_snapshot_contract();
+    test_command_material_preserves_theme_snapshot_contract();
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     std::puts("\nAll material tests passed.");

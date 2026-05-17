@@ -40,7 +40,21 @@
     "fallback": 0,
     "backdrop_sampling": 22,
     "contract_versions": {
-      "19": 22
+      "20": 22
+    },
+    "theme_foreground_matches_theme": 22,
+    "theme_accent_matches_theme": 22,
+    "theme_tint_matches_surface": 22,
+    "theme_border_matches_theme": 22,
+    "theme_default_glass_tokens": 22,
+    "theme_profile_names": {
+      "apple-glass-light": 22
+    },
+    "theme_sources": {
+      "material-style": 22
+    },
+    "theme_token_policies": {
+      "explicit-material-style-tokens": 22
     },
     "roles": {
       "surface": 19,

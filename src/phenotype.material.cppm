@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 19;
+inline constexpr std::uint32_t material_plan_contract_version = 20;
 inline constexpr unsigned int material_max_execution_stages = 4;
 
 struct MaterialGeometry {
@@ -266,6 +266,23 @@ struct MaterialForegroundRecommendation {
     bool deterministic = true;
 };
 
+struct MaterialThemeSnapshot {
+    Color foreground = {0, 0, 0, 255};
+    Color secondary_foreground = {0, 0, 0, 255};
+    Color accent_foreground = {0, 0, 0, 255};
+    Color strong_accent_foreground = {0, 0, 0, 255};
+    Color tint = {0, 0, 0, 0};
+    Color border = {0, 0, 0, 0};
+    char const* source = "material-style";
+    char const* profile_name = "custom";
+    char const* token_policy = "explicit-material-style-tokens";
+    bool foreground_matches_theme = false;
+    bool accent_matches_theme = false;
+    bool tint_matches_surface = false;
+    bool border_matches_theme = false;
+    bool default_glass_tokens = false;
+};
+
 struct MaterialRenderTargetAnalysis {
     int width = 0;
     int height = 0;
@@ -359,6 +376,7 @@ struct MaterialPlan {
     bool backdrop_sampling = false;
     MaterialBackdropAnalysis backdrop{};
     MaterialBackdropAccess backdrop_access{};
+    MaterialThemeSnapshot theme{};
     MaterialForegroundRecommendation foreground{};
     MaterialFallbackPath fallback_path = MaterialFallbackPath::None;
     char const* fallback_reason = "";
@@ -501,6 +519,8 @@ struct MaterialRuntimeSummary {
     std::uint32_t foreground_backdrop_driven_count = 0;
     std::uint32_t foreground_high_contrast_count = 0;
     std::uint32_t foreground_vibrant_count = 0;
+    std::uint32_t theme_default_glass_token_count = 0;
+    std::uint32_t theme_custom_token_count = 0;
     float max_surface_area = 0.0f;
     float max_effective_radius = 0.0f;
     float max_radius_limit = 0.0f;
@@ -722,6 +742,10 @@ inline void accumulate_material_runtime_summary(
         ++summary.foreground_high_contrast_count;
     if (plan.foreground.uses_vibrancy)
         ++summary.foreground_vibrant_count;
+    if (plan.theme.default_glass_tokens)
+        ++summary.theme_default_glass_token_count;
+    else
+        ++summary.theme_custom_token_count;
     summary.max_surface_area = std::max(
         summary.max_surface_area,
         plan.shape.surface_area);
@@ -873,7 +897,6 @@ inline MaterialStyle material_style_for_command(MaterialKind kind,
     style.opacity = opacity;
     style.blur_radius = blur_radius;
     style.tint = tint;
-    style.border = tint;
     return style;
 }
 
@@ -1223,6 +1246,40 @@ inline MaterialForegroundRecommendation material_resolve_foreground(
 
 inline bool material_color_rgb_equal(Color a, Color b) noexcept {
     return a.r == b.r && a.g == b.g && a.b == b.b;
+}
+
+inline MaterialThemeSnapshot material_resolve_theme_snapshot(
+        MaterialStyle const& style) noexcept {
+    MaterialThemeSnapshot snapshot{};
+    Theme const default_theme{};
+    snapshot.foreground = style.foreground;
+    snapshot.secondary_foreground = style.secondary_foreground;
+    snapshot.accent_foreground = style.accent_foreground;
+    snapshot.strong_accent_foreground = style.strong_accent_foreground;
+    snapshot.tint = style.tint;
+    snapshot.border = style.border;
+    snapshot.foreground_matches_theme =
+        style.foreground == default_theme.foreground
+        && style.secondary_foreground == default_theme.muted;
+    snapshot.accent_matches_theme =
+        style.accent_foreground == default_theme.accent
+        && style.strong_accent_foreground == default_theme.accent_strong;
+    snapshot.tint_matches_surface =
+        style.kind == MaterialKind::None
+        || material_color_rgb_equal(style.tint, default_theme.surface);
+    snapshot.border_matches_theme =
+        style.kind == MaterialKind::None
+        || material_color_rgb_equal(style.border, default_theme.border);
+    snapshot.default_glass_tokens =
+        snapshot.foreground_matches_theme
+        && snapshot.accent_matches_theme
+        && snapshot.tint_matches_surface
+        && snapshot.border_matches_theme
+        && theme_matches_default_glass_contract(default_theme);
+    snapshot.profile_name = snapshot.default_glass_tokens
+        ? "apple-glass-light"
+        : "custom";
+    return snapshot;
 }
 
 inline Color material_preserve_text_alpha(Color resolved,
@@ -1687,6 +1744,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.blur_radius = std::clamp(
         style.blur_radius, 0.0f, max_blur_radius);
     plan.tint = style.tint;
+    plan.theme = material_resolve_theme_snapshot(style);
     plan.saturation = std::max(0.0f, style.saturation);
     plan.luminance_floor = std::clamp(style.luminance_floor, 0.0f, 1.0f);
     plan.luminance_gain = std::max(0.0f, style.luminance_gain);
