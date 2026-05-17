@@ -163,6 +163,12 @@ Runtime labels are resolved through the shared pure `ResourceCatalog` helper in
 `file_explorer_shared`, while file reads and package inspection remain
 CLI/example edge work. Set
 `PHENOTYPE_FILE_EXPLORER_LOCALE=ko` to smoke the Korean label path.
+Startup artifacts serialize the same package contract at
+`debug.application.file_explorer.resource_system`, including SVG asset counts,
+the app icon declaration, default locale/font status, Pretendard's CJK fallback,
+locale coverage, and debug manifest/probe/verifier declarations. This lets a
+bundle explain package/resource drift even when the native window and material
+rendering are otherwise healthy.
 
 ## Run
 

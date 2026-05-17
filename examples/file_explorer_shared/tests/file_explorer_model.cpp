@@ -5,11 +5,13 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <span>
 #include <string>
 #include <vector>
 
 import file_explorer_shared;
 import json;
+import phenotype.resources;
 
 namespace {
 
@@ -40,6 +42,20 @@ int main() {
     auto catalog = demo::file_explorer_resource_catalog("desktop");
     assert(catalog.default_font_family == "Pretendard");
     assert(catalog.debug.verifier == "phenotype artifact verify-file-explorer");
+    auto required_locale_keys =
+        demo::resource_contract_locale_keys(catalog);
+    auto contract = phenotype::resource_catalog_contract(
+        catalog,
+        std::span<std::string_view const>{required_locale_keys});
+    assert(contract.svg_asset_count == 1);
+    assert(contract.preload_svg_asset_count == 1);
+    assert(contract.app_icon_declared);
+    assert(contract.app_icon_svg);
+    assert(contract.app_icon_preload);
+    assert(contract.default_font_has_cjk_fallback);
+    assert(contract.debug_artifact_manifest_declared);
+    assert(contract.debug_probe_scene_declared);
+    assert(contract.debug_verifier_declared);
     assert(demo::file_explorer_labels("ko", "desktop").sidebar_recents
         == "최근 항목");
     assert(demo::file_explorer_labels("ko", catalog).sidebar_recents
@@ -713,6 +729,25 @@ duplicate
     assert(debug_text.find("\"titlebar_control_start_x\"") != std::string::npos);
     assert(debug_text.find("\"profile\"") != std::string::npos);
     assert(debug_text.find(profile) != std::string::npos);
+    assert(debug_text.find("\"resource_system\"") != std::string::npos);
+    assert(debug_text.find("\"svg_asset_count\":1") != std::string::npos);
+    assert(debug_text.find("\"preload_svg_asset_count\":1")
+           != std::string::npos);
+    assert(debug_text.find("\"runtime_visible_svg_asset_count\":0")
+           != std::string::npos);
+    assert(debug_text.find("\"app_icon\"") != std::string::npos);
+    assert(debug_text.find("\"declared\":true") != std::string::npos);
+    assert(debug_text.find("\"svg\":true") != std::string::npos);
+    assert(debug_text.find("\"preload\":true") != std::string::npos);
+    assert(debug_text.find("\"font_family\":\"Pretendard\"")
+           != std::string::npos);
+    assert(debug_text.find("\"default_font_has_cjk_fallback\":true")
+           != std::string::npos);
+    assert(debug_text.find(
+        "\"svg_asset_policy\":\"package_svg_assets_must_declare_image_svg_xml_and_svg_source_suffix\"")
+           != std::string::npos);
+    assert(debug_text.find("\"verifier_declared\":true")
+           != std::string::npos);
     assert(debug_text.find("\"keyboard_commands\"") != std::string::npos);
     assert(debug_text.find("CommandOrControl+F") != std::string::npos);
     assert(debug_text.find("ArrowDown") != std::string::npos);

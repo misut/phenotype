@@ -699,6 +699,9 @@ inline bool desktop_status_bar_visible(ExplorerState const& state) {
     return true;
 }
 
+inline phenotype::ResourceCatalog file_explorer_resource_catalog(
+        std::string_view profile);
+
 inline ExplorerChromeMetrics explorer_chrome_metrics(
         ExplorerState const& state,
         std::string_view profile) {
@@ -2069,6 +2072,176 @@ inline json::Value explorer_theme_system_debug_json(
     return json::Value{std::move(out)};
 }
 
+inline auto resource_contract_locale_keys(
+        phenotype::ResourceCatalog const& catalog)
+        -> std::vector<std::string_view> {
+    auto out = std::vector<std::string_view>{};
+    if (auto locale = phenotype::find_locale(catalog, catalog.default_locale)) {
+        out.reserve(locale->get().strings.size());
+        for (auto const& text : locale->get().strings)
+            out.push_back(text.key);
+    }
+    return out;
+}
+
+inline json::Value string_vector_debug_json(
+        std::span<std::string const> values) {
+    json::Array out;
+    for (auto const& value : values)
+        out.push_back(json::Value{value});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value locale_coverage_debug_json(
+        std::span<phenotype::LocaleCoverage const> coverage) {
+    json::Array out;
+    for (auto const& locale : coverage) {
+        json::Object item;
+        item.emplace("tag", json::Value{locale.tag});
+        item.emplace("default_locale", json::Value{locale.default_locale});
+        item.emplace(
+            "fallback_chain",
+            string_vector_debug_json(locale.fallback_chain));
+        item.emplace(
+            "declared_string_count",
+            json::Value{static_cast<std::int64_t>(
+                locale.declared_string_count)});
+        item.emplace(
+            "required_key_count",
+            json::Value{static_cast<std::int64_t>(
+                locale.required_key_count)});
+        item.emplace(
+            "resolved_key_count",
+            json::Value{static_cast<std::int64_t>(
+                locale.resolved_key_count)});
+        item.emplace(
+            "missing_keys",
+            string_vector_debug_json(locale.missing_keys));
+        out.push_back(json::Value{std::move(item)});
+    }
+    return json::Value{std::move(out)};
+}
+
+inline json::Value file_explorer_resource_system_debug_json(
+        std::string_view profile) {
+    auto catalog = file_explorer_resource_catalog(profile);
+    auto required_keys = resource_contract_locale_keys(catalog);
+    auto contract = phenotype::resource_catalog_contract(
+        catalog,
+        std::span<std::string_view const>{required_keys});
+
+    json::Array platforms;
+    for (auto const& platform : catalog.application.platforms)
+        platforms.push_back(json::Value{platform});
+
+    json::Object application;
+    application.emplace("id", json::Value{catalog.application.id});
+    application.emplace(
+        "display_name",
+        json::Value{catalog.application.display_name});
+    application.emplace("version", json::Value{catalog.application.version});
+    application.emplace("entry", json::Value{catalog.application.entry});
+    application.emplace("platforms", json::Value{std::move(platforms)});
+
+    json::Object app_icon;
+    app_icon.emplace("declared", json::Value{contract.app_icon_declared});
+    app_icon.emplace("svg", json::Value{contract.app_icon_svg});
+    app_icon.emplace("preload", json::Value{contract.app_icon_preload});
+    if (auto asset = phenotype::find_asset(catalog, "app.icon")) {
+        app_icon.emplace("source", json::Value{asset->get().source});
+        app_icon.emplace(
+            "content_type",
+            json::Value{asset->get().content_type});
+    }
+
+    json::Object defaults;
+    defaults.emplace("locale", json::Value{catalog.default_locale});
+    defaults.emplace(
+        "default_locale_declared",
+        json::Value{contract.default_locale_declared});
+    defaults.emplace("font_family", json::Value{catalog.default_font_family});
+    defaults.emplace(
+        "default_font_declared",
+        json::Value{contract.default_font_declared});
+    defaults.emplace(
+        "default_font_has_cjk_fallback",
+        json::Value{contract.default_font_has_cjk_fallback});
+
+    json::Object locales;
+    locales.emplace(
+        "count",
+        json::Value{static_cast<std::int64_t>(contract.locale_count)});
+    locales.emplace(
+        "string_count",
+        json::Value{static_cast<std::int64_t>(contract.locale_string_count)});
+    locales.emplace(
+        "required_key_count",
+        json::Value{static_cast<std::int64_t>(required_keys.size())});
+    locales.emplace(
+        "coverage",
+        locale_coverage_debug_json(contract.locale_coverage));
+
+    json::Object fonts;
+    fonts.emplace(
+        "count",
+        json::Value{static_cast<std::int64_t>(contract.font_count)});
+    fonts.emplace(
+        "registered_count",
+        json::Value{static_cast<std::int64_t>(
+            contract.registered_font_count)});
+
+    json::Object debug;
+    debug.emplace(
+        "artifact_manifest",
+        json::Value{catalog.debug.artifact_manifest});
+    debug.emplace("probe_scene", json::Value{catalog.debug.probe_scene});
+    debug.emplace("verifier", json::Value{catalog.debug.verifier});
+    debug.emplace(
+        "artifact_manifest_declared",
+        json::Value{contract.debug_artifact_manifest_declared});
+    debug.emplace(
+        "probe_scene_declared",
+        json::Value{contract.debug_probe_scene_declared});
+    debug.emplace(
+        "verifier_declared",
+        json::Value{contract.debug_verifier_declared});
+
+    json::Object out;
+    out.emplace("schema_version", json::Value{1});
+    out.emplace("application", json::Value{std::move(application)});
+    out.emplace(
+        "asset_count",
+        json::Value{static_cast<std::int64_t>(contract.asset_count)});
+    out.emplace(
+        "preload_asset_count",
+        json::Value{static_cast<std::int64_t>(
+            contract.preload_asset_count)});
+    out.emplace(
+        "runtime_visible_asset_count",
+        json::Value{static_cast<std::int64_t>(
+            contract.runtime_visible_asset_count)});
+    out.emplace(
+        "svg_asset_count",
+        json::Value{static_cast<std::int64_t>(contract.svg_asset_count)});
+    out.emplace(
+        "preload_svg_asset_count",
+        json::Value{static_cast<std::int64_t>(
+            contract.preload_svg_asset_count)});
+    out.emplace(
+        "runtime_visible_svg_asset_count",
+        json::Value{static_cast<std::int64_t>(
+            contract.runtime_visible_svg_asset_count)});
+    out.emplace(
+        "svg_asset_policy",
+        json::Value{std::string{phenotype::svg_asset_contract_policy()}});
+    out.emplace("app_icon", json::Value{std::move(app_icon)});
+    out.emplace("defaults", json::Value{std::move(defaults)});
+    out.emplace("locales", json::Value{std::move(locales)});
+    out.emplace("fonts", json::Value{std::move(fonts)});
+    out.emplace("debug", json::Value{std::move(debug)});
+    return json::Value{std::move(out)};
+}
+
 inline json::Value file_explorer_debug_json(
         ExplorerState const& state,
         Snapshot const& snap,
@@ -2138,6 +2311,7 @@ inline json::Value file_explorer_debug_json(
         operation_receipt_debug_json(state.last_operation, snap.operation_label));
     out.emplace("chrome", explorer_chrome_debug_json(chrome));
     out.emplace("theme_system", explorer_theme_system_debug_json(chrome));
+    out.emplace("resource_system", file_explorer_resource_system_debug_json(profile));
     out.emplace("keyboard_commands", keyboard_commands_debug_json(profile));
     out.emplace("entries_sample", json::Value{std::move(entries)});
     out.emplace("mobile_tab", json::Value{static_cast<std::int64_t>(state.mobile_tab)});
