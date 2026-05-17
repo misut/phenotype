@@ -688,6 +688,12 @@ The file explorer's `debug.application.file_explorer.chrome` additionally
 publishes `content_window_control_markers=true` and three titlebar-control marker
 metrics; these describe the deterministic visual marker used in startup
 artifacts, not an input-capable duplicate of OS controls. The same chrome object
+is enabled automatically by the CLI for
+`phenotype run file_explorer_desktop --artifact-dir ... --artifact-exit`, unless
+the caller explicitly sets `PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS`.
+The run JSON records this under
+`file_explorer_input.artifact_chrome_markers` and
+`file_explorer_input.artifact_chrome_markers_injected`.
 publishes the native titlebar drag/control reserve widths plus a
 `geometry.policy=finder_integrated_glass_chrome_geometry_v1` object with the
 window inset/gap, sidebar surface origin, first sidebar row, toolbar shell,
