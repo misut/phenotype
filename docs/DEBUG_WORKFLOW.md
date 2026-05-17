@@ -113,8 +113,17 @@ pure contract surface:
 ```sh
 cd tools/phenotype_cli
 mise exec -- exon build
+.exon/debug/phenotype_cli theme contract --json
 .exon/debug/phenotype_cli io contract --json
 ```
+
+`theme contract` reports the `phenotype_theme_contract` version, Apple-like
+glass profile, Pretendard typography baseline, Liquid Glass usage boundary,
+macOS/Finder-style iconography policy, phenotype-owned SVG asset policy,
+grouped-container policy, performance bounds, accessibility fallback policy,
+unsupported-backend degradation policy, color tokens, radii, typography, and
+semantic surface roles. It should stay green before debugging theme-dependent
+artifact differences.
 
 `io contract` reports the `phenotype.io` version, accepted input event kinds,
 output observation kinds, deterministic replay sample, LLM-debuggable artifact
@@ -204,7 +213,8 @@ without reading pixels by eye.
 `phenotype icons catalog --json` emits the complete all/sidebar/toolbar symbol
 contract from the same pure metadata package, while
 `phenotype drive file-explorer --json` embeds the desktop chrome geometry and
-icon-system contract under `chrome.geometry` and `chrome.icon_system`. The
+icon-system contract under `chrome.geometry` and `chrome.icon_system`; the
+same output includes the default glass theme contract under `theme_system`. The
 verifier can assert those paths with `require_debug_details`, which keeps
 Finder workflow failures debuggable without relying on a screenshot guess.
 The native runtime window payload also reports `visibility_state` and
@@ -278,6 +288,16 @@ as a JSON contract mismatch. `svg_path_arc_symbol_count` proves that at least
 one built-in Finder sidebar symbol exercises the SVG path arc parser in normal
 example artifacts, while `round_stroke_symbol_count` proves outline glyphs stay
 on the macOS-like round stroke contract.
+
+The same artifact exposes `application.file_explorer.theme_system.*` from the
+pure `phenotype_theme_contract` package. That block names the Apple-like glass
+theme profile, Pretendard font policy, material planning boundary,
+macOS/Finder-style iconography policy, phenotype-owned SVG asset policy, Liquid
+Glass usage boundary, grouped-container policy, performance bounds,
+accessibility fallbacks, and unsupported-backend degradation. Check it first
+when a Finder artifact looks visually off but material plans and icon metadata
+still pass: theme drift, material planning, backend execution, and example
+geometry now have separate JSON owners.
 
 `PHENOTYPE_ARTIFACT_EXIT=1` makes the example exit after writing the first
 rendered frame, which is useful for CI or LLM debugging. Omit it for manual

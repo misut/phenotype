@@ -6,7 +6,7 @@ phenotype = **platform-agnostic core** (C++23 modules) + **platform backends**.
 
 The core handles widgets, layout, state management, vDOM diff, and draw-command emission. It knows nothing about windows, GPUs, or font files — those are provided by the backend via a thin host interface.
 
-- **Core modules**: types, material, io, state, layout, paint, commands, diag, theme_json
+- **Core modules**: types, material, io, theme_contract, state, layout, paint, commands, diag, theme_json
 - **Backend contract**: `phenotype_host.h` (5 host functions) + `phenotype.commands` (typed draw commands)
 - **Current backends**: WASM+JS (production), macOS native (AppKit shell + CoreText + Metal), Windows native (Win32 shell + DirectWrite + Direct3D 12), Linux stub native backend
 - **Planned backends**: platform-specific native renderers/text systems behind the same shell + command-buffer contract
@@ -151,11 +151,20 @@ focus affordances, neutral grouped-background grays, a translucent white
 surface token, and larger chrome radii. The values are phenotype-owned design
 tokens rather than Apple private API or copied platform assets, so examples can
 look native while remaining portable across macOS, Windows, Android, and WASI.
-The pure metadata helpers `default_theme_profile_name`,
+`packages/phenotype_theme_contract` owns the pure metadata contract for this
+baseline: profile, reference, font/material policies, Liquid Glass usage
+boundary, macOS/Finder-style iconography policy, phenotype-owned SVG asset
+policy, container grouping, performance bounds, accessibility fallbacks,
+unsupported-backend degradation, color tokens, radii, typography, and expected
+surface roles. The root helpers `default_theme_profile_name`,
 `default_theme_reference`, `default_theme_font_policy`,
-`default_theme_material_policy`, and `theme_matches_default_glass_contract`
-make that baseline machine-checkable without forcing the theme JSON schema to
-grow a platform-specific field.
+`default_theme_material_policy`, `default_theme_iconography_policy`,
+`default_theme_icon_asset_policy`, `default_theme_usage_policy`,
+`default_theme_container_policy`, `default_theme_performance_policy`,
+`default_theme_accessibility_policy`, `default_theme_fallback_policy`, and
+`theme_matches_default_glass_contract` delegate to that pure package so tests,
+CLI output, and artifacts can check the same contract without giving backend
+adapters any policy authority.
 
 `layout::glass_surface_options` and `layout::glass_surface` provide the
 high-level Apple-glass surface presets used by examples. They are not a new
@@ -665,6 +674,7 @@ phenotype (umbrella re-export)
 ├── phenotype.svg         — pure SVG subset parser + Painter renderer
 ├── phenotype.icons       — phenotype-owned SVG icon catalog
 ├── phenotype.io          — pure input frame and output observation contracts
+├── phenotype.theme_contract — pure Apple-like glass theme contract metadata
 ├── phenotype.state       — Arena, AppState, Scope, InputHandler, message queue
 ├── phenotype.diag        — OTel-shaped Counter, Gauge, Histogram, log ring, JSON snapshot
 ├── phenotype.layout      — flexbox engine, measure_text cache, vDOM diff

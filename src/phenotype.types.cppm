@@ -7,6 +7,8 @@ module;
 #include <vector>
 export module phenotype.types;
 
+import phenotype.theme_contract;
+
 export namespace phenotype {
 
 // ============================================================
@@ -350,30 +352,74 @@ struct Theme {
 };
 
 inline auto default_theme_profile_name() noexcept -> std::string_view {
-    return "apple-glass-light";
+    return theme_contract::default_theme_profile_name();
 }
 
 inline auto default_theme_reference() noexcept -> std::string_view {
-    return "Apple HIG Materials inspired portable glass tokens";
+    return theme_contract::default_theme_reference();
 }
 
 inline auto default_theme_font_policy() noexcept -> std::string_view {
-    return "Pretendard primary with platform sans fallback";
+    return theme_contract::default_theme_font_policy();
 }
 
 inline auto default_theme_material_policy() noexcept -> std::string_view {
-    return "pure material planner decides glass execution; theme provides portable tokens";
+    return theme_contract::default_theme_material_policy();
+}
+
+inline auto default_theme_iconography_policy() noexcept -> std::string_view {
+    return theme_contract::default_theme_iconography_policy();
+}
+
+inline auto default_theme_icon_asset_policy() noexcept -> std::string_view {
+    return theme_contract::default_theme_icon_asset_policy();
+}
+
+inline auto default_theme_usage_policy() noexcept -> std::string_view {
+    return theme_contract::default_theme_usage_policy();
+}
+
+inline auto default_theme_container_policy() noexcept -> std::string_view {
+    return theme_contract::default_theme_container_policy();
+}
+
+inline auto default_theme_performance_policy() noexcept -> std::string_view {
+    return theme_contract::default_theme_performance_policy();
+}
+
+inline auto default_theme_accessibility_policy() noexcept -> std::string_view {
+    return theme_contract::default_theme_accessibility_policy();
+}
+
+inline auto default_theme_fallback_policy() noexcept -> std::string_view {
+    return theme_contract::default_theme_fallback_policy();
 }
 
 inline bool theme_matches_default_glass_contract(Theme const& theme) {
+    auto const contract = theme_contract::default_glass_theme_contract();
     return theme.default_font_family == "Pretendard"
-        && theme.background == Color{242, 242, 247, 255}
-        && theme.foreground == Color{28, 28, 30, 255}
-        && theme.accent == Color{0, 122, 255, 255}
-        && theme.surface == Color{255, 255, 255, 238}
-        && theme.radius_sm == 10.0f
-        && theme.radius_md == 14.0f
-        && theme.radius_lg == 22.0f
+        && theme.background == Color{contract.background.r,
+                                     contract.background.g,
+                                     contract.background.b,
+                                     contract.background.a}
+        && theme.foreground == Color{contract.foreground.r,
+                                     contract.foreground.g,
+                                     contract.foreground.b,
+                                     contract.foreground.a}
+        && theme.accent == Color{contract.accent.r,
+                                 contract.accent.g,
+                                 contract.accent.b,
+                                 contract.accent.a}
+        && theme.surface == Color{contract.surface.r,
+                                  contract.surface.g,
+                                  contract.surface.b,
+                                  contract.surface.a}
+        && theme.radius_sm == contract.radius.sm
+        && theme.radius_md == contract.radius.md
+        && theme.radius_lg == contract.radius.lg
+        && theme.body_font_size == contract.typography.body_font_size
+        && theme.small_font_size == contract.typography.small_font_size
+        && theme.line_height_ratio == contract.typography.line_height_ratio
         && theme.state_focus_ring == theme.accent;
 }
 

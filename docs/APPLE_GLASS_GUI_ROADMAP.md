@@ -260,10 +260,14 @@ product typography, system-blue accent/focus tokens, neutral grouped
 backgrounds, a translucent white surface token, and larger chrome radii. These
 are portable phenotype-owned tokens; platform materials still come from the
 material planner/backend contract rather than from private Apple APIs. The
-baseline is now exposed through pure metadata helpers plus
+baseline is now owned by the pure `phenotype_theme_contract` package and exposed
+through root metadata helpers plus
 `theme_matches_default_glass_contract`, which lets tests and future artifact
 tools verify the intended Apple-glass theme without adding platform-specific
-keys to every theme fixture.
+keys to every theme fixture. CLI and file explorer artifacts read the same
+package-level contract, including macOS/Finder-style iconography,
+phenotype-owned SVG asset policy, usage, container, performance,
+accessibility, and unsupported-backend fallback policies.
 High-level `layout::glass_surface_options` / `layout::glass_surface` presets
 now sit above the generic material surface API. They keep execution on the
 same `MaterialRect` path while giving examples named Apple-glass roles for

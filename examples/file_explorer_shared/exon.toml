@@ -14,6 +14,7 @@ platforms = [
 "github.com/misut/jsoncpp" = "0.1.4"
 
 [dependencies.path]
+phenotype_theme_contract = "../../packages/phenotype_theme_contract"
 phenotype_icon_contract = "../../packages/phenotype_icon_contract"
 phenotype_resources = "../../packages/phenotype_resources"
 

@@ -166,6 +166,54 @@
       "equals": -1
     },
     {
+      "path": "application.file_explorer.theme_system.contract_version",
+      "equals": 1
+    },
+    {
+      "path": "application.file_explorer.theme_system.profile_name",
+      "equals": "apple-glass-light"
+    },
+    {
+      "path": "application.file_explorer.theme_system.reference",
+      "equals": "Apple HIG Materials and Liquid Glass inspired portable tokens"
+    },
+    {
+      "path": "application.file_explorer.theme_system.font_policy",
+      "equals": "Pretendard primary with platform sans fallback"
+    },
+    {
+      "path": "application.file_explorer.theme_system.material_policy",
+      "equals": "pure material planner decides glass execution; theme provides portable tokens"
+    },
+    {
+      "path": "application.file_explorer.theme_system.iconography_policy",
+      "equals": "macos_finder_rounded_outline_symbols_with_simplified_universal_metaphors"
+    },
+    {
+      "path": "application.file_explorer.theme_system.icon_asset_policy",
+      "equals": "phenotype_owned_svg_symbols_reference_sf_symbols_semantics_without_embedded_apple_artwork"
+    },
+    {
+      "path": "application.file_explorer.theme_system.usage_policy",
+      "equals": "liquid_glass_for_navigation_controls_and_functional_chrome_not_content_fill"
+    },
+    {
+      "path": "application.file_explorer.theme_system.container_policy",
+      "equals": "group_related_glass_controls_with_explicit_container_spacing"
+    },
+    {
+      "path": "application.file_explorer.theme_system.performance_policy",
+      "equals": "bounded_glass_surfaces_and_backdrop_sampling_budgets"
+    },
+    {
+      "path": "application.file_explorer.theme_system.accessibility_policy",
+      "equals": "deterministic_reduced_transparency_and_contrast_fallbacks"
+    },
+    {
+      "path": "application.file_explorer.theme_system.fallback_policy",
+      "equals": "unsupported_backends_render_semantic_translucent_surfaces"
+    },
+    {
       "path": "application.file_explorer.counts.files",
       "equals": 22
     },

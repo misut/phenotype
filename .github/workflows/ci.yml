@@ -82,6 +82,13 @@ jobs:
             esac
 
             case "$path" in
+              packages/phenotype_theme_contract/*)
+                cli_check=true
+                continue
+                ;;
+            esac
+
+            case "$path" in
               packages/phenotype_resources/*)
                 cli_check=true
                 package_resource_check=true
@@ -500,7 +507,7 @@ jobs:
           path: |
             tools/phenotype_cli/.exon
             ~/.exon/cache
-          key: cli-package-${{ runner.os }}-${{ hashFiles('mise.toml', 'tools/phenotype_cli/exon.toml', 'examples/file_explorer_shared/exon.toml', 'examples/glass_showcase_shared/exon.toml', 'packages/phenotype_icon_contract/exon.toml', 'packages/phenotype_resources/exon.toml') }}
+          key: cli-package-${{ runner.os }}-${{ hashFiles('mise.toml', 'tools/phenotype_cli/exon.toml', 'examples/file_explorer_shared/exon.toml', 'examples/glass_showcase_shared/exon.toml', 'packages/phenotype_icon_contract/exon.toml', 'packages/phenotype_theme_contract/exon.toml', 'packages/phenotype_resources/exon.toml') }}
           restore-keys: |
             cli-package-${{ runner.os }}-
 
@@ -558,6 +565,12 @@ jobs:
           cd packages/phenotype_icon_contract
           exon test
 
+      - name: Test phenotype theme contract package
+        run: |
+          eval "$(intron env)"
+          cd packages/phenotype_theme_contract
+          exon test
+
       - name: Test file explorer shared module
         if: needs.changes.outputs.file_explorer_examples == 'true'
         run: |
@@ -584,6 +597,7 @@ jobs:
           "$cli" doctor --json | json_tool >/dev/null
           "$cli" commands --json | json_tool >/dev/null
           "$cli" icons catalog --json | json_tool >/dev/null
+          "$cli" theme contract --json | json_tool >/dev/null
           "$cli" package list --json examples | json_tool >/dev/null
           "$cli" package inspect --json examples/file_explorer_desktop | json_tool >/dev/null
           "$cli" package inspect --json examples/file_explorer_mobile | json_tool >/dev/null

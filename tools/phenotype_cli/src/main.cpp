@@ -10,6 +10,7 @@ import json;
 import phenotype.io;
 import phenotype.icon_catalog;
 import phenotype.resources;
+import phenotype.theme_contract;
 import std;
 
 namespace {
@@ -17,6 +18,7 @@ namespace {
 namespace fs = std::filesystem;
 namespace icon_catalog = phenotype::icon_catalog;
 namespace io_contract = phenotype::io;
+namespace theme_contract = phenotype::theme_contract;
 
 struct Check {
     std::string name;
@@ -750,6 +752,26 @@ auto spec() -> cppx::cli::CommandSpec {
                 .category = "metadata",
             },
             {
+                .name = "theme",
+                .summary = "Inspect default glass theme contracts",
+                .options = {help_option()},
+                .subcommands = {
+                    {
+                        .name = "contract",
+                        .summary =
+                            "Emit the Apple-like default glass theme contract",
+                        .options = {help_option(), json_option()},
+                        .allow_positionals = false,
+                        .examples = {
+                            "phenotype theme contract --json",
+                            "phenotype theme contract",
+                        },
+                    },
+                },
+                .allow_positionals = false,
+                .category = "metadata",
+            },
+            {
                 .name = "io",
                 .summary = "Inspect pure input and output abstraction contracts",
                 .options = {help_option()},
@@ -1216,6 +1238,8 @@ auto doctor_checks() -> std::vector<Check> {
                    "Shared model package should stay available for examples.");
     add_path_check("glass_showcase_shared", "examples/glass_showcase_shared/exon.toml",
                    "Shared material probe package should stay available for examples.");
+    add_path_check("theme_contract_package", "packages/phenotype_theme_contract/exon.toml",
+                   "Pure default glass theme metadata should stay package-testable.");
 
     return checks;
 }
@@ -1297,6 +1321,18 @@ auto check_json(Check const& check) -> std::string {
 }
 
 auto string_array_json(std::span<std::string const> values) -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += json_string(values[i]);
+    }
+    out += "]";
+    return out;
+}
+
+auto string_view_array_json(std::span<std::string_view const> values)
+        -> std::string {
     auto out = std::string{"["};
     for (std::size_t i = 0; i < values.size(); ++i) {
         if (i > 0)
@@ -3460,6 +3496,188 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         checks_json(checks));
 }
 
+auto theme_color_json(theme_contract::ColorToken const& color) -> std::string {
+    return std::format(
+        "{{\"r\":{},\"g\":{},\"b\":{},\"a\":{}}}",
+        static_cast<int>(color.r),
+        static_cast<int>(color.g),
+        static_cast<int>(color.b),
+        static_cast<int>(color.a));
+}
+
+auto theme_radius_json(theme_contract::RadiusTokens const& radius)
+        -> std::string {
+    return std::format(
+        "{{\"xs\":{},\"sm\":{},\"md\":{},\"lg\":{},\"full\":{}}}",
+        radius.xs,
+        radius.sm,
+        radius.md,
+        radius.lg,
+        radius.full);
+}
+
+auto theme_typography_json(theme_contract::TypographyTokens const& typography)
+        -> std::string {
+    return std::format(
+        "{{\"default_font_family\":{},\"body_font_size\":{},"
+        "\"heading_font_size\":{},\"small_font_size\":{},"
+        "\"line_height_ratio\":{}}}",
+        json_string(typography.default_font_family),
+        typography.body_font_size,
+        typography.heading_font_size,
+        typography.small_font_size,
+        typography.line_height_ratio);
+}
+
+auto theme_contract_checks() -> std::vector<Check> {
+    auto const contract = theme_contract::default_glass_theme_contract();
+    auto const roles = theme_contract::glass_surface_roles();
+    bool const has_toolbar =
+        std::ranges::find(roles, std::string_view{"toolbar"}) != roles.end();
+    bool const has_sidebar =
+        std::ranges::find(roles, std::string_view{"sidebar"}) != roles.end();
+    bool const has_status_bar =
+        std::ranges::find(roles, std::string_view{"status_bar"}) != roles.end();
+    return {
+        {.name = "theme_profile",
+         .ok = contract.profile_name == std::string_view{"apple-glass-light"}
+            && contract.reference.find("Apple HIG Materials")
+                != std::string_view::npos
+            && contract.reference.find("Liquid Glass")
+                != std::string_view::npos,
+         .detail = std::string{contract.reference},
+         .hint =
+             "Keep the default theme anchored to Apple HIG Materials and Liquid Glass without claiming private API parity."},
+        {.name = "pretendard_typography",
+         .ok = contract.typography.default_font_family
+                == std::string_view{"Pretendard"}
+            && contract.font_policy.find("Pretendard")
+                != std::string_view::npos
+            && contract.typography.line_height_ratio >= 1.5f,
+         .detail = std::format(
+             "font={} body={} small={} line_height={}",
+             contract.typography.default_font_family,
+             contract.typography.body_font_size,
+             contract.typography.small_font_size,
+             contract.typography.line_height_ratio),
+         .hint =
+             "Default UI typography should prefer Pretendard and keep a readable line-height baseline."},
+        {.name = "macos_icon_language",
+         .ok = contract.iconography_policy.find("macos_finder")
+                != std::string_view::npos
+            && contract.iconography_policy.find("simplified_universal_metaphors")
+                != std::string_view::npos
+            && contract.icon_asset_policy.find("phenotype_owned_svg_symbols")
+                != std::string_view::npos
+            && contract.icon_asset_policy.find("without_embedded_apple_artwork")
+                != std::string_view::npos,
+         .detail = std::format(
+             "{}; {}",
+             contract.iconography_policy,
+             contract.icon_asset_policy),
+         .hint =
+             "Default icon language should follow macOS/Finder and SF Symbols semantics while keeping phenotype-owned SVG artwork."},
+        {.name = "apple_glass_color_tokens",
+         .ok = contract.background
+                == theme_contract::ColorToken{242, 242, 247, 255}
+            && contract.foreground
+                == theme_contract::ColorToken{28, 28, 30, 255}
+            && contract.accent
+                == theme_contract::ColorToken{0, 122, 255, 255}
+            && contract.surface.a < 255,
+         .detail = std::format(
+             "background=#{:02x}{:02x}{:02x} accent=#{:02x}{:02x}{:02x} surface_alpha={}",
+             contract.background.r,
+             contract.background.g,
+             contract.background.b,
+             contract.accent.r,
+             contract.accent.g,
+             contract.accent.b,
+             contract.surface.a),
+         .hint =
+             "Default glass tokens should stay neutral, system-blue accented, and translucent where used as material tint."},
+        {.name = "glass_usage_boundary",
+         .ok = contract.material_policy.find("pure material planner")
+                != std::string_view::npos
+            && contract.usage_policy.find("navigation_controls")
+                != std::string_view::npos
+            && contract.usage_policy.find("not_content_fill")
+                != std::string_view::npos,
+         .detail = std::string{contract.usage_policy},
+         .hint =
+             "Liquid-glass styling belongs to functional chrome/navigation controls, not blanket content fills."},
+        {.name = "container_and_role_contract",
+         .ok = has_toolbar && has_sidebar && has_status_bar
+            && contract.container_policy.find("explicit_container_spacing")
+                != std::string_view::npos,
+         .detail = std::format("roles={} container={}",
+                               roles.size(),
+                               contract.container_policy),
+         .hint =
+             "Theme metadata should expose role names and grouped-container spacing for artifact checks."},
+        {.name = "performance_and_fallback_contract",
+         .ok = contract.performance_policy.find("bounded_glass_surfaces")
+                != std::string_view::npos
+            && contract.fallback_policy.find("unsupported_backends")
+                != std::string_view::npos
+            && contract.accessibility_policy.find("reduced_transparency")
+                != std::string_view::npos,
+         .detail = std::format(
+             "{}; {}; {}",
+             contract.performance_policy,
+             contract.accessibility_policy,
+             contract.fallback_policy),
+         .hint =
+             "Theme metadata must keep resource bounds, accessibility fallbacks, and unsupported backend degradation explicit."},
+    };
+}
+
+auto theme_contract_json(std::span<Check const> checks) -> std::string {
+    auto const contract = theme_contract::default_glass_theme_contract();
+    auto const roles = theme_contract::glass_surface_roles();
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"theme contract\","
+        "\"ok\":{},\"version\":{},"
+        "\"profile_name\":{},\"reference\":{},"
+        "\"policies\":{{\"font\":{},\"material\":{},"
+        "\"iconography\":{},\"icon_asset\":{},\"usage\":{},"
+        "\"container\":{},\"performance\":{},\"accessibility\":{},"
+        "\"fallback\":{}}},"
+        "\"tokens\":{{\"background\":{},\"foreground\":{},\"accent\":{},"
+        "\"accent_strong\":{},\"muted\":{},\"border\":{},"
+        "\"surface\":{},\"hover_background\":{},"
+        "\"disabled_foreground\":{},\"focus_ring\":{},"
+        "\"radius\":{},\"typography\":{}}},"
+        "\"surface_roles\":{},\"checks\":{}}}",
+        all_ok(checks) ? "true" : "false",
+        theme_contract::theme_contract_version,
+        json_string(contract.profile_name),
+        json_string(contract.reference),
+        json_string(contract.font_policy),
+        json_string(contract.material_policy),
+        json_string(contract.iconography_policy),
+        json_string(contract.icon_asset_policy),
+        json_string(contract.usage_policy),
+        json_string(contract.container_policy),
+        json_string(contract.performance_policy),
+        json_string(contract.accessibility_policy),
+        json_string(contract.fallback_policy),
+        theme_color_json(contract.background),
+        theme_color_json(contract.foreground),
+        theme_color_json(contract.accent),
+        theme_color_json(contract.accent_strong),
+        theme_color_json(contract.muted),
+        theme_color_json(contract.border),
+        theme_color_json(contract.surface),
+        theme_color_json(contract.hover_background),
+        theme_color_json(contract.disabled_foreground),
+        theme_color_json(contract.focus_ring),
+        theme_radius_json(contract.radius),
+        theme_typography_json(contract.typography),
+        string_view_array_json(roles),
+        checks_json(checks));
+}
+
 auto input_event_kinds_json() -> std::string {
     auto out = std::string{"["};
     for (std::size_t i = 0; i < io_contract::input_event_kinds.size(); ++i) {
@@ -3849,6 +4067,29 @@ auto explorer_chrome_json(
             chrome.icon_reference_symbol_count > 0));
 }
 
+auto explorer_theme_system_json(
+        file_explorer_demo::ExplorerChromeMetrics const& chrome) -> std::string {
+    return std::format(
+        "{{\"contract_version\":{},\"profile_name\":{},"
+        "\"reference\":{},\"font_policy\":{},\"material_policy\":{},"
+        "\"iconography_policy\":{},\"icon_asset_policy\":{},"
+        "\"usage_policy\":{},\"container_policy\":{},"
+        "\"performance_policy\":{},\"accessibility_policy\":{},"
+        "\"fallback_policy\":{}}}",
+        chrome.theme_contract_version,
+        json_string(chrome.theme_profile_name),
+        json_string(chrome.theme_reference),
+        json_string(chrome.theme_font_policy),
+        json_string(chrome.theme_material_policy),
+        json_string(chrome.theme_iconography_policy),
+        json_string(chrome.theme_icon_asset_policy),
+        json_string(chrome.theme_usage_policy),
+        json_string(chrome.theme_container_policy),
+        json_string(chrome.theme_performance_policy),
+        json_string(chrome.theme_accessibility_policy),
+        json_string(chrome.theme_fallback_policy));
+}
+
 auto explorer_keyboard_commands_json(std::string_view profile) -> std::string {
     auto commands = file_explorer_demo::file_explorer_keyboard_commands(profile);
     auto out = std::string{"["};
@@ -3987,6 +4228,7 @@ auto explorer_drive_json(
         "\"view_mode\":{{\"value\":{},\"label\":{}}},"
         "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
         "\"chrome\":{},"
+        "\"theme_system\":{},"
         "\"keyboard_commands\":{},"
         "\"selected\":{{\"present\":{},\"name\":{},\"kind\":{},"
         "\"index\":{},\"size\":{},\"path_label\":{},"
@@ -4014,6 +4256,7 @@ auto explorer_drive_json(
         result.state.viewport_height,
         result.state.viewport_scale,
         explorer_chrome_json(result.chrome),
+        explorer_theme_system_json(result.chrome),
         explorer_keyboard_commands_json(result.profile),
         snap.has_selection ? "true" : "false",
         json_string(snap.has_selection ? snap.selected.name : ""),
@@ -6717,6 +6960,41 @@ int run_icons_catalog(cppx::cli::Invocation const& invocation) {
     return all_ok(checks) ? 0 : 1;
 }
 
+int run_theme_contract(cppx::cli::Invocation const& invocation) {
+    auto checks = theme_contract_checks();
+    auto const contract = theme_contract::default_glass_theme_contract();
+    if (invocation.has("json")) {
+        std::println("{}", theme_contract_json(checks));
+        return all_ok(checks) ? 0 : 1;
+    }
+
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "profile",
+         .value = std::string{contract.profile_name},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "font",
+         .value = std::string{contract.font_policy},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "usage",
+         .value = std::string{contract.usage_policy},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "icons",
+         .value = std::string{contract.iconography_policy},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "container",
+         .value = std::string{contract.container_policy},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "fallback",
+         .value = std::string{contract.fallback_policy},
+         .status = all_ok(checks) ? cppx::terminal::StatusKind::ok
+                                  : cppx::terminal::StatusKind::fail},
+    };
+    std::println("phenotype theme contract");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    print_checks("checks", checks);
+    return all_ok(checks) ? 0 : 1;
+}
+
 int run_io_contract(cppx::cli::Invocation const& invocation) {
     auto sample = io_contract_sample();
     auto checks = io_contract_checks(sample);
@@ -7622,6 +7900,9 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "icons", "catalog"})
         return run_icons_catalog(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "theme", "contract"})
+        return run_theme_contract(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "io", "contract"})
         return run_io_contract(*parsed);
