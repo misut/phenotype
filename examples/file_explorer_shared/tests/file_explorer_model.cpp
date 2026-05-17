@@ -1,4 +1,5 @@
 #include <cassert>
+#include <algorithm>
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
@@ -129,6 +130,36 @@ fallback = []
     assert(parsed_find_shortcut.ok);
     assert(parsed_find_shortcut.input.kind
            == demo::ExplorerInputKind::FocusSearch);
+    auto parsed_arrow_down =
+        demo::parse_explorer_input("key:arrow-down");
+    assert(parsed_arrow_down.ok);
+    assert(parsed_arrow_down.input.kind
+           == demo::ExplorerInputKind::MoveSelection);
+    assert(parsed_arrow_down.input.selection_move
+           == demo::ExplorerSelectionMove::Down);
+    assert(demo::explorer_input_label(parsed_arrow_down.input)
+           == "move_selection:down");
+    auto parsed_arrow_right =
+        demo::parse_explorer_input("key:right");
+    assert(parsed_arrow_right.ok);
+    assert(parsed_arrow_right.input.kind
+           == demo::ExplorerInputKind::MoveSelection);
+    assert(parsed_arrow_right.input.selection_move
+           == demo::ExplorerSelectionMove::Right);
+    auto parsed_home_key =
+        demo::parse_explorer_input("key:home");
+    assert(parsed_home_key.ok);
+    assert(parsed_home_key.input.kind
+           == demo::ExplorerInputKind::MoveSelection);
+    assert(parsed_home_key.input.selection_move
+           == demo::ExplorerSelectionMove::Home);
+    auto parsed_page_down =
+        demo::parse_explorer_input("move:page-down");
+    assert(parsed_page_down.ok);
+    assert(parsed_page_down.input.kind
+           == demo::ExplorerInputKind::MoveSelection);
+    assert(parsed_page_down.input.selection_move
+           == demo::ExplorerSelectionMove::PageDown);
     auto parsed_escape_key =
         demo::parse_explorer_input("key:escape");
     assert(parsed_escape_key.ok);
@@ -337,6 +368,57 @@ duplicate
     assert(snap.entries[5].name == "※해당 시 필독_①무주택자인 경우.pdf");
     assert(snap.entries[6].name == "[카카오] 퇴직금 지급 기준.pdf");
 
+    std::string const keyboard_profile = "test-keyboard-navigation";
+    auto keyboard_state = demo::make_state(keyboard_profile);
+    auto keyboard_entries = demo::snapshot(keyboard_state).entries;
+    auto keyboard_chrome =
+        demo::explorer_chrome_metrics(keyboard_state, keyboard_profile);
+    assert(keyboard_entries.size()
+           > static_cast<std::size_t>(keyboard_chrome.icon_grid_columns + 1));
+    demo::apply_explorer_input(
+        keyboard_state,
+        parsed_arrow_down.input,
+        keyboard_profile);
+    auto keyboard_snap = demo::snapshot(keyboard_state);
+    assert(keyboard_snap.has_selection);
+    assert(keyboard_snap.selected_index == 0);
+    assert(keyboard_snap.selected.name == keyboard_entries[0].name);
+    assert(keyboard_state.status.find("Arrow Down") != std::string::npos);
+    demo::apply_explorer_input(
+        keyboard_state,
+        parsed_arrow_right.input,
+        keyboard_profile);
+    keyboard_snap = demo::snapshot(keyboard_state);
+    assert(keyboard_snap.selected_index == 1);
+    assert(keyboard_snap.selected.name == keyboard_entries[1].name);
+    demo::apply_explorer_input(
+        keyboard_state,
+        parsed_arrow_down.input,
+        keyboard_profile);
+    keyboard_snap = demo::snapshot(keyboard_state);
+    assert(keyboard_snap.selected_index
+           == static_cast<std::size_t>(keyboard_chrome.icon_grid_columns + 1));
+    assert(keyboard_snap.selected.name
+           == keyboard_entries[static_cast<std::size_t>(
+               keyboard_chrome.icon_grid_columns + 1)].name);
+    demo::apply_explorer_input(
+        keyboard_state,
+        parsed_home_key.input,
+        keyboard_profile);
+    keyboard_snap = demo::snapshot(keyboard_state);
+    assert(keyboard_snap.selected_index == 0);
+    demo::apply_explorer_input(
+        keyboard_state,
+        parsed_page_down.input,
+        keyboard_profile);
+    keyboard_snap = demo::snapshot(keyboard_state);
+    assert(keyboard_snap.selected_index
+           == std::min<std::size_t>(
+               static_cast<std::size_t>(
+                   keyboard_chrome.icon_grid_visible_capacity),
+               keyboard_entries.size() - 1));
+    fs::remove_all(keyboard_state.root, ec);
+
     auto outside = state.root.parent_path()
         / "phenotype-file-explorer-outside.txt";
     {
@@ -430,6 +512,8 @@ duplicate
     assert(debug_text.find(profile) != std::string::npos);
     assert(debug_text.find("\"keyboard_commands\"") != std::string::npos);
     assert(debug_text.find("CommandOrControl+F") != std::string::npos);
+    assert(debug_text.find("ArrowDown") != std::string::npos);
+    assert(debug_text.find("\"index\"") != std::string::npos);
 
     state.draft_name = "../ Launch Plan";
     state.draft_body = "Created from test_file_explorer_model.";
@@ -747,6 +831,29 @@ duplicate
     assert(activated.trace[1].operation.kind == "folder_open");
     assert(activated.trace[1].operation.ok);
     assert(activated.snapshot.relative_location == "Demo Root/Documents");
+    fs::remove_all(navigation_root, ec);
+
+    fs::remove_all(navigation_root, ec);
+    std::vector<demo::ExplorerInput> keyboard_inputs{
+        {.kind = demo::ExplorerInputKind::MoveSelection,
+         .value = "down",
+         .selection_move = demo::ExplorerSelectionMove::Down},
+        {.kind = demo::ExplorerInputKind::MoveSelection,
+         .value = "right",
+         .selection_move = demo::ExplorerSelectionMove::Right},
+    };
+    auto keyboard_driven = demo::drive_explorer(
+        navigation_profile,
+        keyboard_inputs);
+    assert(keyboard_driven.trace.size() == 2);
+    assert(keyboard_driven.trace[0].selected_name
+           == keyboard_driven.snapshot.entries[0].name);
+    assert(keyboard_driven.trace[0].operation.kind == "file_read");
+    assert(keyboard_driven.trace[0].operation.ok);
+    assert(keyboard_driven.snapshot.has_selection);
+    assert(keyboard_driven.snapshot.selected_index == 1);
+    assert(keyboard_driven.snapshot.selected.name
+           == keyboard_driven.snapshot.entries[1].name);
     fs::remove_all(navigation_root, ec);
 
     demo::reset_demo_tree(state, profile);

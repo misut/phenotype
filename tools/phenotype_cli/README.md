@@ -70,7 +70,9 @@ The initial scope is intentionally narrow:
   results, so expected failure receipts can be asserted while the JSON
   `operation.ok` field still records the failed operation. The command accepts
   the same key/shortcut aliases published by the shared model, including
-  `key:enter`, `key:delete`, `key:escape`, `shortcut:find`,
+  `key:enter`, `key:arrow-up`, `key:arrow-down`, `key:arrow-left`,
+  `key:arrow-right`, `key:home`, `key:end`, `key:page-up`,
+  `key:page-down`, `key:delete`, `key:escape`, `shortcut:find`,
   `shortcut:duplicate`, and `shortcut:new-folder`.
 - `phenotype drive glass-showcase` applies deterministic typed inputs to the
   shared glass showcase model without opening a native window. JSON output

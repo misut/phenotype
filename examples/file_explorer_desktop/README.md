@@ -101,10 +101,12 @@ The desktop view also registers the shared keyboard command contract through
 phenotype's native key-command registry. AppKit, Win32, and Android shells only
 translate platform keys into normalized command input; the pure app contract
 decides that search is `CommandOrControl+F`, selection activation is `Enter`,
-Trash movement is `DeleteOrBackspace`, duplicate is `CommandOrControl+D`,
-folder creation is `Shift+CommandOrControl+N`, and transient dismissal is
-`Escape`. `debug.application.file_explorer.keyboard_commands` serializes that
-same contract so artifacts can catch shortcut drift before a manual key test.
+grid navigation is `ArrowUp/Down/Left/Right`, jump navigation is
+`Home`/`End`/`PageUp`/`PageDown`, Trash movement is `DeleteOrBackspace`,
+duplicate is `CommandOrControl+D`, folder creation is
+`Shift+CommandOrControl+N`, and transient dismissal is `Escape`.
+`debug.application.file_explorer.keyboard_commands` serializes that same
+contract so artifacts can catch shortcut drift before a manual key test.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-desktop`. The example never points at the user's real

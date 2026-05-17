@@ -160,7 +160,8 @@ This keeps the long-term input/output abstraction model testable without a
 native window. `examples/file_explorer_shared` publishes Finder-style desktop
 commands as data, `examples/file_explorer_desktop` registers those descriptors
 with the core, and `phenotype drive file-explorer` accepts matching `key:` and
-`shortcut:` aliases against the same shared model.
+`shortcut:` aliases against the same shared model, including arrow/home/end/page
+selection navigation.
 
 ## Command buffer protocol
 

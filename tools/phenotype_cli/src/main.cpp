@@ -2744,11 +2744,14 @@ auto explorer_input_json(file_explorer_demo::ExplorerInput const& input)
     -> std::string {
     return std::format(
         "{{\"kind\":{},\"value\":{},\"sort_mode\":{},\"view_mode\":{},"
+        "\"selection_move\":{},"
         "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},\"label\":{}}}",
         json_string(file_explorer_demo::explorer_input_kind_name(input.kind)),
         json_string(input.value),
         json_string(file_explorer_demo::sort_mode_label(input.sort_mode)),
         json_string(file_explorer_demo::view_mode_value_name(input.view_mode)),
+        json_string(file_explorer_demo::selection_move_value_name(
+            input.selection_move)),
         input.viewport_width,
         input.viewport_height,
         input.viewport_scale,
@@ -3034,7 +3037,8 @@ auto explorer_drive_json(
         "\"chrome\":{},"
         "\"keyboard_commands\":{},"
         "\"selected\":{{\"present\":{},\"name\":{},\"kind\":{},"
-        "\"size\":{},\"path_label\":{},\"preview_excerpt\":{}}},"
+        "\"index\":{},\"size\":{},\"path_label\":{},"
+        "\"preview_excerpt\":{}}},"
         "\"counts\":{{\"visible_entries\":{},\"files\":{},\"folders\":{}}},"
         "\"capabilities\":{{\"can_go_back\":{},\"can_go_forward\":{},"
         "\"can_create_file\":{},\"can_create_folder\":{},"
@@ -3062,6 +3066,9 @@ auto explorer_drive_json(
         snap.has_selection ? "true" : "false",
         json_string(snap.has_selection ? snap.selected.name : ""),
         json_string(snap.selected_kind_label),
+        snap.has_selection
+            ? static_cast<std::int64_t>(snap.selected_index)
+            : -1,
         json_string(snap.selected_size_label),
         json_string(snap.selected_path_label),
         json_string(output_tail(snap.preview, 512)),

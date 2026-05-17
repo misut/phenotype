@@ -163,16 +163,18 @@ The drive output reports the typed input trace, sandbox paths, visible entries,
 viewport, view mode, pure Finder chrome/grid metrics, selection capabilities,
 operation receipts, preview excerpt, and desktop keyboard command descriptors.
 It is useful for validating
-select/open/read/create/duplicate/delete/view-mode/resize/shortcut model
-behavior before running the slower desktop/mobile artifact capture gate.
+select/open/read/create/duplicate/delete/view-mode/resize/shortcut and
+keyboard-selection model behavior before running the slower desktop/mobile
+artifact capture gate.
 The parser accepts desktop-style aliases including `key:enter`, `key:delete`,
-`key:escape`, `shortcut:find`, `shortcut:duplicate`, and
-`shortcut:new-folder`, matching the native key-command registry used by the
-desktop example.
+`key:escape`, `key:arrow-up`, `key:arrow-down`, `key:arrow-left`,
+`key:arrow-right`, `key:home`, `key:end`, `key:page-up`, `key:page-down`,
+`shortcut:find`, `shortcut:duplicate`, and `shortcut:new-folder`, matching the
+native key-command registry used by the desktop example.
 Native file explorer artifact bundles expose the same model state under
 `debug.application.file_explorer`: profile, location, status, sort mode, view
-mode, selected entry, operation receipt, entry counts, pure chrome metrics, and
-keyboard command descriptors.
+mode, selected entry plus index, operation receipt, entry counts, pure chrome
+metrics, and keyboard command descriptors.
 The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
 traffic-light marker coordinates, and icon-grid density metrics such as column
 width, row height, pitch, thumbnail canvas size, label size, gap, visible rows,
