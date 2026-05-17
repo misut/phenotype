@@ -19,10 +19,13 @@ The desktop window requests `WindowChromeStyle::IntegratedTitlebar` with
 explicit titlebar, leading-control, and trailing-control reserve metrics. On
 macOS the backend uses native AppKit titlebar transparency/full-size content so
 the system traffic-light controls are integrated into the content area instead
-of being duplicated as interactive phenotype controls. The example paints a
-small non-interactive traffic-light marker in the reserved sidebar/titlebar
-area so startup artifacts show the same Finder-like chrome that the OS owns at
-runtime. On Windows the native Win32 shell keeps the same contract through a
+of being duplicated as interactive phenotype controls. The live example keeps
+that sidebar/titlebar area as blank reserve, so the real OS-owned window
+controls have space without phenotype drawing another set of buttons. Artifact
+capture can opt in to a deterministic non-interactive traffic-light marker with
+`PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS=1`, which is what the CLI gate
+uses when it needs screenshots to expose the reserved chrome region. On Windows
+the native Win32 shell keeps the same contract through a
 DWM custom frame, using `WM_NCHITTEST` to preserve
 resize edges, caption-button behavior, blank-toolbar dragging, phenotype toolbar
 hit regions, and native size/aspect-ratio constraints. The example does not use
@@ -38,10 +41,11 @@ the status surface again so debug artifacts still expose action receipts and
 state transitions without adding persistent chrome to the startup view.
 
 Startup frame artifacts intentionally capture phenotype content rather than the
-operating system's non-client controls. The top-left titlebar reserve therefore
-contains only a deterministic non-interactive traffic-light marker; AppKit/Win32
-still own the real close, minimize, maximize, and caption-button hit testing at
-runtime.
+operating system's non-client controls. The top-left titlebar reserve is blank
+in normal interactive runs, while the artifact verifier launches with
+`PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS=1` so the reserve contains a
+deterministic non-interactive traffic-light marker. AppKit/Win32 still own the
+real close, minimize, maximize, and caption-button hit testing at runtime.
 The manifest also checks `debug.platform_runtime.details.window` so CI can
 prove the example requested `IntegratedTitlebar`, preserved the expected
 titlebar/control reserve metrics, and is not using GLFW or another toolkit
@@ -54,10 +58,12 @@ regions, so an LLM can distinguish model-state drift from renderer/capture
 drift without guessing from pixels. The desktop manifest also asserts the
 Finder toolbar group, separator, icon-button, and compact Recents icon-grid
 density metrics from that payload, including thumbnail canvas, label, font,
-grid-gap sizing, and contextual `status_bar_visible` state. It also checks
-sidebar symbol and label placement, section spacing, selected-row radius, and
-traffic-light marker coordinates so Finder parity regressions are reported as
-structured chrome contract failures before pixel inspection.
+grid-gap sizing, contextual `status_bar_visible` state, and the
+`window_control_marker_mode` split between live native controls and artifact
+probe markers. It also checks sidebar symbol and label placement, section
+spacing, selected-row radius, and artifact traffic-light marker coordinates so
+Finder parity regressions are reported as structured chrome contract failures
+before pixel inspection.
 The sidebar and toolbar glyphs come from `phenotype.icons`, not copied SF
 Symbols assets. They are phenotype-owned SVG symbols with a macOS-style
 rounded-outline contract and bounded secondary-layer opacity for detailed
@@ -83,7 +89,7 @@ CI. The AppKit shell installs a small native application delegate that reorders
 the existing window when the app becomes active or the Dock icon is reopened;
 if the launch path still cannot make the window visible/key/main, stderr names
 the exact state before the event loop continues. The example's traffic-light
-marker is visual-only and is not wired to phenotype input.
+marker is visual-only, artifact-only, and is not wired to phenotype input.
 
 The toolbar search control starts as a Finder-style icon button. Activating it
 reveals a search field wired to the shared file model, so desktop and mobile

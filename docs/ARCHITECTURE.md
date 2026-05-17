@@ -520,9 +520,11 @@ metrics, leading/trailing native-control reserves, whether native OS controls
 own the caption-button/traffic-light territory, and explicit `uses_glfw=false`
 / `toolkit_window_shim=false` markers.
 Finder-style startup artifacts may render deterministic visual markers for the
-traffic-light reserve so screenshots match the product shell, but those markers
-are model/debug data only; input and caption-button ownership stay in AppKit or
-Win32.
+traffic-light reserve so screenshots expose the product shell, but those
+markers are opt-in artifact probes (`artifact-probe-marker`) rather than live
+runtime chrome. Interactive desktop examples keep the same reserve blank and
+report `runtime-native-controls`, leaving input and caption-button ownership in
+AppKit or Win32.
 
 ## Unified debug plane
 

@@ -5324,6 +5324,8 @@ auto run_file_explorer_case(fs::path const& root,
     };
     if (item.profile == "desktop")
         env["PHENOTYPE_FILE_EXPLORER_VIEW"] = item.mode;
+    if (item.profile == "desktop")
+        env["PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS"] = "1";
     if (scenario_active) {
         if (item.scenario == "more-actions-open") {
             env["PHENOTYPE_FILE_EXPLORER_MORE_ACTIONS"] = "1";
