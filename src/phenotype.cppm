@@ -1969,6 +1969,30 @@ struct MaterialSurfaceOptions {
     MaterialContainerDescriptor container{};
 };
 
+enum class GlassSurfacePreset {
+    Window,
+    Toolbar,
+    ToolbarGroup,
+    Navigation,
+    Sidebar,
+    Content,
+    StatusBar,
+};
+
+inline char const* glass_surface_preset_name(
+        GlassSurfacePreset preset) noexcept {
+    switch (preset) {
+        case GlassSurfacePreset::Window:       return "window";
+        case GlassSurfacePreset::Toolbar:      return "toolbar";
+        case GlassSurfacePreset::ToolbarGroup: return "toolbar_group";
+        case GlassSurfacePreset::Navigation:   return "navigation";
+        case GlassSurfacePreset::Sidebar:      return "sidebar";
+        case GlassSurfacePreset::Content:      return "content";
+        case GlassSurfacePreset::StatusBar:    return "status_bar";
+    }
+    return "content";
+}
+
 inline void configure_material_surface(LayoutNode& node,
                                        MaterialSurfaceOptions const& options) {
     auto const& t = detail::g_app.theme;
@@ -2026,6 +2050,104 @@ void material_surface(MaterialKind kind, F&& builder,
 inline char const* chrome_label_or(char const* label,
                                    char const* fallback) noexcept {
     return label && label[0] != '\0' ? label : fallback;
+}
+
+inline MaterialSurfaceOptions glass_surface_options(
+        GlassSurfacePreset preset,
+        char const* semantic_label = "") {
+    auto const& t = detail::g_app.theme;
+    MaterialSurfaceOptions options{};
+    options.border_width = 0.0f;
+    options.border_radius = t.radius_lg;
+
+    switch (preset) {
+        case GlassSurfacePreset::Window:
+            options.kind = MaterialKind::Clear;
+            options.role = MaterialSurfaceRole::Surface;
+            options.direction = FlexDirection::Row;
+            options.padding = SpaceToken::Xs;
+            options.gap = SpaceToken::Sm;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Glass Window");
+            break;
+        case GlassSurfacePreset::Toolbar:
+            options.kind = MaterialKind::Clear;
+            options.role = MaterialSurfaceRole::Toolbar;
+            options.direction = FlexDirection::Row;
+            options.padding = SpaceToken::Xs;
+            options.gap = SpaceToken::Xs;
+            options.cross_align = CrossAxisAlignment::Center;
+            options.border_radius = 0.0f;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Toolbar");
+            break;
+        case GlassSurfacePreset::ToolbarGroup:
+            options.kind = MaterialKind::Thick;
+            options.role = MaterialSurfaceRole::Toolbar;
+            options.direction = FlexDirection::Row;
+            options.padding = SpaceToken::Xs;
+            options.gap = SpaceToken::Xs;
+            options.cross_align = CrossAxisAlignment::Center;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Toolbar Group");
+            break;
+        case GlassSurfacePreset::Navigation:
+            options.kind = MaterialKind::Thin;
+            options.role = MaterialSurfaceRole::Navigation;
+            options.direction = FlexDirection::Row;
+            options.padding = SpaceToken::Sm;
+            options.gap = SpaceToken::Xs;
+            options.cross_align = CrossAxisAlignment::Center;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Navigation");
+            break;
+        case GlassSurfacePreset::Sidebar:
+            options.kind = MaterialKind::Thin;
+            options.role = MaterialSurfaceRole::Sidebar;
+            options.direction = FlexDirection::Column;
+            options.padding = SpaceToken::Md;
+            options.gap = SpaceToken::Sm;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Sidebar");
+            break;
+        case GlassSurfacePreset::Content:
+            options.kind = MaterialKind::Regular;
+            options.role = MaterialSurfaceRole::Content;
+            options.direction = FlexDirection::Column;
+            options.padding = SpaceToken::Xl;
+            options.gap = SpaceToken::Md;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Content");
+            break;
+        case GlassSurfacePreset::StatusBar:
+            options.kind = MaterialKind::Clear;
+            options.role = MaterialSurfaceRole::StatusBar;
+            options.direction = FlexDirection::Column;
+            options.padding = SpaceToken::Sm;
+            options.gap = SpaceToken::Xs;
+            options.border_radius = t.radius_md;
+            options.semantic_label = chrome_label_or(
+                semantic_label,
+                "Status Bar");
+            break;
+    }
+    return options;
+}
+
+template<typename F>
+    requires std::is_invocable_v<F>
+void glass_surface(GlassSurfacePreset preset,
+                   F&& builder,
+                   char const* semantic_label = "") {
+    material_surface(
+        glass_surface_options(preset, semantic_label),
+        std::forward<F>(builder));
 }
 
 template<typename F>

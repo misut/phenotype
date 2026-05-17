@@ -2067,6 +2067,73 @@ void test_material_surface_shape_overrides() {
     std::puts("PASS: material surface shape overrides");
 }
 
+void test_glass_surface_presets_emit_material_contract() {
+    auto toolbar = layout::glass_surface_options(
+        layout::GlassSurfacePreset::Toolbar);
+    assert(toolbar.kind == MaterialKind::Clear);
+    assert(toolbar.role == MaterialSurfaceRole::Toolbar);
+    assert(toolbar.direction == FlexDirection::Row);
+    assert(toolbar.cross_align == CrossAxisAlignment::Center);
+    assert(toolbar.border_radius == 0.0f);
+    assert(std::string_view{toolbar.semantic_label} == "Toolbar");
+    assert(std::string_view{
+        layout::glass_surface_preset_name(
+            layout::GlassSurfacePreset::ToolbarGroup)}
+        == "toolbar_group");
+
+    auto content = layout::glass_surface_options(
+        layout::GlassSurfacePreset::Content,
+        "Files");
+    assert(content.kind == MaterialKind::Regular);
+    assert(content.role == MaterialSurfaceRole::Content);
+    assert(content.padding == SpaceToken::Xl);
+    assert(std::string_view{content.semantic_label} == "Files");
+
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::glass_surface(
+        layout::GlassSurfacePreset::ToolbarGroup,
+        [] {
+            widget::text("Preset command");
+        },
+        "Preset Toolbar Group");
+    Scope::set_current(nullptr);
+
+    auto const& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    auto const& surface = detail::node_at(root.children[0]);
+    assert(surface.material.kind == MaterialKind::Thick);
+    assert(surface.material.role == MaterialSurfaceRole::Toolbar);
+    assert(surface.border_width == 0.0f);
+    assert(surface.border_radius == detail::g_app.theme.radius_lg);
+    assert(std::string_view{surface.debug_semantic_label}
+           == "Preset Toolbar Group");
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    auto const* material = static_cast<MaterialRectCmd const*>(nullptr);
+    for (auto const& cmd : cmds) {
+        if (auto const* m = std::get_if<MaterialRectCmd>(&cmd)) {
+            material = m;
+            break;
+        }
+    }
+    assert(material != nullptr);
+    assert(material->material.kind == MaterialKind::Thick);
+    assert(material->material.role == MaterialSurfaceRole::Toolbar);
+
+    std::puts("PASS: glass surface presets emit material contract");
+}
+
 void test_material_container_scope_emits_command_context() {
     detail::g_app.arena.reset();
     detail::g_app.prev_arena.reset();
@@ -3529,6 +3596,7 @@ int main() {
     test_material_text_foreground_resolution();
     test_material_surface_emits_material_rect_command();
     test_material_surface_shape_overrides();
+    test_glass_surface_presets_emit_material_contract();
     test_material_container_scope_emits_command_context();
     test_material_command_preserves_style_optics();
     test_radio_paint_cache_stale_descendant_after_subtree_blit();

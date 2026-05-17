@@ -264,6 +264,11 @@ baseline is now exposed through pure metadata helpers plus
 `theme_matches_default_glass_contract`, which lets tests and future artifact
 tools verify the intended Apple-glass theme without adding platform-specific
 keys to every theme fixture.
+High-level `layout::glass_surface_options` / `layout::glass_surface` presets
+now sit above the generic material surface API. They keep execution on the
+same `MaterialRect` path while giving examples named Apple-glass roles for
+window chrome, toolbar shells, toolbar groups, navigation, sidebars, content,
+and status bars.
 
 SVG and built-in icons are first-class shared UI primitives. `phenotype.svg`
 parses a bounded pure SVG subset into `svg::Document` and renders through
@@ -636,8 +641,8 @@ Current seed:
 The initial G0-G4 path is now landed. The next useful PR should avoid another
 schema-only increment unless a real failure appears. Recommended directions:
 
-- add a first-class material-aware surface/control widget API on top of the
-  existing `MaterialRect` command path;
+- expand first-class material-aware controls beyond the new glass surface
+  presets, especially buttons, segmented controls, and popovers;
 - tighten macOS material executor budgets after collecting a small sample of
   local and CI timing/copy values;
 - add Android CI emulator wiring if runner capacity and cost are acceptable;
