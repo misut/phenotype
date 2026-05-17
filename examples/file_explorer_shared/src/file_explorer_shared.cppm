@@ -276,6 +276,9 @@ struct ExplorerChromeMetrics {
     std::string icon_module;
     std::string icon_style;
     std::string icon_source_format;
+    std::string icon_svg_subset_policy;
+    std::string icon_svg_supported_path_commands;
+    std::string icon_svg_arc_policy;
     std::string icon_design_reference;
     std::string icon_reference_family;
     std::string icon_reference_policy;
@@ -666,6 +669,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_module = "text_controls",
             .icon_style = "mobile_text_buttons",
             .icon_source_format = "none",
+            .icon_svg_subset_policy = "n/a",
+            .icon_svg_supported_path_commands = "n/a",
+            .icon_svg_arc_policy = "n/a",
             .icon_design_reference = "mobile text controls",
             .icon_reference_family = "n/a",
             .icon_reference_policy = "n/a",
@@ -795,6 +801,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_module = "phenotype.icons",
         .icon_style = std::string{icon_catalog::style_name()},
         .icon_source_format = std::string{icon_catalog::source_format()},
+        .icon_svg_subset_policy =
+            std::string{icon_catalog::svg_subset_policy()},
+        .icon_svg_supported_path_commands =
+            std::string{icon_catalog::svg_supported_path_commands()},
+        .icon_svg_arc_policy = std::string{icon_catalog::svg_arc_policy()},
         .icon_design_reference =
             std::string{icon_catalog::style_reference()},
         .icon_reference_family =
@@ -1408,6 +1419,11 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace("module", json::Value{chrome.icon_module});
     icon_system.emplace("style", json::Value{chrome.icon_style});
     icon_system.emplace("source_format", json::Value{chrome.icon_source_format});
+    icon_system.emplace("svg_subset_policy", json::Value{chrome.icon_svg_subset_policy});
+    icon_system.emplace(
+        "svg_supported_path_commands",
+        json::Value{chrome.icon_svg_supported_path_commands});
+    icon_system.emplace("svg_arc_policy", json::Value{chrome.icon_svg_arc_policy});
     icon_system.emplace("owned_assets", json::Value{chrome.owned_icon_assets});
     icon_system.emplace("uses_sf_symbols_assets", json::Value{chrome.uses_sf_symbols_assets});
     icon_system.emplace("round_stroke_contract", json::Value{chrome.icon_round_stroke_contract});

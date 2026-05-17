@@ -12,6 +12,11 @@ int main() {
     assert(icons::style_reference().find("Apple HIG") != std::string_view::npos);
     assert(icons::style_reference().find("macOS Finder") != std::string_view::npos);
     assert(icons::asset_policy().find("no Apple") != std::string_view::npos);
+    assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");
+    assert(icons::svg_supported_path_commands().find("A Z")
+           != std::string_view::npos);
+    assert(icons::svg_arc_policy().find("bounded cubic Bezier")
+           != std::string_view::npos);
     assert(icons::all_symbol_count == 31);
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);

@@ -250,6 +250,22 @@ inline auto source_format() noexcept -> std::string_view {
     return "svg";
 }
 
+inline auto svg_subset_policy() noexcept -> std::string_view {
+    return "bounded_svg_icon_subset";
+}
+
+inline auto svg_supported_elements() noexcept -> std::string_view {
+    return "svg, g, path, rect, circle, ellipse, line, polyline, polygon";
+}
+
+inline auto svg_supported_path_commands() noexcept -> std::string_view {
+    return "M L H V Q T C S A Z with absolute and relative variants";
+}
+
+inline auto svg_arc_policy() noexcept -> std::string_view {
+    return "circle elements preserve native ArcTo; path A/a lowers to bounded cubic Bezier segments";
+}
+
 inline auto alignment_policy() noexcept -> std::string_view {
     return "24x24 text-aligned symbol grid";
 }
@@ -426,6 +442,7 @@ inline auto symbol_layer_count(Symbol symbol) noexcept -> unsigned int {
     case Symbol::SortGroup:   return 9;
     case Symbol::Document:
     case Symbol::AirDrop:
+    case Symbol::Applications:
     case Symbol::NewDocument:
         return 4;
     case Symbol::Share:
@@ -435,7 +452,6 @@ inline auto symbol_layer_count(Symbol symbol) noexcept -> unsigned int {
     case Symbol::Home:
     case Symbol::Shared:
     case Symbol::NewFolder:
-    case Symbol::Applications:
     case Symbol::Desktop:
     case Symbol::Download:
         return 3;

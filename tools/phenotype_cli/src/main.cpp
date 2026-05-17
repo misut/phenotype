@@ -3288,6 +3288,16 @@ auto icon_catalog_checks() -> std::vector<Check> {
                                text_weight_aligned ? "true" : "false"),
          .hint =
              "Mac-like icons should stay round-stroked and text-weight aligned."},
+        {.name = "svg_path_subset",
+         .ok = icon_catalog::svg_subset_policy()
+                == std::string_view{"bounded_svg_icon_subset"}
+            && icon_catalog::svg_supported_path_commands().find("A Z")
+                != std::string_view::npos
+            && icon_catalog::svg_arc_policy().find("bounded cubic Bezier")
+                != std::string_view::npos,
+         .detail = std::string{icon_catalog::svg_supported_path_commands()},
+         .hint =
+             "Keep the built-in icon SVG subset broad enough for macOS-style rounded glyph geometry."},
         {.name = "interaction_tone_policy",
          .ok = icon_catalog::interaction_tone_policy()
                 == std::string_view{"macos_finder_interaction_tones"}
@@ -3317,6 +3327,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
     return std::format(
         "{{\"schema_version\":1,\"command\":\"icons catalog\","
         "\"ok\":{},\"style\":{{\"name\":{},\"source_format\":{},"
+        "\"svg_subset_policy\":{},\"svg_supported_path_commands\":{},"
+        "\"svg_arc_policy\":{},"
         "\"design_reference\":{},\"reference_family\":{},"
         "\"reference_policy\":{},\"asset_policy\":{},"
         "\"alignment\":{},\"variant_policy\":{},"
@@ -3331,6 +3343,9 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         all_ok(checks) ? "true" : "false",
         json_string(icon_catalog::style_name()),
         json_string(icon_catalog::source_format()),
+        json_string(icon_catalog::svg_subset_policy()),
+        json_string(icon_catalog::svg_supported_path_commands()),
+        json_string(icon_catalog::svg_arc_policy()),
         json_string(icon_catalog::style_reference()),
         json_string(icon_catalog::reference_family()),
         json_string(icon_catalog::reference_policy()),
@@ -3389,7 +3404,10 @@ auto explorer_chrome_json(
         "\"content_surface_width\":{},\"sidebar_surface_x\":{},"
         "\"sidebar_surface_y\":{},\"sidebar_first_row_y\":{}}},"
         "\"icon_system\":{{\"module\":{},\"style\":{},"
-        "\"source_format\":{},\"owned_assets\":{},"
+        "\"source_format\":{},"
+        "\"svg_subset_policy\":{},\"svg_supported_path_commands\":{},"
+        "\"svg_arc_policy\":{},"
+        "\"owned_assets\":{},"
         "\"uses_sf_symbols_assets\":{},\"round_stroke_contract\":{},"
         "\"total_symbol_count\":{},\"sidebar_symbol_count\":{},"
         "\"toolbar_symbol_count\":{},\"filled_symbol_count\":{},"
@@ -3467,6 +3485,9 @@ auto explorer_chrome_json(
         json_string(chrome.icon_module),
         json_string(chrome.icon_style),
         json_string(chrome.icon_source_format),
+        json_string(chrome.icon_svg_subset_policy),
+        json_string(chrome.icon_svg_supported_path_commands),
+        json_string(chrome.icon_svg_arc_policy),
         chrome.owned_icon_assets ? "true" : "false",
         chrome.uses_sf_symbols_assets ? "true" : "false",
         chrome.icon_round_stroke_contract ? "true" : "false",
@@ -6351,6 +6372,9 @@ int run_icons_catalog(cppx::cli::Invocation const& invocation) {
          .status = cppx::terminal::StatusKind::ok},
         {.label = "source",
          .value = std::string{icon_catalog::source_format()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "svg subset",
+         .value = std::string{icon_catalog::svg_supported_path_commands()},
          .status = cppx::terminal::StatusKind::ok},
         {.label = "symbols",
          .value = std::format(

@@ -263,6 +263,9 @@ font descriptor to name a CJK-capable fallback. Runtime widget text now flows
 through `Theme::default_font_family` (`Pretendard` by default), while the
 example-specific canvas labels pass the same family explicitly so the Finder
 scene and package manifest agree on typography.
+The desktop artifact manifest also verifies the built-in icon SVG subset and
+arc-lowering policy, which keeps Finder-style icon work tied to an engine
+feature instead of a one-off screenshot fixture.
 
 ## Widget coverage
 

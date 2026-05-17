@@ -195,9 +195,46 @@ void test_svg_transform_subset() {
     std::puts("PASS: SVG transform subset composes group and shape transforms");
 }
 
+void test_svg_smooth_path_commands() {
+    auto doc = svg::parse(R"SVG(
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M4 12 Q8 4 12 12 T20 12 M4 18 C7 14 10 14 12 18 S17 22 20 18"/>
+        </svg>
+    )SVG");
+    assert(doc.shapes.size() == 1);
+    assert(!doc.has_diagnostics());
+    assert(count_path_verb(doc.shapes[0].path, PathVerb::QuadTo) == 2);
+    assert(count_path_verb(doc.shapes[0].path, PathVerb::CubicTo) == 2);
+
+    CapturePainter painter;
+    svg::paint(painter, doc, 0.0f, 0.0f, 24.0f, 24.0f);
+    assert(painter.strokes == 1);
+
+    std::puts("PASS: SVG smooth quadratic/cubic path commands parse");
+}
+
+void test_svg_arc_path_command() {
+    auto doc = svg::parse(R"SVG(
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M4 12 A8 8 0 0 1 20 12 A8 8 0 0 1 4 12"/>
+        </svg>
+    )SVG");
+    assert(doc.shapes.size() == 1);
+    assert(!doc.has_diagnostics());
+    assert(doc.unsupported_count == 0);
+    assert(count_path_verb(doc.shapes[0].path, PathVerb::CubicTo) >= 2);
+
+    CapturePainter painter;
+    svg::paint(painter, doc, 0.0f, 0.0f, 24.0f, 24.0f,
+               svg::RenderOptions{{0, 122, 255, 255}, true});
+    assert(painter.strokes == 1);
+
+    std::puts("PASS: SVG elliptical arc path command lowers to cubic segments");
+}
+
 void test_svg_unsupported_path_diagnostic() {
     auto doc = svg::parse(
-        R"SVG(<svg viewBox="0 0 24 24"><path d="M4 12 A8 8 0 0 1 20 12"/></svg>)SVG");
+        R"SVG(<svg viewBox="0 0 24 24"><path d="M4 12 R8 8 20 12"/></svg>)SVG");
     assert(doc.unsupported_count == 1);
     assert(doc.has_diagnostics());
 
@@ -208,6 +245,19 @@ void test_builtin_icons_parse() {
     assert(icons::style_name() == "macos_rounded_outline_svg");
     assert(icons::style_reference().find("Apple HIG") != std::string_view::npos);
     assert(icons::asset_policy().find("no Apple") != std::string_view::npos);
+    assert(icons::source_format() == "svg");
+    assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");
+    assert(icons::svg_supported_elements().find("path")
+           != std::string_view::npos);
+    assert(icons::svg_supported_path_commands().find("A Z")
+           != std::string_view::npos);
+    assert(icons::svg_arc_policy().find("circle elements preserve native ArcTo")
+           != std::string_view::npos);
+    assert(icons::alignment_policy() == "24x24 text-aligned symbol grid");
+    assert(icons::variant_policy() == "outline primary with filled action variants");
+    assert(icons::tone_policy()
+           == "primary, secondary, selected, accent, disabled, destructive");
+    assert(icons::default_scale_policy() == "medium");
     assert(icons::all_symbol_count == 31);
     assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
@@ -369,6 +419,8 @@ int main() {
     test_svg_basic_shapes();
     test_svg_circle_uses_arc_path();
     test_svg_transform_subset();
+    test_svg_smooth_path_commands();
+    test_svg_arc_path_command();
     test_svg_unsupported_path_diagnostic();
     test_builtin_icons_parse();
     std::puts("\nAll SVG/icon tests passed.");

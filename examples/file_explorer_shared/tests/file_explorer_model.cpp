@@ -357,6 +357,11 @@ duplicate
     assert(chrome.icon_module == "phenotype.icons");
     assert(chrome.icon_style == "macos_rounded_outline_svg");
     assert(chrome.icon_source_format == "svg");
+    assert(chrome.icon_svg_subset_policy == "bounded_svg_icon_subset");
+    assert(chrome.icon_svg_supported_path_commands.find("A Z")
+           != std::string::npos);
+    assert(chrome.icon_svg_arc_policy.find("bounded cubic Bezier")
+           != std::string::npos);
     assert(chrome.icon_design_reference.find("macOS Finder")
            != std::string::npos);
     assert(chrome.icon_reference_family == "SF Symbols semantic reference");
@@ -587,6 +592,12 @@ duplicate
     assert(debug_text.find("\"icon_system\"") != std::string::npos);
     assert(debug_text.find("\"phenotype.icons\"") != std::string::npos);
     assert(debug_text.find("\"macos_rounded_outline_svg\"") != std::string::npos);
+    assert(debug_text.find("\"svg_subset_policy\":\"bounded_svg_icon_subset\"")
+           != std::string::npos);
+    assert(debug_text.find("\"svg_supported_path_commands\":\"M L H V Q T C S A Z")
+           != std::string::npos);
+    assert(debug_text.find("\"svg_arc_policy\":\"circle elements preserve native ArcTo")
+           != std::string::npos);
     assert(debug_text.find("\"hierarchical_opacity\":true")
            != std::string::npos);
     assert(debug_text.find("\"rendering_mode\":\"hierarchical\"")

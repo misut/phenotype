@@ -282,6 +282,42 @@ inline auto presentation_policy() noexcept -> std::string_view {
     return catalog::presentation_policy();
 }
 
+inline auto source_format() noexcept -> std::string_view {
+    return catalog::source_format();
+}
+
+inline auto svg_subset_policy() noexcept -> std::string_view {
+    return catalog::svg_subset_policy();
+}
+
+inline auto svg_supported_elements() noexcept -> std::string_view {
+    return catalog::svg_supported_elements();
+}
+
+inline auto svg_supported_path_commands() noexcept -> std::string_view {
+    return catalog::svg_supported_path_commands();
+}
+
+inline auto svg_arc_policy() noexcept -> std::string_view {
+    return catalog::svg_arc_policy();
+}
+
+inline auto alignment_policy() noexcept -> std::string_view {
+    return catalog::alignment_policy();
+}
+
+inline auto variant_policy() noexcept -> std::string_view {
+    return catalog::variant_policy();
+}
+
+inline auto tone_policy() noexcept -> std::string_view {
+    return catalog::tone_policy();
+}
+
+inline auto default_scale_policy() noexcept -> std::string_view {
+    return catalog::default_scale_policy();
+}
+
 inline auto semantic_reference_name(Symbol symbol) noexcept -> std::string_view {
     return catalog::semantic_reference_name(to_catalog_symbol(symbol));
 }
@@ -462,7 +498,7 @@ inline auto source(Symbol symbol) noexcept -> std::string_view {
     case Symbol::NewFolder:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5 L9.1 8.5 L11.1 10.4 L20 10.4 L20 19 L4 19 Z"/><path d="M14 13 L14 17" stroke-opacity="0.66"/><path d="M12 15 L16 15" stroke-opacity="0.66"/></svg>)SVG";
     case Symbol::Applications:
-        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20 L12 4 L18 20"/><path d="M8.2 14.5 L15.8 14.5" stroke-opacity="0.66"/><path d="M4.5 20 L19.5 20" stroke-opacity="0.66"/></svg>)SVG";
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"><path d="M6.4 19 L12.1 5.2"/><path d="M17.6 19 L11.9 5.2"/><path d="M8.2 14.5 L15.8 14.5" stroke-opacity="0.66"/><path d="M5 19.2 C7 18.7 9.3 18.5 12 18.5 C14.7 18.5 17 18.7 19 19.2" stroke-opacity="0.66"/></svg>)SVG";
     case Symbol::Desktop:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="12" rx="2.4"/><path d="M9 20 L15 20" stroke-opacity="0.66"/><path d="M7 21.5 L17 21.5" stroke-opacity="0.66"/></svg>)SVG";
     case Symbol::Download:
