@@ -813,6 +813,45 @@ auto spec() -> cppx::cli::CommandSpec {
                             "phenotype icons present recents --role sidebar --selected --json",
                         },
                     },
+                    {
+                        .name = "render",
+                        .summary =
+                            "Emit one icon as a standalone macOS-style SVG",
+                        .options = {
+                            help_option(),
+                            json_option(),
+                            {.name = "role",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name =
+                                 "toolbar|navigation|sidebar|file_type|action",
+                             .description =
+                                 "Presentation role. Defaults to the symbol's catalog role."},
+                            {.name = "phase",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "normal|hovered|pressed",
+                             .description =
+                                 "Interaction phase. Defaults to normal."},
+                            {.name = "selected",
+                             .arity = cppx::cli::OptionArity::none,
+                             .description = "Resolve the selected-state recipe"},
+                            {.name = "disabled",
+                             .arity = cppx::cli::OptionArity::none,
+                             .description = "Resolve the disabled-state recipe"},
+                            {.name = "output",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "path",
+                             .description =
+                                 "Write the rendered standalone SVG to this path"},
+                        },
+                        .positional_name = "name-or-reference",
+                        .positional_description =
+                            "Built-in symbol name such as search or SF Symbols semantic reference such as magnifyingglass.",
+                        .examples = {
+                            "phenotype icons render magnifyingglass --role toolbar --phase pressed",
+                            "phenotype icons render recents --role sidebar --selected --output /tmp/recents.svg",
+                            "phenotype icons render doc.richtext --role file_type --json",
+                        },
+                    },
                 },
                 .allow_positionals = false,
                 .category = "metadata",
@@ -4219,9 +4258,176 @@ auto icon_presentation_json(std::string_view query,
         recipe.grouped_control ? "true" : "false");
 }
 
+auto xml_attribute_escape(std::string_view value) -> std::string {
+    auto out = std::string{};
+    out.reserve(value.size());
+    for (char ch : value) {
+        switch (ch) {
+        case '&':  out += "&amp;"; break;
+        case '<':  out += "&lt;"; break;
+        case '>':  out += "&gt;"; break;
+        case '"': out += "&quot;"; break;
+        case '\'': out += "&apos;"; break;
+        default:   out.push_back(ch); break;
+        }
+    }
+    return out;
+}
+
+auto svg_number(float value) -> std::string {
+    return std::format("{:.2f}", value);
+}
+
+auto svg_opacity(unsigned char alpha) -> std::string {
+    return std::format("{:.3f}", static_cast<float>(alpha) / 255.0f);
+}
+
+auto svg_rgb(icon_catalog::SymbolColor color) -> std::string {
+    return std::format(
+        "rgb({},{},{})",
+        static_cast<int>(color.r),
+        static_cast<int>(color.g),
+        static_cast<int>(color.b));
+}
+
+auto icon_svg_inner_source(std::string_view source) -> std::string_view {
+    auto const start = source.find('>');
+    auto const end = source.rfind("</svg>");
+    if (start == std::string_view::npos || end == std::string_view::npos
+        || end <= start)
+        return source;
+    return source.substr(start + 1, end - start - 1);
+}
+
+auto rendered_icon_svg_source(IconLookupResult const& result,
+                              icon_catalog::SymbolPresentationRole role,
+                              icon_catalog::SymbolInteractionPhase phase,
+                              bool selected,
+                              bool enabled) -> std::string {
+    auto const desc = icon_catalog::descriptor(result.symbol);
+    auto const metrics = icon_catalog::metrics(role);
+    auto const recipe = icon_catalog::macos_state_recipe(
+        role,
+        icon_catalog::SymbolInteractionState{selected, enabled},
+        phase);
+    auto const visible_color =
+        icon_color_with_opacity(recipe.symbol_color, recipe.symbol_opacity);
+    auto const effective_point_size = metrics.point_size * recipe.scale;
+    auto const content_inset =
+        (recipe.hit_target_size - effective_point_size) / 2.0f;
+    auto const scale = effective_point_size / 24.0f;
+    auto const inner = icon_svg_inner_source(
+        icon_catalog::svg_source(result.symbol));
+
+    auto out = std::format(
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"{}\" height=\"{}\" viewBox=\"0 0 {} {}\" role=\"img\" aria-label=\"{}\" data-phenotype-symbol=\"{}\" data-semantic-reference=\"{}\" data-role=\"{}\" data-phase=\"{}\" data-asset-policy=\"{}\">",
+        svg_number(recipe.hit_target_size),
+        svg_number(recipe.hit_target_size),
+        svg_number(recipe.hit_target_size),
+        svg_number(recipe.hit_target_size),
+        xml_attribute_escape(desc.semantic_reference_name),
+        xml_attribute_escape(desc.name),
+        xml_attribute_escape(desc.semantic_reference_name),
+        xml_attribute_escape(icon_catalog::symbol_presentation_role_name(role)),
+        xml_attribute_escape(icon_catalog::symbol_interaction_phase_name(phase)),
+        xml_attribute_escape(icon_catalog::asset_policy()));
+    if (recipe.background_color.a > 0) {
+        out += std::format(
+            "<rect x=\"0\" y=\"0\" width=\"{}\" height=\"{}\" rx=\"{}\" fill=\"{}\" fill-opacity=\"{}\"/>",
+            svg_number(recipe.hit_target_size),
+            svg_number(recipe.hit_target_size),
+            svg_number(recipe.corner_radius),
+            svg_rgb(recipe.background_color),
+            svg_opacity(recipe.background_color.a));
+    }
+    out += std::format(
+        "<g transform=\"translate({} {}) scale({})\" color=\"{}\" opacity=\"{}\">",
+        svg_number(content_inset),
+        svg_number(content_inset + metrics.optical_y_offset),
+        svg_number(scale),
+        svg_rgb(visible_color),
+        svg_opacity(visible_color.a));
+    out += inner;
+    out += "</g></svg>";
+    return out;
+}
+
+auto icon_render_json(std::string_view query,
+                      IconLookupResult const& result,
+                      icon_catalog::SymbolPresentationRole role,
+                      icon_catalog::SymbolInteractionPhase phase,
+                      bool selected,
+                      bool enabled,
+                      std::string_view source,
+                      fs::path const& output_path) -> std::string {
+    auto const desc = icon_catalog::descriptor(result.symbol);
+    auto const metrics = icon_catalog::metrics(role);
+    auto const recipe = icon_catalog::macos_state_recipe(
+        role,
+        icon_catalog::SymbolInteractionState{selected, enabled},
+        phase);
+    auto const visible_color =
+        icon_color_with_opacity(recipe.symbol_color, recipe.symbol_opacity);
+    auto const output_json = output_path.empty()
+        ? std::string{"null"}
+        : std::format(
+              "{{\"path\":{},\"written\":true,\"bytes\":{}}}",
+              json_string(path_string(output_path)),
+              source.size());
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"icons render\","
+        "\"ok\":true,\"query\":{},\"match_kind\":{},"
+        "\"symbol\":{},\"semantic_reference_name\":{},"
+        "\"asset_policy\":{},\"state\":{{\"role\":{},\"phase\":{},"
+        "\"selected\":{},\"enabled\":{}}},"
+        "\"presentation\":{{\"policy\":{},\"symbol_tone\":{},"
+        "\"visible_symbol_color\":{},\"background_color\":{},"
+        "\"point_size\":{},\"effective_point_size\":{},"
+        "\"hit_target_size\":{},\"corner_radius\":{},"
+        "\"likely_layer\":\"icon_glyph\","
+        "\"likely_pass\":\"standalone_svg_wrapper\"}},"
+        "\"svg\":{{\"source_format\":\"svg\",\"source\":{},"
+        "\"bytes\":{},\"view_box\":{},\"width\":{},\"height\":{}}},"
+        "\"output\":{}}}",
+        json_string(query),
+        json_string(result.match_kind),
+        json_string(desc.name),
+        json_string(desc.semantic_reference_name),
+        json_string(icon_catalog::asset_policy()),
+        json_string(icon_catalog::symbol_presentation_role_name(role)),
+        json_string(icon_catalog::symbol_interaction_phase_name(phase)),
+        selected ? "true" : "false",
+        enabled ? "true" : "false",
+        json_string(recipe.policy),
+        json_string(icon_catalog::symbol_tone_name(recipe.symbol_tone)),
+        icon_color_json(visible_color),
+        icon_color_json(recipe.background_color),
+        metrics.point_size,
+        metrics.point_size * recipe.scale,
+        recipe.hit_target_size,
+        recipe.corner_radius,
+        json_string(source),
+        source.size(),
+        json_string(std::format(
+            "0 0 {} {}",
+            svg_number(recipe.hit_target_size),
+            svg_number(recipe.hit_target_size))),
+        recipe.hit_target_size,
+        recipe.hit_target_size,
+        output_json);
+}
+
 auto icon_present_not_found_json(std::string_view query) -> std::string {
     return std::format(
         "{{\"schema_version\":1,\"command\":\"icons present\","
+        "\"ok\":false,\"query\":{},\"error\":\"symbol not found\","
+        "\"suggestion\":\"Use phenotype icons catalog --json to list built-in symbol names and semantic references.\"}}",
+        json_string(query));
+}
+
+auto icon_render_not_found_json(std::string_view query) -> std::string {
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"icons render\","
         "\"ok\":false,\"query\":{},\"error\":\"symbol not found\","
         "\"suggestion\":\"Use phenotype icons catalog --json to list built-in symbol names and semantic references.\"}}",
         json_string(query));
@@ -8459,6 +8665,99 @@ int run_icons_present(cppx::cli::Invocation const& invocation) {
     return 0;
 }
 
+int run_icons_render(cppx::cli::Invocation const& invocation) {
+    auto query = single_positional_text_or_error(
+        invocation,
+        "icons render",
+        "name-or-reference");
+    if (!query)
+        return print_error("icons render", query.error(), invocation.has("json"));
+
+    auto result = lookup_icon_symbol(*query);
+    if (!result) {
+        if (invocation.has("json")) {
+            std::println("{}", icon_render_not_found_json(*query));
+        } else {
+            std::println(
+                std::cerr,
+                "{}",
+                cppx::terminal::format_diagnostic({
+                    .severity = cppx::terminal::DiagnosticSeverity::error,
+                    .message = std::format(
+                        "symbol '{}' was not found; run 'phenotype icons catalog' to list built-in symbols",
+                        *query),
+                    .context = "icons render",
+                }));
+        }
+        return 2;
+    }
+
+    auto role = icon_presentation_role_from_invocation(invocation, result->symbol);
+    if (!role)
+        return print_error("icons render", role.error(), invocation.has("json"));
+    auto phase = icon_interaction_phase_from_invocation(invocation);
+    if (!phase)
+        return print_error("icons render", phase.error(), invocation.has("json"));
+
+    auto const selected = invocation.has("selected");
+    auto const enabled = !invocation.has("disabled");
+    auto source = rendered_icon_svg_source(
+        *result,
+        *role,
+        *phase,
+        selected,
+        enabled);
+    auto output_path = fs::path{};
+    if (auto output = invocation.value("output")) {
+        output_path = fs::path{absolute_path_string(fs::path{std::string{*output}})};
+        auto error = std::string{};
+        if (!write_text_file(output_path, source, error)) {
+            return print_error(
+                "icons render",
+                std::format(
+                    "failed to write rendered icon SVG to {}: {}",
+                    path_string(output_path),
+                    error),
+                invocation.has("json"));
+        }
+    }
+    if (invocation.has("json")) {
+        std::println(
+            "{}",
+            icon_render_json(
+                *query,
+                *result,
+                *role,
+                *phase,
+                selected,
+                enabled,
+                source,
+                output_path));
+        return 0;
+    }
+
+    if (!output_path.empty()) {
+        auto lines = std::vector<cppx::terminal::StatusLine>{
+            {.label = "symbol",
+             .value = std::string{
+                 icon_catalog::name(result->symbol)},
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "output",
+             .value = path_string(output_path),
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "bytes",
+             .value = std::format("{}", source.size()),
+             .status = cppx::terminal::StatusKind::ok},
+        };
+        std::println("phenotype icons render");
+        std::println("{}", cppx::terminal::format_status_frame(lines, false));
+        return 0;
+    }
+
+    std::println("{}", source);
+    return 0;
+}
+
 int run_theme_contract(cppx::cli::Invocation const& invocation) {
     auto checks = theme_contract_checks();
     auto const contract = theme_contract::default_glass_theme_contract();
@@ -9432,6 +9731,9 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "icons", "present"})
         return run_icons_present(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "icons", "render"})
+        return run_icons_render(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "theme", "contract"})
         return run_theme_contract(*parsed);

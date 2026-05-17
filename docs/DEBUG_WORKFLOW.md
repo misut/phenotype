@@ -235,7 +235,11 @@ phenotype-owned SVG source for that glyph, with `--json` adding the semantic
 reference name, asset policy, and rendering capabilities. `phenotype icons
 present <name-or-reference> --role ... --phase ... --json` resolves the exact
 macOS-style presentation recipe for one glyph state, including visible RGBA,
-background chrome, effective size, hit target, and likely layer/pass. Use these
+background chrome, effective size, hit target, and likely layer/pass.
+`phenotype icons render <name-or-reference> --role ... --phase ... --json`
+emits the same state as a standalone SVG wrapper with explicit source bytes,
+viewBox, optional `--output` write path, background chrome, and
+`standalone_svg_wrapper` pass metadata. Use these
 icon probes when a renderer, path parser, or icon-source cache is suspect, while
 `phenotype drive file-explorer --json` embeds the desktop chrome geometry and
 icon-system contract under `chrome.geometry` and `chrome.icon_system`, including
