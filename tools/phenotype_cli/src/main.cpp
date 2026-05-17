@@ -2080,12 +2080,14 @@ auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
          .hint = "Every declared locale fallback chain must resolve the default locale key set."},
         {.name = "resource_intent",
          .ok = summary.resource_contract.preload_asset_count > 0
+             && summary.resource_contract.svg_asset_count > 0
              && summary.resource_contract.font_count > 0,
-         .detail = std::format("preload_assets={} runtime_visible_assets={} fonts={}",
+         .detail = std::format("preload_assets={} svg_assets={} runtime_visible_assets={} fonts={}",
                                summary.resource_contract.preload_asset_count,
+                               summary.resource_contract.svg_asset_count,
                                summary.resource_contract.runtime_visible_asset_count,
                                summary.resource_contract.font_count),
-         .hint = "Packages should declare preload intent and at least one UI font descriptor."},
+         .hint = "Packages should declare preload intent, SVG image assets, and at least one UI font descriptor."},
         {.name = "manifest_sources",
          .ok = summary.source_reference_count > 0
              && summary.missing_sources.empty(),
@@ -2193,10 +2195,11 @@ auto assets_catalog_json(
             out += ",";
         out += std::format(
             "{{\"name\":{},\"source\":{},\"content_type\":{},"
-            "\"preload\":{},\"runtime_visible\":{}}}",
+            "\"svg\":{},\"preload\":{},\"runtime_visible\":{}}}",
             json_string(asset.name),
             json_string(asset.source),
             json_string(asset.content_type),
+            phenotype::resource_asset_declares_svg(asset) ? "true" : "false",
             asset.preload ? "true" : "false",
             asset.runtime_visible ? "true" : "false");
     }
@@ -2271,7 +2274,10 @@ auto resource_contract_json(PackageSummary const& summary) -> std::string {
     auto const& contract = summary.resource_contract;
     return std::format(
         "{{\"asset_count\":{},\"preload_asset_count\":{},"
-        "\"runtime_visible_asset_count\":{},\"locale_count\":{},"
+        "\"runtime_visible_asset_count\":{},"
+        "\"svg_asset_count\":{},\"preload_svg_asset_count\":{},"
+        "\"runtime_visible_svg_asset_count\":{},"
+        "\"svg_asset_policy\":{},\"locale_count\":{},"
         "\"locale_string_count\":{},\"font_count\":{},"
         "\"registered_font_count\":{},"
         "\"app_icon_declared\":{},\"app_icon_svg\":{},"
@@ -2285,6 +2291,10 @@ auto resource_contract_json(PackageSummary const& summary) -> std::string {
         contract.asset_count,
         contract.preload_asset_count,
         contract.runtime_visible_asset_count,
+        contract.svg_asset_count,
+        contract.preload_svg_asset_count,
+        contract.runtime_visible_svg_asset_count,
+        json_string(phenotype::svg_asset_contract_policy()),
         contract.locale_count,
         contract.locale_string_count,
         contract.font_count,
@@ -2336,7 +2346,8 @@ auto resource_catalog_summary_json(PackageSummary const& summary)
     auto const& catalog = summary.catalog;
     return std::format(
         "{{\"default_locale\":{},\"default_font_family\":{},"
-        "\"assets\":{},\"locales\":{},\"locale_strings\":{},"
+        "\"assets\":{},\"svg_assets\":{},"
+        "\"locales\":{},\"locale_strings\":{},"
         "\"fonts\":{},\"diagnostics\":{},"
         "\"preload_assets\":{},\"runtime_visible_assets\":{},"
         "\"app_icon_declared\":{},\"app_icon_svg\":{},"
@@ -2345,6 +2356,7 @@ auto resource_catalog_summary_json(PackageSummary const& summary)
         json_string(catalog.default_locale),
         json_string(catalog.default_font_family),
         catalog.assets.size(),
+        summary.resource_contract.svg_asset_count,
         catalog.locales.size(),
         summary.locale_string_count,
         catalog.fonts.size(),
@@ -2371,7 +2383,8 @@ auto package_json(PackageSummary const& summary,
         "\"application\":{{\"id\":{},\"display_name\":{},\"version\":{},"
         "\"entry\":{},\"platforms\":{}}},"
         "\"sections\":{{\"application\":{},\"resources\":{},\"debug\":{}}},"
-        "\"declared_resources\":{{\"assets\":{},\"locales\":{},\"fonts\":{}}},"
+        "\"declared_resources\":{{\"assets\":{},\"svg_assets\":{},"
+        "\"locales\":{},\"fonts\":{}}},"
         "\"source_reference_count\":{},\"missing_sources\":{},"
         "\"locale_string_count\":{},"
         "\"artifact_manifest\":{{\"path\":{},\"present\":{}}},"
@@ -2396,6 +2409,7 @@ auto package_json(PackageSummary const& summary,
         summary.resources_section ? "true" : "false",
         summary.debug_section ? "true" : "false",
         summary.manifest_asset_count,
+        summary.resource_contract.svg_asset_count,
         summary.manifest_locale_count,
         summary.manifest_font_count,
         summary.source_reference_count,

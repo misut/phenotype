@@ -686,16 +686,21 @@ inline void svg_image(svg::Document document,
                       Color current_color) {
     auto const paint_token =
         svg::paint_token(document, width, height, current_color);
-    canvas(width, height,
-           [document = std::move(document),
-            width,
-            height,
-            current_color](Painter& painter) {
-               svg::paint(painter, document, 0.0f, 0.0f, width, height,
-                          svg::RenderOptions{current_color, true});
-           },
-           {},
-           paint_token);
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    node.style.max_width = width;
+    node.style.fixed_height = height;
+    node.debug_semantic_role = "image";
+    node.paint_fn = [
+        document = std::move(document),
+        width,
+        height,
+        current_color](Painter& painter) {
+        svg::paint(painter, document, 0.0f, 0.0f, width, height,
+                   svg::RenderOptions{current_color, true});
+    };
+    node.paint_token = paint_token;
+    detail::attach_to_scope(h);
 }
 
 inline void svg_image(svg::Document document,

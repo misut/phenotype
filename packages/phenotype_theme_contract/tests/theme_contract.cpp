@@ -20,6 +20,8 @@ int main() {
            != std::string_view::npos);
     assert(contract.iconography_policy.find("macos_finder")
            != std::string_view::npos);
+    assert(contract.iconography_policy.find("sf_symbols_aligned")
+           != std::string_view::npos);
     assert(contract.iconography_policy.find("simplified_universal_metaphors")
            != std::string_view::npos);
     assert(contract.icon_asset_policy.find("phenotype_owned_svg_symbols")
