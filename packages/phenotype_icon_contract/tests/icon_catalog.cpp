@@ -24,10 +24,12 @@ int main() {
     assert(icons::filled_symbol_count == 1);
     assert(icons::hierarchical_symbol_count == 20);
     assert(icons::reference_symbol_count == icons::all_symbol_count);
+    assert(icons::svg_path_arc_symbol_count == 1);
 
     unsigned int outline_count = 0;
     unsigned int filled_count = 0;
     unsigned int hierarchical_count = 0;
+    unsigned int arc_path_count = 0;
     for (unsigned int i = 0; i < icons::all_symbol_count; ++i) {
         auto const symbol = icons::symbol_at(i);
         auto const desc = icons::descriptor(symbol);
@@ -46,12 +48,16 @@ int main() {
             ++outline_count;
         if (desc.supports_hierarchical_opacity)
             ++hierarchical_count;
+        if (icons::uses_svg_path_arcs(symbol))
+            ++arc_path_count;
     }
     assert(outline_count == icons::outline_symbol_count);
     assert(filled_count == icons::filled_symbol_count);
     assert(hierarchical_count == icons::hierarchical_symbol_count);
+    assert(arc_path_count == icons::svg_path_arc_symbol_count);
 
     assert(icons::semantic_reference_name(icons::Symbol::AirDrop) == "airdrop");
+    assert(icons::uses_svg_path_arcs(icons::Symbol::AirDrop));
     assert(icons::sidebar_symbol_at(8) == icons::Symbol::AirDrop);
     assert(icons::toolbar_symbol_at(10) == icons::Symbol::Search);
     assert(icons::interaction_tone_policy() == "macos_finder_interaction_tones");

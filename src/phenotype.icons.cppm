@@ -245,6 +245,8 @@ inline constexpr unsigned int hierarchical_symbol_count =
     catalog::hierarchical_symbol_count;
 inline constexpr unsigned int reference_symbol_count =
     catalog::reference_symbol_count;
+inline constexpr unsigned int svg_path_arc_symbol_count =
+    catalog::svg_path_arc_symbol_count;
 
 inline auto symbol_at(unsigned int index) noexcept -> Symbol {
     return from_catalog_symbol(catalog::symbol_at(index));
@@ -328,6 +330,10 @@ inline bool supports_hierarchical_opacity(Symbol symbol) noexcept {
 
 inline auto symbol_layer_count(Symbol symbol) noexcept -> unsigned int {
     return catalog::symbol_layer_count(to_catalog_symbol(symbol));
+}
+
+inline bool uses_svg_path_arcs(Symbol symbol) noexcept {
+    return catalog::uses_svg_path_arcs(to_catalog_symbol(symbol));
 }
 
 inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
@@ -488,7 +494,7 @@ inline auto source(Symbol symbol) noexcept -> std::string_view {
     case Symbol::Cloud:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18 L17 18 C20 18 21.5 16 21.5 13.7 C21.5 11.5 19.8 9.8 17.6 9.7 C16.8 7.3 14.7 6 12.2 6 C9.4 6 7.3 7.8 6.7 10.3 C4.4 10.7 2.5 12.2 2.5 14.4 C2.5 16.4 4.1 18 7 18 Z"/></svg>)SVG";
     case Symbol::AirDrop:
-        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.25"/><circle cx="12" cy="12" r="4.3" stroke-opacity="0.66"/><circle cx="12" cy="12" r="7.3" stroke-opacity="0.42"/><path d="M12 13.4 L12 19.2" stroke-opacity="0.66"/></svg>)SVG";
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.2"/><path d="M8.1 14.1 A4.4 4.4 0 0 0 15.9 14.1" stroke-opacity="0.66"/><path d="M5.4 15.2 A7.2 7.2 0 0 0 18.6 15.2" stroke-opacity="0.48"/><path d="M3.4 16.8 A9.5 9.5 0 0 0 20.6 16.8" stroke-opacity="0.34"/><path d="M12 13.5 L12 19.2" stroke-opacity="0.66"/></svg>)SVG";
     case Symbol::Recents:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7 L12 12 L8.5 12" stroke-opacity="0.66"/></svg>)SVG";
     case Symbol::Shared:

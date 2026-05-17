@@ -213,7 +213,10 @@ folder/document/image/movie glyphs, which desktop examples use in list and
 column rows without asking a native icon service for platform artwork.
 The catalog also publishes the SVG subset and arc-lowering policy, so CLI
 checks and example artifacts can catch a regression where a macOS-style glyph
-depends on an unsupported path command.
+depends on an unsupported path command. AirDrop intentionally uses SVG `A/a`
+path arcs in the built-in catalog, giving the Finder-like sidebar a real
+runtime probe for the arc-lowering path instead of leaving that support covered
+only by unit tests.
 Finder-style examples serialize sidebar and toolbar semantic reference arrays
 plus the presentation policy in their artifact debug payload, and
 `phenotype icons catalog --json` exposes the complete contract to CI and LLM
