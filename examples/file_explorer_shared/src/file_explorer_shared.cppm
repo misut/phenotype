@@ -274,6 +274,7 @@ struct ExplorerChromeMetrics {
     int icon_reference_symbol_count = 0;
     int icon_svg_path_arc_symbol_count = 0;
     int icon_round_stroke_symbol_count = 0;
+    int icon_interaction_phase_count = 0;
     float icon_grid_size = 0.0f;
     float icon_default_stroke_width = 0.0f;
     float icon_secondary_opacity = 0.0f;
@@ -288,6 +289,10 @@ struct ExplorerChromeMetrics {
     int icon_toolbar_button_hover_background_alpha = 0;
     int icon_toolbar_selected_button_background_alpha = 0;
     int icon_toolbar_selected_button_hover_background_alpha = 0;
+    int icon_toolbar_pressed_button_background_alpha = 0;
+    int icon_sidebar_selected_pressed_background_alpha = 0;
+    float icon_pressed_symbol_opacity = 0.0f;
+    float icon_pressed_scale = 0.0f;
     float column_location_row_height = 0.0f;
     float column_location_icon_size = 0.0f;
     bool integrated_titlebar = true;
@@ -312,6 +317,7 @@ struct ExplorerChromeMetrics {
     std::string icon_style;
     std::string icon_source_format;
     std::string icon_svg_subset_policy;
+    std::string icon_svg_supported_elements;
     std::string icon_svg_supported_path_commands;
     std::string icon_svg_supported_style_attributes;
     std::string icon_svg_arc_policy;
@@ -333,6 +339,7 @@ struct ExplorerChromeMetrics {
     std::string icon_tone_policy;
     std::string icon_interaction_tone_policy;
     std::string icon_symbol_control_chrome_policy;
+    std::string icon_symbol_interaction_phase_policy;
     std::string icon_toolbar_symbol_chrome_policy;
     std::string icon_sidebar_symbol_color_policy;
     std::string icon_file_type_color_policy;
@@ -813,6 +820,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_reference_symbol_count = 0,
             .icon_svg_path_arc_symbol_count = 0,
             .icon_round_stroke_symbol_count = 0,
+            .icon_interaction_phase_count = 0,
             .icon_grid_size = 0.0f,
             .icon_default_stroke_width = 0.0f,
             .icon_secondary_opacity = 0.0f,
@@ -827,6 +835,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_toolbar_button_hover_background_alpha = 0,
             .icon_toolbar_selected_button_background_alpha = 0,
             .icon_toolbar_selected_button_hover_background_alpha = 0,
+            .icon_toolbar_pressed_button_background_alpha = 0,
+            .icon_sidebar_selected_pressed_background_alpha = 0,
+            .icon_pressed_symbol_opacity = 0.0f,
+            .icon_pressed_scale = 0.0f,
             .column_location_row_height = 0.0f,
             .column_location_icon_size = 0.0f,
             .integrated_titlebar = false,
@@ -850,6 +862,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_style = "mobile_text_buttons",
             .icon_source_format = "none",
             .icon_svg_subset_policy = "n/a",
+            .icon_svg_supported_elements = "n/a",
             .icon_svg_supported_path_commands = "n/a",
             .icon_svg_supported_style_attributes = "n/a",
             .icon_svg_arc_policy = "n/a",
@@ -871,6 +884,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_tone_policy = "n/a",
             .icon_interaction_tone_policy = "n/a",
             .icon_symbol_control_chrome_policy = "n/a",
+            .icon_symbol_interaction_phase_policy = "n/a",
             .icon_toolbar_symbol_chrome_policy = "n/a",
             .icon_sidebar_symbol_color_policy = "n/a",
             .icon_file_type_color_policy = "n/a",
@@ -914,6 +928,15 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
     auto const toolbar_selected_chrome = icon_catalog::macos_control_chrome(
         icon_catalog::SymbolPresentationRole::Toolbar,
         icon_catalog::SymbolInteractionState{true, true});
+    auto const toolbar_pressed_recipe = icon_catalog::macos_state_recipe(
+        icon_catalog::SymbolPresentationRole::Toolbar,
+        icon_catalog::SymbolInteractionState{false, true},
+        icon_catalog::SymbolInteractionPhase::Pressed);
+    auto const sidebar_selected_pressed_recipe =
+        icon_catalog::macos_state_recipe(
+            icon_catalog::SymbolPresentationRole::Sidebar,
+            icon_catalog::SymbolInteractionState{true, true},
+            icon_catalog::SymbolInteractionPhase::Pressed);
     return ExplorerChromeMetrics{
         .viewport = viewport,
         .integrated_titlebar_height = k_desktop_integrated_titlebar_height,
@@ -1023,6 +1046,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             static_cast<int>(icon_catalog::svg_path_arc_symbol_count),
         .icon_round_stroke_symbol_count =
             static_cast<int>(icon_catalog::round_stroke_symbol_count),
+        .icon_interaction_phase_count =
+            static_cast<int>(icon_catalog::symbol_interaction_phase_count),
         .icon_grid_size =
             icon_catalog::descriptor(icon_catalog::Symbol::Document).grid_size,
         .icon_default_stroke_width =
@@ -1058,6 +1083,13 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             toolbar_selected_chrome.background_color.a,
         .icon_toolbar_selected_button_hover_background_alpha =
             toolbar_selected_chrome.hover_background_color.a,
+        .icon_toolbar_pressed_button_background_alpha =
+            toolbar_pressed_recipe.background_color.a,
+        .icon_sidebar_selected_pressed_background_alpha =
+            sidebar_selected_pressed_recipe.background_color.a,
+        .icon_pressed_symbol_opacity =
+            toolbar_pressed_recipe.symbol_opacity,
+        .icon_pressed_scale = toolbar_pressed_recipe.scale,
         .column_location_row_height = k_desktop_column_location_row_height,
         .column_location_icon_size = k_desktop_column_location_icon_size,
         .integrated_titlebar = true,
@@ -1083,6 +1115,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_source_format = std::string{icon_catalog::source_format()},
         .icon_svg_subset_policy =
             std::string{icon_catalog::svg_subset_policy()},
+        .icon_svg_supported_elements =
+            std::string{icon_catalog::svg_supported_elements()},
         .icon_svg_supported_path_commands =
             std::string{icon_catalog::svg_supported_path_commands()},
         .icon_svg_supported_style_attributes =
@@ -1119,6 +1153,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             std::string{icon_catalog::interaction_tone_policy()},
         .icon_symbol_control_chrome_policy =
             std::string{icon_catalog::symbol_control_chrome_policy()},
+        .icon_symbol_interaction_phase_policy =
+            std::string{icon_catalog::symbol_interaction_phase_policy()},
         .icon_toolbar_symbol_chrome_policy =
             std::string{icon_catalog::toolbar_symbol_chrome_policy()},
         .icon_sidebar_symbol_color_policy =
@@ -1824,6 +1860,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace("source_format", json::Value{chrome.icon_source_format});
     icon_system.emplace("svg_subset_policy", json::Value{chrome.icon_svg_subset_policy});
     icon_system.emplace(
+        "svg_supported_elements",
+        json::Value{chrome.icon_svg_supported_elements});
+    icon_system.emplace(
         "svg_supported_path_commands",
         json::Value{chrome.icon_svg_supported_path_commands});
     icon_system.emplace(
@@ -1881,6 +1920,10 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "round_stroke_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.icon_round_stroke_symbol_count)});
+    icon_system.emplace(
+        "interaction_phase_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_interaction_phase_count)});
     icon_system.emplace("grid_size", json::Value{chrome.icon_grid_size});
     icon_system.emplace(
         "default_stroke_width",
@@ -1924,6 +1967,18 @@ inline json::Value explorer_chrome_debug_json(
         json::Value{static_cast<std::int64_t>(
             chrome.icon_toolbar_selected_button_hover_background_alpha)});
     icon_system.emplace(
+        "toolbar_pressed_button_background_alpha",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_toolbar_pressed_button_background_alpha)});
+    icon_system.emplace(
+        "sidebar_selected_pressed_background_alpha",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_sidebar_selected_pressed_background_alpha)});
+    icon_system.emplace(
+        "pressed_symbol_opacity",
+        json::Value{chrome.icon_pressed_symbol_opacity});
+    icon_system.emplace("pressed_scale", json::Value{chrome.icon_pressed_scale});
+    icon_system.emplace(
         "column_location_icon_size",
         json::Value{chrome.column_location_icon_size});
     icon_system.emplace("text_weight_aligned", json::Value{chrome.icon_text_weight_aligned});
@@ -1956,6 +2011,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "symbol_control_chrome_policy",
         json::Value{chrome.icon_symbol_control_chrome_policy});
+    icon_system.emplace(
+        "symbol_interaction_phase_policy",
+        json::Value{chrome.icon_symbol_interaction_phase_policy});
     icon_system.emplace(
         "toolbar_symbol_chrome_policy",
         json::Value{chrome.icon_toolbar_symbol_chrome_policy});

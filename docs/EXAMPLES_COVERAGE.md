@@ -282,10 +282,12 @@ without requiring a separate package-inspect command.
 The desktop artifact manifest also verifies the built-in icon SVG subset,
 arc-lowering policy, SF Symbols rendering-mode vocabulary, regular
 text-aligned weight policy, and explicit monochrome/hierarchical/palette/
-multicolor capability counts. That keeps Finder-style icon work tied to an
-engine feature instead of a one-off screenshot fixture. AirDrop uses isolated
-circular SVG path arcs in the sidebar, giving the artifact a concrete
-macOS-style native arc probe.
+multicolor capability counts. It now also verifies normal/hovered/pressed
+state policy, toolbar/sidebar pressed background alpha, pressed symbol opacity,
+and pressed scale. That keeps Finder-style icon work tied to an engine feature
+instead of a one-off screenshot fixture. AirDrop uses isolated circular SVG
+path arcs in the sidebar, giving the artifact a concrete macOS-style native
+arc probe.
 The file explorer debug payload also exposes file-type symbol tokens and per-entry
 resolved `symbol` / `symbol_semantic_reference_name` fields, so PDF, text,
 archive, image, movie, folder, and generic document fallbacks can be verified

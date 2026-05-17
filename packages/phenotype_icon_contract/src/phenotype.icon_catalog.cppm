@@ -145,12 +145,35 @@ struct SymbolInteractionState {
     bool enabled = true;
 };
 
+enum class SymbolInteractionPhase {
+    Normal,
+    Hovered,
+    Pressed,
+};
+
 struct SymbolControlChrome {
     SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
     SymbolTone symbol_tone = SymbolTone::Secondary;
     SymbolColor symbol_color{};
     SymbolColor background_color{0, 0, 0, 0};
     SymbolColor hover_background_color{0, 0, 0, 0};
+    float corner_radius = 0.0f;
+    float hit_target_size = 36.0f;
+    bool borderless = true;
+    bool grouped_control = true;
+    std::string_view policy;
+};
+
+struct SymbolStateRecipe {
+    SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
+    SymbolInteractionPhase phase = SymbolInteractionPhase::Normal;
+    bool selected = false;
+    bool enabled = true;
+    SymbolTone symbol_tone = SymbolTone::Secondary;
+    SymbolColor symbol_color{};
+    SymbolColor background_color{0, 0, 0, 0};
+    float symbol_opacity = 1.0f;
+    float scale = 1.0f;
     float corner_radius = 0.0f;
     float hit_target_size = 36.0f;
     bool borderless = true;
@@ -182,6 +205,7 @@ inline constexpr unsigned int multicolor_symbol_count = 0;
 inline constexpr unsigned int reference_symbol_count = all_symbol_count;
 inline constexpr unsigned int svg_path_arc_symbol_count = 1;
 inline constexpr unsigned int round_stroke_symbol_count = outline_symbol_count;
+inline constexpr unsigned int symbol_interaction_phase_count = 3;
 
 inline auto name(Symbol symbol) noexcept -> std::string_view {
     switch (symbol) {
@@ -309,6 +333,16 @@ inline auto symbol_tone_name(SymbolTone tone) noexcept -> std::string_view {
     return "primary";
 }
 
+inline auto symbol_interaction_phase_name(
+        SymbolInteractionPhase phase) noexcept -> std::string_view {
+    switch (phase) {
+    case SymbolInteractionPhase::Normal:  return "normal";
+    case SymbolInteractionPhase::Hovered: return "hovered";
+    case SymbolInteractionPhase::Pressed: return "pressed";
+    }
+    return "normal";
+}
+
 inline auto style_name() noexcept -> std::string_view {
     return "macos_rounded_outline_svg";
 }
@@ -407,6 +441,10 @@ inline auto sidebar_symbol_color_policy() noexcept -> std::string_view {
 
 inline auto symbol_control_chrome_policy() noexcept -> std::string_view {
     return "macos_finder_symbol_state_chrome";
+}
+
+inline auto symbol_interaction_phase_policy() noexcept -> std::string_view {
+    return "macos_finder_normal_hover_pressed_symbol_chrome";
 }
 
 inline auto default_scale_policy() noexcept -> std::string_view {
@@ -1000,6 +1038,70 @@ inline auto macos_control_chrome(SymbolPresentationRole role,
         true,
         true,
         symbol_control_chrome_policy(),
+    };
+}
+
+inline auto macos_phase_background_color(SymbolPresentationRole role,
+                                         SymbolInteractionState state,
+                                         SymbolInteractionPhase phase) noexcept
+        -> SymbolColor {
+    auto const chrome = macos_control_chrome(role, state);
+    if (!state.enabled)
+        return chrome.background_color;
+    switch (phase) {
+    case SymbolInteractionPhase::Normal:
+        return chrome.background_color;
+    case SymbolInteractionPhase::Hovered:
+        return chrome.hover_background_color;
+    case SymbolInteractionPhase::Pressed:
+        if (role == SymbolPresentationRole::FileType)
+            return chrome.background_color;
+        if (role == SymbolPresentationRole::Sidebar) {
+            return state.selected
+                ? SymbolColor{232, 232, 238, 255}
+                : SymbolColor{218, 218, 224, 190};
+        }
+        return state.selected
+            ? SymbolColor{204, 204, 212, 210}
+            : SymbolColor{214, 214, 222, 150};
+    }
+    return chrome.background_color;
+}
+
+inline float macos_phase_symbol_opacity(SymbolInteractionState state,
+                                        SymbolInteractionPhase phase) noexcept {
+    if (!state.enabled)
+        return 0.35f;
+    return phase == SymbolInteractionPhase::Pressed ? 0.82f : 1.0f;
+}
+
+inline float macos_phase_scale(SymbolPresentationRole role,
+                               SymbolInteractionPhase phase) noexcept {
+    if (phase != SymbolInteractionPhase::Pressed)
+        return 1.0f;
+    return role == SymbolPresentationRole::FileType ? 1.0f : 0.985f;
+}
+
+inline auto macos_state_recipe(SymbolPresentationRole role,
+                               SymbolInteractionState state,
+                               SymbolInteractionPhase phase) noexcept
+        -> SymbolStateRecipe {
+    auto const chrome = macos_control_chrome(role, state);
+    return SymbolStateRecipe{
+        role,
+        phase,
+        state.selected,
+        state.enabled,
+        chrome.symbol_tone,
+        chrome.symbol_color,
+        macos_phase_background_color(role, state, phase),
+        macos_phase_symbol_opacity(state, phase),
+        macos_phase_scale(role, phase),
+        chrome.corner_radius,
+        chrome.hit_target_size,
+        chrome.borderless,
+        chrome.grouped_control,
+        symbol_interaction_phase_policy(),
     };
 }
 

@@ -119,6 +119,12 @@ enum class SymbolTone {
     Destructive,
 };
 
+enum class SymbolInteractionPhase {
+    Normal,
+    Hovered,
+    Pressed,
+};
+
 inline auto to_catalog_role(SymbolRole role) noexcept -> catalog::SymbolRole {
     return static_cast<catalog::SymbolRole>(static_cast<unsigned int>(role));
 }
@@ -213,6 +219,19 @@ inline auto from_catalog_tone(catalog::SymbolTone tone) noexcept -> SymbolTone {
     return static_cast<SymbolTone>(static_cast<unsigned int>(tone));
 }
 
+inline auto to_catalog_phase(SymbolInteractionPhase phase) noexcept
+        -> catalog::SymbolInteractionPhase {
+    return static_cast<catalog::SymbolInteractionPhase>(
+        static_cast<unsigned int>(phase));
+}
+
+inline auto from_catalog_phase(
+        catalog::SymbolInteractionPhase phase) noexcept
+        -> SymbolInteractionPhase {
+    return static_cast<SymbolInteractionPhase>(
+        static_cast<unsigned int>(phase));
+}
+
 inline auto symbol_role_name(SymbolRole role) noexcept -> std::string_view {
     return catalog::symbol_role_name(to_catalog_role(role));
 }
@@ -254,6 +273,11 @@ inline auto symbol_presentation_role_name(
 
 inline auto symbol_tone_name(SymbolTone tone) noexcept -> std::string_view {
     return catalog::symbol_tone_name(to_catalog_tone(tone));
+}
+
+inline auto symbol_interaction_phase_name(
+        SymbolInteractionPhase phase) noexcept -> std::string_view {
+    return catalog::symbol_interaction_phase_name(to_catalog_phase(phase));
 }
 
 struct SymbolDescriptor {
@@ -324,6 +348,23 @@ struct SymbolControlChrome {
     std::string_view policy;
 };
 
+struct SymbolStateRecipe {
+    SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
+    SymbolInteractionPhase phase = SymbolInteractionPhase::Normal;
+    bool selected = false;
+    bool enabled = true;
+    SymbolTone symbol_tone = SymbolTone::Secondary;
+    Color symbol_color = {96, 96, 100, 255};
+    Color background_color = {0, 0, 0, 0};
+    float symbol_opacity = 1.0f;
+    float scale = 1.0f;
+    float corner_radius = 0.0f;
+    float hit_target_size = 36.0f;
+    bool borderless = true;
+    bool grouped_control = true;
+    std::string_view policy;
+};
+
 struct SymbolMetrics {
     SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
     SymbolScale scale = SymbolScale::Medium;
@@ -360,6 +401,8 @@ inline constexpr unsigned int svg_path_arc_symbol_count =
     catalog::svg_path_arc_symbol_count;
 inline constexpr unsigned int round_stroke_symbol_count =
     catalog::round_stroke_symbol_count;
+inline constexpr unsigned int symbol_interaction_phase_count =
+    catalog::symbol_interaction_phase_count;
 
 inline auto symbol_at(unsigned int index) noexcept -> Symbol {
     return from_catalog_symbol(catalog::symbol_at(index));
@@ -491,6 +534,10 @@ inline auto sidebar_symbol_color_policy() noexcept -> std::string_view {
 
 inline auto symbol_control_chrome_policy() noexcept -> std::string_view {
     return catalog::symbol_control_chrome_policy();
+}
+
+inline auto symbol_interaction_phase_policy() noexcept -> std::string_view {
+    return catalog::symbol_interaction_phase_policy();
 }
 
 inline auto semantic_reference_name(Symbol symbol) noexcept -> std::string_view {
@@ -665,6 +712,35 @@ inline auto macos_control_chrome(SymbolPresentationRole role,
         to_color(base.symbol_color),
         to_color(base.background_color),
         to_color(base.hover_background_color),
+        base.corner_radius,
+        base.hit_target_size,
+        base.borderless,
+        base.grouped_control,
+        base.policy,
+    };
+}
+
+inline auto macos_state_recipe(SymbolPresentationRole role,
+                               SymbolInteractionState state,
+                               SymbolInteractionPhase phase) noexcept
+        -> SymbolStateRecipe {
+    auto const base = catalog::macos_state_recipe(
+        to_catalog_presentation_role(role),
+        catalog::SymbolInteractionState{
+            state.selected,
+            state.enabled,
+        },
+        to_catalog_phase(phase));
+    return SymbolStateRecipe{
+        from_catalog_presentation_role(base.role),
+        from_catalog_phase(base.phase),
+        base.selected,
+        base.enabled,
+        from_catalog_tone(base.symbol_tone),
+        to_color(base.symbol_color),
+        to_color(base.background_color),
+        base.symbol_opacity,
+        base.scale,
         base.corner_radius,
         base.hit_target_size,
         base.borderless,
