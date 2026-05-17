@@ -271,9 +271,13 @@ chrome and common app actions, following Apple-style proportions and macOS-like
 rounded stroke caps/joins without copying SF Symbols assets. The macOS Metal
 renderer executes diagonal icon strokes as triangle bodies with round caps
 instead of dot chains, keeping toolbar/search/sidebar symbols continuous while
-remaining bounded. The catalog exposes semantic metadata for toolbar, sidebar,
-action, and file-type roles so verifier artifacts can prove which icon policy
-was used.
+remaining bounded. Windows accepts the same SVG-driven `Path`, `FillPath`, and
+`DrawArc` command surface; strokes flatten to rotated color-pipeline capsules
+and small fills flatten to color-pipeline strips so the built-in catalog does
+not drop or mis-layer the native command stream on non-macOS desktop runs.
+Larger fills still ear-clip into the existing triangle pipeline. The catalog
+exposes semantic metadata for toolbar, sidebar, action, and file-type roles so
+verifier artifacts can prove which icon policy was used.
 File explorer packages now declare `app.icon` as a package-owned SVG asset, so
 the same CLI bundle contract can later feed platform app-icon generation
 without embedding Apple artwork or depending on platform symbol fonts.
