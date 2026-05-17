@@ -242,6 +242,7 @@ struct ExplorerChromeMetrics {
     int toolbar_group_count = 0;
     int toolbar_separator_count = 0;
     int toolbar_icon_button_count = 0;
+    int column_location_row_count = 0;
     int titlebar_control_count = 0;
     int overflow_action_button_count = 0;
     int icon_total_symbol_count = 0;
@@ -257,6 +258,8 @@ struct ExplorerChromeMetrics {
     float icon_toolbar_point_size = 0.0f;
     float icon_sidebar_point_size = 0.0f;
     float icon_sidebar_optical_y_offset = 0.0f;
+    float column_location_row_height = 0.0f;
+    float column_location_icon_size = 0.0f;
     bool integrated_titlebar = true;
     bool native_window_controls = true;
     bool duplicate_window_controls = false;
@@ -364,6 +367,9 @@ inline constexpr float k_desktop_sidebar_material_padding = 16.0f;
 inline constexpr float k_desktop_sidebar_item_gap = 4.0f;
 inline constexpr float k_desktop_sidebar_section_gap = 14.0f;
 inline constexpr float k_desktop_sidebar_selected_row_radius = 10.0f;
+inline constexpr int k_desktop_column_location_row_count = 4;
+inline constexpr float k_desktop_column_location_row_height = 30.0f;
+inline constexpr float k_desktop_column_location_icon_size = 18.0f;
 inline constexpr float k_desktop_window_radius = 18.0f;
 inline constexpr float k_desktop_toolbar_group_radius = 22.0f;
 inline constexpr float k_desktop_toolbar_group_height = 46.0f;
@@ -628,6 +634,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .toolbar_group_count = 0,
             .toolbar_separator_count = 0,
             .toolbar_icon_button_count = 0,
+            .column_location_row_count = 0,
             .titlebar_control_count = 0,
             .icon_total_symbol_count = 0,
             .sidebar_symbol_count = 0,
@@ -642,6 +649,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_toolbar_point_size = 0.0f,
             .icon_sidebar_point_size = 0.0f,
             .icon_sidebar_optical_y_offset = 0.0f,
+            .column_location_row_height = 0.0f,
+            .column_location_icon_size = 0.0f,
             .integrated_titlebar = false,
             .native_window_controls = false,
             .duplicate_window_controls = false,
@@ -747,6 +756,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .toolbar_group_count = 5,
         .toolbar_separator_count = 3,
         .toolbar_icon_button_count = 11,
+        .column_location_row_count = k_desktop_column_location_row_count,
         .titlebar_control_count = k_desktop_titlebar_control_count,
         .icon_total_symbol_count =
             static_cast<int>(icon_catalog::all_symbol_count),
@@ -768,6 +778,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_toolbar_point_size = 24.0f,
         .icon_sidebar_point_size = 26.0f,
         .icon_sidebar_optical_y_offset = -0.5f,
+        .column_location_row_height = k_desktop_column_location_row_height,
+        .column_location_icon_size = k_desktop_column_location_icon_size,
         .integrated_titlebar = true,
         .native_window_controls = true,
         .duplicate_window_controls = false,
@@ -1434,6 +1446,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "sidebar_optical_y_offset",
         json::Value{chrome.icon_sidebar_optical_y_offset});
+    icon_system.emplace(
+        "column_location_icon_size",
+        json::Value{chrome.column_location_icon_size});
     icon_system.emplace("text_weight_aligned", json::Value{chrome.icon_text_weight_aligned});
     icon_system.emplace("hierarchical_opacity", json::Value{chrome.icon_hierarchical_opacity});
     icon_system.emplace("design_reference", json::Value{chrome.icon_design_reference});
@@ -1502,6 +1517,8 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("toolbar_group_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_group_count)});
     out.emplace("toolbar_separator_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_separator_count)});
     out.emplace("toolbar_icon_button_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_icon_button_count)});
+    out.emplace("column_location_row_count", json::Value{static_cast<std::int64_t>(chrome.column_location_row_count)});
+    out.emplace("column_location_row_height", json::Value{chrome.column_location_row_height});
     out.emplace("titlebar_control_count", json::Value{static_cast<std::int64_t>(chrome.titlebar_control_count)});
     out.emplace("overflow_action_button_count", json::Value{static_cast<std::int64_t>(chrome.overflow_action_button_count)});
     out.emplace("sidebar_symbol_count", json::Value{static_cast<std::int64_t>(chrome.sidebar_symbol_count)});

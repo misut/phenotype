@@ -336,6 +336,12 @@ duplicate
     assert(chrome.toolbar_group_count == 5);
     assert(chrome.toolbar_separator_count == 3);
     assert(chrome.toolbar_icon_button_count == 11);
+    assert(chrome.column_location_row_count
+           == demo::k_desktop_column_location_row_count);
+    assert(chrome.column_location_row_height
+           == demo::k_desktop_column_location_row_height);
+    assert(chrome.column_location_icon_size
+           == demo::k_desktop_column_location_icon_size);
     assert(chrome.titlebar_control_count
            == demo::k_desktop_titlebar_control_count);
     assert(chrome.icon_total_symbol_count == 31);
@@ -599,6 +605,10 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"toolbar_point_size\":24") != std::string::npos);
     assert(debug_text.find("\"sidebar_point_size\":26") != std::string::npos);
+    assert(debug_text.find("\"column_location_row_count\":4")
+           != std::string::npos);
+    assert(debug_text.find("\"column_location_icon_size\":18")
+           != std::string::npos);
     assert(debug_text.find("\"uses_sf_symbols_assets\":false")
            != std::string::npos);
     assert(debug_text.find(

@@ -182,7 +182,9 @@ total/sidebar/toolbar/filled symbol counts, and
 `interaction_tone_policy` / `file_type_color_policy`), traffic-light marker
 coordinates, and icon-grid density metrics such as column width, row height,
 pitch, thumbnail canvas size, label size, gap, visible rows, and visible
-capacity.
+capacity. Column view also records location-pane row count, row height, and
+icon size so Finder-style navigation rows can be checked from the artifact
+without reading pixels by eye.
 `phenotype icons catalog --json` emits the complete all/sidebar/toolbar symbol
 contract from the same pure metadata package, while
 `phenotype drive file-explorer --json` embeds the desktop chrome geometry and

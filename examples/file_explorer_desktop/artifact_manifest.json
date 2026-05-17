@@ -302,6 +302,14 @@
       "equals": 11
     },
     {
+      "path": "application.file_explorer.chrome.column_location_row_count",
+      "equals": 4
+    },
+    {
+      "path": "application.file_explorer.chrome.column_location_row_height",
+      "equals": 30.0
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.module",
       "equals": "phenotype.icons"
     },
@@ -376,6 +384,10 @@
     {
       "path": "application.file_explorer.chrome.icon_system.sidebar_optical_y_offset",
       "equals": -0.5
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.column_location_icon_size",
+      "equals": 18.0
     },
     {
       "path": "application.file_explorer.chrome.icon_system.text_weight_aligned",
