@@ -3141,6 +3141,7 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         "\"preferred_rendering\":{},\"default_scale\":{},"
         "\"style\":{},\"reference_family\":{},\"reference_policy\":{},"
         "\"grid_size\":{},\"default_stroke_width\":{},"
+        "\"stroke_cap\":{},\"stroke_join\":{},"
         "\"secondary_opacity\":{},\"layer_count\":{},"
         "\"uses_current_color\":{},\"round_stroke\":{},\"filled\":{},"
         "\"text_weight_aligned\":{},"
@@ -3164,6 +3165,8 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         json_string(desc.reference_policy),
         desc.grid_size,
         desc.default_stroke_width,
+        json_string(icon_catalog::symbol_stroke_cap_name(desc.stroke_cap)),
+        json_string(icon_catalog::symbol_stroke_join_name(desc.stroke_join)),
         desc.secondary_opacity,
         desc.layer_count,
         desc.uses_current_color ? "true" : "false",
@@ -3221,10 +3224,12 @@ auto icon_catalog_checks() -> std::vector<Check> {
     unsigned int filled_count = 0;
     unsigned int hierarchical_count = 0;
     unsigned int arc_path_count = 0;
+    unsigned int round_stroke_count = 0;
     bool all_owned = true;
     bool no_sf_assets = true;
     bool semantic_references = true;
     bool round_stroke_contract = true;
+    bool round_cap_join_contract = true;
     bool text_weight_aligned = true;
     for (unsigned int i = 0; i < icon_catalog::all_symbol_count; ++i) {
         auto const symbol = icon_catalog::symbol_at(i);
@@ -3237,12 +3242,20 @@ auto icon_catalog_checks() -> std::vector<Check> {
             ++hierarchical_count;
         if (icon_catalog::uses_svg_path_arcs(symbol))
             ++arc_path_count;
+        if (desc.round_stroke)
+            ++round_stroke_count;
         all_owned = all_owned && desc.phenotype_owned;
         no_sf_assets = no_sf_assets && !desc.uses_sf_symbols_asset;
         semantic_references =
             semantic_references && !desc.semantic_reference_name.empty();
         round_stroke_contract =
             round_stroke_contract && (desc.filled || desc.round_stroke);
+        round_cap_join_contract =
+            round_cap_join_contract
+            && (desc.filled
+                || (desc.stroke_cap == icon_catalog::SymbolStrokeCap::Round
+                    && desc.stroke_join
+                        == icon_catalog::SymbolStrokeJoin::Round));
         text_weight_aligned =
             text_weight_aligned && desc.text_weight_aligned;
     }
@@ -3288,16 +3301,30 @@ auto icon_catalog_checks() -> std::vector<Check> {
          .hint =
              "Every phenotype-owned glyph needs a stable semantic SF Symbols reference name for debug traces."},
         {.name = "stroke_and_weight",
-         .ok = round_stroke_contract && text_weight_aligned,
-         .detail = std::format("round_stroke={} text_weight_aligned={}",
+         .ok = round_stroke_contract
+            && round_cap_join_contract
+            && text_weight_aligned
+            && round_stroke_count == icon_catalog::round_stroke_symbol_count
+            && icon_catalog::stroke_geometry_policy()
+                == std::string_view{"round_cap_round_join_svg_strokes"},
+         .detail = std::format(
+             "round_stroke={} round_cap_join={} text_weight_aligned={} count={}",
                                round_stroke_contract ? "true" : "false",
-                               text_weight_aligned ? "true" : "false"),
+                               round_cap_join_contract ? "true" : "false",
+                               text_weight_aligned ? "true" : "false",
+                               round_stroke_count),
         .hint =
-            "Mac-like icons should stay round-stroked and text-weight aligned."},
+            "Mac-like icons should stay round-cap, round-join, and text-weight aligned."},
         {.name = "svg_path_subset",
          .ok = icon_catalog::svg_subset_policy()
                 == std::string_view{"bounded_svg_icon_subset"}
             && icon_catalog::svg_supported_path_commands().find("A Z")
+                != std::string_view::npos
+            && icon_catalog::svg_supported_style_attributes()
+                   .find("stroke-linecap")
+                != std::string_view::npos
+            && icon_catalog::svg_supported_style_attributes()
+                   .find("stroke-linejoin")
                 != std::string_view::npos
             && icon_catalog::svg_arc_policy().find("isolated circular path A/a")
                 != std::string_view::npos
@@ -3340,7 +3367,10 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "{{\"schema_version\":1,\"command\":\"icons catalog\","
         "\"ok\":{},\"style\":{{\"name\":{},\"source_format\":{},"
         "\"svg_subset_policy\":{},\"svg_supported_path_commands\":{},"
+        "\"svg_supported_style_attributes\":{},"
         "\"svg_arc_policy\":{},"
+        "\"stroke_geometry_policy\":{},\"stroke_cap_policy\":{},"
+        "\"stroke_join_policy\":{},"
         "\"design_reference\":{},\"reference_family\":{},"
         "\"reference_policy\":{},\"asset_policy\":{},"
         "\"alignment\":{},\"variant_policy\":{},"
@@ -3349,7 +3379,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"file_type_color_policy\":{},\"default_scale\":{}}},"
         "\"counts\":{{\"all\":{},\"sidebar\":{},\"toolbar\":{},"
         "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
-        "\"reference\":{},\"svg_path_arc\":{}}},"
+        "\"reference\":{},\"svg_path_arc\":{},\"round_stroke\":{}}},"
         "\"symbols\":{},\"sidebar_symbols\":{},"
         "\"toolbar_symbols\":{},\"checks\":{}}}",
         all_ok(checks) ? "true" : "false",
@@ -3357,7 +3387,11 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::source_format()),
         json_string(icon_catalog::svg_subset_policy()),
         json_string(icon_catalog::svg_supported_path_commands()),
+        json_string(icon_catalog::svg_supported_style_attributes()),
         json_string(icon_catalog::svg_arc_policy()),
+        json_string(icon_catalog::stroke_geometry_policy()),
+        json_string(icon_catalog::stroke_cap_policy()),
+        json_string(icon_catalog::stroke_join_policy()),
         json_string(icon_catalog::style_reference()),
         json_string(icon_catalog::reference_family()),
         json_string(icon_catalog::reference_policy()),
@@ -3377,6 +3411,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_catalog::hierarchical_symbol_count,
         icon_catalog::reference_symbol_count,
         icon_catalog::svg_path_arc_symbol_count,
+        icon_catalog::round_stroke_symbol_count,
         icon_symbol_set_json(IconCatalogSet::All),
         icon_symbol_set_json(IconCatalogSet::Sidebar),
         icon_symbol_set_json(IconCatalogSet::Toolbar),
@@ -3419,13 +3454,17 @@ auto explorer_chrome_json(
         "\"icon_system\":{{\"module\":{},\"style\":{},"
         "\"source_format\":{},"
         "\"svg_subset_policy\":{},\"svg_supported_path_commands\":{},"
+        "\"svg_supported_style_attributes\":{},"
         "\"svg_arc_policy\":{},"
+        "\"stroke_geometry_policy\":{},\"stroke_cap_policy\":{},"
+        "\"stroke_join_policy\":{},"
         "\"owned_assets\":{},"
         "\"uses_sf_symbols_assets\":{},\"round_stroke_contract\":{},"
         "\"total_symbol_count\":{},\"sidebar_symbol_count\":{},"
         "\"toolbar_symbol_count\":{},\"filled_symbol_count\":{},"
         "\"outline_symbol_count\":{},\"hierarchical_symbol_count\":{},"
         "\"reference_symbol_count\":{},\"svg_path_arc_symbol_count\":{},"
+        "\"round_stroke_symbol_count\":{},"
         "\"grid_size\":{},"
         "\"default_stroke_width\":{},\"secondary_opacity\":{},"
         "\"toolbar_point_size\":{},\"sidebar_point_size\":{},"
@@ -3501,7 +3540,11 @@ auto explorer_chrome_json(
         json_string(chrome.icon_source_format),
         json_string(chrome.icon_svg_subset_policy),
         json_string(chrome.icon_svg_supported_path_commands),
+        json_string(chrome.icon_svg_supported_style_attributes),
         json_string(chrome.icon_svg_arc_policy),
+        json_string(chrome.icon_stroke_geometry_policy),
+        json_string(chrome.icon_stroke_cap_policy),
+        json_string(chrome.icon_stroke_join_policy),
         chrome.owned_icon_assets ? "true" : "false",
         chrome.uses_sf_symbols_assets ? "true" : "false",
         chrome.icon_round_stroke_contract ? "true" : "false",
@@ -3513,6 +3556,7 @@ auto explorer_chrome_json(
         chrome.icon_hierarchical_symbol_count,
         chrome.icon_reference_symbol_count,
         chrome.icon_svg_path_arc_symbol_count,
+        chrome.icon_round_stroke_symbol_count,
         chrome.icon_grid_size,
         chrome.icon_default_stroke_width,
         chrome.icon_secondary_opacity,

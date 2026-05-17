@@ -330,8 +330,24 @@
       "equals": "M L H V Q T C S A Z with absolute and relative variants"
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.svg_supported_style_attributes",
+      "equals": "fill, stroke, color, opacity, fill-opacity, stroke-opacity, stroke-width, stroke-linecap, stroke-linejoin"
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.svg_arc_policy",
       "equals": "circle elements and isolated circular path A/a preserve native ArcTo; chained or elliptical path A/a lowers to bounded cubic Bezier segments"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.stroke_geometry_policy",
+      "equals": "round_cap_round_join_svg_strokes"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.stroke_cap_policy",
+      "equals": "round"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.stroke_join_policy",
+      "equals": "round"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.owned_assets",
@@ -376,6 +392,10 @@
     {
       "path": "application.file_explorer.chrome.icon_system.svg_path_arc_symbol_count",
       "equals": 1
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.round_stroke_symbol_count",
+      "equals": 30
     },
     {
       "path": "application.file_explorer.chrome.icon_system.grid_size",

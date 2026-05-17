@@ -62,6 +62,14 @@ enum class SymbolScale {
     Large,
 };
 
+enum class SymbolStrokeCap {
+    Round,
+};
+
+enum class SymbolStrokeJoin {
+    Round,
+};
+
 enum class SymbolPresentationRole {
     Toolbar,
     Navigation,
@@ -92,6 +100,8 @@ struct SymbolDescriptor {
     std::string_view reference_policy;
     float grid_size = 24.0f;
     float default_stroke_width = 1.8f;
+    SymbolStrokeCap stroke_cap = SymbolStrokeCap::Round;
+    SymbolStrokeJoin stroke_join = SymbolStrokeJoin::Round;
     float secondary_opacity = 1.0f;
     unsigned int layer_count = 1;
     bool uses_current_color = true;
@@ -123,6 +133,7 @@ inline constexpr unsigned int filled_symbol_count = 1;
 inline constexpr unsigned int hierarchical_symbol_count = 20;
 inline constexpr unsigned int reference_symbol_count = all_symbol_count;
 inline constexpr unsigned int svg_path_arc_symbol_count = 1;
+inline constexpr unsigned int round_stroke_symbol_count = outline_symbol_count;
 
 inline auto name(Symbol symbol) noexcept -> std::string_view {
     switch (symbol) {
@@ -199,6 +210,22 @@ inline auto symbol_scale_name(SymbolScale scale) noexcept -> std::string_view {
     return "medium";
 }
 
+inline auto symbol_stroke_cap_name(SymbolStrokeCap cap) noexcept
+        -> std::string_view {
+    switch (cap) {
+    case SymbolStrokeCap::Round: return "round";
+    }
+    return "round";
+}
+
+inline auto symbol_stroke_join_name(SymbolStrokeJoin join) noexcept
+        -> std::string_view {
+    switch (join) {
+    case SymbolStrokeJoin::Round: return "round";
+    }
+    return "round";
+}
+
 inline auto symbol_presentation_role_name(
         SymbolPresentationRole role) noexcept -> std::string_view {
     switch (role) {
@@ -263,8 +290,24 @@ inline auto svg_supported_path_commands() noexcept -> std::string_view {
     return "M L H V Q T C S A Z with absolute and relative variants";
 }
 
+inline auto svg_supported_style_attributes() noexcept -> std::string_view {
+    return "fill, stroke, color, opacity, fill-opacity, stroke-opacity, stroke-width, stroke-linecap, stroke-linejoin";
+}
+
 inline auto svg_arc_policy() noexcept -> std::string_view {
     return "circle elements and isolated circular path A/a preserve native ArcTo; chained or elliptical path A/a lowers to bounded cubic Bezier segments";
+}
+
+inline auto stroke_geometry_policy() noexcept -> std::string_view {
+    return "round_cap_round_join_svg_strokes";
+}
+
+inline auto stroke_cap_policy() noexcept -> std::string_view {
+    return "round";
+}
+
+inline auto stroke_join_policy() noexcept -> std::string_view {
+    return "round";
 }
 
 inline auto alignment_policy() noexcept -> std::string_view {
@@ -535,6 +578,8 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
         reference_policy(),
         24.0f,
         filled ? 0.0f : 1.8f,
+        SymbolStrokeCap::Round,
+        SymbolStrokeJoin::Round,
         hierarchical ? 0.66f : 1.0f,
         symbol_layer_count(symbol),
         true,

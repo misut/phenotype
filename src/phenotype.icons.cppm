@@ -86,6 +86,14 @@ enum class SymbolScale {
     Large,
 };
 
+enum class SymbolStrokeCap {
+    Round,
+};
+
+enum class SymbolStrokeJoin {
+    Round,
+};
+
 enum class SymbolPresentationRole {
     Toolbar,
     Navigation,
@@ -143,6 +151,28 @@ inline auto from_catalog_scale(catalog::SymbolScale scale) noexcept
     return static_cast<SymbolScale>(static_cast<unsigned int>(scale));
 }
 
+inline auto to_catalog_stroke_cap(SymbolStrokeCap cap) noexcept
+        -> catalog::SymbolStrokeCap {
+    return static_cast<catalog::SymbolStrokeCap>(
+        static_cast<unsigned int>(cap));
+}
+
+inline auto from_catalog_stroke_cap(
+        catalog::SymbolStrokeCap cap) noexcept -> SymbolStrokeCap {
+    return static_cast<SymbolStrokeCap>(static_cast<unsigned int>(cap));
+}
+
+inline auto to_catalog_stroke_join(SymbolStrokeJoin join) noexcept
+        -> catalog::SymbolStrokeJoin {
+    return static_cast<catalog::SymbolStrokeJoin>(
+        static_cast<unsigned int>(join));
+}
+
+inline auto from_catalog_stroke_join(
+        catalog::SymbolStrokeJoin join) noexcept -> SymbolStrokeJoin {
+    return static_cast<SymbolStrokeJoin>(static_cast<unsigned int>(join));
+}
+
 inline auto to_catalog_presentation_role(SymbolPresentationRole role) noexcept
         -> catalog::SymbolPresentationRole {
     return static_cast<catalog::SymbolPresentationRole>(
@@ -182,6 +212,16 @@ inline auto symbol_scale_name(SymbolScale scale) noexcept -> std::string_view {
     return catalog::symbol_scale_name(to_catalog_scale(scale));
 }
 
+inline auto symbol_stroke_cap_name(SymbolStrokeCap cap) noexcept
+        -> std::string_view {
+    return catalog::symbol_stroke_cap_name(to_catalog_stroke_cap(cap));
+}
+
+inline auto symbol_stroke_join_name(SymbolStrokeJoin join) noexcept
+        -> std::string_view {
+    return catalog::symbol_stroke_join_name(to_catalog_stroke_join(join));
+}
+
 inline auto symbol_presentation_role_name(
         SymbolPresentationRole role) noexcept -> std::string_view {
     return catalog::symbol_presentation_role_name(
@@ -205,6 +245,8 @@ struct SymbolDescriptor {
     std::string_view reference_policy;
     float grid_size = 24.0f;
     float default_stroke_width = 1.8f;
+    SymbolStrokeCap stroke_cap = SymbolStrokeCap::Round;
+    SymbolStrokeJoin stroke_join = SymbolStrokeJoin::Round;
     float secondary_opacity = 1.0f;
     unsigned int layer_count = 1;
     bool uses_current_color = true;
@@ -247,6 +289,8 @@ inline constexpr unsigned int reference_symbol_count =
     catalog::reference_symbol_count;
 inline constexpr unsigned int svg_path_arc_symbol_count =
     catalog::svg_path_arc_symbol_count;
+inline constexpr unsigned int round_stroke_symbol_count =
+    catalog::round_stroke_symbol_count;
 
 inline auto symbol_at(unsigned int index) noexcept -> Symbol {
     return from_catalog_symbol(catalog::symbol_at(index));
@@ -300,8 +344,24 @@ inline auto svg_supported_path_commands() noexcept -> std::string_view {
     return catalog::svg_supported_path_commands();
 }
 
+inline auto svg_supported_style_attributes() noexcept -> std::string_view {
+    return catalog::svg_supported_style_attributes();
+}
+
 inline auto svg_arc_policy() noexcept -> std::string_view {
     return catalog::svg_arc_policy();
+}
+
+inline auto stroke_geometry_policy() noexcept -> std::string_view {
+    return catalog::stroke_geometry_policy();
+}
+
+inline auto stroke_cap_policy() noexcept -> std::string_view {
+    return catalog::stroke_cap_policy();
+}
+
+inline auto stroke_join_policy() noexcept -> std::string_view {
+    return catalog::stroke_join_policy();
 }
 
 inline auto alignment_policy() noexcept -> std::string_view {
@@ -351,6 +411,8 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
         base.reference_policy,
         base.grid_size,
         base.default_stroke_width,
+        from_catalog_stroke_cap(base.stroke_cap),
+        from_catalog_stroke_join(base.stroke_join),
         base.secondary_opacity,
         base.layer_count,
         base.uses_current_color,

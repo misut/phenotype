@@ -3569,7 +3569,14 @@ void test_icon_catalog_umbrella_export() {
            == "bounded_svg_icon_subset");
     assert(phenotype::icon_catalog::svg_supported_path_commands().find("A Z")
            != std::string_view::npos);
+    assert(phenotype::icon_catalog::svg_supported_style_attributes()
+               .find("stroke-linecap")
+           != std::string_view::npos);
+    assert(phenotype::icon_catalog::stroke_geometry_policy()
+           == "round_cap_round_join_svg_strokes");
     assert(phenotype::icon_catalog::svg_path_arc_symbol_count == 1);
+    assert(phenotype::icon_catalog::round_stroke_symbol_count
+           == phenotype::icon_catalog::outline_symbol_count);
     assert(phenotype::icon_catalog::semantic_reference_name(
                phenotype::icon_catalog::Symbol::AirDrop)
            == "airdrop");

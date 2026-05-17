@@ -253,6 +253,7 @@ struct ExplorerChromeMetrics {
     int icon_hierarchical_symbol_count = 0;
     int icon_reference_symbol_count = 0;
     int icon_svg_path_arc_symbol_count = 0;
+    int icon_round_stroke_symbol_count = 0;
     float icon_grid_size = 0.0f;
     float icon_default_stroke_width = 0.0f;
     float icon_secondary_opacity = 0.0f;
@@ -279,7 +280,11 @@ struct ExplorerChromeMetrics {
     std::string icon_source_format;
     std::string icon_svg_subset_policy;
     std::string icon_svg_supported_path_commands;
+    std::string icon_svg_supported_style_attributes;
     std::string icon_svg_arc_policy;
+    std::string icon_stroke_geometry_policy;
+    std::string icon_stroke_cap_policy;
+    std::string icon_stroke_join_policy;
     std::string icon_design_reference;
     std::string icon_reference_family;
     std::string icon_reference_policy;
@@ -648,6 +653,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_hierarchical_symbol_count = 0,
             .icon_reference_symbol_count = 0,
             .icon_svg_path_arc_symbol_count = 0,
+            .icon_round_stroke_symbol_count = 0,
             .icon_grid_size = 0.0f,
             .icon_default_stroke_width = 0.0f,
             .icon_secondary_opacity = 0.0f,
@@ -673,7 +679,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_source_format = "none",
             .icon_svg_subset_policy = "n/a",
             .icon_svg_supported_path_commands = "n/a",
+            .icon_svg_supported_style_attributes = "n/a",
             .icon_svg_arc_policy = "n/a",
+            .icon_stroke_geometry_policy = "n/a",
+            .icon_stroke_cap_policy = "n/a",
+            .icon_stroke_join_policy = "n/a",
             .icon_design_reference = "mobile text controls",
             .icon_reference_family = "n/a",
             .icon_reference_policy = "n/a",
@@ -782,6 +792,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             static_cast<int>(icon_catalog::reference_symbol_count),
         .icon_svg_path_arc_symbol_count =
             static_cast<int>(icon_catalog::svg_path_arc_symbol_count),
+        .icon_round_stroke_symbol_count =
+            static_cast<int>(icon_catalog::round_stroke_symbol_count),
         .icon_grid_size = 24.0f,
         .icon_default_stroke_width = 1.8f,
         .icon_secondary_opacity = 0.66f,
@@ -809,7 +821,15 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             std::string{icon_catalog::svg_subset_policy()},
         .icon_svg_supported_path_commands =
             std::string{icon_catalog::svg_supported_path_commands()},
+        .icon_svg_supported_style_attributes =
+            std::string{icon_catalog::svg_supported_style_attributes()},
         .icon_svg_arc_policy = std::string{icon_catalog::svg_arc_policy()},
+        .icon_stroke_geometry_policy =
+            std::string{icon_catalog::stroke_geometry_policy()},
+        .icon_stroke_cap_policy =
+            std::string{icon_catalog::stroke_cap_policy()},
+        .icon_stroke_join_policy =
+            std::string{icon_catalog::stroke_join_policy()},
         .icon_design_reference =
             std::string{icon_catalog::style_reference()},
         .icon_reference_family =
@@ -1427,7 +1447,19 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "svg_supported_path_commands",
         json::Value{chrome.icon_svg_supported_path_commands});
+    icon_system.emplace(
+        "svg_supported_style_attributes",
+        json::Value{chrome.icon_svg_supported_style_attributes});
     icon_system.emplace("svg_arc_policy", json::Value{chrome.icon_svg_arc_policy});
+    icon_system.emplace(
+        "stroke_geometry_policy",
+        json::Value{chrome.icon_stroke_geometry_policy});
+    icon_system.emplace(
+        "stroke_cap_policy",
+        json::Value{chrome.icon_stroke_cap_policy});
+    icon_system.emplace(
+        "stroke_join_policy",
+        json::Value{chrome.icon_stroke_join_policy});
     icon_system.emplace("owned_assets", json::Value{chrome.owned_icon_assets});
     icon_system.emplace("uses_sf_symbols_assets", json::Value{chrome.uses_sf_symbols_assets});
     icon_system.emplace("round_stroke_contract", json::Value{chrome.icon_round_stroke_contract});
@@ -1455,6 +1487,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "svg_path_arc_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.icon_svg_path_arc_symbol_count)});
+    icon_system.emplace(
+        "round_stroke_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.icon_round_stroke_symbol_count)});
     icon_system.emplace("grid_size", json::Value{chrome.icon_grid_size});
     icon_system.emplace(
         "default_stroke_width",

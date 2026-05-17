@@ -169,7 +169,8 @@ chrome radius for every surface.
 `phenotype.svg` is a pure vector image layer. It parses a bounded SVG subset
 (`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,
 `polygon`, `fill`, `stroke`, `currentColor`, opacity, stroke width, and
-`translate`/`scale`/`rotate`/`matrix` transforms) into a `svg::Document`.
+stroke cap/join attributes, plus `translate`/`scale`/`rotate`/`matrix`
+transforms) into a `svg::Document`.
 Path data supports `M/L/H/V/Q/T/C/S/A/Z` in absolute and relative forms, which
 covers the rounded and reflected curves common in interface glyphs without
 handing SVG interpretation to a backend.
@@ -198,12 +199,13 @@ Apple's vector paths. Apps can call `icons::document`, `icons::paint_symbol`,
 or `widget::icon`; the widget helper paints through `widget::canvas` and uses a
 deterministic paint token so stable icons do not re-emit every frame. The
 catalog encodes macOS-like rounded stroke caps and joins in each line icon's
-SVG source, uses bounded secondary opacity on detail strokes for
-SF Symbols-like hierarchical emphasis, and exposes symbol metadata
-(`icon_catalog::descriptor`, semantic reference names, variant/rendering/scale
-names, count constants, and index accessors for all, sidebar, and toolbar
-symbols) so examples and artifact verifiers can assert the style contract
-without pixel guessing. `icons::presentation` adds the default macOS-inspired
+SVG source, records those attributes in `svg::Style`, uses bounded secondary
+opacity on detail strokes for SF Symbols-like hierarchical emphasis, and
+exposes symbol metadata (`icon_catalog::descriptor`, stroke cap/join policies,
+semantic reference names, variant/rendering/scale names, count constants, and
+index accessors for all, sidebar, and toolbar symbols) so examples and artifact
+verifiers can assert the style contract without pixel guessing.
+`icons::presentation` adds the default macOS-inspired
 presentation policy: toolbar symbols use 24 pt secondary/selected tones,
 sidebar symbols use 26 pt primary/accent tones with a small optical vertical
 adjustment, and disabled/destructive tones are explicit pure values.
