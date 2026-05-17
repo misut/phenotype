@@ -3594,6 +3594,86 @@ void test_icon_catalog_umbrella_export() {
     std::puts("PASS: umbrella module exports icon catalog contract");
 }
 
+void test_io_contract_value_types() {
+    auto frame = phenotype::io::InputFrame{
+        .frame_index = 2,
+        .timestamp_ms = 32,
+        .deterministic = true,
+    };
+    frame.events.push_back(phenotype::io::InputEvent{
+        .sequence = 1,
+        .payload = phenotype::io::InputViewportEvent{
+            .width = 900,
+            .height = 620,
+            .scale = 2.0f,
+        },
+    });
+    frame.events.push_back(phenotype::io::InputEvent{
+        .sequence = 2,
+        .payload = phenotype::io::InputScrollEvent{
+            .delta_x = 0.0f,
+            .delta_y = -24.0f,
+            .precise = true,
+        },
+    });
+
+    auto script = phenotype::io::InputScript{
+        .source_name = "test-script",
+        .deterministic = true,
+        .frames = {frame},
+    };
+
+    assert(phenotype::io::io_contract_version == 1);
+    assert(phenotype::io::input_event_kinds.size() == 7);
+    assert(phenotype::io::output_observation_kinds.size() == 6);
+    assert(phenotype::io::input_event_kind_name(
+               phenotype::io::InputEventKind::Pointer)
+           == "pointer");
+    assert(phenotype::io::output_observation_kind_name(
+               phenotype::io::OutputObservationKind::PixelRegion)
+           == "pixel_region");
+    assert(phenotype::io::input_event_kind(frame.events[0])
+           == phenotype::io::InputEventKind::Viewport);
+    assert(phenotype::io::input_script_event_count(script) == 2);
+    assert(phenotype::io::input_script_is_replayable(script));
+
+    auto observation = phenotype::io::OutputObservation{
+        .semantic_tree_present = true,
+        .command_stream_present = true,
+        .material_plans_present = true,
+        .runtime_summary_present = true,
+        .machine_readable_failure_shape = true,
+        .semantic_node_count = 3,
+        .command_stream = {.command_count = 4,
+                           .path_count = 1,
+                           .material_count = 1,
+                           .text_count = 1,
+                           .image_count = 0,
+                           .bounded = true},
+        .material = {.plan_count = 1,
+                     .fallback_count = 0,
+                     .runtime_pass_count = 2,
+                     .semantic_runtime_match = true},
+        .likely_layers = {"material_plan"},
+        .likely_passes = {"blur_pass"},
+    };
+
+    auto bundle = phenotype::io::ArtifactBundleDescriptor{
+        .snapshot_json = true,
+        .frame_image = true,
+        .platform_runtime_details = true,
+        .observation = observation,
+    };
+    assert(phenotype::io::output_observation_is_llm_debuggable(observation));
+    assert(phenotype::io::artifact_bundle_is_llm_debuggable(bundle));
+    assert(phenotype::io::edge_effect_policy().find("filesystem")
+           != std::string_view::npos);
+    assert(phenotype::io::production_bypass_policy().find("release_adapters")
+           != std::string_view::npos);
+
+    std::puts("PASS: pure IO contract value types");
+}
+
 // ============================================================
 // Runner
 // ============================================================
@@ -3666,6 +3746,7 @@ int main() {
     test_resource_catalog_diagnostics_are_actionable();
     test_resource_catalog_theme_defaults();
     test_icon_catalog_umbrella_export();
+    test_io_contract_value_types();
     std::puts("\nAll tests passed.");
     return 0;
 }

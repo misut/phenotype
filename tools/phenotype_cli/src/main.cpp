@@ -7,6 +7,7 @@ import cppx.terminal;
 import file_explorer_shared;
 import glass_showcase_shared;
 import json;
+import phenotype.io;
 import phenotype.icon_catalog;
 import phenotype.resources;
 import std;
@@ -15,6 +16,7 @@ namespace {
 
 namespace fs = std::filesystem;
 namespace icon_catalog = phenotype::icon_catalog;
+namespace io_contract = phenotype::io;
 
 struct Check {
     std::string name;
@@ -741,6 +743,26 @@ auto spec() -> cppx::cli::CommandSpec {
                         .examples = {
                             "phenotype icons catalog --json",
                             "phenotype icons catalog",
+                        },
+                    },
+                },
+                .allow_positionals = false,
+                .category = "metadata",
+            },
+            {
+                .name = "io",
+                .summary = "Inspect pure input and output abstraction contracts",
+                .options = {help_option()},
+                .subcommands = {
+                    {
+                        .name = "contract",
+                        .summary =
+                            "Emit the pure CLI/native input-output contract",
+                        .options = {help_option(), json_option()},
+                        .allow_positionals = false,
+                        .examples = {
+                            "phenotype io contract --json",
+                            "phenotype io contract",
                         },
                     },
                 },
@@ -3415,6 +3437,216 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_symbol_set_json(IconCatalogSet::All),
         icon_symbol_set_json(IconCatalogSet::Sidebar),
         icon_symbol_set_json(IconCatalogSet::Toolbar),
+        checks_json(checks));
+}
+
+auto input_event_kinds_json() -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < io_contract::input_event_kinds.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += json_string(io_contract::input_event_kind_name(
+            io_contract::input_event_kinds[i]));
+    }
+    out += "]";
+    return out;
+}
+
+auto output_observation_kinds_json() -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < io_contract::output_observation_kinds.size();
+         ++i) {
+        if (i > 0)
+            out += ",";
+        out += json_string(io_contract::output_observation_kind_name(
+            io_contract::output_observation_kinds[i]));
+    }
+    out += "]";
+    return out;
+}
+
+struct IoContractSample {
+    io_contract::InputScript script;
+    io_contract::ArtifactBundleDescriptor bundle;
+};
+
+auto io_contract_sample() -> IoContractSample {
+    auto frame = io_contract::InputFrame{
+        .frame_index = 1,
+        .timestamp_ms = 16,
+        .deterministic = true,
+    };
+    frame.events.push_back(io_contract::InputEvent{
+        .sequence = 1,
+        .payload = io_contract::InputViewportEvent{
+            .width = 900,
+            .height = 620,
+            .scale = 2.0f,
+        },
+    });
+    frame.events.push_back(io_contract::InputEvent{
+        .sequence = 2,
+        .payload = io_contract::InputPointerEvent{
+            .phase = io_contract::PointerPhase::Down,
+            .pointer_id = 1,
+            .x = 48.0f,
+            .y = 52.0f,
+            .buttons = 1,
+        },
+    });
+
+    auto script = io_contract::InputScript{
+        .source_name = "cli-contract-sample",
+        .deterministic = true,
+    };
+    script.frames.push_back(std::move(frame));
+
+    auto observation = io_contract::OutputObservation{
+        .semantic_tree_present = true,
+        .command_stream_present = true,
+        .material_plans_present = true,
+        .runtime_summary_present = true,
+        .machine_readable_failure_shape = true,
+        .semantic_node_count = 3,
+        .command_stream = {.command_count = 12,
+                           .path_count = 2,
+                           .material_count = 1,
+                           .text_count = 4,
+                           .image_count = 1,
+                           .bounded = true},
+        .material = {.plan_count = 1,
+                     .fallback_count = 0,
+                     .runtime_pass_count = 2,
+                     .semantic_runtime_match = true},
+        .likely_layers = {"semantic_tree", "material_plan"},
+        .likely_passes = {"input_replay", "render_observation"},
+    };
+    observation.pixel_regions.push_back(io_contract::OutputPixelRegionSummary{
+        .name = "finder-toolbar-probe",
+        .luma_delta = 0.18f,
+        .sampled_pixels = 64,
+        .unique_colors = 14,
+        .likely_layer = "material_plan",
+        .likely_pass = "render_observation",
+    });
+
+    return {
+        .script = std::move(script),
+        .bundle = {
+            .snapshot_json = true,
+            .frame_image = true,
+            .platform_runtime_details = true,
+            .observation = std::move(observation),
+        },
+    };
+}
+
+auto io_contract_checks(IoContractSample const& sample) -> std::vector<Check> {
+    auto const event_count = io_contract::input_script_event_count(sample.script);
+    auto const replayable = io_contract::input_script_is_replayable(sample.script);
+    auto const artifact_debuggable =
+        io_contract::artifact_bundle_is_llm_debuggable(sample.bundle);
+
+    return {
+        {.name = "contract_version",
+         .ok = io_contract::io_contract_version == 1,
+         .detail = std::format("version={}", io_contract::io_contract_version),
+         .hint = "Bump the CLI schema when the pure IO contract changes."},
+        {.name = "input_event_surface",
+         .ok = io_contract::input_event_kinds.size() == 7
+            && io_contract::input_event_kind_name(
+                   io_contract::InputEventKind::Pointer)
+                == std::string_view{"pointer"}
+            && io_contract::input_event_kind(
+                   sample.script.frames.front().events.front())
+                == io_contract::InputEventKind::Viewport,
+         .detail = std::format(
+             "kinds={} first_sample={}",
+             io_contract::input_event_kinds.size(),
+             io_contract::input_event_kind_name(io_contract::input_event_kind(
+                 sample.script.frames.front().events.front()))),
+         .hint =
+             "Native and CLI adapters must lower platform input to typed event values."},
+        {.name = "deterministic_replay",
+         .ok = replayable && event_count == 2,
+         .detail = std::format(
+             "frames={} events={} replayable={}",
+             sample.script.frames.size(),
+             event_count,
+             replayable ? "true" : "false"),
+         .hint =
+             "Every non-tick input event in a replay script needs a stable non-zero sequence."},
+        {.name = "output_observation_surface",
+         .ok = io_contract::output_observation_kinds.size() == 6
+            && sample.bundle.observation.command_stream.bounded
+            && sample.bundle.observation.material.semantic_runtime_match,
+         .detail = std::format(
+             "kinds={} semantic_nodes={} material_plans={}",
+             io_contract::output_observation_kinds.size(),
+             sample.bundle.observation.semantic_node_count,
+             sample.bundle.observation.material.plan_count),
+         .hint =
+             "Renderer output must lower into bounded command/material/runtime summaries."},
+        {.name = "llm_debuggable_artifact",
+         .ok = artifact_debuggable,
+         .detail = std::format(
+             "snapshot={} frame={} runtime={} likely_layers={} likely_passes={}",
+             sample.bundle.snapshot_json ? "true" : "false",
+             sample.bundle.frame_image ? "true" : "false",
+             sample.bundle.platform_runtime_details ? "true" : "false",
+             sample.bundle.observation.likely_layers.size(),
+             sample.bundle.observation.likely_passes.size()),
+         .hint =
+             "Artifact output must include semantic, runtime, machine-readable failure, likely layer, and likely pass data."},
+        {.name = "edge_effect_boundary",
+         .ok = io_contract::input_contract_policy().find("typed_input_frames")
+                != std::string_view::npos
+            && io_contract::output_contract_policy().find("typed_observations")
+                != std::string_view::npos
+            && io_contract::edge_effect_policy().find("filesystem")
+                != std::string_view::npos
+            && io_contract::edge_effect_policy().find("device")
+                != std::string_view::npos
+            && io_contract::production_bypass_policy().find("release_adapters")
+                != std::string_view::npos,
+         .detail = std::string{io_contract::edge_effect_policy()},
+         .hint =
+             "Filesystem, clocks, process control, capture, shaders, and devices must stay at CLI/backend edges."},
+    };
+}
+
+auto io_contract_json(IoContractSample const& sample,
+                      std::span<Check const> checks) -> std::string {
+    auto const event_count = io_contract::input_script_event_count(sample.script);
+    auto const replayable = io_contract::input_script_is_replayable(sample.script);
+    auto const artifact_debuggable =
+        io_contract::artifact_bundle_is_llm_debuggable(sample.bundle);
+
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"io contract\","
+        "\"ok\":{},\"version\":{},"
+        "\"policies\":{{\"input\":{},\"output\":{},"
+        "\"edge_effects\":{},\"production_bypass\":{}}},"
+        "\"input_event_kinds\":{},\"output_observation_kinds\":{},"
+        "\"sample\":{{\"source\":{},\"frames\":{},\"events\":{},"
+        "\"replayable\":{},\"artifact_llm_debuggable\":{},"
+        "\"semantic_node_count\":{},\"pixel_region_count\":{}}},"
+        "\"checks\":{}}}",
+        all_ok(checks) ? "true" : "false",
+        io_contract::io_contract_version,
+        json_string(io_contract::input_contract_policy()),
+        json_string(io_contract::output_contract_policy()),
+        json_string(io_contract::edge_effect_policy()),
+        json_string(io_contract::production_bypass_policy()),
+        input_event_kinds_json(),
+        output_observation_kinds_json(),
+        json_string(sample.script.source_name),
+        sample.script.frames.size(),
+        event_count,
+        replayable ? "true" : "false",
+        artifact_debuggable ? "true" : "false",
+        sample.bundle.observation.semantic_node_count,
+        sample.bundle.observation.pixel_regions.size(),
         checks_json(checks));
 }
 
@@ -6456,6 +6688,39 @@ int run_icons_catalog(cppx::cli::Invocation const& invocation) {
     return all_ok(checks) ? 0 : 1;
 }
 
+int run_io_contract(cppx::cli::Invocation const& invocation) {
+    auto sample = io_contract_sample();
+    auto checks = io_contract_checks(sample);
+    if (invocation.has("json")) {
+        std::println("{}", io_contract_json(sample, checks));
+        return all_ok(checks) ? 0 : 1;
+    }
+
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "version",
+         .value = std::format("{}", io_contract::io_contract_version),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "input",
+         .value = std::string{io_contract::input_contract_policy()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "output",
+         .value = std::string{io_contract::output_contract_policy()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "edge effects",
+         .value = std::string{io_contract::edge_effect_policy()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "debuggable",
+         .value = io_contract::artifact_bundle_is_llm_debuggable(sample.bundle)
+            ? "true" : "false",
+         .status = all_ok(checks) ? cppx::terminal::StatusKind::ok
+                                  : cppx::terminal::StatusKind::fail},
+    };
+    std::println("phenotype io contract");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    print_checks("checks", checks);
+    return all_ok(checks) ? 0 : 1;
+}
+
 int run_package_inspect(cppx::cli::Invocation const& invocation) {
     auto path = first_positional_or_error(invocation, "package inspect");
     if (!path)
@@ -7328,6 +7593,9 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "icons", "catalog"})
         return run_icons_catalog(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "io", "contract"})
+        return run_io_contract(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "drive", "file-explorer"})
         return run_drive_file_explorer(*parsed);
