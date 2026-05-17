@@ -30,6 +30,12 @@ origin so headless CLI traces can reason about Finder-like placement before a
 native screenshot exists. They also carry `status_bar_visible`, keeping the
 default Recents surface clean while making search, selection, and
 file-operation receipts observable in both native artifacts and CLI output.
+Desktop metrics also include the pure `thumbnail_system` contract consumed by
+the icon-grid painter: PDF page/fold/detail sizing, media preview sizing,
+image/video detail counts, shadow policy, and the explicit
+`uses_external_previews=false` rule. This keeps Finder-like thumbnail polish
+observable from `phenotype drive file-explorer --json` before a native renderer
+captures pixels.
 The same package publishes the desktop keyboard command contract as pure data:
 `CommandOrControl+F` for search, `Enter` for selection activation,
 `DeleteOrBackspace` for Trash movement, `CommandOrControl+D` for duplicate,

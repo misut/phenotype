@@ -4199,6 +4199,32 @@ auto io_contract_json(IoContractSample const& sample,
 
 auto explorer_chrome_json(
         file_explorer_demo::ExplorerChromeMetrics const& chrome) -> std::string {
+    auto const thumbnail_system = std::format(
+        "{{\"visual_policy\":{},\"asset_policy\":{},"
+        "\"pdf_policy\":{},\"image_policy\":{},\"video_policy\":{},"
+        "\"shadow_policy\":{},\"uses_external_previews\":{},"
+        "\"pdf_page_width\":{},\"pdf_page_height\":{},"
+        "\"pdf_page_radius\":{},\"pdf_fold_size\":{},"
+        "\"media_preview_width\":{},\"media_preview_height\":{},"
+        "\"media_preview_radius\":{},\"pdf_detail_line_count\":{},"
+        "\"image_sample_block_count\":{},\"video_strip_count\":{}}}",
+        json_string(chrome.thumbnail_visual_policy),
+        json_string(chrome.thumbnail_asset_policy),
+        json_string(chrome.thumbnail_pdf_policy),
+        json_string(chrome.thumbnail_image_policy),
+        json_string(chrome.thumbnail_video_policy),
+        json_string(chrome.thumbnail_shadow_policy),
+        chrome.thumbnail_uses_external_previews ? "true" : "false",
+        chrome.thumbnail_pdf_page_width,
+        chrome.thumbnail_pdf_page_height,
+        chrome.thumbnail_pdf_page_radius,
+        chrome.thumbnail_pdf_fold_size,
+        chrome.thumbnail_media_preview_width,
+        chrome.thumbnail_media_preview_height,
+        chrome.thumbnail_media_preview_radius,
+        chrome.thumbnail_pdf_detail_line_count,
+        chrome.thumbnail_image_sample_block_count,
+        chrome.thumbnail_video_strip_count);
     return std::format(
         "{{\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
         "\"integrated_titlebar_height\":{},\"sidebar_width\":{},"
@@ -4214,6 +4240,7 @@ auto explorer_chrome_json(
         "\"icon_grid\":{{\"columns\":{},\"visible_rows\":{},"
         "\"visible_capacity\":{},\"column_width\":{},\"row_height\":{},"
         "\"column_pitch\":{},\"scroll_height\":{}}},"
+        "\"thumbnail_system\":{},"
         "\"toolbar\":{{\"group_count\":{},\"separator_count\":{},"
         "\"icon_button_count\":{},\"overflow_action_button_count\":{},"
         "\"finder_segmented\":{},\"more_actions_open\":{},"
@@ -4313,6 +4340,7 @@ auto explorer_chrome_json(
         chrome.icon_grid_row_height,
         chrome.icon_grid_column_pitch,
         chrome.icon_grid_scroll_height,
+        thumbnail_system,
         chrome.toolbar_group_count,
         chrome.toolbar_separator_count,
         chrome.toolbar_icon_button_count,

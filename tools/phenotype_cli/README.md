@@ -93,10 +93,11 @@ The initial scope is intentionally narrow:
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible
   entries, viewport, view mode, pure Finder chrome/grid metrics including the
-  integrated titlebar geometry policy and icon-system contract, selection
-  capabilities, operation receipts, preview excerpts, localized labels,
-  package resource metadata, desktop keyboard command descriptors, and optional
-  expectation results. Repeated
+  integrated titlebar geometry policy, icon-system contract, and
+  `thumbnail_system` preview-painter contract, selection capabilities,
+  operation receipts, preview excerpts, localized labels, package resource
+  metadata, desktop keyboard command descriptors, and optional expectation
+  results. Repeated
   `--script` files feed line-based input sequences, and repeated `--expect`
   values make the command a small state verifier for file
   select/open/read/create/duplicate/delete/view-mode workflows. When

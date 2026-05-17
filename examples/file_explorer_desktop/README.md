@@ -86,6 +86,16 @@ The desktop sidebar additionally exposes the pure `token -> symbol -> semantic
 reference` table used by the renderer (`recents -> recents -> clock`,
 `download -> download -> arrow.down.circle`, and so on), without depending on
 platform icon fonts or bundled Apple assets.
+The icon-grid thumbnails follow the same boundary. The example references
+macOS Finder's document/image/movie preview proportions and SF Symbols-style
+visual restraint, but it paints deterministic phenotype-owned vector previews
+instead of reading user files or embedding platform preview assets. The shared
+`thumbnail_system` contract exposes PDF page size/fold/detail counts, media
+preview size/radius, image/video detail counts, shadow policy, and the
+`uses_external_previews=false` asset boundary. The manifest asserts those JSON
+paths and adds pixel-region probes for the first PDF, image, and video
+thumbnails, so a regression reports whether the preview painter, grid geometry,
+or capture region drifted.
 On macOS, the same runtime object reports live `NSWindow` chrome state:
 transparent titlebar, full-size content view, hidden native title, and
 background dragging must all be enabled. These fields are actual platform

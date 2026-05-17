@@ -238,6 +238,16 @@ struct ExplorerChromeMetrics {
     float icon_grid_column_pitch = 0.0f;
     float icon_grid_thumbnail_width = 0.0f;
     float icon_grid_thumbnail_height = 0.0f;
+    float thumbnail_pdf_page_width = 0.0f;
+    float thumbnail_pdf_page_height = 0.0f;
+    float thumbnail_pdf_page_radius = 0.0f;
+    float thumbnail_pdf_fold_size = 0.0f;
+    float thumbnail_media_preview_width = 0.0f;
+    float thumbnail_media_preview_height = 0.0f;
+    float thumbnail_media_preview_radius = 0.0f;
+    int thumbnail_pdf_detail_line_count = 0;
+    int thumbnail_image_sample_block_count = 0;
+    int thumbnail_video_strip_count = 0;
     float icon_grid_label_height = 0.0f;
     float icon_grid_label_font_size = 0.0f;
     float icon_grid_gap = 0.0f;
@@ -293,6 +303,7 @@ struct ExplorerChromeMetrics {
     bool icon_hierarchical_opacity = false;
     bool icon_palette_rendering = false;
     bool icon_multicolor_rendering = false;
+    bool thumbnail_uses_external_previews = false;
     bool artifact_window_control_markers = false;
     bool more_actions_open = false;
     bool status_bar_visible = false;
@@ -328,6 +339,12 @@ struct ExplorerChromeMetrics {
     std::string icon_metrics_policy;
     std::string icon_hit_target_policy;
     std::string icon_scale;
+    std::string thumbnail_visual_policy;
+    std::string thumbnail_asset_policy;
+    std::string thumbnail_pdf_policy;
+    std::string thumbnail_image_policy;
+    std::string thumbnail_video_policy;
+    std::string thumbnail_shadow_policy;
     std::string theme_profile_name;
     std::string theme_reference;
     std::string theme_font_policy;
@@ -457,6 +474,28 @@ inline constexpr float k_desktop_icon_grid_row_height = 148.0f;
 inline constexpr float k_desktop_icon_grid_column_pitch = 150.0f;
 inline constexpr float k_desktop_icon_grid_thumbnail_width = 118.0f;
 inline constexpr float k_desktop_icon_grid_thumbnail_height = 72.0f;
+inline constexpr float k_desktop_thumbnail_pdf_page_width = 50.0f;
+inline constexpr float k_desktop_thumbnail_pdf_page_height = 64.0f;
+inline constexpr float k_desktop_thumbnail_pdf_page_radius = 4.0f;
+inline constexpr float k_desktop_thumbnail_pdf_fold_size = 12.0f;
+inline constexpr float k_desktop_thumbnail_media_preview_width = 88.0f;
+inline constexpr float k_desktop_thumbnail_media_preview_height = 38.0f;
+inline constexpr float k_desktop_thumbnail_media_preview_radius = 7.0f;
+inline constexpr int k_desktop_thumbnail_pdf_detail_line_count = 12;
+inline constexpr int k_desktop_thumbnail_image_sample_block_count = 7;
+inline constexpr int k_desktop_thumbnail_video_strip_count = 6;
+inline constexpr char k_desktop_thumbnail_visual_policy[] =
+    "finder_rich_preview_thumbnails_v1";
+inline constexpr char k_desktop_thumbnail_asset_policy[] =
+    "deterministic_vector_preview_painters_no_external_assets";
+inline constexpr char k_desktop_thumbnail_pdf_policy[] =
+    "page_preview_with_fold_header_table_rows_and_bottom_highlight";
+inline constexpr char k_desktop_thumbnail_image_policy[] =
+    "rounded_screenshot_strip_with_layered_blurred_content";
+inline constexpr char k_desktop_thumbnail_video_policy[] =
+    "wide_video_preview_with_filmstrip_and_content_bands";
+inline constexpr char k_desktop_thumbnail_shadow_policy[] =
+    "subtle_windowserver_like_drop_shadow";
 inline constexpr float k_desktop_icon_grid_label_height = 46.0f;
 inline constexpr float k_desktop_icon_grid_label_font_size = 14.0f;
 inline constexpr float k_desktop_icon_grid_gap = 24.0f;
@@ -720,6 +759,16 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_grid_column_pitch = 0.0f,
             .icon_grid_thumbnail_width = 0.0f,
             .icon_grid_thumbnail_height = 0.0f,
+            .thumbnail_pdf_page_width = 0.0f,
+            .thumbnail_pdf_page_height = 0.0f,
+            .thumbnail_pdf_page_radius = 0.0f,
+            .thumbnail_pdf_fold_size = 0.0f,
+            .thumbnail_media_preview_width = 0.0f,
+            .thumbnail_media_preview_height = 0.0f,
+            .thumbnail_media_preview_radius = 0.0f,
+            .thumbnail_pdf_detail_line_count = 0,
+            .thumbnail_image_sample_block_count = 0,
+            .thumbnail_video_strip_count = 0,
             .icon_grid_label_height = 0.0f,
             .icon_grid_label_font_size = 0.0f,
             .icon_grid_gap = 0.0f,
@@ -774,6 +823,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_hierarchical_opacity = false,
             .icon_palette_rendering = false,
             .icon_multicolor_rendering = false,
+            .thumbnail_uses_external_previews = false,
             .artifact_window_control_markers = false,
             .status_bar_visible = false,
             .theme_contract_version = 0,
@@ -808,6 +858,12 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_metrics_policy = "n/a",
             .icon_hit_target_policy = "n/a",
             .icon_scale = "n/a",
+            .thumbnail_visual_policy = "n/a",
+            .thumbnail_asset_policy = "n/a",
+            .thumbnail_pdf_policy = "n/a",
+            .thumbnail_image_policy = "n/a",
+            .thumbnail_video_policy = "n/a",
+            .thumbnail_shadow_policy = "n/a",
             .theme_profile_name = "n/a",
             .theme_reference = "n/a",
             .theme_font_policy = "n/a",
@@ -898,6 +954,18 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_grid_column_pitch = k_desktop_icon_grid_column_pitch,
         .icon_grid_thumbnail_width = k_desktop_icon_grid_thumbnail_width,
         .icon_grid_thumbnail_height = k_desktop_icon_grid_thumbnail_height,
+        .thumbnail_pdf_page_width = k_desktop_thumbnail_pdf_page_width,
+        .thumbnail_pdf_page_height = k_desktop_thumbnail_pdf_page_height,
+        .thumbnail_pdf_page_radius = k_desktop_thumbnail_pdf_page_radius,
+        .thumbnail_pdf_fold_size = k_desktop_thumbnail_pdf_fold_size,
+        .thumbnail_media_preview_width = k_desktop_thumbnail_media_preview_width,
+        .thumbnail_media_preview_height = k_desktop_thumbnail_media_preview_height,
+        .thumbnail_media_preview_radius = k_desktop_thumbnail_media_preview_radius,
+        .thumbnail_pdf_detail_line_count =
+            k_desktop_thumbnail_pdf_detail_line_count,
+        .thumbnail_image_sample_block_count =
+            k_desktop_thumbnail_image_sample_block_count,
+        .thumbnail_video_strip_count = k_desktop_thumbnail_video_strip_count,
         .icon_grid_label_height = k_desktop_icon_grid_label_height,
         .icon_grid_label_font_size = k_desktop_icon_grid_label_font_size,
         .icon_grid_gap = k_desktop_icon_grid_gap,
@@ -986,6 +1054,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_hierarchical_opacity = true,
         .icon_palette_rendering = false,
         .icon_multicolor_rendering = false,
+        .thumbnail_uses_external_previews = false,
         .artifact_window_control_markers = false,
         .status_bar_visible = desktop_status_bar_visible(state),
         .theme_contract_version =
@@ -1041,6 +1110,12 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_hit_target_policy =
             std::string{icon_catalog::hit_target_policy()},
         .icon_scale = std::string{icon_catalog::default_scale_policy()},
+        .thumbnail_visual_policy = k_desktop_thumbnail_visual_policy,
+        .thumbnail_asset_policy = k_desktop_thumbnail_asset_policy,
+        .thumbnail_pdf_policy = k_desktop_thumbnail_pdf_policy,
+        .thumbnail_image_policy = k_desktop_thumbnail_image_policy,
+        .thumbnail_video_policy = k_desktop_thumbnail_video_policy,
+        .thumbnail_shadow_policy = k_desktop_thumbnail_shadow_policy,
         .theme_profile_name =
             std::string{theme_contract::default_theme_profile_name()},
         .theme_reference =
@@ -1841,6 +1916,60 @@ inline json::Value explorer_chrome_debug_json(
         "toolbar_reference_symbols",
         toolbar_icon_reference_symbols_debug_json(chrome));
 
+    json::Object thumbnail_system;
+    thumbnail_system.emplace(
+        "visual_policy",
+        json::Value{chrome.thumbnail_visual_policy});
+    thumbnail_system.emplace(
+        "asset_policy",
+        json::Value{chrome.thumbnail_asset_policy});
+    thumbnail_system.emplace("pdf_policy", json::Value{chrome.thumbnail_pdf_policy});
+    thumbnail_system.emplace(
+        "image_policy",
+        json::Value{chrome.thumbnail_image_policy});
+    thumbnail_system.emplace(
+        "video_policy",
+        json::Value{chrome.thumbnail_video_policy});
+    thumbnail_system.emplace(
+        "shadow_policy",
+        json::Value{chrome.thumbnail_shadow_policy});
+    thumbnail_system.emplace(
+        "uses_external_previews",
+        json::Value{chrome.thumbnail_uses_external_previews});
+    thumbnail_system.emplace(
+        "pdf_page_width",
+        json::Value{chrome.thumbnail_pdf_page_width});
+    thumbnail_system.emplace(
+        "pdf_page_height",
+        json::Value{chrome.thumbnail_pdf_page_height});
+    thumbnail_system.emplace(
+        "pdf_page_radius",
+        json::Value{chrome.thumbnail_pdf_page_radius});
+    thumbnail_system.emplace(
+        "pdf_fold_size",
+        json::Value{chrome.thumbnail_pdf_fold_size});
+    thumbnail_system.emplace(
+        "media_preview_width",
+        json::Value{chrome.thumbnail_media_preview_width});
+    thumbnail_system.emplace(
+        "media_preview_height",
+        json::Value{chrome.thumbnail_media_preview_height});
+    thumbnail_system.emplace(
+        "media_preview_radius",
+        json::Value{chrome.thumbnail_media_preview_radius});
+    thumbnail_system.emplace(
+        "pdf_detail_line_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.thumbnail_pdf_detail_line_count)});
+    thumbnail_system.emplace(
+        "image_sample_block_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.thumbnail_image_sample_block_count)});
+    thumbnail_system.emplace(
+        "video_strip_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.thumbnail_video_strip_count)});
+
     json::Object out;
     out.emplace("viewport", json::Value{std::move(viewport)});
     out.emplace("integrated_titlebar_height", json::Value{chrome.integrated_titlebar_height});
@@ -1882,6 +2011,7 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("icon_grid_column_pitch", json::Value{chrome.icon_grid_column_pitch});
     out.emplace("icon_grid_thumbnail_width", json::Value{chrome.icon_grid_thumbnail_width});
     out.emplace("icon_grid_thumbnail_height", json::Value{chrome.icon_grid_thumbnail_height});
+    out.emplace("thumbnail_system", json::Value{std::move(thumbnail_system)});
     out.emplace("icon_grid_label_height", json::Value{chrome.icon_grid_label_height});
     out.emplace("icon_grid_label_font_size", json::Value{chrome.icon_grid_label_font_size});
     out.emplace("icon_grid_gap", json::Value{chrome.icon_grid_gap});
