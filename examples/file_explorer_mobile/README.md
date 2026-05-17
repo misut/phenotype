@@ -10,6 +10,11 @@ Browse taps use the shared `open` contract so folders navigate immediately on
 mobile, while files move to the Preview tab for reading and actions.
 The compact location strip includes the same sandboxed Trash location as the
 desktop sidebar.
+The Browse action strip uses the shared `widget::symbol_button` contract for
+sort, back, forward, and parent navigation controls. Those buttons resolve
+through the same phenotype-owned SVG catalog and macOS-style state recipes as
+the desktop Finder toolbar, including disabled navigation states and semantic
+labels for artifacts.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-mobile`. The example never points at the user's real

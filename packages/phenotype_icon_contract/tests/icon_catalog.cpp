@@ -56,11 +56,11 @@ int main() {
            == "macos_finder_role_metrics_with_explicit_hit_targets");
     assert(icons::hit_target_policy().find("sidebar=38pt")
            != std::string_view::npos);
-    assert(icons::all_symbol_count == 34);
+    assert(icons::all_symbol_count == 35);
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);
     assert(icons::file_type_symbol_count == 7);
-    assert(icons::outline_symbol_count == 33);
+    assert(icons::outline_symbol_count == 34);
     assert(icons::filled_symbol_count == 1);
     assert(icons::hierarchical_symbol_count == 23);
     assert(icons::monochrome_symbol_count == icons::all_symbol_count);
@@ -141,6 +141,8 @@ int main() {
     assert(round_stroke_count == icons::round_stroke_symbol_count);
 
     assert(icons::semantic_reference_name(icons::Symbol::AirDrop) == "airdrop");
+    assert(icons::semantic_reference_name(icons::Symbol::ChevronUp)
+           == "chevron.up");
     assert(icons::semantic_reference_name(icons::Symbol::PdfDocument)
            == "doc.richtext");
     assert(icons::semantic_reference_name(icons::Symbol::TextDocument)

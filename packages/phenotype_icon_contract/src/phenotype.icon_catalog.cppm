@@ -24,6 +24,7 @@ enum class Symbol : unsigned int {
     Plus,
     XMark,
     ChevronDown,
+    ChevronUp,
     Home,
     Cloud,
     AirDrop,
@@ -192,11 +193,11 @@ struct SymbolMetrics {
     float optical_y_offset = 0.0f;
 };
 
-inline constexpr unsigned int all_symbol_count = 34;
+inline constexpr unsigned int all_symbol_count = 35;
 inline constexpr unsigned int sidebar_symbol_count = 11;
 inline constexpr unsigned int toolbar_symbol_count = 15;
 inline constexpr unsigned int file_type_symbol_count = 7;
-inline constexpr unsigned int outline_symbol_count = 33;
+inline constexpr unsigned int outline_symbol_count = 34;
 inline constexpr unsigned int filled_symbol_count = 1;
 inline constexpr unsigned int hierarchical_symbol_count = 23;
 inline constexpr unsigned int monochrome_symbol_count = all_symbol_count;
@@ -228,6 +229,7 @@ inline auto name(Symbol symbol) noexcept -> std::string_view {
     case Symbol::Plus:         return "plus";
     case Symbol::XMark:        return "xmark";
     case Symbol::ChevronDown:  return "chevron_down";
+    case Symbol::ChevronUp:    return "chevron_up";
     case Symbol::Home:         return "home";
     case Symbol::Cloud:        return "cloud";
     case Symbol::AirDrop:      return "airdrop";
@@ -488,22 +490,23 @@ inline auto symbol_at(unsigned int index) noexcept -> Symbol {
     case 15: return Symbol::Plus;
     case 16: return Symbol::XMark;
     case 17: return Symbol::ChevronDown;
-    case 18: return Symbol::Home;
-    case 19: return Symbol::Cloud;
-    case 20: return Symbol::AirDrop;
-    case 21: return Symbol::Recents;
-    case 22: return Symbol::Shared;
-    case 23: return Symbol::Sidebar;
-    case 24: return Symbol::NewFolder;
-    case 25: return Symbol::Applications;
-    case 26: return Symbol::Desktop;
-    case 27: return Symbol::Download;
-    case 28: return Symbol::SortGroup;
-    case 29: return Symbol::Duplicate;
-    case 30: return Symbol::NewDocument;
-    case 31: return Symbol::PdfDocument;
-    case 32: return Symbol::TextDocument;
-    case 33: return Symbol::Archive;
+    case 18: return Symbol::ChevronUp;
+    case 19: return Symbol::Home;
+    case 20: return Symbol::Cloud;
+    case 21: return Symbol::AirDrop;
+    case 22: return Symbol::Recents;
+    case 23: return Symbol::Shared;
+    case 24: return Symbol::Sidebar;
+    case 25: return Symbol::NewFolder;
+    case 26: return Symbol::Applications;
+    case 27: return Symbol::Desktop;
+    case 28: return Symbol::Download;
+    case 29: return Symbol::SortGroup;
+    case 30: return Symbol::Duplicate;
+    case 31: return Symbol::NewDocument;
+    case 32: return Symbol::PdfDocument;
+    case 33: return Symbol::TextDocument;
+    case 34: return Symbol::Archive;
     }
     return Symbol::Document;
 }
@@ -590,6 +593,7 @@ inline auto semantic_reference_name(Symbol symbol) noexcept
     case Symbol::Plus:         return "plus";
     case Symbol::XMark:        return "xmark";
     case Symbol::ChevronDown:  return "chevron.down";
+    case Symbol::ChevronUp:    return "chevron.up";
     case Symbol::Home:         return "house";
     case Symbol::Cloud:        return "icloud";
     case Symbol::AirDrop:      return "airdrop";
@@ -658,6 +662,8 @@ inline auto svg_source(Symbol symbol) noexcept -> std::string_view {
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 6.5 L17.5 17.5"/><path d="M17.5 6.5 L6.5 17.5"/></svg>)SVG";
     case Symbol::ChevronDown:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 9 L12 14.5 L17.5 9"/></svg>)SVG";
+    case Symbol::ChevronUp:
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 15 L12 9.5 L17.5 15"/></svg>)SVG";
     case Symbol::Home:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 L12 5 L20 11.5"/><path d="M6.5 10 L6.5 20 L17.5 20 L17.5 10"/><path d="M10 20 L10 14 L14 14 L14 20" stroke-opacity="0.66"/></svg>)SVG";
     case Symbol::Cloud:
@@ -785,6 +791,7 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
     case Symbol::Back:
     case Symbol::Forward:
     case Symbol::ChevronDown:
+    case Symbol::ChevronUp:
         role = SymbolRole::Navigation;
         break;
     case Symbol::Folder:

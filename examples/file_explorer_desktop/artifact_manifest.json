@@ -517,7 +517,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.total_symbol_count",
-      "equals": 34
+      "equals": 35
     },
     {
       "path": "application.file_explorer.chrome.icon_system.sidebar_symbol_count",
@@ -537,7 +537,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.outline_symbol_count",
-      "equals": 33
+      "equals": 34
     },
     {
       "path": "application.file_explorer.chrome.icon_system.hierarchical_symbol_count",
@@ -545,7 +545,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_symbol_count",
-      "equals": 34
+      "equals": 35
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_path_arc_symbol_count",
@@ -553,7 +553,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.round_stroke_symbol_count",
-      "equals": 33
+      "equals": 34
     },
     {
       "path": "application.file_explorer.chrome.icon_system.interaction_phase_count",

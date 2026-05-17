@@ -233,8 +233,7 @@ need an interactive macOS-style symbol control should call
 That value selects the presentation role, selected/disabled state, optional
 control size, and token salt; `phenotype.icons` then derives the button chrome,
 symbol presentation, hit target, and paint token from pure immutable inputs.
-The
-generic `widget::svg_image` path uses the same parsed-document token contract,
+The generic `widget::svg_image` path uses the same parsed-document token contract,
 so app-owned SVG illustrations, package icons, and future generated symbols can
 stay static in the paint cache unless their document, size, current color, or
 aspect-ratio policy changes. `SvgImageOptions` makes current color,

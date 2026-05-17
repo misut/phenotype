@@ -209,6 +209,28 @@ Msg on_draft_body_changed(std::string text) {
     return DraftBodyChanged{std::move(text)};
 }
 
+void mobile_symbol_button(std::string const& label,
+                          phenotype::icons::Symbol symbol,
+                          Msg msg,
+                          phenotype::icons::SymbolPresentationRole role =
+                              phenotype::icons::SymbolPresentationRole::Navigation,
+                          bool enabled = true,
+                          bool selected = false,
+                          std::uint64_t token = 0) {
+    phenotype::widget::symbol_button<Msg>(
+        phenotype::str{label},
+        symbol,
+        std::move(msg),
+        phenotype::icons::SymbolButtonOptions{
+            .role = role,
+            .selected = selected,
+            .disabled = !enabled,
+            .width = 38.0f,
+            .height = 38.0f,
+            .token_salt = token,
+        });
+}
+
 void update(State& state, Msg msg) {
     auto& explorer = state.explorer;
     std::visit([&](auto const& m) {
@@ -331,14 +353,38 @@ void browse_tab(
                     summary += " - " + snap.sort_label;
                 widget::text(summary, TextSize::Small, TextColor::Muted);
             });
-            widget::button<Msg>(labels.sort, CycleSort{});
-            widget::button<Msg>(labels.back, GoBack{},
-                                ButtonVariant::Default,
-                                !snap.can_go_back);
-            widget::button<Msg>(labels.forward, GoForward{},
-                                ButtonVariant::Default,
-                                !snap.can_go_forward);
-            widget::button<Msg>(labels.up, GoUp{});
+            mobile_symbol_button(
+                labels.sort,
+                icons::Symbol::SortGroup,
+                CycleSort{},
+                icons::SymbolPresentationRole::Toolbar,
+                true,
+                false,
+                0x7101u);
+            mobile_symbol_button(
+                labels.back,
+                icons::Symbol::Back,
+                GoBack{},
+                icons::SymbolPresentationRole::Navigation,
+                snap.can_go_back,
+                false,
+                0x7102u);
+            mobile_symbol_button(
+                labels.forward,
+                icons::Symbol::Forward,
+                GoForward{},
+                icons::SymbolPresentationRole::Navigation,
+                snap.can_go_forward,
+                false,
+                0x7103u);
+            mobile_symbol_button(
+                labels.up,
+                icons::Symbol::ChevronUp,
+                GoUp{},
+                icons::SymbolPresentationRole::Navigation,
+                true,
+                false,
+                0x7104u);
         });
         layout::spacer(8);
         layout::scroll_view(430.0f, [&] {
