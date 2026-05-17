@@ -275,13 +275,17 @@ parses a bounded pure SVG subset into `svg::Document` and renders through
 `Painter` path commands on every backend, including common transform lists used
 by packaged SVG icon assets. SVG circles lower to native `ArcTo` path segments
 so Apple-style round glyph geometry does not depend on cubic approximation
-quality. `phenotype.icons` provides original 24x24 glyph SVGs for Finder-like
-chrome and common app actions, following Apple-style proportions, text-aligned
-medium-scale metrics, macOS-like rounded stroke caps/joins, and bounded
-secondary-stroke opacity for symbols with detail layers without copying SF
-Symbols assets. Each built-in symbol now carries a semantic SF Symbols
-reference name and explicit policy that the reference is only a role/style
-anchor; the vector artwork remains phenotype-owned SVG. The macOS Metal
+quality. `phenotype.icon_catalog` now holds the pure metadata for the built-in
+macOS-style symbol contract, and `phenotype.icons` provides the painter-facing
+original 24x24 glyph SVGs for Finder-like chrome and common app actions. The
+catalog follows Apple-style proportions, text-aligned medium-scale metrics,
+macOS-like rounded stroke caps/joins, and bounded secondary-stroke opacity for
+symbols with detail layers without copying SF Symbols assets. Each built-in
+symbol carries a semantic SF Symbols reference name and explicit policy that
+the reference is only a role/style anchor; the vector artwork remains
+phenotype-owned SVG. The CLI command `phenotype icons catalog --json` exposes
+the same contract for CI and LLM debugging on Linux without importing native
+GUI code. The macOS Metal
 renderer executes diagonal icon strokes as triangle bodies with round caps
 instead of dot chains, keeping toolbar/search/sidebar symbols continuous while
 remaining bounded. Windows accepts the same SVG-driven `Path`, `FillPath`, and

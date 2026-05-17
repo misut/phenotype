@@ -19,11 +19,13 @@ module;
 export module file_explorer_shared;
 
 import json;
+import phenotype.icon_catalog;
 import phenotype.resources;
 
 export namespace file_explorer_demo {
 
 namespace fs = std::filesystem;
+namespace icon_catalog = phenotype::icon_catalog;
 
 struct Entry {
     std::string name;
@@ -742,13 +744,20 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .toolbar_separator_count = 3,
         .toolbar_icon_button_count = 11,
         .titlebar_control_count = k_desktop_titlebar_control_count,
-        .icon_total_symbol_count = 31,
-        .sidebar_symbol_count = 11,
-        .toolbar_symbol_count = 15,
-        .icon_filled_symbol_count = 1,
-        .icon_outline_symbol_count = 30,
-        .icon_hierarchical_symbol_count = 20,
-        .icon_reference_symbol_count = 31,
+        .icon_total_symbol_count =
+            static_cast<int>(icon_catalog::all_symbol_count),
+        .sidebar_symbol_count =
+            static_cast<int>(icon_catalog::sidebar_symbol_count),
+        .toolbar_symbol_count =
+            static_cast<int>(icon_catalog::toolbar_symbol_count),
+        .icon_filled_symbol_count =
+            static_cast<int>(icon_catalog::filled_symbol_count),
+        .icon_outline_symbol_count =
+            static_cast<int>(icon_catalog::outline_symbol_count),
+        .icon_hierarchical_symbol_count =
+            static_cast<int>(icon_catalog::hierarchical_symbol_count),
+        .icon_reference_symbol_count =
+            static_cast<int>(icon_catalog::reference_symbol_count),
         .icon_grid_size = 24.0f,
         .icon_default_stroke_width = 1.8f,
         .icon_secondary_opacity = 0.66f,
@@ -768,22 +777,22 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .artifact_window_control_markers = false,
         .status_bar_visible = desktop_status_bar_visible(state),
         .icon_module = "phenotype.icons",
-        .icon_style = "macos_rounded_outline_svg",
-        .icon_source_format = "svg",
+        .icon_style = std::string{icon_catalog::style_name()},
+        .icon_source_format = std::string{icon_catalog::source_format()},
         .icon_design_reference =
-            "Apple HIG, macOS Finder, and SF Symbols inspired custom rounded-outline SVG glyphs",
-        .icon_reference_family = "SF Symbols semantic reference",
+            std::string{icon_catalog::style_reference()},
+        .icon_reference_family =
+            std::string{icon_catalog::reference_family()},
         .icon_reference_policy =
-            "semantic reference only; phenotype-owned SVG artwork",
-        .icon_asset_policy =
-            "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded",
-        .icon_alignment = "24x24 text-aligned symbol grid",
+            std::string{icon_catalog::reference_policy()},
+        .icon_asset_policy = std::string{icon_catalog::asset_policy()},
+        .icon_alignment = std::string{icon_catalog::alignment_policy()},
         .icon_rendering_mode = "hierarchical",
-        .icon_variant_policy = "outline primary with filled action variants",
-        .icon_presentation_policy = "macos_role_aware_symbol_presentation",
-        .icon_tone_policy =
-            "primary, secondary, selected, accent, disabled, destructive",
-        .icon_scale = "medium",
+        .icon_variant_policy = std::string{icon_catalog::variant_policy()},
+        .icon_presentation_policy =
+            std::string{icon_catalog::presentation_policy()},
+        .icon_tone_policy = std::string{icon_catalog::tone_policy()},
+        .icon_scale = std::string{icon_catalog::default_scale_policy()},
         .chrome_geometry_policy = k_desktop_chrome_geometry_policy,
         .window_control_marker_mode = "runtime-native-controls",
     };
@@ -1270,42 +1279,26 @@ inline json::Value sidebar_icon_reference_symbols_debug_json(
         ExplorerChromeMetrics const& chrome) {
     if (chrome.icon_reference_symbol_count <= 0)
         return json::Value{json::Array{}};
-    return string_array_debug_json({
-        "clock",
-        "folder.badge.person.crop",
-        "app",
-        "desktopcomputer",
-        "doc",
-        "arrow.down.circle",
-        "icloud",
-        "house",
-        "airdrop",
-        "trash",
-        "folder",
-    });
+    json::Array out;
+    for (unsigned int i = 0; i < icon_catalog::sidebar_symbol_count; ++i) {
+        out.push_back(json::Value{std::string{
+            icon_catalog::semantic_reference_name(
+                icon_catalog::sidebar_symbol_at(i))}});
+    }
+    return json::Value{std::move(out)};
 }
 
 inline json::Value toolbar_icon_reference_symbols_debug_json(
         ExplorerChromeMetrics const& chrome) {
     if (chrome.icon_reference_symbol_count <= 0)
         return json::Value{json::Array{}};
-    return string_array_debug_json({
-        "chevron.left",
-        "chevron.right",
-        "square.grid.2x2",
-        "list.bullet",
-        "rectangle.split.3x1",
-        "rectangle.on.rectangle",
-        "rectangle.grid.3x2",
-        "square.and.arrow.up",
-        "tag",
-        "ellipsis",
-        "magnifyingglass",
-        "doc.badge.plus",
-        "folder.badge.plus",
-        "square.on.square",
-        "trash",
-    });
+    json::Array out;
+    for (unsigned int i = 0; i < icon_catalog::toolbar_symbol_count; ++i) {
+        out.push_back(json::Value{std::string{
+            icon_catalog::semantic_reference_name(
+                icon_catalog::toolbar_symbol_at(i))}});
+    }
+    return json::Value{std::move(out)};
 }
 
 inline json::Value explorer_chrome_debug_json(

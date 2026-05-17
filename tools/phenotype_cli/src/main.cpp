@@ -7,12 +7,14 @@ import cppx.terminal;
 import file_explorer_shared;
 import glass_showcase_shared;
 import json;
+import phenotype.icon_catalog;
 import phenotype.resources;
 import std;
 
 namespace {
 
 namespace fs = std::filesystem;
+namespace icon_catalog = phenotype::icon_catalog;
 
 struct Check {
     std::string name;
@@ -724,6 +726,26 @@ auto spec() -> cppx::cli::CommandSpec {
                 },
                 .allow_positionals = false,
                 .category = "packaging",
+            },
+            {
+                .name = "icons",
+                .summary = "Inspect built-in icon catalog contracts",
+                .options = {help_option()},
+                .subcommands = {
+                    {
+                        .name = "catalog",
+                        .summary =
+                            "Emit the macOS-style SVG icon catalog metadata",
+                        .options = {help_option(), json_option()},
+                        .allow_positionals = false,
+                        .examples = {
+                            "phenotype icons catalog --json",
+                            "phenotype icons catalog",
+                        },
+                    },
+                },
+                .allow_positionals = false,
+                .category = "metadata",
             },
             {
                 .name = "drive",
@@ -3027,6 +3049,251 @@ auto explorer_labels_json(file_explorer_demo::ExplorerLabels const& labels)
         json_string(labels.status));
 }
 
+enum class IconCatalogSet {
+    All,
+    Sidebar,
+    Toolbar,
+};
+
+auto icon_catalog_set_name(IconCatalogSet set) -> std::string_view {
+    switch (set) {
+    case IconCatalogSet::All:     return "all";
+    case IconCatalogSet::Sidebar: return "sidebar";
+    case IconCatalogSet::Toolbar: return "toolbar";
+    }
+    return "all";
+}
+
+auto icon_catalog_set_count(IconCatalogSet set) -> unsigned int {
+    switch (set) {
+    case IconCatalogSet::All:     return icon_catalog::all_symbol_count;
+    case IconCatalogSet::Sidebar: return icon_catalog::sidebar_symbol_count;
+    case IconCatalogSet::Toolbar: return icon_catalog::toolbar_symbol_count;
+    }
+    return icon_catalog::all_symbol_count;
+}
+
+auto icon_catalog_set_symbol(IconCatalogSet set, unsigned int index)
+        -> icon_catalog::Symbol {
+    switch (set) {
+    case IconCatalogSet::All:     return icon_catalog::symbol_at(index);
+    case IconCatalogSet::Sidebar: return icon_catalog::sidebar_symbol_at(index);
+    case IconCatalogSet::Toolbar: return icon_catalog::toolbar_symbol_at(index);
+    }
+    return icon_catalog::symbol_at(index);
+}
+
+auto icon_color_json(icon_catalog::SymbolColor const& color) -> std::string {
+    return std::format(
+        "{{\"r\":{},\"g\":{},\"b\":{},\"a\":{}}}",
+        static_cast<int>(color.r),
+        static_cast<int>(color.g),
+        static_cast<int>(color.b),
+        static_cast<int>(color.a));
+}
+
+auto icon_symbol_json(icon_catalog::Symbol symbol,
+                      std::string_view reference_set) -> std::string {
+    auto const desc = icon_catalog::descriptor(symbol);
+    auto const presentation_role =
+        icon_catalog::default_presentation_role(symbol);
+    auto const presentation_scale =
+        icon_catalog::default_scale(presentation_role);
+    auto const tone =
+        presentation_role == icon_catalog::SymbolPresentationRole::Sidebar
+            ? icon_catalog::SymbolTone::Primary
+            : icon_catalog::SymbolTone::Secondary;
+    auto const color = icon_catalog::macos_light_tone_color(tone);
+    return std::format(
+        "{{\"name\":{},\"semantic_reference_name\":{},"
+        "\"reference_set\":{},\"role\":{},\"variant\":{},"
+        "\"preferred_rendering\":{},\"default_scale\":{},"
+        "\"style\":{},\"reference_family\":{},\"reference_policy\":{},"
+        "\"grid_size\":{},\"default_stroke_width\":{},"
+        "\"secondary_opacity\":{},\"layer_count\":{},"
+        "\"uses_current_color\":{},\"round_stroke\":{},\"filled\":{},"
+        "\"text_weight_aligned\":{},"
+        "\"supports_hierarchical_opacity\":{},"
+        "\"phenotype_owned\":{},\"uses_sf_symbols_asset\":{},"
+        "\"presentation\":{{\"role\":{},\"tone\":{},\"scale\":{},"
+        "\"point_size\":{},\"optical_y_offset\":{},\"color\":{}}}}}",
+        json_string(desc.name),
+        json_string(desc.semantic_reference_name),
+        json_string(reference_set),
+        json_string(icon_catalog::symbol_role_name(desc.role)),
+        json_string(icon_catalog::symbol_variant_name(desc.variant)),
+        json_string(icon_catalog::symbol_rendering_mode_name(
+            desc.preferred_rendering)),
+        json_string(icon_catalog::symbol_scale_name(desc.default_scale)),
+        json_string(desc.style),
+        json_string(desc.reference_family),
+        json_string(desc.reference_policy),
+        desc.grid_size,
+        desc.default_stroke_width,
+        desc.secondary_opacity,
+        desc.layer_count,
+        desc.uses_current_color ? "true" : "false",
+        desc.round_stroke ? "true" : "false",
+        desc.filled ? "true" : "false",
+        desc.text_weight_aligned ? "true" : "false",
+        desc.supports_hierarchical_opacity ? "true" : "false",
+        desc.phenotype_owned ? "true" : "false",
+        desc.uses_sf_symbols_asset ? "true" : "false",
+        json_string(icon_catalog::symbol_presentation_role_name(
+            presentation_role)),
+        json_string(icon_catalog::symbol_tone_name(tone)),
+        json_string(icon_catalog::symbol_scale_name(presentation_scale)),
+        icon_catalog::point_size(presentation_scale),
+        icon_catalog::optical_y_offset(presentation_role),
+        icon_color_json(color));
+}
+
+auto icon_symbol_set_json(IconCatalogSet set) -> std::string {
+    auto out = std::string{"["};
+    auto const count = icon_catalog_set_count(set);
+    for (unsigned int i = 0; i < count; ++i) {
+        if (i > 0)
+            out += ",";
+        out += icon_symbol_json(
+            icon_catalog_set_symbol(set, i),
+            icon_catalog_set_name(set));
+    }
+    out += "]";
+    return out;
+}
+
+auto icon_reference_names_json(IconCatalogSet set, bool enabled)
+        -> std::string {
+    if (!enabled)
+        return "[]";
+    auto out = std::string{"["};
+    auto const count = icon_catalog_set_count(set);
+    for (unsigned int i = 0; i < count; ++i) {
+        if (i > 0)
+            out += ",";
+        out += json_string(icon_catalog::semantic_reference_name(
+            icon_catalog_set_symbol(set, i)));
+    }
+    out += "]";
+    return out;
+}
+
+auto icon_catalog_checks() -> std::vector<Check> {
+    unsigned int outline_count = 0;
+    unsigned int filled_count = 0;
+    unsigned int hierarchical_count = 0;
+    bool all_owned = true;
+    bool no_sf_assets = true;
+    bool semantic_references = true;
+    bool round_stroke_contract = true;
+    bool text_weight_aligned = true;
+    for (unsigned int i = 0; i < icon_catalog::all_symbol_count; ++i) {
+        auto const desc = icon_catalog::descriptor(icon_catalog::symbol_at(i));
+        if (desc.filled)
+            ++filled_count;
+        else
+            ++outline_count;
+        if (desc.supports_hierarchical_opacity)
+            ++hierarchical_count;
+        all_owned = all_owned && desc.phenotype_owned;
+        no_sf_assets = no_sf_assets && !desc.uses_sf_symbols_asset;
+        semantic_references =
+            semantic_references && !desc.semantic_reference_name.empty();
+        round_stroke_contract =
+            round_stroke_contract && (desc.filled || desc.round_stroke);
+        text_weight_aligned =
+            text_weight_aligned && desc.text_weight_aligned;
+    }
+
+    return {
+        {.name = "symbol_counts",
+         .ok = outline_count == icon_catalog::outline_symbol_count
+            && filled_count == icon_catalog::filled_symbol_count
+            && hierarchical_count == icon_catalog::hierarchical_symbol_count,
+         .detail = std::format(
+             "all={} outline={} filled={} hierarchical={}",
+             icon_catalog::all_symbol_count,
+             outline_count,
+             filled_count,
+             hierarchical_count),
+         .hint =
+             "Update phenotype.icon_catalog counts when adding or removing built-in symbols."},
+        {.name = "macos_reference_policy",
+         .ok = icon_catalog::style_reference().find("macOS Finder")
+            != std::string_view::npos
+            && icon_catalog::reference_family()
+                == std::string_view{"SF Symbols semantic reference"},
+         .detail = std::string{icon_catalog::style_reference()},
+         .hint =
+             "Keep the icon catalog anchored to Apple HIG, macOS Finder, and SF Symbols semantic names."},
+        {.name = "asset_ownership",
+         .ok = all_owned && no_sf_assets,
+         .detail = std::format("phenotype_owned={} uses_sf_symbols_asset={}",
+                               all_owned ? "true" : "false",
+                               no_sf_assets ? "false" : "true"),
+         .hint =
+             "Do not embed Apple or SF Symbols vector artwork in the built-in catalog."},
+        {.name = "semantic_references",
+         .ok = semantic_references
+            && icon_catalog::semantic_reference_name(
+                   icon_catalog::Symbol::AirDrop)
+                == std::string_view{"airdrop"},
+         .detail = std::format(
+             "reference_count={} airdrop={}",
+             icon_catalog::reference_symbol_count,
+             icon_catalog::semantic_reference_name(
+                 icon_catalog::Symbol::AirDrop)),
+         .hint =
+             "Every phenotype-owned glyph needs a stable semantic SF Symbols reference name for debug traces."},
+        {.name = "stroke_and_weight",
+         .ok = round_stroke_contract && text_weight_aligned,
+         .detail = std::format("round_stroke={} text_weight_aligned={}",
+                               round_stroke_contract ? "true" : "false",
+                               text_weight_aligned ? "true" : "false"),
+         .hint =
+             "Mac-like icons should stay round-stroked and text-weight aligned."},
+    };
+}
+
+auto icon_catalog_json(std::span<Check const> checks) -> std::string {
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"icons catalog\","
+        "\"ok\":{},\"style\":{{\"name\":{},\"source_format\":{},"
+        "\"design_reference\":{},\"reference_family\":{},"
+        "\"reference_policy\":{},\"asset_policy\":{},"
+        "\"alignment\":{},\"variant_policy\":{},"
+        "\"presentation_policy\":{},\"tone_policy\":{},"
+        "\"default_scale\":{}}},"
+        "\"counts\":{{\"all\":{},\"sidebar\":{},\"toolbar\":{},"
+        "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
+        "\"reference\":{}}},"
+        "\"symbols\":{},\"sidebar_symbols\":{},"
+        "\"toolbar_symbols\":{},\"checks\":{}}}",
+        all_ok(checks) ? "true" : "false",
+        json_string(icon_catalog::style_name()),
+        json_string(icon_catalog::source_format()),
+        json_string(icon_catalog::style_reference()),
+        json_string(icon_catalog::reference_family()),
+        json_string(icon_catalog::reference_policy()),
+        json_string(icon_catalog::asset_policy()),
+        json_string(icon_catalog::alignment_policy()),
+        json_string(icon_catalog::variant_policy()),
+        json_string(icon_catalog::presentation_policy()),
+        json_string(icon_catalog::tone_policy()),
+        json_string(icon_catalog::default_scale_policy()),
+        icon_catalog::all_symbol_count,
+        icon_catalog::sidebar_symbol_count,
+        icon_catalog::toolbar_symbol_count,
+        icon_catalog::outline_symbol_count,
+        icon_catalog::filled_symbol_count,
+        icon_catalog::hierarchical_symbol_count,
+        icon_catalog::reference_symbol_count,
+        icon_symbol_set_json(IconCatalogSet::All),
+        icon_symbol_set_json(IconCatalogSet::Sidebar),
+        icon_symbol_set_json(IconCatalogSet::Toolbar),
+        checks_json(checks));
+}
+
 auto explorer_chrome_json(
         file_explorer_demo::ExplorerChromeMetrics const& chrome) -> std::string {
     return std::format(
@@ -3044,7 +3311,37 @@ auto explorer_chrome_json(
         "\"finder_segmented\":{},\"more_actions_open\":{},"
         "\"status_bar_visible\":{}}},"
         "\"native_window\":{{\"integrated_titlebar\":{},"
-        "\"native_window_controls\":{},\"duplicate_window_controls\":{}}}}}",
+        "\"native_window_controls\":{},\"duplicate_window_controls\":{},"
+        "\"titlebar_drag_region_height\":{},"
+        "\"leading_control_reserved_width\":{},"
+        "\"trailing_control_reserved_width\":{}}},"
+        "\"geometry\":{{\"policy\":{},\"window_content_inset\":{},"
+        "\"window_gap\":{},\"toolbar_shell_x\":{},"
+        "\"toolbar_shell_y\":{},\"toolbar_shell_width\":{},"
+        "\"toolbar_shell_height\":{},\"toolbar_group_y\":{},"
+        "\"toolbar_navigation_group_x\":{},\"toolbar_title_x\":{},"
+        "\"toolbar_view_group_x\":{},\"toolbar_sort_group_x\":{},"
+        "\"toolbar_action_group_x\":{},\"toolbar_search_group_x\":{},"
+        "\"content_surface_x\":{},\"content_surface_y\":{},"
+        "\"content_surface_width\":{},\"sidebar_surface_x\":{},"
+        "\"sidebar_surface_y\":{},\"sidebar_first_row_y\":{}}},"
+        "\"icon_system\":{{\"module\":{},\"style\":{},"
+        "\"source_format\":{},\"owned_assets\":{},"
+        "\"uses_sf_symbols_assets\":{},\"round_stroke_contract\":{},"
+        "\"total_symbol_count\":{},\"sidebar_symbol_count\":{},"
+        "\"toolbar_symbol_count\":{},\"filled_symbol_count\":{},"
+        "\"outline_symbol_count\":{},\"hierarchical_symbol_count\":{},"
+        "\"reference_symbol_count\":{},\"grid_size\":{},"
+        "\"default_stroke_width\":{},\"secondary_opacity\":{},"
+        "\"toolbar_point_size\":{},\"sidebar_point_size\":{},"
+        "\"sidebar_optical_y_offset\":{},\"text_weight_aligned\":{},"
+        "\"hierarchical_opacity\":{},\"design_reference\":{},"
+        "\"reference_family\":{},\"reference_policy\":{},"
+        "\"asset_policy\":{},\"alignment\":{},\"rendering_mode\":{},"
+        "\"variant_policy\":{},\"presentation_policy\":{},"
+        "\"tone_policy\":{},\"scale\":{},"
+        "\"sidebar_reference_symbols\":{},"
+        "\"toolbar_reference_symbols\":{}}}}}",
         chrome.viewport.width,
         chrome.viewport.height,
         chrome.viewport.scale,
@@ -3074,7 +3371,67 @@ auto explorer_chrome_json(
         chrome.status_bar_visible ? "true" : "false",
         chrome.integrated_titlebar ? "true" : "false",
         chrome.native_window_controls ? "true" : "false",
-        chrome.duplicate_window_controls ? "true" : "false");
+        chrome.duplicate_window_controls ? "true" : "false",
+        chrome.titlebar_drag_region_height,
+        chrome.leading_control_reserved_width,
+        chrome.trailing_control_reserved_width,
+        json_string(chrome.chrome_geometry_policy),
+        chrome.window_content_inset,
+        chrome.window_gap,
+        chrome.toolbar_shell_x,
+        chrome.toolbar_shell_y,
+        chrome.toolbar_shell_width,
+        chrome.toolbar_shell_height,
+        chrome.toolbar_group_y,
+        chrome.toolbar_navigation_group_x,
+        chrome.toolbar_title_x,
+        chrome.toolbar_view_group_x,
+        chrome.toolbar_sort_group_x,
+        chrome.toolbar_action_group_x,
+        chrome.toolbar_search_group_x,
+        chrome.content_surface_x,
+        chrome.content_surface_y,
+        chrome.content_surface_width,
+        chrome.sidebar_surface_x,
+        chrome.sidebar_surface_y,
+        chrome.sidebar_first_row_y,
+        json_string(chrome.icon_module),
+        json_string(chrome.icon_style),
+        json_string(chrome.icon_source_format),
+        chrome.owned_icon_assets ? "true" : "false",
+        chrome.uses_sf_symbols_assets ? "true" : "false",
+        chrome.icon_round_stroke_contract ? "true" : "false",
+        chrome.icon_total_symbol_count,
+        chrome.sidebar_symbol_count,
+        chrome.toolbar_symbol_count,
+        chrome.icon_filled_symbol_count,
+        chrome.icon_outline_symbol_count,
+        chrome.icon_hierarchical_symbol_count,
+        chrome.icon_reference_symbol_count,
+        chrome.icon_grid_size,
+        chrome.icon_default_stroke_width,
+        chrome.icon_secondary_opacity,
+        chrome.icon_toolbar_point_size,
+        chrome.icon_sidebar_point_size,
+        chrome.icon_sidebar_optical_y_offset,
+        chrome.icon_text_weight_aligned ? "true" : "false",
+        chrome.icon_hierarchical_opacity ? "true" : "false",
+        json_string(chrome.icon_design_reference),
+        json_string(chrome.icon_reference_family),
+        json_string(chrome.icon_reference_policy),
+        json_string(chrome.icon_asset_policy),
+        json_string(chrome.icon_alignment),
+        json_string(chrome.icon_rendering_mode),
+        json_string(chrome.icon_variant_policy),
+        json_string(chrome.icon_presentation_policy),
+        json_string(chrome.icon_tone_policy),
+        json_string(chrome.icon_scale),
+        icon_reference_names_json(
+            IconCatalogSet::Sidebar,
+            chrome.icon_reference_symbol_count > 0),
+        icon_reference_names_json(
+            IconCatalogSet::Toolbar,
+            chrome.icon_reference_symbol_count > 0));
 }
 
 auto explorer_keyboard_commands_json(std::string_view profile) -> std::string {
@@ -5907,6 +6264,41 @@ int run_android_command(cppx::cli::Invocation const& invocation) {
         invocation.has("json"));
 }
 
+int run_icons_catalog(cppx::cli::Invocation const& invocation) {
+    auto checks = icon_catalog_checks();
+    if (invocation.has("json")) {
+        std::println("{}", icon_catalog_json(checks));
+        return all_ok(checks) ? 0 : 1;
+    }
+
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "style",
+         .value = std::string{icon_catalog::style_name()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "source",
+         .value = std::string{icon_catalog::source_format()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "symbols",
+         .value = std::format(
+             "{} total, {} sidebar, {} toolbar",
+             icon_catalog::all_symbol_count,
+             icon_catalog::sidebar_symbol_count,
+             icon_catalog::toolbar_symbol_count),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "reference",
+         .value = std::string{icon_catalog::reference_family()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "assets",
+         .value = std::string{icon_catalog::asset_policy()},
+         .status = all_ok(checks) ? cppx::terminal::StatusKind::ok
+                                  : cppx::terminal::StatusKind::fail},
+    };
+    std::println("phenotype icons catalog");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    print_checks("checks", checks);
+    return all_ok(checks) ? 0 : 1;
+}
+
 int run_package_inspect(cppx::cli::Invocation const& invocation) {
     auto path = first_positional_or_error(invocation, "package inspect");
     if (!path)
@@ -6776,6 +7168,9 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "package", "verify-bundle"})
         return run_package_verify_bundle(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "icons", "catalog"})
+        return run_icons_catalog(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "drive", "file-explorer"})
         return run_drive_file_explorer(*parsed);

@@ -3562,6 +3562,16 @@ void test_resource_catalog_theme_defaults() {
     std::puts("PASS: resource catalog theme defaults");
 }
 
+void test_icon_catalog_umbrella_export() {
+    assert(phenotype::icon_catalog::style_name() == "macos_rounded_outline_svg");
+    assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
+    assert(phenotype::icon_catalog::semantic_reference_name(
+               phenotype::icon_catalog::Symbol::AirDrop)
+           == "airdrop");
+
+    std::puts("PASS: umbrella module exports icon catalog contract");
+}
+
 // ============================================================
 // Runner
 // ============================================================
@@ -3633,6 +3643,7 @@ int main() {
     test_resource_catalog_lookup_and_locale_fallback();
     test_resource_catalog_diagnostics_are_actionable();
     test_resource_catalog_theme_defaults();
+    test_icon_catalog_umbrella_export();
     std::puts("\nAll tests passed.");
     return 0;
 }
