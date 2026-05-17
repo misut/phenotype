@@ -18,6 +18,7 @@ platforms = [
 file_explorer_shared = "../../examples/file_explorer_shared"
 glass_showcase_shared = "../../examples/glass_showcase_shared"
 phenotype_icon_contract = "../../packages/phenotype_icon_contract"
+phenotype_io = "../../packages/phenotype_io"
 phenotype_resources = "../../packages/phenotype_resources"
 
 [sync]

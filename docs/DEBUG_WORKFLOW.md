@@ -107,6 +107,20 @@ uv-managed verifier and embeds its JSON report in the same envelope. Use this
 as the first artifact triage command when a CI log or local bundle needs one
 machine-readable explanation before deeper pixel-contract debugging.
 
+When debugging the CLI/native input-output boundary itself, first check the
+pure contract surface:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli io contract --json
+```
+
+`io contract` reports the `phenotype.io` version, accepted input event kinds,
+output observation kinds, deterministic replay sample, LLM-debuggable artifact
+sample, edge-effect policy, and release-adapter bypass policy. It should stay
+green before investigating an example-specific driver or renderer artifact.
+
 The CLI also exposes the verifier through an edge wrapper:
 
 ```sh

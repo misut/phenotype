@@ -85,6 +85,7 @@ The first durable CLI should expose a small command tree with stable JSON:
 | `phenotype package inspect` | Validate package manifests, assets, locales, fonts, and platform bundle metadata. | new |
 | `phenotype package bundle` | Produce staged resource bundles, integrity manifests, and future macOS `.app`/`.dmg`, Windows, Android, and web package inputs. | new |
 | `phenotype package verify-bundle` | Recompute staged bundle resource integrity without the original package root. | new |
+| `phenotype io contract` | Emit the pure input-frame and output-observation contract used by CLI/native adapters. | new |
 | `phenotype drive file-explorer` | Feed deterministic file workflow inputs into the shared desktop/mobile model. | new |
 | `phenotype drive glass-showcase` | Feed deterministic material probe inputs into the shared glass showcase model. | new |
 | `phenotype observe <artifact-or-run>` | Emit semantic tree, material plans, runtime summaries, pixel-region summaries, and likely failing pass/layer. | new |
@@ -126,6 +127,7 @@ Current commands:
 | `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, debug manifest references, byte counts, content metadata, the pure resource contract, and SHA-256 digests. |
 | `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource, compares stored manifest records against the staged files, and reports the same package checks plus bundle integrity totals. |
 | `phenotype icons catalog` | implemented | Emits the pure `phenotype.icon_catalog` contract for the built-in macOS-style SVG symbol set, including Apple HIG / macOS Finder / SF Symbols semantic reference policy, phenotype-owned asset policy, count checks, all/sidebar/toolbar symbol lists, per-symbol role/variant/rendering/layer metadata, role-aware presentation defaults, selected/disabled interaction tones, and Finder-style file-type tint policy. |
+| `phenotype io contract` | implemented | Emits the pure `phenotype.io` contract for typed input events, deterministic input scripts, output observation summaries, LLM-debuggable artifact descriptors, edge-effect placement, and release-adapter bypass policy. |
 | `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs or line-based scripts and emits a stable observation JSON with trace, entries, viewport, view mode, pure Finder chrome/grid metrics, capabilities, operation receipt, preview excerpt fields, localized labels, package-resource metadata, and optional expectation results. |
 | `phenotype drive glass-showcase` | implemented | Drives the shared material probe model from typed CLI inputs or line-based scripts and emits a stable observation JSON with final state, trace, public material kinds, expected material plan count, backdrop/inspector/density/viewport state, progress value, and optional expectation results. |
 | `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, passes package-root environment when a manifest exists, validates file explorer `--input`/`--script` through the shared model, and emits a stable JSON launch receipt with build/run output tails, input counts, timeout state, artifact bundle summary, optional `--observe-output` artifact observation, and explicit environment overrides. |
@@ -311,12 +313,20 @@ without a visible window:
   and local repros readable until the full JSONL native-event injector exists.
 - The shell translates AppKit, Win32, Android, WASI, and CLI events into the
   same neutral event types before calling app update code.
+- `phenotype.io` is the first shared pure contract for that boundary. It pins
+  event kinds, replayability rules, output observation kinds, artifact bundle
+  predicates, and edge-effect policy strings that CLI and native adapters can
+  validate without platform APIs.
 - Output observations include command-buffer summaries, semantic material
   nodes, resolved `MaterialPlan` records, runtime/executor summaries, pixel
   sample regions, fallback reasons, and likely pass/layer suggestions.
 - A failing observation should report the exact JSON path, expected value,
   actual value, region summary, and suggested owner layer without requiring a
   human screenshot comparison.
+
+`phenotype io contract --json` emits this contract directly. Use it as a cheap
+CI and local sanity check when changing input translation, artifact observation,
+or release-build bypass behavior.
 
 `phenotype drive file-explorer` is the first concrete runtime-drive command.
 It intentionally starts with the example's shared model rather than a hidden
