@@ -396,21 +396,34 @@ duplicate
            == demo::k_desktop_column_location_icon_size);
     assert(chrome.titlebar_control_count
            == demo::k_desktop_titlebar_control_count);
-    assert(chrome.icon_total_symbol_count == 31);
+    assert(chrome.icon_total_symbol_count == 34);
     assert(chrome.sidebar_symbol_count == 11);
     assert(chrome.toolbar_symbol_count == 15);
     assert(chrome.icon_filled_symbol_count == 1);
-    assert(chrome.icon_outline_symbol_count == 30);
-    assert(chrome.icon_hierarchical_symbol_count == 20);
-    assert(chrome.icon_reference_symbol_count == 31);
+    assert(chrome.icon_outline_symbol_count == 33);
+    assert(chrome.icon_hierarchical_symbol_count == 23);
+    assert(chrome.icon_reference_symbol_count == 34);
     assert(chrome.icon_svg_path_arc_symbol_count == 1);
     assert(chrome.icon_grid_size == 24.0f);
     assert(demo::desktop_sidebar_symbol_contract().size() == 10);
+    assert(demo::file_type_symbol_contract().size() == 7);
     assert(demo::sidebar_symbol_name_for_token("recents") == "recents");
     assert(demo::sidebar_symbol_name_for_token("shared") == "shared");
     assert(demo::sidebar_symbol_name_for_token("desktop") == "desktop");
     assert(demo::sidebar_symbol_name_for_token("download") == "download");
     assert(demo::sidebar_symbol_name_for_token("unknown-token") == "folder");
+    demo::Entry pdf_entry{.name = "Application Form 3.pdf"};
+    demo::Entry text_entry{.name = "README.txt"};
+    demo::Entry archive_entry{.name = "Archive.zip"};
+    assert(demo::entry_symbol_name(pdf_entry) == "pdf_document");
+    assert(demo::entry_symbol_semantic_reference_name(pdf_entry)
+           == "doc.richtext");
+    assert(demo::entry_symbol_name(text_entry) == "text_document");
+    assert(demo::entry_symbol_semantic_reference_name(text_entry)
+           == "doc.plaintext");
+    assert(demo::entry_symbol_name(archive_entry) == "archive");
+    assert(demo::entry_symbol_semantic_reference_name(archive_entry)
+           == "archivebox");
     assert(chrome.icon_default_stroke_width == 1.8f);
     assert(chrome.icon_secondary_opacity == 0.66f);
     assert(chrome.icon_toolbar_button_radius == 15.0f);
@@ -712,6 +725,14 @@ duplicate
     assert(debug_text.find("\"toolbar_unselected\":\"secondary\"")
            != std::string::npos);
     assert(debug_text.find("\"file_type_color_policy\":\"macos_finder_file_type_tints\"")
+           != std::string::npos);
+    assert(debug_text.find("\"file_type_symbol_tokens\"")
+           != std::string::npos);
+    assert(debug_text.find("\"symbol\":\"pdf_document\"")
+           != std::string::npos);
+    assert(debug_text.find("\"semantic_reference_name\":\"doc.richtext\"")
+           != std::string::npos);
+    assert(debug_text.find("\"symbol_semantic_reference_name\":\"doc.plaintext\"")
            != std::string::npos);
     assert(debug_text.find("\"toolbar_point_size\":24") != std::string::npos);
     assert(debug_text.find("\"sidebar_point_size\":26") != std::string::npos);

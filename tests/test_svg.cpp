@@ -335,15 +335,15 @@ void test_builtin_icons_parse() {
     assert(icons::default_weight_policy() == "regular_text_weight_aligned");
     assert(icons::rendering_capability_policy().find("sf_symbols_mode_names")
            != std::string_view::npos);
-    assert(icons::all_symbol_count == 31);
+    assert(icons::all_symbol_count == 34);
     assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
     assert(phenotype::icon_catalog::sidebar_symbol_count == icons::sidebar_symbol_count);
     assert(icons::toolbar_symbol_count == 15);
     assert(phenotype::icon_catalog::toolbar_symbol_count == icons::toolbar_symbol_count);
-    assert(icons::outline_symbol_count == 30);
+    assert(icons::outline_symbol_count == 33);
     assert(icons::filled_symbol_count == 1);
-    assert(icons::hierarchical_symbol_count == 20);
+    assert(icons::hierarchical_symbol_count == 23);
     assert(icons::monochrome_symbol_count == icons::all_symbol_count);
     assert(icons::regular_weight_symbol_count == icons::all_symbol_count);
     assert(icons::palette_symbol_count == 0);
@@ -376,8 +376,14 @@ void test_builtin_icons_parse() {
         icons::macos_file_type_color(icons::Symbol::Folder);
     auto const movie_color =
         icons::macos_file_type_color(icons::Symbol::Movie);
+    auto const pdf_color =
+        icons::macos_file_type_color(icons::Symbol::PdfDocument);
+    auto const archive_color =
+        icons::macos_file_type_color(icons::Symbol::Archive);
     assert(folder_color.b > folder_color.r);
     assert(movie_color.b > movie_color.g);
+    assert(pdf_color.r > pdf_color.g);
+    assert(archive_color.r > archive_color.b);
     assert(icons::point_size(icons::SymbolScale::Small) == 20.0f);
     assert(icons::point_size(icons::SymbolScale::Medium) == 24.0f);
     assert(icons::point_size(icons::SymbolScale::Large) == 26.0f);

@@ -81,11 +81,15 @@ stroke expectation, rendering mode, variant policy,
 text-aligned scale, role-aware presentation policy, sidebar/toolbar point
 sizes, role hit-target metrics, tone policy, symbol-state chrome policy,
 toolbar button alpha/radius metrics, symbol counts, and the exact semantic
-reference arrays for the visible Finder-style toolbar/sidebar glyphs.
+reference arrays for the visible Finder-style toolbar/sidebar glyphs, plus the
+file-type symbol table used by icon-view fallback painters.
 The desktop sidebar additionally exposes the pure `token -> symbol -> semantic
 reference` table used by the renderer (`recents -> recents -> clock`,
 `download -> download -> arrow.down.circle`, and so on), without depending on
-platform icon fonts or bundled Apple assets.
+platform icon fonts or bundled Apple assets. File entries use the same pure
+mapping for Finder-like fallbacks: PDF, text, image, movie, archive, document,
+and folder entries resolve to phenotype-owned SVG symbols and semantic
+reference names before any native renderer sees them.
 The icon-grid thumbnails follow the same boundary. The example references
 macOS Finder's document/image/movie preview proportions and SF Symbols-style
 visual restraint, but it paints deterministic phenotype-owned vector previews

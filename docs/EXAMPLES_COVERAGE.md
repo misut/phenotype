@@ -284,6 +284,10 @@ multicolor capability counts. That keeps Finder-style icon work tied to an
 engine feature instead of a one-off screenshot fixture. AirDrop uses isolated
 circular SVG path arcs in the sidebar, giving the artifact a concrete
 macOS-style native arc probe.
+The file explorer debug payload also exposes file-type symbol tokens and per-entry
+resolved `symbol` / `symbol_semantic_reference_name` fields, so PDF, text,
+archive, image, movie, folder, and generic document fallbacks can be verified
+without relying on screenshot-only icon recognition.
 
 ## Widget coverage
 
