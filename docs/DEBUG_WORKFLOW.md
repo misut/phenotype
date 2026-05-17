@@ -213,7 +213,9 @@ icon size so Finder-style navigation rows can be checked from the artifact
 without reading pixels by eye.
 `phenotype icons catalog --json` emits the complete all/sidebar/toolbar symbol
 contract, name/reference lookup invariants, and macOS role metrics from the
-same pure metadata package, while
+same pure metadata package. `phenotype icons lookup <name-or-reference> --json`
+is the narrow probe for one glyph when a Finder token maps to the wrong visual
+metaphor or hit target, while
 `phenotype drive file-explorer --json` embeds the desktop chrome geometry and
 icon-system contract under `chrome.geometry` and `chrome.icon_system`; the
 same output includes the default glass theme contract under `theme_system`. The
@@ -289,7 +291,11 @@ comparing screenshots; a missing SVG command or stroke-style policy should fail
 as a JSON contract mismatch. `svg_path_arc_symbol_count` proves that at least
 one built-in Finder sidebar symbol exercises the SVG path arc parser in normal
 example artifacts, while `round_stroke_symbol_count` proves outline glyphs stay
-on the macOS-like round stroke contract.
+on the macOS-like round stroke contract. The desktop payload also includes
+`sidebar_symbol_tokens`, the renderer-facing table that maps sidebar tokens to
+phenotype-owned symbols and semantic SF Symbols reference names, so a wrong
+Recents/Shared/Desktop-style metaphor fails as data before anyone compares
+pixels.
 
 The same artifact exposes `application.file_explorer.theme_system.*` from the
 pure `phenotype_theme_contract` package. That block names the Apple-like glass

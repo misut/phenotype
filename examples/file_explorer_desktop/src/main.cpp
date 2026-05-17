@@ -429,32 +429,8 @@ void stroke_round(phenotype::Painter& painter,
 }
 
 phenotype::icons::Symbol sidebar_symbol(std::string_view id) {
-    using phenotype::icons::Symbol;
-    if (id == "recents")
-        return Symbol::Recents;
-    if (id == "shared")
-        return Symbol::Shared;
-    if (id == "folder")
-        return Symbol::Folder;
-    if (id == "app")
-        return Symbol::Applications;
-    if (id == "desktop")
-        return Symbol::Desktop;
-    if (id == "doc")
-        return Symbol::Document;
-    if (id == "image")
-        return Symbol::Image;
-    if (id == "download")
-        return Symbol::Download;
-    if (id == "cloud")
-        return Symbol::Cloud;
-    if (id == "home")
-        return Symbol::Home;
-    if (id == "airdrop")
-        return Symbol::AirDrop;
-    if (id == "trash")
-        return Symbol::Trash;
-    return Symbol::Folder;
+    return phenotype::icons::from_catalog_symbol(
+        file_explorer_demo::sidebar_symbol_for_token(id));
 }
 
 void paint_symbol_centered(phenotype::Painter& painter,

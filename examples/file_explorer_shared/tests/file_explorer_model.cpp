@@ -353,6 +353,12 @@ duplicate
     assert(chrome.icon_reference_symbol_count == 31);
     assert(chrome.icon_svg_path_arc_symbol_count == 1);
     assert(chrome.icon_grid_size == 24.0f);
+    assert(demo::desktop_sidebar_symbol_contract().size() == 10);
+    assert(demo::sidebar_symbol_name_for_token("recents") == "recents");
+    assert(demo::sidebar_symbol_name_for_token("shared") == "shared");
+    assert(demo::sidebar_symbol_name_for_token("desktop") == "desktop");
+    assert(demo::sidebar_symbol_name_for_token("download") == "download");
+    assert(demo::sidebar_symbol_name_for_token("unknown-token") == "folder");
     assert(chrome.icon_default_stroke_width == 1.8f);
     assert(chrome.icon_secondary_opacity == 0.66f);
     assert(chrome.icon_module == "phenotype.icons");
