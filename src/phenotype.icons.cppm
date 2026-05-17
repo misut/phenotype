@@ -337,6 +337,11 @@ inline auto macos_light_tone_color(SymbolTone tone) noexcept -> Color {
     return {color.r, color.g, color.b, color.a};
 }
 
+inline auto macos_file_type_color(Symbol symbol) noexcept -> Color {
+    auto const color = catalog::macos_file_type_color(to_catalog_symbol(symbol));
+    return {color.r, color.g, color.b, color.a};
+}
+
 inline auto presentation(Symbol symbol,
                          SymbolPresentationRole role,
                          SymbolTone tone,

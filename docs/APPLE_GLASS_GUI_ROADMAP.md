@@ -283,9 +283,11 @@ macOS-like rounded stroke caps/joins, and bounded secondary-stroke opacity for
 symbols with detail layers without copying SF Symbols assets. Each built-in
 symbol carries a semantic SF Symbols reference name and explicit policy that
 the reference is only a role/style anchor; the vector artwork remains
-phenotype-owned SVG. The CLI command `phenotype icons catalog --json` exposes
-the same contract for CI and LLM debugging on Linux without importing native
-GUI code. The macOS Metal
+phenotype-owned SVG. A pure Finder-style file-type tint policy now gives
+folder/document/image/movie glyphs deterministic colors for list and column
+rows without querying native platform icon services. The CLI command
+`phenotype icons catalog --json` exposes the same contract for CI and LLM
+debugging on Linux without importing native GUI code. The macOS Metal
 renderer executes diagonal icon strokes as triangle bodies with round caps
 instead of dot chains, keeping toolbar/search/sidebar symbols continuous while
 remaining bounded. Windows accepts the same SVG-driven `Path`, `FillPath`, and

@@ -282,6 +282,7 @@ struct ExplorerChromeMetrics {
     std::string icon_variant_policy;
     std::string icon_presentation_policy;
     std::string icon_tone_policy;
+    std::string icon_file_type_color_policy;
     std::string icon_scale;
     std::string chrome_geometry_policy;
     std::string window_control_marker_mode;
@@ -664,6 +665,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_variant_policy = "n/a",
             .icon_presentation_policy = "n/a",
             .icon_tone_policy = "n/a",
+            .icon_file_type_color_policy = "n/a",
             .icon_scale = "n/a",
             .chrome_geometry_policy = "n/a",
             .window_control_marker_mode = "none",
@@ -792,6 +794,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_presentation_policy =
             std::string{icon_catalog::presentation_policy()},
         .icon_tone_policy = std::string{icon_catalog::tone_policy()},
+        .icon_file_type_color_policy =
+            std::string{icon_catalog::file_type_color_policy()},
         .icon_scale = std::string{icon_catalog::default_scale_policy()},
         .chrome_geometry_policy = k_desktop_chrome_geometry_policy,
         .window_control_marker_mode = "runtime-native-controls",
@@ -1400,6 +1404,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace("variant_policy", json::Value{chrome.icon_variant_policy});
     icon_system.emplace("presentation_policy", json::Value{chrome.icon_presentation_policy});
     icon_system.emplace("tone_policy", json::Value{chrome.icon_tone_policy});
+    icon_system.emplace(
+        "file_type_color_policy",
+        json::Value{chrome.icon_file_type_color_policy});
     icon_system.emplace("scale", json::Value{chrome.icon_scale});
     icon_system.emplace(
         "sidebar_reference_symbols",

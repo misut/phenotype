@@ -223,6 +223,12 @@ void test_builtin_icons_parse() {
            != std::string_view::npos);
     assert(icons::presentation_policy()
            == "macos_role_aware_symbol_presentation");
+    auto const folder_color =
+        icons::macos_file_type_color(icons::Symbol::Folder);
+    auto const movie_color =
+        icons::macos_file_type_color(icons::Symbol::Movie);
+    assert(folder_color.b > folder_color.r);
+    assert(movie_color.b > movie_color.g);
     assert(icons::point_size(icons::SymbolScale::Small) == 20.0f);
     assert(icons::point_size(icons::SymbolScale::Medium) == 24.0f);
     assert(icons::point_size(icons::SymbolScale::Large) == 26.0f);

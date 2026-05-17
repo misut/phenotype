@@ -257,6 +257,10 @@ inline auto tone_policy() noexcept -> std::string_view {
     return "primary, secondary, selected, accent, disabled, destructive";
 }
 
+inline auto file_type_color_policy() noexcept -> std::string_view {
+    return "macos_finder_file_type_tints";
+}
+
 inline auto default_scale_policy() noexcept -> std::string_view {
     return "medium";
 }
@@ -571,6 +575,26 @@ inline auto macos_light_tone_color(SymbolTone tone) noexcept -> SymbolColor {
     case SymbolTone::Destructive: return {255, 59, 48, 255};
     }
     return {96, 96, 100, 255};
+}
+
+inline auto macos_file_type_color(Symbol symbol) noexcept -> SymbolColor {
+    switch (symbol) {
+    case Symbol::Folder:
+    case Symbol::NewFolder:
+        return {64, 156, 255, 255};
+    case Symbol::Image:
+        return {48, 176, 199, 255};
+    case Symbol::Movie:
+        return {88, 86, 214, 255};
+    case Symbol::Trash:
+        return {142, 142, 147, 255};
+    case Symbol::Document:
+    case Symbol::NewDocument:
+    case Symbol::Duplicate:
+        return {142, 142, 147, 255};
+    default:
+        return macos_light_tone_color(SymbolTone::Secondary);
+    }
 }
 
 } // namespace phenotype::icon_catalog

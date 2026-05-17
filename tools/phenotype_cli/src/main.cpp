@@ -3104,6 +3104,7 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
             ? icon_catalog::SymbolTone::Primary
             : icon_catalog::SymbolTone::Secondary;
     auto const color = icon_catalog::macos_light_tone_color(tone);
+    auto const file_type_color = icon_catalog::macos_file_type_color(symbol);
     return std::format(
         "{{\"name\":{},\"semantic_reference_name\":{},"
         "\"reference_set\":{},\"role\":{},\"variant\":{},"
@@ -3115,6 +3116,7 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         "\"text_weight_aligned\":{},"
         "\"supports_hierarchical_opacity\":{},"
         "\"phenotype_owned\":{},\"uses_sf_symbols_asset\":{},"
+        "\"file_type_color\":{},"
         "\"presentation\":{{\"role\":{},\"tone\":{},\"scale\":{},"
         "\"point_size\":{},\"optical_y_offset\":{},\"color\":{}}}}}",
         json_string(desc.name),
@@ -3139,6 +3141,7 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         desc.supports_hierarchical_opacity ? "true" : "false",
         desc.phenotype_owned ? "true" : "false",
         desc.uses_sf_symbols_asset ? "true" : "false",
+        icon_color_json(file_type_color),
         json_string(icon_catalog::symbol_presentation_role_name(
             presentation_role)),
         json_string(icon_catalog::symbol_tone_name(tone)),
@@ -3252,6 +3255,14 @@ auto icon_catalog_checks() -> std::vector<Check> {
                                text_weight_aligned ? "true" : "false"),
          .hint =
              "Mac-like icons should stay round-stroked and text-weight aligned."},
+        {.name = "file_type_palette",
+         .ok = icon_catalog::file_type_color_policy()
+                == std::string_view{"macos_finder_file_type_tints"}
+            && icon_catalog::macos_file_type_color(icon_catalog::Symbol::Folder).b
+                > icon_catalog::macos_file_type_color(icon_catalog::Symbol::Folder).r,
+         .detail = std::string{icon_catalog::file_type_color_policy()},
+         .hint =
+             "Keep Finder-style file type icon tints exposed as pure catalog data."},
     };
 }
 
@@ -3263,7 +3274,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"reference_policy\":{},\"asset_policy\":{},"
         "\"alignment\":{},\"variant_policy\":{},"
         "\"presentation_policy\":{},\"tone_policy\":{},"
-        "\"default_scale\":{}}},"
+        "\"file_type_color_policy\":{},\"default_scale\":{}}},"
         "\"counts\":{{\"all\":{},\"sidebar\":{},\"toolbar\":{},"
         "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
         "\"reference\":{}}},"
@@ -3280,6 +3291,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::variant_policy()),
         json_string(icon_catalog::presentation_policy()),
         json_string(icon_catalog::tone_policy()),
+        json_string(icon_catalog::file_type_color_policy()),
         json_string(icon_catalog::default_scale_policy()),
         icon_catalog::all_symbol_count,
         icon_catalog::sidebar_symbol_count,
@@ -3339,7 +3351,7 @@ auto explorer_chrome_json(
         "\"reference_family\":{},\"reference_policy\":{},"
         "\"asset_policy\":{},\"alignment\":{},\"rendering_mode\":{},"
         "\"variant_policy\":{},\"presentation_policy\":{},"
-        "\"tone_policy\":{},\"scale\":{},"
+        "\"tone_policy\":{},\"file_type_color_policy\":{},\"scale\":{},"
         "\"sidebar_reference_symbols\":{},"
         "\"toolbar_reference_symbols\":{}}}}}",
         chrome.viewport.width,
@@ -3425,6 +3437,7 @@ auto explorer_chrome_json(
         json_string(chrome.icon_variant_policy),
         json_string(chrome.icon_presentation_policy),
         json_string(chrome.icon_tone_policy),
+        json_string(chrome.icon_file_type_color_policy),
         json_string(chrome.icon_scale),
         icon_reference_names_json(
             IconCatalogSet::Sidebar,

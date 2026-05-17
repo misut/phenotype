@@ -201,6 +201,9 @@ without pixel guessing. `icons::presentation` adds the default macOS-inspired
 presentation policy: toolbar symbols use 24 pt secondary/selected tones,
 sidebar symbols use 26 pt primary/accent tones with a small optical vertical
 adjustment, and disabled/destructive tones are explicit pure values.
+The same pure catalog exposes a Finder-style file-type tint policy for
+folder/document/image/movie glyphs, which desktop examples use in list and
+column rows without asking a native icon service for platform artwork.
 Finder-style examples serialize sidebar and toolbar semantic reference arrays
 plus the presentation policy in their artifact debug payload, and
 `phenotype icons catalog --json` exposes the complete contract to CI and LLM
