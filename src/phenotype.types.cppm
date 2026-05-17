@@ -626,6 +626,7 @@ enum class InteractionRole {
     Checkbox,
     Radio,
     TextField,
+    Command,
 };
 
 // Button visual variant.
@@ -657,6 +658,12 @@ struct ButtonStyleOptions {
     float max_width = 0.0f;
     float fixed_height = -1.0f;
     TextAlign text_align = TextAlign::Start;
+};
+
+struct KeyCommandOptions {
+    bool disabled = false;
+    bool allow_when_input_focused = false;
+    std::string debug_label;
 };
 
 // Text size variant.
@@ -700,6 +707,7 @@ inline constexpr char const* interaction_role_name(InteractionRole role) noexcep
         case InteractionRole::Checkbox:  return "checkbox";
         case InteractionRole::Radio:     return "radio";
         case InteractionRole::TextField: return "text_field";
+        case InteractionRole::Command:   return "command";
         default:                         return "none";
     }
 }

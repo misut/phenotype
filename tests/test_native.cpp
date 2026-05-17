@@ -60,6 +60,7 @@ static constexpr int LEGACY_MOD_SUPER = static_cast<int>(Modifier::Super);
 static constexpr int LEGACY_MOUSE_BUTTON_LEFT = static_cast<int>(MouseButton::Left);
 static constexpr int LEGACY_KEY_TAB = static_cast<int>(Key::Tab);
 static constexpr int LEGACY_KEY_BACKSPACE = static_cast<int>(Key::Backspace);
+static constexpr int LEGACY_KEY_DELETE = static_cast<int>(Key::Delete);
 static constexpr int LEGACY_KEY_ENTER = static_cast<int>(Key::Enter);
 static constexpr int LEGACY_KEY_SPACE = static_cast<int>(Key::Space);
 static constexpr int LEGACY_KEY_LEFT = static_cast<int>(Key::Left);
@@ -71,6 +72,8 @@ static constexpr int LEGACY_KEY_HOME = static_cast<int>(Key::Home);
 static constexpr int LEGACY_KEY_END = static_cast<int>(Key::End);
 static constexpr int LEGACY_KEY_ESCAPE = static_cast<int>(Key::Escape);
 static constexpr int LEGACY_KEY_A = static_cast<int>(Key::A);
+static constexpr int LEGACY_KEY_D = static_cast<int>(Key::D);
+static constexpr int LEGACY_KEY_F = static_cast<int>(Key::F);
 
 static constexpr char kLocalExampleImageAsset[] = "showcase-local.bmp";
 static constexpr char kRemoteExampleImageAsset[] = "showcase.bmp";
@@ -665,14 +668,24 @@ struct ActivateButton {};
 struct ToggleChecked {};
 struct SelectChoice { int value; };
 struct TextChanged { std::string text; };
+struct TriggerCommand {};
+struct TriggerInputCommand {};
 
-using Msg = std::variant<ActivateButton, ToggleChecked, SelectChoice, TextChanged>;
+using Msg = std::variant<
+    ActivateButton,
+    ToggleChecked,
+    SelectChoice,
+    TextChanged,
+    TriggerCommand,
+    TriggerInputCommand>;
 
 struct State {
     int button_activations = 0;
     bool checked = false;
     int choice = 0;
     std::string text;
+    int command_activations = 0;
+    int input_command_activations = 0;
 };
 
 inline State g_observed_state{};
@@ -690,6 +703,7 @@ static void reset_core_state() {
     app.app_runner = nullptr;
     app.callbacks.clear();
     app.callback_roles.clear();
+    app.key_commands.clear();
     app.input_handlers.clear();
     app.input_nodes.clear();
     app.focusable_ids.clear();
@@ -730,6 +744,10 @@ static void update(State& state, Msg msg) {
         state.choice = choice->value;
     } else if (auto const* text = std::get_if<TextChanged>(&msg)) {
         state.text = text->text;
+    } else if (std::get_if<TriggerCommand>(&msg)) {
+        state.command_activations += 1;
+    } else if (std::get_if<TriggerInputCommand>(&msg)) {
+        state.input_command_activations += 1;
     }
     g_observed_state = state;
 }
@@ -752,6 +770,27 @@ static void view(State const& state) {
         });
         phenotype::layout::spacer(1200);
         phenotype::widget::text("Bottom marker");
+    });
+}
+
+static void key_command_view(State const& state) {
+    phenotype::app::key_command<Msg>(
+        static_cast<unsigned int>(Key::D),
+        LEGACY_MOD_CONTROL,
+        TriggerCommand{},
+        phenotype::KeyCommandOptions{
+            .debug_label = "duplicate",
+        });
+    phenotype::app::key_command<Msg>(
+        static_cast<unsigned int>(Key::F),
+        LEGACY_MOD_CONTROL,
+        TriggerInputCommand{},
+        phenotype::KeyCommandOptions{
+            .allow_when_input_focused = true,
+            .debug_label = "find",
+        });
+    phenotype::layout::column([&] {
+        phenotype::widget::text_field<Msg>("Type here", state.text, +map_text);
     });
 }
 
@@ -810,6 +849,24 @@ struct Harness {
         }
         assert(false && "missing hit-test point");
         return {0.0f, 0.0f};
+    }
+};
+
+struct KeyCommandHarness {
+    platform_api platform = make_stub_platform("test-key-command-stub", nullptr);
+    native_host host{};
+
+    KeyCommandHarness() {
+        reset_core_state();
+        host.platform = &platform;
+        phenotype::native::run<State, Msg>(host, key_command_view, update);
+        assert(phenotype::detail::g_app.key_commands.size() == 2);
+        assert(phenotype::detail::g_app.callbacks.size() == 3);
+    }
+
+    ~KeyCommandHarness() {
+        phenotype::native::detail::shutdown_host(host);
+        reset_core_state();
     }
 };
 
@@ -1065,7 +1122,43 @@ static void test_shell_text_space_char_and_enter_behavior() {
     std::puts("PASS: shared shell text space char and enter behavior");
 }
 
-static void test_shell_text_caret_navigation_and_backspace() {
+static void test_shell_key_commands_respect_input_focus_policy() {
+    using namespace input_regression;
+
+    KeyCommandHarness harness;
+
+    assert(phenotype::native::detail::dispatch_key(
+        LEGACY_KEY_D,
+        LEGACY_PRESS,
+        LEGACY_MOD_CONTROL));
+    assert(g_observed_state.command_activations == 1);
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.event == "key");
+    assert(debug.detail == "d");
+    assert(debug.result == "handled");
+    assert(debug.role == "command");
+    assert(has_metric("key", "d", "handled", "command"));
+
+    phenotype::detail::set_focus_id(2, "test", "setup");
+    assert(!phenotype::native::detail::dispatch_key(
+        LEGACY_KEY_D,
+        LEGACY_PRESS,
+        LEGACY_MOD_CONTROL));
+    assert(g_observed_state.command_activations == 1);
+
+    assert(phenotype::native::detail::dispatch_key(
+        LEGACY_KEY_F,
+        LEGACY_PRESS,
+        LEGACY_MOD_CONTROL));
+    assert(g_observed_state.input_command_activations == 1);
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.detail == "f");
+    assert(debug.result == "handled");
+    assert(debug.role == "command");
+    std::puts("PASS: shared shell key commands respect input focus policy");
+}
+
+static void test_shell_text_caret_navigation_and_delete() {
     using namespace input_regression;
 
     Harness harness;
@@ -1109,7 +1202,17 @@ static void test_shell_text_caret_navigation_and_backspace() {
     assert(debug.caret_pos == 2);
     assert(debug.caret_visible);
     assert(has_metric("key", "backspace", "handled", "text_field"));
-    std::puts("PASS: shared shell text caret navigation and backspace");
+
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_LEFT, LEGACY_PRESS, 0));
+    assert(phenotype::detail::get_caret_pos() == 1);
+    assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_DELETE, LEGACY_PRESS, 0));
+    assert(g_observed_state.text == "AC");
+    assert(phenotype::detail::get_caret_pos() == 1);
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.detail == "delete");
+    assert(debug.result == "handled");
+    assert(debug.caret_pos == 1);
+    std::puts("PASS: shared shell text caret navigation and delete");
 }
 
 static void test_shell_text_selection_shortcuts_and_replacement() {
@@ -3646,7 +3749,8 @@ int main() {
     test_shell_pointer_hover_click_and_tab_navigation();
     test_shell_activation_keys_respect_roles();
     test_shell_text_space_char_and_enter_behavior();
-    test_shell_text_caret_navigation_and_backspace();
+    test_shell_key_commands_respect_input_focus_policy();
+    test_shell_text_caret_navigation_and_delete();
     test_shell_text_selection_shortcuts_and_replacement();
     test_shell_pointer_text_caret_placement_and_visibility_reset();
     test_shell_pointer_drag_selection_and_click_collapse();

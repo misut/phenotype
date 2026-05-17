@@ -2894,6 +2894,25 @@ auto explorer_chrome_json(
         chrome.duplicate_window_controls ? "true" : "false");
 }
 
+auto explorer_keyboard_commands_json(std::string_view profile) -> std::string {
+    auto commands = file_explorer_demo::file_explorer_keyboard_commands(profile);
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < commands.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        auto const& command = commands[i];
+        out += std::format(
+            "{{\"action\":{},\"shortcut\":{},\"input_alias\":{},"
+            "\"allow_when_input_focused\":{}}}",
+            json_string(command.action),
+            json_string(command.shortcut),
+            json_string(command.input_alias),
+            command.allow_when_input_focused ? "true" : "false");
+    }
+    out += "]";
+    return out;
+}
+
 auto explorer_trace_json(
         file_explorer_demo::ExplorerInputTrace const& trace,
         std::size_t index) -> std::string {
@@ -3013,6 +3032,7 @@ auto explorer_drive_json(
         "\"view_mode\":{{\"value\":{},\"label\":{}}},"
         "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
         "\"chrome\":{},"
+        "\"keyboard_commands\":{},"
         "\"selected\":{{\"present\":{},\"name\":{},\"kind\":{},"
         "\"size\":{},\"path_label\":{},\"preview_excerpt\":{}}},"
         "\"counts\":{{\"visible_entries\":{},\"files\":{},\"folders\":{}}},"
@@ -3038,6 +3058,7 @@ auto explorer_drive_json(
         result.state.viewport_height,
         result.state.viewport_scale,
         explorer_chrome_json(result.chrome),
+        explorer_keyboard_commands_json(result.profile),
         snap.has_selection ? "true" : "false",
         json_string(snap.has_selection ? snap.selected.name : ""),
         json_string(snap.selected_kind_label),

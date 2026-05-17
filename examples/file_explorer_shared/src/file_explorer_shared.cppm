@@ -105,8 +105,10 @@ enum class ExplorerInputKind {
     SelectLocation,
     SelectEntry,
     Search,
+    FocusSearch,
     OpenEntry,
     ActivateEntry,
+    ActivateSelected,
     ViewMode,
     Viewport,
     DraftName,
@@ -123,6 +125,7 @@ enum class ExplorerInputKind {
     CycleSort,
     Reset,
     Scenario,
+    DismissTransient,
 };
 
 struct ExplorerInput {
@@ -152,6 +155,13 @@ struct ExplorerViewport {
     int width = 0;
     int height = 0;
     float scale = 1.0f;
+};
+
+struct ExplorerKeyboardCommand {
+    std::string action;
+    std::string shortcut;
+    std::string input_alias;
+    bool allow_when_input_focused = false;
 };
 
 struct ExplorerChromeMetrics {
@@ -874,6 +884,35 @@ inline json::Value operation_receipt_debug_json(
     return json::Value{std::move(out)};
 }
 
+inline std::vector<ExplorerKeyboardCommand> file_explorer_keyboard_commands(
+        std::string_view profile) {
+    if (profile == "mobile")
+        return {};
+    return {
+        {"show_search", "CommandOrControl+F", "shortcut:find", true},
+        {"activate_selected", "Enter", "key:enter", false},
+        {"delete_selected", "DeleteOrBackspace", "key:delete", false},
+        {"duplicate_selected", "CommandOrControl+D", "shortcut:duplicate", false},
+        {"create_folder", "Shift+CommandOrControl+N", "shortcut:new-folder", false},
+        {"dismiss_transient", "Escape", "key:escape", true},
+    };
+}
+
+inline json::Value keyboard_commands_debug_json(std::string_view profile) {
+    json::Array commands;
+    for (auto const& command : file_explorer_keyboard_commands(profile)) {
+        json::Object item;
+        item.emplace("action", json::Value{command.action});
+        item.emplace("shortcut", json::Value{command.shortcut});
+        item.emplace("input_alias", json::Value{command.input_alias});
+        item.emplace(
+            "allow_when_input_focused",
+            json::Value{command.allow_when_input_focused});
+        commands.push_back(json::Value{std::move(item)});
+    }
+    return json::Value{std::move(commands)};
+}
+
 inline json::Value explorer_chrome_debug_json(
         ExplorerChromeMetrics const& chrome) {
     json::Object viewport;
@@ -1001,6 +1040,7 @@ inline json::Value file_explorer_debug_json(
         "operation",
         operation_receipt_debug_json(state.last_operation, snap.operation_label));
     out.emplace("chrome", explorer_chrome_debug_json(chrome));
+    out.emplace("keyboard_commands", keyboard_commands_debug_json(profile));
     out.emplace("entries_sample", json::Value{std::move(entries)});
     out.emplace("mobile_tab", json::Value{static_cast<std::int64_t>(state.mobile_tab)});
     return json::Value{std::move(out)};
@@ -1034,8 +1074,10 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::SelectLocation: return "select_location";
         case ExplorerInputKind::SelectEntry: return "select_entry";
         case ExplorerInputKind::Search: return "search";
+        case ExplorerInputKind::FocusSearch: return "focus_search";
         case ExplorerInputKind::OpenEntry: return "open_entry";
         case ExplorerInputKind::ActivateEntry: return "activate_entry";
+        case ExplorerInputKind::ActivateSelected: return "activate_selected";
         case ExplorerInputKind::ViewMode: return "view_mode";
         case ExplorerInputKind::Viewport: return "viewport";
         case ExplorerInputKind::DraftName: return "draft_name";
@@ -1052,6 +1094,7 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::CycleSort: return "cycle_sort";
         case ExplorerInputKind::Reset: return "reset";
         case ExplorerInputKind::Scenario: return "scenario";
+        case ExplorerInputKind::DismissTransient: return "dismiss_transient";
     }
     return "noop";
 }
@@ -1323,6 +1366,45 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         return require_value(ExplorerInputKind::OpenEntry);
     if (name == "activate" || name == "click" || name == "activate-entry")
         return require_value(ExplorerInputKind::ActivateEntry);
+    if (name == "open-selected" || name == "open_selection"
+        || name == "activate-selected" || name == "activate_selection"
+        || name == "enter") {
+        return parsed_input({.kind = ExplorerInputKind::ActivateSelected});
+    }
+    if (name == "key" || name == "shortcut") {
+        auto command = lower_copy(trim(value));
+        if (command.empty()) {
+            return input_parse_error(
+                "input '" + name + "' requires a command name");
+        }
+        if (command == "enter" || command == "return"
+            || command == "open" || command == "activate") {
+            return parsed_input({.kind = ExplorerInputKind::ActivateSelected});
+        }
+        if (command == "delete" || command == "backspace"
+            || command == "trash") {
+            return parsed_input({.kind = ExplorerInputKind::DeleteSelected});
+        }
+        if (command == "find" || command == "search") {
+            return parsed_input({.kind = ExplorerInputKind::FocusSearch});
+        }
+        if (command == "escape" || command == "dismiss") {
+            return parsed_input({.kind = ExplorerInputKind::DismissTransient});
+        }
+        if (command == "duplicate" || command == "copy") {
+            return parsed_input({.kind = ExplorerInputKind::DuplicateSelected});
+        }
+        if (command == "new-folder" || command == "new_folder"
+            || command == "mkdir") {
+            return parsed_input({.kind = ExplorerInputKind::CreateFolder});
+        }
+        if (command == "new-file" || command == "new_file"
+            || command == "touch") {
+            return parsed_input({.kind = ExplorerInputKind::CreateFile});
+        }
+        return input_parse_error(
+            "unknown file explorer " + name + " command: " + command);
+    }
     if (name == "search")
         return require_value(ExplorerInputKind::Search);
     if (name == "view" || name == "view-mode" || name == "view_mode"
@@ -1958,6 +2040,20 @@ inline void activate_entry(ExplorerState& state, std::string const& name) {
     select_entry(state, name);
 }
 
+inline void activate_selected_entry(ExplorerState& state) {
+    if (state.selected_name.empty()) {
+        state.status = "Select a file or folder before opening.";
+        record_operation(
+            state,
+            "activate_selected",
+            {},
+            false,
+            state.status);
+        return;
+    }
+    activate_entry(state, state.selected_name);
+}
+
 inline fs::path unique_child_path(fs::path const& parent, std::string name) {
     std::error_code ec;
     auto candidate = parent / name;
@@ -2376,11 +2472,17 @@ inline void apply_explorer_input(
         case ExplorerInputKind::Search:
             set_search_filter(state, input.value);
             return;
+        case ExplorerInputKind::FocusSearch:
+            state.status = "Search ready.";
+            return;
         case ExplorerInputKind::OpenEntry:
             open_entry(state, input.value);
             return;
         case ExplorerInputKind::ActivateEntry:
             activate_entry(state, input.value);
+            return;
+        case ExplorerInputKind::ActivateSelected:
+            activate_selected_entry(state);
             return;
         case ExplorerInputKind::ViewMode:
             state.view_mode = input.view_mode;
@@ -2436,6 +2538,9 @@ inline void apply_explorer_input(
             return;
         case ExplorerInputKind::Scenario:
             apply_startup_scenario(state, input.value);
+            return;
+        case ExplorerInputKind::DismissTransient:
+            state.status = "Transient UI dismissed.";
             return;
     }
 }

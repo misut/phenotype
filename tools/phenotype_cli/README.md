@@ -61,13 +61,17 @@ The initial scope is intentionally narrow:
   JSON output includes the input trace, sandbox root/current paths, visible
   entries, viewport, view mode, pure Finder chrome/grid metrics, selection
   capabilities, operation receipts, preview excerpts, localized labels,
-  package resource metadata, and optional expectation results. Repeated
+  package resource metadata, desktop keyboard command descriptors, and optional
+  expectation results. Repeated
   `--script` files feed line-based input sequences, and repeated `--expect`
   values make the command a small state verifier for file
   select/open/read/create/duplicate/delete/view-mode workflows. When
   expectations are present, the process exit code follows the expectation
   results, so expected failure receipts can be asserted while the JSON
-  `operation.ok` field still records the failed operation.
+  `operation.ok` field still records the failed operation. The command accepts
+  the same key/shortcut aliases published by the shared model, including
+  `key:enter`, `key:delete`, `key:escape`, `shortcut:find`,
+  `shortcut:duplicate`, and `shortcut:new-folder`.
 - `phenotype drive glass-showcase` applies deterministic typed inputs to the
   shared glass showcase model without opening a native window. JSON output
   includes the final state, per-input trace, public material kinds, expected
@@ -112,10 +116,11 @@ mise exec -- exon build
   --input view:gallery \
   --input viewport:900x620@2 \
   --input select:README.txt \
-  --input duplicate \
-  --input delete
+  --input shortcut:duplicate \
+  --input key:delete
 .exon/debug/phenotype_cli drive file-explorer --json \
-  --input open:Documents \
+  --input select:Documents \
+  --input key:enter \
   --input select:Project\ Notes.txt \
   --expect location:Demo\ Root/Documents \
   --expect selected:Project\ Notes.txt
@@ -158,7 +163,7 @@ mise exec -- exon build
   --artifact-exit \
   --env PHENOTYPE_FILE_EXPLORER_VIEW=icon \
   --input select:README.txt \
-  --input duplicate
+  --input shortcut:duplicate
 .exon/debug/phenotype_cli android doctor --json
 .exon/debug/phenotype_cli android devices --json
 .exon/debug/phenotype_cli android contract --json \

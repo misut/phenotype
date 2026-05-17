@@ -111,6 +111,29 @@ fallback = []
     assert(parsed_activate.ok);
     assert(parsed_activate.input.kind == demo::ExplorerInputKind::ActivateEntry);
     assert(parsed_activate.input.value == "Documents");
+    auto parsed_enter = demo::parse_explorer_input("key:enter");
+    assert(parsed_enter.ok);
+    assert(parsed_enter.input.kind
+           == demo::ExplorerInputKind::ActivateSelected);
+    auto parsed_delete_key = demo::parse_explorer_input("key:delete");
+    assert(parsed_delete_key.ok);
+    assert(parsed_delete_key.input.kind
+           == demo::ExplorerInputKind::DeleteSelected);
+    auto parsed_duplicate_shortcut =
+        demo::parse_explorer_input("shortcut:duplicate");
+    assert(parsed_duplicate_shortcut.ok);
+    assert(parsed_duplicate_shortcut.input.kind
+           == demo::ExplorerInputKind::DuplicateSelected);
+    auto parsed_find_shortcut =
+        demo::parse_explorer_input("shortcut:find");
+    assert(parsed_find_shortcut.ok);
+    assert(parsed_find_shortcut.input.kind
+           == demo::ExplorerInputKind::FocusSearch);
+    auto parsed_escape_key =
+        demo::parse_explorer_input("key:escape");
+    assert(parsed_escape_key.ok);
+    assert(parsed_escape_key.input.kind
+           == demo::ExplorerInputKind::DismissTransient);
     auto parsed_view = demo::parse_explorer_input("view:gallery");
     assert(parsed_view.ok);
     assert(parsed_view.input.kind == demo::ExplorerInputKind::ViewMode);
@@ -405,6 +428,8 @@ duplicate
     assert(debug_text.find("\"titlebar_control_start_x\"") != std::string::npos);
     assert(debug_text.find("\"profile\"") != std::string::npos);
     assert(debug_text.find(profile) != std::string::npos);
+    assert(debug_text.find("\"keyboard_commands\"") != std::string::npos);
+    assert(debug_text.find("CommandOrControl+F") != std::string::npos);
 
     state.draft_name = "../ Launch Plan";
     state.draft_body = "Created from test_file_explorer_model.";
@@ -711,7 +736,7 @@ duplicate
     fs::remove_all(navigation_root, ec);
     std::vector<demo::ExplorerInput> activate_inputs{
         {.kind = demo::ExplorerInputKind::ActivateEntry, .value = "Documents"},
-        {.kind = demo::ExplorerInputKind::ActivateEntry, .value = "Documents"},
+        {.kind = demo::ExplorerInputKind::ActivateSelected},
     };
     auto activated = demo::drive_explorer(
         navigation_profile,

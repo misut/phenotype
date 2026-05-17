@@ -180,10 +180,16 @@ The same path now owns Finder view-mode changes (`view:icon`, `view:list`,
 `view:column`, and `view:gallery`), so the desktop toolbar, startup environment,
 headless drive JSON, and artifact captures all observe one shared state field
 instead of separate UI-only mode storage.
+It also owns Finder-style key/shortcut aliases (`key:enter`, `key:delete`,
+`key:escape`, `shortcut:find`, `shortcut:duplicate`, and
+`shortcut:new-folder`). The aliases resolve through `file_explorer_shared` and
+mirror the native key-command descriptors registered by the desktop example, so
+CLI input replay and platform key dispatch do not fork product behavior.
 Artifact capture now has a matching application-debug extension:
 `debug.application.file_explorer` serializes the same shared snapshot and pure
-chrome metrics into `snapshot.json`, while the verifier's `require_debug_details`
-manifest field asserts those paths alongside platform runtime details.
+chrome metrics plus desktop keyboard command descriptors into `snapshot.json`,
+while the verifier's `require_debug_details` manifest field asserts those paths
+alongside platform runtime details.
 
 ## Packaging contract
 

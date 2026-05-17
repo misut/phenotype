@@ -26,6 +26,13 @@ toolbar icon button dimensions that the desktop example consumes. They also
 carry `status_bar_visible`, keeping the default Recents surface clean while
 making search, selection, and file-operation receipts observable in both native
 artifacts and CLI output.
+The same package publishes the desktop keyboard command contract as pure data:
+`CommandOrControl+F` for search, `Enter` for selection activation,
+`DeleteOrBackspace` for Trash movement, `CommandOrControl+D` for duplicate,
+`Shift+CommandOrControl+N` for folder creation, and `Escape` for transient
+dismissal. `phenotype drive file-explorer` accepts the matching `key:` and
+`shortcut:` aliases, so headless traces and native key dispatch exercise the
+same model actions.
 
 The module also provides the pure file explorer `ResourceCatalog` fixture and
 locale label resolver used by the desktop and mobile examples. Package/locale
@@ -49,10 +56,11 @@ mise exec -- exon build
 .exon/debug/phenotype_cli drive file-explorer --json \
   --input viewport:900x620@2 \
   --input select:README.txt \
-  --input duplicate \
-  --input delete
+  --input shortcut:duplicate \
+  --input key:delete
 .exon/debug/phenotype_cli drive file-explorer --json \
-  --input open:Documents \
+  --input select:Documents \
+  --input key:enter \
   --input select:Project\ Notes.txt \
   --expect location:Demo\ Root/Documents \
   --expect selected:Project\ Notes.txt
