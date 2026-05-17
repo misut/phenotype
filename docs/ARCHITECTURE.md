@@ -250,10 +250,12 @@ only by unit tests.
 Finder-style examples serialize sidebar and toolbar semantic reference arrays
 plus the presentation policy in their artifact debug payload, and
 `phenotype icons catalog --json` exposes the complete contract to CI and LLM
-debugging before anyone inspects a screenshot. The style reference deliberately
-says the custom SVGs are informed by Apple HIG, macOS Finder, and SF Symbols
-while the asset policy continues to forbid copied Apple/SF Symbols vector
-artwork.
+debugging before anyone inspects a screenshot. `phenotype icons svg
+<name-or-reference>` exposes the exact built-in SVG source from the same pure
+catalog, so renderer and parser failures can be reproduced without launching a
+native window. The style reference deliberately says the custom SVGs are
+informed by Apple HIG, macOS Finder, and SF Symbols while the asset policy
+continues to forbid copied Apple/SF Symbols vector artwork.
 Package app icons are separate resources, not part of the glyph catalog: they
 are declared as `app.icon` SVG assets in `phenotype.package.toml`, copied by the
 CLI bundle step, and validated by `phenotype.resources` before a platform

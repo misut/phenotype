@@ -58,9 +58,13 @@ int main() {
     for (unsigned int i = 0; i < icons::all_symbol_count; ++i) {
         auto const symbol = icons::symbol_at(i);
         auto const desc = icons::descriptor(symbol);
+        auto const source = icons::svg_source(symbol);
         assert(desc.symbol == symbol);
         assert(!desc.name.empty());
         assert(!desc.semantic_reference_name.empty());
+        assert(source.find("<svg") == 0);
+        assert(source.find("viewBox=\"0 0 24 24\"") != std::string_view::npos);
+        assert(source.find("currentColor") != std::string_view::npos);
         assert(desc.style == icons::style_name());
         assert(desc.reference_family == icons::reference_family());
         assert(desc.reference_policy == icons::reference_policy());

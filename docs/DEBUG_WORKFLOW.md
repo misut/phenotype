@@ -213,10 +213,14 @@ capacity. Column view also records location-pane row count, row height, and
 icon size so Finder-style navigation rows can be checked from the artifact
 without reading pixels by eye.
 `phenotype icons catalog --json` emits the complete all/sidebar/toolbar symbol
-contract, name/reference lookup invariants, and macOS role metrics from the
-same pure metadata package. `phenotype icons lookup <name-or-reference> --json`
-is the narrow probe for one glyph when a Finder token maps to the wrong visual
-metaphor or hit target, while
+contract, name/reference lookup invariants, macOS role metrics, and SVG source
+presence checks from the same pure metadata package.
+`phenotype icons lookup <name-or-reference> --json` is the narrow metadata
+probe for one glyph when a Finder token maps to the wrong visual metaphor or
+hit target. `phenotype icons svg <name-or-reference>` emits the exact
+phenotype-owned SVG source for that glyph, with `--json` adding the semantic
+reference name and asset policy. Use it when a renderer, path parser, or
+icon-source cache is suspect, while
 `phenotype drive file-explorer --json` embeds the desktop chrome geometry and
 icon-system contract under `chrome.geometry` and `chrome.icon_system`; the
 same output includes the default glass theme contract under `theme_system`. The

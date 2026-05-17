@@ -80,6 +80,12 @@ The initial scope is intentionally narrow:
   same presentation role, metrics, ownership, and reference policy as the full
   catalog. This gives tests, examples, and LLM debugging a small probe when a
   Finder-style sidebar or toolbar token maps to the wrong visual metaphor.
+- `phenotype icons svg <name-or-reference>` emits the exact phenotype-owned SVG
+  source for one built-in glyph. The default output is raw SVG for renderer or
+  asset-pipeline probes; `--json` wraps the source with the matched symbol,
+  semantic reference name, asset policy, and byte count. This keeps macOS-style
+  icon debugging inside the pure catalog boundary without embedding Apple or
+  SF Symbols vector artwork.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible

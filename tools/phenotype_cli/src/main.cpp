@@ -760,6 +760,19 @@ auto spec() -> cppx::cli::CommandSpec {
                             "phenotype icons lookup magnifyingglass --json",
                         },
                     },
+                    {
+                        .name = "svg",
+                        .summary =
+                            "Emit one phenotype-owned built-in icon SVG source",
+                        .options = {help_option(), json_option()},
+                        .positional_name = "name-or-reference",
+                        .positional_description =
+                            "Built-in symbol name such as applications or SF Symbols semantic reference such as desktopcomputer.",
+                        .examples = {
+                            "phenotype icons svg recents",
+                            "phenotype icons svg desktopcomputer --json",
+                        },
+                    },
                 },
                 .allow_positionals = false,
                 .category = "metadata",
@@ -3226,6 +3239,7 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
     auto const disabled_tone = icon_catalog::macos_interaction_tone(
         presentation_role,
         icon_catalog::SymbolInteractionState{false, false});
+    auto const source = icon_catalog::svg_source(symbol);
     auto const color = icon_catalog::macos_light_tone_color(tone);
     auto const file_type_color = icon_catalog::macos_file_type_color(symbol);
     auto const control_chrome = icon_catalog::macos_control_chrome(
@@ -3247,6 +3261,7 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         "\"supports_hierarchical_opacity\":{},"
         "\"uses_svg_path_arcs\":{},"
         "\"phenotype_owned\":{},\"uses_sf_symbols_asset\":{},"
+        "\"has_svg_source\":{},\"source_bytes\":{},"
         "\"file_type_color\":{},"
         "\"presentation\":{{\"role\":{},\"tone\":{},"
         "\"selected_tone\":{},\"disabled_tone\":{},\"scale\":{},"
@@ -3280,6 +3295,8 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         icon_catalog::uses_svg_path_arcs(symbol) ? "true" : "false",
         desc.phenotype_owned ? "true" : "false",
         desc.uses_sf_symbols_asset ? "true" : "false",
+        source.empty() ? "false" : "true",
+        source.size(),
         icon_color_json(file_type_color),
         json_string(icon_catalog::symbol_presentation_role_name(
             presentation_role)),
@@ -3352,6 +3369,33 @@ auto icon_lookup_not_found_json(std::string_view query) -> std::string {
         json_string(query));
 }
 
+auto icon_svg_json(std::string_view query,
+                   IconLookupResult const& result) -> std::string {
+    auto const desc = icon_catalog::descriptor(result.symbol);
+    auto const source = icon_catalog::svg_source(result.symbol);
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"icons svg\","
+        "\"ok\":true,\"query\":{},\"match_kind\":{},"
+        "\"symbol\":{},\"semantic_reference_name\":{},"
+        "\"source_format\":\"svg\",\"asset_policy\":{},"
+        "\"source_bytes\":{},\"source\":{}}}",
+        json_string(query),
+        json_string(result.match_kind),
+        json_string(desc.name),
+        json_string(desc.semantic_reference_name),
+        json_string(icon_catalog::asset_policy()),
+        source.size(),
+        json_string(source));
+}
+
+auto icon_svg_not_found_json(std::string_view query) -> std::string {
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"icons svg\","
+        "\"ok\":false,\"query\":{},\"error\":\"symbol not found\","
+        "\"suggestion\":\"Use phenotype icons catalog --json to list built-in symbol names and semantic references.\"}}",
+        json_string(query));
+}
+
 auto icon_reference_names_json(IconCatalogSet set, bool enabled)
         -> std::string {
     if (!enabled)
@@ -3402,6 +3446,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
     bool name_lookup_roundtrips = true;
     bool reference_lookup_roundtrips = true;
     bool metric_contract = true;
+    bool svg_source_contract = true;
     auto const toolbar_chrome = icon_catalog::macos_control_chrome(
         icon_catalog::SymbolPresentationRole::Toolbar,
         icon_catalog::SymbolInteractionState{false, true});
@@ -3412,6 +3457,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
         auto const symbol = icon_catalog::symbol_at(i);
         auto const desc = icon_catalog::descriptor(symbol);
         auto const metrics = icon_catalog::symbol_metrics(symbol);
+        auto const source = icon_catalog::svg_source(symbol);
         auto const name_lookup = icon_catalog::symbol_from_name(desc.name);
         auto const reference_lookup =
             icon_catalog::symbol_from_semantic_reference_name(
@@ -3443,6 +3489,12 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && metrics.point_size <= metrics.hit_target_size
             && metrics.content_inset >= 0.0f
             && metrics.stroke_width == desc.default_stroke_width;
+        svg_source_contract =
+            svg_source_contract
+            && source.find("<svg") == 0
+            && source.find("viewBox=\"0 0 24 24\"")
+                != std::string_view::npos
+            && source.find("currentColor") != std::string_view::npos;
         round_stroke_contract =
             round_stroke_contract && (desc.filled || desc.round_stroke);
         round_cap_join_contract =
@@ -3489,6 +3541,14 @@ auto icon_catalog_checks() -> std::vector<Check> {
                                no_sf_assets ? "false" : "true"),
          .hint =
              "Do not embed Apple or SF Symbols vector artwork in the built-in catalog."},
+        {.name = "svg_source_contract",
+         .ok = svg_source_contract
+            && icon_catalog::svg_source(icon_catalog::Symbol::Applications)
+                   .find("stroke-linecap=\"round\"")
+                != std::string_view::npos,
+         .detail = "all built-in symbols expose phenotype-owned SVG source",
+         .hint =
+             "Keep icon SVG source in phenotype.icon_catalog so CLI diagnostics can inspect icons without platform renderer dependencies."},
         {.name = "semantic_references",
          .ok = semantic_references
             && icon_catalog::semantic_reference_name(
@@ -7240,6 +7300,42 @@ int run_icons_lookup(cppx::cli::Invocation const& invocation) {
     return 0;
 }
 
+int run_icons_svg(cppx::cli::Invocation const& invocation) {
+    auto query = single_positional_text_or_error(
+        invocation,
+        "icons svg",
+        "name-or-reference");
+    if (!query)
+        return print_error("icons svg", query.error(), invocation.has("json"));
+
+    auto result = lookup_icon_symbol(*query);
+    if (!result) {
+        if (invocation.has("json")) {
+            std::println("{}", icon_svg_not_found_json(*query));
+        } else {
+            std::println(
+                std::cerr,
+                "{}",
+                cppx::terminal::format_diagnostic({
+                    .severity = cppx::terminal::DiagnosticSeverity::error,
+                    .message = std::format(
+                        "symbol '{}' was not found; run 'phenotype icons catalog' to list built-in symbols",
+                        *query),
+                    .context = "icons svg",
+                }));
+        }
+        return 2;
+    }
+
+    if (invocation.has("json")) {
+        std::println("{}", icon_svg_json(*query, *result));
+        return 0;
+    }
+
+    std::println("{}", icon_catalog::svg_source(result->symbol));
+    return 0;
+}
+
 int run_theme_contract(cppx::cli::Invocation const& invocation) {
     auto checks = theme_contract_checks();
     auto const contract = theme_contract::default_glass_theme_contract();
@@ -8183,6 +8279,9 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "icons", "lookup"})
         return run_icons_lookup(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "icons", "svg"})
+        return run_icons_svg(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "theme", "contract"})
         return run_theme_contract(*parsed);

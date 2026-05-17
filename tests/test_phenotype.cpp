@@ -3650,6 +3650,10 @@ void test_icon_catalog_umbrella_export() {
            == "airdrop");
     assert(phenotype::icon_catalog::uses_svg_path_arcs(
                phenotype::icon_catalog::Symbol::AirDrop));
+    assert(phenotype::icon_catalog::svg_source(
+               phenotype::icon_catalog::Symbol::Applications)
+               .find("currentColor")
+           != std::string_view::npos);
     assert(phenotype::icon_catalog::file_type_color_policy()
            == "macos_finder_file_type_tints");
     assert(phenotype::icon_catalog::interaction_tone_policy()
