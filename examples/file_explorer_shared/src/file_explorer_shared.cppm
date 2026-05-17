@@ -1655,6 +1655,112 @@ inline std::optional<ExplorerSelectionMove> selection_move_from_name(
     return std::nullopt;
 }
 
+inline json::Value icon_color_debug_json(icon_catalog::SymbolColor color) {
+    json::Object out;
+    out.emplace("r", json::Value{static_cast<std::int64_t>(color.r)});
+    out.emplace("g", json::Value{static_cast<std::int64_t>(color.g)});
+    out.emplace("b", json::Value{static_cast<std::int64_t>(color.b)});
+    out.emplace("a", json::Value{static_cast<std::int64_t>(color.a)});
+    return json::Value{std::move(out)};
+}
+
+inline icon_catalog::SymbolColor icon_color_with_opacity(
+        icon_catalog::SymbolColor color,
+        float opacity) {
+    auto alpha = static_cast<float>(color.a)
+        * std::clamp(opacity, 0.0f, 1.0f);
+    auto rounded = static_cast<int>(alpha + 0.5f);
+    color.a = static_cast<unsigned char>(std::clamp(rounded, 0, 255));
+    return color;
+}
+
+inline double icon_contract_round_hundredth(float value) {
+    auto scaled = static_cast<int>(value * 100.0f + 0.5f);
+    return static_cast<double>(scaled) / 100.0;
+}
+
+inline json::Value icon_rendering_capabilities_debug_json(
+        icon_catalog::Symbol symbol) {
+    auto const capabilities = icon_catalog::rendering_capabilities(symbol);
+    json::Object out;
+    out.emplace("policy", json::Value{std::string{capabilities.policy}});
+    out.emplace("monochrome", json::Value{capabilities.monochrome});
+    out.emplace("hierarchical", json::Value{capabilities.hierarchical});
+    out.emplace("palette", json::Value{capabilities.palette});
+    out.emplace("multicolor", json::Value{capabilities.multicolor});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value icon_presentation_debug_json(
+        icon_catalog::Symbol symbol,
+        icon_catalog::SymbolPresentationRole role,
+        icon_catalog::SymbolInteractionState state,
+        icon_catalog::SymbolInteractionPhase phase) {
+    auto const desc = icon_catalog::descriptor(symbol);
+    auto const metrics = icon_catalog::metrics(role);
+    auto const recipe = icon_catalog::macos_state_recipe(role, state, phase);
+    auto const visible_color =
+        icon_color_with_opacity(recipe.symbol_color, recipe.symbol_opacity);
+    auto const effective_point_size =
+        icon_contract_round_hundredth(metrics.point_size * recipe.scale);
+    auto const content_inset = icon_contract_round_hundredth(
+        (recipe.hit_target_size - static_cast<float>(effective_point_size))
+        / 2.0f);
+    json::Object out;
+    out.emplace("schema_version", json::Value{1});
+    out.emplace("symbol", json::Value{std::string{desc.name}});
+    out.emplace(
+        "semantic_reference_name",
+        json::Value{std::string{desc.semantic_reference_name}});
+    out.emplace(
+        "role",
+        json::Value{std::string{
+            icon_catalog::symbol_presentation_role_name(role)}});
+    out.emplace(
+        "phase",
+        json::Value{std::string{
+            icon_catalog::symbol_interaction_phase_name(phase)}});
+    out.emplace("selected", json::Value{state.selected});
+    out.emplace("enabled", json::Value{state.enabled});
+    out.emplace("policy", json::Value{std::string{recipe.policy}});
+    out.emplace(
+        "rendering",
+        json::Value{std::string{
+            icon_catalog::symbol_rendering_mode_name(
+                desc.preferred_rendering)}});
+    out.emplace(
+        "rendering_capabilities",
+        icon_rendering_capabilities_debug_json(symbol));
+    out.emplace(
+        "symbol_tone",
+        json::Value{std::string{
+            icon_catalog::symbol_tone_name(recipe.symbol_tone)}});
+    out.emplace(
+        "base_symbol_color",
+        icon_color_debug_json(recipe.symbol_color));
+    out.emplace(
+        "visible_symbol_color",
+        icon_color_debug_json(visible_color));
+    out.emplace(
+        "background_color",
+        icon_color_debug_json(recipe.background_color));
+    out.emplace(
+        "symbol_opacity",
+        json::Value{icon_contract_round_hundredth(recipe.symbol_opacity)});
+    out.emplace("phase_scale", json::Value{recipe.scale});
+    out.emplace("point_size", json::Value{metrics.point_size});
+    out.emplace("effective_point_size", json::Value{effective_point_size});
+    out.emplace("hit_target_size", json::Value{recipe.hit_target_size});
+    out.emplace("content_inset", json::Value{content_inset});
+    out.emplace("optical_y_offset", json::Value{metrics.optical_y_offset});
+    out.emplace("corner_radius", json::Value{recipe.corner_radius});
+    out.emplace("borderless", json::Value{recipe.borderless});
+    out.emplace("grouped_control", json::Value{recipe.grouped_control});
+    out.emplace("likely_layer", json::Value{"icon_glyph"});
+    out.emplace("likely_pass", json::Value{"svg_path_or_line_paint"});
+    return json::Value{std::move(out)};
+}
+
 inline json::Value entry_debug_json(Entry const& entry) {
     json::Object out;
     out.emplace("name", json::Value{entry.name});
@@ -1663,6 +1769,13 @@ inline json::Value entry_debug_json(Entry const& entry) {
     out.emplace(
         "symbol_semantic_reference_name",
         json::Value{std::string{entry_symbol_semantic_reference_name(entry)}});
+    out.emplace(
+        "symbol_presentation",
+        icon_presentation_debug_json(
+            entry_symbol(entry),
+            icon_catalog::SymbolPresentationRole::FileType,
+            icon_catalog::SymbolInteractionState{false, true},
+            icon_catalog::SymbolInteractionPhase::Normal));
     out.emplace("folder", json::Value{entry.folder});
     out.emplace("size", json::Value{static_cast<std::int64_t>(entry.size)});
     return json::Value{std::move(out)};
@@ -1780,6 +1893,40 @@ inline json::Value sidebar_symbol_tokens_debug_json(
     return json::Value{std::move(out)};
 }
 
+inline json::Value sidebar_symbol_presentations_debug_json(
+        ExplorerChromeMetrics const& chrome) {
+    if (chrome.icon_reference_symbol_count <= 0)
+        return json::Value{json::Array{}};
+    json::Array out;
+    for (auto const& item : desktop_sidebar_symbol_contract()) {
+        json::Object token;
+        token.emplace("token", json::Value{std::string{item.token}});
+        token.emplace(
+            "symbol",
+            json::Value{std::string{icon_catalog::name(item.symbol)}});
+        token.emplace(
+            "semantic_reference_name",
+            json::Value{std::string{
+                icon_catalog::semantic_reference_name(item.symbol)}});
+        token.emplace(
+            "unselected_presentation",
+            icon_presentation_debug_json(
+                item.symbol,
+                icon_catalog::SymbolPresentationRole::Sidebar,
+                icon_catalog::SymbolInteractionState{false, true},
+                icon_catalog::SymbolInteractionPhase::Normal));
+        token.emplace(
+            "selected_presentation",
+            icon_presentation_debug_json(
+                item.symbol,
+                icon_catalog::SymbolPresentationRole::Sidebar,
+                icon_catalog::SymbolInteractionState{true, true},
+                icon_catalog::SymbolInteractionPhase::Normal));
+        out.push_back(json::Value{std::move(token)});
+    }
+    return json::Value{std::move(out)};
+}
+
 inline json::Value toolbar_icon_reference_symbols_debug_json(
         ExplorerChromeMetrics const& chrome) {
     if (chrome.icon_reference_symbol_count <= 0)
@@ -1810,6 +1957,107 @@ inline json::Value file_type_symbol_tokens_debug_json(
                 icon_catalog::semantic_reference_name(item.symbol)}});
         out.push_back(json::Value{std::move(token)});
     }
+    return json::Value{std::move(out)};
+}
+
+inline json::Value file_type_symbol_presentations_debug_json(
+        ExplorerChromeMetrics const& chrome) {
+    if (chrome.icon_reference_symbol_count <= 0)
+        return json::Value{json::Array{}};
+    json::Array out;
+    for (auto const& item : file_type_symbol_contract()) {
+        json::Object token;
+        token.emplace("token", json::Value{std::string{item.token}});
+        token.emplace(
+            "symbol",
+            json::Value{std::string{icon_catalog::name(item.symbol)}});
+        token.emplace(
+            "semantic_reference_name",
+            json::Value{std::string{
+                icon_catalog::semantic_reference_name(item.symbol)}});
+        token.emplace(
+            "presentation",
+            icon_presentation_debug_json(
+                item.symbol,
+                icon_catalog::SymbolPresentationRole::FileType,
+                icon_catalog::SymbolInteractionState{false, true},
+                icon_catalog::SymbolInteractionPhase::Normal));
+        out.push_back(json::Value{std::move(token)});
+    }
+    return json::Value{std::move(out)};
+}
+
+inline json::Value toolbar_symbol_presentations_debug_json(
+        ExplorerChromeMetrics const& chrome) {
+    if (chrome.icon_reference_symbol_count <= 0)
+        return json::Value{json::Array{}};
+    json::Array out;
+    for (unsigned int i = 0; i < icon_catalog::toolbar_symbol_count; ++i) {
+        auto const symbol = icon_catalog::toolbar_symbol_at(i);
+        json::Object item;
+        item.emplace("symbol", json::Value{std::string{
+            icon_catalog::name(symbol)}});
+        item.emplace("semantic_reference_name", json::Value{std::string{
+            icon_catalog::semantic_reference_name(symbol)}});
+        item.emplace(
+            "normal_presentation",
+            icon_presentation_debug_json(
+                symbol,
+                icon_catalog::SymbolPresentationRole::Toolbar,
+                icon_catalog::SymbolInteractionState{false, true},
+                icon_catalog::SymbolInteractionPhase::Normal));
+        item.emplace(
+            "pressed_presentation",
+            icon_presentation_debug_json(
+                symbol,
+                icon_catalog::SymbolPresentationRole::Toolbar,
+                icon_catalog::SymbolInteractionState{false, true},
+                icon_catalog::SymbolInteractionPhase::Pressed));
+        out.push_back(json::Value{std::move(item)});
+    }
+    return json::Value{std::move(out)};
+}
+
+inline json::Value icon_presentation_samples_debug_json(
+        ExplorerChromeMetrics const& chrome) {
+    if (chrome.icon_reference_symbol_count <= 0)
+        return json::Value{json::Object{}};
+    json::Object out;
+    out.emplace(
+        "sidebar_selected_recents",
+        icon_presentation_debug_json(
+            icon_catalog::Symbol::Recents,
+            icon_catalog::SymbolPresentationRole::Sidebar,
+            icon_catalog::SymbolInteractionState{true, true},
+            icon_catalog::SymbolInteractionPhase::Normal));
+    out.emplace(
+        "sidebar_unselected_trash",
+        icon_presentation_debug_json(
+            icon_catalog::Symbol::Trash,
+            icon_catalog::SymbolPresentationRole::Sidebar,
+            icon_catalog::SymbolInteractionState{false, true},
+            icon_catalog::SymbolInteractionPhase::Normal));
+    out.emplace(
+        "toolbar_pressed_search",
+        icon_presentation_debug_json(
+            icon_catalog::Symbol::Search,
+            icon_catalog::SymbolPresentationRole::Toolbar,
+            icon_catalog::SymbolInteractionState{false, true},
+            icon_catalog::SymbolInteractionPhase::Pressed));
+    out.emplace(
+        "toolbar_disabled_forward",
+        icon_presentation_debug_json(
+            icon_catalog::Symbol::Forward,
+            icon_catalog::SymbolPresentationRole::Toolbar,
+            icon_catalog::SymbolInteractionState{false, false},
+            icon_catalog::SymbolInteractionPhase::Normal));
+    out.emplace(
+        "file_type_pdf",
+        icon_presentation_debug_json(
+            icon_catalog::Symbol::PdfDocument,
+            icon_catalog::SymbolPresentationRole::FileType,
+            icon_catalog::SymbolInteractionState{false, true},
+            icon_catalog::SymbolInteractionPhase::Normal));
     return json::Value{std::move(out)};
 }
 
@@ -2082,11 +2330,23 @@ inline json::Value explorer_chrome_debug_json(
         "sidebar_symbol_tokens",
         sidebar_symbol_tokens_debug_json(chrome));
     icon_system.emplace(
+        "sidebar_symbol_presentations",
+        sidebar_symbol_presentations_debug_json(chrome));
+    icon_system.emplace(
         "toolbar_reference_symbols",
         toolbar_icon_reference_symbols_debug_json(chrome));
     icon_system.emplace(
+        "toolbar_symbol_presentations",
+        toolbar_symbol_presentations_debug_json(chrome));
+    icon_system.emplace(
         "file_type_symbol_tokens",
         file_type_symbol_tokens_debug_json(chrome));
+    icon_system.emplace(
+        "file_type_symbol_presentations",
+        file_type_symbol_presentations_debug_json(chrome));
+    icon_system.emplace(
+        "presentation_samples",
+        icon_presentation_samples_debug_json(chrome));
 
     json::Object thumbnail_system;
     thumbnail_system.emplace(

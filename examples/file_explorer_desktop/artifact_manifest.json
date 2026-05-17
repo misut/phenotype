@@ -724,6 +724,54 @@
       "equals": "disabled"
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.presentation_samples.toolbar_pressed_search.phase",
+      "equals": "pressed"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.presentation_samples.toolbar_pressed_search.semantic_reference_name",
+      "equals": "magnifyingglass"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.presentation_samples.toolbar_pressed_search.visible_symbol_color.a",
+      "equals": 209
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.presentation_samples.toolbar_pressed_search.background_color.a",
+      "equals": 150
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.presentation_samples.toolbar_pressed_search.effective_point_size",
+      "equals": 23.64
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.presentation_samples.toolbar_pressed_search.likely_pass",
+      "equals": "svg_path_or_line_paint"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.presentation_samples.sidebar_selected_recents.symbol_tone",
+      "equals": "accent"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.presentation_samples.sidebar_selected_recents.selected",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.presentation_samples.toolbar_disabled_forward.enabled",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.presentation_samples.toolbar_disabled_forward.symbol_opacity",
+      "equals": 0.35
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.presentation_samples.file_type_pdf.hit_target_size",
+      "equals": 64.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.presentation_samples.file_type_pdf.semantic_reference_name",
+      "equals": "doc.richtext"
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.file_type_color_policy",
       "equals": "macos_finder_file_type_tints"
     },

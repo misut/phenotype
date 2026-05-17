@@ -231,8 +231,11 @@ presence checks from the same pure metadata package.
 probe for one glyph when a Finder token maps to the wrong visual metaphor or
 hit target. `phenotype icons svg <name-or-reference>` emits the exact
 phenotype-owned SVG source for that glyph, with `--json` adding the semantic
-reference name, asset policy, and rendering capabilities. Use it when a renderer, path parser, or
-icon-source cache is suspect, while
+reference name, asset policy, and rendering capabilities. `phenotype icons
+present <name-or-reference> --role ... --phase ... --json` resolves the exact
+macOS-style presentation recipe for one glyph state, including visible RGBA,
+background chrome, effective size, hit target, and likely layer/pass. Use these
+icon probes when a renderer, path parser, or icon-source cache is suspect, while
 `phenotype drive file-explorer --json` embeds the desktop chrome geometry and
 icon-system contract under `chrome.geometry` and `chrome.icon_system`; the
 same output includes the default glass theme contract under `theme_system`. The
@@ -317,7 +320,12 @@ phenotype-owned symbols and semantic SF Symbols reference names, so a wrong
 Recents/Shared/Desktop-style metaphor fails as data before anyone compares
 pixels. `file_type_symbol_tokens` performs the same check for icon-grid
 fallback symbols, including PDF, text, image, movie, archive, document, and
-folder entries. `symbol_control_chrome_policy`,
+folder entries. `sidebar_symbol_presentations`,
+`toolbar_symbol_presentations`, `file_type_symbol_presentations`, and
+`presentation_samples` then resolve those semantic tokens into the same
+role/phase/selected/disabled recipes used by `phenotype icons present`, so
+alpha, effective point size, hit target, and likely icon layer/pass can be
+checked before looking at pixels. `symbol_control_chrome_policy`,
 `symbol_interaction_phase_policy`, toolbar/sidebar pressed background alpha,
 pressed symbol opacity, and pressed scale describe the macOS-style normal,
 hovered, pressed, selected, and disabled symbol chrome that the example uses
