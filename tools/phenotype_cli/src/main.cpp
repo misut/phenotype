@@ -21,6 +21,17 @@ struct Check {
     std::string hint;
 };
 
+struct ToolMigration {
+    std::string legacy_path;
+    std::string replacement_command;
+    std::string status;
+    std::string edge_boundary;
+    std::string removal_policy;
+    bool legacy_present = false;
+    bool replacement_implemented = true;
+    bool removal_ready = false;
+};
+
 struct ArtifactSummary {
     fs::path bundle;
     bool exists = false;
@@ -1158,6 +1169,67 @@ auto doctor_checks() -> std::vector<Check> {
     return checks;
 }
 
+auto tool_migrations(fs::path const& root) -> std::vector<ToolMigration> {
+    auto make = [&](std::string legacy_path,
+                    std::string replacement_command,
+                    std::string status,
+                    std::string edge_boundary,
+                    std::string removal_policy,
+                    bool removal_ready = false) {
+        return ToolMigration{
+            .legacy_path = legacy_path,
+            .replacement_command = replacement_command,
+            .status = status,
+            .edge_boundary = edge_boundary,
+            .removal_policy = removal_policy,
+            .legacy_present = path_exists(root / legacy_path),
+            .replacement_implemented = true,
+            .removal_ready = removal_ready,
+        };
+    };
+
+    return {
+        make("tools/verify_artifact_bundle.py",
+             "phenotype artifact verify <bundle>",
+             "uv_managed_reference_verifier",
+             "Python process execution stays at the CLI edge.",
+             "Keep until the native verifier matches representative failure shapes."),
+        make("tools/verify_glass_showcase_artifact.sh",
+             "phenotype artifact verify-glass-showcase",
+             "thin_compatibility_wrapper",
+             "Native capture, process execution, and uv verifier calls stay at the CLI edge.",
+             "Remove after local docs and developer workflows stop invoking the wrapper.",
+             true),
+        make("tools/verify_glass_showcase_accessibility_artifact.sh",
+             "phenotype artifact verify-glass-showcase --accessibility",
+             "thin_compatibility_wrapper",
+             "Accessibility capture flags and uv verifier calls stay at the CLI edge.",
+             "Remove after local docs and developer workflows stop invoking the wrapper.",
+             true),
+        make("tools/verify_file_explorer_artifacts.sh",
+             "phenotype artifact verify-file-explorer",
+             "thin_compatibility_wrapper",
+             "Native capture, shared-model tests, and uv verifier calls stay at the CLI edge.",
+             "Remove after local docs and developer workflows stop invoking the wrapper.",
+             true),
+        make("tools/android/doctor.sh",
+             "phenotype android doctor",
+             "cli_namespace_delegates_to_edge_script",
+             "Android SDK, JDK, adb, and emulator probes stay at the CLI edge.",
+             "Keep as edge implementation until Android process control moves into the native CLI adapter."),
+        make("tools/android/run.sh",
+             "phenotype android run",
+             "cli_namespace_delegates_to_edge_script",
+             "APK install, app launch, and log sampling stay at the CLI edge.",
+             "Keep as edge implementation until Android process control moves into the native CLI adapter."),
+        make("tools/android/contract.sh",
+             "phenotype android contract",
+             "cli_namespace_delegates_to_edge_script",
+             "Device artifact collection and verifier execution stay at the CLI edge.",
+             "Keep as edge implementation until Android process control moves into the native CLI adapter."),
+    };
+}
+
 auto all_ok(std::span<Check const> checks) -> bool {
     return std::ranges::all_of(checks, [](Check const& check) {
         return check.ok;
@@ -1193,6 +1265,56 @@ auto checks_json(std::span<Check const> checks) -> std::string {
     }
     out += "]";
     return out;
+}
+
+auto tool_migration_json(ToolMigration const& migration) -> std::string {
+    return std::format(
+        "{{\"legacy_path\":{},\"replacement_command\":{},"
+        "\"status\":{},\"edge_boundary\":{},\"removal_policy\":{},"
+        "\"legacy_present\":{},\"replacement_implemented\":{},"
+        "\"removal_ready\":{}}}",
+        json_string(migration.legacy_path),
+        json_string(migration.replacement_command),
+        json_string(migration.status),
+        json_string(migration.edge_boundary),
+        json_string(migration.removal_policy),
+        migration.legacy_present ? "true" : "false",
+        migration.replacement_implemented ? "true" : "false",
+        migration.removal_ready ? "true" : "false");
+}
+
+auto tool_migrations_json(std::span<ToolMigration const> migrations)
+    -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < migrations.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += tool_migration_json(migrations[i]);
+    }
+    out += "]";
+    return out;
+}
+
+auto tool_migration_summary_json(std::span<ToolMigration const> migrations)
+    -> std::string {
+    auto present = std::size_t{0};
+    auto implemented = std::size_t{0};
+    auto removal_ready = std::size_t{0};
+    for (auto const& migration : migrations) {
+        if (migration.legacy_present)
+            ++present;
+        if (migration.replacement_implemented)
+            ++implemented;
+        if (migration.removal_ready)
+            ++removal_ready;
+    }
+    return std::format(
+        "{{\"legacy_present\":{},\"replacement_implemented\":{},"
+        "\"removal_ready\":{},\"entries\":{}}}",
+        present,
+        implemented,
+        removal_ready,
+        migrations.size());
 }
 
 void append_command_entries(cppx::cli::CommandSpec const& command,
@@ -3846,13 +3968,36 @@ int print_error(std::string_view command, std::string_view message, bool json) {
 
 int run_doctor(cppx::cli::Invocation const& invocation) {
     auto checks = doctor_checks();
+    auto root = find_repo_root(fs::current_path());
+    auto migrations = root ? tool_migrations(*root) : std::vector<ToolMigration>{};
     if (invocation.has("json")) {
         std::println(
-            "{{\"schema_version\":1,\"command\":\"doctor\",\"ok\":{},\"checks\":{}}}",
+            "{{\"schema_version\":1,\"command\":\"doctor\",\"ok\":{},"
+            "\"checks\":{},\"tool_migration\":{{\"summary\":{},"
+            "\"entries\":{}}}}}",
             all_ok(checks) ? "true" : "false",
-            checks_json(checks));
+            checks_json(checks),
+            tool_migration_summary_json(migrations),
+            tool_migrations_json(migrations));
     } else {
         print_checks("phenotype doctor", checks);
+        if (!migrations.empty()) {
+            auto lines = std::vector<cppx::terminal::StatusLine>{};
+            lines.reserve(migrations.size());
+            for (auto const& migration : migrations) {
+                lines.push_back({
+                    .label = migration.legacy_path,
+                    .value = migration.replacement_command + " ("
+                        + migration.status + ")",
+                    .status = migration.legacy_present
+                        ? cppx::terminal::StatusKind::ok
+                        : cppx::terminal::StatusKind::skip,
+                });
+            }
+            std::println("tool migration");
+            std::println("{}",
+                         cppx::terminal::format_status_frame(lines, false));
+        }
     }
     return all_ok(checks) ? 0 : 1;
 }
