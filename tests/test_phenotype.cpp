@@ -3683,8 +3683,8 @@ void test_icon_catalog_umbrella_export() {
     auto const sidebar_chrome = phenotype::icon_catalog::macos_control_chrome(
         phenotype::icon_catalog::SymbolPresentationRole::Sidebar,
         phenotype::icon_catalog::SymbolInteractionState{true, true});
-    assert(sidebar_chrome.background_color.a == 176);
-    assert(sidebar_chrome.hover_background_color.a == 214);
+    assert(sidebar_chrome.background_color.a == 238);
+    assert(sidebar_chrome.hover_background_color.a == 248);
 
     std::puts("PASS: umbrella module exports icon catalog contract");
 }

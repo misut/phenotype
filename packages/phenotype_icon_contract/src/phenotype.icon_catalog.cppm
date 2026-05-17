@@ -813,10 +813,10 @@ inline auto macos_control_chrome(SymbolPresentationRole role,
             tone,
             symbol_color,
             state.selected
-                ? SymbolColor{236, 236, 238, 176}
+                ? SymbolColor{248, 248, 250, 238}
                 : transparent,
             state.selected
-                ? SymbolColor{232, 232, 236, 214}
+                ? SymbolColor{242, 242, 246, 248}
                 : SymbolColor{230, 230, 234, 150},
             10.0f,
             hit_target_size(role),
