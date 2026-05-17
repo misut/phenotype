@@ -274,6 +274,18 @@
       "equals": 0.6600000262260437
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.toolbar_point_size",
+      "equals": 24.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.sidebar_point_size",
+      "equals": 26.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.sidebar_optical_y_offset",
+      "equals": -0.5
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.text_weight_aligned",
       "equals": true
     },
@@ -308,6 +320,14 @@
     {
       "path": "application.file_explorer.chrome.icon_system.variant_policy",
       "equals": "outline primary with filled action variants"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.presentation_policy",
+      "equals": "macos_role_aware_symbol_presentation"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.tone_policy",
+      "equals": "primary, secondary, selected, accent, disabled, destructive"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.scale",

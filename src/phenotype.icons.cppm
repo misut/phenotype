@@ -104,6 +104,23 @@ enum class SymbolScale {
     Large,
 };
 
+enum class SymbolPresentationRole {
+    Toolbar,
+    Navigation,
+    Sidebar,
+    FileType,
+    Action,
+};
+
+enum class SymbolTone {
+    Primary,
+    Secondary,
+    Selected,
+    Accent,
+    Disabled,
+    Destructive,
+};
+
 inline auto symbol_role_name(SymbolRole role) noexcept -> std::string_view {
     switch (role) {
     case SymbolRole::Navigation: return "navigation";
@@ -142,6 +159,30 @@ inline auto symbol_scale_name(SymbolScale scale) noexcept -> std::string_view {
     return "medium";
 }
 
+inline auto symbol_presentation_role_name(
+        SymbolPresentationRole role) noexcept -> std::string_view {
+    switch (role) {
+    case SymbolPresentationRole::Toolbar:    return "toolbar";
+    case SymbolPresentationRole::Navigation: return "navigation";
+    case SymbolPresentationRole::Sidebar:    return "sidebar";
+    case SymbolPresentationRole::FileType:   return "file_type";
+    case SymbolPresentationRole::Action:     return "action";
+    }
+    return "toolbar";
+}
+
+inline auto symbol_tone_name(SymbolTone tone) noexcept -> std::string_view {
+    switch (tone) {
+    case SymbolTone::Primary:     return "primary";
+    case SymbolTone::Secondary:   return "secondary";
+    case SymbolTone::Selected:    return "selected";
+    case SymbolTone::Accent:      return "accent";
+    case SymbolTone::Disabled:    return "disabled";
+    case SymbolTone::Destructive: return "destructive";
+    }
+    return "primary";
+}
+
 struct SymbolDescriptor {
     Symbol symbol = Symbol::Document;
     std::string_view name;
@@ -164,6 +205,17 @@ struct SymbolDescriptor {
     bool supports_hierarchical_opacity = false;
     bool phenotype_owned = true;
     bool uses_sf_symbols_asset = false;
+};
+
+struct SymbolPresentation {
+    Symbol symbol = Symbol::Document;
+    SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
+    SymbolTone tone = SymbolTone::Secondary;
+    SymbolScale scale = SymbolScale::Medium;
+    SymbolRenderingMode rendering = SymbolRenderingMode::Monochrome;
+    Color color = {96, 96, 100, 255};
+    float point_size = 24.0f;
+    float optical_y_offset = 0.0f;
 };
 
 inline constexpr unsigned int all_symbol_count = 31;
@@ -267,6 +319,10 @@ inline auto reference_family() noexcept -> std::string_view {
 
 inline auto reference_policy() noexcept -> std::string_view {
     return "semantic reference only; phenotype-owned SVG artwork";
+}
+
+inline auto presentation_policy() noexcept -> std::string_view {
+    return "macos_role_aware_symbol_presentation";
 }
 
 inline auto semantic_reference_name(Symbol symbol) noexcept -> std::string_view {
@@ -445,6 +501,98 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
     };
 }
 
+inline auto default_presentation_role(Symbol symbol) noexcept
+        -> SymbolPresentationRole {
+    switch (descriptor(symbol).role) {
+    case SymbolRole::Navigation: return SymbolPresentationRole::Navigation;
+    case SymbolRole::Toolbar:    return SymbolPresentationRole::Toolbar;
+    case SymbolRole::Sidebar:    return SymbolPresentationRole::Sidebar;
+    case SymbolRole::FileType:   return SymbolPresentationRole::FileType;
+    case SymbolRole::Action:     return SymbolPresentationRole::Action;
+    }
+    return SymbolPresentationRole::Toolbar;
+}
+
+inline auto default_scale(SymbolPresentationRole role) noexcept
+        -> SymbolScale {
+    switch (role) {
+    case SymbolPresentationRole::Sidebar:
+    case SymbolPresentationRole::FileType:
+        return SymbolScale::Large;
+    case SymbolPresentationRole::Toolbar:
+    case SymbolPresentationRole::Navigation:
+    case SymbolPresentationRole::Action:
+        return SymbolScale::Medium;
+    }
+    return SymbolScale::Medium;
+}
+
+inline float point_size(SymbolScale scale) noexcept {
+    switch (scale) {
+    case SymbolScale::Small:  return 20.0f;
+    case SymbolScale::Medium: return 24.0f;
+    case SymbolScale::Large:  return 26.0f;
+    }
+    return 24.0f;
+}
+
+inline float optical_y_offset(SymbolPresentationRole role) noexcept {
+    switch (role) {
+    case SymbolPresentationRole::Sidebar:
+        return -0.5f;
+    case SymbolPresentationRole::Toolbar:
+    case SymbolPresentationRole::Navigation:
+    case SymbolPresentationRole::FileType:
+    case SymbolPresentationRole::Action:
+        return 0.0f;
+    }
+    return 0.0f;
+}
+
+inline auto macos_light_tone_color(SymbolTone tone) noexcept -> Color {
+    switch (tone) {
+    case SymbolTone::Primary:     return {30, 30, 30, 255};
+    case SymbolTone::Secondary:   return {96, 96, 100, 255};
+    case SymbolTone::Selected:    return {58, 58, 60, 255};
+    case SymbolTone::Accent:      return {0, 122, 255, 255};
+    case SymbolTone::Disabled:    return {190, 193, 198, 255};
+    case SymbolTone::Destructive: return {255, 59, 48, 255};
+    }
+    return {96, 96, 100, 255};
+}
+
+inline auto presentation(Symbol symbol,
+                         SymbolPresentationRole role,
+                         SymbolTone tone,
+                         SymbolScale scale) noexcept
+        -> SymbolPresentation {
+    auto const desc = descriptor(symbol);
+    return SymbolPresentation{
+        symbol,
+        role,
+        tone,
+        scale,
+        desc.preferred_rendering,
+        macos_light_tone_color(tone),
+        point_size(scale),
+        optical_y_offset(role),
+    };
+}
+
+inline auto presentation(Symbol symbol,
+                         SymbolPresentationRole role,
+                         SymbolTone tone = SymbolTone::Secondary) noexcept
+        -> SymbolPresentation {
+    return presentation(symbol, role, tone, default_scale(role));
+}
+
+inline auto presentation(Symbol symbol,
+                         SymbolTone tone = SymbolTone::Secondary) noexcept
+        -> SymbolPresentation {
+    auto const role = default_presentation_role(symbol);
+    return presentation(symbol, role, tone, default_scale(role));
+}
+
 inline auto source(Symbol symbol) noexcept -> std::string_view {
     switch (symbol) {
     case Symbol::Back:
@@ -527,6 +675,19 @@ void paint_symbol(Painter& painter,
     svg::paint(painter, doc, x, y, size, size, svg::RenderOptions{color, true});
 }
 
+void paint_symbol(Painter& painter,
+                  SymbolPresentation const& style,
+                  float x,
+                  float y) {
+    paint_symbol(
+        painter,
+        style.symbol,
+        x,
+        y + style.optical_y_offset,
+        style.point_size,
+        style.color);
+}
+
 inline auto paint_token(Symbol symbol, float size, Color color) noexcept
     -> std::uint64_t {
     std::uint64_t h = 1469598103934665603ull;
@@ -542,6 +703,16 @@ inline auto paint_token(Symbol symbol, float size, Color color) noexcept
     mix(color.g);
     mix(color.b);
     mix(color.a);
+    return h == 0 ? 1 : h;
+}
+
+inline auto paint_token(SymbolPresentation const& style) noexcept
+    -> std::uint64_t {
+    auto h = paint_token(style.symbol, style.point_size, style.color);
+    h ^= static_cast<std::uint64_t>(style.role) << 8;
+    h ^= static_cast<std::uint64_t>(style.tone) << 16;
+    h ^= static_cast<std::uint64_t>(style.scale) << 24;
+    h ^= static_cast<std::uint64_t>(style.rendering) << 32;
     return h == 0 ? 1 : h;
 }
 

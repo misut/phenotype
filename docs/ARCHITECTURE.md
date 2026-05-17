@@ -193,9 +193,13 @@ strokes for SF Symbols-like hierarchical emphasis, and exposes symbol metadata
 (`icons::descriptor`, semantic reference names, variant/rendering/scale names,
 count constants, and index accessors for all, sidebar, and toolbar symbols) so
 examples and artifact verifiers can assert the style contract without pixel
-guessing. Finder-style examples serialize sidebar and toolbar semantic
-reference arrays in their artifact debug payload, making a symbol regression
-visible in JSON before anyone inspects a screenshot.
+guessing. `icons::presentation` adds the default macOS-inspired presentation
+policy: toolbar symbols use 24 pt secondary/selected tones, sidebar symbols use
+26 pt primary/accent tones with a small optical vertical adjustment, and
+disabled/destructive tones are explicit pure values. Finder-style examples
+serialize sidebar and toolbar semantic reference arrays plus the presentation
+policy in their artifact debug payload, making a symbol regression visible in
+JSON before anyone inspects a screenshot.
 Package app icons are separate resources, not part of the glyph catalog: they
 are declared as `app.icon` SVG assets in `phenotype.package.toml`, copied by the
 CLI bundle step, and validated by `phenotype.resources` before a platform

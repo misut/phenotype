@@ -230,6 +230,9 @@ struct ExplorerChromeMetrics {
     float icon_grid_size = 0.0f;
     float icon_default_stroke_width = 0.0f;
     float icon_secondary_opacity = 0.0f;
+    float icon_toolbar_point_size = 0.0f;
+    float icon_sidebar_point_size = 0.0f;
+    float icon_sidebar_optical_y_offset = 0.0f;
     bool integrated_titlebar = true;
     bool native_window_controls = true;
     bool duplicate_window_controls = false;
@@ -253,6 +256,8 @@ struct ExplorerChromeMetrics {
     std::string icon_alignment;
     std::string icon_rendering_mode;
     std::string icon_variant_policy;
+    std::string icon_presentation_policy;
+    std::string icon_tone_policy;
     std::string icon_scale;
     std::string window_control_marker_mode;
 };
@@ -496,6 +501,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_grid_size = 0.0f,
             .icon_default_stroke_width = 0.0f,
             .icon_secondary_opacity = 0.0f,
+            .icon_toolbar_point_size = 0.0f,
+            .icon_sidebar_point_size = 0.0f,
+            .icon_sidebar_optical_y_offset = 0.0f,
             .integrated_titlebar = false,
             .native_window_controls = false,
             .duplicate_window_controls = false,
@@ -518,6 +526,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_alignment = "n/a",
             .icon_rendering_mode = "n/a",
             .icon_variant_policy = "n/a",
+            .icon_presentation_policy = "n/a",
+            .icon_tone_policy = "n/a",
             .icon_scale = "n/a",
             .window_control_marker_mode = "none",
         };
@@ -583,6 +593,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_grid_size = 24.0f,
         .icon_default_stroke_width = 1.8f,
         .icon_secondary_opacity = 0.66f,
+        .icon_toolbar_point_size = 24.0f,
+        .icon_sidebar_point_size = 26.0f,
+        .icon_sidebar_optical_y_offset = -0.5f,
         .integrated_titlebar = true,
         .native_window_controls = true,
         .duplicate_window_controls = false,
@@ -608,6 +621,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_alignment = "24x24 text-aligned symbol grid",
         .icon_rendering_mode = "hierarchical",
         .icon_variant_policy = "outline primary with filled action variants",
+        .icon_presentation_policy = "macos_role_aware_symbol_presentation",
+        .icon_tone_policy =
+            "primary, secondary, selected, accent, disabled, destructive",
         .icon_scale = "medium",
         .window_control_marker_mode = "runtime-native-controls",
     };
@@ -1180,6 +1196,15 @@ inline json::Value explorer_chrome_debug_json(
         "default_stroke_width",
         json::Value{chrome.icon_default_stroke_width});
     icon_system.emplace("secondary_opacity", json::Value{chrome.icon_secondary_opacity});
+    icon_system.emplace(
+        "toolbar_point_size",
+        json::Value{chrome.icon_toolbar_point_size});
+    icon_system.emplace(
+        "sidebar_point_size",
+        json::Value{chrome.icon_sidebar_point_size});
+    icon_system.emplace(
+        "sidebar_optical_y_offset",
+        json::Value{chrome.icon_sidebar_optical_y_offset});
     icon_system.emplace("text_weight_aligned", json::Value{chrome.icon_text_weight_aligned});
     icon_system.emplace("hierarchical_opacity", json::Value{chrome.icon_hierarchical_opacity});
     icon_system.emplace("design_reference", json::Value{chrome.icon_design_reference});
@@ -1189,6 +1214,8 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace("alignment", json::Value{chrome.icon_alignment});
     icon_system.emplace("rendering_mode", json::Value{chrome.icon_rendering_mode});
     icon_system.emplace("variant_policy", json::Value{chrome.icon_variant_policy});
+    icon_system.emplace("presentation_policy", json::Value{chrome.icon_presentation_policy});
+    icon_system.emplace("tone_policy", json::Value{chrome.icon_tone_policy});
     icon_system.emplace("scale", json::Value{chrome.icon_scale});
     icon_system.emplace(
         "sidebar_reference_symbols",

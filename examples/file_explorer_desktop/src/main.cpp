@@ -458,20 +458,36 @@ void paint_symbol_centered(phenotype::Painter& painter,
     phenotype::icons::paint_symbol(painter, symbol, x, y, size, color);
 }
 
+void paint_symbol_centered(
+        phenotype::Painter& painter,
+        phenotype::icons::SymbolPresentation presentation,
+        float box_x,
+        float box_y,
+        float box_width,
+        float box_height) {
+    auto const size = presentation.point_size;
+    auto const x = box_x + (box_width - size) * 0.5f;
+    auto const y = box_y + (box_height - size) * 0.5f;
+    phenotype::icons::paint_symbol(painter, presentation, x, y);
+}
+
 void paint_sidebar_icon(phenotype::Painter& painter,
                         std::string_view id,
                         float origin_x,
                         float origin_y) {
-    auto ink = id == "recents" ? rgba(0, 122, 255) : rgba(30, 30, 30);
+    auto const tone = id == "recents"
+        ? phenotype::icons::SymbolTone::Accent
+        : phenotype::icons::SymbolTone::Primary;
     paint_symbol_centered(
         painter,
-        sidebar_symbol(id),
+        phenotype::icons::presentation(
+            sidebar_symbol(id),
+            phenotype::icons::SymbolPresentationRole::Sidebar,
+            tone),
         origin_x,
         origin_y,
         k_sidebar_icon_size,
-        k_sidebar_icon_size,
-        24.0f,
-        ink);
+        k_sidebar_icon_size);
 }
 
 std::string extension_lower(std::string const& name) {
@@ -1100,10 +1116,6 @@ void finder_sidebar(State const& state) {
     }, MaterialKind::Thin, SpaceToken::Lg, SpaceToken::Xs);
 }
 
-phenotype::Color nav_icon_ink(bool enabled) {
-    return enabled ? rgba(82, 82, 86) : rgba(190, 193, 198);
-}
-
 phenotype::ButtonStyleOptions toolbar_icon_button_options(
         bool selected = false,
         bool disabled = false) {
@@ -1125,35 +1137,47 @@ phenotype::ButtonStyleOptions toolbar_icon_button_options(
     return options;
 }
 
-phenotype::Color toolbar_icon_ink(bool selected = false) {
-    return selected ? rgba(58, 58, 60) : rgba(96, 96, 100);
-}
-
 void paint_toolbar_symbol(phenotype::Painter& painter,
                           phenotype::icons::Symbol symbol,
-                          phenotype::Color ink,
-                          float size = 24.0f) {
+                          phenotype::icons::SymbolTone tone) {
     paint_symbol_centered(
         painter,
-        symbol,
+        phenotype::icons::presentation(
+            symbol,
+            phenotype::icons::SymbolPresentationRole::Toolbar,
+            tone),
         0.0f,
         0.0f,
         k_toolbar_icon_button_width,
-        k_toolbar_icon_button_height,
-        size,
-        ink);
+        k_toolbar_icon_button_height);
 }
 
 void paint_toolbar_symbol(phenotype::Painter& painter,
                           phenotype::icons::Symbol symbol,
                           bool selected = false) {
-    paint_toolbar_symbol(painter, symbol, toolbar_icon_ink(selected));
+    paint_toolbar_symbol(
+        painter,
+        symbol,
+        selected
+            ? phenotype::icons::SymbolTone::Selected
+            : phenotype::icons::SymbolTone::Secondary);
 }
 
 void paint_navigation_symbol(phenotype::Painter& painter,
                              phenotype::icons::Symbol symbol,
                              bool enabled) {
-    paint_toolbar_symbol(painter, symbol, nav_icon_ink(enabled));
+    paint_symbol_centered(
+        painter,
+        phenotype::icons::presentation(
+            symbol,
+            phenotype::icons::SymbolPresentationRole::Navigation,
+            enabled
+                ? phenotype::icons::SymbolTone::Selected
+                : phenotype::icons::SymbolTone::Disabled),
+        0.0f,
+        0.0f,
+        k_toolbar_icon_button_width,
+        k_toolbar_icon_button_height);
 }
 
 void toolbar_separator() {
