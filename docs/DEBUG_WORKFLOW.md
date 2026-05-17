@@ -336,10 +336,11 @@ checked before looking at pixels. `symbol_control_chrome_policy`,
 `symbol_interaction_phase_policy`, toolbar/sidebar pressed background alpha,
 pressed symbol opacity, and pressed scale describe the macOS-style normal,
 hovered, pressed, selected, and disabled symbol chrome that the example uses
-before rendering. Core `ButtonVisualState` carries the pressed callback id into
-state-aware canvas buttons, so a Finder toolbar glyph can prove from JSON and
-pixels that it is consuming the pure icon recipe rather than painting a separate
-ad hoc pressed style.
+before rendering. Core `widget::symbol_button` now composes that recipe with
+`ButtonVisualState`, semantic labels, and deterministic paint tokens for
+toolbar/navigation/action controls, so a Finder toolbar glyph can prove from
+JSON and pixels that it is consuming the pure icon recipe rather than painting a
+separate ad hoc pressed style.
 
 For a package-owned or ad hoc SVG file, use `phenotype svg inspect <path>
 --json` before blaming a backend. The output includes the pure SVG subset

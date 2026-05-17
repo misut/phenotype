@@ -90,9 +90,13 @@ glyphs, plus the file-type symbol table used by icon-view fallback painters.
 The debug payload also resolves representative sidebar, toolbar, and file-type
 presentation recipes with visible RGBA, effective point size, hit target, and
 likely icon layer/pass so Finder-like icon drift is diagnosable from JSON.
-The live toolbar and sidebar buttons consume the same state recipes through
-`ButtonVisualState`, so hover and press chrome affect both the button material
-and the glyph opacity/scale instead of remaining debug-only metadata.
+The live toolbar controls use the core `widget::symbol_button` helper, which
+derives `ButtonStyleOptions`, `ButtonVisualState`, centered SVG glyph painting,
+semantic labels, and paint tokens from `phenotype.icons::SymbolButtonOptions`.
+Sidebar rows still own their custom label layout, but their glyphs use the same
+pure role/state presentation recipe. Hover and press chrome therefore affect
+both the button material and the glyph opacity/scale instead of remaining
+debug-only metadata.
 The desktop sidebar additionally exposes the pure `token -> symbol -> semantic
 reference` table used by the renderer (`recents -> recents -> clock`,
 `download -> download -> arrow.down.circle`, and so on), without depending on

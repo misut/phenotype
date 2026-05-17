@@ -53,7 +53,10 @@ does not embed Apple or SF Symbols artwork. `icons::macos_presentation(...)`
 is the pure role/state mapper for toolbar, navigation, sidebar, file-type, and
 action symbols. It resolves tone, opacity, scale, hit target, and optical offset
 from explicit immutable inputs, while backends only paint the resulting SVG
-paths.
+paths. `widget::symbol_button` is the core control helper for those symbols: it
+lowers the same pure recipe to `ButtonStyleOptions`, `ButtonVisualState`, a
+centered SVG paint callback, semantic button labels, and deterministic paint
+tokens so examples do not hand-roll macOS-style toolbar chrome.
 
 ## View-time animation
 
@@ -224,7 +227,13 @@ SF Symbols reference name, family, and policy, so the contract can say "this
 glyph is playing the same UI role as `magnifyingglass`" without embedding
 Apple's vector paths. Apps can call `icons::document`, `icons::paint_symbol`,
 or `widget::icon`; the widget helper paints through `widget::canvas` and uses a
-deterministic paint token so stable icons do not re-emit every frame. The
+deterministic paint token so stable icons do not re-emit every frame. Apps that
+need an interactive macOS-style symbol control should call
+`widget::symbol_button` with an explicit `icons::SymbolButtonOptions` value.
+That value selects the presentation role, selected/disabled state, optional
+control size, and token salt; `phenotype.icons` then derives the button chrome,
+symbol presentation, hit target, and paint token from pure immutable inputs.
+The
 generic `widget::svg_image` path uses the same parsed-document token contract,
 so app-owned SVG illustrations, package icons, and future generated symbols can
 stay static in the paint cache unless their document, size, current color, or
@@ -266,10 +275,16 @@ catalog instead of leaving those decisions inside examples or native backends.
 hover background colors, corner radii, hit targets, and borderless/grouped
 control flags. `icon_catalog::macos_state_recipe` then resolves normal,
 hovered, pressed, selected, and disabled symbol states, including pressed
-background alpha, symbol opacity, and scale. `widget::canvas_button` exposes
-that core state as `ButtonVisualState`, so Finder-like toolbar and sidebar
-symbols can consume the pure recipe in the actual renderer while staying
-LLM-debuggable without consulting AppKit.
+background alpha, symbol opacity, and scale. `phenotype.icons` mirrors those
+pure catalog types into renderer-facing helpers:
+`icons::macos_symbol_button_style` builds the button chrome,
+`icons::macos_presentation(symbol, role, selected, ButtonVisualState)` maps the
+live control state to the resolved glyph presentation, and
+`icons::symbol_button_paint_token` keeps the canvas cache key aligned with that
+state. `widget::symbol_button` composes those helpers on top of
+`widget::canvas_button`, so Finder-like toolbar/navigation/action controls use
+the same contract in both examples and tests while remaining LLM-debuggable
+without consulting AppKit.
 The same pure catalog exposes a Finder-style file-type symbol set and tint
 policy for folder/document/PDF/text/image/movie/archive glyphs, which desktop
 examples use in list and column rows without asking a native icon service for
