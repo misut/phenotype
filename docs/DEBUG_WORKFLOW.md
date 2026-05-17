@@ -185,11 +185,16 @@ mise exec -- exon build
 
 The drive output reports the typed input trace, sandbox paths, visible entries,
 viewport, view mode, pure Finder chrome/grid metrics, selection capabilities,
-operation receipts, preview excerpt, and desktop keyboard command descriptors.
+operation receipts with resolved operation plans, preview excerpt, and desktop
+keyboard command descriptors.
 It is useful for validating
 select/open/read/create/duplicate/delete/view-mode/resize/shortcut and
 keyboard-selection model behavior before running the slower desktop/mobile
 artifact capture gate.
+Each operation plan records the sandbox-relative source and destination,
+whether the action reads a file, writes a file, creates a directory, moves to
+Trash, permanently deletes from Trash, and which fallback reason blocked a
+failed operation.
 The parser accepts desktop-style aliases including `key:enter`, `key:delete`,
 `key:escape`, `key:arrow-up`, `key:arrow-down`, `key:arrow-left`,
 `key:arrow-right`, `key:home`, `key:end`, `key:page-up`, `key:page-down`,
@@ -198,7 +203,9 @@ native key-command registry used by the desktop example.
 Native file explorer artifact bundles expose the same model state under
 `debug.application.file_explorer`: profile, location, status, sort mode, view
 mode, selected entry plus index, operation receipt, entry counts, pure chrome
-metrics, and keyboard command descriptors.
+metrics, and keyboard command descriptors. The operation receipt embeds the
+same plan shape as CLI drive output, so a startup artifact can explain the file
+effect contract without replaying the UI.
 The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
 selected-row radius plus soft selected-row alpha policy, the
 `phenotype.icon_catalog` / `phenotype.icons` style contract

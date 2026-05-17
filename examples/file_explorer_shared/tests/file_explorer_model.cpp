@@ -796,6 +796,10 @@ duplicate
     demo::create_file(state);
     assert(state.selected_name == "Launch Plan.txt");
     assert(fs::exists(state.current / "Launch Plan.txt"));
+    assert(state.last_operation.plan.writes_file);
+    assert(state.last_operation.plan.mutates_filesystem);
+    assert(state.last_operation.plan.destination
+           == "Demo Root/Launch Plan.txt");
     assert(demo::snapshot(state).operation_label
         .find("Operation: file_create ok - Launch Plan.txt") != std::string::npos);
     assert(demo::read_preview(state.current / "Launch Plan.txt")
@@ -805,6 +809,9 @@ duplicate
     assert(!fs::exists(state.current / "Launch Plan.txt"));
     assert(fs::exists(demo::trash_path(state.root) / "Launch Plan.txt"));
     assert(state.selected_name.empty());
+    assert(state.last_operation.plan.moves_to_trash);
+    assert(!state.last_operation.plan.permanent_delete);
+    assert(state.last_operation.plan.destination == "Trash/Launch Plan.txt");
     assert(demo::snapshot(state).operation_label
         .find("Operation: file_delete ok - Launch Plan.txt") != std::string::npos);
 
@@ -812,6 +819,7 @@ duplicate
     demo::create_folder(state);
     assert(state.selected_name == "Review Folder");
     assert(fs::is_directory(state.current / "Review Folder"));
+    assert(state.last_operation.plan.creates_directory);
     snap = demo::snapshot(state);
     assert(snap.selected.folder);
     assert(snap.can_delete_selected);
@@ -824,6 +832,9 @@ duplicate
     snap = demo::snapshot(state);
     assert(snap.has_selection);
     assert(snap.selected.folder);
+    assert(state.last_operation.plan.kind == "folder_select");
+    assert(state.last_operation.plan.source == "Demo Root/Review Folder");
+    assert(state.last_operation.plan.reads_directory);
     assert(snap.operation_label
         .find("Operation: folder_select ok - Review Folder") != std::string::npos);
 
@@ -847,6 +858,8 @@ duplicate
     assert(fs::exists(demo::trash_path(state.root)
         / "Review Folder" / "Nested Note.txt"));
     assert(state.selected_name.empty());
+    assert(state.last_operation.plan.deletes_directory);
+    assert(state.last_operation.plan.moves_to_trash);
     assert(demo::snapshot(state).operation_label
         .find("Operation: folder_delete ok - Review Folder") != std::string::npos);
 
@@ -887,6 +900,8 @@ duplicate
     demo::delete_selected(state);
     assert(!fs::exists(demo::trash_path(state.root) / "Trash Note.txt"));
     assert(state.status == "Deleted Trash Note.txt from Trash");
+    assert(state.last_operation.plan.permanent_delete);
+    assert(!state.last_operation.plan.moves_to_trash);
 
     demo::apply_startup_scenario(state, "created-folder");
     assert(state.selected_name == "Review Folder");
@@ -904,12 +919,16 @@ duplicate
         .find("Operation: folder_delete ok - Trash Folder") != std::string::npos);
 
     demo::select_entry(state, "README.txt");
+    assert(state.last_operation.plan.reads_file);
     assert(demo::snapshot(state).operation_label
         .find("Operation: file_read ok - README.txt") != std::string::npos);
     demo::duplicate_selected(state);
     assert(state.selected_name == "README copy.txt");
     assert(fs::exists(state.current / "README copy.txt"));
     assert(state.status == "Duplicated README.txt to README copy.txt");
+    assert(state.last_operation.plan.reads_file);
+    assert(state.last_operation.plan.writes_file);
+    assert(state.last_operation.plan.destination == "Demo Root/README copy.txt");
     snap = demo::snapshot(state);
     assert(snap.selected.name == "README copy.txt");
     assert(snap.operation_label
@@ -1038,10 +1057,16 @@ duplicate
     assert(!driven.trace[1].chrome.status_bar_visible);
     assert(driven.trace[4].operation.kind == "file_create");
     assert(driven.trace[4].operation.ok);
+    assert(driven.trace[4].operation.plan.writes_file);
+    assert(driven.trace[4].operation.plan.destination == "Demo Root/CLI Note.txt");
     assert(driven.trace[5].operation.kind == "file_duplicate");
     assert(driven.trace[5].operation.ok);
+    assert(driven.trace[5].operation.plan.source == "Demo Root/CLI Note.txt");
+    assert(driven.trace[5].operation.plan.destination
+           == "Demo Root/CLI Note copy.txt");
     assert(driven.trace[6].operation.kind == "file_delete");
     assert(driven.trace[6].operation.ok);
+    assert(driven.trace[6].operation.plan.moves_to_trash);
     assert(driven.snapshot.relative_location == "Trash");
     assert(driven.snapshot.sort_label == "Sort: Kind");
     bool saw_cli_note_copy = false;

@@ -104,12 +104,15 @@ The initial scope is intentionally narrow:
   entries, viewport, view mode, pure Finder chrome/grid metrics including the
   integrated titlebar geometry policy, icon-system contract, and
   `thumbnail_system` preview-painter contract, selection capabilities,
-  operation receipts, preview excerpts, localized labels, package resource
-  metadata, desktop keyboard command descriptors, and optional expectation
-  results. Repeated
+  operation receipts with resolved operation plans, preview excerpts,
+  localized labels, package resource metadata, desktop keyboard command
+  descriptors, and optional expectation results. Repeated
   `--script` files feed line-based input sequences, and repeated `--expect`
   values make the command a small state verifier for file
-  select/open/read/create/duplicate/delete/view-mode workflows. When
+  select/open/read/create/duplicate/delete/view-mode workflows. Each operation
+  plan describes the sandboxed source/destination, read/write/delete flags,
+  Trash movement, permanent delete-from-Trash, and fallback reason before the
+  receipt reports whether execution succeeded. When
   expectations are present, the process exit code follows the expectation
   results, so expected failure receipts can be asserted while the JSON
   `operation.ok` field still records the failed operation. The command accepts

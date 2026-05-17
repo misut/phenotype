@@ -188,6 +188,18 @@
       "equals": -1
     },
     {
+      "path": "application.file_explorer.operation.plan.executable",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.operation.plan.mutates_filesystem",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.operation.plan.moves_to_trash",
+      "equals": false
+    },
+    {
       "path": "application.file_explorer.theme_system.contract_version",
       "equals": 1
     },
