@@ -156,6 +156,14 @@
       "equals": "desktop"
     },
     {
+      "path": "input_debug.pressed_id",
+      "equals": 4294967295
+    },
+    {
+      "path": "platform_runtime.pressed_callback_id",
+      "equals": null
+    },
+    {
       "path": "application.file_explorer.relative_location",
       "equals": "Demo Root"
     },

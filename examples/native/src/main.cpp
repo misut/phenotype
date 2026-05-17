@@ -181,6 +181,8 @@ static std::string input_debug_block(phenotype::diag::InputDebugSnapshot const& 
     block += debug.focused_role;
     block += "\nhovered_id: ";
     block += debug_id_text(debug.hovered_id);
+    block += "\npressed_id: ";
+    block += debug_id_text(debug.pressed_id);
     block += "\nscroll_y: ";
     block += std::to_string(debug.scroll_y);
     block += "\ntext caret: ";

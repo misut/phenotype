@@ -712,6 +712,8 @@ static void reset_core_state() {
     app.scroll_y = 0.0f;
     app.hovered_id = phenotype::native::invalid_callback_id;
     app.focused_id = phenotype::native::invalid_callback_id;
+    app.pressed_id = phenotype::native::invalid_callback_id;
+    app.prev_pressed_id = phenotype::native::invalid_callback_id;
     app.caret_pos = phenotype::native::invalid_callback_id;
     app.selection_anchor = phenotype::native::invalid_callback_id;
     app.caret_visible = true;
@@ -1036,8 +1038,20 @@ static void test_shell_pointer_hover_click_and_tab_navigation() {
     assert(debug.result == "handled");
     assert(debug.callback_id == button_id);
     assert(debug.focused_id == button_id);
+    assert(debug.pressed_id == button_id);
     assert(debug.focused_role == "button");
     assert(has_metric("click", "pointer-click", "handled", "button"));
+
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x, y, LEGACY_MOUSE_BUTTON_LEFT, LEGACY_RELEASE, 0));
+    assert(phenotype::detail::get_pressed_id()
+           == phenotype::native::invalid_callback_id);
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.event == "click");
+    assert(debug.detail == "pointer-release");
+    assert(debug.result == "handled");
+    assert(debug.pressed_id == phenotype::native::invalid_callback_id);
+    assert(has_metric("click", "pointer-release", "handled", "button"));
 
     assert(phenotype::native::detail::dispatch_key(LEGACY_KEY_TAB, LEGACY_PRESS, 0));
     assert(phenotype::detail::get_focused_id() == link_id);

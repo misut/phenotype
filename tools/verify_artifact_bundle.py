@@ -7178,8 +7178,17 @@ def verify(args: argparse.Namespace) -> int:
             and float(viewport["w"]) > 0.0 and float(viewport["h"]) > 0.0,
             repr(viewport))
 
-    for key in ("event", "source", "detail", "result", "caret_rect"):
+    for key in ("event", "source", "detail", "result", "pressed_id", "caret_rect"):
         report.check(f"input_debug contains {key}", key in input_debug)
+    report.check(
+        "runtime contains pressed callback state",
+        "pressed_callback_id" in runtime,
+        repr(runtime.get("pressed_callback_id")),
+        path="debug.platform_runtime.pressed_callback_id",
+        expected="null or callback id",
+        actual=runtime.get("pressed_callback_id"),
+        likely_layer="input-runtime",
+        hint="Check core input state propagation from pressed_id into the debug plane.")
 
     report.check("semantic root role is root", semantic_tree.get("role") == "root")
     summary = summarize_semantic_tree(semantic_tree)

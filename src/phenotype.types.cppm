@@ -718,6 +718,8 @@ struct ButtonStyleOptions {
     Color background = {};
     bool has_hover_background = false;
     Color hover_background = {};
+    bool has_pressed_background = false;
+    Color pressed_background = {};
     bool has_border_color = false;
     Color border_color = {};
     bool has_text_color = false;
@@ -732,6 +734,13 @@ struct ButtonStyleOptions {
     float max_width = 0.0f;
     float fixed_height = -1.0f;
     TextAlign text_align = TextAlign::Start;
+};
+
+struct ButtonVisualState {
+    bool hovered = false;
+    bool focused = false;
+    bool pressed = false;
+    bool enabled = true;
 };
 
 struct KeyCommandOptions {

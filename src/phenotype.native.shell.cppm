@@ -673,7 +673,15 @@ inline bool dispatch_mouse_button(float mx, float my,
         && g_app_state.host->platform->input.handle_mouse_button
         && g_app_state.host->platform->input.handle_mouse_button(
             mx, my, static_cast<int>(button), static_cast<int>(action), mods)) {
-        repaint_current();
+        bool pressed_changed = false;
+        if (button == MouseButton::Left && action == KeyAction::Release) {
+            pressed_changed = ::phenotype::detail::set_pressed_id(
+                invalid_callback_id, "shell", "platform-release");
+        }
+        if (pressed_changed)
+            ::phenotype::detail::trigger_rebuild();
+        else
+            repaint_current();
         ::phenotype::detail::note_input_event(
             "click", "shell", "pointer-click", "platform-consumed", invalid_callback_id);
         return true;
@@ -689,13 +697,17 @@ inline bool dispatch_mouse_button(float mx, float my,
         bool had_drag = g_app_state.drag_selecting;
         g_app_state.drag_selecting = false;
         g_app_state.drag_selection_id = invalid_callback_id;
+        bool pressed_changed = ::phenotype::detail::set_pressed_id(
+            invalid_callback_id, "shell", "pointer-release");
         ::phenotype::detail::note_input_event(
             "click",
             "shell",
             "pointer-release",
-            had_drag ? "handled" : "ignored",
+            (had_drag || pressed_changed) ? "handled" : "ignored",
             ::phenotype::detail::get_focused_id());
-        return had_drag;
+        if (pressed_changed)
+            ::phenotype::detail::trigger_rebuild();
+        return had_drag || pressed_changed;
     }
 
     if (action != KeyAction::Press) {
@@ -705,6 +717,8 @@ inline bool dispatch_mouse_button(float mx, float my,
     }
 
     if (auto hit = hit_test(mx, my, g_app_state.scroll_x, g_app_state.scroll_y)) {
+        bool pressed_changed = ::phenotype::detail::set_pressed_id(
+            *hit, "shell", "pointer-press");
         bool focus_changed = ::phenotype::detail::set_focus_id(
             *hit, "shell", "pointer-focus");
         bool caret_changed = false;
@@ -731,24 +745,26 @@ inline bool dispatch_mouse_button(float mx, float my,
         // keeps the no-callback paths (text_field click) animated.
         // Caret-only updates stay on `repaint_current` since the caret
         // is drawn at paint time.
-        if (focus_changed || activated)
+        if (pressed_changed || focus_changed || activated)
             ::phenotype::detail::trigger_rebuild();
         else if (caret_changed)
             repaint_current();
-        return focus_changed || caret_changed || activated;
+        return pressed_changed || focus_changed || caret_changed || activated;
     }
 
     g_app_state.drag_selecting = false;
     g_app_state.drag_selection_id = invalid_callback_id;
     bool cleared = ::phenotype::detail::set_focus_id(
         invalid_callback_id, "shell", "pointer-clear");
+    bool pressed_cleared = ::phenotype::detail::set_pressed_id(
+        invalid_callback_id, "shell", "pointer-clear");
     if (cleared)
         sync_platform_input();
     if (cleared)
         reset_caret_blink_timer();
-    if (cleared)
+    if (cleared || pressed_cleared)
         ::phenotype::detail::trigger_rebuild();
-    return cleared;
+    return cleared || pressed_cleared;
 }
 
 inline bool dispatch_mouse_button(float mx, float my,

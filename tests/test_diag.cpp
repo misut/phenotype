@@ -264,9 +264,11 @@ void test_snapshot_shape() {
 
     auto const& input_debug = debug.at("input_debug").as_object();
     assert(input_debug.contains("event"));
+    assert(input_debug.contains("pressed_id"));
     assert(input_debug.contains("caret_rect"));
 
     auto const& runtime = debug.at("platform_runtime").as_object();
+    assert(runtime.contains("pressed_callback_id"));
 #ifdef __wasi__
     assert(capabilities.at("platform").as_string() == "wasi");
     assert(capabilities.at("capture_frame_rgba").as_bool() == false);
