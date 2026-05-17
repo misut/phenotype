@@ -201,7 +201,7 @@
     },
     {
       "path": "application.file_explorer.theme_system.iconography_policy",
-      "equals": "macos_finder_rounded_outline_symbols_with_simplified_universal_metaphors"
+      "equals": "macos_finder_sf_symbols_aligned_rounded_outline_symbols_with_simplified_universal_metaphors"
     },
     {
       "path": "application.file_explorer.theme_system.icon_asset_policy",
@@ -226,6 +226,62 @@
     {
       "path": "application.file_explorer.theme_system.fallback_policy",
       "equals": "unsupported_backends_render_semantic_translucent_surfaces"
+    },
+    {
+      "path": "application.file_explorer.resource_system.schema_version",
+      "equals": 1
+    },
+    {
+      "path": "application.file_explorer.resource_system.application.id",
+      "equals": "com.misut.phenotype.examples.file-explorer-desktop"
+    },
+    {
+      "path": "application.file_explorer.resource_system.asset_count",
+      "equals": 1
+    },
+    {
+      "path": "application.file_explorer.resource_system.svg_asset_count",
+      "equals": 1
+    },
+    {
+      "path": "application.file_explorer.resource_system.preload_svg_asset_count",
+      "equals": 1
+    },
+    {
+      "path": "application.file_explorer.resource_system.runtime_visible_svg_asset_count",
+      "equals": 0
+    },
+    {
+      "path": "application.file_explorer.resource_system.svg_asset_policy",
+      "equals": "package_svg_assets_must_declare_image_svg_xml_and_svg_source_suffix"
+    },
+    {
+      "path": "application.file_explorer.resource_system.app_icon.declared",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.resource_system.app_icon.svg",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.resource_system.app_icon.preload",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.resource_system.defaults.font_family",
+      "equals": "Pretendard"
+    },
+    {
+      "path": "application.file_explorer.resource_system.defaults.default_font_has_cjk_fallback",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.resource_system.locales.required_key_count",
+      "equals": 46
+    },
+    {
+      "path": "application.file_explorer.resource_system.debug.verifier_declared",
+      "equals": true
     },
     {
       "path": "application.file_explorer.counts.files",

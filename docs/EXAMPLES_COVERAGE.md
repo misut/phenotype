@@ -270,6 +270,13 @@ fallback. Runtime widget text now flows through `Theme::default_font_family`
 (`Pretendard` by default), while the
 example-specific canvas labels pass the same family explicitly so the Finder
 scene and package manifest agree on typography.
+Native file explorer artifacts publish the same contract under
+`application.file_explorer.resource_system`: application id/version/entry,
+platform list, SVG/preload/runtime-visible asset counts, app icon SVG/preload
+state, default locale/font state, locale coverage, Pretendard CJK fallback state,
+and debug manifest/probe/verifier declarations. This keeps packaging drift,
+icon-resource drift, and artifact-debug drift visible from a startup bundle
+without requiring a separate package-inspect command.
 The desktop artifact manifest also verifies the built-in icon SVG subset,
 arc-lowering policy, SF Symbols rendering-mode vocabulary, regular
 text-aligned weight policy, and explicit monochrome/hierarchical/palette/

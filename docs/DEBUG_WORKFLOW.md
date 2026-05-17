@@ -319,6 +319,14 @@ when a Finder artifact looks visually off but material plans and icon metadata
 still pass: theme drift, material planning, backend execution, and example
 geometry now have separate JSON owners.
 
+`application.file_explorer.resource_system.*` is the package/debug-resource
+counterpart. It records the file explorer application id/version/entry,
+declared platforms, SVG/preload/runtime-visible asset counts, app icon
+SVG/preload state, default locale/font state, locale coverage, Pretendard CJK
+fallback status, and debug manifest/probe/verifier declarations. Use it when an
+artifact looks correct but package inspection, i18n, icon loading, or the
+verifier route might be stale.
+
 `PHENOTYPE_ARTIFACT_EXIT=1` makes the example exit after writing the first
 rendered frame, which is useful for CI or LLM debugging. Omit it for manual
 inspection; the bundle is still written after the initial render and the window
