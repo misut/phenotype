@@ -199,7 +199,8 @@ Native file explorer artifact bundles expose the same model state under
 mode, selected entry plus index, operation receipt, entry counts, pure chrome
 metrics, and keyboard command descriptors.
 The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
-the `phenotype.icon_catalog` / `phenotype.icons` style contract
+selected-row radius plus soft selected-row alpha policy, the
+`phenotype.icon_catalog` / `phenotype.icons` style contract
 (`design_reference`, `asset_policy`, 24x24 alignment grid, stroke width,
 total/sidebar/toolbar/filled symbol counts, and
 `interface_metaphor_policy`, `visual_consistency_policy`,
@@ -632,9 +633,9 @@ publishes the native titlebar drag/control reserve widths plus a
 window inset/gap, sidebar surface origin, first sidebar row, toolbar shell,
 navigation/title/trailing toolbar group x-coordinates, collapsed search x, and
 content surface origin. It also publishes sidebar symbol size, symbol leading,
-label leading, section gap, and selected-row radius so Finder sidebar density
-and placement can fail as JSON contracts before a pixel-region summary is
-needed.
+label leading, section gap, selected-row radius, and selected-row alpha policy
+so Finder sidebar density, placement, and active-row weight can fail as JSON
+contracts before a pixel-region summary is needed.
 Its sibling `debug.application.file_explorer.keyboard_commands` publishes the
 desktop command descriptors consumed by native key dispatch. If
 `CommandOrControl+F`, `Enter`, `DeleteOrBackspace`, `CommandOrControl+D`,

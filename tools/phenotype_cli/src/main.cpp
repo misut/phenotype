@@ -4017,7 +4017,12 @@ auto explorer_chrome_json(
         "{{\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
         "\"integrated_titlebar_height\":{},\"sidebar_width\":{},"
         "\"sidebar_row_width\":{},\"sidebar_row_height\":{},"
-        "\"sidebar_heading_height\":{},\"toolbar_group_height\":{},"
+        "\"sidebar_heading_height\":{},"
+        "\"sidebar_selected_row_radius\":{},"
+        "\"sidebar_selected_row_background_alpha\":{},"
+        "\"sidebar_selected_row_hover_background_alpha\":{},"
+        "\"sidebar_selection_policy\":{},"
+        "\"toolbar_group_height\":{},"
         "\"toolbar_group_radius\":{},\"toolbar_icon_button_width\":{},"
         "\"toolbar_icon_button_height\":{},\"window_radius\":{},"
         "\"icon_grid\":{{\"columns\":{},\"visible_rows\":{},"
@@ -4092,6 +4097,10 @@ auto explorer_chrome_json(
         chrome.sidebar_row_width,
         chrome.sidebar_row_height,
         chrome.sidebar_heading_height,
+        chrome.sidebar_selected_row_radius,
+        chrome.sidebar_selected_row_background_alpha,
+        chrome.sidebar_selected_row_hover_background_alpha,
+        json_string(chrome.sidebar_selection_policy),
         chrome.toolbar_group_height,
         chrome.toolbar_group_radius,
         chrome.toolbar_icon_button_width,

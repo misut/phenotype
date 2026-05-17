@@ -217,6 +217,9 @@ struct ExplorerChromeMetrics {
     float sidebar_heading_label_top = 0.0f;
     float sidebar_section_gap = 0.0f;
     float sidebar_selected_row_radius = 0.0f;
+    int sidebar_selected_row_background_alpha = 0;
+    int sidebar_selected_row_hover_background_alpha = 0;
+    std::string sidebar_selection_policy;
     float toolbar_group_height = 0.0f;
     float toolbar_group_radius = 0.0f;
     float toolbar_icon_button_width = 0.0f;
@@ -405,6 +408,10 @@ inline constexpr float k_desktop_sidebar_material_padding = 16.0f;
 inline constexpr float k_desktop_sidebar_item_gap = 4.0f;
 inline constexpr float k_desktop_sidebar_section_gap = 14.0f;
 inline constexpr float k_desktop_sidebar_selected_row_radius = 10.0f;
+inline constexpr int k_desktop_sidebar_selected_row_background_alpha = 176;
+inline constexpr int k_desktop_sidebar_selected_row_hover_background_alpha = 214;
+inline constexpr char k_desktop_sidebar_selection_policy[] =
+    "finder_soft_selected_row_no_outline_accent_symbol";
 inline constexpr int k_desktop_column_location_row_count = 4;
 inline constexpr float k_desktop_column_location_row_height = 30.0f;
 inline constexpr float k_desktop_column_location_icon_size = 18.0f;
@@ -677,6 +684,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .sidebar_heading_label_top = 0.0f,
             .sidebar_section_gap = 0.0f,
             .sidebar_selected_row_radius = 0.0f,
+            .sidebar_selected_row_background_alpha = 0,
+            .sidebar_selected_row_hover_background_alpha = 0,
+            .sidebar_selection_policy = "n/a",
             .toolbar_group_height = 0.0f,
             .toolbar_group_radius = 0.0f,
             .toolbar_icon_button_width = 0.0f,
@@ -827,6 +837,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .sidebar_heading_label_top = k_desktop_sidebar_heading_label_top,
         .sidebar_section_gap = k_desktop_sidebar_section_gap,
         .sidebar_selected_row_radius = k_desktop_sidebar_selected_row_radius,
+        .sidebar_selected_row_background_alpha =
+            k_desktop_sidebar_selected_row_background_alpha,
+        .sidebar_selected_row_hover_background_alpha =
+            k_desktop_sidebar_selected_row_hover_background_alpha,
+        .sidebar_selection_policy = k_desktop_sidebar_selection_policy,
         .toolbar_group_height = k_desktop_toolbar_group_height,
         .toolbar_group_radius = k_desktop_toolbar_group_radius,
         .toolbar_icon_button_width = k_desktop_toolbar_icon_button_width,
@@ -1738,6 +1753,17 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("sidebar_heading_label_top", json::Value{chrome.sidebar_heading_label_top});
     out.emplace("sidebar_section_gap", json::Value{chrome.sidebar_section_gap});
     out.emplace("sidebar_selected_row_radius", json::Value{chrome.sidebar_selected_row_radius});
+    out.emplace(
+        "sidebar_selected_row_background_alpha",
+        json::Value{static_cast<std::int64_t>(
+            chrome.sidebar_selected_row_background_alpha)});
+    out.emplace(
+        "sidebar_selected_row_hover_background_alpha",
+        json::Value{static_cast<std::int64_t>(
+            chrome.sidebar_selected_row_hover_background_alpha)});
+    out.emplace(
+        "sidebar_selection_policy",
+        json::Value{chrome.sidebar_selection_policy});
     out.emplace("toolbar_group_height", json::Value{chrome.toolbar_group_height});
     out.emplace("toolbar_group_radius", json::Value{chrome.toolbar_group_radius});
     out.emplace("toolbar_icon_button_width", json::Value{chrome.toolbar_icon_button_width});

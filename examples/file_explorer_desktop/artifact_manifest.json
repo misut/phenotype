@@ -296,6 +296,18 @@
       "equals": 76.0
     },
     {
+      "path": "application.file_explorer.chrome.sidebar_selected_row_background_alpha",
+      "equals": 176
+    },
+    {
+      "path": "application.file_explorer.chrome.sidebar_selected_row_hover_background_alpha",
+      "equals": 214
+    },
+    {
+      "path": "application.file_explorer.chrome.sidebar_selection_policy",
+      "equals": "finder_soft_selected_row_no_outline_accent_symbol"
+    },
+    {
       "path": "application.file_explorer.chrome.geometry.toolbar_shell_x",
       "equals": 236.0
     },

@@ -279,6 +279,10 @@ constexpr float k_sidebar_section_gap =
     file_explorer_demo::k_desktop_sidebar_section_gap;
 constexpr float k_sidebar_selected_row_radius =
     file_explorer_demo::k_desktop_sidebar_selected_row_radius;
+constexpr int k_sidebar_selected_row_background_alpha =
+    file_explorer_demo::k_desktop_sidebar_selected_row_background_alpha;
+constexpr int k_sidebar_selected_row_hover_background_alpha =
+    file_explorer_demo::k_desktop_sidebar_selected_row_hover_background_alpha;
 constexpr float k_column_location_row_height =
     file_explorer_demo::k_desktop_column_location_row_height;
 constexpr float k_column_location_icon_size =
@@ -931,11 +935,11 @@ void finder_column_location_button(std::string label,
     phenotype::ButtonStyleOptions options;
     options.has_background = true;
     options.background = selected
-        ? rgba(232, 232, 234, 235)
+        ? rgba(236, 236, 238, k_sidebar_selected_row_background_alpha)
         : rgba(0, 0, 0, 0);
     options.has_hover_background = true;
     options.hover_background = selected
-        ? rgba(224, 224, 229, 245)
+        ? rgba(232, 232, 236, k_sidebar_selected_row_hover_background_alpha)
         : rgba(230, 230, 234, 150);
     options.has_border_color = true;
     options.border_color = rgba(0, 0, 0, 0);
@@ -1166,7 +1170,8 @@ void sidebar_row(std::string_view label,
         },
         SelectLocation{std::move(location_id)},
         options,
-        stable_token(label_text) ^ stable_token(icon_name) ^ 0x510000u);
+        stable_token(label_text) ^ stable_token(icon_name)
+            ^ (selected ? 0x511f00u : 0x510000u));
 }
 
 void sidebar_heading(std::string_view label) {

@@ -331,7 +331,10 @@ preservation path that packaged macOS-style icons are allowed to depend on.
 The desktop file explorer also records a pure Finder chrome geometry policy for
 the integrated titlebar/sidebar/toolbar/content coordinates and native
 control-reserve widths, so the example can move toward Finder-like placement
-without leaving an LLM to infer layout drift from pixels alone.
+without leaving an LLM to infer layout drift from pixels alone. Its sidebar
+selection contract records the soft selected-row alpha policy used by the
+desktop example, keeping the active Recents row light enough for Finder-style
+glass instead of turning it into a heavy opaque button.
 File explorer packages now declare `app.icon` as a package-owned SVG asset, so
 the same CLI bundle contract can later feed platform app-icon generation
 without embedding Apple artwork or depending on platform symbol fonts.
