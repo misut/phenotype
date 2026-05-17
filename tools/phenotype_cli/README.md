@@ -67,7 +67,7 @@ The initial scope is intentionally narrow:
   pure `phenotype.icon_catalog` path package. JSON output reports the
   macOS/Finder/SF-Symbols-inspired reference policy, package-owned SVG asset
   rule, supported SVG path subset and arc-lowering policy, count invariants,
-  all/sidebar/toolbar semantic reference sets,
+  SVG arc-using built-in symbol count, all/sidebar/toolbar semantic reference sets,
   per-symbol role/variant/rendering/layer metadata, presentation defaults, and
   Finder-style selected/disabled tone and file-type tint policies for
   toolbar/sidebar/folder/document/image/movie glyphs.

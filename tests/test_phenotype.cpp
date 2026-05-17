@@ -3569,9 +3569,12 @@ void test_icon_catalog_umbrella_export() {
            == "bounded_svg_icon_subset");
     assert(phenotype::icon_catalog::svg_supported_path_commands().find("A Z")
            != std::string_view::npos);
+    assert(phenotype::icon_catalog::svg_path_arc_symbol_count == 1);
     assert(phenotype::icon_catalog::semantic_reference_name(
                phenotype::icon_catalog::Symbol::AirDrop)
            == "airdrop");
+    assert(phenotype::icon_catalog::uses_svg_path_arcs(
+               phenotype::icon_catalog::Symbol::AirDrop));
     assert(phenotype::icon_catalog::file_type_color_policy()
            == "macos_finder_file_type_tints");
     assert(phenotype::icon_catalog::interaction_tone_policy()

@@ -374,6 +374,10 @@
       "equals": 31
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.svg_path_arc_symbol_count",
+      "equals": 1
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.grid_size",
       "equals": 24.0
     },

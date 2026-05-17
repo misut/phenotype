@@ -122,6 +122,7 @@ inline constexpr unsigned int outline_symbol_count = 30;
 inline constexpr unsigned int filled_symbol_count = 1;
 inline constexpr unsigned int hierarchical_symbol_count = 20;
 inline constexpr unsigned int reference_symbol_count = all_symbol_count;
+inline constexpr unsigned int svg_path_arc_symbol_count = 1;
 
 inline auto name(Symbol symbol) noexcept -> std::string_view {
     switch (symbol) {
@@ -440,8 +441,8 @@ inline auto symbol_layer_count(Symbol symbol) noexcept -> unsigned int {
     case Symbol::Movie:       return 5;
     case Symbol::Sidebar:     return 4;
     case Symbol::SortGroup:   return 9;
+    case Symbol::AirDrop:     return 5;
     case Symbol::Document:
-    case Symbol::AirDrop:
     case Symbol::Applications:
     case Symbol::NewDocument:
         return 4;
@@ -465,6 +466,10 @@ inline auto symbol_layer_count(Symbol symbol) noexcept -> unsigned int {
     default:
         return 1;
     }
+}
+
+inline bool uses_svg_path_arcs(Symbol symbol) noexcept {
+    return symbol == Symbol::AirDrop;
 }
 
 inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {

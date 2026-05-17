@@ -268,6 +268,7 @@ void test_builtin_icons_parse() {
     assert(icons::filled_symbol_count == 1);
     assert(icons::hierarchical_symbol_count == 20);
     assert(icons::reference_symbol_count == icons::all_symbol_count);
+    assert(icons::svg_path_arc_symbol_count == 1);
     assert(icons::reference_family() == "SF Symbols semantic reference");
     assert(icons::reference_policy().find("phenotype-owned")
            != std::string_view::npos);
@@ -289,6 +290,7 @@ void test_builtin_icons_parse() {
     unsigned int filled_count = 0;
     unsigned int hierarchical_count = 0;
     unsigned int reference_count = 0;
+    unsigned int arc_path_count = 0;
     for (unsigned int i = 0; i < icons::all_symbol_count; ++i) {
         auto symbol = icons::symbol_at(i);
         auto src = icons::source(symbol);
@@ -312,6 +314,8 @@ void test_builtin_icons_parse() {
         assert(descriptor.reference_policy == icons::reference_policy());
         if (!descriptor.semantic_reference_name.empty())
             ++reference_count;
+        if (icons::uses_svg_path_arcs(symbol))
+            ++arc_path_count;
         assert(descriptor.grid_size == 24.0f);
         assert(descriptor.layer_count == doc.shapes.size());
         assert(descriptor.text_weight_aligned);
@@ -352,6 +356,11 @@ void test_builtin_icons_parse() {
         }
         assert(!doc.empty());
         assert(!doc.has_diagnostics());
+        if (symbol == icons::Symbol::AirDrop) {
+            assert(icons::uses_svg_path_arcs(symbol));
+            assert(src.find(" A") != std::string_view::npos);
+            assert(count_path_verb(doc.shapes[1].path, PathVerb::CubicTo) > 0);
+        }
 
         CapturePainter painter;
         icons::paint_symbol(painter, symbol, 0.0f, 0.0f, 24.0f,
@@ -362,6 +371,7 @@ void test_builtin_icons_parse() {
     assert(filled_count == icons::filled_symbol_count);
     assert(hierarchical_count == icons::hierarchical_symbol_count);
     assert(reference_count == icons::reference_symbol_count);
+    assert(arc_path_count == icons::svg_path_arc_symbol_count);
 
     auto shared = icons::descriptor(icons::Symbol::Shared);
     assert(shared.role == icons::SymbolRole::Sidebar);

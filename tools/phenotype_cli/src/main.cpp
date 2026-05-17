@@ -3145,6 +3145,7 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         "\"uses_current_color\":{},\"round_stroke\":{},\"filled\":{},"
         "\"text_weight_aligned\":{},"
         "\"supports_hierarchical_opacity\":{},"
+        "\"uses_svg_path_arcs\":{},"
         "\"phenotype_owned\":{},\"uses_sf_symbols_asset\":{},"
         "\"file_type_color\":{},"
         "\"presentation\":{{\"role\":{},\"tone\":{},"
@@ -3170,6 +3171,7 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         desc.filled ? "true" : "false",
         desc.text_weight_aligned ? "true" : "false",
         desc.supports_hierarchical_opacity ? "true" : "false",
+        icon_catalog::uses_svg_path_arcs(symbol) ? "true" : "false",
         desc.phenotype_owned ? "true" : "false",
         desc.uses_sf_symbols_asset ? "true" : "false",
         icon_color_json(file_type_color),
@@ -3218,19 +3220,23 @@ auto icon_catalog_checks() -> std::vector<Check> {
     unsigned int outline_count = 0;
     unsigned int filled_count = 0;
     unsigned int hierarchical_count = 0;
+    unsigned int arc_path_count = 0;
     bool all_owned = true;
     bool no_sf_assets = true;
     bool semantic_references = true;
     bool round_stroke_contract = true;
     bool text_weight_aligned = true;
     for (unsigned int i = 0; i < icon_catalog::all_symbol_count; ++i) {
-        auto const desc = icon_catalog::descriptor(icon_catalog::symbol_at(i));
+        auto const symbol = icon_catalog::symbol_at(i);
+        auto const desc = icon_catalog::descriptor(symbol);
         if (desc.filled)
             ++filled_count;
         else
             ++outline_count;
         if (desc.supports_hierarchical_opacity)
             ++hierarchical_count;
+        if (icon_catalog::uses_svg_path_arcs(symbol))
+            ++arc_path_count;
         all_owned = all_owned && desc.phenotype_owned;
         no_sf_assets = no_sf_assets && !desc.uses_sf_symbols_asset;
         semantic_references =
@@ -3286,16 +3292,20 @@ auto icon_catalog_checks() -> std::vector<Check> {
          .detail = std::format("round_stroke={} text_weight_aligned={}",
                                round_stroke_contract ? "true" : "false",
                                text_weight_aligned ? "true" : "false"),
-         .hint =
-             "Mac-like icons should stay round-stroked and text-weight aligned."},
+        .hint =
+            "Mac-like icons should stay round-stroked and text-weight aligned."},
         {.name = "svg_path_subset",
          .ok = icon_catalog::svg_subset_policy()
                 == std::string_view{"bounded_svg_icon_subset"}
             && icon_catalog::svg_supported_path_commands().find("A Z")
                 != std::string_view::npos
             && icon_catalog::svg_arc_policy().find("bounded cubic Bezier")
-                != std::string_view::npos,
-         .detail = std::string{icon_catalog::svg_supported_path_commands()},
+                != std::string_view::npos
+            && arc_path_count == icon_catalog::svg_path_arc_symbol_count,
+         .detail = std::format(
+             "{}; arc_path_symbols={}",
+             icon_catalog::svg_supported_path_commands(),
+             arc_path_count),
          .hint =
              "Keep the built-in icon SVG subset broad enough for macOS-style rounded glyph geometry."},
         {.name = "interaction_tone_policy",
@@ -3337,7 +3347,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"file_type_color_policy\":{},\"default_scale\":{}}},"
         "\"counts\":{{\"all\":{},\"sidebar\":{},\"toolbar\":{},"
         "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
-        "\"reference\":{}}},"
+        "\"reference\":{},\"svg_path_arc\":{}}},"
         "\"symbols\":{},\"sidebar_symbols\":{},"
         "\"toolbar_symbols\":{},\"checks\":{}}}",
         all_ok(checks) ? "true" : "false",
@@ -3364,6 +3374,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_catalog::filled_symbol_count,
         icon_catalog::hierarchical_symbol_count,
         icon_catalog::reference_symbol_count,
+        icon_catalog::svg_path_arc_symbol_count,
         icon_symbol_set_json(IconCatalogSet::All),
         icon_symbol_set_json(IconCatalogSet::Sidebar),
         icon_symbol_set_json(IconCatalogSet::Toolbar),
@@ -3412,7 +3423,8 @@ auto explorer_chrome_json(
         "\"total_symbol_count\":{},\"sidebar_symbol_count\":{},"
         "\"toolbar_symbol_count\":{},\"filled_symbol_count\":{},"
         "\"outline_symbol_count\":{},\"hierarchical_symbol_count\":{},"
-        "\"reference_symbol_count\":{},\"grid_size\":{},"
+        "\"reference_symbol_count\":{},\"svg_path_arc_symbol_count\":{},"
+        "\"grid_size\":{},"
         "\"default_stroke_width\":{},\"secondary_opacity\":{},"
         "\"toolbar_point_size\":{},\"sidebar_point_size\":{},"
         "\"sidebar_optical_y_offset\":{},\"column_location_icon_size\":{},"
@@ -3498,6 +3510,7 @@ auto explorer_chrome_json(
         chrome.icon_outline_symbol_count,
         chrome.icon_hierarchical_symbol_count,
         chrome.icon_reference_symbol_count,
+        chrome.icon_svg_path_arc_symbol_count,
         chrome.icon_grid_size,
         chrome.icon_default_stroke_width,
         chrome.icon_secondary_opacity,

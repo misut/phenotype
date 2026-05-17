@@ -252,6 +252,7 @@ struct ExplorerChromeMetrics {
     int icon_outline_symbol_count = 0;
     int icon_hierarchical_symbol_count = 0;
     int icon_reference_symbol_count = 0;
+    int icon_svg_path_arc_symbol_count = 0;
     float icon_grid_size = 0.0f;
     float icon_default_stroke_width = 0.0f;
     float icon_secondary_opacity = 0.0f;
@@ -646,6 +647,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_outline_symbol_count = 0,
             .icon_hierarchical_symbol_count = 0,
             .icon_reference_symbol_count = 0,
+            .icon_svg_path_arc_symbol_count = 0,
             .icon_grid_size = 0.0f,
             .icon_default_stroke_width = 0.0f,
             .icon_secondary_opacity = 0.0f,
@@ -778,6 +780,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             static_cast<int>(icon_catalog::hierarchical_symbol_count),
         .icon_reference_symbol_count =
             static_cast<int>(icon_catalog::reference_symbol_count),
+        .icon_svg_path_arc_symbol_count =
+            static_cast<int>(icon_catalog::svg_path_arc_symbol_count),
         .icon_grid_size = 24.0f,
         .icon_default_stroke_width = 1.8f,
         .icon_secondary_opacity = 0.66f,
@@ -1448,6 +1452,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "reference_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.icon_reference_symbol_count)});
+    icon_system.emplace(
+        "svg_path_arc_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.icon_svg_path_arc_symbol_count)});
     icon_system.emplace("grid_size", json::Value{chrome.icon_grid_size});
     icon_system.emplace(
         "default_stroke_width",

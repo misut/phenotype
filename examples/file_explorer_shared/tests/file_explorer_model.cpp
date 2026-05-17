@@ -351,6 +351,7 @@ duplicate
     assert(chrome.icon_outline_symbol_count == 30);
     assert(chrome.icon_hierarchical_symbol_count == 20);
     assert(chrome.icon_reference_symbol_count == 31);
+    assert(chrome.icon_svg_path_arc_symbol_count == 1);
     assert(chrome.icon_grid_size == 24.0f);
     assert(chrome.icon_default_stroke_width == 1.8f);
     assert(chrome.icon_secondary_opacity == 0.66f);
@@ -597,6 +598,8 @@ duplicate
     assert(debug_text.find("\"svg_supported_path_commands\":\"M L H V Q T C S A Z")
            != std::string::npos);
     assert(debug_text.find("\"svg_arc_policy\":\"circle elements preserve native ArcTo")
+           != std::string::npos);
+    assert(debug_text.find("\"svg_path_arc_symbol_count\":1")
            != std::string::npos);
     assert(debug_text.find("\"hierarchical_opacity\":true")
            != std::string::npos);

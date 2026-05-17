@@ -307,7 +307,9 @@ primary or selected-row accent tones with an explicit optical offset. The file
 explorer artifact records those sizes and tone-policy names so the Finder-like
 icon treatment is checked as data, not as a screenshot guess. It also records
 the SVG subset and arc-lowering policy so a future icon regression can fail on
-an exact JSON path before anyone compares pixels.
+an exact JSON path before anyone compares pixels. The AirDrop sidebar glyph now
+uses SVG path arcs, so the example exercises the same arc-lowering path that
+packaged macOS-style icons are allowed to depend on.
 The desktop file explorer also records a pure Finder chrome geometry policy for
 the integrated titlebar/sidebar/toolbar/content coordinates and native
 control-reserve widths, so the example can move toward Finder-like placement
