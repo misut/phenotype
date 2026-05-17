@@ -787,6 +787,42 @@ inline auto presentation(Symbol symbol,
     return presentation(symbol, role, tone, default_scale(role));
 }
 
+inline auto symbol_color_with_opacity(Color color, float opacity) noexcept
+        -> Color {
+    if (opacity < 0.0f)
+        opacity = 0.0f;
+    if (opacity > 1.0f)
+        opacity = 1.0f;
+    auto const alpha =
+        static_cast<unsigned int>(static_cast<float>(color.a) * opacity + 0.5f);
+    color.a = static_cast<unsigned char>(alpha > 255u ? 255u : alpha);
+    return color;
+}
+
+inline auto macos_presentation(Symbol symbol,
+                               SymbolPresentationRole role,
+                               SymbolInteractionState state,
+                               SymbolInteractionPhase phase) noexcept
+        -> SymbolPresentation {
+    auto const recipe = macos_state_recipe(role, state, phase);
+    auto out = presentation(symbol, role, recipe.symbol_tone);
+    out.color = symbol_color_with_opacity(recipe.symbol_color,
+                                          recipe.symbol_opacity);
+    out.point_size *= recipe.scale;
+    return out;
+}
+
+inline auto macos_presentation(Symbol symbol,
+                               SymbolInteractionState state,
+                               SymbolInteractionPhase phase) noexcept
+        -> SymbolPresentation {
+    return macos_presentation(
+        symbol,
+        default_presentation_role(symbol),
+        state,
+        phase);
+}
+
 inline auto source(Symbol symbol) noexcept -> std::string_view {
     return catalog::svg_source(to_catalog_symbol(symbol));
 }
@@ -816,6 +852,30 @@ void paint_symbol(Painter& painter,
         y + style.optical_y_offset,
         style.point_size,
         style.color);
+}
+
+void paint_symbol_centered(Painter& painter,
+                           Symbol symbol,
+                           float box_x,
+                           float box_y,
+                           float box_width,
+                           float box_height,
+                           float size,
+                           Color color) {
+    auto const x = box_x + (box_width - size) * 0.5f;
+    auto const y = box_y + (box_height - size) * 0.5f;
+    paint_symbol(painter, symbol, x, y, size, color);
+}
+
+void paint_symbol_centered(Painter& painter,
+                           SymbolPresentation const& style,
+                           float box_x,
+                           float box_y,
+                           float box_width,
+                           float box_height) {
+    auto const x = box_x + (box_width - style.point_size) * 0.5f;
+    auto const y = box_y + (box_height - style.point_size) * 0.5f;
+    paint_symbol(painter, style, x, y);
 }
 
 inline auto paint_token(Symbol symbol, float size, Color color) noexcept

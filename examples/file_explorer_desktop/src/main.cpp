@@ -319,16 +319,6 @@ phenotype::Color rgba(int r, int g, int b, int a = 255) {
     };
 }
 
-phenotype::Color with_opacity(phenotype::Color color, float opacity) {
-    if (opacity < 0.0f)
-        opacity = 0.0f;
-    if (opacity > 1.0f)
-        opacity = 1.0f;
-    color.a = static_cast<unsigned char>(
-        static_cast<float>(color.a) * opacity + 0.5f);
-    return color;
-}
-
 phenotype::FontSpec finder_font(
         phenotype::FontWeight weight = phenotype::FontWeight::Regular) {
     return phenotype::FontSpec{
@@ -443,30 +433,39 @@ phenotype::icons::Symbol sidebar_symbol(std::string_view id) {
         file_explorer_demo::sidebar_symbol_for_token(id));
 }
 
-void paint_symbol_centered(phenotype::Painter& painter,
-                           phenotype::icons::Symbol symbol,
-                           float box_x,
-                           float box_y,
-                           float box_width,
-                           float box_height,
-                           float size,
-                           phenotype::Color color) {
-    auto x = box_x + (box_width - size) * 0.5f;
-    auto y = box_y + (box_height - size) * 0.5f;
-    phenotype::icons::paint_symbol(painter, symbol, x, y, size, color);
+void paint_finder_symbol_centered(phenotype::Painter& painter,
+                                  phenotype::icons::Symbol symbol,
+                                  float box_x,
+                                  float box_y,
+                                  float box_width,
+                                  float box_height,
+                                  float size,
+                                  phenotype::Color color) {
+    phenotype::icons::paint_symbol_centered(
+        painter,
+        symbol,
+        box_x,
+        box_y,
+        box_width,
+        box_height,
+        size,
+        color);
 }
 
-void paint_symbol_centered(
+void paint_finder_symbol_centered(
         phenotype::Painter& painter,
         phenotype::icons::SymbolPresentation presentation,
         float box_x,
         float box_y,
         float box_width,
         float box_height) {
-    auto const size = presentation.point_size;
-    auto const x = box_x + (box_width - size) * 0.5f;
-    auto const y = box_y + (box_height - size) * 0.5f;
-    phenotype::icons::paint_symbol(painter, presentation, x, y);
+    phenotype::icons::paint_symbol_centered(
+        painter,
+        presentation,
+        box_x,
+        box_y,
+        box_width,
+        box_height);
 }
 
 phenotype::icons::SymbolInteractionPhase icon_phase(
@@ -483,17 +482,11 @@ phenotype::icons::SymbolPresentation icon_presentation_for_state(
         phenotype::icons::SymbolPresentationRole role,
         bool selected,
         phenotype::ButtonVisualState state) {
-    auto const recipe = phenotype::icons::macos_state_recipe(
+    return phenotype::icons::macos_presentation(
+        symbol,
         role,
         phenotype::icons::SymbolInteractionState{selected, state.enabled},
         icon_phase(state));
-    auto presentation = phenotype::icons::presentation(
-        symbol,
-        role,
-        recipe.symbol_tone);
-    presentation.color = with_opacity(recipe.symbol_color, recipe.symbol_opacity);
-    presentation.point_size *= recipe.scale;
-    return presentation;
 }
 
 void paint_sidebar_icon(phenotype::Painter& painter,
@@ -502,7 +495,7 @@ void paint_sidebar_icon(phenotype::Painter& painter,
                         phenotype::ButtonVisualState state,
                         float origin_x,
                         float origin_y) {
-    paint_symbol_centered(
+    paint_finder_symbol_centered(
         painter,
         icon_presentation_for_state(
             sidebar_symbol(id),
@@ -740,7 +733,7 @@ void paint_entry_symbol(phenotype::Painter& painter,
                         float y,
                         float box_size,
                         float icon_size) {
-    paint_symbol_centered(
+    paint_finder_symbol_centered(
         painter,
         phenotype::icons::from_catalog_symbol(
             file_explorer_demo::entry_symbol(entry)),
@@ -1047,7 +1040,7 @@ void finder_column_location_button(std::string label,
             float const icon_x = 7.0f;
             float const icon_y =
                 (k_column_location_row_height - icon_box) * 0.5f;
-            paint_symbol_centered(
+            paint_finder_symbol_centered(
                 painter,
                 icon_presentation_for_state(
                     sidebar_symbol(icon),
@@ -1070,7 +1063,7 @@ void finder_column_location_button(std::string label,
                          font_size,
                          ink,
                          finder_font());
-            paint_symbol_centered(
+            paint_finder_symbol_centered(
                 painter,
                 phenotype::icons::Symbol::Forward,
                 max_width - 22.0f,
@@ -1427,7 +1420,7 @@ void paint_toolbar_symbol(phenotype::Painter& painter,
                           phenotype::icons::Symbol symbol,
                           bool selected,
                           phenotype::ButtonVisualState state) {
-    paint_symbol_centered(
+    paint_finder_symbol_centered(
         painter,
         icon_presentation_for_state(
             symbol,
@@ -1451,7 +1444,7 @@ void paint_navigation_symbol(phenotype::Painter& painter,
                              bool enabled,
                              phenotype::ButtonVisualState state) {
     state.enabled = enabled;
-    paint_symbol_centered(
+    paint_finder_symbol_centered(
         painter,
         icon_presentation_for_state(
             symbol,

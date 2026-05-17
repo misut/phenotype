@@ -584,6 +584,33 @@ void test_builtin_icons_parse() {
     assert(toolbar.hit_target_size == 36.0f);
     assert((toolbar.color == Color{96, 96, 100, 255}));
     assert(icons::paint_token(toolbar) != 0);
+    auto toolbar_pressed = icons::macos_presentation(
+        icons::Symbol::Search,
+        icons::SymbolPresentationRole::Toolbar,
+        icons::SymbolInteractionState{false, true},
+        icons::SymbolInteractionPhase::Pressed);
+    assert(toolbar_pressed.role == icons::SymbolPresentationRole::Toolbar);
+    assert(toolbar_pressed.tone == icons::SymbolTone::Secondary);
+    assert(toolbar_pressed.point_size < toolbar.point_size);
+    assert(toolbar_pressed.color.a < toolbar.color.a);
+    assert(toolbar_pressed.hit_target_size == toolbar.hit_target_size);
+
+    auto disabled_share = icons::macos_presentation(
+        icons::Symbol::Share,
+        icons::SymbolInteractionState{false, false},
+        icons::SymbolInteractionPhase::Hovered);
+    assert(disabled_share.role == icons::SymbolPresentationRole::Toolbar);
+    assert(disabled_share.tone == icons::SymbolTone::Disabled);
+    assert(disabled_share.color.a < 128);
+
+    CapturePainter centered_painter;
+    icons::paint_symbol_centered(centered_painter,
+                                 toolbar_pressed,
+                                 0.0f,
+                                 0.0f,
+                                 36.0f,
+                                 36.0f);
+    assert(centered_painter.fills + centered_painter.strokes > 0);
     assert(!icons::symbol_from_name("not_a_symbol").has_value());
     assert(*icons::symbol_from_semantic_reference_name("magnifyingglass")
            == icons::Symbol::Search);

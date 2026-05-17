@@ -37,6 +37,24 @@ Backend consumes the cmd buffer:
   └── Native: phenotype::parse_commands() → platform renderer
 ```
 
+## SVG And Iconography
+
+`phenotype.svg` is a bounded vector-image subset for product UI assets and
+built-in symbols. It parses `svg`, `g`, `path`, `rect`, `circle`, `ellipse`,
+`line`, `polyline`, and `polygon`; path data supports `M/L/H/V/Q/T/C/S/A/Z`
+with absolute and relative forms. The implementation intentionally lowers the
+parsed document to phenotype `PathBuilder` commands, so native, WASM, and test
+surfaces consume the same draw-command path instead of calling platform SVG
+APIs from core code.
+
+`phenotype.icons` builds on that parser with phenotype-owned SVG symbols. The
+catalog keeps macOS/Finder/SF Symbols names only as semantic references: it
+does not embed Apple or SF Symbols artwork. `icons::macos_presentation(...)`
+is the pure role/state mapper for toolbar, navigation, sidebar, file-type, and
+action symbols. It resolves tone, opacity, scale, hit target, and optical offset
+from explicit immutable inputs, while backends only paint the resulting SVG
+paths.
+
 ## View-time animation
 
 Visual transitions are bound at view time, not paint time. A widget
