@@ -283,7 +283,12 @@ plus the presentation policy in their artifact debug payload, and
 debugging before anyone inspects a screenshot. `phenotype icons svg
 <name-or-reference>` exposes the exact built-in SVG source from the same pure
 catalog with the matched rendering capability envelope, so renderer and parser
-failures can be reproduced without launching a native window. The style reference deliberately says the custom SVGs are
+failures can be reproduced without launching a native window. `phenotype icons
+present <name-or-reference>` resolves the same state recipe for a chosen role,
+phase, selected state, and disabled state, including the effective visible
+symbol color, background chrome, hit target, and likely icon layer/pass. This
+lets CI logs and artifact triage explain a toolbar/sidebar icon mismatch
+without relying on a human visual guess. The style reference deliberately says the custom SVGs are
 informed by Apple HIG, macOS Finder, and SF Symbols while the asset policy
 continues to forbid copied Apple/SF Symbols vector artwork.
 Package app icons are separate resources, not part of the glyph catalog: they

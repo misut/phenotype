@@ -95,9 +95,16 @@ The initial scope is intentionally narrow:
   source for one built-in glyph. The default output is raw SVG for renderer or
   asset-pipeline probes; `--json` wraps the source with the matched symbol,
   semantic reference name, asset policy, rendering capabilities, and byte count.
-  This keeps macOS-style
-  icon debugging inside the pure catalog boundary without embedding Apple or
+  This keeps macOS-style icon debugging inside the pure catalog boundary
+  without embedding Apple or
   SF Symbols vector artwork.
+- `phenotype icons present <name-or-reference>` resolves the same pure
+  macOS/Finder-style presentation recipe used by native examples. `--role`,
+  `--phase`, `--selected`, and `--disabled` make toolbar, sidebar, navigation,
+  file-type, and action glyph states observable without launching AppKit:
+  JSON output includes the semantic reference, asset policy, rendering mode,
+  tone, visible RGBA after opacity, background color, symbol and hit-target
+  metrics, corner radius, and likely icon layer/pass.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible
@@ -207,6 +214,10 @@ mise exec -- exon build
   ../../examples/file_explorer_desktop
 .exon/debug/phenotype_cli icons lookup magnifyingglass --json
 .exon/debug/phenotype_cli icons svg desktopcomputer --json
+.exon/debug/phenotype_cli icons present magnifyingglass \
+  --role toolbar \
+  --phase pressed \
+  --json
 .exon/debug/phenotype_cli artifact verify-file-explorer \
   --profile desktop \
   --view-mode icon \
