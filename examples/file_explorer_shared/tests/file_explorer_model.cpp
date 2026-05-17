@@ -311,11 +311,18 @@ duplicate
     assert(chrome.toolbar_icon_button_count == 11);
     assert(chrome.titlebar_control_count
            == demo::k_desktop_titlebar_control_count);
-    assert(chrome.sidebar_symbol_count == 10);
+    assert(chrome.icon_total_symbol_count == 31);
+    assert(chrome.sidebar_symbol_count == 11);
     assert(chrome.toolbar_symbol_count == 15);
+    assert(chrome.icon_filled_symbol_count == 1);
+    assert(chrome.icon_grid_size == 24.0f);
+    assert(chrome.icon_default_stroke_width == 1.8f);
     assert(chrome.icon_module == "phenotype.icons");
     assert(chrome.icon_style == "macos_rounded_outline_svg");
     assert(chrome.icon_source_format == "svg");
+    assert(chrome.icon_design_reference.find("Apple HIG") != std::string::npos);
+    assert(chrome.icon_asset_policy.find("no Apple") != std::string::npos);
+    assert(chrome.icon_alignment == "24x24 text-aligned symbol grid");
     assert(chrome.owned_icon_assets);
     assert(!chrome.uses_sf_symbols_assets);
     assert(chrome.icon_round_stroke_contract);

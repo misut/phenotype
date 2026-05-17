@@ -220,8 +220,12 @@ struct ExplorerChromeMetrics {
     int toolbar_icon_button_count = 0;
     int titlebar_control_count = 0;
     int overflow_action_button_count = 0;
+    int icon_total_symbol_count = 0;
     int sidebar_symbol_count = 0;
     int toolbar_symbol_count = 0;
+    int icon_filled_symbol_count = 0;
+    float icon_grid_size = 0.0f;
+    float icon_default_stroke_width = 0.0f;
     bool integrated_titlebar = true;
     bool native_window_controls = true;
     bool duplicate_window_controls = false;
@@ -235,6 +239,9 @@ struct ExplorerChromeMetrics {
     std::string icon_module;
     std::string icon_style;
     std::string icon_source_format;
+    std::string icon_design_reference;
+    std::string icon_asset_policy;
+    std::string icon_alignment;
 };
 
 struct ExplorerInputTrace {
@@ -466,8 +473,12 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .toolbar_separator_count = 0,
             .toolbar_icon_button_count = 0,
             .titlebar_control_count = 0,
+            .icon_total_symbol_count = 0,
             .sidebar_symbol_count = 0,
             .toolbar_symbol_count = 0,
+            .icon_filled_symbol_count = 0,
+            .icon_grid_size = 0.0f,
+            .icon_default_stroke_width = 0.0f,
             .integrated_titlebar = false,
             .native_window_controls = false,
             .duplicate_window_controls = false,
@@ -480,6 +491,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_module = "text_controls",
             .icon_style = "mobile_text_buttons",
             .icon_source_format = "none",
+            .icon_design_reference = "mobile text controls",
+            .icon_asset_policy = "no vector icon assets in mobile profile",
+            .icon_alignment = "n/a",
         };
     }
     auto columns = desktop_icon_grid_column_count(viewport);
@@ -533,8 +547,12 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .toolbar_separator_count = 3,
         .toolbar_icon_button_count = 11,
         .titlebar_control_count = k_desktop_titlebar_control_count,
-        .sidebar_symbol_count = 10,
+        .icon_total_symbol_count = 31,
+        .sidebar_symbol_count = 11,
         .toolbar_symbol_count = 15,
+        .icon_filled_symbol_count = 1,
+        .icon_grid_size = 24.0f,
+        .icon_default_stroke_width = 1.8f,
         .integrated_titlebar = true,
         .native_window_controls = true,
         .duplicate_window_controls = false,
@@ -547,6 +565,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_module = "phenotype.icons",
         .icon_style = "macos_rounded_outline_svg",
         .icon_source_format = "svg",
+        .icon_design_reference =
+            "Apple HIG Icons and SF Symbols inspired custom rounded-outline SVG glyphs",
+        .icon_asset_policy =
+            "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded",
+        .icon_alignment = "24x24 text-aligned symbol grid",
     };
 }
 
@@ -1030,11 +1053,24 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace("uses_sf_symbols_assets", json::Value{chrome.uses_sf_symbols_assets});
     icon_system.emplace("round_stroke_contract", json::Value{chrome.icon_round_stroke_contract});
     icon_system.emplace(
+        "total_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.icon_total_symbol_count)});
+    icon_system.emplace(
         "sidebar_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.sidebar_symbol_count)});
     icon_system.emplace(
         "toolbar_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.toolbar_symbol_count)});
+    icon_system.emplace(
+        "filled_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.icon_filled_symbol_count)});
+    icon_system.emplace("grid_size", json::Value{chrome.icon_grid_size});
+    icon_system.emplace(
+        "default_stroke_width",
+        json::Value{chrome.icon_default_stroke_width});
+    icon_system.emplace("design_reference", json::Value{chrome.icon_design_reference});
+    icon_system.emplace("asset_policy", json::Value{chrome.icon_asset_policy});
+    icon_system.emplace("alignment", json::Value{chrome.icon_alignment});
 
     json::Object out;
     out.emplace("viewport", json::Value{std::move(viewport)});

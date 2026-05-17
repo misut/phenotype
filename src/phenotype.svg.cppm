@@ -68,6 +68,15 @@ struct Attribute {
     std::string value;
 };
 
+struct Transform {
+    float a = 1.0f;
+    float b = 0.0f;
+    float c = 0.0f;
+    float d = 1.0f;
+    float e = 0.0f;
+    float f = 0.0f;
+};
+
 inline bool is_space(char c) noexcept {
     return c == ' ' || c == '\t' || c == '\n' || c == '\r' || c == '\f';
 }
@@ -136,6 +145,131 @@ inline auto parse_number_list(std::string_view in, unsigned int limit = 0)
         i += parsed->second;
         if (limit != 0 && out.size() >= limit)
             break;
+    }
+    return out;
+}
+
+inline auto transform_identity() noexcept -> Transform {
+    return {};
+}
+
+inline auto transform_multiply(Transform lhs, Transform rhs) noexcept
+    -> Transform {
+    return Transform{
+        lhs.a * rhs.a + lhs.c * rhs.b,
+        lhs.b * rhs.a + lhs.d * rhs.b,
+        lhs.a * rhs.c + lhs.c * rhs.d,
+        lhs.b * rhs.c + lhs.d * rhs.d,
+        lhs.a * rhs.e + lhs.c * rhs.f + lhs.e,
+        lhs.b * rhs.e + lhs.d * rhs.f + lhs.f,
+    };
+}
+
+inline auto transform_translate(float tx, float ty) noexcept -> Transform {
+    return Transform{1.0f, 0.0f, 0.0f, 1.0f, tx, ty};
+}
+
+inline auto transform_scale(float sx, float sy) noexcept -> Transform {
+    return Transform{sx, 0.0f, 0.0f, sy, 0.0f, 0.0f};
+}
+
+inline auto transform_rotate(float degrees) noexcept -> Transform {
+    constexpr float pi = 3.14159265358979323846f;
+    auto const radians = degrees * pi / 180.0f;
+    auto const s = std::sin(radians);
+    auto const c = std::cos(radians);
+    return Transform{c, s, -s, c, 0.0f, 0.0f};
+}
+
+inline auto parse_transform(std::string_view in, std::vector<std::string>& diagnostics)
+    -> Transform {
+    Transform out = transform_identity();
+    std::size_t i = 0;
+    while (i < in.size()) {
+        while (i < in.size() && (is_space(in[i]) || in[i] == ','))
+            ++i;
+        if (i >= in.size())
+            break;
+
+        auto const name_start = i;
+        while (i < in.size() && (std::isalpha(static_cast<unsigned char>(in[i]))
+               || in[i] == '-'))
+            ++i;
+        auto name = lower_ascii(in.substr(name_start, i - name_start));
+        while (i < in.size() && is_space(in[i]))
+            ++i;
+        if (name.empty() || i >= in.size() || in[i] != '(') {
+            diagnostics.push_back("svg.transform: malformed transform list");
+            break;
+        }
+        ++i;
+        auto const values_start = i;
+        int depth = 1;
+        while (i < in.size() && depth > 0) {
+            if (in[i] == '(')
+                ++depth;
+            else if (in[i] == ')')
+                --depth;
+            if (depth > 0)
+                ++i;
+        }
+        if (depth != 0) {
+            diagnostics.push_back("svg.transform: unterminated transform");
+            break;
+        }
+        auto values = parse_number_list(in.substr(values_start, i - values_start));
+        ++i;
+
+        Transform op = transform_identity();
+        bool supported = true;
+        if (name == "translate") {
+            if (values.empty()) {
+                supported = false;
+            } else {
+                op = transform_translate(
+                    values[0],
+                    values.size() >= 2 ? values[1] : 0.0f);
+            }
+        } else if (name == "scale") {
+            if (values.empty()) {
+                supported = false;
+            } else {
+                op = transform_scale(
+                    values[0],
+                    values.size() >= 2 ? values[1] : values[0]);
+            }
+        } else if (name == "matrix") {
+            if (values.size() < 6) {
+                supported = false;
+            } else {
+                op = Transform{
+                    values[0], values[1], values[2],
+                    values[3], values[4], values[5]};
+            }
+        } else if (name == "rotate") {
+            if (values.empty()) {
+                supported = false;
+            } else if (values.size() >= 3) {
+                op = transform_multiply(
+                    transform_multiply(
+                        transform_translate(values[1], values[2]),
+                        transform_rotate(values[0])),
+                    transform_translate(-values[1], -values[2]));
+            } else {
+                op = transform_rotate(values[0]);
+            }
+        } else {
+            diagnostics.push_back(
+                std::string{"svg.transform: unsupported function "} + name);
+            continue;
+        }
+
+        if (!supported) {
+            diagnostics.push_back(
+                std::string{"svg.transform: invalid argument count for "} + name);
+            continue;
+        }
+        out = transform_multiply(out, op);
     }
     return out;
 }
@@ -374,15 +508,14 @@ inline auto read_f32(unsigned int bits) noexcept -> float {
 }
 
 inline auto transformed_path(PathBuilder const& path,
-                             float tx,
-                             float ty,
-                             float sx,
-                             float sy) -> PathBuilder {
+                             Transform transform) -> PathBuilder {
     PathBuilder out;
     unsigned int i = 0;
     auto xy = [&](float& x, float& y) {
-        x = read_f32(path.verbs[i++]) * sx + tx;
-        y = read_f32(path.verbs[i++]) * sy + ty;
+        auto const px = read_f32(path.verbs[i++]);
+        auto const py = read_f32(path.verbs[i++]);
+        x = transform.a * px + transform.c * py + transform.e;
+        y = transform.b * px + transform.d * py + transform.f;
     };
 
     while (i < path.verbs.size()) {
@@ -419,7 +552,8 @@ inline auto transformed_path(PathBuilder const& path,
             float cx, cy;
             xy(cx, cy);
             auto const radius = read_f32(path.verbs[i++])
-                * ((std::abs(sx) + std::abs(sy)) * 0.5f);
+                * ((std::hypot(transform.a, transform.b)
+                    + std::hypot(transform.c, transform.d)) * 0.5f);
             auto const start = read_f32(path.verbs[i++]);
             auto const end = read_f32(path.verbs[i++]);
             out.arc_to(cx, cy, radius, start, end);
@@ -712,6 +846,7 @@ inline auto parse_path_data(std::string_view d, Document& doc) -> PathBuilder {
 inline auto shape_from_tag(std::string const& name,
                            std::vector<Attribute> const& attrs,
                            Style const& base,
+                           Transform transform,
                            Document& doc) -> std::optional<Shape> {
     auto style = merged_style(base, attrs);
     Shape shape;
@@ -776,6 +911,15 @@ inline auto shape_from_tag(std::string const& name,
 
     if (shape.path.empty())
         return std::nullopt;
+    if (auto transform_attr = attr(attrs, "transform"))
+        transform = transform_multiply(
+            transform,
+            parse_transform(*transform_attr, doc.diagnostics));
+    auto const local_stroke_scale =
+        (std::hypot(transform.a, transform.b)
+         + std::hypot(transform.c, transform.d)) * 0.5f;
+    shape.style.stroke_width *= local_stroke_scale;
+    shape.path = transformed_path(shape.path, transform);
     return shape;
 }
 
@@ -809,8 +953,10 @@ export namespace phenotype::svg {
 auto parse(std::string_view source) -> Document {
     Document doc;
     std::vector<Style> style_stack;
+    std::vector<detail::Transform> transform_stack;
     std::vector<std::string> styled_elements;
     style_stack.push_back(Style{});
+    transform_stack.push_back(detail::transform_identity());
 
     std::size_t cursor = 0;
     while (true) {
@@ -842,8 +988,10 @@ auto parse(std::string_view source) -> Document {
             if (!styled_elements.empty()
                 && (name == styled_elements.back() || name == "g" || name == "svg")) {
                 styled_elements.pop_back();
-                if (style_stack.size() > 1)
+                if (style_stack.size() > 1) {
                     style_stack.pop_back();
+                    transform_stack.pop_back();
+                }
             }
             continue;
         }
@@ -866,8 +1014,14 @@ auto parse(std::string_view source) -> Document {
         if (name == "svg") {
             detail::apply_svg_metrics(doc, attrs);
             auto merged = detail::merged_style(style_stack.back(), attrs);
+            auto transform = transform_stack.back();
+            if (auto transform_attr = detail::attr(attrs, "transform"))
+                transform = detail::transform_multiply(
+                    transform,
+                    detail::parse_transform(*transform_attr, doc.diagnostics));
             if (!self_closing) {
                 style_stack.push_back(merged);
+                transform_stack.push_back(transform);
                 styled_elements.push_back(name);
             }
             continue;
@@ -875,15 +1029,21 @@ auto parse(std::string_view source) -> Document {
 
         if (name == "g") {
             auto merged = detail::merged_style(style_stack.back(), attrs);
+            auto transform = transform_stack.back();
+            if (auto transform_attr = detail::attr(attrs, "transform"))
+                transform = detail::transform_multiply(
+                    transform,
+                    detail::parse_transform(*transform_attr, doc.diagnostics));
             if (!self_closing) {
                 style_stack.push_back(merged);
+                transform_stack.push_back(transform);
                 styled_elements.push_back(name);
             }
             continue;
         }
 
         if (auto shape = detail::shape_from_tag(
-                name, attrs, style_stack.back(), doc)) {
+                name, attrs, style_stack.back(), transform_stack.back(), doc)) {
             doc.shapes.push_back(std::move(*shape));
         }
     }
@@ -926,8 +1086,9 @@ void paint(Painter& painter,
         stroke_scale = s;
     }
 
+    auto render_transform = detail::Transform{sx, 0.0f, 0.0f, sy, tx, ty};
     for (auto const& shape : doc.shapes) {
-        auto transformed = detail::transformed_path(shape.path, tx, ty, sx, sy);
+        auto transformed = detail::transformed_path(shape.path, render_transform);
         if (auto fill = detail::resolve_paint(shape.style.fill, shape.style, options))
             painter.fill_path(transformed, *fill);
         if (auto stroke = detail::resolve_paint(shape.style.stroke, shape.style, options)) {
