@@ -397,14 +397,14 @@ duplicate
            == demo::k_desktop_column_location_icon_size);
     assert(chrome.titlebar_control_count
            == demo::k_desktop_titlebar_control_count);
-    assert(chrome.icon_total_symbol_count == 34);
+    assert(chrome.icon_total_symbol_count == 35);
     assert(chrome.sidebar_symbol_count == 11);
     assert(chrome.toolbar_symbol_count == 15);
     assert(chrome.file_type_symbol_count == 7);
     assert(chrome.icon_filled_symbol_count == 1);
-    assert(chrome.icon_outline_symbol_count == 33);
+    assert(chrome.icon_outline_symbol_count == 34);
     assert(chrome.icon_hierarchical_symbol_count == 23);
-    assert(chrome.icon_reference_symbol_count == 34);
+    assert(chrome.icon_reference_symbol_count == 35);
     assert(chrome.icon_svg_path_arc_symbol_count == 1);
     assert(chrome.icon_interaction_phase_count == 3);
     assert(chrome.icon_grid_size == 24.0f);

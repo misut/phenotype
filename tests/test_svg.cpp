@@ -367,7 +367,7 @@ void test_builtin_icons_parse() {
     assert(icons::default_weight_policy() == "regular_text_weight_aligned");
     assert(icons::rendering_capability_policy().find("sf_symbols_mode_names")
            != std::string_view::npos);
-    assert(icons::all_symbol_count == 34);
+    assert(icons::all_symbol_count == 35);
     assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
     assert(phenotype::icon_catalog::sidebar_symbol_count == icons::sidebar_symbol_count);
@@ -375,7 +375,7 @@ void test_builtin_icons_parse() {
     assert(phenotype::icon_catalog::toolbar_symbol_count == icons::toolbar_symbol_count);
     assert(icons::file_type_symbol_count == 7);
     assert(phenotype::icon_catalog::file_type_symbol_count == icons::file_type_symbol_count);
-    assert(icons::outline_symbol_count == 33);
+    assert(icons::outline_symbol_count == 34);
     assert(icons::filled_symbol_count == 1);
     assert(icons::hierarchical_symbol_count == 23);
     assert(icons::monochrome_symbol_count == icons::all_symbol_count);
