@@ -172,6 +172,10 @@ stroke caps and joins in each line icon's SVG source and exposes symbol
 metadata (`icons::descriptor`, count constants, and index accessors for all,
 sidebar, and toolbar symbols) so examples and artifact verifiers can assert the
 style contract without pixel guessing.
+Package app icons are separate resources, not part of the glyph catalog: they
+are declared as `app.icon` SVG assets in `phenotype.package.toml`, copied by the
+CLI bundle step, and validated by `phenotype.resources` before a platform
+packager maps them to `.app`, Windows, Android, or web icon formats.
 
 ## Input Command Boundary
 
@@ -447,7 +451,10 @@ does not parse TOML, touch the filesystem, register fonts, copy assets, or
 probe platform bundles. CLI/package adapters build a catalog snapshot at the
 edge, then core code can resolve logical asset names, locale fallback chains,
 required translation keys, and package default typography without depending on
-where those files live. The root `phenotype` umbrella provides
+where those files live. The pure contract also asserts a package-owned SVG
+`app.icon` asset and CJK-capable fallback for the Pretendard default UI font,
+so platform packagers can fail early before any native bundle work starts. The
+root `phenotype` umbrella provides
 `theme_with_resource_defaults` as a thin framework helper that returns a new
 `Theme`; the pure catalog package stays independent from UI types.
 

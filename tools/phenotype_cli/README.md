@@ -34,14 +34,15 @@ The initial scope is intentionally narrow:
   that builds and delegates to this command.
 - `phenotype package inspect <path>` checks the proposed package manifest,
   application/debug metadata, declared resource counts, referenced `source`
-  files, Pretendard default-font policy, CLI-owned debug verifier metadata,
-  asset layout, locale layout, and font layout. JSON output includes the
-  normalized `ResourceCatalog` produced by the shared pure
-  `phenotype.resources` path package plus its pure `ResourceCatalogContract`.
-  The contract reports asset preload/runtime-visible intent, default
-  locale/font resolution, debug metadata presence, and per-locale fallback
-  coverage for the default key set; the CLI only reads files and checks paths,
-  while manifest and locale text parsing stay in the pure package.
+  files, CLI-owned debug verifier metadata, app-icon SVG policy, Pretendard
+  default-font policy, CJK fallback coverage, asset layout, locale layout, and
+  font layout. JSON output includes the normalized `ResourceCatalog` produced
+  by the shared pure `phenotype.resources` path package plus its pure
+  `ResourceCatalogContract`. The contract reports asset preload/runtime-visible
+  intent, `app.icon` SVG/preload state, default locale/font resolution, CJK
+  fallback state, debug metadata presence, and per-locale fallback coverage for
+  the default key set; the CLI only reads files and checks paths, while
+  manifest and locale text parsing stay in the pure package.
 - `phenotype package list <root>` scans for package manifests below a root and
   emits a compact package catalog for CI or future bundling, including resource
   counts and catalog diagnostic counts.
@@ -146,6 +147,8 @@ mise exec -- exon build
   --output /tmp/phenotype-file-explorer
 .exon/debug/phenotype_cli package verify-bundle --json \
   /tmp/phenotype-file-explorer
+.exon/debug/phenotype_cli package inspect --json \
+  ../../examples/file_explorer_desktop
 .exon/debug/phenotype_cli artifact verify-file-explorer \
   --profile desktop \
   --view-mode icon \

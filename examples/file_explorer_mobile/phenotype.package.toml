@@ -12,8 +12,8 @@ artifact_manifest = "artifact_manifest.json"
 
 [[assets]]
 name = "app.icon"
-source = "assets/file-explorer-icon.txt"
-content_type = "text/plain"
+source = "assets/file-explorer-icon.svg"
+content_type = "image/svg+xml"
 preload = true
 runtime_visible = false
 

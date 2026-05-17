@@ -124,6 +124,10 @@ struct PackageSummary {
     std::string artifact_manifest;
     std::string debug_probe_scene;
     std::string debug_verifier;
+    bool app_icon_declared = false;
+    bool app_icon_svg = false;
+    bool app_icon_preload = false;
+    bool default_font_has_cjk_fallback = false;
     phenotype::ResourceCatalog catalog;
     std::vector<phenotype::ResourceDiagnostic> catalog_diagnostics;
     phenotype::ResourceCatalogContract resource_contract;
@@ -1727,6 +1731,11 @@ auto package_summary(fs::path root) -> PackageSummary {
         phenotype::validate_resource_catalog(summary.catalog, required_views);
     summary.resource_contract =
         phenotype::resource_catalog_contract(summary.catalog, required_views);
+    summary.app_icon_declared = summary.resource_contract.app_icon_declared;
+    summary.app_icon_svg = summary.resource_contract.app_icon_svg;
+    summary.app_icon_preload = summary.resource_contract.app_icon_preload;
+    summary.default_font_has_cjk_fallback =
+        summary.resource_contract.default_font_has_cjk_fallback;
     return summary;
 }
 
@@ -1752,6 +1761,10 @@ bool resource_contract_ok(PackageSummary const& summary) {
     auto const& contract = summary.resource_contract;
     return contract.default_locale_declared
         && contract.default_font_declared
+        && contract.default_font_has_cjk_fallback
+        && contract.app_icon_declared
+        && contract.app_icon_svg
+        && contract.app_icon_preload
         && contract.debug_artifact_manifest_declared
         && contract.debug_probe_scene_declared
         && contract.debug_verifier_declared
@@ -1808,12 +1821,21 @@ auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
         {.name = "resource_contract",
          .ok = resource_contract_ok(summary),
          .detail = std::format(
-             "default_locale={} default_font={} debug_manifest={} verifier={}",
+             "default_locale={} default_font={} app_icon={} debug_manifest={} verifier={}",
              summary.resource_contract.default_locale_declared ? "true" : "false",
              summary.resource_contract.default_font_declared ? "true" : "false",
+             summary.resource_contract.app_icon_declared ? "true" : "false",
              summary.resource_contract.debug_artifact_manifest_declared ? "true" : "false",
              summary.resource_contract.debug_verifier_declared ? "true" : "false"),
          .hint = "The pure ResourceCatalog contract should resolve defaults and debug metadata before launch."},
+        {.name = "app_icon",
+         .ok = summary.app_icon_declared && summary.app_icon_svg
+             && summary.app_icon_preload,
+         .detail = std::format("declared={} svg={} preload={}",
+                               summary.app_icon_declared ? "true" : "false",
+                               summary.app_icon_svg ? "true" : "false",
+                               summary.app_icon_preload ? "true" : "false"),
+         .hint = "Declare app.icon as a package-owned SVG asset with content_type image/svg+xml and preload=true."},
         {.name = "locale_coverage",
          .ok = locale_coverage_ok(summary),
          .detail = std::format("{} required keys, {} locales, {} missing",
@@ -1863,11 +1885,16 @@ auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
              : std::format("verifier={}", summary.debug_verifier),
          .hint = "Use a phenotype CLI command; shell scripts are compatibility wrappers."},
         {.name = "default_font",
-         .ok = summary.default_font_pretendard,
+         .ok = summary.default_font_pretendard
+             && summary.default_font_has_cjk_fallback,
          .detail = summary.default_font_family.empty()
              ? "default_font_family=<missing>"
-             : std::format("default_font_family={}", summary.default_font_family),
-         .hint = "Package resources should default to Pretendard for UI text."},
+             : std::format("default_font_family={} cjk_fallback={}",
+                           summary.default_font_family,
+                           summary.default_font_has_cjk_fallback
+                               ? "true"
+                               : "false"),
+         .hint = "Package resources should default to Pretendard and declare a CJK-capable fallback for UI text."},
         {.name = "assets",
          .ok = summary.assets_directory,
          .detail = std::format("{} files", summary.asset_file_count),
@@ -2012,7 +2039,10 @@ auto resource_contract_json(PackageSummary const& summary) -> std::string {
         "\"runtime_visible_asset_count\":{},\"locale_count\":{},"
         "\"locale_string_count\":{},\"font_count\":{},"
         "\"registered_font_count\":{},"
+        "\"app_icon_declared\":{},\"app_icon_svg\":{},"
+        "\"app_icon_preload\":{},"
         "\"default_locale_declared\":{},\"default_font_declared\":{},"
+        "\"default_font_has_cjk_fallback\":{},"
         "\"debug_artifact_manifest_declared\":{},"
         "\"debug_probe_scene_declared\":{},\"debug_verifier_declared\":{},"
         "\"required_locale_key_count\":{},\"missing_locale_key_count\":{},"
@@ -2024,8 +2054,12 @@ auto resource_contract_json(PackageSummary const& summary) -> std::string {
         contract.locale_string_count,
         contract.font_count,
         contract.registered_font_count,
+        contract.app_icon_declared ? "true" : "false",
+        contract.app_icon_svg ? "true" : "false",
+        contract.app_icon_preload ? "true" : "false",
         contract.default_locale_declared ? "true" : "false",
         contract.default_font_declared ? "true" : "false",
+        contract.default_font_has_cjk_fallback ? "true" : "false",
         contract.debug_artifact_manifest_declared ? "true" : "false",
         contract.debug_probe_scene_declared ? "true" : "false",
         contract.debug_verifier_declared ? "true" : "false",
@@ -2070,6 +2104,8 @@ auto resource_catalog_summary_json(PackageSummary const& summary)
         "\"assets\":{},\"locales\":{},\"locale_strings\":{},"
         "\"fonts\":{},\"diagnostics\":{},"
         "\"preload_assets\":{},\"runtime_visible_assets\":{},"
+        "\"app_icon_declared\":{},\"app_icon_svg\":{},"
+        "\"default_font_has_cjk_fallback\":{},"
         "\"missing_locale_keys\":{},\"contract_ok\":{}}}",
         json_string(catalog.default_locale),
         json_string(catalog.default_font_family),
@@ -2080,6 +2116,11 @@ auto resource_catalog_summary_json(PackageSummary const& summary)
         summary.catalog_diagnostics.size(),
         summary.resource_contract.preload_asset_count,
         summary.resource_contract.runtime_visible_asset_count,
+        summary.resource_contract.app_icon_declared ? "true" : "false",
+        summary.resource_contract.app_icon_svg ? "true" : "false",
+        summary.resource_contract.default_font_has_cjk_fallback
+            ? "true"
+            : "false",
         locale_coverage_missing_key_count(summary),
         (resource_contract_ok(summary) && locale_coverage_ok(summary))
             ? "true"
@@ -2100,7 +2141,9 @@ auto package_json(PackageSummary const& summary,
         "\"locale_string_count\":{},"
         "\"artifact_manifest\":{{\"path\":{},\"present\":{}}},"
         "\"debug\":{{\"probe_scene\":{},\"verifier\":{}}},"
-        "\"default_font_family\":{},\"default_font_pretendard\":{}}},"
+        "\"app_icon\":{{\"declared\":{},\"svg\":{},\"preload\":{}}},"
+        "\"default_font_family\":{},\"default_font_pretendard\":{},"
+        "\"default_font_has_cjk_fallback\":{}}},"
         "\"assets\":{{\"present\":{},\"file_count\":{}}},"
         "\"locales\":{{\"present\":{},\"file_count\":{}}},"
         "\"fonts\":{{\"present\":{},\"file_count\":{}}},"
@@ -2127,8 +2170,12 @@ auto package_json(PackageSummary const& summary,
         summary.artifact_manifest_exists ? "true" : "false",
         json_string(summary.debug_probe_scene),
         json_string(summary.debug_verifier),
+        summary.app_icon_declared ? "true" : "false",
+        summary.app_icon_svg ? "true" : "false",
+        summary.app_icon_preload ? "true" : "false",
         json_string(summary.default_font_family),
         summary.default_font_pretendard ? "true" : "false",
+        summary.default_font_has_cjk_fallback ? "true" : "false",
         summary.assets_directory ? "true" : "false",
         summary.asset_file_count,
         summary.locales_directory ? "true" : "false",
@@ -2146,7 +2193,8 @@ auto package_entry_json(PackageSummary const& summary,
         "{{\"root\":{},\"ok\":{},\"application_id\":{},"
         "\"display_name\":{},\"entry\":{},\"platforms\":{},"
         "\"default_font_family\":{},\"artifact_manifest\":{},"
-        "\"debug_verifier\":{},\"resource_catalog\":{},"
+        "\"debug_verifier\":{},\"app_icon\":{{\"declared\":{},"
+        "\"svg\":{},\"preload\":{}}},\"resource_catalog\":{},"
         "\"resource_contract\":{},\"checks\":{}}}",
         json_string(path_string(summary.root)),
         all_ok(checks) ? "true" : "false",
@@ -2157,6 +2205,9 @@ auto package_entry_json(PackageSummary const& summary,
         json_string(summary.default_font_family),
         json_string(summary.artifact_manifest),
         json_string(summary.debug_verifier),
+        summary.app_icon_declared ? "true" : "false",
+        summary.app_icon_svg ? "true" : "false",
+        summary.app_icon_preload ? "true" : "false",
         resource_catalog_summary_json(summary),
         resource_contract_json(summary),
         checks_json(checks));

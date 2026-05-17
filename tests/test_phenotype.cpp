@@ -3336,8 +3336,8 @@ ResourceCatalog make_test_resource_catalog() {
     catalog.assets = {
         {
             .name = "app.icon",
-            .source = "assets/file-explorer-icon.txt",
-            .content_type = "text/plain",
+            .source = "assets/file-explorer-icon.svg",
+            .content_type = "image/svg+xml",
             .preload = true,
             .runtime_visible = false,
         },
@@ -3367,7 +3367,7 @@ ResourceCatalog make_test_resource_catalog() {
             .family = "Pretendard",
             .source = "fonts/pretendard.alias.toml",
             .register_font = false,
-            .fallback = {"system-ui", "Apple SD Gothic Neo", "Segoe UI"},
+            .fallback = {"system-ui", "Apple SD Gothic Neo", "Segoe UI", "Noto Sans CJK"},
         },
     };
     catalog.debug = {
@@ -3392,11 +3392,11 @@ void test_resource_catalog_lookup_and_locale_fallback() {
 
     auto asset = find_asset(catalog, "app.icon");
     assert(asset);
-    assert(asset->get().source == "assets/file-explorer-icon.txt");
+    assert(asset->get().source == "assets/file-explorer-icon.svg");
 
     auto font = find_font(catalog, "Pretendard");
     assert(font);
-    assert(font->get().fallback.size() == 3);
+    assert(font->get().fallback.size() == 4);
 
     auto ko_delete = localized_string(catalog, "action.delete", "ko");
     assert(ko_delete);
