@@ -160,6 +160,10 @@ inline auto to_catalog_tone(SymbolTone tone) noexcept -> catalog::SymbolTone {
     return static_cast<catalog::SymbolTone>(static_cast<unsigned int>(tone));
 }
 
+inline auto from_catalog_tone(catalog::SymbolTone tone) noexcept -> SymbolTone {
+    return static_cast<SymbolTone>(static_cast<unsigned int>(tone));
+}
+
 inline auto symbol_role_name(SymbolRole role) noexcept -> std::string_view {
     return catalog::symbol_role_name(to_catalog_role(role));
 }
@@ -221,6 +225,11 @@ struct SymbolPresentation {
     Color color = {96, 96, 100, 255};
     float point_size = 24.0f;
     float optical_y_offset = 0.0f;
+};
+
+struct SymbolInteractionState {
+    bool selected = false;
+    bool enabled = true;
 };
 
 inline constexpr unsigned int all_symbol_count = catalog::all_symbol_count;
@@ -335,6 +344,32 @@ inline float optical_y_offset(SymbolPresentationRole role) noexcept {
 inline auto macos_light_tone_color(SymbolTone tone) noexcept -> Color {
     auto const color = catalog::macos_light_tone_color(to_catalog_tone(tone));
     return {color.r, color.g, color.b, color.a};
+}
+
+inline auto interaction_tone_policy() noexcept -> std::string_view {
+    return catalog::interaction_tone_policy();
+}
+
+inline auto macos_interaction_tone(SymbolPresentationRole role,
+                                   SymbolInteractionState state) noexcept
+        -> SymbolTone {
+    return from_catalog_tone(catalog::macos_interaction_tone(
+        to_catalog_presentation_role(role),
+        catalog::SymbolInteractionState{
+            state.selected,
+            state.enabled,
+        }));
+}
+
+inline auto macos_interaction_tone(Symbol symbol,
+                                   SymbolInteractionState state) noexcept
+        -> SymbolTone {
+    return from_catalog_tone(catalog::macos_interaction_tone(
+        to_catalog_symbol(symbol),
+        catalog::SymbolInteractionState{
+            state.selected,
+            state.enabled,
+        }));
 }
 
 inline auto macos_file_type_color(Symbol symbol) noexcept -> Color {

@@ -3092,6 +3092,31 @@ auto icon_color_json(icon_catalog::SymbolColor const& color) -> std::string {
         static_cast<int>(color.a));
 }
 
+auto icon_interaction_tones_json(bool enabled) -> std::string {
+    if (!enabled)
+        return "{}";
+    auto tone_name = [](icon_catalog::SymbolPresentationRole role,
+                        bool selected,
+                        bool state_enabled) {
+        return json_string(icon_catalog::symbol_tone_name(
+            icon_catalog::macos_interaction_tone(
+                role,
+                icon_catalog::SymbolInteractionState{
+                    selected,
+                    state_enabled,
+                })));
+    };
+    return std::format(
+        "{{\"sidebar_selected\":{},\"sidebar_unselected\":{},"
+        "\"toolbar_selected\":{},\"toolbar_unselected\":{},"
+        "\"disabled\":{}}}",
+        tone_name(icon_catalog::SymbolPresentationRole::Sidebar, true, true),
+        tone_name(icon_catalog::SymbolPresentationRole::Sidebar, false, true),
+        tone_name(icon_catalog::SymbolPresentationRole::Toolbar, true, true),
+        tone_name(icon_catalog::SymbolPresentationRole::Toolbar, false, true),
+        tone_name(icon_catalog::SymbolPresentationRole::Toolbar, false, false));
+}
+
 auto icon_symbol_json(icon_catalog::Symbol symbol,
                       std::string_view reference_set) -> std::string {
     auto const desc = icon_catalog::descriptor(symbol);
@@ -3099,10 +3124,15 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         icon_catalog::default_presentation_role(symbol);
     auto const presentation_scale =
         icon_catalog::default_scale(presentation_role);
-    auto const tone =
-        presentation_role == icon_catalog::SymbolPresentationRole::Sidebar
-            ? icon_catalog::SymbolTone::Primary
-            : icon_catalog::SymbolTone::Secondary;
+    auto const tone = icon_catalog::macos_interaction_tone(
+        presentation_role,
+        icon_catalog::SymbolInteractionState{false, true});
+    auto const selected_tone = icon_catalog::macos_interaction_tone(
+        presentation_role,
+        icon_catalog::SymbolInteractionState{true, true});
+    auto const disabled_tone = icon_catalog::macos_interaction_tone(
+        presentation_role,
+        icon_catalog::SymbolInteractionState{false, false});
     auto const color = icon_catalog::macos_light_tone_color(tone);
     auto const file_type_color = icon_catalog::macos_file_type_color(symbol);
     return std::format(
@@ -3117,7 +3147,8 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         "\"supports_hierarchical_opacity\":{},"
         "\"phenotype_owned\":{},\"uses_sf_symbols_asset\":{},"
         "\"file_type_color\":{},"
-        "\"presentation\":{{\"role\":{},\"tone\":{},\"scale\":{},"
+        "\"presentation\":{{\"role\":{},\"tone\":{},"
+        "\"selected_tone\":{},\"disabled_tone\":{},\"scale\":{},"
         "\"point_size\":{},\"optical_y_offset\":{},\"color\":{}}}}}",
         json_string(desc.name),
         json_string(desc.semantic_reference_name),
@@ -3145,6 +3176,8 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         json_string(icon_catalog::symbol_presentation_role_name(
             presentation_role)),
         json_string(icon_catalog::symbol_tone_name(tone)),
+        json_string(icon_catalog::symbol_tone_name(selected_tone)),
+        json_string(icon_catalog::symbol_tone_name(disabled_tone)),
         json_string(icon_catalog::symbol_scale_name(presentation_scale)),
         icon_catalog::point_size(presentation_scale),
         icon_catalog::optical_y_offset(presentation_role),
@@ -3255,6 +3288,20 @@ auto icon_catalog_checks() -> std::vector<Check> {
                                text_weight_aligned ? "true" : "false"),
          .hint =
              "Mac-like icons should stay round-stroked and text-weight aligned."},
+        {.name = "interaction_tone_policy",
+         .ok = icon_catalog::interaction_tone_policy()
+                == std::string_view{"macos_finder_interaction_tones"}
+            && icon_catalog::macos_interaction_tone(
+                   icon_catalog::SymbolPresentationRole::Sidebar,
+                   icon_catalog::SymbolInteractionState{true, true})
+                == icon_catalog::SymbolTone::Accent
+            && icon_catalog::macos_interaction_tone(
+                   icon_catalog::SymbolPresentationRole::Toolbar,
+                   icon_catalog::SymbolInteractionState{false, false})
+                == icon_catalog::SymbolTone::Disabled,
+         .detail = std::string{icon_catalog::interaction_tone_policy()},
+         .hint =
+             "Keep selected and disabled icon tones in the pure catalog contract."},
         {.name = "file_type_palette",
          .ok = icon_catalog::file_type_color_policy()
                 == std::string_view{"macos_finder_file_type_tints"}
@@ -3274,6 +3321,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"reference_policy\":{},\"asset_policy\":{},"
         "\"alignment\":{},\"variant_policy\":{},"
         "\"presentation_policy\":{},\"tone_policy\":{},"
+        "\"interaction_tone_policy\":{},"
         "\"file_type_color_policy\":{},\"default_scale\":{}}},"
         "\"counts\":{{\"all\":{},\"sidebar\":{},\"toolbar\":{},"
         "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
@@ -3291,6 +3339,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::variant_policy()),
         json_string(icon_catalog::presentation_policy()),
         json_string(icon_catalog::tone_policy()),
+        json_string(icon_catalog::interaction_tone_policy()),
         json_string(icon_catalog::file_type_color_policy()),
         json_string(icon_catalog::default_scale_policy()),
         icon_catalog::all_symbol_count,
@@ -3351,7 +3400,9 @@ auto explorer_chrome_json(
         "\"reference_family\":{},\"reference_policy\":{},"
         "\"asset_policy\":{},\"alignment\":{},\"rendering_mode\":{},"
         "\"variant_policy\":{},\"presentation_policy\":{},"
-        "\"tone_policy\":{},\"file_type_color_policy\":{},\"scale\":{},"
+        "\"tone_policy\":{},\"interaction_tone_policy\":{},"
+        "\"interaction_tones\":{},"
+        "\"file_type_color_policy\":{},\"scale\":{},"
         "\"sidebar_reference_symbols\":{},"
         "\"toolbar_reference_symbols\":{}}}}}",
         chrome.viewport.width,
@@ -3437,6 +3488,9 @@ auto explorer_chrome_json(
         json_string(chrome.icon_variant_policy),
         json_string(chrome.icon_presentation_policy),
         json_string(chrome.icon_tone_policy),
+        json_string(chrome.icon_interaction_tone_policy),
+        icon_interaction_tones_json(
+            chrome.icon_interaction_tone_policy != "n/a"),
         json_string(chrome.icon_file_type_color_policy),
         json_string(chrome.icon_scale),
         icon_reference_names_json(

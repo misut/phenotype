@@ -110,6 +110,11 @@ struct SymbolColor {
     unsigned char a = 255;
 };
 
+struct SymbolInteractionState {
+    bool selected = false;
+    bool enabled = true;
+};
+
 inline constexpr unsigned int all_symbol_count = 31;
 inline constexpr unsigned int sidebar_symbol_count = 11;
 inline constexpr unsigned int toolbar_symbol_count = 15;
@@ -255,6 +260,10 @@ inline auto variant_policy() noexcept -> std::string_view {
 
 inline auto tone_policy() noexcept -> std::string_view {
     return "primary, secondary, selected, accent, disabled, destructive";
+}
+
+inline auto interaction_tone_policy() noexcept -> std::string_view {
+    return "macos_finder_interaction_tones";
 }
 
 inline auto file_type_color_policy() noexcept -> std::string_view {
@@ -575,6 +584,34 @@ inline auto macos_light_tone_color(SymbolTone tone) noexcept -> SymbolColor {
     case SymbolTone::Destructive: return {255, 59, 48, 255};
     }
     return {96, 96, 100, 255};
+}
+
+inline auto macos_interaction_tone(SymbolPresentationRole role,
+                                   SymbolInteractionState state) noexcept
+        -> SymbolTone {
+    if (!state.enabled)
+        return SymbolTone::Disabled;
+    if (state.selected) {
+        return role == SymbolPresentationRole::Sidebar
+            ? SymbolTone::Accent
+            : SymbolTone::Selected;
+    }
+    switch (role) {
+    case SymbolPresentationRole::Sidebar:
+        return SymbolTone::Primary;
+    case SymbolPresentationRole::Toolbar:
+    case SymbolPresentationRole::Navigation:
+    case SymbolPresentationRole::FileType:
+    case SymbolPresentationRole::Action:
+        return SymbolTone::Secondary;
+    }
+    return SymbolTone::Secondary;
+}
+
+inline auto macos_interaction_tone(Symbol symbol,
+                                   SymbolInteractionState state) noexcept
+        -> SymbolTone {
+    return macos_interaction_tone(default_presentation_role(symbol), state);
 }
 
 inline auto macos_file_type_color(Symbol symbol) noexcept -> SymbolColor {

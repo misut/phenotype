@@ -223,6 +223,8 @@ void test_builtin_icons_parse() {
            != std::string_view::npos);
     assert(icons::presentation_policy()
            == "macos_role_aware_symbol_presentation");
+    assert(icons::interaction_tone_policy()
+           == "macos_finder_interaction_tones");
     auto const folder_color =
         icons::macos_file_type_color(icons::Symbol::Folder);
     auto const movie_color =
@@ -322,7 +324,9 @@ void test_builtin_icons_parse() {
     auto sidebar = icons::presentation(
         icons::Symbol::Recents,
         icons::SymbolPresentationRole::Sidebar,
-        icons::SymbolTone::Accent);
+        icons::macos_interaction_tone(
+            icons::SymbolPresentationRole::Sidebar,
+            icons::SymbolInteractionState{true, true}));
     assert(sidebar.role == icons::SymbolPresentationRole::Sidebar);
     assert(icons::symbol_presentation_role_name(sidebar.role) == "sidebar");
     assert(sidebar.tone == icons::SymbolTone::Accent);
@@ -331,11 +335,21 @@ void test_builtin_icons_parse() {
     assert(sidebar.point_size == 26.0f);
     assert(sidebar.optical_y_offset == -0.5f);
     assert((sidebar.color == Color{0, 122, 255, 255}));
+    assert(icons::macos_interaction_tone(
+               icons::Symbol::Recents,
+               icons::SymbolInteractionState{false, true})
+           == icons::SymbolTone::Primary);
+    assert(icons::macos_interaction_tone(
+               icons::SymbolPresentationRole::Toolbar,
+               icons::SymbolInteractionState{false, false})
+           == icons::SymbolTone::Disabled);
 
     auto toolbar = icons::presentation(
         icons::Symbol::Search,
         icons::SymbolPresentationRole::Toolbar,
-        icons::SymbolTone::Secondary);
+        icons::macos_interaction_tone(
+            icons::SymbolPresentationRole::Toolbar,
+            icons::SymbolInteractionState{false, true}));
     assert(toolbar.scale == icons::SymbolScale::Medium);
     assert(toolbar.point_size == 24.0f);
     assert((toolbar.color == Color{96, 96, 100, 255}));

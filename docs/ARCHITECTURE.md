@@ -201,6 +201,9 @@ without pixel guessing. `icons::presentation` adds the default macOS-inspired
 presentation policy: toolbar symbols use 24 pt secondary/selected tones,
 sidebar symbols use 26 pt primary/accent tones with a small optical vertical
 adjustment, and disabled/destructive tones are explicit pure values.
+`icon_catalog::macos_interaction_tone` keeps selected and disabled toolbar,
+navigation, sidebar, file-type, and action tone choices in the same pure
+catalog instead of leaving those decisions inside examples or native backends.
 The same pure catalog exposes a Finder-style file-type tint policy for
 folder/document/image/movie glyphs, which desktop examples use in list and
 column rows without asking a native icon service for platform artwork.

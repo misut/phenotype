@@ -282,6 +282,7 @@ struct ExplorerChromeMetrics {
     std::string icon_variant_policy;
     std::string icon_presentation_policy;
     std::string icon_tone_policy;
+    std::string icon_interaction_tone_policy;
     std::string icon_file_type_color_policy;
     std::string icon_scale;
     std::string chrome_geometry_policy;
@@ -665,6 +666,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_variant_policy = "n/a",
             .icon_presentation_policy = "n/a",
             .icon_tone_policy = "n/a",
+            .icon_interaction_tone_policy = "n/a",
             .icon_file_type_color_policy = "n/a",
             .icon_scale = "n/a",
             .chrome_geometry_policy = "n/a",
@@ -794,6 +796,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_presentation_policy =
             std::string{icon_catalog::presentation_policy()},
         .icon_tone_policy = std::string{icon_catalog::tone_policy()},
+        .icon_interaction_tone_policy =
+            std::string{icon_catalog::interaction_tone_policy()},
         .icon_file_type_color_policy =
             std::string{icon_catalog::file_type_color_policy()},
         .icon_scale = std::string{icon_catalog::default_scale_policy()},
@@ -1305,6 +1309,43 @@ inline json::Value toolbar_icon_reference_symbols_debug_json(
     return json::Value{std::move(out)};
 }
 
+inline auto interaction_tone_name(icon_catalog::SymbolPresentationRole role,
+                                  bool selected,
+                                  bool enabled) -> std::string {
+    return std::string{icon_catalog::symbol_tone_name(
+        icon_catalog::macos_interaction_tone(
+            role,
+            icon_catalog::SymbolInteractionState{selected, enabled}))};
+}
+
+inline json::Value icon_interaction_tones_debug_json(
+        ExplorerChromeMetrics const& chrome) {
+    if (chrome.icon_interaction_tone_policy == "n/a")
+        return json::Value{json::Object{}};
+    json::Object out;
+    out.emplace(
+        "sidebar_selected",
+        json::Value{interaction_tone_name(
+            icon_catalog::SymbolPresentationRole::Sidebar, true, true)});
+    out.emplace(
+        "sidebar_unselected",
+        json::Value{interaction_tone_name(
+            icon_catalog::SymbolPresentationRole::Sidebar, false, true)});
+    out.emplace(
+        "toolbar_selected",
+        json::Value{interaction_tone_name(
+            icon_catalog::SymbolPresentationRole::Toolbar, true, true)});
+    out.emplace(
+        "toolbar_unselected",
+        json::Value{interaction_tone_name(
+            icon_catalog::SymbolPresentationRole::Toolbar, false, true)});
+    out.emplace(
+        "disabled",
+        json::Value{interaction_tone_name(
+            icon_catalog::SymbolPresentationRole::Toolbar, false, false)});
+    return json::Value{std::move(out)};
+}
+
 inline json::Value explorer_chrome_debug_json(
         ExplorerChromeMetrics const& chrome) {
     json::Object viewport;
@@ -1404,6 +1445,12 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace("variant_policy", json::Value{chrome.icon_variant_policy});
     icon_system.emplace("presentation_policy", json::Value{chrome.icon_presentation_policy});
     icon_system.emplace("tone_policy", json::Value{chrome.icon_tone_policy});
+    icon_system.emplace(
+        "interaction_tone_policy",
+        json::Value{chrome.icon_interaction_tone_policy});
+    icon_system.emplace(
+        "interaction_tones",
+        icon_interaction_tones_debug_json(chrome));
     icon_system.emplace(
         "file_type_color_policy",
         json::Value{chrome.icon_file_type_color_policy});

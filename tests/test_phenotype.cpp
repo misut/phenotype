@@ -3570,6 +3570,12 @@ void test_icon_catalog_umbrella_export() {
            == "airdrop");
     assert(phenotype::icon_catalog::file_type_color_policy()
            == "macos_finder_file_type_tints");
+    assert(phenotype::icon_catalog::interaction_tone_policy()
+           == "macos_finder_interaction_tones");
+    assert(phenotype::icon_catalog::macos_interaction_tone(
+               phenotype::icon_catalog::SymbolPresentationRole::Sidebar,
+               phenotype::icon_catalog::SymbolInteractionState{true, true})
+           == phenotype::icon_catalog::SymbolTone::Accent);
 
     std::puts("PASS: umbrella module exports icon catalog contract");
 }
