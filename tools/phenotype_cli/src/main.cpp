@@ -3182,6 +3182,8 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         icon_catalog::default_presentation_role(symbol);
     auto const presentation_scale =
         icon_catalog::default_scale(presentation_role);
+    auto const presentation_metrics =
+        icon_catalog::metrics(presentation_role);
     auto const tone = icon_catalog::macos_interaction_tone(
         presentation_role,
         icon_catalog::SymbolInteractionState{false, true});
@@ -3209,7 +3211,9 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         "\"file_type_color\":{},"
         "\"presentation\":{{\"role\":{},\"tone\":{},"
         "\"selected_tone\":{},\"disabled_tone\":{},\"scale\":{},"
-        "\"point_size\":{},\"optical_y_offset\":{},\"color\":{}}}}}",
+        "\"point_size\":{},\"hit_target_size\":{},"
+        "\"content_inset\":{},\"optical_y_offset\":{},"
+        "\"metrics_policy\":{},\"color\":{}}}}}",
         json_string(desc.name),
         json_string(desc.semantic_reference_name),
         json_string(reference_set),
@@ -3242,8 +3246,11 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         json_string(icon_catalog::symbol_tone_name(selected_tone)),
         json_string(icon_catalog::symbol_tone_name(disabled_tone)),
         json_string(icon_catalog::symbol_scale_name(presentation_scale)),
-        icon_catalog::point_size(presentation_scale),
-        icon_catalog::optical_y_offset(presentation_role),
+        presentation_metrics.point_size,
+        presentation_metrics.hit_target_size,
+        presentation_metrics.content_inset,
+        presentation_metrics.optical_y_offset,
+        json_string(icon_catalog::metrics_policy()),
         icon_color_json(color));
 }
 
@@ -3289,9 +3296,17 @@ auto icon_catalog_checks() -> std::vector<Check> {
     bool round_stroke_contract = true;
     bool round_cap_join_contract = true;
     bool text_weight_aligned = true;
+    bool name_lookup_roundtrips = true;
+    bool reference_lookup_roundtrips = true;
+    bool metric_contract = true;
     for (unsigned int i = 0; i < icon_catalog::all_symbol_count; ++i) {
         auto const symbol = icon_catalog::symbol_at(i);
         auto const desc = icon_catalog::descriptor(symbol);
+        auto const metrics = icon_catalog::symbol_metrics(symbol);
+        auto const name_lookup = icon_catalog::symbol_from_name(desc.name);
+        auto const reference_lookup =
+            icon_catalog::symbol_from_semantic_reference_name(
+                desc.semantic_reference_name);
         if (desc.filled)
             ++filled_count;
         else
@@ -3306,6 +3321,19 @@ auto icon_catalog_checks() -> std::vector<Check> {
         no_sf_assets = no_sf_assets && !desc.uses_sf_symbols_asset;
         semantic_references =
             semantic_references && !desc.semantic_reference_name.empty();
+        name_lookup_roundtrips =
+            name_lookup_roundtrips && name_lookup.has_value()
+            && *name_lookup == symbol;
+        reference_lookup_roundtrips =
+            reference_lookup_roundtrips && reference_lookup.has_value()
+            && *reference_lookup == symbol;
+        metric_contract =
+            metric_contract
+            && metrics.role == icon_catalog::default_presentation_role(symbol)
+            && metrics.grid_size == desc.grid_size
+            && metrics.point_size <= metrics.hit_target_size
+            && metrics.content_inset >= 0.0f
+            && metrics.stroke_width == desc.default_stroke_width;
         round_stroke_contract =
             round_stroke_contract && (desc.filled || desc.round_stroke);
         round_cap_join_contract =
@@ -3364,6 +3392,25 @@ auto icon_catalog_checks() -> std::vector<Check> {
                  icon_catalog::Symbol::AirDrop)),
          .hint =
              "Every phenotype-owned glyph needs a stable semantic SF Symbols reference name for debug traces."},
+        {.name = "lookup_and_metrics",
+         .ok = name_lookup_roundtrips
+            && reference_lookup_roundtrips
+            && metric_contract
+            && icon_catalog::metrics_policy()
+                == std::string_view{
+                    "macos_finder_role_metrics_with_explicit_hit_targets"}
+            && icon_catalog::hit_target_size(
+                   icon_catalog::SymbolPresentationRole::Toolbar)
+                == 36.0f
+            && icon_catalog::hit_target_size(
+                   icon_catalog::SymbolPresentationRole::Sidebar)
+                == 38.0f,
+         .detail = std::format(
+             "{}; {}",
+             icon_catalog::metrics_policy(),
+             icon_catalog::hit_target_policy()),
+         .hint =
+             "Keep symbol lookup and macOS role metrics pure so apps can map string commands to Finder-like glyph presentation without platform APIs."},
         {.name = "stroke_and_weight",
          .ok = round_stroke_contract
             && round_cap_join_contract
@@ -3450,7 +3497,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"interaction_tone_policy\":{},"
         "\"toolbar_symbol_chrome_policy\":{},"
         "\"sidebar_symbol_color_policy\":{},"
-        "\"file_type_color_policy\":{},\"default_scale\":{}}},"
+        "\"file_type_color_policy\":{},\"default_scale\":{},"
+        "\"metrics_policy\":{},\"hit_target_policy\":{}}},"
         "\"counts\":{{\"all\":{},\"sidebar\":{},\"toolbar\":{},"
         "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
         "\"reference\":{},\"svg_path_arc\":{},\"round_stroke\":{}}},"
@@ -3481,6 +3529,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::sidebar_symbol_color_policy()),
         json_string(icon_catalog::file_type_color_policy()),
         json_string(icon_catalog::default_scale_policy()),
+        json_string(icon_catalog::metrics_policy()),
+        json_string(icon_catalog::hit_target_policy()),
         icon_catalog::all_symbol_count,
         icon_catalog::sidebar_symbol_count,
         icon_catalog::toolbar_symbol_count,
@@ -3938,7 +3988,11 @@ auto explorer_chrome_json(
         "\"grid_size\":{},"
         "\"default_stroke_width\":{},\"secondary_opacity\":{},"
         "\"toolbar_point_size\":{},\"sidebar_point_size\":{},"
-        "\"sidebar_optical_y_offset\":{},\"column_location_icon_size\":{},"
+        "\"sidebar_optical_y_offset\":{},"
+        "\"toolbar_hit_target_size\":{},"
+        "\"sidebar_hit_target_size\":{},"
+        "\"action_hit_target_size\":{},"
+        "\"column_location_icon_size\":{},"
         "\"text_weight_aligned\":{},"
         "\"hierarchical_opacity\":{},\"design_reference\":{},"
         "\"reference_family\":{},\"reference_policy\":{},"
@@ -3951,7 +4005,9 @@ auto explorer_chrome_json(
         "\"toolbar_symbol_chrome_policy\":{},"
         "\"sidebar_symbol_color_policy\":{},"
         "\"interaction_tones\":{},"
-        "\"file_type_color_policy\":{},\"scale\":{},"
+        "\"file_type_color_policy\":{},"
+        "\"metrics_policy\":{},\"hit_target_policy\":{},"
+        "\"scale\":{},"
         "\"sidebar_reference_symbols\":{},"
         "\"toolbar_reference_symbols\":{}}}}}",
         chrome.viewport.width,
@@ -4038,6 +4094,9 @@ auto explorer_chrome_json(
         chrome.icon_toolbar_point_size,
         chrome.icon_sidebar_point_size,
         chrome.icon_sidebar_optical_y_offset,
+        chrome.icon_toolbar_hit_target_size,
+        chrome.icon_sidebar_hit_target_size,
+        chrome.icon_action_hit_target_size,
         chrome.column_location_icon_size,
         chrome.icon_text_weight_aligned ? "true" : "false",
         chrome.icon_hierarchical_opacity ? "true" : "false",
@@ -4058,6 +4117,8 @@ auto explorer_chrome_json(
         icon_interaction_tones_json(
             chrome.icon_interaction_tone_policy != "n/a"),
         json_string(chrome.icon_file_type_color_policy),
+        json_string(chrome.icon_metrics_policy),
+        json_string(chrome.icon_hit_target_policy),
         json_string(chrome.icon_scale),
         icon_reference_names_json(
             IconCatalogSet::Sidebar,

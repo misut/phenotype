@@ -34,6 +34,10 @@ int main() {
            == "borderless_toolbar_symbols_inside_grouped_controls");
     assert(icons::sidebar_symbol_color_policy()
            == "accent_selected_user_tint_compatible_sidebar_symbols");
+    assert(icons::metrics_policy()
+           == "macos_finder_role_metrics_with_explicit_hit_targets");
+    assert(icons::hit_target_policy().find("sidebar=38pt")
+           != std::string_view::npos);
     assert(icons::all_symbol_count == 31);
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);
@@ -59,6 +63,20 @@ int main() {
         assert(desc.reference_family == icons::reference_family());
         assert(desc.reference_policy == icons::reference_policy());
         assert(desc.grid_size == 24.0f);
+        assert(icons::symbol_from_name(desc.name).has_value());
+        assert(*icons::symbol_from_name(desc.name) == symbol);
+        assert(icons::symbol_from_semantic_reference_name(
+                   desc.semantic_reference_name)
+                   .has_value());
+        assert(*icons::symbol_from_semantic_reference_name(
+                   desc.semantic_reference_name)
+                == symbol);
+        auto const metrics = icons::symbol_metrics(symbol);
+        assert(metrics.role == icons::default_presentation_role(symbol));
+        assert(metrics.grid_size == desc.grid_size);
+        assert(metrics.point_size <= metrics.hit_target_size);
+        assert(metrics.content_inset >= 0.0f);
+        assert(metrics.stroke_width == desc.default_stroke_width);
         assert(desc.phenotype_owned);
         assert(!desc.uses_sf_symbols_asset);
         if (desc.filled)
@@ -117,6 +135,17 @@ int main() {
                icons::default_scale(icons::SymbolPresentationRole::Sidebar))
            == "large");
     assert(icons::point_size(icons::SymbolScale::Medium) == 24.0f);
+    assert(icons::hit_target_size(icons::SymbolPresentationRole::Toolbar)
+           == 36.0f);
+    assert(icons::hit_target_size(icons::SymbolPresentationRole::Sidebar)
+           == 38.0f);
+    auto const sidebar_metrics =
+        icons::metrics(icons::SymbolPresentationRole::Sidebar);
+    assert(sidebar_metrics.point_size == 26.0f);
+    assert(sidebar_metrics.hit_target_size == 38.0f);
+    assert(sidebar_metrics.optical_y_offset == -0.5f);
+    assert(!icons::symbol_from_name("missing").has_value());
+    assert(!icons::symbol_from_semantic_reference_name("missing").has_value());
     assert(icons::descriptor(icons::Symbol::Folder).layer_count
            == icons::symbol_layer_count(icons::Symbol::Folder));
 

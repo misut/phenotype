@@ -204,14 +204,16 @@ the `phenotype.icon_catalog` / `phenotype.icons` style contract
 total/sidebar/toolbar/filled symbol counts, and
 `interface_metaphor_policy`, `visual_consistency_policy`,
 `toolbar_symbol_chrome_policy`, `sidebar_symbol_color_policy`,
-`interaction_tone_policy` / `file_type_color_policy`), traffic-light marker
+`interaction_tone_policy` / `file_type_color_policy`, and
+`metrics_policy` / `hit_target_policy`), traffic-light marker
 coordinates, and icon-grid density metrics such as column width, row height,
 pitch, thumbnail canvas size, label size, gap, visible rows, and visible
 capacity. Column view also records location-pane row count, row height, and
 icon size so Finder-style navigation rows can be checked from the artifact
 without reading pixels by eye.
 `phenotype icons catalog --json` emits the complete all/sidebar/toolbar symbol
-contract from the same pure metadata package, while
+contract, name/reference lookup invariants, and macOS role metrics from the
+same pure metadata package, while
 `phenotype drive file-explorer --json` embeds the desktop chrome geometry and
 icon-system contract under `chrome.geometry` and `chrome.icon_system`; the
 same output includes the default glass theme contract under `theme_system`. The

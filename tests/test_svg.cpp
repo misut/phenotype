@@ -328,6 +328,10 @@ void test_builtin_icons_parse() {
            == "macos_role_aware_symbol_presentation");
     assert(icons::interaction_tone_policy()
            == "macos_finder_interaction_tones");
+    assert(icons::metrics_policy()
+           == "macos_finder_role_metrics_with_explicit_hit_targets");
+    assert(icons::hit_target_policy().find("toolbar")
+           != std::string_view::npos);
     auto const folder_color =
         icons::macos_file_type_color(icons::Symbol::Folder);
     auto const movie_color =
@@ -355,6 +359,8 @@ void test_builtin_icons_parse() {
         assert(!icons::name(symbol).empty());
         assert(!icons::semantic_reference_name(symbol).empty());
         assert(phenotype::icon_catalog::name(contract_symbol) == icons::name(symbol));
+        assert(icons::symbol_from_name(icons::name(symbol)).has_value());
+        assert(*icons::symbol_from_name(icons::name(symbol)) == symbol);
         assert(!src.empty());
         assert(descriptor.name == icons::name(symbol));
         assert(contract_descriptor.semantic_reference_name
@@ -372,6 +378,12 @@ void test_builtin_icons_parse() {
         if (descriptor.round_stroke)
             ++round_stroke_count;
         assert(descriptor.grid_size == 24.0f);
+        auto const metrics = icons::symbol_metrics(symbol);
+        assert(metrics.role == icons::default_presentation_role(symbol));
+        assert(metrics.grid_size == descriptor.grid_size);
+        assert(metrics.point_size <= metrics.hit_target_size);
+        assert(metrics.content_inset >= 0.0f);
+        assert(metrics.stroke_width == descriptor.default_stroke_width);
         assert(descriptor.layer_count == doc.shapes.size());
         assert(descriptor.text_weight_aligned);
         assert(descriptor.default_scale == icons::SymbolScale::Medium);
@@ -455,6 +467,7 @@ void test_builtin_icons_parse() {
     assert(icons::symbol_tone_name(sidebar.tone) == "accent");
     assert(sidebar.scale == icons::SymbolScale::Large);
     assert(sidebar.point_size == 26.0f);
+    assert(sidebar.hit_target_size == 38.0f);
     assert(sidebar.optical_y_offset == -0.5f);
     assert((sidebar.color == Color{0, 122, 255, 255}));
     assert(icons::macos_interaction_tone(
@@ -474,8 +487,12 @@ void test_builtin_icons_parse() {
             icons::SymbolInteractionState{false, true}));
     assert(toolbar.scale == icons::SymbolScale::Medium);
     assert(toolbar.point_size == 24.0f);
+    assert(toolbar.hit_target_size == 36.0f);
     assert((toolbar.color == Color{96, 96, 100, 255}));
     assert(icons::paint_token(toolbar) != 0);
+    assert(!icons::symbol_from_name("not_a_symbol").has_value());
+    assert(*icons::symbol_from_semantic_reference_name("magnifyingglass")
+           == icons::Symbol::Search);
 
     CapturePainter presentation_painter;
     icons::paint_symbol(presentation_painter, sidebar, 0.0f, 0.0f);

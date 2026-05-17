@@ -211,13 +211,19 @@ catalog encodes macOS-like rounded stroke caps and joins in each line icon's
 SVG source, records those attributes in `svg::Style`, uses bounded secondary
 opacity on detail strokes for SF Symbols-like hierarchical emphasis, and
 exposes symbol metadata (`icon_catalog::descriptor`, stroke cap/join policies,
-semantic reference names, variant/rendering/scale names, count constants, and
-index accessors for all, sidebar, and toolbar symbols) so examples and artifact
-verifiers can assert the style contract without pixel guessing.
+semantic reference names, name/reference lookup helpers, variant/rendering/scale
+names, count constants, and index accessors for all, sidebar, and toolbar
+symbols) so examples and artifact verifiers can assert the style contract
+without pixel guessing.
 `icons::presentation` adds the default macOS-inspired
 presentation policy: toolbar symbols use 24 pt secondary/selected tones,
 sidebar symbols use 26 pt primary/accent tones with a small optical vertical
 adjustment, and disabled/destructive tones are explicit pure values.
+`icon_catalog::metrics` and `icon_catalog::hit_target_size` keep the Finder-like
+role metrics pure as well: toolbar/navigation/action glyphs use 36 pt control
+targets, sidebar glyphs align to 38 pt rows, and file-type glyphs reserve larger
+targets for icon-view thumbnails. This lets the CLI and examples validate
+macOS-style icon sizing without calling AppKit or embedding SF Symbols assets.
 The catalog also pins HIG-derived visual-language policies for familiar
 simplified metaphors, consistent size/stroke/detail/perspective, borderless
 toolbar symbols inside grouped controls, and accent-selected sidebar symbols.

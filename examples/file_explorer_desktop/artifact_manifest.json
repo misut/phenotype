@@ -484,6 +484,18 @@
       "equals": -0.5
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.toolbar_hit_target_size",
+      "equals": 36.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.sidebar_hit_target_size",
+      "equals": 38.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.action_hit_target_size",
+      "equals": 36.0
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.column_location_icon_size",
       "equals": 18.0
     },
@@ -574,6 +586,14 @@
     {
       "path": "application.file_explorer.chrome.icon_system.file_type_color_policy",
       "equals": "macos_finder_file_type_tints"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.metrics_policy",
+      "equals": "macos_finder_role_metrics_with_explicit_hit_targets"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.hit_target_policy",
+      "equals": "toolbar/navigation/action=36pt, sidebar=38pt, file_type=64pt"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.scale",

@@ -1,4 +1,5 @@
 module;
+#include <optional>
 #include <string_view>
 export module phenotype.icon_catalog;
 
@@ -123,6 +124,17 @@ struct SymbolColor {
 struct SymbolInteractionState {
     bool selected = false;
     bool enabled = true;
+};
+
+struct SymbolMetrics {
+    SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
+    SymbolScale scale = SymbolScale::Medium;
+    float grid_size = 24.0f;
+    float point_size = 24.0f;
+    float hit_target_size = 36.0f;
+    float content_inset = 6.0f;
+    float stroke_width = 1.8f;
+    float optical_y_offset = 0.0f;
 };
 
 inline constexpr unsigned int all_symbol_count = 31;
@@ -350,6 +362,14 @@ inline auto default_scale_policy() noexcept -> std::string_view {
     return "medium";
 }
 
+inline auto metrics_policy() noexcept -> std::string_view {
+    return "macos_finder_role_metrics_with_explicit_hit_targets";
+}
+
+inline auto hit_target_policy() noexcept -> std::string_view {
+    return "toolbar/navigation/action=36pt, sidebar=38pt, file_type=64pt";
+}
+
 inline auto symbol_at(unsigned int index) noexcept -> Symbol {
     switch (index) {
     case 0:  return Symbol::Back;
@@ -425,6 +445,16 @@ inline auto toolbar_symbol_at(unsigned int index) noexcept -> Symbol {
     return Symbol::Search;
 }
 
+inline auto symbol_from_name(std::string_view symbol_name) noexcept
+        -> std::optional<Symbol> {
+    for (unsigned int i = 0; i < all_symbol_count; ++i) {
+        auto const symbol = symbol_at(i);
+        if (name(symbol) == symbol_name)
+            return symbol;
+    }
+    return std::nullopt;
+}
+
 inline auto semantic_reference_name(Symbol symbol) noexcept
         -> std::string_view {
     switch (symbol) {
@@ -461,6 +491,16 @@ inline auto semantic_reference_name(Symbol symbol) noexcept
     case Symbol::NewDocument:  return "doc.badge.plus";
     }
     return "doc";
+}
+
+inline auto symbol_from_semantic_reference_name(
+        std::string_view reference_name) noexcept -> std::optional<Symbol> {
+    for (unsigned int i = 0; i < all_symbol_count; ++i) {
+        auto const symbol = symbol_at(i);
+        if (semantic_reference_name(symbol) == reference_name)
+            return symbol;
+    }
+    return std::nullopt;
 }
 
 inline bool supports_hierarchical_opacity(Symbol symbol) noexcept {
@@ -643,6 +683,18 @@ inline float point_size(SymbolScale scale) noexcept {
     return 24.0f;
 }
 
+inline float hit_target_size(SymbolPresentationRole role) noexcept {
+    switch (role) {
+    case SymbolPresentationRole::Sidebar:  return 38.0f;
+    case SymbolPresentationRole::FileType: return 64.0f;
+    case SymbolPresentationRole::Toolbar:
+    case SymbolPresentationRole::Navigation:
+    case SymbolPresentationRole::Action:
+        return 36.0f;
+    }
+    return 36.0f;
+}
+
 inline float optical_y_offset(SymbolPresentationRole role) noexcept {
     switch (role) {
     case SymbolPresentationRole::Sidebar:
@@ -654,6 +706,28 @@ inline float optical_y_offset(SymbolPresentationRole role) noexcept {
         return 0.0f;
     }
     return 0.0f;
+}
+
+inline auto metrics(SymbolPresentationRole role) noexcept -> SymbolMetrics {
+    auto const scale = default_scale(role);
+    auto const point = point_size(scale);
+    auto const target = hit_target_size(role);
+    return SymbolMetrics{
+        role,
+        scale,
+        24.0f,
+        point,
+        target,
+        (target - point) * 0.5f,
+        1.8f,
+        optical_y_offset(role),
+    };
+}
+
+inline auto symbol_metrics(Symbol symbol) noexcept -> SymbolMetrics {
+    auto out = metrics(default_presentation_role(symbol));
+    out.stroke_width = descriptor(symbol).default_stroke_width;
+    return out;
 }
 
 inline auto macos_light_tone_color(SymbolTone tone) noexcept -> SymbolColor {
