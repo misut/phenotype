@@ -381,6 +381,8 @@ inline constexpr unsigned int sidebar_symbol_count =
     catalog::sidebar_symbol_count;
 inline constexpr unsigned int toolbar_symbol_count =
     catalog::toolbar_symbol_count;
+inline constexpr unsigned int file_type_symbol_count =
+    catalog::file_type_symbol_count;
 inline constexpr unsigned int outline_symbol_count =
     catalog::outline_symbol_count;
 inline constexpr unsigned int filled_symbol_count =
@@ -414,6 +416,10 @@ inline auto sidebar_symbol_at(unsigned int index) noexcept -> Symbol {
 
 inline auto toolbar_symbol_at(unsigned int index) noexcept -> Symbol {
     return from_catalog_symbol(catalog::toolbar_symbol_at(index));
+}
+
+inline auto file_type_symbol_at(unsigned int index) noexcept -> Symbol {
+    return from_catalog_symbol(catalog::file_type_symbol_at(index));
 }
 
 inline auto symbol_from_name(std::string_view symbol_name) noexcept

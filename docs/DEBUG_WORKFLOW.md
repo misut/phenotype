@@ -210,7 +210,8 @@ The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
 selected-row radius plus soft selected-row alpha policy, the
 `phenotype.icon_catalog` / `phenotype.icons` style contract
 (`design_reference`, `asset_policy`, 24x24 alignment grid, stroke width,
-total/sidebar/toolbar/filled symbol counts, SF Symbols rendering-mode names,
+total/sidebar/toolbar/file-type/filled symbol counts,
+SF Symbols rendering-mode names,
 regular text-aligned weight policy, monochrome/hierarchical/palette/multicolor
 capability counts, and
 `interface_metaphor_policy`, `visual_consistency_policy`,
@@ -224,7 +225,7 @@ icon size so Finder-style navigation rows can be checked from the artifact
 without reading pixels by eye. Entry samples include the resolved
 `symbol` and `symbol_semantic_reference_name`, so PDF/text/archive/image/movie
 fallback mistakes can be diagnosed from JSON before inspecting the screenshot.
-`phenotype icons catalog --json` emits the complete all/sidebar/toolbar symbol
+`phenotype icons catalog --json` emits the complete all/sidebar/toolbar/file-type symbol
 contract, name/reference lookup invariants, macOS role metrics, and SVG source
 presence checks from the same pure metadata package.
 `phenotype icons lookup <name-or-reference> --json` is the narrow metadata
@@ -237,7 +238,9 @@ macOS-style presentation recipe for one glyph state, including visible RGBA,
 background chrome, effective size, hit target, and likely layer/pass. Use these
 icon probes when a renderer, path parser, or icon-source cache is suspect, while
 `phenotype drive file-explorer --json` embeds the desktop chrome geometry and
-icon-system contract under `chrome.geometry` and `chrome.icon_system`; the
+icon-system contract under `chrome.geometry` and `chrome.icon_system`, including
+the resolved sidebar/toolbar/file-type presentation arrays and sample
+normal/pressed/disabled recipes; the
 same output includes the default glass theme contract under `theme_system`. The
 verifier can assert those paths with `require_debug_details`, which keeps
 Finder workflow failures debuggable without relying on a screenshot guess.

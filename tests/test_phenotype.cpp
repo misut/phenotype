@@ -3740,6 +3740,8 @@ void test_resource_catalog_theme_defaults() {
 void test_icon_catalog_umbrella_export() {
     assert(phenotype::icon_catalog::style_name() == "macos_rounded_outline_svg");
     assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
+    assert(phenotype::icon_catalog::file_type_symbol_count
+           == icons::file_type_symbol_count);
     assert(phenotype::icon_catalog::svg_subset_policy()
            == "bounded_svg_icon_subset");
     assert(phenotype::icon_catalog::svg_supported_path_commands().find("A Z")
@@ -3788,6 +3790,10 @@ void test_icon_catalog_umbrella_export() {
            != std::string_view::npos);
     assert(phenotype::icon_catalog::file_type_color_policy()
            == "macos_finder_file_type_tints");
+    assert(phenotype::icon_catalog::file_type_symbol_at(2)
+           == phenotype::icon_catalog::Symbol::PdfDocument);
+    assert(phenotype::icon_catalog::file_type_symbol_at(6)
+           == phenotype::icon_catalog::Symbol::Archive);
     assert(phenotype::icon_catalog::interaction_tone_policy()
            == "macos_finder_interaction_tones");
     assert(phenotype::icon_catalog::metrics_policy()

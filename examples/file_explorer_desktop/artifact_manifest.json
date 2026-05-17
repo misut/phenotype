@@ -528,6 +528,10 @@
       "equals": 15
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.file_type_symbol_count",
+      "equals": 7
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.filled_symbol_count",
       "equals": 1
     },
@@ -916,6 +920,18 @@
           "symbol": "archive",
           "semantic_reference_name": "archivebox"
         }
+      ]
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.file_type_reference_symbols",
+      "equals": [
+        "folder",
+        "doc",
+        "doc.richtext",
+        "doc.plaintext",
+        "photo",
+        "film",
+        "archivebox"
       ]
     },
     {
