@@ -121,6 +121,18 @@ struct ArtifactObservation {
     bool ok = false;
 };
 
+struct PackageSvgAssetInspection {
+    std::string name;
+    std::string source;
+    fs::path path;
+    bool present = false;
+    std::uintmax_t bytes = 0;
+    bool inspected = false;
+    bool ok = false;
+    std::string error;
+    svg_contract::DocumentInspection inspection;
+};
+
 struct PackageSummary {
     fs::path root;
     bool exists = false;
@@ -150,6 +162,7 @@ struct PackageSummary {
     phenotype::ResourceCatalog catalog;
     std::vector<phenotype::ResourceDiagnostic> catalog_diagnostics;
     phenotype::ResourceCatalogContract resource_contract;
+    std::vector<PackageSvgAssetInspection> svg_asset_inspections;
     std::vector<std::string> missing_sources;
     std::uintmax_t manifest_bytes = 0;
     std::size_t manifest_asset_count = 0;
@@ -1997,6 +2010,49 @@ auto artifact_observation_json(ArtifactObservation const& observation)
         checks_json(observation.checks));
 }
 
+auto inspect_package_svg_asset(
+        fs::path const& root,
+        phenotype::AssetDescriptor const& asset)
+    -> PackageSvgAssetInspection {
+    auto result = PackageSvgAssetInspection{};
+    result.name = asset.name;
+    result.source = asset.source;
+    result.path = root / asset.source;
+    result.present = path_exists(result.path);
+    result.bytes = file_size_or_zero(result.path);
+    if (!result.present) {
+        result.error = "asset source is missing";
+        return result;
+    }
+
+    auto const source = read_text_file(result.path);
+    if (source.empty() && result.bytes > 0) {
+        result.error = "failed to read SVG asset source";
+        return result;
+    }
+
+    result.inspected = true;
+    result.inspection = svg_contract::inspect_source(source);
+    auto const& summary = result.inspection.summary;
+    result.ok = summary.paintable
+        && summary.unsupported_count == 0
+        && !summary.has_diagnostics;
+    return result;
+}
+
+auto inspect_package_svg_assets(
+        fs::path const& root,
+        phenotype::ResourceCatalog const& catalog)
+    -> std::vector<PackageSvgAssetInspection> {
+    auto inspections = std::vector<PackageSvgAssetInspection>{};
+    for (auto const& asset : catalog.assets) {
+        if (!phenotype::resource_asset_declares_svg(asset))
+            continue;
+        inspections.push_back(inspect_package_svg_asset(root, asset));
+    }
+    return inspections;
+}
+
 auto package_summary(fs::path root) -> PackageSummary {
     auto summary = PackageSummary{.root = std::move(root)};
     summary.exists = path_exists(summary.root);
@@ -2042,6 +2098,8 @@ auto package_summary(fs::path root) -> PackageSummary {
     summary.manifest_asset_count = summary.catalog.assets.size();
     summary.manifest_locale_count = summary.catalog.locales.size();
     summary.manifest_font_count = summary.catalog.fonts.size();
+    summary.svg_asset_inspections =
+        inspect_package_svg_assets(summary.root, summary.catalog);
 
     for (auto& locale : summary.catalog.locales) {
         if (locale.source.empty())
@@ -2113,6 +2171,22 @@ bool resource_contract_ok(PackageSummary const& summary) {
         && contract.asset_count == summary.manifest_asset_count
         && contract.locale_count == summary.manifest_locale_count
         && contract.font_count == summary.manifest_font_count;
+}
+
+auto svg_asset_inspection_failure_count(PackageSummary const& summary)
+    -> std::size_t {
+    return static_cast<std::size_t>(std::ranges::count_if(
+        summary.svg_asset_inspections,
+        [](auto const& inspection) {
+            return !inspection.ok;
+        }));
+}
+
+bool svg_asset_inspections_ok(PackageSummary const& summary) {
+    return summary.resource_contract.svg_asset_count
+            == summary.svg_asset_inspections.size()
+        && summary.resource_contract.svg_asset_count > 0
+        && svg_asset_inspection_failure_count(summary) == 0;
 }
 
 auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
@@ -2195,6 +2269,12 @@ auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
                                summary.resource_contract.runtime_visible_asset_count,
                                summary.resource_contract.font_count),
          .hint = "Packages should declare preload intent, SVG image assets, and at least one UI font descriptor."},
+        {.name = "svg_asset_inspection",
+         .ok = svg_asset_inspections_ok(summary),
+         .detail = std::format("{} inspected, {} failures",
+                               summary.svg_asset_inspections.size(),
+                               svg_asset_inspection_failure_count(summary)),
+         .hint = "SVG package assets should be present, paintable, and free of unsupported-element diagnostics under the phenotype SVG subset."},
         {.name = "manifest_sources",
          .ok = summary.source_reference_count > 0
              && summary.missing_sources.empty(),
@@ -2309,6 +2389,55 @@ auto assets_catalog_json(
             phenotype::resource_asset_declares_svg(asset) ? "true" : "false",
             asset.preload ? "true" : "false",
             asset.runtime_visible ? "true" : "false");
+    }
+    out += "]";
+    return out;
+}
+
+auto svg_document_summary_json(svg_contract::DocumentSummary const& summary)
+    -> std::string {
+    return std::format(
+        "{{\"view_box\":{{\"x\":{},\"y\":{},\"width\":{},\"height\":{}}},"
+        "\"shape_count\":{},\"diagnostic_count\":{},"
+        "\"unsupported_count\":{},\"paintable\":{},"
+        "\"has_diagnostics\":{}}}",
+        summary.view_min_x,
+        summary.view_min_y,
+        summary.view_width,
+        summary.view_height,
+        summary.shape_count,
+        summary.diagnostic_count,
+        summary.unsupported_count,
+        summary.paintable ? "true" : "false",
+        summary.has_diagnostics ? "true" : "false");
+}
+
+auto svg_asset_inspection_json(PackageSvgAssetInspection const& inspection)
+    -> std::string {
+    return std::format(
+        "{{\"name\":{},\"source\":{},\"path\":{},\"present\":{},"
+        "\"bytes\":{},\"inspected\":{},\"ok\":{},\"error\":{},"
+        "\"summary\":{},\"diagnostics\":{}}}",
+        json_string(inspection.name),
+        json_string(inspection.source),
+        json_string(path_string(inspection.path)),
+        inspection.present ? "true" : "false",
+        inspection.bytes,
+        inspection.inspected ? "true" : "false",
+        inspection.ok ? "true" : "false",
+        json_string(inspection.error),
+        svg_document_summary_json(inspection.inspection.summary),
+        string_array_json(inspection.inspection.diagnostics));
+}
+
+auto svg_asset_inspections_json(
+        std::span<PackageSvgAssetInspection const> inspections)
+    -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < inspections.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += svg_asset_inspection_json(inspections[i]);
     }
     out += "]";
     return out;
@@ -2429,7 +2558,8 @@ auto resource_catalog_json(PackageSummary const& summary) -> std::string {
         "{{\"application\":{{\"id\":{},\"display_name\":{},\"version\":{},"
         "\"entry\":{},\"platforms\":{}}},"
         "\"defaults\":{{\"locale\":{},\"font_family\":{}}},"
-        "\"assets\":{},\"locales\":{},\"fonts\":{},"
+        "\"assets\":{},\"svg_asset_inspections\":{},"
+        "\"locales\":{},\"fonts\":{},"
         "\"debug\":{{\"artifact_manifest\":{},\"probe_scene\":{},"
         "\"verifier\":{}}},\"diagnostics\":{}}}",
         json_string(catalog.application.id),
@@ -2440,6 +2570,7 @@ auto resource_catalog_json(PackageSummary const& summary) -> std::string {
         json_string(catalog.default_locale),
         json_string(catalog.default_font_family),
         assets_catalog_json(catalog.assets),
+        svg_asset_inspections_json(summary.svg_asset_inspections),
         locales_catalog_json(catalog.locales),
         fonts_catalog_json(catalog.fonts),
         json_string(catalog.debug.artifact_manifest),
@@ -2454,6 +2585,7 @@ auto resource_catalog_summary_json(PackageSummary const& summary)
     return std::format(
         "{{\"default_locale\":{},\"default_font_family\":{},"
         "\"assets\":{},\"svg_assets\":{},"
+        "\"svg_assets_inspected\":{},\"svg_asset_failures\":{},"
         "\"locales\":{},\"locale_strings\":{},"
         "\"fonts\":{},\"diagnostics\":{},"
         "\"preload_assets\":{},\"runtime_visible_assets\":{},"
@@ -2464,6 +2596,8 @@ auto resource_catalog_summary_json(PackageSummary const& summary)
         json_string(catalog.default_font_family),
         catalog.assets.size(),
         summary.resource_contract.svg_asset_count,
+        summary.svg_asset_inspections.size(),
+        svg_asset_inspection_failure_count(summary),
         catalog.locales.size(),
         summary.locale_string_count,
         catalog.fonts.size(),
@@ -2500,6 +2634,7 @@ auto package_json(PackageSummary const& summary,
         "\"default_font_family\":{},\"default_font_pretendard\":{},"
         "\"default_font_has_cjk_fallback\":{}}},"
         "\"assets\":{{\"present\":{},\"file_count\":{}}},"
+        "\"svg_asset_inspections\":{},"
         "\"locales\":{{\"present\":{},\"file_count\":{}}},"
         "\"fonts\":{{\"present\":{},\"file_count\":{}}},"
         "\"resource_catalog\":{},\"resource_contract\":{},\"checks\":{}}}",
@@ -2534,6 +2669,7 @@ auto package_json(PackageSummary const& summary,
         summary.default_font_has_cjk_fallback ? "true" : "false",
         summary.assets_directory ? "true" : "false",
         summary.asset_file_count,
+        svg_asset_inspections_json(summary.svg_asset_inspections),
         summary.locales_directory ? "true" : "false",
         summary.locale_file_count,
         summary.fonts_directory ? "true" : "false",

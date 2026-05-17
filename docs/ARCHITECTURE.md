@@ -227,10 +227,12 @@ or `widget::icon`; the widget helper paints through `widget::canvas` and uses a
 deterministic paint token so stable icons do not re-emit every frame. The
 generic `widget::svg_image` path uses the same parsed-document token contract,
 so app-owned SVG illustrations, package icons, and future generated symbols can
-stay static in the paint cache unless their document, size, or current color
-changes. `widget::svg_image` also marks the resulting node as a semantic
-`image`, so artifact snapshots can distinguish vector images from decorative
-canvas drawing without asking a backend to decode SVG files. The
+stay static in the paint cache unless their document, size, current color, or
+aspect-ratio policy changes. `SvgImageOptions` makes current color,
+`preserve_aspect_ratio`, and semantic labels explicit value inputs.
+`widget::svg_image` also marks the resulting node as a semantic `image`, so
+artifact snapshots can distinguish vector images from decorative canvas drawing
+without asking a backend to decode SVG files. The
 catalog encodes macOS-like rounded stroke caps and joins in each line icon's
 SVG source, records those attributes in `svg::Style`, uses bounded secondary
 opacity on detail strokes for SF Symbols-like hierarchical emphasis, and
@@ -302,14 +304,15 @@ CLI bundle step, and validated by `phenotype.resources` before a platform
 packager maps them to `.app`, Windows, Android, or web icon formats. Generic
 SVG assets use the same package contract (`image/svg+xml` plus a `.svg` source
 suffix), and `phenotype package inspect --json` reports total/preload/runtime
-SVG counts so asset regressions are visible in CI logs. `phenotype svg inspect
-<path> --json` is the local edge probe for those files: it reads the file at the
-CLI boundary, parses it with the pure SVG contract shared by `phenotype.svg`,
-and reports the supported SVG subset, viewBox, shape count, unsupported command
-count, diagnostics, and renderer-facing `Painter` path so SVG failures can be
-debugged without AppKit, Metal, or platform image decoders. The shared
-`phenotype_svg_contract` package keeps that asset inspection available to the
-Linux CLI gate without depending on the native renderer package.
+SVG counts plus `svg_asset_inspections` for each declared SVG file. Those
+inspections read files only at the CLI edge, parse them with the pure SVG
+contract shared by `phenotype.svg`, and report viewBox, shape count,
+unsupported command count, diagnostics, paintability, and bytes so asset
+regressions are visible in CI logs. `phenotype svg inspect <path> --json` is
+the narrow local edge probe for one file and uses the same contract, so SVG
+failures can be debugged without AppKit, Metal, or platform image decoders. The
+shared `phenotype_svg_contract` package keeps that asset inspection available
+to the Linux CLI gate without depending on the native renderer package.
 
 ## Input Command Boundary
 

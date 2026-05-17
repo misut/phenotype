@@ -743,6 +743,13 @@ struct ButtonVisualState {
     bool enabled = true;
 };
 
+struct SvgImageOptions {
+    bool has_current_color = false;
+    Color current_color = {0, 0, 0, 0};
+    bool preserve_aspect_ratio = true;
+    std::string_view semantic_label;
+};
+
 struct KeyCommandOptions {
     bool disabled = false;
     bool allow_when_input_focused = false;
