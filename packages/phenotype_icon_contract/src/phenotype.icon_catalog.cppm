@@ -195,6 +195,7 @@ struct SymbolMetrics {
 inline constexpr unsigned int all_symbol_count = 34;
 inline constexpr unsigned int sidebar_symbol_count = 11;
 inline constexpr unsigned int toolbar_symbol_count = 15;
+inline constexpr unsigned int file_type_symbol_count = 7;
 inline constexpr unsigned int outline_symbol_count = 33;
 inline constexpr unsigned int filled_symbol_count = 1;
 inline constexpr unsigned int hierarchical_symbol_count = 23;
@@ -543,6 +544,19 @@ inline auto toolbar_symbol_at(unsigned int index) noexcept -> Symbol {
     case 14: return Symbol::Trash;
     }
     return Symbol::Search;
+}
+
+inline auto file_type_symbol_at(unsigned int index) noexcept -> Symbol {
+    switch (index) {
+    case 0: return Symbol::Folder;
+    case 1: return Symbol::Document;
+    case 2: return Symbol::PdfDocument;
+    case 3: return Symbol::TextDocument;
+    case 4: return Symbol::Image;
+    case 5: return Symbol::Movie;
+    case 6: return Symbol::Archive;
+    }
+    return Symbol::Document;
 }
 
 inline auto symbol_from_name(std::string_view symbol_name) noexcept

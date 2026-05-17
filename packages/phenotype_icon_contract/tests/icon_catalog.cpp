@@ -59,6 +59,7 @@ int main() {
     assert(icons::all_symbol_count == 34);
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);
+    assert(icons::file_type_symbol_count == 7);
     assert(icons::outline_symbol_count == 33);
     assert(icons::filled_symbol_count == 1);
     assert(icons::hierarchical_symbol_count == 23);
@@ -149,6 +150,9 @@ int main() {
     assert(icons::uses_svg_path_arcs(icons::Symbol::AirDrop));
     assert(icons::sidebar_symbol_at(8) == icons::Symbol::AirDrop);
     assert(icons::toolbar_symbol_at(10) == icons::Symbol::Search);
+    assert(icons::file_type_symbol_at(0) == icons::Symbol::Folder);
+    assert(icons::file_type_symbol_at(2) == icons::Symbol::PdfDocument);
+    assert(icons::file_type_symbol_at(6) == icons::Symbol::Archive);
     assert(icons::interaction_tone_policy() == "macos_finder_interaction_tones");
     assert(icons::macos_interaction_tone(
                icons::SymbolPresentationRole::Sidebar,

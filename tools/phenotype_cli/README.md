@@ -78,7 +78,8 @@ The initial scope is intentionally narrow:
   rule, supported SVG path subset and arc-lowering policy, count invariants,
   SF Symbols rendering-mode names, regular text-aligned weight policy,
   explicit monochrome/hierarchical/palette/multicolor capability counts,
-  SVG arc-using built-in symbol count, all/sidebar/toolbar semantic reference sets,
+  SVG arc-using built-in symbol count,
+  all/sidebar/toolbar/file-type semantic reference sets,
   per-symbol role/variant/rendering/layer metadata, name/reference lookup
   invariants, presentation defaults, role hit-target metrics, and Finder-style
   normal/hovered/pressed/selected/disabled state recipes plus file-type tint
@@ -109,8 +110,9 @@ The initial scope is intentionally narrow:
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible
   entries, viewport, view mode, pure Finder chrome/grid metrics including the
-  integrated titlebar geometry policy, icon-system contract, and
-  `thumbnail_system` preview-painter contract, selection capabilities,
+  integrated titlebar geometry policy, icon-system contract, resolved
+  sidebar/toolbar/file-type icon presentation samples, and `thumbnail_system`
+  preview-painter contract, selection capabilities,
   operation receipts with resolved operation plans, preview excerpts,
   localized labels, package resource metadata, desktop keyboard command
   descriptors, and optional expectation results. Repeated

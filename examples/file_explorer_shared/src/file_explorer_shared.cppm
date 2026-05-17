@@ -284,6 +284,7 @@ struct ExplorerChromeMetrics {
     int icon_total_symbol_count = 0;
     int sidebar_symbol_count = 0;
     int toolbar_symbol_count = 0;
+    int file_type_symbol_count = 0;
     int icon_filled_symbol_count = 0;
     int icon_outline_symbol_count = 0;
     int icon_hierarchical_symbol_count = 0;
@@ -1046,6 +1047,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             static_cast<int>(icon_catalog::sidebar_symbol_count),
         .toolbar_symbol_count =
             static_cast<int>(icon_catalog::toolbar_symbol_count),
+        .file_type_symbol_count =
+            static_cast<int>(icon_catalog::file_type_symbol_count),
         .icon_filled_symbol_count =
             static_cast<int>(icon_catalog::filled_symbol_count),
         .icon_outline_symbol_count =
@@ -1960,6 +1963,19 @@ inline json::Value file_type_symbol_tokens_debug_json(
     return json::Value{std::move(out)};
 }
 
+inline json::Value file_type_icon_reference_symbols_debug_json(
+        ExplorerChromeMetrics const& chrome) {
+    if (chrome.icon_reference_symbol_count <= 0)
+        return json::Value{json::Array{}};
+    json::Array out;
+    for (unsigned int i = 0; i < icon_catalog::file_type_symbol_count; ++i) {
+        out.push_back(json::Value{std::string{
+            icon_catalog::semantic_reference_name(
+                icon_catalog::file_type_symbol_at(i))}});
+    }
+    return json::Value{std::move(out)};
+}
+
 inline json::Value file_type_symbol_presentations_debug_json(
         ExplorerChromeMetrics const& chrome) {
     if (chrome.icon_reference_symbol_count <= 0)
@@ -2181,6 +2197,9 @@ inline json::Value explorer_chrome_debug_json(
         "toolbar_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.toolbar_symbol_count)});
     icon_system.emplace(
+        "file_type_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.file_type_symbol_count)});
+    icon_system.emplace(
         "filled_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.icon_filled_symbol_count)});
     icon_system.emplace(
@@ -2342,6 +2361,9 @@ inline json::Value explorer_chrome_debug_json(
         "file_type_symbol_tokens",
         file_type_symbol_tokens_debug_json(chrome));
     icon_system.emplace(
+        "file_type_reference_symbols",
+        file_type_icon_reference_symbols_debug_json(chrome));
+    icon_system.emplace(
         "file_type_symbol_presentations",
         file_type_symbol_presentations_debug_json(chrome));
     icon_system.emplace(
@@ -2460,6 +2482,7 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("overflow_action_button_count", json::Value{static_cast<std::int64_t>(chrome.overflow_action_button_count)});
     out.emplace("sidebar_symbol_count", json::Value{static_cast<std::int64_t>(chrome.sidebar_symbol_count)});
     out.emplace("toolbar_symbol_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_symbol_count)});
+    out.emplace("file_type_symbol_count", json::Value{static_cast<std::int64_t>(chrome.file_type_symbol_count)});
     out.emplace("content_window_control_markers", json::Value{chrome.content_window_control_markers});
     out.emplace("artifact_window_control_markers", json::Value{chrome.artifact_window_control_markers});
     out.emplace("window_control_marker_mode", json::Value{chrome.window_control_marker_mode});

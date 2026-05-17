@@ -341,6 +341,8 @@ void test_builtin_icons_parse() {
     assert(phenotype::icon_catalog::sidebar_symbol_count == icons::sidebar_symbol_count);
     assert(icons::toolbar_symbol_count == 15);
     assert(phenotype::icon_catalog::toolbar_symbol_count == icons::toolbar_symbol_count);
+    assert(icons::file_type_symbol_count == 7);
+    assert(phenotype::icon_catalog::file_type_symbol_count == icons::file_type_symbol_count);
     assert(icons::outline_symbol_count == 33);
     assert(icons::filled_symbol_count == 1);
     assert(icons::hierarchical_symbol_count == 23);
@@ -387,6 +389,10 @@ void test_builtin_icons_parse() {
     assert(icons::point_size(icons::SymbolScale::Small) == 20.0f);
     assert(icons::point_size(icons::SymbolScale::Medium) == 24.0f);
     assert(icons::point_size(icons::SymbolScale::Large) == 26.0f);
+    assert(icons::file_type_symbol_at(0) == icons::Symbol::Folder);
+    assert(icons::file_type_symbol_at(2) == icons::Symbol::PdfDocument);
+    assert(phenotype::icon_catalog::file_type_symbol_at(6)
+           == phenotype::icon_catalog::Symbol::Archive);
 
     unsigned int outline_count = 0;
     unsigned int filled_count = 0;

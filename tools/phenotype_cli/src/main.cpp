@@ -3741,22 +3741,25 @@ enum class IconCatalogSet {
     All,
     Sidebar,
     Toolbar,
+    FileType,
 };
 
 auto icon_catalog_set_name(IconCatalogSet set) -> std::string_view {
     switch (set) {
-    case IconCatalogSet::All:     return "all";
-    case IconCatalogSet::Sidebar: return "sidebar";
-    case IconCatalogSet::Toolbar: return "toolbar";
+    case IconCatalogSet::All:      return "all";
+    case IconCatalogSet::Sidebar:  return "sidebar";
+    case IconCatalogSet::Toolbar:  return "toolbar";
+    case IconCatalogSet::FileType: return "file_type";
     }
     return "all";
 }
 
 auto icon_catalog_set_count(IconCatalogSet set) -> unsigned int {
     switch (set) {
-    case IconCatalogSet::All:     return icon_catalog::all_symbol_count;
-    case IconCatalogSet::Sidebar: return icon_catalog::sidebar_symbol_count;
-    case IconCatalogSet::Toolbar: return icon_catalog::toolbar_symbol_count;
+    case IconCatalogSet::All:      return icon_catalog::all_symbol_count;
+    case IconCatalogSet::Sidebar:  return icon_catalog::sidebar_symbol_count;
+    case IconCatalogSet::Toolbar:  return icon_catalog::toolbar_symbol_count;
+    case IconCatalogSet::FileType: return icon_catalog::file_type_symbol_count;
     }
     return icon_catalog::all_symbol_count;
 }
@@ -3764,9 +3767,10 @@ auto icon_catalog_set_count(IconCatalogSet set) -> unsigned int {
 auto icon_catalog_set_symbol(IconCatalogSet set, unsigned int index)
         -> icon_catalog::Symbol {
     switch (set) {
-    case IconCatalogSet::All:     return icon_catalog::symbol_at(index);
-    case IconCatalogSet::Sidebar: return icon_catalog::sidebar_symbol_at(index);
-    case IconCatalogSet::Toolbar: return icon_catalog::toolbar_symbol_at(index);
+    case IconCatalogSet::All:      return icon_catalog::symbol_at(index);
+    case IconCatalogSet::Sidebar:  return icon_catalog::sidebar_symbol_at(index);
+    case IconCatalogSet::Toolbar:  return icon_catalog::toolbar_symbol_at(index);
+    case IconCatalogSet::FileType: return icon_catalog::file_type_symbol_at(index);
     }
     return icon_catalog::symbol_at(index);
 }
@@ -4279,6 +4283,12 @@ auto icon_catalog_checks() -> std::vector<Check> {
     bool reference_lookup_roundtrips = true;
     bool metric_contract = true;
     bool svg_source_contract = true;
+    bool file_type_symbol_set_contract =
+        icon_catalog::file_type_symbol_count == 7
+        && icon_catalog::file_type_symbol_at(0) == icon_catalog::Symbol::Folder
+        && icon_catalog::file_type_symbol_at(2)
+            == icon_catalog::Symbol::PdfDocument
+        && icon_catalog::file_type_symbol_at(6) == icon_catalog::Symbol::Archive;
     auto const toolbar_chrome = icon_catalog::macos_control_chrome(
         icon_catalog::SymbolPresentationRole::Toolbar,
         icon_catalog::SymbolInteractionState{false, true});
@@ -4442,6 +4452,16 @@ auto icon_catalog_checks() -> std::vector<Check> {
              icon_catalog::hit_target_policy()),
          .hint =
              "Keep symbol lookup and macOS role metrics pure so apps can map string commands to Finder-like glyph presentation without platform APIs."},
+        {.name = "file_type_symbol_set",
+         .ok = file_type_symbol_set_contract,
+         .detail = std::format(
+             "file_type_count={} first={} pdf={} last={}",
+             icon_catalog::file_type_symbol_count,
+             icon_catalog::name(icon_catalog::file_type_symbol_at(0)),
+             icon_catalog::name(icon_catalog::file_type_symbol_at(2)),
+             icon_catalog::name(icon_catalog::file_type_symbol_at(6))),
+         .hint =
+             "Keep Finder-like file-type glyphs exposed as a pure catalog set for examples, CLI, and artifact contracts."},
         {.name = "stroke_and_weight",
          .ok = round_stroke_contract
             && round_cap_join_contract
@@ -4583,13 +4603,14 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"file_type_color_policy\":{},\"default_scale\":{},"
         "\"metrics_policy\":{},\"hit_target_policy\":{}}},"
         "\"counts\":{{\"all\":{},\"sidebar\":{},\"toolbar\":{},"
+        "\"file_type\":{},"
         "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
         "\"monochrome\":{},\"regular_weight\":{},"
         "\"palette\":{},\"multicolor\":{},"
         "\"reference\":{},\"svg_path_arc\":{},\"round_stroke\":{},"
         "\"interaction_phases\":{}}},"
         "\"symbols\":{},\"sidebar_symbols\":{},"
-        "\"toolbar_symbols\":{},\"checks\":{}}}",
+        "\"toolbar_symbols\":{},\"file_type_symbols\":{},\"checks\":{}}}",
         all_ok(checks) ? "true" : "false",
         json_string(icon_catalog::style_name()),
         json_string(icon_catalog::source_format()),
@@ -4625,6 +4646,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_catalog::all_symbol_count,
         icon_catalog::sidebar_symbol_count,
         icon_catalog::toolbar_symbol_count,
+        icon_catalog::file_type_symbol_count,
         icon_catalog::outline_symbol_count,
         icon_catalog::filled_symbol_count,
         icon_catalog::hierarchical_symbol_count,
@@ -4639,6 +4661,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_symbol_set_json(IconCatalogSet::All),
         icon_symbol_set_json(IconCatalogSet::Sidebar),
         icon_symbol_set_json(IconCatalogSet::Toolbar),
+        icon_symbol_set_json(IconCatalogSet::FileType),
         checks_json(checks));
 }
 
@@ -5110,7 +5133,8 @@ auto explorer_chrome_json(
         "\"owned_assets\":{},"
         "\"uses_sf_symbols_assets\":{},\"round_stroke_contract\":{},"
         "\"total_symbol_count\":{},\"sidebar_symbol_count\":{},"
-        "\"toolbar_symbol_count\":{},\"filled_symbol_count\":{},"
+        "\"toolbar_symbol_count\":{},\"file_type_symbol_count\":{},"
+        "\"filled_symbol_count\":{},"
         "\"outline_symbol_count\":{},\"hierarchical_symbol_count\":{},"
         "\"monochrome_symbol_count\":{},"
         "\"regular_weight_symbol_count\":{},"
@@ -5158,7 +5182,13 @@ auto explorer_chrome_json(
         "\"scale\":{},"
         "\"sidebar_reference_symbols\":{},"
         "\"sidebar_symbol_tokens\":{},"
-        "\"toolbar_reference_symbols\":{}}}}}",
+        "\"sidebar_symbol_presentations\":{},"
+        "\"toolbar_reference_symbols\":{},"
+        "\"toolbar_symbol_presentations\":{},"
+        "\"file_type_symbol_tokens\":{},"
+        "\"file_type_reference_symbols\":{},"
+        "\"file_type_symbol_presentations\":{},"
+        "\"presentation_samples\":{}}}}}",
         chrome.viewport.width,
         chrome.viewport.height,
         chrome.viewport.scale,
@@ -5237,6 +5267,7 @@ auto explorer_chrome_json(
         chrome.icon_total_symbol_count,
         chrome.sidebar_symbol_count,
         chrome.toolbar_symbol_count,
+        chrome.file_type_symbol_count,
         chrome.icon_filled_symbol_count,
         chrome.icon_outline_symbol_count,
         chrome.icon_hierarchical_symbol_count,
@@ -5300,9 +5331,22 @@ auto explorer_chrome_json(
             IconCatalogSet::Sidebar,
             chrome.icon_reference_symbol_count > 0),
         sidebar_symbol_tokens_json(chrome.icon_reference_symbol_count > 0),
+        json::emit(file_explorer_demo::sidebar_symbol_presentations_debug_json(
+            chrome)),
         icon_reference_names_json(
             IconCatalogSet::Toolbar,
-            chrome.icon_reference_symbol_count > 0));
+            chrome.icon_reference_symbol_count > 0),
+        json::emit(file_explorer_demo::toolbar_symbol_presentations_debug_json(
+            chrome)),
+        json::emit(file_explorer_demo::file_type_symbol_tokens_debug_json(
+            chrome)),
+        json::emit(
+            file_explorer_demo::file_type_icon_reference_symbols_debug_json(
+                chrome)),
+        json::emit(file_explorer_demo::file_type_symbol_presentations_debug_json(
+            chrome)),
+        json::emit(file_explorer_demo::icon_presentation_samples_debug_json(
+            chrome)));
 }
 
 auto explorer_theme_system_json(
@@ -8194,10 +8238,11 @@ int run_icons_catalog(cppx::cli::Invocation const& invocation) {
          .status = cppx::terminal::StatusKind::ok},
         {.label = "symbols",
          .value = std::format(
-             "{} total, {} sidebar, {} toolbar",
+             "{} total, {} sidebar, {} toolbar, {} file-type",
              icon_catalog::all_symbol_count,
              icon_catalog::sidebar_symbol_count,
-             icon_catalog::toolbar_symbol_count),
+             icon_catalog::toolbar_symbol_count,
+             icon_catalog::file_type_symbol_count),
          .status = cppx::terminal::StatusKind::ok},
         {.label = "reference",
          .value = std::string{icon_catalog::reference_family()},

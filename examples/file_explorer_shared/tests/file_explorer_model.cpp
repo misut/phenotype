@@ -11,6 +11,7 @@
 
 import file_explorer_shared;
 import json;
+import phenotype.icon_catalog;
 import phenotype.resources;
 
 namespace {
@@ -399,6 +400,7 @@ duplicate
     assert(chrome.icon_total_symbol_count == 34);
     assert(chrome.sidebar_symbol_count == 11);
     assert(chrome.toolbar_symbol_count == 15);
+    assert(chrome.file_type_symbol_count == 7);
     assert(chrome.icon_filled_symbol_count == 1);
     assert(chrome.icon_outline_symbol_count == 33);
     assert(chrome.icon_hierarchical_symbol_count == 23);
@@ -408,6 +410,11 @@ duplicate
     assert(chrome.icon_grid_size == 24.0f);
     assert(demo::desktop_sidebar_symbol_contract().size() == 10);
     assert(demo::file_type_symbol_contract().size() == 7);
+    for (std::size_t i = 0; i < demo::file_type_symbol_contract().size(); ++i) {
+        assert(demo::file_type_symbol_contract()[i].symbol
+               == phenotype::icon_catalog::file_type_symbol_at(
+                   static_cast<unsigned int>(i)));
+    }
     assert(demo::sidebar_symbol_name_for_token("recents") == "recents");
     assert(demo::sidebar_symbol_name_for_token("shared") == "shared");
     assert(demo::sidebar_symbol_name_for_token("desktop") == "desktop");
@@ -743,7 +750,13 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"file_type_color_policy\":\"macos_finder_file_type_tints\"")
            != std::string::npos);
+    assert(debug_text.find("\"file_type_symbol_count\":7")
+           != std::string::npos);
     assert(debug_text.find("\"file_type_symbol_tokens\"")
+           != std::string::npos);
+    assert(debug_text.find("\"file_type_reference_symbols\"")
+           != std::string::npos);
+    assert(debug_text.find("\"archivebox\"")
            != std::string::npos);
     assert(debug_text.find("\"toolbar_symbol_presentations\"")
            != std::string::npos);

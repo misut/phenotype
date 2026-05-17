@@ -268,17 +268,19 @@ background alpha, symbol opacity, and scale. `widget::canvas_button` exposes
 that core state as `ButtonVisualState`, so Finder-like toolbar and sidebar
 symbols can consume the pure recipe in the actual renderer while staying
 LLM-debuggable without consulting AppKit.
-The same pure catalog exposes a Finder-style file-type tint policy for
-folder/document/image/movie glyphs, which desktop examples use in list and
-column rows without asking a native icon service for platform artwork.
+The same pure catalog exposes a Finder-style file-type symbol set and tint
+policy for folder/document/PDF/text/image/movie/archive glyphs, which desktop
+examples use in list and column rows without asking a native icon service for
+platform artwork.
 The catalog also publishes the SVG subset and arc-lowering policy, so CLI
 checks and example artifacts can catch a regression where a macOS-style glyph
 depends on an unsupported path command. AirDrop intentionally uses SVG `A/a`
 path arcs in the built-in catalog, giving the Finder-like sidebar a real
 runtime probe for the arc-lowering path instead of leaving that support covered
 only by unit tests.
-Finder-style examples serialize sidebar and toolbar semantic reference arrays
-plus the presentation policy in their artifact debug payload, and
+Finder-style examples serialize sidebar, toolbar, and file-type semantic
+reference arrays plus the resolved presentation policy in their artifact debug
+payload, and
 `phenotype icons catalog --json` exposes the complete contract to CI and LLM
 debugging before anyone inspects a screenshot. `phenotype icons svg
 <name-or-reference>` exposes the exact built-in SVG source from the same pure
@@ -287,7 +289,7 @@ failures can be reproduced without launching a native window. `phenotype icons
 present <name-or-reference>` resolves the same state recipe for a chosen role,
 phase, selected state, and disabled state, including the effective visible
 symbol color, background chrome, hit target, and likely icon layer/pass. This
-lets CI logs and artifact triage explain a toolbar/sidebar icon mismatch
+lets CI logs and artifact triage explain a toolbar/sidebar/file-type icon mismatch
 without relying on a human visual guess. The style reference deliberately says the custom SVGs are
 informed by Apple HIG, macOS Finder, and SF Symbols while the asset policy
 continues to forbid copied Apple/SF Symbols vector artwork.
