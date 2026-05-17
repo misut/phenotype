@@ -65,7 +65,8 @@ chrome contract: window inset/gap, sidebar surface origin, first sidebar row,
 toolbar shell, navigation/title/trailing group x-coordinates, collapsed search
 button x-coordinate, content surface origin, and the native titlebar drag and
 leading/trailing control reserve widths. Sidebar symbol and label placement,
-section spacing, selected-row radius, and artifact traffic-light marker
+section spacing, selected-row radius, soft selected-row alpha policy, and
+artifact traffic-light marker
 coordinates are still asserted separately, so Finder parity regressions are
 reported as structured chrome contract failures before pixel inspection.
 The sidebar and toolbar glyphs come from `phenotype.icons`, not copied SF
