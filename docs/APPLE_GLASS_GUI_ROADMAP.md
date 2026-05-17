@@ -298,12 +298,12 @@ Larger fills still ear-clip into the existing triangle pipeline. The catalog
 exposes semantic metadata for toolbar, sidebar, action, file-type roles,
 outline/fill variants, preferred rendering mode, scale, and hierarchical
 opacity/reference counts so verifier artifacts can prove which icon policy was
-used. The catalog now also exposes a role-aware macOS presentation policy:
-toolbar/navigation symbols resolve to 24 pt secondary, selected, or disabled
-tones, while sidebar symbols resolve to 26 pt primary or accent tones with an
-explicit optical offset. The file explorer artifact records those sizes and
-tone-policy names so the Finder-like icon treatment is checked as data, not as
-a screenshot guess.
+used. The catalog now also exposes a role-aware macOS presentation and
+interaction-tone policy: toolbar/navigation symbols resolve to 24 pt
+secondary, selected, or disabled tones, while sidebar symbols resolve to 26 pt
+primary or selected-row accent tones with an explicit optical offset. The file
+explorer artifact records those sizes and tone-policy names so the Finder-like
+icon treatment is checked as data, not as a screenshot guess.
 The desktop file explorer also records a pure Finder chrome geometry policy for
 the integrated titlebar/sidebar/toolbar/content coordinates and native
 control-reserve widths, so the example can move toward Finder-like placement

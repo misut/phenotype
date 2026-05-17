@@ -422,6 +422,30 @@
       "equals": "primary, secondary, selected, accent, disabled, destructive"
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.interaction_tone_policy",
+      "equals": "macos_finder_interaction_tones"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.interaction_tones.sidebar_selected",
+      "equals": "accent"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.interaction_tones.sidebar_unselected",
+      "equals": "primary"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.interaction_tones.toolbar_selected",
+      "equals": "selected"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.interaction_tones.toolbar_unselected",
+      "equals": "secondary"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.interaction_tones.disabled",
+      "equals": "disabled"
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.file_type_color_policy",
       "equals": "macos_finder_file_type_tints"
     },

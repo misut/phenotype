@@ -49,6 +49,19 @@ int main() {
     assert(icons::semantic_reference_name(icons::Symbol::AirDrop) == "airdrop");
     assert(icons::sidebar_symbol_at(8) == icons::Symbol::AirDrop);
     assert(icons::toolbar_symbol_at(10) == icons::Symbol::Search);
+    assert(icons::interaction_tone_policy() == "macos_finder_interaction_tones");
+    assert(icons::macos_interaction_tone(
+               icons::SymbolPresentationRole::Sidebar,
+               icons::SymbolInteractionState{true, true})
+           == icons::SymbolTone::Accent);
+    assert(icons::macos_interaction_tone(
+               icons::SymbolPresentationRole::Sidebar,
+               icons::SymbolInteractionState{false, true})
+           == icons::SymbolTone::Primary);
+    assert(icons::macos_interaction_tone(
+               icons::SymbolPresentationRole::Toolbar,
+               icons::SymbolInteractionState{false, false})
+           == icons::SymbolTone::Disabled);
     assert(icons::file_type_color_policy() == "macos_finder_file_type_tints");
     auto const folder_color = icons::macos_file_type_color(icons::Symbol::Folder);
     auto const image_color = icons::macos_file_type_color(icons::Symbol::Image);

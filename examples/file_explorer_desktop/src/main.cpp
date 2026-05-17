@@ -479,11 +479,12 @@ void paint_symbol_centered(
 
 void paint_sidebar_icon(phenotype::Painter& painter,
                         std::string_view id,
+                        bool selected,
                         float origin_x,
                         float origin_y) {
-    auto const tone = id == "recents"
-        ? phenotype::icons::SymbolTone::Accent
-        : phenotype::icons::SymbolTone::Primary;
+    auto const tone = phenotype::icons::macos_interaction_tone(
+        phenotype::icons::SymbolPresentationRole::Sidebar,
+        phenotype::icons::SymbolInteractionState{selected, true});
     paint_symbol_centered(
         painter,
         phenotype::icons::presentation(
@@ -1093,6 +1094,7 @@ void sidebar_row(std::string_view label,
             paint_sidebar_icon(
                 painter,
                 icon_name,
+                selected,
                 k_sidebar_icon_leading,
                 icon_top);
             auto ink = selected ? rgba(0, 122, 255) : rgba(30, 30, 30);
@@ -1272,22 +1274,23 @@ void paint_toolbar_symbol(phenotype::Painter& painter,
     paint_toolbar_symbol(
         painter,
         symbol,
-        selected
-            ? phenotype::icons::SymbolTone::Selected
-            : phenotype::icons::SymbolTone::Secondary);
+        phenotype::icons::macos_interaction_tone(
+            phenotype::icons::SymbolPresentationRole::Toolbar,
+            phenotype::icons::SymbolInteractionState{selected, true}));
 }
 
 void paint_navigation_symbol(phenotype::Painter& painter,
                              phenotype::icons::Symbol symbol,
                              bool enabled) {
+    auto const tone = phenotype::icons::macos_interaction_tone(
+        phenotype::icons::SymbolPresentationRole::Navigation,
+        phenotype::icons::SymbolInteractionState{false, enabled});
     paint_symbol_centered(
         painter,
         phenotype::icons::presentation(
             symbol,
             phenotype::icons::SymbolPresentationRole::Navigation,
-            enabled
-                ? phenotype::icons::SymbolTone::Selected
-                : phenotype::icons::SymbolTone::Disabled),
+            tone),
         0.0f,
         0.0f,
         k_toolbar_icon_button_width,
