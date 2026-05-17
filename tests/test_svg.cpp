@@ -5,6 +5,7 @@
 #include <string_view>
 
 import phenotype.icons;
+import phenotype.icon_catalog;
 import phenotype.svg;
 import phenotype.types;
 
@@ -208,8 +209,11 @@ void test_builtin_icons_parse() {
     assert(icons::style_reference().find("Apple HIG") != std::string_view::npos);
     assert(icons::asset_policy().find("no Apple") != std::string_view::npos);
     assert(icons::all_symbol_count == 31);
+    assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
+    assert(phenotype::icon_catalog::sidebar_symbol_count == icons::sidebar_symbol_count);
     assert(icons::toolbar_symbol_count == 15);
+    assert(phenotype::icon_catalog::toolbar_symbol_count == icons::toolbar_symbol_count);
     assert(icons::outline_symbol_count == 30);
     assert(icons::filled_symbol_count == 1);
     assert(icons::hierarchical_symbol_count == 20);
@@ -232,10 +236,17 @@ void test_builtin_icons_parse() {
         auto src = icons::source(symbol);
         auto doc = icons::document(symbol);
         auto descriptor = icons::descriptor(symbol);
+        auto contract_symbol = phenotype::icon_catalog::symbol_at(i);
+        auto contract_descriptor =
+            phenotype::icon_catalog::descriptor(contract_symbol);
         assert(!icons::name(symbol).empty());
         assert(!icons::semantic_reference_name(symbol).empty());
+        assert(phenotype::icon_catalog::name(contract_symbol) == icons::name(symbol));
         assert(!src.empty());
         assert(descriptor.name == icons::name(symbol));
+        assert(contract_descriptor.semantic_reference_name
+               == descriptor.semantic_reference_name);
+        assert(contract_descriptor.layer_count == descriptor.layer_count);
         assert(descriptor.style == icons::style_name());
         assert(descriptor.semantic_reference_name
                == icons::semantic_reference_name(symbol));

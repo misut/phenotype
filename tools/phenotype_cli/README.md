@@ -63,10 +63,19 @@ The initial scope is intentionally narrow:
   the stored `phenotype.bundle.json` schema, command, file count, byte total,
   relative destinations, and digests without needing the original source
   package root.
+- `phenotype icons catalog` emits the built-in icon catalog contract from the
+  pure `phenotype.icon_catalog` path package. JSON output reports the
+  macOS/Finder/SF-Symbols-inspired reference policy, package-owned SVG asset
+  rule, count invariants, all/sidebar/toolbar semantic reference sets,
+  per-symbol role/variant/rendering/layer metadata, and presentation defaults.
+  The command deliberately reports semantic SF Symbols names without embedding
+  Apple vector artwork, so CI and future LLM debugging can verify icon intent
+  without screenshot guessing.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible
-  entries, viewport, view mode, pure Finder chrome/grid metrics, selection
+  entries, viewport, view mode, pure Finder chrome/grid metrics including the
+  integrated titlebar geometry policy and icon-system contract, selection
   capabilities, operation receipts, preview excerpts, localized labels,
   package resource metadata, desktop keyboard command descriptors, and optional
   expectation results. Repeated

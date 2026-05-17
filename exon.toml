@@ -20,6 +20,7 @@ platforms = [
 
 [dependencies.path]
 phenotype_resources = "packages/phenotype_resources"
+phenotype_icon_contract = "packages/phenotype_icon_contract"
 
 [target.'cfg(os = "macos")'.dependencies.path]
 metal-cpp = "libs/metal-cpp"

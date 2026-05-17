@@ -176,11 +176,15 @@ Native file explorer artifact bundles expose the same model state under
 mode, selected entry plus index, operation receipt, entry counts, pure chrome
 metrics, and keyboard command descriptors.
 The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
-the `phenotype.icons` style contract (`design_reference`, `asset_policy`,
-24x24 alignment grid, stroke width, total/sidebar/toolbar/filled symbol counts),
-traffic-light marker coordinates, and icon-grid density metrics such as column
-width, row height, pitch, thumbnail canvas size, label size, gap, visible rows,
-and visible capacity. The
+the `phenotype.icon_catalog` / `phenotype.icons` style contract
+(`design_reference`, `asset_policy`, 24x24 alignment grid, stroke width,
+total/sidebar/toolbar/filled symbol counts), traffic-light marker coordinates,
+and icon-grid density metrics such as column width, row height, pitch,
+thumbnail canvas size, label size, gap, visible rows, and visible capacity.
+`phenotype icons catalog --json` emits the complete all/sidebar/toolbar symbol
+contract from the same pure metadata package, while
+`phenotype drive file-explorer --json` embeds the desktop chrome geometry and
+icon-system contract under `chrome.geometry` and `chrome.icon_system`. The
 verifier can assert those paths with `require_debug_details`, which keeps
 Finder workflow failures debuggable without relying on a screenshot guess.
 The native runtime window payload also reports `visibility_state` and
