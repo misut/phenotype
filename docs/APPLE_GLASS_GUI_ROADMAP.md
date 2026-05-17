@@ -304,7 +304,10 @@ phenotype-owned SVG. A pure Finder-style file-type tint policy now gives
 folder/document/image/movie glyphs deterministic colors for list and column
 rows without querying native platform icon services. The CLI command
 `phenotype icons catalog --json` exposes the same contract for CI and LLM
-debugging on Linux without importing native GUI code. The macOS Metal
+debugging on Linux without importing native GUI code, and `phenotype icons svg
+<name-or-reference>` exposes the exact phenotype-owned SVG source for one
+glyph when a renderer, parser, or icon cache needs a pure source-level probe.
+The macOS Metal
 renderer executes diagonal icon strokes as triangle bodies with round caps
 instead of dot chains, keeping toolbar/search/sidebar symbols continuous while
 remaining bounded. Windows accepts the same SVG-driven `Path`, `FillPath`, and

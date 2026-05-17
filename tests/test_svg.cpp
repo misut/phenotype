@@ -391,6 +391,8 @@ void test_builtin_icons_parse() {
             phenotype::icon_catalog::descriptor(contract_symbol);
         assert(!icons::name(symbol).empty());
         assert(!icons::semantic_reference_name(symbol).empty());
+        assert(icons::source(symbol)
+               == phenotype::icon_catalog::svg_source(contract_symbol));
         assert(phenotype::icon_catalog::name(contract_symbol) == icons::name(symbol));
         assert(icons::symbol_from_name(icons::name(symbol)).has_value());
         assert(*icons::symbol_from_name(icons::name(symbol)) == symbol);
