@@ -161,6 +161,10 @@
       "equals": false
     },
     {
+      "path": "application.file_explorer.selection.index",
+      "equals": -1
+    },
+    {
       "path": "application.file_explorer.counts.files",
       "equals": 22
     },
@@ -317,6 +321,54 @@
           "action": "activate_selected",
           "shortcut": "Enter",
           "input_alias": "key:enter",
+          "allow_when_input_focused": false
+        },
+        {
+          "action": "move_selection_up",
+          "shortcut": "ArrowUp",
+          "input_alias": "key:arrow-up",
+          "allow_when_input_focused": false
+        },
+        {
+          "action": "move_selection_down",
+          "shortcut": "ArrowDown",
+          "input_alias": "key:arrow-down",
+          "allow_when_input_focused": false
+        },
+        {
+          "action": "move_selection_left",
+          "shortcut": "ArrowLeft",
+          "input_alias": "key:arrow-left",
+          "allow_when_input_focused": false
+        },
+        {
+          "action": "move_selection_right",
+          "shortcut": "ArrowRight",
+          "input_alias": "key:arrow-right",
+          "allow_when_input_focused": false
+        },
+        {
+          "action": "move_selection_home",
+          "shortcut": "Home",
+          "input_alias": "key:home",
+          "allow_when_input_focused": false
+        },
+        {
+          "action": "move_selection_end",
+          "shortcut": "End",
+          "input_alias": "key:end",
+          "allow_when_input_focused": false
+        },
+        {
+          "action": "move_selection_page_up",
+          "shortcut": "PageUp",
+          "input_alias": "key:page-up",
+          "allow_when_input_focused": false
+        },
+        {
+          "action": "move_selection_page_down",
+          "shortcut": "PageDown",
+          "input_alias": "key:page-down",
           "allow_when_input_focused": false
         },
         {

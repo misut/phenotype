@@ -52,6 +52,17 @@ enum class ExplorerViewMode {
     Gallery,
 };
 
+enum class ExplorerSelectionMove {
+    Left,
+    Right,
+    Up,
+    Down,
+    PageUp,
+    PageDown,
+    Home,
+    End,
+};
+
 struct Snapshot {
     fs::path root;
     fs::path current;
@@ -59,6 +70,7 @@ struct Snapshot {
     std::vector<Entry> entries;
     Entry selected{};
     bool has_selection = false;
+    std::size_t selected_index = 0;
     bool can_go_back = false;
     bool can_go_forward = false;
     bool can_create_file = false;
@@ -106,6 +118,7 @@ enum class ExplorerInputKind {
     SelectEntry,
     Search,
     FocusSearch,
+    MoveSelection,
     OpenEntry,
     ActivateEntry,
     ActivateSelected,
@@ -133,6 +146,7 @@ struct ExplorerInput {
     std::string value;
     SortMode sort_mode = SortMode::Name;
     ExplorerViewMode view_mode = ExplorerViewMode::Icon;
+    ExplorerSelectionMove selection_move = ExplorerSelectionMove::Down;
     int viewport_width = 0;
     int viewport_height = 0;
     float viewport_scale = 1.0f;
@@ -846,6 +860,34 @@ inline std::string view_mode_label(ExplorerViewMode mode) {
     }
 }
 
+inline std::string selection_move_value_name(ExplorerSelectionMove move) {
+    switch (move) {
+        case ExplorerSelectionMove::Left: return "left";
+        case ExplorerSelectionMove::Right: return "right";
+        case ExplorerSelectionMove::Up: return "up";
+        case ExplorerSelectionMove::Down: return "down";
+        case ExplorerSelectionMove::PageUp: return "page-up";
+        case ExplorerSelectionMove::PageDown: return "page-down";
+        case ExplorerSelectionMove::Home: return "home";
+        case ExplorerSelectionMove::End: return "end";
+    }
+    return "down";
+}
+
+inline std::string selection_move_label(ExplorerSelectionMove move) {
+    switch (move) {
+        case ExplorerSelectionMove::Left: return "Arrow Left";
+        case ExplorerSelectionMove::Right: return "Arrow Right";
+        case ExplorerSelectionMove::Up: return "Arrow Up";
+        case ExplorerSelectionMove::Down: return "Arrow Down";
+        case ExplorerSelectionMove::PageUp: return "Page Up";
+        case ExplorerSelectionMove::PageDown: return "Page Down";
+        case ExplorerSelectionMove::Home: return "Home";
+        case ExplorerSelectionMove::End: return "End";
+    }
+    return "Arrow Down";
+}
+
 inline ExplorerViewMode view_mode_from_name(std::string_view value) {
     auto mode = lower_copy(trim(value));
     if (mode == "list")
@@ -861,6 +903,28 @@ inline bool known_view_mode_name(std::string_view value) {
     auto mode = lower_copy(trim(value));
     return mode == "icon" || mode == "list" || mode == "column"
         || mode == "gallery";
+}
+
+inline std::optional<ExplorerSelectionMove> selection_move_from_name(
+        std::string_view value) {
+    auto move = lower_copy(trim(value));
+    if (move == "left" || move == "arrow-left" || move == "arrow_left")
+        return ExplorerSelectionMove::Left;
+    if (move == "right" || move == "arrow-right" || move == "arrow_right")
+        return ExplorerSelectionMove::Right;
+    if (move == "up" || move == "arrow-up" || move == "arrow_up")
+        return ExplorerSelectionMove::Up;
+    if (move == "down" || move == "arrow-down" || move == "arrow_down")
+        return ExplorerSelectionMove::Down;
+    if (move == "page-up" || move == "page_up" || move == "pageup")
+        return ExplorerSelectionMove::PageUp;
+    if (move == "page-down" || move == "page_down" || move == "pagedown")
+        return ExplorerSelectionMove::PageDown;
+    if (move == "home")
+        return ExplorerSelectionMove::Home;
+    if (move == "end")
+        return ExplorerSelectionMove::End;
+    return std::nullopt;
 }
 
 inline json::Value entry_debug_json(Entry const& entry) {
@@ -891,6 +955,14 @@ inline std::vector<ExplorerKeyboardCommand> file_explorer_keyboard_commands(
     return {
         {"show_search", "CommandOrControl+F", "shortcut:find", true},
         {"activate_selected", "Enter", "key:enter", false},
+        {"move_selection_up", "ArrowUp", "key:arrow-up", false},
+        {"move_selection_down", "ArrowDown", "key:arrow-down", false},
+        {"move_selection_left", "ArrowLeft", "key:arrow-left", false},
+        {"move_selection_right", "ArrowRight", "key:arrow-right", false},
+        {"move_selection_home", "Home", "key:home", false},
+        {"move_selection_end", "End", "key:end", false},
+        {"move_selection_page_up", "PageUp", "key:page-up", false},
+        {"move_selection_page_down", "PageDown", "key:page-down", false},
         {"delete_selected", "DeleteOrBackspace", "key:delete", false},
         {"duplicate_selected", "CommandOrControl+D", "shortcut:duplicate", false},
         {"create_folder", "Shift+CommandOrControl+N", "shortcut:new-folder", false},
@@ -989,6 +1061,10 @@ inline json::Value file_explorer_debug_json(
     selection.emplace(
         "kind",
         json::Value{snap.has_selection ? snap.selected_kind_label : std::string{}});
+    selection.emplace(
+        "index",
+        json::Value{static_cast<std::int64_t>(
+            snap.has_selection ? snap.selected_index : -1)});
     selection.emplace("size_label", json::Value{snap.selected_size_label});
     selection.emplace("path_label", json::Value{snap.selected_path_label});
     selection.emplace("can_preview", json::Value{snap.can_preview_selected});
@@ -1075,6 +1151,7 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::SelectEntry: return "select_entry";
         case ExplorerInputKind::Search: return "search";
         case ExplorerInputKind::FocusSearch: return "focus_search";
+        case ExplorerInputKind::MoveSelection: return "move_selection";
         case ExplorerInputKind::OpenEntry: return "open_entry";
         case ExplorerInputKind::ActivateEntry: return "activate_entry";
         case ExplorerInputKind::ActivateSelected: return "activate_selected";
@@ -1105,6 +1182,8 @@ inline std::string explorer_input_label(ExplorerInput const& input) {
         return label + ":" + sort_mode_label(input.sort_mode);
     if (input.kind == ExplorerInputKind::ViewMode)
         return label + ":" + view_mode_value_name(input.view_mode);
+    if (input.kind == ExplorerInputKind::MoveSelection)
+        return label + ":" + selection_move_value_name(input.selection_move);
     if (!input.value.empty())
         return label + ":" + input.value;
     return label;
@@ -1352,6 +1431,20 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         });
     };
 
+    auto parse_move = [&](std::string_view move_name) -> ExplorerInputParseResult {
+        auto move = selection_move_from_name(move_name);
+        if (!move) {
+            return input_parse_error(
+                "unknown file explorer selection move: "
+                + std::string{move_name});
+        }
+        return parsed_input(ExplorerInput{
+            .kind = ExplorerInputKind::MoveSelection,
+            .value = selection_move_value_name(*move),
+            .selection_move = *move,
+        });
+    };
+
     if (name == "noop")
         return parsed_input({});
     if (name == "location" || name == "loc"
@@ -1371,6 +1464,14 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         || name == "enter") {
         return parsed_input({.kind = ExplorerInputKind::ActivateSelected});
     }
+    if (name == "move" || name == "move-selection"
+        || name == "move_selection" || name == "navigate") {
+        if (value.empty()) {
+            return input_parse_error(
+                "input '" + name + "' requires a selection move");
+        }
+        return parse_move(value);
+    }
     if (name == "key" || name == "shortcut") {
         auto command = lower_copy(trim(value));
         if (command.empty()) {
@@ -1387,6 +1488,13 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         }
         if (command == "find" || command == "search") {
             return parsed_input({.kind = ExplorerInputKind::FocusSearch});
+        }
+        if (auto move = selection_move_from_name(command)) {
+            return parsed_input(ExplorerInput{
+                .kind = ExplorerInputKind::MoveSelection,
+                .value = selection_move_value_name(*move),
+                .selection_move = *move,
+            });
         }
         if (command == "escape" || command == "dismiss") {
             return parsed_input({.kind = ExplorerInputKind::DismissTransient});
@@ -1816,7 +1924,8 @@ inline Snapshot snapshot(ExplorerState const& state) {
     out.sort_mode = state.sort_mode;
     out.sort_label = "Sort: " + sort_mode_label(state.sort_mode);
     out.view_mode = state.view_mode;
-    for (auto const& entry : out.entries) {
+    for (std::size_t i = 0; i < out.entries.size(); ++i) {
+        auto const& entry = out.entries[i];
         if (entry.folder)
             ++out.folder_count;
         else
@@ -1824,6 +1933,7 @@ inline Snapshot snapshot(ExplorerState const& state) {
         if (entry.name == state.selected_name) {
             out.selected = entry;
             out.has_selection = true;
+            out.selected_index = i;
         }
     }
     out.item_summary = std::to_string(out.file_count) + " files";
@@ -1997,6 +2107,77 @@ inline void select_entry(ExplorerState& state, std::string const& name) {
         name,
         false,
         state.status);
+}
+
+inline std::optional<std::size_t> selected_entry_index(
+        std::vector<Entry> const& entries,
+        std::string const& selected_name) {
+    if (selected_name.empty())
+        return std::nullopt;
+    for (std::size_t i = 0; i < entries.size(); ++i) {
+        if (entries[i].name == selected_name)
+            return i;
+    }
+    return std::nullopt;
+}
+
+inline int selection_navigation_stride(
+        ExplorerState const& state,
+        ExplorerSelectionMove move,
+        ExplorerChromeMetrics const& chrome) {
+    bool const icon_grid = state.view_mode == ExplorerViewMode::Icon;
+    int const columns = std::max(1, chrome.icon_grid_columns);
+    int const page_span = icon_grid
+        ? std::max(columns, chrome.icon_grid_visible_capacity)
+        : std::max(6, chrome.icon_grid_visible_rows);
+    switch (move) {
+        case ExplorerSelectionMove::Left: return -1;
+        case ExplorerSelectionMove::Right: return 1;
+        case ExplorerSelectionMove::Up: return icon_grid ? -columns : -1;
+        case ExplorerSelectionMove::Down: return icon_grid ? columns : 1;
+        case ExplorerSelectionMove::PageUp: return -page_span;
+        case ExplorerSelectionMove::PageDown: return page_span;
+        case ExplorerSelectionMove::Home:
+        case ExplorerSelectionMove::End:
+            return 0;
+    }
+    return 0;
+}
+
+inline void move_selection(
+        ExplorerState& state,
+        ExplorerSelectionMove move,
+        std::string_view profile) {
+    auto entries = list_entries(state.current, state.search, state.sort_mode);
+    if (entries.empty()) {
+        state.selected_name.clear();
+        state.status = "No visible entries to navigate.";
+        return;
+    }
+
+    auto const current = selected_entry_index(entries, state.selected_name);
+    std::ptrdiff_t target = 0;
+    if (!current) {
+        target = move == ExplorerSelectionMove::End
+            ? static_cast<std::ptrdiff_t>(entries.size() - 1)
+            : 0;
+    } else if (move == ExplorerSelectionMove::Home) {
+        target = 0;
+    } else if (move == ExplorerSelectionMove::End) {
+        target = static_cast<std::ptrdiff_t>(entries.size() - 1);
+    } else {
+        auto const chrome = explorer_chrome_metrics(state, profile);
+        target = static_cast<std::ptrdiff_t>(*current)
+            + selection_navigation_stride(state, move, chrome);
+    }
+
+    auto const last = static_cast<std::ptrdiff_t>(entries.size() - 1);
+    target = std::clamp<std::ptrdiff_t>(target, 0, last);
+    auto selected = entries[static_cast<std::size_t>(target)].name;
+    select_entry(state, selected);
+    state.status = "Moved selection with "
+        + selection_move_label(move)
+        + " to " + selected + ".";
 }
 
 inline void open_entry(ExplorerState& state, std::string const& name) {
@@ -2474,6 +2655,9 @@ inline void apply_explorer_input(
             return;
         case ExplorerInputKind::FocusSearch:
             state.status = "Search ready.";
+            return;
+        case ExplorerInputKind::MoveSelection:
+            move_selection(state, input.selection_move, profile);
             return;
         case ExplorerInputKind::OpenEntry:
             open_entry(state, input.value);

@@ -30,6 +30,7 @@ struct SearchChanged { std::string text; };
 struct ToggleSearch {};
 struct ShowSearch {};
 struct DismissTransient {};
+struct MoveSelection { file_explorer_demo::ExplorerSelectionMove move; };
 struct CreateFile {};
 struct CreateFolder {};
 struct DeleteSelected {};
@@ -54,6 +55,7 @@ using Msg = std::variant<
     ToggleSearch,
     ShowSearch,
     DismissTransient,
+    MoveSelection,
     CreateFile,
     CreateFolder,
     DeleteSelected,
@@ -815,6 +817,12 @@ void update(State& state, Msg msg) {
             } else {
                 explorer.status = "Ready";
             }
+        } else if constexpr (std::same_as<T, MoveSelection>) {
+            state.more_actions_open = false;
+            file_explorer_demo::move_selection(
+                explorer,
+                m.move,
+                "desktop");
         } else if constexpr (std::same_as<T, CreateFile>) {
             state.more_actions_open = false;
             file_explorer_demo::create_file(explorer);
@@ -1895,6 +1903,46 @@ void register_finder_key_commands() {
     finder_key_command(Key::F, control, ShowSearch{}, "show_search", true);
     finder_key_command(Key::Enter, none, ActivateSelected{}, "activate_selected");
     finder_key_command(Key::KpEnter, none, ActivateSelected{}, "activate_selected");
+    finder_key_command(
+        Key::Up,
+        none,
+        MoveSelection{file_explorer_demo::ExplorerSelectionMove::Up},
+        "move_selection_up");
+    finder_key_command(
+        Key::Down,
+        none,
+        MoveSelection{file_explorer_demo::ExplorerSelectionMove::Down},
+        "move_selection_down");
+    finder_key_command(
+        Key::Left,
+        none,
+        MoveSelection{file_explorer_demo::ExplorerSelectionMove::Left},
+        "move_selection_left");
+    finder_key_command(
+        Key::Right,
+        none,
+        MoveSelection{file_explorer_demo::ExplorerSelectionMove::Right},
+        "move_selection_right");
+    finder_key_command(
+        Key::Home,
+        none,
+        MoveSelection{file_explorer_demo::ExplorerSelectionMove::Home},
+        "move_selection_home");
+    finder_key_command(
+        Key::End,
+        none,
+        MoveSelection{file_explorer_demo::ExplorerSelectionMove::End},
+        "move_selection_end");
+    finder_key_command(
+        Key::PageUp,
+        none,
+        MoveSelection{file_explorer_demo::ExplorerSelectionMove::PageUp},
+        "move_selection_page_up");
+    finder_key_command(
+        Key::PageDown,
+        none,
+        MoveSelection{file_explorer_demo::ExplorerSelectionMove::PageDown},
+        "move_selection_page_down");
     finder_key_command(Key::Backspace, none, DeleteSelected{}, "delete_selected");
     finder_key_command(Key::Delete, none, DeleteSelected{}, "delete_selected");
     finder_key_command(Key::Backspace, super, DeleteSelected{}, "delete_selected");
