@@ -1187,6 +1187,33 @@ inline void tabs(std::vector<str> const& items,
 
 } // namespace widget
 
+namespace app {
+
+template<typename Msg>
+inline void key_command(unsigned int key,
+                        int modifiers,
+                        Msg msg,
+                        KeyCommandOptions options = {}) {
+    if (options.disabled)
+        return;
+    auto const id = static_cast<unsigned int>(
+        detail::g_app.callbacks.size());
+    detail::g_app.callbacks.push_back([msg = std::move(msg)] {
+        detail::post<Msg>(msg);
+        detail::trigger_rebuild();
+    });
+    detail::g_app.callback_roles.push_back(InteractionRole::Command);
+    detail::g_app.key_commands.push_back(KeyCommand{
+        .key = key,
+        .modifiers = modifiers,
+        .allow_when_input_focused = options.allow_when_input_focused,
+        .callback_id = id,
+        .debug_label = std::move(options.debug_label),
+    });
+}
+
+} // namespace app
+
 // ============================================================
 // View-time animation
 // ============================================================
@@ -1374,6 +1401,7 @@ void run(Host& host, View view, Update update) {
         app.arena.reset();
         app.callbacks.clear();
         app.callback_roles.clear();
+        app.key_commands.clear();
         app.gesture_callbacks.clear();
         app.gesture_target_id = 0xFFFFFFFFu;
         app.scroll_targets.clear();
@@ -1522,6 +1550,7 @@ void run(View view, Update update) {
         app.arena.reset();
         app.callbacks.clear();
         app.callback_roles.clear();
+        app.key_commands.clear();
         app.gesture_callbacks.clear();
         app.gesture_target_id = 0xFFFFFFFFu;
         app.scroll_targets.clear();
@@ -2742,6 +2771,7 @@ inline char const* input_key_detail_name(unsigned int key_type) {
         case 3: return "arrow-right";
         case 4: return "home";
         case 5: return "end";
+        case 6: return "delete";
         default: return "key";
     }
 }
@@ -2809,6 +2839,40 @@ inline bool handle_event(unsigned int callback_id,
         "click id={} out of range (size={})",
         callback_id, g_app.callbacks.size());
     note_input_event("click", source, detail, "ignored", callback_id);
+    return false;
+}
+
+inline bool handle_key_command(unsigned int key,
+                               int modifiers,
+                               bool focused_is_input,
+                               char const* source = "core",
+                               char const* detail = "command") {
+    for (auto it = g_app.key_commands.rbegin();
+         it != g_app.key_commands.rend();
+         ++it) {
+        if (it->key != key || it->modifiers != modifiers)
+            continue;
+        if (focused_is_input && !it->allow_when_input_focused)
+            return false;
+        auto const callback_id = it->callback_id;
+        if (callback_id < g_app.callbacks.size()) {
+            g_app.callbacks[callback_id]();
+            note_input_event(
+                "key",
+                source,
+                detail,
+                "handled",
+                callback_id);
+            return true;
+        }
+        note_input_event(
+            "key",
+            source,
+            detail,
+            "ignored",
+            callback_id);
+        return false;
+    }
     return false;
 }
 
@@ -2985,6 +3049,14 @@ inline bool apply_key_to_string(unsigned int key_type,
                 return false;
             caret = value.size();
             return true;
+        case 6: {
+            if (caret >= value.size())
+                return false;
+            auto end = next_utf8_boundary(value, caret);
+            value.erase(caret, end - caret);
+            text_changed = true;
+            return true;
+        }
         default:
             return false;
     }
@@ -3090,7 +3162,7 @@ inline bool handle_key(unsigned int key_type, unsigned int codepoint,
         caret = selection.start + replacement.size();
         text_changed = true;
         set_caret_state(value, caret);
-    } else if (key_type == 1 && selection.active) {
+    } else if ((key_type == 1 || key_type == 6) && selection.active) {
         value.erase(selection.start, selection.end - selection.start);
         caret = selection.start;
         text_changed = true;

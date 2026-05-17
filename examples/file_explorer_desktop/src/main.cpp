@@ -28,10 +28,13 @@ struct SetViewMode { file_explorer_demo::ExplorerViewMode mode; };
 struct ToolbarAction { std::string label; };
 struct SearchChanged { std::string text; };
 struct ToggleSearch {};
+struct ShowSearch {};
+struct DismissTransient {};
 struct CreateFile {};
 struct CreateFolder {};
 struct DeleteSelected {};
 struct DuplicateSelected {};
+struct ActivateSelected {};
 struct ToggleMoreActions {};
 struct GoBack {};
 struct GoForward {};
@@ -49,10 +52,13 @@ using Msg = std::variant<
     ToolbarAction,
     SearchChanged,
     ToggleSearch,
+    ShowSearch,
+    DismissTransient,
     CreateFile,
     CreateFolder,
     DeleteSelected,
     DuplicateSelected,
+    ActivateSelected,
     ToggleMoreActions,
     GoBack,
     GoForward,
@@ -795,6 +801,20 @@ void update(State& state, Msg msg) {
             } else {
                 explorer.status = "Search ready.";
             }
+        } else if constexpr (std::same_as<T, ShowSearch>) {
+            state.more_actions_open = false;
+            state.search_visible = true;
+            explorer.status = "Search ready.";
+        } else if constexpr (std::same_as<T, DismissTransient>) {
+            if (state.more_actions_open) {
+                state.more_actions_open = false;
+                explorer.status = "More actions closed.";
+            } else if (state.search_visible) {
+                state.search_visible = false;
+                file_explorer_demo::set_search_filter(explorer, {});
+            } else {
+                explorer.status = "Ready";
+            }
         } else if constexpr (std::same_as<T, CreateFile>) {
             state.more_actions_open = false;
             file_explorer_demo::create_file(explorer);
@@ -807,6 +827,9 @@ void update(State& state, Msg msg) {
         } else if constexpr (std::same_as<T, DuplicateSelected>) {
             state.more_actions_open = false;
             file_explorer_demo::duplicate_selected(explorer);
+        } else if constexpr (std::same_as<T, ActivateSelected>) {
+            state.more_actions_open = false;
+            file_explorer_demo::activate_selected_entry(explorer);
         } else if constexpr (std::same_as<T, ToggleMoreActions>) {
             state.more_actions_open = !state.more_actions_open;
             explorer.status = state.more_actions_open
@@ -1844,10 +1867,60 @@ void finder_status_bar(State const& state,
         });
 }
 
+template<typename CommandMsg>
+void finder_key_command(phenotype::native::Key key,
+                        int modifiers,
+                        CommandMsg msg,
+                        char const* label,
+                        bool allow_when_input_focused = false) {
+    phenotype::app::key_command<Msg>(
+        static_cast<unsigned int>(key),
+        modifiers,
+        Msg{std::move(msg)},
+        phenotype::KeyCommandOptions{
+            .allow_when_input_focused = allow_when_input_focused,
+            .debug_label = label ? std::string{label} : std::string{},
+        });
+}
+
+void register_finder_key_commands() {
+    using phenotype::native::Key;
+    using phenotype::native::Modifier;
+    constexpr int none = 0;
+    constexpr int shift = static_cast<int>(Modifier::Shift);
+    constexpr int control = static_cast<int>(Modifier::Control);
+    constexpr int super = static_cast<int>(Modifier::Super);
+
+    finder_key_command(Key::F, super, ShowSearch{}, "show_search", true);
+    finder_key_command(Key::F, control, ShowSearch{}, "show_search", true);
+    finder_key_command(Key::Enter, none, ActivateSelected{}, "activate_selected");
+    finder_key_command(Key::KpEnter, none, ActivateSelected{}, "activate_selected");
+    finder_key_command(Key::Backspace, none, DeleteSelected{}, "delete_selected");
+    finder_key_command(Key::Delete, none, DeleteSelected{}, "delete_selected");
+    finder_key_command(Key::Backspace, super, DeleteSelected{}, "delete_selected");
+    finder_key_command(Key::Backspace, control, DeleteSelected{}, "delete_selected");
+    finder_key_command(Key::Delete, super, DeleteSelected{}, "delete_selected");
+    finder_key_command(Key::Delete, control, DeleteSelected{}, "delete_selected");
+    finder_key_command(Key::D, super, DuplicateSelected{}, "duplicate_selected");
+    finder_key_command(Key::D, control, DuplicateSelected{}, "duplicate_selected");
+    finder_key_command(
+        Key::N,
+        shift | super,
+        CreateFolder{},
+        "create_folder");
+    finder_key_command(
+        Key::N,
+        shift | control,
+        CreateFolder{},
+        "create_folder");
+    finder_key_command(Key::Escape, none, DismissTransient{}, "dismiss_transient", true);
+}
+
 void view(State const& state) {
     using namespace phenotype;
     g_debug_state = &state;
     auto snap = file_explorer_demo::snapshot(state.explorer);
+    register_finder_key_commands();
     layout::material_container(
         layout::MaterialContainerOptions{
             .container_id = 2100u,

@@ -149,10 +149,11 @@ mise exec -- exon build
   --input view:gallery \
   --input viewport:900x620@2 \
   --input select:README.txt \
-  --input duplicate \
-  --input delete
+  --input shortcut:duplicate \
+  --input key:delete
 .exon/debug/phenotype_cli drive file-explorer --json \
-  --input open:Documents \
+  --input select:Documents \
+  --input key:enter \
   --input select:Project\ Notes.txt \
   --expect location:Demo\ Root/Documents \
   --expect selected:Project\ Notes.txt
@@ -160,12 +161,18 @@ mise exec -- exon build
 
 The drive output reports the typed input trace, sandbox paths, visible entries,
 viewport, view mode, pure Finder chrome/grid metrics, selection capabilities,
-operation receipts, and preview excerpt. It is useful for validating
-select/open/read/create/duplicate/delete/view-mode/resize model behavior before
-running the slower desktop/mobile artifact capture gate.
+operation receipts, preview excerpt, and desktop keyboard command descriptors.
+It is useful for validating
+select/open/read/create/duplicate/delete/view-mode/resize/shortcut model
+behavior before running the slower desktop/mobile artifact capture gate.
+The parser accepts desktop-style aliases including `key:enter`, `key:delete`,
+`key:escape`, `shortcut:find`, `shortcut:duplicate`, and
+`shortcut:new-folder`, matching the native key-command registry used by the
+desktop example.
 Native file explorer artifact bundles expose the same model state under
 `debug.application.file_explorer`: profile, location, status, sort mode, view
-mode, selected entry, operation receipt, entry counts, and pure chrome metrics.
+mode, selected entry, operation receipt, entry counts, pure chrome metrics, and
+keyboard command descriptors.
 The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
 traffic-light marker coordinates, and icon-grid density metrics such as column
 width, row height, pitch, thumbnail canvas size, label size, gap, visible rows,
@@ -252,7 +259,7 @@ mise exec -- exon build
   --artifact-exit \
   --input view:gallery \
   --input select:README.txt \
-  --input duplicate
+  --input shortcut:duplicate
 ```
 
 The CLI validates those inputs before launch, reports direct/script input
@@ -520,6 +527,11 @@ artifacts, not an input-capable duplicate of OS controls. The same chrome object
 publishes sidebar symbol size, symbol leading, label leading, section gap, and
 selected-row radius so Finder sidebar density can fail as a JSON contract before
 a pixel-region summary is needed.
+Its sibling `debug.application.file_explorer.keyboard_commands` publishes the
+desktop command descriptors consumed by native key dispatch. If
+`CommandOrControl+F`, `Enter`, `DeleteOrBackspace`, `CommandOrControl+D`,
+`Shift+CommandOrControl+N`, or `Escape` drift, prefer fixing the shared
+`file_explorer_shared` command contract before changing platform key maps.
 On macOS, `titlebar_transparent=true`, `full_size_content_view=true`,
 `title_hidden=true`, and `background_drag_enabled=true` are read back from the
 live `NSWindow`, not inferred from the request, so a Finder-style artifact can

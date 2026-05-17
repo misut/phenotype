@@ -159,14 +159,18 @@ inline int appkit_modifiers(unsigned long flags) {
 inline Key appkit_key(unsigned short key_code) {
     switch (key_code) {
         case 0: return Key::A;
+        case 2: return Key::D;
+        case 3: return Key::F;
         case 36: return Key::Enter;
         case 48: return Key::Tab;
         case 49: return Key::Space;
         case 51: return Key::Backspace;
         case 53: return Key::Escape;
+        case 45: return Key::N;
         case 76: return Key::KpEnter;
         case 115: return Key::Home;
         case 116: return Key::PageUp;
+        case 117: return Key::Delete;
         case 119: return Key::End;
         case 121: return Key::PageDown;
         case 123: return Key::Left;

@@ -7025,6 +7025,7 @@ inline Key translate_android_keycode(int akc) {
     switch (akc) {
     case AKEYCODE_TAB:             return Key::Tab;
     case AKEYCODE_DEL:             return Key::Backspace; // named DEL, acts as BS
+    case AKEYCODE_FORWARD_DEL:     return Key::Delete;
     case AKEYCODE_ENTER:           return Key::Enter;
     case AKEYCODE_NUMPAD_ENTER:    return Key::KpEnter;
     case AKEYCODE_SPACE:           return Key::Space;
@@ -7038,6 +7039,9 @@ inline Key translate_android_keycode(int akc) {
     case AKEYCODE_MOVE_END:        return Key::End;
     case AKEYCODE_ESCAPE:          return Key::Escape;
     case AKEYCODE_A:               return Key::A;
+    case AKEYCODE_D:               return Key::D;
+    case AKEYCODE_F:               return Key::F;
+    case AKEYCODE_N:               return Key::N;
     default:                       return Key::Other;
     }
 }

@@ -146,6 +146,22 @@ keeps the platform monospace default. This keeps Korean, Chinese, and Japanese
 text closer to the intended product typography without requiring every widget to
 pass an explicit `FontSpec`.
 
+## Input Command Boundary
+
+Core application code can register hidden key commands with
+`phenotype::app::key_command`. The command descriptor is pure app data: key,
+normalized modifiers, focus policy, callback id, and an optional debug label.
+Native shells translate platform key codes at the edge, then ask the core to
+dispatch a matching descriptor. The core enforces exact key/modifier matching
+and the `allow_when_input_focused` policy before invoking the callback, so
+platform adapters do not decide product shortcuts.
+
+This keeps the long-term input/output abstraction model testable without a
+native window. `examples/file_explorer_shared` publishes Finder-style desktop
+commands as data, `examples/file_explorer_desktop` registers those descriptors
+with the core, and `phenotype drive file-explorer` accepts matching `key:` and
+`shortcut:` aliases against the same shared model.
+
 ## Command buffer protocol
 
 The cmd buffer (`phenotype_cmd_buf[65536]`) uses a binary encoding with

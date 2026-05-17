@@ -50,6 +50,7 @@ enum class MouseButton : int {
 enum class Key : int {
     Tab       = 258,
     Backspace = 259,
+    Delete    = 261,
     Enter     = 257,
     KpEnter   = 335,
     Space     = 32,
@@ -63,6 +64,9 @@ enum class Key : int {
     End       = 269,
     Escape    = 256,
     A         = 65,
+    D         = 68,
+    F         = 70,
+    N         = 78,
     Other     = -1,
 };
 
@@ -70,6 +74,7 @@ inline Key key_from_legacy_code(int key) {
     switch (key) {
         case static_cast<int>(Key::Tab): return Key::Tab;
         case static_cast<int>(Key::Backspace): return Key::Backspace;
+        case static_cast<int>(Key::Delete): return Key::Delete;
         case static_cast<int>(Key::Enter): return Key::Enter;
         case static_cast<int>(Key::KpEnter): return Key::KpEnter;
         case static_cast<int>(Key::Space): return Key::Space;
@@ -83,6 +88,9 @@ inline Key key_from_legacy_code(int key) {
         case static_cast<int>(Key::End): return Key::End;
         case static_cast<int>(Key::Escape): return Key::Escape;
         case static_cast<int>(Key::A): return Key::A;
+        case static_cast<int>(Key::D): return Key::D;
+        case static_cast<int>(Key::F): return Key::F;
+        case static_cast<int>(Key::N): return Key::N;
         default: return Key::Other;
     }
 }
@@ -451,6 +459,14 @@ inline bool has_select_all_modifier(int mods) {
 #else
     return (mods & static_cast<int>(Modifier::Control)) != 0;
 #endif
+}
+
+inline int normalized_key_command_modifiers(int mods) {
+    return mods
+        & (static_cast<int>(Modifier::Shift)
+           | static_cast<int>(Modifier::Control)
+           | static_cast<int>(Modifier::Alt)
+           | static_cast<int>(Modifier::Super));
 }
 
 inline void reset_caret_blink_timer() {
@@ -905,6 +921,7 @@ inline char const* key_detail_name(Key key, bool shift) {
     switch (key) {
         case Key::Tab: return shift ? "shift-tab" : "tab";
         case Key::Backspace: return "backspace";
+        case Key::Delete: return "delete";
         case Key::Enter:
         case Key::KpEnter: return "enter";
         case Key::Space: return "space";
@@ -918,15 +935,34 @@ inline char const* key_detail_name(Key key, bool shift) {
         case Key::End: return shift ? "shift-end" : "end";
         case Key::Escape: return "escape";
         case Key::A: return "select-all";
+        case Key::D: return "d";
+        case Key::F: return "f";
+        case Key::N: return "n";
         case Key::Other: return "key";
     }
     return "key";
+}
+
+inline bool dispatch_registered_key_command(Key key,
+                                            int mods,
+                                            char const* detail) {
+    if (::phenotype::detail::handle_key_command(
+            static_cast<unsigned int>(key),
+            normalized_key_command_modifiers(mods),
+            ::phenotype::detail::focused_is_input(),
+            "shell",
+            detail)) {
+        repaint_current();
+        return true;
+    }
+    return false;
 }
 
 inline bool dispatch_key(Key key, KeyAction action, int mods) {
     bool shift = (mods & static_cast<int>(Modifier::Shift)) != 0;
     auto detail = key_detail_name(key, shift);
     auto repeat_allowed = key == Key::Backspace
+        || key == Key::Delete
         || key == Key::Left
         || key == Key::Right
         || key == Key::Up
@@ -960,6 +996,16 @@ inline bool dispatch_key(Key key, KeyAction action, int mods) {
         return true;
     }
 
+    bool const command_chord =
+        (normalized_key_command_modifiers(mods)
+         & (static_cast<int>(Modifier::Control)
+            | static_cast<int>(Modifier::Alt)
+            | static_cast<int>(Modifier::Super))) != 0;
+    if (command_chord
+        && dispatch_registered_key_command(key, mods, detail)) {
+        return true;
+    }
+
     switch (key) {
         case Key::Tab:
             if (::phenotype::detail::handle_tab(shift ? 1u : 0u, "shell", detail)) {
@@ -978,10 +1024,23 @@ inline bool dispatch_key(Key key, KeyAction action, int mods) {
                 repaint_current();
                 return true;
             }
+            if (dispatch_registered_key_command(key, mods, detail))
+                return true;
+            return false;
+        case Key::Delete:
+            if (::phenotype::detail::handle_key(6, 0, false, "shell", detail)) {
+                reset_caret_blink_timer();
+                repaint_current();
+                return true;
+            }
+            if (dispatch_registered_key_command(key, mods, detail))
+                return true;
             return false;
         case Key::Enter:
         case Key::KpEnter:
-            return dispatch_activation(detail, true);
+            if (dispatch_activation(detail, true))
+                return true;
+            return dispatch_registered_key_command(key, mods, detail);
         case Key::Space:
             if (::phenotype::detail::focused_is_input()) {
                 ::phenotype::detail::note_input_event(
@@ -1052,6 +1111,8 @@ inline bool dispatch_key(Key key, KeyAction action, int mods) {
                                        viewport_height(),
                                        detail);
         case Key::Escape: {
+            if (dispatch_registered_key_command(key, mods, detail))
+                return true;
             bool dismissed = dismiss_platform_transient();
             bool cleared = false;
             if (::phenotype::detail::get_focused_id() != invalid_callback_id)
@@ -1070,6 +1131,14 @@ inline bool dispatch_key(Key key, KeyAction action, int mods) {
                 "key", "shell", detail, handled ? "handled" : "ignored", invalid_callback_id);
             return handled;
         }
+        case Key::D:
+        case Key::F:
+        case Key::N:
+            if (dispatch_registered_key_command(key, mods, detail))
+                return true;
+            ::phenotype::detail::note_input_event(
+                "key", "shell", detail, "ignored", ::phenotype::detail::get_focused_id());
+            return false;
         case Key::Other:
         default:
             ::phenotype::detail::note_input_event(

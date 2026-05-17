@@ -163,6 +163,14 @@ struct FocusedInputCaretLayout {
     float height = 0.0f;
 };
 
+struct KeyCommand {
+    unsigned int key = 0;
+    int modifiers = 0;
+    bool allow_when_input_focused = false;
+    unsigned int callback_id = 0xFFFFFFFFu;
+    std::string debug_label;
+};
+
 struct AppState {
     Theme theme;
     Arena arena;
@@ -179,6 +187,7 @@ struct AppState {
     // Click callbacks indexed by callback_id, registered by Button<Msg>.
     std::vector<std::function<void()>> callbacks;
     std::vector<InteractionRole> callback_roles;
+    std::vector<KeyCommand> key_commands;
     // Gesture callbacks indexed by gesture_callback_id, registered by
     // widget::canvas when the builder passes an `on_gesture` lambda.
     // Cleared and repopulated each frame in lockstep with `callbacks`.

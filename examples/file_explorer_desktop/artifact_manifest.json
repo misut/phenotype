@@ -303,6 +303,47 @@
     {
       "path": "application.file_explorer.chrome.status_bar_visible",
       "equals": false
+    },
+    {
+      "path": "application.file_explorer.keyboard_commands",
+      "equals": [
+        {
+          "action": "show_search",
+          "shortcut": "CommandOrControl+F",
+          "input_alias": "shortcut:find",
+          "allow_when_input_focused": true
+        },
+        {
+          "action": "activate_selected",
+          "shortcut": "Enter",
+          "input_alias": "key:enter",
+          "allow_when_input_focused": false
+        },
+        {
+          "action": "delete_selected",
+          "shortcut": "DeleteOrBackspace",
+          "input_alias": "key:delete",
+          "allow_when_input_focused": false
+        },
+        {
+          "action": "duplicate_selected",
+          "shortcut": "CommandOrControl+D",
+          "input_alias": "shortcut:duplicate",
+          "allow_when_input_focused": false
+        },
+        {
+          "action": "create_folder",
+          "shortcut": "Shift+CommandOrControl+N",
+          "input_alias": "shortcut:new-folder",
+          "allow_when_input_focused": false
+        },
+        {
+          "action": "dismiss_transient",
+          "shortcut": "Escape",
+          "input_alias": "key:escape",
+          "allow_when_input_focused": true
+        }
+      ]
     }
   ],
   "require_runtime_details": [

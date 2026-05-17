@@ -97,6 +97,14 @@ titlebar reserve, sidebar row metrics, sidebar icon/label placement, and toolbar
 group/icon button metrics come from the shared pure
 `ExplorerChromeMetrics` contract, so `phenotype drive file-explorer --json`
 can report the same layout decisions without launching a native window.
+The desktop view also registers the shared keyboard command contract through
+phenotype's native key-command registry. AppKit, Win32, and Android shells only
+translate platform keys into normalized command input; the pure app contract
+decides that search is `CommandOrControl+F`, selection activation is `Enter`,
+Trash movement is `DeleteOrBackspace`, duplicate is `CommandOrControl+D`,
+folder creation is `Shift+CommandOrControl+N`, and transient dismissal is
+`Escape`. `debug.application.file_explorer.keyboard_commands` serializes that
+same contract so artifacts can catch shortcut drift before a manual key test.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-desktop`. The example never points at the user's real
@@ -158,7 +166,7 @@ mise exec -- exon build
   --artifact-dir /tmp/phenotype-file-explorer-input \
   --artifact-exit \
   --input select:README.txt \
-  --input duplicate
+  --input shortcut:duplicate
 ```
 
 For direct launches, `PHENOTYPE_FILE_EXPLORER_INPUTS` accepts newline- or
@@ -170,7 +178,8 @@ and input application stay in `file_explorer_shared`.
 The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity,
 semantic toolbar button labels, bounded material resource budgets, and
-pixel-region checks for the sidebar, toolbar, and icon grid. The default icon
+pixel-region checks for the sidebar, toolbar, icon grid, and shared keyboard
+command debug contract. The default icon
 artifact also requires `status_bar_visible=false` and the neutral `Sort:
 Recent` model state, so accidental default file selection or sort drift is
 caught without relying on a persistent bottom status label.

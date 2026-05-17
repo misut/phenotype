@@ -183,6 +183,7 @@ inline Key win32_key(WPARAM key) {
     switch (key) {
         case VK_TAB: return Key::Tab;
         case VK_BACK: return Key::Backspace;
+        case VK_DELETE: return Key::Delete;
         case VK_RETURN: return Key::Enter;
         case VK_SPACE: return Key::Space;
         case VK_LEFT: return Key::Left;
@@ -195,6 +196,9 @@ inline Key win32_key(WPARAM key) {
         case VK_END: return Key::End;
         case VK_ESCAPE: return Key::Escape;
         case 'A': return Key::A;
+        case 'D': return Key::D;
+        case 'F': return Key::F;
+        case 'N': return Key::N;
         default: return Key::Other;
     }
 }
