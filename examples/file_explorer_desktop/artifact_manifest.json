@@ -297,11 +297,11 @@
     },
     {
       "path": "application.file_explorer.chrome.sidebar_selected_row_background_alpha",
-      "equals": 176
+      "equals": 238
     },
     {
       "path": "application.file_explorer.chrome.sidebar_selected_row_hover_background_alpha",
-      "equals": 214
+      "equals": 248
     },
     {
       "path": "application.file_explorer.chrome.sidebar_selection_policy",
@@ -1195,6 +1195,18 @@
       "min_unique_colors": 24
     },
     {
+      "name": "finder-sidebar-selected-row-fill",
+      "rect": [0.095, 0.105, 0.06, 0.035],
+      "min_luma_delta": 0.5,
+      "min_unique_colors": 2
+    },
+    {
+      "name": "finder-sidebar-selected-symbol-accent",
+      "rect": [0.025, 0.112, 0.022, 0.034],
+      "min_luma_delta": 90.0,
+      "min_unique_colors": 24
+    },
+    {
       "name": "finder-toolbar",
       "rect": [0.22, 0.02, 0.76, 0.08],
       "min_luma_delta": 12.0,
@@ -1257,6 +1269,36 @@
       "region": "finder-titlebar-zoom-control",
       "metric": "red_mean",
       "lte": 200.0
+    },
+    {
+      "region": "finder-sidebar-selected-row-fill",
+      "metric": "luma_mean",
+      "gte": 228.0
+    },
+    {
+      "region": "finder-sidebar-selected-row-fill",
+      "metric": "luma_mean",
+      "lte": 238.0
+    },
+    {
+      "region": "finder-sidebar-selected-row-fill",
+      "metric": "luma_stddev",
+      "lte": 1.0
+    },
+    {
+      "region": "finder-sidebar-selected-row-fill",
+      "metric": "edge_energy",
+      "lte": 0.75
+    },
+    {
+      "region": "finder-sidebar-selected-symbol-accent",
+      "metric": "red_mean",
+      "lte": 205.0
+    },
+    {
+      "region": "finder-sidebar-selected-symbol-accent",
+      "metric": "blue_mean",
+      "gte": 232.0
     },
     {
       "region": "finder-toolbar",

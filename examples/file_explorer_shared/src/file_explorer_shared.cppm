@@ -414,8 +414,8 @@ inline constexpr float k_desktop_sidebar_material_padding = 16.0f;
 inline constexpr float k_desktop_sidebar_item_gap = 4.0f;
 inline constexpr float k_desktop_sidebar_section_gap = 14.0f;
 inline constexpr float k_desktop_sidebar_selected_row_radius = 10.0f;
-inline constexpr int k_desktop_sidebar_selected_row_background_alpha = 176;
-inline constexpr int k_desktop_sidebar_selected_row_hover_background_alpha = 214;
+inline constexpr int k_desktop_sidebar_selected_row_background_alpha = 238;
+inline constexpr int k_desktop_sidebar_selected_row_hover_background_alpha = 248;
 inline constexpr char k_desktop_sidebar_selection_policy[] =
     "finder_soft_selected_row_no_outline_accent_symbol";
 inline constexpr int k_desktop_column_location_row_count = 4;

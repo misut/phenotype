@@ -508,8 +508,10 @@ void test_builtin_icons_parse() {
         icons::SymbolInteractionState{true, true});
     assert(sidebar_chrome.symbol_tone == icons::SymbolTone::Accent);
     assert((sidebar_chrome.symbol_color == Color{0, 122, 255, 255}));
-    assert(sidebar_chrome.background_color.a == 176);
-    assert(sidebar_chrome.hover_background_color.a == 214);
+    assert(sidebar_chrome.background_color.r == 248);
+    assert(sidebar_chrome.background_color.a == 238);
+    assert(sidebar_chrome.hover_background_color.r == 242);
+    assert(sidebar_chrome.hover_background_color.a == 248);
     assert(sidebar_chrome.corner_radius == 10.0f);
     assert(icons::macos_interaction_tone(
                icons::Symbol::Recents,

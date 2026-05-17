@@ -294,10 +294,8 @@ duplicate
     assert(chrome.sidebar_section_gap == demo::k_desktop_sidebar_section_gap);
     assert(chrome.sidebar_selected_row_radius
            == demo::k_desktop_sidebar_selected_row_radius);
-    assert(chrome.sidebar_selected_row_background_alpha
-           == demo::k_desktop_sidebar_selected_row_background_alpha);
-    assert(chrome.sidebar_selected_row_hover_background_alpha
-           == demo::k_desktop_sidebar_selected_row_hover_background_alpha);
+    assert(chrome.sidebar_selected_row_background_alpha == 238);
+    assert(chrome.sidebar_selected_row_hover_background_alpha == 248);
     assert(chrome.sidebar_selection_policy
            == demo::k_desktop_sidebar_selection_policy);
     assert(chrome.toolbar_group_height
