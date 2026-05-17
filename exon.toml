@@ -19,6 +19,7 @@ platforms = [
 "github.com/misut/txn" = "0.7.0"
 
 [dependencies.path]
+phenotype_theme_contract = "packages/phenotype_theme_contract"
 phenotype_resources = "packages/phenotype_resources"
 phenotype_icon_contract = "packages/phenotype_icon_contract"
 phenotype_io = "packages/phenotype_io"

@@ -21,11 +21,13 @@ export module file_explorer_shared;
 import json;
 import phenotype.icon_catalog;
 import phenotype.resources;
+import phenotype.theme_contract;
 
 export namespace file_explorer_demo {
 
 namespace fs = std::filesystem;
 namespace icon_catalog = phenotype::icon_catalog;
+namespace theme_contract = phenotype::theme_contract;
 
 struct Entry {
     std::string name;
@@ -275,6 +277,7 @@ struct ExplorerChromeMetrics {
     bool artifact_window_control_markers = false;
     bool more_actions_open = false;
     bool status_bar_visible = false;
+    int theme_contract_version = 0;
     std::string icon_module;
     std::string icon_style;
     std::string icon_source_format;
@@ -301,6 +304,17 @@ struct ExplorerChromeMetrics {
     std::string icon_sidebar_symbol_color_policy;
     std::string icon_file_type_color_policy;
     std::string icon_scale;
+    std::string theme_profile_name;
+    std::string theme_reference;
+    std::string theme_font_policy;
+    std::string theme_material_policy;
+    std::string theme_iconography_policy;
+    std::string theme_icon_asset_policy;
+    std::string theme_usage_policy;
+    std::string theme_container_policy;
+    std::string theme_performance_policy;
+    std::string theme_accessibility_policy;
+    std::string theme_fallback_policy;
     std::string chrome_geometry_policy;
     std::string window_control_marker_mode;
 };
@@ -678,6 +692,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_hierarchical_opacity = false,
             .artifact_window_control_markers = false,
             .status_bar_visible = false,
+            .theme_contract_version = 0,
             .icon_module = "text_controls",
             .icon_style = "mobile_text_buttons",
             .icon_source_format = "none",
@@ -704,6 +719,17 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_sidebar_symbol_color_policy = "n/a",
             .icon_file_type_color_policy = "n/a",
             .icon_scale = "n/a",
+            .theme_profile_name = "n/a",
+            .theme_reference = "n/a",
+            .theme_font_policy = "n/a",
+            .theme_material_policy = "n/a",
+            .theme_iconography_policy = "n/a",
+            .theme_icon_asset_policy = "n/a",
+            .theme_usage_policy = "n/a",
+            .theme_container_policy = "n/a",
+            .theme_performance_policy = "n/a",
+            .theme_accessibility_policy = "n/a",
+            .theme_fallback_policy = "n/a",
             .chrome_geometry_policy = "n/a",
             .window_control_marker_mode = "none",
         };
@@ -822,6 +848,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_hierarchical_opacity = true,
         .artifact_window_control_markers = false,
         .status_bar_visible = desktop_status_bar_visible(state),
+        .theme_contract_version =
+            static_cast<int>(theme_contract::theme_contract_version),
         .icon_module = "phenotype.icons",
         .icon_style = std::string{icon_catalog::style_name()},
         .icon_source_format = std::string{icon_catalog::source_format()},
@@ -864,6 +892,28 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_file_type_color_policy =
             std::string{icon_catalog::file_type_color_policy()},
         .icon_scale = std::string{icon_catalog::default_scale_policy()},
+        .theme_profile_name =
+            std::string{theme_contract::default_theme_profile_name()},
+        .theme_reference =
+            std::string{theme_contract::default_theme_reference()},
+        .theme_font_policy =
+            std::string{theme_contract::default_theme_font_policy()},
+        .theme_material_policy =
+            std::string{theme_contract::default_theme_material_policy()},
+        .theme_iconography_policy =
+            std::string{theme_contract::default_theme_iconography_policy()},
+        .theme_icon_asset_policy =
+            std::string{theme_contract::default_theme_icon_asset_policy()},
+        .theme_usage_policy =
+            std::string{theme_contract::default_theme_usage_policy()},
+        .theme_container_policy =
+            std::string{theme_contract::default_theme_container_policy()},
+        .theme_performance_policy =
+            std::string{theme_contract::default_theme_performance_policy()},
+        .theme_accessibility_policy =
+            std::string{theme_contract::default_theme_accessibility_policy()},
+        .theme_fallback_policy =
+            std::string{theme_contract::default_theme_fallback_policy()},
         .chrome_geometry_policy = k_desktop_chrome_geometry_policy,
         .window_control_marker_mode = "runtime-native-controls",
     };
@@ -1621,6 +1671,35 @@ inline json::Value explorer_chrome_debug_json(
     return json::Value{std::move(out)};
 }
 
+inline json::Value explorer_theme_system_debug_json(
+        ExplorerChromeMetrics const& chrome) {
+    json::Object out;
+    out.emplace(
+        "contract_version",
+        json::Value{static_cast<std::int64_t>(
+            chrome.theme_contract_version)});
+    out.emplace("profile_name", json::Value{chrome.theme_profile_name});
+    out.emplace("reference", json::Value{chrome.theme_reference});
+    out.emplace("font_policy", json::Value{chrome.theme_font_policy});
+    out.emplace("material_policy", json::Value{chrome.theme_material_policy});
+    out.emplace(
+        "iconography_policy",
+        json::Value{chrome.theme_iconography_policy});
+    out.emplace(
+        "icon_asset_policy",
+        json::Value{chrome.theme_icon_asset_policy});
+    out.emplace("usage_policy", json::Value{chrome.theme_usage_policy});
+    out.emplace("container_policy", json::Value{chrome.theme_container_policy});
+    out.emplace(
+        "performance_policy",
+        json::Value{chrome.theme_performance_policy});
+    out.emplace(
+        "accessibility_policy",
+        json::Value{chrome.theme_accessibility_policy});
+    out.emplace("fallback_policy", json::Value{chrome.theme_fallback_policy});
+    return json::Value{std::move(out)};
+}
+
 inline json::Value file_explorer_debug_json(
         ExplorerState const& state,
         Snapshot const& snap,
@@ -1689,6 +1768,7 @@ inline json::Value file_explorer_debug_json(
         "operation",
         operation_receipt_debug_json(state.last_operation, snap.operation_label));
     out.emplace("chrome", explorer_chrome_debug_json(chrome));
+    out.emplace("theme_system", explorer_theme_system_debug_json(chrome));
     out.emplace("keyboard_commands", keyboard_commands_debug_json(profile));
     out.emplace("entries_sample", json::Value{std::move(entries)});
     out.emplace("mobile_tab", json::Value{static_cast<std::int64_t>(state.mobile_tab)});

@@ -308,12 +308,28 @@ void test_set_theme_updates_and_invalidates_cache() {
 
 void test_default_theme_glass_contract() {
     Theme theme{};
+    assert(theme_contract::theme_contract_version == 1);
+    assert(theme_contract::glass_surface_roles().size() == 7);
     assert(default_theme_profile_name() == "apple-glass-light");
     assert(default_theme_reference().find("Apple HIG Materials")
            != std::string_view::npos);
     assert(default_theme_font_policy().find("Pretendard")
            != std::string_view::npos);
     assert(default_theme_material_policy().find("pure material planner")
+           != std::string_view::npos);
+    assert(default_theme_iconography_policy().find("macos_finder")
+           != std::string_view::npos);
+    assert(default_theme_icon_asset_policy().find("without_embedded_apple_artwork")
+           != std::string_view::npos);
+    assert(default_theme_usage_policy().find("not_content_fill")
+           != std::string_view::npos);
+    assert(default_theme_container_policy().find("explicit_container_spacing")
+           != std::string_view::npos);
+    assert(default_theme_performance_policy().find("bounded_glass_surfaces")
+           != std::string_view::npos);
+    assert(default_theme_accessibility_policy().find("reduced_transparency")
+           != std::string_view::npos);
+    assert(default_theme_fallback_policy().find("unsupported_backends")
            != std::string_view::npos);
     assert(theme_matches_default_glass_contract(theme));
 

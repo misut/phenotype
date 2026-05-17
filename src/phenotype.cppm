@@ -18,6 +18,7 @@ module;
 export module phenotype;
 
 export import phenotype.diag;
+export import phenotype.theme_contract;
 export import phenotype.types;
 export import phenotype.resources;
 export import phenotype.icon_catalog;

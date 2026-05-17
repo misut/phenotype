@@ -378,6 +378,26 @@ duplicate
     assert(chrome.icon_file_type_color_policy
            == "macos_finder_file_type_tints");
     assert(chrome.icon_scale == "medium");
+    assert(chrome.theme_contract_version == 1);
+    assert(chrome.theme_profile_name == "apple-glass-light");
+    assert(chrome.theme_reference.find("Liquid Glass") != std::string::npos);
+    assert(chrome.theme_font_policy.find("Pretendard") != std::string::npos);
+    assert(chrome.theme_material_policy.find("pure material planner")
+           != std::string::npos);
+    assert(chrome.theme_iconography_policy.find("macos_finder")
+           != std::string::npos);
+    assert(chrome.theme_icon_asset_policy.find("without_embedded_apple_artwork")
+           != std::string::npos);
+    assert(chrome.theme_usage_policy.find("not_content_fill")
+           != std::string::npos);
+    assert(chrome.theme_container_policy.find("explicit_container_spacing")
+           != std::string::npos);
+    assert(chrome.theme_performance_policy.find("bounded_glass_surfaces")
+           != std::string::npos);
+    assert(chrome.theme_accessibility_policy.find("reduced_transparency")
+           != std::string::npos);
+    assert(chrome.theme_fallback_policy.find("unsupported_backends")
+           != std::string::npos);
     assert(chrome.chrome_geometry_policy
            == demo::k_desktop_chrome_geometry_policy);
     assert(chrome.owned_icon_assets);
