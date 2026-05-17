@@ -5,3 +5,6 @@ ninja = "1.13.2"
 wasi-sdk = "32"
 wasmtime = "43.0.1"
 android-ndk = "r30-beta1"
+
+[toolchain.windows]
+msvc = "2022"

@@ -2199,6 +2199,46 @@ inline int finder_recents_rank(std::string_view name) {
     return 1000;
 }
 
+inline bool entry_name_less(Entry const& a, Entry const& b) {
+    return lower_copy(a.name) < lower_copy(b.name);
+}
+
+inline bool entry_less(Entry const& a, Entry const& b, SortMode sort_mode) {
+    if (sort_mode == SortMode::Recent) {
+        auto lhs_rank = finder_recents_rank(a.name);
+        auto rhs_rank = finder_recents_rank(b.name);
+        if (lhs_rank != rhs_rank)
+            return lhs_rank < rhs_rank;
+        if (a.folder != b.folder)
+            return !a.folder && b.folder;
+        return entry_name_less(a, b);
+    }
+    if (a.folder != b.folder)
+        return a.folder && !b.folder;
+    if (sort_mode == SortMode::Kind) {
+        auto lhs_kind = lower_copy(entry_kind_label(a));
+        auto rhs_kind = lower_copy(entry_kind_label(b));
+        if (lhs_kind != rhs_kind)
+            return lhs_kind < rhs_kind;
+    } else if (sort_mode == SortMode::Size && !a.folder && !b.folder) {
+        if (a.size != b.size)
+            return a.size > b.size;
+    }
+    return entry_name_less(a, b);
+}
+
+inline void sort_entries(std::vector<Entry>& entries, SortMode sort_mode) {
+    for (std::size_t i = 1; i < entries.size(); ++i) {
+        auto value = std::move(entries[i]);
+        auto j = i;
+        while (j > 0 && entry_less(value, entries[j - 1], sort_mode)) {
+            entries[j] = std::move(entries[j - 1]);
+            --j;
+        }
+        entries[j] = std::move(value);
+    }
+}
+
 inline bool path_inside_root(fs::path const& root, fs::path const& path) {
     auto rel = path.lexically_relative(root).generic_string();
     if (rel.empty() || rel == ".")
@@ -2274,29 +2314,7 @@ inline std::vector<Entry> list_entries(
         }
         entries.push_back(entry);
     }
-    std::sort(entries.begin(), entries.end(), [sort_mode](Entry const& a, Entry const& b) {
-        if (sort_mode == SortMode::Recent) {
-            auto lhs_rank = finder_recents_rank(a.name);
-            auto rhs_rank = finder_recents_rank(b.name);
-            if (lhs_rank != rhs_rank)
-                return lhs_rank < rhs_rank;
-            if (a.folder != b.folder)
-                return !a.folder && b.folder;
-            return lower_copy(a.name) < lower_copy(b.name);
-        }
-        if (a.folder != b.folder)
-            return a.folder && !b.folder;
-        if (sort_mode == SortMode::Kind) {
-            auto lhs_kind = lower_copy(entry_kind_label(a));
-            auto rhs_kind = lower_copy(entry_kind_label(b));
-            if (lhs_kind != rhs_kind)
-                return lhs_kind < rhs_kind;
-        } else if (sort_mode == SortMode::Size && !a.folder && !b.folder) {
-            if (a.size != b.size)
-                return a.size > b.size;
-        }
-        return lower_copy(a.name) < lower_copy(b.name);
-    });
+    sort_entries(entries, sort_mode);
     return entries;
 }
 
