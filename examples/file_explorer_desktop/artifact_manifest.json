@@ -456,6 +456,10 @@
       "equals": "bounded_svg_icon_subset"
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.svg_supported_elements",
+      "equals": "svg, g, path, rect, circle, ellipse, line, polyline, polygon"
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.svg_supported_path_commands",
       "equals": "M L H V Q T C S A Z with absolute and relative variants"
     },
@@ -528,6 +532,10 @@
       "equals": 33
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.interaction_phase_count",
+      "equals": 3
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.grid_size",
       "equals": 24.0
     },
@@ -582,6 +590,22 @@
     {
       "path": "application.file_explorer.chrome.icon_system.toolbar_selected_button_hover_background_alpha",
       "equals": 190
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.toolbar_pressed_button_background_alpha",
+      "equals": 150
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.sidebar_selected_pressed_background_alpha",
+      "equals": 255
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.pressed_symbol_opacity",
+      "equals": 0.8199999928474426
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.pressed_scale",
+      "equals": 0.9850000143051147
     },
     {
       "path": "application.file_explorer.chrome.icon_system.column_location_icon_size",
@@ -646,6 +670,10 @@
     {
       "path": "application.file_explorer.chrome.icon_system.symbol_control_chrome_policy",
       "equals": "macos_finder_symbol_state_chrome"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.symbol_interaction_phase_policy",
+      "equals": "macos_finder_normal_hover_pressed_symbol_chrome"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.toolbar_symbol_chrome_policy",

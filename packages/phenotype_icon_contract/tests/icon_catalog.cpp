@@ -36,6 +36,18 @@ int main() {
            == "accent_selected_user_tint_compatible_sidebar_symbols");
     assert(icons::symbol_control_chrome_policy()
            == "macos_finder_symbol_state_chrome");
+    assert(icons::symbol_interaction_phase_policy()
+           == "macos_finder_normal_hover_pressed_symbol_chrome");
+    assert(icons::symbol_interaction_phase_count == 3);
+    assert(icons::symbol_interaction_phase_name(
+               icons::SymbolInteractionPhase::Normal)
+           == "normal");
+    assert(icons::symbol_interaction_phase_name(
+               icons::SymbolInteractionPhase::Hovered)
+           == "hovered");
+    assert(icons::symbol_interaction_phase_name(
+               icons::SymbolInteractionPhase::Pressed)
+           == "pressed");
     assert(icons::default_weight_policy()
            == "regular_text_weight_aligned");
     assert(icons::rendering_capability_policy().find("sf_symbols_mode_names")
@@ -178,6 +190,32 @@ int main() {
         icons::SymbolInteractionState{false, false});
     assert(disabled_toolbar_chrome.symbol_tone == icons::SymbolTone::Disabled);
     assert(disabled_toolbar_chrome.hover_background_color.a == 0);
+    auto const toolbar_pressed_recipe = icons::macos_state_recipe(
+        icons::SymbolPresentationRole::Toolbar,
+        icons::SymbolInteractionState{false, true},
+        icons::SymbolInteractionPhase::Pressed);
+    assert(toolbar_pressed_recipe.phase
+           == icons::SymbolInteractionPhase::Pressed);
+    assert(toolbar_pressed_recipe.background_color.a == 150);
+    assert(toolbar_pressed_recipe.symbol_opacity < 1.0f);
+    assert(toolbar_pressed_recipe.scale < 1.0f);
+    assert(toolbar_pressed_recipe.policy
+           == icons::symbol_interaction_phase_policy());
+    auto const selected_sidebar_pressed_recipe = icons::macos_state_recipe(
+        icons::SymbolPresentationRole::Sidebar,
+        icons::SymbolInteractionState{true, true},
+        icons::SymbolInteractionPhase::Pressed);
+    assert(selected_sidebar_pressed_recipe.symbol_tone
+           == icons::SymbolTone::Accent);
+    assert(selected_sidebar_pressed_recipe.background_color.a == 255);
+    assert(selected_sidebar_pressed_recipe.scale < 1.0f);
+    auto const disabled_recipe = icons::macos_state_recipe(
+        icons::SymbolPresentationRole::Toolbar,
+        icons::SymbolInteractionState{false, false},
+        icons::SymbolInteractionPhase::Hovered);
+    assert(disabled_recipe.symbol_tone == icons::SymbolTone::Disabled);
+    assert(disabled_recipe.background_color.a == 0);
+    assert(disabled_recipe.symbol_opacity < 0.5f);
     assert(icons::file_type_color_policy() == "macos_finder_file_type_tints");
     auto const folder_color = icons::macos_file_type_color(icons::Symbol::Folder);
     auto const image_color = icons::macos_file_type_color(icons::Symbol::Image);

@@ -3740,6 +3740,63 @@ auto icon_control_chrome_json(
         chrome.grouped_control ? "true" : "false");
 }
 
+auto icon_state_recipe_json(
+        icon_catalog::SymbolStateRecipe const& recipe) -> std::string {
+    return std::format(
+        "{{\"policy\":{},\"role\":{},\"phase\":{},"
+        "\"selected\":{},\"enabled\":{},\"symbol_tone\":{},"
+        "\"symbol_color\":{},\"background_color\":{},"
+        "\"symbol_opacity\":{},\"scale\":{},\"corner_radius\":{},"
+        "\"hit_target_size\":{},\"borderless\":{},"
+        "\"grouped_control\":{}}}",
+        json_string(recipe.policy),
+        json_string(icon_catalog::symbol_presentation_role_name(recipe.role)),
+        json_string(icon_catalog::symbol_interaction_phase_name(recipe.phase)),
+        recipe.selected ? "true" : "false",
+        recipe.enabled ? "true" : "false",
+        json_string(icon_catalog::symbol_tone_name(recipe.symbol_tone)),
+        icon_color_json(recipe.symbol_color),
+        icon_color_json(recipe.background_color),
+        recipe.symbol_opacity,
+        recipe.scale,
+        recipe.corner_radius,
+        recipe.hit_target_size,
+        recipe.borderless ? "true" : "false",
+        recipe.grouped_control ? "true" : "false");
+}
+
+auto icon_state_recipes_json(
+        icon_catalog::SymbolPresentationRole role) -> std::string {
+    auto const normal = icon_catalog::macos_state_recipe(
+        role,
+        icon_catalog::SymbolInteractionState{false, true},
+        icon_catalog::SymbolInteractionPhase::Normal);
+    auto const hovered = icon_catalog::macos_state_recipe(
+        role,
+        icon_catalog::SymbolInteractionState{false, true},
+        icon_catalog::SymbolInteractionPhase::Hovered);
+    auto const pressed = icon_catalog::macos_state_recipe(
+        role,
+        icon_catalog::SymbolInteractionState{false, true},
+        icon_catalog::SymbolInteractionPhase::Pressed);
+    auto const selected = icon_catalog::macos_state_recipe(
+        role,
+        icon_catalog::SymbolInteractionState{true, true},
+        icon_catalog::SymbolInteractionPhase::Normal);
+    auto const disabled = icon_catalog::macos_state_recipe(
+        role,
+        icon_catalog::SymbolInteractionState{false, false},
+        icon_catalog::SymbolInteractionPhase::Normal);
+    return std::format(
+        "{{\"normal\":{},\"hovered\":{},\"pressed\":{},"
+        "\"selected\":{},\"disabled\":{}}}",
+        icon_state_recipe_json(normal),
+        icon_state_recipe_json(hovered),
+        icon_state_recipe_json(pressed),
+        icon_state_recipe_json(selected),
+        icon_state_recipe_json(disabled));
+}
+
 auto icon_rendering_capabilities_json(
         icon_catalog::SymbolRenderingCapabilities const& capabilities)
         -> std::string {
@@ -3832,7 +3889,8 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         "\"content_inset\":{},\"optical_y_offset\":{},"
         "\"metrics_policy\":{},\"color\":{},"
         "\"control_chrome\":{},"
-        "\"selected_control_chrome\":{}}}}}",
+        "\"selected_control_chrome\":{},"
+        "\"state_recipes\":{}}}}}",
         json_string(desc.name),
         json_string(desc.semantic_reference_name),
         json_string(reference_set),
@@ -3879,7 +3937,8 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         json_string(icon_catalog::metrics_policy()),
         icon_color_json(color),
         icon_control_chrome_json(control_chrome),
-        icon_control_chrome_json(selected_control_chrome));
+        icon_control_chrome_json(selected_control_chrome),
+        icon_state_recipes_json(presentation_role));
 }
 
 auto icon_symbol_set_json(IconCatalogSet set) -> std::string {
@@ -4029,6 +4088,18 @@ auto icon_catalog_checks() -> std::vector<Check> {
     auto const sidebar_selected_chrome = icon_catalog::macos_control_chrome(
         icon_catalog::SymbolPresentationRole::Sidebar,
         icon_catalog::SymbolInteractionState{true, true});
+    auto const toolbar_pressed_recipe = icon_catalog::macos_state_recipe(
+        icon_catalog::SymbolPresentationRole::Toolbar,
+        icon_catalog::SymbolInteractionState{false, true},
+        icon_catalog::SymbolInteractionPhase::Pressed);
+    auto const selected_sidebar_pressed_recipe = icon_catalog::macos_state_recipe(
+        icon_catalog::SymbolPresentationRole::Sidebar,
+        icon_catalog::SymbolInteractionState{true, true},
+        icon_catalog::SymbolInteractionPhase::Pressed);
+    auto const disabled_recipe = icon_catalog::macos_state_recipe(
+        icon_catalog::SymbolPresentationRole::Toolbar,
+        icon_catalog::SymbolInteractionState{false, false},
+        icon_catalog::SymbolInteractionPhase::Hovered);
     for (unsigned int i = 0; i < icon_catalog::all_symbol_count; ++i) {
         auto const symbol = icon_catalog::symbol_at(i);
         auto const desc = icon_catalog::descriptor(symbol);
@@ -4259,6 +4330,25 @@ auto icon_catalog_checks() -> std::vector<Check> {
              icon_catalog::symbol_control_chrome_policy()),
          .hint =
              "Keep selected, hover, and disabled icon chrome in the pure catalog contract."},
+        {.name = "interaction_phase_policy",
+         .ok = icon_catalog::symbol_interaction_phase_policy()
+                == std::string_view{
+                    "macos_finder_normal_hover_pressed_symbol_chrome"}
+            && icon_catalog::symbol_interaction_phase_count == 3
+            && icon_catalog::symbol_interaction_phase_name(
+                   icon_catalog::SymbolInteractionPhase::Pressed)
+                == std::string_view{"pressed"}
+            && toolbar_pressed_recipe.background_color.a == 150
+            && toolbar_pressed_recipe.symbol_opacity < 1.0f
+            && toolbar_pressed_recipe.scale < 1.0f
+            && selected_sidebar_pressed_recipe.background_color.a == 255
+            && disabled_recipe.symbol_opacity < 0.5f,
+         .detail = std::format(
+             "{}; phases={}",
+             icon_catalog::symbol_interaction_phase_policy(),
+             icon_catalog::symbol_interaction_phase_count),
+         .hint =
+             "Keep normal, hovered, pressed, selected, and disabled icon state recipes in the pure catalog contract."},
         {.name = "file_type_palette",
          .ok = icon_catalog::file_type_color_policy()
                 == std::string_view{"macos_finder_file_type_tints"}
@@ -4274,7 +4364,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
     return std::format(
         "{{\"schema_version\":1,\"command\":\"icons catalog\","
         "\"ok\":{},\"style\":{{\"name\":{},\"source_format\":{},"
-        "\"svg_subset_policy\":{},\"svg_supported_path_commands\":{},"
+        "\"svg_subset_policy\":{},\"svg_supported_elements\":{},"
+        "\"svg_supported_path_commands\":{},"
         "\"svg_supported_style_attributes\":{},"
         "\"svg_arc_policy\":{},"
         "\"stroke_geometry_policy\":{},\"stroke_cap_policy\":{},"
@@ -4289,6 +4380,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"rendering_capability_policy\":{},"
         "\"interaction_tone_policy\":{},"
         "\"symbol_control_chrome_policy\":{},"
+        "\"symbol_interaction_phase_policy\":{},"
         "\"toolbar_symbol_chrome_policy\":{},"
         "\"sidebar_symbol_color_policy\":{},"
         "\"file_type_color_policy\":{},\"default_scale\":{},"
@@ -4297,13 +4389,15 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
         "\"monochrome\":{},\"regular_weight\":{},"
         "\"palette\":{},\"multicolor\":{},"
-        "\"reference\":{},\"svg_path_arc\":{},\"round_stroke\":{}}},"
+        "\"reference\":{},\"svg_path_arc\":{},\"round_stroke\":{},"
+        "\"interaction_phases\":{}}},"
         "\"symbols\":{},\"sidebar_symbols\":{},"
         "\"toolbar_symbols\":{},\"checks\":{}}}",
         all_ok(checks) ? "true" : "false",
         json_string(icon_catalog::style_name()),
         json_string(icon_catalog::source_format()),
         json_string(icon_catalog::svg_subset_policy()),
+        json_string(icon_catalog::svg_supported_elements()),
         json_string(icon_catalog::svg_supported_path_commands()),
         json_string(icon_catalog::svg_supported_style_attributes()),
         json_string(icon_catalog::svg_arc_policy()),
@@ -4324,6 +4418,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::rendering_capability_policy()),
         json_string(icon_catalog::interaction_tone_policy()),
         json_string(icon_catalog::symbol_control_chrome_policy()),
+        json_string(icon_catalog::symbol_interaction_phase_policy()),
         json_string(icon_catalog::toolbar_symbol_chrome_policy()),
         json_string(icon_catalog::sidebar_symbol_color_policy()),
         json_string(icon_catalog::file_type_color_policy()),
@@ -4343,6 +4438,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_catalog::reference_symbol_count,
         icon_catalog::svg_path_arc_symbol_count,
         icon_catalog::round_stroke_symbol_count,
+        icon_catalog::symbol_interaction_phase_count,
         icon_symbol_set_json(IconCatalogSet::All),
         icon_symbol_set_json(IconCatalogSet::Sidebar),
         icon_symbol_set_json(IconCatalogSet::Toolbar),
@@ -4808,7 +4904,8 @@ auto explorer_chrome_json(
         "\"sidebar_surface_y\":{},\"sidebar_first_row_y\":{}}},"
         "\"icon_system\":{{\"module\":{},\"style\":{},"
         "\"source_format\":{},"
-        "\"svg_subset_policy\":{},\"svg_supported_path_commands\":{},"
+        "\"svg_subset_policy\":{},\"svg_supported_elements\":{},"
+        "\"svg_supported_path_commands\":{},"
         "\"svg_supported_style_attributes\":{},"
         "\"svg_arc_policy\":{},"
         "\"stroke_geometry_policy\":{},\"stroke_cap_policy\":{},"
@@ -4823,6 +4920,7 @@ auto explorer_chrome_json(
         "\"palette_symbol_count\":{},\"multicolor_symbol_count\":{},"
         "\"reference_symbol_count\":{},\"svg_path_arc_symbol_count\":{},"
         "\"round_stroke_symbol_count\":{},"
+        "\"interaction_phase_count\":{},"
         "\"grid_size\":{},"
         "\"default_stroke_width\":{},\"secondary_opacity\":{},"
         "\"toolbar_point_size\":{},\"sidebar_point_size\":{},"
@@ -4835,6 +4933,9 @@ auto explorer_chrome_json(
         "\"toolbar_button_hover_background_alpha\":{},"
         "\"toolbar_selected_button_background_alpha\":{},"
         "\"toolbar_selected_button_hover_background_alpha\":{},"
+        "\"toolbar_pressed_button_background_alpha\":{},"
+        "\"sidebar_selected_pressed_background_alpha\":{},"
+        "\"pressed_symbol_opacity\":{},\"pressed_scale\":{},"
         "\"column_location_icon_size\":{},"
         "\"text_weight_aligned\":{},"
         "\"monochrome_rendering\":{},"
@@ -4851,6 +4952,7 @@ auto explorer_chrome_json(
         "\"variant_policy\":{},\"presentation_policy\":{},"
         "\"tone_policy\":{},\"interaction_tone_policy\":{},"
         "\"symbol_control_chrome_policy\":{},"
+        "\"symbol_interaction_phase_policy\":{},"
         "\"toolbar_symbol_chrome_policy\":{},"
         "\"sidebar_symbol_color_policy\":{},"
         "\"interaction_tones\":{},"
@@ -4925,6 +5027,7 @@ auto explorer_chrome_json(
         json_string(chrome.icon_style),
         json_string(chrome.icon_source_format),
         json_string(chrome.icon_svg_subset_policy),
+        json_string(chrome.icon_svg_supported_elements),
         json_string(chrome.icon_svg_supported_path_commands),
         json_string(chrome.icon_svg_supported_style_attributes),
         json_string(chrome.icon_svg_arc_policy),
@@ -4947,6 +5050,7 @@ auto explorer_chrome_json(
         chrome.icon_reference_symbol_count,
         chrome.icon_svg_path_arc_symbol_count,
         chrome.icon_round_stroke_symbol_count,
+        chrome.icon_interaction_phase_count,
         chrome.icon_grid_size,
         chrome.icon_default_stroke_width,
         chrome.icon_secondary_opacity,
@@ -4961,6 +5065,10 @@ auto explorer_chrome_json(
         chrome.icon_toolbar_button_hover_background_alpha,
         chrome.icon_toolbar_selected_button_background_alpha,
         chrome.icon_toolbar_selected_button_hover_background_alpha,
+        chrome.icon_toolbar_pressed_button_background_alpha,
+        chrome.icon_sidebar_selected_pressed_background_alpha,
+        chrome.icon_pressed_symbol_opacity,
+        chrome.icon_pressed_scale,
         chrome.column_location_icon_size,
         chrome.icon_text_weight_aligned ? "true" : "false",
         chrome.icon_monochrome_rendering ? "true" : "false",
@@ -4982,6 +5090,7 @@ auto explorer_chrome_json(
         json_string(chrome.icon_tone_policy),
         json_string(chrome.icon_interaction_tone_policy),
         json_string(chrome.icon_symbol_control_chrome_policy),
+        json_string(chrome.icon_symbol_interaction_phase_policy),
         json_string(chrome.icon_toolbar_symbol_chrome_policy),
         json_string(chrome.icon_sidebar_symbol_color_policy),
         icon_interaction_tones_json(

@@ -322,7 +322,8 @@ opacity/reference counts so verifier artifacts can prove which icon policy was
 used. It also exposes regular text-aligned symbol weight, SF Symbols
 rendering-mode vocabulary, explicit monochrome/hierarchical/palette/multicolor
 capability counts, supported SVG style attributes, round cap/join policy names,
-and the count of round-stroked outline symbols so the Finder icon style
+normal/hovered/pressed state recipes, pressed opacity/scale contracts, and the
+count of round-stroked outline symbols so the Finder icon style
 can fail as a data contract before it becomes a visual-only regression. The
 catalog now also exposes a role-aware macOS presentation and
 interaction-tone policy: toolbar/navigation symbols resolve to 24 pt
@@ -330,8 +331,9 @@ secondary, selected, or disabled tones, while sidebar symbols resolve to 26 pt
 primary or selected-row accent tones with an explicit optical offset. The file
 explorer artifact records those sizes and tone-policy names so the Finder-like
 icon treatment is checked as data, not as a screenshot guess. The same pure
-contract now covers symbol control chrome: selected and hover background
-alpha, borderless toolbar grouping, sidebar row radius, and hit-target policy.
+contract now covers symbol control chrome: selected, hover, and pressed
+background alpha, pressed symbol opacity/scale, borderless toolbar grouping,
+sidebar row radius, and hit-target policy.
 It also records the SVG subset and arc-lowering policy so a future icon
 regression can fail on an exact JSON path before anyone compares pixels. The
 AirDrop sidebar glyph now uses isolated circular SVG path arcs, so the example

@@ -309,9 +309,11 @@ phenotype-owned symbols and semantic SF Symbols reference names, so a wrong
 Recents/Shared/Desktop-style metaphor fails as data before anyone compares
 pixels. `file_type_symbol_tokens` performs the same check for icon-grid
 fallback symbols, including PDF, text, image, movie, archive, document, and
-folder entries. `symbol_control_chrome_policy` plus the toolbar button alpha/radius
-fields describe the macOS-style selected, hover, and disabled symbol chrome
-that the example uses before rendering.
+folder entries. `symbol_control_chrome_policy`,
+`symbol_interaction_phase_policy`, toolbar/sidebar pressed background alpha,
+pressed symbol opacity, and pressed scale describe the macOS-style normal,
+hovered, pressed, selected, and disabled symbol chrome that the example uses
+before rendering.
 
 The same artifact exposes `application.file_explorer.theme_system.*` from the
 pure `phenotype_theme_contract` package. That block names the Apple-like glass

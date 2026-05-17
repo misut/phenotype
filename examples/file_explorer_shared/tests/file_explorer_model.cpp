@@ -404,6 +404,7 @@ duplicate
     assert(chrome.icon_hierarchical_symbol_count == 23);
     assert(chrome.icon_reference_symbol_count == 34);
     assert(chrome.icon_svg_path_arc_symbol_count == 1);
+    assert(chrome.icon_interaction_phase_count == 3);
     assert(chrome.icon_grid_size == 24.0f);
     assert(demo::desktop_sidebar_symbol_contract().size() == 10);
     assert(demo::file_type_symbol_contract().size() == 7);
@@ -431,10 +432,16 @@ duplicate
     assert(chrome.icon_toolbar_button_hover_background_alpha == 120);
     assert(chrome.icon_toolbar_selected_button_background_alpha == 150);
     assert(chrome.icon_toolbar_selected_button_hover_background_alpha == 190);
+    assert(chrome.icon_toolbar_pressed_button_background_alpha == 150);
+    assert(chrome.icon_sidebar_selected_pressed_background_alpha == 255);
+    assert(chrome.icon_pressed_symbol_opacity == 0.82f);
+    assert(chrome.icon_pressed_scale == 0.985f);
     assert(chrome.icon_module == "phenotype.icons");
     assert(chrome.icon_style == "macos_rounded_outline_svg");
     assert(chrome.icon_source_format == "svg");
     assert(chrome.icon_svg_subset_policy == "bounded_svg_icon_subset");
+    assert(chrome.icon_svg_supported_elements.find("circle")
+           != std::string::npos);
     assert(chrome.icon_svg_supported_path_commands.find("A Z")
            != std::string::npos);
     assert(chrome.icon_svg_arc_policy.find("bounded cubic Bezier")
@@ -453,6 +460,8 @@ duplicate
            == "macos_finder_interaction_tones");
     assert(chrome.icon_symbol_control_chrome_policy
            == "macos_finder_symbol_state_chrome");
+    assert(chrome.icon_symbol_interaction_phase_policy
+           == "macos_finder_normal_hover_pressed_symbol_chrome");
     assert(chrome.icon_file_type_color_policy
            == "macos_finder_file_type_tints");
     assert(chrome.icon_scale == "medium");
@@ -698,6 +707,8 @@ duplicate
     assert(debug_text.find("\"macos_rounded_outline_svg\"") != std::string::npos);
     assert(debug_text.find("\"svg_subset_policy\":\"bounded_svg_icon_subset\"")
            != std::string::npos);
+    assert(debug_text.find("\"svg_supported_elements\":\"svg, g, path, rect, circle")
+           != std::string::npos);
     assert(debug_text.find("\"svg_supported_path_commands\":\"M L H V Q T C S A Z")
            != std::string::npos);
     assert(debug_text.find("\"svg_arc_policy\":\"circle elements and isolated circular path A/a")
@@ -716,9 +727,15 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"symbol_control_chrome_policy\":\"macos_finder_symbol_state_chrome\"")
            != std::string::npos);
+    assert(debug_text.find("\"symbol_interaction_phase_policy\":\"macos_finder_normal_hover_pressed_symbol_chrome\"")
+           != std::string::npos);
     assert(debug_text.find("\"toolbar_button_hover_background_alpha\":120")
            != std::string::npos);
     assert(debug_text.find("\"toolbar_selected_button_background_alpha\":150")
+           != std::string::npos);
+    assert(debug_text.find("\"toolbar_pressed_button_background_alpha\":150")
+           != std::string::npos);
+    assert(debug_text.find("\"pressed_scale\":0.985")
            != std::string::npos);
     assert(debug_text.find("\"sidebar_selected\":\"accent\"")
            != std::string::npos);
