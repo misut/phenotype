@@ -272,10 +272,12 @@ and status bars.
 
 SVG and built-in icons are first-class shared UI primitives. `phenotype.svg`
 parses a bounded pure SVG subset into `svg::Document` and renders through
-`Painter` path commands on every backend, including common transform lists used
-by packaged SVG icon assets. SVG circles lower to native `ArcTo` path segments
-so Apple-style round glyph geometry does not depend on cubic approximation
-quality. `phenotype.icon_catalog` now holds the pure metadata for the built-in
+`Painter` path commands on every backend, including common transform lists and
+`M/L/H/V/Q/T/C/S/A/Z` path commands used by packaged SVG icon assets. SVG
+circles lower to native `ArcTo` path segments so Apple-style round glyph
+geometry does not depend on cubic approximation quality; path `A/a` arcs lower
+to bounded cubic Bezier segments for portable SVG icon compatibility.
+`phenotype.icon_catalog` now holds the pure metadata for the built-in
 macOS-style symbol contract, and `phenotype.icons` provides the painter-facing
 original 24x24 glyph SVGs for Finder-like chrome and common app actions. The
 catalog follows Apple-style proportions, text-aligned medium-scale metrics,
@@ -303,7 +305,9 @@ interaction-tone policy: toolbar/navigation symbols resolve to 24 pt
 secondary, selected, or disabled tones, while sidebar symbols resolve to 26 pt
 primary or selected-row accent tones with an explicit optical offset. The file
 explorer artifact records those sizes and tone-policy names so the Finder-like
-icon treatment is checked as data, not as a screenshot guess.
+icon treatment is checked as data, not as a screenshot guess. It also records
+the SVG subset and arc-lowering policy so a future icon regression can fail on
+an exact JSON path before anyone compares pixels.
 The desktop file explorer also records a pure Finder chrome geometry policy for
 the integrated titlebar/sidebar/toolbar/content coordinates and native
 control-reserve widths, so the example can move toward Finder-like placement

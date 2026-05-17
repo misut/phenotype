@@ -693,6 +693,12 @@ struct PathCursor {
     float y = 0.0f;
     float sub_x = 0.0f;
     float sub_y = 0.0f;
+    float last_cubic_cx = 0.0f;
+    float last_cubic_cy = 0.0f;
+    float last_quad_cx = 0.0f;
+    float last_quad_cy = 0.0f;
+    bool has_cubic_control = false;
+    bool has_quad_control = false;
 };
 
 inline bool path_skip(std::string_view d, std::size_t& i) noexcept {
@@ -721,6 +727,119 @@ inline bool path_has_number(std::string_view d, std::size_t i) noexcept {
     return c == '-' || c == '+' || c == '.' || (c >= '0' && c <= '9');
 }
 
+inline void reset_path_controls(PathCursor& cursor) noexcept {
+    cursor.has_cubic_control = false;
+    cursor.has_quad_control = false;
+}
+
+inline float vector_angle(float ux, float uy, float vx, float vy) noexcept {
+    auto const cross = ux * vy - uy * vx;
+    auto const dot = ux * vx + uy * vy;
+    return std::atan2(cross, dot);
+}
+
+inline void append_svg_arc(PathBuilder& path,
+                           float x1,
+                           float y1,
+                           float rx,
+                           float ry,
+                           float x_axis_rotation_degrees,
+                           bool large_arc,
+                           bool sweep,
+                           float x2,
+                           float y2) {
+    constexpr float pi = 3.14159265358979323846f;
+    if (std::abs(x1 - x2) <= 0.0001f
+        && std::abs(y1 - y2) <= 0.0001f)
+        return;
+
+    rx = std::abs(rx);
+    ry = std::abs(ry);
+    if (rx <= 0.0001f || ry <= 0.0001f) {
+        path.line_to(x2, y2);
+        return;
+    }
+
+    auto const phi = x_axis_rotation_degrees * pi / 180.0f;
+    auto const cos_phi = std::cos(phi);
+    auto const sin_phi = std::sin(phi);
+    auto const dx2 = (x1 - x2) * 0.5f;
+    auto const dy2 = (y1 - y2) * 0.5f;
+    auto const x1p = cos_phi * dx2 + sin_phi * dy2;
+    auto const y1p = -sin_phi * dx2 + cos_phi * dy2;
+
+    auto const rx2_initial = rx * rx;
+    auto const ry2_initial = ry * ry;
+    auto const radii_check =
+        (x1p * x1p) / rx2_initial + (y1p * y1p) / ry2_initial;
+    if (radii_check > 1.0f) {
+        auto const scale = std::sqrt(radii_check);
+        rx *= scale;
+        ry *= scale;
+    }
+
+    auto const rx2 = rx * rx;
+    auto const ry2 = ry * ry;
+    auto const x1p2 = x1p * x1p;
+    auto const y1p2 = y1p * y1p;
+    auto const denom = rx2 * y1p2 + ry2 * x1p2;
+    if (denom <= 0.000001f) {
+        path.line_to(x2, y2);
+        return;
+    }
+
+    auto const sign = large_arc == sweep ? -1.0f : 1.0f;
+    auto const numerator = std::max(
+        0.0f,
+        (rx2 * ry2 - rx2 * y1p2 - ry2 * x1p2) / denom);
+    auto const coef = sign * std::sqrt(numerator);
+    auto const cxp = coef * (rx * y1p / ry);
+    auto const cyp = coef * (-ry * x1p / rx);
+    auto const cx = cos_phi * cxp - sin_phi * cyp + (x1 + x2) * 0.5f;
+    auto const cy = sin_phi * cxp + cos_phi * cyp + (y1 + y2) * 0.5f;
+
+    auto const ux = (x1p - cxp) / rx;
+    auto const uy = (y1p - cyp) / ry;
+    auto const vx = (-x1p - cxp) / rx;
+    auto const vy = (-y1p - cyp) / ry;
+    auto theta = vector_angle(1.0f, 0.0f, ux, uy);
+    auto delta = vector_angle(ux, uy, vx, vy);
+    if (!sweep && delta > 0.0f)
+        delta -= 2.0f * pi;
+    else if (sweep && delta < 0.0f)
+        delta += 2.0f * pi;
+
+    auto segment_count = static_cast<unsigned int>(
+        std::ceil(std::abs(delta) / (0.5f * pi)));
+    segment_count = std::max(1u, std::min(8u, segment_count));
+    auto const step = delta / static_cast<float>(segment_count);
+
+    auto map_point = [&](float ex, float ey) {
+        return std::pair<float, float>{
+            cx + rx * cos_phi * ex - ry * sin_phi * ey,
+            cy + rx * sin_phi * ex + ry * cos_phi * ey,
+        };
+    };
+
+    for (unsigned int i = 0; i < segment_count; ++i) {
+        auto const next = theta + step;
+        auto const alpha = (4.0f / 3.0f) * std::tan((next - theta) * 0.25f);
+        auto const cos_t = std::cos(theta);
+        auto const sin_t = std::sin(theta);
+        auto const cos_n = std::cos(next);
+        auto const sin_n = std::sin(next);
+        auto [c1x, c1y] = map_point(
+            cos_t - alpha * sin_t,
+            sin_t + alpha * cos_t);
+        auto [c2x, c2y] = map_point(
+            cos_n + alpha * sin_n,
+            sin_n - alpha * cos_n);
+        auto [px, py] = map_point(cos_n, sin_n);
+        path.cubic_to(c1x, c1y, c2x, c2y, px, py);
+        theta = next;
+    }
+}
+
 inline auto parse_path_data(std::string_view d, Document& doc) -> PathBuilder {
     PathBuilder path;
     PathCursor cursor;
@@ -743,6 +862,7 @@ inline auto parse_path_data(std::string_view d, Document& doc) -> PathBuilder {
             path.close();
             cursor.x = cursor.sub_x;
             cursor.y = cursor.sub_y;
+            reset_path_controls(cursor);
             continue;
         }
 
@@ -765,6 +885,7 @@ inline auto parse_path_data(std::string_view d, Document& doc) -> PathBuilder {
                 }
                 cursor.x = px;
                 cursor.y = py;
+                reset_path_controls(cursor);
             }
             continue;
         }
@@ -778,6 +899,7 @@ inline auto parse_path_data(std::string_view d, Document& doc) -> PathBuilder {
                 cursor.x = *x + (relative ? cursor.x : 0.0f);
                 cursor.y = *y + (relative ? cursor.y : 0.0f);
                 path.line_to(cursor.x, cursor.y);
+                reset_path_controls(cursor);
             }
             continue;
         }
@@ -789,6 +911,7 @@ inline auto parse_path_data(std::string_view d, Document& doc) -> PathBuilder {
                     break;
                 cursor.x = *x + (relative ? cursor.x : 0.0f);
                 path.line_to(cursor.x, cursor.y);
+                reset_path_controls(cursor);
             }
             continue;
         }
@@ -800,6 +923,7 @@ inline auto parse_path_data(std::string_view d, Document& doc) -> PathBuilder {
                     break;
                 cursor.y = *y + (relative ? cursor.y : 0.0f);
                 path.line_to(cursor.x, cursor.y);
+                reset_path_controls(cursor);
             }
             continue;
         }
@@ -817,6 +941,33 @@ inline auto parse_path_data(std::string_view d, Document& doc) -> PathBuilder {
                 cursor.x = *x + (relative ? cursor.x : 0.0f);
                 cursor.y = *y + (relative ? cursor.y : 0.0f);
                 path.quad_to(pcx, pcy, cursor.x, cursor.y);
+                cursor.last_quad_cx = pcx;
+                cursor.last_quad_cy = pcy;
+                cursor.has_quad_control = true;
+                cursor.has_cubic_control = false;
+            }
+            continue;
+        }
+
+        if (upper == 'T') {
+            while (path_has_number(d, i)) {
+                auto x = path_number(d, i);
+                auto y = path_number(d, i);
+                if (!x || !y)
+                    break;
+                float pcx = cursor.has_quad_control
+                    ? 2.0f * cursor.x - cursor.last_quad_cx
+                    : cursor.x;
+                float pcy = cursor.has_quad_control
+                    ? 2.0f * cursor.y - cursor.last_quad_cy
+                    : cursor.y;
+                cursor.x = *x + (relative ? cursor.x : 0.0f);
+                cursor.y = *y + (relative ? cursor.y : 0.0f);
+                path.quad_to(pcx, pcy, cursor.x, cursor.y);
+                cursor.last_quad_cx = pcx;
+                cursor.last_quad_cy = pcy;
+                cursor.has_quad_control = true;
+                cursor.has_cubic_control = false;
             }
             continue;
         }
@@ -838,6 +989,68 @@ inline auto parse_path_data(std::string_view d, Document& doc) -> PathBuilder {
                 cursor.x = *x + (relative ? cursor.x : 0.0f);
                 cursor.y = *y + (relative ? cursor.y : 0.0f);
                 path.cubic_to(pc1x, pc1y, pc2x, pc2y, cursor.x, cursor.y);
+                cursor.last_cubic_cx = pc2x;
+                cursor.last_cubic_cy = pc2y;
+                cursor.has_cubic_control = true;
+                cursor.has_quad_control = false;
+            }
+            continue;
+        }
+
+        if (upper == 'S') {
+            while (path_has_number(d, i)) {
+                auto c2x = path_number(d, i);
+                auto c2y = path_number(d, i);
+                auto x = path_number(d, i);
+                auto y = path_number(d, i);
+                if (!c2x || !c2y || !x || !y)
+                    break;
+                float pc1x = cursor.has_cubic_control
+                    ? 2.0f * cursor.x - cursor.last_cubic_cx
+                    : cursor.x;
+                float pc1y = cursor.has_cubic_control
+                    ? 2.0f * cursor.y - cursor.last_cubic_cy
+                    : cursor.y;
+                float pc2x = *c2x + (relative ? cursor.x : 0.0f);
+                float pc2y = *c2y + (relative ? cursor.y : 0.0f);
+                cursor.x = *x + (relative ? cursor.x : 0.0f);
+                cursor.y = *y + (relative ? cursor.y : 0.0f);
+                path.cubic_to(pc1x, pc1y, pc2x, pc2y, cursor.x, cursor.y);
+                cursor.last_cubic_cx = pc2x;
+                cursor.last_cubic_cy = pc2y;
+                cursor.has_cubic_control = true;
+                cursor.has_quad_control = false;
+            }
+            continue;
+        }
+
+        if (upper == 'A') {
+            while (path_has_number(d, i)) {
+                auto rx = path_number(d, i);
+                auto ry = path_number(d, i);
+                auto rotation = path_number(d, i);
+                auto large_arc = path_number(d, i);
+                auto sweep = path_number(d, i);
+                auto x = path_number(d, i);
+                auto y = path_number(d, i);
+                if (!rx || !ry || !rotation || !large_arc || !sweep || !x || !y)
+                    break;
+                auto const end_x = *x + (relative ? cursor.x : 0.0f);
+                auto const end_y = *y + (relative ? cursor.y : 0.0f);
+                append_svg_arc(
+                    path,
+                    cursor.x,
+                    cursor.y,
+                    *rx,
+                    *ry,
+                    *rotation,
+                    *large_arc != 0.0f,
+                    *sweep != 0.0f,
+                    end_x,
+                    end_y);
+                cursor.x = end_x;
+                cursor.y = end_y;
+                reset_path_controls(cursor);
             }
             continue;
         }

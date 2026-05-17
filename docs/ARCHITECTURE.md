@@ -170,6 +170,9 @@ chrome radius for every surface.
 (`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,
 `polygon`, `fill`, `stroke`, `currentColor`, opacity, stroke width, and
 `translate`/`scale`/`rotate`/`matrix` transforms) into a `svg::Document`.
+Path data supports `M/L/H/V/Q/T/C/S/A/Z` in absolute and relative forms, which
+covers the rounded and reflected curves common in interface glyphs without
+handing SVG interpretation to a backend.
 Rendering consumes only a `Painter`, target geometry, and an explicit
 `svg::RenderOptions`, then emits existing `Path` / `FillPath` commands. It
 never reads files, compiles shaders, probes platform SVG support, or mutates
@@ -177,7 +180,8 @@ global state. File/package loading belongs to resource and backend edges; core
 SVG rendering starts from already-provided SVG text. Circular SVG shapes lower
 to `PathVerb::ArcTo` segments instead of cubic approximations so backends that
 own arc SDF paths can preserve SF Symbols-style round glyph geometry without a
-separate SVG opcode; non-circular ellipses still use cubic curves.
+separate SVG opcode; path `A/a` arcs lower to bounded cubic Bezier segments and
+non-circular ellipses still use cubic curves.
 
 `phenotype.icon_catalog` is a pure path package for the built-in symbol
 contract. It contains no renderer dependency, no filesystem access, and no
@@ -207,6 +211,9 @@ catalog instead of leaving those decisions inside examples or native backends.
 The same pure catalog exposes a Finder-style file-type tint policy for
 folder/document/image/movie glyphs, which desktop examples use in list and
 column rows without asking a native icon service for platform artwork.
+The catalog also publishes the SVG subset and arc-lowering policy, so CLI
+checks and example artifacts can catch a regression where a macOS-style glyph
+depends on an unsupported path command.
 Finder-style examples serialize sidebar and toolbar semantic reference arrays
 plus the presentation policy in their artifact debug payload, and
 `phenotype icons catalog --json` exposes the complete contract to CI and LLM

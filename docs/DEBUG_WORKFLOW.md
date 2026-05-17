@@ -253,6 +253,12 @@ PHENOTYPE_ARTIFACT_EXIT=1 \
 .exon/debug/native
 ```
 
+The file explorer artifact's `application.file_explorer.chrome.icon_system`
+object also names the pure SVG subset, supported path commands, and arc
+lowering policy used by built-in macOS-style glyphs. If a Finder-like icon
+breaks, check those fields before comparing screenshots; a missing SVG command
+should fail as a JSON contract mismatch.
+
 `PHENOTYPE_ARTIFACT_EXIT=1` makes the example exit after writing the first
 rendered frame, which is useful for CI or LLM debugging. Omit it for manual
 inspection; the bundle is still written after the initial render and the window

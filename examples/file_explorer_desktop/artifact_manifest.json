@@ -322,6 +322,18 @@
       "equals": "svg"
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.svg_subset_policy",
+      "equals": "bounded_svg_icon_subset"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.svg_supported_path_commands",
+      "equals": "M L H V Q T C S A Z with absolute and relative variants"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.svg_arc_policy",
+      "equals": "circle elements preserve native ArcTo; path A/a lowers to bounded cubic Bezier segments"
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.owned_assets",
       "equals": true
     },
