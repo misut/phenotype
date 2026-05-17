@@ -657,6 +657,16 @@ inline void append_ellipse(PathBuilder& path,
     ry = std::abs(ry);
     if (rx == 0.0f || ry == 0.0f)
         return;
+    if (std::fabs(rx - ry) <= 0.0001f) {
+        constexpr float pi = 3.14159265358979323846f;
+        path.move_to(cx + rx, cy);
+        path.arc_to(cx, cy, rx, 0.0f, 0.5f * pi);
+        path.arc_to(cx, cy, rx, 0.5f * pi, pi);
+        path.arc_to(cx, cy, rx, pi, 1.5f * pi);
+        path.arc_to(cx, cy, rx, 1.5f * pi, 2.0f * pi);
+        path.close();
+        return;
+    }
     float const k = 0.552284749831f;
     path.move_to(cx + rx, cy);
     path.cubic_to(cx + rx, cy + ry * k,
