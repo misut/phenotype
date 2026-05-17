@@ -210,7 +210,13 @@ void test_builtin_icons_parse() {
     assert(icons::all_symbol_count == 31);
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);
+    assert(icons::outline_symbol_count == 30);
+    assert(icons::filled_symbol_count == 1);
+    assert(icons::hierarchical_symbol_count == 20);
 
+    unsigned int outline_count = 0;
+    unsigned int filled_count = 0;
+    unsigned int hierarchical_count = 0;
     for (unsigned int i = 0; i < icons::all_symbol_count; ++i) {
         auto symbol = icons::symbol_at(i);
         auto src = icons::source(symbol);
@@ -221,17 +227,42 @@ void test_builtin_icons_parse() {
         assert(descriptor.name == icons::name(symbol));
         assert(descriptor.style == icons::style_name());
         assert(descriptor.grid_size == 24.0f);
+        assert(descriptor.layer_count == doc.shapes.size());
+        assert(descriptor.text_weight_aligned);
+        assert(descriptor.default_scale == icons::SymbolScale::Medium);
+        assert(icons::symbol_scale_name(descriptor.default_scale) == "medium");
         assert(descriptor.phenotype_owned);
         assert(!descriptor.uses_sf_symbols_asset);
         assert(descriptor.uses_current_color);
         if (symbol != icons::Symbol::More) {
+            ++outline_count;
+            assert(descriptor.variant == icons::SymbolVariant::Outline);
+            assert(icons::symbol_variant_name(descriptor.variant) == "outline");
             assert(src.find(R"(stroke-linecap="round")") != std::string_view::npos);
             assert(src.find(R"(stroke-linejoin="round")") != std::string_view::npos);
             assert(descriptor.round_stroke);
             assert(!descriptor.filled);
         } else {
+            ++filled_count;
+            assert(descriptor.variant == icons::SymbolVariant::Fill);
+            assert(icons::symbol_variant_name(descriptor.variant) == "fill");
             assert(descriptor.filled);
             assert(!descriptor.round_stroke);
+        }
+        if (descriptor.supports_hierarchical_opacity) {
+            ++hierarchical_count;
+            assert(descriptor.preferred_rendering
+                   == icons::SymbolRenderingMode::Hierarchical);
+            assert(icons::symbol_rendering_mode_name(descriptor.preferred_rendering)
+                   == "hierarchical");
+            assert(std::abs(descriptor.secondary_opacity - 0.66f) < 0.001f);
+            assert(src.find("opacity") != std::string_view::npos);
+        } else {
+            assert(descriptor.preferred_rendering
+                   == icons::SymbolRenderingMode::Monochrome);
+            assert(icons::symbol_rendering_mode_name(descriptor.preferred_rendering)
+                   == "monochrome");
+            assert(descriptor.secondary_opacity == 1.0f);
         }
         assert(!doc.empty());
         assert(!doc.has_diagnostics());
@@ -241,10 +272,14 @@ void test_builtin_icons_parse() {
                             Color{28, 28, 30, 255});
         assert(painter.fills + painter.strokes > 0);
     }
+    assert(outline_count == icons::outline_symbol_count);
+    assert(filled_count == icons::filled_symbol_count);
+    assert(hierarchical_count == icons::hierarchical_symbol_count);
 
     auto shared = icons::descriptor(icons::Symbol::Shared);
     assert(shared.role == icons::SymbolRole::Sidebar);
     assert(icons::symbol_role_name(shared.role) == "sidebar");
+    assert(shared.supports_hierarchical_opacity);
     assert(icons::sidebar_symbol_at(1) == icons::Symbol::Shared);
     assert(icons::toolbar_symbol_at(10) == icons::Symbol::Search);
 

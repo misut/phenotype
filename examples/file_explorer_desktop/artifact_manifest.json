@@ -242,12 +242,32 @@
       "equals": 1
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.outline_symbol_count",
+      "equals": 30
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.hierarchical_symbol_count",
+      "equals": 20
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.grid_size",
       "equals": 24.0
     },
     {
       "path": "application.file_explorer.chrome.icon_system.default_stroke_width",
       "equals": 1.7999999523162842
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.secondary_opacity",
+      "equals": 0.6600000262260437
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.text_weight_aligned",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.hierarchical_opacity",
+      "equals": true
     },
     {
       "path": "application.file_explorer.chrome.icon_system.design_reference",
@@ -260,6 +280,18 @@
     {
       "path": "application.file_explorer.chrome.icon_system.alignment",
       "equals": "24x24 text-aligned symbol grid"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.rendering_mode",
+      "equals": "hierarchical"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.variant_policy",
+      "equals": "outline primary with filled action variants"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.scale",
+      "equals": "medium"
     },
     {
       "path": "application.file_explorer.chrome.titlebar_control_count",

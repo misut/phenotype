@@ -315,17 +315,26 @@ duplicate
     assert(chrome.sidebar_symbol_count == 11);
     assert(chrome.toolbar_symbol_count == 15);
     assert(chrome.icon_filled_symbol_count == 1);
+    assert(chrome.icon_outline_symbol_count == 30);
+    assert(chrome.icon_hierarchical_symbol_count == 20);
     assert(chrome.icon_grid_size == 24.0f);
     assert(chrome.icon_default_stroke_width == 1.8f);
+    assert(chrome.icon_secondary_opacity == 0.66f);
     assert(chrome.icon_module == "phenotype.icons");
     assert(chrome.icon_style == "macos_rounded_outline_svg");
     assert(chrome.icon_source_format == "svg");
     assert(chrome.icon_design_reference.find("Apple HIG") != std::string::npos);
     assert(chrome.icon_asset_policy.find("no Apple") != std::string::npos);
     assert(chrome.icon_alignment == "24x24 text-aligned symbol grid");
+    assert(chrome.icon_rendering_mode == "hierarchical");
+    assert(chrome.icon_variant_policy
+           == "outline primary with filled action variants");
+    assert(chrome.icon_scale == "medium");
     assert(chrome.owned_icon_assets);
     assert(!chrome.uses_sf_symbols_assets);
     assert(chrome.icon_round_stroke_contract);
+    assert(chrome.icon_text_weight_aligned);
+    assert(chrome.icon_hierarchical_opacity);
     assert(chrome.finder_segmented_toolbar);
     assert(chrome.integrated_titlebar);
     assert(chrome.native_window_controls);
@@ -525,6 +534,10 @@ duplicate
     assert(debug_text.find("\"icon_system\"") != std::string::npos);
     assert(debug_text.find("\"phenotype.icons\"") != std::string::npos);
     assert(debug_text.find("\"macos_rounded_outline_svg\"") != std::string::npos);
+    assert(debug_text.find("\"hierarchical_opacity\":true")
+           != std::string::npos);
+    assert(debug_text.find("\"rendering_mode\":\"hierarchical\"")
+           != std::string::npos);
     assert(debug_text.find("\"uses_sf_symbols_assets\":false")
            != std::string::npos);
     assert(debug_text.find("\"titlebar_control_start_x\"") != std::string::npos);
