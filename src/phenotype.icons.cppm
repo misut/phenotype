@@ -34,6 +34,12 @@ enum class Symbol : unsigned int {
     Recents,
     Sidebar,
     NewFolder,
+    Applications,
+    Desktop,
+    Download,
+    SortGroup,
+    Duplicate,
+    NewDocument,
 };
 
 inline auto name(Symbol symbol) noexcept -> std::string_view {
@@ -62,6 +68,12 @@ inline auto name(Symbol symbol) noexcept -> std::string_view {
     case Symbol::Recents:     return "recents";
     case Symbol::Sidebar:     return "sidebar";
     case Symbol::NewFolder:   return "new_folder";
+    case Symbol::Applications: return "applications";
+    case Symbol::Desktop:     return "desktop";
+    case Symbol::Download:    return "download";
+    case Symbol::SortGroup:   return "sort_group";
+    case Symbol::Duplicate:   return "duplicate";
+    case Symbol::NewDocument: return "new_document";
     }
     return "unknown";
 }
@@ -116,6 +128,18 @@ inline auto source(Symbol symbol) noexcept -> std::string_view {
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2.4"/><path d="M9 5 L9 19"/><path d="M6.2 8 L7.1 8"/><path d="M6.2 11 L7.1 11"/></svg>)SVG";
     case Symbol::NewFolder:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8.5 L9.1 8.5 L11.1 10.4 L20 10.4 L20 19 L4 19 Z"/><path d="M14 13 L14 17"/><path d="M12 15 L16 15"/></svg>)SVG";
+    case Symbol::Applications:
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M6 20 L12 4 L18 20"/><path d="M8.2 14.5 L15.8 14.5"/><path d="M4.5 20 L19.5 20"/></svg>)SVG";
+    case Symbol::Desktop:
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="12" rx="2.4"/><path d="M9 20 L15 20"/><path d="M7 21.5 L17 21.5"/></svg>)SVG";
+    case Symbol::Download:
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7 L12 15"/><path d="M8.5 12 L12 15.5 L15.5 12"/></svg>)SVG";
+    case Symbol::SortGroup:
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="4.2" height="3" rx="0.8"/><rect x="10" y="5" width="4.2" height="3" rx="0.8"/><rect x="16" y="5" width="4.2" height="3" rx="0.8"/><rect x="4" y="11" width="4.2" height="3" rx="0.8"/><rect x="10" y="11" width="4.2" height="3" rx="0.8"/><rect x="16" y="11" width="4.2" height="3" rx="0.8"/><rect x="4" y="17" width="4.2" height="3" rx="0.8"/><rect x="10" y="17" width="4.2" height="3" rx="0.8"/><path d="M17 16 L19.2 18.2 L21.4 16"/></svg>)SVG";
+    case Symbol::Duplicate:
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="8" width="10" height="12" rx="2"/><rect x="10" y="4" width="10" height="12" rx="2"/></svg>)SVG";
+    case Symbol::NewDocument:
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 4 L14 4 L18 8 L18 20 L7 20 Z"/><path d="M14 4 L14 8 L18 8"/><path d="M12.5 12 L12.5 17"/><path d="M10 14.5 L15 14.5"/></svg>)SVG";
     }
     return {};
 }

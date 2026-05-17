@@ -4794,7 +4794,10 @@ auto append_file_explorer_scenario_requirements(
             args, "Went forward to Demo Root/Documents");
     } else if (scenario == "sorted-kind") {
         append_required_label_contains(args, "Sort: Kind");
-        append_required_label_contains(args, "Sorted by Kind");
+        append_required_debug_detail(
+            args, "application.file_explorer.status=\"Sorted by Kind\"");
+        append_required_debug_detail(
+            args, "application.file_explorer.sort.value=\"kind\"");
     } else if (scenario == "search-active") {
         append_required_role(args, "text_field");
         append_required_label(args, "Search");

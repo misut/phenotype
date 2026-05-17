@@ -58,6 +58,11 @@ grid-gap sizing, and contextual `status_bar_visible` state. It also checks
 sidebar symbol and label placement, section spacing, selected-row radius, and
 traffic-light marker coordinates so Finder parity regressions are reported as
 structured chrome contract failures before pixel inspection.
+The sidebar and toolbar glyphs come from `phenotype.icons`, not copied SF
+Symbols assets. They are phenotype-owned SVG symbols with a macOS-style
+rounded-outline contract, so artifacts can assert the icon module, source
+format, ownership boundary, round stroke expectation, and sidebar/toolbar
+symbol counts without depending on platform icon fonts.
 On macOS, the same runtime object reports live `NSWindow` chrome state:
 transparent titlebar, full-size content view, hidden native title, and
 background dragging must all be enabled. These fields are actual platform
