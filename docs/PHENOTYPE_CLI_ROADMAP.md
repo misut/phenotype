@@ -113,7 +113,7 @@ Current commands:
 
 | Command | Status | Notes |
 |---|---|---|
-| `phenotype doctor` | implemented | Read-only repository checks for `mise.toml`, verifier tools, Android contract script, CLI roadmap, and file explorer shared package presence. |
+| `phenotype doctor` | implemented | Read-only repository checks for `mise.toml`, verifier tools, Android contract script, CLI roadmap, shared packages, and the legacy-tool-to-CLI migration matrix. |
 | `phenotype commands --json` | implemented | Emits a recursive command tree with `cppx.cli` command metadata, stable paths, and schema version `1`. |
 | `phenotype artifact summary <bundle>` | implemented | Read-only structural summary for `snapshot.json`, `frame.bmp`, and platform runtime files. This does not replace semantic verification yet. |
 | `phenotype artifact verify <bundle>` | implemented | Edge wrapper that runs the uv-managed Python verifier through `mise` and forwards the verifier JSON report. |
@@ -283,7 +283,11 @@ should become an implementation detail during migration:
 3. Convert shell scripts into thin compatibility wrappers that delegate to the
    matching CLI command. The glass showcase and file-explorer wrappers already
    delegate to the CLI.
-4. Delete wrappers only after CI, docs, and local developer workflows use the
+4. Use `phenotype doctor --json` to inspect the migration matrix before
+   deleting wrappers. It reports each legacy path, replacement command, edge
+   boundary, and removal policy so CI can distinguish thin compatibility
+   wrappers from Android edge implementation scripts.
+5. Delete wrappers only after CI, docs, and local developer workflows use the
    CLI command directly.
 
 ## Input and output observation

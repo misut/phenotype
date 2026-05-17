@@ -7,7 +7,9 @@ that command later without changing command contracts.
 
 The initial scope is intentionally narrow:
 
-- `phenotype doctor` checks repository-local tool and documentation surfaces.
+- `phenotype doctor` checks repository-local tool and documentation surfaces
+  and reports a tool-migration matrix that maps legacy shell/Python entry
+  points to their CLI replacements.
 - `phenotype artifact summary <bundle>` summarizes a debug artifact bundle
   without replacing the Python verifier yet.
 - `phenotype artifact verify <bundle>` runs the uv-managed Python verifier
@@ -174,4 +176,5 @@ mise exec -- exon build
 .exon/debug/phenotype_cli android contract --json \
   --state-dir /tmp/phenotype-android \
   --contract-out /tmp/phenotype-android/contract-bundle
+.exon/debug/phenotype_cli doctor --json
 ```
