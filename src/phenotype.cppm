@@ -723,6 +723,15 @@ inline void icon(icons::Symbol symbol,
            icons::paint_token(symbol, size, color));
 }
 
+inline void icon(icons::SymbolPresentation presentation) {
+    canvas(presentation.point_size, presentation.point_size,
+           [presentation](Painter& painter) {
+               icons::paint_symbol(painter, presentation, 0.0f, 0.0f);
+           },
+           {},
+           icons::paint_token(presentation));
+}
+
 inline void icon(icons::Symbol symbol, float size) {
     icon(symbol, size, detail::g_app.theme.foreground);
 }

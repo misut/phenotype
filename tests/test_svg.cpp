@@ -217,6 +217,11 @@ void test_builtin_icons_parse() {
     assert(icons::reference_family() == "SF Symbols semantic reference");
     assert(icons::reference_policy().find("phenotype-owned")
            != std::string_view::npos);
+    assert(icons::presentation_policy()
+           == "macos_role_aware_symbol_presentation");
+    assert(icons::point_size(icons::SymbolScale::Small) == 20.0f);
+    assert(icons::point_size(icons::SymbolScale::Medium) == 24.0f);
+    assert(icons::point_size(icons::SymbolScale::Large) == 26.0f);
 
     unsigned int outline_count = 0;
     unsigned int filled_count = 0;
@@ -296,6 +301,32 @@ void test_builtin_icons_parse() {
     assert(shared.semantic_reference_name == "folder.badge.person.crop");
     assert(icons::sidebar_symbol_at(1) == icons::Symbol::Shared);
     assert(icons::toolbar_symbol_at(10) == icons::Symbol::Search);
+
+    auto sidebar = icons::presentation(
+        icons::Symbol::Recents,
+        icons::SymbolPresentationRole::Sidebar,
+        icons::SymbolTone::Accent);
+    assert(sidebar.role == icons::SymbolPresentationRole::Sidebar);
+    assert(icons::symbol_presentation_role_name(sidebar.role) == "sidebar");
+    assert(sidebar.tone == icons::SymbolTone::Accent);
+    assert(icons::symbol_tone_name(sidebar.tone) == "accent");
+    assert(sidebar.scale == icons::SymbolScale::Large);
+    assert(sidebar.point_size == 26.0f);
+    assert(sidebar.optical_y_offset == -0.5f);
+    assert((sidebar.color == Color{0, 122, 255, 255}));
+
+    auto toolbar = icons::presentation(
+        icons::Symbol::Search,
+        icons::SymbolPresentationRole::Toolbar,
+        icons::SymbolTone::Secondary);
+    assert(toolbar.scale == icons::SymbolScale::Medium);
+    assert(toolbar.point_size == 24.0f);
+    assert((toolbar.color == Color{96, 96, 100, 255}));
+    assert(icons::paint_token(toolbar) != 0);
+
+    CapturePainter presentation_painter;
+    icons::paint_symbol(presentation_painter, sidebar, 0.0f, 0.0f);
+    assert(presentation_painter.fills + presentation_painter.strokes > 0);
 
     std::puts("PASS: built-in phenotype icon catalog is valid SVG");
 }

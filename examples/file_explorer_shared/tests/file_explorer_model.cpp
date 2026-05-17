@@ -551,6 +551,12 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"rendering_mode\":\"hierarchical\"")
            != std::string::npos);
+    assert(debug_text.find("\"presentation_policy\":\"macos_role_aware_symbol_presentation\"")
+           != std::string::npos);
+    assert(debug_text.find("\"tone_policy\":\"primary, secondary, selected, accent, disabled, destructive\"")
+           != std::string::npos);
+    assert(debug_text.find("\"toolbar_point_size\":24") != std::string::npos);
+    assert(debug_text.find("\"sidebar_point_size\":26") != std::string::npos);
     assert(debug_text.find("\"uses_sf_symbols_assets\":false")
            != std::string::npos);
     assert(debug_text.find(
