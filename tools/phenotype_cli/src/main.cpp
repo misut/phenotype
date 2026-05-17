@@ -3299,6 +3299,8 @@ auto icon_catalog_checks() -> std::vector<Check> {
                 == std::string_view{"bounded_svg_icon_subset"}
             && icon_catalog::svg_supported_path_commands().find("A Z")
                 != std::string_view::npos
+            && icon_catalog::svg_arc_policy().find("isolated circular path A/a")
+                != std::string_view::npos
             && icon_catalog::svg_arc_policy().find("bounded cubic Bezier")
                 != std::string_view::npos
             && arc_path_count == icon_catalog::svg_path_arc_symbol_count,

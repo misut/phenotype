@@ -331,7 +331,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_arc_policy",
-      "equals": "circle elements preserve native ArcTo; path A/a lowers to bounded cubic Bezier segments"
+      "equals": "circle elements and isolated circular path A/a preserve native ArcTo; chained or elliptical path A/a lowers to bounded cubic Bezier segments"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.owned_assets",
