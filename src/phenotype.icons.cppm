@@ -335,6 +335,15 @@ struct SymbolInteractionState {
     bool enabled = true;
 };
 
+struct SymbolButtonOptions {
+    SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
+    bool selected = false;
+    bool disabled = false;
+    float width = 0.0f;
+    float height = 0.0f;
+    std::uint64_t token_salt = 0;
+};
+
 struct SymbolControlChrome {
     SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
     SymbolTone symbol_tone = SymbolTone::Secondary;
@@ -755,6 +764,21 @@ inline auto macos_state_recipe(SymbolPresentationRole role,
     };
 }
 
+inline auto symbol_interaction_phase(ButtonVisualState state) noexcept
+        -> SymbolInteractionPhase {
+    if (state.pressed)
+        return SymbolInteractionPhase::Pressed;
+    if (state.hovered)
+        return SymbolInteractionPhase::Hovered;
+    return SymbolInteractionPhase::Normal;
+}
+
+inline auto symbol_interaction_state(bool selected,
+                                     ButtonVisualState state) noexcept
+        -> SymbolInteractionState {
+    return SymbolInteractionState{selected, state.enabled};
+}
+
 inline auto macos_file_type_color(Symbol symbol) noexcept -> Color {
     auto const color = catalog::macos_file_type_color(to_catalog_symbol(symbol));
     return {color.r, color.g, color.b, color.a};
@@ -819,6 +843,18 @@ inline auto macos_presentation(Symbol symbol,
 }
 
 inline auto macos_presentation(Symbol symbol,
+                               SymbolPresentationRole role,
+                               bool selected,
+                               ButtonVisualState state) noexcept
+        -> SymbolPresentation {
+    return macos_presentation(
+        symbol,
+        role,
+        symbol_interaction_state(selected, state),
+        symbol_interaction_phase(state));
+}
+
+inline auto macos_presentation(Symbol symbol,
                                SymbolInteractionState state,
                                SymbolInteractionPhase phase) noexcept
         -> SymbolPresentation {
@@ -827,6 +863,45 @@ inline auto macos_presentation(Symbol symbol,
         default_presentation_role(symbol),
         state,
         phase);
+}
+
+inline auto symbol_button_width(SymbolButtonOptions options) noexcept -> float {
+    if (options.width > 0.0f)
+        return options.width;
+    return hit_target_size(options.role);
+}
+
+inline auto symbol_button_height(SymbolButtonOptions options) noexcept -> float {
+    if (options.height > 0.0f)
+        return options.height;
+    return hit_target_size(options.role);
+}
+
+inline auto macos_symbol_button_style(SymbolButtonOptions options) noexcept
+        -> ButtonStyleOptions {
+    auto const enabled = !options.disabled;
+    auto const interaction = SymbolInteractionState{options.selected, enabled};
+    auto const chrome = macos_control_chrome(options.role, interaction);
+    auto const pressed = macos_state_recipe(
+        options.role,
+        interaction,
+        SymbolInteractionPhase::Pressed);
+
+    ButtonStyleOptions style;
+    style.has_background = true;
+    style.background = chrome.background_color;
+    style.has_hover_background = true;
+    style.hover_background = chrome.hover_background_color;
+    style.has_pressed_background = true;
+    style.pressed_background = pressed.background_color;
+    style.has_border_color = true;
+    style.border_color = {0, 0, 0, 0};
+    style.border_width = 0.0f;
+    style.border_radius = chrome.corner_radius;
+    style.max_width = symbol_button_width(options);
+    style.fixed_height = symbol_button_height(options);
+    style.disabled = options.disabled;
+    return style;
 }
 
 inline auto source(Symbol symbol) noexcept -> std::string_view {
@@ -909,6 +984,32 @@ inline auto paint_token(SymbolPresentation const& style) noexcept
     h ^= static_cast<std::uint64_t>(style.tone) << 16;
     h ^= static_cast<std::uint64_t>(style.scale) << 24;
     h ^= static_cast<std::uint64_t>(style.rendering) << 32;
+    return h == 0 ? 1 : h;
+}
+
+inline auto symbol_button_paint_token(Symbol symbol,
+                                      SymbolButtonOptions options) noexcept
+        -> std::uint64_t {
+    auto const presentation = macos_presentation(
+        symbol,
+        options.role,
+        SymbolInteractionState{options.selected, !options.disabled},
+        SymbolInteractionPhase::Normal);
+    std::uint64_t h = paint_token(presentation);
+    auto mix = [&](std::uint64_t v) {
+        h ^= v;
+        h *= 1099511628211ull;
+    };
+    auto mix_float = [&](float value) {
+        unsigned int bits = 0;
+        std::memcpy(&bits, &value, 4);
+        mix(bits);
+    };
+    mix_float(symbol_button_width(options));
+    mix_float(symbol_button_height(options));
+    mix(options.selected ? 1u : 0u);
+    mix(options.disabled ? 1u : 0u);
+    mix(options.token_salt);
     return h == 0 ? 1 : h;
 }
 

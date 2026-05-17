@@ -2873,6 +2873,38 @@ inline NodeHandle build_canvas_button_with_options(
     assert(root.children.size() == 1);
     return root.children[0];
 }
+
+inline NodeHandle build_symbol_button_with_options(
+        icons::SymbolButtonOptions options,
+        unsigned int hovered_id = 0xFFFFFFFFu,
+        unsigned int focused_id = 0xFFFFFFFFu,
+        unsigned int pressed_id = 0xFFFFFFFFu) {
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::g_app.callback_roles.clear();
+    detail::msg_queue().clear();
+    detail::local_store().clear();
+    detail::bump_local_gen();
+    detail::g_app.hovered_id = hovered_id;
+    detail::g_app.focused_id = focused_id;
+    detail::g_app.pressed_id = pressed_id;
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::symbol_button<ButtonMsg>(
+        "Grid View",
+        icons::Symbol::Grid,
+        Click{},
+        options);
+    Scope::set_current(nullptr);
+
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    return root.children[0];
+}
 } // namespace button_test
 
 void test_button_default_variant() {
@@ -3244,6 +3276,82 @@ void test_canvas_button_disabled_custom_chrome() {
     assert(btn.children.size() == 1);
 
     std::puts("PASS: canvas_button disabled custom chrome");
+}
+
+void test_symbol_button_macos_contract() {
+    icons::SymbolButtonOptions options;
+    options.role = icons::SymbolPresentationRole::Toolbar;
+    options.selected = true;
+    options.token_salt = 0xA11CEu;
+
+    auto btn_h = button_test::build_symbol_button_with_options(options);
+    LAYOUT_NODE(btn_h, 100.0f);
+
+    auto& btn = detail::node_at(btn_h);
+    assert(btn.width == 36.0f);
+    assert(btn.height == 36.0f);
+    assert(btn.interaction_role == InteractionRole::Button);
+    assert(btn.debug_semantic_label == "Grid View");
+    assert(btn.callback_id == 0u);
+    assert(btn.background.a == 150);
+    assert(btn.border_radius == 15.0f);
+    assert(btn.children.size() == 1);
+
+    auto& canvas = detail::node_at(btn.children[0]);
+    assert(canvas.width == 36.0f);
+    assert(canvas.height == 36.0f);
+    assert(canvas.debug_semantic_hidden == true);
+    assert(canvas.paint_token
+           == icons::symbol_button_paint_token(icons::Symbol::Grid, options));
+
+    std::puts("PASS: symbol_button macOS chrome contract");
+}
+
+void test_symbol_button_visual_state_token_contract() {
+    icons::SymbolButtonOptions options;
+    options.role = icons::SymbolPresentationRole::Toolbar;
+    options.token_salt = 0x51A7Eu;
+
+    auto normal_h = button_test::build_symbol_button_with_options(options);
+    auto const normal_token =
+        detail::node_at(detail::node_at(normal_h).children[0]).paint_token;
+
+    auto pressed_h = button_test::build_symbol_button_with_options(
+        options,
+        /*hovered_id=*/0u,
+        /*focused_id=*/0xFFFFFFFFu,
+        /*pressed_id=*/0u);
+    auto& pressed_btn = detail::node_at(pressed_h);
+    auto const pressed_token =
+        detail::node_at(pressed_btn.children[0]).paint_token;
+    assert(pressed_btn.background.a == 150);
+    assert(pressed_token != normal_token);
+
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    std::puts("PASS: symbol_button visual-state paint token contract");
+}
+
+void test_symbol_button_disabled_contract() {
+    icons::SymbolButtonOptions options;
+    options.role = icons::SymbolPresentationRole::Navigation;
+    options.disabled = true;
+
+    auto btn_h = button_test::build_symbol_button_with_options(options);
+    auto& btn = detail::node_at(btn_h);
+    assert(btn.style.max_width == 36.0f);
+    assert(btn.style.fixed_height == 36.0f);
+    assert(btn.interaction_role == InteractionRole::Button);
+    assert(btn.debug_semantic_label == "Grid View");
+    assert(btn.debug_semantic_enabled == false);
+    assert(btn.callback_id == 0xFFFFFFFFu);
+    assert(btn.focusable == false);
+    assert(detail::g_app.callbacks.empty());
+    assert(btn.children.size() == 1);
+
+    auto& canvas = detail::node_at(btn.children[0]);
+    assert(canvas.paint_token != 0);
+    std::puts("PASS: symbol_button disabled contract");
 }
 
 namespace text_field_test {
@@ -4023,6 +4131,9 @@ int main() {
     test_canvas_button_visual_state_contract();
     test_canvas_button_disabled_contract();
     test_canvas_button_disabled_custom_chrome();
+    test_symbol_button_macos_contract();
+    test_symbol_button_visual_state_token_contract();
+    test_symbol_button_disabled_contract();
     test_text_field_default();
     test_text_field_default_placeholder();
     test_text_field_error();

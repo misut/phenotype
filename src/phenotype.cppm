@@ -966,6 +966,39 @@ inline void canvas_button(str label,
     detail::append_child(h, canvas_h);
 }
 
+template<typename Msg>
+inline void symbol_button(str label,
+                          icons::Symbol symbol,
+                          Msg msg,
+                          icons::SymbolButtonOptions options = {}) {
+    auto const style = icons::macos_symbol_button_style(options);
+    auto const width = icons::symbol_button_width(options);
+    auto const height = icons::symbol_button_height(options);
+    canvas_button<Msg>(
+        label,
+        width,
+        height,
+        [symbol, options, width, height](
+                Painter& painter,
+                ButtonVisualState state) {
+            auto const presentation = icons::macos_presentation(
+                symbol,
+                options.role,
+                options.selected,
+                state);
+            icons::paint_symbol_centered(
+                painter,
+                presentation,
+                0.0f,
+                0.0f,
+                width,
+                height);
+        },
+        std::move(msg),
+        style,
+        icons::symbol_button_paint_token(symbol, options));
+}
+
 // progress — horizontal determinate progress bar. `value` is clamped
 // to [0, 1] and drives the filled portion's width as a fraction of
 // `max_width`. Track is theme.border, fill is theme.accent. Both pieces

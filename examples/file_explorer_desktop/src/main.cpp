@@ -468,15 +468,6 @@ void paint_finder_symbol_centered(
         box_height);
 }
 
-phenotype::icons::SymbolInteractionPhase icon_phase(
-        phenotype::ButtonVisualState state) {
-    if (state.pressed)
-        return phenotype::icons::SymbolInteractionPhase::Pressed;
-    if (state.hovered)
-        return phenotype::icons::SymbolInteractionPhase::Hovered;
-    return phenotype::icons::SymbolInteractionPhase::Normal;
-}
-
 phenotype::icons::SymbolPresentation icon_presentation_for_state(
         phenotype::icons::Symbol symbol,
         phenotype::icons::SymbolPresentationRole role,
@@ -485,8 +476,8 @@ phenotype::icons::SymbolPresentation icon_presentation_for_state(
     return phenotype::icons::macos_presentation(
         symbol,
         role,
-        phenotype::icons::SymbolInteractionState{selected, state.enabled},
-        icon_phase(state));
+        selected,
+        state);
 }
 
 void paint_sidebar_icon(phenotype::Painter& painter,
@@ -1387,76 +1378,6 @@ void finder_sidebar(State const& state) {
     }, MaterialKind::Thin, SpaceToken::Lg, SpaceToken::Xs);
 }
 
-phenotype::ButtonStyleOptions toolbar_icon_button_options(
-        bool selected = false,
-        bool disabled = false,
-        phenotype::icons::SymbolPresentationRole role =
-            phenotype::icons::SymbolPresentationRole::Toolbar) {
-    auto const chrome = phenotype::icons::macos_control_chrome(
-        role,
-        phenotype::icons::SymbolInteractionState{selected, !disabled});
-    auto const pressed = phenotype::icons::macos_state_recipe(
-        role,
-        phenotype::icons::SymbolInteractionState{selected, !disabled},
-        phenotype::icons::SymbolInteractionPhase::Pressed);
-    phenotype::ButtonStyleOptions options;
-    options.has_background = true;
-    options.background = chrome.background_color;
-    options.has_hover_background = true;
-    options.hover_background = chrome.hover_background_color;
-    options.has_pressed_background = true;
-    options.pressed_background = pressed.background_color;
-    options.has_border_color = true;
-    options.border_color = rgba(0, 0, 0, 0);
-    options.border_width = 0.0f;
-    options.border_radius = chrome.corner_radius;
-    options.max_width = k_toolbar_icon_button_width;
-    options.fixed_height = k_toolbar_icon_button_height;
-    options.disabled = disabled;
-    return options;
-}
-
-void paint_toolbar_symbol(phenotype::Painter& painter,
-                          phenotype::icons::Symbol symbol,
-                          bool selected,
-                          phenotype::ButtonVisualState state) {
-    paint_finder_symbol_centered(
-        painter,
-        icon_presentation_for_state(
-            symbol,
-            phenotype::icons::SymbolPresentationRole::Toolbar,
-            selected,
-            state),
-        0.0f,
-        0.0f,
-        k_toolbar_icon_button_width,
-        k_toolbar_icon_button_height);
-}
-
-void paint_toolbar_symbol(phenotype::Painter& painter,
-                          phenotype::icons::Symbol symbol,
-                          phenotype::ButtonVisualState state) {
-    paint_toolbar_symbol(painter, symbol, false, state);
-}
-
-void paint_navigation_symbol(phenotype::Painter& painter,
-                             phenotype::icons::Symbol symbol,
-                             bool enabled,
-                             phenotype::ButtonVisualState state) {
-    state.enabled = enabled;
-    paint_finder_symbol_centered(
-        painter,
-        icon_presentation_for_state(
-            symbol,
-            phenotype::icons::SymbolPresentationRole::Navigation,
-            false,
-            state),
-        0.0f,
-        0.0f,
-        k_toolbar_icon_button_width,
-        k_toolbar_icon_button_height);
-}
-
 void toolbar_separator() {
     phenotype::widget::canvas(1.0f, 28.0f,
         [](phenotype::Painter& painter) {
@@ -1474,36 +1395,33 @@ void view_mode_button(char const* label,
                       std::uint64_t token) {
     bool const selected = mode == current;
     std::string semantic_label(label);
-    phenotype::widget::canvas_button<Msg>(
+    phenotype::widget::symbol_button<Msg>(
         phenotype::str{semantic_label},
-        k_toolbar_icon_button_width,
-        k_toolbar_icon_button_height,
-        [symbol, selected](
-                phenotype::Painter& painter,
-                phenotype::ButtonVisualState state) {
-            paint_toolbar_symbol(painter, symbol, selected, state);
-        },
+        symbol,
         SetViewMode{mode},
-        toolbar_icon_button_options(selected),
-        token ^ (selected ? 0x100000000ull : 0ull));
+        phenotype::icons::SymbolButtonOptions{
+            .role = phenotype::icons::SymbolPresentationRole::Toolbar,
+            .selected = selected,
+            .width = k_toolbar_icon_button_width,
+            .height = k_toolbar_icon_button_height,
+            .token_salt = token,
+        });
 }
 
 void toolbar_action_button(char const* label,
                            phenotype::icons::Symbol symbol,
                            std::uint64_t token) {
     std::string semantic_label(label);
-    phenotype::widget::canvas_button<Msg>(
+    phenotype::widget::symbol_button<Msg>(
         phenotype::str{semantic_label},
-        k_toolbar_icon_button_width,
-        k_toolbar_icon_button_height,
-        [symbol](
-                phenotype::Painter& painter,
-                phenotype::ButtonVisualState state) {
-            paint_toolbar_symbol(painter, symbol, state);
-        },
+        symbol,
         ToolbarAction{semantic_label},
-        toolbar_icon_button_options(false),
-        token);
+        phenotype::icons::SymbolButtonOptions{
+            .role = phenotype::icons::SymbolPresentationRole::Toolbar,
+            .width = k_toolbar_icon_button_width,
+            .height = k_toolbar_icon_button_height,
+            .token_salt = token,
+        });
 }
 
 void toolbar_message_button(char const* label,
@@ -1512,18 +1430,17 @@ void toolbar_message_button(char const* label,
                             std::uint64_t token,
                             bool selected = false) {
     std::string semantic_label(label);
-    phenotype::widget::canvas_button<Msg>(
+    phenotype::widget::symbol_button<Msg>(
         phenotype::str{semantic_label},
-        k_toolbar_icon_button_width,
-        k_toolbar_icon_button_height,
-        [symbol, selected](
-                phenotype::Painter& painter,
-                phenotype::ButtonVisualState state) {
-            paint_toolbar_symbol(painter, symbol, selected, state);
-        },
+        symbol,
         std::move(msg),
-        toolbar_icon_button_options(selected),
-        token ^ (selected ? 0x500000000ull : 0ull));
+        phenotype::icons::SymbolButtonOptions{
+            .role = phenotype::icons::SymbolPresentationRole::Toolbar,
+            .selected = selected,
+            .width = k_toolbar_icon_button_width,
+            .height = k_toolbar_icon_button_height,
+            .token_salt = token,
+        });
 }
 
 Msg on_search_changed(std::string text) {
@@ -1532,38 +1449,33 @@ Msg on_search_changed(std::string text) {
 
 void search_toggle_button(bool selected) {
     std::string semantic_label = "Search Control";
-    phenotype::widget::canvas_button<Msg>(
+    phenotype::widget::symbol_button<Msg>(
         phenotype::str{semantic_label},
-        k_toolbar_icon_button_width,
-        k_toolbar_icon_button_height,
-        [](phenotype::Painter& painter, phenotype::ButtonVisualState state) {
-            paint_toolbar_symbol(
-                painter,
-                phenotype::icons::Symbol::Search,
-                state);
-        },
+        phenotype::icons::Symbol::Search,
         ToggleSearch{},
-        toolbar_icon_button_options(selected),
-        0x6401u ^ (selected ? 0x400000000ull : 0ull));
+        phenotype::icons::SymbolButtonOptions{
+            .role = phenotype::icons::SymbolPresentationRole::Toolbar,
+            .selected = selected,
+            .width = k_toolbar_icon_button_width,
+            .height = k_toolbar_icon_button_height,
+            .token_salt = 0x6401u,
+        });
 }
 
 void sort_action_button(file_explorer_demo::Snapshot const& snap) {
     std::string semantic_label = "Group Sort";
     if (!snap.sort_label.empty())
         semantic_label += " (" + snap.sort_label + ")";
-    phenotype::widget::canvas_button<Msg>(
+    phenotype::widget::symbol_button<Msg>(
         phenotype::str{semantic_label},
-        k_toolbar_icon_button_width,
-        k_toolbar_icon_button_height,
-        [](phenotype::Painter& painter, phenotype::ButtonVisualState state) {
-            paint_toolbar_symbol(
-                painter,
-                phenotype::icons::Symbol::SortGroup,
-                state);
-        },
+        phenotype::icons::Symbol::SortGroup,
         CycleSort{},
-        toolbar_icon_button_options(false),
-        0x6501u);
+        phenotype::icons::SymbolButtonOptions{
+            .role = phenotype::icons::SymbolPresentationRole::Toolbar,
+            .width = k_toolbar_icon_button_width,
+            .height = k_toolbar_icon_button_height,
+            .token_salt = 0x6501u,
+        });
 }
 
 void file_action_button(char const* label,
@@ -1572,21 +1484,17 @@ void file_action_button(char const* label,
                         phenotype::icons::Symbol symbol,
                         std::uint64_t token) {
     std::string semantic_label(label);
-    phenotype::widget::canvas_button<Msg>(
+    phenotype::widget::symbol_button<Msg>(
         phenotype::str{semantic_label},
-        k_toolbar_icon_button_width,
-        k_toolbar_icon_button_height,
-        [symbol, enabled](
-                phenotype::Painter& painter,
-                phenotype::ButtonVisualState state) {
-            paint_navigation_symbol(painter, symbol, enabled, state);
-        },
+        symbol,
         std::move(msg),
-        toolbar_icon_button_options(
-            false,
-            !enabled,
-            phenotype::icons::SymbolPresentationRole::Navigation),
-        token ^ (enabled ? 0x300000000ull : 0ull));
+        phenotype::icons::SymbolButtonOptions{
+            .role = phenotype::icons::SymbolPresentationRole::Navigation,
+            .disabled = !enabled,
+            .width = k_toolbar_icon_button_width,
+            .height = k_toolbar_icon_button_height,
+            .token_salt = token,
+        });
 }
 
 void navigation_button(char const* label,
@@ -1595,21 +1503,17 @@ void navigation_button(char const* label,
                        phenotype::icons::Symbol symbol,
                        std::uint64_t token) {
     std::string semantic_label(label);
-    phenotype::widget::canvas_button<Msg>(
+    phenotype::widget::symbol_button<Msg>(
         phenotype::str{semantic_label},
-        k_toolbar_icon_button_width,
-        k_toolbar_icon_button_height,
-        [symbol, enabled](
-                phenotype::Painter& painter,
-                phenotype::ButtonVisualState state) {
-            paint_navigation_symbol(painter, symbol, enabled, state);
-        },
+        symbol,
         std::move(msg),
-        toolbar_icon_button_options(
-            false,
-            !enabled,
-            phenotype::icons::SymbolPresentationRole::Navigation),
-        token ^ (enabled ? 0x200000000ull : 0ull));
+        phenotype::icons::SymbolButtonOptions{
+            .role = phenotype::icons::SymbolPresentationRole::Navigation,
+            .disabled = !enabled,
+            .width = k_toolbar_icon_button_width,
+            .height = k_toolbar_icon_button_height,
+            .token_salt = token,
+        });
 }
 
 void finder_toolbar(State const& state,
