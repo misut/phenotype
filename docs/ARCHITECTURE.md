@@ -6,7 +6,7 @@ phenotype = **platform-agnostic core** (C++23 modules) + **platform backends**.
 
 The core handles widgets, layout, state management, vDOM diff, and draw-command emission. It knows nothing about windows, GPUs, or font files — those are provided by the backend via a thin host interface.
 
-- **Core modules**: types, material, state, layout, paint, commands, diag, theme_json
+- **Core modules**: types, material, io, state, layout, paint, commands, diag, theme_json
 - **Backend contract**: `phenotype_host.h` (5 host functions) + `phenotype.commands` (typed draw commands)
 - **Current backends**: WASM+JS (production), macOS native (AppKit shell + CoreText + Metal), Windows native (Win32 shell + DirectWrite + Direct3D 12), Linux stub native backend
 - **Planned backends**: platform-specific native renderers/text systems behind the same shell + command-buffer contract
@@ -493,13 +493,19 @@ External input -> input abstraction -> phenotype -> output abstraction -> real r
 CLI input      -> input abstraction -> phenotype -> output abstraction -> CLI output
 ```
 
-The abstraction layers are typed value boundaries, not a second runtime. Native
-platforms translate AppKit, Win32, Android, WASI, or JavaScript events into a
-neutral input frame before calling the app. The CLI will translate JSONL input
-scripts into the same shape for deterministic driving. Renderer backends
+The abstraction layers are typed value boundaries, not a second runtime.
+`phenotype.io` defines the shared pure value contract: input event kinds,
+deterministic input frames/scripts, output observation summaries, artifact
+bundle descriptors, edge-effect policy text, and the LLM-debuggable artifact
+predicate. Native platforms translate AppKit, Win32, Android, WASI, or
+JavaScript events into a neutral input frame before calling the app. The CLI
+translates typed command inputs and future JSONL scripts into the same shape for
+deterministic driving. Renderer backends
 consume the command stream and debug descriptors as usual; the CLI can instead
 emit command summaries, semantic nodes, material plans, runtime summaries,
 pixel-region samples, and verifier failures without showing a window.
+`phenotype io contract --json` exposes the contract surface and a sample
+replay/debug artifact check for CI and LLM agents.
 `phenotype run --observe-output` bridges the two paths: it drives a native
 example with CLI-provided input, asks the app to write a startup artifact, exits
 deterministically, and embeds the parsed artifact observation in the same run
@@ -655,6 +661,7 @@ phenotype (umbrella re-export)
 ├── phenotype.icon_catalog — path package with pure built-in icon metadata
 ├── phenotype.svg         — pure SVG subset parser + Painter renderer
 ├── phenotype.icons       — phenotype-owned SVG icon catalog
+├── phenotype.io          — pure input frame and output observation contracts
 ├── phenotype.state       — Arena, AppState, Scope, InputHandler, message queue
 ├── phenotype.diag        — OTel-shaped Counter, Gauge, Histogram, log ring, JSON snapshot
 ├── phenotype.layout      — flexbox engine, measure_text cache, vDOM diff

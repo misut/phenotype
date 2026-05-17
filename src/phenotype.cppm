@@ -23,6 +23,7 @@ export import phenotype.resources;
 export import phenotype.icon_catalog;
 export import phenotype.svg;
 export import phenotype.icons;
+export import phenotype.io;
 export import phenotype.material;
 export import phenotype.state;
 export import phenotype.layout;
