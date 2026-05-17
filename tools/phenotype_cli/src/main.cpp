@@ -10,6 +10,7 @@ import json;
 import phenotype.io;
 import phenotype.icon_catalog;
 import phenotype.resources;
+import phenotype.svg_contract;
 import phenotype.theme_contract;
 import std;
 
@@ -18,6 +19,7 @@ namespace {
 namespace fs = std::filesystem;
 namespace icon_catalog = phenotype::icon_catalog;
 namespace io_contract = phenotype::io;
+namespace svg_contract = phenotype::svg_contract;
 namespace theme_contract = phenotype::theme_contract;
 
 struct Check {
@@ -857,6 +859,28 @@ auto spec() -> cppx::cli::CommandSpec {
                 .category = "metadata",
             },
             {
+                .name = "svg",
+                .summary = "Inspect pure SVG vector image contracts",
+                .options = {help_option()},
+                .subcommands = {
+                    {
+                        .name = "inspect",
+                        .summary =
+                            "Parse an SVG file through phenotype's pure SVG subset",
+                        .options = {help_option(), json_option()},
+                        .positional_name = "path",
+                        .positional_description =
+                            "Path to an SVG file to parse and summarize.",
+                        .examples = {
+                            "phenotype svg inspect assets/file-explorer-icon.svg --json",
+                            "phenotype svg inspect /tmp/icon.svg",
+                        },
+                    },
+                },
+                .allow_positionals = false,
+                .category = "metadata",
+            },
+            {
                 .name = "theme",
                 .summary = "Inspect default glass theme contracts",
                 .options = {help_option()},
@@ -1345,6 +1369,8 @@ auto doctor_checks() -> std::vector<Check> {
                    "Shared material probe package should stay available for examples.");
     add_path_check("theme_contract_package", "packages/phenotype_theme_contract/exon.toml",
                    "Pure default glass theme metadata should stay package-testable.");
+    add_path_check("svg_contract_package", "packages/phenotype_svg_contract/exon.toml",
+                   "Pure SVG asset inspection should stay available to Linux CLI gates.");
 
     return checks;
 }
@@ -4431,6 +4457,57 @@ auto icon_render_not_found_json(std::string_view query) -> std::string {
         "\"ok\":false,\"query\":{},\"error\":\"symbol not found\","
         "\"suggestion\":\"Use phenotype icons catalog --json to list built-in symbol names and semantic references.\"}}",
         json_string(query));
+}
+
+auto svg_document_summary_json(svg_contract::DocumentSummary const& summary,
+                               std::span<std::string const> diagnostics)
+        -> std::string {
+    return std::format(
+        "{{\"view_box\":{{\"min_x\":{},\"min_y\":{},\"width\":{},\"height\":{}}},"
+        "\"shape_count\":{},\"diagnostic_count\":{},"
+        "\"unsupported_count\":{},\"paintable\":{},"
+        "\"has_diagnostics\":{},\"diagnostics\":{}}}",
+        summary.view_min_x,
+        summary.view_min_y,
+        summary.view_width,
+        summary.view_height,
+        summary.shape_count,
+        summary.diagnostic_count,
+        summary.unsupported_count,
+        summary.paintable ? "true" : "false",
+        summary.has_diagnostics ? "true" : "false",
+        string_array_json(diagnostics));
+}
+
+auto svg_support_json() -> std::string {
+    return std::format(
+        "{{\"subset_policy\":{},\"supported_elements\":{},"
+        "\"supported_path_commands\":{},\"supported_style_attributes\":{},"
+        "\"unsupported_policy\":{},\"render_pipeline_policy\":{}}}",
+        json_string(svg_contract::subset_policy()),
+        json_string(svg_contract::supported_elements()),
+        json_string(svg_contract::supported_path_commands()),
+        json_string(svg_contract::supported_style_attributes()),
+        json_string(svg_contract::unsupported_policy()),
+        json_string(svg_contract::render_pipeline_policy()));
+}
+
+auto svg_inspect_json(fs::path const& path,
+                      std::string_view source,
+                      svg_contract::DocumentInspection const& inspection)
+        -> std::string {
+    auto const& summary = inspection.summary;
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"svg inspect\","
+        "\"ok\":{},\"source\":{{\"path\":{},\"bytes\":{}}},"
+        "\"support\":{},\"document\":{},"
+        "\"likely_layer\":\"svg_parser\","
+        "\"likely_pass\":\"pure_svg_subset_parse\"}}",
+        summary.paintable ? "true" : "false",
+        json_string(path_string(path)),
+        source.size(),
+        svg_support_json(),
+        svg_document_summary_json(summary, inspection.diagnostics));
 }
 
 auto icon_reference_names_json(IconCatalogSet set, bool enabled)
@@ -8758,6 +8835,72 @@ int run_icons_render(cppx::cli::Invocation const& invocation) {
     return 0;
 }
 
+int run_svg_inspect(cppx::cli::Invocation const& invocation) {
+    auto path_value = single_positional_text_or_error(
+        invocation,
+        "svg inspect",
+        "path");
+    if (!path_value)
+        return print_error("svg inspect", path_value.error(), invocation.has("json"));
+
+    auto path = fs::path{std::string{*path_value}};
+    auto ec = std::error_code{};
+    if (!fs::is_regular_file(path, ec) || ec) {
+        return print_error(
+            "svg inspect",
+            std::format(
+                "SVG file '{}' is not readable",
+                path_string(path)),
+            invocation.has("json"));
+    }
+
+    auto source = read_text_file(path);
+    auto inspection = svg_contract::inspect_source(source);
+    auto const summary = inspection.summary;
+    if (invocation.has("json")) {
+        std::println("{}", svg_inspect_json(path, source, inspection));
+        return summary.paintable ? 0 : 2;
+    }
+
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "path",
+         .value = path_string(path),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "subset",
+         .value = std::string{svg_contract::subset_policy()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "viewBox",
+         .value = std::format(
+             "{} {} {} {}",
+             summary.view_min_x,
+             summary.view_min_y,
+             summary.view_width,
+             summary.view_height),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "shapes",
+         .value = std::format("{}", summary.shape_count),
+         .status = summary.paintable
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "unsupported",
+         .value = std::format("{}", summary.unsupported_count),
+         .status = summary.unsupported_count == 0
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "diagnostics",
+         .value = std::format("{}", summary.diagnostic_count),
+         .status = summary.diagnostic_count == 0
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "render path",
+         .value = std::string{svg_contract::render_pipeline_policy()},
+         .status = cppx::terminal::StatusKind::ok},
+    };
+    std::println("phenotype svg inspect");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    return summary.paintable ? 0 : 2;
+}
+
 int run_theme_contract(cppx::cli::Invocation const& invocation) {
     auto checks = theme_contract_checks();
     auto const contract = theme_contract::default_glass_theme_contract();
@@ -9734,6 +9877,9 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "icons", "render"})
         return run_icons_render(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "svg", "inspect"})
+        return run_svg_inspect(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "theme", "contract"})
         return run_theme_contract(*parsed);

@@ -302,7 +302,14 @@ CLI bundle step, and validated by `phenotype.resources` before a platform
 packager maps them to `.app`, Windows, Android, or web icon formats. Generic
 SVG assets use the same package contract (`image/svg+xml` plus a `.svg` source
 suffix), and `phenotype package inspect --json` reports total/preload/runtime
-SVG counts so asset regressions are visible in CI logs.
+SVG counts so asset regressions are visible in CI logs. `phenotype svg inspect
+<path> --json` is the local edge probe for those files: it reads the file at the
+CLI boundary, parses it with the pure SVG contract shared by `phenotype.svg`,
+and reports the supported SVG subset, viewBox, shape count, unsupported command
+count, diagnostics, and renderer-facing `Painter` path so SVG failures can be
+debugged without AppKit, Metal, or platform image decoders. The shared
+`phenotype_svg_contract` package keeps that asset inspection available to the
+Linux CLI gate without depending on the native renderer package.
 
 ## Input Command Boundary
 

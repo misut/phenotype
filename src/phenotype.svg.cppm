@@ -2,6 +2,7 @@ module;
 #include <algorithm>
 #include <cmath>
 #include <cctype>
+#include <cstddef>
 #include <cstring>
 #include <cstdlib>
 #include <cstdint>
@@ -12,6 +13,7 @@ module;
 #include <vector>
 export module phenotype.svg;
 
+import phenotype.svg_contract;
 import phenotype.types;
 
 export namespace phenotype::svg {
@@ -93,6 +95,45 @@ struct RenderOptions {
     Color current_color = {28, 28, 30, 255};
     bool preserve_aspect_ratio = true;
 };
+
+using DocumentSummary = phenotype::svg_contract::DocumentSummary;
+
+inline auto subset_policy() noexcept -> std::string_view {
+    return phenotype::svg_contract::subset_policy();
+}
+
+inline auto supported_elements() noexcept -> std::string_view {
+    return phenotype::svg_contract::supported_elements();
+}
+
+inline auto supported_path_commands() noexcept -> std::string_view {
+    return phenotype::svg_contract::supported_path_commands();
+}
+
+inline auto supported_style_attributes() noexcept -> std::string_view {
+    return phenotype::svg_contract::supported_style_attributes();
+}
+
+inline auto unsupported_policy() noexcept -> std::string_view {
+    return phenotype::svg_contract::unsupported_policy();
+}
+
+inline auto render_pipeline_policy() noexcept -> std::string_view {
+    return phenotype::svg_contract::render_pipeline_policy();
+}
+
+inline auto summarize(Document const& doc) noexcept -> DocumentSummary {
+    return {
+        doc.view_min_x,
+        doc.view_min_y,
+        doc.view_width,
+        doc.view_height,
+        doc.shapes.size(),
+        doc.diagnostics.size(),
+        doc.unsupported_count,
+        !doc.shapes.empty(),
+        !doc.diagnostics.empty()};
+}
 
 } // namespace phenotype::svg
 
