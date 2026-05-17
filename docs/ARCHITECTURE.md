@@ -171,10 +171,12 @@ proportions without copying SF Symbols artwork or names as assets. Apps can
 call `icons::document`, `icons::paint_symbol`, or `widget::icon`; the widget
 helper paints through `widget::canvas` and uses a deterministic paint token so
 stable icons do not re-emit every frame. The catalog encodes macOS-like rounded
-stroke caps and joins in each line icon's SVG source and exposes symbol
-metadata (`icons::descriptor`, count constants, and index accessors for all,
-sidebar, and toolbar symbols) so examples and artifact verifiers can assert the
-style contract without pixel guessing.
+stroke caps and joins in each line icon's SVG source, uses bounded secondary
+opacity on detail strokes for SF Symbols-like hierarchical emphasis, and
+exposes symbol metadata (`icons::descriptor`, variant/rendering/scale names,
+count constants, and index accessors for all, sidebar, and toolbar symbols) so
+examples and artifact verifiers can assert the style contract without pixel
+guessing.
 Package app icons are separate resources, not part of the glyph catalog: they
 are declared as `app.icon` SVG assets in `phenotype.package.toml`, copied by the
 CLI bundle step, and validated by `phenotype.resources` before a platform

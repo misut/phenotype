@@ -224,8 +224,11 @@ struct ExplorerChromeMetrics {
     int sidebar_symbol_count = 0;
     int toolbar_symbol_count = 0;
     int icon_filled_symbol_count = 0;
+    int icon_outline_symbol_count = 0;
+    int icon_hierarchical_symbol_count = 0;
     float icon_grid_size = 0.0f;
     float icon_default_stroke_width = 0.0f;
+    float icon_secondary_opacity = 0.0f;
     bool integrated_titlebar = true;
     bool native_window_controls = true;
     bool duplicate_window_controls = false;
@@ -234,6 +237,8 @@ struct ExplorerChromeMetrics {
     bool owned_icon_assets = false;
     bool uses_sf_symbols_assets = false;
     bool icon_round_stroke_contract = false;
+    bool icon_text_weight_aligned = false;
+    bool icon_hierarchical_opacity = false;
     bool more_actions_open = false;
     bool status_bar_visible = false;
     std::string icon_module;
@@ -242,6 +247,9 @@ struct ExplorerChromeMetrics {
     std::string icon_design_reference;
     std::string icon_asset_policy;
     std::string icon_alignment;
+    std::string icon_rendering_mode;
+    std::string icon_variant_policy;
+    std::string icon_scale;
 };
 
 struct ExplorerInputTrace {
@@ -477,8 +485,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .sidebar_symbol_count = 0,
             .toolbar_symbol_count = 0,
             .icon_filled_symbol_count = 0,
+            .icon_outline_symbol_count = 0,
+            .icon_hierarchical_symbol_count = 0,
             .icon_grid_size = 0.0f,
             .icon_default_stroke_width = 0.0f,
+            .icon_secondary_opacity = 0.0f,
             .integrated_titlebar = false,
             .native_window_controls = false,
             .duplicate_window_controls = false,
@@ -487,6 +498,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .owned_icon_assets = false,
             .uses_sf_symbols_assets = false,
             .icon_round_stroke_contract = false,
+            .icon_text_weight_aligned = false,
+            .icon_hierarchical_opacity = false,
             .status_bar_visible = false,
             .icon_module = "text_controls",
             .icon_style = "mobile_text_buttons",
@@ -494,6 +507,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_design_reference = "mobile text controls",
             .icon_asset_policy = "no vector icon assets in mobile profile",
             .icon_alignment = "n/a",
+            .icon_rendering_mode = "n/a",
+            .icon_variant_policy = "n/a",
+            .icon_scale = "n/a",
         };
     }
     auto columns = desktop_icon_grid_column_count(viewport);
@@ -551,8 +567,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .sidebar_symbol_count = 11,
         .toolbar_symbol_count = 15,
         .icon_filled_symbol_count = 1,
+        .icon_outline_symbol_count = 30,
+        .icon_hierarchical_symbol_count = 20,
         .icon_grid_size = 24.0f,
         .icon_default_stroke_width = 1.8f,
+        .icon_secondary_opacity = 0.66f,
         .integrated_titlebar = true,
         .native_window_controls = true,
         .duplicate_window_controls = false,
@@ -561,6 +580,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .owned_icon_assets = true,
         .uses_sf_symbols_assets = false,
         .icon_round_stroke_contract = true,
+        .icon_text_weight_aligned = true,
+        .icon_hierarchical_opacity = true,
         .status_bar_visible = desktop_status_bar_visible(state),
         .icon_module = "phenotype.icons",
         .icon_style = "macos_rounded_outline_svg",
@@ -570,6 +591,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_asset_policy =
             "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded",
         .icon_alignment = "24x24 text-aligned symbol grid",
+        .icon_rendering_mode = "hierarchical",
+        .icon_variant_policy = "outline primary with filled action variants",
+        .icon_scale = "medium",
     };
 }
 
@@ -1064,13 +1088,25 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "filled_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.icon_filled_symbol_count)});
+    icon_system.emplace(
+        "outline_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.icon_outline_symbol_count)});
+    icon_system.emplace(
+        "hierarchical_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.icon_hierarchical_symbol_count)});
     icon_system.emplace("grid_size", json::Value{chrome.icon_grid_size});
     icon_system.emplace(
         "default_stroke_width",
         json::Value{chrome.icon_default_stroke_width});
+    icon_system.emplace("secondary_opacity", json::Value{chrome.icon_secondary_opacity});
+    icon_system.emplace("text_weight_aligned", json::Value{chrome.icon_text_weight_aligned});
+    icon_system.emplace("hierarchical_opacity", json::Value{chrome.icon_hierarchical_opacity});
     icon_system.emplace("design_reference", json::Value{chrome.icon_design_reference});
     icon_system.emplace("asset_policy", json::Value{chrome.icon_asset_policy});
     icon_system.emplace("alignment", json::Value{chrome.icon_alignment});
+    icon_system.emplace("rendering_mode", json::Value{chrome.icon_rendering_mode});
+    icon_system.emplace("variant_policy", json::Value{chrome.icon_variant_policy});
+    icon_system.emplace("scale", json::Value{chrome.icon_scale});
 
     json::Object out;
     out.emplace("viewport", json::Value{std::move(viewport)});

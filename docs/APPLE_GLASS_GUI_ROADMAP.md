@@ -267,8 +267,10 @@ parses a bounded pure SVG subset into `svg::Document` and renders through
 by packaged SVG icon assets. SVG circles lower to native `ArcTo` path segments
 so Apple-style round glyph geometry does not depend on cubic approximation
 quality. `phenotype.icons` provides original 24x24 glyph SVGs for Finder-like
-chrome and common app actions, following Apple-style proportions and macOS-like
-rounded stroke caps/joins without copying SF Symbols assets. The macOS Metal
+chrome and common app actions, following Apple-style proportions, text-aligned
+medium-scale metrics, macOS-like rounded stroke caps/joins, and bounded
+secondary-stroke opacity for symbols with detail layers without copying SF
+Symbols assets. The macOS Metal
 renderer executes diagonal icon strokes as triangle bodies with round caps
 instead of dot chains, keeping toolbar/search/sidebar symbols continuous while
 remaining bounded. Windows accepts the same SVG-driven `Path`, `FillPath`, and
@@ -276,8 +278,9 @@ remaining bounded. Windows accepts the same SVG-driven `Path`, `FillPath`, and
 and small fills flatten to color-pipeline strips so the built-in catalog does
 not drop or mis-layer the native command stream on non-macOS desktop runs.
 Larger fills still ear-clip into the existing triangle pipeline. The catalog
-exposes semantic metadata for toolbar, sidebar, action, and file-type roles so
-verifier artifacts can prove which icon policy was used.
+exposes semantic metadata for toolbar, sidebar, action, file-type roles,
+outline/fill variants, preferred rendering mode, scale, and hierarchical
+opacity counts so verifier artifacts can prove which icon policy was used.
 File explorer packages now declare `app.icon` as a package-owned SVG asset, so
 the same CLI bundle contract can later feed platform app-icon generation
 without embedding Apple artwork or depending on platform symbol fonts.
