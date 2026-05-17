@@ -32,8 +32,13 @@ The initial scope is intentionally narrow:
   invokes the uv-managed verifier without delegating to the shell wrapper. For
   desktop captures, the gate injects
   `PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS=1` so screenshots expose the
-  native window-control reserve; normal interactive launches leave that reserve
-  blank and rely only on OS-owned controls. The gate can be narrowed with
+  native window-control reserve. `phenotype run file_explorer_desktop` now uses
+  the same marker default whenever `--artifact-dir` and `--artifact-exit` are
+  combined, unless the caller explicitly supplies
+  `PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS`. The run JSON records both
+  the marker value and whether the CLI injected it. Normal interactive launches
+  leave that reserve blank and rely only on OS-owned controls. The gate can be
+  narrowed with
   `--profile`, repeated `--view-mode`, and repeated `--scenario` options for
   faster local iteration before running the full gate;
   `tools/verify_file_explorer_artifacts.sh` is a thin compatibility wrapper

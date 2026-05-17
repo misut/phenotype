@@ -241,6 +241,8 @@ struct ExampleRunSummary {
     std::size_t file_explorer_input_count = 0;
     std::size_t file_explorer_script_input_count = 0;
     fs::path file_explorer_script;
+    std::string file_explorer_artifact_chrome_markers;
+    bool file_explorer_artifact_chrome_markers_injected = false;
     std::optional<std::chrono::milliseconds> run_timeout;
     std::optional<cppx::process::CapturedProcessResult> build_result;
     std::optional<cppx::process::CapturedProcessResult> run_result;
@@ -6242,13 +6244,22 @@ auto example_run_json(ExampleRunSummary const& summary) -> std::string {
             std::chrono::duration_cast<std::chrono::seconds>(
                 *summary.run_timeout).count());
     }
+    auto marker_value = summary.file_explorer_artifact_chrome_markers.empty()
+        ? std::string{"null"}
+        : json_string(summary.file_explorer_artifact_chrome_markers);
     auto file_explorer_input = std::format(
-        "{{\"direct_count\":{},\"script_count\":{},\"script\":{}}}",
+        "{{\"direct_count\":{},\"script_count\":{},\"script\":{},"
+        "\"artifact_chrome_markers\":{},"
+        "\"artifact_chrome_markers_injected\":{}}}",
         summary.file_explorer_input_count,
         summary.file_explorer_script_input_count,
         summary.file_explorer_script.empty()
             ? std::string{"null"}
-            : json_string(path_string(summary.file_explorer_script)));
+            : json_string(path_string(summary.file_explorer_script)),
+        marker_value,
+        summary.file_explorer_artifact_chrome_markers_injected
+            ? "true"
+            : "false");
     auto output_observation = summary.output_observation
         ? artifact_observation_json(*summary.output_observation)
         : std::string{"null"};
@@ -9660,6 +9671,17 @@ int run_example(cppx::cli::Invocation const& invocation) {
     }
     if (summary.artifact_exit) {
         (*env)["PHENOTYPE_ARTIFACT_EXIT"] = "1";
+    }
+    if (is_file_explorer_example
+        && summary.artifact_requested
+        && summary.artifact_exit
+        && !env->contains("PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS")) {
+        (*env)["PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS"] = "1";
+        summary.file_explorer_artifact_chrome_markers_injected = true;
+    }
+    if (auto marker = env->find("PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS");
+        marker != env->end()) {
+        summary.file_explorer_artifact_chrome_markers = marker->second;
     }
     if (auto value = invocation.value("artifact-reason")) {
         (*env)["PHENOTYPE_ARTIFACT_REASON"] = std::string{*value};

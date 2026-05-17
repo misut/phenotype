@@ -24,7 +24,10 @@ that sidebar/titlebar area as blank reserve, so the real OS-owned window
 controls have space without phenotype drawing another set of buttons. Artifact
 capture can opt in to a deterministic non-interactive traffic-light marker with
 `PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS=1`, which is what the CLI gate
-uses when it needs screenshots to expose the reserved chrome region. On Windows
+uses when it needs screenshots to expose the reserved chrome region. The
+general `phenotype run file_explorer_desktop --artifact-dir ... --artifact-exit`
+path applies the same marker default unless the environment already sets
+`PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS`. On Windows
 the native Win32 shell keeps the same contract through a
 DWM custom frame, using `WM_NCHITTEST` to preserve
 resize edges, caption-button behavior, blank-toolbar dragging, phenotype toolbar
@@ -244,7 +247,11 @@ through Terminal and make launch debugging look like a missing native window.
 At runtime the example reads `phenotype.package.toml` and locale files from
 `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`, `PHENOTYPE_PACKAGE_ROOT`, or the current
 working directory. `phenotype run file_explorer_desktop` sets the package-root
-environment automatically.
+environment automatically. When `--artifact-dir` and `--artifact-exit` are used
+together, the CLI also enables deterministic artifact traffic-light markers so
+the captured frame resembles the native Finder chrome instead of a blank
+content reserve. The run JSON reports that decision through
+`file_explorer_input.artifact_chrome_markers_injected`.
 The same command can feed deterministic native startup input through the shared
 model parser:
 
