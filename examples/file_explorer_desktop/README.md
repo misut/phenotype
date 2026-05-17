@@ -227,8 +227,12 @@ distribution artifact. Its launcher sets `PHENOTYPE_PACKAGE_ROOT` to
 `Contents/Resources` before execing the built native binary, so runtime labels,
 the package-owned SVG app icon metadata, and the Pretendard/CJK fallback
 contract come from the staged package instead of the caller's working
-directory. This avoids the raw-executable `open` path that can route through
-Terminal and make launch debugging look like a missing native window.
+directory. The bundle step also converts the package-owned SVG `app.icon` into
+`Contents/Resources/file_explorer_desktop.icns` with macOS `sips` and
+`iconutil`, records its SHA-256 digest in `phenotype.bundle.json`, and writes
+`CFBundleIconFile` in `Info.plist` so Finder and Dock use the packaged
+macOS-style icon. This avoids the raw-executable `open` path that can route
+through Terminal and make launch debugging look like a missing native window.
 
 At runtime the example reads `phenotype.package.toml` and locale files from
 `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`, `PHENOTYPE_PACKAGE_ROOT`, or the current

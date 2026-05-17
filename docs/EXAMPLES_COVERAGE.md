@@ -256,9 +256,11 @@ probe input debugging cheap before running the local glass artifact gate.
 the package manifest, declared SVG app icon, all declared SVG image assets,
 locales, Pretendard alias descriptor, and debug artifact manifest into an output
 directory, then writes `phenotype.bundle.json` with copied-file records and
-package checks. This is not a platform installer yet, but it gives CI and future
-packagers a concrete resource inventory to validate without launching a native
-window.
+package checks. The `macos-app` format also generates an ICNS app icon from the
+package-owned SVG `app.icon`, wires `CFBundleIconFile`, and records the ICNS
+digest so Finder/Dock icon drift is debuggable from the bundle manifest. This
+is not a signed platform installer yet, but it gives CI and future packagers a
+concrete resource inventory to validate without launching a native window.
 
 The desktop and mobile file explorer examples also carry initial
 `phenotype.package.toml` manifests plus `assets/`, `locales/`, and `fonts/`

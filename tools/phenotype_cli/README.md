@@ -60,14 +60,18 @@ The initial scope is intentionally narrow:
   integrity totals for CI and platform packagers. Pass `--format macos-app`
   with an `.app` output path to create a development macOS app bundle with
   `Contents/MacOS`, `Contents/Resources`, `Info.plist`, `PkgInfo`, a tiny
-  package-root launcher, the built example binary, and the same integrity
-  manifest under `Contents/Resources`.
+  package-root launcher, the built example binary, a generated `.icns` app
+  icon derived from the package-owned SVG `app.icon` via macOS `sips` and
+  `iconutil`, and the same integrity manifest under `Contents/Resources`.
+  The generated `Info.plist` points `CFBundleIconFile` at that ICNS file so
+  Finder and Dock launches use the package icon instead of the raw executable
+  placeholder.
 - `phenotype package verify-bundle <dir>` re-opens a staged bundle directory,
   rebuilds the package resource contract from the copied manifest, checks that
   every declared resource is present, recomputes SHA-256 digests, and compares
   the stored `phenotype.bundle.json` schema, command, file count, byte total,
-  relative destinations, and digests without needing the original source
-  package root.
+  relative destinations, generated app icon record, and digests without
+  needing the original source package root.
 - `phenotype icons catalog` emits the built-in icon catalog contract from the
   pure `phenotype.icon_catalog` path package. JSON output reports the
   macOS/Finder/SF-Symbols-inspired reference policy, package-owned SVG asset

@@ -125,8 +125,8 @@ Current commands:
 | `phenotype android doctor/devices/emu-start/emu-stop/build/apk/install/launch/stop/run/logs/screencap/contract/clean` | implemented | Stable CLI namespace over the existing Android edge scripts and Android build command. `--json` emits a process/script result envelope, `--serial` forwards `ANDROID_SERIAL`, and `--state-dir`/`--avd`/`--apk` keep device state explicit. |
 | `phenotype package inspect <path>` | implemented | Checks `phenotype.package.toml` sections, application/debug metadata, CLI-owned debug verifier metadata, declared asset/locale/font counts, referenced `source` files, package-owned `app.icon` SVG/preload policy, Pretendard default-font policy, CJK fallback coverage, package resource directories, artifact manifest presence, pure resource-contract defaults, asset preload intent, and locale fallback coverage. |
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
-| `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, debug manifest references, byte counts, content metadata, the pure resource contract, and SHA-256 digests. `--format macos-app` additionally creates a development `.app` layout with `Contents/MacOS`, `Contents/Resources`, `Info.plist`, `PkgInfo`, a package-root launcher, and the built example executable. |
-| `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle or macOS `.app`, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource and generated app file, compares stored manifest records against the staged files, and reports the same package checks plus bundle integrity totals. |
+| `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, debug manifest references, byte counts, content metadata, the pure resource contract, and SHA-256 digests. `--format macos-app` additionally creates a development `.app` layout with `Contents/MacOS`, `Contents/Resources`, `Info.plist`, `PkgInfo`, a package-root launcher, the built example executable, and a generated `.icns` app icon derived from the package-owned SVG `app.icon` through macOS `sips` and `iconutil`. |
+| `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle or macOS `.app`, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource, generated ICNS app icon, and generated app file, compares stored manifest records against the staged files, and reports the same package checks plus bundle integrity totals. |
 | `phenotype icons catalog` | implemented | Emits the pure `phenotype.icon_catalog` contract for the built-in macOS-style SVG symbol set, including Apple HIG / macOS Finder / SF Symbols semantic reference policy, phenotype-owned asset policy, SVG source availability checks, count checks, all/sidebar/toolbar symbol lists, Finder-style PDF/text/archive file-type symbols, per-symbol role/variant/rendering/layer metadata, regular text-aligned weight policy, explicit monochrome/hierarchical/palette/multicolor capability counts, role-aware presentation defaults, selected/disabled interaction tones, and Finder-style file-type tint policy. |
 | `phenotype icons svg <name-or-reference>` | implemented | Emits the raw phenotype-owned SVG source for one built-in icon, or a JSON envelope with the matched symbol, semantic reference, asset policy, rendering capabilities, byte count, and source. This gives renderer, path-parser, cache, and package-debug flows a pure icon source probe without depending on a native window or copied Apple/SF Symbols artwork. |
 | `phenotype theme contract` | implemented | Emits the pure `phenotype_theme_contract` baseline for the default Apple-like glass theme, including Pretendard typography, Liquid Glass usage boundary, macOS/Finder-style iconography policy, phenotype-owned SVG asset policy, grouped-container policy, performance bounds, accessibility fallback policy, unsupported-backend degradation policy, color tokens, radii, typography, and semantic surface roles. |
@@ -258,11 +258,15 @@ directory, rejects unsafe or package-escaping source paths, computes SHA-256 at
 the CLI edge, and writes a machine-readable `phenotype.bundle.json` manifest.
 The `macos-app` format keeps the same resource contract but places resources
 under `Contents/Resources`, writes `Info.plist` and `PkgInfo`, copies the built
-example executable into `Contents/MacOS`, and installs a tiny launcher that sets
+example executable into `Contents/MacOS`, generates an ICNS app icon from the
+package-owned SVG `app.icon`, and installs a tiny launcher that sets
 `PHENOTYPE_PACKAGE_ROOT` before execing the binary. This gives Finder-style
-local launches a real app bundle instead of a raw executable that may open
-through Terminal. The manifest records application identity, platform list,
-default locale/font, debug probe metadata, generated app files, copied resource
+local launches a real app bundle with a Dock/Finder icon instead of a raw
+executable that may open through Terminal. ICNS generation is a macOS-local
+edge step implemented with `sips -s format png` plus `iconutil`; failures are
+recorded as structured bundle file errors rather than hidden packaging drift.
+The manifest records application identity, platform list, default locale/font,
+debug probe metadata, generated app icon and app files, copied resource
 destinations relative to the output root, byte counts, content metadata,
 resource intent flags, SHA-256 digests, package checks, bundle integrity totals,
 and structured errors.
@@ -271,9 +275,10 @@ and structured errors.
 detects either a flat resource bundle or a macOS `.app`, uses the copied
 `phenotype.package.toml` as the bundle-local source of truth, checks that
 `phenotype.bundle.json` exists, recomputes SHA-256 for every declared asset,
-locale, font, debug artifact manifest, generated app metadata file, launcher,
-and bundled executable, and compares stored manifest schema, command, file
-count, total bytes, relative destinations, and digests against the staged files.
+locale, font, debug artifact manifest, generated ICNS app icon, generated app
+metadata file, launcher, and bundled executable, and compares stored manifest
+schema, command, file count, total bytes, relative destinations, and digests
+against the staged files.
 This mirrors Dioxus-style asset collection while keeping the filesystem,
 process, and checksum work in the CLI edge adapter rather than in
 `phenotype.resources`.

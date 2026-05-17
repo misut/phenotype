@@ -3087,10 +3087,18 @@ void append_expected_package_files(BundleSummary& bundle, bool copy_files) {
 }
 
 auto macos_app_info_plist(PackageSummary const& package,
-                          std::string_view executable_name) -> std::string {
+                          std::string_view executable_name,
+                          std::string_view icon_file) -> std::string {
     auto display_name = package.display_name.empty()
         ? package.application_id
         : package.display_name;
+    auto icon_block = std::string{};
+    if (!icon_file.empty()) {
+        icon_block = std::format(
+            "  <key>CFBundleIconFile</key>\n"
+            "  <string>{}</string>\n",
+            xml_escape(icon_file));
+    }
     return std::format(
         "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
         "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
@@ -3103,6 +3111,7 @@ auto macos_app_info_plist(PackageSummary const& package,
         "  <string>{}</string>\n"
         "  <key>CFBundleExecutable</key>\n"
         "  <string>{}</string>\n"
+        "{}"
         "  <key>CFBundleIdentifier</key>\n"
         "  <string>{}</string>\n"
         "  <key>CFBundleName</key>\n"
@@ -3123,6 +3132,7 @@ auto macos_app_info_plist(PackageSummary const& package,
         "</plist>\n",
         xml_escape(display_name),
         xml_escape(executable_name),
+        icon_block,
         xml_escape(package.application_id),
         xml_escape(display_name),
         xml_escape(package.version),
@@ -3139,6 +3149,166 @@ auto macos_app_launcher_script(std::string_view binary_name) -> std::string {
         "export PHENOTYPE_PACKAGE_ROOT=\"$APP_CONTENTS/Resources\"\n"
         "exec \"$APP_CONTENTS/MacOS/{}\" \"$@\"\n",
         binary_name);
+}
+
+auto macos_app_icon_file_name(PackageSummary const& package)
+    -> std::string {
+    auto app_icon = phenotype::find_asset(package.catalog, "app.icon");
+    if (!app_icon)
+        return {};
+    auto const& asset = app_icon->get();
+    if (asset.content_type != "image/svg+xml" || !asset.source.ends_with(".svg"))
+        return {};
+    if (!portable_bundle_file_name(package.entry))
+        return {};
+    return package.entry + ".icns";
+}
+
+auto output_tail(std::string_view text, std::size_t max_bytes) -> std::string_view;
+
+auto process_failure_message(std::string_view tool,
+                             cppx::process::CapturedProcessResult const& result)
+    -> std::string {
+    auto tail = !result.stderr_text.empty()
+        ? std::string{output_tail(result.stderr_text, 2048)}
+        : std::string{output_tail(result.stdout_text, 2048)};
+    if (!tail.empty()) {
+        return std::format(
+            "{} exited with {}: {}",
+            tool,
+            result.exit_code,
+            tail);
+    }
+    return std::format("{} exited with {}", tool, result.exit_code);
+}
+
+auto generate_macos_app_icon(BundleSummary const& bundle,
+                             std::string const& icon_file)
+    -> BundleFileRecord {
+    auto record = BundleFileRecord{
+        .kind = "macos_app",
+        .name = "app_icon",
+        .content_type = "image/icns",
+        .destination = bundle.resource_root / icon_file,
+    };
+    auto app_icon = phenotype::find_asset(bundle.package.catalog, "app.icon");
+    if (!app_icon) {
+        record.error = "package app.icon asset is missing";
+        return record;
+    }
+    record.source = bundle.package_root / app_icon->get().source;
+
+    if (!path_stays_under_root(bundle.package_root, record.source, record.error))
+        return record;
+    if (!path_stays_under_root(bundle.resource_root, record.destination, record.error))
+        return record;
+
+    auto ec = std::error_code{};
+    if (!fs::is_regular_file(record.source, ec) || ec) {
+        record.error = ec ? ec.message() : "app icon SVG source is missing";
+        return record;
+    }
+    fs::create_directories(record.destination.parent_path(), ec);
+    if (ec) {
+        record.error = ec.message();
+        return record;
+    }
+
+    auto iconset = bundle.resource_root
+        / (bundle.package.entry + ".iconset");
+    fs::remove_all(iconset, ec);
+    ec.clear();
+    fs::create_directories(iconset, ec);
+    if (ec) {
+        record.error = ec.message();
+        return record;
+    }
+
+    auto const variants = std::array{
+        std::pair{"icon_16x16.png", 16},
+        std::pair{"icon_16x16@2x.png", 32},
+        std::pair{"icon_32x32.png", 32},
+        std::pair{"icon_32x32@2x.png", 64},
+        std::pair{"icon_128x128.png", 128},
+        std::pair{"icon_128x128@2x.png", 256},
+        std::pair{"icon_256x256.png", 256},
+        std::pair{"icon_256x256@2x.png", 512},
+        std::pair{"icon_512x512.png", 512},
+        std::pair{"icon_512x512@2x.png", 1024},
+    };
+    for (auto const& [name, size] : variants) {
+        auto output = iconset / name;
+        auto result = cppx::process::system::capture({
+            .program = "sips",
+            .args = {
+                "-s",
+                "format",
+                "png",
+                "-z",
+                std::to_string(size),
+                std::to_string(size),
+                path_string(fs::absolute(record.source)),
+                "--out",
+                path_string(fs::absolute(output)),
+            },
+            .cwd = bundle.package_root,
+            .timeout = std::chrono::seconds{30},
+        });
+        if (!result) {
+            record.error = std::format(
+                "failed to run sips: {}",
+                cppx::process::to_string(result.error()));
+            fs::remove_all(iconset, ec);
+            return record;
+        }
+        if (result->timed_out || result->exit_code != 0) {
+            record.error = result->timed_out
+                ? "sips timed out while generating app icon PNGs"
+                : process_failure_message("sips", *result);
+            fs::remove_all(iconset, ec);
+            return record;
+        }
+    }
+
+    auto iconutil = cppx::process::system::capture({
+        .program = "iconutil",
+        .args = {
+            "--convert",
+            "icns",
+            "--output",
+            path_string(fs::absolute(record.destination)),
+            path_string(fs::absolute(iconset)),
+        },
+        .cwd = bundle.package_root,
+        .timeout = std::chrono::seconds{30},
+    });
+    fs::remove_all(iconset, ec);
+    if (!iconutil) {
+        record.error = std::format(
+            "failed to run iconutil: {}",
+            cppx::process::to_string(iconutil.error()));
+        return record;
+    }
+    if (iconutil->timed_out || iconutil->exit_code != 0) {
+        record.error = iconutil->timed_out
+            ? "iconutil timed out while generating app icon"
+            : process_failure_message("iconutil", *iconutil);
+        return record;
+    }
+
+    record.present = path_exists(record.destination);
+    record.copied = record.present;
+    record.bytes = file_size_or_zero(record.destination);
+    if (!record.present || record.bytes == 0) {
+        record.error = "iconutil did not produce a non-empty .icns file";
+        return record;
+    }
+    if (auto digest = sha256_file_or_error(record.destination)) {
+        record.sha256 = *digest;
+    } else {
+        record.integrity_error = digest.error();
+    }
+    return record;
 }
 
 void append_macos_app_files(BundleSummary& bundle, bool copy_files) {
@@ -3162,15 +3332,19 @@ void append_macos_app_files(BundleSummary& bundle, bool copy_files) {
     auto pkg_info = fs::path{"Contents"} / "PkgInfo";
     auto launcher = fs::path{"Contents"} / "MacOS" / executable_name;
     auto binary = fs::path{"Contents"} / "MacOS" / binary_name;
+    auto icon_file = macos_app_icon_file_name(bundle.package);
 
     if (copy_files) {
+        if (!icon_file.empty()) {
+            bundle.files.push_back(generate_macos_app_icon(bundle, icon_file));
+        }
         bundle.files.push_back(write_generated_bundle_file(
             bundle.output_root,
             info_plist,
             "macos_app",
             "Info.plist",
             "application/xml",
-            macos_app_info_plist(bundle.package, executable_name)));
+            macos_app_info_plist(bundle.package, executable_name, icon_file)));
         bundle.files.push_back(write_generated_bundle_file(
             bundle.output_root,
             pkg_info,
@@ -3197,6 +3371,14 @@ void append_macos_app_files(BundleSummary& bundle, bool copy_files) {
             "application/octet-stream",
             true));
     } else {
+        if (!icon_file.empty()) {
+            bundle.files.push_back(inspect_bundle_file(
+                bundle.resource_root,
+                "macos_app",
+                "app_icon",
+                icon_file,
+                "image/icns"));
+        }
         bundle.files.push_back(generated_bundle_file(
             bundle.output_root,
             info_plist,
