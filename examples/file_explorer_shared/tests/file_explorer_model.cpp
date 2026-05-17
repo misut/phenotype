@@ -745,6 +745,32 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"file_type_symbol_tokens\"")
            != std::string::npos);
+    assert(debug_text.find("\"toolbar_symbol_presentations\"")
+           != std::string::npos);
+    assert(debug_text.find("\"sidebar_symbol_presentations\"")
+           != std::string::npos);
+    assert(debug_text.find("\"file_type_symbol_presentations\"")
+           != std::string::npos);
+    assert(debug_text.find("\"presentation_samples\"")
+           != std::string::npos);
+    assert(debug_text.find("\"toolbar_pressed_search\"")
+           != std::string::npos);
+    assert(debug_text.find("\"toolbar_disabled_forward\"")
+           != std::string::npos);
+    assert(debug_text.find("\"sidebar_selected_recents\"")
+           != std::string::npos);
+    assert(debug_text.find("\"selected_presentation\"")
+           != std::string::npos);
+    assert(debug_text.find("\"unselected_presentation\"")
+           != std::string::npos);
+    assert(debug_text.find("\"symbol_presentation\"")
+           != std::string::npos);
+    assert(debug_text.find("\"visible_symbol_color\"")
+           != std::string::npos);
+    assert(debug_text.find("\"likely_pass\":\"svg_path_or_line_paint\"")
+           != std::string::npos);
+    assert(debug_text.find("\"effective_point_size\":23.64")
+           != std::string::npos);
     assert(debug_text.find("\"symbol\":\"pdf_document\"")
            != std::string::npos);
     assert(debug_text.find("\"semantic_reference_name\":\"doc.richtext\"")
