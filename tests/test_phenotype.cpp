@@ -306,6 +306,23 @@ void test_set_theme_updates_and_invalidates_cache() {
     std::puts("PASS: set_theme swaps theme and invalidates measure cache");
 }
 
+void test_default_theme_glass_contract() {
+    Theme theme{};
+    assert(default_theme_profile_name() == "apple-glass-light");
+    assert(default_theme_reference().find("Apple HIG Materials")
+           != std::string_view::npos);
+    assert(default_theme_font_policy().find("Pretendard")
+           != std::string_view::npos);
+    assert(default_theme_material_policy().find("pure material planner")
+           != std::string_view::npos);
+    assert(theme_matches_default_glass_contract(theme));
+
+    theme.default_font_family = "System";
+    assert(!theme_matches_default_glass_contract(theme));
+
+    std::puts("PASS: default theme exposes Apple glass contract metadata");
+}
+
 void test_sized_box_in_row() {
     detail::g_app.arena.reset();
 
@@ -3493,6 +3510,7 @@ int main() {
     test_newline_handling();
     test_measure_text_cache_dedup();
     test_set_theme_updates_and_invalidates_cache();
+    test_default_theme_glass_contract();
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();
     test_grid_cell_text_is_vertically_centered();

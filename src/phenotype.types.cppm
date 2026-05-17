@@ -349,6 +349,34 @@ struct Theme {
     Color semantic_error_border   = {220,  38,  38, 255}; // = state_error_border
 };
 
+inline auto default_theme_profile_name() noexcept -> std::string_view {
+    return "apple-glass-light";
+}
+
+inline auto default_theme_reference() noexcept -> std::string_view {
+    return "Apple HIG Materials inspired portable glass tokens";
+}
+
+inline auto default_theme_font_policy() noexcept -> std::string_view {
+    return "Pretendard primary with platform sans fallback";
+}
+
+inline auto default_theme_material_policy() noexcept -> std::string_view {
+    return "pure material planner decides glass execution; theme provides portable tokens";
+}
+
+inline bool theme_matches_default_glass_contract(Theme const& theme) {
+    return theme.default_font_family == "Pretendard"
+        && theme.background == Color{242, 242, 247, 255}
+        && theme.foreground == Color{28, 28, 30, 255}
+        && theme.accent == Color{0, 122, 255, 255}
+        && theme.surface == Color{255, 255, 255, 238}
+        && theme.radius_sm == 10.0f
+        && theme.radius_md == 14.0f
+        && theme.radius_lg == 22.0f
+        && theme.state_focus_ring == theme.accent;
+}
+
 // ============================================================
 // Draw command opcodes — shared by paint emitters and JS shim
 // ============================================================

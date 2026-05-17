@@ -213,19 +213,31 @@ void test_builtin_icons_parse() {
     assert(icons::outline_symbol_count == 30);
     assert(icons::filled_symbol_count == 1);
     assert(icons::hierarchical_symbol_count == 20);
+    assert(icons::reference_symbol_count == icons::all_symbol_count);
+    assert(icons::reference_family() == "SF Symbols semantic reference");
+    assert(icons::reference_policy().find("phenotype-owned")
+           != std::string_view::npos);
 
     unsigned int outline_count = 0;
     unsigned int filled_count = 0;
     unsigned int hierarchical_count = 0;
+    unsigned int reference_count = 0;
     for (unsigned int i = 0; i < icons::all_symbol_count; ++i) {
         auto symbol = icons::symbol_at(i);
         auto src = icons::source(symbol);
         auto doc = icons::document(symbol);
         auto descriptor = icons::descriptor(symbol);
         assert(!icons::name(symbol).empty());
+        assert(!icons::semantic_reference_name(symbol).empty());
         assert(!src.empty());
         assert(descriptor.name == icons::name(symbol));
         assert(descriptor.style == icons::style_name());
+        assert(descriptor.semantic_reference_name
+               == icons::semantic_reference_name(symbol));
+        assert(descriptor.reference_family == icons::reference_family());
+        assert(descriptor.reference_policy == icons::reference_policy());
+        if (!descriptor.semantic_reference_name.empty())
+            ++reference_count;
         assert(descriptor.grid_size == 24.0f);
         assert(descriptor.layer_count == doc.shapes.size());
         assert(descriptor.text_weight_aligned);
@@ -275,11 +287,13 @@ void test_builtin_icons_parse() {
     assert(outline_count == icons::outline_symbol_count);
     assert(filled_count == icons::filled_symbol_count);
     assert(hierarchical_count == icons::hierarchical_symbol_count);
+    assert(reference_count == icons::reference_symbol_count);
 
     auto shared = icons::descriptor(icons::Symbol::Shared);
     assert(shared.role == icons::SymbolRole::Sidebar);
     assert(icons::symbol_role_name(shared.role) == "sidebar");
     assert(shared.supports_hierarchical_opacity);
+    assert(shared.semantic_reference_name == "folder.badge.person.crop");
     assert(icons::sidebar_symbol_at(1) == icons::Symbol::Shared);
     assert(icons::toolbar_symbol_at(10) == icons::Symbol::Search);
 

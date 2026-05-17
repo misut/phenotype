@@ -67,10 +67,13 @@ before pixel inspection.
 The sidebar and toolbar glyphs come from `phenotype.icons`, not copied SF
 Symbols assets. They are phenotype-owned SVG symbols with a macOS-style
 rounded-outline contract and bounded secondary-layer opacity for detailed
-symbols, so artifacts can assert the icon module, source format, ownership
-boundary, round stroke expectation, rendering mode, variant policy,
-text-aligned scale, and sidebar/toolbar symbol counts without depending on
-platform icon fonts.
+symbols. Each icon declares a semantic SF Symbols reference name as a role and
+proportion anchor while keeping the SVG artwork phenotype-owned, so artifacts
+can assert the icon module, source format, ownership boundary, reference
+family/policy, round stroke expectation, rendering mode, variant policy,
+text-aligned scale, sidebar/toolbar symbol counts, and the exact semantic
+reference arrays for the visible Finder-style toolbar/sidebar glyphs without
+depending on platform icon fonts or bundled Apple assets.
 On macOS, the same runtime object reports live `NSWindow` chrome state:
 transparent titlebar, full-size content view, hidden native title, and
 background dragging must all be enabled. These fields are actual platform

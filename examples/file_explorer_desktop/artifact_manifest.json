@@ -258,6 +258,10 @@
       "equals": 20
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.reference_symbol_count",
+      "equals": 31
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.grid_size",
       "equals": 24.0
     },
@@ -282,6 +286,14 @@
       "equals": "Apple HIG Icons and SF Symbols inspired custom rounded-outline SVG glyphs"
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.reference_family",
+      "equals": "SF Symbols semantic reference"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.reference_policy",
+      "equals": "semantic reference only; phenotype-owned SVG artwork"
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.asset_policy",
       "equals": "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded"
     },
@@ -300,6 +312,42 @@
     {
       "path": "application.file_explorer.chrome.icon_system.scale",
       "equals": "medium"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.sidebar_reference_symbols",
+      "equals": [
+        "clock",
+        "folder.badge.person.crop",
+        "app",
+        "desktopcomputer",
+        "doc",
+        "arrow.down.circle",
+        "icloud",
+        "house",
+        "airdrop",
+        "trash",
+        "folder"
+      ]
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.toolbar_reference_symbols",
+      "equals": [
+        "chevron.left",
+        "chevron.right",
+        "square.grid.2x2",
+        "list.bullet",
+        "rectangle.split.3x1",
+        "rectangle.on.rectangle",
+        "rectangle.grid.3x2",
+        "square.and.arrow.up",
+        "tag",
+        "ellipsis",
+        "magnifyingglass",
+        "doc.badge.plus",
+        "folder.badge.plus",
+        "square.on.square",
+        "trash"
+      ]
     },
     {
       "path": "application.file_explorer.chrome.titlebar_control_count",

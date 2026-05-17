@@ -150,6 +150,9 @@ struct SymbolDescriptor {
     SymbolRenderingMode preferred_rendering = SymbolRenderingMode::Monochrome;
     SymbolScale default_scale = SymbolScale::Medium;
     std::string_view style;
+    std::string_view semantic_reference_name;
+    std::string_view reference_family;
+    std::string_view reference_policy;
     float grid_size = 24.0f;
     float default_stroke_width = 1.8f;
     float secondary_opacity = 1.0f;
@@ -169,6 +172,7 @@ inline constexpr unsigned int toolbar_symbol_count = 15;
 inline constexpr unsigned int outline_symbol_count = 30;
 inline constexpr unsigned int filled_symbol_count = 1;
 inline constexpr unsigned int hierarchical_symbol_count = 20;
+inline constexpr unsigned int reference_symbol_count = all_symbol_count;
 
 inline auto symbol_at(unsigned int index) noexcept -> Symbol {
     switch (index) {
@@ -255,6 +259,51 @@ inline auto style_reference() noexcept -> std::string_view {
 
 inline auto asset_policy() noexcept -> std::string_view {
     return "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded";
+}
+
+inline auto reference_family() noexcept -> std::string_view {
+    return "SF Symbols semantic reference";
+}
+
+inline auto reference_policy() noexcept -> std::string_view {
+    return "semantic reference only; phenotype-owned SVG artwork";
+}
+
+inline auto semantic_reference_name(Symbol symbol) noexcept -> std::string_view {
+    switch (symbol) {
+    case Symbol::Back:        return "chevron.left";
+    case Symbol::Forward:     return "chevron.right";
+    case Symbol::Search:      return "magnifyingglass";
+    case Symbol::Share:       return "square.and.arrow.up";
+    case Symbol::Tag:         return "tag";
+    case Symbol::More:        return "ellipsis";
+    case Symbol::Grid:        return "square.grid.2x2";
+    case Symbol::List:        return "list.bullet";
+    case Symbol::Columns:     return "rectangle.split.3x1";
+    case Symbol::Gallery:     return "rectangle.on.rectangle";
+    case Symbol::Folder:      return "folder";
+    case Symbol::Trash:       return "trash";
+    case Symbol::Document:    return "doc";
+    case Symbol::Image:       return "photo";
+    case Symbol::Movie:       return "film";
+    case Symbol::Plus:        return "plus";
+    case Symbol::XMark:       return "xmark";
+    case Symbol::ChevronDown: return "chevron.down";
+    case Symbol::Home:        return "house";
+    case Symbol::Cloud:       return "icloud";
+    case Symbol::AirDrop:     return "airdrop";
+    case Symbol::Recents:     return "clock";
+    case Symbol::Shared:      return "folder.badge.person.crop";
+    case Symbol::Sidebar:     return "sidebar.left";
+    case Symbol::NewFolder:   return "folder.badge.plus";
+    case Symbol::Applications: return "app";
+    case Symbol::Desktop:     return "desktopcomputer";
+    case Symbol::Download:    return "arrow.down.circle";
+    case Symbol::SortGroup:   return "rectangle.grid.3x2";
+    case Symbol::Duplicate:   return "square.on.square";
+    case Symbol::NewDocument: return "doc.badge.plus";
+    }
+    return "doc";
 }
 
 inline bool supports_hierarchical_opacity(Symbol symbol) noexcept {
@@ -379,6 +428,9 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
             : SymbolRenderingMode::Monochrome,
         SymbolScale::Medium,
         style_name(),
+        semantic_reference_name(symbol),
+        reference_family(),
+        reference_policy(),
         24.0f,
         filled ? 0.0f : 1.8f,
         hierarchical ? 0.66f : 1.0f,
