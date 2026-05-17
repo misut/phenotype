@@ -208,6 +208,28 @@ The package metadata's debug verifier is the CLI command
 `phenotype artifact verify-file-explorer`; the shell script remains only as a
 thin wrapper for older local run configurations.
 
+To create a Finder-launchable development bundle after building the example:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli package bundle \
+  ../../examples/file_explorer_desktop \
+  --format macos-app \
+  --output "/tmp/Phenotype File Explorer.app"
+.exon/debug/phenotype_cli package verify-bundle \
+  "/tmp/Phenotype File Explorer.app"
+open "/tmp/Phenotype File Explorer.app"
+```
+
+The generated `.app` is intentionally a local development bundle, not a signed
+distribution artifact. Its launcher sets `PHENOTYPE_PACKAGE_ROOT` to
+`Contents/Resources` before execing the built native binary, so runtime labels,
+the package-owned SVG app icon metadata, and the Pretendard/CJK fallback
+contract come from the staged package instead of the caller's working
+directory. This avoids the raw-executable `open` path that can route through
+Terminal and make launch debugging look like a missing native window.
+
 At runtime the example reads `phenotype.package.toml` and locale files from
 `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`, `PHENOTYPE_PACKAGE_ROOT`, or the current
 working directory. `phenotype run file_explorer_desktop` sets the package-root
