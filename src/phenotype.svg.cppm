@@ -747,7 +747,8 @@ inline void append_svg_arc(PathBuilder& path,
                            bool large_arc,
                            bool sweep,
                            float x2,
-                           float y2) {
+                           float y2,
+                           bool preserve_native_circular_arc) {
     constexpr float pi = 3.14159265358979323846f;
     if (std::abs(x1 - x2) <= 0.0001f
         && std::abs(y1 - y2) <= 0.0001f)
@@ -809,6 +810,16 @@ inline void append_svg_arc(PathBuilder& path,
     else if (sweep && delta < 0.0f)
         delta += 2.0f * pi;
 
+    auto const radius_epsilon = 0.0001f * std::max(1.0f, std::max(rx, ry));
+    if (preserve_native_circular_arc && std::abs(rx - ry) <= radius_epsilon) {
+        auto start = theta;
+        auto end = theta + delta;
+        if (delta < 0.0f)
+            std::swap(start, end);
+        path.arc_to(cx, cy, rx, start, end);
+        return;
+    }
+
     auto segment_count = static_cast<unsigned int>(
         std::ceil(std::abs(delta) / (0.5f * pi)));
     segment_count = std::max(1u, std::min(8u, segment_count));
@@ -840,11 +851,36 @@ inline void append_svg_arc(PathBuilder& path,
     }
 }
 
+inline bool path_data_is_single_move_arc(std::string_view d) noexcept {
+    std::size_t i = 0;
+    path_skip(d, i);
+    if (i >= d.size())
+        return false;
+    auto command = d[i++];
+    if (std::toupper(static_cast<unsigned char>(command)) != 'M')
+        return false;
+    if (!path_number(d, i) || !path_number(d, i))
+        return false;
+    path_skip(d, i);
+    if (i >= d.size())
+        return false;
+    command = d[i++];
+    if (std::toupper(static_cast<unsigned char>(command)) != 'A')
+        return false;
+    for (int n = 0; n < 7; ++n) {
+        if (!path_number(d, i))
+            return false;
+    }
+    path_skip(d, i);
+    return i >= d.size();
+}
+
 inline auto parse_path_data(std::string_view d, Document& doc) -> PathBuilder {
     PathBuilder path;
     PathCursor cursor;
     char command = 0;
     std::size_t i = 0;
+    bool const preserve_native_circular_arc = path_data_is_single_move_arc(d);
 
     while (path_skip(d, i)) {
         if (std::isalpha(static_cast<unsigned char>(d[i]))) {
@@ -1047,7 +1083,8 @@ inline auto parse_path_data(std::string_view d, Document& doc) -> PathBuilder {
                     *large_arc != 0.0f,
                     *sweep != 0.0f,
                     end_x,
-                    end_y);
+                    end_y,
+                    preserve_native_circular_arc);
                 cursor.x = end_x;
                 cursor.y = end_y;
                 reset_path_controls(cursor);

@@ -597,7 +597,7 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"svg_supported_path_commands\":\"M L H V Q T C S A Z")
            != std::string::npos);
-    assert(debug_text.find("\"svg_arc_policy\":\"circle elements preserve native ArcTo")
+    assert(debug_text.find("\"svg_arc_policy\":\"circle elements and isolated circular path A/a")
            != std::string::npos);
     assert(debug_text.find("\"svg_path_arc_symbol_count\":1")
            != std::string::npos);

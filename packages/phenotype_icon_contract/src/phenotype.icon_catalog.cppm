@@ -264,7 +264,7 @@ inline auto svg_supported_path_commands() noexcept -> std::string_view {
 }
 
 inline auto svg_arc_policy() noexcept -> std::string_view {
-    return "circle elements preserve native ArcTo; path A/a lowers to bounded cubic Bezier segments";
+    return "circle elements and isolated circular path A/a preserve native ArcTo; chained or elliptical path A/a lowers to bounded cubic Bezier segments";
 }
 
 inline auto alignment_policy() noexcept -> std::string_view {

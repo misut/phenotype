@@ -229,7 +229,32 @@ void test_svg_arc_path_command() {
                svg::RenderOptions{{0, 122, 255, 255}, true});
     assert(painter.strokes == 1);
 
-    std::puts("PASS: SVG elliptical arc path command lowers to cubic segments");
+    std::puts("PASS: SVG chained arc path command lowers to cubic segments");
+}
+
+void test_svg_single_circular_arc_path_preserves_native_arc() {
+    auto doc = svg::parse(R"SVG(
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M4 12 A8 8 0 0 1 20 12"/>
+        </svg>
+    )SVG");
+    assert(doc.shapes.size() == 1);
+    assert(!doc.has_diagnostics());
+    assert(doc.unsupported_count == 0);
+    assert(count_path_verb(doc.shapes[0].path, PathVerb::ArcTo) == 1);
+    assert(count_path_verb(doc.shapes[0].path, PathVerb::CubicTo) == 0);
+
+    auto ellipse = svg::parse(R"SVG(
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M4 12 A8 5 0 0 1 20 12"/>
+        </svg>
+    )SVG");
+    assert(ellipse.shapes.size() == 1);
+    assert(!ellipse.has_diagnostics());
+    assert(count_path_verb(ellipse.shapes[0].path, PathVerb::ArcTo) == 0);
+    assert(count_path_verb(ellipse.shapes[0].path, PathVerb::CubicTo) > 0);
+
+    std::puts("PASS: SVG isolated circular arc path preserves native ArcTo");
 }
 
 void test_svg_unsupported_path_diagnostic() {
@@ -251,7 +276,11 @@ void test_builtin_icons_parse() {
            != std::string_view::npos);
     assert(icons::svg_supported_path_commands().find("A Z")
            != std::string_view::npos);
-    assert(icons::svg_arc_policy().find("circle elements preserve native ArcTo")
+    assert(icons::svg_arc_policy().find("circle elements")
+           != std::string_view::npos);
+    assert(icons::svg_arc_policy().find("native ArcTo")
+           != std::string_view::npos);
+    assert(icons::svg_arc_policy().find("isolated circular path A/a")
            != std::string_view::npos);
     assert(icons::alignment_policy() == "24x24 text-aligned symbol grid");
     assert(icons::variant_policy() == "outline primary with filled action variants");
@@ -359,7 +388,7 @@ void test_builtin_icons_parse() {
         if (symbol == icons::Symbol::AirDrop) {
             assert(icons::uses_svg_path_arcs(symbol));
             assert(src.find(" A") != std::string_view::npos);
-            assert(count_path_verb(doc.shapes[1].path, PathVerb::CubicTo) > 0);
+            assert(count_path_verb(doc.shapes[1].path, PathVerb::ArcTo) > 0);
         }
 
         CapturePainter painter;
@@ -431,6 +460,7 @@ int main() {
     test_svg_transform_subset();
     test_svg_smooth_path_commands();
     test_svg_arc_path_command();
+    test_svg_single_circular_arc_path_preserves_native_arc();
     test_svg_unsupported_path_diagnostic();
     test_builtin_icons_parse();
     std::puts("\nAll SVG/icon tests passed.");

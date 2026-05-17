@@ -258,8 +258,9 @@ object also names the pure SVG subset, supported path commands, and arc
 lowering policy used by built-in macOS-style glyphs. If a Finder-like icon
 breaks, check those fields before comparing screenshots; a missing SVG command
 should fail as a JSON contract mismatch. `svg_path_arc_symbol_count` proves
-that at least one built-in Finder sidebar symbol exercises the SVG arc path in
-normal example artifacts.
+that at least one built-in Finder sidebar symbol exercises the SVG path arc
+parser in normal example artifacts, while the arc policy states whether that
+arc stays on the native `ArcTo` path or lowers to cubic segments.
 
 `PHENOTYPE_ARTIFACT_EXIT=1` makes the example exit after writing the first
 rendered frame, which is useful for CI or LLM debugging. Omit it for manual
