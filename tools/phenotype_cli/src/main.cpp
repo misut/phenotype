@@ -3371,6 +3371,8 @@ auto explorer_chrome_json(
         "\"icon_button_count\":{},\"overflow_action_button_count\":{},"
         "\"finder_segmented\":{},\"more_actions_open\":{},"
         "\"status_bar_visible\":{}}},"
+        "\"column_locations\":{{\"row_count\":{},\"row_height\":{},"
+        "\"icon_size\":{}}},"
         "\"native_window\":{{\"integrated_titlebar\":{},"
         "\"native_window_controls\":{},\"duplicate_window_controls\":{},"
         "\"titlebar_drag_region_height\":{},"
@@ -3395,7 +3397,8 @@ auto explorer_chrome_json(
         "\"reference_symbol_count\":{},\"grid_size\":{},"
         "\"default_stroke_width\":{},\"secondary_opacity\":{},"
         "\"toolbar_point_size\":{},\"sidebar_point_size\":{},"
-        "\"sidebar_optical_y_offset\":{},\"text_weight_aligned\":{},"
+        "\"sidebar_optical_y_offset\":{},\"column_location_icon_size\":{},"
+        "\"text_weight_aligned\":{},"
         "\"hierarchical_opacity\":{},\"design_reference\":{},"
         "\"reference_family\":{},\"reference_policy\":{},"
         "\"asset_policy\":{},\"alignment\":{},\"rendering_mode\":{},"
@@ -3432,6 +3435,9 @@ auto explorer_chrome_json(
         chrome.finder_segmented_toolbar ? "true" : "false",
         chrome.more_actions_open ? "true" : "false",
         chrome.status_bar_visible ? "true" : "false",
+        chrome.column_location_row_count,
+        chrome.column_location_row_height,
+        chrome.column_location_icon_size,
         chrome.integrated_titlebar ? "true" : "false",
         chrome.native_window_controls ? "true" : "false",
         chrome.duplicate_window_controls ? "true" : "false",
@@ -3477,6 +3483,7 @@ auto explorer_chrome_json(
         chrome.icon_toolbar_point_size,
         chrome.icon_sidebar_point_size,
         chrome.icon_sidebar_optical_y_offset,
+        chrome.column_location_icon_size,
         chrome.icon_text_weight_aligned ? "true" : "false",
         chrome.icon_hierarchical_opacity ? "true" : "false",
         json_string(chrome.icon_design_reference),

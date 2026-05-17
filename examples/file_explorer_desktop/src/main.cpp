@@ -279,6 +279,10 @@ constexpr float k_sidebar_section_gap =
     file_explorer_demo::k_desktop_sidebar_section_gap;
 constexpr float k_sidebar_selected_row_radius =
     file_explorer_demo::k_desktop_sidebar_selected_row_radius;
+constexpr float k_column_location_row_height =
+    file_explorer_demo::k_desktop_column_location_row_height;
+constexpr float k_column_location_icon_size =
+    file_explorer_demo::k_desktop_column_location_icon_size;
 constexpr float k_content_radius = 0.0f;
 constexpr float k_window_radius = file_explorer_demo::k_desktop_window_radius;
 constexpr float k_toolbar_group_radius =
@@ -438,6 +442,8 @@ phenotype::icons::Symbol sidebar_symbol(std::string_view id) {
         return Symbol::Desktop;
     if (id == "doc")
         return Symbol::Document;
+    if (id == "image")
+        return Symbol::Image;
     if (id == "download")
         return Symbol::Download;
     if (id == "cloud")
@@ -477,20 +483,26 @@ void paint_symbol_centered(
     phenotype::icons::paint_symbol(painter, presentation, x, y);
 }
 
+phenotype::Color sidebar_symbol_color(bool selected) {
+    return phenotype::icons::macos_light_tone_color(
+        phenotype::icons::macos_interaction_tone(
+            phenotype::icons::SymbolPresentationRole::Sidebar,
+            phenotype::icons::SymbolInteractionState{selected, true}));
+}
+
 void paint_sidebar_icon(phenotype::Painter& painter,
                         std::string_view id,
                         bool selected,
                         float origin_x,
                         float origin_y) {
-    auto const tone = phenotype::icons::macos_interaction_tone(
-        phenotype::icons::SymbolPresentationRole::Sidebar,
-        phenotype::icons::SymbolInteractionState{selected, true});
     paint_symbol_centered(
         painter,
         phenotype::icons::presentation(
             sidebar_symbol(id),
             phenotype::icons::SymbolPresentationRole::Sidebar,
-            tone),
+            phenotype::icons::macos_interaction_tone(
+                phenotype::icons::SymbolPresentationRole::Sidebar,
+                phenotype::icons::SymbolInteractionState{selected, true})),
         origin_x,
         origin_y,
         k_sidebar_icon_size,
@@ -932,6 +944,76 @@ void finder_button(std::string label,
         options.text_align = phenotype::TextAlign::Center;
 
     phenotype::widget::button<Msg>(label, std::move(msg), options);
+}
+
+void finder_column_location_button(std::string label,
+                                   std::string icon,
+                                   Msg msg,
+                                   bool selected,
+                                   float max_width,
+                                   float font_size) {
+    phenotype::ButtonStyleOptions options;
+    options.has_background = true;
+    options.background = selected
+        ? rgba(232, 232, 234, 235)
+        : rgba(0, 0, 0, 0);
+    options.has_hover_background = true;
+    options.hover_background = selected
+        ? rgba(224, 224, 229, 245)
+        : rgba(230, 230, 234, 150);
+    options.has_border_color = true;
+    options.border_color = rgba(0, 0, 0, 0);
+    options.border_width = 0.0f;
+    options.border_radius = 8.0f;
+    options.fixed_height = k_column_location_row_height;
+    options.max_width = max_width;
+
+    phenotype::widget::canvas_button<Msg>(
+        phenotype::str{label},
+        max_width,
+        k_column_location_row_height,
+        [label, icon, selected, max_width, font_size](
+                phenotype::Painter& painter) {
+            float const icon_box = 22.0f;
+            float const icon_x = 7.0f;
+            float const icon_y =
+                (k_column_location_row_height - icon_box) * 0.5f;
+            paint_symbol_centered(
+                painter,
+                sidebar_symbol(icon),
+                icon_x,
+                icon_y,
+                icon_box,
+                icon_box,
+                k_column_location_icon_size,
+                sidebar_symbol_color(selected));
+
+            auto const ink = selected ? rgba(0, 122, 255)
+                                      : rgba(28, 28, 30);
+            float const text_y =
+                std::max(0.0f, (k_column_location_row_height - 18.0f) * 0.5f);
+            painter.text(34.0f,
+                         text_y,
+                         label.c_str(),
+                         static_cast<unsigned int>(label.size()),
+                         font_size,
+                         ink,
+                         finder_font());
+            paint_symbol_centered(
+                painter,
+                phenotype::icons::Symbol::Forward,
+                max_width - 22.0f,
+                (k_column_location_row_height - 18.0f) * 0.5f,
+                18.0f,
+                18.0f,
+                14.0f,
+                selected ? rgba(0, 122, 255, 210)
+                         : rgba(130, 130, 136, 210));
+        },
+        std::move(msg),
+        options,
+        stable_token(label) ^ stable_token(icon) ^ 0x3f7000u
+            ^ (selected ? 0x3f1f00u : 0u));
 }
 
 void finder_icon_label_button(std::string const& label,
@@ -1685,18 +1767,34 @@ void finder_column_view(State const& state,
                 layout::sized_box(210.0f, [&] {
                     layout::column([&] {
                         widget::text(state.labels.locations, TextSize::Small, TextColor::Muted);
-                        finder_button("Demo Root", SelectLocation{"root"},
-                                      snap.relative_location == "Demo Root",
-                                      190.0f, 14.0f, false, true);
-                        finder_button(state.labels.documents, SelectLocation{"documents"},
-                                      snap.relative_location == "Demo Root/Documents",
-                                      190.0f, 14.0f, false, true);
-                        finder_button(state.labels.pictures, SelectLocation{"pictures"},
-                                      snap.relative_location == "Demo Root/Pictures",
-                                      190.0f, 14.0f, false, true);
-                        finder_button(state.labels.sidebar_shared, SelectLocation{"shared"},
-                                      snap.relative_location == "Demo Root/Shared",
-                                      190.0f, 14.0f, false, true);
+                        finder_column_location_button(
+                            "Demo Root",
+                            "home",
+                            SelectLocation{"root"},
+                            snap.relative_location == "Demo Root",
+                            190.0f,
+                            14.0f);
+                        finder_column_location_button(
+                            state.labels.documents,
+                            "doc",
+                            SelectLocation{"documents"},
+                            snap.relative_location == "Demo Root/Documents",
+                            190.0f,
+                            14.0f);
+                        finder_column_location_button(
+                            state.labels.pictures,
+                            "image",
+                            SelectLocation{"pictures"},
+                            snap.relative_location == "Demo Root/Pictures",
+                            190.0f,
+                            14.0f);
+                        finder_column_location_button(
+                            state.labels.sidebar_shared,
+                            "shared",
+                            SelectLocation{"shared"},
+                            snap.relative_location == "Demo Root/Shared",
+                            190.0f,
+                            14.0f);
                     }, SpaceToken::Xs);
                 });
                 layout::sized_box(360.0f, [&] {
