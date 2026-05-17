@@ -272,6 +272,22 @@ counts in the run receipt, and passes only
 native process. This keeps file reads, process execution, and environment
 access at the edge while allowing artifact bundles to prove the result of GUI
 input replay.
+For a single command that drives input and observes native output, use
+`--observe-output`:
+
+```sh
+cd tools/phenotype_cli
+mise exec -- exon build
+.exon/debug/phenotype_cli run file_explorer_desktop \
+  --observe-output \
+  --input view:gallery \
+  --input select:README.txt \
+  --json
+```
+
+`--observe-output` allocates an artifact directory if needed, implies
+`PHENOTYPE_ARTIFACT_EXIT=1`, and embeds the same parsed semantic/material/
+runtime observation produced by `phenotype observe` in the JSON run receipt.
 The macOS native backend reads accessibility display preferences from
 `NSWorkspace` by default. For deterministic artifact capture, set
 `PHENOTYPE_ACCESSIBILITY_DISPLAY=standard` to disable those inputs, or set

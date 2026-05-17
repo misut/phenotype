@@ -472,6 +472,12 @@ scripts into the same shape for deterministic driving. Renderer backends
 consume the command stream and debug descriptors as usual; the CLI can instead
 emit command summaries, semantic nodes, material plans, runtime summaries,
 pixel-region samples, and verifier failures without showing a window.
+`phenotype run --observe-output` bridges the two paths: it drives a native
+example with CLI-provided input, asks the app to write a startup artifact, exits
+deterministically, and embeds the parsed artifact observation in the same run
+receipt. That keeps input driving and output observation under one CLI command
+while preserving the renderer/backend artifact writer as the only side-effect
+edge.
 
 Packaging and diagnostics stay at the CLI edge. Asset discovery, i18n resource
 validation, font packaging, Android process control, screenshots, filesystem

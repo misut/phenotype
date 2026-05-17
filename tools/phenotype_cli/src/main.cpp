@@ -227,6 +227,7 @@ struct ExampleRunSummary {
     bool run_requested = true;
     bool artifact_requested = false;
     bool artifact_exit = false;
+    bool output_observation_requested = false;
     std::size_t file_explorer_input_count = 0;
     std::size_t file_explorer_script_input_count = 0;
     fs::path file_explorer_script;
@@ -234,6 +235,7 @@ struct ExampleRunSummary {
     std::optional<cppx::process::CapturedProcessResult> build_result;
     std::optional<cppx::process::CapturedProcessResult> run_result;
     std::optional<ArtifactSummary> artifact;
+    std::optional<ArtifactObservation> output_observation;
     bool ok = false;
     std::string error;
 };
@@ -822,6 +824,10 @@ auto spec() -> cppx::cli::CommandSpec {
                     {.name = "artifact-exit",
                      .arity = cppx::cli::OptionArity::none,
                      .description = "Set PHENOTYPE_ARTIFACT_EXIT=1"},
+                    {.name = "observe-output",
+                     .arity = cppx::cli::OptionArity::none,
+                     .description =
+                        "Capture a startup artifact, exit, and embed the parsed output observation"},
                     {.name = "artifact-reason",
                      .arity = cppx::cli::OptionArity::one,
                      .value_name = "text",
@@ -856,6 +862,7 @@ auto spec() -> cppx::cli::CommandSpec {
                 .examples = {
                     "phenotype run glass_showcase --artifact-dir /tmp/phenotype-glass --artifact-exit",
                     "phenotype run examples/file_explorer_desktop --artifact-exit --input select:README.txt",
+                    "phenotype run examples/file_explorer_desktop --observe-output --input select:README.txt --json",
                 },
             },
             android_command_spec(),
@@ -3662,13 +3669,18 @@ auto example_run_json(ExampleRunSummary const& summary) -> std::string {
         summary.file_explorer_script.empty()
             ? std::string{"null"}
             : json_string(path_string(summary.file_explorer_script)));
+    auto output_observation = summary.output_observation
+        ? artifact_observation_json(*summary.output_observation)
+        : std::string{"null"};
 
     return std::format(
         "{{\"schema_version\":1,\"command\":\"run\",\"ok\":{},"
         "\"example\":{},\"example_root\":{},\"package_name\":{},"
         "\"executable\":{},\"build_requested\":{},\"run_requested\":{},"
-        "\"artifact_exit\":{},\"file_explorer_input\":{},\"timeout_seconds\":{},"
-        "\"build\":{},\"run_result\":{},\"artifact\":{},\"error\":{}}}",
+        "\"artifact_exit\":{},\"output_observation_requested\":{},"
+        "\"file_explorer_input\":{},\"timeout_seconds\":{},"
+        "\"build\":{},\"run_result\":{},\"artifact\":{},"
+        "\"output_observation\":{},\"error\":{}}}",
         summary.ok ? "true" : "false",
         json_string(summary.example),
         json_string(path_string(summary.example_root)),
@@ -3677,11 +3689,13 @@ auto example_run_json(ExampleRunSummary const& summary) -> std::string {
         summary.build_requested ? "true" : "false",
         summary.run_requested ? "true" : "false",
         summary.artifact_exit ? "true" : "false",
+        summary.output_observation_requested ? "true" : "false",
         file_explorer_input,
         timeout_seconds,
         process_result_detail_json(summary.build_result),
         process_result_detail_json(summary.run_result),
         artifact,
+        output_observation,
         json_string(summary.error));
 }
 
@@ -3774,6 +3788,27 @@ void print_example_run(ExampleRunSummary const& summary) {
                 summary.artifact->platform_file_count);
         }
         lines.push_back({.label = "artifact", .value = value, .status = status});
+    }
+    if (summary.output_observation_requested) {
+        auto status = cppx::terminal::StatusKind::skip;
+        auto value = std::string{"not run"};
+        if (summary.output_observation) {
+            status = summary.output_observation->ok
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::fail;
+            value = std::format(
+                "{} snapshot={} material_plans={}",
+                path_string(summary.output_observation->bundle),
+                summary.output_observation->snapshot.parse_ok
+                    ? "parsed"
+                    : "missing",
+                summary.output_observation->snapshot.material.plan_count);
+        }
+        lines.push_back({
+            .label = "output",
+            .value = std::move(value),
+            .status = status,
+        });
     }
     std::println("phenotype run");
     std::println("{}", cppx::terminal::format_status_frame(lines, false));
@@ -6432,7 +6467,9 @@ int run_example(cppx::cli::Invocation const& invocation) {
     auto summary = ExampleRunSummary{
         .example = invocation.positionals.front(),
         .build_requested = !invocation.has("no-build"),
-        .artifact_exit = invocation.has("artifact-exit"),
+        .artifact_exit =
+            invocation.has("artifact-exit") || invocation.has("observe-output"),
+        .output_observation_requested = invocation.has("observe-output"),
     };
 
     auto example_root = resolve_example_root(
@@ -6521,6 +6558,18 @@ int run_example(cppx::cli::Invocation const& invocation) {
         summary.artifact_requested = true;
         summary.artifact_dir =
             fs::path{absolute_path_string(fs::path{std::string{*value}})};
+        (*env)["PHENOTYPE_ARTIFACT_DIR"] = path_string(summary.artifact_dir);
+    }
+    if (summary.output_observation_requested && !summary.artifact_requested) {
+        auto output_dir = make_temp_directory("phenotype-run-output");
+        if (!output_dir) {
+            return print_error(
+                "run",
+                output_dir.error(),
+                invocation.has("json"));
+        }
+        summary.artifact_requested = true;
+        summary.artifact_dir = *output_dir;
         (*env)["PHENOTYPE_ARTIFACT_DIR"] = path_string(summary.artifact_dir);
     }
     if (summary.artifact_exit) {
@@ -6613,10 +6662,16 @@ int run_example(cppx::cli::Invocation const& invocation) {
     summary.run_result = std::move(*run);
     if (summary.artifact_requested)
         summary.artifact = artifact_summary(summary.artifact_dir);
+    if (summary.output_observation_requested && summary.artifact) {
+        summary.output_observation =
+            observe_artifact(summary.artifact_dir, invocation);
+    }
     summary.ok = !summary.run_result->timed_out
         && summary.run_result->exit_code == 0
         && (!summary.artifact_requested
-            || (summary.artifact && summary.artifact->snapshot_json));
+            || (summary.artifact && summary.artifact->snapshot_json))
+        && (!summary.output_observation_requested
+            || (summary.output_observation && summary.output_observation->ok));
     if (!summary.ok && summary.error.empty()) {
         if (summary.run_result->timed_out) {
             summary.error = "example timed out";
@@ -6624,8 +6679,12 @@ int run_example(cppx::cli::Invocation const& invocation) {
             summary.error = std::format(
                 "example exited with {}",
                 summary.run_result->exit_code);
-        } else if (summary.artifact_requested) {
+        } else if (summary.artifact_requested
+                   && (!summary.artifact
+                       || !summary.artifact->snapshot_json)) {
             summary.error = "artifact bundle did not contain snapshot.json";
+        } else if (summary.output_observation_requested) {
+            summary.error = "output observation failed";
         }
     }
 

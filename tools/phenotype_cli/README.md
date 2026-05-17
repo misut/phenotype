@@ -100,6 +100,10 @@ The initial scope is intentionally narrow:
   those inputs through `file_explorer_shared`, then passes them to the native
   example through `PHENOTYPE_FILE_EXPLORER_INPUTS` and
   `PHENOTYPE_FILE_EXPLORER_SCRIPT` before startup artifact capture.
+  `--observe-output` makes the command allocate an artifact directory when
+  needed, set `PHENOTYPE_ARTIFACT_EXIT=1`, run the native example, and embed the
+  same parsed output observation used by `phenotype observe`. This connects
+  CLI-driven inputs to native renderer output without a second shell step.
 - `phenotype android ...` is the single Android workflow namespace for
   repository-local doctor/devices/emulator/build/APK/install/run/logs/screencap
   and artifact-contract commands. The implementation still delegates to the
