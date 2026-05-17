@@ -433,6 +433,8 @@ phenotype::icons::Symbol sidebar_symbol(std::string_view id) {
     using phenotype::icons::Symbol;
     if (id == "recents")
         return Symbol::Recents;
+    if (id == "shared")
+        return Symbol::Shared;
     if (id == "folder")
         return Symbol::Folder;
     if (id == "app")
@@ -1089,7 +1091,7 @@ void finder_sidebar(State const& state) {
     layout::sidebar(k_sidebar_width, [&] {
         titlebar_control_markers();
         sidebar_row(labels.sidebar_recents, "recents", "root", in_root);
-        sidebar_row(labels.sidebar_shared, "folder", "shared",
+        sidebar_row(labels.sidebar_shared, "shared", "shared",
                     relative == "Demo Root/Shared");
         layout::spacer(k_sidebar_section_gap);
         sidebar_heading(labels.favorites);

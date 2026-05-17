@@ -176,6 +176,8 @@ Native file explorer artifact bundles expose the same model state under
 mode, selected entry plus index, operation receipt, entry counts, pure chrome
 metrics, and keyboard command descriptors.
 The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
+the `phenotype.icons` style contract (`design_reference`, `asset_policy`,
+24x24 alignment grid, stroke width, total/sidebar/toolbar/filled symbol counts),
 traffic-light marker coordinates, and icon-grid density metrics such as column
 width, row height, pitch, thumbnail canvas size, label size, gap, visible rows,
 and visible capacity. The

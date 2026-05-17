@@ -32,6 +32,7 @@ enum class Symbol : unsigned int {
     Cloud,
     AirDrop,
     Recents,
+    Shared,
     Sidebar,
     NewFolder,
     Applications,
@@ -66,6 +67,7 @@ inline auto name(Symbol symbol) noexcept -> std::string_view {
     case Symbol::Cloud:       return "cloud";
     case Symbol::AirDrop:     return "airdrop";
     case Symbol::Recents:     return "recents";
+    case Symbol::Shared:      return "shared";
     case Symbol::Sidebar:     return "sidebar";
     case Symbol::NewFolder:   return "new_folder";
     case Symbol::Applications: return "applications";
@@ -76,6 +78,192 @@ inline auto name(Symbol symbol) noexcept -> std::string_view {
     case Symbol::NewDocument: return "new_document";
     }
     return "unknown";
+}
+
+enum class SymbolRole {
+    Navigation,
+    Toolbar,
+    Sidebar,
+    FileType,
+    Action,
+};
+
+inline auto symbol_role_name(SymbolRole role) noexcept -> std::string_view {
+    switch (role) {
+    case SymbolRole::Navigation: return "navigation";
+    case SymbolRole::Toolbar:    return "toolbar";
+    case SymbolRole::Sidebar:    return "sidebar";
+    case SymbolRole::FileType:   return "file_type";
+    case SymbolRole::Action:     return "action";
+    }
+    return "toolbar";
+}
+
+struct SymbolDescriptor {
+    Symbol symbol = Symbol::Document;
+    std::string_view name;
+    SymbolRole role = SymbolRole::Toolbar;
+    std::string_view style;
+    float grid_size = 24.0f;
+    float default_stroke_width = 1.8f;
+    bool uses_current_color = true;
+    bool round_stroke = true;
+    bool filled = false;
+    bool phenotype_owned = true;
+    bool uses_sf_symbols_asset = false;
+};
+
+inline constexpr unsigned int all_symbol_count = 31;
+inline constexpr unsigned int sidebar_symbol_count = 11;
+inline constexpr unsigned int toolbar_symbol_count = 15;
+
+inline auto symbol_at(unsigned int index) noexcept -> Symbol {
+    switch (index) {
+    case 0:  return Symbol::Back;
+    case 1:  return Symbol::Forward;
+    case 2:  return Symbol::Search;
+    case 3:  return Symbol::Share;
+    case 4:  return Symbol::Tag;
+    case 5:  return Symbol::More;
+    case 6:  return Symbol::Grid;
+    case 7:  return Symbol::List;
+    case 8:  return Symbol::Columns;
+    case 9:  return Symbol::Gallery;
+    case 10: return Symbol::Folder;
+    case 11: return Symbol::Trash;
+    case 12: return Symbol::Document;
+    case 13: return Symbol::Image;
+    case 14: return Symbol::Movie;
+    case 15: return Symbol::Plus;
+    case 16: return Symbol::XMark;
+    case 17: return Symbol::ChevronDown;
+    case 18: return Symbol::Home;
+    case 19: return Symbol::Cloud;
+    case 20: return Symbol::AirDrop;
+    case 21: return Symbol::Recents;
+    case 22: return Symbol::Shared;
+    case 23: return Symbol::Sidebar;
+    case 24: return Symbol::NewFolder;
+    case 25: return Symbol::Applications;
+    case 26: return Symbol::Desktop;
+    case 27: return Symbol::Download;
+    case 28: return Symbol::SortGroup;
+    case 29: return Symbol::Duplicate;
+    case 30: return Symbol::NewDocument;
+    }
+    return Symbol::Document;
+}
+
+inline auto sidebar_symbol_at(unsigned int index) noexcept -> Symbol {
+    switch (index) {
+    case 0:  return Symbol::Recents;
+    case 1:  return Symbol::Shared;
+    case 2:  return Symbol::Applications;
+    case 3:  return Symbol::Desktop;
+    case 4:  return Symbol::Document;
+    case 5:  return Symbol::Download;
+    case 6:  return Symbol::Cloud;
+    case 7:  return Symbol::Home;
+    case 8:  return Symbol::AirDrop;
+    case 9:  return Symbol::Trash;
+    case 10: return Symbol::Folder;
+    }
+    return Symbol::Folder;
+}
+
+inline auto toolbar_symbol_at(unsigned int index) noexcept -> Symbol {
+    switch (index) {
+    case 0:  return Symbol::Back;
+    case 1:  return Symbol::Forward;
+    case 2:  return Symbol::Grid;
+    case 3:  return Symbol::List;
+    case 4:  return Symbol::Columns;
+    case 5:  return Symbol::Gallery;
+    case 6:  return Symbol::SortGroup;
+    case 7:  return Symbol::Share;
+    case 8:  return Symbol::Tag;
+    case 9:  return Symbol::More;
+    case 10: return Symbol::Search;
+    case 11: return Symbol::NewDocument;
+    case 12: return Symbol::NewFolder;
+    case 13: return Symbol::Duplicate;
+    case 14: return Symbol::Trash;
+    }
+    return Symbol::Search;
+}
+
+inline auto style_name() noexcept -> std::string_view {
+    return "macos_rounded_outline_svg";
+}
+
+inline auto style_reference() noexcept -> std::string_view {
+    return "Apple HIG Icons and SF Symbols inspired custom rounded-outline SVG glyphs";
+}
+
+inline auto asset_policy() noexcept -> std::string_view {
+    return "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded";
+}
+
+inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
+    SymbolRole role = SymbolRole::Toolbar;
+    switch (symbol) {
+    case Symbol::Back:
+    case Symbol::Forward:
+    case Symbol::ChevronDown:
+        role = SymbolRole::Navigation;
+        break;
+    case Symbol::Folder:
+    case Symbol::Document:
+    case Symbol::Image:
+    case Symbol::Movie:
+        role = SymbolRole::FileType;
+        break;
+    case Symbol::Home:
+    case Symbol::Cloud:
+    case Symbol::AirDrop:
+    case Symbol::Recents:
+    case Symbol::Shared:
+    case Symbol::Sidebar:
+    case Symbol::Applications:
+    case Symbol::Desktop:
+    case Symbol::Download:
+        role = SymbolRole::Sidebar;
+        break;
+    case Symbol::Plus:
+    case Symbol::XMark:
+    case Symbol::NewFolder:
+    case Symbol::Duplicate:
+    case Symbol::NewDocument:
+    case Symbol::Trash:
+        role = SymbolRole::Action;
+        break;
+    case Symbol::Search:
+    case Symbol::Share:
+    case Symbol::Tag:
+    case Symbol::More:
+    case Symbol::Grid:
+    case Symbol::List:
+    case Symbol::Columns:
+    case Symbol::Gallery:
+    case Symbol::SortGroup:
+        role = SymbolRole::Toolbar;
+        break;
+    }
+
+    bool const filled = symbol == Symbol::More;
+    return SymbolDescriptor{
+        symbol,
+        name(symbol),
+        role,
+        style_name(),
+        24.0f,
+        filled ? 0.0f : 1.8f,
+        true,
+        !filled,
+        filled,
+        true,
+        false,
+    };
 }
 
 inline auto source(Symbol symbol) noexcept -> std::string_view {
@@ -124,6 +312,8 @@ inline auto source(Symbol symbol) noexcept -> std::string_view {
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="1.8"/><path d="M8.5 16.8 Q12 13.6 15.5 16.8"/><path d="M5.8 19.2 Q12 13.2 18.2 19.2"/><path d="M4.5 9.5 Q12 3.5 19.5 9.5"/></svg>)SVG";
     case Symbol::Recents:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7 L12 12 L8.5 12"/></svg>)SVG";
+    case Symbol::Shared:
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3.8 8.4 L8.7 8.4 L10.5 10.1 L19.4 10.1 L19.4 18.2 L3.8 18.2 Z"/><circle cx="17.2" cy="7.6" r="2.2"/><path d="M13.8 12.5 C14.5 11.2 15.7 10.6 17.2 10.6 C18.7 10.6 20 11.2 20.6 12.5"/></svg>)SVG";
     case Symbol::Sidebar:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2.4"/><path d="M9 5 L9 19"/><path d="M6.2 8 L7.1 8"/><path d="M6.2 11 L7.1 11"/></svg>)SVG";
     case Symbol::NewFolder:

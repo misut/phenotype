@@ -1,6 +1,7 @@
 #include <cassert>
 #include <cmath>
 #include <cstdio>
+#include <cstring>
 #include <string_view>
 
 import phenotype.icons;
@@ -17,6 +18,10 @@ struct CapturePainter final : Painter {
     unsigned int last_verb_count = 0;
     float last_thickness = 0.0f;
     Color last_color = {};
+    float first_move_x = 0.0f;
+    float first_move_y = 0.0f;
+    float first_line_x = 0.0f;
+    float first_line_y = 0.0f;
 
     void line(float, float, float, float, float, Color) override {}
     void text(float, float, char const*, unsigned int, float, Color,
@@ -31,13 +36,34 @@ struct CapturePainter final : Painter {
     void stroke_path(PathBuilder const& path, float thickness, Color color) override {
         ++strokes;
         last_verb_count = path.verb_count;
+        capture_first_segment(path);
         last_thickness = thickness;
         last_color = color;
     }
     void fill_path(PathBuilder const& path, Color color) override {
         ++fills;
         last_verb_count = path.verb_count;
+        capture_first_segment(path);
         last_color = color;
+    }
+
+private:
+    static float read_f32(PathBuilder const& path, unsigned int index) {
+        float value = 0.0f;
+        unsigned int bits = path.verbs[index];
+        std::memcpy(&value, &bits, 4);
+        return value;
+    }
+
+    void capture_first_segment(PathBuilder const& path) {
+        if (path.verbs.size() >= 6
+            && static_cast<PathVerb>(path.verbs[0]) == PathVerb::MoveTo
+            && static_cast<PathVerb>(path.verbs[3]) == PathVerb::LineTo) {
+            first_move_x = read_f32(path, 1);
+            first_move_y = read_f32(path, 2);
+            first_line_x = read_f32(path, 4);
+            first_line_y = read_f32(path, 5);
+        }
     }
 };
 
@@ -89,6 +115,29 @@ void test_svg_basic_shapes() {
     std::puts("PASS: SVG rect/circle/ellipse/line/polygon parse");
 }
 
+void test_svg_transform_subset() {
+    auto doc = svg::parse(R"SVG(
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <g transform="translate(2 3)">
+            <path transform="scale(2)" d="M1 1 L3 1"/>
+          </g>
+        </svg>
+    )SVG");
+    assert(doc.shapes.size() == 1);
+    assert(!doc.has_diagnostics());
+
+    CapturePainter painter;
+    svg::paint(painter, doc, 0.0f, 0.0f, 24.0f, 24.0f);
+    assert(painter.strokes == 1);
+    assert(std::abs(painter.first_move_x - 4.0f) < 0.001f);
+    assert(std::abs(painter.first_move_y - 5.0f) < 0.001f);
+    assert(std::abs(painter.first_line_x - 8.0f) < 0.001f);
+    assert(std::abs(painter.first_line_y - 5.0f) < 0.001f);
+    assert(std::abs(painter.last_thickness - 2.0f) < 0.001f);
+
+    std::puts("PASS: SVG transform subset composes group and shape transforms");
+}
+
 void test_svg_unsupported_path_diagnostic() {
     auto doc = svg::parse(
         R"SVG(<svg viewBox="0 0 24 24"><path d="M4 12 A8 8 0 0 1 20 12"/></svg>)SVG");
@@ -99,47 +148,34 @@ void test_svg_unsupported_path_diagnostic() {
 }
 
 void test_builtin_icons_parse() {
-    constexpr icons::Symbol symbols[] = {
-        icons::Symbol::Back,
-        icons::Symbol::Forward,
-        icons::Symbol::Search,
-        icons::Symbol::Share,
-        icons::Symbol::Tag,
-        icons::Symbol::More,
-        icons::Symbol::Grid,
-        icons::Symbol::List,
-        icons::Symbol::Columns,
-        icons::Symbol::Gallery,
-        icons::Symbol::Folder,
-        icons::Symbol::Trash,
-        icons::Symbol::Document,
-        icons::Symbol::Image,
-        icons::Symbol::Movie,
-        icons::Symbol::Plus,
-        icons::Symbol::XMark,
-        icons::Symbol::ChevronDown,
-        icons::Symbol::Home,
-        icons::Symbol::Cloud,
-        icons::Symbol::AirDrop,
-        icons::Symbol::Recents,
-        icons::Symbol::Sidebar,
-        icons::Symbol::NewFolder,
-        icons::Symbol::Applications,
-        icons::Symbol::Desktop,
-        icons::Symbol::Download,
-        icons::Symbol::SortGroup,
-        icons::Symbol::Duplicate,
-        icons::Symbol::NewDocument,
-    };
+    assert(icons::style_name() == "macos_rounded_outline_svg");
+    assert(icons::style_reference().find("Apple HIG") != std::string_view::npos);
+    assert(icons::asset_policy().find("no Apple") != std::string_view::npos);
+    assert(icons::all_symbol_count == 31);
+    assert(icons::sidebar_symbol_count == 11);
+    assert(icons::toolbar_symbol_count == 15);
 
-    for (auto symbol : symbols) {
+    for (unsigned int i = 0; i < icons::all_symbol_count; ++i) {
+        auto symbol = icons::symbol_at(i);
         auto src = icons::source(symbol);
         auto doc = icons::document(symbol);
+        auto descriptor = icons::descriptor(symbol);
         assert(!icons::name(symbol).empty());
         assert(!src.empty());
+        assert(descriptor.name == icons::name(symbol));
+        assert(descriptor.style == icons::style_name());
+        assert(descriptor.grid_size == 24.0f);
+        assert(descriptor.phenotype_owned);
+        assert(!descriptor.uses_sf_symbols_asset);
+        assert(descriptor.uses_current_color);
         if (symbol != icons::Symbol::More) {
             assert(src.find(R"(stroke-linecap="round")") != std::string_view::npos);
             assert(src.find(R"(stroke-linejoin="round")") != std::string_view::npos);
+            assert(descriptor.round_stroke);
+            assert(!descriptor.filled);
+        } else {
+            assert(descriptor.filled);
+            assert(!descriptor.round_stroke);
         }
         assert(!doc.empty());
         assert(!doc.has_diagnostics());
@@ -150,7 +186,13 @@ void test_builtin_icons_parse() {
         assert(painter.fills + painter.strokes > 0);
     }
 
-    std::puts("PASS: built-in phenotype icons are valid SVG documents");
+    auto shared = icons::descriptor(icons::Symbol::Shared);
+    assert(shared.role == icons::SymbolRole::Sidebar);
+    assert(icons::symbol_role_name(shared.role) == "sidebar");
+    assert(icons::sidebar_symbol_at(1) == icons::Symbol::Shared);
+    assert(icons::toolbar_symbol_at(10) == icons::Symbol::Search);
+
+    std::puts("PASS: built-in phenotype icon catalog is valid SVG");
 }
 
 } // namespace
@@ -158,6 +200,7 @@ void test_builtin_icons_parse() {
 int main() {
     test_svg_path_subset();
     test_svg_basic_shapes();
+    test_svg_transform_subset();
     test_svg_unsupported_path_diagnostic();
     test_builtin_icons_parse();
     std::puts("\nAll SVG/icon tests passed.");

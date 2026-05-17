@@ -226,12 +226,40 @@
       "equals": true
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.total_symbol_count",
+      "equals": 31
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.sidebar_symbol_count",
-      "equals": 10
+      "equals": 11
     },
     {
       "path": "application.file_explorer.chrome.icon_system.toolbar_symbol_count",
       "equals": 15
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.filled_symbol_count",
+      "equals": 1
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.grid_size",
+      "equals": 24.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.default_stroke_width",
+      "equals": 1.7999999523162842
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.design_reference",
+      "equals": "Apple HIG Icons and SF Symbols inspired custom rounded-outline SVG glyphs"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.asset_policy",
+      "equals": "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.alignment",
+      "equals": "24x24 text-aligned symbol grid"
     },
     {
       "path": "application.file_explorer.chrome.titlebar_control_count",

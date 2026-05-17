@@ -154,12 +154,13 @@ look native while remaining portable across macOS, Windows, Android, and WASI.
 
 `phenotype.svg` is a pure vector image layer. It parses a bounded SVG subset
 (`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,
-`polygon`, `fill`, `stroke`, `currentColor`, opacity, and stroke width) into a
-`svg::Document`. Rendering consumes only a `Painter`, target geometry, and an
-explicit `svg::RenderOptions`, then emits existing `Path` / `FillPath`
-commands. It never reads files, compiles shaders, probes platform SVG support,
-or mutates global state. File/package loading belongs to resource and backend
-edges; core SVG rendering starts from already-provided SVG text.
+`polygon`, `fill`, `stroke`, `currentColor`, opacity, stroke width, and
+`translate`/`scale`/`rotate`/`matrix` transforms) into a `svg::Document`.
+Rendering consumes only a `Painter`, target geometry, and an explicit
+`svg::RenderOptions`, then emits existing `Path` / `FillPath` commands. It
+never reads files, compiles shaders, probes platform SVG support, or mutates
+global state. File/package loading belongs to resource and backend edges; core
+SVG rendering starts from already-provided SVG text.
 
 `phenotype.icons` is a small built-in icon catalog defined as original 24x24
 SVG glyphs. It intentionally follows general Apple HIG-style optical
@@ -167,8 +168,10 @@ proportions without copying SF Symbols artwork or names as assets. Apps can
 call `icons::document`, `icons::paint_symbol`, or `widget::icon`; the widget
 helper paints through `widget::canvas` and uses a deterministic paint token so
 stable icons do not re-emit every frame. The catalog encodes macOS-like rounded
-stroke caps and joins in each line icon's SVG source so future renderers can
-honor the same visual contract explicitly.
+stroke caps and joins in each line icon's SVG source and exposes symbol
+metadata (`icons::descriptor`, count constants, and index accessors for all,
+sidebar, and toolbar symbols) so examples and artifact verifiers can assert the
+style contract without pixel guessing.
 
 ## Input Command Boundary
 
