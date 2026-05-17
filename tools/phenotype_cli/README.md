@@ -75,6 +75,11 @@ The initial scope is intentionally narrow:
   The command deliberately reports semantic SF Symbols names without embedding
   Apple vector artwork, so CI and future LLM debugging can verify icon intent
   without screenshot guessing.
+- `phenotype icons lookup <name-or-reference>` resolves one built-in glyph by
+  phenotype symbol name or semantic SF Symbols reference name and reports the
+  same presentation role, metrics, ownership, and reference policy as the full
+  catalog. This gives tests, examples, and LLM debugging a small probe when a
+  Finder-style sidebar or toolbar token maps to the wrong visual metaphor.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible

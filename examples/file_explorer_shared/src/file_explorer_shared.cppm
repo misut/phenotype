@@ -1,5 +1,6 @@
 module;
 #include <algorithm>
+#include <array>
 #include <cctype>
 #include <cstddef>
 #include <cstdint>
@@ -378,6 +379,11 @@ struct PackageResourceText {
     std::string text;
 };
 
+struct ExplorerSidebarSymbol {
+    std::string_view token;
+    icon_catalog::Symbol symbol = icon_catalog::Symbol::Folder;
+};
+
 inline constexpr int k_desktop_default_viewport_width = 1300;
 inline constexpr int k_desktop_default_viewport_height = 760;
 inline constexpr int k_mobile_default_viewport_width = 390;
@@ -432,6 +438,39 @@ inline constexpr float k_desktop_icon_grid_thumbnail_height = 72.0f;
 inline constexpr float k_desktop_icon_grid_label_height = 46.0f;
 inline constexpr float k_desktop_icon_grid_label_font_size = 14.0f;
 inline constexpr float k_desktop_icon_grid_gap = 24.0f;
+
+inline constexpr std::array<ExplorerSidebarSymbol, 10>
+    k_desktop_sidebar_symbols{{
+        {"recents", icon_catalog::Symbol::Recents},
+        {"shared", icon_catalog::Symbol::Shared},
+        {"app", icon_catalog::Symbol::Applications},
+        {"desktop", icon_catalog::Symbol::Desktop},
+        {"doc", icon_catalog::Symbol::Document},
+        {"download", icon_catalog::Symbol::Download},
+        {"cloud", icon_catalog::Symbol::Cloud},
+        {"home", icon_catalog::Symbol::Home},
+        {"airdrop", icon_catalog::Symbol::AirDrop},
+        {"trash", icon_catalog::Symbol::Trash},
+    }};
+
+inline auto desktop_sidebar_symbol_contract() noexcept
+        -> std::span<ExplorerSidebarSymbol const> {
+    return k_desktop_sidebar_symbols;
+}
+
+inline auto sidebar_symbol_for_token(std::string_view token) noexcept
+        -> icon_catalog::Symbol {
+    for (auto const& item : desktop_sidebar_symbol_contract()) {
+        if (item.token == token)
+            return item.symbol;
+    }
+    return icon_catalog::Symbol::Folder;
+}
+
+inline auto sidebar_symbol_name_for_token(std::string_view token) noexcept
+        -> std::string_view {
+    return icon_catalog::name(sidebar_symbol_for_token(token));
+}
 inline constexpr char k_desktop_chrome_geometry_policy[] =
     "finder_integrated_glass_chrome_geometry_v1";
 
@@ -1442,6 +1481,26 @@ inline json::Value sidebar_icon_reference_symbols_debug_json(
     return json::Value{std::move(out)};
 }
 
+inline json::Value sidebar_symbol_tokens_debug_json(
+        ExplorerChromeMetrics const& chrome) {
+    if (chrome.icon_reference_symbol_count <= 0)
+        return json::Value{json::Array{}};
+    json::Array out;
+    for (auto const& item : desktop_sidebar_symbol_contract()) {
+        json::Object token;
+        token.emplace("token", json::Value{std::string{item.token}});
+        token.emplace(
+            "symbol",
+            json::Value{std::string{icon_catalog::name(item.symbol)}});
+        token.emplace(
+            "semantic_reference_name",
+            json::Value{std::string{
+                icon_catalog::semantic_reference_name(item.symbol)}});
+        out.push_back(json::Value{std::move(token)});
+    }
+    return json::Value{std::move(out)};
+}
+
 inline json::Value toolbar_icon_reference_symbols_debug_json(
         ExplorerChromeMetrics const& chrome) {
     if (chrome.icon_reference_symbol_count <= 0)
@@ -1657,6 +1716,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "sidebar_reference_symbols",
         sidebar_icon_reference_symbols_debug_json(chrome));
+    icon_system.emplace(
+        "sidebar_symbol_tokens",
+        sidebar_symbol_tokens_debug_json(chrome));
     icon_system.emplace(
         "toolbar_reference_symbols",
         toolbar_icon_reference_symbols_debug_json(chrome));

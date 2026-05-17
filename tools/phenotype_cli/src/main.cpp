@@ -747,6 +747,19 @@ auto spec() -> cppx::cli::CommandSpec {
                             "phenotype icons catalog",
                         },
                     },
+                    {
+                        .name = "lookup",
+                        .summary =
+                            "Resolve one built-in icon by name or semantic reference",
+                        .options = {help_option(), json_option()},
+                        .positional_name = "name-or-reference",
+                        .positional_description =
+                            "Built-in symbol name such as recents or SF Symbols semantic reference such as clock.",
+                        .examples = {
+                            "phenotype icons lookup recents --json",
+                            "phenotype icons lookup magnifyingglass --json",
+                        },
+                    },
                 },
                 .allow_positionals = false,
                 .category = "metadata",
@@ -3268,6 +3281,47 @@ auto icon_symbol_set_json(IconCatalogSet set) -> std::string {
     return out;
 }
 
+struct IconLookupResult {
+    icon_catalog::Symbol symbol = icon_catalog::Symbol::Folder;
+    std::string_view match_kind;
+};
+
+auto lookup_icon_symbol(std::string_view query)
+        -> std::optional<IconLookupResult> {
+    if (auto symbol = icon_catalog::symbol_from_name(query)) {
+        return IconLookupResult{
+            .symbol = *symbol,
+            .match_kind = "name",
+        };
+    }
+    if (auto symbol =
+            icon_catalog::symbol_from_semantic_reference_name(query)) {
+        return IconLookupResult{
+            .symbol = *symbol,
+            .match_kind = "semantic_reference_name",
+        };
+    }
+    return std::nullopt;
+}
+
+auto icon_lookup_json(std::string_view query,
+                      IconLookupResult const& result) -> std::string {
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"icons lookup\","
+        "\"ok\":true,\"query\":{},\"match_kind\":{},\"symbol\":{}}}",
+        json_string(query),
+        json_string(result.match_kind),
+        icon_symbol_json(result.symbol, "lookup"));
+}
+
+auto icon_lookup_not_found_json(std::string_view query) -> std::string {
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"icons lookup\","
+        "\"ok\":false,\"query\":{},\"error\":\"symbol not found\","
+        "\"suggestion\":\"Use phenotype icons catalog --json to list built-in symbol names and semantic references.\"}}",
+        json_string(query));
+}
+
 auto icon_reference_names_json(IconCatalogSet set, bool enabled)
         -> std::string {
     if (!enabled)
@@ -3279,6 +3333,25 @@ auto icon_reference_names_json(IconCatalogSet set, bool enabled)
             out += ",";
         out += json_string(icon_catalog::semantic_reference_name(
             icon_catalog_set_symbol(set, i)));
+    }
+    out += "]";
+    return out;
+}
+
+auto sidebar_symbol_tokens_json(bool enabled) -> std::string {
+    if (!enabled)
+        return "[]";
+    auto out = std::string{"["};
+    auto const items = file_explorer_demo::desktop_sidebar_symbol_contract();
+    for (std::size_t i = 0; i < items.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        auto const& item = items[i];
+        out += std::format(
+            "{{\"token\":{},\"symbol\":{},\"semantic_reference_name\":{}}}",
+            json_string(item.token),
+            json_string(icon_catalog::name(item.symbol)),
+            json_string(icon_catalog::semantic_reference_name(item.symbol)));
     }
     out += "]";
     return out;
@@ -4009,6 +4082,7 @@ auto explorer_chrome_json(
         "\"metrics_policy\":{},\"hit_target_policy\":{},"
         "\"scale\":{},"
         "\"sidebar_reference_symbols\":{},"
+        "\"sidebar_symbol_tokens\":{},"
         "\"toolbar_reference_symbols\":{}}}}}",
         chrome.viewport.width,
         chrome.viewport.height,
@@ -4123,6 +4197,7 @@ auto explorer_chrome_json(
         icon_reference_names_json(
             IconCatalogSet::Sidebar,
             chrome.icon_reference_symbol_count > 0),
+        sidebar_symbol_tokens_json(chrome.icon_reference_symbol_count > 0),
         icon_reference_names_json(
             IconCatalogSet::Toolbar,
             chrome.icon_reference_symbol_count > 0));
@@ -5041,6 +5116,21 @@ auto first_positional_or_error(cppx::cli::Invocation const& invocation,
             std::format("{} accepts exactly one positional path", command_name)};
     }
     return fs::path{invocation.positionals.front()};
+}
+
+auto single_positional_text_or_error(cppx::cli::Invocation const& invocation,
+                                     std::string_view command_name,
+                                     std::string_view value_name)
+    -> std::expected<std::string, std::string> {
+    if (invocation.positionals.empty()) {
+        return std::unexpected{
+            std::format("{} requires one positional {}", command_name, value_name)};
+    }
+    if (invocation.positionals.size() > 1) {
+        return std::unexpected{
+            std::format("{} accepts exactly one positional {}", command_name, value_name)};
+    }
+    return invocation.positionals.front();
 }
 
 auto optional_positional_or_error(cppx::cli::Invocation const& invocation,
@@ -7021,6 +7111,69 @@ int run_icons_catalog(cppx::cli::Invocation const& invocation) {
     return all_ok(checks) ? 0 : 1;
 }
 
+int run_icons_lookup(cppx::cli::Invocation const& invocation) {
+    auto query = single_positional_text_or_error(
+        invocation,
+        "icons lookup",
+        "name-or-reference");
+    if (!query)
+        return print_error("icons lookup", query.error(), invocation.has("json"));
+
+    auto result = lookup_icon_symbol(*query);
+    if (!result) {
+        if (invocation.has("json")) {
+            std::println("{}", icon_lookup_not_found_json(*query));
+        } else {
+            std::println(
+                std::cerr,
+                "{}",
+                cppx::terminal::format_diagnostic({
+                    .severity = cppx::terminal::DiagnosticSeverity::error,
+                    .message = std::format(
+                        "symbol '{}' was not found; run 'phenotype icons catalog' to list built-in symbols",
+                        *query),
+                    .context = "icons lookup",
+                }));
+        }
+        return 2;
+    }
+
+    if (invocation.has("json")) {
+        std::println("{}", icon_lookup_json(*query, *result));
+        return 0;
+    }
+
+    auto const desc = icon_catalog::descriptor(result->symbol);
+    auto const role = icon_catalog::default_presentation_role(result->symbol);
+    auto const metrics = icon_catalog::metrics(role);
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "query",
+         .value = *query,
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "match",
+         .value = std::string{result->match_kind},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "symbol",
+         .value = std::string{desc.name},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "semantic reference",
+         .value = std::string{desc.semantic_reference_name},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "role",
+         .value = std::string{icon_catalog::symbol_presentation_role_name(role)},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "metrics",
+         .value = std::format(
+             "{}pt symbol, {}pt hit target",
+             metrics.point_size,
+             metrics.hit_target_size),
+         .status = cppx::terminal::StatusKind::ok},
+    };
+    std::println("phenotype icons lookup");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    return 0;
+}
+
 int run_theme_contract(cppx::cli::Invocation const& invocation) {
     auto checks = theme_contract_checks();
     auto const contract = theme_contract::default_glass_theme_contract();
@@ -7961,6 +8114,9 @@ int main(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "icons", "catalog"})
         return run_icons_catalog(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "icons", "lookup"})
+        return run_icons_lookup(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "theme", "contract"})
         return run_theme_contract(*parsed);

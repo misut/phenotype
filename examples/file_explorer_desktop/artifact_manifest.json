@@ -616,6 +616,61 @@
       ]
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.sidebar_symbol_tokens",
+      "equals": [
+        {
+          "token": "recents",
+          "symbol": "recents",
+          "semantic_reference_name": "clock"
+        },
+        {
+          "token": "shared",
+          "symbol": "shared",
+          "semantic_reference_name": "folder.badge.person.crop"
+        },
+        {
+          "token": "app",
+          "symbol": "applications",
+          "semantic_reference_name": "app"
+        },
+        {
+          "token": "desktop",
+          "symbol": "desktop",
+          "semantic_reference_name": "desktopcomputer"
+        },
+        {
+          "token": "doc",
+          "symbol": "document",
+          "semantic_reference_name": "doc"
+        },
+        {
+          "token": "download",
+          "symbol": "download",
+          "semantic_reference_name": "arrow.down.circle"
+        },
+        {
+          "token": "cloud",
+          "symbol": "cloud",
+          "semantic_reference_name": "icloud"
+        },
+        {
+          "token": "home",
+          "symbol": "home",
+          "semantic_reference_name": "house"
+        },
+        {
+          "token": "airdrop",
+          "symbol": "airdrop",
+          "semantic_reference_name": "airdrop"
+        },
+        {
+          "token": "trash",
+          "symbol": "trash",
+          "semantic_reference_name": "trash"
+        }
+      ]
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.toolbar_reference_symbols",
       "equals": [
         "chevron.left",
