@@ -89,9 +89,23 @@ jobs:
             esac
 
             case "$path" in
+              packages/phenotype_io/*)
+                cli_check=true
+                continue
+                ;;
+            esac
+
+            case "$path" in
               packages/phenotype_resources/*)
                 cli_check=true
                 package_resource_check=true
+                continue
+                ;;
+            esac
+
+            case "$path" in
+              packages/phenotype_svg_contract/*)
+                cli_check=true
                 continue
                 ;;
             esac
@@ -507,7 +521,7 @@ jobs:
           path: |
             tools/phenotype_cli/.exon
             ~/.exon/cache
-          key: cli-package-${{ runner.os }}-${{ hashFiles('mise.toml', 'tools/phenotype_cli/exon.toml', 'examples/file_explorer_shared/exon.toml', 'examples/glass_showcase_shared/exon.toml', 'packages/phenotype_icon_contract/exon.toml', 'packages/phenotype_theme_contract/exon.toml', 'packages/phenotype_resources/exon.toml') }}
+          key: cli-package-${{ runner.os }}-${{ hashFiles('mise.toml', 'tools/phenotype_cli/exon.toml', 'examples/file_explorer_shared/exon.toml', 'examples/glass_showcase_shared/exon.toml', 'packages/phenotype_icon_contract/exon.toml', 'packages/phenotype_theme_contract/exon.toml', 'packages/phenotype_io/exon.toml', 'packages/phenotype_resources/exon.toml', 'packages/phenotype_svg_contract/exon.toml') }}
           restore-keys: |
             cli-package-${{ runner.os }}-
 
@@ -571,6 +585,18 @@ jobs:
           cd packages/phenotype_theme_contract
           exon test
 
+      - name: Test phenotype IO contract package
+        run: |
+          eval "$(intron env)"
+          cd packages/phenotype_io
+          exon test
+
+      - name: Build phenotype SVG contract package
+        run: |
+          eval "$(intron env)"
+          cd packages/phenotype_svg_contract
+          exon build
+
       - name: Test file explorer shared module
         if: needs.changes.outputs.file_explorer_examples == 'true'
         run: |
@@ -601,7 +627,11 @@ jobs:
           "$cli" icons lookup magnifyingglass --json | json_tool >/dev/null
           "$cli" icons svg desktopcomputer --json | json_tool >/dev/null
           "$cli" icons svg applications | grep -q '<svg '
+          "$cli" icons present recents --role sidebar --selected --json | json_tool >/dev/null
+          "$cli" icons render magnifyingglass --role toolbar --phase pressed --json | json_tool >/dev/null
+          "$cli" svg inspect examples/file_explorer_desktop/assets/file-explorer-icon.svg --json | json_tool >/dev/null
           "$cli" theme contract --json | json_tool >/dev/null
+          "$cli" io contract --json | json_tool >/dev/null
           "$cli" package list --json examples | json_tool >/dev/null
           "$cli" package inspect --json examples/file_explorer_desktop | json_tool >/dev/null
           "$cli" package inspect --json examples/file_explorer_mobile | json_tool >/dev/null

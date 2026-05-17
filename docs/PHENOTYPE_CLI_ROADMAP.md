@@ -155,6 +155,11 @@ Pull-request CI routes CLI and file explorer package-resource edits through a
 lightweight Linux CLI/package job instead of the full root native matrix.
 The PR gate only validates command metadata and resource catalogs for the slow
 native artifact commands; full glass/file-explorer captures remain local gates.
+Pure support packages used by the CLI, including `phenotype_io` and
+`phenotype_svg_contract`, are intentionally classified into that Linux
+CLI/package lane instead of the root macOS/wasm matrix. This keeps package-only
+contract work cheap while still exercising the command JSON surfaces that future
+automation depends on.
 
 Android workflows now follow the same CLI-first rule. The shell scripts under
 `tools/android` remain as the edge adapter implementation because they already
