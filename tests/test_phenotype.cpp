@@ -3640,6 +3640,8 @@ void test_icon_catalog_umbrella_export() {
            == "familiar_simplified_macos_symbol_metaphors");
     assert(phenotype::icon_catalog::toolbar_symbol_chrome_policy()
            == "borderless_toolbar_symbols_inside_grouped_controls");
+    assert(phenotype::icon_catalog::symbol_control_chrome_policy()
+           == "macos_finder_symbol_state_chrome");
     assert(phenotype::icon_catalog::svg_path_arc_symbol_count == 1);
     assert(phenotype::icon_catalog::round_stroke_symbol_count
            == phenotype::icon_catalog::outline_symbol_count);
@@ -3673,6 +3675,16 @@ void test_icon_catalog_umbrella_export() {
                phenotype::icon_catalog::SymbolPresentationRole::Sidebar,
                phenotype::icon_catalog::SymbolInteractionState{true, true})
            == phenotype::icon_catalog::SymbolTone::Accent);
+    auto const toolbar_chrome = phenotype::icon_catalog::macos_control_chrome(
+        phenotype::icon_catalog::SymbolPresentationRole::Toolbar,
+        phenotype::icon_catalog::SymbolInteractionState{false, true});
+    assert(toolbar_chrome.background_color.a == 0);
+    assert(toolbar_chrome.hover_background_color.a == 120);
+    auto const sidebar_chrome = phenotype::icon_catalog::macos_control_chrome(
+        phenotype::icon_catalog::SymbolPresentationRole::Sidebar,
+        phenotype::icon_catalog::SymbolInteractionState{true, true});
+    assert(sidebar_chrome.background_color.a == 176);
+    assert(sidebar_chrome.hover_background_color.a == 214);
 
     std::puts("PASS: umbrella module exports icon catalog contract");
 }

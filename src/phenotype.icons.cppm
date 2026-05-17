@@ -276,6 +276,19 @@ struct SymbolInteractionState {
     bool enabled = true;
 };
 
+struct SymbolControlChrome {
+    SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
+    SymbolTone symbol_tone = SymbolTone::Secondary;
+    Color symbol_color = {96, 96, 100, 255};
+    Color background_color = {0, 0, 0, 0};
+    Color hover_background_color = {0, 0, 0, 0};
+    float corner_radius = 0.0f;
+    float hit_target_size = 36.0f;
+    bool borderless = true;
+    bool grouped_control = true;
+    std::string_view policy;
+};
+
 struct SymbolMetrics {
     SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
     SymbolScale scale = SymbolScale::Medium;
@@ -425,6 +438,10 @@ inline auto sidebar_symbol_color_policy() noexcept -> std::string_view {
     return catalog::sidebar_symbol_color_policy();
 }
 
+inline auto symbol_control_chrome_policy() noexcept -> std::string_view {
+    return catalog::symbol_control_chrome_policy();
+}
+
 inline auto semantic_reference_name(Symbol symbol) noexcept -> std::string_view {
     return catalog::semantic_reference_name(to_catalog_symbol(symbol));
 }
@@ -536,6 +553,10 @@ inline auto macos_light_tone_color(SymbolTone tone) noexcept -> Color {
     return {color.r, color.g, color.b, color.a};
 }
 
+inline auto to_color(catalog::SymbolColor color) noexcept -> Color {
+    return {color.r, color.g, color.b, color.a};
+}
+
 inline auto interaction_tone_policy() noexcept -> std::string_view {
     return catalog::interaction_tone_policy();
 }
@@ -560,6 +581,29 @@ inline auto macos_interaction_tone(Symbol symbol,
             state.selected,
             state.enabled,
         }));
+}
+
+inline auto macos_control_chrome(SymbolPresentationRole role,
+                                 SymbolInteractionState state) noexcept
+        -> SymbolControlChrome {
+    auto const base = catalog::macos_control_chrome(
+        to_catalog_presentation_role(role),
+        catalog::SymbolInteractionState{
+            state.selected,
+            state.enabled,
+        });
+    return SymbolControlChrome{
+        from_catalog_presentation_role(base.role),
+        from_catalog_tone(base.symbol_tone),
+        to_color(base.symbol_color),
+        to_color(base.background_color),
+        to_color(base.hover_background_color),
+        base.corner_radius,
+        base.hit_target_size,
+        base.borderless,
+        base.grouped_control,
+        base.policy,
+    };
 }
 
 inline auto macos_file_type_color(Symbol symbol) noexcept -> Color {

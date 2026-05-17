@@ -367,6 +367,11 @@ duplicate
     assert(demo::sidebar_symbol_name_for_token("unknown-token") == "folder");
     assert(chrome.icon_default_stroke_width == 1.8f);
     assert(chrome.icon_secondary_opacity == 0.66f);
+    assert(chrome.icon_toolbar_button_radius == 15.0f);
+    assert(chrome.icon_toolbar_button_background_alpha == 0);
+    assert(chrome.icon_toolbar_button_hover_background_alpha == 120);
+    assert(chrome.icon_toolbar_selected_button_background_alpha == 150);
+    assert(chrome.icon_toolbar_selected_button_hover_background_alpha == 190);
     assert(chrome.icon_module == "phenotype.icons");
     assert(chrome.icon_style == "macos_rounded_outline_svg");
     assert(chrome.icon_source_format == "svg");
@@ -387,6 +392,8 @@ duplicate
            == "outline primary with filled action variants");
     assert(chrome.icon_interaction_tone_policy
            == "macos_finder_interaction_tones");
+    assert(chrome.icon_symbol_control_chrome_policy
+           == "macos_finder_symbol_state_chrome");
     assert(chrome.icon_file_type_color_policy
            == "macos_finder_file_type_tints");
     assert(chrome.icon_scale == "medium");
@@ -642,6 +649,12 @@ duplicate
     assert(debug_text.find("\"tone_policy\":\"primary, secondary, selected, accent, disabled, destructive\"")
            != std::string::npos);
     assert(debug_text.find("\"interaction_tone_policy\":\"macos_finder_interaction_tones\"")
+           != std::string::npos);
+    assert(debug_text.find("\"symbol_control_chrome_policy\":\"macos_finder_symbol_state_chrome\"")
+           != std::string::npos);
+    assert(debug_text.find("\"toolbar_button_hover_background_alpha\":120")
+           != std::string::npos);
+    assert(debug_text.find("\"toolbar_selected_button_background_alpha\":150")
            != std::string::npos);
     assert(debug_text.find("\"sidebar_selected\":\"accent\"")
            != std::string::npos);

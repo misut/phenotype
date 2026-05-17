@@ -79,8 +79,9 @@ without embedding Apple-owned vector paths. Artifacts can assert the icon
 module, source format, ownership boundary, reference family/policy, round
 stroke expectation, rendering mode, variant policy,
 text-aligned scale, role-aware presentation policy, sidebar/toolbar point
-sizes, role hit-target metrics, tone policy, symbol counts, and the exact
-semantic reference arrays for the visible Finder-style toolbar/sidebar glyphs.
+sizes, role hit-target metrics, tone policy, symbol-state chrome policy,
+toolbar button alpha/radius metrics, symbol counts, and the exact semantic
+reference arrays for the visible Finder-style toolbar/sidebar glyphs.
 The desktop sidebar additionally exposes the pure `token -> symbol -> semantic
 reference` table used by the renderer (`recents -> recents -> clock`,
 `download -> download -> arrow.down.circle`, and so on), without depending on

@@ -296,7 +296,9 @@ on the macOS-like round stroke contract. The desktop payload also includes
 `sidebar_symbol_tokens`, the renderer-facing table that maps sidebar tokens to
 phenotype-owned symbols and semantic SF Symbols reference names, so a wrong
 Recents/Shared/Desktop-style metaphor fails as data before anyone compares
-pixels.
+pixels. `symbol_control_chrome_policy` plus the toolbar button alpha/radius
+fields describe the macOS-style selected, hover, and disabled symbol chrome
+that the example uses before rendering.
 
 The same artifact exposes `application.file_explorer.theme_system.*` from the
 pure `phenotype_theme_contract` package. That block names the Apple-like glass

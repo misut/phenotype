@@ -323,11 +323,14 @@ interaction-tone policy: toolbar/navigation symbols resolve to 24 pt
 secondary, selected, or disabled tones, while sidebar symbols resolve to 26 pt
 primary or selected-row accent tones with an explicit optical offset. The file
 explorer artifact records those sizes and tone-policy names so the Finder-like
-icon treatment is checked as data, not as a screenshot guess. It also records
-the SVG subset and arc-lowering policy so a future icon regression can fail on
-an exact JSON path before anyone compares pixels. The AirDrop sidebar glyph now
-uses isolated circular SVG path arcs, so the example exercises the native arc
-preservation path that packaged macOS-style icons are allowed to depend on.
+icon treatment is checked as data, not as a screenshot guess. The same pure
+contract now covers symbol control chrome: selected and hover background
+alpha, borderless toolbar grouping, sidebar row radius, and hit-target policy.
+It also records the SVG subset and arc-lowering policy so a future icon
+regression can fail on an exact JSON path before anyone compares pixels. The
+AirDrop sidebar glyph now uses isolated circular SVG path arcs, so the example
+exercises the native arc preservation path that packaged macOS-style icons are
+allowed to depend on.
 The desktop file explorer also records a pure Finder chrome geometry policy for
 the integrated titlebar/sidebar/toolbar/content coordinates and native
 control-reserve widths, so the example can move toward Finder-like placement

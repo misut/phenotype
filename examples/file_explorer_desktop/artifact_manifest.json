@@ -508,6 +508,26 @@
       "equals": 36.0
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.toolbar_button_radius",
+      "equals": 15.0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.toolbar_button_background_alpha",
+      "equals": 0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.toolbar_button_hover_background_alpha",
+      "equals": 120
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.toolbar_selected_button_background_alpha",
+      "equals": 150
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.toolbar_selected_button_hover_background_alpha",
+      "equals": 190
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.column_location_icon_size",
       "equals": 18.0
     },
@@ -566,6 +586,10 @@
     {
       "path": "application.file_explorer.chrome.icon_system.interaction_tone_policy",
       "equals": "macos_finder_interaction_tones"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.symbol_control_chrome_policy",
+      "equals": "macos_finder_symbol_state_chrome"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.toolbar_symbol_chrome_policy",
