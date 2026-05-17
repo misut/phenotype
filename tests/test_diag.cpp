@@ -937,6 +937,10 @@ void test_material_runtime_record_json_contract() {
     assert(obj.at("fallback_reason").as_string()
            == "backend reports no material backdrop blur support");
     assert(obj.at("backdrop_sampling").as_bool() == false);
+    assert(obj.at("backdrop").as_object()
+               .at("excludes_foreground_text").as_bool() == false);
+    assert(obj.at("backdrop_access").as_object()
+               .at("excludes_foreground_text").as_bool() == false);
     assert(obj.at("sample_taps").as_integer() == 0);
     auto const& sampling_kernel = obj.at("sampling_kernel").as_object();
     assert(sampling_kernel.at("name").as_string() == "none");
@@ -1022,6 +1026,8 @@ void test_material_runtime_record_json_contract() {
     assert(observation.at("stable_backdrop_required").as_bool() == false);
     assert(observation.at("shared_frame_capture_required").as_bool() == false);
     assert(observation.at("next_frame_capture_required").as_bool() == false);
+    assert(observation.at("backdrop_capture_excludes_foreground_text")
+               .as_bool() == false);
     assert(observation.at("bounded_texture_copy_required").as_bool() == true);
     assert(observation.at("deterministic_fallback_required").as_bool()
            == true);

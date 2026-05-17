@@ -186,7 +186,7 @@ ALLOWED_MATERIAL_REFERENCE_PERFORMANCE_RESPONSES = {
     "warmup-capture",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 18
+MATERIAL_PLAN_CONTRACT_VERSION = 19
 
 
 def suggested_action_for_failure(
@@ -1084,11 +1084,13 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "luminance_curves",
         "backdrop_available",
         "backdrop_stable",
+        "backdrop_excludes_foreground_text",
         "backdrop_access_required",
         "backdrop_access_stable_required",
         "backdrop_access_frame_history_required",
         "backdrop_access_shared_frame_capture",
         "backdrop_access_next_frame_capture_required",
+        "backdrop_access_excludes_foreground_text",
         "backdrop_access_bounded",
         "backdrop_sources",
         "backdrop_access_sources",
@@ -1136,11 +1138,13 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "backdrop_sampling",
             "backdrop_available",
             "backdrop_stable",
+            "backdrop_excludes_foreground_text",
             "backdrop_access_required",
             "backdrop_access_stable_required",
             "backdrop_access_frame_history_required",
             "backdrop_access_shared_frame_capture",
             "backdrop_access_next_frame_capture_required",
+            "backdrop_access_excludes_foreground_text",
             "backdrop_access_bounded",
             "luminance_adapted",
             "render_target_ready",
@@ -1924,7 +1928,11 @@ MATERIAL_DECISION_TRACE_BOOL_FIELDS = (
 )
 MATERIAL_TINT_FIELDS = ("r", "g", "b", "a")
 MATERIAL_COLOR_FIELDS = ("r", "g", "b", "a")
-MATERIAL_BACKDROP_BOOL_FIELDS = ("available", "stable")
+MATERIAL_BACKDROP_BOOL_FIELDS = (
+    "available",
+    "stable",
+    "excludes_foreground_text",
+)
 MATERIAL_BACKDROP_LUMA_FIELDS = (
     "luma_min",
     "luma_max",
@@ -1965,6 +1973,7 @@ MATERIAL_OBSERVATION_BOOL_FIELDS = (
     "stable_backdrop_required",
     "shared_frame_capture_required",
     "next_frame_capture_required",
+    "backdrop_capture_excludes_foreground_text",
     "bounded_texture_copy_required",
     "deterministic_fallback_required",
 )
@@ -2044,6 +2053,7 @@ MATERIAL_BACKDROP_ACCESS_BOOL_FIELDS = (
     "frame_history_required",
     "shared_frame_capture",
     "next_frame_capture_required",
+    "excludes_foreground_text",
     "bounded",
 )
 MATERIAL_BACKDROP_ACCESS_NUMBER_FIELDS = (
@@ -2203,6 +2213,22 @@ def check_material_observation_contract(
             likely_layer="material-observation",
             likely_pass=likely_pass,
             hint="Observation warmup capture must mirror MaterialPlan.backdrop_access.",
+            record_success=False)
+        report.check(
+            "material observation foreground-exclusion requirement matches access",
+            observation.get("backdrop_capture_excludes_foreground_text")
+            == backdrop_access.get("excludes_foreground_text"),
+            path=(
+                f"{observation_path}."
+                "backdrop_capture_excludes_foreground_text"),
+            expected=backdrop_access.get("excludes_foreground_text"),
+            actual=observation.get(
+                "backdrop_capture_excludes_foreground_text"),
+            likely_layer="material-observation",
+            likely_pass=likely_pass,
+            hint=(
+                "Observation foreground-exclusion must mirror "
+                "MaterialPlan.backdrop_access."),
             record_success=False)
         report.check(
             "material observation capture scope matches access",
@@ -2525,6 +2551,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "backdrop": {
             "available": 0,
             "stable": 0,
+            "excludes_foreground_text": 0,
             "sources": {},
             "luminance_responses": {},
             "luminance_adapted": 0,
@@ -2539,6 +2566,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "frame_history_required": 0,
             "shared_frame_capture": 0,
             "next_frame_capture_required": 0,
+            "excludes_foreground_text": 0,
             "bounded": 0,
             "sources": {},
             "capture_scopes": {},
@@ -4295,6 +4323,17 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     hint="Sampled material plans require a stable backdrop descriptor.",
                     record_success=False)
                 report.check(
+                    "material sampled backdrop excludes foreground text",
+                    backdrop.get("excludes_foreground_text") is True,
+                    path=f"{plan_path}.backdrop.excludes_foreground_text",
+                    expected=True,
+                    actual=backdrop.get("excludes_foreground_text"),
+                    likely_layer=likely_layer,
+                    hint=(
+                        "Sampled glass should read an edge-provided backdrop "
+                        "capture that excludes foreground text and overlays."),
+                    record_success=False)
+                report.check(
                     "material sampled backdrop has luminance response",
                     response != "not-sampled",
                     path=f"{plan_path}.backdrop.luminance_response",
@@ -4417,17 +4456,21 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     "material sampled backdrop has required access",
                     access_required is True
                     and shared_capture is True
-                    and next_frame_capture is True,
+                    and next_frame_capture is True
+                    and backdrop_access.get("excludes_foreground_text") is True,
                     path=f"{plan_path}.backdrop_access",
                     expected={
                         "required": True,
                         "shared_frame_capture": True,
                         "next_frame_capture_required": True,
+                        "excludes_foreground_text": True,
                     },
                     actual={
                         "required": access_required,
                         "shared_frame_capture": shared_capture,
                         "next_frame_capture_required": next_frame_capture,
+                        "excludes_foreground_text": backdrop_access.get(
+                            "excludes_foreground_text"),
                     },
                     likely_layer="material-backdrop",
                     hint=(
@@ -4451,15 +4494,20 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 report.check(
                     "material fallback backdrop access follows warmup contract",
                     access_required is False
-                    and shared_capture is expected_shared_capture,
+                    and shared_capture is expected_shared_capture
+                    and backdrop_access.get("excludes_foreground_text")
+                        is expected_shared_capture,
                     path=f"{plan_path}.backdrop_access",
                     expected={
                         "required": False,
                         "shared_frame_capture": expected_shared_capture,
+                        "excludes_foreground_text": expected_shared_capture,
                     },
                     actual={
                         "required": access_required,
                         "shared_frame_capture": shared_capture,
+                        "excludes_foreground_text": backdrop_access.get(
+                            "excludes_foreground_text"),
                     },
                     likely_layer="material-backdrop",
                     hint=(
@@ -5605,11 +5653,13 @@ def check_material_plan_summary_requirements(
             "backdrop_sampling",
             "backdrop_available",
             "backdrop_stable",
+            "backdrop_excludes_foreground_text",
             "backdrop_access_required",
             "backdrop_access_stable_required",
             "backdrop_access_frame_history_required",
             "backdrop_access_shared_frame_capture",
             "backdrop_access_next_frame_capture_required",
+            "backdrop_access_excludes_foreground_text",
             "backdrop_access_bounded",
             "luminance_adapted",
             "render_target_ready",
@@ -5649,7 +5699,10 @@ def check_material_plan_summary_requirements(
         if field in spec:
             actual = summary.get(field)
             summary_path = f"{base_path}.{field}"
-            if field in ("backdrop_available", "backdrop_stable"):
+            if field in (
+                    "backdrop_available",
+                    "backdrop_stable",
+                    "backdrop_excludes_foreground_text"):
                 backdrop_summary = summary.get("backdrop")
                 if not isinstance(backdrop_summary, dict):
                     backdrop_summary = {}
@@ -6394,6 +6447,22 @@ def check_material_executor_summary_contract(
             likely_pass="material-executor",
             hint="Executor telemetry must be numeric and non-negative.")
 
+    bool_fields = (
+        "backdrop_copy_excludes_foreground_text",
+        "foreground_pass_after_backdrop_copy",
+    )
+    for field in bool_fields:
+        actual = executor_summary.get(field)
+        report.check(
+            f"material executor summary {field} is boolean",
+            isinstance(actual, bool),
+            path=f"{base_path}.{field}",
+            expected="boolean",
+            actual=actual,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint="Executor foreground/capture ordering telemetry must be explicit.")
+
     foreground_candidates = executor_summary.get("foreground_text_candidate_count")
     foreground_remaps = executor_summary.get("foreground_text_remap_count")
     if (isinstance(foreground_candidates, (int, float))
@@ -6508,6 +6577,38 @@ def check_material_executor_summary_contract(
             hint=(
                 "The macOS edge should copy the previous frame once and share "
                 "that capture across all backdrop-sampling material plans."))
+        if copied_count > 0:
+            report.check(
+                "material executor backdrop copy excludes foreground text",
+                executor_summary.get(
+                    "backdrop_copy_excludes_foreground_text") is True,
+                path=f"{base_path}.backdrop_copy_excludes_foreground_text",
+                expected=True,
+                actual=executor_summary.get(
+                    "backdrop_copy_excludes_foreground_text"),
+                likely_layer="platform-runtime",
+                likely_pass="material-executor",
+                hint=(
+                    "The backend should copy frame history before foreground "
+                    "text and overlays are encoded."))
+            foreground_remaps_for_order = executor_summary.get(
+                "foreground_text_remap_count")
+            if (isinstance(foreground_remaps_for_order, (int, float))
+                    and not isinstance(foreground_remaps_for_order, bool)
+                    and foreground_remaps_for_order > 0):
+                report.check(
+                    "material executor foreground pass follows backdrop copy",
+                    executor_summary.get(
+                        "foreground_pass_after_backdrop_copy") is True,
+                    path=f"{base_path}.foreground_pass_after_backdrop_copy",
+                    expected=True,
+                    actual=executor_summary.get(
+                        "foreground_pass_after_backdrop_copy"),
+                    likely_layer="platform-runtime",
+                    likely_pass="material-foreground",
+                    hint=(
+                        "Foreground text that was remapped for material "
+                        "legibility must be drawn after the safe backdrop copy."))
     planned_capture_pixels = executor_summary.get("planned_frame_capture_pixels")
     if (isinstance(planned_capture_pixels, (int, float))
             and not isinstance(planned_capture_pixels, bool)

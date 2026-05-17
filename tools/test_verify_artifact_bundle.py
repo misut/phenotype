@@ -156,6 +156,7 @@ def material_plan(
         "backdrop": {
             "available": False,
             "stable": False,
+            "excludes_foreground_text": False,
             "luma_min": 0.0,
             "luma_max": 1.0,
             "luma_mean": 0.5,
@@ -172,6 +173,7 @@ def material_plan(
             "frame_history_required": False,
             "shared_frame_capture": False,
             "next_frame_capture_required": False,
+            "excludes_foreground_text": False,
             "source": "none",
             "capture_scope": "none",
             "capture_reason": "not-required",
@@ -378,6 +380,9 @@ def refresh_observation_contract(plan: dict[str, object]) -> None:
         "next_frame_capture_required": (
             backdrop_access["next_frame_capture_required"]
         ),
+        "backdrop_capture_excludes_foreground_text": (
+            backdrop_access["excludes_foreground_text"]
+        ),
         "bounded_texture_copy_required": budget["bounded_texture_copy"],
         "deterministic_fallback_required": budget["deterministic_fallback"],
         "backdrop_capture_scope": backdrop_access["capture_scope"],
@@ -436,6 +441,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     plan["backdrop"].update({
         "available": True,
         "stable": True,
+        "excludes_foreground_text": True,
         "source": "previous-presented-frame",
         "luminance_response": "neutral",
     })
@@ -445,6 +451,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "frame_history_required": True,
         "shared_frame_capture": True,
         "next_frame_capture_required": True,
+        "excludes_foreground_text": True,
         "source": "previous-presented-frame",
         "capture_scope": "shared-frame",
         "capture_reason": "sample-current-frame",
@@ -668,6 +675,8 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "material_max_sample_taps": sample_taps,
         "material_total_sample_taps": sample_taps,
         "backdrop_copy_pixels": 0,
+        "backdrop_copy_excludes_foreground_text": False,
+        "foreground_pass_after_backdrop_copy": False,
         "material_upload_bytes": 0,
         "material_buffer_capacity_bytes": 0,
         "material_buffer_reallocations": 0,

@@ -17,6 +17,7 @@ MaterialEnvironment sampled_environment() {
     env.capabilities.frame_history = true;
     env.backdrop.available = true;
     env.backdrop.stable = true;
+    env.backdrop.excludes_foreground_text = true;
     env.backdrop.source = "previous-presented-frame";
     env.backdrop.luma_min = 0.2f;
     env.backdrop.luma_max = 0.8f;
@@ -40,7 +41,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 18);
+    assert(material_plan_contract_version == 19);
     assert(plan.backdrop_sampling);
     assert(!plan.fallback());
     assert(plan.backdrop_access.required);
@@ -48,6 +49,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.backdrop_access.frame_history_required);
     assert(plan.backdrop_access.shared_frame_capture);
     assert(plan.backdrop_access.next_frame_capture_required);
+    assert(plan.backdrop_access.excludes_foreground_text);
     assert(std::string_view(plan.backdrop_access.source)
         == "previous-presented-frame");
     assert(std::string_view(plan.backdrop_access.capture_scope)
@@ -62,6 +64,7 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.resource_budget.max_surface_sample_pixels == 240 * 96);
     assert(plan.observation_contract.shared_frame_capture_required);
     assert(plan.observation_contract.next_frame_capture_required);
+    assert(plan.observation_contract.backdrop_capture_excludes_foreground_text);
     assert(std::string_view(plan.observation_contract.backdrop_capture_scope)
         == "shared-frame");
     assert(std::string_view(plan.observation_contract.backdrop_capture_reason)
@@ -89,6 +92,7 @@ void test_fallback_backdrop_access_contract() {
     assert(!plan.backdrop_access.required);
     assert(!plan.backdrop_access.shared_frame_capture);
     assert(!plan.backdrop_access.next_frame_capture_required);
+    assert(!plan.backdrop_access.excludes_foreground_text);
     assert(std::string_view(plan.backdrop_access.capture_scope) == "none");
     assert(std::string_view(plan.backdrop_access.capture_reason)
         == "not-required");
@@ -126,6 +130,7 @@ void test_warmup_backdrop_access_contract() {
     assert(!plan.backdrop_access.frame_history_required);
     assert(plan.backdrop_access.shared_frame_capture);
     assert(plan.backdrop_access.next_frame_capture_required);
+    assert(plan.backdrop_access.excludes_foreground_text);
     assert(std::string_view(plan.backdrop_access.source)
         == "previous-presented-frame");
     assert(std::string_view(plan.backdrop_access.capture_scope)
@@ -140,6 +145,7 @@ void test_warmup_backdrop_access_contract() {
     assert(plan.resource_budget.max_surface_sample_pixels == 0);
     assert(plan.observation_contract.shared_frame_capture_required);
     assert(plan.observation_contract.next_frame_capture_required);
+    assert(plan.observation_contract.backdrop_capture_excludes_foreground_text);
     assert(std::string_view(plan.observation_contract.backdrop_capture_scope)
         == "shared-frame");
     assert(std::string_view(plan.observation_contract.backdrop_capture_reason)
