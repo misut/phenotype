@@ -279,10 +279,6 @@ constexpr float k_sidebar_section_gap =
     file_explorer_demo::k_desktop_sidebar_section_gap;
 constexpr float k_sidebar_selected_row_radius =
     file_explorer_demo::k_desktop_sidebar_selected_row_radius;
-constexpr int k_sidebar_selected_row_background_alpha =
-    file_explorer_demo::k_desktop_sidebar_selected_row_background_alpha;
-constexpr int k_sidebar_selected_row_hover_background_alpha =
-    file_explorer_demo::k_desktop_sidebar_selected_row_hover_background_alpha;
 constexpr float k_column_location_row_height =
     file_explorer_demo::k_desktop_column_location_row_height;
 constexpr float k_column_location_icon_size =
@@ -464,10 +460,9 @@ void paint_symbol_centered(
 }
 
 phenotype::Color sidebar_symbol_color(bool selected) {
-    return phenotype::icons::macos_light_tone_color(
-        phenotype::icons::macos_interaction_tone(
-            phenotype::icons::SymbolPresentationRole::Sidebar,
-            phenotype::icons::SymbolInteractionState{selected, true}));
+    return phenotype::icons::macos_control_chrome(
+        phenotype::icons::SymbolPresentationRole::Sidebar,
+        phenotype::icons::SymbolInteractionState{selected, true}).symbol_color;
 }
 
 void paint_sidebar_icon(phenotype::Painter& painter,
@@ -932,15 +927,14 @@ void finder_column_location_button(std::string label,
                                    bool selected,
                                    float max_width,
                                    float font_size) {
+    auto const chrome = phenotype::icons::macos_control_chrome(
+        phenotype::icons::SymbolPresentationRole::Sidebar,
+        phenotype::icons::SymbolInteractionState{selected, true});
     phenotype::ButtonStyleOptions options;
     options.has_background = true;
-    options.background = selected
-        ? rgba(236, 236, 238, k_sidebar_selected_row_background_alpha)
-        : rgba(0, 0, 0, 0);
+    options.background = chrome.background_color;
     options.has_hover_background = true;
-    options.hover_background = selected
-        ? rgba(232, 232, 236, k_sidebar_selected_row_hover_background_alpha)
-        : rgba(230, 230, 234, 150);
+    options.hover_background = chrome.hover_background_color;
     options.has_border_color = true;
     options.border_color = rgba(0, 0, 0, 0);
     options.border_width = 0.0f;
@@ -1128,15 +1122,14 @@ void sidebar_row(std::string_view label,
                  std::string location_id,
                  bool selected = false) {
     using namespace phenotype;
+    auto const chrome = phenotype::icons::macos_control_chrome(
+        phenotype::icons::SymbolPresentationRole::Sidebar,
+        phenotype::icons::SymbolInteractionState{selected, true});
     ButtonStyleOptions options;
     options.has_background = true;
-    options.background = selected
-        ? rgba(232, 232, 234, 235)
-        : rgba(0, 0, 0, 0);
+    options.background = chrome.background_color;
     options.has_hover_background = true;
-    options.hover_background = selected
-        ? rgba(224, 224, 229, 245)
-        : rgba(230, 230, 234, 150);
+    options.hover_background = chrome.hover_background_color;
     options.has_border_color = true;
     options.border_color = rgba(0, 0, 0, 0);
     options.border_width = 0.0f;
@@ -1298,18 +1291,18 @@ void finder_sidebar(State const& state) {
 phenotype::ButtonStyleOptions toolbar_icon_button_options(
         bool selected = false,
         bool disabled = false) {
-    auto const& t = phenotype::current_theme();
+    auto const chrome = phenotype::icons::macos_control_chrome(
+        phenotype::icons::SymbolPresentationRole::Toolbar,
+        phenotype::icons::SymbolInteractionState{selected, !disabled});
     phenotype::ButtonStyleOptions options;
     options.has_background = true;
-    options.background = selected ? rgba(229, 229, 234, 150) : t.transparent;
+    options.background = chrome.background_color;
     options.has_hover_background = true;
-    options.hover_background = selected
-        ? rgba(216, 216, 222, 190)
-        : rgba(229, 229, 234, 120);
+    options.hover_background = chrome.hover_background_color;
     options.has_border_color = true;
-    options.border_color = t.transparent;
+    options.border_color = rgba(0, 0, 0, 0);
     options.border_width = 0.0f;
-    options.border_radius = 15.0f;
+    options.border_radius = chrome.corner_radius;
     options.max_width = k_toolbar_icon_button_width;
     options.fixed_height = k_toolbar_icon_button_height;
     options.disabled = disabled;

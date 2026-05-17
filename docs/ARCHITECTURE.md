@@ -234,6 +234,10 @@ toolbar symbols inside grouped controls, and accent-selected sidebar symbols.
 `icon_catalog::macos_interaction_tone` keeps selected and disabled toolbar,
 navigation, sidebar, file-type, and action tone choices in the same pure
 catalog instead of leaving those decisions inside examples or native backends.
+`icon_catalog::macos_control_chrome` extends that contract to selected and
+hover background colors, corner radii, hit targets, and borderless/grouped
+control flags, so Finder-like toolbar and sidebar symbol states stay
+LLM-debuggable without consulting AppKit.
 The same pure catalog exposes a Finder-style file-type tint policy for
 folder/document/image/movie glyphs, which desktop examples use in list and
 column rows without asking a native icon service for platform artwork.

@@ -34,6 +34,8 @@ int main() {
            == "borderless_toolbar_symbols_inside_grouped_controls");
     assert(icons::sidebar_symbol_color_policy()
            == "accent_selected_user_tint_compatible_sidebar_symbols");
+    assert(icons::symbol_control_chrome_policy()
+           == "macos_finder_symbol_state_chrome");
     assert(icons::metrics_policy()
            == "macos_finder_role_metrics_with_explicit_hit_targets");
     assert(icons::hit_target_policy().find("sidebar=38pt")
@@ -119,6 +121,32 @@ int main() {
                icons::SymbolPresentationRole::Toolbar,
                icons::SymbolInteractionState{false, false})
            == icons::SymbolTone::Disabled);
+    auto const toolbar_chrome = icons::macos_control_chrome(
+        icons::SymbolPresentationRole::Toolbar,
+        icons::SymbolInteractionState{false, true});
+    assert(toolbar_chrome.symbol_tone == icons::SymbolTone::Secondary);
+    assert(toolbar_chrome.background_color.a == 0);
+    assert(toolbar_chrome.hover_background_color.a == 120);
+    assert(toolbar_chrome.corner_radius == 15.0f);
+    assert(toolbar_chrome.borderless);
+    auto const selected_toolbar_chrome = icons::macos_control_chrome(
+        icons::SymbolPresentationRole::Toolbar,
+        icons::SymbolInteractionState{true, true});
+    assert(selected_toolbar_chrome.background_color.a == 150);
+    assert(selected_toolbar_chrome.hover_background_color.a == 190);
+    auto const selected_sidebar_chrome = icons::macos_control_chrome(
+        icons::SymbolPresentationRole::Sidebar,
+        icons::SymbolInteractionState{true, true});
+    assert(selected_sidebar_chrome.symbol_tone == icons::SymbolTone::Accent);
+    assert(selected_sidebar_chrome.symbol_color.b == 255);
+    assert(selected_sidebar_chrome.background_color.a == 176);
+    assert(selected_sidebar_chrome.hover_background_color.a == 214);
+    assert(selected_sidebar_chrome.corner_radius == 10.0f);
+    auto const disabled_toolbar_chrome = icons::macos_control_chrome(
+        icons::SymbolPresentationRole::Toolbar,
+        icons::SymbolInteractionState{false, false});
+    assert(disabled_toolbar_chrome.symbol_tone == icons::SymbolTone::Disabled);
+    assert(disabled_toolbar_chrome.hover_background_color.a == 0);
     assert(icons::file_type_color_policy() == "macos_finder_file_type_tints");
     auto const folder_color = icons::macos_file_type_color(icons::Symbol::Folder);
     auto const image_color = icons::macos_file_type_color(icons::Symbol::Image);

@@ -269,6 +269,11 @@ struct ExplorerChromeMetrics {
     float icon_toolbar_hit_target_size = 0.0f;
     float icon_sidebar_hit_target_size = 0.0f;
     float icon_action_hit_target_size = 0.0f;
+    float icon_toolbar_button_radius = 0.0f;
+    int icon_toolbar_button_background_alpha = 0;
+    int icon_toolbar_button_hover_background_alpha = 0;
+    int icon_toolbar_selected_button_background_alpha = 0;
+    int icon_toolbar_selected_button_hover_background_alpha = 0;
     float column_location_row_height = 0.0f;
     float column_location_icon_size = 0.0f;
     bool integrated_titlebar = true;
@@ -307,6 +312,7 @@ struct ExplorerChromeMetrics {
     std::string icon_presentation_policy;
     std::string icon_tone_policy;
     std::string icon_interaction_tone_policy;
+    std::string icon_symbol_control_chrome_policy;
     std::string icon_toolbar_symbol_chrome_policy;
     std::string icon_sidebar_symbol_color_policy;
     std::string icon_file_type_color_policy;
@@ -735,6 +741,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_toolbar_hit_target_size = 0.0f,
             .icon_sidebar_hit_target_size = 0.0f,
             .icon_action_hit_target_size = 0.0f,
+            .icon_toolbar_button_radius = 0.0f,
+            .icon_toolbar_button_background_alpha = 0,
+            .icon_toolbar_button_hover_background_alpha = 0,
+            .icon_toolbar_selected_button_background_alpha = 0,
+            .icon_toolbar_selected_button_hover_background_alpha = 0,
             .column_location_row_height = 0.0f,
             .column_location_icon_size = 0.0f,
             .integrated_titlebar = false,
@@ -772,6 +783,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_presentation_policy = "n/a",
             .icon_tone_policy = "n/a",
             .icon_interaction_tone_policy = "n/a",
+            .icon_symbol_control_chrome_policy = "n/a",
             .icon_toolbar_symbol_chrome_policy = "n/a",
             .icon_sidebar_symbol_color_policy = "n/a",
             .icon_file_type_color_policy = "n/a",
@@ -803,6 +815,12 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         scroll_height / k_desktop_icon_grid_row_height);
     if (visible_rows < 1)
         visible_rows = 1;
+    auto const toolbar_chrome = icon_catalog::macos_control_chrome(
+        icon_catalog::SymbolPresentationRole::Toolbar,
+        icon_catalog::SymbolInteractionState{false, true});
+    auto const toolbar_selected_chrome = icon_catalog::macos_control_chrome(
+        icon_catalog::SymbolPresentationRole::Toolbar,
+        icon_catalog::SymbolInteractionState{true, true});
     return ExplorerChromeMetrics{
         .viewport = viewport,
         .integrated_titlebar_height = k_desktop_integrated_titlebar_height,
@@ -918,6 +936,15 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_action_hit_target_size =
             icon_catalog::hit_target_size(
                 icon_catalog::SymbolPresentationRole::Action),
+        .icon_toolbar_button_radius = toolbar_chrome.corner_radius,
+        .icon_toolbar_button_background_alpha =
+            toolbar_chrome.background_color.a,
+        .icon_toolbar_button_hover_background_alpha =
+            toolbar_chrome.hover_background_color.a,
+        .icon_toolbar_selected_button_background_alpha =
+            toolbar_selected_chrome.background_color.a,
+        .icon_toolbar_selected_button_hover_background_alpha =
+            toolbar_selected_chrome.hover_background_color.a,
         .column_location_row_height = k_desktop_column_location_row_height,
         .column_location_icon_size = k_desktop_column_location_icon_size,
         .integrated_titlebar = true,
@@ -969,6 +996,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_tone_policy = std::string{icon_catalog::tone_policy()},
         .icon_interaction_tone_policy =
             std::string{icon_catalog::interaction_tone_policy()},
+        .icon_symbol_control_chrome_policy =
+            std::string{icon_catalog::symbol_control_chrome_policy()},
         .icon_toolbar_symbol_chrome_policy =
             std::string{icon_catalog::toolbar_symbol_chrome_policy()},
         .icon_sidebar_symbol_color_policy =
@@ -1687,6 +1716,25 @@ inline json::Value explorer_chrome_debug_json(
         "action_hit_target_size",
         json::Value{chrome.icon_action_hit_target_size});
     icon_system.emplace(
+        "toolbar_button_radius",
+        json::Value{chrome.icon_toolbar_button_radius});
+    icon_system.emplace(
+        "toolbar_button_background_alpha",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_toolbar_button_background_alpha)});
+    icon_system.emplace(
+        "toolbar_button_hover_background_alpha",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_toolbar_button_hover_background_alpha)});
+    icon_system.emplace(
+        "toolbar_selected_button_background_alpha",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_toolbar_selected_button_background_alpha)});
+    icon_system.emplace(
+        "toolbar_selected_button_hover_background_alpha",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_toolbar_selected_button_hover_background_alpha)});
+    icon_system.emplace(
         "column_location_icon_size",
         json::Value{chrome.column_location_icon_size});
     icon_system.emplace("text_weight_aligned", json::Value{chrome.icon_text_weight_aligned});
@@ -1709,6 +1757,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "interaction_tone_policy",
         json::Value{chrome.icon_interaction_tone_policy});
+    icon_system.emplace(
+        "symbol_control_chrome_policy",
+        json::Value{chrome.icon_symbol_control_chrome_policy});
     icon_system.emplace(
         "toolbar_symbol_chrome_policy",
         json::Value{chrome.icon_toolbar_symbol_chrome_policy});

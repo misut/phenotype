@@ -126,6 +126,19 @@ struct SymbolInteractionState {
     bool enabled = true;
 };
 
+struct SymbolControlChrome {
+    SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
+    SymbolTone symbol_tone = SymbolTone::Secondary;
+    SymbolColor symbol_color{};
+    SymbolColor background_color{0, 0, 0, 0};
+    SymbolColor hover_background_color{0, 0, 0, 0};
+    float corner_radius = 0.0f;
+    float hit_target_size = 36.0f;
+    bool borderless = true;
+    bool grouped_control = true;
+    std::string_view policy;
+};
+
 struct SymbolMetrics {
     SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
     SymbolScale scale = SymbolScale::Medium;
@@ -356,6 +369,10 @@ inline auto toolbar_symbol_chrome_policy() noexcept -> std::string_view {
 
 inline auto sidebar_symbol_color_policy() noexcept -> std::string_view {
     return "accent_selected_user_tint_compatible_sidebar_symbols";
+}
+
+inline auto symbol_control_chrome_policy() noexcept -> std::string_view {
+    return "macos_finder_symbol_state_chrome";
 }
 
 inline auto default_scale_policy() noexcept -> std::string_view {
@@ -768,6 +785,76 @@ inline auto macos_interaction_tone(Symbol symbol,
                                    SymbolInteractionState state) noexcept
         -> SymbolTone {
     return macos_interaction_tone(default_presentation_role(symbol), state);
+}
+
+inline auto macos_control_chrome(SymbolPresentationRole role,
+                                 SymbolInteractionState state) noexcept
+        -> SymbolControlChrome {
+    auto const tone = macos_interaction_tone(role, state);
+    auto const symbol_color = macos_light_tone_color(tone);
+    auto const transparent = SymbolColor{0, 0, 0, 0};
+    if (!state.enabled) {
+        return SymbolControlChrome{
+            role,
+            tone,
+            symbol_color,
+            transparent,
+            transparent,
+            role == SymbolPresentationRole::Sidebar ? 10.0f : 15.0f,
+            hit_target_size(role),
+            true,
+            role != SymbolPresentationRole::FileType,
+            symbol_control_chrome_policy(),
+        };
+    }
+    if (role == SymbolPresentationRole::Sidebar) {
+        return SymbolControlChrome{
+            role,
+            tone,
+            symbol_color,
+            state.selected
+                ? SymbolColor{236, 236, 238, 176}
+                : transparent,
+            state.selected
+                ? SymbolColor{232, 232, 236, 214}
+                : SymbolColor{230, 230, 234, 150},
+            10.0f,
+            hit_target_size(role),
+            true,
+            true,
+            symbol_control_chrome_policy(),
+        };
+    }
+    if (role == SymbolPresentationRole::FileType) {
+        return SymbolControlChrome{
+            role,
+            tone,
+            symbol_color,
+            transparent,
+            transparent,
+            0.0f,
+            hit_target_size(role),
+            true,
+            false,
+            symbol_control_chrome_policy(),
+        };
+    }
+    return SymbolControlChrome{
+        role,
+        tone,
+        symbol_color,
+        state.selected
+            ? SymbolColor{229, 229, 234, 150}
+            : transparent,
+        state.selected
+            ? SymbolColor{216, 216, 222, 190}
+            : SymbolColor{229, 229, 234, 120},
+        15.0f,
+        hit_target_size(role),
+        true,
+        true,
+        symbol_control_chrome_policy(),
+    };
 }
 
 inline auto macos_file_type_color(Symbol symbol) noexcept -> SymbolColor {

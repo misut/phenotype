@@ -3163,6 +3163,26 @@ auto icon_color_json(icon_catalog::SymbolColor const& color) -> std::string {
         static_cast<int>(color.a));
 }
 
+auto icon_control_chrome_json(
+        icon_catalog::SymbolControlChrome const& chrome) -> std::string {
+    return std::format(
+        "{{\"policy\":{},\"role\":{},\"symbol_tone\":{},"
+        "\"symbol_color\":{},\"background_color\":{},"
+        "\"hover_background_color\":{},\"corner_radius\":{},"
+        "\"hit_target_size\":{},\"borderless\":{},"
+        "\"grouped_control\":{}}}",
+        json_string(chrome.policy),
+        json_string(icon_catalog::symbol_presentation_role_name(chrome.role)),
+        json_string(icon_catalog::symbol_tone_name(chrome.symbol_tone)),
+        icon_color_json(chrome.symbol_color),
+        icon_color_json(chrome.background_color),
+        icon_color_json(chrome.hover_background_color),
+        chrome.corner_radius,
+        chrome.hit_target_size,
+        chrome.borderless ? "true" : "false",
+        chrome.grouped_control ? "true" : "false");
+}
+
 auto icon_interaction_tones_json(bool enabled) -> std::string {
     if (!enabled)
         return "{}";
@@ -3208,6 +3228,12 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         icon_catalog::SymbolInteractionState{false, false});
     auto const color = icon_catalog::macos_light_tone_color(tone);
     auto const file_type_color = icon_catalog::macos_file_type_color(symbol);
+    auto const control_chrome = icon_catalog::macos_control_chrome(
+        presentation_role,
+        icon_catalog::SymbolInteractionState{false, true});
+    auto const selected_control_chrome = icon_catalog::macos_control_chrome(
+        presentation_role,
+        icon_catalog::SymbolInteractionState{true, true});
     return std::format(
         "{{\"name\":{},\"semantic_reference_name\":{},"
         "\"reference_set\":{},\"role\":{},\"variant\":{},"
@@ -3226,7 +3252,9 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         "\"selected_tone\":{},\"disabled_tone\":{},\"scale\":{},"
         "\"point_size\":{},\"hit_target_size\":{},"
         "\"content_inset\":{},\"optical_y_offset\":{},"
-        "\"metrics_policy\":{},\"color\":{}}}}}",
+        "\"metrics_policy\":{},\"color\":{},"
+        "\"control_chrome\":{},"
+        "\"selected_control_chrome\":{}}}}}",
         json_string(desc.name),
         json_string(desc.semantic_reference_name),
         json_string(reference_set),
@@ -3264,7 +3292,9 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         presentation_metrics.content_inset,
         presentation_metrics.optical_y_offset,
         json_string(icon_catalog::metrics_policy()),
-        icon_color_json(color));
+        icon_color_json(color),
+        icon_control_chrome_json(control_chrome),
+        icon_control_chrome_json(selected_control_chrome));
 }
 
 auto icon_symbol_set_json(IconCatalogSet set) -> std::string {
@@ -3372,6 +3402,12 @@ auto icon_catalog_checks() -> std::vector<Check> {
     bool name_lookup_roundtrips = true;
     bool reference_lookup_roundtrips = true;
     bool metric_contract = true;
+    auto const toolbar_chrome = icon_catalog::macos_control_chrome(
+        icon_catalog::SymbolPresentationRole::Toolbar,
+        icon_catalog::SymbolInteractionState{false, true});
+    auto const sidebar_selected_chrome = icon_catalog::macos_control_chrome(
+        icon_catalog::SymbolPresentationRole::Sidebar,
+        icon_catalog::SymbolInteractionState{true, true});
     for (unsigned int i = 0; i < icon_catalog::all_symbol_count; ++i) {
         auto const symbol = icon_catalog::symbol_at(i);
         auto const desc = icon_catalog::descriptor(symbol);
@@ -3530,6 +3566,10 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && icon_catalog::sidebar_symbol_color_policy()
                 == std::string_view{
                     "accent_selected_user_tint_compatible_sidebar_symbols"}
+            && icon_catalog::symbol_control_chrome_policy()
+                == std::string_view{"macos_finder_symbol_state_chrome"}
+            && toolbar_chrome.hover_background_color.a == 120
+            && sidebar_selected_chrome.background_color.a == 176
             && icon_catalog::macos_interaction_tone(
                    icon_catalog::SymbolPresentationRole::Sidebar,
                    icon_catalog::SymbolInteractionState{true, true})
@@ -3538,9 +3578,12 @@ auto icon_catalog_checks() -> std::vector<Check> {
                    icon_catalog::SymbolPresentationRole::Toolbar,
                    icon_catalog::SymbolInteractionState{false, false})
                 == icon_catalog::SymbolTone::Disabled,
-         .detail = std::string{icon_catalog::interaction_tone_policy()},
+         .detail = std::format(
+             "{}; {}",
+             icon_catalog::interaction_tone_policy(),
+             icon_catalog::symbol_control_chrome_policy()),
          .hint =
-             "Keep selected and disabled icon tones in the pure catalog contract."},
+             "Keep selected, hover, and disabled icon chrome in the pure catalog contract."},
         {.name = "file_type_palette",
          .ok = icon_catalog::file_type_color_policy()
                 == std::string_view{"macos_finder_file_type_tints"}
@@ -3568,6 +3611,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"alignment\":{},\"variant_policy\":{},"
         "\"presentation_policy\":{},\"tone_policy\":{},"
         "\"interaction_tone_policy\":{},"
+        "\"symbol_control_chrome_policy\":{},"
         "\"toolbar_symbol_chrome_policy\":{},"
         "\"sidebar_symbol_color_policy\":{},"
         "\"file_type_color_policy\":{},\"default_scale\":{},"
@@ -3598,6 +3642,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::presentation_policy()),
         json_string(icon_catalog::tone_policy()),
         json_string(icon_catalog::interaction_tone_policy()),
+        json_string(icon_catalog::symbol_control_chrome_policy()),
         json_string(icon_catalog::toolbar_symbol_chrome_policy()),
         json_string(icon_catalog::sidebar_symbol_color_policy()),
         json_string(icon_catalog::file_type_color_policy()),
@@ -4070,6 +4115,11 @@ auto explorer_chrome_json(
         "\"toolbar_hit_target_size\":{},"
         "\"sidebar_hit_target_size\":{},"
         "\"action_hit_target_size\":{},"
+        "\"toolbar_button_radius\":{},"
+        "\"toolbar_button_background_alpha\":{},"
+        "\"toolbar_button_hover_background_alpha\":{},"
+        "\"toolbar_selected_button_background_alpha\":{},"
+        "\"toolbar_selected_button_hover_background_alpha\":{},"
         "\"column_location_icon_size\":{},"
         "\"text_weight_aligned\":{},"
         "\"hierarchical_opacity\":{},\"design_reference\":{},"
@@ -4080,6 +4130,7 @@ auto explorer_chrome_json(
         "\"alignment\":{},\"rendering_mode\":{},"
         "\"variant_policy\":{},\"presentation_policy\":{},"
         "\"tone_policy\":{},\"interaction_tone_policy\":{},"
+        "\"symbol_control_chrome_policy\":{},"
         "\"toolbar_symbol_chrome_policy\":{},"
         "\"sidebar_symbol_color_policy\":{},"
         "\"interaction_tones\":{},"
@@ -4180,6 +4231,11 @@ auto explorer_chrome_json(
         chrome.icon_toolbar_hit_target_size,
         chrome.icon_sidebar_hit_target_size,
         chrome.icon_action_hit_target_size,
+        chrome.icon_toolbar_button_radius,
+        chrome.icon_toolbar_button_background_alpha,
+        chrome.icon_toolbar_button_hover_background_alpha,
+        chrome.icon_toolbar_selected_button_background_alpha,
+        chrome.icon_toolbar_selected_button_hover_background_alpha,
         chrome.column_location_icon_size,
         chrome.icon_text_weight_aligned ? "true" : "false",
         chrome.icon_hierarchical_opacity ? "true" : "false",
@@ -4195,6 +4251,7 @@ auto explorer_chrome_json(
         json_string(chrome.icon_presentation_policy),
         json_string(chrome.icon_tone_policy),
         json_string(chrome.icon_interaction_tone_policy),
+        json_string(chrome.icon_symbol_control_chrome_policy),
         json_string(chrome.icon_toolbar_symbol_chrome_policy),
         json_string(chrome.icon_sidebar_symbol_color_policy),
         icon_interaction_tones_json(

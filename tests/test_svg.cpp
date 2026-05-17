@@ -355,6 +355,8 @@ void test_builtin_icons_parse() {
            == "borderless_toolbar_symbols_inside_grouped_controls");
     assert(icons::sidebar_symbol_color_policy()
            == "accent_selected_user_tint_compatible_sidebar_symbols");
+    assert(icons::symbol_control_chrome_policy()
+           == "macos_finder_symbol_state_chrome");
     assert(icons::presentation_policy()
            == "macos_role_aware_symbol_presentation");
     assert(icons::interaction_tone_policy()
@@ -501,6 +503,14 @@ void test_builtin_icons_parse() {
     assert(sidebar.hit_target_size == 38.0f);
     assert(sidebar.optical_y_offset == -0.5f);
     assert((sidebar.color == Color{0, 122, 255, 255}));
+    auto sidebar_chrome = icons::macos_control_chrome(
+        icons::SymbolPresentationRole::Sidebar,
+        icons::SymbolInteractionState{true, true});
+    assert(sidebar_chrome.symbol_tone == icons::SymbolTone::Accent);
+    assert((sidebar_chrome.symbol_color == Color{0, 122, 255, 255}));
+    assert(sidebar_chrome.background_color.a == 176);
+    assert(sidebar_chrome.hover_background_color.a == 214);
+    assert(sidebar_chrome.corner_radius == 10.0f);
     assert(icons::macos_interaction_tone(
                icons::Symbol::Recents,
                icons::SymbolInteractionState{false, true})
@@ -518,6 +528,13 @@ void test_builtin_icons_parse() {
             icons::SymbolInteractionState{false, true}));
     assert(toolbar.scale == icons::SymbolScale::Medium);
     assert(toolbar.point_size == 24.0f);
+    auto toolbar_chrome = icons::macos_control_chrome(
+        icons::SymbolPresentationRole::Toolbar,
+        icons::SymbolInteractionState{false, true});
+    assert(toolbar_chrome.symbol_tone == icons::SymbolTone::Secondary);
+    assert(toolbar_chrome.background_color.a == 0);
+    assert(toolbar_chrome.hover_background_color.a == 120);
+    assert(toolbar_chrome.corner_radius == 15.0f);
     assert(toolbar.hit_target_size == 36.0f);
     assert((toolbar.color == Color{96, 96, 100, 255}));
     assert(icons::paint_token(toolbar) != 0);
