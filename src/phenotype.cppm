@@ -684,6 +684,8 @@ inline void svg_image(svg::Document document,
                       float width,
                       float height,
                       Color current_color) {
+    auto const paint_token =
+        svg::paint_token(document, width, height, current_color);
     canvas(width, height,
            [document = std::move(document),
             width,
@@ -691,7 +693,9 @@ inline void svg_image(svg::Document document,
             current_color](Painter& painter) {
                svg::paint(painter, document, 0.0f, 0.0f, width, height,
                           svg::RenderOptions{current_color, true});
-           });
+           },
+           {},
+           paint_token);
 }
 
 inline void svg_image(svg::Document document,

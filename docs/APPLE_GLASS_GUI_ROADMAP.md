@@ -345,6 +345,11 @@ Widgets currently cover:
 - layout containers: column, row, box, sized box, weighted, grid, scaffold,
   card, scroll view, overlay, dialog, accordion, list items, divider, spacer.
 
+`widget::svg_image` now derives the same kind of stable paint token used by
+`widget::icon`, keyed by parsed SVG document geometry/style, requested size,
+and current color. Static app-owned SVG assets therefore participate in the
+paint cache instead of re-running their canvas painter every frame.
+
 The style system is usable, but not yet material-aware. There is no first-class
 `layout::material_surface` is now the low-level material container, with
 first-class `layout::toolbar`, `layout::sidebar`, and `layout::status_bar`

@@ -273,6 +273,37 @@ void test_svg_unsupported_path_diagnostic() {
     std::puts("PASS: SVG unsupported path commands are diagnostic");
 }
 
+void test_svg_paint_tokens_are_stable() {
+    auto doc = svg::parse(R"SVG(
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M4 12 L20 12"/>
+        </svg>
+    )SVG");
+    auto doc_again = svg::parse(R"SVG(
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M4 12 L20 12"/>
+        </svg>
+    )SVG");
+    auto changed = svg::parse(R"SVG(
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor">
+          <path d="M4 12 L20 12 L20 16"/>
+        </svg>
+    )SVG");
+    auto const blue = Color{0, 122, 255, 255};
+    auto const gray = Color{96, 96, 100, 255};
+    assert(svg::document_token(doc) != 0);
+    assert(svg::document_token(doc) == svg::document_token(doc_again));
+    assert(svg::document_token(doc) != svg::document_token(changed));
+    assert(svg::paint_token(doc, 24.0f, 24.0f, blue)
+           == svg::paint_token(doc_again, 24.0f, 24.0f, blue));
+    assert(svg::paint_token(doc, 24.0f, 24.0f, blue)
+           != svg::paint_token(doc, 24.0f, 24.0f, gray));
+    assert(svg::paint_token(doc, 24.0f, 24.0f, blue)
+           != svg::paint_token(doc, 32.0f, 24.0f, blue));
+
+    std::puts("PASS: SVG document and paint tokens are stable");
+}
+
 void test_builtin_icons_parse() {
     assert(icons::style_name() == "macos_rounded_outline_svg");
     assert(icons::style_reference().find("Apple HIG") != std::string_view::npos);
@@ -512,6 +543,7 @@ int main() {
     test_svg_arc_path_command();
     test_svg_single_circular_arc_path_preserves_native_arc();
     test_svg_unsupported_path_diagnostic();
+    test_svg_paint_tokens_are_stable();
     test_builtin_icons_parse();
     std::puts("\nAll SVG/icon tests passed.");
     return 0;

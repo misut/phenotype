@@ -207,6 +207,10 @@ glyph is playing the same UI role as `magnifyingglass`" without embedding
 Apple's vector paths. Apps can call `icons::document`, `icons::paint_symbol`,
 or `widget::icon`; the widget helper paints through `widget::canvas` and uses a
 deterministic paint token so stable icons do not re-emit every frame. The
+generic `widget::svg_image` path uses the same parsed-document token contract,
+so app-owned SVG illustrations, package icons, and future generated symbols can
+stay static in the paint cache unless their document, size, or current color
+changes. The
 catalog encodes macOS-like rounded stroke caps and joins in each line icon's
 SVG source, records those attributes in `svg::Style`, uses bounded secondary
 opacity on detail strokes for SF Symbols-like hierarchical emphasis, and

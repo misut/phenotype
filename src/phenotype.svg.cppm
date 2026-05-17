@@ -4,6 +4,7 @@ module;
 #include <cctype>
 #include <cstring>
 #include <cstdlib>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <string_view>
@@ -1270,6 +1271,54 @@ inline void apply_svg_metrics(Document& doc,
     }
 }
 
+inline void hash_mix(std::uint64_t& state, std::uint64_t value) noexcept {
+    state ^= value;
+    state *= 1099511628211ull;
+}
+
+inline auto float_bits(float value) noexcept -> std::uint32_t {
+    std::uint32_t bits = 0;
+    std::memcpy(&bits, &value, sizeof(bits));
+    return bits;
+}
+
+inline void hash_float(std::uint64_t& state, float value) noexcept {
+    hash_mix(state, float_bits(value));
+}
+
+inline void hash_string(std::uint64_t& state, std::string_view value) noexcept {
+    hash_mix(state, value.size());
+    for (unsigned char ch : value)
+        hash_mix(state, ch);
+}
+
+inline void hash_color(std::uint64_t& state, Color color) noexcept {
+    hash_mix(state, color.packed());
+}
+
+inline void hash_paint(std::uint64_t& state, Paint const& paint) noexcept {
+    hash_mix(state, static_cast<std::uint64_t>(paint.kind));
+    hash_color(state, paint.color);
+    hash_float(state, paint.opacity);
+}
+
+inline void hash_style(std::uint64_t& state, Style const& style) noexcept {
+    hash_paint(state, style.fill);
+    hash_paint(state, style.stroke);
+    hash_paint(state, style.current_color);
+    hash_float(state, style.stroke_width);
+    hash_mix(state, static_cast<std::uint64_t>(style.stroke_line_cap));
+    hash_mix(state, static_cast<std::uint64_t>(style.stroke_line_join));
+    hash_float(state, style.opacity);
+}
+
+inline void hash_path(std::uint64_t& state, PathBuilder const& path) noexcept {
+    hash_mix(state, path.verb_count);
+    hash_mix(state, path.verbs.size());
+    for (auto word : path.verbs)
+        hash_mix(state, word);
+}
+
 } // namespace phenotype::svg::detail
 
 export namespace phenotype::svg {
@@ -1378,6 +1427,39 @@ auto parse(std::string_view source) -> Document {
         doc.view_height = 24.0f;
     }
     return doc;
+}
+
+auto document_token(Document const& doc) noexcept -> std::uint64_t {
+    std::uint64_t state = 1469598103934665603ull;
+    detail::hash_float(state, doc.view_min_x);
+    detail::hash_float(state, doc.view_min_y);
+    detail::hash_float(state, doc.view_width);
+    detail::hash_float(state, doc.view_height);
+    detail::hash_mix(state, doc.shapes.size());
+    detail::hash_mix(state, doc.diagnostics.size());
+    detail::hash_mix(state, doc.unsupported_count);
+    for (auto const& shape : doc.shapes) {
+        detail::hash_string(state, shape.element);
+        detail::hash_path(state, shape.path);
+        detail::hash_style(state, shape.style);
+    }
+    for (auto const& diagnostic : doc.diagnostics)
+        detail::hash_string(state, diagnostic);
+    return state == 0 ? 1469598103934665603ull : state;
+}
+
+auto paint_token(Document const& doc,
+                 float width,
+                 float height,
+                 Color current_color,
+                 bool preserve_aspect_ratio = true) noexcept
+        -> std::uint64_t {
+    auto state = document_token(doc);
+    detail::hash_float(state, width);
+    detail::hash_float(state, height);
+    detail::hash_color(state, current_color);
+    detail::hash_mix(state, preserve_aspect_ratio ? 1u : 0u);
+    return state == 0 ? 1469598103934665603ull : state;
 }
 
 void paint(Painter& painter,
