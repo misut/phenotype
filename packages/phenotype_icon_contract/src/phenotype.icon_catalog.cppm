@@ -63,6 +63,10 @@ enum class SymbolScale {
     Large,
 };
 
+enum class SymbolWeight {
+    Regular,
+};
+
 enum class SymbolStrokeCap {
     Round,
 };
@@ -95,6 +99,7 @@ struct SymbolDescriptor {
     SymbolVariant variant = SymbolVariant::Outline;
     SymbolRenderingMode preferred_rendering = SymbolRenderingMode::Monochrome;
     SymbolScale default_scale = SymbolScale::Medium;
+    SymbolWeight default_weight = SymbolWeight::Regular;
     std::string_view style;
     std::string_view semantic_reference_name;
     std::string_view reference_family;
@@ -109,9 +114,20 @@ struct SymbolDescriptor {
     bool round_stroke = true;
     bool filled = false;
     bool text_weight_aligned = true;
+    bool supports_monochrome = true;
     bool supports_hierarchical_opacity = false;
+    bool supports_palette = false;
+    bool supports_multicolor = false;
     bool phenotype_owned = true;
     bool uses_sf_symbols_asset = false;
+};
+
+struct SymbolRenderingCapabilities {
+    bool monochrome = true;
+    bool hierarchical = false;
+    bool palette = false;
+    bool multicolor = false;
+    std::string_view policy;
 };
 
 struct SymbolColor {
@@ -156,6 +172,10 @@ inline constexpr unsigned int toolbar_symbol_count = 15;
 inline constexpr unsigned int outline_symbol_count = 30;
 inline constexpr unsigned int filled_symbol_count = 1;
 inline constexpr unsigned int hierarchical_symbol_count = 20;
+inline constexpr unsigned int monochrome_symbol_count = all_symbol_count;
+inline constexpr unsigned int regular_weight_symbol_count = all_symbol_count;
+inline constexpr unsigned int palette_symbol_count = 0;
+inline constexpr unsigned int multicolor_symbol_count = 0;
 inline constexpr unsigned int reference_symbol_count = all_symbol_count;
 inline constexpr unsigned int svg_path_arc_symbol_count = 1;
 inline constexpr unsigned int round_stroke_symbol_count = outline_symbol_count;
@@ -233,6 +253,14 @@ inline auto symbol_scale_name(SymbolScale scale) noexcept -> std::string_view {
     case SymbolScale::Large:  return "large";
     }
     return "medium";
+}
+
+inline auto symbol_weight_name(SymbolWeight weight) noexcept
+        -> std::string_view {
+    switch (weight) {
+    case SymbolWeight::Regular: return "regular";
+    }
+    return "regular";
 }
 
 inline auto symbol_stroke_cap_name(SymbolStrokeCap cap) noexcept
@@ -377,6 +405,14 @@ inline auto symbol_control_chrome_policy() noexcept -> std::string_view {
 
 inline auto default_scale_policy() noexcept -> std::string_view {
     return "medium";
+}
+
+inline auto default_weight_policy() noexcept -> std::string_view {
+    return "regular_text_weight_aligned";
+}
+
+inline auto rendering_capability_policy() noexcept -> std::string_view {
+    return "sf_symbols_mode_names_with_macos_monochrome_hierarchical_contract";
 }
 
 inline auto metrics_policy() noexcept -> std::string_view {
@@ -656,6 +692,17 @@ inline bool uses_svg_path_arcs(Symbol symbol) noexcept {
     return symbol == Symbol::AirDrop;
 }
 
+inline auto rendering_capabilities(Symbol symbol) noexcept
+        -> SymbolRenderingCapabilities {
+    return {
+        true,
+        supports_hierarchical_opacity(symbol),
+        false,
+        false,
+        rendering_capability_policy(),
+    };
+}
+
 inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
     SymbolRole role = SymbolRole::Toolbar;
     switch (symbol) {
@@ -713,6 +760,7 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
             ? SymbolRenderingMode::Hierarchical
             : SymbolRenderingMode::Monochrome,
         SymbolScale::Medium,
+        SymbolWeight::Regular,
         style_name(),
         semantic_reference_name(symbol),
         reference_family(),
@@ -727,7 +775,10 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
         !filled,
         filled,
         true,
+        true,
         hierarchical,
+        false,
+        false,
         true,
         false,
     };

@@ -3196,6 +3196,19 @@ auto icon_control_chrome_json(
         chrome.grouped_control ? "true" : "false");
 }
 
+auto icon_rendering_capabilities_json(
+        icon_catalog::SymbolRenderingCapabilities const& capabilities)
+        -> std::string {
+    return std::format(
+        "{{\"policy\":{},\"monochrome\":{},\"hierarchical\":{},"
+        "\"palette\":{},\"multicolor\":{}}}",
+        json_string(capabilities.policy),
+        capabilities.monochrome ? "true" : "false",
+        capabilities.hierarchical ? "true" : "false",
+        capabilities.palette ? "true" : "false",
+        capabilities.multicolor ? "true" : "false");
+}
+
 auto icon_interaction_tones_json(bool enabled) -> std::string {
     if (!enabled)
         return "{}";
@@ -3248,17 +3261,23 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
     auto const selected_control_chrome = icon_catalog::macos_control_chrome(
         presentation_role,
         icon_catalog::SymbolInteractionState{true, true});
+    auto const rendering_capabilities =
+        icon_catalog::rendering_capabilities(symbol);
     return std::format(
         "{{\"name\":{},\"semantic_reference_name\":{},"
         "\"reference_set\":{},\"role\":{},\"variant\":{},"
         "\"preferred_rendering\":{},\"default_scale\":{},"
+        "\"default_weight\":{},"
         "\"style\":{},\"reference_family\":{},\"reference_policy\":{},"
         "\"grid_size\":{},\"default_stroke_width\":{},"
         "\"stroke_cap\":{},\"stroke_join\":{},"
         "\"secondary_opacity\":{},\"layer_count\":{},"
         "\"uses_current_color\":{},\"round_stroke\":{},\"filled\":{},"
         "\"text_weight_aligned\":{},"
+        "\"supports_monochrome\":{},"
         "\"supports_hierarchical_opacity\":{},"
+        "\"supports_palette\":{},\"supports_multicolor\":{},"
+        "\"rendering_capabilities\":{},"
         "\"uses_svg_path_arcs\":{},"
         "\"phenotype_owned\":{},\"uses_sf_symbols_asset\":{},"
         "\"has_svg_source\":{},\"source_bytes\":{},"
@@ -3278,6 +3297,7 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         json_string(icon_catalog::symbol_rendering_mode_name(
             desc.preferred_rendering)),
         json_string(icon_catalog::symbol_scale_name(desc.default_scale)),
+        json_string(icon_catalog::symbol_weight_name(desc.default_weight)),
         json_string(desc.style),
         json_string(desc.reference_family),
         json_string(desc.reference_policy),
@@ -3291,7 +3311,11 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         desc.round_stroke ? "true" : "false",
         desc.filled ? "true" : "false",
         desc.text_weight_aligned ? "true" : "false",
+        desc.supports_monochrome ? "true" : "false",
         desc.supports_hierarchical_opacity ? "true" : "false",
+        desc.supports_palette ? "true" : "false",
+        desc.supports_multicolor ? "true" : "false",
+        icon_rendering_capabilities_json(rendering_capabilities),
         icon_catalog::uses_svg_path_arcs(symbol) ? "true" : "false",
         desc.phenotype_owned ? "true" : "false",
         desc.uses_sf_symbols_asset ? "true" : "false",
@@ -3373,17 +3397,20 @@ auto icon_svg_json(std::string_view query,
                    IconLookupResult const& result) -> std::string {
     auto const desc = icon_catalog::descriptor(result.symbol);
     auto const source = icon_catalog::svg_source(result.symbol);
+    auto const capabilities = icon_catalog::rendering_capabilities(result.symbol);
     return std::format(
         "{{\"schema_version\":1,\"command\":\"icons svg\","
         "\"ok\":true,\"query\":{},\"match_kind\":{},"
         "\"symbol\":{},\"semantic_reference_name\":{},"
         "\"source_format\":\"svg\",\"asset_policy\":{},"
+        "\"rendering_capabilities\":{},"
         "\"source_bytes\":{},\"source\":{}}}",
         json_string(query),
         json_string(result.match_kind),
         json_string(desc.name),
         json_string(desc.semantic_reference_name),
         json_string(icon_catalog::asset_policy()),
+        icon_rendering_capabilities_json(capabilities),
         source.size(),
         json_string(source));
 }
@@ -3435,6 +3462,10 @@ auto icon_catalog_checks() -> std::vector<Check> {
     unsigned int outline_count = 0;
     unsigned int filled_count = 0;
     unsigned int hierarchical_count = 0;
+    unsigned int monochrome_count = 0;
+    unsigned int regular_weight_count = 0;
+    unsigned int palette_count = 0;
+    unsigned int multicolor_count = 0;
     unsigned int arc_path_count = 0;
     unsigned int round_stroke_count = 0;
     bool all_owned = true;
@@ -3443,6 +3474,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
     bool round_stroke_contract = true;
     bool round_cap_join_contract = true;
     bool text_weight_aligned = true;
+    bool rendering_capability_contract = true;
     bool name_lookup_roundtrips = true;
     bool reference_lookup_roundtrips = true;
     bool metric_contract = true;
@@ -3468,6 +3500,14 @@ auto icon_catalog_checks() -> std::vector<Check> {
             ++outline_count;
         if (desc.supports_hierarchical_opacity)
             ++hierarchical_count;
+        if (desc.supports_monochrome)
+            ++monochrome_count;
+        if (desc.default_weight == icon_catalog::SymbolWeight::Regular)
+            ++regular_weight_count;
+        if (desc.supports_palette)
+            ++palette_count;
+        if (desc.supports_multicolor)
+            ++multicolor_count;
         if (icon_catalog::uses_svg_path_arcs(symbol))
             ++arc_path_count;
         if (desc.round_stroke)
@@ -3505,6 +3545,16 @@ auto icon_catalog_checks() -> std::vector<Check> {
                         == icon_catalog::SymbolStrokeJoin::Round));
         text_weight_aligned =
             text_weight_aligned && desc.text_weight_aligned;
+        auto const capabilities = icon_catalog::rendering_capabilities(symbol);
+        rendering_capability_contract =
+            rendering_capability_contract
+            && capabilities.policy
+                == icon_catalog::rendering_capability_policy()
+            && capabilities.monochrome == desc.supports_monochrome
+            && capabilities.hierarchical
+                == desc.supports_hierarchical_opacity
+            && capabilities.palette == desc.supports_palette
+            && capabilities.multicolor == desc.supports_multicolor;
     }
 
     return {
@@ -3584,17 +3634,38 @@ auto icon_catalog_checks() -> std::vector<Check> {
          .ok = round_stroke_contract
             && round_cap_join_contract
             && text_weight_aligned
+            && regular_weight_count == icon_catalog::regular_weight_symbol_count
             && round_stroke_count == icon_catalog::round_stroke_symbol_count
             && icon_catalog::stroke_geometry_policy()
-                == std::string_view{"round_cap_round_join_svg_strokes"},
+                == std::string_view{"round_cap_round_join_svg_strokes"}
+            && icon_catalog::default_weight_policy()
+                == std::string_view{"regular_text_weight_aligned"},
          .detail = std::format(
-             "round_stroke={} round_cap_join={} text_weight_aligned={} count={}",
+             "round_stroke={} round_cap_join={} text_weight_aligned={} regular_weight={} count={}",
                                round_stroke_contract ? "true" : "false",
                                round_cap_join_contract ? "true" : "false",
                                text_weight_aligned ? "true" : "false",
+                               regular_weight_count,
                                round_stroke_count),
         .hint =
             "Mac-like icons should stay round-cap, round-join, and text-weight aligned."},
+        {.name = "rendering_capabilities",
+         .ok = rendering_capability_contract
+            && monochrome_count == icon_catalog::monochrome_symbol_count
+            && hierarchical_count == icon_catalog::hierarchical_symbol_count
+            && palette_count == icon_catalog::palette_symbol_count
+            && multicolor_count == icon_catalog::multicolor_symbol_count
+            && icon_catalog::rendering_capability_policy().find(
+                   "sf_symbols_mode_names")
+                != std::string_view::npos,
+         .detail = std::format(
+             "monochrome={} hierarchical={} palette={} multicolor={}",
+             monochrome_count,
+             hierarchical_count,
+             palette_count,
+             multicolor_count),
+         .hint =
+             "Expose SF Symbols rendering-mode names explicitly while keeping unsupported palette/multicolor output deterministic."},
         {.name = "svg_path_subset",
          .ok = icon_catalog::svg_subset_policy()
                 == std::string_view{"bounded_svg_icon_subset"}
@@ -3670,6 +3741,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"visual_consistency_policy\":{},"
         "\"alignment\":{},\"variant_policy\":{},"
         "\"presentation_policy\":{},\"tone_policy\":{},"
+        "\"default_weight\":{},"
+        "\"rendering_capability_policy\":{},"
         "\"interaction_tone_policy\":{},"
         "\"symbol_control_chrome_policy\":{},"
         "\"toolbar_symbol_chrome_policy\":{},"
@@ -3678,6 +3751,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"metrics_policy\":{},\"hit_target_policy\":{}}},"
         "\"counts\":{{\"all\":{},\"sidebar\":{},\"toolbar\":{},"
         "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
+        "\"monochrome\":{},\"regular_weight\":{},"
+        "\"palette\":{},\"multicolor\":{},"
         "\"reference\":{},\"svg_path_arc\":{},\"round_stroke\":{}}},"
         "\"symbols\":{},\"sidebar_symbols\":{},"
         "\"toolbar_symbols\":{},\"checks\":{}}}",
@@ -3701,6 +3776,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::variant_policy()),
         json_string(icon_catalog::presentation_policy()),
         json_string(icon_catalog::tone_policy()),
+        json_string(icon_catalog::default_weight_policy()),
+        json_string(icon_catalog::rendering_capability_policy()),
         json_string(icon_catalog::interaction_tone_policy()),
         json_string(icon_catalog::symbol_control_chrome_policy()),
         json_string(icon_catalog::toolbar_symbol_chrome_policy()),
@@ -3715,6 +3792,10 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_catalog::outline_symbol_count,
         icon_catalog::filled_symbol_count,
         icon_catalog::hierarchical_symbol_count,
+        icon_catalog::monochrome_symbol_count,
+        icon_catalog::regular_weight_symbol_count,
+        icon_catalog::palette_symbol_count,
+        icon_catalog::multicolor_symbol_count,
         icon_catalog::reference_symbol_count,
         icon_catalog::svg_path_arc_symbol_count,
         icon_catalog::round_stroke_symbol_count,
@@ -4166,6 +4247,9 @@ auto explorer_chrome_json(
         "\"total_symbol_count\":{},\"sidebar_symbol_count\":{},"
         "\"toolbar_symbol_count\":{},\"filled_symbol_count\":{},"
         "\"outline_symbol_count\":{},\"hierarchical_symbol_count\":{},"
+        "\"monochrome_symbol_count\":{},"
+        "\"regular_weight_symbol_count\":{},"
+        "\"palette_symbol_count\":{},\"multicolor_symbol_count\":{},"
         "\"reference_symbol_count\":{},\"svg_path_arc_symbol_count\":{},"
         "\"round_stroke_symbol_count\":{},"
         "\"grid_size\":{},"
@@ -4182,12 +4266,17 @@ auto explorer_chrome_json(
         "\"toolbar_selected_button_hover_background_alpha\":{},"
         "\"column_location_icon_size\":{},"
         "\"text_weight_aligned\":{},"
-        "\"hierarchical_opacity\":{},\"design_reference\":{},"
+        "\"monochrome_rendering\":{},"
+        "\"hierarchical_opacity\":{},"
+        "\"palette_rendering\":{},\"multicolor_rendering\":{},"
+        "\"design_reference\":{},"
         "\"reference_family\":{},\"reference_policy\":{},"
         "\"asset_policy\":{},"
         "\"interface_metaphor_policy\":{},"
         "\"visual_consistency_policy\":{},"
         "\"alignment\":{},\"rendering_mode\":{},"
+        "\"default_weight\":{},"
+        "\"rendering_capability_policy\":{},"
         "\"variant_policy\":{},\"presentation_policy\":{},"
         "\"tone_policy\":{},\"interaction_tone_policy\":{},"
         "\"symbol_control_chrome_policy\":{},"
@@ -4279,6 +4368,10 @@ auto explorer_chrome_json(
         chrome.icon_filled_symbol_count,
         chrome.icon_outline_symbol_count,
         chrome.icon_hierarchical_symbol_count,
+        chrome.icon_monochrome_symbol_count,
+        chrome.icon_regular_weight_symbol_count,
+        chrome.icon_palette_symbol_count,
+        chrome.icon_multicolor_symbol_count,
         chrome.icon_reference_symbol_count,
         chrome.icon_svg_path_arc_symbol_count,
         chrome.icon_round_stroke_symbol_count,
@@ -4298,7 +4391,10 @@ auto explorer_chrome_json(
         chrome.icon_toolbar_selected_button_hover_background_alpha,
         chrome.column_location_icon_size,
         chrome.icon_text_weight_aligned ? "true" : "false",
+        chrome.icon_monochrome_rendering ? "true" : "false",
         chrome.icon_hierarchical_opacity ? "true" : "false",
+        chrome.icon_palette_rendering ? "true" : "false",
+        chrome.icon_multicolor_rendering ? "true" : "false",
         json_string(chrome.icon_design_reference),
         json_string(chrome.icon_reference_family),
         json_string(chrome.icon_reference_policy),
@@ -4307,6 +4403,8 @@ auto explorer_chrome_json(
         json_string(chrome.icon_visual_consistency_policy),
         json_string(chrome.icon_alignment),
         json_string(chrome.icon_rendering_mode),
+        json_string(chrome.icon_default_weight),
+        json_string(chrome.icon_rendering_capability_policy),
         json_string(chrome.icon_variant_policy),
         json_string(chrome.icon_presentation_policy),
         json_string(chrome.icon_tone_policy),
@@ -7225,6 +7323,9 @@ int run_icons_catalog(cppx::cli::Invocation const& invocation) {
          .status = cppx::terminal::StatusKind::ok},
         {.label = "reference",
          .value = std::string{icon_catalog::reference_family()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "rendering",
+         .value = std::string{icon_catalog::rendering_capability_policy()},
          .status = cppx::terminal::StatusKind::ok},
         {.label = "assets",
          .value = std::string{icon_catalog::asset_policy()},

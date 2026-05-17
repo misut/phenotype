@@ -87,6 +87,10 @@ enum class SymbolScale {
     Large,
 };
 
+enum class SymbolWeight {
+    Regular,
+};
+
 enum class SymbolStrokeCap {
     Round,
 };
@@ -152,6 +156,17 @@ inline auto from_catalog_scale(catalog::SymbolScale scale) noexcept
     return static_cast<SymbolScale>(static_cast<unsigned int>(scale));
 }
 
+inline auto to_catalog_weight(SymbolWeight weight) noexcept
+        -> catalog::SymbolWeight {
+    return static_cast<catalog::SymbolWeight>(
+        static_cast<unsigned int>(weight));
+}
+
+inline auto from_catalog_weight(catalog::SymbolWeight weight) noexcept
+        -> SymbolWeight {
+    return static_cast<SymbolWeight>(static_cast<unsigned int>(weight));
+}
+
 inline auto to_catalog_stroke_cap(SymbolStrokeCap cap) noexcept
         -> catalog::SymbolStrokeCap {
     return static_cast<catalog::SymbolStrokeCap>(
@@ -213,6 +228,11 @@ inline auto symbol_scale_name(SymbolScale scale) noexcept -> std::string_view {
     return catalog::symbol_scale_name(to_catalog_scale(scale));
 }
 
+inline auto symbol_weight_name(SymbolWeight weight) noexcept
+        -> std::string_view {
+    return catalog::symbol_weight_name(to_catalog_weight(weight));
+}
+
 inline auto symbol_stroke_cap_name(SymbolStrokeCap cap) noexcept
         -> std::string_view {
     return catalog::symbol_stroke_cap_name(to_catalog_stroke_cap(cap));
@@ -240,6 +260,7 @@ struct SymbolDescriptor {
     SymbolVariant variant = SymbolVariant::Outline;
     SymbolRenderingMode preferred_rendering = SymbolRenderingMode::Monochrome;
     SymbolScale default_scale = SymbolScale::Medium;
+    SymbolWeight default_weight = SymbolWeight::Regular;
     std::string_view style;
     std::string_view semantic_reference_name;
     std::string_view reference_family;
@@ -254,9 +275,20 @@ struct SymbolDescriptor {
     bool round_stroke = true;
     bool filled = false;
     bool text_weight_aligned = true;
+    bool supports_monochrome = true;
     bool supports_hierarchical_opacity = false;
+    bool supports_palette = false;
+    bool supports_multicolor = false;
     bool phenotype_owned = true;
     bool uses_sf_symbols_asset = false;
+};
+
+struct SymbolRenderingCapabilities {
+    bool monochrome = true;
+    bool hierarchical = false;
+    bool palette = false;
+    bool multicolor = false;
+    std::string_view policy;
 };
 
 struct SymbolPresentation {
@@ -311,6 +343,14 @@ inline constexpr unsigned int filled_symbol_count =
     catalog::filled_symbol_count;
 inline constexpr unsigned int hierarchical_symbol_count =
     catalog::hierarchical_symbol_count;
+inline constexpr unsigned int monochrome_symbol_count =
+    catalog::monochrome_symbol_count;
+inline constexpr unsigned int regular_weight_symbol_count =
+    catalog::regular_weight_symbol_count;
+inline constexpr unsigned int palette_symbol_count =
+    catalog::palette_symbol_count;
+inline constexpr unsigned int multicolor_symbol_count =
+    catalog::multicolor_symbol_count;
 inline constexpr unsigned int reference_symbol_count =
     catalog::reference_symbol_count;
 inline constexpr unsigned int svg_path_arc_symbol_count =
@@ -414,6 +454,14 @@ inline auto default_scale_policy() noexcept -> std::string_view {
     return catalog::default_scale_policy();
 }
 
+inline auto default_weight_policy() noexcept -> std::string_view {
+    return catalog::default_weight_policy();
+}
+
+inline auto rendering_capability_policy() noexcept -> std::string_view {
+    return catalog::rendering_capability_policy();
+}
+
 inline auto metrics_policy() noexcept -> std::string_view {
     return catalog::metrics_policy();
 }
@@ -467,6 +515,18 @@ inline bool uses_svg_path_arcs(Symbol symbol) noexcept {
     return catalog::uses_svg_path_arcs(to_catalog_symbol(symbol));
 }
 
+inline auto rendering_capabilities(Symbol symbol) noexcept
+        -> SymbolRenderingCapabilities {
+    auto const base = catalog::rendering_capabilities(to_catalog_symbol(symbol));
+    return SymbolRenderingCapabilities{
+        base.monochrome,
+        base.hierarchical,
+        base.palette,
+        base.multicolor,
+        base.policy,
+    };
+}
+
 inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
     auto const base = catalog::descriptor(to_catalog_symbol(symbol));
     return SymbolDescriptor{
@@ -476,6 +536,7 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
         from_catalog_variant(base.variant),
         from_catalog_rendering(base.preferred_rendering),
         from_catalog_scale(base.default_scale),
+        from_catalog_weight(base.default_weight),
         base.style,
         base.semantic_reference_name,
         base.reference_family,
@@ -490,7 +551,10 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
         base.round_stroke,
         base.filled,
         base.text_weight_aligned,
+        base.supports_monochrome,
         base.supports_hierarchical_opacity,
+        base.supports_palette,
+        base.supports_multicolor,
         base.phenotype_owned,
         base.uses_sf_symbols_asset,
     };

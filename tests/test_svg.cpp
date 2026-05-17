@@ -332,6 +332,9 @@ void test_builtin_icons_parse() {
     assert(icons::tone_policy()
            == "primary, secondary, selected, accent, disabled, destructive");
     assert(icons::default_scale_policy() == "medium");
+    assert(icons::default_weight_policy() == "regular_text_weight_aligned");
+    assert(icons::rendering_capability_policy().find("sf_symbols_mode_names")
+           != std::string_view::npos);
     assert(icons::all_symbol_count == 31);
     assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
@@ -341,6 +344,10 @@ void test_builtin_icons_parse() {
     assert(icons::outline_symbol_count == 30);
     assert(icons::filled_symbol_count == 1);
     assert(icons::hierarchical_symbol_count == 20);
+    assert(icons::monochrome_symbol_count == icons::all_symbol_count);
+    assert(icons::regular_weight_symbol_count == icons::all_symbol_count);
+    assert(icons::palette_symbol_count == 0);
+    assert(icons::multicolor_symbol_count == 0);
     assert(icons::reference_symbol_count == icons::all_symbol_count);
     assert(icons::svg_path_arc_symbol_count == 1);
     assert(icons::round_stroke_symbol_count == icons::outline_symbol_count);
@@ -378,6 +385,10 @@ void test_builtin_icons_parse() {
     unsigned int outline_count = 0;
     unsigned int filled_count = 0;
     unsigned int hierarchical_count = 0;
+    unsigned int monochrome_count = 0;
+    unsigned int regular_weight_count = 0;
+    unsigned int palette_count = 0;
+    unsigned int multicolor_count = 0;
     unsigned int reference_count = 0;
     unsigned int arc_path_count = 0;
     unsigned int round_stroke_count = 0;
@@ -423,9 +434,30 @@ void test_builtin_icons_parse() {
         assert(descriptor.text_weight_aligned);
         assert(descriptor.default_scale == icons::SymbolScale::Medium);
         assert(icons::symbol_scale_name(descriptor.default_scale) == "medium");
+        assert(descriptor.default_weight == icons::SymbolWeight::Regular);
+        assert(icons::symbol_weight_name(descriptor.default_weight)
+               == "regular");
         assert(descriptor.phenotype_owned);
         assert(!descriptor.uses_sf_symbols_asset);
         assert(descriptor.uses_current_color);
+        auto const capabilities = icons::rendering_capabilities(symbol);
+        assert(capabilities.policy == icons::rendering_capability_policy());
+        assert(capabilities.monochrome == descriptor.supports_monochrome);
+        assert(capabilities.hierarchical
+               == descriptor.supports_hierarchical_opacity);
+        assert(capabilities.palette == descriptor.supports_palette);
+        assert(capabilities.multicolor == descriptor.supports_multicolor);
+        assert(descriptor.supports_monochrome);
+        assert(!descriptor.supports_palette);
+        assert(!descriptor.supports_multicolor);
+        if (descriptor.supports_monochrome)
+            ++monochrome_count;
+        if (descriptor.default_weight == icons::SymbolWeight::Regular)
+            ++regular_weight_count;
+        if (descriptor.supports_palette)
+            ++palette_count;
+        if (descriptor.supports_multicolor)
+            ++multicolor_count;
         if (symbol != icons::Symbol::More) {
             ++outline_count;
             assert(descriptor.variant == icons::SymbolVariant::Outline);
@@ -478,6 +510,10 @@ void test_builtin_icons_parse() {
     assert(outline_count == icons::outline_symbol_count);
     assert(filled_count == icons::filled_symbol_count);
     assert(hierarchical_count == icons::hierarchical_symbol_count);
+    assert(monochrome_count == icons::monochrome_symbol_count);
+    assert(regular_weight_count == icons::regular_weight_symbol_count);
+    assert(palette_count == icons::palette_symbol_count);
+    assert(multicolor_count == icons::multicolor_symbol_count);
     assert(reference_count == icons::reference_symbol_count);
     assert(arc_path_count == icons::svg_path_arc_symbol_count);
     assert(round_stroke_count == icons::round_stroke_symbol_count);

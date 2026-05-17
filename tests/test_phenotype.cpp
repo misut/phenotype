@@ -3642,6 +3642,17 @@ void test_icon_catalog_umbrella_export() {
            == "borderless_toolbar_symbols_inside_grouped_controls");
     assert(phenotype::icon_catalog::symbol_control_chrome_policy()
            == "macos_finder_symbol_state_chrome");
+    assert(phenotype::icon_catalog::default_weight_policy()
+           == "regular_text_weight_aligned");
+    assert(phenotype::icon_catalog::rendering_capability_policy().find(
+               "sf_symbols_mode_names")
+           != std::string_view::npos);
+    assert(phenotype::icon_catalog::monochrome_symbol_count
+           == phenotype::icon_catalog::all_symbol_count);
+    assert(phenotype::icon_catalog::regular_weight_symbol_count
+           == phenotype::icon_catalog::all_symbol_count);
+    assert(phenotype::icon_catalog::palette_symbol_count == 0);
+    assert(phenotype::icon_catalog::multicolor_symbol_count == 0);
     assert(phenotype::icon_catalog::svg_path_arc_symbol_count == 1);
     assert(phenotype::icon_catalog::round_stroke_symbol_count
            == phenotype::icon_catalog::outline_symbol_count);
@@ -3650,6 +3661,14 @@ void test_icon_catalog_umbrella_export() {
            == "airdrop");
     assert(phenotype::icon_catalog::uses_svg_path_arcs(
                phenotype::icon_catalog::Symbol::AirDrop));
+    auto const capabilities = phenotype::icon_catalog::rendering_capabilities(
+        phenotype::icon_catalog::Symbol::AirDrop);
+    assert(capabilities.monochrome);
+    assert(capabilities.hierarchical);
+    assert(!capabilities.palette);
+    assert(!capabilities.multicolor);
+    assert(capabilities.policy
+           == phenotype::icon_catalog::rendering_capability_policy());
     assert(phenotype::icon_catalog::svg_source(
                phenotype::icon_catalog::Symbol::Applications)
                .find("currentColor")

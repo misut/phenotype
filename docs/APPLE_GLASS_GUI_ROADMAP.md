@@ -306,7 +306,8 @@ rows without querying native platform icon services. The CLI command
 `phenotype icons catalog --json` exposes the same contract for CI and LLM
 debugging on Linux without importing native GUI code, and `phenotype icons svg
 <name-or-reference>` exposes the exact phenotype-owned SVG source for one
-glyph when a renderer, parser, or icon cache needs a pure source-level probe.
+glyph plus its rendering capability envelope when a renderer, parser, or icon
+cache needs a pure source-level probe.
 The macOS Metal
 renderer executes diagonal icon strokes as triangle bodies with round caps
 instead of dot chains, keeping toolbar/search/sidebar symbols continuous while
@@ -318,8 +319,10 @@ Larger fills still ear-clip into the existing triangle pipeline. The catalog
 exposes semantic metadata for toolbar, sidebar, action, file-type roles,
 outline/fill variants, preferred rendering mode, scale, and hierarchical
 opacity/reference counts so verifier artifacts can prove which icon policy was
-used. It also exposes supported SVG style attributes, round cap/join policy
-names, and the count of round-stroked outline symbols so the Finder icon style
+used. It also exposes regular text-aligned symbol weight, SF Symbols
+rendering-mode vocabulary, explicit monochrome/hierarchical/palette/multicolor
+capability counts, supported SVG style attributes, round cap/join policy names,
+and the count of round-stroked outline symbols so the Finder icon style
 can fail as a data contract before it becomes a visual-only regression. The
 catalog now also exposes a role-aware macOS presentation and
 interaction-tone policy: toolbar/navigation symbols resolve to 24 pt

@@ -257,6 +257,10 @@ struct ExplorerChromeMetrics {
     int icon_filled_symbol_count = 0;
     int icon_outline_symbol_count = 0;
     int icon_hierarchical_symbol_count = 0;
+    int icon_monochrome_symbol_count = 0;
+    int icon_regular_weight_symbol_count = 0;
+    int icon_palette_symbol_count = 0;
+    int icon_multicolor_symbol_count = 0;
     int icon_reference_symbol_count = 0;
     int icon_svg_path_arc_symbol_count = 0;
     int icon_round_stroke_symbol_count = 0;
@@ -285,7 +289,10 @@ struct ExplorerChromeMetrics {
     bool uses_sf_symbols_assets = false;
     bool icon_round_stroke_contract = false;
     bool icon_text_weight_aligned = false;
+    bool icon_monochrome_rendering = false;
     bool icon_hierarchical_opacity = false;
+    bool icon_palette_rendering = false;
+    bool icon_multicolor_rendering = false;
     bool artifact_window_control_markers = false;
     bool more_actions_open = false;
     bool status_bar_visible = false;
@@ -308,6 +315,8 @@ struct ExplorerChromeMetrics {
     std::string icon_visual_consistency_policy;
     std::string icon_alignment;
     std::string icon_rendering_mode;
+    std::string icon_default_weight;
+    std::string icon_rendering_capability_policy;
     std::string icon_variant_policy;
     std::string icon_presentation_policy;
     std::string icon_tone_policy;
@@ -729,6 +738,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_filled_symbol_count = 0,
             .icon_outline_symbol_count = 0,
             .icon_hierarchical_symbol_count = 0,
+            .icon_monochrome_symbol_count = 0,
+            .icon_regular_weight_symbol_count = 0,
+            .icon_palette_symbol_count = 0,
+            .icon_multicolor_symbol_count = 0,
             .icon_reference_symbol_count = 0,
             .icon_svg_path_arc_symbol_count = 0,
             .icon_round_stroke_symbol_count = 0,
@@ -757,7 +770,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .uses_sf_symbols_assets = false,
             .icon_round_stroke_contract = false,
             .icon_text_weight_aligned = false,
+            .icon_monochrome_rendering = false,
             .icon_hierarchical_opacity = false,
+            .icon_palette_rendering = false,
+            .icon_multicolor_rendering = false,
             .artifact_window_control_markers = false,
             .status_bar_visible = false,
             .theme_contract_version = 0,
@@ -779,6 +795,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_visual_consistency_policy = "n/a",
             .icon_alignment = "n/a",
             .icon_rendering_mode = "n/a",
+            .icon_default_weight = "n/a",
+            .icon_rendering_capability_policy = "n/a",
             .icon_variant_policy = "n/a",
             .icon_presentation_policy = "n/a",
             .icon_tone_policy = "n/a",
@@ -904,6 +922,14 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             static_cast<int>(icon_catalog::outline_symbol_count),
         .icon_hierarchical_symbol_count =
             static_cast<int>(icon_catalog::hierarchical_symbol_count),
+        .icon_monochrome_symbol_count =
+            static_cast<int>(icon_catalog::monochrome_symbol_count),
+        .icon_regular_weight_symbol_count =
+            static_cast<int>(icon_catalog::regular_weight_symbol_count),
+        .icon_palette_symbol_count =
+            static_cast<int>(icon_catalog::palette_symbol_count),
+        .icon_multicolor_symbol_count =
+            static_cast<int>(icon_catalog::multicolor_symbol_count),
         .icon_reference_symbol_count =
             static_cast<int>(icon_catalog::reference_symbol_count),
         .icon_svg_path_arc_symbol_count =
@@ -956,7 +982,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .uses_sf_symbols_assets = false,
         .icon_round_stroke_contract = true,
         .icon_text_weight_aligned = true,
+        .icon_monochrome_rendering = true,
         .icon_hierarchical_opacity = true,
+        .icon_palette_rendering = false,
+        .icon_multicolor_rendering = false,
         .artifact_window_control_markers = false,
         .status_bar_visible = desktop_status_bar_visible(state),
         .theme_contract_version =
@@ -990,6 +1019,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             std::string{icon_catalog::visual_consistency_policy()},
         .icon_alignment = std::string{icon_catalog::alignment_policy()},
         .icon_rendering_mode = "hierarchical",
+        .icon_default_weight =
+            std::string{icon_catalog::default_weight_policy()},
+        .icon_rendering_capability_policy =
+            std::string{icon_catalog::rendering_capability_policy()},
         .icon_variant_policy = std::string{icon_catalog::variant_policy()},
         .icon_presentation_policy =
             std::string{icon_catalog::presentation_policy()},
@@ -1684,6 +1717,18 @@ inline json::Value explorer_chrome_debug_json(
         "hierarchical_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.icon_hierarchical_symbol_count)});
     icon_system.emplace(
+        "monochrome_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.icon_monochrome_symbol_count)});
+    icon_system.emplace(
+        "regular_weight_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.icon_regular_weight_symbol_count)});
+    icon_system.emplace(
+        "palette_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.icon_palette_symbol_count)});
+    icon_system.emplace(
+        "multicolor_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.icon_multicolor_symbol_count)});
+    icon_system.emplace(
         "reference_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.icon_reference_symbol_count)});
     icon_system.emplace(
@@ -1738,7 +1783,10 @@ inline json::Value explorer_chrome_debug_json(
         "column_location_icon_size",
         json::Value{chrome.column_location_icon_size});
     icon_system.emplace("text_weight_aligned", json::Value{chrome.icon_text_weight_aligned});
+    icon_system.emplace("monochrome_rendering", json::Value{chrome.icon_monochrome_rendering});
     icon_system.emplace("hierarchical_opacity", json::Value{chrome.icon_hierarchical_opacity});
+    icon_system.emplace("palette_rendering", json::Value{chrome.icon_palette_rendering});
+    icon_system.emplace("multicolor_rendering", json::Value{chrome.icon_multicolor_rendering});
     icon_system.emplace("design_reference", json::Value{chrome.icon_design_reference});
     icon_system.emplace("reference_family", json::Value{chrome.icon_reference_family});
     icon_system.emplace("reference_policy", json::Value{chrome.icon_reference_policy});
@@ -1751,6 +1799,10 @@ inline json::Value explorer_chrome_debug_json(
         json::Value{chrome.icon_visual_consistency_policy});
     icon_system.emplace("alignment", json::Value{chrome.icon_alignment});
     icon_system.emplace("rendering_mode", json::Value{chrome.icon_rendering_mode});
+    icon_system.emplace("default_weight", json::Value{chrome.icon_default_weight});
+    icon_system.emplace(
+        "rendering_capability_policy",
+        json::Value{chrome.icon_rendering_capability_policy});
     icon_system.emplace("variant_policy", json::Value{chrome.icon_variant_policy});
     icon_system.emplace("presentation_policy", json::Value{chrome.icon_presentation_policy});
     icon_system.emplace("tone_policy", json::Value{chrome.icon_tone_policy});
