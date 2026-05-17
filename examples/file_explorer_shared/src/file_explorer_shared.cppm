@@ -514,9 +514,25 @@ inline constexpr std::array<ExplorerSidebarSymbol, 10>
         {"trash", icon_catalog::Symbol::Trash},
     }};
 
+inline constexpr std::array<ExplorerSidebarSymbol, 7>
+    k_file_type_symbols{{
+        {"folder", icon_catalog::Symbol::Folder},
+        {"document", icon_catalog::Symbol::Document},
+        {"pdf", icon_catalog::Symbol::PdfDocument},
+        {"text", icon_catalog::Symbol::TextDocument},
+        {"image", icon_catalog::Symbol::Image},
+        {"movie", icon_catalog::Symbol::Movie},
+        {"archive", icon_catalog::Symbol::Archive},
+    }};
+
 inline auto desktop_sidebar_symbol_contract() noexcept
         -> std::span<ExplorerSidebarSymbol const> {
     return k_desktop_sidebar_symbols;
+}
+
+inline auto file_type_symbol_contract() noexcept
+        -> std::span<ExplorerSidebarSymbol const> {
+    return k_file_type_symbols;
 }
 
 inline auto sidebar_symbol_for_token(std::string_view token) noexcept
@@ -1446,6 +1462,32 @@ inline std::string entry_kind_label(Entry const& entry) {
     return ext + " File";
 }
 
+inline icon_catalog::Symbol entry_symbol(Entry const& entry) {
+    if (entry.folder)
+        return icon_catalog::Symbol::Folder;
+    auto ext = extension_lower(entry.name);
+    if (ext == "pdf")
+        return icon_catalog::Symbol::PdfDocument;
+    if (ext == "png" || ext == "jpg" || ext == "jpeg")
+        return icon_catalog::Symbol::Image;
+    if (ext == "mov" || ext == "mp4")
+        return icon_catalog::Symbol::Movie;
+    if (ext == "txt" || ext == "md")
+        return icon_catalog::Symbol::TextDocument;
+    if (ext == "zip")
+        return icon_catalog::Symbol::Archive;
+    return icon_catalog::Symbol::Document;
+}
+
+inline std::string_view entry_symbol_name(Entry const& entry) {
+    return icon_catalog::name(entry_symbol(entry));
+}
+
+inline std::string_view entry_symbol_semantic_reference_name(
+        Entry const& entry) {
+    return icon_catalog::semantic_reference_name(entry_symbol(entry));
+}
+
 inline std::string entry_size_label(Entry const& entry) {
     return entry.folder ? "--" : format_size(entry.size);
 }
@@ -1561,6 +1603,10 @@ inline json::Value entry_debug_json(Entry const& entry) {
     json::Object out;
     out.emplace("name", json::Value{entry.name});
     out.emplace("kind", json::Value{entry_kind_label(entry)});
+    out.emplace("symbol", json::Value{std::string{entry_symbol_name(entry)}});
+    out.emplace(
+        "symbol_semantic_reference_name",
+        json::Value{std::string{entry_symbol_semantic_reference_name(entry)}});
     out.emplace("folder", json::Value{entry.folder});
     out.emplace("size", json::Value{static_cast<std::int64_t>(entry.size)});
     return json::Value{std::move(out)};
@@ -1665,6 +1711,26 @@ inline json::Value toolbar_icon_reference_symbols_debug_json(
         out.push_back(json::Value{std::string{
             icon_catalog::semantic_reference_name(
                 icon_catalog::toolbar_symbol_at(i))}});
+    }
+    return json::Value{std::move(out)};
+}
+
+inline json::Value file_type_symbol_tokens_debug_json(
+        ExplorerChromeMetrics const& chrome) {
+    if (chrome.icon_reference_symbol_count <= 0)
+        return json::Value{json::Array{}};
+    json::Array out;
+    for (auto const& item : file_type_symbol_contract()) {
+        json::Object token;
+        token.emplace("token", json::Value{std::string{item.token}});
+        token.emplace(
+            "symbol",
+            json::Value{std::string{icon_catalog::name(item.symbol)}});
+        token.emplace(
+            "semantic_reference_name",
+            json::Value{std::string{
+                icon_catalog::semantic_reference_name(item.symbol)}});
+        out.push_back(json::Value{std::move(token)});
     }
     return json::Value{std::move(out)};
 }
@@ -1918,6 +1984,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "toolbar_reference_symbols",
         toolbar_icon_reference_symbols_debug_json(chrome));
+    icon_system.emplace(
+        "file_type_symbol_tokens",
+        file_type_symbol_tokens_debug_json(chrome));
 
     json::Object thumbnail_system;
     thumbnail_system.emplace(

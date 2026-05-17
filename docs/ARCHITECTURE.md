@@ -222,6 +222,11 @@ names, regular text-aligned weight policy, rendering capability flags for
 monochrome/hierarchical/palette/multicolor, count constants, and index accessors
 for all, sidebar, and toolbar symbols) so examples and artifact verifiers can assert the style contract
 without pixel guessing.
+The built-in set includes Finder-style file-type glyphs for folders, generic
+documents, PDFs, text documents, images, movies, and archives. Apps choose those
+symbols through pure filename and role metadata, then expose the resolved symbol
+and semantic reference in debug JSON so native backends remain simple
+executors.
 `icons::presentation` adds the default macOS-inspired
 presentation policy: toolbar symbols use 24 pt secondary/selected tones,
 sidebar symbols use 26 pt primary/accent tones with a small optical vertical

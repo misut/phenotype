@@ -692,25 +692,14 @@ void paint_item_thumbnail(phenotype::Painter& painter,
     }
 }
 
-phenotype::icons::Symbol entry_symbol(
-        file_explorer_demo::Entry const& entry) {
-    using phenotype::icons::Symbol;
-    if (entry.folder)
-        return Symbol::Folder;
-    auto ext = extension_lower(entry.name);
-    if (ext == "png" || ext == "jpg" || ext == "jpeg")
-        return Symbol::Image;
-    if (ext == "mov" || ext == "mp4")
-        return Symbol::Movie;
-    return Symbol::Document;
-}
-
 phenotype::Color entry_symbol_color(
         file_explorer_demo::Entry const& entry,
         bool selected) {
     if (selected)
         return rgba(255, 255, 255);
-    return phenotype::icons::macos_file_type_color(entry_symbol(entry));
+    return phenotype::icons::macos_file_type_color(
+        phenotype::icons::from_catalog_symbol(
+            file_explorer_demo::entry_symbol(entry)));
 }
 
 void paint_entry_symbol(phenotype::Painter& painter,
@@ -722,7 +711,8 @@ void paint_entry_symbol(phenotype::Painter& painter,
                         float icon_size) {
     paint_symbol_centered(
         painter,
-        entry_symbol(entry),
+        phenotype::icons::from_catalog_symbol(
+            file_explorer_demo::entry_symbol(entry)),
         x,
         y,
         box_size,

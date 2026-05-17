@@ -301,8 +301,8 @@ symbols with detail layers without copying SF Symbols assets. Each built-in
 symbol carries a semantic SF Symbols reference name and explicit policy that
 the reference is only a role/style anchor; the vector artwork remains
 phenotype-owned SVG. A pure Finder-style file-type tint policy now gives
-folder/document/image/movie glyphs deterministic colors for list and column
-rows without querying native platform icon services. The CLI command
+folder/document/PDF/text/image/movie/archive glyphs deterministic colors for
+list and column rows without querying native platform icon services. The CLI command
 `phenotype icons catalog --json` exposes the same contract for CI and LLM
 debugging on Linux without importing native GUI code, and `phenotype icons svg
 <name-or-reference>` exposes the exact phenotype-owned SVG source for one

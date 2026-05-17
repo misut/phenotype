@@ -43,12 +43,15 @@ enum class Symbol : unsigned int {
     SortGroup,
     Duplicate,
     NewDocument,
+    PdfDocument,
+    TextDocument,
+    Archive,
 };
 
 namespace catalog = phenotype::icon_catalog;
 
-static_assert(catalog::all_symbol_count == 31);
-static_assert(static_cast<unsigned int>(Symbol::NewDocument) + 1
+static_assert(catalog::all_symbol_count == 34);
+static_assert(static_cast<unsigned int>(Symbol::Archive) + 1
               == catalog::all_symbol_count);
 
 inline auto to_catalog_symbol(Symbol symbol) noexcept -> catalog::Symbol {

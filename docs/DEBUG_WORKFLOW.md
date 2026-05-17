@@ -213,7 +213,9 @@ coordinates, and icon-grid density metrics such as column width, row height,
 pitch, thumbnail canvas size, label size, gap, visible rows, and visible
 capacity. Column view also records location-pane row count, row height, and
 icon size so Finder-style navigation rows can be checked from the artifact
-without reading pixels by eye.
+without reading pixels by eye. Entry samples include the resolved
+`symbol` and `symbol_semantic_reference_name`, so PDF/text/archive/image/movie
+fallback mistakes can be diagnosed from JSON before inspecting the screenshot.
 `phenotype icons catalog --json` emits the complete all/sidebar/toolbar symbol
 contract, name/reference lookup invariants, macOS role metrics, and SVG source
 presence checks from the same pure metadata package.
@@ -305,7 +307,9 @@ on the macOS-like round stroke contract. The desktop payload also includes
 `sidebar_symbol_tokens`, the renderer-facing table that maps sidebar tokens to
 phenotype-owned symbols and semantic SF Symbols reference names, so a wrong
 Recents/Shared/Desktop-style metaphor fails as data before anyone compares
-pixels. `symbol_control_chrome_policy` plus the toolbar button alpha/radius
+pixels. `file_type_symbol_tokens` performs the same check for icon-grid
+fallback symbols, including PDF, text, image, movie, archive, document, and
+folder entries. `symbol_control_chrome_policy` plus the toolbar button alpha/radius
 fields describe the macOS-style selected, hover, and disabled symbol chrome
 that the example uses before rendering.
 

@@ -37,6 +37,9 @@ enum class Symbol : unsigned int {
     SortGroup,
     Duplicate,
     NewDocument,
+    PdfDocument,
+    TextDocument,
+    Archive,
 };
 
 enum class SymbolRole {
@@ -166,12 +169,12 @@ struct SymbolMetrics {
     float optical_y_offset = 0.0f;
 };
 
-inline constexpr unsigned int all_symbol_count = 31;
+inline constexpr unsigned int all_symbol_count = 34;
 inline constexpr unsigned int sidebar_symbol_count = 11;
 inline constexpr unsigned int toolbar_symbol_count = 15;
-inline constexpr unsigned int outline_symbol_count = 30;
+inline constexpr unsigned int outline_symbol_count = 33;
 inline constexpr unsigned int filled_symbol_count = 1;
-inline constexpr unsigned int hierarchical_symbol_count = 20;
+inline constexpr unsigned int hierarchical_symbol_count = 23;
 inline constexpr unsigned int monochrome_symbol_count = all_symbol_count;
 inline constexpr unsigned int regular_weight_symbol_count = all_symbol_count;
 inline constexpr unsigned int palette_symbol_count = 0;
@@ -213,6 +216,9 @@ inline auto name(Symbol symbol) noexcept -> std::string_view {
     case Symbol::SortGroup:    return "sort_group";
     case Symbol::Duplicate:    return "duplicate";
     case Symbol::NewDocument:  return "new_document";
+    case Symbol::PdfDocument:  return "pdf_document";
+    case Symbol::TextDocument: return "text_document";
+    case Symbol::Archive:      return "archive";
     }
     return "unknown";
 }
@@ -456,6 +462,9 @@ inline auto symbol_at(unsigned int index) noexcept -> Symbol {
     case 28: return Symbol::SortGroup;
     case 29: return Symbol::Duplicate;
     case 30: return Symbol::NewDocument;
+    case 31: return Symbol::PdfDocument;
+    case 32: return Symbol::TextDocument;
+    case 33: return Symbol::Archive;
     }
     return Symbol::Document;
 }
@@ -542,6 +551,9 @@ inline auto semantic_reference_name(Symbol symbol) noexcept
     case Symbol::SortGroup:    return "rectangle.grid.3x2";
     case Symbol::Duplicate:    return "square.on.square";
     case Symbol::NewDocument:  return "doc.badge.plus";
+    case Symbol::PdfDocument:  return "doc.richtext";
+    case Symbol::TextDocument: return "doc.plaintext";
+    case Symbol::Archive:      return "archivebox";
     }
     return "doc";
 }
@@ -620,6 +632,12 @@ inline auto svg_source(Symbol symbol) noexcept -> std::string_view {
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="6" y="8" width="10" height="12" rx="2" stroke-opacity="0.66"/><rect x="10" y="4" width="10" height="12" rx="2"/></svg>)SVG";
     case Symbol::NewDocument:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 4.2 L13.7 4.2 Q14.3 4.2 14.8 4.7 L17.5 7.4 Q18 7.9 18 8.6 L18 18.9 Q18 19.8 17.1 19.8 L7.2 19.8 Q6.3 19.8 6.3 18.9 L6.3 5.1 Q6.3 4.2 7.2 4.2 Z"/><path d="M14.2 4.5 L14.2 8.1 L17.8 8.1" stroke-opacity="0.66"/><path d="M12.4 12.2 L12.4 17" stroke-opacity="0.66"/><path d="M10 14.6 L14.8 14.6" stroke-opacity="0.66"/></svg>)SVG";
+    case Symbol::PdfDocument:
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 4.2 L13.7 4.2 Q14.3 4.2 14.8 4.7 L17.5 7.4 Q18 7.9 18 8.6 L18 18.9 Q18 19.8 17.1 19.8 L7.2 19.8 Q6.3 19.8 6.3 18.9 L6.3 5.1 Q6.3 4.2 7.2 4.2 Z"/><path d="M14.2 4.5 L14.2 8.1 L17.8 8.1" stroke-opacity="0.66"/><path d="M8.7 11.6 L15.2 11.6" stroke-opacity="0.66"/><path d="M8.7 14.2 L13.7 14.2" stroke-opacity="0.66"/><path d="M8.7 16.8 L15.2 16.8" stroke-opacity="0.42"/></svg>)SVG";
+    case Symbol::TextDocument:
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 4.2 L13.7 4.2 Q14.3 4.2 14.8 4.7 L17.5 7.4 Q18 7.9 18 8.6 L18 18.9 Q18 19.8 17.1 19.8 L7.2 19.8 Q6.3 19.8 6.3 18.9 L6.3 5.1 Q6.3 4.2 7.2 4.2 Z"/><path d="M14.2 4.5 L14.2 8.1 L17.8 8.1" stroke-opacity="0.66"/><path d="M9.1 11.2 L15.2 11.2" stroke-opacity="0.66"/><path d="M9.1 13.7 L15.2 13.7" stroke-opacity="0.66"/><path d="M9.1 16.2 L13.2 16.2" stroke-opacity="0.42"/></svg>)SVG";
+    case Symbol::Archive:
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="6.2" width="14" height="12.4" rx="2.2"/><path d="M5.6 10.2 L18.4 10.2" stroke-opacity="0.66"/><path d="M9.2 6.2 L9.2 18.6" stroke-opacity="0.66"/><path d="M9.2 8.2 L11.3 8.2" stroke-opacity="0.42"/><path d="M9.2 12.2 L11.3 12.2" stroke-opacity="0.42"/><path d="M9.2 16.2 L11.3 16.2" stroke-opacity="0.42"/></svg>)SVG";
     }
     return {};
 }
@@ -646,6 +664,9 @@ inline bool supports_hierarchical_opacity(Symbol symbol) noexcept {
     case Symbol::SortGroup:
     case Symbol::Duplicate:
     case Symbol::NewDocument:
+    case Symbol::PdfDocument:
+    case Symbol::TextDocument:
+    case Symbol::Archive:
         return true;
     default:
         return false;
@@ -659,6 +680,9 @@ inline auto symbol_layer_count(Symbol symbol) noexcept -> unsigned int {
     case Symbol::List:        return 6;
     case Symbol::Trash:       return 5;
     case Symbol::Movie:       return 5;
+    case Symbol::PdfDocument: return 5;
+    case Symbol::TextDocument: return 5;
+    case Symbol::Archive:     return 6;
     case Symbol::Sidebar:     return 4;
     case Symbol::SortGroup:   return 9;
     case Symbol::AirDrop:     return 5;
@@ -715,6 +739,9 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
     case Symbol::Document:
     case Symbol::Image:
     case Symbol::Movie:
+    case Symbol::PdfDocument:
+    case Symbol::TextDocument:
+    case Symbol::Archive:
         role = SymbolRole::FileType;
         break;
     case Symbol::Home:
@@ -985,6 +1012,12 @@ inline auto macos_file_type_color(Symbol symbol) noexcept -> SymbolColor {
         return {48, 176, 199, 255};
     case Symbol::Movie:
         return {88, 86, 214, 255};
+    case Symbol::PdfDocument:
+        return {255, 69, 58, 255};
+    case Symbol::TextDocument:
+        return {90, 128, 168, 255};
+    case Symbol::Archive:
+        return {196, 142, 64, 255};
     case Symbol::Trash:
         return {142, 142, 147, 255};
     case Symbol::Document:

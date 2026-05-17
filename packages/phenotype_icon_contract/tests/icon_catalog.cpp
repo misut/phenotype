@@ -44,12 +44,12 @@ int main() {
            == "macos_finder_role_metrics_with_explicit_hit_targets");
     assert(icons::hit_target_policy().find("sidebar=38pt")
            != std::string_view::npos);
-    assert(icons::all_symbol_count == 31);
+    assert(icons::all_symbol_count == 34);
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);
-    assert(icons::outline_symbol_count == 30);
+    assert(icons::outline_symbol_count == 33);
     assert(icons::filled_symbol_count == 1);
-    assert(icons::hierarchical_symbol_count == 20);
+    assert(icons::hierarchical_symbol_count == 23);
     assert(icons::monochrome_symbol_count == icons::all_symbol_count);
     assert(icons::regular_weight_symbol_count == icons::all_symbol_count);
     assert(icons::palette_symbol_count == 0);
@@ -128,6 +128,12 @@ int main() {
     assert(round_stroke_count == icons::round_stroke_symbol_count);
 
     assert(icons::semantic_reference_name(icons::Symbol::AirDrop) == "airdrop");
+    assert(icons::semantic_reference_name(icons::Symbol::PdfDocument)
+           == "doc.richtext");
+    assert(icons::semantic_reference_name(icons::Symbol::TextDocument)
+           == "doc.plaintext");
+    assert(icons::semantic_reference_name(icons::Symbol::Archive)
+           == "archivebox");
     assert(icons::uses_svg_path_arcs(icons::Symbol::AirDrop));
     assert(icons::sidebar_symbol_at(8) == icons::Symbol::AirDrop);
     assert(icons::toolbar_symbol_at(10) == icons::Symbol::Search);
@@ -175,10 +181,16 @@ int main() {
     assert(icons::file_type_color_policy() == "macos_finder_file_type_tints");
     auto const folder_color = icons::macos_file_type_color(icons::Symbol::Folder);
     auto const image_color = icons::macos_file_type_color(icons::Symbol::Image);
+    auto const pdf_color =
+        icons::macos_file_type_color(icons::Symbol::PdfDocument);
+    auto const archive_color =
+        icons::macos_file_type_color(icons::Symbol::Archive);
     auto const document_color =
         icons::macos_file_type_color(icons::Symbol::Document);
     assert(folder_color.b > folder_color.r);
     assert(image_color.g > document_color.g);
+    assert(pdf_color.r > pdf_color.g);
+    assert(archive_color.r > archive_color.b);
     assert(document_color.r == document_color.g);
     assert(document_color.a == 255);
     assert(icons::symbol_presentation_role_name(
