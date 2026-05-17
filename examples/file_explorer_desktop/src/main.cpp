@@ -299,6 +299,12 @@ constexpr float k_titlebar_control_start_x =
     file_explorer_demo::k_desktop_titlebar_control_start_x;
 constexpr float k_titlebar_control_top =
     file_explorer_demo::k_desktop_titlebar_control_top;
+constexpr float k_titlebar_drag_region_height =
+    file_explorer_demo::k_desktop_titlebar_drag_region_height;
+constexpr float k_leading_control_reserved_width =
+    file_explorer_demo::k_desktop_leading_control_reserved_width;
+constexpr float k_trailing_control_reserved_width =
+    file_explorer_demo::k_desktop_trailing_control_reserved_width;
 
 phenotype::Color rgba(int r, int g, int b, int a = 255) {
     return phenotype::Color{
@@ -1318,7 +1324,9 @@ void finder_toolbar(State const& state,
     using namespace phenotype;
     layout::toolbar(toolbar_shell_options(), [&] {
         layout::toolbar(
-            toolbar_group_options("Navigation Controls", 92.0f),
+            toolbar_group_options(
+                "Navigation Controls",
+                file_explorer_demo::k_desktop_toolbar_navigation_group_width),
             [&] {
                 navigation_button(state.labels.back.c_str(), GoBack{}, snap.can_go_back,
                                   icons::Symbol::Back, 0x6201u);
@@ -1332,7 +1340,9 @@ void finder_toolbar(State const& state,
             TextSize::Heading);
         layout::weighted(1.0f, [] {});
         layout::toolbar(
-            toolbar_group_options("View Controls", 216.0f),
+            toolbar_group_options(
+                "View Controls",
+                file_explorer_demo::k_desktop_toolbar_view_group_width),
             [&] {
                 view_mode_button("Icon View", file_explorer_demo::ExplorerViewMode::Icon,
                                  state.explorer.view_mode, icons::Symbol::Grid, 0x6301u);
@@ -1346,12 +1356,16 @@ void finder_toolbar(State const& state,
                                  state.explorer.view_mode, icons::Symbol::Gallery, 0x6304u);
             });
         layout::toolbar(
-            toolbar_group_options("Group Sort", 48.0f),
+            toolbar_group_options(
+                "Group Sort",
+                file_explorer_demo::k_desktop_toolbar_sort_group_width),
             [&] {
                 sort_action_button(snap);
             });
         layout::toolbar(
-            toolbar_group_options("Share Tag More", 128.0f),
+            toolbar_group_options(
+                "Share Tag More",
+                file_explorer_demo::k_desktop_toolbar_action_group_width),
             [&] {
                 toolbar_action_button("Share", icons::Symbol::Share, 0x6601u);
                 toolbar_action_button("Tag", icons::Symbol::Tag, 0x6602u);
@@ -1363,7 +1377,9 @@ void finder_toolbar(State const& state,
         layout::toolbar(
             toolbar_group_options(
                 "Search Control",
-                state.search_visible ? 220.0f : 48.0f),
+                state.search_visible
+                    ? 220.0f
+                    : file_explorer_demo::k_desktop_toolbar_search_collapsed_width),
             [&] {
                 search_toggle_button(state.search_visible);
                 if (state.search_visible) {
@@ -1915,9 +1931,9 @@ int main() {
         .chrome = phenotype::native::WindowChromeStyle::IntegratedTitlebar,
         .integrated_titlebar = {
             .height = k_integrated_titlebar_height,
-            .drag_region_height = k_integrated_titlebar_height,
-            .leading_control_reserved_width = 176.0f,
-            .trailing_control_reserved_width = 168.0f,
+            .drag_region_height = k_titlebar_drag_region_height,
+            .leading_control_reserved_width = k_leading_control_reserved_width,
+            .trailing_control_reserved_width = k_trailing_control_reserved_width,
         },
     };
 

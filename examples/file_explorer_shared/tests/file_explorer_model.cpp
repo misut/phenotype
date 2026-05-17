@@ -259,6 +259,27 @@ duplicate
     assert(chrome.icon_grid_columns == 6);
     assert(chrome.icon_grid_visible_rows == 3);
     assert(chrome.icon_grid_visible_capacity == 18);
+    assert(chrome.window_content_inset
+           == demo::k_desktop_window_content_inset);
+    assert(chrome.window_gap == demo::k_desktop_window_gap);
+    assert(chrome.toolbar_shell_x == 236.0f);
+    assert(chrome.toolbar_shell_y == demo::k_desktop_window_content_inset);
+    assert(chrome.toolbar_shell_width == 1060.0f);
+    assert(chrome.toolbar_shell_height
+           == demo::k_desktop_toolbar_shell_height);
+    assert(chrome.toolbar_group_y == 8.0f);
+    assert(chrome.toolbar_navigation_group_x == 240.0f);
+    assert(chrome.toolbar_title_x == 336.0f);
+    assert(chrome.toolbar_view_group_x == 840.0f);
+    assert(chrome.toolbar_sort_group_x == 1060.0f);
+    assert(chrome.toolbar_action_group_x == 1112.0f);
+    assert(chrome.toolbar_search_group_x == 1244.0f);
+    assert(chrome.content_surface_x == chrome.toolbar_shell_x);
+    assert(chrome.content_surface_y == 64.0f);
+    assert(chrome.content_surface_width == chrome.toolbar_shell_width);
+    assert(chrome.sidebar_surface_x == demo::k_desktop_window_content_inset);
+    assert(chrome.sidebar_surface_y == demo::k_desktop_window_content_inset);
+    assert(chrome.sidebar_first_row_y == 76.0f);
     assert(chrome.sidebar_row_height == demo::k_desktop_sidebar_row_height);
     assert(chrome.sidebar_heading_height
            == demo::k_desktop_sidebar_heading_height);
@@ -291,6 +312,12 @@ duplicate
            == demo::k_desktop_titlebar_control_start_x);
     assert(chrome.titlebar_control_top
            == demo::k_desktop_titlebar_control_top);
+    assert(chrome.titlebar_drag_region_height
+           == demo::k_desktop_titlebar_drag_region_height);
+    assert(chrome.leading_control_reserved_width
+           == demo::k_desktop_leading_control_reserved_width);
+    assert(chrome.trailing_control_reserved_width
+           == demo::k_desktop_trailing_control_reserved_width);
     assert(chrome.icon_grid_column_width
            == demo::k_desktop_icon_grid_column_width);
     assert(chrome.icon_grid_row_height
@@ -324,7 +351,8 @@ duplicate
     assert(chrome.icon_module == "phenotype.icons");
     assert(chrome.icon_style == "macos_rounded_outline_svg");
     assert(chrome.icon_source_format == "svg");
-    assert(chrome.icon_design_reference.find("Apple HIG") != std::string::npos);
+    assert(chrome.icon_design_reference.find("macOS Finder")
+           != std::string::npos);
     assert(chrome.icon_reference_family == "SF Symbols semantic reference");
     assert(chrome.icon_reference_policy.find("phenotype-owned")
            != std::string::npos);
@@ -334,6 +362,8 @@ duplicate
     assert(chrome.icon_variant_policy
            == "outline primary with filled action variants");
     assert(chrome.icon_scale == "medium");
+    assert(chrome.chrome_geometry_policy
+           == demo::k_desktop_chrome_geometry_policy);
     assert(chrome.owned_icon_assets);
     assert(!chrome.uses_sf_symbols_assets);
     assert(chrome.icon_round_stroke_contract);

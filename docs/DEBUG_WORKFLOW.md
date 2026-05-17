@@ -552,9 +552,14 @@ The file explorer's `debug.application.file_explorer.chrome` additionally
 publishes `content_window_control_markers=true` and three titlebar-control marker
 metrics; these describe the deterministic visual marker used in startup
 artifacts, not an input-capable duplicate of OS controls. The same chrome object
-publishes sidebar symbol size, symbol leading, label leading, section gap, and
-selected-row radius so Finder sidebar density can fail as a JSON contract before
-a pixel-region summary is needed.
+publishes the native titlebar drag/control reserve widths plus a
+`geometry.policy=finder_integrated_glass_chrome_geometry_v1` object with the
+window inset/gap, sidebar surface origin, first sidebar row, toolbar shell,
+navigation/title/trailing toolbar group x-coordinates, collapsed search x, and
+content surface origin. It also publishes sidebar symbol size, symbol leading,
+label leading, section gap, and selected-row radius so Finder sidebar density
+and placement can fail as JSON contracts before a pixel-region summary is
+needed.
 Its sibling `debug.application.file_explorer.keyboard_commands` publishes the
 desktop command descriptors consumed by native key dispatch. If
 `CommandOrControl+F`, `Enter`, `DeleteOrBackspace`, `CommandOrControl+D`,

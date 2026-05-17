@@ -181,6 +181,25 @@ struct ExplorerKeyboardCommand {
 struct ExplorerChromeMetrics {
     ExplorerViewport viewport{};
     float integrated_titlebar_height = 0.0f;
+    float window_content_inset = 0.0f;
+    float window_gap = 0.0f;
+    float toolbar_shell_x = 0.0f;
+    float toolbar_shell_y = 0.0f;
+    float toolbar_shell_width = 0.0f;
+    float toolbar_shell_height = 0.0f;
+    float toolbar_group_y = 0.0f;
+    float toolbar_navigation_group_x = 0.0f;
+    float toolbar_title_x = 0.0f;
+    float toolbar_view_group_x = 0.0f;
+    float toolbar_sort_group_x = 0.0f;
+    float toolbar_action_group_x = 0.0f;
+    float toolbar_search_group_x = 0.0f;
+    float content_surface_x = 0.0f;
+    float content_surface_y = 0.0f;
+    float content_surface_width = 0.0f;
+    float sidebar_surface_x = 0.0f;
+    float sidebar_surface_y = 0.0f;
+    float sidebar_first_row_y = 0.0f;
     float sidebar_width = 0.0f;
     float sidebar_row_width = 0.0f;
     float sidebar_row_height = 0.0f;
@@ -202,6 +221,9 @@ struct ExplorerChromeMetrics {
     float titlebar_control_spacing = 0.0f;
     float titlebar_control_start_x = 0.0f;
     float titlebar_control_top = 0.0f;
+    float titlebar_drag_region_height = 0.0f;
+    float leading_control_reserved_width = 0.0f;
+    float trailing_control_reserved_width = 0.0f;
     float window_radius = 0.0f;
     float icon_grid_column_width = 0.0f;
     float icon_grid_row_height = 0.0f;
@@ -259,6 +281,7 @@ struct ExplorerChromeMetrics {
     std::string icon_presentation_policy;
     std::string icon_tone_policy;
     std::string icon_scale;
+    std::string chrome_geometry_policy;
     std::string window_control_marker_mode;
 };
 
@@ -321,6 +344,8 @@ inline constexpr int k_desktop_default_viewport_height = 760;
 inline constexpr int k_mobile_default_viewport_width = 390;
 inline constexpr int k_mobile_default_viewport_height = 844;
 inline constexpr float k_desktop_integrated_titlebar_height = 64.0f;
+inline constexpr float k_desktop_window_content_inset = 4.0f;
+inline constexpr float k_desktop_window_gap = 8.0f;
 inline constexpr float k_desktop_sidebar_width = 224.0f;
 inline constexpr float k_desktop_sidebar_row_width = 188.0f;
 inline constexpr float k_desktop_sidebar_row_height = 38.0f;
@@ -331,11 +356,20 @@ inline constexpr float k_desktop_sidebar_label_leading = 48.0f;
 inline constexpr float k_desktop_sidebar_label_top = 8.0f;
 inline constexpr float k_desktop_sidebar_heading_label_leading = 10.0f;
 inline constexpr float k_desktop_sidebar_heading_label_top = 7.0f;
+inline constexpr float k_desktop_sidebar_material_padding = 16.0f;
+inline constexpr float k_desktop_sidebar_item_gap = 4.0f;
 inline constexpr float k_desktop_sidebar_section_gap = 14.0f;
 inline constexpr float k_desktop_sidebar_selected_row_radius = 10.0f;
 inline constexpr float k_desktop_window_radius = 18.0f;
 inline constexpr float k_desktop_toolbar_group_radius = 22.0f;
 inline constexpr float k_desktop_toolbar_group_height = 46.0f;
+inline constexpr float k_desktop_toolbar_shell_height = 52.0f;
+inline constexpr float k_desktop_toolbar_shell_padding = 4.0f;
+inline constexpr float k_desktop_toolbar_navigation_group_width = 92.0f;
+inline constexpr float k_desktop_toolbar_view_group_width = 216.0f;
+inline constexpr float k_desktop_toolbar_sort_group_width = 48.0f;
+inline constexpr float k_desktop_toolbar_action_group_width = 128.0f;
+inline constexpr float k_desktop_toolbar_search_collapsed_width = 48.0f;
 inline constexpr float k_desktop_toolbar_icon_button_width = 38.0f;
 inline constexpr float k_desktop_toolbar_icon_button_height = 36.0f;
 inline constexpr float k_desktop_titlebar_control_cluster_height = 52.0f;
@@ -343,6 +377,10 @@ inline constexpr float k_desktop_titlebar_control_diameter = 13.0f;
 inline constexpr float k_desktop_titlebar_control_spacing = 23.0f;
 inline constexpr float k_desktop_titlebar_control_start_x = 20.0f;
 inline constexpr float k_desktop_titlebar_control_top = 16.0f;
+inline constexpr float k_desktop_titlebar_drag_region_height =
+    k_desktop_integrated_titlebar_height;
+inline constexpr float k_desktop_leading_control_reserved_width = 176.0f;
+inline constexpr float k_desktop_trailing_control_reserved_width = 168.0f;
 inline constexpr int k_desktop_titlebar_control_count = 3;
 inline constexpr float k_desktop_icon_grid_column_width = 126.0f;
 inline constexpr float k_desktop_icon_grid_row_height = 148.0f;
@@ -352,6 +390,8 @@ inline constexpr float k_desktop_icon_grid_thumbnail_height = 72.0f;
 inline constexpr float k_desktop_icon_grid_label_height = 46.0f;
 inline constexpr float k_desktop_icon_grid_label_font_size = 14.0f;
 inline constexpr float k_desktop_icon_grid_gap = 24.0f;
+inline constexpr char k_desktop_chrome_geometry_policy[] =
+    "finder_integrated_glass_chrome_geometry_v1";
 
 inline bool mobile_profile(std::string_view profile) {
     return profile == "mobile";
@@ -430,6 +470,78 @@ inline int desktop_icon_grid_column_count(ExplorerViewport const& viewport) {
     return std::clamp(columns, 2, 7);
 }
 
+inline float desktop_toolbar_shell_x() noexcept {
+    return k_desktop_window_content_inset + k_desktop_sidebar_width
+        + k_desktop_window_gap;
+}
+
+inline float desktop_toolbar_shell_width(
+        ExplorerViewport const& viewport) noexcept {
+    float const window_width = viewport.width > 0
+        ? static_cast<float>(viewport.width)
+        : static_cast<float>(k_desktop_default_viewport_width);
+    return std::max(
+        0.0f,
+        window_width - desktop_toolbar_shell_x()
+            - k_desktop_window_content_inset);
+}
+
+inline float desktop_toolbar_group_y() noexcept {
+    return k_desktop_window_content_inset + k_desktop_toolbar_shell_padding;
+}
+
+inline float desktop_toolbar_navigation_group_x() noexcept {
+    return desktop_toolbar_shell_x() + k_desktop_toolbar_shell_padding;
+}
+
+inline float desktop_toolbar_title_x() noexcept {
+    return desktop_toolbar_navigation_group_x()
+        + k_desktop_toolbar_navigation_group_width
+        + k_desktop_toolbar_shell_padding;
+}
+
+inline float desktop_toolbar_search_group_x(
+        ExplorerViewport const& viewport) noexcept {
+    float const window_width = viewport.width > 0
+        ? static_cast<float>(viewport.width)
+        : static_cast<float>(k_desktop_default_viewport_width);
+    return window_width - k_desktop_window_content_inset
+        - k_desktop_toolbar_shell_padding
+        - k_desktop_toolbar_search_collapsed_width;
+}
+
+inline float desktop_toolbar_action_group_x(
+        ExplorerViewport const& viewport) noexcept {
+    return desktop_toolbar_search_group_x(viewport)
+        - k_desktop_toolbar_shell_padding
+        - k_desktop_toolbar_action_group_width;
+}
+
+inline float desktop_toolbar_sort_group_x(
+        ExplorerViewport const& viewport) noexcept {
+    return desktop_toolbar_action_group_x(viewport)
+        - k_desktop_toolbar_shell_padding
+        - k_desktop_toolbar_sort_group_width;
+}
+
+inline float desktop_toolbar_view_group_x(
+        ExplorerViewport const& viewport) noexcept {
+    return desktop_toolbar_sort_group_x(viewport)
+        - k_desktop_toolbar_shell_padding
+        - k_desktop_toolbar_view_group_width;
+}
+
+inline float desktop_content_surface_y() noexcept {
+    return k_desktop_window_content_inset + k_desktop_toolbar_shell_height
+        + k_desktop_window_gap;
+}
+
+inline float desktop_sidebar_first_row_y() noexcept {
+    return k_desktop_window_content_inset + k_desktop_sidebar_material_padding
+        + k_desktop_titlebar_control_cluster_height
+        + k_desktop_sidebar_item_gap;
+}
+
 inline bool desktop_status_bar_visible(ExplorerState const& state) {
     if (!state.selected_name.empty()
         || !state.last_operation.kind.empty()
@@ -453,6 +565,25 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         return ExplorerChromeMetrics{
             .viewport = viewport,
             .integrated_titlebar_height = 0.0f,
+            .window_content_inset = 0.0f,
+            .window_gap = 0.0f,
+            .toolbar_shell_x = 0.0f,
+            .toolbar_shell_y = 0.0f,
+            .toolbar_shell_width = 0.0f,
+            .toolbar_shell_height = 0.0f,
+            .toolbar_group_y = 0.0f,
+            .toolbar_navigation_group_x = 0.0f,
+            .toolbar_title_x = 0.0f,
+            .toolbar_view_group_x = 0.0f,
+            .toolbar_sort_group_x = 0.0f,
+            .toolbar_action_group_x = 0.0f,
+            .toolbar_search_group_x = 0.0f,
+            .content_surface_x = 0.0f,
+            .content_surface_y = 0.0f,
+            .content_surface_width = 0.0f,
+            .sidebar_surface_x = 0.0f,
+            .sidebar_surface_y = 0.0f,
+            .sidebar_first_row_y = 0.0f,
             .sidebar_width = 0.0f,
             .sidebar_row_width = 0.0f,
             .sidebar_row_height = 0.0f,
@@ -474,6 +605,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .titlebar_control_spacing = 0.0f,
             .titlebar_control_start_x = 0.0f,
             .titlebar_control_top = 0.0f,
+            .titlebar_drag_region_height = 0.0f,
+            .leading_control_reserved_width = 0.0f,
+            .trailing_control_reserved_width = 0.0f,
             .window_radius = 0.0f,
             .icon_grid_column_width = 0.0f,
             .icon_grid_row_height = 0.0f,
@@ -529,6 +663,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_presentation_policy = "n/a",
             .icon_tone_policy = "n/a",
             .icon_scale = "n/a",
+            .chrome_geometry_policy = "n/a",
             .window_control_marker_mode = "none",
         };
     }
@@ -545,6 +680,25 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
     return ExplorerChromeMetrics{
         .viewport = viewport,
         .integrated_titlebar_height = k_desktop_integrated_titlebar_height,
+        .window_content_inset = k_desktop_window_content_inset,
+        .window_gap = k_desktop_window_gap,
+        .toolbar_shell_x = desktop_toolbar_shell_x(),
+        .toolbar_shell_y = k_desktop_window_content_inset,
+        .toolbar_shell_width = desktop_toolbar_shell_width(viewport),
+        .toolbar_shell_height = k_desktop_toolbar_shell_height,
+        .toolbar_group_y = desktop_toolbar_group_y(),
+        .toolbar_navigation_group_x = desktop_toolbar_navigation_group_x(),
+        .toolbar_title_x = desktop_toolbar_title_x(),
+        .toolbar_view_group_x = desktop_toolbar_view_group_x(viewport),
+        .toolbar_sort_group_x = desktop_toolbar_sort_group_x(viewport),
+        .toolbar_action_group_x = desktop_toolbar_action_group_x(viewport),
+        .toolbar_search_group_x = desktop_toolbar_search_group_x(viewport),
+        .content_surface_x = desktop_toolbar_shell_x(),
+        .content_surface_y = desktop_content_surface_y(),
+        .content_surface_width = desktop_toolbar_shell_width(viewport),
+        .sidebar_surface_x = k_desktop_window_content_inset,
+        .sidebar_surface_y = k_desktop_window_content_inset,
+        .sidebar_first_row_y = desktop_sidebar_first_row_y(),
         .sidebar_width = k_desktop_sidebar_width,
         .sidebar_row_width = k_desktop_sidebar_row_width,
         .sidebar_row_height = k_desktop_sidebar_row_height,
@@ -566,6 +720,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .titlebar_control_spacing = k_desktop_titlebar_control_spacing,
         .titlebar_control_start_x = k_desktop_titlebar_control_start_x,
         .titlebar_control_top = k_desktop_titlebar_control_top,
+        .titlebar_drag_region_height = k_desktop_titlebar_drag_region_height,
+        .leading_control_reserved_width =
+            k_desktop_leading_control_reserved_width,
+        .trailing_control_reserved_width =
+            k_desktop_trailing_control_reserved_width,
         .window_radius = k_desktop_window_radius,
         .icon_grid_column_width = k_desktop_icon_grid_column_width,
         .icon_grid_row_height = k_desktop_icon_grid_row_height,
@@ -612,7 +771,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_style = "macos_rounded_outline_svg",
         .icon_source_format = "svg",
         .icon_design_reference =
-            "Apple HIG Icons and SF Symbols inspired custom rounded-outline SVG glyphs",
+            "Apple HIG, macOS Finder, and SF Symbols inspired custom rounded-outline SVG glyphs",
         .icon_reference_family = "SF Symbols semantic reference",
         .icon_reference_policy =
             "semantic reference only; phenotype-owned SVG artwork",
@@ -625,6 +784,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_tone_policy =
             "primary, secondary, selected, accent, disabled, destructive",
         .icon_scale = "medium",
+        .chrome_geometry_policy = k_desktop_chrome_geometry_policy,
         .window_control_marker_mode = "runtime-native-controls",
     };
 }
@@ -1162,6 +1322,37 @@ inline json::Value explorer_chrome_debug_json(
     native_window.emplace("content_window_control_markers", json::Value{chrome.content_window_control_markers});
     native_window.emplace("artifact_window_control_markers", json::Value{chrome.artifact_window_control_markers});
     native_window.emplace("window_control_marker_mode", json::Value{chrome.window_control_marker_mode});
+    native_window.emplace(
+        "titlebar_drag_region_height",
+        json::Value{chrome.titlebar_drag_region_height});
+    native_window.emplace(
+        "leading_control_reserved_width",
+        json::Value{chrome.leading_control_reserved_width});
+    native_window.emplace(
+        "trailing_control_reserved_width",
+        json::Value{chrome.trailing_control_reserved_width});
+
+    json::Object geometry;
+    geometry.emplace("policy", json::Value{chrome.chrome_geometry_policy});
+    geometry.emplace("window_content_inset", json::Value{chrome.window_content_inset});
+    geometry.emplace("window_gap", json::Value{chrome.window_gap});
+    geometry.emplace("toolbar_shell_x", json::Value{chrome.toolbar_shell_x});
+    geometry.emplace("toolbar_shell_y", json::Value{chrome.toolbar_shell_y});
+    geometry.emplace("toolbar_shell_width", json::Value{chrome.toolbar_shell_width});
+    geometry.emplace("toolbar_shell_height", json::Value{chrome.toolbar_shell_height});
+    geometry.emplace("toolbar_group_y", json::Value{chrome.toolbar_group_y});
+    geometry.emplace("toolbar_navigation_group_x", json::Value{chrome.toolbar_navigation_group_x});
+    geometry.emplace("toolbar_title_x", json::Value{chrome.toolbar_title_x});
+    geometry.emplace("toolbar_view_group_x", json::Value{chrome.toolbar_view_group_x});
+    geometry.emplace("toolbar_sort_group_x", json::Value{chrome.toolbar_sort_group_x});
+    geometry.emplace("toolbar_action_group_x", json::Value{chrome.toolbar_action_group_x});
+    geometry.emplace("toolbar_search_group_x", json::Value{chrome.toolbar_search_group_x});
+    geometry.emplace("content_surface_x", json::Value{chrome.content_surface_x});
+    geometry.emplace("content_surface_y", json::Value{chrome.content_surface_y});
+    geometry.emplace("content_surface_width", json::Value{chrome.content_surface_width});
+    geometry.emplace("sidebar_surface_x", json::Value{chrome.sidebar_surface_x});
+    geometry.emplace("sidebar_surface_y", json::Value{chrome.sidebar_surface_y});
+    geometry.emplace("sidebar_first_row_y", json::Value{chrome.sidebar_first_row_y});
 
     json::Object icon_system;
     icon_system.emplace("module", json::Value{chrome.icon_module});
@@ -1275,6 +1466,7 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("more_actions_open", json::Value{chrome.more_actions_open});
     out.emplace("status_bar_visible", json::Value{chrome.status_bar_visible});
     out.emplace("native_window", json::Value{std::move(native_window)});
+    out.emplace("geometry", json::Value{std::move(geometry)});
     out.emplace("icon_system", json::Value{std::move(icon_system)});
     return json::Value{std::move(out)};
 }
