@@ -113,6 +113,9 @@ titlebar reserve, sidebar row metrics, sidebar icon/label placement, and toolbar
 group/icon button metrics come from the shared pure
 `ExplorerChromeMetrics` contract, so `phenotype drive file-explorer --json`
 can report the same layout decisions without launching a native window.
+Finder chrome surfaces are created through `layout::glass_surface_options`
+presets, then locally constrained with those shared metrics, so the example
+uses the same material surface API that other apps can call directly.
 The desktop view also registers the shared keyboard command contract through
 phenotype's native key-command registry. AppKit, Win32, and Android shells only
 translate platform keys into normalized command input; the pure app contract

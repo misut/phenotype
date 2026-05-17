@@ -157,6 +157,15 @@ The pure metadata helpers `default_theme_profile_name`,
 make that baseline machine-checkable without forcing the theme JSON schema to
 grow a platform-specific field.
 
+`layout::glass_surface_options` and `layout::glass_surface` provide the
+high-level Apple-glass surface presets used by examples. They are not a new
+renderer path: each preset lowers to `MaterialSurfaceOptions`, then to the same
+pure `MaterialStyle` and `MaterialRect` command contract as
+`layout::material_surface`. The preset enum captures product roles such as
+window, toolbar, toolbar group, navigation, sidebar, content, and status bar so
+example code does not hand-roll blur thickness, semantic role, alignment, and
+chrome radius for every surface.
+
 `phenotype.svg` is a pure vector image layer. It parses a bounded SVG subset
 (`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,
 `polygon`, `fill`, `stroke`, `currentColor`, opacity, stroke width, and

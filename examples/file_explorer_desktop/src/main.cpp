@@ -319,55 +319,33 @@ phenotype::FontSpec finder_font(
 
 phenotype::layout::MaterialSurfaceOptions toolbar_shell_options() {
     using namespace phenotype;
-    return layout::MaterialSurfaceOptions{
-        .kind = MaterialKind::Clear,
-        .role = MaterialSurfaceRole::Toolbar,
-        .direction = FlexDirection::Row,
-        .padding = SpaceToken::Xs,
-        .gap = SpaceToken::Xs,
-        .cross_align = CrossAxisAlignment::Center,
-        .main_align = MainAxisAlignment::Start,
-        .border_radius = 0.0f,
-        .border_width = 0.0f,
-        .semantic_label = "Toolbar",
-    };
+    return layout::glass_surface_options(
+        layout::GlassSurfacePreset::Toolbar,
+        "Toolbar");
 }
 
 phenotype::layout::MaterialSurfaceOptions toolbar_group_options(
         char const* label,
         float max_width) {
     using namespace phenotype;
-    return layout::MaterialSurfaceOptions{
-        .kind = MaterialKind::Thick,
-        .role = MaterialSurfaceRole::Toolbar,
-        .direction = FlexDirection::Row,
-        .padding = SpaceToken::Xs,
-        .gap = SpaceToken::Xs,
-        .cross_align = CrossAxisAlignment::Center,
-        .main_align = MainAxisAlignment::Start,
-        .max_width = max_width,
-        .fixed_height = k_toolbar_group_height,
-        .border_radius = k_toolbar_group_radius,
-        .border_width = 0.0f,
-        .semantic_label = label,
-    };
+    auto options = layout::glass_surface_options(
+        layout::GlassSurfacePreset::ToolbarGroup,
+        label);
+    options.max_width = max_width;
+    options.fixed_height = k_toolbar_group_height;
+    options.border_radius = k_toolbar_group_radius;
+    return options;
 }
 
 phenotype::layout::MaterialSurfaceOptions content_surface_options(
         phenotype::SpaceToken gap = phenotype::SpaceToken::Md) {
     using namespace phenotype;
-    return layout::MaterialSurfaceOptions{
-        .kind = MaterialKind::Regular,
-        .role = MaterialSurfaceRole::Content,
-        .direction = FlexDirection::Column,
-        .padding = SpaceToken::Xl,
-        .gap = gap,
-        .cross_align = CrossAxisAlignment::Start,
-        .main_align = MainAxisAlignment::Start,
-        .border_radius = k_content_radius,
-        .border_width = 0.0f,
-        .semantic_label = "Files",
-    };
+    auto options = layout::glass_surface_options(
+        layout::GlassSurfacePreset::Content,
+        "Files");
+    options.gap = gap;
+    options.border_radius = k_content_radius;
+    return options;
 }
 
 phenotype::PathBuilder rounded_rect_path(
@@ -1404,21 +1382,15 @@ void finder_more_actions(State const& state,
     using namespace phenotype;
     layout::row([&] {
         layout::weighted(1.0f, [] {});
+        auto options = layout::glass_surface_options(
+            layout::GlassSurfacePreset::ToolbarGroup,
+            "More Actions Menu");
+        options.kind = MaterialKind::Regular;
+        options.max_width = 376.0f;
+        options.fixed_height = 72.0f;
+        options.border_radius = k_toolbar_group_radius;
         layout::material_surface(
-            layout::MaterialSurfaceOptions{
-                .kind = MaterialKind::Regular,
-                .role = MaterialSurfaceRole::Toolbar,
-                .direction = FlexDirection::Row,
-                .padding = SpaceToken::Sm,
-                .gap = SpaceToken::Xs,
-                .cross_align = CrossAxisAlignment::Center,
-                .main_align = MainAxisAlignment::Start,
-                .max_width = 376.0f,
-                .fixed_height = 72.0f,
-                .border_radius = k_toolbar_group_radius,
-                .border_width = 0.0f,
-                .semantic_label = "More Actions Menu",
-            },
+            options,
             [&] {
                 more_action_item(state.labels.create_file.c_str(),
                                  CreateFile{},
@@ -1722,16 +1694,13 @@ void finder_status_bar(State const& state,
                        file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
+    auto options = layout::glass_surface_options(
+        layout::GlassSurfacePreset::StatusBar,
+        "Status Bar");
+    options.padding = SpaceToken::Xs;
+    options.border_radius = 12.0f;
     layout::status_bar(
-        layout::MaterialSurfaceOptions{
-            .kind = MaterialKind::Clear,
-            .direction = FlexDirection::Column,
-            .padding = SpaceToken::Xs,
-            .gap = SpaceToken::Xs,
-            .border_radius = 12.0f,
-            .border_width = 0.0f,
-            .semantic_label = "Status Bar",
-        },
+        options,
         [&] {
             layout::row([&] {
                 layout::weighted(1.0f, [&] {
@@ -1867,21 +1836,14 @@ void view(State const& state) {
             .morph_transitions = true,
         },
         [&] {
+            auto window_options = layout::glass_surface_options(
+                layout::GlassSurfacePreset::Window,
+                "Finder Window");
+            window_options.max_width = 0.0f;
+            window_options.fixed_height = -1.0f;
+            window_options.border_radius = k_window_radius;
             layout::material_surface(
-                layout::MaterialSurfaceOptions{
-                    .kind = MaterialKind::Clear,
-                    .role = MaterialSurfaceRole::Surface,
-                    .direction = FlexDirection::Row,
-                    .padding = SpaceToken::Xs,
-                    .gap = SpaceToken::Sm,
-                    .cross_align = CrossAxisAlignment::Start,
-                    .main_align = MainAxisAlignment::Start,
-                    .max_width = 0.0f,
-                    .fixed_height = -1.0f,
-                    .border_radius = k_window_radius,
-                    .border_width = 0.0f,
-                    .semantic_label = "Finder Window",
-                },
+                window_options,
                 [&] {
                     finder_sidebar(state);
                     layout::weighted(1.0f, [&] {
