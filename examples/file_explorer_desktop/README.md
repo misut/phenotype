@@ -60,17 +60,23 @@ Finder toolbar group, separator, icon-button, and compact Recents icon-grid
 density metrics from that payload, including thumbnail canvas, label, font,
 grid-gap sizing, contextual `status_bar_visible` state, and the
 `window_control_marker_mode` split between live native controls and artifact
-probe markers. It also checks sidebar symbol and label placement, section
-spacing, selected-row radius, and artifact traffic-light marker coordinates so
-Finder parity regressions are reported as structured chrome contract failures
-before pixel inspection.
+probe markers. It also checks the pure `geometry` object for the integrated
+chrome contract: window inset/gap, sidebar surface origin, first sidebar row,
+toolbar shell, navigation/title/trailing group x-coordinates, collapsed search
+button x-coordinate, content surface origin, and the native titlebar drag and
+leading/trailing control reserve widths. Sidebar symbol and label placement,
+section spacing, selected-row radius, and artifact traffic-light marker
+coordinates are still asserted separately, so Finder parity regressions are
+reported as structured chrome contract failures before pixel inspection.
 The sidebar and toolbar glyphs come from `phenotype.icons`, not copied SF
 Symbols assets. They are phenotype-owned SVG symbols with a macOS-style
 rounded-outline contract and bounded secondary-layer opacity for detailed
 symbols. Each icon declares a semantic SF Symbols reference name as a role and
-proportion anchor while keeping the SVG artwork phenotype-owned, so artifacts
-can assert the icon module, source format, ownership boundary, reference
-family/policy, round stroke expectation, rendering mode, variant policy,
+proportion anchor while keeping the SVG artwork phenotype-owned, and the visual
+policy now names Apple HIG, macOS Finder, and SF Symbols as style references
+without embedding Apple-owned vector paths. Artifacts can assert the icon
+module, source format, ownership boundary, reference family/policy, round
+stroke expectation, rendering mode, variant policy,
 text-aligned scale, role-aware presentation policy, sidebar/toolbar point
 sizes, tone policy, symbol counts, and the exact semantic reference arrays for
 the visible Finder-style toolbar/sidebar glyphs without depending on platform
@@ -110,8 +116,8 @@ second activation opens it. The CLI can exercise the same behavior with
 `activate:Folder`, or bypass it with `open:Folder` when a test wants direct
 navigation.
 The icon-grid column count, visible row budget, thumbnail canvas, label size,
-titlebar reserve, sidebar row metrics, sidebar icon/label placement, and toolbar
-group/icon button metrics come from the shared pure
+titlebar reserve, sidebar row metrics, sidebar icon/label placement, toolbar
+group/icon button metrics, and Finder chrome geometry come from the shared pure
 `ExplorerChromeMetrics` contract, so `phenotype drive file-explorer --json`
 can report the same layout decisions without launching a native window.
 Finder chrome surfaces are created through `layout::glass_surface_options`

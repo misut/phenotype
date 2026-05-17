@@ -306,7 +306,7 @@ inline auto style_name() noexcept -> std::string_view {
 }
 
 inline auto style_reference() noexcept -> std::string_view {
-    return "Apple HIG Icons and SF Symbols inspired custom rounded-outline SVG glyphs";
+    return "Apple HIG, macOS Finder, and SF Symbols inspired custom rounded-outline SVG glyphs";
 }
 
 inline auto asset_policy() noexcept -> std::string_view {
@@ -636,7 +636,7 @@ inline auto source(Symbol symbol) noexcept -> std::string_view {
     case Symbol::Cloud:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 18 L17 18 C20 18 21.5 16 21.5 13.7 C21.5 11.5 19.8 9.8 17.6 9.7 C16.8 7.3 14.7 6 12.2 6 C9.4 6 7.3 7.8 6.7 10.3 C4.4 10.7 2.5 12.2 2.5 14.4 C2.5 16.4 4.1 18 7 18 Z"/></svg>)SVG";
     case Symbol::AirDrop:
-        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="13" r="1.8"/><path d="M8.5 16.8 Q12 13.6 15.5 16.8" stroke-opacity="0.66"/><path d="M5.8 19.2 Q12 13.2 18.2 19.2" stroke-opacity="0.66"/><path d="M4.5 9.5 Q12 3.5 19.5 9.5" stroke-opacity="0.66"/></svg>)SVG";
+        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="1.25"/><circle cx="12" cy="12" r="4.3" stroke-opacity="0.66"/><circle cx="12" cy="12" r="7.3" stroke-opacity="0.42"/><path d="M12 13.4 L12 19.2" stroke-opacity="0.66"/></svg>)SVG";
     case Symbol::Recents:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="8"/><path d="M12 7 L12 12 L8.5 12" stroke-opacity="0.66"/></svg>)SVG";
     case Symbol::Shared:

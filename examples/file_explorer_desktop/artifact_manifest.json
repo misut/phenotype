@@ -198,6 +198,98 @@
       "equals": "artifact-probe-marker"
     },
     {
+      "path": "application.file_explorer.chrome.native_window.titlebar_drag_region_height",
+      "equals": 64.0
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.leading_control_reserved_width",
+      "equals": 176.0
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.trailing_control_reserved_width",
+      "equals": 168.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.policy",
+      "equals": "finder_integrated_glass_chrome_geometry_v1"
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.window_content_inset",
+      "equals": 4.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.window_gap",
+      "equals": 8.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.sidebar_surface_x",
+      "equals": 4.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.sidebar_surface_y",
+      "equals": 4.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.sidebar_first_row_y",
+      "equals": 76.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.toolbar_shell_x",
+      "equals": 236.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.toolbar_shell_y",
+      "equals": 4.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.toolbar_shell_width",
+      "equals": 1060.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.toolbar_shell_height",
+      "equals": 52.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.toolbar_group_y",
+      "equals": 8.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.toolbar_navigation_group_x",
+      "equals": 240.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.toolbar_title_x",
+      "equals": 336.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.toolbar_view_group_x",
+      "equals": 840.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.toolbar_sort_group_x",
+      "equals": 1060.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.toolbar_action_group_x",
+      "equals": 1112.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.toolbar_search_group_x",
+      "equals": 1244.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.content_surface_x",
+      "equals": 236.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.content_surface_y",
+      "equals": 64.0
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.content_surface_width",
+      "equals": 1060.0
+    },
+    {
       "path": "application.file_explorer.chrome.toolbar_group_count",
       "equals": 5
     },
@@ -295,7 +387,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.design_reference",
-      "equals": "Apple HIG Icons and SF Symbols inspired custom rounded-outline SVG glyphs"
+      "equals": "Apple HIG, macOS Finder, and SF Symbols inspired custom rounded-outline SVG glyphs"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_family",

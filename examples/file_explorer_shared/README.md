@@ -20,12 +20,16 @@ delete, sort, reset, and startup scenarios.
 `ExplorerChromeMetrics`, so the CLI can observe the same workflow and
 viewport-derived Finder chrome/grid contract without opening a native AppKit or
 Win32 window. The desktop chrome metrics include the integrated titlebar,
-native-control ownership, icon-grid capacity, and Finder-style segmented
-toolbar group/separator/button counts plus the sidebar row, toolbar group, and
-toolbar icon button dimensions that the desktop example consumes. They also
-carry `status_bar_visible`, keeping the default Recents surface clean while
-making search, selection, and file-operation receipts observable in both native
-artifacts and CLI output.
+native-control ownership, titlebar drag/control reserve widths, icon-grid
+capacity, and Finder-style segmented toolbar group/separator/button counts plus
+the sidebar row, toolbar group, toolbar icon button, and top-level chrome
+geometry that the desktop example consumes. The geometry contract exposes the
+window inset/gap, sidebar surface/first-row coordinates, toolbar shell and
+trailing group coordinates, collapsed search position, and content surface
+origin so headless CLI traces can reason about Finder-like placement before a
+native screenshot exists. They also carry `status_bar_visible`, keeping the
+default Recents surface clean while making search, selection, and
+file-operation receipts observable in both native artifacts and CLI output.
 The same package publishes the desktop keyboard command contract as pure data:
 `CommandOrControl+F` for search, `Enter` for selection activation,
 `DeleteOrBackspace` for Trash movement, `CommandOrControl+D` for duplicate,

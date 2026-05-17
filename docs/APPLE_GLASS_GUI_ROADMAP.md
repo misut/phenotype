@@ -298,6 +298,10 @@ tones, while sidebar symbols resolve to 26 pt primary or accent tones with an
 explicit optical offset. The file explorer artifact records those sizes and
 tone-policy names so the Finder-like icon treatment is checked as data, not as
 a screenshot guess.
+The desktop file explorer also records a pure Finder chrome geometry policy for
+the integrated titlebar/sidebar/toolbar/content coordinates and native
+control-reserve widths, so the example can move toward Finder-like placement
+without leaving an LLM to infer layout drift from pixels alone.
 File explorer packages now declare `app.icon` as a package-owned SVG asset, so
 the same CLI bundle contract can later feed platform app-icon generation
 without embedding Apple artwork or depending on platform symbol fonts.
