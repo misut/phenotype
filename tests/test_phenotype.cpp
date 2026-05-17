@@ -1225,6 +1225,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!fallback_plan.backdrop_access.required);
     assert(!fallback_plan.backdrop_access.shared_frame_capture);
     assert(!fallback_plan.backdrop_access.next_frame_capture_required);
+    assert(!fallback_plan.backdrop_access.excludes_foreground_text);
     assert(std::string(fallback_plan.backdrop_access.capture_scope) == "none");
     assert(std::string(fallback_plan.backdrop_access.capture_reason)
            == "not-required");
@@ -1304,6 +1305,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!fallback_plan.observation_contract.stable_backdrop_required);
     assert(!fallback_plan.observation_contract.shared_frame_capture_required);
     assert(!fallback_plan.observation_contract.next_frame_capture_required);
+    assert(!fallback_plan.observation_contract
+                .backdrop_capture_excludes_foreground_text);
     assert(fallback_plan.observation_contract.bounded_texture_copy_required);
     assert(fallback_plan.observation_contract.deterministic_fallback_required);
     assert(std::string(fallback_plan.observation_contract.fallback_path)
@@ -1359,6 +1362,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!warmup_plan.backdrop_access.frame_history_required);
     assert(warmup_plan.backdrop_access.shared_frame_capture);
     assert(warmup_plan.backdrop_access.next_frame_capture_required);
+    assert(warmup_plan.backdrop_access.excludes_foreground_text);
     assert(std::string(warmup_plan.backdrop_access.capture_scope)
            == "shared-frame");
     assert(std::string(warmup_plan.backdrop_access.capture_reason)
@@ -1373,6 +1377,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(warmup_plan.resource_budget.max_surface_sample_pixels == 0);
     assert(warmup_plan.observation_contract.shared_frame_capture_required);
     assert(warmup_plan.observation_contract.next_frame_capture_required);
+    assert(warmup_plan.observation_contract
+                .backdrop_capture_excludes_foreground_text);
     assert(std::string(warmup_plan.reference_model.performance_response)
            == "warmup-capture");
     assert(std::string(warmup_plan.observation_contract.backdrop_capture_scope)
@@ -1388,6 +1394,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     glass_env.capabilities.frame_history = true;
     glass_env.backdrop.available = true;
     glass_env.backdrop.stable = true;
+    glass_env.backdrop.excludes_foreground_text = true;
     glass_env.backdrop.source = "previous-presented-frame";
     auto glass_plan = plan_material_surface(request, glass_env);
     assert(glass_plan.contract_version == material_plan_contract_version);
@@ -1467,12 +1474,14 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(glass_plan.backdrop_access.required);
     assert(glass_plan.backdrop_access.shared_frame_capture);
     assert(glass_plan.backdrop_access.next_frame_capture_required);
+    assert(glass_plan.backdrop_access.excludes_foreground_text);
     assert(std::string(glass_plan.backdrop_access.capture_scope)
            == "shared-frame");
     assert(std::string(glass_plan.backdrop_access.capture_reason)
            == "sample-current-frame");
     assert(glass_plan.backdrop.available);
     assert(glass_plan.backdrop.stable);
+    assert(glass_plan.backdrop.excludes_foreground_text);
     assert(std::string(glass_plan.backdrop.source)
            == "previous-presented-frame");
     assert(std::string(glass_plan.backdrop.luminance_response)
@@ -1527,6 +1536,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(glass_plan.observation_contract.stable_backdrop_required);
     assert(glass_plan.observation_contract.shared_frame_capture_required);
     assert(glass_plan.observation_contract.next_frame_capture_required);
+    assert(glass_plan.observation_contract
+                .backdrop_capture_excludes_foreground_text);
     assert(std::string(glass_plan.observation_contract.backdrop_capture_scope)
            == "shared-frame");
     assert(std::string(glass_plan.observation_contract.backdrop_capture_reason)
@@ -1855,6 +1866,7 @@ void test_material_text_foreground_resolution() {
     env.capabilities.frame_history = true;
     env.backdrop.available = true;
     env.backdrop.stable = true;
+    env.backdrop.excludes_foreground_text = true;
     env.backdrop.source = "previous-presented-frame";
     env.backdrop.luma_min = 0.84f;
     env.backdrop.luma_max = 0.97f;

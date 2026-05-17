@@ -1076,6 +1076,10 @@ namespace detail {
             "next_frame_capture_required",
             json::Value{observation.next_frame_capture_required});
         observation_contract.emplace(
+            "backdrop_capture_excludes_foreground_text",
+            json::Value{
+                observation.backdrop_capture_excludes_foreground_text});
+        observation_contract.emplace(
             "bounded_texture_copy_required",
             json::Value{observation.bounded_texture_copy_required});
         observation_contract.emplace(
@@ -1214,6 +1218,9 @@ namespace detail {
         json::Object backdrop;
         backdrop.emplace("available", json::Value{plan.backdrop.available});
         backdrop.emplace("stable", json::Value{plan.backdrop.stable});
+        backdrop.emplace(
+            "excludes_foreground_text",
+            json::Value{plan.backdrop.excludes_foreground_text});
         backdrop.emplace("luma_min", json::Value{plan.backdrop.luma_min});
         backdrop.emplace("luma_max", json::Value{plan.backdrop.luma_max});
         backdrop.emplace("luma_mean", json::Value{plan.backdrop.luma_mean});
@@ -1248,6 +1255,9 @@ namespace detail {
         backdrop_access.emplace(
             "next_frame_capture_required",
             json::Value{plan.backdrop_access.next_frame_capture_required});
+        backdrop_access.emplace(
+            "excludes_foreground_text",
+            json::Value{plan.backdrop_access.excludes_foreground_text});
         backdrop_access.emplace(
             "source",
             json::Value{plan.backdrop_access.source});
@@ -1860,6 +1870,12 @@ namespace detail {
         out.emplace(
             "backdrop_copy_pixels",
             json::Value{summary.backdrop_copy_pixels});
+        out.emplace(
+            "backdrop_copy_excludes_foreground_text",
+            json::Value{summary.backdrop_copy_excludes_foreground_text});
+        out.emplace(
+            "foreground_pass_after_backdrop_copy",
+            json::Value{summary.foreground_pass_after_backdrop_copy});
         out.emplace(
             "material_upload_bytes",
             json::Value{summary.material_upload_bytes});

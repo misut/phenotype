@@ -4283,6 +4283,9 @@ struct RendererState {
     MTL::Texture* debug_capture_texture = nullptr;
     int debug_capture_width = 0;
     int debug_capture_height = 0;
+    MTL::Texture* material_backdrop_texture = nullptr;
+    int material_backdrop_width = 0;
+    int material_backdrop_height = 0;
     MTL::Buffer* frame_readback_buf = nullptr;
     std::size_t frame_readback_capacity = 0;
     MTL::Texture* image_atlas_texture = nullptr;
@@ -4302,6 +4305,8 @@ struct RendererState {
     MacOSAccessibilityDisplayOptions accessibility_options{};
     MaterialExecutorSummary material_executor_summary{};
     bool last_frame_available = false;
+    bool last_material_backdrop_available = false;
+    bool last_material_backdrop_excludes_foreground_text = false;
     bool initialized = false;
 };
 
@@ -4478,6 +4483,39 @@ inline bool ensure_debug_capture_texture(int width, int height) {
         g_renderer.debug_capture_height = height;
     }
     return g_renderer.debug_capture_texture != nullptr;
+}
+
+inline bool ensure_material_backdrop_texture(int width, int height) {
+    if (width <= 0 || height <= 0)
+        return false;
+    if (g_renderer.material_backdrop_texture
+        && g_renderer.material_backdrop_width == width
+        && g_renderer.material_backdrop_height == height) {
+        return true;
+    }
+
+    if (g_renderer.material_backdrop_texture) {
+        g_renderer.material_backdrop_texture->release();
+        g_renderer.material_backdrop_texture = nullptr;
+        g_renderer.material_backdrop_width = 0;
+        g_renderer.material_backdrop_height = 0;
+        g_renderer.last_material_backdrop_available = false;
+        g_renderer.last_material_backdrop_excludes_foreground_text = false;
+    }
+
+    auto* tex_desc = MTL::TextureDescriptor::texture2DDescriptor(
+        MTL::PixelFormatBGRA8Unorm,
+        NS::UInteger(width),
+        NS::UInteger(height),
+        false);
+    tex_desc->setUsage(MTL::TextureUsageShaderRead | MTL::TextureUsageRenderTarget);
+    g_renderer.material_backdrop_texture =
+        g_renderer.device->newTexture(tex_desc);
+    if (g_renderer.material_backdrop_texture) {
+        g_renderer.material_backdrop_width = width;
+        g_renderer.material_backdrop_height = height;
+    }
+    return g_renderer.material_backdrop_texture != nullptr;
 }
 
 inline bool ensure_frame_readback_buffer(std::size_t required) {
@@ -6459,10 +6497,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     sync_drawable_size(fbw, fbh);
     bool const backdrop_ready =
         g_renderer.material_pipeline
-        && g_renderer.debug_capture_texture
-        && g_renderer.last_frame_available
-        && g_renderer.debug_capture_width == fbw
-        && g_renderer.debug_capture_height == fbh;
+        && g_renderer.material_backdrop_texture
+        && g_renderer.last_material_backdrop_available
+        && g_renderer.material_backdrop_width == fbw
+        && g_renderer.material_backdrop_height == fbh;
     MaterialEnvironment material_env{};
     auto const accessibility = accessibility_display_options();
     g_renderer.accessibility_options = accessibility;
@@ -6478,6 +6516,9 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_env.capabilities.reduce_motion = accessibility.reduce_motion;
     material_env.backdrop.available = backdrop_ready;
     material_env.backdrop.stable = backdrop_ready;
+    material_env.backdrop.excludes_foreground_text =
+        backdrop_ready
+        && g_renderer.last_material_backdrop_excludes_foreground_text;
     material_env.backdrop.source = backdrop_ready
         ? "previous-presented-frame"
         : "none";
@@ -6709,6 +6750,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     // contiguously in the flat *_instances vectors thanks to
     // finalize_batches; we use baseInstance to point at them.
     float const scissor_scale = frame_scale;
+    bool const defer_foreground_pass =
+        text_uploaded || !scratch.overlay_color_instances.empty();
     for (auto const& batch : scratch.batches) {
         auto const batch_tri_count =
             static_cast<std::uint32_t>(batch.tri_vertices.size());
@@ -6769,11 +6812,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 NS::UInteger(batch.color_first));
         }
         if (material_uploaded && batch_material_count > 0
-            && g_renderer.debug_capture_texture) {
+            && g_renderer.material_backdrop_texture
+            && g_renderer.last_material_backdrop_available) {
             encoder->setRenderPipelineState(g_renderer.material_pipeline);
             encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
             encoder->setVertexBuffer(g_renderer.material_instances_buf, 0, 1);
-            encoder->setFragmentTexture(g_renderer.debug_capture_texture, 0);
+            encoder->setFragmentTexture(g_renderer.material_backdrop_texture, 0);
             encoder->setFragmentSamplerState(g_renderer.sampler, 0);
             encoder->drawPrimitives(
                 MTL::PrimitiveTypeTriangle,
@@ -6804,7 +6848,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 NS::UInteger(batch_image_count),
                 NS::UInteger(batch.image_first));
         }
-        if (text_uploaded && batch_text_count > 0) {
+        if (!defer_foreground_pass && text_uploaded && batch_text_count > 0) {
             encoder->setRenderPipelineState(g_renderer.text_pipeline);
             encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
             encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
@@ -6829,7 +6873,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         scratch.overlay_color_instances.size() * sizeof(ColorInstanceGPU);
     uint32_t overlay_color_count =
         static_cast<uint32_t>(scratch.overlay_color_instances.size());
-    if (overlay_color_count > 0) {
+    if (!defer_foreground_pass && overlay_color_count > 0) {
         if (!ensure_instance_buffer(
                 g_renderer.overlay_color_instances_buf,
                 g_renderer.overlay_color_instances_capacity,
@@ -6851,7 +6895,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             NS::UInteger(0), 6, NS::UInteger(overlay_color_count));
     }
 
-    if (text_uploaded && scratch.overlay_text_count > 0) {
+    if (!defer_foreground_pass && text_uploaded && scratch.overlay_text_count > 0) {
         encoder->setRenderPipelineState(g_renderer.text_pipeline);
         encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
         encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
@@ -6867,9 +6911,126 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     encoder->endEncoding();
     g_renderer.last_render_width = fbw;
     g_renderer.last_render_height = fbh;
-    g_renderer.last_frame_available = false;
+    g_renderer.last_material_backdrop_available = false;
+    g_renderer.last_material_backdrop_excludes_foreground_text = false;
     bool const capture_frame_history =
         material_summary.planned_frame_capture_count > 0;
+    if (ensure_material_backdrop_texture(fbw, fbh)) {
+        if (auto* blit = command_buffer->blitCommandEncoder()) {
+            MTL::Origin origin{0, 0, 0};
+            MTL::Size size{
+                NS::UInteger(fbw),
+                NS::UInteger(fbh),
+                NS::UInteger(1),
+            };
+            blit->copyFromTexture(
+                drawable->texture(),
+                NS::UInteger(0),
+                NS::UInteger(0),
+                origin,
+                size,
+                g_renderer.material_backdrop_texture,
+                NS::UInteger(0),
+                NS::UInteger(0),
+                origin);
+            blit->endEncoding();
+            g_renderer.last_material_backdrop_available = true;
+            g_renderer.last_material_backdrop_excludes_foreground_text = true;
+            material_summary.backdrop_copy_excludes_foreground_text = true;
+            if (capture_frame_history) {
+                material_summary.backdrop_copy_count = 1;
+                material_summary.backdrop_copy_pixels =
+                    static_cast<std::int64_t>(fbw)
+                    * static_cast<std::int64_t>(fbh);
+            }
+        }
+    }
+
+    if (defer_foreground_pass) {
+        auto* foreground_pass = MTL::RenderPassDescriptor::renderPassDescriptor();
+        foreground_pass->colorAttachments()->object(0)->setTexture(
+            drawable->texture());
+        foreground_pass->colorAttachments()->object(0)->setLoadAction(
+            MTL::LoadActionLoad);
+        foreground_pass->colorAttachments()->object(0)->setStoreAction(
+            MTL::StoreActionStore);
+        auto* foreground_encoder =
+            command_buffer->renderCommandEncoder(foreground_pass);
+        if (!foreground_encoder) {
+            pool->release();
+            return;
+        }
+
+        for (auto const& batch : scratch.batches) {
+            auto const batch_text_count =
+                static_cast<std::uint32_t>(batch.texts.size());
+            if (!text_uploaded || batch_text_count == 0)
+                continue;
+            auto const sr = compute_metal_scissor(
+                batch, scissor_scale,
+                static_cast<std::uint32_t>(g_renderer.drawable_width),
+                static_cast<std::uint32_t>(g_renderer.drawable_height));
+            if (sr.width == 0 || sr.height == 0)
+                continue;
+            foreground_encoder->setScissorRect(sr);
+            foreground_encoder->setRenderPipelineState(g_renderer.text_pipeline);
+            foreground_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+            foreground_encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
+            foreground_encoder->setFragmentTexture(g_renderer.text_atlas_texture, 0);
+            foreground_encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+            foreground_encoder->drawPrimitives(
+                MTL::PrimitiveTypeTriangle,
+                NS::UInteger(0), 6,
+                NS::UInteger(batch_text_count),
+                NS::UInteger(batch.text_first));
+        }
+
+        foreground_encoder->setScissorRect(MTL::ScissorRect{
+            0, 0,
+            static_cast<NS::UInteger>(g_renderer.drawable_width),
+            static_cast<NS::UInteger>(g_renderer.drawable_height)});
+
+        if (overlay_color_count > 0) {
+            if (!ensure_instance_buffer(
+                    g_renderer.overlay_color_instances_buf,
+                    g_renderer.overlay_color_instances_capacity,
+                    overlay_color_bytes,
+                    "overlay_color_instances")) {
+                foreground_encoder->endEncoding();
+                pool->release();
+                return;
+            }
+            std::memcpy(
+                g_renderer.overlay_color_instances_buf->contents(),
+                scratch.overlay_color_instances.data(),
+                overlay_color_bytes);
+            foreground_encoder->setRenderPipelineState(g_renderer.color_pipeline);
+            foreground_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+            foreground_encoder->setVertexBuffer(
+                g_renderer.overlay_color_instances_buf, 0, 1);
+            foreground_encoder->drawPrimitives(
+                MTL::PrimitiveTypeTriangle,
+                NS::UInteger(0), 6, NS::UInteger(overlay_color_count));
+        }
+
+        if (text_uploaded && scratch.overlay_text_count > 0) {
+            foreground_encoder->setRenderPipelineState(g_renderer.text_pipeline);
+            foreground_encoder->setVertexBuffer(g_renderer.uniform_buf, 0, 0);
+            foreground_encoder->setVertexBuffer(g_renderer.text_instances_buf, 0, 1);
+            foreground_encoder->setFragmentTexture(g_renderer.text_atlas_texture, 0);
+            foreground_encoder->setFragmentSamplerState(g_renderer.sampler, 0);
+            foreground_encoder->drawPrimitives(
+                MTL::PrimitiveTypeTriangle,
+                NS::UInteger(0), 6,
+                NS::UInteger(scratch.overlay_text_count),
+                NS::UInteger(scratch.overlay_text_first));
+        }
+
+        foreground_encoder->endEncoding();
+        material_summary.foreground_pass_after_backdrop_copy = true;
+    }
+
+    g_renderer.last_frame_available = false;
     if (ensure_debug_capture_texture(fbw, fbh)) {
         if (auto* blit = command_buffer->blitCommandEncoder()) {
             MTL::Origin origin{0, 0, 0};
@@ -6890,12 +7051,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 origin);
             blit->endEncoding();
             g_renderer.last_frame_available = true;
-            if (capture_frame_history) {
-                material_summary.backdrop_copy_count = 1;
-                material_summary.backdrop_copy_pixels =
-                    static_cast<std::int64_t>(fbw)
-                    * static_cast<std::int64_t>(fbh);
-            }
         }
     }
     command_buffer->presentDrawable(drawable);
@@ -6910,6 +7065,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 inline void renderer_shutdown() {
     if (g_renderer.sampler) { g_renderer.sampler->release(); g_renderer.sampler = nullptr; }
     if (g_renderer.debug_capture_texture) { g_renderer.debug_capture_texture->release(); g_renderer.debug_capture_texture = nullptr; }
+    if (g_renderer.material_backdrop_texture) { g_renderer.material_backdrop_texture->release(); g_renderer.material_backdrop_texture = nullptr; }
+    g_renderer.last_frame_available = false;
+    g_renderer.last_material_backdrop_available = false;
+    g_renderer.last_material_backdrop_excludes_foreground_text = false;
     if (g_renderer.frame_readback_buf) { g_renderer.frame_readback_buf->release(); g_renderer.frame_readback_buf = nullptr; }
     if (g_renderer.image_atlas_texture) { g_renderer.image_atlas_texture->release(); g_renderer.image_atlas_texture = nullptr; }
     if (g_renderer.text_atlas_texture) { g_renderer.text_atlas_texture->release(); g_renderer.text_atlas_texture = nullptr; }
@@ -6955,6 +7114,8 @@ inline void renderer_shutdown() {
     g_renderer.drawable_height = 0;
     g_renderer.debug_capture_width = 0;
     g_renderer.debug_capture_height = 0;
+    g_renderer.material_backdrop_width = 0;
+    g_renderer.material_backdrop_height = 0;
     g_renderer.last_render_width = 0;
     g_renderer.last_render_height = 0;
     g_renderer.material_frame_sequence = 0;
@@ -7553,8 +7714,14 @@ inline json::Object macos_renderer_runtime_json() {
     renderer.emplace(
         "material_backdrop_source_ready",
         json::Value{
-            g_renderer.debug_capture_texture != nullptr
-            && g_renderer.last_frame_available});
+            g_renderer.material_backdrop_texture != nullptr
+            && g_renderer.last_material_backdrop_available});
+    renderer.emplace(
+        "material_backdrop_excludes_foreground_text",
+        json::Value{
+            g_renderer.material_backdrop_texture != nullptr
+            && g_renderer.last_material_backdrop_available
+            && g_renderer.last_material_backdrop_excludes_foreground_text});
     renderer.emplace(
         "readback_buffer_ready",
         json::Value{g_renderer.frame_readback_buf != nullptr});

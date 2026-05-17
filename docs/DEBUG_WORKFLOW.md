@@ -307,13 +307,15 @@ the actual `material_plans` executed for the frame. Each plan includes:
   increased contrast, reduced motion, and the first blocker that explains the
   fallback path;
 - `backdrop_sampling`, `fallback`, `fallback_path`, and `fallback_reason`;
-- `backdrop`, including source, readiness flags, sanitized luminance
-  statistics, luminance response, and floor/gain/edge deltas;
+- `backdrop`, including source, readiness flags, whether foreground text was
+  excluded from the source, sanitized luminance statistics, luminance response,
+  and floor/gain/edge deltas;
 - `backdrop_access`, including whether the plan requires a stable frame-history
   source, whether that source is a shared frame capture, the capture scope, the
   capture reason, maximum capture count, maximum capture pixels, maximum
-  surface sample pixels, and whether the access budget is bounded. Sampled
-  plans use `capture_scope: shared-frame` with
+  surface sample pixels, whether foreground text must be excluded, and whether
+  the access budget is bounded. Sampled plans use `capture_scope: shared-frame`
+  with
   `capture_reason: sample-current-frame`. A supported first-frame fallback can
   use `capture_reason: warmup-next-frame` with zero surface sample pixels so
   the next frame has a debuggable history source; unsupported fallbacks use
@@ -410,6 +412,12 @@ and accent text tokens whose draw origins fall inside a prior material command.
 Use `renderer.material_executor_summary.foreground_text_candidate_count` and
 `foreground_text_remap_count` to confirm that this execution step happened in
 the artifact; custom colors should count as candidates but remain unremapped.
+For sampled macOS glass, also require
+`renderer.material_executor_summary.backdrop_copy_excludes_foreground_text:
+true` and `foreground_pass_after_backdrop_copy: true`. If text appears as a
+blurred ghost below current foreground text, inspect these fields first; a false
+value means the material backdrop source is sampling a final foreground frame
+instead of a foreground-excluded scene pass.
 `primary_pass.executor` and each `passes[].executor` use pure roles:
 `backdrop-filter` for sampled glass, `fallback-fill` for deterministic fallback,
 and `none` for inactive material work. `max_texture_copy_pixels` is non-zero
@@ -675,6 +683,10 @@ fit the reported material buffer capacity, and copied backdrop pixels must stay
 within the pure resource budget. Foreground remaps must also be less than or
 equal to foreground text candidates, otherwise the backend has counted a remap
 without a material surface hit.
+For sampled-backdrop PRs, require the foreground-exclusion booleans in both the
+plan summary and executor summary. This keeps the final artifact/readback frame
+complete while proving the material shader sampled a separate safe backdrop
+texture.
 Use `require_material_quality_policy` when a material gate must prove the
 resolved pure policy stayed enabled and bounded. It can require backdrop
 sampling, noise, and shadow to remain allowed for every plan, and can bound the

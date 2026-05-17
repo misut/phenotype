@@ -204,12 +204,16 @@ re-decide policy.
 glass. A sampled plan requires a stable previous-frame source, declares
 `capture_scope: shared-frame` with `capture_reason: sample-current-frame`, caps
 frame capture at one copy, records the maximum capture pixels from
-`render_target.pixel_count`, and separately records the bounded surface sample
-pixels for the material shape. A supported backend that lacks a stable previous
-frame emits a deterministic `no-backdrop-source` fallback with
+`render_target.pixel_count`, requires foreground text and overlays to be
+excluded from the captured source, and separately records the bounded surface
+sample pixels for the material shape. A supported backend that lacks a stable
+previous frame emits a deterministic `no-backdrop-source` fallback with
 `capture_reason: warmup-next-frame`; this explains the first-frame warmup copy
-that prepares sampling for the next frame. Unsupported, reduced-transparency,
-invalid, and quality-policy fallback plans keep this access contract inactive
+that prepares sampling for the next frame. macOS executes this by separating the
+material backdrop texture from the final artifact/readback texture, copying the
+backdrop source before the foreground text pass, and reporting the ordering in
+`renderer.material_executor_summary`. Unsupported, reduced-transparency,
+invalid, and quality-policy fallback plans keep this access contract inactive.
 with zero capture/sample budgets. macOS performs the actual texture copy at the
 edge and reports it through `material_executor_summary`, while other backends
 can keep the same contract and explicitly fall back.
@@ -423,7 +427,7 @@ Done means `examples/` is a local acceptance suite, not just demos:
 |---|---|---|
 | Analyze current phenotype progress | This document, `README.md`, `docs/ARCHITECTURE.md`, `docs/DEBUG_WORKFLOW.md`, examples and tests | Keep updated as milestones land |
 | Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, material container/union identity, macOS sampled-backdrop rendering, resolved runtime fallback plans on Windows/Android, snapshot fallback contracts elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
-| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, pure material observation contracts, backdrop access/capture contracts, bounded material execution stages, explicit stage-capacity/drop counters, startup bundle verifier, optional pixel-region checks, material/container/shape/foreground/backdrop-access plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, foreground text execution counters, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
+| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, pure material observation contracts, foreground-excluded backdrop access/capture contracts, bounded material execution stages, explicit stage-capacity/drop counters, startup bundle verifier, optional pixel-region checks, material/container/shape/foreground/backdrop-access plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, executor numeric bounds, foreground text execution counters, foreground-feedback guard counters, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
 | Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, execution stage count/capacity, dropped-stage count, backdrop pixels, shared frame capture count/pixels, surface sample pixels, bounded texture copies, deterministic fallback, pure effective-radius shape bounds, backend `material_runtime_summary` counters cross-checked by the verifier, and backend `material_executor_summary` budget/timing/stage telemetry guarded by artifact manifests | Keep tightening backend timing budgets as more native material renderers land |
 | Runnable examples under `examples/` | Native, glass showcase, desktop/mobile file explorer, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |

@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 18;
+inline constexpr std::uint32_t material_plan_contract_version = 19;
 inline constexpr unsigned int material_max_execution_stages = 4;
 
 struct MaterialGeometry {
@@ -47,6 +47,7 @@ struct MaterialCapabilityInput {
 struct MaterialBackdropDescriptor {
     bool available = false;
     bool stable = false;
+    bool excludes_foreground_text = false;
     float luma_min = 0.0f;
     float luma_max = 1.0f;
     float luma_mean = 0.5f;
@@ -137,6 +138,7 @@ struct MaterialObservationContract {
     bool stable_backdrop_required = false;
     bool shared_frame_capture_required = false;
     bool next_frame_capture_required = false;
+    bool backdrop_capture_excludes_foreground_text = false;
     bool bounded_texture_copy_required = true;
     bool deterministic_fallback_required = true;
     char const* backdrop_capture_scope = "none";
@@ -219,6 +221,7 @@ struct MaterialExecutionStage {
 struct MaterialBackdropAnalysis {
     bool available = false;
     bool stable = false;
+    bool excludes_foreground_text = false;
     float luma_min = 0.0f;
     float luma_max = 1.0f;
     float luma_mean = 0.5f;
@@ -236,6 +239,7 @@ struct MaterialBackdropAccess {
     bool frame_history_required = false;
     bool shared_frame_capture = false;
     bool next_frame_capture_required = false;
+    bool excludes_foreground_text = false;
     char const* source = "none";
     char const* capture_scope = "none";
     char const* capture_reason = "not-required";
@@ -411,6 +415,8 @@ inline MaterialObservationContract material_observation_contract(
         plan.backdrop_access.shared_frame_capture;
     contract.next_frame_capture_required =
         plan.backdrop_access.next_frame_capture_required;
+    contract.backdrop_capture_excludes_foreground_text =
+        plan.backdrop_access.excludes_foreground_text;
     contract.bounded_texture_copy_required =
         plan.resource_budget.bounded_texture_copy;
     contract.deterministic_fallback_required =
@@ -528,6 +534,8 @@ struct MaterialExecutorSummary {
     std::uint32_t material_max_sample_taps = 0;
     std::int64_t material_total_sample_taps = 0;
     std::int64_t backdrop_copy_pixels = 0;
+    bool backdrop_copy_excludes_foreground_text = false;
+    bool foreground_pass_after_backdrop_copy = false;
     std::int64_t material_upload_bytes = 0;
     std::int64_t material_buffer_capacity_bytes = 0;
     std::uint32_t material_buffer_reallocations = 0;
@@ -1296,6 +1304,7 @@ inline MaterialBackdropAnalysis analyze_material_backdrop(
     MaterialBackdropAnalysis analysis{};
     analysis.available = backdrop.available;
     analysis.stable = backdrop.stable;
+    analysis.excludes_foreground_text = backdrop.excludes_foreground_text;
     analysis.luma_min = material_safe_luma(backdrop.luma_min, 0.0f);
     analysis.luma_max = std::max(
         analysis.luma_min,
@@ -1476,6 +1485,7 @@ inline MaterialBackdropAccess material_resolve_backdrop_access(
     access.frame_history_required = plan.backdrop_sampling;
     access.shared_frame_capture = true;
     access.next_frame_capture_required = true;
+    access.excludes_foreground_text = true;
     bool const has_named_backdrop_source =
         plan.backdrop.source
         && plan.backdrop.source[0]

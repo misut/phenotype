@@ -243,7 +243,7 @@ The plan records its artifact `contract_version`, source
 `command_descriptor`, material `role`, material container analysis, blur, tint,
 saturation, luminance curve, edge highlight, noise/dither, shadow, render-target
 analysis, pure shape analysis, backdrop sampling, backdrop analysis, backdrop
-access/capture bounds, decision
+access/capture bounds, foreground-excluded capture requirements, decision
 trace, fallback path, debug metadata, pass expectations, the resolved quality
 policy, foreground legibility/vibrancy recommendation, an Apple Liquid Glass
 `reference_model`, resource budgets, the resolved sampling kernel, bounded
@@ -319,12 +319,16 @@ backdrop-pixel budget, max shared frame capture count/pixels, max surface sample
 pixels, and whether texture copies and fallback behavior are bounded.
 `backdrop_access` mirrors the active shared frame contract per plan:
 sampled-backdrop plans require `capture_scope: shared-frame` and
-`capture_reason: sample-current-frame` with one bounded frame-history copy.
+`capture_reason: sample-current-frame` with one bounded frame-history copy that
+excludes foreground text and overlays. This prevents a material surface from
+sampling text it drew in the previous frame and then drawing the same text again
+as foreground in the current frame.
 When a backend can support backdrop sampling but the stable previous frame is
 not ready yet, a deterministic `no-backdrop-source` fallback may still request
-`capture_reason: warmup-next-frame` so the next frame can sample without hiding
-that warmup copy in backend policy. Unsupported, reduced-transparency, invalid,
-and quality-policy fallbacks keep capture/sample budgets at zero.
+`capture_reason: warmup-next-frame` with the same foreground-excluded capture
+contract so the next frame can sample without hiding that warmup copy in backend
+policy. Unsupported, reduced-transparency, invalid, and quality-policy fallbacks
+keep capture/sample budgets at zero.
 Container spacing is also reported as `max_container_spacing`, so
 artifact gates can bound future container/union expansion work before a backend
 starts allocating extra backdrop passes.
@@ -349,9 +353,10 @@ container identity intact but disables morph-transition expectations in the pure
 plan, matching Apple's guidance to coordinate related glass surfaces while still
 respecting accessibility settings.
 When a stable backdrop descriptor is available, the pure planner also copies
-its source, readiness flags, sanitized luminance statistics, response bucket,
-and floor/gain/edge deltas into `MaterialPlan.backdrop`. The same value drives
-the `MaterialPlan.luminance_curve` gamma/midpoint/contrast and edge-highlight
+its source, readiness flags, foreground-exclusion flag, sanitized luminance
+statistics, response bucket, and floor/gain/edge deltas into
+`MaterialPlan.backdrop`. The same value drives the
+`MaterialPlan.luminance_curve` gamma/midpoint/contrast and edge-highlight
 adjustment before the plan reaches a backend. This keeps legibility policy in
 the deterministic layer as blur, tint, and fallback decisions, and lets
 artifacts explain why a material responded to dark, bright, flat, or neutral
@@ -391,9 +396,15 @@ pixels, upload bytes/capacity, framebuffer-history copy bounds, and CPU enqueue
 timings. It also records `foreground_text_candidate_count` and
 `foreground_text_remap_count`, proving whether the backend consumed
 `MaterialPlan.foreground` for text commands without treating the counters as
-planner inputs. These fields let artifact gates prove the backend stayed inside
-deterministic resource limits while also leaving nondeterministic timing data
-available for post-failure diagnosis.
+planner inputs. macOS additionally separates the material backdrop texture from
+the final debug/readback texture: it copies the backdrop source after
+non-foreground scene work, then draws text and overlays in a foreground pass,
+and finally captures the complete frame for artifacts. The executor summary
+publishes `backdrop_copy_excludes_foreground_text` and
+`foreground_pass_after_backdrop_copy` so artifact gates can detect a future
+foreground-feedback regression. These fields let artifact gates prove the
+backend stayed inside deterministic resource limits while also leaving
+nondeterministic timing data available for post-failure diagnosis.
 Platform APIs, Metal/AppKit calls, shader compilation, texture capture, clocks,
 filesystem writes, and process execution stay outside this pure layer.
 

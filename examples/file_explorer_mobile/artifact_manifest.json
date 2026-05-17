@@ -40,7 +40,7 @@
     "fallback": 0,
     "backdrop_sampling": 22,
     "contract_versions": {
-      "18": 22
+      "19": 22
     },
     "roles": {
       "surface": 19,
@@ -77,6 +77,7 @@
     "backdrop_access_frame_history_required": 22,
     "backdrop_access_shared_frame_capture": 22,
     "backdrop_access_next_frame_capture_required": 22,
+    "backdrop_access_excludes_foreground_text": 22,
     "backdrop_access_bounded": 22,
     "backdrop_access_sources": {
       "previous-presented-frame": 22
@@ -146,6 +147,18 @@
     },
     {
       "path": "renderer.material_backdrop_source_ready",
+      "equals": true
+    },
+    {
+      "path": "renderer.material_backdrop_excludes_foreground_text",
+      "equals": true
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_excludes_foreground_text",
+      "equals": true
+    },
+    {
+      "path": "renderer.material_executor_summary.foreground_pass_after_backdrop_copy",
       "equals": true
     },
     {
