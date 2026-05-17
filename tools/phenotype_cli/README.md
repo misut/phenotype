@@ -57,7 +57,11 @@ The initial scope is intentionally narrow:
   assets, locales, fonts, and debug artifact manifest into a bundle directory
   and writes `phenotype.bundle.json` with copied-file records, content metadata,
   the pure resource contract, SHA-256 digests, byte counts, and bundle-level
-  integrity totals for CI and future platform packagers.
+  integrity totals for CI and platform packagers. Pass `--format macos-app`
+  with an `.app` output path to create a development macOS app bundle with
+  `Contents/MacOS`, `Contents/Resources`, `Info.plist`, `PkgInfo`, a tiny
+  package-root launcher, the built example binary, and the same integrity
+  manifest under `Contents/Resources`.
 - `phenotype package verify-bundle <dir>` re-opens a staged bundle directory,
   rebuilds the package resource contract from the copied manifest, checks that
   every declared resource is present, recomputes SHA-256 digests, and compares
@@ -184,8 +188,14 @@ mise exec -- exon build
 .exon/debug/phenotype_cli package bundle --json \
   ../../examples/file_explorer_desktop \
   --output /tmp/phenotype-file-explorer
+.exon/debug/phenotype_cli package bundle --json \
+  ../../examples/file_explorer_desktop \
+  --format macos-app \
+  --output "/tmp/Phenotype File Explorer.app"
 .exon/debug/phenotype_cli package verify-bundle --json \
   /tmp/phenotype-file-explorer
+.exon/debug/phenotype_cli package verify-bundle --json \
+  "/tmp/Phenotype File Explorer.app"
 .exon/debug/phenotype_cli package inspect --json \
   ../../examples/file_explorer_desktop
 .exon/debug/phenotype_cli icons lookup magnifyingglass --json

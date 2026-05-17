@@ -199,8 +199,10 @@ struct StoredBundleManifest {
 
 struct BundleSummary {
     std::string command = "package bundle";
+    std::string format = "resources";
     fs::path package_root;
     fs::path output_root;
+    fs::path resource_root;
     fs::path manifest_path;
     PackageSummary package;
     std::vector<BundleFileRecord> files;
@@ -658,10 +660,10 @@ auto spec() -> cppx::cli::CommandSpec {
                      .arity = cppx::cli::OptionArity::none,
                      .description = "Require frame.bmp in structural and verifier checks"},
                 },
+                .category = "runtime",
                 .positional_name = "bundle",
                 .positional_description =
                     "Artifact bundle directory containing snapshot.json, frame.bmp, and platform details.",
-                .category = "runtime",
                 .examples = {
                     "phenotype observe --json /tmp/phenotype-glass-showcase",
                     "phenotype observe --json /tmp/phenotype-glass-showcase --manifest examples/glass_showcase/artifact_manifest.json",
@@ -706,12 +708,17 @@ auto spec() -> cppx::cli::CommandSpec {
                              .arity = cppx::cli::OptionArity::one,
                              .value_name = "dir",
                              .description = "Output staging directory for copied resources"},
+                            {.name = "format",
+                             .arity = cppx::cli::OptionArity::one,
+                             .value_name = "resources|macos-app",
+                             .description = "Bundle layout to produce"},
                         },
                         .positional_name = "path",
                         .positional_description =
                             "Directory expected to contain phenotype.package.toml.",
                         .examples = {
                             "phenotype package bundle examples/file_explorer_desktop --output /tmp/phenotype-file-explorer",
+                            "phenotype package bundle examples/file_explorer_desktop --format macos-app --output '/tmp/Phenotype File Explorer.app'",
                             "phenotype package bundle --json examples/file_explorer_mobile --output /tmp/phenotype-mobile",
                         },
                     },
@@ -2688,7 +2695,8 @@ auto stored_bundle_manifest_check(BundleSummary const& summary) -> Check {
 auto bundle_json(BundleSummary const& summary) -> std::string {
     return std::format(
         "{{\"schema_version\":1,\"command\":{},"
-        "\"ok\":{},\"package_root\":{},\"output_root\":{},"
+        "\"ok\":{},\"format\":{},\"package_root\":{},\"output_root\":{},"
+        "\"resource_root\":{},"
         "\"bundle_manifest\":{},\"application\":{{\"id\":{},"
         "\"display_name\":{},\"version\":{},\"entry\":{},"
         "\"platforms\":{}}},\"defaults\":{{\"locale\":{},"
@@ -2702,8 +2710,10 @@ auto bundle_json(BundleSummary const& summary) -> std::string {
         "\"files\":{},\"stored_manifest\":{},\"checks\":{},\"error\":{}}}",
         json_string(summary.command),
         summary.ok ? "true" : "false",
+        json_string(summary.format),
         json_string(path_string(summary.package_root)),
         json_string(path_string(summary.output_root)),
+        json_string(path_string(summary.resource_root)),
         json_string(path_string(summary.manifest_path)),
         json_string(summary.package.application_id),
         json_string(summary.package.display_name),
@@ -2757,8 +2767,33 @@ auto package_manifest_roots(fs::path root) -> std::vector<fs::path> {
     return roots;
 }
 
+auto xml_escape(std::string_view text) -> std::string {
+    auto out = std::string{};
+    out.reserve(text.size());
+    for (char ch : text) {
+        switch (ch) {
+            case '&': out += "&amp;"; break;
+            case '<': out += "&lt;"; break;
+            case '>': out += "&gt;"; break;
+            case '"': out += "&quot;"; break;
+            case '\'': out += "&apos;"; break;
+            default: out.push_back(ch); break;
+        }
+    }
+    return out;
+}
+
+bool portable_bundle_file_name(std::string_view name) {
+    if (name.empty() || name == "." || name == "..")
+        return false;
+    return std::ranges::all_of(name, [](char ch) {
+        auto uch = static_cast<unsigned char>(ch);
+        return std::isalnum(uch) || ch == '_' || ch == '-' || ch == '.';
+    });
+}
+
 auto copy_bundle_file(fs::path const& package_root,
-                      fs::path const& output_root,
+                      fs::path const& destination_root,
                       std::string kind,
                       std::string name,
                       fs::path relative_source,
@@ -2770,7 +2805,7 @@ auto copy_bundle_file(fs::path const& package_root,
         .name = std::move(name),
         .content_type = std::move(content_type),
         .source = package_root / relative_source,
-        .destination = output_root / relative_source,
+        .destination = destination_root / relative_source,
         .preload = preload,
         .runtime_visible = runtime_visible,
     };
@@ -2809,6 +2844,128 @@ auto copy_bundle_file(fs::path const& package_root,
 
     record.bytes = file_size_or_zero(record.destination);
     record.copied = true;
+    if (auto digest = sha256_file_or_error(record.destination)) {
+        record.sha256 = *digest;
+    } else {
+        record.integrity_error = digest.error();
+    }
+    return record;
+}
+
+auto copy_bundle_absolute_file(fs::path const& package_root,
+                               fs::path const& source,
+                               fs::path const& output_root,
+                               fs::path relative_destination,
+                               std::string kind,
+                               std::string name,
+                               std::string content_type,
+                               bool executable = false) -> BundleFileRecord {
+    BundleFileRecord record{
+        .kind = std::move(kind),
+        .name = std::move(name),
+        .content_type = std::move(content_type),
+        .source = source,
+        .destination = output_root / relative_destination,
+    };
+
+    if (!safe_relative_path(relative_destination)) {
+        record.error = "destination path must be a safe relative path";
+        return record;
+    }
+    if (!path_stays_under_root(package_root, source, record.error))
+        return record;
+    if (!path_stays_under_root(output_root, record.destination, record.error))
+        return record;
+
+    auto ec = std::error_code{};
+    if (!fs::is_regular_file(record.source, ec) || ec) {
+        record.error = ec ? ec.message() : "source file is missing";
+        return record;
+    }
+    record.present = true;
+
+    fs::create_directories(record.destination.parent_path(), ec);
+    if (ec) {
+        record.error = ec.message();
+        return record;
+    }
+
+    ec.clear();
+    fs::copy_file(
+        record.source,
+        record.destination,
+        fs::copy_options::overwrite_existing,
+        ec);
+    if (ec) {
+        record.error = ec.message();
+        return record;
+    }
+    if (executable) {
+        ec.clear();
+        fs::permissions(
+            record.destination,
+            fs::perms::owner_exec | fs::perms::group_exec
+                | fs::perms::others_exec,
+            fs::perm_options::add,
+            ec);
+        if (ec) {
+            record.error = ec.message();
+            return record;
+        }
+    }
+
+    record.bytes = file_size_or_zero(record.destination);
+    record.copied = true;
+    if (auto digest = sha256_file_or_error(record.destination)) {
+        record.sha256 = *digest;
+    } else {
+        record.integrity_error = digest.error();
+    }
+    return record;
+}
+
+auto write_generated_bundle_file(fs::path const& output_root,
+                                 fs::path relative_destination,
+                                 std::string kind,
+                                 std::string name,
+                                 std::string content_type,
+                                 std::string_view contents,
+                                 bool executable = false)
+    -> BundleFileRecord {
+    BundleFileRecord record{
+        .kind = std::move(kind),
+        .name = std::move(name),
+        .content_type = std::move(content_type),
+        .source = fs::path{"<generated>"} / relative_destination,
+        .destination = output_root / relative_destination,
+    };
+
+    if (!safe_relative_path(relative_destination)) {
+        record.error = "destination path must be a safe relative path";
+        return record;
+    }
+    if (!path_stays_under_root(output_root, record.destination, record.error))
+        return record;
+
+    if (!write_text_file(record.destination, contents, record.error))
+        return record;
+    if (executable) {
+        auto ec = std::error_code{};
+        fs::permissions(
+            record.destination,
+            fs::perms::owner_exec | fs::perms::group_exec
+                | fs::perms::others_exec,
+            fs::perm_options::add,
+            ec);
+        if (ec) {
+            record.error = ec.message();
+            return record;
+        }
+    }
+
+    record.present = true;
+    record.copied = true;
+    record.bytes = file_size_or_zero(record.destination);
     if (auto digest = sha256_file_or_error(record.destination)) {
         record.sha256 = *digest;
     } else {
@@ -2858,6 +3015,21 @@ auto inspect_bundle_file(fs::path const& bundle_root,
     return record;
 }
 
+auto generated_bundle_file(fs::path const& output_root,
+                           fs::path relative_destination,
+                           std::string kind,
+                           std::string name,
+                           std::string content_type) -> BundleFileRecord {
+    auto record = inspect_bundle_file(
+        output_root,
+        std::move(kind),
+        std::move(name),
+        relative_destination,
+        std::move(content_type));
+    record.source = fs::path{"<generated>"} / relative_destination;
+    return record;
+}
+
 void append_expected_package_files(BundleSummary& bundle, bool copy_files) {
     auto append = [&](std::string kind,
                       std::string name,
@@ -2868,7 +3040,7 @@ void append_expected_package_files(BundleSummary& bundle, bool copy_files) {
         if (copy_files) {
             bundle.files.push_back(copy_bundle_file(
                 bundle.package_root,
-                bundle.output_root,
+                bundle.resource_root,
                 std::move(kind),
                 std::move(name),
                 std::move(source),
@@ -2877,7 +3049,7 @@ void append_expected_package_files(BundleSummary& bundle, bool copy_files) {
                 runtime_visible));
         } else {
             bundle.files.push_back(inspect_bundle_file(
-                bundle.output_root,
+                bundle.resource_root,
                 std::move(kind),
                 std::move(name),
                 std::move(source),
@@ -2914,6 +3086,144 @@ void append_expected_package_files(BundleSummary& bundle, bool copy_files) {
     }
 }
 
+auto macos_app_info_plist(PackageSummary const& package,
+                          std::string_view executable_name) -> std::string {
+    auto display_name = package.display_name.empty()
+        ? package.application_id
+        : package.display_name;
+    return std::format(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n"
+        "<!DOCTYPE plist PUBLIC \"-//Apple//DTD PLIST 1.0//EN\" "
+        "\"http://www.apple.com/DTDs/PropertyList-1.0.dtd\">\n"
+        "<plist version=\"1.0\">\n"
+        "<dict>\n"
+        "  <key>CFBundleDevelopmentRegion</key>\n"
+        "  <string>en</string>\n"
+        "  <key>CFBundleDisplayName</key>\n"
+        "  <string>{}</string>\n"
+        "  <key>CFBundleExecutable</key>\n"
+        "  <string>{}</string>\n"
+        "  <key>CFBundleIdentifier</key>\n"
+        "  <string>{}</string>\n"
+        "  <key>CFBundleName</key>\n"
+        "  <string>{}</string>\n"
+        "  <key>CFBundlePackageType</key>\n"
+        "  <string>APPL</string>\n"
+        "  <key>CFBundleShortVersionString</key>\n"
+        "  <string>{}</string>\n"
+        "  <key>CFBundleVersion</key>\n"
+        "  <string>{}</string>\n"
+        "  <key>LSMinimumSystemVersion</key>\n"
+        "  <string>13.0</string>\n"
+        "  <key>NSHighResolutionCapable</key>\n"
+        "  <true/>\n"
+        "  <key>NSSupportsAutomaticGraphicsSwitching</key>\n"
+        "  <true/>\n"
+        "</dict>\n"
+        "</plist>\n",
+        xml_escape(display_name),
+        xml_escape(executable_name),
+        xml_escape(package.application_id),
+        xml_escape(display_name),
+        xml_escape(package.version),
+        xml_escape(package.version));
+}
+
+auto executable_filename(std::string const& package_name) -> std::string;
+
+auto macos_app_launcher_script(std::string_view binary_name) -> std::string {
+    return std::format(
+        "#!/bin/sh\n"
+        "set -eu\n"
+        "APP_CONTENTS=$(CDPATH= cd -- \"$(dirname -- \"$0\")/..\" && pwd)\n"
+        "export PHENOTYPE_PACKAGE_ROOT=\"$APP_CONTENTS/Resources\"\n"
+        "exec \"$APP_CONTENTS/MacOS/{}\" \"$@\"\n",
+        binary_name);
+}
+
+void append_macos_app_files(BundleSummary& bundle, bool copy_files) {
+    auto executable_name = bundle.package.entry;
+    if (!portable_bundle_file_name(executable_name)) {
+        bundle.files.push_back({
+            .kind = "macos_app",
+            .name = "launcher",
+            .content_type = "application/x-sh",
+            .source = fs::path{"<generated>"} / "Contents" / "MacOS"
+                / executable_name,
+            .destination = bundle.output_root / "Contents" / "MacOS"
+                / executable_name,
+            .error = "application entry must be a portable bundle executable name",
+        });
+        return;
+    }
+
+    auto binary_name = executable_name + ".bin";
+    auto info_plist = fs::path{"Contents"} / "Info.plist";
+    auto pkg_info = fs::path{"Contents"} / "PkgInfo";
+    auto launcher = fs::path{"Contents"} / "MacOS" / executable_name;
+    auto binary = fs::path{"Contents"} / "MacOS" / binary_name;
+
+    if (copy_files) {
+        bundle.files.push_back(write_generated_bundle_file(
+            bundle.output_root,
+            info_plist,
+            "macos_app",
+            "Info.plist",
+            "application/xml",
+            macos_app_info_plist(bundle.package, executable_name)));
+        bundle.files.push_back(write_generated_bundle_file(
+            bundle.output_root,
+            pkg_info,
+            "macos_app",
+            "PkgInfo",
+            "text/plain",
+            "APPL????\n"));
+        bundle.files.push_back(write_generated_bundle_file(
+            bundle.output_root,
+            launcher,
+            "macos_app",
+            "launcher",
+            "application/x-sh",
+            macos_app_launcher_script(binary_name),
+            true));
+        bundle.files.push_back(copy_bundle_absolute_file(
+            bundle.package_root,
+            bundle.package_root / ".exon" / "debug"
+                / executable_filename(bundle.package.entry),
+            bundle.output_root,
+            binary,
+            "macos_app",
+            "executable",
+            "application/octet-stream",
+            true));
+    } else {
+        bundle.files.push_back(generated_bundle_file(
+            bundle.output_root,
+            info_plist,
+            "macos_app",
+            "Info.plist",
+            "application/xml"));
+        bundle.files.push_back(generated_bundle_file(
+            bundle.output_root,
+            pkg_info,
+            "macos_app",
+            "PkgInfo",
+            "text/plain"));
+        bundle.files.push_back(generated_bundle_file(
+            bundle.output_root,
+            launcher,
+            "macos_app",
+            "launcher",
+            "application/x-sh"));
+        bundle.files.push_back(inspect_bundle_file(
+            bundle.output_root,
+            "macos_app",
+            "executable",
+            binary,
+            "application/octet-stream"));
+    }
+}
+
 bool write_bundle_manifest(BundleSummary& bundle) {
     bundle.bundle_manifest_present = true;
     for (int attempt = 0; attempt < 4; ++attempt) {
@@ -2930,16 +3240,47 @@ bool write_bundle_manifest(BundleSummary& bundle) {
     return true;
 }
 
+auto normalized_bundle_format(std::string_view value)
+    -> std::expected<std::string, std::string> {
+    auto format = std::string{value.empty() ? "resources" : value};
+    std::ranges::transform(format, format.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    if (format == "resources" || format == "macos-app")
+        return format;
+    return std::unexpected{"package bundle --format must be 'resources' or 'macos-app'"};
+}
+
+auto detect_bundle_format(fs::path const& bundle_root)
+    -> std::pair<std::string, fs::path> {
+    if (path_exists(bundle_root / "phenotype.package.toml"))
+        return {"resources", bundle_root};
+    auto app_resources = bundle_root / "Contents" / "Resources";
+    if (path_exists(app_resources / "phenotype.package.toml"))
+        return {"macos-app", app_resources};
+    return {"resources", bundle_root};
+}
+
 auto build_package_bundle(fs::path package_root,
-                          fs::path output_root) -> BundleSummary {
+                          fs::path output_root,
+                          std::string format) -> BundleSummary {
     BundleSummary bundle{
+        .format = std::move(format),
         .package_root = std::move(package_root),
         .output_root = std::move(output_root),
     };
+    bundle.resource_root = bundle.format == "macos-app"
+        ? bundle.output_root / "Contents" / "Resources"
+        : bundle.output_root;
     bundle.package = package_summary(bundle.package_root);
     bundle.checks = package_checks(bundle.package);
     if (!all_ok(bundle.checks)) {
         bundle.error = "package inspect checks failed";
+        return bundle;
+    }
+    if (bundle.format == "macos-app"
+        && bundle.output_root.extension() != ".app") {
+        bundle.error = "macos-app format requires an output directory ending in .app";
         return bundle;
     }
 
@@ -2951,6 +3292,8 @@ auto build_package_bundle(fs::path package_root,
     }
 
     append_expected_package_files(bundle, true);
+    if (bundle.format == "macos-app")
+        append_macos_app_files(bundle, true);
     bundle.total_bytes = bundle_total_bytes(bundle.files);
     bundle.verified_file_count = bundle_verified_file_count(bundle.files);
 
@@ -2959,7 +3302,7 @@ auto build_package_bundle(fs::path package_root,
         return bundle;
     }
 
-    bundle.manifest_path = bundle.output_root / "phenotype.bundle.json";
+    bundle.manifest_path = bundle.resource_root / "phenotype.bundle.json";
     bundle.ok = true;
     if (!write_bundle_manifest(bundle)) {
         bundle.ok = false;
@@ -2975,13 +3318,16 @@ auto build_package_bundle(fs::path package_root,
 }
 
 auto verify_package_bundle(fs::path bundle_root) -> BundleSummary {
+    auto [format, resource_root] = detect_bundle_format(bundle_root);
     BundleSummary bundle{
         .command = "package verify-bundle",
-        .package_root = bundle_root,
+        .format = std::move(format),
+        .package_root = resource_root,
         .output_root = std::move(bundle_root),
+        .resource_root = std::move(resource_root),
     };
-    bundle.manifest_path = bundle.output_root / "phenotype.bundle.json";
-    bundle.package = package_summary(bundle.output_root);
+    bundle.manifest_path = bundle.resource_root / "phenotype.bundle.json";
+    bundle.package = package_summary(bundle.resource_root);
     bundle.checks = package_checks(bundle.package);
     bundle.bundle_manifest_present = path_exists(bundle.manifest_path);
     bundle.bundle_manifest_bytes = file_size_or_zero(bundle.manifest_path);
@@ -2999,6 +3345,8 @@ auto verify_package_bundle(fs::path bundle_root) -> BundleSummary {
     }
 
     append_expected_package_files(bundle, false);
+    if (bundle.format == "macos-app")
+        append_macos_app_files(bundle, false);
     bundle.total_bytes = bundle_total_bytes(bundle.files);
     bundle.verified_file_count = bundle_verified_file_count(bundle.files);
     compare_stored_bundle_manifest(bundle);
@@ -7630,14 +7978,26 @@ int run_package_bundle(cppx::cli::Invocation const& invocation) {
             "package bundle requires --output <dir>",
             invocation.has("json"));
     }
+    auto format = normalized_bundle_format(
+        invocation.value("format").value_or("resources"));
+    if (!format) {
+        return print_error(
+            "package bundle",
+            format.error(),
+            invocation.has("json"));
+    }
 
     auto bundle = build_package_bundle(
         fs::path{*path},
-        fs::path{std::string{*output}});
+        fs::path{std::string{*output}},
+        *format);
     if (invocation.has("json")) {
         std::println("{}", bundle_json(bundle));
     } else {
         auto lines = std::vector<cppx::terminal::StatusLine>{
+            {.label = "format",
+             .value = bundle.format,
+             .status = cppx::terminal::StatusKind::ok},
             {.label = "package",
              .value = path_string(bundle.package_root),
              .status = all_ok(bundle.checks)
@@ -7647,6 +8007,10 @@ int run_package_bundle(cppx::cli::Invocation const& invocation) {
              .value = path_string(bundle.output_root),
              .status = bundle.ok ? cppx::terminal::StatusKind::ok
                                  : cppx::terminal::StatusKind::fail},
+            {.label = "resources",
+             .value = path_string(bundle.resource_root),
+             .status = bundle.ok ? cppx::terminal::StatusKind::ok
+                                 : cppx::terminal::StatusKind::skip},
             {.label = "manifest",
              .value = path_string(bundle.manifest_path),
              .status = bundle.ok ? cppx::terminal::StatusKind::ok
@@ -7685,9 +8049,17 @@ int run_package_verify_bundle(cppx::cli::Invocation const& invocation) {
         std::println("{}", bundle_json(bundle));
     } else {
         auto lines = std::vector<cppx::terminal::StatusLine>{
+            {.label = "format",
+             .value = bundle.format,
+             .status = cppx::terminal::StatusKind::ok},
             {.label = "bundle",
              .value = path_string(bundle.output_root),
              .status = all_ok(bundle.checks)
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::fail},
+            {.label = "resources",
+             .value = path_string(bundle.resource_root),
+             .status = path_is_directory(bundle.resource_root)
                 ? cppx::terminal::StatusKind::ok
                 : cppx::terminal::StatusKind::fail},
             {.label = "manifest",
