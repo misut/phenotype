@@ -361,6 +361,8 @@ duplicate
     assert(chrome.icon_rendering_mode == "hierarchical");
     assert(chrome.icon_variant_policy
            == "outline primary with filled action variants");
+    assert(chrome.icon_file_type_color_policy
+           == "macos_finder_file_type_tints");
     assert(chrome.icon_scale == "medium");
     assert(chrome.chrome_geometry_policy
            == demo::k_desktop_chrome_geometry_policy);
@@ -584,6 +586,8 @@ duplicate
     assert(debug_text.find("\"presentation_policy\":\"macos_role_aware_symbol_presentation\"")
            != std::string::npos);
     assert(debug_text.find("\"tone_policy\":\"primary, secondary, selected, accent, disabled, destructive\"")
+           != std::string::npos);
+    assert(debug_text.find("\"file_type_color_policy\":\"macos_finder_file_type_tints\"")
            != std::string::npos);
     assert(debug_text.find("\"toolbar_point_size\":24") != std::string::npos);
     assert(debug_text.find("\"sidebar_point_size\":26") != std::string::npos);

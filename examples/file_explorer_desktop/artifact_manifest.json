@@ -422,6 +422,10 @@
       "equals": "primary, secondary, selected, accent, disabled, destructive"
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.file_type_color_policy",
+      "equals": "macos_finder_file_type_tints"
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.scale",
       "equals": "medium"
     },

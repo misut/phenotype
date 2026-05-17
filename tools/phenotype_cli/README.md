@@ -67,7 +67,8 @@ The initial scope is intentionally narrow:
   pure `phenotype.icon_catalog` path package. JSON output reports the
   macOS/Finder/SF-Symbols-inspired reference policy, package-owned SVG asset
   rule, count invariants, all/sidebar/toolbar semantic reference sets,
-  per-symbol role/variant/rendering/layer metadata, and presentation defaults.
+  per-symbol role/variant/rendering/layer metadata, presentation defaults, and
+  Finder-style file-type tint policy for folder/document/image/movie glyphs.
   The command deliberately reports semantic SF Symbols names without embedding
   Apple vector artwork, so CI and future LLM debugging can verify icon intent
   without screenshot guessing.

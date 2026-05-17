@@ -3568,6 +3568,8 @@ void test_icon_catalog_umbrella_export() {
     assert(phenotype::icon_catalog::semantic_reference_name(
                phenotype::icon_catalog::Symbol::AirDrop)
            == "airdrop");
+    assert(phenotype::icon_catalog::file_type_color_policy()
+           == "macos_finder_file_type_tints");
 
     std::puts("PASS: umbrella module exports icon catalog contract");
 }

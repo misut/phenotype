@@ -637,6 +637,45 @@ void paint_item_thumbnail(phenotype::Painter& painter,
     }
 }
 
+phenotype::icons::Symbol entry_symbol(
+        file_explorer_demo::Entry const& entry) {
+    using phenotype::icons::Symbol;
+    if (entry.folder)
+        return Symbol::Folder;
+    auto ext = extension_lower(entry.name);
+    if (ext == "png" || ext == "jpg" || ext == "jpeg")
+        return Symbol::Image;
+    if (ext == "mov" || ext == "mp4")
+        return Symbol::Movie;
+    return Symbol::Document;
+}
+
+phenotype::Color entry_symbol_color(
+        file_explorer_demo::Entry const& entry,
+        bool selected) {
+    if (selected)
+        return rgba(255, 255, 255);
+    return phenotype::icons::macos_file_type_color(entry_symbol(entry));
+}
+
+void paint_entry_symbol(phenotype::Painter& painter,
+                        file_explorer_demo::Entry const& entry,
+                        bool selected,
+                        float x,
+                        float y,
+                        float box_size,
+                        float icon_size) {
+    paint_symbol_centered(
+        painter,
+        entry_symbol(entry),
+        x,
+        y,
+        box_size,
+        box_size,
+        icon_size,
+        entry_symbol_color(entry, selected));
+}
+
 std::string finder_status(file_explorer_demo::Snapshot const& snap) {
     std::string text = snap.item_summary;
     if (snap.has_selection)
@@ -950,6 +989,75 @@ void finder_icon_label_button(std::string const& label,
         SelectEntry{label},
         options,
         stable_token(label) ^ (selected ? 0x1f1f00u : 0x1f1000u));
+}
+
+void finder_entry_row_button(file_explorer_demo::Entry const& entry,
+                             bool selected,
+                             float max_width,
+                             float font_size,
+                             float fixed_height) {
+    auto const& t = phenotype::current_theme();
+    phenotype::ButtonStyleOptions options;
+    options.has_background = true;
+    options.background = selected ? t.accent : t.transparent;
+    options.has_hover_background = true;
+    options.hover_background = selected
+        ? t.accent_strong
+        : rgba(255, 255, 255, 110);
+    options.has_border_color = true;
+    options.border_color = t.transparent;
+    options.has_text_color = true;
+    options.text_color = selected ? t.state_active_fg : t.foreground;
+    options.border_width = 0.0f;
+    options.border_radius = 8.0f;
+    options.fixed_height = fixed_height;
+    options.max_width = max_width;
+
+    phenotype::widget::canvas_button<Msg>(
+        phenotype::str{entry.name},
+        max_width,
+        fixed_height,
+        [entry, selected, max_width, font_size, fixed_height](
+                phenotype::Painter& painter) {
+            float const icon_box = 24.0f;
+            float const icon_size = 18.0f;
+            float const icon_x = 8.0f;
+            float const icon_y = (fixed_height - icon_box) * 0.5f;
+            paint_entry_symbol(
+                painter,
+                entry,
+                selected,
+                icon_x,
+                icon_y,
+                icon_box,
+                icon_size);
+
+            auto const ink = selected ? rgba(255, 255, 255)
+                                      : rgba(28, 28, 30);
+            float const text_x = 36.0f;
+            float const text_y = std::max(0.0f, (fixed_height - 18.0f) * 0.5f);
+            painter.text(text_x,
+                         text_y,
+                         entry.name.c_str(),
+                         static_cast<unsigned int>(entry.name.size()),
+                         font_size,
+                         ink,
+                         finder_font());
+            if (entry.folder) {
+                auto const chevron = ">";
+                painter.text(max_width - 20.0f,
+                             text_y,
+                             chevron,
+                             1,
+                             font_size,
+                             selected ? rgba(255, 255, 255, 220)
+                                      : rgba(110, 110, 116),
+                             finder_font());
+            }
+        },
+        SelectEntry{entry.name},
+        options,
+        stable_token(entry.name) ^ (selected ? 0x2f1f00u : 0x2f1000u));
 }
 
 void sidebar_row(std::string_view label,
@@ -1535,14 +1643,12 @@ void finder_list(State const& state,
                             && snap.selected.name == entry.name;
                         layout::row([&] {
                             layout::sized_box(420.0f, [&] {
-                                finder_button(
-                                    entry.name,
-                                    SelectEntry{entry.name},
+                                finder_entry_row_button(
+                                    entry,
                                     selected,
                                     410.0f,
                                     15.0f,
-                                    false,
-                                    !selected);
+                                    32.0f);
                             });
                             layout::sized_box(160.0f, [&] {
                                 widget::text(file_explorer_demo::entry_kind_label(entry),
@@ -1604,16 +1710,12 @@ void finder_column_view(State const& state,
                                 for (auto const& entry : entries) {
                                     bool const selected = snap.has_selection
                                         && snap.selected.name == entry.name;
-                                    finder_button(
-                                        entry.folder
-                                            ? entry.name + " >"
-                                            : entry.name,
-                                        SelectEntry{entry.name},
+                                    finder_entry_row_button(
+                                        entry,
                                         selected,
                                         330.0f,
                                         14.0f,
-                                        false,
-                                        !selected);
+                                        30.0f);
                                 }
                             }, SpaceToken::Xs);
                         });
