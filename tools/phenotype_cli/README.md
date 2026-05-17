@@ -106,6 +106,13 @@ The initial scope is intentionally narrow:
   JSON output includes the semantic reference, asset policy, rendering mode,
   tone, visible RGBA after opacity, background color, symbol and hit-target
   metrics, corner radius, and likely icon layer/pass.
+- `phenotype icons render <name-or-reference>` wraps the same built-in glyph and
+  presentation recipe in a standalone SVG hit target. The default output is raw
+  SVG for previews or package probes; `--output <path>` writes that SVG at the
+  CLI edge. `--json` adds the rendered SVG source, bytes, viewBox, optional
+  output path, role/phase state, visible RGBA, background chrome, and likely
+  wrapper pass. This gives the CLI a deterministic icon output path while still
+  keeping Apple/SF Symbols artwork out of the repository.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible

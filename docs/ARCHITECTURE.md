@@ -288,7 +288,10 @@ catalog with the matched rendering capability envelope, so renderer and parser
 failures can be reproduced without launching a native window. `phenotype icons
 present <name-or-reference>` resolves the same state recipe for a chosen role,
 phase, selected state, and disabled state, including the effective visible
-symbol color, background chrome, hit target, and likely icon layer/pass. This
+symbol color, background chrome, hit target, and likely icon layer/pass.
+`phenotype icons render <name-or-reference>` then wraps that recipe into a
+standalone SVG hit target, giving package probes and visual diffs the same pure
+icon output path as the native examples. This
 lets CI logs and artifact triage explain a toolbar/sidebar/file-type icon mismatch
 without relying on a human visual guess. The style reference deliberately says the custom SVGs are
 informed by Apple HIG, macOS Finder, and SF Symbols while the asset policy
