@@ -67,6 +67,8 @@ The initial scope is intentionally narrow:
   pure `phenotype.icon_catalog` path package. JSON output reports the
   macOS/Finder/SF-Symbols-inspired reference policy, package-owned SVG asset
   rule, supported SVG path subset and arc-lowering policy, count invariants,
+  SF Symbols rendering-mode names, regular text-aligned weight policy,
+  explicit monochrome/hierarchical/palette/multicolor capability counts,
   SVG arc-using built-in symbol count, all/sidebar/toolbar semantic reference sets,
   per-symbol role/variant/rendering/layer metadata, name/reference lookup
   invariants, presentation defaults, role hit-target metrics, and Finder-style
@@ -83,7 +85,8 @@ The initial scope is intentionally narrow:
 - `phenotype icons svg <name-or-reference>` emits the exact phenotype-owned SVG
   source for one built-in glyph. The default output is raw SVG for renderer or
   asset-pipeline probes; `--json` wraps the source with the matched symbol,
-  semantic reference name, asset policy, and byte count. This keeps macOS-style
+  semantic reference name, asset policy, rendering capabilities, and byte count.
+  This keeps macOS-style
   icon debugging inside the pure catalog boundary without embedding Apple or
   SF Symbols vector artwork.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
@@ -183,6 +186,8 @@ mise exec -- exon build
   /tmp/phenotype-file-explorer
 .exon/debug/phenotype_cli package inspect --json \
   ../../examples/file_explorer_desktop
+.exon/debug/phenotype_cli icons lookup magnifyingglass --json
+.exon/debug/phenotype_cli icons svg desktopcomputer --json
 .exon/debug/phenotype_cli artifact verify-file-explorer \
   --profile desktop \
   --view-mode icon \

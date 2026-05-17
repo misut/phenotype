@@ -36,6 +36,10 @@ int main() {
            == "accent_selected_user_tint_compatible_sidebar_symbols");
     assert(icons::symbol_control_chrome_policy()
            == "macos_finder_symbol_state_chrome");
+    assert(icons::default_weight_policy()
+           == "regular_text_weight_aligned");
+    assert(icons::rendering_capability_policy().find("sf_symbols_mode_names")
+           != std::string_view::npos);
     assert(icons::metrics_policy()
            == "macos_finder_role_metrics_with_explicit_hit_targets");
     assert(icons::hit_target_policy().find("sidebar=38pt")
@@ -46,6 +50,10 @@ int main() {
     assert(icons::outline_symbol_count == 30);
     assert(icons::filled_symbol_count == 1);
     assert(icons::hierarchical_symbol_count == 20);
+    assert(icons::monochrome_symbol_count == icons::all_symbol_count);
+    assert(icons::regular_weight_symbol_count == icons::all_symbol_count);
+    assert(icons::palette_symbol_count == 0);
+    assert(icons::multicolor_symbol_count == 0);
     assert(icons::reference_symbol_count == icons::all_symbol_count);
     assert(icons::svg_path_arc_symbol_count == 1);
     assert(icons::round_stroke_symbol_count == icons::outline_symbol_count);
@@ -69,6 +77,8 @@ int main() {
         assert(desc.reference_family == icons::reference_family());
         assert(desc.reference_policy == icons::reference_policy());
         assert(desc.grid_size == 24.0f);
+        assert(desc.default_weight == icons::SymbolWeight::Regular);
+        assert(icons::symbol_weight_name(desc.default_weight) == "regular");
         assert(icons::symbol_from_name(desc.name).has_value());
         assert(*icons::symbol_from_name(desc.name) == symbol);
         assert(icons::symbol_from_semantic_reference_name(
@@ -85,6 +95,15 @@ int main() {
         assert(metrics.stroke_width == desc.default_stroke_width);
         assert(desc.phenotype_owned);
         assert(!desc.uses_sf_symbols_asset);
+        auto const capabilities = icons::rendering_capabilities(symbol);
+        assert(capabilities.monochrome);
+        assert(capabilities.hierarchical == desc.supports_hierarchical_opacity);
+        assert(!capabilities.palette);
+        assert(!capabilities.multicolor);
+        assert(capabilities.policy == icons::rendering_capability_policy());
+        assert(desc.supports_monochrome);
+        assert(!desc.supports_palette);
+        assert(!desc.supports_multicolor);
         if (desc.filled)
             ++filled_count;
         else {

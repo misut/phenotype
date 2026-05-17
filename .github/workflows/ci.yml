@@ -597,6 +597,10 @@ jobs:
           "$cli" doctor --json | json_tool >/dev/null
           "$cli" commands --json | json_tool >/dev/null
           "$cli" icons catalog --json | json_tool >/dev/null
+          "$cli" icons lookup recents --json | json_tool >/dev/null
+          "$cli" icons lookup magnifyingglass --json | json_tool >/dev/null
+          "$cli" icons svg desktopcomputer --json | json_tool >/dev/null
+          "$cli" icons svg applications | grep -q '<svg '
           "$cli" theme contract --json | json_tool >/dev/null
           "$cli" package list --json examples | json_tool >/dev/null
           "$cli" package inspect --json examples/file_explorer_desktop | json_tool >/dev/null

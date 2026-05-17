@@ -202,7 +202,9 @@ The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
 selected-row radius plus soft selected-row alpha policy, the
 `phenotype.icon_catalog` / `phenotype.icons` style contract
 (`design_reference`, `asset_policy`, 24x24 alignment grid, stroke width,
-total/sidebar/toolbar/filled symbol counts, and
+total/sidebar/toolbar/filled symbol counts, SF Symbols rendering-mode names,
+regular text-aligned weight policy, monochrome/hierarchical/palette/multicolor
+capability counts, and
 `interface_metaphor_policy`, `visual_consistency_policy`,
 `toolbar_symbol_chrome_policy`, `sidebar_symbol_color_policy`,
 `interaction_tone_policy` / `file_type_color_policy`, and
@@ -219,7 +221,7 @@ presence checks from the same pure metadata package.
 probe for one glyph when a Finder token maps to the wrong visual metaphor or
 hit target. `phenotype icons svg <name-or-reference>` emits the exact
 phenotype-owned SVG source for that glyph, with `--json` adding the semantic
-reference name and asset policy. Use it when a renderer, path parser, or
+reference name, asset policy, and rendering capabilities. Use it when a renderer, path parser, or
 icon-source cache is suspect, while
 `phenotype drive file-explorer --json` embeds the desktop chrome geometry and
 icon-system contract under `chrome.geometry` and `chrome.icon_system`; the
@@ -291,7 +293,10 @@ PHENOTYPE_ARTIFACT_EXIT=1 \
 The file explorer artifact's `application.file_explorer.chrome.icon_system`
 object also names the pure SVG subset, supported path commands, supported style
 attributes, round cap/join policy, and arc lowering policy used by built-in
-macOS-style glyphs. If a Finder-like icon breaks, check those fields before
+macOS-style glyphs. It also records regular weight alignment, monochrome and
+hierarchical support, and explicit palette/multicolor unsupported counts, so
+future richer symbol rendering can fail as a contract change instead of a
+silent visual drift. If a Finder-like icon breaks, check those fields before
 comparing screenshots; a missing SVG command or stroke-style policy should fail
 as a JSON contract mismatch. `svg_path_arc_symbol_count` proves that at least
 one built-in Finder sidebar symbol exercises the SVG path arc parser in normal
