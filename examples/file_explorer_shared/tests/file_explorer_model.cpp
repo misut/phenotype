@@ -317,6 +317,7 @@ duplicate
     assert(chrome.icon_filled_symbol_count == 1);
     assert(chrome.icon_outline_symbol_count == 30);
     assert(chrome.icon_hierarchical_symbol_count == 20);
+    assert(chrome.icon_reference_symbol_count == 31);
     assert(chrome.icon_grid_size == 24.0f);
     assert(chrome.icon_default_stroke_width == 1.8f);
     assert(chrome.icon_secondary_opacity == 0.66f);
@@ -324,6 +325,9 @@ duplicate
     assert(chrome.icon_style == "macos_rounded_outline_svg");
     assert(chrome.icon_source_format == "svg");
     assert(chrome.icon_design_reference.find("Apple HIG") != std::string::npos);
+    assert(chrome.icon_reference_family == "SF Symbols semantic reference");
+    assert(chrome.icon_reference_policy.find("phenotype-owned")
+           != std::string::npos);
     assert(chrome.icon_asset_policy.find("no Apple") != std::string::npos);
     assert(chrome.icon_alignment == "24x24 text-aligned symbol grid");
     assert(chrome.icon_rendering_mode == "hierarchical");

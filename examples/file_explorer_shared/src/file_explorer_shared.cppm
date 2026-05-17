@@ -226,6 +226,7 @@ struct ExplorerChromeMetrics {
     int icon_filled_symbol_count = 0;
     int icon_outline_symbol_count = 0;
     int icon_hierarchical_symbol_count = 0;
+    int icon_reference_symbol_count = 0;
     float icon_grid_size = 0.0f;
     float icon_default_stroke_width = 0.0f;
     float icon_secondary_opacity = 0.0f;
@@ -246,6 +247,8 @@ struct ExplorerChromeMetrics {
     std::string icon_style;
     std::string icon_source_format;
     std::string icon_design_reference;
+    std::string icon_reference_family;
+    std::string icon_reference_policy;
     std::string icon_asset_policy;
     std::string icon_alignment;
     std::string icon_rendering_mode;
@@ -489,6 +492,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_filled_symbol_count = 0,
             .icon_outline_symbol_count = 0,
             .icon_hierarchical_symbol_count = 0,
+            .icon_reference_symbol_count = 0,
             .icon_grid_size = 0.0f,
             .icon_default_stroke_width = 0.0f,
             .icon_secondary_opacity = 0.0f,
@@ -508,6 +512,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_style = "mobile_text_buttons",
             .icon_source_format = "none",
             .icon_design_reference = "mobile text controls",
+            .icon_reference_family = "n/a",
+            .icon_reference_policy = "n/a",
             .icon_asset_policy = "no vector icon assets in mobile profile",
             .icon_alignment = "n/a",
             .icon_rendering_mode = "n/a",
@@ -573,6 +579,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_filled_symbol_count = 1,
         .icon_outline_symbol_count = 30,
         .icon_hierarchical_symbol_count = 20,
+        .icon_reference_symbol_count = 31,
         .icon_grid_size = 24.0f,
         .icon_default_stroke_width = 1.8f,
         .icon_secondary_opacity = 0.66f,
@@ -593,6 +600,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_source_format = "svg",
         .icon_design_reference =
             "Apple HIG Icons and SF Symbols inspired custom rounded-outline SVG glyphs",
+        .icon_reference_family = "SF Symbols semantic reference",
+        .icon_reference_policy =
+            "semantic reference only; phenotype-owned SVG artwork",
         .icon_asset_policy =
             "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded",
         .icon_alignment = "24x24 text-aligned symbol grid",
@@ -1072,6 +1082,56 @@ inline json::Value keyboard_commands_debug_json(std::string_view profile) {
     return json::Value{std::move(commands)};
 }
 
+inline json::Value string_array_debug_json(
+        std::initializer_list<std::string_view> values) {
+    json::Array out;
+    for (auto value : values)
+        out.push_back(json::Value{std::string{value}});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value sidebar_icon_reference_symbols_debug_json(
+        ExplorerChromeMetrics const& chrome) {
+    if (chrome.icon_reference_symbol_count <= 0)
+        return json::Value{json::Array{}};
+    return string_array_debug_json({
+        "clock",
+        "folder.badge.person.crop",
+        "app",
+        "desktopcomputer",
+        "doc",
+        "arrow.down.circle",
+        "icloud",
+        "house",
+        "airdrop",
+        "trash",
+        "folder",
+    });
+}
+
+inline json::Value toolbar_icon_reference_symbols_debug_json(
+        ExplorerChromeMetrics const& chrome) {
+    if (chrome.icon_reference_symbol_count <= 0)
+        return json::Value{json::Array{}};
+    return string_array_debug_json({
+        "chevron.left",
+        "chevron.right",
+        "square.grid.2x2",
+        "list.bullet",
+        "rectangle.split.3x1",
+        "rectangle.on.rectangle",
+        "rectangle.grid.3x2",
+        "square.and.arrow.up",
+        "tag",
+        "ellipsis",
+        "magnifyingglass",
+        "doc.badge.plus",
+        "folder.badge.plus",
+        "square.on.square",
+        "trash",
+    });
+}
+
 inline json::Value explorer_chrome_debug_json(
         ExplorerChromeMetrics const& chrome) {
     json::Object viewport;
@@ -1112,6 +1172,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "hierarchical_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.icon_hierarchical_symbol_count)});
+    icon_system.emplace(
+        "reference_symbol_count",
+        json::Value{static_cast<std::int64_t>(chrome.icon_reference_symbol_count)});
     icon_system.emplace("grid_size", json::Value{chrome.icon_grid_size});
     icon_system.emplace(
         "default_stroke_width",
@@ -1120,11 +1183,19 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace("text_weight_aligned", json::Value{chrome.icon_text_weight_aligned});
     icon_system.emplace("hierarchical_opacity", json::Value{chrome.icon_hierarchical_opacity});
     icon_system.emplace("design_reference", json::Value{chrome.icon_design_reference});
+    icon_system.emplace("reference_family", json::Value{chrome.icon_reference_family});
+    icon_system.emplace("reference_policy", json::Value{chrome.icon_reference_policy});
     icon_system.emplace("asset_policy", json::Value{chrome.icon_asset_policy});
     icon_system.emplace("alignment", json::Value{chrome.icon_alignment});
     icon_system.emplace("rendering_mode", json::Value{chrome.icon_rendering_mode});
     icon_system.emplace("variant_policy", json::Value{chrome.icon_variant_policy});
     icon_system.emplace("scale", json::Value{chrome.icon_scale});
+    icon_system.emplace(
+        "sidebar_reference_symbols",
+        sidebar_icon_reference_symbols_debug_json(chrome));
+    icon_system.emplace(
+        "toolbar_reference_symbols",
+        toolbar_icon_reference_symbols_debug_json(chrome));
 
     json::Object out;
     out.emplace("viewport", json::Value{std::move(viewport)});

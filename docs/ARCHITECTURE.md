@@ -151,6 +151,11 @@ focus affordances, neutral grouped-background grays, a translucent white
 surface token, and larger chrome radii. The values are phenotype-owned design
 tokens rather than Apple private API or copied platform assets, so examples can
 look native while remaining portable across macOS, Windows, Android, and WASI.
+The pure metadata helpers `default_theme_profile_name`,
+`default_theme_reference`, `default_theme_font_policy`,
+`default_theme_material_policy`, and `theme_matches_default_glass_contract`
+make that baseline machine-checkable without forcing the theme JSON schema to
+grow a platform-specific field.
 
 `phenotype.svg` is a pure vector image layer. It parses a bounded SVG subset
 (`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,
@@ -167,16 +172,21 @@ separate SVG opcode; non-circular ellipses still use cubic curves.
 
 `phenotype.icons` is a small built-in icon catalog defined as original 24x24
 SVG glyphs. It intentionally follows general Apple HIG-style optical
-proportions without copying SF Symbols artwork or names as assets. Apps can
-call `icons::document`, `icons::paint_symbol`, or `widget::icon`; the widget
-helper paints through `widget::canvas` and uses a deterministic paint token so
-stable icons do not re-emit every frame. The catalog encodes macOS-like rounded
-stroke caps and joins in each line icon's SVG source, uses bounded secondary
-opacity on detail strokes for SF Symbols-like hierarchical emphasis, and
-exposes symbol metadata (`icons::descriptor`, variant/rendering/scale names,
+proportions without copying SF Symbols artwork as assets. Each symbol also
+declares a semantic SF Symbols reference name, family, and policy, so the
+contract can say "this glyph is playing the same UI role as `magnifyingglass`"
+without embedding Apple's vector paths. Apps can call `icons::document`,
+`icons::paint_symbol`, or `widget::icon`; the widget helper paints through
+`widget::canvas` and uses a deterministic paint token so stable icons do not
+re-emit every frame. The catalog encodes macOS-like rounded stroke caps and
+joins in each line icon's SVG source, uses bounded secondary opacity on detail
+strokes for SF Symbols-like hierarchical emphasis, and exposes symbol metadata
+(`icons::descriptor`, semantic reference names, variant/rendering/scale names,
 count constants, and index accessors for all, sidebar, and toolbar symbols) so
 examples and artifact verifiers can assert the style contract without pixel
-guessing.
+guessing. Finder-style examples serialize sidebar and toolbar semantic
+reference arrays in their artifact debug payload, making a symbol regression
+visible in JSON before anyone inspects a screenshot.
 Package app icons are separate resources, not part of the glyph catalog: they
 are declared as `app.icon` SVG assets in `phenotype.package.toml`, copied by the
 CLI bundle step, and validated by `phenotype.resources` before a platform

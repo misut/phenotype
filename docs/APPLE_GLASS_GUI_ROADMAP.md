@@ -259,7 +259,11 @@ The default theme now starts from an Apple-like glass baseline: Pretendard for
 product typography, system-blue accent/focus tokens, neutral grouped
 backgrounds, a translucent white surface token, and larger chrome radii. These
 are portable phenotype-owned tokens; platform materials still come from the
-material planner/backend contract rather than from private Apple APIs.
+material planner/backend contract rather than from private Apple APIs. The
+baseline is now exposed through pure metadata helpers plus
+`theme_matches_default_glass_contract`, which lets tests and future artifact
+tools verify the intended Apple-glass theme without adding platform-specific
+keys to every theme fixture.
 
 SVG and built-in icons are first-class shared UI primitives. `phenotype.svg`
 parses a bounded pure SVG subset into `svg::Document` and renders through
@@ -270,7 +274,9 @@ quality. `phenotype.icons` provides original 24x24 glyph SVGs for Finder-like
 chrome and common app actions, following Apple-style proportions, text-aligned
 medium-scale metrics, macOS-like rounded stroke caps/joins, and bounded
 secondary-stroke opacity for symbols with detail layers without copying SF
-Symbols assets. The macOS Metal
+Symbols assets. Each built-in symbol now carries a semantic SF Symbols
+reference name and explicit policy that the reference is only a role/style
+anchor; the vector artwork remains phenotype-owned SVG. The macOS Metal
 renderer executes diagonal icon strokes as triangle bodies with round caps
 instead of dot chains, keeping toolbar/search/sidebar symbols continuous while
 remaining bounded. Windows accepts the same SVG-driven `Path`, `FillPath`, and
@@ -280,7 +286,8 @@ not drop or mis-layer the native command stream on non-macOS desktop runs.
 Larger fills still ear-clip into the existing triangle pipeline. The catalog
 exposes semantic metadata for toolbar, sidebar, action, file-type roles,
 outline/fill variants, preferred rendering mode, scale, and hierarchical
-opacity counts so verifier artifacts can prove which icon policy was used.
+opacity/reference counts so verifier artifacts can prove which icon policy was
+used.
 File explorer packages now declare `app.icon` as a package-owned SVG asset, so
 the same CLI bundle contract can later feed platform app-icon generation
 without embedding Apple artwork or depending on platform symbol fonts.
