@@ -787,6 +787,23 @@ namespace detail {
         return json::Value{std::move(out)};
     }
 
+    inline json::Value color_to_json(Color color) {
+        json::Object out;
+        out.emplace(
+            "r",
+            json::Value{static_cast<std::int64_t>(color.r)});
+        out.emplace(
+            "g",
+            json::Value{static_cast<std::int64_t>(color.g)});
+        out.emplace(
+            "b",
+            json::Value{static_cast<std::int64_t>(color.b)});
+        out.emplace(
+            "a",
+            json::Value{static_cast<std::int64_t>(color.a)});
+        return json::Value{std::move(out)};
+    }
+
     inline json::Value material_plan_runtime_json(
             MaterialRuntimeRecord const& record) {
         auto const& plan = record.plan;
@@ -1282,6 +1299,40 @@ namespace detail {
             "bounded",
             json::Value{plan.backdrop_access.bounded});
 
+        json::Object theme;
+        theme.emplace("source", json::Value{plan.theme.source});
+        theme.emplace("profile_name", json::Value{plan.theme.profile_name});
+        theme.emplace("token_policy", json::Value{plan.theme.token_policy});
+        theme.emplace(
+            "foreground",
+            color_to_json(plan.theme.foreground));
+        theme.emplace(
+            "secondary_foreground",
+            color_to_json(plan.theme.secondary_foreground));
+        theme.emplace(
+            "accent_foreground",
+            color_to_json(plan.theme.accent_foreground));
+        theme.emplace(
+            "strong_accent_foreground",
+            color_to_json(plan.theme.strong_accent_foreground));
+        theme.emplace("tint", color_to_json(plan.theme.tint));
+        theme.emplace("border", color_to_json(plan.theme.border));
+        theme.emplace(
+            "foreground_matches_theme",
+            json::Value{plan.theme.foreground_matches_theme});
+        theme.emplace(
+            "accent_matches_theme",
+            json::Value{plan.theme.accent_matches_theme});
+        theme.emplace(
+            "tint_matches_surface",
+            json::Value{plan.theme.tint_matches_surface});
+        theme.emplace(
+            "border_matches_theme",
+            json::Value{plan.theme.border_matches_theme});
+        theme.emplace(
+            "default_glass_tokens",
+            json::Value{plan.theme.default_glass_tokens});
+
         json::Object foreground_primary;
         foreground_primary.emplace(
             "r",
@@ -1534,6 +1585,7 @@ namespace detail {
         out.emplace(
             "backdrop_access",
             json::Value{std::move(backdrop_access)});
+        out.emplace("theme", json::Value{std::move(theme)});
         out.emplace("foreground", json::Value{std::move(foreground)});
         out.emplace("fallback", json::Value{plan.fallback()});
         out.emplace(
@@ -1736,6 +1788,16 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.foreground_vibrant_count)});
+        out.emplace(
+            "theme_default_glass_token_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.theme_default_glass_token_count)});
+        out.emplace(
+            "theme_custom_token_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.theme_custom_token_count)});
         out.emplace("max_surface_area",
                     json::Value{summary.max_surface_area});
         out.emplace("max_effective_radius",

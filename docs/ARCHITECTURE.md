@@ -332,9 +332,10 @@ analysis, pure shape analysis, backdrop sampling, backdrop analysis, backdrop
 access/capture bounds, foreground-excluded capture requirements, decision
 trace, fallback path, debug metadata, pass expectations, the resolved quality
 policy, foreground legibility/vibrancy recommendation, an Apple Liquid Glass
-`reference_model`, resource budgets, the resolved sampling kernel, bounded
-execution stages, verifier expectations, and an `observation_contract` that
-mirrors the pure facts the artifact verifier must observe at runtime.
+`reference_model`, the resolved theme token snapshot, resource budgets, the
+resolved sampling kernel, bounded execution stages, verifier expectations, and
+an `observation_contract` that mirrors the pure facts the artifact verifier
+must observe at runtime.
 `reference_model` is intentionally pure. It records that the surface follows the
 Liquid Glass-style model, the semantic thickness variant, view-bounds shape
 scope, resolved shape, tint participation, interactive/container/union/morph
@@ -395,6 +396,16 @@ surfaces. Native command decoders also use the same pure recommendation to
 remap default primary, secondary, and accent text tokens drawn inside a prior
 material surface. Custom text colors are left unchanged, and the original text
 alpha is preserved.
+`theme` is the pure snapshot of the explicit `MaterialStyle` tokens that fed
+the material surface. It records the token source, profile name, token policy,
+foreground, secondary foreground, accent, strong accent, tint, and border
+colors, plus booleans that show whether those values match the default
+Apple-like glass theme contract. A plan that still uses the default contract
+reports `profile_name: apple-glass-light` and `default_glass_tokens: true`;
+custom token mixes report `profile_name: custom`. Backends do not infer theme
+identity or substitute platform palettes at the edge; they execute or serialize
+this resolved pure snapshot so artifacts can explain why text, icons, tint,
+and fallback colors look the way they do.
 `quality_policy` records the pure planner's resolved
 sampling/noise/shadow switches and caller quality limits, including
 `max_backdrop_pixels`. `render_target` records sanitized target dimensions,

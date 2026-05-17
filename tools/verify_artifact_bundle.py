@@ -186,7 +186,7 @@ ALLOWED_MATERIAL_REFERENCE_PERFORMANCE_RESPONSES = {
     "warmup-capture",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 19
+MATERIAL_PLAN_CONTRACT_VERSION = 20
 
 
 def suggested_action_for_failure(
@@ -550,6 +550,7 @@ def material_failure_context(
             "pass_executors")
         material_contract["foreground"] = material_plan_summary.get(
             "foreground")
+        material_contract["theme"] = material_plan_summary.get("theme")
         material_contract["decision_first_blockers"] = decision_trace.get(
             "first_blockers")
         material_contract["decision_reduced_transparency"] = (
@@ -700,6 +701,7 @@ def check_number_field(
     path: str,
     *,
     min_value: float | None = None,
+    max_value: float | None = None,
     likely_layer: str,
     likely_pass: str = "",
     hint: str,
@@ -708,9 +710,15 @@ def check_number_field(
     ok = isinstance(item, (int, float)) and not isinstance(item, bool)
     if ok and min_value is not None:
         ok = float(item) >= min_value
+    if ok and max_value is not None:
+        ok = float(item) <= max_value
     expected: Any = "number"
-    if min_value is not None:
-        expected = {"type": "number", ">=": min_value}
+    if min_value is not None or max_value is not None:
+        expected = {"type": "number"}
+        if min_value is not None:
+            expected[">="] = min_value
+        if max_value is not None:
+            expected["<="] = max_value
     report.check(
         f"{path}.{key} is valid number",
         ok,
@@ -1106,6 +1114,14 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "foreground_deterministic",
         "foreground_min_primary_contrast_gte",
         "foreground_minimum_contrast_gte",
+        "theme_foreground_matches_theme",
+        "theme_accent_matches_theme",
+        "theme_tint_matches_surface",
+        "theme_border_matches_theme",
+        "theme_default_glass_tokens",
+        "theme_profile_names",
+        "theme_sources",
+        "theme_token_policies",
         "render_target_ready",
         "render_target_within_backdrop_budget",
         "render_target_pixel_formats",
@@ -1177,6 +1193,11 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "foreground_high_contrast",
             "foreground_vibrant",
             "foreground_deterministic",
+            "theme_foreground_matches_theme",
+            "theme_accent_matches_theme",
+            "theme_tint_matches_surface",
+            "theme_border_matches_theme",
+            "theme_default_glass_tokens",
             "verifier_require_backdrop_source",
             "verifier_require_container_identity",
             "verifier_require_container_morph_contract",
@@ -1241,6 +1262,14 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         spec["contract_versions"] = string_int_map(
             value["contract_versions"],
             "require_material_plan_summary.contract_versions")
+    for field in (
+            "theme_profile_names",
+            "theme_sources",
+            "theme_token_policies"):
+        if field in value:
+            spec[field] = string_int_map(
+                value[field],
+                f"require_material_plan_summary.{field}")
     if "container_ids" in value:
         spec["container_ids"] = string_int_map(
             value["container_ids"],
@@ -1849,6 +1878,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "backdrop_sampling",
     "backdrop",
     "backdrop_access",
+    "theme",
     "foreground",
     "fallback",
     "fallback_path",
@@ -1928,6 +1958,22 @@ MATERIAL_DECISION_TRACE_BOOL_FIELDS = (
 )
 MATERIAL_TINT_FIELDS = ("r", "g", "b", "a")
 MATERIAL_COLOR_FIELDS = ("r", "g", "b", "a")
+MATERIAL_THEME_COLOR_FIELDS = (
+    "foreground",
+    "secondary_foreground",
+    "accent_foreground",
+    "strong_accent_foreground",
+    "tint",
+    "border",
+)
+MATERIAL_THEME_STRING_FIELDS = ("source", "profile_name", "token_policy")
+MATERIAL_THEME_BOOL_FIELDS = (
+    "foreground_matches_theme",
+    "accent_matches_theme",
+    "tint_matches_surface",
+    "border_matches_theme",
+    "default_glass_tokens",
+)
 MATERIAL_BACKDROP_BOOL_FIELDS = (
     "available",
     "stable",
@@ -2575,6 +2621,16 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "max_frame_capture_pixels": 0,
             "total_surface_sample_pixels": 0,
             "max_surface_sample_pixels": 0,
+        },
+        "theme": {
+            "sources": {},
+            "profile_names": {},
+            "token_policies": {},
+            "foreground_matches_theme": 0,
+            "accent_matches_theme": 0,
+            "tint_matches_surface": 0,
+            "border_matches_theme": 0,
+            "default_glass_tokens": 0,
         },
         "foreground": {
             "schemes": {},
@@ -4515,6 +4571,79 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         "when they are warming a supported backend for the next frame."),
                     record_success=False)
 
+        theme = check_object_field(
+            report,
+            plan,
+            "theme",
+            plan_path,
+            likely_layer="theme",
+            hint=(
+                "MaterialPlan.theme should expose the resolved material style "
+                "tokens used by foreground, tint, and fallback decisions."))
+        if theme is not None:
+            theme_summary = summary["theme"]
+            for key in MATERIAL_THEME_STRING_FIELDS:
+                value = check_string_field(
+                    report,
+                    theme,
+                    key,
+                    f"{plan_path}.theme",
+                    likely_layer="theme",
+                    hint="Theme snapshot strings should be stable pure-plan metadata.")
+                if isinstance(value, str):
+                    bucket_name = {
+                        "source": "sources",
+                        "profile_name": "profile_names",
+                        "token_policy": "token_policies",
+                    }[key]
+                    bucket = theme_summary[bucket_name]
+                    bucket[value] = bucket.get(value, 0) + 1
+            for key in MATERIAL_THEME_BOOL_FIELDS:
+                value = check_bool_field(
+                    report,
+                    theme,
+                    key,
+                    f"{plan_path}.theme",
+                    likely_layer="theme",
+                    hint="Theme token booleans should be explicit for artifact debugging.")
+                if value is True:
+                    theme_summary[key] = int(theme_summary[key]) + 1
+            for key in MATERIAL_THEME_COLOR_FIELDS:
+                color = check_object_field(
+                    report,
+                    theme,
+                    key,
+                    f"{plan_path}.theme",
+                    likely_layer="theme",
+                    hint="Theme token colors should expose RGBA channels.")
+                if color is not None:
+                    for channel in MATERIAL_COLOR_FIELDS:
+                        check_number_field(
+                            report,
+                            color,
+                            channel,
+                            f"{plan_path}.theme.{key}",
+                            min_value=0.0,
+                            max_value=255.0,
+                            likely_layer="theme",
+                            hint="Theme token color channels must be byte values.")
+            profile_name = theme.get("profile_name")
+            default_tokens = theme.get("default_glass_tokens")
+            report.check(
+                "material theme profile follows token match",
+                (profile_name == "apple-glass-light") is (default_tokens is True),
+                path=f"{plan_path}.theme.profile_name",
+                expected="apple-glass-light when default_glass_tokens is true, custom otherwise",
+                actual={
+                    "profile_name": profile_name,
+                    "default_glass_tokens": default_tokens,
+                },
+                likely_layer="theme",
+                hint=(
+                    "MaterialPlan.theme.profile_name should be derived from "
+                    "the explicit MaterialStyle token snapshot."),
+                record_success=False)
+
         verifier = check_object_field(
             report,
             plan,
@@ -5800,6 +5929,13 @@ def check_material_plan_summary_requirements(
                     nested_field = "vibrant"
                 actual = foreground_summary.get(nested_field)
                 summary_path = f"{base_path}.foreground.{nested_field}"
+            elif field.startswith("theme_"):
+                theme_summary = summary.get("theme")
+                if not isinstance(theme_summary, dict):
+                    theme_summary = {}
+                nested_field = field.removeprefix("theme_")
+                actual = theme_summary.get(nested_field)
+                summary_path = f"{base_path}.theme.{nested_field}"
             report.check(
                 f"material plan summary {field} matches",
                 actual == spec[field],
@@ -5966,6 +6102,15 @@ def check_material_plan_summary_requirements(
         "foreground_sources": (
             "material-foreground",
             "Inspect MaterialPlan.foreground.source and planner inputs."),
+        "theme_profile_names": (
+            "theme",
+            "Inspect MaterialPlan.theme.profile_name and the explicit MaterialStyle token snapshot."),
+        "theme_sources": (
+            "theme",
+            "Inspect MaterialPlan.theme.source and the material request construction path."),
+        "theme_token_policies": (
+            "theme",
+            "Inspect MaterialPlan.theme.token_policy and material style token resolution."),
     }
     for field in (
             "fallback_paths",
@@ -6000,7 +6145,10 @@ def check_material_plan_summary_requirements(
             "verifier_region_layers",
             "verifier_region_passes",
             "foreground_schemes",
-            "foreground_sources"):
+            "foreground_sources",
+            "theme_profile_names",
+            "theme_sources",
+            "theme_token_policies"):
         if field in spec:
             actual = summary.get(field)
             summary_path = f"{base_path}.{field}"
@@ -6085,6 +6233,20 @@ def check_material_plan_summary_requirements(
                 }[field]
                 actual = foreground_summary.get(nested)
                 summary_path = f"{base_path}.foreground.{nested}"
+            elif field in (
+                    "theme_profile_names",
+                    "theme_sources",
+                    "theme_token_policies"):
+                theme_summary = summary.get("theme")
+                if not isinstance(theme_summary, dict):
+                    theme_summary = {}
+                nested = {
+                    "theme_profile_names": "profile_names",
+                    "theme_sources": "sources",
+                    "theme_token_policies": "token_policies",
+                }[field]
+                actual = theme_summary.get(nested)
+                summary_path = f"{base_path}.theme.{nested}"
             likely_layer, hint = summary_field_hints[field]
             report.check(
                 f"material plan summary {field} matches",

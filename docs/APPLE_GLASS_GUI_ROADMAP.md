@@ -1,7 +1,8 @@
 # Apple Glass GUI Roadmap
 
 Status: implementation baseline for `origin/main` after
-`feat(material): add material observation contracts`. This includes the pure
+`feat(theme): add pure glass theme contract`, with the in-progress material
+runtime branch adding the schema-20 theme snapshot to `MaterialPlan`. This includes the pure
 material-planning boundary, macOS sampled-backdrop execution, deterministic
 fallback contracts on non-macOS backends, edge executor telemetry, pure
 observation contracts, and the artifact verifier gates described below.
@@ -181,8 +182,8 @@ radius, tint, saturation, luminance curve, edge highlight, noise/dither,
 shadow, material container analysis, pure shape analysis, backdrop sampling,
 fallback path, debug metadata, resolved quality policy, pass expectations,
 sampling kernel, foreground legibility/vibrancy recommendation, resource
-budgets, a pure Apple reference alignment model, and verifier expectations. The
-plan also carries a
+budgets, a pure Apple reference alignment model, the resolved theme token
+snapshot, and verifier expectations. The plan also carries a
 `luminance_curve` contract: sampled glass uses the backdrop-driven
 `adaptive-backdrop-luma` curve, while deterministic fallback uses
 `fallback-flat`.
@@ -229,6 +230,14 @@ letting each backend invent foreground colors for glass surfaces. Native
 backends now execute that recommendation for default text tokens inside
 material surfaces and publish foreground candidate/remap counters in the
 artifact executor summary.
+`MaterialPlan.theme` records the explicit material-style token snapshot that
+drives that foreground recommendation and material tint. It names the token
+source, profile, token policy, foreground/secondary/accent/strong-accent/tint/
+border colors, and per-family booleans for whether the style still matches the
+default Apple-like glass theme. This keeps Finder-style icon and text color
+debugging in the pure plan: backends serialize the resolved token facts instead
+of guessing whether a platform palette, custom theme, or fallback path changed
+the visible surface.
 `MaterialPlan.shape` turns raw material geometry into the executable radius,
 area, radius limit, and clamp status consumed by native backends. This keeps
 Finder-style rounded chrome and mobile card surfaces debuggable from artifacts

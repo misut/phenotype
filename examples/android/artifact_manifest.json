@@ -32,7 +32,21 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "19": 1
+      "20": 1
+    },
+    "theme_foreground_matches_theme": 1,
+    "theme_accent_matches_theme": 1,
+    "theme_tint_matches_surface": 1,
+    "theme_border_matches_theme": 1,
+    "theme_default_glass_tokens": 1,
+    "theme_profile_names": {
+      "apple-glass-light": 1
+    },
+    "theme_sources": {
+      "material-style": 1
+    },
+    "theme_token_policies": {
+      "explicit-material-style-tokens": 1
     },
     "roles": {
       "surface": 1

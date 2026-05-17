@@ -182,6 +182,22 @@ def material_plan(
             "max_surface_sample_pixels": 0,
             "bounded": True,
         },
+        "theme": {
+            "source": "material-style",
+            "profile_name": "apple-glass-light",
+            "token_policy": "explicit-material-style-tokens",
+            "foreground": {"r": 28, "g": 28, "b": 30, "a": 255},
+            "secondary_foreground": {"r": 99, "g": 99, "b": 102, "a": 255},
+            "accent_foreground": {"r": 0, "g": 122, "b": 255, "a": 255},
+            "strong_accent_foreground": {"r": 0, "g": 90, "b": 190, "a": 255},
+            "tint": {"r": 255, "g": 255, "b": 255, "a": 148},
+            "border": {"r": 209, "g": 209, "b": 214, "a": 190},
+            "foreground_matches_theme": True,
+            "accent_matches_theme": True,
+            "tint_matches_surface": True,
+            "border_matches_theme": True,
+            "default_glass_tokens": True,
+        },
         "foreground": {
             "primary": {"r": 17, "g": 24, "b": 39, "a": 255},
             "secondary": {"r": 71, "g": 85, "b": 105, "a": 255},
@@ -952,6 +968,15 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "deterministic_degradation"],
             1)
         self.assertEqual(
+            report["material_plans"]["theme"]["profile_names"],
+            {"apple-glass-light": 1})
+        self.assertEqual(
+            report["material_plans"]["theme"]["sources"],
+            {"material-style": 1})
+        self.assertEqual(
+            report["material_plans"]["theme"]["default_glass_tokens"],
+            1)
+        self.assertEqual(
             report["semantic_tree"]["material_descriptor_missing"],
             0)
 
@@ -1563,6 +1588,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "render_target_ready": 1,
                 "render_target_within_backdrop_budget": 1,
                 "render_target_pixel_formats": {"rgba8unorm": 1},
+                "theme_default_glass_tokens": 1,
+                "theme_profile_names": {"apple-glass-light": 1},
+                "theme_sources": {"material-style": 1},
+                "theme_token_policies": {
+                    "explicit-material-style-tokens": 1,
+                },
                 "pass_executors": {"fallback-fill": 1},
                 "decision_can_sample_backdrop": 0,
                 "decision_backend_supports_backdrop": 0,
