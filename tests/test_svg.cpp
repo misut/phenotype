@@ -109,7 +109,8 @@ unsigned int count_path_verb(PathBuilder const& path, PathVerb needle) {
 void test_svg_path_subset() {
     auto doc = svg::parse(R"SVG(
         <svg viewBox="0 0 24 24">
-          <g fill="none" stroke="currentColor" stroke-width="2">
+          <g fill="none" stroke="currentColor" stroke-width="2"
+             stroke-linecap="round" stroke-linejoin="round">
             <path d="M4 4 L20 4 H21 V8 Q18 12 21 16 C18 20 8 20 4 16 Z"/>
           </g>
         </svg>
@@ -118,6 +119,12 @@ void test_svg_path_subset() {
     assert(doc.view_height == 24.0f);
     assert(doc.shapes.size() == 1);
     assert(!doc.has_diagnostics());
+    assert(doc.shapes[0].style.stroke_line_cap == svg::StrokeLineCap::Round);
+    assert(doc.shapes[0].style.stroke_line_join == svg::StrokeLineJoin::Round);
+    assert(svg::stroke_line_cap_name(doc.shapes[0].style.stroke_line_cap)
+           == std::string_view{"round"});
+    assert(svg::stroke_line_join_name(doc.shapes[0].style.stroke_line_join)
+           == std::string_view{"round"});
 
     CapturePainter painter;
     svg::paint(painter, doc, 0.0f, 0.0f, 24.0f, 24.0f,
@@ -276,12 +283,19 @@ void test_builtin_icons_parse() {
            != std::string_view::npos);
     assert(icons::svg_supported_path_commands().find("A Z")
            != std::string_view::npos);
+    assert(icons::svg_supported_style_attributes().find("stroke-linecap")
+           != std::string_view::npos);
+    assert(icons::svg_supported_style_attributes().find("stroke-linejoin")
+           != std::string_view::npos);
     assert(icons::svg_arc_policy().find("circle elements")
            != std::string_view::npos);
     assert(icons::svg_arc_policy().find("native ArcTo")
            != std::string_view::npos);
     assert(icons::svg_arc_policy().find("isolated circular path A/a")
            != std::string_view::npos);
+    assert(icons::stroke_geometry_policy() == "round_cap_round_join_svg_strokes");
+    assert(icons::stroke_cap_policy() == "round");
+    assert(icons::stroke_join_policy() == "round");
     assert(icons::alignment_policy() == "24x24 text-aligned symbol grid");
     assert(icons::variant_policy() == "outline primary with filled action variants");
     assert(icons::tone_policy()
@@ -298,6 +312,7 @@ void test_builtin_icons_parse() {
     assert(icons::hierarchical_symbol_count == 20);
     assert(icons::reference_symbol_count == icons::all_symbol_count);
     assert(icons::svg_path_arc_symbol_count == 1);
+    assert(icons::round_stroke_symbol_count == icons::outline_symbol_count);
     assert(icons::reference_family() == "SF Symbols semantic reference");
     assert(icons::reference_policy().find("phenotype-owned")
            != std::string_view::npos);
@@ -320,6 +335,7 @@ void test_builtin_icons_parse() {
     unsigned int hierarchical_count = 0;
     unsigned int reference_count = 0;
     unsigned int arc_path_count = 0;
+    unsigned int round_stroke_count = 0;
     for (unsigned int i = 0; i < icons::all_symbol_count; ++i) {
         auto symbol = icons::symbol_at(i);
         auto src = icons::source(symbol);
@@ -345,6 +361,8 @@ void test_builtin_icons_parse() {
             ++reference_count;
         if (icons::uses_svg_path_arcs(symbol))
             ++arc_path_count;
+        if (descriptor.round_stroke)
+            ++round_stroke_count;
         assert(descriptor.grid_size == 24.0f);
         assert(descriptor.layer_count == doc.shapes.size());
         assert(descriptor.text_weight_aligned);
@@ -360,6 +378,12 @@ void test_builtin_icons_parse() {
             assert(src.find(R"(stroke-linecap="round")") != std::string_view::npos);
             assert(src.find(R"(stroke-linejoin="round")") != std::string_view::npos);
             assert(descriptor.round_stroke);
+            assert(descriptor.stroke_cap == icons::SymbolStrokeCap::Round);
+            assert(descriptor.stroke_join == icons::SymbolStrokeJoin::Round);
+            assert(icons::symbol_stroke_cap_name(descriptor.stroke_cap)
+                   == std::string_view{"round"});
+            assert(icons::symbol_stroke_join_name(descriptor.stroke_join)
+                   == std::string_view{"round"});
             assert(!descriptor.filled);
         } else {
             ++filled_count;
@@ -401,6 +425,7 @@ void test_builtin_icons_parse() {
     assert(hierarchical_count == icons::hierarchical_symbol_count);
     assert(reference_count == icons::reference_symbol_count);
     assert(arc_path_count == icons::svg_path_arc_symbol_count);
+    assert(round_stroke_count == icons::round_stroke_symbol_count);
 
     auto shared = icons::descriptor(icons::Symbol::Shared);
     assert(shared.role == icons::SymbolRole::Sidebar);

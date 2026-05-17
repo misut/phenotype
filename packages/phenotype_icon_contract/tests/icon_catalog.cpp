@@ -15,10 +15,17 @@ int main() {
     assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");
     assert(icons::svg_supported_path_commands().find("A Z")
            != std::string_view::npos);
+    assert(icons::svg_supported_style_attributes().find("stroke-linecap")
+           != std::string_view::npos);
+    assert(icons::svg_supported_style_attributes().find("stroke-linejoin")
+           != std::string_view::npos);
     assert(icons::svg_arc_policy().find("isolated circular path A/a")
            != std::string_view::npos);
     assert(icons::svg_arc_policy().find("bounded cubic Bezier")
            != std::string_view::npos);
+    assert(icons::stroke_geometry_policy() == "round_cap_round_join_svg_strokes");
+    assert(icons::stroke_cap_policy() == "round");
+    assert(icons::stroke_join_policy() == "round");
     assert(icons::all_symbol_count == 31);
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);
@@ -27,11 +34,13 @@ int main() {
     assert(icons::hierarchical_symbol_count == 20);
     assert(icons::reference_symbol_count == icons::all_symbol_count);
     assert(icons::svg_path_arc_symbol_count == 1);
+    assert(icons::round_stroke_symbol_count == icons::outline_symbol_count);
 
     unsigned int outline_count = 0;
     unsigned int filled_count = 0;
     unsigned int hierarchical_count = 0;
     unsigned int arc_path_count = 0;
+    unsigned int round_stroke_count = 0;
     for (unsigned int i = 0; i < icons::all_symbol_count; ++i) {
         auto const symbol = icons::symbol_at(i);
         auto const desc = icons::descriptor(symbol);
@@ -46,17 +55,26 @@ int main() {
         assert(!desc.uses_sf_symbols_asset);
         if (desc.filled)
             ++filled_count;
-        else
+        else {
             ++outline_count;
+            assert(desc.round_stroke);
+            assert(desc.stroke_cap == icons::SymbolStrokeCap::Round);
+            assert(desc.stroke_join == icons::SymbolStrokeJoin::Round);
+            assert(icons::symbol_stroke_cap_name(desc.stroke_cap) == "round");
+            assert(icons::symbol_stroke_join_name(desc.stroke_join) == "round");
+        }
         if (desc.supports_hierarchical_opacity)
             ++hierarchical_count;
         if (icons::uses_svg_path_arcs(symbol))
             ++arc_path_count;
+        if (desc.round_stroke)
+            ++round_stroke_count;
     }
     assert(outline_count == icons::outline_symbol_count);
     assert(filled_count == icons::filled_symbol_count);
     assert(hierarchical_count == icons::hierarchical_symbol_count);
     assert(arc_path_count == icons::svg_path_arc_symbol_count);
+    assert(round_stroke_count == icons::round_stroke_symbol_count);
 
     assert(icons::semantic_reference_name(icons::Symbol::AirDrop) == "airdrop");
     assert(icons::uses_svg_path_arcs(icons::Symbol::AirDrop));

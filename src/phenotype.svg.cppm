@@ -21,6 +21,38 @@ enum class PaintKind {
     CurrentColor,
 };
 
+enum class StrokeLineCap {
+    Butt,
+    Round,
+    Square,
+};
+
+enum class StrokeLineJoin {
+    Miter,
+    Round,
+    Bevel,
+};
+
+inline auto stroke_line_cap_name(StrokeLineCap cap) noexcept
+        -> std::string_view {
+    switch (cap) {
+    case StrokeLineCap::Butt:   return "butt";
+    case StrokeLineCap::Round:  return "round";
+    case StrokeLineCap::Square: return "square";
+    }
+    return "butt";
+}
+
+inline auto stroke_line_join_name(StrokeLineJoin join) noexcept
+        -> std::string_view {
+    switch (join) {
+    case StrokeLineJoin::Miter: return "miter";
+    case StrokeLineJoin::Round: return "round";
+    case StrokeLineJoin::Bevel: return "bevel";
+    }
+    return "miter";
+}
+
 struct Paint {
     PaintKind kind = PaintKind::None;
     Color color = {0, 0, 0, 255};
@@ -32,6 +64,8 @@ struct Style {
     Paint stroke = {PaintKind::None, {0, 0, 0, 255}, 1.0f};
     Paint current_color = {PaintKind::CurrentColor, {0, 0, 0, 255}, 1.0f};
     float stroke_width = 1.0f;
+    StrokeLineCap stroke_line_cap = StrokeLineCap::Butt;
+    StrokeLineJoin stroke_line_join = StrokeLineJoin::Miter;
     float opacity = 1.0f;
 };
 
@@ -100,6 +134,30 @@ inline auto trim(std::string_view in) noexcept -> std::string_view {
     while (!in.empty() && is_space(in.back()))
         in.remove_suffix(1);
     return in;
+}
+
+inline auto parse_stroke_line_cap(std::string_view raw)
+        -> std::optional<StrokeLineCap> {
+    auto const value = lower_ascii(trim(raw));
+    if (value == "butt")
+        return StrokeLineCap::Butt;
+    if (value == "round")
+        return StrokeLineCap::Round;
+    if (value == "square")
+        return StrokeLineCap::Square;
+    return std::nullopt;
+}
+
+inline auto parse_stroke_line_join(std::string_view raw)
+        -> std::optional<StrokeLineJoin> {
+    auto const value = lower_ascii(trim(raw));
+    if (value == "miter")
+        return StrokeLineJoin::Miter;
+    if (value == "round")
+        return StrokeLineJoin::Round;
+    if (value == "bevel")
+        return StrokeLineJoin::Bevel;
+    return std::nullopt;
 }
 
 inline auto parse_float_prefix(std::string_view in)
@@ -465,6 +523,12 @@ inline void apply_property(Style& style,
     } else if (name == "stroke-width") {
         if (auto width = parse_float(value))
             style.stroke_width = std::max(0.0f, *width);
+    } else if (name == "stroke-linecap") {
+        if (auto cap = parse_stroke_line_cap(value))
+            style.stroke_line_cap = *cap;
+    } else if (name == "stroke-linejoin") {
+        if (auto join = parse_stroke_line_join(value))
+            style.stroke_line_join = *join;
     } else if (name == "opacity") {
         if (auto opacity = parse_float(value))
             style.opacity *= std::clamp(*opacity, 0.0f, 1.0f);
