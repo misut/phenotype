@@ -10,6 +10,7 @@
 #include <variant>
 #include <vector>
 import phenotype;
+import phenotype.svg;
 
 using namespace phenotype;
 
@@ -417,6 +418,44 @@ void test_image_widget_layout_and_emit() {
     assert(found_url);
 
     std::puts("PASS: widget::image lays out and emits DrawImage");
+}
+
+void test_svg_image_widget_uses_stable_paint_token() {
+    detail::g_app.arena.reset();
+
+    auto root_h = detail::alloc_node();
+    auto& root = detail::node_at(root_h);
+    root.style.flex_direction = FlexDirection::Row;
+
+    constexpr std::string_view source =
+        R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M4 12 L20 12"/></svg>)SVG";
+    auto const color = Color{0, 122, 255, 255};
+    auto expected = svg::paint_token(
+        svg::parse(source),
+        32.0f,
+        32.0f,
+        color);
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::svg_image(
+        {source.data(), static_cast<unsigned int>(source.size())},
+        32.0f,
+        32.0f,
+        color);
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 200.0f);
+
+    assert(root.children.size() == 1);
+    auto& svg_node = detail::node_at(root.children[0]);
+    assert(svg_node.width == 32.0f);
+    assert(svg_node.height == 32.0f);
+    assert(static_cast<bool>(svg_node.paint_fn));
+    assert(svg_node.paint_token == expected);
+    assert(svg_node.paint_token != 0);
+
+    std::puts("PASS: widget::svg_image uses a stable paint token");
 }
 
 void test_grid_cell_text_is_vertically_centered() {
@@ -3736,6 +3775,7 @@ int main() {
     test_default_theme_glass_contract();
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();
+    test_svg_image_widget_uses_stable_paint_token();
     test_grid_cell_text_is_vertically_centered();
     test_canvas_widget_invokes_painter();
     test_canvas_linear_gradient_rect_emits_command();
