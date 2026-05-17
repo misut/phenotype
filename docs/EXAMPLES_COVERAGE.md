@@ -215,8 +215,9 @@ example edge. The shared model operates only under a deterministic temp
 directory (`phenotype-file-explorer-desktop` or
 `phenotype-file-explorer-mobile`) and never points at the user's real home
 folder. File create, folder create, folder select/open, read, duplicate, Trash
-movement, and permanent delete-from-Trash actions produce operation receipts,
-and sort mode changes produce a shared `Sort: ...` status contract, that the
+movement, and permanent delete-from-Trash actions produce operation receipts
+backed by resolved operation plans, and sort mode changes produce a shared
+`Sort: ...` status contract, that the
 desktop and mobile status surfaces expose to artifact verification. This keeps
 the examples useful for interactive product checks while preserving a stable
 startup artifact contract.
@@ -225,12 +226,15 @@ The same shared model is available without a native window through
 `phenotype drive file-explorer`. That command applies typed inputs to the
 sandboxed model and emits JSON containing the input trace, visible entries,
 viewport, view mode, pure Finder chrome/grid metrics, capabilities, operation
-receipt, selected preview excerpt, desktop keyboard command descriptors, and
-final snapshot. It is the lightweight CI-friendly counterpart to the local
-desktop/mobile artifact capture gate.
+receipt and plan, selected preview excerpt, desktop keyboard command
+descriptors, and final snapshot. It is the lightweight CI-friendly counterpart
+to the local desktop/mobile artifact capture gate.
 File-operation inputs are resolved as direct child entry names in the current
 sandbox folder; path traversal or hidden-entry names produce failed operation
 receipts that can be asserted with `--expect operation:...:fail`.
+Successful plans name sandbox-relative sources/destinations and whether the
+operation reads, writes, creates a directory, moves to Trash, permanently
+deletes from Trash, or degrades with a fallback reason.
 Key and shortcut aliases such as `key:enter`, `key:delete`,
 `shortcut:duplicate`, `shortcut:find`, and `shortcut:new-folder` resolve to the
 same shared actions that the desktop native key-command registry dispatches.

@@ -36,11 +36,31 @@ struct Entry {
     std::uintmax_t size = 0;
 };
 
+struct OperationPlan {
+    std::string kind;
+    std::string display_name;
+    std::string source;
+    std::string destination;
+    bool executable = false;
+    bool sandboxed = true;
+    bool mutates_filesystem = false;
+    bool reads_file = false;
+    bool reads_directory = false;
+    bool writes_file = false;
+    bool creates_directory = false;
+    bool deletes_file = false;
+    bool deletes_directory = false;
+    bool moves_to_trash = false;
+    bool permanent_delete = false;
+    std::string fallback_reason;
+};
+
 struct OperationReceipt {
     std::string kind;
     std::string target;
     bool ok = false;
     std::string detail;
+    OperationPlan plan{};
 };
 
 enum class SortMode {
@@ -1648,6 +1668,27 @@ inline json::Value entry_debug_json(Entry const& entry) {
     return json::Value{std::move(out)};
 }
 
+inline json::Value operation_plan_debug_json(OperationPlan const& plan) {
+    json::Object out;
+    out.emplace("kind", json::Value{plan.kind});
+    out.emplace("display_name", json::Value{plan.display_name});
+    out.emplace("source", json::Value{plan.source});
+    out.emplace("destination", json::Value{plan.destination});
+    out.emplace("executable", json::Value{plan.executable});
+    out.emplace("sandboxed", json::Value{plan.sandboxed});
+    out.emplace("mutates_filesystem", json::Value{plan.mutates_filesystem});
+    out.emplace("reads_file", json::Value{plan.reads_file});
+    out.emplace("reads_directory", json::Value{plan.reads_directory});
+    out.emplace("writes_file", json::Value{plan.writes_file});
+    out.emplace("creates_directory", json::Value{plan.creates_directory});
+    out.emplace("deletes_file", json::Value{plan.deletes_file});
+    out.emplace("deletes_directory", json::Value{plan.deletes_directory});
+    out.emplace("moves_to_trash", json::Value{plan.moves_to_trash});
+    out.emplace("permanent_delete", json::Value{plan.permanent_delete});
+    out.emplace("fallback_reason", json::Value{plan.fallback_reason});
+    return json::Value{std::move(out)};
+}
+
 inline json::Value operation_receipt_debug_json(
         OperationReceipt const& receipt,
         std::string const& label) {
@@ -1657,6 +1698,7 @@ inline json::Value operation_receipt_debug_json(
     out.emplace("ok", json::Value{receipt.ok});
     out.emplace("detail", json::Value{receipt.detail});
     out.emplace("label", json::Value{label});
+    out.emplace("plan", operation_plan_debug_json(receipt.plan));
     return json::Value{std::move(out)};
 }
 
@@ -2948,11 +2990,37 @@ inline void record_operation(
         std::string target,
         bool ok,
         std::string detail) {
+    OperationPlan plan{
+        .kind = kind,
+        .display_name = target,
+        .executable = ok,
+        .sandboxed = ok,
+        .fallback_reason = ok ? std::string{} : detail,
+    };
     state.last_operation = OperationReceipt{
         .kind = std::move(kind),
         .target = std::move(target),
         .ok = ok,
         .detail = std::move(detail),
+        .plan = std::move(plan),
+    };
+}
+
+inline void record_operation(
+        ExplorerState& state,
+        OperationPlan plan,
+        bool ok,
+        std::string detail) {
+    plan.executable = ok;
+    if (!ok && plan.fallback_reason.empty())
+        plan.fallback_reason = detail;
+    auto target = plan.display_name;
+    state.last_operation = OperationReceipt{
+        .kind = plan.kind,
+        .target = std::move(target),
+        .ok = ok,
+        .detail = std::move(detail),
+        .plan = std::move(plan),
     };
 }
 
@@ -3180,6 +3248,127 @@ inline bool deletable_directory(
         return false;
     }
     return true;
+}
+
+inline std::string operation_path_label(
+        fs::path const& root,
+        fs::path const& path) {
+    if (path.empty())
+        return {};
+    auto const normalized = path.lexically_normal();
+    auto const rel = normalized.lexically_relative(root).generic_string();
+    if (rel.empty() || rel == ".")
+        return "Demo Root";
+    if (rel == ".." || rel.starts_with("../"))
+        return "[outside-demo-root]";
+    if (rel == ".Trash")
+        return "Trash";
+    if (rel.starts_with(".Trash/"))
+        return std::string{"Trash/"} + rel.substr(7);
+    return std::string{"Demo Root/"} + rel;
+}
+
+inline OperationPlan planned_file_create(
+        ExplorerState const& state,
+        std::string const& display_name,
+        fs::path const& target) {
+    return OperationPlan{
+        .kind = "file_create",
+        .display_name = display_name,
+        .destination = operation_path_label(state.root, target),
+        .executable = true,
+        .sandboxed = path_inside_root(state.root, target),
+        .mutates_filesystem = true,
+        .writes_file = true,
+    };
+}
+
+inline OperationPlan planned_folder_create(
+        ExplorerState const& state,
+        std::string const& display_name,
+        fs::path const& target) {
+    return OperationPlan{
+        .kind = "folder_create",
+        .display_name = display_name,
+        .destination = operation_path_label(state.root, target),
+        .executable = true,
+        .sandboxed = path_inside_root(state.root, target),
+        .mutates_filesystem = true,
+        .creates_directory = true,
+    };
+}
+
+inline OperationPlan planned_entry_read(
+        ExplorerState const& state,
+        std::string const& display_name,
+        fs::path const& source,
+        bool folder) {
+    return OperationPlan{
+        .kind = folder ? "folder_select" : "file_read",
+        .display_name = display_name,
+        .source = operation_path_label(state.root, source),
+        .executable = true,
+        .sandboxed = path_inside_root(state.root, source),
+        .reads_file = !folder,
+        .reads_directory = folder,
+    };
+}
+
+inline OperationPlan planned_folder_open(
+        ExplorerState const& state,
+        std::string const& display_name,
+        fs::path const& source) {
+    return OperationPlan{
+        .kind = "folder_open",
+        .display_name = display_name,
+        .source = operation_path_label(state.root, source),
+        .destination = operation_path_label(state.root, source),
+        .executable = true,
+        .sandboxed = path_inside_root(state.root, source),
+        .reads_directory = true,
+    };
+}
+
+inline OperationPlan planned_delete(
+        ExplorerState const& state,
+        std::string const& display_name,
+        fs::path const& source,
+        bool folder,
+        bool deleting_from_trash,
+        fs::path const& destination = {}) {
+    return OperationPlan{
+        .kind = folder ? "folder_delete" : "file_delete",
+        .display_name = display_name,
+        .source = operation_path_label(state.root, source),
+        .destination = operation_path_label(state.root, destination),
+        .executable = true,
+        .sandboxed = path_inside_root(state.root, source)
+            && (destination.empty() || path_inside_root(state.root, destination)),
+        .mutates_filesystem = true,
+        .deletes_file = !folder,
+        .deletes_directory = folder,
+        .moves_to_trash = !deleting_from_trash,
+        .permanent_delete = deleting_from_trash,
+    };
+}
+
+inline OperationPlan planned_duplicate(
+        ExplorerState const& state,
+        std::string const& display_name,
+        fs::path const& source,
+        fs::path const& destination) {
+    return OperationPlan{
+        .kind = "file_duplicate",
+        .display_name = display_name,
+        .source = operation_path_label(state.root, source),
+        .destination = operation_path_label(state.root, destination),
+        .executable = true,
+        .sandboxed = path_inside_root(state.root, source)
+            && path_inside_root(state.root, destination),
+        .mutates_filesystem = true,
+        .reads_file = true,
+        .writes_file = true,
+    };
 }
 
 inline std::vector<Entry> list_entries(
@@ -3419,24 +3608,24 @@ inline void select_entry(ExplorerState& state, std::string const& name) {
     }
     std::error_code ec;
     if (fs::is_directory(*resolved, ec)) {
+        auto plan = planned_entry_read(state, name, *resolved, true);
         state.selected_name = name;
         state.status = "Selected folder " + name;
         record_operation(
             state,
-            "folder_select",
-            name,
+            std::move(plan),
             true,
             "Selected " + name + " for folder actions");
         return;
     }
     ec.clear();
     if (fs::is_regular_file(*resolved, ec)) {
+        auto plan = planned_entry_read(state, name, *resolved, false);
         state.selected_name = name;
         state.status = "Selected " + name;
         record_operation(
             state,
-            "file_read",
-            name,
+            std::move(plan),
             true,
             "Selected " + name + " for preview");
         return;
@@ -3529,11 +3718,11 @@ inline void open_entry(ExplorerState& state, std::string const& name) {
     }
     std::error_code ec;
     if (fs::is_directory(*resolved, ec)) {
+        auto plan = planned_folder_open(state, name, *resolved);
         open_directory(state, *resolved, "Opened " + name);
         record_operation(
             state,
-            "folder_open",
-            name,
+            std::move(plan),
             true,
             state.status);
         return;
@@ -3550,11 +3739,11 @@ inline void activate_entry(ExplorerState& state, std::string const& name) {
     std::error_code ec;
     bool const selected = state.selected_name == name;
     if (selected && fs::is_directory(*resolved, ec)) {
+        auto plan = planned_folder_open(state, name, *resolved);
         open_directory(state, *resolved, "Opened " + name);
         record_operation(
             state,
-            "folder_open",
-            name,
+            std::move(plan),
             true,
             state.status);
         return;
@@ -3594,24 +3783,24 @@ inline fs::path unique_child_path(fs::path const& parent, std::string name) {
 inline void create_file(ExplorerState& state) {
     auto name = sanitize_file_name(state.draft_name);
     auto path = unique_child_path(state.current, name);
+    auto plan = planned_file_create(state, path.filename().string(), path);
     std::ofstream out(path, std::ios::binary);
     if (!out) {
         state.status = "Could not create " + name;
-        record_operation(state, "file_create", name, false, state.status);
+        record_operation(state, std::move(plan), false, state.status);
         return;
     }
     out << state.draft_body << "\n";
     if (!out) {
         state.status = "Could not write " + name;
-        record_operation(state, "file_create", name, false, state.status);
+        record_operation(state, std::move(plan), false, state.status);
         return;
     }
     state.selected_name = path.filename().string();
     state.status = "Created " + state.selected_name;
     record_operation(
         state,
-        "file_create",
-        state.selected_name,
+        std::move(plan),
         true,
         state.status);
 }
@@ -3619,18 +3808,18 @@ inline void create_file(ExplorerState& state) {
 inline void create_folder(ExplorerState& state) {
     auto name = sanitize_folder_name(state.draft_folder_name);
     auto path = unique_child_path(state.current, name);
+    auto plan = planned_folder_create(state, path.filename().string(), path);
     std::error_code ec;
     if (!fs::create_directory(path, ec) || ec) {
         state.status = "Could not create folder " + name;
-        record_operation(state, "folder_create", name, false, state.status);
+        record_operation(state, std::move(plan), false, state.status);
         return;
     }
     state.selected_name = path.filename().string();
     state.status = "Created folder " + state.selected_name;
     record_operation(
         state,
-        "folder_create",
-        state.selected_name,
+        std::move(plan),
         true,
         state.status);
 }
@@ -3660,35 +3849,45 @@ inline void delete_selected(ExplorerState& state) {
     std::error_code ec;
     if (fs::is_directory(path, ec)) {
         if (!deletable_directory(state.root, path)) {
+            auto plan = planned_delete(
+                state,
+                state.selected_name,
+                path,
+                true,
+                deleting_from_trash);
+            plan.executable = false;
+            plan.fallback_reason = "Only sandbox folders can be deleted.";
             state.status = "Only sandbox folders can be deleted.";
             record_operation(
                 state,
-                "folder_delete",
-                state.selected_name,
+                std::move(plan),
                 false,
                 state.status);
             return;
         }
         ec.clear();
         if (deleting_from_trash) {
+            auto plan = planned_delete(
+                state,
+                state.selected_name,
+                path,
+                true,
+                true);
             auto const removed = fs::remove_all(path, ec);
             if (ec || removed == 0) {
                 state.status = "Could not delete folder " + state.selected_name;
                 record_operation(
                     state,
-                    "folder_delete",
-                    state.selected_name,
+                    std::move(plan),
                     false,
                     state.status);
                 return;
             }
-            auto deleted = state.selected_name;
             state.status = "Deleted folder " + state.selected_name + " from Trash";
             state.selected_name.clear();
             record_operation(
                 state,
-                "folder_delete",
-                deleted,
+                std::move(plan),
                 true,
                 state.status);
             return;
@@ -3696,24 +3895,28 @@ inline void delete_selected(ExplorerState& state) {
         fs::create_directories(trash, ec);
         ec.clear();
         auto target = unique_child_path(trash, state.selected_name);
+        auto plan = planned_delete(
+            state,
+            state.selected_name,
+            path,
+            true,
+            false,
+            target);
         fs::rename(path, target, ec);
         if (ec) {
             state.status = "Could not move folder " + state.selected_name + " to Trash";
             record_operation(
                 state,
-                "folder_delete",
-                state.selected_name,
+                std::move(plan),
                 false,
                 state.status);
             return;
         }
-        auto moved = state.selected_name;
         state.status = "Moved folder " + state.selected_name + " to Trash";
         state.selected_name.clear();
         record_operation(
             state,
-            "folder_delete",
-            moved,
+            std::move(plan),
             true,
             state.status);
         return;
@@ -3730,23 +3933,26 @@ inline void delete_selected(ExplorerState& state) {
         return;
     }
     if (deleting_from_trash) {
+        auto plan = planned_delete(
+            state,
+            state.selected_name,
+            path,
+            false,
+            true);
         if (!fs::remove(path, ec) || ec) {
             state.status = "Could not delete " + state.selected_name;
             record_operation(
                 state,
-                "file_delete",
-                state.selected_name,
+                std::move(plan),
                 false,
                 state.status);
             return;
         }
-        auto deleted = state.selected_name;
         state.status = "Deleted " + state.selected_name + " from Trash";
         state.selected_name.clear();
         record_operation(
             state,
-            "file_delete",
-            deleted,
+            std::move(plan),
             true,
             state.status);
         return;
@@ -3754,24 +3960,28 @@ inline void delete_selected(ExplorerState& state) {
     fs::create_directories(trash, ec);
     ec.clear();
     auto target = unique_child_path(trash, state.selected_name);
+    auto plan = planned_delete(
+        state,
+        state.selected_name,
+        path,
+        false,
+        false,
+        target);
     fs::rename(path, target, ec);
     if (ec) {
         state.status = "Could not delete " + state.selected_name;
         record_operation(
             state,
-            "file_delete",
-            state.selected_name,
+            std::move(plan),
             false,
             state.status);
         return;
     }
-    auto deleted = state.selected_name;
     state.status = "Moved " + state.selected_name + " to Trash";
     state.selected_name.clear();
     record_operation(
         state,
-        "file_delete",
-        deleted,
+        std::move(plan),
         true,
         state.status);
 }
@@ -3810,13 +4020,17 @@ inline void duplicate_selected(ExplorerState& state) {
     auto candidate_name =
         source.stem().string() + " copy" + source.extension().string();
     auto target = unique_child_path(state.current, candidate_name);
+    auto plan = planned_duplicate(
+        state,
+        target.filename().string(),
+        source,
+        target);
     ec.clear();
     if (!fs::copy_file(source, target, fs::copy_options::none, ec) || ec) {
         state.status = "Could not duplicate " + state.selected_name;
         record_operation(
             state,
-            "file_duplicate",
-            state.selected_name,
+            std::move(plan),
             false,
             state.status);
         return;
@@ -3826,8 +4040,7 @@ inline void duplicate_selected(ExplorerState& state) {
     state.status = "Duplicated " + previous + " to " + state.selected_name;
     record_operation(
         state,
-        "file_duplicate",
-        state.selected_name,
+        std::move(plan),
         true,
         state.status);
 }

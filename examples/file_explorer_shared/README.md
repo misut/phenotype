@@ -6,7 +6,7 @@ desktop and mobile file explorer examples.
 The module owns the sandboxed file model, deterministic demo tree,
 file/folder create and delete behavior, sandboxed Trash navigation,
 duplicate/read/navigation behavior, filename search, sort mode state,
-selection action metadata, operation receipts, and artifact startup scenarios.
+selection action metadata, operation plans/receipts, and artifact startup scenarios.
 Keeping it as a separate exon library makes the example UI packages depend on
 a normal module contract instead of a relative header include.
 
@@ -19,7 +19,11 @@ delete, sort, reset, and startup scenarios.
 `ExplorerInputTrace` records plus a final `Snapshot` and pure
 `ExplorerChromeMetrics`, so the CLI can observe the same workflow and
 viewport-derived Finder chrome/grid contract without opening a native AppKit or
-Win32 window. The desktop chrome metrics include the integrated titlebar,
+Win32 window. Operation receipts embed a resolved plan that names the
+sandbox-relative source/destination plus read, write, directory creation, Trash
+movement, permanent delete, and fallback flags, so a headless trace can explain
+the file effect before anyone opens a native window. The desktop chrome metrics
+include the integrated titlebar,
 native-control ownership, titlebar drag/control reserve widths, icon-grid
 capacity, and Finder-style segmented toolbar group/separator/button counts plus
 the sidebar row, toolbar group, toolbar icon button, and top-level chrome
