@@ -450,6 +450,14 @@
       "equals": "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded"
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.interface_metaphor_policy",
+      "equals": "familiar_simplified_macos_symbol_metaphors"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.visual_consistency_policy",
+      "equals": "consistent_size_stroke_detail_and_perspective"
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.alignment",
       "equals": "24x24 text-aligned symbol grid"
     },
@@ -472,6 +480,14 @@
     {
       "path": "application.file_explorer.chrome.icon_system.interaction_tone_policy",
       "equals": "macos_finder_interaction_tones"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.toolbar_symbol_chrome_policy",
+      "equals": "borderless_toolbar_symbols_inside_grouped_controls"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.sidebar_symbol_color_policy",
+      "equals": "accent_selected_user_tint_compatible_sidebar_symbols"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.interaction_tones.sidebar_selected",

@@ -289,12 +289,16 @@ struct ExplorerChromeMetrics {
     std::string icon_reference_family;
     std::string icon_reference_policy;
     std::string icon_asset_policy;
+    std::string icon_interface_metaphor_policy;
+    std::string icon_visual_consistency_policy;
     std::string icon_alignment;
     std::string icon_rendering_mode;
     std::string icon_variant_policy;
     std::string icon_presentation_policy;
     std::string icon_tone_policy;
     std::string icon_interaction_tone_policy;
+    std::string icon_toolbar_symbol_chrome_policy;
+    std::string icon_sidebar_symbol_color_policy;
     std::string icon_file_type_color_policy;
     std::string icon_scale;
     std::string chrome_geometry_policy;
@@ -688,12 +692,16 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_reference_family = "n/a",
             .icon_reference_policy = "n/a",
             .icon_asset_policy = "no vector icon assets in mobile profile",
+            .icon_interface_metaphor_policy = "n/a",
+            .icon_visual_consistency_policy = "n/a",
             .icon_alignment = "n/a",
             .icon_rendering_mode = "n/a",
             .icon_variant_policy = "n/a",
             .icon_presentation_policy = "n/a",
             .icon_tone_policy = "n/a",
             .icon_interaction_tone_policy = "n/a",
+            .icon_toolbar_symbol_chrome_policy = "n/a",
+            .icon_sidebar_symbol_color_policy = "n/a",
             .icon_file_type_color_policy = "n/a",
             .icon_scale = "n/a",
             .chrome_geometry_policy = "n/a",
@@ -837,6 +845,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_reference_policy =
             std::string{icon_catalog::reference_policy()},
         .icon_asset_policy = std::string{icon_catalog::asset_policy()},
+        .icon_interface_metaphor_policy =
+            std::string{icon_catalog::interface_metaphor_policy()},
+        .icon_visual_consistency_policy =
+            std::string{icon_catalog::visual_consistency_policy()},
         .icon_alignment = std::string{icon_catalog::alignment_policy()},
         .icon_rendering_mode = "hierarchical",
         .icon_variant_policy = std::string{icon_catalog::variant_policy()},
@@ -845,6 +857,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_tone_policy = std::string{icon_catalog::tone_policy()},
         .icon_interaction_tone_policy =
             std::string{icon_catalog::interaction_tone_policy()},
+        .icon_toolbar_symbol_chrome_policy =
+            std::string{icon_catalog::toolbar_symbol_chrome_policy()},
+        .icon_sidebar_symbol_color_policy =
+            std::string{icon_catalog::sidebar_symbol_color_policy()},
         .icon_file_type_color_policy =
             std::string{icon_catalog::file_type_color_policy()},
         .icon_scale = std::string{icon_catalog::default_scale_policy()},
@@ -1513,6 +1529,12 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace("reference_family", json::Value{chrome.icon_reference_family});
     icon_system.emplace("reference_policy", json::Value{chrome.icon_reference_policy});
     icon_system.emplace("asset_policy", json::Value{chrome.icon_asset_policy});
+    icon_system.emplace(
+        "interface_metaphor_policy",
+        json::Value{chrome.icon_interface_metaphor_policy});
+    icon_system.emplace(
+        "visual_consistency_policy",
+        json::Value{chrome.icon_visual_consistency_policy});
     icon_system.emplace("alignment", json::Value{chrome.icon_alignment});
     icon_system.emplace("rendering_mode", json::Value{chrome.icon_rendering_mode});
     icon_system.emplace("variant_policy", json::Value{chrome.icon_variant_policy});
@@ -1521,6 +1543,12 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "interaction_tone_policy",
         json::Value{chrome.icon_interaction_tone_policy});
+    icon_system.emplace(
+        "toolbar_symbol_chrome_policy",
+        json::Value{chrome.icon_toolbar_symbol_chrome_policy});
+    icon_system.emplace(
+        "sidebar_symbol_color_policy",
+        json::Value{chrome.icon_sidebar_symbol_color_policy});
     icon_system.emplace(
         "interaction_tones",
         icon_interaction_tones_debug_json(chrome));
