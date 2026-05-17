@@ -113,6 +113,13 @@ The initial scope is intentionally narrow:
   output path, role/phase state, visible RGBA, background chrome, and likely
   wrapper pass. This gives the CLI a deterministic icon output path while still
   keeping Apple/SF Symbols artwork out of the repository.
+- `phenotype svg inspect <path>` parses a package or local SVG through the pure
+  `phenotype_svg_contract` subset and reports the supported elements, path
+  commands, style attributes, parser diagnostics, paintability, and
+  renderer-facing path.
+  Filesystem reads stay at the CLI edge while the parser summary is pure app
+  data, which makes SVG asset support observable without starting a native
+  renderer.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible

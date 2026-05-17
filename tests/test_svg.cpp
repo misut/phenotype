@@ -304,6 +304,38 @@ void test_svg_paint_tokens_are_stable() {
     std::puts("PASS: SVG document and paint tokens are stable");
 }
 
+void test_svg_support_contract_summary() {
+    auto doc = svg::parse(R"SVG(
+        <svg viewBox="-2 -4 28 32" fill="none" stroke="currentColor">
+          <polyline points="0 0 12 8 24 0"/>
+          <polygon points="4 16 20 16 12 24"/>
+        </svg>
+    )SVG");
+    auto summary = svg::summarize(doc);
+    assert(svg::subset_policy() == std::string_view{"bounded_svg_vector_image_subset"});
+    assert(svg::supported_elements().find("polyline")
+           != std::string_view::npos);
+    assert(svg::supported_path_commands().find("A/a")
+           != std::string_view::npos);
+    assert(svg::supported_style_attributes().find("stroke-linecap")
+           != std::string_view::npos);
+    assert(svg::unsupported_policy().find("diagnostics")
+           != std::string_view::npos);
+    assert(svg::render_pipeline_policy().find("Painter")
+           != std::string_view::npos);
+    assert(summary.view_min_x == -2.0f);
+    assert(summary.view_min_y == -4.0f);
+    assert(summary.view_width == 28.0f);
+    assert(summary.view_height == 32.0f);
+    assert(summary.shape_count == 2);
+    assert(summary.diagnostic_count == 0);
+    assert(summary.unsupported_count == 0);
+    assert(summary.paintable);
+    assert(!summary.has_diagnostics);
+
+    std::puts("PASS: SVG support contract summary is pure and explicit");
+}
+
 void test_builtin_icons_parse() {
     assert(icons::style_name() == "macos_rounded_outline_svg");
     assert(icons::style_reference().find("Apple HIG") != std::string_view::npos);
@@ -640,6 +672,7 @@ int main() {
     test_svg_single_circular_arc_path_preserves_native_arc();
     test_svg_unsupported_path_diagnostic();
     test_svg_paint_tokens_are_stable();
+    test_svg_support_contract_summary();
     test_builtin_icons_parse();
     std::puts("\nAll SVG/icon tests passed.");
     return 0;

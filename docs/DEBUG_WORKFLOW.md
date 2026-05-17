@@ -341,6 +341,15 @@ state-aware canvas buttons, so a Finder toolbar glyph can prove from JSON and
 pixels that it is consuming the pure icon recipe rather than painting a separate
 ad hoc pressed style.
 
+For a package-owned or ad hoc SVG file, use `phenotype svg inspect <path>
+--json` before blaming a backend. The output includes the pure SVG subset
+policy, supported elements/path commands/style attributes, source byte count,
+viewBox, shape count, unsupported command count, diagnostics, paintability, and
+the renderer-facing `Painter` path from `phenotype_svg_contract`, the same
+contract named by `phenotype.svg`. Filesystem access happens only in the CLI, so
+a failure here points at the SVG source or parser contract rather than the native
+image cache.
+
 The same artifact exposes `application.file_explorer.theme_system.*` from the
 pure `phenotype_theme_contract` package. That block names the Apple-like glass
 theme profile, Pretendard font policy, material planning boundary,

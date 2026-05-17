@@ -21,6 +21,7 @@ phenotype_theme_contract = "../../packages/phenotype_theme_contract"
 phenotype_icon_contract = "../../packages/phenotype_icon_contract"
 phenotype_io = "../../packages/phenotype_io"
 phenotype_resources = "../../packages/phenotype_resources"
+phenotype_svg_contract = "../../packages/phenotype_svg_contract"
 
 [sync]
 cmake-in-root = false
