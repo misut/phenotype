@@ -1301,8 +1301,22 @@ ColorVsOut vs_color(uint vertex_id : SV_VertexID, ColorInstance inst) {
         float2(1,0), float2(1,1), float2(0,1)
     };
     float2 c = corners[vertex_id];
-    float px = inst.rect.x + c.x * inst.rect.z;
-    float py = inst.rect.y + c.y * inst.rect.w;
+    uint draw_type = (uint)inst.params.z;
+    float px;
+    float py;
+    if (draw_type == 3u) {
+        float2 local = (c - float2(0.5f, 0.5f)) * inst.rect.zw;
+        float s = sin(inst.params.w);
+        float co = cos(inst.params.w);
+        float2 rotated = float2(
+            local.x * co - local.y * s,
+            local.x * s + local.y * co);
+        px = inst.rect.x + rotated.x;
+        py = inst.rect.y + rotated.y;
+    } else {
+        px = inst.rect.x + c.x * inst.rect.z;
+        py = inst.rect.y + c.y * inst.rect.w;
+    }
     float cx = (px / viewport.x) * 2.0f - 1.0f;
     float cy = 1.0f - (py / viewport.y) * 2.0f;
     ColorVsOut o;
@@ -1318,7 +1332,7 @@ float4 fs_color(ColorVsOut input) : SV_TARGET {
     uint draw_type = (uint)input.params.z;
     float radius = input.params.x;
     float border_w = input.params.y;
-    if (draw_type == 2u && radius > 0.0f) {
+    if ((draw_type == 2u || draw_type == 3u) && radius > 0.0f) {
         float2 half_size = input.rect_size * 0.5f;
         float2 p = abs(input.local_pos - half_size) - half_size + float2(radius, radius);
         float d = length(max(p, float2(0.0f, 0.0f))) - radius;
@@ -2432,6 +2446,86 @@ inline void append_color_instance(std::vector<float>& color_data,
     });
 }
 
+inline void append_stroked_segment(std::vector<float>& color_data,
+                                   float x1, float y1,
+                                   float x2, float y2,
+                                   float thickness,
+                                   Color color) {
+    float const dx = x2 - x1;
+    float const dy = y2 - y1;
+    float const line_len = std::sqrt(dx * dx + dy * dy);
+    if (line_len <= 0.0f || thickness <= 0.0f)
+        return;
+    float const half_th = thickness * 0.5f;
+    float const r = color.r / 255.0f;
+    float const g = color.g / 255.0f;
+    float const b = color.b / 255.0f;
+    float const a = color.a / 255.0f;
+    if (std::fabs(dx) <= 0.0001f || std::fabs(dy) <= 0.0001f) {
+        float const w = (std::fabs(dy) <= 0.0001f) ? line_len : thickness;
+        float const h = (std::fabs(dx) <= 0.0001f) ? line_len : thickness;
+        float const x = (std::fabs(dx) <= 0.0001f)
+            ? x1 - half_th
+            : (std::min)(x1, x2);
+        float const y = (std::fabs(dy) <= 0.0001f)
+            ? y1 - half_th
+            : (std::min)(y1, y2);
+        append_color_instance(
+            color_data,
+            x, y, w, h, r, g, b, a,
+            half_th, 0.0f, 2.0f);
+        return;
+    }
+    append_color_instance(
+        color_data,
+        (x1 + x2) * 0.5f,
+        (y1 + y2) * 0.5f,
+        line_len + thickness,
+        thickness,
+        r, g, b, a,
+        half_th, 0.0f, 3.0f,
+        std::atan2(dy, dx));
+}
+
+template <typename Fn>
+inline void for_each_arc_segment(float cx, float cy, float radius,
+                                 float start_angle, float end_angle,
+                                 Fn&& fn) {
+    if (radius <= 0.0f)
+        return;
+    constexpr float tau = 6.28318530717958647692f;
+    float sweep = end_angle - start_angle;
+    while (sweep <= 0.0f) sweep += tau;
+    while (sweep > tau) sweep -= tau;
+    int steps = static_cast<int>(std::ceil(sweep / (tau / 32.0f)));
+    if (steps < 1) steps = 1;
+    if (steps > 64) steps = 64;
+    float px = cx + radius * std::cos(start_angle);
+    float py = cy + radius * std::sin(start_angle);
+    for (int i = 1; i <= steps; ++i) {
+        float const t = start_angle
+            + sweep * static_cast<float>(i) / static_cast<float>(steps);
+        float const x = cx + radius * std::cos(t);
+        float const y = cy + radius * std::sin(t);
+        fn(px, py, x, y);
+        px = x;
+        py = y;
+    }
+}
+
+inline void append_stroked_arc(std::vector<float>& color_data,
+                               float cx, float cy, float radius,
+                               float start_angle, float end_angle,
+                               float thickness,
+                               Color color) {
+    for_each_arc_segment(
+        cx, cy, radius, start_angle, end_angle,
+        [&](float x1, float y1, float x2, float y2) {
+            append_stroked_segment(
+                color_data, x1, y1, x2, y2, thickness, color);
+        });
+}
+
 inline void append_linear_gradient_instances(
         std::vector<float>& color_data,
         float x, float y, float w, float h,
@@ -2489,6 +2583,180 @@ inline void append_tri_vertex(std::vector<float>& tri_data,
         color.r / 255.0f, color.g / 255.0f,
         color.b / 255.0f, color.a / 255.0f,
     });
+}
+
+inline bool point_in_triangle(float px, float py,
+                              float ax, float ay,
+                              float bx, float by,
+                              float cx, float cy) {
+    float const v0x = cx - ax, v0y = cy - ay;
+    float const v1x = bx - ax, v1y = by - ay;
+    float const v2x = px - ax, v2y = py - ay;
+    float const dot00 = v0x * v0x + v0y * v0y;
+    float const dot01 = v0x * v1x + v0y * v1y;
+    float const dot02 = v0x * v2x + v0y * v2y;
+    float const dot11 = v1x * v1x + v1y * v1y;
+    float const dot12 = v1x * v2x + v1y * v2y;
+    float const denom = dot00 * dot11 - dot01 * dot01;
+    if (std::fabs(denom) < 1e-12f)
+        return false;
+    float const inv = 1.0f / denom;
+    float const u = (dot11 * dot02 - dot01 * dot12) * inv;
+    float const v = (dot00 * dot12 - dot01 * dot02) * inv;
+    return u > 0.0f && v > 0.0f && (u + v) < 1.0f;
+}
+
+inline void polygon_ear_clip(std::vector<float>& poly,
+                             std::vector<float>& tris,
+                             std::vector<std::size_t>& remain) {
+    tris.clear();
+    std::size_t const n0 = poly.size() / 2;
+    if (n0 < 3)
+        return;
+
+    double area2 = 0.0;
+    for (std::size_t i = 0; i < n0; ++i) {
+        std::size_t const j = (i + 1) % n0;
+        area2 += static_cast<double>(poly[2 * i]) * poly[2 * j + 1]
+               - static_cast<double>(poly[2 * j]) * poly[2 * i + 1];
+    }
+    if (std::fabs(area2) < 1e-6)
+        return;
+    if (area2 < 0.0) {
+        for (std::size_t i = 0; i < n0 / 2; ++i) {
+            std::swap(poly[2 * i],     poly[2 * (n0 - 1 - i)]);
+            std::swap(poly[2 * i + 1], poly[2 * (n0 - 1 - i) + 1]);
+        }
+    }
+
+    remain.clear();
+    remain.reserve(n0);
+    for (std::size_t i = 0; i < n0; ++i)
+        remain.push_back(i);
+
+    bool convex = true;
+    for (std::size_t i = 0; i < n0 && convex; ++i) {
+        std::size_t const ip = (i + n0 - 1) % n0;
+        std::size_t const ic = i;
+        std::size_t const in = (i + 1) % n0;
+        float const ax = poly[2 * ip], ay = poly[2 * ip + 1];
+        float const bx = poly[2 * ic], by = poly[2 * ic + 1];
+        float const cx = poly[2 * in], cy = poly[2 * in + 1];
+        float const cross = (bx - ax) * (cy - ay)
+                          - (by - ay) * (cx - ax);
+        if (cross < 0.0f)
+            convex = false;
+    }
+    if (convex) {
+        float const ax = poly[0], ay = poly[1];
+        for (std::size_t i = 1; i + 1 < n0; ++i) {
+            float const bx = poly[2 * i],     by = poly[2 * i + 1];
+            float const cx = poly[2 * (i + 1)], cy = poly[2 * (i + 1) + 1];
+            tris.push_back(ax); tris.push_back(ay);
+            tris.push_back(bx); tris.push_back(by);
+            tris.push_back(cx); tris.push_back(cy);
+        }
+        return;
+    }
+
+    int safety = static_cast<int>(n0) * 3 + 1;
+    while (remain.size() >= 3 && safety-- > 0) {
+        bool found = false;
+        std::size_t const m = remain.size();
+        for (std::size_t i = 0; i < m; ++i) {
+            std::size_t const ip = remain[(i + m - 1) % m];
+            std::size_t const ic = remain[i];
+            std::size_t const in = remain[(i + 1) % m];
+            float const ax = poly[2 * ip], ay = poly[2 * ip + 1];
+            float const bx = poly[2 * ic], by = poly[2 * ic + 1];
+            float const cx = poly[2 * in], cy = poly[2 * in + 1];
+            float const cross = (bx - ax) * (cy - ay)
+                              - (by - ay) * (cx - ax);
+            if (cross <= 0.0f)
+                continue;
+            bool empty = true;
+            for (std::size_t k : remain) {
+                if (k == ip || k == ic || k == in)
+                    continue;
+                float const px = poly[2 * k], py = poly[2 * k + 1];
+                if (point_in_triangle(px, py, ax, ay, bx, by, cx, cy)) {
+                    empty = false;
+                    break;
+                }
+            }
+            if (!empty)
+                continue;
+            tris.push_back(ax); tris.push_back(ay);
+            tris.push_back(bx); tris.push_back(by);
+            tris.push_back(cx); tris.push_back(cy);
+            remain.erase(remain.begin() + static_cast<long>(i));
+            found = true;
+            break;
+        }
+        if (!found)
+            break;
+    }
+}
+
+inline bool append_small_polygon_fill_strips(std::vector<float>& color_data,
+                                             std::vector<float> const& polygon,
+                                             std::vector<float>& intersections,
+                                             Color color) {
+    std::size_t const n = polygon.size() / 2;
+    if (n < 3 || n > 128)
+        return false;
+    float min_y = polygon[1];
+    float max_y = polygon[1];
+    for (std::size_t i = 1; i < n; ++i) {
+        float const y = polygon[2 * i + 1];
+        min_y = (std::min)(min_y, y);
+        max_y = (std::max)(max_y, y);
+    }
+    int const y0 = static_cast<int>(std::floor(min_y));
+    int const y1 = static_cast<int>(std::ceil(max_y));
+    int const rows = y1 - y0;
+    if (rows <= 0 || rows > 256)
+        return false;
+
+    float const r = color.r / 255.0f;
+    float const g = color.g / 255.0f;
+    float const b = color.b / 255.0f;
+    float const a = color.a / 255.0f;
+    intersections.clear();
+    for (int y = y0; y < y1; ++y) {
+        float const sample_y = static_cast<float>(y) + 0.5f;
+        intersections.clear();
+        for (std::size_t i = 0; i < n; ++i) {
+            std::size_t const j = (i + 1) % n;
+            float const x_a = polygon[2 * i];
+            float const y_a = polygon[2 * i + 1];
+            float const x_b = polygon[2 * j];
+            float const y_b = polygon[2 * j + 1];
+            if (std::fabs(y_b - y_a) <= 0.0001f)
+                continue;
+            float const lo = (std::min)(y_a, y_b);
+            float const hi = (std::max)(y_a, y_b);
+            if (sample_y < lo || sample_y >= hi)
+                continue;
+            float const t = (sample_y - y_a) / (y_b - y_a);
+            intersections.push_back(x_a + (x_b - x_a) * t);
+        }
+        if (intersections.size() < 2)
+            continue;
+        std::sort(intersections.begin(), intersections.end());
+        for (std::size_t k = 0; k + 1 < intersections.size(); k += 2) {
+            float const left = intersections[k];
+            float const right = intersections[k + 1];
+            if (right <= left)
+                continue;
+            append_color_instance(
+                color_data,
+                left, static_cast<float>(y),
+                right - left, 1.0f,
+                r, g, b, a);
+        }
+    }
+    return true;
 }
 
 inline void append_textured_quad(std::vector<float>& quad_data,
@@ -2557,6 +2825,10 @@ struct DecodedFrame {
     std::vector<HitRegionCmd> hit_regions;
     std::vector<MaterialRuntimeRecord> material_records;
     std::vector<PendingImageCmd> images;
+    std::vector<float> fill_polygon;
+    std::vector<float> fill_tris;
+    std::vector<float> fill_intersections;
+    std::vector<std::size_t> fill_ear_remain;
     std::uint32_t foreground_text_candidate_count = 0;
     std::uint32_t foreground_text_remap_count = 0;
 };
@@ -2790,46 +3062,8 @@ inline bool decode_frame_commands(unsigned char const* buf,
                 || !reader.read_u32(packed))
                 return false;
             auto color = unpack_color(packed);
-            float dx = x2 - x1;
-            float dy = y2 - y1;
-            float line_len = std::sqrt(dx * dx + dy * dy);
-            if (line_len <= 0.0f || thickness <= 0.0f)
-                break;
-            float half_th = thickness * 0.5f;
-            if (dx == 0.0f || dy == 0.0f) {
-                float w = (dy == 0.0f) ? line_len : thickness;
-                float h = (dx == 0.0f) ? line_len : thickness;
-                float x = (dx == 0.0f)
-                    ? x1 - thickness / 2.0f
-                    : (x1 < x2 ? x1 : x2);
-                float y = (dy == 0.0f)
-                    ? y1 - thickness / 2.0f
-                    : (y1 < y2 ? y1 : y2);
-                append_color_instance(
-                    frame.color_data,
-                    x, y, w, h,
-                    color.r / 255.0f, color.g / 255.0f,
-                    color.b / 255.0f, color.a / 255.0f,
-                    half_th, 0.0f, 2.0f);
-            } else {
-                float step = thickness * 0.5f;
-                if (step < 0.5f) step = 0.5f;
-                int n_steps = static_cast<int>(std::ceil(line_len / step));
-                if (n_steps < 1) n_steps = 1;
-                for (int i = 0; i <= n_steps; ++i) {
-                    float t = static_cast<float>(i)
-                              / static_cast<float>(n_steps);
-                    float cx = x1 + dx * t;
-                    float cy = y1 + dy * t;
-                    append_color_instance(
-                        frame.color_data,
-                        cx - half_th, cy - half_th,
-                        thickness, thickness,
-                        color.r / 255.0f, color.g / 255.0f,
-                        color.b / 255.0f, color.a / 255.0f,
-                        half_th, 0.0f, 2.0f);
-                }
-            }
+            append_stroked_segment(
+                frame.color_data, x1, y1, x2, y2, thickness, color);
             break;
         }
         case Cmd::HitRegion: {
@@ -2865,6 +3099,378 @@ inline bool decode_frame_commands(unsigned char const* buf,
             // follow-up. Parsing is still required so paint_node can
             // emit Scissor bytes without the backend erroring.
             (void)x; (void)y; (void)w; (void)h;
+            break;
+        }
+        case Cmd::DrawArc: {
+            float cx = 0.0f, cy = 0.0f, radius = 0.0f;
+            float start_angle = 0.0f, end_angle = 0.0f, thickness = 0.0f;
+            unsigned int packed = 0;
+            if (!reader.read_f32(cx) || !reader.read_f32(cy)
+                || !reader.read_f32(radius)
+                || !reader.read_f32(start_angle)
+                || !reader.read_f32(end_angle)
+                || !reader.read_f32(thickness)
+                || !reader.read_u32(packed))
+                return false;
+            append_stroked_arc(
+                frame.color_data,
+                cx, cy, radius, start_angle, end_angle,
+                thickness,
+                unpack_color(packed));
+            break;
+        }
+        case Cmd::Path: {
+            float thickness = 0.0f;
+            unsigned int packed = 0;
+            unsigned int verb_count = 0;
+            if (!reader.read_f32(thickness)
+                || !reader.read_u32(packed)
+                || !reader.read_u32(verb_count))
+                return false;
+            auto color = unpack_color(packed);
+            float pen_x = 0.0f, pen_y = 0.0f;
+            float sub_x = 0.0f, sub_y = 0.0f;
+            bool has_pen = false;
+
+            auto emit_segment = [&](float x1, float y1, float x2, float y2) {
+                append_stroked_segment(
+                    frame.color_data, x1, y1, x2, y2, thickness, color);
+            };
+
+            constexpr float flatness2 = 0.25f;
+            constexpr int max_depth = 16;
+            auto flatten_quad = [&](auto& self,
+                                    float p0x, float p0y,
+                                    float p1x, float p1y,
+                                    float p2x, float p2y,
+                                    int depth) -> void {
+                float const lx = p2x - p0x;
+                float const ly = p2y - p0y;
+                float const llen2 = lx * lx + ly * ly;
+                bool flat = (depth == 0);
+                if (!flat && llen2 > 1e-6f) {
+                    float const d = (p1x - p0x) * ly - (p1y - p0y) * lx;
+                    if (d * d < flatness2 * llen2)
+                        flat = true;
+                }
+                if (flat || llen2 < 1e-6f) {
+                    emit_segment(p0x, p0y, p2x, p2y);
+                    return;
+                }
+                float const a0x = (p0x + p1x) * 0.5f;
+                float const a0y = (p0y + p1y) * 0.5f;
+                float const a1x = (p1x + p2x) * 0.5f;
+                float const a1y = (p1y + p2y) * 0.5f;
+                float const midx = (a0x + a1x) * 0.5f;
+                float const midy = (a0y + a1y) * 0.5f;
+                self(self, p0x, p0y, a0x, a0y, midx, midy, depth - 1);
+                self(self, midx, midy, a1x, a1y, p2x, p2y, depth - 1);
+            };
+            auto flatten_cubic = [&](auto& self,
+                                     float p0x, float p0y,
+                                     float p1x, float p1y,
+                                     float p2x, float p2y,
+                                     float p3x, float p3y,
+                                     int depth) -> void {
+                float const lx = p3x - p0x;
+                float const ly = p3y - p0y;
+                float const llen2 = lx * lx + ly * ly;
+                bool flat = (depth == 0);
+                if (!flat && llen2 > 1e-6f) {
+                    float const d1 = (p1x - p0x) * ly - (p1y - p0y) * lx;
+                    float const d2 = (p2x - p0x) * ly - (p2y - p0y) * lx;
+                    if (d1 * d1 < flatness2 * llen2
+                        && d2 * d2 < flatness2 * llen2)
+                        flat = true;
+                }
+                if (flat || llen2 < 1e-6f) {
+                    emit_segment(p0x, p0y, p3x, p3y);
+                    return;
+                }
+                float const a01x = (p0x + p1x) * 0.5f;
+                float const a01y = (p0y + p1y) * 0.5f;
+                float const a12x = (p1x + p2x) * 0.5f;
+                float const a12y = (p1y + p2y) * 0.5f;
+                float const a23x = (p2x + p3x) * 0.5f;
+                float const a23y = (p2y + p3y) * 0.5f;
+                float const b01x = (a01x + a12x) * 0.5f;
+                float const b01y = (a01y + a12y) * 0.5f;
+                float const b12x = (a12x + a23x) * 0.5f;
+                float const b12y = (a12y + a23y) * 0.5f;
+                float const midx = (b01x + b12x) * 0.5f;
+                float const midy = (b01y + b12y) * 0.5f;
+                self(self,
+                     p0x, p0y, a01x, a01y, b01x, b01y, midx, midy,
+                     depth - 1);
+                self(self,
+                     midx, midy, b12x, b12y, a23x, a23y, p3x, p3y,
+                     depth - 1);
+            };
+
+            for (unsigned int i = 0; i < verb_count; ++i) {
+                unsigned int verb = 0;
+                if (!reader.read_u32(verb))
+                    return false;
+                switch (static_cast<PathVerb>(verb)) {
+                case PathVerb::MoveTo: {
+                    float x = 0.0f, y = 0.0f;
+                    if (!reader.read_f32(x) || !reader.read_f32(y))
+                        return false;
+                    pen_x = x; pen_y = y;
+                    sub_x = x; sub_y = y;
+                    has_pen = true;
+                    break;
+                }
+                case PathVerb::LineTo: {
+                    float x = 0.0f, y = 0.0f;
+                    if (!reader.read_f32(x) || !reader.read_f32(y))
+                        return false;
+                    if (has_pen)
+                        emit_segment(pen_x, pen_y, x, y);
+                    pen_x = x; pen_y = y;
+                    has_pen = true;
+                    break;
+                }
+                case PathVerb::QuadTo: {
+                    float c1x = 0.0f, c1y = 0.0f;
+                    float x = 0.0f, y = 0.0f;
+                    if (!reader.read_f32(c1x) || !reader.read_f32(c1y)
+                        || !reader.read_f32(x) || !reader.read_f32(y))
+                        return false;
+                    if (has_pen) {
+                        flatten_quad(
+                            flatten_quad,
+                            pen_x, pen_y, c1x, c1y, x, y, max_depth);
+                    }
+                    pen_x = x; pen_y = y;
+                    has_pen = true;
+                    break;
+                }
+                case PathVerb::CubicTo: {
+                    float c1x = 0.0f, c1y = 0.0f;
+                    float c2x = 0.0f, c2y = 0.0f;
+                    float x = 0.0f, y = 0.0f;
+                    if (!reader.read_f32(c1x) || !reader.read_f32(c1y)
+                        || !reader.read_f32(c2x) || !reader.read_f32(c2y)
+                        || !reader.read_f32(x) || !reader.read_f32(y))
+                        return false;
+                    if (has_pen) {
+                        flatten_cubic(
+                            flatten_cubic,
+                            pen_x, pen_y, c1x, c1y, c2x, c2y, x, y,
+                            max_depth);
+                    }
+                    pen_x = x; pen_y = y;
+                    has_pen = true;
+                    break;
+                }
+                case PathVerb::ArcTo: {
+                    float cx = 0.0f, cy = 0.0f, radius = 0.0f;
+                    float start_angle = 0.0f, end_angle = 0.0f;
+                    if (!reader.read_f32(cx) || !reader.read_f32(cy)
+                        || !reader.read_f32(radius)
+                        || !reader.read_f32(start_angle)
+                        || !reader.read_f32(end_angle))
+                        return false;
+                    append_stroked_arc(
+                        frame.color_data,
+                        cx, cy, radius, start_angle, end_angle,
+                        thickness, color);
+                    break;
+                }
+                case PathVerb::Close: {
+                    if (has_pen)
+                        emit_segment(pen_x, pen_y, sub_x, sub_y);
+                    pen_x = sub_x;
+                    pen_y = sub_y;
+                    break;
+                }
+                default:
+                    return false;
+                }
+            }
+            break;
+        }
+        case Cmd::FillPath: {
+            unsigned int packed = 0;
+            unsigned int verb_count = 0;
+            if (!reader.read_u32(packed) || !reader.read_u32(verb_count))
+                return false;
+            auto color = unpack_color(packed);
+            auto& polygon = frame.fill_polygon;
+            polygon.clear();
+            polygon.reserve(verb_count * 2);
+            auto append = [&](float x, float y) {
+                polygon.push_back(x);
+                polygon.push_back(y);
+            };
+
+            constexpr float flatness2 = 0.25f;
+            constexpr int max_depth = 16;
+            auto flatten_quad = [&](auto& self,
+                                    float p0x, float p0y,
+                                    float p1x, float p1y,
+                                    float p2x, float p2y,
+                                    int depth) -> void {
+                float const lx = p2x - p0x;
+                float const ly = p2y - p0y;
+                float const llen2 = lx * lx + ly * ly;
+                bool flat = (depth == 0);
+                if (!flat && llen2 > 1e-6f) {
+                    float const d = (p1x - p0x) * ly - (p1y - p0y) * lx;
+                    if (d * d < flatness2 * llen2)
+                        flat = true;
+                }
+                if (flat || llen2 < 1e-6f) {
+                    append(p2x, p2y);
+                    return;
+                }
+                float const a0x = (p0x + p1x) * 0.5f;
+                float const a0y = (p0y + p1y) * 0.5f;
+                float const a1x = (p1x + p2x) * 0.5f;
+                float const a1y = (p1y + p2y) * 0.5f;
+                float const midx = (a0x + a1x) * 0.5f;
+                float const midy = (a0y + a1y) * 0.5f;
+                self(self, p0x, p0y, a0x, a0y, midx, midy, depth - 1);
+                self(self, midx, midy, a1x, a1y, p2x, p2y, depth - 1);
+            };
+            auto flatten_cubic = [&](auto& self,
+                                     float p0x, float p0y,
+                                     float p1x, float p1y,
+                                     float p2x, float p2y,
+                                     float p3x, float p3y,
+                                     int depth) -> void {
+                float const lx = p3x - p0x;
+                float const ly = p3y - p0y;
+                float const llen2 = lx * lx + ly * ly;
+                bool flat = (depth == 0);
+                if (!flat && llen2 > 1e-6f) {
+                    float const d1 = (p1x - p0x) * ly - (p1y - p0y) * lx;
+                    float const d2 = (p2x - p0x) * ly - (p2y - p0y) * lx;
+                    if (d1 * d1 < flatness2 * llen2
+                        && d2 * d2 < flatness2 * llen2)
+                        flat = true;
+                }
+                if (flat || llen2 < 1e-6f) {
+                    append(p3x, p3y);
+                    return;
+                }
+                float const a01x = (p0x + p1x) * 0.5f;
+                float const a01y = (p0y + p1y) * 0.5f;
+                float const a12x = (p1x + p2x) * 0.5f;
+                float const a12y = (p1y + p2y) * 0.5f;
+                float const a23x = (p2x + p3x) * 0.5f;
+                float const a23y = (p2y + p3y) * 0.5f;
+                float const b01x = (a01x + a12x) * 0.5f;
+                float const b01y = (a01y + a12y) * 0.5f;
+                float const b12x = (a12x + a23x) * 0.5f;
+                float const b12y = (a12y + a23y) * 0.5f;
+                float const midx = (b01x + b12x) * 0.5f;
+                float const midy = (b01y + b12y) * 0.5f;
+                self(self,
+                     p0x, p0y, a01x, a01y, b01x, b01y, midx, midy,
+                     depth - 1);
+                self(self,
+                     midx, midy, b12x, b12y, a23x, a23y, p3x, p3y,
+                     depth - 1);
+            };
+
+            bool started = false;
+            for (unsigned int i = 0; i < verb_count; ++i) {
+                unsigned int verb = 0;
+                if (!reader.read_u32(verb))
+                    return false;
+                switch (static_cast<PathVerb>(verb)) {
+                case PathVerb::MoveTo: {
+                    float x = 0.0f, y = 0.0f;
+                    if (!reader.read_f32(x) || !reader.read_f32(y))
+                        return false;
+                    if (!started) {
+                        append(x, y);
+                        started = true;
+                    }
+                    break;
+                }
+                case PathVerb::LineTo: {
+                    float x = 0.0f, y = 0.0f;
+                    if (!reader.read_f32(x) || !reader.read_f32(y))
+                        return false;
+                    append(x, y);
+                    if (!started)
+                        started = true;
+                    break;
+                }
+                case PathVerb::QuadTo: {
+                    float c1x = 0.0f, c1y = 0.0f;
+                    float x = 0.0f, y = 0.0f;
+                    if (!reader.read_f32(c1x) || !reader.read_f32(c1y)
+                        || !reader.read_f32(x) || !reader.read_f32(y))
+                        return false;
+                    if (!polygon.empty()) {
+                        float const p0x = polygon[polygon.size() - 2];
+                        float const p0y = polygon[polygon.size() - 1];
+                        flatten_quad(
+                            flatten_quad,
+                            p0x, p0y, c1x, c1y, x, y, max_depth);
+                    }
+                    break;
+                }
+                case PathVerb::CubicTo: {
+                    float c1x = 0.0f, c1y = 0.0f;
+                    float c2x = 0.0f, c2y = 0.0f;
+                    float x = 0.0f, y = 0.0f;
+                    if (!reader.read_f32(c1x) || !reader.read_f32(c1y)
+                        || !reader.read_f32(c2x) || !reader.read_f32(c2y)
+                        || !reader.read_f32(x) || !reader.read_f32(y))
+                        return false;
+                    if (!polygon.empty()) {
+                        float const p0x = polygon[polygon.size() - 2];
+                        float const p0y = polygon[polygon.size() - 1];
+                        flatten_cubic(
+                            flatten_cubic,
+                            p0x, p0y, c1x, c1y, c2x, c2y, x, y,
+                            max_depth);
+                    }
+                    break;
+                }
+                case PathVerb::ArcTo: {
+                    float cx = 0.0f, cy = 0.0f, radius = 0.0f;
+                    float start_angle = 0.0f, end_angle = 0.0f;
+                    if (!reader.read_f32(cx) || !reader.read_f32(cy)
+                        || !reader.read_f32(radius)
+                        || !reader.read_f32(start_angle)
+                        || !reader.read_f32(end_angle))
+                        return false;
+                    for_each_arc_segment(
+                        cx, cy, radius, start_angle, end_angle,
+                        [&](float, float, float x2, float y2) {
+                            append(x2, y2);
+                        });
+                    break;
+                }
+                case PathVerb::Close:
+                    break;
+                default:
+                    return false;
+                }
+            }
+            if (polygon.size() < 6)
+                break;
+            if (append_small_polygon_fill_strips(
+                    frame.color_data,
+                    polygon,
+                    frame.fill_intersections,
+                    color)) {
+                break;
+            }
+            auto& tris = frame.fill_tris;
+            tris.clear();
+            polygon_ear_clip(polygon, tris, frame.fill_ear_remain);
+            for (std::size_t t = 0; t + 5 < tris.size(); t += 6) {
+                append_tri_vertex(frame.tri_data, tris[t], tris[t + 1], color);
+                append_tri_vertex(frame.tri_data, tris[t + 2], tris[t + 3], color);
+                append_tri_vertex(frame.tri_data, tris[t + 4], tris[t + 5], color);
+            }
             break;
         }
         case Cmd::FillQuads: {
