@@ -1975,6 +1975,98 @@ inline void append_color_instance(std::vector<ColorInstanceGPU>& out,
     out.push_back(inst);
 }
 
+inline void append_tri_vertex(std::vector<TriVertexGPU>& out,
+                              float x, float y,
+                              float r, float g, float b, float a) {
+    TriVertexGPU v;
+    v.pos[0] = x;
+    v.pos[1] = y;
+    v.color[0] = r;
+    v.color[1] = g;
+    v.color[2] = b;
+    v.color[3] = a;
+    out.push_back(v);
+}
+
+inline bool stroked_segment_needs_triangle_body(float x1,
+                                                float y1,
+                                                float x2,
+                                                float y2,
+                                                float thickness) noexcept {
+    if (thickness <= 0.0f)
+        return false;
+    float const dx = x2 - x1;
+    float const dy = y2 - y1;
+    float const line_len = std::sqrt(dx * dx + dy * dy);
+    if (line_len <= 0.0f)
+        return false;
+    return std::fabs(dx) > 0.0001f && std::fabs(dy) > 0.0001f;
+}
+
+inline void append_stroked_segment_to_batch(ScissorBatch& batch,
+                                            float x1, float y1,
+                                            float x2, float y2,
+                                            float thickness,
+                                            float r, float g,
+                                            float b, float a) {
+    float const dx = x2 - x1;
+    float const dy = y2 - y1;
+    float const line_len = std::sqrt(dx * dx + dy * dy);
+    if (line_len <= 0.0f || thickness <= 0.0f)
+        return;
+
+    float const half_th = thickness * 0.5f;
+    if (!stroked_segment_needs_triangle_body(x1, y1, x2, y2, thickness)) {
+        float const w = (std::fabs(dy) <= 0.0001f) ? line_len : thickness;
+        float const h = (std::fabs(dx) <= 0.0001f) ? line_len : thickness;
+        float const x = (std::fabs(dx) <= 0.0001f)
+            ? x1 - half_th
+            : (x1 < x2 ? x1 : x2);
+        float const y = (std::fabs(dy) <= 0.0001f)
+            ? y1 - half_th
+            : (y1 < y2 ? y1 : y2);
+        append_color_instance(
+            batch.colors,
+            x, y, w, h, r, g, b, a,
+            half_th, 0.0f, 2.0f);
+        return;
+    }
+
+    float const nx = -dy / line_len * half_th;
+    float const ny = dx / line_len * half_th;
+    auto& tris = batch.tri_vertices;
+    append_tri_vertex(tris, x1 + nx, y1 + ny, r, g, b, a);
+    append_tri_vertex(tris, x2 + nx, y2 + ny, r, g, b, a);
+    append_tri_vertex(tris, x2 - nx, y2 - ny, r, g, b, a);
+    append_tri_vertex(tris, x1 + nx, y1 + ny, r, g, b, a);
+    append_tri_vertex(tris, x2 - nx, y2 - ny, r, g, b, a);
+    append_tri_vertex(tris, x1 - nx, y1 - ny, r, g, b, a);
+
+    append_color_instance(
+        batch.colors,
+        x1 - half_th, y1 - half_th, thickness, thickness,
+        r, g, b, a, half_th, 0.0f, 2.0f);
+    append_color_instance(
+        batch.colors,
+        x2 - half_th, y2 - half_th, thickness, thickness,
+        r, g, b, a, half_th, 0.0f, 2.0f);
+}
+
+inline void append_stroked_segment(FrameScratch& scratch,
+                                   float x1, float y1,
+                                   float x2, float y2,
+                                   float thickness,
+                                   float r, float g,
+                                   float b, float a) {
+    if (stroked_segment_needs_triangle_body(x1, y1, x2, y2, thickness))
+        ensure_triangle_order_batch(scratch);
+    append_stroked_segment_to_batch(
+        scratch.batches.back(),
+        x1, y1, x2, y2,
+        thickness,
+        r, g, b, a);
+}
+
 inline void append_linear_gradient_instances(
         std::vector<ColorInstanceGPU>& out,
         float x, float y, float w, float h,
@@ -2560,56 +2652,13 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                     || !reader.read_u32(packed))
                     return false;
                 auto color = unpack_color(packed);
-                float dx = x2 - x1;
-                float dy = y2 - y1;
-                float line_len = std::sqrt(dx * dx + dy * dy);
-                if (line_len <= 0.0f || thickness <= 0.0f)
-                    break;
-                float half_th = thickness * 0.5f;
-                if (dx == 0.0f || dy == 0.0f) {
-                    // Axis-aligned: a single instance is exact.
-                    float w = (dy == 0.0f) ? line_len : thickness;
-                    float h = (dx == 0.0f) ? line_len : thickness;
-                    float x = (dx == 0.0f)
-                        ? x1 - thickness / 2.0f
-                        : (x1 < x2 ? x1 : x2);
-                    float y = (dy == 0.0f)
-                        ? y1 - thickness / 2.0f
-                        : (y1 < y2 ? y1 : y2);
-                    append_color_instance(
-                        scratch.batches.back().colors,
-                        x, y, w, h,
-                        color.r / 255.0f, color.g / 255.0f,
-                        color.b / 255.0f, color.a / 255.0f,
-                        half_th, 0.0f, 2.0f);
-                } else {
-                    // Diagonal: the instanced color pipeline can only fill
-                    // axis-aligned rects, so decompose the segment into a
-                    // chain of overlapping rounded dots along the line.
-                    // Step is half the thickness so the dots overlap and
-                    // produce continuous coverage with round caps.
-                    // O(line_len / thickness) instances per line; for
-                    // thickness = 1 px and a 500 px diagonal this emits
-                    // ~1000 dots, which the GPU handles trivially.
-                    float step = thickness * 0.5f;
-                    if (step < 0.5f) step = 0.5f;
-                    int n_steps = static_cast<int>(std::ceil(line_len / step));
-                    if (n_steps < 1) n_steps = 1;
-                    auto& dst = scratch.batches.back().colors;
-                    for (int i = 0; i <= n_steps; ++i) {
-                        float t = static_cast<float>(i)
-                                  / static_cast<float>(n_steps);
-                        float cx = x1 + dx * t;
-                        float cy = y1 + dy * t;
-                        append_color_instance(
-                            dst,
-                            cx - half_th, cy - half_th,
-                            thickness, thickness,
-                            color.r / 255.0f, color.g / 255.0f,
-                            color.b / 255.0f, color.a / 255.0f,
-                            half_th, 0.0f, 2.0f);
-                    }
-                }
+                append_stroked_segment(
+                    scratch,
+                    x1, y1, x2, y2, thickness,
+                    color.r / 255.0f,
+                    color.g / 255.0f,
+                    color.b / 255.0f,
+                    color.a / 255.0f);
                 break;
             }
             case Cmd::HitRegion: {
@@ -2675,12 +2724,12 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
             }
             case Cmd::Path: {
                 // Walk the verb stream and dispatch each segment onto
-                // the existing instance buffers — LineTo / flattened
-                // QuadTo / flattened CubicTo go through the same
-                // `colors` instance vector that `Cmd::DrawLine` fills,
-                // and ArcTo pushes an `ArcInstanceGPU` directly. No
-                // new pipeline is introduced; stroke rendering reuses
-                // the color and arc SDF backends already in flight.
+                // the existing instance buffers. Axis-aligned strokes
+                // use the color SDF path, diagonal strokes use triangle
+                // bodies plus round color caps, and ArcTo pushes an
+                // `ArcInstanceGPU` directly. No new pipeline is introduced;
+                // stroke rendering reuses the color, triangle, and arc
+                // backends already in flight.
                 float thickness = 0.0f;
                 unsigned int packed = 0;
                 unsigned int verb_count = 0;
@@ -2698,48 +2747,21 @@ inline bool decode_frame_commands(unsigned char const* buf, unsigned int len,
                 float sub_x = 0.0f, sub_y = 0.0f;
                 bool has_pen = false;
 
-                // Same logic as `Cmd::DrawLine` — axis-aligned single
-                // instance, diagonal decomposed into overlapping dots.
+                bool triangle_stroke_batch_ready = false;
                 auto emit_segment = [&](float x1, float y1,
                                         float x2, float y2) {
-                    float dx = x2 - x1;
-                    float dy = y2 - y1;
-                    float line_len = std::sqrt(dx * dx + dy * dy);
-                    if (line_len <= 0.0f || thickness <= 0.0f)
-                        return;
-                    float half_th = thickness * 0.5f;
-                    if (dx == 0.0f || dy == 0.0f) {
-                        float w = (dy == 0.0f) ? line_len : thickness;
-                        float h = (dx == 0.0f) ? line_len : thickness;
-                        float x = (dx == 0.0f)
-                            ? x1 - thickness / 2.0f
-                            : (x1 < x2 ? x1 : x2);
-                        float y = (dy == 0.0f)
-                            ? y1 - thickness / 2.0f
-                            : (y1 < y2 ? y1 : y2);
-                        append_color_instance(
-                            scratch.batches.back().colors,
-                            x, y, w, h, cr, cg, cb, ca,
-                            half_th, 0.0f, 2.0f);
-                    } else {
-                        float step = thickness * 0.5f;
-                        if (step < 0.5f) step = 0.5f;
-                        int n_steps = static_cast<int>(
-                            std::ceil(line_len / step));
-                        if (n_steps < 1) n_steps = 1;
-                        auto& dst = scratch.batches.back().colors;
-                        for (int i = 0; i <= n_steps; ++i) {
-                            float t = static_cast<float>(i)
-                                      / static_cast<float>(n_steps);
-                            float ccx = x1 + dx * t;
-                            float ccy = y1 + dy * t;
-                            append_color_instance(
-                                dst,
-                                ccx - half_th, ccy - half_th,
-                                thickness, thickness,
-                                cr, cg, cb, ca, half_th, 0.0f, 2.0f);
+                    if (stroked_segment_needs_triangle_body(
+                            x1, y1, x2, y2, thickness)) {
+                        if (!triangle_stroke_batch_ready) {
+                            ensure_triangle_order_batch(scratch);
+                            triangle_stroke_batch_ready = true;
                         }
                     }
+                    append_stroked_segment_to_batch(
+                        scratch.batches.back(),
+                        x1, y1, x2, y2,
+                        thickness,
+                        cr, cg, cb, ca);
                 };
 
                 // Recursive De Casteljau flatten — split until each

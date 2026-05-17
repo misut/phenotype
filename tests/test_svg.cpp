@@ -67,6 +67,44 @@ private:
     }
 };
 
+unsigned int count_path_verb(PathBuilder const& path, PathVerb needle) {
+    unsigned int count = 0;
+    unsigned int i = 0;
+    auto skip = [&](unsigned int words) {
+        if (i + words <= path.verbs.size()) {
+            i += words;
+            return true;
+        }
+        i = static_cast<unsigned int>(path.verbs.size());
+        return false;
+    };
+    while (i < path.verbs.size()) {
+        auto const tag = static_cast<PathVerb>(path.verbs[i++]);
+        if (tag == needle)
+            ++count;
+        switch (tag) {
+        case PathVerb::MoveTo:
+        case PathVerb::LineTo:
+            if (!skip(2)) return count;
+            break;
+        case PathVerb::QuadTo:
+            if (!skip(4)) return count;
+            break;
+        case PathVerb::CubicTo:
+            if (!skip(6)) return count;
+            break;
+        case PathVerb::ArcTo:
+            if (!skip(5)) return count;
+            break;
+        case PathVerb::Close:
+            break;
+        default:
+            return count;
+        }
+    }
+    return count;
+}
+
 void test_svg_path_subset() {
     auto doc = svg::parse(R"SVG(
         <svg viewBox="0 0 24 24">
@@ -113,6 +151,24 @@ void test_svg_basic_shapes() {
     assert(painter.strokes == 5);
 
     std::puts("PASS: SVG rect/circle/ellipse/line/polygon parse");
+}
+
+void test_svg_circle_uses_arc_path() {
+    auto circle = svg::parse(
+        R"SVG(<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="8"/></svg>)SVG");
+    assert(circle.shapes.size() == 1);
+    assert(!circle.has_diagnostics());
+    assert(count_path_verb(circle.shapes[0].path, PathVerb::ArcTo) == 4);
+    assert(count_path_verb(circle.shapes[0].path, PathVerb::CubicTo) == 0);
+
+    auto ellipse = svg::parse(
+        R"SVG(<svg viewBox="0 0 24 24"><ellipse cx="12" cy="12" rx="8" ry="5"/></svg>)SVG");
+    assert(ellipse.shapes.size() == 1);
+    assert(!ellipse.has_diagnostics());
+    assert(count_path_verb(ellipse.shapes[0].path, PathVerb::ArcTo) == 0);
+    assert(count_path_verb(ellipse.shapes[0].path, PathVerb::CubicTo) == 4);
+
+    std::puts("PASS: SVG circles lower to native arc paths");
 }
 
 void test_svg_transform_subset() {
@@ -200,6 +256,7 @@ void test_builtin_icons_parse() {
 int main() {
     test_svg_path_subset();
     test_svg_basic_shapes();
+    test_svg_circle_uses_arc_path();
     test_svg_transform_subset();
     test_svg_unsupported_path_diagnostic();
     test_builtin_icons_parse();
