@@ -78,9 +78,9 @@ without embedding Apple-owned vector paths. Artifacts can assert the icon
 module, source format, ownership boundary, reference family/policy, round
 stroke expectation, rendering mode, variant policy,
 text-aligned scale, role-aware presentation policy, sidebar/toolbar point
-sizes, tone policy, symbol counts, and the exact semantic reference arrays for
-the visible Finder-style toolbar/sidebar glyphs without depending on platform
-icon fonts or bundled Apple assets.
+sizes, role hit-target metrics, tone policy, symbol counts, and the exact
+semantic reference arrays for the visible Finder-style toolbar/sidebar glyphs
+without depending on platform icon fonts or bundled Apple assets.
 On macOS, the same runtime object reports live `NSWindow` chrome state:
 transparent titlebar, full-size content view, hidden native title, and
 background dragging must all be enabled. These fields are actual platform

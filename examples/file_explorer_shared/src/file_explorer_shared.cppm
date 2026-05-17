@@ -262,6 +262,9 @@ struct ExplorerChromeMetrics {
     float icon_toolbar_point_size = 0.0f;
     float icon_sidebar_point_size = 0.0f;
     float icon_sidebar_optical_y_offset = 0.0f;
+    float icon_toolbar_hit_target_size = 0.0f;
+    float icon_sidebar_hit_target_size = 0.0f;
+    float icon_action_hit_target_size = 0.0f;
     float column_location_row_height = 0.0f;
     float column_location_icon_size = 0.0f;
     bool integrated_titlebar = true;
@@ -303,6 +306,8 @@ struct ExplorerChromeMetrics {
     std::string icon_toolbar_symbol_chrome_policy;
     std::string icon_sidebar_symbol_color_policy;
     std::string icon_file_type_color_policy;
+    std::string icon_metrics_policy;
+    std::string icon_hit_target_policy;
     std::string icon_scale;
     std::string theme_profile_name;
     std::string theme_reference;
@@ -678,6 +683,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_toolbar_point_size = 0.0f,
             .icon_sidebar_point_size = 0.0f,
             .icon_sidebar_optical_y_offset = 0.0f,
+            .icon_toolbar_hit_target_size = 0.0f,
+            .icon_sidebar_hit_target_size = 0.0f,
+            .icon_action_hit_target_size = 0.0f,
             .column_location_row_height = 0.0f,
             .column_location_icon_size = 0.0f,
             .integrated_titlebar = false,
@@ -718,6 +726,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_toolbar_symbol_chrome_policy = "n/a",
             .icon_sidebar_symbol_color_policy = "n/a",
             .icon_file_type_color_policy = "n/a",
+            .icon_metrics_policy = "n/a",
+            .icon_hit_target_policy = "n/a",
             .icon_scale = "n/a",
             .theme_profile_name = "n/a",
             .theme_reference = "n/a",
@@ -828,12 +838,32 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             static_cast<int>(icon_catalog::svg_path_arc_symbol_count),
         .icon_round_stroke_symbol_count =
             static_cast<int>(icon_catalog::round_stroke_symbol_count),
-        .icon_grid_size = 24.0f,
-        .icon_default_stroke_width = 1.8f,
-        .icon_secondary_opacity = 0.66f,
-        .icon_toolbar_point_size = 24.0f,
-        .icon_sidebar_point_size = 26.0f,
-        .icon_sidebar_optical_y_offset = -0.5f,
+        .icon_grid_size =
+            icon_catalog::descriptor(icon_catalog::Symbol::Document).grid_size,
+        .icon_default_stroke_width =
+            icon_catalog::descriptor(
+                icon_catalog::Symbol::Document).default_stroke_width,
+        .icon_secondary_opacity =
+            icon_catalog::descriptor(
+                icon_catalog::Symbol::Document).secondary_opacity,
+        .icon_toolbar_point_size =
+            icon_catalog::metrics(
+                icon_catalog::SymbolPresentationRole::Toolbar).point_size,
+        .icon_sidebar_point_size =
+            icon_catalog::metrics(
+                icon_catalog::SymbolPresentationRole::Sidebar).point_size,
+        .icon_sidebar_optical_y_offset =
+            icon_catalog::metrics(
+                icon_catalog::SymbolPresentationRole::Sidebar).optical_y_offset,
+        .icon_toolbar_hit_target_size =
+            icon_catalog::hit_target_size(
+                icon_catalog::SymbolPresentationRole::Toolbar),
+        .icon_sidebar_hit_target_size =
+            icon_catalog::hit_target_size(
+                icon_catalog::SymbolPresentationRole::Sidebar),
+        .icon_action_hit_target_size =
+            icon_catalog::hit_target_size(
+                icon_catalog::SymbolPresentationRole::Action),
         .column_location_row_height = k_desktop_column_location_row_height,
         .column_location_icon_size = k_desktop_column_location_icon_size,
         .integrated_titlebar = true,
@@ -891,6 +921,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             std::string{icon_catalog::sidebar_symbol_color_policy()},
         .icon_file_type_color_policy =
             std::string{icon_catalog::file_type_color_policy()},
+        .icon_metrics_policy = std::string{icon_catalog::metrics_policy()},
+        .icon_hit_target_policy =
+            std::string{icon_catalog::hit_target_policy()},
         .icon_scale = std::string{icon_catalog::default_scale_policy()},
         .theme_profile_name =
             std::string{theme_contract::default_theme_profile_name()},
@@ -1571,6 +1604,15 @@ inline json::Value explorer_chrome_debug_json(
         "sidebar_optical_y_offset",
         json::Value{chrome.icon_sidebar_optical_y_offset});
     icon_system.emplace(
+        "toolbar_hit_target_size",
+        json::Value{chrome.icon_toolbar_hit_target_size});
+    icon_system.emplace(
+        "sidebar_hit_target_size",
+        json::Value{chrome.icon_sidebar_hit_target_size});
+    icon_system.emplace(
+        "action_hit_target_size",
+        json::Value{chrome.icon_action_hit_target_size});
+    icon_system.emplace(
         "column_location_icon_size",
         json::Value{chrome.column_location_icon_size});
     icon_system.emplace("text_weight_aligned", json::Value{chrome.icon_text_weight_aligned});
@@ -1605,6 +1647,12 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "file_type_color_policy",
         json::Value{chrome.icon_file_type_color_policy});
+    icon_system.emplace(
+        "metrics_policy",
+        json::Value{chrome.icon_metrics_policy});
+    icon_system.emplace(
+        "hit_target_policy",
+        json::Value{chrome.icon_hit_target_policy});
     icon_system.emplace("scale", json::Value{chrome.icon_scale});
     icon_system.emplace(
         "sidebar_reference_symbols",

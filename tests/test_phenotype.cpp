@@ -3613,6 +3613,23 @@ void test_icon_catalog_umbrella_export() {
            == "macos_finder_file_type_tints");
     assert(phenotype::icon_catalog::interaction_tone_policy()
            == "macos_finder_interaction_tones");
+    assert(phenotype::icon_catalog::metrics_policy()
+           == "macos_finder_role_metrics_with_explicit_hit_targets");
+    assert(phenotype::icon_catalog::hit_target_size(
+               phenotype::icon_catalog::SymbolPresentationRole::Toolbar)
+           == 36.0f);
+    assert(phenotype::icon_catalog::hit_target_size(
+               phenotype::icon_catalog::SymbolPresentationRole::Sidebar)
+           == 38.0f);
+    assert(phenotype::icon_catalog::symbol_from_name("recents").has_value());
+    assert(*phenotype::icon_catalog::symbol_from_name("recents")
+           == phenotype::icon_catalog::Symbol::Recents);
+    assert(phenotype::icon_catalog::symbol_from_semantic_reference_name(
+               "magnifyingglass")
+               .has_value());
+    assert(*phenotype::icon_catalog::symbol_from_semantic_reference_name(
+               "magnifyingglass")
+           == phenotype::icon_catalog::Symbol::Search);
     assert(phenotype::icon_catalog::macos_interaction_tone(
                phenotype::icon_catalog::SymbolPresentationRole::Sidebar,
                phenotype::icon_catalog::SymbolInteractionState{true, true})

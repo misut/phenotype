@@ -68,8 +68,9 @@ The initial scope is intentionally narrow:
   macOS/Finder/SF-Symbols-inspired reference policy, package-owned SVG asset
   rule, supported SVG path subset and arc-lowering policy, count invariants,
   SVG arc-using built-in symbol count, all/sidebar/toolbar semantic reference sets,
-  per-symbol role/variant/rendering/layer metadata, presentation defaults, and
-  Finder-style selected/disabled tone and file-type tint policies for
+  per-symbol role/variant/rendering/layer metadata, name/reference lookup
+  invariants, presentation defaults, role hit-target metrics, and Finder-style
+  selected/disabled tone and file-type tint policies for
   toolbar/sidebar/folder/document/image/movie glyphs.
   The command deliberately reports semantic SF Symbols names without embedding
   Apple vector artwork, so CI and future LLM debugging can verify icon intent

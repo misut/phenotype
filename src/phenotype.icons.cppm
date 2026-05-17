@@ -1,6 +1,7 @@
 module;
 #include <cstdint>
 #include <cstring>
+#include <optional>
 #include <string_view>
 export module phenotype.icons;
 
@@ -266,12 +267,24 @@ struct SymbolPresentation {
     SymbolRenderingMode rendering = SymbolRenderingMode::Monochrome;
     Color color = {96, 96, 100, 255};
     float point_size = 24.0f;
+    float hit_target_size = 36.0f;
     float optical_y_offset = 0.0f;
 };
 
 struct SymbolInteractionState {
     bool selected = false;
     bool enabled = true;
+};
+
+struct SymbolMetrics {
+    SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
+    SymbolScale scale = SymbolScale::Medium;
+    float grid_size = 24.0f;
+    float point_size = 24.0f;
+    float hit_target_size = 36.0f;
+    float content_inset = 6.0f;
+    float stroke_width = 1.8f;
+    float optical_y_offset = 0.0f;
 };
 
 inline constexpr unsigned int all_symbol_count = catalog::all_symbol_count;
@@ -302,6 +315,14 @@ inline auto sidebar_symbol_at(unsigned int index) noexcept -> Symbol {
 
 inline auto toolbar_symbol_at(unsigned int index) noexcept -> Symbol {
     return from_catalog_symbol(catalog::toolbar_symbol_at(index));
+}
+
+inline auto symbol_from_name(std::string_view symbol_name) noexcept
+        -> std::optional<Symbol> {
+    auto const found = catalog::symbol_from_name(symbol_name);
+    if (!found.has_value())
+        return std::nullopt;
+    return from_catalog_symbol(*found);
 }
 
 inline auto style_name() noexcept -> std::string_view {
@@ -380,6 +401,14 @@ inline auto default_scale_policy() noexcept -> std::string_view {
     return catalog::default_scale_policy();
 }
 
+inline auto metrics_policy() noexcept -> std::string_view {
+    return catalog::metrics_policy();
+}
+
+inline auto hit_target_policy() noexcept -> std::string_view {
+    return catalog::hit_target_policy();
+}
+
 inline auto interface_metaphor_policy() noexcept -> std::string_view {
     return catalog::interface_metaphor_policy();
 }
@@ -398,6 +427,15 @@ inline auto sidebar_symbol_color_policy() noexcept -> std::string_view {
 
 inline auto semantic_reference_name(Symbol symbol) noexcept -> std::string_view {
     return catalog::semantic_reference_name(to_catalog_symbol(symbol));
+}
+
+inline auto symbol_from_semantic_reference_name(
+        std::string_view reference_name) noexcept -> std::optional<Symbol> {
+    auto const found =
+        catalog::symbol_from_semantic_reference_name(reference_name);
+    if (!found.has_value())
+        return std::nullopt;
+    return from_catalog_symbol(*found);
 }
 
 inline bool supports_hierarchical_opacity(Symbol symbol) noexcept {
@@ -457,8 +495,40 @@ inline float point_size(SymbolScale scale) noexcept {
     return catalog::point_size(to_catalog_scale(scale));
 }
 
+inline float hit_target_size(SymbolPresentationRole role) noexcept {
+    return catalog::hit_target_size(to_catalog_presentation_role(role));
+}
+
 inline float optical_y_offset(SymbolPresentationRole role) noexcept {
     return catalog::optical_y_offset(to_catalog_presentation_role(role));
+}
+
+inline auto metrics(SymbolPresentationRole role) noexcept -> SymbolMetrics {
+    auto const base = catalog::metrics(to_catalog_presentation_role(role));
+    return SymbolMetrics{
+        from_catalog_presentation_role(base.role),
+        from_catalog_scale(base.scale),
+        base.grid_size,
+        base.point_size,
+        base.hit_target_size,
+        base.content_inset,
+        base.stroke_width,
+        base.optical_y_offset,
+    };
+}
+
+inline auto symbol_metrics(Symbol symbol) noexcept -> SymbolMetrics {
+    auto const base = catalog::symbol_metrics(to_catalog_symbol(symbol));
+    return SymbolMetrics{
+        from_catalog_presentation_role(base.role),
+        from_catalog_scale(base.scale),
+        base.grid_size,
+        base.point_size,
+        base.hit_target_size,
+        base.content_inset,
+        base.stroke_width,
+        base.optical_y_offset,
+    };
 }
 
 inline auto macos_light_tone_color(SymbolTone tone) noexcept -> Color {
@@ -511,6 +581,7 @@ inline auto presentation(Symbol symbol,
         desc.preferred_rendering,
         macos_light_tone_color(tone),
         point_size(scale),
+        hit_target_size(role),
         optical_y_offset(role),
     };
 }
