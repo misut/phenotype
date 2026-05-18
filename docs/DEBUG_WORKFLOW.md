@@ -384,6 +384,10 @@ the exact ISC or Feather-derived MIT license and a direct raw SVG URL pinned to
 the catalog revision, plus `platform_extracted=false` and
 `runtime_fetch_required=false`, so a future LLM can audit provenance without
 trusting `main` or assuming a local macOS icon service was used. The
+file-explorer `resource_system.file_type_icon_source_map` repeats that
+attribution next to each packaged `assets/icons/file-types/*.svg` declaration,
+so package bundle bugs and catalog provenance bugs can be separated from a
+single artifact. The
 `reference_sources` array names the exact Apple HIG/SF Symbols
 semantic references, W3C SVG path reference, Lucide embedded-source reference,
 Feather MIT license-lineage reference, Tabler MIT future-source candidate, and

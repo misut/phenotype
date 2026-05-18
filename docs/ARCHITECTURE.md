@@ -340,6 +340,9 @@ resource bundle preserves the permissive-source notice alongside the copied SVG
 files. Entry debug JSON links each resolved file-type symbol back to the
 package asset name/source, which lets CI logs explain whether an icon mismatch
 belongs to filename classification, the package manifest, or SVG rendering.
+`resource_system.file_type_icon_source_map` also ties each package asset to the
+catalog source attribution, including direct pinned raw SVG URL, license,
+`platform_extracted=false`, and `runtime_fetch_required=false`.
 The catalog also publishes the SVG subset and arc-lowering policy, so CLI
 checks and example artifacts can catch a regression where a macOS-style glyph
 depends on an unsupported path command. AirDrop intentionally uses SVG `A/a`

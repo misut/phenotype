@@ -7,6 +7,7 @@ import cppx.process;
 import cppx.process.system;
 import cppx.terminal;
 import json;
+import phenotype.icon_catalog;
 import phenotype.resources;
 import phenotype.svg_contract;
 import phenotype_cli.common;
@@ -15,8 +16,24 @@ import std;
 namespace phenotype_cli::package {
 
 namespace fs = std::filesystem;
+namespace icon_catalog = phenotype::icon_catalog;
 namespace svg_contract = phenotype::svg_contract;
 using namespace phenotype_cli::common;
+
+export struct PackageIconSourceAttribution {
+    std::string family;
+    std::string icon_name;
+    std::string license;
+    std::string license_url;
+    std::string source_url;
+    std::string source_revision;
+    std::string copyright;
+    bool embedded_source = false;
+    bool modified_for_phenotype = false;
+    bool apple_asset = false;
+    bool platform_extracted = false;
+    bool runtime_fetch_required = false;
+};
 
 export struct PackageSvgAssetInspection {
     std::string name;
@@ -28,6 +45,10 @@ export struct PackageSvgAssetInspection {
     bool ok = false;
     std::string error;
     std::vector<std::string> native_window_control_palette_hits;
+    bool file_type_icon_asset = false;
+    std::string file_type_token;
+    std::string icon_symbol;
+    PackageIconSourceAttribution source_attribution;
     svg_contract::DocumentInspection inspection;
 };
 
@@ -309,6 +330,75 @@ auto optional_positional_or_error(cppx::cli::Invocation const& invocation,
     return fs::path{invocation.positionals.front()};
 }
 
+auto file_type_token_from_package_asset_name(std::string_view name)
+        -> std::optional<std::string_view> {
+    auto constexpr prefix = std::string_view{"file_type."};
+    auto constexpr suffix = std::string_view{".icon"};
+    if (!name.starts_with(prefix) || !name.ends_with(suffix))
+        return std::nullopt;
+    return name.substr(prefix.size(),
+                       name.size() - prefix.size() - suffix.size());
+}
+
+auto file_type_symbol_for_token(std::string_view token)
+        -> std::optional<icon_catalog::Symbol> {
+    if (token == "folder")
+        return icon_catalog::Symbol::Folder;
+    if (token == "document")
+        return icon_catalog::Symbol::Document;
+    if (token == "pdf")
+        return icon_catalog::Symbol::PdfDocument;
+    if (token == "text")
+        return icon_catalog::Symbol::TextDocument;
+    if (token == "image")
+        return icon_catalog::Symbol::Image;
+    if (token == "movie")
+        return icon_catalog::Symbol::Movie;
+    if (token == "archive")
+        return icon_catalog::Symbol::Archive;
+    if (token == "audio")
+        return icon_catalog::Symbol::AudioDocument;
+    if (token == "code")
+        return icon_catalog::Symbol::CodeDocument;
+    if (token == "spreadsheet")
+        return icon_catalog::Symbol::SpreadsheetDocument;
+    if (token == "presentation")
+        return icon_catalog::Symbol::PresentationDocument;
+    return std::nullopt;
+}
+
+auto package_icon_source_attribution(
+        icon_catalog::Symbol symbol) -> PackageIconSourceAttribution {
+    auto source = icon_catalog::source_attribution(symbol);
+    return PackageIconSourceAttribution{
+        .family = std::string{source.family},
+        .icon_name = std::string{source.icon_name},
+        .license = std::string{source.license},
+        .license_url = std::string{source.license_url},
+        .source_url = std::string{source.source_url},
+        .source_revision = std::string{source.source_revision},
+        .copyright = std::string{source.copyright},
+        .embedded_source = source.embedded_source,
+        .modified_for_phenotype = source.modified_for_phenotype,
+        .apple_asset = source.apple_asset,
+        .platform_extracted = source.platform_extracted,
+        .runtime_fetch_required = source.runtime_fetch_required,
+    };
+}
+
+void attach_file_type_icon_provenance(PackageSvgAssetInspection& inspection) {
+    auto token = file_type_token_from_package_asset_name(inspection.name);
+    if (!token)
+        return;
+    inspection.file_type_icon_asset = true;
+    inspection.file_type_token = std::string{*token};
+    auto symbol = file_type_symbol_for_token(*token);
+    if (!symbol)
+        return;
+    inspection.icon_symbol = std::string{icon_catalog::name(*symbol)};
+    inspection.source_attribution = package_icon_source_attribution(*symbol);
+}
+
 auto inspect_package_svg_asset(
         fs::path const& root,
         phenotype::AssetDescriptor const& asset)
@@ -316,6 +406,7 @@ auto inspect_package_svg_asset(
     auto result = PackageSvgAssetInspection{};
     result.name = asset.name;
     result.source = asset.source;
+    attach_file_type_icon_provenance(result);
     result.path = root / asset.source;
     result.present = path_exists(result.path);
     result.bytes = file_size_or_zero(result.path);
@@ -558,6 +649,84 @@ auto native_window_palette_failure_detail(PackageSummary const& summary)
     return detail;
 }
 
+auto file_type_icon_asset_count(PackageSummary const& summary) -> std::size_t {
+    return static_cast<std::size_t>(std::ranges::count_if(
+        summary.svg_asset_inspections,
+        [](auto const& inspection) {
+            return inspection.file_type_icon_asset;
+        }));
+}
+
+auto file_type_icon_provenance_failure_count(
+        PackageSummary const& summary) -> std::size_t {
+    return static_cast<std::size_t>(std::ranges::count_if(
+        summary.svg_asset_inspections,
+        [](auto const& inspection) {
+            if (!inspection.file_type_icon_asset)
+                return false;
+            auto const& source = inspection.source_attribution;
+            return inspection.file_type_token.empty()
+                || inspection.icon_symbol.empty()
+                || source.family.empty()
+                || source.license.empty()
+                || source.source_url.empty()
+                || source.source_revision.empty()
+                || !source.embedded_source
+                || source.apple_asset
+                || source.platform_extracted
+                || source.runtime_fetch_required;
+        }));
+}
+
+auto file_type_icon_provenance_detail(PackageSummary const& summary)
+        -> std::string {
+    auto const icon_count = file_type_icon_asset_count(summary);
+    auto const failure_count =
+        file_type_icon_provenance_failure_count(summary);
+    auto detail = std::format("file_type_icon_assets={} failures={}",
+                              icon_count,
+                              failure_count);
+    if (failure_count == 0)
+        return detail;
+
+    auto shown = std::size_t{0};
+    for (auto const& inspection : summary.svg_asset_inspections) {
+        if (!inspection.file_type_icon_asset)
+            continue;
+        auto const& source = inspection.source_attribution;
+        auto failed = inspection.file_type_token.empty()
+            || inspection.icon_symbol.empty()
+            || source.family.empty()
+            || source.license.empty()
+            || source.source_url.empty()
+            || source.source_revision.empty()
+            || !source.embedded_source
+            || source.apple_asset
+            || source.platform_extracted
+            || source.runtime_fetch_required;
+        if (!failed)
+            continue;
+        if (shown >= 4) {
+            detail += std::format(" (+{} more)", failure_count - shown);
+            break;
+        }
+        detail += std::format(
+            " {} token={} family={} license={} fetch={} platform={}",
+            inspection.name,
+            inspection.file_type_token.empty() ? "<missing>" : inspection.file_type_token,
+            source.family.empty() ? "<missing>" : source.family,
+            source.license.empty() ? "<missing>" : source.license,
+            source.runtime_fetch_required ? "true" : "false",
+            source.platform_extracted ? "true" : "false");
+        ++shown;
+    }
+    return detail;
+}
+
+bool file_type_icon_provenance_ok(PackageSummary const& summary) {
+    return file_type_icon_provenance_failure_count(summary) == 0;
+}
+
 export auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
     return {
         {.name = "package_root",
@@ -654,6 +823,10 @@ export auto package_checks(PackageSummary const& summary) -> std::vector<Check> 
          .ok = native_window_palette_failure_count(summary) == 0,
          .detail = native_window_palette_failure_detail(summary),
          .hint = "Do not embed traffic-light/caption-button marker colors in packaged SVG assets; native windows own those controls."},
+        {.name = "svg_file_type_icon_provenance",
+         .ok = file_type_icon_provenance_ok(summary),
+         .detail = file_type_icon_provenance_detail(summary),
+         .hint = "File-type SVG package assets must map to audited source attribution with a pinned URL, no Apple artwork, no platform extraction, and no runtime fetch."},
         {.name = "manifest_sources",
          .ok = summary.source_reference_count > 0
              && summary.missing_sources.empty(),
@@ -747,7 +920,7 @@ auto assets_catalog_json(
 }
 
 auto svg_document_summary_json(svg_contract::DocumentSummary const& summary)
-    -> std::string {
+        -> std::string {
     return std::format(
         "{{\"view_box\":{{\"x\":{},\"y\":{},\"width\":{},\"height\":{}}},"
         "\"shape_count\":{},\"diagnostic_count\":{},"
@@ -764,12 +937,36 @@ auto svg_document_summary_json(svg_contract::DocumentSummary const& summary)
         summary.has_diagnostics ? "true" : "false");
 }
 
+auto icon_source_attribution_json(
+        PackageIconSourceAttribution const& source) -> std::string {
+    return std::format(
+        "{{\"family\":{},\"icon_name\":{},\"license\":{},"
+        "\"license_url\":{},\"source_url\":{},\"source_revision\":{},"
+        "\"copyright\":{},\"embedded_source\":{},"
+        "\"modified_for_phenotype\":{},\"apple_asset\":{},"
+        "\"platform_extracted\":{},\"runtime_fetch_required\":{}}}",
+        json_string(source.family),
+        json_string(source.icon_name),
+        json_string(source.license),
+        json_string(source.license_url),
+        json_string(source.source_url),
+        json_string(source.source_revision),
+        json_string(source.copyright),
+        source.embedded_source ? "true" : "false",
+        source.modified_for_phenotype ? "true" : "false",
+        source.apple_asset ? "true" : "false",
+        source.platform_extracted ? "true" : "false",
+        source.runtime_fetch_required ? "true" : "false");
+}
+
 auto svg_asset_inspection_json(PackageSvgAssetInspection const& inspection)
     -> std::string {
     return std::format(
         "{{\"name\":{},\"source\":{},\"path\":{},\"present\":{},"
         "\"bytes\":{},\"inspected\":{},\"ok\":{},\"error\":{},"
         "\"native_window_control_palette_hits\":{},"
+        "\"file_type_icon_asset\":{},\"file_type_token\":{},"
+        "\"icon_symbol\":{},\"source_attribution\":{},"
         "\"summary\":{},\"diagnostics\":{}}}",
         json_string(inspection.name),
         json_string(inspection.source),
@@ -780,6 +977,10 @@ auto svg_asset_inspection_json(PackageSvgAssetInspection const& inspection)
         inspection.ok ? "true" : "false",
         json_string(inspection.error),
         string_array_json(inspection.native_window_control_palette_hits),
+        inspection.file_type_icon_asset ? "true" : "false",
+        json_string(inspection.file_type_token),
+        json_string(inspection.icon_symbol),
+        icon_source_attribution_json(inspection.source_attribution),
         svg_document_summary_json(inspection.inspection.summary),
         string_array_json(inspection.inspection.diagnostics));
 }
