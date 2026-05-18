@@ -358,7 +358,7 @@ duplicate
     assert(chrome.content_surface_width == chrome.toolbar_shell_width);
     assert(chrome.sidebar_surface_x == demo::k_desktop_window_content_inset);
     assert(chrome.sidebar_surface_y == demo::k_desktop_window_content_inset);
-    assert(chrome.sidebar_first_row_y == 76.0f);
+    assert(chrome.sidebar_first_row_y == 64.0f);
     assert(chrome.sidebar_row_height == demo::k_desktop_sidebar_row_height);
     assert(chrome.sidebar_heading_height
            == demo::k_desktop_sidebar_heading_height);
@@ -485,6 +485,7 @@ duplicate
     assert(chrome.icon_phenotype_owned_symbol_count == 4);
     assert(chrome.icon_permissive_source_symbol_count == 35);
     assert(chrome.icon_lucide_source_symbol_count == 35);
+    assert(chrome.icon_lucide_unique_source_icon_count == 34);
     assert(chrome.icon_apple_asset_symbol_count == 0);
     assert(chrome.icon_platform_extracted_symbol_count == 0);
     assert(chrome.icon_runtime_fetched_symbol_count == 0);
@@ -1001,6 +1002,8 @@ duplicate
     assert(debug_text.find("\"svg_path_arc_symbol_count\":16")
            != std::string::npos);
     assert(debug_text.find("\"lucide_source_symbol_count\":35")
+           != std::string::npos);
+    assert(debug_text.find("\"lucide_unique_source_icon_count\":34")
            != std::string::npos);
     assert(debug_text.find("\"source_attribution_policy\"")
            != std::string::npos);

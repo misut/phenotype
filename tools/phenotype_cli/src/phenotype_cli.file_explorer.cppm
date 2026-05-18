@@ -389,6 +389,7 @@ export auto explorer_chrome_json(
         "\"phenotype_owned_symbol_count\":{},"
         "\"permissive_source_symbol_count\":{},"
         "\"lucide_source_symbol_count\":{},"
+        "\"lucide_unique_source_icon_count\":{},"
         "\"apple_asset_symbol_count\":{},"
         "\"platform_extracted_symbol_count\":{},"
         "\"runtime_fetched_symbol_count\":{},"
@@ -562,6 +563,7 @@ export auto explorer_chrome_json(
         chrome.icon_phenotype_owned_symbol_count,
         chrome.icon_permissive_source_symbol_count,
         chrome.icon_lucide_source_symbol_count,
+        chrome.icon_lucide_unique_source_icon_count,
         chrome.icon_apple_asset_symbol_count,
         chrome.icon_platform_extracted_symbol_count,
         chrome.icon_runtime_fetched_symbol_count,

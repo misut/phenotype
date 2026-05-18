@@ -226,6 +226,7 @@ inline constexpr unsigned int phenotype_owned_symbol_count = 4;
 inline constexpr unsigned int permissive_source_symbol_count = 35;
 inline constexpr unsigned int lucide_source_symbol_count =
     permissive_source_symbol_count;
+inline constexpr unsigned int lucide_unique_source_icon_count = 34;
 inline constexpr unsigned int apple_asset_symbol_count = 0;
 inline constexpr unsigned int platform_extracted_symbol_count = 0;
 inline constexpr unsigned int runtime_fetched_symbol_count = 0;
@@ -864,6 +865,47 @@ inline auto permissive_source_icon_name(Symbol symbol) noexcept
     case Symbol::PresentationDocument: return "presentation";
     default:                   return name(symbol);
     }
+}
+
+inline auto lucide_source_icon_name_at(unsigned int index) noexcept
+        -> std::string_view {
+    switch (index) {
+    case 0:  return "chevron-left";
+    case 1:  return "chevron-right";
+    case 2:  return "search";
+    case 3:  return "share";
+    case 4:  return "tag";
+    case 5:  return "grid-2x2";
+    case 6:  return "list";
+    case 7:  return "columns-3";
+    case 8:  return "gallery-horizontal";
+    case 9:  return "folder";
+    case 10: return "trash-2";
+    case 11: return "file";
+    case 12: return "file-image";
+    case 13: return "clapperboard";
+    case 14: return "plus";
+    case 15: return "x";
+    case 16: return "chevron-down";
+    case 17: return "chevron-up";
+    case 18: return "house";
+    case 19: return "cloud";
+    case 20: return "clock";
+    case 21: return "panel-left";
+    case 22: return "folder-plus";
+    case 23: return "app-window";
+    case 24: return "monitor";
+    case 25: return "circle-arrow-down";
+    case 26: return "copy";
+    case 27: return "file-plus";
+    case 28: return "file-text";
+    case 29: return "file-archive";
+    case 30: return "file-music";
+    case 31: return "file-code";
+    case 32: return "file-spreadsheet";
+    case 33: return "presentation";
+    }
+    return "file";
 }
 
 inline auto lucide_source_url(std::string_view icon_name) noexcept

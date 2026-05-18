@@ -554,7 +554,7 @@
     },
     {
       "path": "application.file_explorer.chrome.geometry.sidebar_first_row_y",
-      "equals": 76.0
+      "equals": 64.0
     },
     {
       "path": "application.file_explorer.chrome.geometry.finder_density_policy",
@@ -731,6 +731,10 @@
     {
       "path": "application.file_explorer.chrome.icon_system.lucide_source_symbol_count",
       "equals": 35
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.lucide_unique_source_icon_count",
+      "equals": 34
     },
     {
       "path": "application.file_explorer.chrome.icon_system.apple_asset_symbol_count",
@@ -1862,7 +1866,7 @@
   "pixel_regions": [
     {
       "name": "finder-titlebar-drag-reserve",
-      "rect": [0.105, 0.02, 0.05, 0.08],
+      "rect": [0.105, 0.02, 0.05, 0.06],
       "min_luma_delta": 2.0,
       "min_unique_colors": 4
     },
@@ -1898,13 +1902,13 @@
     },
     {
       "name": "finder-sidebar-selected-row-fill",
-      "rect": [0.095, 0.105, 0.06, 0.035],
+      "rect": [0.095, 0.089, 0.06, 0.035],
       "min_luma_delta": 0.5,
       "min_unique_colors": 2
     },
     {
       "name": "finder-sidebar-selected-symbol-accent",
-      "rect": [0.025, 0.112, 0.022, 0.034],
+      "rect": [0.025, 0.096, 0.022, 0.034],
       "min_luma_delta": 90.0,
       "min_unique_colors": 24
     },

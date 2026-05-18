@@ -408,6 +408,8 @@ inline constexpr unsigned int permissive_source_symbol_count =
     catalog::permissive_source_symbol_count;
 inline constexpr unsigned int lucide_source_symbol_count =
     catalog::lucide_source_symbol_count;
+inline constexpr unsigned int lucide_unique_source_icon_count =
+    catalog::lucide_unique_source_icon_count;
 inline constexpr unsigned int apple_asset_symbol_count =
     catalog::apple_asset_symbol_count;
 inline constexpr unsigned int platform_extracted_symbol_count =
@@ -447,6 +449,11 @@ inline constexpr unsigned int symbol_interaction_phase_count =
 
 inline auto symbol_at(unsigned int index) noexcept -> Symbol {
     return from_catalog_symbol(catalog::symbol_at(index));
+}
+
+inline auto lucide_source_icon_name_at(unsigned int index) noexcept
+        -> std::string_view {
+    return catalog::lucide_source_icon_name_at(index);
 }
 
 inline auto sidebar_symbol_at(unsigned int index) noexcept -> Symbol {

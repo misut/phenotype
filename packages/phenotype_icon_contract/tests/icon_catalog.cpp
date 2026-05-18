@@ -153,6 +153,7 @@ int main() {
     assert(icons::phenotype_owned_symbol_count == 4);
     assert(icons::permissive_source_symbol_count == 35);
     assert(icons::lucide_source_symbol_count == 35);
+    assert(icons::lucide_unique_source_icon_count == 34);
     assert(icons::apple_asset_symbol_count == 0);
     assert(icons::platform_extracted_symbol_count == 0);
     assert(icons::runtime_fetched_symbol_count == 0);
@@ -170,6 +171,27 @@ int main() {
     assert(icons::reference_symbol_count == icons::all_symbol_count);
     assert(icons::svg_path_arc_symbol_count == 16);
     assert(icons::round_stroke_symbol_count == icons::outline_symbol_count);
+    assert(icons::lucide_source_icon_name_at(0) == "chevron-left");
+    assert(icons::lucide_source_icon_name_at(28) == "file-text");
+    assert(icons::lucide_source_icon_name_at(
+               icons::lucide_unique_source_icon_count - 1)
+           == "presentation");
+    unsigned int unique_source_count = 0;
+    for (unsigned int i = 0; i < icons::lucide_unique_source_icon_count; ++i) {
+        auto const icon_name = icons::lucide_source_icon_name_at(i);
+        assert(!icon_name.empty());
+        assert(icons::lucide_source_url(icon_name).find(
+                   icons::lucide_source_revision())
+               != std::string_view::npos);
+        assert(icons::lucide_source_url(icon_name).find(
+                   "raw.githubusercontent.com")
+               != std::string_view::npos);
+        for (unsigned int j = 0; j < i; ++j) {
+            assert(icons::lucide_source_icon_name_at(j) != icon_name);
+        }
+        ++unique_source_count;
+    }
+    assert(unique_source_count == icons::lucide_unique_source_icon_count);
 
     unsigned int outline_count = 0;
     unsigned int filled_count = 0;
