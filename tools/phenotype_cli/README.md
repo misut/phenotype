@@ -12,11 +12,16 @@ turning `main.cpp` into every subsystem at once:
   summaries, and resource diagnostic emission.
 - `phenotype_cli.contracts` owns pure theme and IO contract checks/JSON for
   `phenotype theme contract` and `phenotype io contract`.
-- `phenotype_cli.file_explorer` owns file explorer drive JSON, expectation
-  JSON, keyboard/focus model JSON, and localized label emission.
+- `phenotype_cli.file_explorer` owns file explorer drive JSON, chrome/native
+  window control JSON, expectation JSON, keyboard/focus model JSON, and
+  localized label emission.
 - `phenotype_cli.icons` owns icon catalog checks, lookup/presentation/render
   JSON, SVG support summaries, and the icon helper payloads reused by file
   explorer debug output.
+- `phenotype_cli.package` owns package manifest inspection, resource catalog
+  checks, package bundling, bundle integrity verification, and macOS app bundle
+  staging helpers. It keeps filesystem/package edge IO away from command
+  dispatch while preserving the pure `phenotype.resources` contract boundary.
 - `main.cpp` should stay responsible for command parsing, edge IO/process
   execution, and composing the subcommand results.
 
