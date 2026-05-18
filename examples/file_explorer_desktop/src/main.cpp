@@ -243,9 +243,39 @@ phenotype::ResourceCatalog runtime_resource_catalog() {
         locale_texts);
 }
 
+struct SvgPreviewDocumentCacheEntry {
+    std::string source;
+    phenotype::svg::Document document;
+};
+
+struct SvgPreviewDocumentCache {
+    std::vector<SvgPreviewDocumentCacheEntry> entries;
+};
+
+phenotype::svg::Document const* cached_svg_preview_document(
+        SvgPreviewDocumentCache& cache,
+        std::string_view source) {
+    if (source.empty())
+        return nullptr;
+    for (auto const& entry : cache.entries) {
+        if (entry.source == source)
+            return &entry.document;
+    }
+    if (cache.entries.size()
+        >= static_cast<std::size_t>(
+            file_explorer_demo::k_desktop_thumbnail_svg_document_cache_limit)) {
+        return nullptr;
+    }
+    auto& entry = cache.entries.emplace_back();
+    entry.source = std::string{source};
+    entry.document = phenotype::svg::parse(source);
+    return &entry.document;
+}
+
 struct State {
     phenotype::icons::SymbolDocumentCache icon_cache =
         phenotype::icons::make_symbol_document_cache();
+    mutable SvgPreviewDocumentCache svg_preview_cache;
     file_explorer_demo::ExplorerState explorer;
     file_explorer_demo::ExplorerLabels labels;
     bool search_visible = false;
@@ -258,6 +288,9 @@ struct State {
               runtime_resource_catalog())),
           search_visible(!explorer.search.empty()),
           more_actions_open(initial_more_actions_open()) {
+        svg_preview_cache.entries.reserve(
+            static_cast<std::size_t>(
+                file_explorer_demo::k_desktop_thumbnail_svg_document_cache_limit));
     }
 };
 
@@ -667,20 +700,26 @@ void paint_svg_preview_fallback(phenotype::Painter& painter,
 }
 
 void paint_svg_file_preview(phenotype::Painter& painter,
+                            SvgPreviewDocumentCache& cache,
                             std::string_view source,
                             float x,
                             float y,
                             float w,
                             float h,
                             bool selected) {
-    auto doc = phenotype::svg::parse(source);
-    if (!doc.empty()) {
+    auto local_doc = phenotype::svg::Document{};
+    auto const* doc = cached_svg_preview_document(cache, source);
+    if (!doc) {
+        local_doc = phenotype::svg::parse(source);
+        doc = &local_doc;
+    }
+    if (!doc->empty()) {
         auto const current_color = selected
             ? rgba(0, 122, 255)
             : rgba(68, 76, 88);
         phenotype::svg::paint(
             painter,
-            doc,
+            *doc,
             x + 10.0f,
             y + 7.0f,
             w - 20.0f,
@@ -697,6 +736,7 @@ void paint_svg_file_preview(phenotype::Painter& painter,
 }
 
 void paint_image_thumbnail(phenotype::Painter& painter,
+                           SvgPreviewDocumentCache& cache,
                            bool selected,
                            bool svg_file,
                            std::string_view svg_source) {
@@ -720,7 +760,7 @@ void paint_image_thumbnail(phenotype::Painter& painter,
     fill_rect(painter, x + 3.0f, y + 4.0f, w - 6.0f, 2.0f,
               rgba(235, 239, 245));
     if (svg_file) {
-        paint_svg_file_preview(painter, svg_source, x, y, w, h, selected);
+        paint_svg_file_preview(painter, cache, svg_source, x, y, w, h, selected);
         return;
     }
     fill_round(painter, x + 10.0f, y + 13.0f, 26.0f, 10.0f, 4.0f,
@@ -790,6 +830,7 @@ void paint_folder_thumbnail(phenotype::Painter& painter,
 }
 
 void paint_item_thumbnail(phenotype::Painter& painter,
+                          SvgPreviewDocumentCache& cache,
                           file_explorer_demo::Entry const& entry,
                           bool selected,
                           std::string_view preview_source = {}) {
@@ -803,6 +844,7 @@ void paint_item_thumbnail(phenotype::Painter& painter,
     } else if (image_extension(ext)) {
         paint_image_thumbnail(
             painter,
+            cache,
             selected,
             svg_image_extension(ext),
             preview_source);
@@ -1841,6 +1883,7 @@ void finder_grid(State const& state,
     auto const chrome = file_explorer_demo::explorer_chrome_metrics(
         state.explorer,
         "desktop");
+    auto& svg_cache = state.svg_preview_cache;
     layout::material_surface(
         content_surface_options(),
         [&] {
@@ -1861,9 +1904,11 @@ void finder_grid(State const& state,
                         layout::column([&] {
                             widget::canvas(chrome.icon_grid_thumbnail_width,
                                 chrome.icon_grid_thumbnail_height,
-                                [entry, selected, preview_source](Painter& painter) {
+                                [entry, selected, preview_source, &svg_cache](
+                                        Painter& painter) {
                                     paint_item_thumbnail(
                                         painter,
+                                        svg_cache,
                                         entry,
                                         selected,
                                         preview_source);
@@ -1952,6 +1997,7 @@ void finder_column_view(State const& state,
     auto entries = finder_entries(snap);
     float const column_height = file_explorer_demo::desktop_scroll_height(
         state.explorer, 224.0f, 500.0f, 620.0f);
+    auto& svg_cache = state.svg_preview_cache;
     layout::material_surface(
         content_surface_options(),
         [&] {
@@ -2025,9 +2071,11 @@ void finder_column_view(State const& state,
                         if (snap.has_selection) {
                             widget::canvas(160.0f, 110.0f,
                                 [entry = snap.selected,
-                                 preview = snap.preview](Painter& painter) {
+                                 preview = snap.preview,
+                                 &svg_cache](Painter& painter) {
                                     paint_item_thumbnail(
                                         painter,
+                                        svg_cache,
                                         entry,
                                         true,
                                         preview);
@@ -2060,6 +2108,7 @@ void finder_gallery_view(State const& state,
     auto entries = finder_entries(snap);
     float const gallery_height = file_explorer_demo::desktop_scroll_height(
         state.explorer, 352.0f, 366.0f, 520.0f);
+    auto& svg_cache = state.svg_preview_cache;
     file_explorer_demo::Entry hero = snap.has_selection && !snap.selected.name.empty()
         ? snap.selected
         : (entries.empty() ? file_explorer_demo::Entry{} : entries.front());
@@ -2076,8 +2125,13 @@ void finder_gallery_view(State const& state,
             }
             layout::row([&] {
                 widget::canvas(220.0f, 150.0f,
-                    [hero, hero_preview](Painter& painter) {
-                        paint_item_thumbnail(painter, hero, true, hero_preview);
+                    [hero, hero_preview, &svg_cache](Painter& painter) {
+                        paint_item_thumbnail(
+                            painter,
+                            svg_cache,
+                            hero,
+                            true,
+                            hero_preview);
                     },
                     {},
                     thumbnail_paint_token(hero, true, hero_preview, 0x550000u));
@@ -2106,9 +2160,11 @@ void finder_gallery_view(State const& state,
                             : std::string{};
                         layout::column([&] {
                             widget::canvas(128.0f, 76.0f,
-                                [entry, selected, preview_source](Painter& painter) {
+                                [entry, selected, preview_source, &svg_cache](
+                                        Painter& painter) {
                                     paint_item_thumbnail(
                                         painter,
+                                        svg_cache,
                                         entry,
                                         selected,
                                         preview_source);

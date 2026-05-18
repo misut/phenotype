@@ -1393,6 +1393,14 @@
       "equals": "no_external_svg_resources_or_network_fetches"
     },
     {
+      "path": "application.file_explorer.chrome.thumbnail_system.svg_document_cache_policy",
+      "equals": "edge_svg_document_cache_keyed_by_file_preview_body_no_frame_parse_churn"
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.svg_document_cache_limit",
+      "equals": 32
+    },
+    {
       "path": "application.file_explorer.chrome.thumbnail_system.video_policy",
       "equals": "wide_video_preview_with_filmstrip_and_content_bands"
     },

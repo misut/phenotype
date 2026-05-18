@@ -144,10 +144,13 @@ visual restraint, but it paints deterministic phenotype-owned vector previews
 instead of reading user files or embedding platform preview assets. The shared
 `thumbnail_system` contract exposes PDF page size/fold/detail counts, media
 preview size/radius, image/video detail counts, shadow policy, and the
-`uses_external_previews=false` asset boundary. The manifest asserts those JSON
-paths and adds pixel-region probes for the first PDF, image, and video
-thumbnails, so a regression reports whether the preview painter, grid geometry,
-or capture region drifted.
+`uses_external_previews=false` asset boundary. SVG file thumbnails use a bounded
+edge document cache keyed by the sandbox preview body, and the same contract
+exposes the cache policy and limit so frame-to-frame SVG XML parse churn is
+debuggable from artifacts. The manifest asserts those JSON paths and adds
+pixel-region probes for the first PDF, image, and video thumbnails, so a
+regression reports whether the preview painter, grid geometry, or capture
+region drifted.
 On macOS, the same runtime object reports live `NSWindow` chrome state:
 transparent titlebar, full-size content view, hidden native title, and
 background dragging must all be enabled. These fields are actual platform

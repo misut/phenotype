@@ -298,8 +298,10 @@ movie strips, and shadow policy are all named separately, and
 `uses_external_previews=false` confirms that no native Quick Look or platform
 icon-service query is needed for CI artifacts. SVG thumbnails also expose
 `svg_render_policy`, `svg_preview_source_policy`, and
-`svg_external_resource_policy`; together these say that the desktop preview
-renders the sandbox file body through `phenotype.svg`, does not extract macOS
+`svg_external_resource_policy`, plus `svg_document_cache_policy` and
+`svg_document_cache_limit`; together these say that the desktop preview renders
+the sandbox file body through `phenotype.svg`, caches parsed preview documents
+at the edge, does not extract macOS
 icons, and does not fetch external SVG resources.
 To verify that path explicitly, run the local-only scenario:
 
