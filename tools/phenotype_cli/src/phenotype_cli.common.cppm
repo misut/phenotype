@@ -1,5 +1,6 @@
 export module phenotype_cli.common;
 
+import cppx.cli;
 import cppx.terminal;
 import phenotype.resources;
 import std;
@@ -49,6 +50,82 @@ auto absolute_path_string(std::filesystem::path const& path) -> std::string {
     auto ec = std::error_code{};
     auto absolute = std::filesystem::absolute(path, ec);
     return ec ? path_string(path) : path_string(absolute);
+}
+
+auto read_text_file(std::filesystem::path const& path) -> std::string {
+    auto input = std::ifstream{path, std::ios::binary};
+    if (!input)
+        return {};
+    return std::string{
+        std::istreambuf_iterator<char>{input},
+        std::istreambuf_iterator<char>{}};
+}
+
+auto write_text_file(std::filesystem::path const& path,
+                     std::string_view content,
+                     std::string& error) -> bool {
+    auto ec = std::error_code{};
+    auto parent = path.parent_path();
+    if (!parent.empty()) {
+        std::filesystem::create_directories(parent, ec);
+        if (ec) {
+            error = ec.message();
+            return false;
+        }
+    }
+    auto output = std::ofstream{path, std::ios::binary};
+    if (!output) {
+        error = "could not open output file";
+        return false;
+    }
+    output << content;
+    if (!output) {
+        error = "could not write output file";
+        return false;
+    }
+    return true;
+}
+
+auto single_positional_text_or_error(cppx::cli::Invocation const& invocation,
+                                     std::string_view command,
+                                     std::string_view value_name)
+        -> std::expected<std::string, std::string> {
+    if (invocation.positionals.empty()) {
+        return std::unexpected{
+            std::format("{} requires one positional {}", command, value_name)};
+    }
+    if (invocation.positionals.size() > 1) {
+        return std::unexpected{
+            std::format(
+                "{} accepts exactly one positional {}",
+                command,
+                value_name)};
+    }
+    return invocation.positionals.front();
+}
+
+auto error_json(std::string_view command, std::string_view message)
+        -> std::string {
+    return std::format(
+        "{{\"schema_version\":1,\"command\":{},\"ok\":false,\"error\":{}}}",
+        json_string(command),
+        json_string(message));
+}
+
+int print_error(std::string_view command, std::string_view message, bool json) {
+    if (json) {
+        std::println("{}", error_json(command, message));
+    } else {
+        std::println(
+            std::cerr,
+            "{}",
+            cppx::terminal::format_diagnostic({
+                .severity = cppx::terminal::DiagnosticSeverity::error,
+                .message = std::string{message},
+                .context = std::string{command},
+            }));
+    }
+    return 2;
 }
 
 auto all_ok(std::span<Check const> checks) -> bool {

@@ -167,12 +167,14 @@ CLI/package lane instead of the root macOS/wasm matrix. This keeps package-only
 contract work cheap while still exercising the command JSON surfaces that future
 automation depends on.
 The executable source is being split by command ownership as those surfaces
-stabilize: `phenotype_cli.common` owns shared JSON/check helpers,
+stabilize: `phenotype_cli.common` owns shared JSON/check, text-file, and
+positional/error helpers,
 `phenotype_cli.commands` owns the `cppx.cli` command tree and option metadata,
 `phenotype_cli.contracts` owns the pure theme/IO contract commands,
 `phenotype_cli.file_explorer` owns file explorer observation, chrome/native
 window control, and drive JSON, and
-`phenotype_cli.icons` owns built-in icon command helpers. `phenotype_cli.package`
+`phenotype_cli.icons` owns the icon and SVG inspection command runners plus
+built-in icon helper payloads. `phenotype_cli.package`
 now owns package manifest inspection, resource catalog checks, bundling, and
 bundle integrity verification so package edge IO can evolve without expanding
 the dispatcher. New CLI work should prefer adding a focused module over

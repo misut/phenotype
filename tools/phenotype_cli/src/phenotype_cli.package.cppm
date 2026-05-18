@@ -145,37 +145,6 @@ auto file_size_or_zero(fs::path const& path) -> std::uintmax_t {
     return ec ? 0 : size;
 }
 
-auto read_text_file(fs::path const& path) -> std::string {
-    auto input = std::ifstream{path, std::ios::binary};
-    if (!input)
-        return {};
-    auto out = std::ostringstream{};
-    out << input.rdbuf();
-    return out.str();
-}
-
-auto write_text_file(fs::path const& path,
-                     std::string_view text,
-                     std::string& error) -> bool {
-    auto ec = std::error_code{};
-    fs::create_directories(path.parent_path(), ec);
-    if (ec) {
-        error = ec.message();
-        return false;
-    }
-    auto out = std::ofstream{path, std::ios::binary};
-    if (!out) {
-        error = "failed to open file for writing";
-        return false;
-    }
-    out << text;
-    if (!out) {
-        error = "failed to write file";
-        return false;
-    }
-    return true;
-}
-
 auto sha256_file_or_error(fs::path const& path)
     -> std::expected<std::string, std::string> {
     auto digest = cppx::checksum::system::sha256_file(path);
@@ -338,27 +307,6 @@ auto optional_positional_or_error(cppx::cli::Invocation const& invocation,
             std::format("{} accepts at most one positional path", command_name)};
     }
     return fs::path{invocation.positionals.front()};
-}
-
-auto error_json(std::string_view command, std::string_view message) -> std::string {
-    return std::format(
-        "{{\"schema_version\":1,\"command\":{},\"ok\":false,\"error\":{}}}",
-        json_string(command),
-        json_string(message));
-}
-
-int print_error(std::string_view command, std::string_view message, bool json) {
-    if (json) {
-        std::println("{}", error_json(command, message));
-    } else {
-        std::println(std::cerr, "{}",
-                     cppx::terminal::format_diagnostic({
-                         .severity = cppx::terminal::DiagnosticSeverity::error,
-                         .message = std::string{message},
-                         .context = std::string{command},
-                     }));
-    }
-    return 2;
 }
 
 auto inspect_package_svg_asset(
