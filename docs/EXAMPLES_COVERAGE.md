@@ -291,11 +291,12 @@ state policy, toolbar/sidebar pressed background alpha, pressed symbol opacity,
 and pressed scale. The desktop payload additionally publishes resolved
 presentation samples for selected sidebar, pressed toolbar, disabled toolbar,
 and PDF file-type glyphs, including visible RGBA after opacity, effective
-point size, hit target, and likely icon layer/pass. The desktop renderer consumes those recipes through core
-`ButtonVisualState`, so Finder-style icon work is tied to an engine feature
-instead of a one-off screenshot fixture. AirDrop uses isolated circular SVG
-path arcs in the sidebar, giving the artifact a concrete macOS-style native
-arc probe.
+point size, visual hit target, and likely icon layer/pass. Core button styles
+separately preserve a 44 pt minimum activation region by expanding emitted
+`HitRegion` commands, so Finder-style icon work is tied to an engine feature
+instead of a one-off screenshot fixture. AirDrop uses isolated circular SVG path
+arcs in the sidebar, giving the artifact a concrete macOS-style native arc
+probe.
 The file explorer debug payload also exposes file-type symbol tokens, a shared
 `entry_symbol_summary`, and per-entry resolved `symbol`,
 `symbol_semantic_reference_name`, and file-type presentation fields, so PDF,

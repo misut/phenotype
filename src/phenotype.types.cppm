@@ -711,6 +711,8 @@ enum class ButtonVariant {
     Primary,
 };
 
+inline constexpr float minimum_button_activation_size = 44.0f;
+
 struct ButtonStyleOptions {
     ButtonVariant variant = ButtonVariant::Default;
     bool disabled = false;
@@ -733,6 +735,8 @@ struct ButtonStyleOptions {
     float padding_left = -1.0f;
     float max_width = 0.0f;
     float fixed_height = -1.0f;
+    float min_hit_width = minimum_button_activation_size;
+    float min_hit_height = minimum_button_activation_size;
     TextAlign text_align = TextAlign::Start;
 };
 
@@ -1099,6 +1103,8 @@ struct LayoutNode {
     unsigned int cursor_type = 0; // 0=default, 1=pointer
     bool focusable = true;        // false = clickable but skipped by Tab + no focus ring
     InteractionRole interaction_role = InteractionRole::None;
+    float min_hit_width = 0.0f;
+    float min_hit_height = 0.0f;
     std::string debug_semantic_role;
     std::string debug_semantic_label;
     unsigned int debug_semantic_callback_id = 0xFFFFFFFFu;

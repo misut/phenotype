@@ -181,6 +181,7 @@ struct AppState {
     float scroll_y = 0;
     unsigned int hovered_id = 0xFFFFFFFF;
     unsigned int focused_id = 0xFFFFFFFF;
+    bool focus_visible = false;
     unsigned int pressed_id = 0xFFFFFFFF;
     unsigned int caret_pos = 0xFFFFFFFFu;
     unsigned int selection_anchor = 0xFFFFFFFFu;
@@ -271,6 +272,7 @@ struct AppState {
     float         prev_scroll_y = 0.0f;
     unsigned int  prev_hovered_id = 0xFFFFFFFFu;
     unsigned int  prev_focused_id = 0xFFFFFFFFu;
+    bool          prev_focus_visible = false;
     unsigned int  prev_pressed_id = 0xFFFFFFFFu;
     // Computed once per frame by the runner before paint; OR'd against
     // each node's paint_callback_mask to decide whether a blit is safe.

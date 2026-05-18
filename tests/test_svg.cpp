@@ -406,6 +406,8 @@ void test_builtin_icons_parse() {
            == "macos_finder_role_metrics_with_explicit_hit_targets");
     assert(icons::hit_target_policy().find("toolbar")
            != std::string_view::npos);
+    assert(icons::hit_target_policy().find("activation minimum=44pt")
+           != std::string_view::npos);
     auto const folder_color =
         icons::macos_file_type_color(icons::Symbol::Folder);
     auto const movie_color =
@@ -620,6 +622,9 @@ void test_builtin_icons_parse() {
     assert(toolbar_chrome.hover_background_color.a == 120);
     assert(toolbar_chrome.corner_radius == 15.0f);
     assert(toolbar.hit_target_size == 36.0f);
+    assert(icons::activation_hit_target_size(
+               icons::SymbolPresentationRole::Toolbar)
+           == 44.0f);
     assert((toolbar.color == Color{96, 96, 100, 255}));
     assert(icons::paint_token(toolbar) != 0);
     auto toolbar_pressed = icons::macos_presentation(

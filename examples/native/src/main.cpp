@@ -179,6 +179,8 @@ static std::string input_debug_block(phenotype::diag::InputDebugSnapshot const& 
     block += debug_id_text(debug.focused_id);
     block += "\nfocused_role: ";
     block += debug.focused_role;
+    block += "\nfocus_visible: ";
+    block += debug.focus_visible ? "true" : "false";
     block += "\nhovered_id: ";
     block += debug_id_text(debug.hovered_id);
     block += "\npressed_id: ";

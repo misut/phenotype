@@ -646,6 +646,11 @@ inline float hit_target_size(SymbolPresentationRole role) noexcept {
     return catalog::hit_target_size(to_catalog_presentation_role(role));
 }
 
+inline float activation_hit_target_size(SymbolPresentationRole role) noexcept {
+    return catalog::activation_hit_target_size(
+        to_catalog_presentation_role(role));
+}
+
 inline float optical_y_offset(SymbolPresentationRole role) noexcept {
     return catalog::optical_y_offset(to_catalog_presentation_role(role));
 }
@@ -901,6 +906,8 @@ inline auto macos_symbol_button_style(SymbolButtonOptions options) noexcept
     style.border_radius = chrome.corner_radius;
     style.max_width = symbol_button_width(options);
     style.fixed_height = symbol_button_height(options);
+    style.min_hit_width = activation_hit_target_size(options.role);
+    style.min_hit_height = activation_hit_target_size(options.role);
     style.disabled = options.disabled;
     return style;
 }

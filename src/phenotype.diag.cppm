@@ -569,6 +569,7 @@ struct InputDebugSnapshot {
     std::string role = "none";
     unsigned int focused_id = 0xFFFFFFFFu;
     std::string focused_role = "none";
+    bool focus_visible = false;
     unsigned int hovered_id = 0xFFFFFFFFu;
     unsigned int pressed_id = 0xFFFFFFFFu;
     float scroll_x = 0.0f;
@@ -653,6 +654,7 @@ struct PlatformRuntimeSnapshot {
     float scroll_y = 0.0f;
     float content_height = 0.0f;
     std::optional<unsigned int> focused_callback_id;
+    bool focus_visible = false;
     std::optional<unsigned int> hovered_callback_id;
     std::optional<unsigned int> pressed_callback_id;
     json::Value details = json::Value{json::Object{}};
@@ -2199,6 +2201,7 @@ inline json::Value input_debug_to_json(InputDebugSnapshot const& snapshot) {
     out.emplace("role", json::Value{snapshot.role});
     out.emplace("focused_id", json::Value{static_cast<std::int64_t>(snapshot.focused_id)});
     out.emplace("focused_role", json::Value{snapshot.focused_role});
+    out.emplace("focus_visible", json::Value{snapshot.focus_visible});
     out.emplace("hovered_id", json::Value{static_cast<std::int64_t>(snapshot.hovered_id)});
     out.emplace("pressed_id", json::Value{static_cast<std::int64_t>(snapshot.pressed_id)});
     out.emplace("scroll_x", json::Value{snapshot.scroll_x});
@@ -2347,6 +2350,7 @@ inline json::Value platform_runtime_to_json(
     out.emplace(
         "focused_callback_id",
         callback_id_to_json(runtime.focused_callback_id));
+    out.emplace("focus_visible", json::Value{runtime.focus_visible});
     out.emplace(
         "hovered_callback_id",
         callback_id_to_json(runtime.hovered_callback_id));

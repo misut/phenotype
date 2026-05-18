@@ -436,6 +436,9 @@ duplicate
            == "archivebox");
     assert(chrome.icon_default_stroke_width == 1.8f);
     assert(chrome.icon_secondary_opacity == 0.66f);
+    assert(chrome.icon_toolbar_activation_hit_target_size == 44.0f);
+    assert(chrome.icon_sidebar_activation_hit_target_size == 44.0f);
+    assert(chrome.icon_action_activation_hit_target_size == 44.0f);
     assert(chrome.icon_toolbar_button_radius == 15.0f);
     assert(chrome.icon_toolbar_button_background_alpha == 0);
     assert(chrome.icon_toolbar_button_hover_background_alpha == 120);

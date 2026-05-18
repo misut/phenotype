@@ -3997,7 +3997,8 @@ auto icon_control_chrome_json(
         "{{\"policy\":{},\"role\":{},\"symbol_tone\":{},"
         "\"symbol_color\":{},\"background_color\":{},"
         "\"hover_background_color\":{},\"corner_radius\":{},"
-        "\"hit_target_size\":{},\"borderless\":{},"
+        "\"hit_target_size\":{},\"activation_hit_target_size\":{},"
+        "\"borderless\":{},"
         "\"grouped_control\":{}}}",
         json_string(chrome.policy),
         json_string(icon_catalog::symbol_presentation_role_name(chrome.role)),
@@ -4007,6 +4008,7 @@ auto icon_control_chrome_json(
         icon_color_json(chrome.hover_background_color),
         chrome.corner_radius,
         chrome.hit_target_size,
+        icon_catalog::activation_hit_target_size(chrome.role),
         chrome.borderless ? "true" : "false",
         chrome.grouped_control ? "true" : "false");
 }
@@ -4018,7 +4020,8 @@ auto icon_state_recipe_json(
         "\"selected\":{},\"enabled\":{},\"symbol_tone\":{},"
         "\"symbol_color\":{},\"background_color\":{},"
         "\"symbol_opacity\":{},\"scale\":{},\"corner_radius\":{},"
-        "\"hit_target_size\":{},\"borderless\":{},"
+        "\"hit_target_size\":{},\"activation_hit_target_size\":{},"
+        "\"borderless\":{},"
         "\"grouped_control\":{}}}",
         json_string(recipe.policy),
         json_string(icon_catalog::symbol_presentation_role_name(recipe.role)),
@@ -4032,6 +4035,7 @@ auto icon_state_recipe_json(
         recipe.scale,
         recipe.corner_radius,
         recipe.hit_target_size,
+        icon_catalog::activation_hit_target_size(recipe.role),
         recipe.borderless ? "true" : "false",
         recipe.grouped_control ? "true" : "false");
 }
@@ -4390,6 +4394,7 @@ auto icon_presentation_json(std::string_view query,
         "\"background_color\":{},\"symbol_opacity\":{},"
         "\"phase_scale\":{},\"point_size\":{},"
         "\"effective_point_size\":{},\"hit_target_size\":{},"
+        "\"activation_hit_target_size\":{},"
         "\"content_inset\":{},\"optical_y_offset\":{},"
         "\"corner_radius\":{},\"borderless\":{},"
         "\"grouped_control\":{},\"likely_layer\":\"icon_glyph\","
@@ -4419,6 +4424,7 @@ auto icon_presentation_json(std::string_view query,
         metrics.point_size,
         metrics.point_size * recipe.scale,
         recipe.hit_target_size,
+        icon_catalog::activation_hit_target_size(role),
         content_inset,
         metrics.optical_y_offset,
         recipe.corner_radius,
@@ -5574,6 +5580,9 @@ auto explorer_chrome_json(
         "\"toolbar_hit_target_size\":{},"
         "\"sidebar_hit_target_size\":{},"
         "\"action_hit_target_size\":{},"
+        "\"toolbar_activation_hit_target_size\":{},"
+        "\"sidebar_activation_hit_target_size\":{},"
+        "\"action_activation_hit_target_size\":{},"
         "\"toolbar_button_radius\":{},"
         "\"toolbar_button_background_alpha\":{},"
         "\"toolbar_button_hover_background_alpha\":{},"
@@ -5713,6 +5722,9 @@ auto explorer_chrome_json(
         chrome.icon_toolbar_hit_target_size,
         chrome.icon_sidebar_hit_target_size,
         chrome.icon_action_hit_target_size,
+        chrome.icon_toolbar_activation_hit_target_size,
+        chrome.icon_sidebar_activation_hit_target_size,
+        chrome.icon_action_activation_hit_target_size,
         chrome.icon_toolbar_button_radius,
         chrome.icon_toolbar_button_background_alpha,
         chrome.icon_toolbar_button_hover_background_alpha,

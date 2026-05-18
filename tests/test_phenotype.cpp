@@ -2821,7 +2821,8 @@ using ButtonMsg = std::variant<Click>;
 inline NodeHandle build_button(ButtonVariant variant, bool disabled,
                                unsigned int hovered_id = 0xFFFFFFFFu,
                                unsigned int focused_id = 0xFFFFFFFFu,
-                               unsigned int pressed_id = 0xFFFFFFFFu) {
+                               unsigned int pressed_id = 0xFFFFFFFFu,
+                               bool focus_visible = false) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::msg_queue().clear();
@@ -2833,6 +2834,7 @@ inline NodeHandle build_button(ButtonVariant variant, bool disabled,
     detail::g_app.hovered_id = hovered_id;
     detail::g_app.focused_id = focused_id;
     detail::g_app.pressed_id = pressed_id;
+    detail::g_app.focus_visible = focus_visible;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -2851,7 +2853,8 @@ inline NodeHandle build_button_with_options(
         ButtonStyleOptions options,
         unsigned int hovered_id = 0xFFFFFFFFu,
         unsigned int focused_id = 0xFFFFFFFFu,
-        unsigned int pressed_id = 0xFFFFFFFFu) {
+        unsigned int pressed_id = 0xFFFFFFFFu,
+        bool focus_visible = false) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::msg_queue().clear();
@@ -2860,6 +2863,7 @@ inline NodeHandle build_button_with_options(
     detail::g_app.hovered_id = hovered_id;
     detail::g_app.focused_id = focused_id;
     detail::g_app.pressed_id = pressed_id;
+    detail::g_app.focus_visible = focus_visible;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -2879,7 +2883,8 @@ inline NodeHandle build_canvas_button_with_options(
         std::uint64_t paint_token = 0xCAFEu,
         unsigned int hovered_id = 0xFFFFFFFFu,
         unsigned int focused_id = 0xFFFFFFFFu,
-        unsigned int pressed_id = 0xFFFFFFFFu) {
+        unsigned int pressed_id = 0xFFFFFFFFu,
+        bool focus_visible = false) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::g_app.callback_roles.clear();
@@ -2889,6 +2894,7 @@ inline NodeHandle build_canvas_button_with_options(
     detail::g_app.hovered_id = hovered_id;
     detail::g_app.focused_id = focused_id;
     detail::g_app.pressed_id = pressed_id;
+    detail::g_app.focus_visible = focus_visible;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -2917,7 +2923,8 @@ inline NodeHandle build_symbol_button_with_options(
         icons::SymbolButtonOptions options,
         unsigned int hovered_id = 0xFFFFFFFFu,
         unsigned int focused_id = 0xFFFFFFFFu,
-        unsigned int pressed_id = 0xFFFFFFFFu) {
+        unsigned int pressed_id = 0xFFFFFFFFu,
+        bool focus_visible = false) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::g_app.callback_roles.clear();
@@ -2927,6 +2934,7 @@ inline NodeHandle build_symbol_button_with_options(
     detail::g_app.hovered_id = hovered_id;
     detail::g_app.focused_id = focused_id;
     detail::g_app.pressed_id = pressed_id;
+    detail::g_app.focus_visible = focus_visible;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -3039,20 +3047,69 @@ void test_button_primary_hovered_snaps_to_hover_bg() {
     std::puts("PASS: button primary snaps to accent_strong when hovered");
 }
 
-// Focus ring smoke test: pre-set `g_app.focused_id` to the id button is
-// about to claim, then assert the first frame snaps the animated
-// border_width to `state_focus_ring_width`. Mirrors the hover-snap pair
-// — same reasoning, exercised on the focus-ring animate_float wiring.
+// Keyboard focus ring smoke test: pre-set `g_app.focused_id` and
+// `g_app.focus_visible` to the id the button is about to claim, then
+// assert the first frame snaps the animated border_width to
+// `state_focus_ring_width`. Pointer focus keeps the id for event routing
+// but leaves `focus_visible=false`, so it should not draw this ring.
 void test_button_focused_snaps_to_focus_ring_width() {
     auto btn_h = button_test::build_button(
         ButtonVariant::Default, /*disabled=*/false,
-        /*hovered_id=*/0xFFFFFFFFu, /*focused_id=*/0u);
+        /*hovered_id=*/0xFFFFFFFFu, /*focused_id=*/0u,
+        /*pressed_id=*/0xFFFFFFFFu, /*focus_visible=*/true);
     auto& btn = detail::node_at(btn_h);
     auto const& t = detail::g_app.theme;
     assert(btn.callback_id == 0u);
     assert(btn.border_width == t.state_focus_ring_width);
     detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = false;
     std::puts("PASS: button border_width snaps to focus ring width when focused");
+}
+
+void test_button_pointer_focused_hides_focus_ring() {
+    auto btn_h = button_test::build_button(
+        ButtonVariant::Default, /*disabled=*/false,
+        /*hovered_id=*/0xFFFFFFFFu, /*focused_id=*/0u,
+        /*pressed_id=*/0xFFFFFFFFu, /*focus_visible=*/false);
+    auto& btn = detail::node_at(btn_h);
+    auto const& t = detail::g_app.theme;
+    assert(btn.callback_id == 0u);
+    assert(btn.border_width == 1.0f);
+    assert(btn.border_color.r == t.border.r);
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = false;
+    std::puts("PASS: pointer-focused button hides focus ring");
+}
+
+void test_focus_visible_tracks_keyboard_modality() {
+    detail::g_app.focusable_ids.clear();
+    detail::g_app.focusable_ids.push_back(7u);
+    detail::g_app.focusable_ids.push_back(11u);
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = false;
+
+    bool const tabbed =
+        detail::handle_tab(0u, "test", "tab");
+    assert(tabbed);
+    assert(detail::g_app.focused_id == 7u);
+    assert(detail::g_app.focus_visible == true);
+    auto debug = diag::input_debug_snapshot();
+    assert(debug.focused_id == 7u);
+    assert(debug.focus_visible == true);
+
+    bool const pointer_focus =
+        detail::set_focus_id(7u, "test", "pointer-focus");
+    assert(pointer_focus);
+    assert(detail::g_app.focused_id == 7u);
+    assert(detail::g_app.focus_visible == false);
+    debug = diag::input_debug_snapshot();
+    assert(debug.focused_id == 7u);
+    assert(debug.focus_visible == false);
+
+    detail::g_app.focusable_ids.clear();
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = false;
+    std::puts("PASS: focus-visible tracks keyboard modality");
 }
 
 // Defocused (resting) border_width is the variant's natural 1px — not
@@ -3151,6 +3208,8 @@ void test_button_style_options_custom_chrome() {
     assert(btn.style.padding[3] == 4.0f);
     assert(btn.style.max_width == 120.0f);
     assert(btn.style.fixed_height == 32.0f);
+    assert(btn.min_hit_width == minimum_button_activation_size);
+    assert(btn.min_hit_height == minimum_button_activation_size);
     assert(btn.style.text_align == TextAlign::Center);
     assert(btn.callback_id != 0xFFFFFFFFu);
 
@@ -3192,6 +3251,8 @@ void test_canvas_button_semantic_and_layout_contract() {
     auto& btn = detail::node_at(btn_h);
     assert(btn.width == 44.0f);
     assert(btn.height == 36.0f);
+    assert(btn.min_hit_width == minimum_button_activation_size);
+    assert(btn.min_hit_height == minimum_button_activation_size);
     assert(btn.interaction_role == InteractionRole::Button);
     assert(btn.debug_semantic_label == "Grid View");
     assert(btn.callback_id == 0u);
@@ -3210,6 +3271,87 @@ void test_canvas_button_semantic_and_layout_contract() {
     assert(canvas.debug_semantic_hidden == true);
 
     std::puts("PASS: canvas_button semantic + layout contract");
+}
+
+void test_canvas_button_minimum_hit_region_contract() {
+    ButtonStyleOptions options;
+    options.max_width = 36.0f;
+    options.fixed_height = 36.0f;
+    options.has_background = true;
+    options.background = Color{255, 255, 255, 0};
+    options.has_border_color = true;
+    options.border_color = Color{0, 0, 0, 0};
+    options.border_width = 0.0f;
+
+    auto btn_h = button_test::build_canvas_button_with_options(
+        options, 0xBEEFu);
+    LAYOUT_NODE(btn_h, 100.0f);
+    auto const& btn = detail::node_at(btn_h);
+    float const expected_slop_x =
+        (minimum_button_activation_size - btn.width) * 0.5f;
+    float const expected_slop_y =
+        (minimum_button_activation_size - btn.height) * 0.5f;
+    CMD_LEN = 0;
+    PAINT_NODE(btn_h, 0, 0, 0, 100.0f);
+
+    bool found = false;
+    for (unsigned int i = 0; i + 28 <= CMD_LEN; i += 4) {
+        unsigned int op;
+        std::memcpy(&op, &CMD_BUF[i], 4);
+        if (op != static_cast<unsigned int>(Cmd::HitRegion))
+            continue;
+        float hx = 0.0f;
+        float hy = 0.0f;
+        float hw = 0.0f;
+        float hh = 0.0f;
+        std::memcpy(&hx, &CMD_BUF[i + 4], 4);
+        std::memcpy(&hy, &CMD_BUF[i + 8], 4);
+        std::memcpy(&hw, &CMD_BUF[i + 12], 4);
+        std::memcpy(&hh, &CMD_BUF[i + 16], 4);
+        assert(hx == btn.x - expected_slop_x);
+        assert(hy == btn.y - expected_slop_y);
+        assert(hw == minimum_button_activation_size);
+        assert(hh == minimum_button_activation_size);
+        found = true;
+        break;
+    }
+    assert(found);
+    std::puts("PASS: canvas_button minimum hit region contract");
+}
+
+void test_canvas_button_focus_visible_contract() {
+    ButtonStyleOptions options;
+    options.max_width = 44.0f;
+    options.fixed_height = 36.0f;
+
+    auto keyboard_h = button_test::build_canvas_button_with_options(
+        options,
+        0xCAFEu,
+        /*hovered_id=*/0xFFFFFFFFu,
+        /*focused_id=*/0u,
+        /*pressed_id=*/0xFFFFFFFFu,
+        /*focus_visible=*/true);
+    auto& keyboard = detail::node_at(keyboard_h);
+    auto const& t = detail::g_app.theme;
+    assert(keyboard.callback_id == 0u);
+    assert(keyboard.border_width == t.state_focus_ring_width);
+    assert(keyboard.border_color.r == t.state_focus_ring.r);
+
+    auto pointer_h = button_test::build_canvas_button_with_options(
+        options,
+        0xCAFEu,
+        /*hovered_id=*/0xFFFFFFFFu,
+        /*focused_id=*/0u,
+        /*pressed_id=*/0xFFFFFFFFu,
+        /*focus_visible=*/false);
+    auto& pointer = detail::node_at(pointer_h);
+    assert(pointer.callback_id == 0u);
+    assert(pointer.border_width == 1.0f);
+    assert(pointer.border_color.r == t.border.r);
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = false;
+
+    std::puts("PASS: canvas_button focus-visible contract");
 }
 
 void test_canvas_button_visual_state_contract() {
@@ -3329,6 +3471,8 @@ void test_symbol_button_macos_contract() {
     auto& btn = detail::node_at(btn_h);
     assert(btn.width == 36.0f);
     assert(btn.height == 36.0f);
+    assert(btn.min_hit_width == minimum_button_activation_size);
+    assert(btn.min_hit_height == minimum_button_activation_size);
     assert(btn.interaction_role == InteractionRole::Button);
     assert(btn.debug_semantic_label == "Grid View");
     assert(btn.callback_id == 0u);
@@ -3344,6 +3488,45 @@ void test_symbol_button_macos_contract() {
            == icons::symbol_button_paint_token(icons::Symbol::Grid, options));
 
     std::puts("PASS: symbol_button macOS chrome contract");
+}
+
+void test_symbol_button_minimum_hit_region_contract() {
+    icons::SymbolButtonOptions options;
+    options.role = icons::SymbolPresentationRole::Toolbar;
+
+    auto btn_h = button_test::build_symbol_button_with_options(options);
+    LAYOUT_NODE(btn_h, 100.0f);
+    auto const& btn = detail::node_at(btn_h);
+    float const expected_slop_x =
+        (icons::activation_hit_target_size(options.role) - btn.width) * 0.5f;
+    float const expected_slop_y =
+        (icons::activation_hit_target_size(options.role) - btn.height) * 0.5f;
+    CMD_LEN = 0;
+    PAINT_NODE(btn_h, 0, 0, 0, 100.0f);
+
+    bool found = false;
+    for (unsigned int i = 0; i + 28 <= CMD_LEN; i += 4) {
+        unsigned int op;
+        std::memcpy(&op, &CMD_BUF[i], 4);
+        if (op != static_cast<unsigned int>(Cmd::HitRegion))
+            continue;
+        float hx = 0.0f;
+        float hy = 0.0f;
+        float hw = 0.0f;
+        float hh = 0.0f;
+        std::memcpy(&hx, &CMD_BUF[i + 4], 4);
+        std::memcpy(&hy, &CMD_BUF[i + 8], 4);
+        std::memcpy(&hw, &CMD_BUF[i + 12], 4);
+        std::memcpy(&hh, &CMD_BUF[i + 16], 4);
+        assert(hx == btn.x - expected_slop_x);
+        assert(hy == btn.y - expected_slop_y);
+        assert(hw == icons::activation_hit_target_size(options.role));
+        assert(hh == icons::activation_hit_target_size(options.role));
+        found = true;
+        break;
+    }
+    assert(found);
+    std::puts("PASS: symbol_button minimum hit region contract");
 }
 
 void test_symbol_button_visual_state_token_contract() {
@@ -4003,6 +4186,15 @@ void test_icon_catalog_umbrella_export() {
     assert(phenotype::icon_catalog::hit_target_size(
                phenotype::icon_catalog::SymbolPresentationRole::Sidebar)
            == 38.0f);
+    assert(phenotype::icon_catalog::activation_hit_target_size(
+               phenotype::icon_catalog::SymbolPresentationRole::Toolbar)
+           == 44.0f);
+    assert(phenotype::icon_catalog::activation_hit_target_size(
+               phenotype::icon_catalog::SymbolPresentationRole::Sidebar)
+           == 44.0f);
+    assert(phenotype::icon_catalog::activation_hit_target_size(
+               phenotype::icon_catalog::SymbolPresentationRole::FileType)
+           == 64.0f);
     assert(phenotype::icon_catalog::symbol_from_name("recents").has_value());
     assert(*phenotype::icon_catalog::symbol_from_name("recents")
            == phenotype::icon_catalog::Symbol::Recents);
@@ -4162,15 +4354,20 @@ int main() {
     test_button_primary_hovered_snaps_to_hover_bg();
     test_button_pressed_snaps_to_pressed_bg();
     test_button_focused_snaps_to_focus_ring_width();
+    test_button_pointer_focused_hides_focus_ring();
+    test_focus_visible_tracks_keyboard_modality();
     test_button_defocused_resting_border_width();
     test_button_disabled();
     test_button_disabled_custom_chrome();
     test_button_style_options_custom_chrome();
     test_canvas_button_semantic_and_layout_contract();
+    test_canvas_button_minimum_hit_region_contract();
+    test_canvas_button_focus_visible_contract();
     test_canvas_button_visual_state_contract();
     test_canvas_button_disabled_contract();
     test_canvas_button_disabled_custom_chrome();
     test_symbol_button_macos_contract();
+    test_symbol_button_minimum_hit_region_contract();
     test_symbol_button_visual_state_token_contract();
     test_symbol_button_disabled_contract();
     test_text_field_default();
