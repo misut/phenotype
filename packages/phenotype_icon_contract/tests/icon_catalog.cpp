@@ -70,11 +70,19 @@ int main() {
            != std::string_view::npos);
     assert(!apple_icons.used_as_embedded_asset_source);
     assert(apple_icons.apple_owned_artwork);
+    assert(!apple_icons.may_embed_svg_source);
+    assert(!apple_icons.runtime_fetch_allowed);
+    assert(!apple_icons.platform_extraction_allowed);
+    assert(apple_icons.license_url.find("apple.com/legal")
+           != std::string_view::npos);
+    assert(apple_icons.source_acquisition
+           == std::string_view{"reference_only_no_embedding"});
     auto const svg_paths = icons::reference_source_at(2);
     assert(svg_paths.name.find("W3C SVG") != std::string_view::npos);
     assert(svg_paths.url.find("SVG2/paths")
            != std::string_view::npos);
     assert(!svg_paths.apple_owned_artwork);
+    assert(!svg_paths.may_embed_svg_source);
     auto const lucide_reference = icons::reference_source_at(3);
     assert(lucide_reference.name == std::string_view{"Lucide"});
     assert(lucide_reference.license_policy.find("ISC")
@@ -83,6 +91,14 @@ int main() {
            != std::string_view::npos);
     assert(lucide_reference.used_as_embedded_asset_source);
     assert(!lucide_reference.apple_owned_artwork);
+    assert(lucide_reference.may_embed_svg_source);
+    assert(lucide_reference.requires_notice);
+    assert(!lucide_reference.runtime_fetch_allowed);
+    assert(!lucide_reference.platform_extraction_allowed);
+    assert(lucide_reference.license_url.find("lucide.dev/license")
+           != std::string_view::npos);
+    assert(lucide_reference.source_acquisition.find("pinned_raw_svg")
+           != std::string_view::npos);
     auto const feather_reference = icons::reference_source_at(4);
     assert(feather_reference.name.find("Feather") != std::string_view::npos);
     assert(feather_reference.url.find("feathericons/feather")
@@ -91,11 +107,19 @@ int main() {
            != std::string_view::npos);
     assert(!feather_reference.used_as_embedded_asset_source);
     assert(!feather_reference.apple_owned_artwork);
+    assert(!feather_reference.may_embed_svg_source);
+    assert(feather_reference.requires_notice);
+    assert(feather_reference.source_acquisition
+           == std::string_view{"license_lineage_reference_only"});
     auto const material_symbols = icons::reference_source_at(5);
     assert(material_symbols.url.find("material_symbols")
            != std::string_view::npos);
     assert(material_symbols.license_policy.find("Apache-2.0")
            != std::string_view::npos);
+    assert(material_symbols.license_url.find("material-design-icons")
+           != std::string_view::npos);
+    assert(material_symbols.may_embed_svg_source);
+    assert(material_symbols.requires_notice);
     auto const tabler_reference = icons::reference_source_at(6);
     assert(tabler_reference.name.find("Tabler") != std::string_view::npos);
     assert(tabler_reference.url.find("tabler/tabler-icons")
@@ -103,6 +127,10 @@ int main() {
     assert(tabler_reference.license_policy.find("MIT")
            != std::string_view::npos);
     assert(!tabler_reference.used_as_embedded_asset_source);
+    assert(tabler_reference.license_url.find("tabler-icons")
+           != std::string_view::npos);
+    assert(tabler_reference.may_embed_svg_source);
+    assert(tabler_reference.requires_notice);
     auto const iconoir_reference = icons::reference_source_at(7);
     assert(iconoir_reference.name.find("Iconoir") != std::string_view::npos);
     assert(iconoir_reference.url.find("iconoir-icons/iconoir")
@@ -110,6 +138,10 @@ int main() {
     assert(iconoir_reference.license_policy.find("MIT")
            != std::string_view::npos);
     assert(!iconoir_reference.used_as_embedded_asset_source);
+    assert(iconoir_reference.license_url.find("iconoir-icons/iconoir")
+           != std::string_view::npos);
+    assert(iconoir_reference.may_embed_svg_source);
+    assert(iconoir_reference.requires_notice);
     assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");
     assert(icons::svg_supported_path_commands().find("A Z")
            != std::string_view::npos);

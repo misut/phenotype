@@ -430,14 +430,19 @@ semantic references, package asset paths, pinned Lucide raw SVG URLs, license
 metadata, and Apple-artwork boundary without touching the filesystem. The
 `reference_sources` array names the exact Apple HIG/SF Symbols
 semantic references, W3C SVG path reference, Lucide embedded-source reference,
-Feather MIT license-lineage reference, Tabler MIT future-source candidate, and
+Feather MIT license-lineage reference, Tabler MIT future-source candidate,
 Iconoir MIT future-source candidate, and Material Symbols Apache-2.0
-future-source candidate used by the policy.
+future-source candidate used by the policy. Each row includes the official
+license URL, acquisition mode, embedding permission, notice requirement,
+runtime-fetch flag, and platform-extraction flag, so a future LLM can reject an
+unsafe icon import from JSON alone.
 Apple rows must stay
-`used_as_embedded_asset_source=false` and `apple_owned_artwork=true`; a failure
-there points to provenance policy before any renderer investigation. macOS
-system-icon extraction is also out of policy unless a future reference row
-records explicit redistribution clearance. The
+`used_as_embedded_asset_source=false`, `may_embed_svg_source=false`,
+`apple_owned_artwork=true`, `runtime_fetch_allowed=false`, and
+`platform_extraction_allowed=false`; a failure there points to provenance
+policy before any renderer investigation. macOS system-icon extraction is also
+out of policy unless a future reference row records explicit redistribution
+clearance. The
 desktop payload also includes
 `sidebar_symbol_tokens`, the renderer-facing table that maps sidebar tokens to
 audited symbols and semantic SF Symbols reference names, so a wrong

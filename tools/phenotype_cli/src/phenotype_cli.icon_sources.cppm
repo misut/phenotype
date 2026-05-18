@@ -16,14 +16,23 @@ auto icon_reference_source_json(
         icon_catalog::IconReferenceSource const& source) -> std::string {
     return std::format(
         "{{\"name\":{},\"url\":{},\"role\":{},\"license_policy\":{},"
+        "\"license_url\":{},\"source_acquisition\":{},"
         "\"used_as_embedded_asset_source\":{},"
-        "\"apple_owned_artwork\":{}}}",
+        "\"apple_owned_artwork\":{},\"may_embed_svg_source\":{},"
+        "\"requires_notice\":{},\"runtime_fetch_allowed\":{},"
+        "\"platform_extraction_allowed\":{}}}",
         json_string(source.name),
         json_string(source.url),
         json_string(source.role),
         json_string(source.license_policy),
+        json_string(source.license_url),
+        json_string(source.source_acquisition),
         source.used_as_embedded_asset_source ? "true" : "false",
-        source.apple_owned_artwork ? "true" : "false");
+        source.apple_owned_artwork ? "true" : "false",
+        source.may_embed_svg_source ? "true" : "false",
+        source.requires_notice ? "true" : "false",
+        source.runtime_fetch_allowed ? "true" : "false",
+        source.platform_extraction_allowed ? "true" : "false");
 }
 
 auto icon_reference_sources_json() -> std::string {
@@ -193,20 +202,32 @@ auto icon_source_audit_checks() -> std::vector<Check> {
          .ok = icon_catalog::reference_source_count == 8
             && icon_catalog::reference_source_at(3)
                    .used_as_embedded_asset_source
+            && icon_catalog::reference_source_at(3).may_embed_svg_source
+            && icon_catalog::reference_source_at(3).requires_notice
             && icon_catalog::reference_source_at(3).name
                 == std::string_view{"Lucide"}
             && icon_catalog::reference_source_at(3).license_policy.find("ISC")
+                != std::string_view::npos
+            && icon_catalog::reference_source_at(3).license_url.find("lucide.dev/license")
+                != std::string_view::npos
+            && !icon_catalog::reference_source_at(0).may_embed_svg_source
+            && !icon_catalog::reference_source_at(0).runtime_fetch_allowed
+            && !icon_catalog::reference_source_at(0).platform_extraction_allowed
+            && icon_catalog::reference_source_at(6).license_url.find("tabler-icons")
+                != std::string_view::npos
+            && icon_catalog::reference_source_at(7).license_url.find("iconoir-icons")
                 != std::string_view::npos
             && icon_catalog::source_acquisition_policy().find(
                    "platform icon extraction disabled")
                 != std::string_view::npos,
          .detail = std::format(
-             "references={} embedded_source={} acquisition={}",
+             "references={} embedded_source={} license_url={} acquisition={}",
              icon_catalog::reference_source_count,
              icon_catalog::reference_source_at(3).name,
+             icon_catalog::reference_source_at(3).license_url,
              icon_catalog::source_acquisition_policy()),
          .hint =
-             "Document every reference source and mark which one is allowed as an embedded asset source."},
+             "Document every reference source with license URL, acquisition mode, embedding permission, notice requirement, and platform-extraction boundary."},
     };
 }
 
