@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 22;
+inline constexpr std::uint32_t material_plan_contract_version = 23;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
 inline constexpr unsigned int material_max_sample_taps = 25;
@@ -197,6 +197,8 @@ struct MaterialObservationContract {
     char const* primary_pass = "none";
     char const* primary_executor = "none";
     std::uint32_t expected_runtime_passes = 0;
+    std::uint32_t expected_active_runtime_passes = 0;
+    std::uint32_t expected_backdrop_runtime_passes = 0;
     std::uint32_t expected_execution_stages = 0;
     std::uint32_t expected_active_execution_stages = 0;
     std::uint32_t expected_backdrop_execution_stages = 0;
@@ -507,6 +509,10 @@ inline MaterialObservationContract material_observation_contract(
     contract.primary_pass = plan.primary_pass.name;
     contract.primary_executor = plan.primary_pass.executor;
     contract.expected_runtime_passes = 1;
+    contract.expected_active_runtime_passes =
+        plan.primary_pass.active ? 1u : 0u;
+    contract.expected_backdrop_runtime_passes =
+        plan.primary_pass.requires_backdrop ? 1u : 0u;
     contract.expected_execution_stages = plan.execution_stage_count;
     contract.max_frame_capture_count =
         plan.backdrop_access.max_frame_capture_count;

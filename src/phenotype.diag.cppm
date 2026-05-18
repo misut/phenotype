@@ -1151,6 +1151,16 @@ namespace detail {
                 static_cast<std::int64_t>(
                     observation.expected_runtime_passes)});
         observation_contract.emplace(
+            "expected_active_runtime_passes",
+            json::Value{
+                static_cast<std::int64_t>(
+                    observation.expected_active_runtime_passes)});
+        observation_contract.emplace(
+            "expected_backdrop_runtime_passes",
+            json::Value{
+                static_cast<std::int64_t>(
+                    observation.expected_backdrop_runtime_passes)});
+        observation_contract.emplace(
             "expected_execution_stages",
             json::Value{
                 static_cast<std::int64_t>(
