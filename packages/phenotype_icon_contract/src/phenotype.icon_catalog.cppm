@@ -412,6 +412,10 @@ inline auto source_acquisition_policy() noexcept -> std::string_view {
     return "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons, macOS system icons, or fetches remote resources";
 }
 
+inline auto document_cache_policy() noexcept -> std::string_view {
+    return "explicit_symbol_document_cache_keyed_by_symbol_descriptor_no_frame_parse_churn";
+}
+
 inline auto lucide_source_revision() noexcept -> std::string_view {
     return "5b40f2c5a76a27eeb81c8f1b1c311121dee45495";
 }

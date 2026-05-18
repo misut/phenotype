@@ -78,6 +78,11 @@ inline bool focus_ring_visible(unsigned int callback_id) {
         && g_app.focus_visible;
 }
 
+inline icons::SymbolDocumentCache const& icon_document_cache() {
+    static auto const cache = icons::make_symbol_document_cache();
+    return cache;
+}
+
 inline bool focus_ring_hidden_by_pointer_modality(unsigned int callback_id) {
     return callback_id != 0xFFFFFFFFu
         && !g_app.focus_visible
@@ -832,7 +837,14 @@ inline void icon(icons::Symbol symbol,
                  Color color) {
     canvas(size, size,
            [symbol, size, color](Painter& painter) {
-               icons::paint_symbol(painter, symbol, 0.0f, 0.0f, size, color);
+               icons::paint_symbol(
+                   painter,
+                   detail::icon_document_cache(),
+                   symbol,
+                   0.0f,
+                   0.0f,
+                   size,
+                   color);
            },
            {},
            icons::paint_token(symbol, size, color));
@@ -841,7 +853,12 @@ inline void icon(icons::Symbol symbol,
 inline void icon(icons::SymbolPresentation presentation) {
     canvas(presentation.point_size, presentation.point_size,
            [presentation](Painter& painter) {
-               icons::paint_symbol(painter, presentation, 0.0f, 0.0f);
+               icons::paint_symbol(
+                   painter,
+                   detail::icon_document_cache(),
+                   presentation,
+                   0.0f,
+                   0.0f);
            },
            {},
            icons::paint_token(presentation));
@@ -1048,6 +1065,7 @@ inline void symbol_button(str label,
                 state);
             icons::paint_symbol_centered(
                 painter,
+                detail::icon_document_cache(),
                 presentation,
                 0.0f,
                 0.0f,

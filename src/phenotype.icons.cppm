@@ -3,6 +3,7 @@ module;
 #include <cstring>
 #include <optional>
 #include <string_view>
+#include <vector>
 export module phenotype.icons;
 
 import phenotype.svg;
@@ -498,6 +499,10 @@ inline auto preferred_external_source_policy() noexcept -> std::string_view {
 
 inline auto source_acquisition_policy() noexcept -> std::string_view {
     return catalog::source_acquisition_policy();
+}
+
+inline auto document_cache_policy() noexcept -> std::string_view {
+    return catalog::document_cache_policy();
 }
 
 inline auto lucide_source_revision() noexcept -> std::string_view {
@@ -1027,8 +1032,49 @@ inline auto source(Symbol symbol) noexcept -> std::string_view {
     return catalog::svg_source(to_catalog_symbol(symbol));
 }
 
+struct SymbolDocumentCache {
+    std::vector<svg::Document> documents;
+    std::string_view policy = document_cache_policy();
+};
+
+auto make_symbol_document_cache() -> SymbolDocumentCache {
+    SymbolDocumentCache cache;
+    cache.documents.resize(all_symbol_count);
+    for (unsigned int i = 0; i < all_symbol_count; ++i) {
+        auto const symbol = symbol_at(i);
+        cache.documents[static_cast<unsigned int>(symbol)] =
+            svg::parse(source(symbol));
+    }
+    return cache;
+}
+
+inline auto cached_document(SymbolDocumentCache const& cache,
+                            Symbol symbol) noexcept
+        -> svg::Document const* {
+    auto const index = static_cast<unsigned int>(symbol);
+    if (index >= cache.documents.size())
+        return nullptr;
+    auto const& doc = cache.documents[index];
+    return doc.empty() ? nullptr : &doc;
+}
+
+inline auto cached_document_count(SymbolDocumentCache const& cache) noexcept
+        -> unsigned int {
+    unsigned int count = 0;
+    for (auto const& doc : cache.documents) {
+        if (!doc.empty())
+            ++count;
+    }
+    return count;
+}
+
 auto document(Symbol symbol) -> svg::Document {
     return svg::parse(source(symbol));
+}
+
+inline auto document(SymbolDocumentCache const& cache,
+                     Symbol symbol) noexcept -> svg::Document const* {
+    return cached_document(cache, symbol);
 }
 
 void paint_symbol(Painter& painter,
@@ -1042,11 +1088,47 @@ void paint_symbol(Painter& painter,
 }
 
 void paint_symbol(Painter& painter,
+                  SymbolDocumentCache const& cache,
+                  Symbol symbol,
+                  float x,
+                  float y,
+                  float size,
+                  Color color) {
+    if (auto const* doc = cached_document(cache, symbol)) {
+        svg::paint(
+            painter,
+            *doc,
+            x,
+            y,
+            size,
+            size,
+            svg::RenderOptions{color, true});
+        return;
+    }
+    paint_symbol(painter, symbol, x, y, size, color);
+}
+
+void paint_symbol(Painter& painter,
                   SymbolPresentation const& style,
                   float x,
                   float y) {
     paint_symbol(
         painter,
+        style.symbol,
+        x,
+        y + style.optical_y_offset,
+        style.point_size,
+        style.color);
+}
+
+void paint_symbol(Painter& painter,
+                  SymbolDocumentCache const& cache,
+                  SymbolPresentation const& style,
+                  float x,
+                  float y) {
+    paint_symbol(
+        painter,
+        cache,
         style.symbol,
         x,
         y + style.optical_y_offset,
@@ -1068,6 +1150,20 @@ void paint_symbol_centered(Painter& painter,
 }
 
 void paint_symbol_centered(Painter& painter,
+                           SymbolDocumentCache const& cache,
+                           Symbol symbol,
+                           float box_x,
+                           float box_y,
+                           float box_width,
+                           float box_height,
+                           float size,
+                           Color color) {
+    auto const x = box_x + (box_width - size) * 0.5f;
+    auto const y = box_y + (box_height - size) * 0.5f;
+    paint_symbol(painter, cache, symbol, x, y, size, color);
+}
+
+void paint_symbol_centered(Painter& painter,
                            SymbolPresentation const& style,
                            float box_x,
                            float box_y,
@@ -1076,6 +1172,18 @@ void paint_symbol_centered(Painter& painter,
     auto const x = box_x + (box_width - style.point_size) * 0.5f;
     auto const y = box_y + (box_height - style.point_size) * 0.5f;
     paint_symbol(painter, style, x, y);
+}
+
+void paint_symbol_centered(Painter& painter,
+                           SymbolDocumentCache const& cache,
+                           SymbolPresentation const& style,
+                           float box_x,
+                           float box_y,
+                           float box_width,
+                           float box_height) {
+    auto const x = box_x + (box_width - style.point_size) * 0.5f;
+    auto const y = box_y + (box_height - style.point_size) * 0.5f;
+    paint_symbol(painter, cache, style, x, y);
 }
 
 inline auto paint_token(Symbol symbol, float size, Color color) noexcept

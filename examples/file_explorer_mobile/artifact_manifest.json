@@ -266,6 +266,10 @@
       "equals": "macos_finder_file_type_tints"
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.document_cache_policy",
+      "equals": "explicit_symbol_document_cache_keyed_by_symbol_descriptor_no_frame_parse_churn"
+    },
+    {
       "path": "application.file_explorer.operation.plan.executable",
       "equals": false
     },

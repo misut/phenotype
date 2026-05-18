@@ -244,6 +244,8 @@ phenotype::ResourceCatalog runtime_resource_catalog() {
 }
 
 struct State {
+    phenotype::icons::SymbolDocumentCache icon_cache =
+        phenotype::icons::make_symbol_document_cache();
     file_explorer_demo::ExplorerState explorer;
     file_explorer_demo::ExplorerLabels labels;
     bool search_visible = false;
@@ -462,6 +464,7 @@ phenotype::icons::Symbol sidebar_symbol(std::string_view id) {
 }
 
 void paint_finder_symbol_centered(phenotype::Painter& painter,
+                                  phenotype::icons::SymbolDocumentCache const& cache,
                                   phenotype::icons::Symbol symbol,
                                   float box_x,
                                   float box_y,
@@ -471,6 +474,7 @@ void paint_finder_symbol_centered(phenotype::Painter& painter,
                                   phenotype::Color color) {
     phenotype::icons::paint_symbol_centered(
         painter,
+        cache,
         symbol,
         box_x,
         box_y,
@@ -482,6 +486,7 @@ void paint_finder_symbol_centered(phenotype::Painter& painter,
 
 void paint_finder_symbol_centered(
         phenotype::Painter& painter,
+        phenotype::icons::SymbolDocumentCache const& cache,
         phenotype::icons::SymbolPresentation presentation,
         float box_x,
         float box_y,
@@ -489,6 +494,7 @@ void paint_finder_symbol_centered(
         float box_height) {
     phenotype::icons::paint_symbol_centered(
         painter,
+        cache,
         presentation,
         box_x,
         box_y,
@@ -509,6 +515,7 @@ phenotype::icons::SymbolPresentation icon_presentation_for_state(
 }
 
 void paint_sidebar_icon(phenotype::Painter& painter,
+                        phenotype::icons::SymbolDocumentCache const& cache,
                         std::string_view id,
                         bool selected,
                         phenotype::ButtonVisualState state,
@@ -516,6 +523,7 @@ void paint_sidebar_icon(phenotype::Painter& painter,
                         float origin_y) {
     paint_finder_symbol_centered(
         painter,
+        cache,
         icon_presentation_for_state(
             sidebar_symbol(id),
             phenotype::icons::SymbolPresentationRole::Sidebar,
@@ -828,6 +836,7 @@ phenotype::Color entry_symbol_color(
 }
 
 void paint_entry_symbol(phenotype::Painter& painter,
+                        phenotype::icons::SymbolDocumentCache const& cache,
                         file_explorer_demo::Entry const& entry,
                         bool selected,
                         float x,
@@ -836,6 +845,7 @@ void paint_entry_symbol(phenotype::Painter& painter,
                         float icon_size) {
     paint_finder_symbol_centered(
         painter,
+        cache,
         phenotype::icons::from_catalog_symbol(
             file_explorer_demo::entry_symbol(entry)),
         x,
@@ -1232,7 +1242,8 @@ void finder_column_location_button(std::string label,
                                    Msg msg,
                                    bool selected,
                                    float max_width,
-                                   float font_size) {
+                                   float font_size,
+                                   phenotype::icons::SymbolDocumentCache const& cache) {
     auto options = phenotype::icons::macos_control_button_style(
         phenotype::icons::ControlButtonStyleOptions{
             .role = phenotype::icons::SymbolPresentationRole::Sidebar,
@@ -1246,7 +1257,7 @@ void finder_column_location_button(std::string label,
         phenotype::str{label},
         max_width,
         k_column_location_row_height,
-        [label, icon, selected, max_width, font_size](
+        [label, icon, selected, max_width, font_size, &cache](
                 phenotype::Painter& painter,
                 phenotype::ButtonVisualState state) {
             float const icon_box = 22.0f;
@@ -1255,6 +1266,7 @@ void finder_column_location_button(std::string label,
                 (k_column_location_row_height - icon_box) * 0.5f;
             paint_finder_symbol_centered(
                 painter,
+                cache,
                 icon_presentation_for_state(
                     sidebar_symbol(icon),
                     phenotype::icons::SymbolPresentationRole::Sidebar,
@@ -1278,6 +1290,7 @@ void finder_column_location_button(std::string label,
                          finder_font());
             paint_finder_symbol_centered(
                 painter,
+                cache,
                 phenotype::icons::Symbol::Forward,
                 max_width - 22.0f,
                 (k_column_location_row_height - 18.0f) * 0.5f,
@@ -1355,7 +1368,8 @@ void finder_entry_row_button(file_explorer_demo::Entry const& entry,
                              bool selected,
                              float max_width,
                              float font_size,
-                             float fixed_height) {
+                             float fixed_height,
+                             phenotype::icons::SymbolDocumentCache const& cache) {
     auto const& t = phenotype::current_theme();
     phenotype::ButtonStyleOptions options;
     options.has_background = true;
@@ -1377,7 +1391,7 @@ void finder_entry_row_button(file_explorer_demo::Entry const& entry,
         phenotype::str{entry.name},
         max_width,
         fixed_height,
-        [entry, selected, max_width, font_size, fixed_height](
+        [entry, selected, max_width, font_size, fixed_height, &cache](
                 phenotype::Painter& painter) {
             float const icon_box = 24.0f;
             float const icon_size = 18.0f;
@@ -1385,6 +1399,7 @@ void finder_entry_row_button(file_explorer_demo::Entry const& entry,
             float const icon_y = (fixed_height - icon_box) * 0.5f;
             paint_entry_symbol(
                 painter,
+                cache,
                 entry,
                 selected,
                 icon_x,
@@ -1423,7 +1438,8 @@ void finder_entry_row_button(file_explorer_demo::Entry const& entry,
 void sidebar_row(std::string_view label,
                  std::string_view icon,
                  std::string location_id,
-                 bool selected = false) {
+                 bool selected,
+                 phenotype::icons::SymbolDocumentCache const& cache) {
     using namespace phenotype;
     auto options = icons::macos_control_button_style(
         icons::ControlButtonStyleOptions{
@@ -1440,13 +1456,14 @@ void sidebar_row(std::string_view label,
         str{label_text},
         k_sidebar_row_width,
         k_sidebar_row_height,
-        [label_text, icon_name, selected](
+        [label_text, icon_name, selected, &cache](
                 Painter& painter,
                 phenotype::ButtonVisualState state) {
             float const icon_top =
                 (k_sidebar_row_height - k_sidebar_icon_size) * 0.5f;
             paint_sidebar_icon(
                 painter,
+                cache,
                 icon_name,
                 selected,
                 state,
@@ -1517,24 +1534,25 @@ void finder_sidebar(State const& state) {
         explorer.current);
     bool const in_root = relative == "Demo Root";
     auto const& labels = state.labels;
+    auto const& icon_cache = state.icon_cache;
     layout::sidebar(k_sidebar_width, [&] {
         native_window_control_reserve_slot();
-        sidebar_row(labels.sidebar_recents, "recents", "root", in_root);
+        sidebar_row(labels.sidebar_recents, "recents", "root", in_root, icon_cache);
         sidebar_row(labels.sidebar_shared, "shared", "shared",
-                    relative == "Demo Root/Shared");
+                    relative == "Demo Root/Shared", icon_cache);
         layout::spacer(k_sidebar_section_gap);
         sidebar_heading(labels.favorites);
-        sidebar_row(labels.applications, "app", "root");
-        sidebar_row(labels.desktop, "desktop", "root");
+        sidebar_row(labels.applications, "app", "root", false, icon_cache);
+        sidebar_row(labels.desktop, "desktop", "root", false, icon_cache);
         sidebar_row(labels.documents, "doc", "documents",
-                    relative == "Demo Root/Documents");
-        sidebar_row(labels.downloads, "download", "root");
+                    relative == "Demo Root/Documents", icon_cache);
+        sidebar_row(labels.downloads, "download", "root", false, icon_cache);
         layout::spacer(k_sidebar_section_gap);
         sidebar_heading(labels.locations);
-        sidebar_row(labels.icloud_drive, "cloud", "root");
-        sidebar_row(labels.home, "home", "root");
-        sidebar_row(labels.airdrop, "airdrop", "shared");
-        sidebar_row(labels.trash, "trash", "trash", relative == "Trash");
+        sidebar_row(labels.icloud_drive, "cloud", "root", false, icon_cache);
+        sidebar_row(labels.home, "home", "root", false, icon_cache);
+        sidebar_row(labels.airdrop, "airdrop", "shared", false, icon_cache);
+        sidebar_row(labels.trash, "trash", "trash", relative == "Trash", icon_cache);
     }, MaterialKind::Thin, SpaceToken::Lg, SpaceToken::Xs);
 }
 
@@ -1906,7 +1924,8 @@ void finder_list(State const& state,
                                     selected,
                                     410.0f,
                                     15.0f,
-                                    32.0f);
+                                    32.0f,
+                                    state.icon_cache);
                             });
                             layout::sized_box(160.0f, [&] {
                                 widget::text(file_explorer_demo::entry_kind_label(entry),
@@ -1946,28 +1965,32 @@ void finder_column_view(State const& state,
                             SelectLocation{"root"},
                             snap.relative_location == "Demo Root",
                             190.0f,
-                            14.0f);
+                            14.0f,
+                            state.icon_cache);
                         finder_column_location_button(
                             state.labels.documents,
                             "doc",
                             SelectLocation{"documents"},
                             snap.relative_location == "Demo Root/Documents",
                             190.0f,
-                            14.0f);
+                            14.0f,
+                            state.icon_cache);
                         finder_column_location_button(
                             state.labels.pictures,
                             "image",
                             SelectLocation{"pictures"},
                             snap.relative_location == "Demo Root/Pictures",
                             190.0f,
-                            14.0f);
+                            14.0f,
+                            state.icon_cache);
                         finder_column_location_button(
                             state.labels.sidebar_shared,
                             "shared",
                             SelectLocation{"shared"},
                             snap.relative_location == "Demo Root/Shared",
                             190.0f,
-                            14.0f);
+                            14.0f,
+                            state.icon_cache);
                     }, SpaceToken::Xs);
                 });
                 layout::sized_box(360.0f, [&] {
@@ -1989,7 +2012,8 @@ void finder_column_view(State const& state,
                                         selected,
                                         330.0f,
                                         14.0f,
-                                        30.0f);
+                                        30.0f,
+                                        state.icon_cache);
                                 }
                             }, SpaceToken::Xs);
                         });

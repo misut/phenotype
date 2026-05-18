@@ -43,6 +43,11 @@ int main() {
            != std::string_view::npos);
     assert(icons::source_acquisition_policy().find("macOS system icons")
            != std::string_view::npos);
+    assert(icons::document_cache_policy().find(
+               "keyed_by_symbol_descriptor")
+           != std::string_view::npos);
+    assert(icons::document_cache_policy().find("no_frame_parse_churn")
+           != std::string_view::npos);
     assert(icons::lucide_source_revision().size() == 40);
     assert(icons::source_attribution_policy().find("pinned direct raw SVG URL")
            != std::string_view::npos);

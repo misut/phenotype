@@ -131,7 +131,10 @@ The initial scope is intentionally narrow:
   per-symbol role/variant/rendering/layer metadata, name/reference lookup
   invariants, presentation defaults, role hit-target metrics, and Finder-style
   normal/hovered/pressed/selected/disabled state recipes plus file-type tint
-  policies for toolbar/sidebar/folder/document/image/movie glyphs.
+  policies for toolbar/sidebar/folder/document/image/movie glyphs. It also
+  reports `document_cache_policy`, the runtime contract that parsed icon SVG
+  documents are cached by pure symbol descriptor instead of reparsed during
+  ordinary frame rebuilds.
   The command deliberately reports semantic SF Symbols names without embedding
   Apple vector artwork, so CI and future LLM debugging can verify icon intent
   without screenshot guessing.

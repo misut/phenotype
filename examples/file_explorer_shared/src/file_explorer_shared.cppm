@@ -402,6 +402,7 @@ struct ExplorerChromeMetrics {
     std::string icon_source_license_policy;
     std::string icon_preferred_external_source_policy;
     std::string icon_source_acquisition_policy;
+    std::string icon_document_cache_policy;
     std::string icon_source_attribution_policy;
     std::string icon_apple_asset_boundary;
     std::string icon_interface_metaphor_policy;
@@ -1306,6 +1307,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
                 std::string{icon_catalog::preferred_external_source_policy()},
             .icon_source_acquisition_policy =
                 std::string{icon_catalog::source_acquisition_policy()},
+            .icon_document_cache_policy =
+                std::string{icon_catalog::document_cache_policy()},
             .icon_source_attribution_policy =
                 std::string{icon_catalog::source_attribution_policy()},
             .icon_apple_asset_boundary =
@@ -1659,6 +1662,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             std::string{icon_catalog::preferred_external_source_policy()},
         .icon_source_acquisition_policy =
             std::string{icon_catalog::source_acquisition_policy()},
+        .icon_document_cache_policy =
+            std::string{icon_catalog::document_cache_policy()},
         .icon_source_attribution_policy =
             std::string{icon_catalog::source_attribution_policy()},
         .icon_apple_asset_boundary =
@@ -3322,6 +3327,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "source_acquisition_policy",
         json::Value{chrome.icon_source_acquisition_policy});
+    icon_system.emplace(
+        "document_cache_policy",
+        json::Value{chrome.icon_document_cache_policy});
     icon_system.emplace(
         "source_attribution_policy",
         json::Value{chrome.icon_source_attribution_policy});

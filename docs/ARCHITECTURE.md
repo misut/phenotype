@@ -252,8 +252,12 @@ Finder-specific metaphors or filled dot treatment need tighter product
 control. Apps can call `icons::document`,
 `icons::paint_symbol`,
 or `widget::icon`; the widget helper paints through `widget::canvas` and uses a
-deterministic paint token so stable icons do not re-emit every frame. Apps that
-need an interactive macOS-style symbol control should call
+deterministic paint token so stable icons do not re-emit every frame.
+`phenotype.icons` also exposes an explicit `SymbolDocumentCache` keyed by the
+pure symbol descriptor. The default widget path builds that cache once at the
+runtime edge and reuses parsed SVG documents for icon paints, so toolbar,
+sidebar, and file-type glyphs do not reparse XML during ordinary frame rebuilds.
+Apps that need an interactive macOS-style symbol control should call
 `widget::symbol_button` with an explicit `icons::SymbolButtonOptions` value.
 That value selects the presentation role, selected/disabled state, optional
 control size, and token salt; `phenotype.icons` then derives the button chrome,
@@ -284,6 +288,9 @@ executors. Each embedded symbol also carries source acquisition metadata: the
 URL is pinned to a permissive source revision when the glyph is Lucide-backed,
 and the attribution explicitly says that no platform icon extraction or runtime
 network fetch is required.
+The icon debug contract includes `document_cache_policy`, making this
+performance boundary visible in artifacts and CLI output instead of leaving it
+as an unobservable renderer implementation detail.
 
 The Finder-style file explorer uses the same SVG parser for sandboxed `.svg`
 file thumbnails. The renderer reads the already-loaded file body from the demo
