@@ -482,7 +482,9 @@ the actual `material_plans` executed for the frame. Each plan includes:
   vibrancy expectation, and deterministic degradation;
 - raw `geometry`, derived `shape` analysis, tint, blur radius, saturation,
   luminance curve, edge highlight, noise, and shadow values for the resolved
-  plan. `shape.effective_radius` is the clamped radius the backend executes;
+  plan. `shape.kind` classifies the backend-executable geometry as
+  `rectangle`, `rounded-rectangle`, `capsule`, or `invalid`, and
+  `shape.effective_radius` is the clamped radius the backend executes;
 - `render_target`, including target dimensions, scale, pixel format, pixel
   count, readiness, and whether the backdrop-pixel budget was satisfied;
 - `decision_trace`, including the pure gate booleans for geometry, quality,
@@ -857,7 +859,7 @@ vocabularies. Current fallback paths are `none`, `no-material`, `invalid-geometr
 `weighted-5x5-manhattan`; current luminance curves are
 `adaptive-backdrop-luma` and `fallback-flat`. Current reference blending scopes
 are `none`, `sampled-backdrop`, and `deterministic-fallback`; current reference
-shapes are `none`, `invalid`, `rectangle`, and `rounded-rectangle`; current
+shapes are `none`, `invalid`, `rectangle`, `rounded-rectangle`, and `capsule`; current
 backdrop capture scopes are `none` and `shared-frame`. Add new
 planner/backend
 vocabulary to the verifier in the same patch that introduces it, so CI reports

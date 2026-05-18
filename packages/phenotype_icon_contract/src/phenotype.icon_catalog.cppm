@@ -381,7 +381,7 @@ inline auto source_license_policy() noexcept -> std::string_view {
 }
 
 inline auto preferred_external_source_policy() noexcept -> std::string_view {
-    return "Lucide ISC or Material Symbols Apache-2.0 may be used as audited source references before phenotype adaptation";
+    return "Prefer audited SVG from Lucide ISC, Tabler MIT, Iconoir MIT, or Material Symbols Apache-2.0 before phenotype adaptation";
 }
 
 inline auto source_attribution_policy() noexcept -> std::string_view {

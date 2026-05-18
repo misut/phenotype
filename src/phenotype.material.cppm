@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 21;
+inline constexpr std::uint32_t material_plan_contract_version = 22;
 inline constexpr unsigned int material_max_execution_stages = 4;
 
 struct MaterialGeometry {
@@ -22,9 +22,28 @@ struct MaterialGeometry {
     float radius = 0.0f;
 };
 
+enum class MaterialShapeKind {
+    Invalid,
+    Rectangle,
+    RoundedRectangle,
+    Capsule,
+};
+
+inline char const* material_shape_kind_name(MaterialShapeKind kind) noexcept {
+    switch (kind) {
+        case MaterialShapeKind::Invalid: return "invalid";
+        case MaterialShapeKind::Rectangle: return "rectangle";
+        case MaterialShapeKind::RoundedRectangle: return "rounded-rectangle";
+        case MaterialShapeKind::Capsule: return "capsule";
+    }
+    return "invalid";
+}
+
 struct MaterialShapeAnalysis {
     bool valid = false;
+    MaterialShapeKind kind = MaterialShapeKind::Invalid;
     bool rounded = false;
+    bool capsule = false;
     bool radius_clamped = false;
     float surface_area = 0.0f;
     float min_extent = 0.0f;
@@ -547,6 +566,7 @@ struct MaterialRuntimeSummary {
     std::uint32_t morph_transition_count = 0;
     std::uint32_t valid_shape_count = 0;
     std::uint32_t rounded_shape_count = 0;
+    std::uint32_t capsule_shape_count = 0;
     std::uint32_t radius_clamped_count = 0;
     std::uint32_t foreground_backdrop_driven_count = 0;
     std::uint32_t foreground_high_contrast_count = 0;
@@ -767,6 +787,8 @@ inline void accumulate_material_runtime_summary(
         ++summary.valid_shape_count;
     if (plan.shape.rounded)
         ++summary.rounded_shape_count;
+    if (plan.shape.capsule)
+        ++summary.capsule_shape_count;
     if (plan.shape.radius_clamped)
         ++summary.radius_clamped_count;
     if (plan.foreground.backdrop_driven)
@@ -1474,6 +1496,13 @@ inline MaterialShapeAnalysis analyze_material_shape(
     analysis.normalized_radius = analysis.radius_limit > 0.0f
         ? analysis.effective_radius / analysis.radius_limit
         : 0.0f;
+    analysis.capsule = analysis.rounded
+        && analysis.normalized_radius >= 0.999f;
+    analysis.kind = analysis.capsule
+        ? MaterialShapeKind::Capsule
+        : analysis.rounded
+            ? MaterialShapeKind::RoundedRectangle
+            : MaterialShapeKind::Rectangle;
     return analysis;
 }
 
@@ -1674,9 +1703,7 @@ inline char const* material_plan_id(MaterialKind kind,
 
 inline char const* material_reference_shape_name(
         MaterialShapeAnalysis shape) noexcept {
-    if (!shape.valid)
-        return "invalid";
-    return shape.rounded ? "rounded-rectangle" : "rectangle";
+    return material_shape_kind_name(shape.kind);
 }
 
 inline char const* material_reference_blending_scope(

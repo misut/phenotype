@@ -40,7 +40,7 @@
     "fallback": 0,
     "backdrop_sampling": 22,
     "contract_versions": {
-      "21": 22
+      "22": 22
     },
     "theme_foreground_matches_theme": 22,
     "theme_accent_matches_theme": 22,

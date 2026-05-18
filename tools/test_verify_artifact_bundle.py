@@ -90,7 +90,9 @@ def material_plan(
         "geometry": {"x": 12.0, "y": 20.0, "w": 240.0, "h": 96.0, "radius": 10.0},
         "shape": {
             "valid": True,
+            "kind": "rounded-rectangle",
             "rounded": True,
+            "capsule": False,
             "radius_clamped": False,
             "surface_area": 240.0 * 96.0,
             "min_extent": 96.0,
@@ -342,6 +344,7 @@ def refresh_reference_model(plan: dict[str, object]) -> None:
     assert isinstance(foreground, dict)
     assert isinstance(budget, dict)
     shape_valid = bool(shape["valid"])
+    shape_kind = str(shape.get("kind", "invalid"))
     content_standard = kind != "none" and role == "content"
     blending_scope = "none"
     if kind != "none" and bool(plan["backdrop_sampling"]):
@@ -369,8 +372,11 @@ def refresh_reference_model(plan: dict[str, object]) -> None:
         "material_policy": material_policy,
         "variant": kind,
         "shape": (
-            "invalid"
+            shape_kind
+            if shape.get("kind") is not None
+            else "invalid"
             if not shape_valid
+            else "capsule" if bool(shape.get("capsule", False))
             else "rounded-rectangle" if bool(shape["rounded"]) else "rectangle"),
         "shape_scope": "view-bounds",
         "blending_scope": blending_scope,
@@ -619,6 +625,7 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         ),
         "valid_shape_count": 1 if shape["valid"] else 0,
         "rounded_shape_count": 1 if shape["rounded"] else 0,
+        "capsule_shape_count": 1 if shape.get("capsule") else 0,
         "radius_clamped_count": 1 if shape["radius_clamped"] else 0,
         "foreground_backdrop_driven_count": (
             1 if plan["foreground"]["backdrop_driven"] else 0
@@ -1089,6 +1096,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["shape"]["rounded"],
             1)
         self.assertEqual(
+            report["material_plans"]["shape"]["capsule"],
+            0)
+        self.assertEqual(
             report["material_plans"]["shape"]["radius_clamped"],
             0)
         self.assertEqual(
@@ -1243,11 +1253,36 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["likely_layer"], "material-shape")
         self.assertIn("MaterialPlan.shape", failure["suggested_action"])
 
+    def test_material_shape_kind_mismatch_is_llm_actionable(self) -> None:
+        plan = material_plan()
+        shape = plan["shape"]
+        reference_model = plan["reference_model"]
+        assert isinstance(shape, dict)
+        assert isinstance(reference_model, dict)
+        shape["kind"] = "capsule"
+        reference_model["shape"] = "capsule"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material shape kind matches geometry")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".shape.kind")
+        self.assertEqual(failure["expected"], "rounded-rectangle")
+        self.assertEqual(failure["actual"], "capsule")
+        self.assertEqual(failure["likely_layer"], "material-shape")
+        self.assertIn("MaterialShapeAnalysis.kind", failure["hint"])
+
     def test_manifest_can_require_material_shape_summary(self) -> None:
         manifest = {
             "require_material_plan_summary": {
                 "shape_valid": 1,
                 "shape_rounded": 1,
+                "shape_capsule": 0,
                 "shape_radius_clamped": 0,
                 "shape_max_surface_area_lte": 240.0 * 96.0,
                 "shape_max_surface_area_gte": 240.0 * 96.0,

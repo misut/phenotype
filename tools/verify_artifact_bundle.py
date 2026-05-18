@@ -172,6 +172,7 @@ ALLOWED_MATERIAL_REFERENCE_POLICIES = {
 }
 
 ALLOWED_MATERIAL_REFERENCE_SHAPES = {
+    "capsule",
     "invalid",
     "none",
     "rectangle",
@@ -205,7 +206,7 @@ ALLOWED_MATERIAL_REFERENCE_PERFORMANCE_RESPONSES = {
     "warmup-capture",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 21
+MATERIAL_PLAN_CONTRACT_VERSION = 22
 
 
 def suggested_action_for_failure(
@@ -1313,6 +1314,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "reference_performance_responses",
         "shape_valid",
         "shape_rounded",
+        "shape_capsule",
         "shape_radius_clamped",
         "shape_max_surface_area_lte",
         "shape_max_surface_area_gte",
@@ -1433,6 +1435,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "reference_deterministic_degradation",
             "shape_valid",
             "shape_rounded",
+            "shape_capsule",
             "shape_radius_clamped",
             "foreground_backdrop_driven",
             "foreground_high_contrast",
@@ -2224,7 +2227,7 @@ MATERIAL_COMMAND_DESCRIPTOR_NUMERIC_FIELDS = (
 )
 
 MATERIAL_GEOMETRY_FIELDS = ("x", "y", "w", "h", "radius")
-MATERIAL_SHAPE_BOOL_FIELDS = ("valid", "rounded", "radius_clamped")
+MATERIAL_SHAPE_BOOL_FIELDS = ("valid", "rounded", "capsule", "radius_clamped")
 MATERIAL_SHAPE_NUMERIC_FIELDS = (
     "surface_area",
     "min_extent",
@@ -2858,6 +2861,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         "shape": {
             "valid": 0,
             "rounded": 0,
+            "capsule": 0,
             "radius_clamped": 0,
             "max_surface_area": 0.0,
             "max_effective_radius": 0.0,
@@ -3334,11 +3338,18 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
 
             shape_obj = plan.get("shape")
             shape_valid = bool_at(shape_obj, "valid") if isinstance(shape_obj, dict) else None
+            shape_kind = string_at(shape_obj, "kind") if isinstance(shape_obj, dict) else None
             shape_rounded = bool_at(shape_obj, "rounded") if isinstance(shape_obj, dict) else None
+            shape_capsule = bool_at(shape_obj, "capsule") if isinstance(shape_obj, dict) else None
             if shape_valid is not None and "shape" in reference_values:
-                expected_shape = "invalid"
-                if shape_valid:
-                    expected_shape = "rounded-rectangle" if shape_rounded else "rectangle"
+                expected_shape = shape_kind
+                if expected_shape is None:
+                    expected_shape = "invalid"
+                    if shape_valid:
+                        expected_shape = (
+                            "capsule" if shape_capsule else
+                            "rounded-rectangle" if shape_rounded else
+                            "rectangle")
                 report.check(
                     "material reference shape matches geometry analysis",
                     reference_values["shape"] == expected_shape,
@@ -4201,9 +4212,23 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 shape_summary["valid"] = int(shape_summary["valid"]) + 1
             if shape_bools.get("rounded"):
                 shape_summary["rounded"] = int(shape_summary["rounded"]) + 1
+            if shape_bools.get("capsule"):
+                shape_summary["capsule"] = int(shape_summary["capsule"]) + 1
             if shape_bools.get("radius_clamped"):
                 shape_summary["radius_clamped"] = (
                     int(shape_summary["radius_clamped"]) + 1)
+            shape_kind = string_at(shape, "kind")
+            if shape_kind is not None:
+                report.check(
+                    "material shape kind uses allowed vocabulary",
+                    shape_kind in ALLOWED_MATERIAL_REFERENCE_SHAPES
+                    and shape_kind != "none",
+                    path=f"{plan_path}.shape.kind",
+                    expected=sorted(ALLOWED_MATERIAL_REFERENCE_SHAPES - {"none"}),
+                    actual=shape_kind,
+                    likely_layer="material-shape",
+                    hint="Add new MaterialShapeKind values to the verifier when intentional.",
+                    record_success=False)
             for key, summary_key in (
                     ("surface_area", "max_surface_area"),
                     ("effective_radius", "max_effective_radius"),
@@ -4223,6 +4248,14 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 expected_normalized = (
                     expected_radius / expected_limit
                     if expected_limit > 0.0 else 0.0)
+                expected_kind = "invalid"
+                if expected_valid:
+                    if expected_normalized >= 0.999:
+                        expected_kind = "capsule"
+                    elif expected_radius > 0.0:
+                        expected_kind = "rounded-rectangle"
+                    else:
+                        expected_kind = "rectangle"
                 if "valid" in shape_bools:
                     report.check(
                         "material shape validity matches geometry",
@@ -4270,6 +4303,28 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         hint=(
                             "MaterialShapeAnalysis.normalized_radius should "
                             "describe the executable radius within its limit."))
+                if shape_kind is not None:
+                    report.check(
+                        "material shape kind matches geometry",
+                        shape_kind == expected_kind,
+                        path=f"{plan_path}.shape.kind",
+                        expected=expected_kind,
+                        actual=shape_kind,
+                        likely_layer="material-shape",
+                        hint=(
+                            "MaterialShapeAnalysis.kind should classify the "
+                            "same executable shape that backends render."))
+                if "capsule" in shape_bools:
+                    report.check(
+                        "material shape capsule flag matches geometry",
+                        shape_bools["capsule"] == (expected_kind == "capsule"),
+                        path=f"{plan_path}.shape.capsule",
+                        expected=(expected_kind == "capsule"),
+                        actual=shape_bools["capsule"],
+                        likely_layer="material-shape",
+                        hint=(
+                            "MaterialShapeAnalysis.capsule should be true only "
+                            "when the clamped radius reaches half of the smaller extent."))
 
         render_target_pixel_count: int | None = None
         render_target = check_object_field(
@@ -6328,6 +6383,7 @@ def check_material_plan_summary_requirements(
             elif field in (
                     "shape_valid",
                     "shape_rounded",
+                    "shape_capsule",
                     "shape_radius_clamped"):
                 shape_summary = summary.get("shape")
                 if not isinstance(shape_summary, dict):
@@ -6863,6 +6919,8 @@ def check_material_runtime_summary_contract(
         "valid_shape_count": summary.get("shape", {}).get("valid")
             if isinstance(summary.get("shape"), dict) else None,
         "rounded_shape_count": summary.get("shape", {}).get("rounded")
+            if isinstance(summary.get("shape"), dict) else None,
+        "capsule_shape_count": summary.get("shape", {}).get("capsule")
             if isinstance(summary.get("shape"), dict) else None,
         "radius_clamped_count": summary.get("shape", {}).get(
             "radius_clamped")

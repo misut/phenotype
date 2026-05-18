@@ -20,6 +20,10 @@ int main() {
            != std::string_view::npos);
     assert(icons::preferred_external_source_policy().find("Lucide ISC")
            != std::string_view::npos);
+    assert(icons::preferred_external_source_policy().find("Tabler MIT")
+           != std::string_view::npos);
+    assert(icons::preferred_external_source_policy().find("Iconoir MIT")
+           != std::string_view::npos);
     assert(icons::preferred_external_source_policy().find("Material Symbols Apache-2.0")
            != std::string_view::npos);
     assert(icons::source_attribution_policy().find("source URL")
