@@ -39,9 +39,9 @@ int main() {
            != std::string_view::npos);
     assert(icons::source_acquisition_policy().find("runtime uses embedded SVG strings")
            != std::string_view::npos);
-    assert(icons::source_acquisition_policy().find("never extracts platform icons")
+    assert(icons::source_acquisition_policy().find("platform icon extraction disabled")
            != std::string_view::npos);
-    assert(icons::source_acquisition_policy().find("macOS system icons")
+    assert(icons::source_acquisition_policy().find("redistribution rights are explicit")
            != std::string_view::npos);
     assert(icons::document_cache_policy().find(
                "keyed_by_symbol_descriptor")
@@ -60,6 +60,8 @@ int main() {
     assert(icons::apple_asset_boundary().find("design references only")
            != std::string_view::npos);
     assert(icons::apple_asset_boundary().find("do not extract or embed")
+           != std::string_view::npos);
+    assert(icons::apple_asset_boundary().find("redistribution clearance")
            != std::string_view::npos);
     assert(icons::reference_source_count == 8);
     auto const apple_icons = icons::reference_source_at(0);

@@ -1055,6 +1055,9 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && icon_catalog::source_acquisition_policy().find(
                    "runtime uses embedded SVG strings")
                 != std::string_view::npos
+            && icon_catalog::source_acquisition_policy().find(
+                   "platform icon extraction disabled")
+                != std::string_view::npos
             && icon_catalog::document_cache_policy().find(
                    "no_frame_parse_churn")
                 != std::string_view::npos

@@ -942,7 +942,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_acquisition_policy",
-      "equals": "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons, macOS system icons, or fetches remote resources"
+      "equals": "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings, does not fetch remote resources, and keeps platform icon extraction disabled unless redistribution rights are explicit and audited"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.document_cache_policy",
@@ -954,7 +954,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.apple_asset_boundary",
-      "equals": "Apple SF Symbols, Finder icons, and macOS system icons are design references only; do not extract or embed Apple-owned artwork without explicit legal clearance"
+      "equals": "Apple SF Symbols, Finder icons, and macOS system icons are design references only; do not extract or embed Apple-owned artwork unless explicit redistribution clearance is recorded"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.interface_metaphor_policy",

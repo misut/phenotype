@@ -221,6 +221,9 @@ ring hidden. The `input_model` records `last_input_modality`, `focus_target`,
 reason a ring is or is not visible. The native shell applies the same reset
 before platform-consumed left-button presses, which prevents titlebar, IME, or
 other edge adapters from preserving a keyboard ring after a pointer click.
+File Explorer also clears `focus_visible` for pointer/programmatic commands such
+as view-mode, sort, refresh, and toolbar action clicks even when the logical
+focus target remains unchanged.
 Core focusable widgets also snap the focus-ring border back to the resting
 state when pointer modality hides a previously keyboard-visible ring, so a
 mouse click cannot leave a short-lived blue fade-out that looks like click
@@ -403,6 +406,8 @@ the catalog revision, plus `platform_extracted=false` and
 trusting `main` or assuming a local macOS icon service was used. The
 same payload should include
 `document_cache_policy=explicit_symbol_document_cache_keyed_by_symbol_descriptor_no_frame_parse_churn`;
+platform icon extraction must stay disabled unless a future source records
+explicit redistribution clearance in the attribution payload.
 if it is missing, suspect the icon runtime/cache contract before spending time
 on backend paint output. The
 file-explorer `resource_system.file_type_icon_source_map` repeats that

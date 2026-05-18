@@ -582,7 +582,7 @@ duplicate
                "runtime uses embedded SVG strings")
            != std::string::npos);
     assert(chrome.icon_source_acquisition_policy.find(
-               "never extracts platform icons")
+               "platform icon extraction disabled")
            != std::string::npos);
     assert(chrome.icon_document_cache_policy.find(
                "keyed_by_symbol_descriptor")
@@ -903,6 +903,41 @@ duplicate
         focus_profile);
     assert(focus_state.focus_target == demo::ExplorerFocusTarget::Search);
     assert(focus_state.focus_visible);
+    demo::apply_explorer_input(
+        focus_state,
+        demo::ExplorerInput{
+            .kind = demo::ExplorerInputKind::ViewMode,
+            .value = "list",
+            .modality = demo::ExplorerInputModality::Pointer,
+            .view_mode = demo::ExplorerViewMode::List,
+        },
+        focus_profile);
+    assert(focus_state.last_input_modality
+           == demo::ExplorerInputModality::Pointer);
+    assert(focus_state.focus_target == demo::ExplorerFocusTarget::Search);
+    assert(!focus_state.focus_visible);
+    assert(demo::focus_ring_visibility_reason(focus_state)
+           == "pointer_input_hides_focus_ring");
+    demo::apply_explorer_input(
+        focus_state,
+        parsed_focus_search.input,
+        focus_profile);
+    assert(focus_state.focus_visible);
+    demo::apply_explorer_input(
+        focus_state,
+        demo::ExplorerInput{
+            .kind = demo::ExplorerInputKind::Viewport,
+            .value = "900x620@2",
+            .viewport_width = 900,
+            .viewport_height = 620,
+            .viewport_scale = 2.0f,
+        },
+        focus_profile);
+    assert(focus_state.last_input_modality
+           == demo::ExplorerInputModality::Programmatic);
+    assert(!focus_state.focus_visible);
+    assert(demo::focus_ring_visibility_reason(focus_state)
+           == "programmatic_input_does_not_show_focus_ring");
     fs::remove_all(focus_state.root, ec);
 
     auto const outside_name = std::string{"phenotype-file-explorer-outside-"}

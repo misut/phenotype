@@ -416,6 +416,9 @@ can still present their caret and selection from raw focus. Native shells also
 clear `focus_visible` before forwarding a left-button press to any platform
 input adapter, so AppKit/IME/titlebar hooks that consume the pointer event
 cannot leave a stale keyboard ring behind.
+Pure app input models mirror this split: pointer and programmatic commands that
+do not move the logical focus target still clear `focus_visible`, while only
+keyboard traversal or explicit keyboard focus commands can enable the ring.
 
 This keeps the long-term input/output abstraction model testable without a
 native window. `examples/file_explorer_shared` publishes Finder-style desktop

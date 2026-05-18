@@ -3351,6 +3351,14 @@ inline bool set_focus_id(unsigned int callback_id,
     return true;
 }
 
+inline bool clear_focus_visible_for_pointer(
+        char const* source = "core",
+        char const* detail = "pointer-focus-visible-reset") {
+    if (!g_app.focus_visible || g_app.focused_id == 0xFFFFFFFFu)
+        return false;
+    return set_focus_id(g_app.focused_id, source, detail, false);
+}
+
 inline unsigned int get_focused_id() {
     return g_app.focused_id;
 }

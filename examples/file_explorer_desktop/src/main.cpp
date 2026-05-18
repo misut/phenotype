@@ -183,6 +183,15 @@ void apply_desktop_input(
         "desktop");
 }
 
+void apply_desktop_pointer_focus(
+        file_explorer_demo::ExplorerState& explorer,
+        std::string_view target) {
+    auto input = pointer_input(
+        file_explorer_demo::ExplorerInputKind::PointerFocus);
+    input.value = std::string{target};
+    apply_desktop_input(explorer, std::move(input));
+}
+
 std::string initial_locale() {
     char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_LOCALE");
     return raw && *raw ? std::string{raw} : std::string{"en"};
@@ -1137,6 +1146,7 @@ void update(State& state, Msg msg) {
             apply_desktop_input(explorer, std::move(input));
         } else if constexpr (std::same_as<T, ToolbarAction>) {
             state.more_actions_open = false;
+            apply_desktop_pointer_focus(explorer, "toolbar_actions");
             explorer.status = m.label + " action is available in the native toolbar contract.";
         } else if constexpr (std::same_as<T, SearchChanged>) {
             auto input = keyboard_input(
@@ -1203,6 +1213,7 @@ void update(State& state, Msg msg) {
                 explorer,
                 keyboard_input(file_explorer_demo::ExplorerInputKind::ActivateSelected));
         } else if constexpr (std::same_as<T, ToggleMoreActions>) {
+            apply_desktop_pointer_focus(explorer, "toolbar_actions");
             state.more_actions_open = !state.more_actions_open;
             explorer.status = state.more_actions_open
                 ? "More actions ready."
@@ -1229,6 +1240,7 @@ void update(State& state, Msg msg) {
                 pointer_input(file_explorer_demo::ExplorerInputKind::CycleSort));
         } else if constexpr (std::same_as<T, Refresh>) {
             state.more_actions_open = false;
+            apply_desktop_pointer_focus(explorer, "toolbar_actions");
             explorer.status = "Refreshed " + file_explorer_demo::relative_location(
                 explorer.root,
                 explorer.current);
