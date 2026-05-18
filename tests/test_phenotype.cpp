@@ -2856,6 +2856,37 @@ inline NodeHandle build_button(ButtonVariant variant, bool disabled,
     return root.children[0];
 }
 
+inline NodeHandle build_button_frame_preserving_animation(
+        bool focus_visible,
+        bool prev_focus_visible) {
+    detail::g_app.arena.reset();
+    detail::g_app.callbacks.clear();
+    detail::msg_queue().clear();
+    detail::g_app.hovered_id = 0xFFFFFFFFu;
+    detail::g_app.focused_id = 0u;
+    detail::g_app.prev_focused_id = 0u;
+    detail::g_app.pressed_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = focus_visible;
+    detail::g_app.prev_focus_visible = prev_focus_visible;
+    detail::bump_local_gen();
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    widget::button<ButtonMsg>(
+        "Click",
+        Click{},
+        ButtonVariant::Default,
+        false);
+    Scope::set_current(nullptr);
+
+    auto& root = detail::node_at(root_h);
+    assert(root.children.size() == 1);
+    return root.children[0];
+}
+
 inline NodeHandle build_button_with_options(
         ButtonStyleOptions options,
         unsigned int hovered_id = 0xFFFFFFFFu,
@@ -3086,6 +3117,38 @@ void test_button_pointer_focused_hides_focus_ring() {
     detail::g_app.focused_id = 0xFFFFFFFFu;
     detail::g_app.focus_visible = false;
     std::puts("PASS: pointer-focused button hides focus ring");
+}
+
+void test_button_pointer_focus_reset_snaps_focus_ring_off() {
+    detail::local_store().clear();
+    detail::bump_local_gen();
+
+    auto keyboard_h =
+        button_test::build_button_frame_preserving_animation(
+            /*focus_visible=*/true,
+            /*prev_focus_visible=*/false);
+    auto& keyboard = detail::node_at(keyboard_h);
+    auto const& t = detail::g_app.theme;
+    assert(keyboard.callback_id == 0u);
+    assert(keyboard.border_width == t.state_focus_ring_width);
+    assert(keyboard.border_color.r == t.state_focus_ring.r);
+
+    auto pointer_h =
+        button_test::build_button_frame_preserving_animation(
+            /*focus_visible=*/false,
+            /*prev_focus_visible=*/true);
+    auto& pointer = detail::node_at(pointer_h);
+    assert(pointer.callback_id == 0u);
+    assert(pointer.border_width == 1.0f);
+    assert(pointer.border_color.r == t.border.r);
+
+    detail::local_store().clear();
+    detail::bump_local_gen();
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.prev_focused_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = false;
+    detail::g_app.prev_focus_visible = false;
+    std::puts("PASS: pointer focus reset snaps focus ring off");
 }
 
 void test_focus_visible_tracks_keyboard_modality() {
@@ -4416,6 +4479,7 @@ int main() {
     test_button_pressed_snaps_to_pressed_bg();
     test_button_focused_snaps_to_focus_ring_width();
     test_button_pointer_focused_hides_focus_ring();
+    test_button_pointer_focus_reset_snaps_focus_ring_off();
     test_focus_visible_tracks_keyboard_modality();
     test_button_defocused_resting_border_width();
     test_button_disabled();

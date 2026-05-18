@@ -157,7 +157,11 @@ longer in the diff, but its `node.border_width` /
 forces `paint_invalidation_mask = ~0ULL` whenever
 `has_active_animations` is set during view, so every cached subtree
 re-walks until the animation lands. The flag self-clears, so the
-diff-driven cache returns the moment everything converges.
+diff-driven cache returns the moment everything converges. Focus-ring hide
+transitions are stricter: when pointer modality hides a ring that was visible
+from keyboard navigation, focusable widgets snap their ring border back to
+resting chrome instead of fading it out, matching macOS behavior where pointer
+clicks do not create a visible focus ring.
 
 ## Host interface
 

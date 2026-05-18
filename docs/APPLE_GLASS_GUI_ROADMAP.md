@@ -427,7 +427,9 @@ failure shapes.
 The first concrete app-level bridge is the file explorer shared input model:
 `phenotype drive file-explorer` and native artifacts now expose the same
 keyboard-vs-pointer focus contract, including `focus_visible`, focus target,
-focus order, and a macOS-style focus ring token.
+focus order, and a macOS-style focus ring token. Core focusable widgets also
+snap a previously keyboard-visible ring off when pointer modality takes over,
+so click interaction does not leave a transient ring.
 
 ### Diagnostics and LLM debugging
 
