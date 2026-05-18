@@ -55,11 +55,12 @@ sources pinned to a fixed source revision, with each symbol reporting either
 the Lucide ISC license or the Feather-derived MIT license when the upstream
 license file requires it. The policy also allows future Tabler MIT, Iconoir
 MIT, or Material Symbols Apache-2.0 sources. Every embedded external source
-exposes family, icon name, exact license, license URL, pinned source URL,
-source revision, copyright, modification status, and Apple-asset boundary in
-debug metadata.
+exposes family, icon name, exact license, license URL, pinned direct raw SVG
+URL, source revision, copyright, modification status, and Apple-asset boundary
+in debug metadata.
 The catalog also exposes structured reference-source rows for Apple HIG/SF
-Symbols, W3C SVG paths, Lucide, Feather Icons, and Material Symbols so
+Symbols, W3C SVG paths, Lucide, Feather Icons, Tabler Icons, and Material
+Symbols so
 provenance checks can distinguish style references, license lineage, and
 embedded asset sources without inspecting screenshots.
 `icons::macos_presentation(...)` is the

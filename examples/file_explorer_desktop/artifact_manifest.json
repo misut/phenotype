@@ -690,7 +690,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_source_count",
-      "equals": 6
+      "equals": 7
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_path_arc_symbol_count",
@@ -814,11 +814,11 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_acquisition_policy",
-      "equals": "development-time import from pinned permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons or fetches remote resources"
+      "equals": "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons or fetches remote resources"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_attribution_policy",
-      "equals": "embedded permissive SVG sources must expose family, icon name, exact license, pinned source URL, source revision, copyright, Apple-asset boundary, platform extraction flag, and runtime fetch flag in debug output"
+      "equals": "embedded permissive SVG sources must expose family, icon name, exact license, pinned direct raw SVG URL, source revision, copyright, Apple-asset boundary, platform extraction flag, and runtime fetch flag in debug output"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.apple_asset_boundary",

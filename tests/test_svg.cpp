@@ -342,7 +342,7 @@ void test_builtin_icons_parse() {
     assert(icons::asset_policy().find("no Apple") != std::string_view::npos);
     assert(icons::asset_policy().find("audited permissive")
            != std::string_view::npos);
-    assert(icons::source_attribution_policy().find("pinned source URL")
+    assert(icons::source_attribution_policy().find("pinned direct raw SVG URL")
            != std::string_view::npos);
     assert(icons::source_format() == "svg");
     assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");

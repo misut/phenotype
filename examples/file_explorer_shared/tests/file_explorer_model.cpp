@@ -554,7 +554,7 @@ duplicate
     assert(chrome.icon_reference_policy.find("audited permissive")
            != std::string::npos);
     assert(chrome.icon_asset_policy.find("no Apple") != std::string::npos);
-    assert(chrome.icon_source_attribution_policy.find("source URL")
+    assert(chrome.icon_source_attribution_policy.find("direct raw SVG URL")
            != std::string::npos);
     assert(chrome.icon_source_attribution_policy.find("source revision")
            != std::string::npos);
