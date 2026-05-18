@@ -27,9 +27,9 @@ pixel contracts plus native-window debug metadata. The macOS runtime snapshot
 also records the actual AppKit standard window buttons, their count, and their
 top-left content frames, so the verifier can fail if the buttons move back into
 a separate titlebar or if phenotype content starts drawing a second set. The
-CLI gate deliberately does not draw traffic-light probes, and the package icon
-avoids traffic-light marker colors, because the real controls are owned by the
-platform shell. On Windows
+CLI gate deliberately does not draw traffic-light probes, and all packaged SVG
+assets avoid traffic-light marker colors, because the real controls are owned
+by the platform shell. On Windows
 the native Win32 shell keeps the same contract through a
 DWM custom frame, using `WM_NCHITTEST` to preserve
 resize edges, caption-button behavior, blank-toolbar dragging, phenotype toolbar
@@ -71,8 +71,8 @@ and a render policy that allows only runtime OS controls. The
 `reserve_metrics_only_not_paint_instructions`, so `titlebar_control_*` numbers
 describe blank reserve geometry only; they are not permission to paint red,
 yellow, or green traffic-light markers. The paired
-`native_window_control_palette_policy` forbids traffic-light colors in content
-and artifact paths. It also checks the
+`native_window_control_palette_policy` forbids traffic-light colors in content,
+artifact, and package SVG asset paths. It also checks the
 platform `window.native_window_controls` object for AppKit standard button
 presence and content-reserve integration, then checks the pure `geometry` object for
 the integrated chrome contract: window inset/gap, sidebar surface origin, first

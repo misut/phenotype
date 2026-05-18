@@ -515,6 +515,49 @@ auto app_icon_native_window_palette_failure_count(
         }));
 }
 
+auto native_window_palette_failure_count(PackageSummary const& summary)
+    -> std::size_t {
+    return static_cast<std::size_t>(std::ranges::count_if(
+        summary.svg_asset_inspections,
+        [](auto const& inspection) {
+            return !inspection.native_window_control_palette_hits.empty();
+        }));
+}
+
+auto native_window_palette_failure_detail(PackageSummary const& summary)
+    -> std::string {
+    auto const failure_count =
+        native_window_palette_failure_count(summary);
+    if (failure_count == 0)
+        return "asset_marker_palette_failures=0";
+
+    auto detail = std::format("asset_marker_palette_failures={}",
+                              failure_count);
+    auto shown = std::size_t{0};
+    for (auto const& inspection : summary.svg_asset_inspections) {
+        if (inspection.native_window_control_palette_hits.empty())
+            continue;
+        if (shown >= 4) {
+            detail += std::format(" (+{} more)", failure_count - shown);
+            break;
+        }
+        detail += std::format(" {}=[",
+                              inspection.name.empty()
+                                  ? path_string(inspection.path.filename())
+                                  : inspection.name);
+        for (std::size_t i = 0;
+             i < inspection.native_window_control_palette_hits.size();
+             ++i) {
+            if (i > 0)
+                detail += ",";
+            detail += inspection.native_window_control_palette_hits[i];
+        }
+        detail += "]";
+        ++shown;
+    }
+    return detail;
+}
+
 export auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
     return {
         {.name = "package_root",
@@ -607,6 +650,10 @@ export auto package_checks(PackageSummary const& summary) -> std::vector<Check> 
                                app_icon_native_window_palette_failure_count(
                                    summary)),
          .hint = "Do not embed traffic-light/caption-button marker colors in packaged app icons; native windows own those controls."},
+        {.name = "svg_assets_native_chrome_palette",
+         .ok = native_window_palette_failure_count(summary) == 0,
+         .detail = native_window_palette_failure_detail(summary),
+         .hint = "Do not embed traffic-light/caption-button marker colors in packaged SVG assets; native windows own those controls."},
         {.name = "manifest_sources",
          .ok = summary.source_reference_count > 0
              && summary.missing_sources.empty(),

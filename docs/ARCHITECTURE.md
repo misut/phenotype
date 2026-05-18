@@ -763,8 +763,9 @@ zero content/artifact marker counts, and a render policy that forbids app-drawn
 traffic-light probes. The artifact verifier checks both the structured
 ownership invariant and the neutral/forbidden-palette titlebar reserve, so
 traffic-light probes cannot regress into duplicate content-drawn controls.
-Package inspection also keeps app icons free of traffic-light marker palettes,
-which prevents packaged assets from visually implying a second set of native
+Package inspection also keeps every manifest-declared SVG asset free of
+traffic-light marker palettes, which prevents packaged icons, file-type
+thumbnails, or runtime images from visually implying a second set of native
 controls.
 
 ## Unified debug plane
