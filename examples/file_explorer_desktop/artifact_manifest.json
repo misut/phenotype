@@ -302,19 +302,35 @@
     },
     {
       "path": "application.file_explorer.resource_system.asset_count",
-      "equals": 1
+      "equals": 13
     },
     {
       "path": "application.file_explorer.resource_system.svg_asset_count",
-      "equals": 1
+      "equals": 12
     },
     {
       "path": "application.file_explorer.resource_system.preload_svg_asset_count",
-      "equals": 1
+      "equals": 12
     },
     {
       "path": "application.file_explorer.resource_system.runtime_visible_svg_asset_count",
-      "equals": 0
+      "equals": 11
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_asset_count",
+      "equals": 11
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_source_family",
+      "equals": "Lucide"
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_source_revision",
+      "equals": "5b40f2c5a76a27eeb81c8f1b1c311121dee45495"
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_license_asset",
+      "equals": "assets/icons/file-types/LUCIDE_LICENSE.txt"
     },
     {
       "path": "application.file_explorer.resource_system.svg_asset_policy",

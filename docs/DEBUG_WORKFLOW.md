@@ -446,9 +446,10 @@ geometry now have separate JSON owners.
 counterpart. It records the file explorer application id/version/entry,
 declared platforms, SVG/preload/runtime-visible asset counts, app icon
 SVG/preload state, default locale/font state, locale coverage, Pretendard CJK
-fallback status, and debug manifest/probe/verifier declarations. Use it when an
-artifact looks correct but package inspection, i18n, icon loading, or the
-verifier route might be stale.
+fallback status, file-type icon asset count/source revision/license asset, and
+debug manifest/probe/verifier declarations. Use it when an artifact looks
+correct but package inspection, i18n, icon loading, or the verifier route might
+be stale.
 
 `PHENOTYPE_ARTIFACT_EXIT=1` makes the example exit after writing the first
 rendered frame, which is useful for CI or LLM debugging. Omit it for manual

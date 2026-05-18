@@ -3396,6 +3396,44 @@ inline json::Value locale_coverage_debug_json(
     return json::Value{std::move(out)};
 }
 
+struct FileTypeIconAsset {
+    std::string_view name;
+    std::string_view source;
+};
+
+inline constexpr FileTypeIconAsset k_file_type_icon_assets[] = {
+    {"file_type.folder.icon", "assets/icons/file-types/folder.svg"},
+    {"file_type.document.icon", "assets/icons/file-types/document.svg"},
+    {"file_type.pdf.icon", "assets/icons/file-types/pdf.svg"},
+    {"file_type.text.icon", "assets/icons/file-types/text.svg"},
+    {"file_type.image.icon", "assets/icons/file-types/image.svg"},
+    {"file_type.movie.icon", "assets/icons/file-types/movie.svg"},
+    {"file_type.archive.icon", "assets/icons/file-types/archive.svg"},
+    {"file_type.audio.icon", "assets/icons/file-types/audio.svg"},
+    {"file_type.code.icon", "assets/icons/file-types/code.svg"},
+    {"file_type.spreadsheet.icon",
+     "assets/icons/file-types/spreadsheet.svg"},
+    {"file_type.presentation.icon",
+     "assets/icons/file-types/presentation.svg"},
+};
+
+inline auto file_type_icon_source_family() noexcept -> std::string_view {
+    return "Lucide";
+}
+
+inline auto file_type_icon_source_revision() noexcept -> std::string_view {
+    return "5b40f2c5a76a27eeb81c8f1b1c311121dee45495";
+}
+
+inline auto file_type_icon_license_asset_source() noexcept
+        -> std::string_view {
+    return "assets/icons/file-types/LUCIDE_LICENSE.txt";
+}
+
+inline bool file_type_icon_asset_name(std::string_view name) noexcept {
+    return name.starts_with("file_type.") && name.ends_with(".icon");
+}
+
 inline json::Value file_explorer_resource_system_debug_json(
         std::string_view profile) {
     auto catalog = file_explorer_resource_catalog(profile);
@@ -3426,6 +3464,21 @@ inline json::Value file_explorer_resource_system_debug_json(
         app_icon.emplace(
             "content_type",
             json::Value{asset->get().content_type});
+    }
+
+    json::Array file_type_icon_assets;
+    for (auto const& asset : catalog.assets) {
+        if (!file_type_icon_asset_name(asset.name))
+            continue;
+        json::Object icon_asset;
+        icon_asset.emplace("name", json::Value{asset.name});
+        icon_asset.emplace("source", json::Value{asset.source});
+        icon_asset.emplace("content_type", json::Value{asset.content_type});
+        icon_asset.emplace("preload", json::Value{asset.preload});
+        icon_asset.emplace(
+            "runtime_visible",
+            json::Value{asset.runtime_visible});
+        file_type_icon_assets.push_back(json::Value{std::move(icon_asset)});
     }
 
     json::Object defaults;
@@ -3505,6 +3558,22 @@ inline json::Value file_explorer_resource_system_debug_json(
         "runtime_visible_svg_asset_count",
         json::Value{static_cast<std::int64_t>(
             contract.runtime_visible_svg_asset_count)});
+    out.emplace(
+        "file_type_icon_asset_count",
+        json::Value{static_cast<std::int64_t>(
+            file_type_icon_assets.size())});
+    out.emplace(
+        "file_type_icon_source_family",
+        json::Value{std::string{file_type_icon_source_family()}});
+    out.emplace(
+        "file_type_icon_source_revision",
+        json::Value{std::string{file_type_icon_source_revision()}});
+    out.emplace(
+        "file_type_icon_license_asset",
+        json::Value{std::string{file_type_icon_license_asset_source()}});
+    out.emplace(
+        "file_type_icon_assets",
+        json::Value{std::move(file_type_icon_assets)});
     out.emplace(
         "svg_asset_policy",
         json::Value{std::string{phenotype::svg_asset_contract_policy()}});
@@ -5957,6 +6026,22 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         .source = "assets/file-explorer-icon.svg",
         .content_type = "image/svg+xml",
         .preload = true,
+    });
+    for (auto const& asset : k_file_type_icon_assets) {
+        catalog.assets.push_back({
+            .name = std::string{asset.name},
+            .source = std::string{asset.source},
+            .content_type = "image/svg+xml",
+            .preload = true,
+            .runtime_visible = true,
+        });
+    }
+    catalog.assets.push_back({
+        .name = "license.lucide.icons",
+        .source = std::string{file_type_icon_license_asset_source()},
+        .content_type = "text/plain",
+        .preload = false,
+        .runtime_visible = false,
     });
 
     phenotype::LocaleDescriptor en{
