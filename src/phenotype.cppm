@@ -606,10 +606,11 @@ inline void text_field(str hint, std::string const& current,
     node.cursor_type = 1;
 
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
-    bool const is_focused = (id == detail::g_app.focused_id);
+    bool const is_focused = detail::focus_ring_visible(id);
     // View-time focus ring: width grows from 1px to
     // `state_focus_ring_width`, colour cross-fades from the resting
-    // border (or `state_error_border`) to `state_focus_ring`.
+    // border (or `state_error_border`) to `state_focus_ring`. Pointer
+    // focus still moves the caret, but only keyboard focus paints the ring.
     node.border_width = animate_float(
         is_focused ? t.state_focus_ring_width : 1.0f, 150);
     node.border_color = animate_color(
