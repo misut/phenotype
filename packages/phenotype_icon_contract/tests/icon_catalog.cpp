@@ -18,6 +18,10 @@ int main() {
            != std::string_view::npos);
     assert(icons::source_license_policy().find("Feather-derived MIT")
            != std::string_view::npos);
+    assert(icons::source_license_policy().find("Tabler MIT")
+           != std::string_view::npos);
+    assert(icons::source_license_policy().find("Iconoir MIT")
+           != std::string_view::npos);
     assert(icons::source_license_policy().find("Apache-2.0")
            != std::string_view::npos);
     assert(icons::preferred_external_source_policy().find("Lucide ISC")
@@ -37,6 +41,8 @@ int main() {
            != std::string_view::npos);
     assert(icons::source_acquisition_policy().find("never extracts platform icons")
            != std::string_view::npos);
+    assert(icons::source_acquisition_policy().find("macOS system icons")
+           != std::string_view::npos);
     assert(icons::lucide_source_revision().size() == 40);
     assert(icons::source_attribution_policy().find("pinned direct raw SVG URL")
            != std::string_view::npos);
@@ -50,7 +56,7 @@ int main() {
            != std::string_view::npos);
     assert(icons::apple_asset_boundary().find("do not extract or embed")
            != std::string_view::npos);
-    assert(icons::reference_source_count == 7);
+    assert(icons::reference_source_count == 8);
     auto const apple_icons = icons::reference_source_at(0);
     assert(apple_icons.name.find("Apple") != std::string_view::npos);
     assert(apple_icons.url.find("developer.apple.com")
@@ -90,6 +96,13 @@ int main() {
     assert(tabler_reference.license_policy.find("MIT")
            != std::string_view::npos);
     assert(!tabler_reference.used_as_embedded_asset_source);
+    auto const iconoir_reference = icons::reference_source_at(7);
+    assert(iconoir_reference.name.find("Iconoir") != std::string_view::npos);
+    assert(iconoir_reference.url.find("iconoir-icons/iconoir")
+           != std::string_view::npos);
+    assert(iconoir_reference.license_policy.find("MIT")
+           != std::string_view::npos);
+    assert(!iconoir_reference.used_as_embedded_asset_source);
     assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");
     assert(icons::svg_supported_path_commands().find("A Z")
            != std::string_view::npos);

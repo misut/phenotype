@@ -1080,7 +1080,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
          .hint =
              "Every embedded icon source must carry machine-readable family, icon name, exact license, pinned direct raw SVG URL, and source revision metadata."},
         {.name = "reference_sources",
-         .ok = icon_catalog::reference_source_count == 7
+         .ok = icon_catalog::reference_source_count == 8
             && icon_catalog::reference_source_at(0).apple_owned_artwork
             && !icon_catalog::reference_source_at(0)
                     .used_as_embedded_asset_source
@@ -1099,6 +1099,9 @@ auto icon_catalog_checks() -> std::vector<Check> {
                     .license_policy.find("Apache-2.0")
                 != std::string_view::npos
             && icon_catalog::reference_source_at(6)
+                    .license_policy.find("MIT")
+                != std::string_view::npos
+            && icon_catalog::reference_source_at(7)
                     .license_policy.find("MIT")
                 != std::string_view::npos,
          .detail = std::format(

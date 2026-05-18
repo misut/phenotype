@@ -868,6 +868,55 @@ std::string compact_preview(std::string text) {
     return text;
 }
 
+void pop_utf8_codepoint(std::string& text);
+
+void paint_elided_finder_text(phenotype::Painter& painter,
+                              float x,
+                              float y,
+                              std::string_view text,
+                              float max_width,
+                              float font_size,
+                              phenotype::Color color) {
+    if (max_width <= 0.0f || text.empty())
+        return;
+
+    auto const font = finder_font();
+    auto fits = [&](std::string_view value) {
+        return painter.measure_text(
+            value.data(),
+            static_cast<unsigned int>(value.size()),
+            font_size,
+            font) <= max_width;
+    };
+    if (fits(text)) {
+        painter.text(x,
+                     y,
+                     text.data(),
+                     static_cast<unsigned int>(text.size()),
+                     font_size,
+                     color,
+                     font);
+        return;
+    }
+
+    std::string shortened{text};
+    while (!shortened.empty()) {
+        pop_utf8_codepoint(shortened);
+        auto candidate = shortened + "...";
+        if (fits(candidate)) {
+            painter.text(x,
+                         y,
+                         candidate.c_str(),
+                         static_cast<unsigned int>(candidate.size()),
+                         font_size,
+                         color,
+                         font);
+            return;
+        }
+    }
+    painter.text(x, y, "...", 3, font_size, color, font);
+}
+
 bool icon_label_break_char(char ch) {
     return ch == ' ' || ch == '_' || ch == '-';
 }
@@ -2084,6 +2133,9 @@ void finder_status_bar(State const& state,
                        file_explorer_demo::Snapshot const& snap) {
     using namespace phenotype;
     auto const& explorer = state.explorer;
+    auto const chrome = file_explorer_demo::explorer_chrome_metrics(
+        explorer,
+        "desktop");
     auto options = layout::glass_surface_options(
         layout::GlassSurfacePreset::StatusBar,
         "Status Bar");
@@ -2093,18 +2145,37 @@ void finder_status_bar(State const& state,
         options,
         [&] {
             layout::row([&] {
-                layout::weighted(1.0f, [&] {
-                    std::string status = finder_status(snap);
-                    if (!explorer.status.empty())
-                        status += " - " + explorer.status;
-                    if (snap.has_selection
-                        && explorer.status != "Ready"
-                        && !snap.preview.empty()) {
-                        status += " - " + compact_preview(snap.preview);
-                    }
-                    if (!snap.operation_label.empty())
-                        status += " - " + snap.operation_label;
-                    widget::text(status, TextSize::Small, TextColor::Muted);
+                std::string status = finder_status(snap);
+                if (!explorer.status.empty())
+                    status += " - " + explorer.status;
+                if (snap.has_selection
+                    && explorer.status != "Ready"
+                    && !snap.preview.empty()) {
+                    status += " - " + compact_preview(snap.preview);
+                }
+                if (!snap.operation_label.empty())
+                    status += " - " + snap.operation_label;
+                float const side_width = snap.has_selection ? 264.0f : 0.0f;
+                float const status_width = std::max(
+                    180.0f,
+                    chrome.content_surface_width - side_width - 36.0f);
+                layout::sized_box(status_width, [&] {
+                    widget::semantic_canvas(
+                        status_width,
+                        20.0f,
+                        str{status},
+                        [status, status_width](Painter& painter) {
+                            paint_elided_finder_text(
+                                painter,
+                                0.0f,
+                                1.0f,
+                                status,
+                                status_width,
+                                current_theme().small_font_size,
+                                current_theme().muted);
+                        },
+                        {},
+                        stable_token(status) ^ 0x5a5a5101u);
                 });
                 if (snap.has_selection) {
                     layout::sized_box(144.0f, [&] {

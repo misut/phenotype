@@ -610,6 +610,54 @@ void test_canvas_widget_invokes_painter() {
     std::puts("PASS: widget::canvas invokes painter and emits DrawLine + DrawText");
 }
 
+void test_semantic_canvas_exposes_debug_label() {
+    detail::g_app.arena.reset();
+
+    auto root_h = detail::alloc_node();
+    auto& root = detail::node_at(root_h);
+    root.style.flex_direction = FlexDirection::Column;
+
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    int paint_calls = 0;
+    widget::semantic_canvas(
+        180.0f,
+        20.0f,
+        "Operation: file_create ok - Action Note.txt",
+        [&paint_calls](Painter& p) {
+            ++paint_calls;
+            p.text(0.0f,
+                   0.0f,
+                   "Operation: file...",
+                   18u,
+                   14.0f,
+                   Color{99, 99, 102, 255});
+        },
+        {},
+        0x5101u);
+    Scope::set_current(nullptr);
+
+    LAYOUT_NODE(root_h, 400.0f);
+
+    assert(root.children.size() == 1);
+    auto& canvas = detail::node_at(root.children[0]);
+    assert(canvas.width == 180.0f);
+    assert(canvas.height == 20.0f);
+    assert(canvas.paint_fn);
+    assert(canvas.paint_token == 0x5101u);
+    assert(canvas.text.empty());
+    assert(canvas.debug_semantic_role == "text");
+    assert(canvas.debug_semantic_label
+           == "Operation: file_create ok - Action Note.txt");
+    assert(canvas.debug_semantic_hidden == false);
+
+    CMD_LEN = 0;
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+    assert(paint_calls == 1);
+
+    std::puts("PASS: widget::semantic_canvas preserves debug label");
+}
+
 void test_canvas_linear_gradient_rect_emits_command() {
     detail::g_app.arena.reset();
 
@@ -4527,6 +4575,7 @@ int main() {
     test_svg_image_widget_options_contract();
     test_grid_cell_text_is_vertically_centered();
     test_canvas_widget_invokes_painter();
+    test_semantic_canvas_exposes_debug_label();
     test_canvas_linear_gradient_rect_emits_command();
     test_canvas_bypasses_paint_cache_after_diff();
     test_canvas_paint_token_hit_skips_paint_fn();

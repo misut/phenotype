@@ -778,7 +778,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_source_count",
-      "equals": 7
+      "equals": 8
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_path_arc_symbol_count",
@@ -894,7 +894,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_license_policy",
-      "equals": "phenotype-owned or permissive SVG only; accepted external licenses include ISC, Feather-derived MIT, and Apache-2.0 with per-symbol attribution"
+      "equals": "phenotype-owned or permissive SVG only; accepted external licenses include Lucide ISC, Feather-derived MIT, Tabler MIT, Iconoir MIT, and Apache-2.0 with per-symbol attribution"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.preferred_external_source_policy",
@@ -902,7 +902,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_acquisition_policy",
-      "equals": "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons or fetches remote resources"
+      "equals": "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons, macOS system icons, or fetches remote resources"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_attribution_policy",
