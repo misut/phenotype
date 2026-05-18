@@ -161,7 +161,8 @@ auto icon_source_attribution_json(
         icon_catalog::SymbolSourceAttribution const& source) -> std::string {
     return std::format(
         "{{\"family\":{},\"icon_name\":{},\"license\":{},"
-        "\"license_url\":{},\"source_url\":{},\"copyright\":{},"
+        "\"license_url\":{},\"source_url\":{},\"source_revision\":{},"
+        "\"copyright\":{},"
         "\"embedded_source\":{},\"modified_for_phenotype\":{},"
         "\"apple_asset\":{}}}",
         json_string(source.family),
@@ -169,10 +170,36 @@ auto icon_source_attribution_json(
         json_string(source.license),
         json_string(source.license_url),
         json_string(source.source_url),
+        json_string(source.source_revision),
         json_string(source.copyright),
         source.embedded_source ? "true" : "false",
         source.modified_for_phenotype ? "true" : "false",
         source.apple_asset ? "true" : "false");
+}
+
+auto icon_reference_source_json(
+        icon_catalog::IconReferenceSource const& source) -> std::string {
+    return std::format(
+        "{{\"name\":{},\"url\":{},\"role\":{},\"license_policy\":{},"
+        "\"used_as_embedded_asset_source\":{},"
+        "\"apple_owned_artwork\":{}}}",
+        json_string(source.name),
+        json_string(source.url),
+        json_string(source.role),
+        json_string(source.license_policy),
+        source.used_as_embedded_asset_source ? "true" : "false",
+        source.apple_owned_artwork ? "true" : "false");
+}
+
+auto icon_reference_sources_json() -> std::string {
+    auto out = std::string{"["};
+    for (unsigned int i = 0; i < icon_catalog::reference_source_count; ++i) {
+        if (i > 0)
+            out += ",";
+        out += icon_reference_source_json(icon_catalog::reference_source_at(i));
+    }
+    out += "]";
+    return out;
 }
 
 auto icon_interaction_tones_json(bool enabled) -> std::string {
@@ -1001,9 +1028,30 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && icon_catalog::source_attribution(icon_catalog::Symbol::Shared)
                    .family
                 == std::string_view{"phenotype"},
-         .detail = std::string{icon_catalog::source_attribution_policy()},
+        .detail = std::string{icon_catalog::source_attribution_policy()},
          .hint =
-             "Every embedded icon source must carry machine-readable family, icon name, license, and source URL metadata."},
+             "Every embedded icon source must carry machine-readable family, icon name, license, source URL, and source revision metadata."},
+        {.name = "reference_sources",
+         .ok = icon_catalog::reference_source_count == 5
+            && icon_catalog::reference_source_at(0).apple_owned_artwork
+            && !icon_catalog::reference_source_at(0)
+                    .used_as_embedded_asset_source
+            && icon_catalog::reference_source_at(2).url.find("SVG2/paths")
+                != std::string_view::npos
+            && icon_catalog::reference_source_at(3)
+                    .used_as_embedded_asset_source
+            && icon_catalog::reference_source_at(3).license_policy.find("ISC")
+                != std::string_view::npos
+            && icon_catalog::reference_source_at(4)
+                    .license_policy.find("Apache-2.0")
+                != std::string_view::npos,
+         .detail = std::format(
+             "references={} embedded_source={} apple_reference={}",
+             icon_catalog::reference_source_count,
+             icon_catalog::reference_source_at(3).name,
+             icon_catalog::reference_source_at(0).name),
+         .hint =
+             "Keep icon reference sources explicit so provenance is debuggable without assuming Apple artwork was embedded."},
         {.name = "svg_source_contract",
          .ok = svg_source_contract
             && icon_catalog::svg_source(icon_catalog::Symbol::Applications)
@@ -1196,7 +1244,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"toolbar_symbol_chrome_policy\":{},"
         "\"sidebar_symbol_color_policy\":{},"
         "\"file_type_color_policy\":{},\"default_scale\":{},"
-        "\"metrics_policy\":{},\"hit_target_policy\":{}}},"
+        "\"metrics_policy\":{},\"hit_target_policy\":{},"
+        "\"reference_sources\":{}}},"
         "\"counts\":{{\"all\":{},\"phenotype_owned\":{},"
         "\"permissive_source\":{},\"lucide_source\":{},"
         "\"apple_asset\":{},\"audited_source\":{},"
@@ -1205,7 +1254,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
         "\"monochrome\":{},\"regular_weight\":{},"
         "\"palette\":{},\"multicolor\":{},"
-        "\"reference\":{},\"svg_path_arc\":{},\"round_stroke\":{},"
+        "\"reference\":{},\"reference_sources\":{},"
+        "\"svg_path_arc\":{},\"round_stroke\":{},"
         "\"interaction_phases\":{}}},"
         "\"symbols\":{},\"sidebar_symbols\":{},"
         "\"toolbar_symbols\":{},\"file_type_symbols\":{},\"checks\":{}}}",
@@ -1245,6 +1295,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::default_scale_policy()),
         json_string(icon_catalog::metrics_policy()),
         json_string(icon_catalog::hit_target_policy()),
+        icon_reference_sources_json(),
         icon_catalog::all_symbol_count,
         icon_catalog::phenotype_owned_symbol_count,
         icon_catalog::permissive_source_symbol_count,
@@ -1262,6 +1313,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_catalog::palette_symbol_count,
         icon_catalog::multicolor_symbol_count,
         icon_catalog::reference_symbol_count,
+        icon_catalog::reference_source_count,
         icon_catalog::svg_path_arc_symbol_count,
         icon_catalog::round_stroke_symbol_count,
         icon_catalog::symbol_interaction_phase_count,

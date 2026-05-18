@@ -23,8 +23,11 @@ turning `main.cpp` into every subsystem at once:
   checks, package bundling, bundle integrity verification, and macOS app bundle
   staging helpers. It keeps filesystem/package edge IO away from command
   dispatch while preserving the pure `phenotype.resources` contract boundary.
-- `main.cpp` should stay responsible for command parsing, example process
-  execution, artifact gate orchestration, and dispatching to focused modules.
+- `phenotype_cli.app` owns the remaining high-level command parsing, example
+  process execution, artifact gate orchestration, Android script dispatch, and
+  routing to focused modules.
+- `main.cpp` is only the executable entry point and should stay a tiny forwarder
+  into `phenotype_cli.app`.
 
 The initial scope is intentionally narrow:
 
@@ -102,7 +105,8 @@ The initial scope is intentionally narrow:
 - `phenotype icons catalog` emits the built-in icon catalog contract from the
   pure `phenotype.icon_catalog` path package. JSON output reports the
   macOS/Finder/SF-Symbols-inspired reference policy, package-owned SVG asset
-  rule, supported SVG path subset and arc-lowering policy, count invariants,
+  rule, explicit reference-source URLs, supported SVG path subset and
+  arc-lowering policy, count invariants,
   SF Symbols rendering-mode names, regular text-aligned weight policy,
   explicit monochrome/hierarchical/palette/multicolor capability counts,
   SVG arc-using built-in symbol count,

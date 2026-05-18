@@ -519,6 +519,8 @@ duplicate
     assert(chrome.icon_asset_policy.find("no Apple") != std::string::npos);
     assert(chrome.icon_source_attribution_policy.find("source URL")
            != std::string::npos);
+    assert(chrome.icon_source_attribution_policy.find("source revision")
+           != std::string::npos);
     assert(chrome.icon_alignment == "24x24 text-aligned symbol grid");
     assert(chrome.icon_rendering_mode == "hierarchical");
     assert(chrome.icon_variant_policy

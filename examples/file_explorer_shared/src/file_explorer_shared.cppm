@@ -2079,12 +2079,37 @@ inline json::Value icon_source_attribution_debug_json(
     out.emplace("license", json::Value{std::string{source.license}});
     out.emplace("license_url", json::Value{std::string{source.license_url}});
     out.emplace("source_url", json::Value{std::string{source.source_url}});
+    out.emplace(
+        "source_revision",
+        json::Value{std::string{source.source_revision}});
     out.emplace("copyright", json::Value{std::string{source.copyright}});
     out.emplace("embedded_source", json::Value{source.embedded_source});
     out.emplace(
         "modified_for_phenotype",
         json::Value{source.modified_for_phenotype});
     out.emplace("apple_asset", json::Value{source.apple_asset});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value icon_reference_sources_debug_json() {
+    json::Array out;
+    for (unsigned int i = 0; i < icon_catalog::reference_source_count; ++i) {
+        auto const source = icon_catalog::reference_source_at(i);
+        json::Object item;
+        item.emplace("name", json::Value{std::string{source.name}});
+        item.emplace("url", json::Value{std::string{source.url}});
+        item.emplace("role", json::Value{std::string{source.role}});
+        item.emplace(
+            "license_policy",
+            json::Value{std::string{source.license_policy}});
+        item.emplace(
+            "used_as_embedded_asset_source",
+            json::Value{source.used_as_embedded_asset_source});
+        item.emplace(
+            "apple_owned_artwork",
+            json::Value{source.apple_owned_artwork});
+        out.push_back(json::Value{std::move(item)});
+    }
     return json::Value{std::move(out)};
 }
 
@@ -2796,6 +2821,13 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "reference_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.icon_reference_symbol_count)});
+    icon_system.emplace(
+        "reference_source_count",
+        json::Value{static_cast<std::int64_t>(
+            icon_catalog::reference_source_count)});
+    icon_system.emplace(
+        "reference_sources",
+        icon_reference_sources_debug_json());
     icon_system.emplace(
         "svg_path_arc_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.icon_svg_path_arc_symbol_count)});

@@ -140,10 +140,20 @@ struct SymbolSourceAttribution {
     std::string_view license;
     std::string_view license_url;
     std::string_view source_url;
+    std::string_view source_revision;
     std::string_view copyright;
     bool embedded_source = true;
     bool modified_for_phenotype = false;
     bool apple_asset = false;
+};
+
+struct IconReferenceSource {
+    std::string_view name;
+    std::string_view url;
+    std::string_view role;
+    std::string_view license_policy;
+    bool used_as_embedded_asset_source = false;
+    bool apple_owned_artwork = false;
 };
 
 struct SymbolColor {
@@ -212,6 +222,7 @@ inline constexpr unsigned int lucide_source_symbol_count =
     permissive_source_symbol_count;
 inline constexpr unsigned int apple_asset_symbol_count = 0;
 inline constexpr unsigned int audited_symbol_source_count = all_symbol_count;
+inline constexpr unsigned int reference_source_count = 5;
 inline constexpr unsigned int sidebar_symbol_count = 11;
 inline constexpr unsigned int toolbar_symbol_count = 15;
 inline constexpr unsigned int file_type_symbol_count = 7;
@@ -384,12 +395,68 @@ inline auto preferred_external_source_policy() noexcept -> std::string_view {
     return "Prefer audited SVG from Lucide ISC, Tabler MIT, Iconoir MIT, or Material Symbols Apache-2.0 before phenotype adaptation";
 }
 
+inline auto lucide_source_revision() noexcept -> std::string_view {
+    return "5b40f2c5a76a27eeb81c8f1b1c311121dee45495";
+}
+
 inline auto source_attribution_policy() noexcept -> std::string_view {
-    return "embedded permissive SVG sources must expose family, icon name, license, license URL, source URL, copyright, and Apple-asset boundary in debug output";
+    return "embedded permissive SVG sources must expose family, icon name, license, license URL, source URL, source revision, copyright, and Apple-asset boundary in debug output";
 }
 
 inline auto apple_asset_boundary() noexcept -> std::string_view {
     return "Apple SF Symbols, Finder icons, and macOS system icons are design references only; do not extract or embed Apple-owned artwork without explicit legal clearance";
+}
+
+inline auto reference_source_at(unsigned int index) noexcept
+        -> IconReferenceSource {
+    switch (index) {
+    case 0:
+        return {
+            "Apple Human Interface Guidelines: Icons",
+            "https://developer.apple.com/design/human-interface-guidelines/icons",
+            "semantic and platform style reference",
+            "reference only; do not embed Apple-owned artwork",
+            false,
+            true,
+        };
+    case 1:
+        return {
+            "Apple Human Interface Guidelines: SF Symbols",
+            "https://developer.apple.com/design/human-interface-guidelines/sf-symbols",
+            "semantic symbol naming and rendering mode reference",
+            "reference only; do not embed SF Symbols artwork",
+            false,
+            true,
+        };
+    case 2:
+        return {
+            "W3C SVG 2 Paths",
+            "https://www.w3.org/TR/SVG2/paths.html",
+            "SVG path command parser reference",
+            "open web standard reference",
+            false,
+            false,
+        };
+    case 3:
+        return {
+            "Lucide",
+            "https://lucide.dev/",
+            "audited permissive SVG source for embedded glyphs",
+            "ISC license with attribution",
+            true,
+            false,
+        };
+    case 4:
+        return {
+            "Google Material Symbols",
+            "https://developers.google.com/fonts/docs/material_symbols",
+            "future permissive fallback source candidate",
+            "Apache-2.0 license with attribution when embedded",
+            false,
+            false,
+        };
+    }
+    return reference_source_at(0);
 }
 
 inline auto reference_family() noexcept -> std::string_view {
@@ -811,6 +878,7 @@ inline auto source_attribution(Symbol symbol) noexcept
             "ISC",
             "https://github.com/lucide-icons/lucide/blob/main/LICENSE",
             lucide_source_url(icon),
+            lucide_source_revision(),
             "Copyright (c) 2026 Lucide Icons and Contributors",
             true,
             true,
@@ -823,6 +891,7 @@ inline auto source_attribution(Symbol symbol) noexcept
         "MIT",
         "https://github.com/misut/phenotype/blob/main/LICENSE",
         "built-in phenotype.icon_catalog",
+        "phenotype-repository",
         "Copyright (c) misut",
         true,
         false,

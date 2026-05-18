@@ -663,6 +663,10 @@
       "equals": 35
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.reference_source_count",
+      "equals": 5
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.svg_path_arc_symbol_count",
       "equals": 13
     },
@@ -784,7 +788,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_attribution_policy",
-      "equals": "embedded permissive SVG sources must expose family, icon name, license, license URL, source URL, copyright, and Apple-asset boundary in debug output"
+      "equals": "embedded permissive SVG sources must expose family, icon name, license, license URL, source URL, source revision, copyright, and Apple-asset boundary in debug output"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.apple_asset_boundary",
