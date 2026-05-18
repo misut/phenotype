@@ -447,6 +447,10 @@ duplicate
            == demo::k_desktop_thumbnail_svg_preview_source_policy);
     assert(chrome.thumbnail_svg_external_resource_policy
            == demo::k_desktop_thumbnail_svg_external_resource_policy);
+    assert(chrome.thumbnail_svg_document_cache_policy
+           == demo::k_desktop_thumbnail_svg_document_cache_policy);
+    assert(chrome.thumbnail_svg_document_cache_limit
+           == demo::k_desktop_thumbnail_svg_document_cache_limit);
     assert(chrome.thumbnail_video_policy
            == demo::k_desktop_thumbnail_video_policy);
     assert(chrome.thumbnail_shadow_policy

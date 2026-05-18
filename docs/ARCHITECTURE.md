@@ -294,10 +294,13 @@ as an unobservable renderer implementation detail.
 
 The Finder-style file explorer uses the same SVG parser for sandboxed `.svg`
 file thumbnails. The renderer reads the already-loaded file body from the demo
-model, paints it through `phenotype.svg` inside the thumbnail frame, and records
-that policy in `chrome.thumbnail_system`. This keeps file icons source-safe:
-macOS system artwork remains a reference only, no platform icon extraction runs
-on the hot path, and SVG external resources are not fetched.
+model, resolves it through an explicit edge `SvgPreviewDocumentCache` keyed by
+the file preview body, paints it through `phenotype.svg` inside the thumbnail
+frame, and records that policy in `chrome.thumbnail_system`. This keeps file
+icons source-safe and stable on hot paths: macOS system artwork remains a
+reference only, no platform icon extraction runs on the hot path, SVG external
+resources are not fetched, and normal frame rebuilds do not reparse the same
+preview SVG XML.
 `icons::presentation` adds the default macOS-inspired
 presentation policy: toolbar symbols use 24 pt secondary/selected tones,
 sidebar symbols use 26 pt primary/accent tones with a small optical vertical

@@ -250,6 +250,10 @@ auto append_file_explorer_scenario_requirements(
             args, "application.file_explorer.chrome.thumbnail_system.svg_render_policy=\"phenotype_svg_subset_renders_file_body_inside_finder_preview\"");
         append_required_debug_detail(
             args, "application.file_explorer.chrome.thumbnail_system.svg_external_resource_policy=\"no_external_svg_resources_or_network_fetches\"");
+        append_required_debug_detail(
+            args, "application.file_explorer.chrome.thumbnail_system.svg_document_cache_policy=\"edge_svg_document_cache_keyed_by_file_preview_body_no_frame_parse_churn\"");
+        append_required_debug_detail(
+            args, "application.file_explorer.chrome.thumbnail_system.svg_document_cache_limit=32");
     } else if (scenario == "history-forward") {
         append_required_label_contains(args, "Project Notes.txt");
         append_required_label_contains(

@@ -36,10 +36,10 @@ default Recents surface clean while making search, selection, and
 file-operation receipts observable in both native artifacts and CLI output.
 Desktop metrics also include the pure `thumbnail_system` contract consumed by
 the icon-grid painter: PDF page/fold/detail sizing, media preview sizing,
-image/video detail counts, shadow policy, and the explicit
-`uses_external_previews=false` rule. This keeps Finder-like thumbnail polish
-observable from `phenotype drive file-explorer --json` before a native renderer
-captures pixels.
+image/video detail counts, SVG preview document cache policy and limit, shadow
+policy, and the explicit `uses_external_previews=false` rule. This keeps
+Finder-like thumbnail polish observable from `phenotype drive file-explorer
+--json` before a native renderer captures pixels.
 `finder_visual_contract` is the higher-level parity summary built from those
 same pure metrics. It pins the Finder-inspired titlebar strategy, native window
 control ownership, no-content-marker traffic-light policy, sidebar soft

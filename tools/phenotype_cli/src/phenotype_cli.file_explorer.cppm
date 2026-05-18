@@ -290,7 +290,9 @@ export auto explorer_chrome_json(
         "\"pdf_policy\":{},\"image_policy\":{},\"video_policy\":{},"
         "\"svg_policy\":{},\"svg_render_policy\":{},"
         "\"svg_preview_source_policy\":{},"
-        "\"svg_external_resource_policy\":{},\"shadow_policy\":{},"
+        "\"svg_external_resource_policy\":{},"
+        "\"svg_document_cache_policy\":{},"
+        "\"svg_document_cache_limit\":{},\"shadow_policy\":{},"
         "\"uses_external_previews\":{},"
         "\"pdf_page_width\":{},\"pdf_page_height\":{},"
         "\"pdf_page_radius\":{},\"pdf_fold_size\":{},"
@@ -306,6 +308,8 @@ export auto explorer_chrome_json(
         json_string(chrome.thumbnail_svg_render_policy),
         json_string(chrome.thumbnail_svg_preview_source_policy),
         json_string(chrome.thumbnail_svg_external_resource_policy),
+        json_string(chrome.thumbnail_svg_document_cache_policy),
+        chrome.thumbnail_svg_document_cache_limit,
         json_string(chrome.thumbnail_shadow_policy),
         chrome.thumbnail_uses_external_previews ? "true" : "false",
         chrome.thumbnail_pdf_page_width,

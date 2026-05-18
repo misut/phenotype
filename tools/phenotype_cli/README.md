@@ -190,7 +190,7 @@ The initial scope is intentionally narrow:
   integrated titlebar geometry policy, icon-system contract, resolved
   sidebar/toolbar/file-type icon presentation samples, per-entry file-type
   symbol names, `entry_symbol_summary`, and `thumbnail_system`
-  preview-painter contract, selection capabilities,
+  preview-painter/cache contract, selection capabilities,
   operation receipts with resolved operation plans, preview excerpts,
   localized labels, package resource metadata, desktop keyboard command
   descriptors, a pure `input_model` describing the last input modality,
