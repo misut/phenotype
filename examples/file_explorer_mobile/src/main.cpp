@@ -1,10 +1,12 @@
 #include <concepts>
 #include <algorithm>
+#include <cctype>
 #include <cstdlib>
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
 #include <fstream>
+#include <optional>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -124,6 +126,112 @@ std::string initial_locale() {
     return raw && *raw ? std::string{raw} : std::string{"en"};
 }
 
+bool env_truthy(char const* raw) {
+    if (!raw || !*raw)
+        return false;
+    auto value = std::string{raw};
+    std::ranges::transform(value, value.begin(), [](unsigned char ch) {
+        return static_cast<char>(std::tolower(ch));
+    });
+    return value == "1" || value == "true" || value == "yes";
+}
+
+std::optional<float> env_float(
+        char const* raw,
+        float minimum,
+        float maximum) {
+    if (!raw || !*raw)
+        return std::nullopt;
+    char* end = nullptr;
+    float value = std::strtof(raw, &end);
+    if (end == raw || (end && *end != '\0'))
+        return std::nullopt;
+    if (!(value > 0.0f))
+        return std::nullopt;
+    if (value < minimum)
+        value = minimum;
+    if (value > maximum)
+        value = maximum;
+    return value;
+}
+
+phenotype::ThemePreferenceOverrides initial_theme_preference_overrides() {
+    phenotype::ThemePreferenceOverrides overrides{};
+    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_FONT_FAMILY")) {
+        if (std::string_view{raw} == "system") {
+            overrides.prefer_system_font_family = true;
+        } else if (*raw) {
+            overrides.font_family = raw;
+        }
+    }
+    if (env_truthy(std::getenv("PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT")))
+        overrides.prefer_system_font_family = true;
+    if (auto scale = env_float(
+            std::getenv("PHENOTYPE_FILE_EXPLORER_FONT_SCALE"),
+            0.75f,
+            1.8f)) {
+        overrides.font_scale = *scale;
+    }
+    if (auto speed = env_float(
+            std::getenv("PHENOTYPE_FILE_EXPLORER_SCROLL_SPEED"),
+            0.25f,
+            4.0f)) {
+        overrides.scroll_delta_multiplier = *speed;
+    }
+    return overrides;
+}
+
+file_explorer_demo::SystemPreferenceSnapshot system_preference_snapshot(
+        phenotype::PlatformSystemSettingsSnapshot const& system) {
+    return {
+        .source = system.source,
+        .font_family = system.font_family,
+        .body_font_size = system.body_font_size,
+        .heading_font_size = system.heading_font_size,
+        .small_font_size = system.small_font_size,
+        .line_height_ratio = system.line_height_ratio,
+        .font_scale = system.font_scale,
+        .text_size_source = system.text_size_source,
+        .preferred_scroller_style = system.preferred_scroller_style,
+        .overlay_scrollbars = system.overlay_scrollbars,
+        .scroll_line_height = system.scroll_line_height,
+        .scroll_wheel_lines = system.scroll_wheel_lines,
+        .scroll_page_mode = system.scroll_page_mode,
+        .scroll_delta_multiplier = system.scroll_delta_multiplier,
+        .scroll_source = system.scroll_source,
+    };
+}
+
+file_explorer_demo::ThemePreferenceSnapshot theme_preference_snapshot(
+        phenotype::ThemePreferenceOverrides const& overrides) {
+    return {
+        .font_family = overrides.font_family,
+        .font_scale = overrides.font_scale,
+        .body_font_size = overrides.body_font_size,
+        .heading_font_size = overrides.heading_font_size,
+        .small_font_size = overrides.small_font_size,
+        .line_height_ratio = overrides.line_height_ratio,
+        .scroll_delta_multiplier = overrides.scroll_delta_multiplier,
+        .prefer_system_font_family = overrides.prefer_system_font_family,
+        .apply_system_font_scale = overrides.apply_system_font_scale,
+    };
+}
+
+file_explorer_demo::RuntimePreferenceState runtime_preference_state(
+        phenotype::Theme const& theme,
+        phenotype::PlatformSystemSettingsSnapshot system_settings,
+        phenotype::ThemePreferenceOverrides theme_preferences) {
+    file_explorer_demo::RuntimePreferenceState state{};
+    state.source = "native-debug-capabilities+environment-overrides";
+    state.system_settings = system_preference_snapshot(system_settings);
+    state.theme_preferences = theme_preference_snapshot(theme_preferences);
+    state.effective_font_family = theme.default_font_family;
+    state.effective_body_font_size = theme.body_font_size;
+    state.effective_small_font_size = theme.small_font_size;
+    state.effective_scroll_delta_multiplier = theme.scroll_delta_multiplier;
+    return state;
+}
+
 fs::path initial_package_root() {
     if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT")) {
         if (*raw)
@@ -164,14 +272,23 @@ phenotype::ResourceCatalog runtime_resource_catalog() {
         locale_texts);
 }
 
+file_explorer_demo::RuntimePreferenceState g_runtime_preferences;
+
 struct State {
     phenotype::icons::SymbolDocumentCache icon_cache =
         phenotype::icons::make_symbol_document_cache();
-    file_explorer_demo::ExplorerState explorer = initial_explorer_state();
-    file_explorer_demo::ExplorerLabels labels =
-        file_explorer_demo::file_explorer_labels(
-            initial_locale(),
-            runtime_resource_catalog());
+    file_explorer_demo::ExplorerState explorer;
+    file_explorer_demo::ExplorerLabels labels;
+
+    State()
+        : explorer(initial_explorer_state()),
+          labels(file_explorer_demo::file_explorer_labels(
+              initial_locale(),
+              runtime_resource_catalog())) {
+        file_explorer_demo::apply_runtime_preferences(
+            explorer,
+            g_runtime_preferences);
+    }
 };
 
 State const* g_debug_state = nullptr;
@@ -721,6 +838,17 @@ int main() {
     theme = phenotype::theme_with_resource_defaults(
         theme,
         runtime_resource_catalog());
+    auto const system_settings =
+        phenotype::native::debug::capabilities().system_settings;
+    auto const theme_preferences = initial_theme_preference_overrides();
+    theme = phenotype::apply_system_theme_preferences(
+        theme,
+        system_settings,
+        theme_preferences);
+    g_runtime_preferences = runtime_preference_state(
+        theme,
+        system_settings,
+        theme_preferences);
     phenotype::set_theme(theme);
     phenotype::diag::set_application_debug_provider(
         file_explorer_application_debug_payload);

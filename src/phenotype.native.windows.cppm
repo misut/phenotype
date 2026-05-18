@@ -5822,12 +5822,68 @@ inline float windows_scroll_delta_y(double dy,
     return static_cast<float>(dy) * static_cast<float>(lines) * line_height;
 }
 
+inline UINT windows_scroll_wheel_lines() {
+    UINT lines = 3;
+    if (!SystemParametersInfoW(SPI_GETWHEELSCROLLLINES, 0, &lines, 0))
+        lines = 3;
+    return lines;
+}
+
+inline ::phenotype::PlatformSystemSettingsSnapshot
+windows_system_settings_snapshot() {
+    ::phenotype::PlatformSystemSettingsSnapshot snapshot{};
+    snapshot.source = "windows-systemparametersinfo";
+    snapshot.text_size_source = "SystemParametersInfoW(SPI_GETNONCLIENTMETRICS)";
+    snapshot.scroll_source = "SystemParametersInfoW(SPI_GETWHEELSCROLLLINES)";
+    snapshot.font_family = "Segoe UI";
+    snapshot.body_font_size = 12.0f;
+    snapshot.heading_font_size = 15.5f;
+    snapshot.small_font_size = 11.0f;
+    snapshot.line_height_ratio = 1.6f;
+    snapshot.font_scale = 1.0f;
+
+    NONCLIENTMETRICSW metrics{};
+    metrics.cbSize = sizeof(metrics);
+    if (SystemParametersInfoW(SPI_GETNONCLIENTMETRICS,
+                              metrics.cbSize,
+                              &metrics,
+                              0)) {
+        if (metrics.lfMessageFont.lfFaceName[0] != L'\0') {
+            snapshot.font_family = cppx::unicode::wide_to_utf8(
+                std::wstring_view{metrics.lfMessageFont.lfFaceName})
+                                       .value_or(snapshot.font_family);
+        }
+        long const height = metrics.lfMessageFont.lfHeight;
+        if (height != 0) {
+            float px = static_cast<float>(height < 0 ? -height : height);
+            if (px >= 8.0f && px <= 40.0f) {
+                snapshot.body_font_size = px;
+                snapshot.heading_font_size = px * 1.2857143f;
+                snapshot.small_font_size = px * 0.8571429f;
+                snapshot.font_scale = px / 12.0f;
+            }
+        }
+    }
+
+    UINT const lines = windows_scroll_wheel_lines();
+    snapshot.scroll_line_height =
+        snapshot.body_font_size * snapshot.line_height_ratio;
+    snapshot.scroll_wheel_lines = lines == WHEEL_PAGESCROLL
+        ? 0.0f
+        : static_cast<float>(lines);
+    snapshot.scroll_page_mode = lines == WHEEL_PAGESCROLL;
+    snapshot.preferred_scroller_style = "system";
+    snapshot.overlay_scrollbars = false;
+    snapshot.scroll_delta_multiplier = 1.0f;
+    return snapshot;
+}
+
 inline bool windows_uses_shared_caret_blink() {
     return true;
 }
 
 inline ::phenotype::diag::PlatformCapabilitiesSnapshot windows_debug_capabilities() {
-    return {
+    ::phenotype::diag::PlatformCapabilitiesSnapshot snapshot{
         "windows",
         true,
         true,
@@ -5839,6 +5895,8 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot windows_debug_capabilitie
         true,
         true,
     };
+    snapshot.system_settings = windows_system_settings_snapshot();
+    return snapshot;
 }
 
 inline json::Object windows_renderer_runtime_json() {
@@ -5904,6 +5962,10 @@ inline json::Object windows_renderer_runtime_json() {
         "material_executor_summary",
         ::phenotype::diag::detail::material_executor_summary_json(
             g_renderer.material_executor_summary));
+    renderer.emplace(
+        "system_settings",
+        ::phenotype::diag::system_settings_to_json(
+            windows_system_settings_snapshot()));
     renderer.emplace(
         "material_fallback_policy",
         json::Value{"d3d12-translucent-rounded-rect"});

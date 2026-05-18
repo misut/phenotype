@@ -108,6 +108,36 @@ enum class ExplorerFocusTarget {
     MoreActions,
 };
 
+struct SystemPreferenceSnapshot {
+    std::string source = "fallback";
+    std::string font_family;
+    float body_font_size = 0.0f;
+    float heading_font_size = 0.0f;
+    float small_font_size = 0.0f;
+    float line_height_ratio = 1.6f;
+    float font_scale = 1.0f;
+    std::string text_size_source = "fallback";
+    std::string preferred_scroller_style = "unknown";
+    bool overlay_scrollbars = false;
+    float scroll_line_height = 0.0f;
+    float scroll_wheel_lines = 3.0f;
+    bool scroll_page_mode = false;
+    float scroll_delta_multiplier = 1.0f;
+    std::string scroll_source = "fallback";
+};
+
+struct ThemePreferenceSnapshot {
+    std::string font_family;
+    float font_scale = 1.0f;
+    float body_font_size = 0.0f;
+    float heading_font_size = 0.0f;
+    float small_font_size = 0.0f;
+    float line_height_ratio = 0.0f;
+    float scroll_delta_multiplier = 1.0f;
+    bool prefer_system_font_family = false;
+    bool apply_system_font_scale = true;
+};
+
 struct Snapshot {
     fs::path root;
     fs::path current;
@@ -159,6 +189,13 @@ struct ExplorerState {
         ExplorerInputModality::Unspecified;
     ExplorerFocusTarget focus_target = ExplorerFocusTarget::None;
     bool focus_visible = false;
+    SystemPreferenceSnapshot system_settings{};
+    ThemePreferenceSnapshot theme_preferences{};
+    std::string preferences_source = "default";
+    std::string effective_font_family = "Pretendard";
+    float effective_body_font_size = 16.0f;
+    float effective_small_font_size = 14.4f;
+    float effective_scroll_delta_multiplier = 1.0f;
 };
 
 enum class ExplorerInputKind {
@@ -543,6 +580,16 @@ struct ExplorerExpectationResult {
 struct PackageResourceText {
     std::string source;
     std::string text;
+};
+
+struct RuntimePreferenceState {
+    std::string source = "default";
+    SystemPreferenceSnapshot system_settings{};
+    ThemePreferenceSnapshot theme_preferences{};
+    std::string effective_font_family = "Pretendard";
+    float effective_body_font_size = 16.0f;
+    float effective_small_font_size = 14.4f;
+    float effective_scroll_delta_multiplier = 1.0f;
 };
 
 struct ExplorerSidebarSymbol {
@@ -2768,6 +2815,93 @@ inline json::Value input_model_debug_json(
     return json::Value{std::move(out)};
 }
 
+inline json::Value system_settings_debug_json(
+        SystemPreferenceSnapshot const& settings) {
+    json::Object out;
+    out.emplace("source", json::Value{settings.source});
+    out.emplace("font_family", json::Value{settings.font_family});
+    out.emplace("body_font_size", json::Value{settings.body_font_size});
+    out.emplace("heading_font_size", json::Value{settings.heading_font_size});
+    out.emplace("small_font_size", json::Value{settings.small_font_size});
+    out.emplace("line_height_ratio", json::Value{settings.line_height_ratio});
+    out.emplace("font_scale", json::Value{settings.font_scale});
+    out.emplace("text_size_source", json::Value{settings.text_size_source});
+    out.emplace(
+        "preferred_scroller_style",
+        json::Value{settings.preferred_scroller_style});
+    out.emplace("overlay_scrollbars", json::Value{settings.overlay_scrollbars});
+    out.emplace("scroll_line_height", json::Value{settings.scroll_line_height});
+    out.emplace("scroll_wheel_lines", json::Value{settings.scroll_wheel_lines});
+    out.emplace("scroll_page_mode", json::Value{settings.scroll_page_mode});
+    out.emplace(
+        "scroll_delta_multiplier",
+        json::Value{settings.scroll_delta_multiplier});
+    out.emplace("scroll_source", json::Value{settings.scroll_source});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value preferences_debug_json(ExplorerState const& state) {
+    json::Object overrides;
+    overrides.emplace(
+        "font_family",
+        json::Value{state.theme_preferences.font_family});
+    overrides.emplace(
+        "font_scale",
+        json::Value{state.theme_preferences.font_scale});
+    overrides.emplace(
+        "body_font_size",
+        json::Value{state.theme_preferences.body_font_size});
+    overrides.emplace(
+        "heading_font_size",
+        json::Value{state.theme_preferences.heading_font_size});
+    overrides.emplace(
+        "small_font_size",
+        json::Value{state.theme_preferences.small_font_size});
+    overrides.emplace(
+        "line_height_ratio",
+        json::Value{state.theme_preferences.line_height_ratio});
+    overrides.emplace(
+        "scroll_delta_multiplier",
+        json::Value{state.theme_preferences.scroll_delta_multiplier});
+    overrides.emplace(
+        "prefer_system_font_family",
+        json::Value{state.theme_preferences.prefer_system_font_family});
+    overrides.emplace(
+        "apply_system_font_scale",
+        json::Value{state.theme_preferences.apply_system_font_scale});
+
+    json::Object effective;
+    effective.emplace(
+        "font_family",
+        json::Value{state.effective_font_family});
+    effective.emplace(
+        "body_font_size",
+        json::Value{state.effective_body_font_size});
+    effective.emplace(
+        "small_font_size",
+        json::Value{state.effective_small_font_size});
+    effective.emplace(
+        "scroll_delta_multiplier",
+        json::Value{state.effective_scroll_delta_multiplier});
+
+    json::Object out;
+    out.emplace("source", json::Value{state.preferences_source});
+    out.emplace(
+        "system_settings",
+        system_settings_debug_json(state.system_settings));
+    out.emplace("app_overrides", json::Value{std::move(overrides)});
+    out.emplace("effective_theme", json::Value{std::move(effective)});
+    out.emplace(
+        "font_policy",
+        json::Value{
+            "Pretendard package default, OS font scale applied, user override wins"});
+    out.emplace(
+        "scroll_policy",
+        json::Value{
+            "OS scroll deltas/line settings at edge, theme multiplier is pure input"});
+    return json::Value{std::move(out)};
+}
+
 inline json::Value string_array_debug_json(
         std::initializer_list<std::string_view> values) {
     json::Array out;
@@ -3952,6 +4086,7 @@ inline json::Value file_explorer_debug_json(
         "finder_visual_contract",
         finder_visual_contract_debug_json(chrome, profile));
     out.emplace("theme_system", explorer_theme_system_debug_json(chrome));
+    out.emplace("preferences", preferences_debug_json(state));
     out.emplace("resource_system", file_explorer_resource_system_debug_json(profile));
     out.emplace("input_model", input_model_debug_json(state, profile));
     out.emplace("keyboard_commands", keyboard_commands_debug_json(profile));
@@ -5108,6 +5243,19 @@ inline ExplorerState make_state(std::string_view profile) {
     state.sort_mode = default_sort_mode(profile);
     apply_default_viewport(state, profile);
     return state;
+}
+
+inline void apply_runtime_preferences(
+        ExplorerState& state,
+        RuntimePreferenceState const& preferences) {
+    state.preferences_source = preferences.source;
+    state.system_settings = preferences.system_settings;
+    state.theme_preferences = preferences.theme_preferences;
+    state.effective_font_family = preferences.effective_font_family;
+    state.effective_body_font_size = preferences.effective_body_font_size;
+    state.effective_small_font_size = preferences.effective_small_font_size;
+    state.effective_scroll_delta_multiplier =
+        preferences.effective_scroll_delta_multiplier;
 }
 
 inline fs::path location_path(ExplorerState const& state, std::string_view id) {

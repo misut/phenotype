@@ -469,6 +469,22 @@
       "equals": true
     },
     {
+      "path": "application.file_explorer.preferences.font_policy",
+      "equals": "Pretendard package default, OS font scale applied, user override wins"
+    },
+    {
+      "path": "application.file_explorer.preferences.scroll_policy",
+      "equals": "OS scroll deltas/line settings at edge, theme multiplier is pure input"
+    },
+    {
+      "path": "application.file_explorer.preferences.effective_theme.font_family",
+      "equals": "Pretendard"
+    },
+    {
+      "path": "application.file_explorer.preferences.app_overrides.apply_system_font_scale",
+      "equals": true
+    },
+    {
       "path": "application.file_explorer.resource_system.locales.required_key_count",
       "equals": 46
     },
@@ -1863,7 +1879,7 @@
     {
       "path": "window.window_server_order_index",
       "gte": 0,
-      "lte": 64
+      "lte": 128
     },
     {
       "path": "window.window_server_app_order_index",

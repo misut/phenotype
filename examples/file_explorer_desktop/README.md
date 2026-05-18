@@ -295,6 +295,14 @@ environment automatically. When `--artifact-dir` and `--artifact-exit` are used
 together, the CLI keeps the leading titlebar reserve blank and relies on the
 runtime window debug payload plus pixel-region contracts to prove native control
 ownership without drawing duplicate traffic lights.
+The example also applies the native `system_settings` snapshot before
+`set_theme`: Pretendard remains the package default, OS font scale and scroll
+policy become pure theme inputs, and user overrides win. Direct launches can use
+`PHENOTYPE_FILE_EXPLORER_FONT_FAMILY`, `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT`,
+`PHENOTYPE_FILE_EXPLORER_FONT_SCALE`, and
+`PHENOTYPE_FILE_EXPLORER_SCROLL_SPEED`; the resulting edge snapshot, overrides,
+and effective theme are written to
+`application.file_explorer.preferences` in the artifact.
 The same command can feed deterministic native startup input through the shared
 model parser:
 

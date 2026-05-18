@@ -297,6 +297,11 @@ fallback. Runtime widget text now flows through `Theme::default_font_family`
 (`Pretendard` by default), while the
 example-specific canvas labels pass the same family explicitly so the Finder
 scene and package manifest agree on typography.
+The examples also publish `application.file_explorer.preferences`, which joins
+the platform `system_settings` snapshot with app/user overrides and the
+effective theme values used at launch. This keeps OS font scale, OS scroll
+policy, Pretendard package defaults, and direct environment overrides
+debuggable from the same artifact bundle.
 Native file explorer artifacts publish the same contract under
 `application.file_explorer.resource_system`: application id/version/entry,
 platform list, SVG/preload/runtime-visible asset counts, app icon SVG/preload

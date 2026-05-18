@@ -263,6 +263,15 @@ void test_snapshot_shape() {
     assert(capabilities.at("reduce_transparency").as_bool() == false);
     assert(capabilities.at("increase_contrast").as_bool() == false);
     assert(capabilities.at("reduce_motion").as_bool() == false);
+    auto const& system_settings =
+        capabilities.at("system_settings").as_object();
+    assert(system_settings.at("source").is_string());
+    assert(system_settings.at("font_family").is_string());
+    (void)system_settings.at("body_font_size").as_float();
+    (void)system_settings.at("font_scale").as_float();
+    assert(system_settings.at("preferred_scroller_style").is_string());
+    (void)system_settings.at("scroll_line_height").as_float();
+    (void)system_settings.at("scroll_delta_multiplier").as_float();
 
     auto const& input_debug = debug.at("input_debug").as_object();
     assert(input_debug.contains("event"));

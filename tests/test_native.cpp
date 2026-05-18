@@ -1947,6 +1947,9 @@ static void test_macos_common_debug_contract_entry_points() {
     assert(capabilities.platform_runtime);
     assert(capabilities.frame_image);
     assert(capabilities.platform_diagnostics);
+    assert(!capabilities.system_settings.source.empty());
+    assert(capabilities.system_settings.font_scale > 0.0f);
+    assert(capabilities.system_settings.scroll_delta_multiplier > 0.0f);
 
     auto snapshot_json = phenotype::native::debug::snapshot_json();
     auto snapshot = json::parse(snapshot_json);
@@ -3066,6 +3069,9 @@ static void test_windows_common_debug_contract_entry_points() {
     assert(capabilities.platform_runtime);
     assert(capabilities.frame_image);
     assert(capabilities.platform_diagnostics);
+    assert(!capabilities.system_settings.source.empty());
+    assert(capabilities.system_settings.font_scale > 0.0f);
+    assert(capabilities.system_settings.scroll_delta_multiplier > 0.0f);
 
     auto snapshot_json = phenotype::native::debug::snapshot_json();
     auto snapshot = json::parse(snapshot_json);

@@ -6176,8 +6176,31 @@ inline void android_open_url(char const* url, unsigned int len) {
 
 // ---- Stage 7 debug plane --------------------------------------------
 
+inline ::phenotype::PlatformSystemSettingsSnapshot
+android_system_settings_snapshot() {
+    ::phenotype::PlatformSystemSettingsSnapshot snapshot{};
+    snapshot.source = "android-fallback";
+    snapshot.font_family = "sans";
+    snapshot.body_font_size = 16.0f;
+    snapshot.heading_font_size = 22.4f;
+    snapshot.small_font_size = 14.4f;
+    snapshot.line_height_ratio = 1.6f;
+    snapshot.font_scale = 1.0f;
+    snapshot.text_size_source =
+        "fallback-until-android-configuration-font-scale-is-plumbed";
+    snapshot.preferred_scroller_style = "overlay";
+    snapshot.overlay_scrollbars = true;
+    snapshot.scroll_line_height = snapshot.body_font_size
+        * snapshot.line_height_ratio;
+    snapshot.scroll_wheel_lines = 3.0f;
+    snapshot.scroll_page_mode = false;
+    snapshot.scroll_delta_multiplier = 1.0f;
+    snapshot.scroll_source = "AMOTION_EVENT_AXIS_VSCROLL fallback";
+    return snapshot;
+}
+
 inline ::phenotype::diag::PlatformCapabilitiesSnapshot android_debug_capabilities() {
-    return {
+    ::phenotype::diag::PlatformCapabilitiesSnapshot snapshot{
         /*platform=*/"android",
         /*read_only=*/true,
         /*snapshot_json=*/true,
@@ -6189,6 +6212,8 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot android_debug_capabilitie
         /*frame_image=*/true,
         /*platform_diagnostics=*/true,
     };
+    snapshot.system_settings = android_system_settings_snapshot();
+    return snapshot;
 }
 
 inline ::json::Object android_renderer_runtime_json() {
@@ -6250,6 +6275,10 @@ inline ::json::Object android_renderer_runtime_json() {
         "material_executor_summary",
         ::phenotype::diag::detail::material_executor_summary_json(
             executor_summary));
+    r.emplace(
+        "system_settings",
+        ::phenotype::diag::system_settings_to_json(
+            android_system_settings_snapshot()));
     r.emplace(
         "material_fallback_policy",
         ::json::Value{"vulkan-translucent-rounded-rect"});

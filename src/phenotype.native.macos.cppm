@@ -421,6 +421,11 @@ inline SEL sel_momentum_phase() {
     return sel;
 }
 
+inline SEL sel_preferred_scroller_style() {
+    static auto sel = sel_registerName("preferredScrollerStyle");
+    return sel;
+}
+
 inline SEL sel_move_left() {
     static auto sel = sel_registerName("moveLeft:");
     return sel;
@@ -4292,6 +4297,86 @@ inline MacOSAccessibilityDisplayOptions accessibility_display_options() {
     return options;
 }
 
+inline float bounded_system_setting(
+        float value,
+        float fallback,
+        float minimum,
+        float maximum) noexcept {
+    if (!(value > 0.0f) || !std::isfinite(value))
+        return fallback;
+    if (value < minimum)
+        return minimum;
+    if (value > maximum)
+        return maximum;
+    return value;
+}
+
+inline std::string scroller_style_name(long style) {
+    if (style == 0)
+        return "legacy";
+    if (style == 1)
+        return "overlay";
+    return "unknown";
+}
+
+inline ::phenotype::PlatformSystemSettingsSnapshot
+macos_system_settings_snapshot() {
+    ::phenotype::PlatformSystemSettingsSnapshot snapshot{};
+    snapshot.source = "macos-appkit-coretext";
+    snapshot.text_size_source =
+        "CTFontCreateUIFontForLanguage(kCTFontUIFontSystem)";
+    snapshot.scroll_source =
+        "NSEvent.scrollingDelta with NSScroller.preferredScrollerStyle";
+    snapshot.line_height_ratio = 1.6f;
+    snapshot.scroll_delta_multiplier = 1.0f;
+
+    CTFontRef raw_font =
+        CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 0.0, nullptr);
+    if (!raw_font)
+        raw_font = CTFontCreateUIFontForLanguage(
+            kCTFontUIFontSystem,
+            13.0,
+            nullptr);
+    auto font = CFGuard<CTFontRef>(raw_font);
+    if (font) {
+        snapshot.body_font_size = bounded_system_setting(
+            static_cast<float>(CTFontGetSize(font.ref)),
+            13.0f,
+            8.0f,
+            40.0f);
+        auto family = CFGuard<CFStringRef>(CTFontCopyFamilyName(font.ref));
+        snapshot.font_family = cf_string_to_utf8(family.ref);
+    } else {
+        snapshot.body_font_size = 13.0f;
+        snapshot.font_family = ".AppleSystemUIFont";
+    }
+    snapshot.font_scale = bounded_system_setting(
+        snapshot.body_font_size / 13.0f,
+        1.0f,
+        0.75f,
+        1.8f);
+    snapshot.heading_font_size = snapshot.body_font_size * 1.2857143f;
+    snapshot.small_font_size = snapshot.body_font_size * 0.8571429f;
+    snapshot.scroll_line_height =
+        snapshot.body_font_size * snapshot.line_height_ratio;
+
+    long scroller_style = -1;
+    auto scroller_class = static_cast<Class>(objc_getClass("NSScroller"));
+    if (scroller_class
+        && objc_responds_to(
+            class_as_id(scroller_class),
+            sel_preferred_scroller_style())) {
+        scroller_style = objc_send<long>(
+            class_as_id(scroller_class),
+            sel_preferred_scroller_style());
+    }
+    snapshot.preferred_scroller_style = scroller_style_name(scroller_style);
+    snapshot.overlay_scrollbars = scroller_style == 1;
+    snapshot.scroll_wheel_lines = 0.0f;
+    snapshot.scroll_page_mode = false;
+    return snapshot;
+}
+
 struct RendererState {
     MTL::Device* device = nullptr;
     MTL::CommandQueue* queue = nullptr;
@@ -7730,6 +7815,7 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities(
     snapshot.reduce_motion = accessibility.reduce_motion;
     snapshot.material_shader_blur = material_pipeline_ready;
     snapshot.material_frame_history = material_frame_history;
+    snapshot.system_settings = macos_system_settings_snapshot();
     return snapshot;
 }
 
@@ -7830,6 +7916,10 @@ inline json::Object macos_renderer_runtime_json() {
     renderer.emplace(
         "accessibility_display_options",
         json::Value{std::move(accessibility)});
+    renderer.emplace(
+        "system_settings",
+        ::phenotype::diag::system_settings_to_json(
+            macos_system_settings_snapshot()));
     renderer.emplace(
         "material_plan_contract_version",
         json::Value{

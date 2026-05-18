@@ -75,6 +75,11 @@ auto append_required_debug_detail(std::vector<std::string>& args,
     append_verifier_arg(args, "--require-debug-detail", std::move(value));
 }
 
+auto append_required_runtime_detail(std::vector<std::string>& args,
+                                    std::string value) {
+    append_verifier_arg(args, "--require-runtime-detail", std::move(value));
+}
+
 auto append_file_explorer_scenario_requirements(
         std::vector<std::string>& args,
         std::string_view scenario) -> std::expected<void, std::string> {
@@ -253,20 +258,20 @@ auto file_explorer_verifier_args(fs::path const& root,
         "application.file_explorer.input_model.focus_visible=false");
     append_required_debug_detail(args, "platform_runtime.focus_visible=false");
     if (profile == "desktop") {
-        append_required_debug_detail(args, "window.chrome=\"integrated_titlebar\"");
-        append_required_debug_detail(args, "window.titlebar_transparent=true");
-        append_required_debug_detail(args, "window.full_size_content_view=true");
-        append_required_debug_detail(args, "window.title_hidden=true");
-        append_required_debug_detail(
+        append_required_runtime_detail(args, "window.chrome=\"integrated_titlebar\"");
+        append_required_runtime_detail(args, "window.titlebar_transparent=true");
+        append_required_runtime_detail(args, "window.full_size_content_view=true");
+        append_required_runtime_detail(args, "window.title_hidden=true");
+        append_required_runtime_detail(
             args,
             "window.native_window_controls.integrated_in_content_area=true");
-        append_required_debug_detail(
+        append_required_runtime_detail(
             args,
             "window.native_window_controls.duplicate_window_controls=false");
-        append_required_debug_detail(
+        append_required_runtime_detail(
             args,
             "window.native_window_controls.content_drawn_window_control_count=0");
-        append_required_debug_detail(
+        append_required_runtime_detail(
             args,
             "window.native_window_controls.artifact_drawn_window_control_count=0");
     }
