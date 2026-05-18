@@ -181,19 +181,21 @@ contract work cheap while still exercising the command JSON surfaces that future
 automation depends on.
 The executable source is being split by command ownership as those surfaces
 stabilize: `phenotype_cli.common` owns shared JSON/check, text-file, and
-positional/error helpers,
-`phenotype_cli.commands` owns the `cppx.cli` command tree and option metadata,
+positional/error helpers, `phenotype_cli.commands` owns the `cppx.cli` command
+metadata, `phenotype_cli.command_tree` owns recursive command-tree JSON,
+`phenotype_cli.doctor` owns repository health and legacy-tool migration
+reporting, `phenotype_cli.artifacts` owns artifact summary, uv-managed verifier
+invocation, snapshot/material observation, and likely-layer suggestions,
 `phenotype_cli.contracts` owns the pure theme/IO contract commands,
 `phenotype_cli.file_explorer` owns file explorer observation, chrome/native
-window control, and drive JSON, and
-`phenotype_cli.icons` owns the icon and SVG inspection command runners plus
-built-in icon helper payloads. `phenotype_cli.package`
-now owns package manifest inspection, resource catalog checks, bundling, and
-bundle integrity verification so package edge IO can evolve without expanding
-the dispatcher. `phenotype_cli.app` owns the remaining high-level process and
-artifact/run/android dispatch glue, and `main.cpp` is only a tiny entry point.
-New CLI work should prefer adding a focused module over expanding either
-`main.cpp` or the app dispatcher.
+window control, and drive JSON, and `phenotype_cli.icons` owns the icon and SVG
+inspection command runners plus built-in icon helper payloads.
+`phenotype_cli.package` now owns package manifest inspection, resource catalog
+checks, bundling, and bundle integrity verification so package edge IO can
+evolve without expanding the dispatcher. `phenotype_cli.app` owns the remaining
+example-run and Android process glue plus top-level routing, and `main.cpp` is
+only a tiny entry point. New CLI work should prefer adding a focused module over
+expanding either `main.cpp` or the app dispatcher.
 
 Android workflows now follow the same CLI-first rule. The shell scripts under
 `tools/android` remain as the edge adapter implementation because they already
