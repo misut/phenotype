@@ -1014,7 +1014,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
          .hint =
              "Use only phenotype-owned or audited permissive SVG sources, and never embed Apple or SF Symbols vector artwork."},
         {.name = "source_attribution",
-         .ok = icon_catalog::source_attribution_policy().find("source URL")
+         .ok = icon_catalog::source_attribution_policy().find("pinned source URL")
                 != std::string_view::npos
             && icon_catalog::source_attribution(icon_catalog::Symbol::Folder)
                    .family
@@ -1023,17 +1023,28 @@ auto icon_catalog_checks() -> std::vector<Check> {
                    .license
                 == std::string_view{"ISC"}
             && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
+                   .license
+                == std::string_view{"MIT"}
+            && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
                    .family
                 == std::string_view{"Lucide"}
             && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
                    .icon_name
                 == std::string_view{"search"}
+            && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
+                   .source_url
+                   .find(icon_catalog::lucide_source_revision())
+                != std::string_view::npos
+            && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
+                   .source_url
+                   .find("/main/")
+                == std::string_view::npos
             && icon_catalog::source_attribution(icon_catalog::Symbol::Shared)
                    .family
                 == std::string_view{"phenotype"},
-        .detail = std::string{icon_catalog::source_attribution_policy()},
+         .detail = std::string{icon_catalog::source_attribution_policy()},
          .hint =
-             "Every embedded icon source must carry machine-readable family, icon name, license, source URL, and source revision metadata."},
+             "Every embedded icon source must carry machine-readable family, icon name, exact license, pinned source URL, and source revision metadata."},
         {.name = "reference_sources",
          .ok = icon_catalog::reference_source_count == 5
             && icon_catalog::reference_source_at(0).apple_owned_artwork

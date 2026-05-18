@@ -88,9 +88,10 @@ Symbols assets. They are phenotype-owned or audited permissive SVG symbols
 with a macOS-style rounded-outline contract and bounded secondary-layer opacity
 for detailed symbols. Each icon declares a semantic SF Symbols reference name
 as a role and proportion anchor while keeping Apple artwork out of the asset
-set. File-type glyphs may embed checked open SVG sources such as Lucide ISC
-icons; artifacts record source family, icon name, license, license URL, source
-URL, copyright, and Apple-asset boundary beside the rendered symbol metadata.
+set. File-type glyphs may embed checked open SVG sources such as Lucide ISC or
+Feather-derived MIT icons; artifacts record source family, icon name, exact
+license, license URL, pinned source URL, source revision, copyright, and
+Apple-asset boundary beside the rendered symbol metadata.
 Artifacts can assert the icon module, source format,
 ownership/permissive-source boundary, reference family/policy, round stroke
 expectation, rendering mode, variant policy,
@@ -119,10 +120,10 @@ code, spreadsheet, presentation, document,
 and folder entries resolve to audited SVG symbols and semantic reference names
 before any native renderer sees them.
 When file-type or toolbar glyphs need more realism, prefer permissive SVG
-sources such as ISC-licensed Lucide or other audited open icon sets and record
-the source/license in the package contract. Do not extract or embed Apple-owned
-SF Symbols, Finder icons, or system file icons unless the legal usage boundary
-is explicitly cleared.
+sources such as Lucide ISC, Feather-derived MIT glyphs, or other audited open
+icon sets and record the exact source/license in the package contract. Do not
+extract or embed Apple-owned SF Symbols, Finder icons, or system file icons
+unless the legal usage boundary is explicitly cleared.
 The icon-grid thumbnails follow the same boundary. The example references
 macOS Finder's document/image/movie preview proportions and SF Symbols-style
 visual restraint, but it paints deterministic phenotype-owned vector previews

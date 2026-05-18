@@ -363,6 +363,7 @@ struct ExplorerChromeMetrics {
     bool integrated_titlebar = true;
     bool native_window_controls = true;
     bool duplicate_window_controls = false;
+    bool window_control_single_owner = true;
     bool content_window_control_markers = false;
     bool finder_segmented_toolbar = false;
     bool owned_icon_assets = false;
@@ -438,6 +439,7 @@ struct ExplorerChromeMetrics {
     std::string finder_density_policy;
     std::string window_control_marker_mode;
     std::string native_window_control_owner;
+    std::string window_control_duplication_guard;
     std::string window_control_render_policy;
     std::string titlebar_control_reserve_policy;
     std::string native_window_control_integration_policy;
@@ -1143,6 +1145,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .integrated_titlebar = false,
             .native_window_controls = false,
             .duplicate_window_controls = false,
+            .window_control_single_owner = true,
             .content_window_control_markers = false,
             .finder_segmented_toolbar = false,
             .owned_icon_assets =
@@ -1260,6 +1263,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .finder_density_policy = "not_applicable_mobile_row_list",
             .window_control_marker_mode = "none",
             .native_window_control_owner = "none",
+            .window_control_duplication_guard =
+                "not_applicable_mobile_shell",
             .window_control_render_policy = "not_applicable_mobile_shell",
             .titlebar_control_reserve_policy =
                 "not_applicable_mobile_shell",
@@ -1482,6 +1487,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .integrated_titlebar = true,
         .native_window_controls = true,
         .duplicate_window_controls = false,
+        .window_control_single_owner = true,
         .content_window_control_markers = false,
         .finder_segmented_toolbar = true,
         .owned_icon_assets =
@@ -1598,6 +1604,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .finder_density_policy = k_desktop_finder_density_policy,
         .window_control_marker_mode = "runtime-native-controls",
         .native_window_control_owner = "platform-edge",
+        .window_control_duplication_guard =
+            "native_window_controls_single_owner",
         .window_control_render_policy =
             "native_controls_runtime_only_no_content_or_artifact_markers",
         .titlebar_control_reserve_policy =
@@ -1644,6 +1652,26 @@ inline ExplorerChromeMetrics explorer_chrome_with_native_window_control_ownershi
         chrome.native_window_control_geometry_role = "none";
         chrome.native_window_control_palette_policy = "none";
     }
+    chrome.window_control_single_owner =
+        !chrome.duplicate_window_controls
+        && !chrome.content_window_control_markers
+        && !chrome.artifact_window_control_markers
+        && chrome.content_window_control_marker_count == 0
+        && chrome.artifact_window_control_marker_count == 0
+        && chrome.content_drawn_window_control_count == 0
+        && chrome.artifact_drawn_window_control_count == 0
+        && ((chrome.native_window_controls
+                && chrome.native_window_control_owner == "platform-edge"
+                && chrome.native_window_control_count > 0)
+            || (!chrome.native_window_controls
+                && chrome.native_window_control_owner == "none"
+                && chrome.native_window_control_count == 0));
+    chrome.window_control_duplication_guard =
+        chrome.window_control_single_owner
+            ? (chrome.native_window_controls
+                  ? "native_window_controls_single_owner"
+                  : "no_window_controls_in_shell")
+            : "duplicate_window_control_risk";
     return chrome;
 }
 
@@ -2707,12 +2735,18 @@ inline json::Value explorer_chrome_debug_json(
     native_window.emplace("integrated_titlebar", json::Value{chrome.integrated_titlebar});
     native_window.emplace("native_window_controls", json::Value{chrome.native_window_controls});
     native_window.emplace("duplicate_window_controls", json::Value{chrome.duplicate_window_controls});
+    native_window.emplace(
+        "window_control_single_owner",
+        json::Value{chrome.window_control_single_owner});
     native_window.emplace("content_window_control_markers", json::Value{chrome.content_window_control_markers});
     native_window.emplace("artifact_window_control_markers", json::Value{chrome.artifact_window_control_markers});
     native_window.emplace("window_control_marker_mode", json::Value{chrome.window_control_marker_mode});
     native_window.emplace(
         "native_window_control_owner",
         json::Value{chrome.native_window_control_owner});
+    native_window.emplace(
+        "window_control_duplication_guard",
+        json::Value{chrome.window_control_duplication_guard});
     native_window.emplace(
         "native_window_control_count",
         json::Value{static_cast<std::int64_t>(chrome.native_window_control_count)});
@@ -3167,8 +3201,10 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("file_type_symbol_count", json::Value{static_cast<std::int64_t>(chrome.file_type_symbol_count)});
     out.emplace("content_window_control_markers", json::Value{chrome.content_window_control_markers});
     out.emplace("artifact_window_control_markers", json::Value{chrome.artifact_window_control_markers});
+    out.emplace("window_control_single_owner", json::Value{chrome.window_control_single_owner});
     out.emplace("window_control_marker_mode", json::Value{chrome.window_control_marker_mode});
     out.emplace("native_window_control_owner", json::Value{chrome.native_window_control_owner});
+    out.emplace("window_control_duplication_guard", json::Value{chrome.window_control_duplication_guard});
     out.emplace("window_control_render_policy", json::Value{chrome.window_control_render_policy});
     out.emplace("titlebar_control_reserve_policy", json::Value{chrome.titlebar_control_reserve_policy});
     out.emplace("native_window_control_integration_policy", json::Value{chrome.native_window_control_integration_policy});

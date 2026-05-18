@@ -793,8 +793,12 @@ def check_file_explorer_native_chrome_contract(
     native_controls = native_window.get("native_window_controls") is True
     marker_fields = {
         "duplicate_window_controls": native_window.get("duplicate_window_controls"),
+        "window_control_single_owner": native_window.get(
+            "window_control_single_owner"),
         "content_window_control_markers": native_window.get("content_window_control_markers"),
         "artifact_window_control_markers": native_window.get("artifact_window_control_markers"),
+        "window_control_duplication_guard": native_window.get(
+            "window_control_duplication_guard"),
         "content_window_control_marker_count": native_window.get(
             "content_window_control_marker_count"),
         "artifact_window_control_marker_count": native_window.get(
@@ -810,8 +814,13 @@ def check_file_explorer_native_chrome_contract(
     }
     no_drawn_controls = (
         marker_fields["duplicate_window_controls"] is False
+        and marker_fields["window_control_single_owner"] is True
         and marker_fields["content_window_control_markers"] is False
         and marker_fields["artifact_window_control_markers"] is False
+        and marker_fields["window_control_duplication_guard"] in (
+            "native_window_controls_single_owner",
+            "no_window_controls_in_shell",
+            "not_applicable_mobile_shell")
         and marker_fields["content_window_control_marker_count"] == 0
         and marker_fields["artifact_window_control_marker_count"] == 0
         and marker_fields["content_drawn_window_control_count"] == 0
@@ -840,8 +849,13 @@ def check_file_explorer_native_chrome_contract(
         path="debug.application.file_explorer.chrome.native_window",
         expected={
             "duplicate_window_controls": False,
+            "window_control_single_owner": True,
             "content_window_control_markers": False,
             "artifact_window_control_markers": False,
+            "window_control_duplication_guard": [
+                "native_window_controls_single_owner",
+                "no_window_controls_in_shell",
+                "not_applicable_mobile_shell"],
             "content_window_control_marker_count": 0,
             "artifact_window_control_marker_count": 0,
             "content_drawn_window_control_count": 0,
@@ -862,6 +876,9 @@ def check_file_explorer_native_chrome_contract(
         report.check(
             "file explorer native window controls are platform-owned",
             native_window.get("native_window_control_owner") == "platform-edge"
+            and native_window.get("window_control_single_owner") is True
+            and native_window.get("window_control_duplication_guard")
+            == "native_window_controls_single_owner"
             and native_window.get("window_control_marker_mode")
             == "runtime-native-controls"
             and isinstance(native_window.get("native_window_control_count"), int)
@@ -873,6 +890,9 @@ def check_file_explorer_native_chrome_contract(
             path="debug.application.file_explorer.chrome.native_window",
             expected={
                 "native_window_control_owner": "platform-edge",
+                "window_control_single_owner": True,
+                "window_control_duplication_guard":
+                    "native_window_controls_single_owner",
                 "window_control_marker_mode": "runtime-native-controls",
                 "native_window_control_count": ">0",
                 "native_window_control_geometry_role":
@@ -883,6 +903,10 @@ def check_file_explorer_native_chrome_contract(
             actual={
                 "native_window_control_owner": native_window.get(
                     "native_window_control_owner"),
+                "window_control_single_owner": native_window.get(
+                    "window_control_single_owner"),
+                "window_control_duplication_guard": native_window.get(
+                    "window_control_duplication_guard"),
                 "window_control_marker_mode": native_window.get(
                     "window_control_marker_mode"),
                 "native_window_control_count": native_window.get(
@@ -919,6 +943,9 @@ def check_file_explorer_native_chrome_contract(
                 and actual.get("all_buttons_within_leading_reserve") is True
                 and actual.get("integrated_in_content_area") is True
                 and actual.get("duplicate_window_controls") is False
+                and actual.get("window_control_single_owner") is True
+                and actual.get("window_control_duplication_guard")
+                == "native_window_controls_single_owner"
                 and actual.get("content_drawn_window_control_count") == 0
                 and actual.get("artifact_drawn_window_control_count") == 0,
                 path="debug.platform_runtime.details.window.native_window_controls",
@@ -934,6 +961,9 @@ def check_file_explorer_native_chrome_contract(
                     "all_buttons_within_leading_reserve": True,
                     "integrated_in_content_area": True,
                     "duplicate_window_controls": False,
+                    "window_control_single_owner": True,
+                    "window_control_duplication_guard":
+                        "native_window_controls_single_owner",
                     "content_drawn_window_control_count": 0,
                     "artifact_drawn_window_control_count": 0,
                 },

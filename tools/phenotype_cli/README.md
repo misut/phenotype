@@ -105,7 +105,8 @@ The initial scope is intentionally narrow:
 - `phenotype icons catalog` emits the built-in icon catalog contract from the
   pure `phenotype.icon_catalog` path package. JSON output reports the
   macOS/Finder/SF-Symbols-inspired reference policy, package-owned SVG asset
-  rule, explicit reference-source URLs, supported SVG path subset and
+  rule, explicit reference-source URLs, pinned per-symbol source URLs, exact
+  ISC versus Feather-derived MIT attribution, supported SVG path subset and
   arc-lowering policy, count invariants,
   SF Symbols rendering-mode names, regular text-aligned weight policy,
   explicit monochrome/hierarchical/palette/multicolor capability counts,
@@ -126,7 +127,8 @@ The initial scope is intentionally narrow:
 - `phenotype icons svg <name-or-reference>` emits the exact audited SVG
   source for one built-in glyph. The default output is raw SVG for renderer or
   asset-pipeline probes; `--json` wraps the source with the matched symbol,
-  semantic reference name, asset policy, rendering capabilities, and byte count.
+  semantic reference name, asset policy, exact source attribution, rendering
+  capabilities, and byte count.
   This keeps macOS-style icon debugging inside the pure catalog boundary
   without embedding Apple or
   SF Symbols vector artwork.

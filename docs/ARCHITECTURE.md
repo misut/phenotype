@@ -50,12 +50,14 @@ APIs from core code.
 `phenotype.icons` builds on that parser with phenotype-owned and audited
 permissive SVG symbols. The catalog keeps macOS/Finder/SF Symbols names only as
 semantic references: it does not embed Apple or SF Symbols artwork. Most
-toolbar, sidebar, action, and file-type glyphs currently use audited Lucide ISC
-SVG sources with small phenotype adaptations for hierarchical opacity; the
-policy also allows future Tabler MIT, Iconoir MIT, or Material Symbols
-Apache-2.0 sources. Every embedded external source exposes family, icon name,
-license, license URL, source URL, copyright, modification status, and
-source revision, modification status, and Apple-asset boundary in debug metadata.
+toolbar, sidebar, action, and file-type glyphs currently use audited Lucide SVG
+sources pinned to a fixed source revision, with each symbol reporting either
+the Lucide ISC license or the Feather-derived MIT license when the upstream
+license file requires it. The policy also allows future Tabler MIT, Iconoir
+MIT, or Material Symbols Apache-2.0 sources. Every embedded external source
+exposes family, icon name, exact license, license URL, pinned source URL,
+source revision, copyright, modification status, and Apple-asset boundary in
+debug metadata.
 The catalog also exposes structured
 reference-source rows for Apple HIG/SF Symbols, W3C SVG paths, Lucide, and
 Material Symbols so provenance checks can distinguish style references from
@@ -237,9 +239,10 @@ without copying SF Symbols artwork as assets. Each symbol declares a semantic
 SF Symbols reference name, family, and policy, so the contract can say "this
 glyph is playing the same UI role as `magnifyingglass`" without embedding
 Apple's vector paths. In the current catalog, 35 of 39 built-in symbols come
-from audited Lucide ISC SVG sources, while AirDrop, Shared, Sort Group, and
-More remain phenotype-owned because their Finder-specific metaphors or filled
-dot treatment need tighter product control. Apps can call `icons::document`,
+from audited Lucide SVG sources pinned to the catalog revision, while AirDrop,
+Shared, Sort Group, and More remain phenotype-owned because their
+Finder-specific metaphors or filled dot treatment need tighter product
+control. Apps can call `icons::document`,
 `icons::paint_symbol`,
 or `widget::icon`; the widget helper paints through `widget::canvas` and uses a
 deterministic paint token so stable icons do not re-emit every frame. Apps that

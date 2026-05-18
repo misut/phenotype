@@ -8144,6 +8144,12 @@ inline json::Value native_window_controls_runtime_json(
         "integrated_in_content_area",
         json::Value{integrated});
     controls.emplace("duplicate_window_controls", json::Value{false});
+    controls.emplace("window_control_single_owner", json::Value{integrated});
+    controls.emplace(
+        "window_control_duplication_guard",
+        json::Value{
+            integrated ? "native_window_controls_single_owner"
+                       : "native_window_controls_not_integrated"});
     controls.emplace(
         "content_drawn_window_control_count",
         json::Value{std::int64_t{0}});

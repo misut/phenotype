@@ -824,6 +824,21 @@ def snapshot_with_file_explorer_chrome(
     root = snapshot(plan)
     debug = root["debug"]
     assert isinstance(debug, dict)
+    window_control_single_owner = (
+        not duplicate
+        and not content_markers
+        and not artifact_markers
+        and content_marker_count == 0
+        and artifact_marker_count == 0)
+    window_control_guard = (
+        "native_window_controls_single_owner"
+        if window_control_single_owner
+        else "duplicate_window_control_risk")
+    runtime_single_owner = runtime_integrated and runtime_visible_count == 3
+    runtime_guard = (
+        "native_window_controls_single_owner"
+        if runtime_single_owner
+        else "native_window_controls_not_integrated")
     debug["application"] = {
         "file_explorer": {
             "kind": "file_explorer",
@@ -833,10 +848,12 @@ def snapshot_with_file_explorer_chrome(
                     "integrated_titlebar": True,
                     "native_window_controls": True,
                     "duplicate_window_controls": duplicate,
+                    "window_control_single_owner": window_control_single_owner,
                     "content_window_control_markers": content_markers,
                     "artifact_window_control_markers": artifact_markers,
                     "window_control_marker_mode": "runtime-native-controls",
                     "native_window_control_owner": "platform-edge",
+                    "window_control_duplication_guard": window_control_guard,
                     "native_window_control_count": 3,
                     "content_window_control_marker_count": content_marker_count,
                     "artifact_window_control_marker_count": artifact_marker_count,
@@ -870,6 +887,8 @@ def snapshot_with_file_explorer_chrome(
             "all_buttons_within_leading_reserve": runtime_integrated,
             "integrated_in_content_area": runtime_integrated,
             "duplicate_window_controls": False,
+            "window_control_single_owner": runtime_single_owner,
+            "window_control_duplication_guard": runtime_guard,
             "content_drawn_window_control_count": 0,
             "artifact_drawn_window_control_count": 0,
         },
