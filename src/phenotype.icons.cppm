@@ -351,6 +351,15 @@ struct SymbolButtonOptions {
     std::uint64_t token_salt = 0;
 };
 
+struct ControlButtonStyleOptions {
+    SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
+    bool selected = false;
+    bool disabled = false;
+    float width = 0.0f;
+    float height = 0.0f;
+    float border_radius = -1.0f;
+};
+
 struct SymbolControlChrome {
     SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
     SymbolTone symbol_tone = SymbolTone::Secondary;
@@ -950,7 +959,22 @@ inline auto symbol_button_height(SymbolButtonOptions options) noexcept -> float 
     return hit_target_size(options.role);
 }
 
-inline auto macos_symbol_button_style(SymbolButtonOptions options) noexcept
+inline auto control_button_width(ControlButtonStyleOptions options) noexcept
+        -> float {
+    if (options.width > 0.0f)
+        return options.width;
+    return hit_target_size(options.role);
+}
+
+inline auto control_button_height(ControlButtonStyleOptions options) noexcept
+        -> float {
+    if (options.height > 0.0f)
+        return options.height;
+    return hit_target_size(options.role);
+}
+
+inline auto macos_control_button_style(
+        ControlButtonStyleOptions options) noexcept
         -> ButtonStyleOptions {
     auto const enabled = !options.disabled;
     auto const interaction = SymbolInteractionState{options.selected, enabled};
@@ -970,13 +994,26 @@ inline auto macos_symbol_button_style(SymbolButtonOptions options) noexcept
     style.has_border_color = true;
     style.border_color = {0, 0, 0, 0};
     style.border_width = 0.0f;
-    style.border_radius = chrome.corner_radius;
-    style.max_width = symbol_button_width(options);
-    style.fixed_height = symbol_button_height(options);
+    style.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : chrome.corner_radius;
+    style.max_width = control_button_width(options);
+    style.fixed_height = control_button_height(options);
     style.min_hit_width = activation_hit_target_size(options.role);
     style.min_hit_height = activation_hit_target_size(options.role);
     style.disabled = options.disabled;
     return style;
+}
+
+inline auto macos_symbol_button_style(SymbolButtonOptions options) noexcept
+        -> ButtonStyleOptions {
+    return macos_control_button_style(ControlButtonStyleOptions{
+        .role = options.role,
+        .selected = options.selected,
+        .disabled = options.disabled,
+        .width = symbol_button_width(options),
+        .height = symbol_button_height(options),
+    });
 }
 
 inline auto source(Symbol symbol) noexcept -> std::string_view {

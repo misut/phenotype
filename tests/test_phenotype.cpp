@@ -3595,6 +3595,50 @@ void test_symbol_button_macos_contract() {
     std::puts("PASS: symbol_button macOS chrome contract");
 }
 
+void test_macos_control_button_style_contract() {
+    icons::ControlButtonStyleOptions options;
+    options.role = icons::SymbolPresentationRole::Sidebar;
+    options.selected = true;
+    options.width = 180.0f;
+    options.height = 28.0f;
+    options.border_radius = 8.0f;
+
+    auto style = icons::macos_control_button_style(options);
+    assert(style.has_background);
+    assert(style.background.r == 248);
+    assert(style.background.a == 238);
+    assert(style.has_hover_background);
+    assert(style.hover_background.r == 242);
+    assert(style.hover_background.a == 248);
+    assert(style.has_pressed_background);
+    assert(style.border_width == 0.0f);
+    assert(style.border_radius == 8.0f);
+    assert(style.max_width == 180.0f);
+    assert(style.fixed_height == 28.0f);
+    assert(style.min_hit_width == minimum_button_activation_size);
+    assert(style.min_hit_height == minimum_button_activation_size);
+
+    icons::SymbolButtonOptions symbol_options;
+    symbol_options.role = icons::SymbolPresentationRole::Toolbar;
+    symbol_options.selected = true;
+    auto symbol_style = icons::macos_symbol_button_style(symbol_options);
+    auto control_style = icons::macos_control_button_style(
+        icons::ControlButtonStyleOptions{
+            .role = symbol_options.role,
+            .selected = symbol_options.selected,
+            .width = icons::symbol_button_width(symbol_options),
+            .height = icons::symbol_button_height(symbol_options),
+        });
+    assert(symbol_style.background == control_style.background);
+    assert(symbol_style.hover_background == control_style.hover_background);
+    assert(symbol_style.pressed_background == control_style.pressed_background);
+    assert(symbol_style.border_radius == control_style.border_radius);
+    assert(symbol_style.max_width == control_style.max_width);
+    assert(symbol_style.fixed_height == control_style.fixed_height);
+
+    std::puts("PASS: macOS control button style contract");
+}
+
 void test_symbol_button_minimum_hit_region_contract() {
     icons::SymbolButtonOptions options;
     options.role = icons::SymbolPresentationRole::Toolbar;
@@ -4527,6 +4571,7 @@ int main() {
     test_canvas_button_disabled_contract();
     test_canvas_button_disabled_custom_chrome();
     test_symbol_button_macos_contract();
+    test_macos_control_button_style_contract();
     test_symbol_button_minimum_hit_region_contract();
     test_symbol_button_visual_state_token_contract();
     test_symbol_button_disabled_contract();

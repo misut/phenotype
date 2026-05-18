@@ -1184,26 +1184,14 @@ void finder_column_location_button(std::string label,
                                    bool selected,
                                    float max_width,
                                    float font_size) {
-    auto const chrome = phenotype::icons::macos_control_chrome(
-        phenotype::icons::SymbolPresentationRole::Sidebar,
-        phenotype::icons::SymbolInteractionState{selected, true});
-    auto const pressed = phenotype::icons::macos_state_recipe(
-        phenotype::icons::SymbolPresentationRole::Sidebar,
-        phenotype::icons::SymbolInteractionState{selected, true},
-        phenotype::icons::SymbolInteractionPhase::Pressed);
-    phenotype::ButtonStyleOptions options;
-    options.has_background = true;
-    options.background = chrome.background_color;
-    options.has_hover_background = true;
-    options.hover_background = chrome.hover_background_color;
-    options.has_pressed_background = true;
-    options.pressed_background = pressed.background_color;
-    options.has_border_color = true;
-    options.border_color = rgba(0, 0, 0, 0);
-    options.border_width = 0.0f;
-    options.border_radius = 8.0f;
-    options.fixed_height = k_column_location_row_height;
-    options.max_width = max_width;
+    auto options = phenotype::icons::macos_control_button_style(
+        phenotype::icons::ControlButtonStyleOptions{
+            .role = phenotype::icons::SymbolPresentationRole::Sidebar,
+            .selected = selected,
+            .width = max_width,
+            .height = k_column_location_row_height,
+            .border_radius = 8.0f,
+        });
 
     phenotype::widget::canvas_button<Msg>(
         phenotype::str{label},
@@ -1388,26 +1376,14 @@ void sidebar_row(std::string_view label,
                  std::string location_id,
                  bool selected = false) {
     using namespace phenotype;
-    auto const chrome = phenotype::icons::macos_control_chrome(
-        phenotype::icons::SymbolPresentationRole::Sidebar,
-        phenotype::icons::SymbolInteractionState{selected, true});
-    auto const pressed = phenotype::icons::macos_state_recipe(
-        phenotype::icons::SymbolPresentationRole::Sidebar,
-        phenotype::icons::SymbolInteractionState{selected, true},
-        phenotype::icons::SymbolInteractionPhase::Pressed);
-    ButtonStyleOptions options;
-    options.has_background = true;
-    options.background = chrome.background_color;
-    options.has_hover_background = true;
-    options.hover_background = chrome.hover_background_color;
-    options.has_pressed_background = true;
-    options.pressed_background = pressed.background_color;
-    options.has_border_color = true;
-    options.border_color = rgba(0, 0, 0, 0);
-    options.border_width = 0.0f;
-    options.border_radius = k_sidebar_selected_row_radius;
-    options.max_width = k_sidebar_row_width;
-    options.fixed_height = k_sidebar_row_height;
+    auto options = icons::macos_control_button_style(
+        icons::ControlButtonStyleOptions{
+            .role = icons::SymbolPresentationRole::Sidebar,
+            .selected = selected,
+            .width = k_sidebar_row_width,
+            .height = k_sidebar_row_height,
+            .border_radius = k_sidebar_selected_row_radius,
+        });
 
     std::string label_text(label);
     std::string icon_name(icon);
