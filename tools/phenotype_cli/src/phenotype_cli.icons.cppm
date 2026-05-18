@@ -352,6 +352,7 @@ auto icon_svg_json(std::string_view query,
         "\"ok\":true,\"query\":{},\"match_kind\":{},"
         "\"symbol\":{},\"semantic_reference_name\":{},"
         "\"source_format\":\"svg\",\"asset_policy\":{},"
+        "\"source_license_policy\":{},\"apple_asset_boundary\":{},"
         "\"rendering_capabilities\":{},"
         "\"source_bytes\":{},\"source\":{}}}",
         json_string(query),
@@ -359,6 +360,8 @@ auto icon_svg_json(std::string_view query,
         json_string(desc.name),
         json_string(desc.semantic_reference_name),
         json_string(icon_catalog::asset_policy()),
+        json_string(icon_catalog::source_license_policy()),
+        json_string(icon_catalog::apple_asset_boundary()),
         icon_rendering_capabilities_json(capabilities),
         source.size(),
         json_string(source));
@@ -456,6 +459,7 @@ auto icon_presentation_json(std::string_view query,
         "\"ok\":true,\"query\":{},\"match_kind\":{},"
         "\"symbol\":{},\"semantic_reference_name\":{},"
         "\"reference_policy\":{},\"asset_policy\":{},"
+        "\"source_license_policy\":{},\"apple_asset_boundary\":{},"
         "\"state\":{{\"role\":{},\"phase\":{},\"selected\":{},"
         "\"enabled\":{}}},"
         "\"presentation\":{{\"policy\":{},\"metrics_policy\":{},"
@@ -476,6 +480,8 @@ auto icon_presentation_json(std::string_view query,
         json_string(desc.semantic_reference_name),
         json_string(icon_catalog::reference_policy()),
         json_string(icon_catalog::asset_policy()),
+        json_string(icon_catalog::source_license_policy()),
+        json_string(icon_catalog::apple_asset_boundary()),
         json_string(icon_catalog::symbol_presentation_role_name(role)),
         json_string(icon_catalog::symbol_interaction_phase_name(phase)),
         selected ? "true" : "false",
@@ -623,7 +629,8 @@ auto icon_render_json(std::string_view query,
         "{{\"schema_version\":1,\"command\":\"icons render\","
         "\"ok\":true,\"query\":{},\"match_kind\":{},"
         "\"symbol\":{},\"semantic_reference_name\":{},"
-        "\"asset_policy\":{},\"state\":{{\"role\":{},\"phase\":{},"
+        "\"asset_policy\":{},\"source_license_policy\":{},"
+        "\"apple_asset_boundary\":{},\"state\":{{\"role\":{},\"phase\":{},"
         "\"selected\":{},\"enabled\":{}}},"
         "\"presentation\":{{\"policy\":{},\"symbol_tone\":{},"
         "\"visible_symbol_color\":{},\"background_color\":{},"
@@ -639,6 +646,8 @@ auto icon_render_json(std::string_view query,
         json_string(desc.name),
         json_string(desc.semantic_reference_name),
         json_string(icon_catalog::asset_policy()),
+        json_string(icon_catalog::source_license_policy()),
+        json_string(icon_catalog::apple_asset_boundary()),
         json_string(icon_catalog::symbol_presentation_role_name(role)),
         json_string(icon_catalog::symbol_interaction_phase_name(phase)),
         selected ? "true" : "false",
@@ -909,7 +918,11 @@ auto icon_catalog_checks() -> std::vector<Check> {
          .hint =
              "Keep the icon catalog anchored to Apple HIG, macOS Finder, and SF Symbols semantic names."},
         {.name = "asset_ownership",
-         .ok = all_owned && no_sf_assets,
+         .ok = all_owned && no_sf_assets
+            && icon_catalog::source_license_policy().find("ISC")
+                != std::string_view::npos
+            && icon_catalog::apple_asset_boundary().find("do not extract")
+                != std::string_view::npos,
          .detail = std::format("phenotype_owned={} uses_sf_symbols_asset={}",
                                all_owned ? "true" : "false",
                                no_sf_assets ? "false" : "true"),
@@ -1091,6 +1104,9 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"stroke_join_policy\":{},"
         "\"design_reference\":{},\"reference_family\":{},"
         "\"reference_policy\":{},\"asset_policy\":{},"
+        "\"source_license_policy\":{},"
+        "\"preferred_external_source_policy\":{},"
+        "\"apple_asset_boundary\":{},"
         "\"interface_metaphor_policy\":{},"
         "\"visual_consistency_policy\":{},"
         "\"alignment\":{},\"variant_policy\":{},"
@@ -1128,6 +1144,9 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::reference_family()),
         json_string(icon_catalog::reference_policy()),
         json_string(icon_catalog::asset_policy()),
+        json_string(icon_catalog::source_license_policy()),
+        json_string(icon_catalog::preferred_external_source_policy()),
+        json_string(icon_catalog::apple_asset_boundary()),
         json_string(icon_catalog::interface_metaphor_policy()),
         json_string(icon_catalog::visual_consistency_policy()),
         json_string(icon_catalog::alignment_policy()),

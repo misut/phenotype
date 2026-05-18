@@ -452,6 +452,18 @@ inline auto asset_policy() noexcept -> std::string_view {
     return catalog::asset_policy();
 }
 
+inline auto source_license_policy() noexcept -> std::string_view {
+    return catalog::source_license_policy();
+}
+
+inline auto preferred_external_source_policy() noexcept -> std::string_view {
+    return catalog::preferred_external_source_policy();
+}
+
+inline auto apple_asset_boundary() noexcept -> std::string_view {
+    return catalog::apple_asset_boundary();
+}
+
 inline auto reference_family() noexcept -> std::string_view {
     return catalog::reference_family();
 }

@@ -26,6 +26,8 @@ int main() {
            != std::string_view::npos);
     assert(contract.icon_asset_policy.find("phenotype_owned_svg_symbols")
            != std::string_view::npos);
+    assert(contract.icon_asset_policy.find("audited_permissive_svg_sources")
+           != std::string_view::npos);
     assert(contract.icon_asset_policy.find("without_embedded_apple_artwork")
            != std::string_view::npos);
     assert(contract.usage_policy.find("navigation_controls")

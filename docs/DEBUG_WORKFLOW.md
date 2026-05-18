@@ -737,7 +737,13 @@ publishes `content_window_control_markers=false`,
 content/artifact marker and drawn-control counts, the
 `platform_standard_controls_inside_leading_content_reserve` integration policy,
 and the
-`native_controls_runtime_only_no_content_or_artifact_markers` render policy. The
+`native_controls_runtime_only_no_content_or_artifact_markers` render policy. It
+also reports
+`native_window_control_geometry_role=reserve_metrics_only_not_paint_instructions`
+and
+`native_window_control_palette_policy=traffic_light_palette_forbidden_in_content_and_artifacts`.
+Those fields make the titlebar-control metrics reserve-only data, not a drawing
+recipe for red/yellow/green controls. The
 verifier checks that invariant independently of the manifest and pairs it with
 low-detail, neutral pixel-region checks plus forbidden traffic-light palette
 checks over the leading control reserve, so a future content-drawn

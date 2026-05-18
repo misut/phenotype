@@ -12,6 +12,18 @@ int main() {
     assert(icons::style_reference().find("Apple HIG") != std::string_view::npos);
     assert(icons::style_reference().find("macOS Finder") != std::string_view::npos);
     assert(icons::asset_policy().find("no Apple") != std::string_view::npos);
+    assert(icons::source_license_policy().find("ISC")
+           != std::string_view::npos);
+    assert(icons::source_license_policy().find("Apache-2.0")
+           != std::string_view::npos);
+    assert(icons::preferred_external_source_policy().find("Lucide ISC")
+           != std::string_view::npos);
+    assert(icons::preferred_external_source_policy().find("Material Symbols Apache-2.0")
+           != std::string_view::npos);
+    assert(icons::apple_asset_boundary().find("design references only")
+           != std::string_view::npos);
+    assert(icons::apple_asset_boundary().find("do not extract or embed")
+           != std::string_view::npos);
     assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");
     assert(icons::svg_supported_path_commands().find("A Z")
            != std::string_view::npos);

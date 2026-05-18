@@ -802,6 +802,10 @@ def check_file_explorer_native_chrome_contract(
             "content_drawn_window_control_count", 0),
         "artifact_drawn_window_control_count": native_window.get(
             "artifact_drawn_window_control_count", 0),
+        "native_window_control_geometry_role": native_window.get(
+            "native_window_control_geometry_role"),
+        "native_window_control_palette_policy": native_window.get(
+            "native_window_control_palette_policy"),
     }
     report.check(
         "file explorer does not draw duplicate native window controls",
@@ -811,7 +815,11 @@ def check_file_explorer_native_chrome_contract(
         and marker_fields["content_window_control_marker_count"] == 0
         and marker_fields["artifact_window_control_marker_count"] == 0
         and marker_fields["content_drawn_window_control_count"] == 0
-        and marker_fields["artifact_drawn_window_control_count"] == 0,
+        and marker_fields["artifact_drawn_window_control_count"] == 0
+        and marker_fields["native_window_control_geometry_role"]
+        == "reserve_metrics_only_not_paint_instructions"
+        and marker_fields["native_window_control_palette_policy"]
+        == "traffic_light_palette_forbidden_in_content_and_artifacts",
         path="debug.application.file_explorer.chrome.native_window",
         expected={
             "duplicate_window_controls": False,
@@ -821,6 +829,10 @@ def check_file_explorer_native_chrome_contract(
             "artifact_window_control_marker_count": 0,
             "content_drawn_window_control_count": 0,
             "artifact_drawn_window_control_count": 0,
+            "native_window_control_geometry_role":
+                "reserve_metrics_only_not_paint_instructions",
+            "native_window_control_palette_policy": (
+                "traffic_light_palette_forbidden_in_content_and_artifacts"),
         },
         actual=marker_fields,
         likely_layer="native-window-chrome",
@@ -828,7 +840,9 @@ def check_file_explorer_native_chrome_contract(
         hint=(
             "File explorer content and artifacts must reserve the titlebar "
             "area; macOS traffic lights or Windows caption buttons are owned "
-            "by the native window edge."))
+            "by the native window edge. The titlebar control geometry is a "
+            "reserve-only contract, not an instruction to draw colored "
+            "traffic-light controls."))
     if native_controls:
         report.check(
             "file explorer native window controls are platform-owned",
@@ -836,12 +850,20 @@ def check_file_explorer_native_chrome_contract(
             and native_window.get("window_control_marker_mode")
             == "runtime-native-controls"
             and isinstance(native_window.get("native_window_control_count"), int)
-            and native_window.get("native_window_control_count") > 0,
+            and native_window.get("native_window_control_count") > 0
+            and native_window.get("native_window_control_geometry_role")
+            == "reserve_metrics_only_not_paint_instructions"
+            and native_window.get("native_window_control_palette_policy")
+            == "traffic_light_palette_forbidden_in_content_and_artifacts",
             path="debug.application.file_explorer.chrome.native_window",
             expected={
                 "native_window_control_owner": "platform-edge",
                 "window_control_marker_mode": "runtime-native-controls",
                 "native_window_control_count": ">0",
+                "native_window_control_geometry_role":
+                    "reserve_metrics_only_not_paint_instructions",
+                "native_window_control_palette_policy": (
+                    "traffic_light_palette_forbidden_in_content_and_artifacts"),
             },
             actual={
                 "native_window_control_owner": native_window.get(
@@ -850,6 +872,10 @@ def check_file_explorer_native_chrome_contract(
                     "window_control_marker_mode"),
                 "native_window_control_count": native_window.get(
                     "native_window_control_count"),
+                "native_window_control_geometry_role": native_window.get(
+                    "native_window_control_geometry_role"),
+                "native_window_control_palette_policy": native_window.get(
+                    "native_window_control_palette_policy"),
             },
             likely_layer="native-window-chrome",
             likely_pass="runtime-native-controls",

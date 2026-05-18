@@ -381,6 +381,8 @@ export auto explorer_chrome_json(
         "\"window_control_render_policy\":{},"
         "\"titlebar_control_reserve_policy\":{},"
         "\"native_window_control_integration_policy\":{},"
+        "\"native_window_control_geometry_role\":{},"
+        "\"native_window_control_palette_policy\":{},"
         "\"titlebar_drag_region_height\":{},"
         "\"leading_control_reserved_width\":{},"
         "\"trailing_control_reserved_width\":{}}},"
@@ -440,6 +442,9 @@ export auto explorer_chrome_json(
         "\"design_reference\":{},"
         "\"reference_family\":{},\"reference_policy\":{},"
         "\"asset_policy\":{},"
+        "\"source_license_policy\":{},"
+        "\"preferred_external_source_policy\":{},"
+        "\"apple_asset_boundary\":{},"
         "\"interface_metaphor_policy\":{},"
         "\"visual_consistency_policy\":{},"
         "\"alignment\":{},\"rendering_mode\":{},"
@@ -514,6 +519,8 @@ export auto explorer_chrome_json(
         json_string(chrome.window_control_render_policy),
         json_string(chrome.titlebar_control_reserve_policy),
         json_string(chrome.native_window_control_integration_policy),
+        json_string(chrome.native_window_control_geometry_role),
+        json_string(chrome.native_window_control_palette_policy),
         chrome.titlebar_drag_region_height,
         chrome.leading_control_reserved_width,
         chrome.trailing_control_reserved_width,
@@ -597,6 +604,9 @@ export auto explorer_chrome_json(
         json_string(chrome.icon_reference_family),
         json_string(chrome.icon_reference_policy),
         json_string(chrome.icon_asset_policy),
+        json_string(chrome.icon_source_license_policy),
+        json_string(chrome.icon_preferred_external_source_policy),
+        json_string(chrome.icon_apple_asset_boundary),
         json_string(chrome.icon_interface_metaphor_policy),
         json_string(chrome.icon_visual_consistency_policy),
         json_string(chrome.icon_alignment),
