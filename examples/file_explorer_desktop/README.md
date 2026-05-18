@@ -66,7 +66,13 @@ grid-gap sizing, contextual `status_bar_visible` state, and the
 probe markers. It records `native_window_control_owner=platform-edge`, a native
 control count, zero content/artifact marker and drawn-control counts, the
 `platform_standard_controls_inside_leading_content_reserve` integration policy,
-and a render policy that allows only runtime OS controls. It also checks the
+and a render policy that allows only runtime OS controls. The
+`native_window_control_geometry_role` value is
+`reserve_metrics_only_not_paint_instructions`, so `titlebar_control_*` numbers
+describe blank reserve geometry only; they are not permission to paint red,
+yellow, or green traffic-light markers. The paired
+`native_window_control_palette_policy` forbids traffic-light colors in content
+and artifact paths. It also checks the
 platform `window.native_window_controls` object for AppKit standard button
 presence and content-reserve integration, then checks the pure `geometry` object for
 the integrated chrome contract: window inset/gap, sidebar surface origin, first
@@ -109,6 +115,11 @@ platform icon fonts or bundled Apple assets. File entries use the same pure
 mapping for Finder-like fallbacks: PDF, text, image, movie, archive, document,
 and folder entries resolve to phenotype-owned SVG symbols and semantic
 reference names before any native renderer sees them.
+When file-type or toolbar glyphs need more realism, prefer permissive SVG
+sources such as ISC-licensed Lucide or other audited open icon sets and record
+the source/license in the package contract. Do not extract or embed Apple-owned
+SF Symbols, Finder icons, or system file icons unless the legal usage boundary
+is explicitly cleared.
 The icon-grid thumbnails follow the same boundary. The example references
 macOS Finder's document/image/movie preview proportions and SF Symbols-style
 visual restraint, but it paints deterministic phenotype-owned vector previews

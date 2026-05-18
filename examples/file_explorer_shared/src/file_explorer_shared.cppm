@@ -387,6 +387,9 @@ struct ExplorerChromeMetrics {
     std::string icon_reference_family;
     std::string icon_reference_policy;
     std::string icon_asset_policy;
+    std::string icon_source_license_policy;
+    std::string icon_preferred_external_source_policy;
+    std::string icon_apple_asset_boundary;
     std::string icon_interface_metaphor_policy;
     std::string icon_visual_consistency_policy;
     std::string icon_alignment;
@@ -428,6 +431,8 @@ struct ExplorerChromeMetrics {
     std::string window_control_render_policy;
     std::string titlebar_control_reserve_policy;
     std::string native_window_control_integration_policy;
+    std::string native_window_control_geometry_role;
+    std::string native_window_control_palette_policy;
 };
 
 struct ExplorerInputTrace {
@@ -1150,6 +1155,12 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_reference_policy =
                 std::string{icon_catalog::reference_policy()},
             .icon_asset_policy = std::string{icon_catalog::asset_policy()},
+            .icon_source_license_policy =
+                std::string{icon_catalog::source_license_policy()},
+            .icon_preferred_external_source_policy =
+                std::string{icon_catalog::preferred_external_source_policy()},
+            .icon_apple_asset_boundary =
+                std::string{icon_catalog::apple_asset_boundary()},
             .icon_interface_metaphor_policy =
                 std::string{icon_catalog::interface_metaphor_policy()},
             .icon_visual_consistency_policy =
@@ -1215,6 +1226,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .titlebar_control_reserve_policy =
                 "not_applicable_mobile_shell",
             .native_window_control_integration_policy =
+                "not_applicable_mobile_shell",
+            .native_window_control_geometry_role =
+                "not_applicable_mobile_shell",
+            .native_window_control_palette_policy =
                 "not_applicable_mobile_shell",
         };
     }
@@ -1458,6 +1473,12 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_reference_policy =
             std::string{icon_catalog::reference_policy()},
         .icon_asset_policy = std::string{icon_catalog::asset_policy()},
+        .icon_source_license_policy =
+            std::string{icon_catalog::source_license_policy()},
+        .icon_preferred_external_source_policy =
+            std::string{icon_catalog::preferred_external_source_policy()},
+        .icon_apple_asset_boundary =
+            std::string{icon_catalog::apple_asset_boundary()},
         .icon_interface_metaphor_policy =
             std::string{icon_catalog::interface_metaphor_policy()},
         .icon_visual_consistency_policy =
@@ -1525,6 +1546,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             "blank_reserve_under_os_window_controls",
         .native_window_control_integration_policy =
             "platform_standard_controls_inside_leading_content_reserve",
+        .native_window_control_geometry_role =
+            "reserve_metrics_only_not_paint_instructions",
+        .native_window_control_palette_policy =
+            "traffic_light_palette_forbidden_in_content_and_artifacts",
     };
 }
 
@@ -1549,11 +1574,17 @@ inline ExplorerChromeMetrics explorer_chrome_with_native_window_control_ownershi
             "blank_reserve_under_os_window_controls";
         chrome.native_window_control_integration_policy =
             "platform_standard_controls_inside_leading_content_reserve";
+        chrome.native_window_control_geometry_role =
+            "reserve_metrics_only_not_paint_instructions";
+        chrome.native_window_control_palette_policy =
+            "traffic_light_palette_forbidden_in_content_and_artifacts";
     } else {
         chrome.native_window_control_count = 0;
         chrome.native_window_control_owner = "none";
         chrome.window_control_marker_mode = "none";
         chrome.native_window_control_integration_policy = "none";
+        chrome.native_window_control_geometry_role = "none";
+        chrome.native_window_control_palette_policy = "none";
     }
     return chrome;
 }
@@ -2570,6 +2601,12 @@ inline json::Value explorer_chrome_debug_json(
         "native_window_control_integration_policy",
         json::Value{chrome.native_window_control_integration_policy});
     native_window.emplace(
+        "native_window_control_geometry_role",
+        json::Value{chrome.native_window_control_geometry_role});
+    native_window.emplace(
+        "native_window_control_palette_policy",
+        json::Value{chrome.native_window_control_palette_policy});
+    native_window.emplace(
         "titlebar_drag_region_height",
         json::Value{chrome.titlebar_drag_region_height});
     native_window.emplace(
@@ -2749,6 +2786,15 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace("reference_family", json::Value{chrome.icon_reference_family});
     icon_system.emplace("reference_policy", json::Value{chrome.icon_reference_policy});
     icon_system.emplace("asset_policy", json::Value{chrome.icon_asset_policy});
+    icon_system.emplace(
+        "source_license_policy",
+        json::Value{chrome.icon_source_license_policy});
+    icon_system.emplace(
+        "preferred_external_source_policy",
+        json::Value{chrome.icon_preferred_external_source_policy});
+    icon_system.emplace(
+        "apple_asset_boundary",
+        json::Value{chrome.icon_apple_asset_boundary});
     icon_system.emplace(
         "interface_metaphor_policy",
         json::Value{chrome.icon_interface_metaphor_policy});
@@ -2946,6 +2992,8 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("window_control_render_policy", json::Value{chrome.window_control_render_policy});
     out.emplace("titlebar_control_reserve_policy", json::Value{chrome.titlebar_control_reserve_policy});
     out.emplace("native_window_control_integration_policy", json::Value{chrome.native_window_control_integration_policy});
+    out.emplace("native_window_control_geometry_role", json::Value{chrome.native_window_control_geometry_role});
+    out.emplace("native_window_control_palette_policy", json::Value{chrome.native_window_control_palette_policy});
     out.emplace("finder_segmented_toolbar", json::Value{chrome.finder_segmented_toolbar});
     out.emplace("more_actions_open", json::Value{chrome.more_actions_open});
     out.emplace("status_bar_visible", json::Value{chrome.status_bar_visible});

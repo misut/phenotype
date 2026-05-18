@@ -358,6 +358,18 @@ inline auto asset_policy() noexcept -> std::string_view {
     return "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded";
 }
 
+inline auto source_license_policy() noexcept -> std::string_view {
+    return "phenotype-owned or permissive SVG only; accepted external licenses include ISC, MIT, and Apache-2.0 with attribution";
+}
+
+inline auto preferred_external_source_policy() noexcept -> std::string_view {
+    return "Lucide ISC or Material Symbols Apache-2.0 may be used as audited source references before phenotype adaptation";
+}
+
+inline auto apple_asset_boundary() noexcept -> std::string_view {
+    return "Apple SF Symbols, Finder icons, and macOS system icons are design references only; do not extract or embed Apple-owned artwork without explicit legal clearance";
+}
+
 inline auto reference_family() noexcept -> std::string_view {
     return "SF Symbols semantic reference";
 }

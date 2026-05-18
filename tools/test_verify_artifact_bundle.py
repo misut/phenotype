@@ -841,6 +841,10 @@ def snapshot_with_file_explorer_chrome(
                         "blank_reserve_under_os_window_controls"),
                     "native_window_control_integration_policy": (
                         "platform_standard_controls_inside_leading_content_reserve"),
+                    "native_window_control_geometry_role": (
+                        "reserve_metrics_only_not_paint_instructions"),
+                    "native_window_control_palette_policy": (
+                        "traffic_light_palette_forbidden_in_content_and_artifacts"),
                 }
             },
         }
@@ -1030,6 +1034,26 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["backdrop_access"]["capture_scopes"],
             {"none": 1})
+
+    def test_file_explorer_native_chrome_contract_rejects_paint_geometry_policy(self) -> None:
+        snap = snapshot_with_file_explorer_chrome(material_plan())
+        native_window = snap["debug"]["application"]["file_explorer"][
+            "chrome"]["native_window"]
+        native_window["native_window_control_geometry_role"] = (
+            "draw_three_titlebar_controls")
+
+        code, report = self.run_verifier(snap)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "file explorer does not draw duplicate native window controls")
+        self.assertEqual(failure["likely_layer"], "native-window-chrome")
+        self.assertEqual(failure["likely_pass"], "window-control-marker")
+        self.assertIn("not an instruction to draw", failure["hint"])
+        self.assertEqual(
+            failure["actual"]["native_window_control_geometry_role"],
+            "draw_three_titlebar_controls")
 
     def test_file_explorer_native_chrome_contract_rejects_unintegrated_buttons(self) -> None:
         code, report = self.run_verifier(

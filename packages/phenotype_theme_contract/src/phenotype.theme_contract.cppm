@@ -73,7 +73,7 @@ inline auto default_glass_theme_contract() noexcept
         .iconography_policy =
             "macos_finder_sf_symbols_aligned_rounded_outline_symbols_with_simplified_universal_metaphors",
         .icon_asset_policy =
-            "phenotype_owned_svg_symbols_reference_sf_symbols_semantics_without_embedded_apple_artwork",
+            "phenotype_owned_svg_symbols_or_audited_permissive_svg_sources_reference_sf_symbols_semantics_without_embedded_apple_artwork",
         .usage_policy =
             "liquid_glass_for_navigation_controls_and_functional_chrome_not_content_fill",
         .container_policy =

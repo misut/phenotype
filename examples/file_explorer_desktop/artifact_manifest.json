@@ -268,7 +268,7 @@
     },
     {
       "path": "application.file_explorer.theme_system.icon_asset_policy",
-      "equals": "phenotype_owned_svg_symbols_reference_sf_symbols_semantics_without_embedded_apple_artwork"
+      "equals": "phenotype_owned_svg_symbols_or_audited_permissive_svg_sources_reference_sf_symbols_semantics_without_embedded_apple_artwork"
     },
     {
       "path": "application.file_explorer.theme_system.usage_policy",
@@ -413,6 +413,14 @@
     {
       "path": "application.file_explorer.chrome.native_window.native_window_control_integration_policy",
       "equals": "platform_standard_controls_inside_leading_content_reserve"
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.native_window_control_geometry_role",
+      "equals": "reserve_metrics_only_not_paint_instructions"
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.native_window_control_palette_policy",
+      "equals": "traffic_light_palette_forbidden_in_content_and_artifacts"
     },
     {
       "path": "application.file_explorer.chrome.native_window.titlebar_drag_region_height",
@@ -737,6 +745,18 @@
     {
       "path": "application.file_explorer.chrome.icon_system.asset_policy",
       "equals": "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.source_license_policy",
+      "equals": "phenotype-owned or permissive SVG only; accepted external licenses include ISC, MIT, and Apache-2.0 with attribution"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.preferred_external_source_policy",
+      "equals": "Lucide ISC or Material Symbols Apache-2.0 may be used as audited source references before phenotype adaptation"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.apple_asset_boundary",
+      "equals": "Apple SF Symbols, Finder icons, and macOS system icons are design references only; do not extract or embed Apple-owned artwork without explicit legal clearance"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.interface_metaphor_policy",
@@ -1212,6 +1232,14 @@
     {
       "path": "application.file_explorer.chrome.native_window_control_integration_policy",
       "equals": "platform_standard_controls_inside_leading_content_reserve"
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window_control_geometry_role",
+      "equals": "reserve_metrics_only_not_paint_instructions"
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window_control_palette_policy",
+      "equals": "traffic_light_palette_forbidden_in_content_and_artifacts"
     },
     {
       "path": "application.file_explorer.chrome.more_actions_open",
