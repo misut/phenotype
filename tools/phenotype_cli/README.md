@@ -118,7 +118,7 @@ The initial scope is intentionally narrow:
   same presentation role, metrics, ownership, and reference policy as the full
   catalog. This gives tests, examples, and LLM debugging a small probe when a
   Finder-style sidebar or toolbar token maps to the wrong visual metaphor.
-- `phenotype icons svg <name-or-reference>` emits the exact phenotype-owned SVG
+- `phenotype icons svg <name-or-reference>` emits the exact audited SVG
   source for one built-in glyph. The default output is raw SVG for renderer or
   asset-pipeline probes; `--json` wraps the source with the matched symbol,
   semantic reference name, asset policy, rendering capabilities, and byte count.

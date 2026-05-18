@@ -191,7 +191,15 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.owned_assets",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.audited_permissive_assets",
       "equals": true
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.uses_apple_icon_assets",
+      "equals": false
     },
     {
       "path": "application.file_explorer.chrome.icon_system.uses_sf_symbols_assets",

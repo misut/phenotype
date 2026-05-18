@@ -122,7 +122,7 @@ mise exec -- exon build
 
 `theme contract` reports the `phenotype_theme_contract` version, Apple-like
 glass profile, Pretendard typography baseline, Liquid Glass usage boundary,
-macOS/Finder-style iconography policy, phenotype-owned SVG asset policy,
+macOS/Finder-style iconography policy, owned/permissive SVG asset policy,
 grouped-container policy, performance bounds, accessibility fallback policy,
 unsupported-backend degradation policy, color tokens, radii, typography, and
 semantic surface roles. It should stay green before debugging theme-dependent
@@ -256,11 +256,12 @@ presence checks from the same pure metadata package.
 `phenotype icons lookup <name-or-reference> --json` is the narrow metadata
 probe for one glyph when a Finder token maps to the wrong visual metaphor or
 hit target. `phenotype icons svg <name-or-reference>` emits the exact
-phenotype-owned SVG source for that glyph, with `--json` adding the semantic
-reference name, asset policy, and rendering capabilities. `phenotype icons
-present <name-or-reference> --role ... --phase ... --json` resolves the exact
-macOS-style presentation recipe for one glyph state, including visible RGBA,
-background chrome, effective size, hit target, and likely layer/pass.
+audited SVG source for that glyph, with `--json` adding the semantic reference
+name, asset policy, source attribution, Apple-asset boundary, and rendering
+capabilities. `phenotype icons present <name-or-reference> --role ... --phase
+... --json` resolves the exact macOS-style presentation recipe for one glyph
+state, including visible RGBA, background chrome, effective size, hit target,
+source attribution, and likely layer/pass.
 `phenotype icons render <name-or-reference> --role ... --phase ... --json`
 emits the same state as a standalone SVG wrapper with explicit source bytes,
 viewBox, optional `--output` write path, background chrome, and
@@ -344,12 +345,15 @@ hierarchical support, and explicit palette/multicolor unsupported counts, so
 future richer symbol rendering can fail as a contract change instead of a
 silent visual drift. If a Finder-like icon breaks, check those fields before
 comparing screenshots; a missing SVG command or stroke-style policy should fail
-as a JSON contract mismatch. `svg_path_arc_symbol_count` proves that at least
-one built-in Finder sidebar symbol exercises the SVG path arc parser in normal
-example artifacts, while `round_stroke_symbol_count` proves outline glyphs stay
-on the macOS-like round stroke contract. The desktop payload also includes
+as a JSON contract mismatch. `svg_path_arc_symbol_count` proves that multiple
+built-in Finder sidebar and file-type symbols exercise the SVG path arc parser
+in normal example artifacts, while `round_stroke_symbol_count` proves outline
+glyphs stay on the macOS-like round stroke contract. The desktop payload also
+includes `source_attribution_policy`, `lucide_source_symbol_count`, and
+`apple_asset_symbol_count` so permissive-source adoption and Apple-asset
+exclusion are machine-checkable. The desktop payload also includes
 `sidebar_symbol_tokens`, the renderer-facing table that maps sidebar tokens to
-phenotype-owned symbols and semantic SF Symbols reference names, so a wrong
+audited symbols and semantic SF Symbols reference names, so a wrong
 Recents/Shared/Desktop-style metaphor fails as data before anyone compares
 pixels. `file_type_symbol_tokens` performs the same check for icon-grid
 fallback symbols, including PDF, text, image, movie, archive, document, and
@@ -391,7 +395,7 @@ valid under the same bounded parser that `widget::svg_image` uses.
 The same artifact exposes `application.file_explorer.theme_system.*` from the
 pure `phenotype_theme_contract` package. That block names the Apple-like glass
 theme profile, Pretendard font policy, material planning boundary,
-macOS/Finder-style iconography policy, phenotype-owned SVG asset policy, Liquid
+macOS/Finder-style iconography policy, owned/permissive SVG asset policy, Liquid
 Glass usage boundary, grouped-container policy, performance bounds,
 accessibility fallbacks, and unsupported-backend degradation. Check it first
 when a Finder artifact looks visually off but material plans and icon metadata

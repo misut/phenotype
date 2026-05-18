@@ -405,8 +405,16 @@ export auto explorer_chrome_json(
         "\"stroke_geometry_policy\":{},\"stroke_cap_policy\":{},"
         "\"stroke_join_policy\":{},"
         "\"owned_assets\":{},"
+        "\"audited_permissive_assets\":{},"
+        "\"uses_apple_icon_assets\":{},"
         "\"uses_sf_symbols_assets\":{},\"round_stroke_contract\":{},"
-        "\"total_symbol_count\":{},\"sidebar_symbol_count\":{},"
+        "\"total_symbol_count\":{},"
+        "\"phenotype_owned_symbol_count\":{},"
+        "\"permissive_source_symbol_count\":{},"
+        "\"lucide_source_symbol_count\":{},"
+        "\"apple_asset_symbol_count\":{},"
+        "\"audited_symbol_source_count\":{},"
+        "\"sidebar_symbol_count\":{},"
         "\"toolbar_symbol_count\":{},\"file_type_symbol_count\":{},"
         "\"filled_symbol_count\":{},"
         "\"outline_symbol_count\":{},\"hierarchical_symbol_count\":{},"
@@ -444,6 +452,7 @@ export auto explorer_chrome_json(
         "\"asset_policy\":{},"
         "\"source_license_policy\":{},"
         "\"preferred_external_source_policy\":{},"
+        "\"source_attribution_policy\":{},"
         "\"apple_asset_boundary\":{},"
         "\"interface_metaphor_policy\":{},"
         "\"visual_consistency_policy\":{},"
@@ -556,9 +565,16 @@ export auto explorer_chrome_json(
         json_string(chrome.icon_stroke_cap_policy),
         json_string(chrome.icon_stroke_join_policy),
         chrome.owned_icon_assets ? "true" : "false",
+        chrome.audited_permissive_icon_assets ? "true" : "false",
+        chrome.uses_apple_icon_assets ? "true" : "false",
         chrome.uses_sf_symbols_assets ? "true" : "false",
         chrome.icon_round_stroke_contract ? "true" : "false",
         chrome.icon_total_symbol_count,
+        chrome.icon_phenotype_owned_symbol_count,
+        chrome.icon_permissive_source_symbol_count,
+        chrome.icon_lucide_source_symbol_count,
+        chrome.icon_apple_asset_symbol_count,
+        chrome.icon_audited_symbol_source_count,
         chrome.sidebar_symbol_count,
         chrome.toolbar_symbol_count,
         chrome.file_type_symbol_count,
@@ -606,6 +622,7 @@ export auto explorer_chrome_json(
         json_string(chrome.icon_asset_policy),
         json_string(chrome.icon_source_license_policy),
         json_string(chrome.icon_preferred_external_source_policy),
+        json_string(chrome.icon_source_attribution_policy),
         json_string(chrome.icon_apple_asset_boundary),
         json_string(chrome.icon_interface_metaphor_policy),
         json_string(chrome.icon_visual_consistency_policy),

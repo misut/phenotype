@@ -12,6 +12,8 @@ int main() {
     assert(icons::style_reference().find("Apple HIG") != std::string_view::npos);
     assert(icons::style_reference().find("macOS Finder") != std::string_view::npos);
     assert(icons::asset_policy().find("no Apple") != std::string_view::npos);
+    assert(icons::asset_policy().find("audited permissive")
+           != std::string_view::npos);
     assert(icons::source_license_policy().find("ISC")
            != std::string_view::npos);
     assert(icons::source_license_policy().find("Apache-2.0")
@@ -19,6 +21,8 @@ int main() {
     assert(icons::preferred_external_source_policy().find("Lucide ISC")
            != std::string_view::npos);
     assert(icons::preferred_external_source_policy().find("Material Symbols Apache-2.0")
+           != std::string_view::npos);
+    assert(icons::source_attribution_policy().find("source URL")
            != std::string_view::npos);
     assert(icons::apple_asset_boundary().find("design references only")
            != std::string_view::npos);
@@ -71,18 +75,23 @@ int main() {
     assert(icons::hit_target_policy().find("activation minimum=44pt")
            != std::string_view::npos);
     assert(icons::all_symbol_count == 35);
+    assert(icons::phenotype_owned_symbol_count == 28);
+    assert(icons::permissive_source_symbol_count == 7);
+    assert(icons::lucide_source_symbol_count == 7);
+    assert(icons::apple_asset_symbol_count == 0);
+    assert(icons::audited_symbol_source_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);
     assert(icons::file_type_symbol_count == 7);
     assert(icons::outline_symbol_count == 34);
     assert(icons::filled_symbol_count == 1);
-    assert(icons::hierarchical_symbol_count == 23);
+    assert(icons::hierarchical_symbol_count == 17);
     assert(icons::monochrome_symbol_count == icons::all_symbol_count);
     assert(icons::regular_weight_symbol_count == icons::all_symbol_count);
     assert(icons::palette_symbol_count == 0);
     assert(icons::multicolor_symbol_count == 0);
     assert(icons::reference_symbol_count == icons::all_symbol_count);
-    assert(icons::svg_path_arc_symbol_count == 1);
+    assert(icons::svg_path_arc_symbol_count == 7);
     assert(icons::round_stroke_symbol_count == icons::outline_symbol_count);
 
     unsigned int outline_count = 0;
@@ -90,10 +99,14 @@ int main() {
     unsigned int hierarchical_count = 0;
     unsigned int arc_path_count = 0;
     unsigned int round_stroke_count = 0;
+    unsigned int phenotype_owned_count = 0;
+    unsigned int lucide_count = 0;
+    unsigned int apple_asset_count = 0;
     for (unsigned int i = 0; i < icons::all_symbol_count; ++i) {
         auto const symbol = icons::symbol_at(i);
         auto const desc = icons::descriptor(symbol);
         auto const source = icons::svg_source(symbol);
+        auto const attribution = icons::source_attribution(symbol);
         assert(desc.symbol == symbol);
         assert(!desc.name.empty());
         assert(!desc.semantic_reference_name.empty());
@@ -120,8 +133,25 @@ int main() {
         assert(metrics.point_size <= metrics.hit_target_size);
         assert(metrics.content_inset >= 0.0f);
         assert(metrics.stroke_width == desc.default_stroke_width);
-        assert(desc.phenotype_owned);
+        if (desc.phenotype_owned)
+            ++phenotype_owned_count;
         assert(!desc.uses_sf_symbols_asset);
+        if (icons::uses_lucide_source(symbol)) {
+            ++lucide_count;
+            assert(!desc.phenotype_owned);
+            assert(attribution.family == "Lucide");
+            assert(attribution.license == "ISC");
+            assert(attribution.source_url.find("lucide-icons/lucide")
+                   != std::string_view::npos);
+            assert(attribution.modified_for_phenotype);
+        } else {
+            assert(desc.phenotype_owned);
+            assert(attribution.family == "phenotype");
+            assert(attribution.license == "MIT");
+        }
+        assert(!attribution.apple_asset);
+        if (attribution.apple_asset)
+            ++apple_asset_count;
         auto const capabilities = icons::rendering_capabilities(symbol);
         assert(capabilities.monochrome);
         assert(capabilities.hierarchical == desc.supports_hierarchical_opacity);
@@ -153,6 +183,9 @@ int main() {
     assert(hierarchical_count == icons::hierarchical_symbol_count);
     assert(arc_path_count == icons::svg_path_arc_symbol_count);
     assert(round_stroke_count == icons::round_stroke_symbol_count);
+    assert(phenotype_owned_count == icons::phenotype_owned_symbol_count);
+    assert(lucide_count == icons::lucide_source_symbol_count);
+    assert(apple_asset_count == icons::apple_asset_symbol_count);
 
     assert(icons::semantic_reference_name(icons::Symbol::AirDrop) == "airdrop");
     assert(icons::semantic_reference_name(icons::Symbol::ChevronUp)
@@ -164,6 +197,13 @@ int main() {
     assert(icons::semantic_reference_name(icons::Symbol::Archive)
            == "archivebox");
     assert(icons::uses_svg_path_arcs(icons::Symbol::AirDrop));
+    assert(icons::uses_lucide_source(icons::Symbol::Folder));
+    assert(icons::source_attribution(icons::Symbol::Folder).icon_name
+           == "folder");
+    assert(icons::source_attribution(icons::Symbol::Movie).icon_name
+           == "clapperboard");
+    assert(icons::source_attribution(icons::Symbol::Search).family
+           == "phenotype");
     assert(icons::sidebar_symbol_at(8) == icons::Symbol::AirDrop);
     assert(icons::toolbar_symbol_at(10) == icons::Symbol::Search);
     assert(icons::file_type_symbol_at(0) == icons::Symbol::Folder);

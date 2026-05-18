@@ -84,14 +84,16 @@ policy, blank native-control reserve coordinates, and forbidden traffic-light
 palette probes are asserted separately, so Finder parity regressions are
 reported as structured chrome contract failures before pixel inspection.
 The sidebar and toolbar glyphs come from `phenotype.icons`, not copied SF
-Symbols assets. They are phenotype-owned SVG symbols with a macOS-style
-rounded-outline contract and bounded secondary-layer opacity for detailed
-symbols. Each icon declares a semantic SF Symbols reference name as a role and
-proportion anchor while keeping the SVG artwork phenotype-owned, and the visual
-policy now names Apple HIG, macOS Finder, and SF Symbols as style references
-without embedding Apple-owned vector paths. Artifacts can assert the icon
-module, source format, ownership boundary, reference family/policy, round
-stroke expectation, rendering mode, variant policy,
+Symbols assets. They are phenotype-owned or audited permissive SVG symbols
+with a macOS-style rounded-outline contract and bounded secondary-layer opacity
+for detailed symbols. Each icon declares a semantic SF Symbols reference name
+as a role and proportion anchor while keeping Apple artwork out of the asset
+set. File-type glyphs may embed checked open SVG sources such as Lucide ISC
+icons; artifacts record source family, icon name, license, license URL, source
+URL, copyright, and Apple-asset boundary beside the rendered symbol metadata.
+Artifacts can assert the icon module, source format,
+ownership/permissive-source boundary, reference family/policy, round stroke
+expectation, rendering mode, variant policy,
 text-aligned scale, role-aware presentation policy, sidebar/toolbar point
 sizes, role hit-target metrics, tone policy, symbol-state chrome policy,
 normal/hovered/pressed state policy, toolbar/sidebar pressed alpha, pressed
@@ -113,8 +115,8 @@ reference` table used by the renderer (`recents -> recents -> clock`,
 `download -> download -> arrow.down.circle`, and so on), without depending on
 platform icon fonts or bundled Apple assets. File entries use the same pure
 mapping for Finder-like fallbacks: PDF, text, image, movie, archive, document,
-and folder entries resolve to phenotype-owned SVG symbols and semantic
-reference names before any native renderer sees them.
+and folder entries resolve to audited SVG symbols and semantic reference names
+before any native renderer sees them.
 When file-type or toolbar glyphs need more realism, prefer permissive SVG
 sources such as ISC-licensed Lucide or other audited open icon sets and record
 the source/license in the package contract. Do not extract or embed Apple-owned

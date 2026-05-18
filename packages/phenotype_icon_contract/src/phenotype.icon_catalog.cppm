@@ -134,6 +134,18 @@ struct SymbolRenderingCapabilities {
     std::string_view policy;
 };
 
+struct SymbolSourceAttribution {
+    std::string_view family;
+    std::string_view icon_name;
+    std::string_view license;
+    std::string_view license_url;
+    std::string_view source_url;
+    std::string_view copyright;
+    bool embedded_source = true;
+    bool modified_for_phenotype = false;
+    bool apple_asset = false;
+};
+
 struct SymbolColor {
     unsigned char r = 96;
     unsigned char g = 96;
@@ -194,18 +206,24 @@ struct SymbolMetrics {
 };
 
 inline constexpr unsigned int all_symbol_count = 35;
+inline constexpr unsigned int phenotype_owned_symbol_count = 28;
+inline constexpr unsigned int permissive_source_symbol_count = 7;
+inline constexpr unsigned int lucide_source_symbol_count =
+    permissive_source_symbol_count;
+inline constexpr unsigned int apple_asset_symbol_count = 0;
+inline constexpr unsigned int audited_symbol_source_count = all_symbol_count;
 inline constexpr unsigned int sidebar_symbol_count = 11;
 inline constexpr unsigned int toolbar_symbol_count = 15;
 inline constexpr unsigned int file_type_symbol_count = 7;
 inline constexpr unsigned int outline_symbol_count = 34;
 inline constexpr unsigned int filled_symbol_count = 1;
-inline constexpr unsigned int hierarchical_symbol_count = 23;
+inline constexpr unsigned int hierarchical_symbol_count = 17;
 inline constexpr unsigned int monochrome_symbol_count = all_symbol_count;
 inline constexpr unsigned int regular_weight_symbol_count = all_symbol_count;
 inline constexpr unsigned int palette_symbol_count = 0;
 inline constexpr unsigned int multicolor_symbol_count = 0;
 inline constexpr unsigned int reference_symbol_count = all_symbol_count;
-inline constexpr unsigned int svg_path_arc_symbol_count = 1;
+inline constexpr unsigned int svg_path_arc_symbol_count = 7;
 inline constexpr unsigned int round_stroke_symbol_count = outline_symbol_count;
 inline constexpr unsigned int symbol_interaction_phase_count = 3;
 
@@ -355,7 +373,7 @@ inline auto style_reference() noexcept -> std::string_view {
 }
 
 inline auto asset_policy() noexcept -> std::string_view {
-    return "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded";
+    return "phenotype-owned or audited permissive vector assets; no Apple or SF Symbols artwork embedded";
 }
 
 inline auto source_license_policy() noexcept -> std::string_view {
@@ -364,6 +382,10 @@ inline auto source_license_policy() noexcept -> std::string_view {
 
 inline auto preferred_external_source_policy() noexcept -> std::string_view {
     return "Lucide ISC or Material Symbols Apache-2.0 may be used as audited source references before phenotype adaptation";
+}
+
+inline auto source_attribution_policy() noexcept -> std::string_view {
+    return "embedded permissive SVG sources must expose family, icon name, license, license URL, source URL, copyright, and Apple-asset boundary in debug output";
 }
 
 inline auto apple_asset_boundary() noexcept -> std::string_view {
@@ -375,7 +397,7 @@ inline auto reference_family() noexcept -> std::string_view {
 }
 
 inline auto reference_policy() noexcept -> std::string_view {
-    return "semantic reference only; phenotype-owned SVG artwork";
+    return "semantic reference only; no Apple or SF Symbols vector artwork; embedded sources are phenotype-owned or audited permissive SVG";
 }
 
 inline auto presentation_policy() noexcept -> std::string_view {
@@ -637,6 +659,81 @@ inline auto symbol_from_semantic_reference_name(
     return std::nullopt;
 }
 
+inline bool uses_lucide_source(Symbol symbol) noexcept {
+    switch (symbol) {
+    case Symbol::Folder:
+    case Symbol::Document:
+    case Symbol::Image:
+    case Symbol::Movie:
+    case Symbol::PdfDocument:
+    case Symbol::TextDocument:
+    case Symbol::Archive:
+        return true;
+    default:
+        return false;
+    }
+}
+
+inline auto permissive_source_icon_name(Symbol symbol) noexcept
+        -> std::string_view {
+    switch (symbol) {
+    case Symbol::Folder:       return "folder";
+    case Symbol::Document:     return "file";
+    case Symbol::Image:        return "file-image";
+    case Symbol::Movie:        return "clapperboard";
+    case Symbol::PdfDocument:  return "file-text";
+    case Symbol::TextDocument: return "file-text";
+    case Symbol::Archive:      return "file-archive";
+    default:                   return name(symbol);
+    }
+}
+
+inline auto lucide_source_url(std::string_view icon_name) noexcept
+        -> std::string_view {
+    if (icon_name == "folder")
+        return "https://github.com/lucide-icons/lucide/blob/main/icons/folder.svg";
+    if (icon_name == "file")
+        return "https://github.com/lucide-icons/lucide/blob/main/icons/file.svg";
+    if (icon_name == "file-image")
+        return "https://github.com/lucide-icons/lucide/blob/main/icons/file-image.svg";
+    if (icon_name == "clapperboard")
+        return "https://github.com/lucide-icons/lucide/blob/main/icons/clapperboard.svg";
+    if (icon_name == "file-text")
+        return "https://github.com/lucide-icons/lucide/blob/main/icons/file-text.svg";
+    if (icon_name == "file-archive")
+        return "https://github.com/lucide-icons/lucide/blob/main/icons/file-archive.svg";
+    return "https://github.com/lucide-icons/lucide/tree/main/icons";
+}
+
+inline auto source_attribution(Symbol symbol) noexcept
+        -> SymbolSourceAttribution {
+    if (uses_lucide_source(symbol)) {
+        auto const icon = permissive_source_icon_name(symbol);
+        return SymbolSourceAttribution{
+            "Lucide",
+            icon,
+            "ISC",
+            "https://github.com/lucide-icons/lucide/blob/main/LICENSE",
+            lucide_source_url(icon),
+            "Copyright (c) 2026 Lucide Icons and Contributors",
+            true,
+            true,
+            false,
+        };
+    }
+    return SymbolSourceAttribution{
+        "phenotype",
+        name(symbol),
+        "MIT",
+        "https://github.com/misut/phenotype/blob/main/LICENSE",
+        "built-in phenotype.icon_catalog",
+        "Copyright (c) misut",
+        true,
+        false,
+        false,
+    };
+}
+
 inline auto svg_source(Symbol symbol) noexcept -> std::string_view {
     switch (symbol) {
     case Symbol::Back:
@@ -660,15 +757,15 @@ inline auto svg_source(Symbol symbol) noexcept -> std::string_view {
     case Symbol::Gallery:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="11" rx="2.4"/><path d="M7 20 L17 20" stroke-opacity="0.66"/><path d="M8 16 L16 16" stroke-opacity="0.66"/></svg>)SVG";
     case Symbol::Folder:
-        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4.2 9.2 Q4.2 8.2 5.2 8.2 L9 8.2 Q9.7 8.2 10.2 8.7 L11.4 9.8 L18.8 9.8 Q19.8 9.8 19.8 10.8 L19.8 18.2 Q19.8 19.2 18.8 19.2 L5.2 19.2 Q4.2 19.2 4.2 18.2 Z"/></svg>)SVG";
+        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 20a2 2 0 0 0 2-2V8a2 2 0 0 0-2-2h-7.9a2 2 0 0 1-1.69-.9L9.6 3.9A2 2 0 0 0 7.93 3H4a2 2 0 0 0-2 2v13a2 2 0 0 0 2 2Z"/></svg>)SVG";
     case Symbol::Trash:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7 8 L17 8"/><path d="M10 5 L14 5 L15 8"/><path d="M8 8 L9 20 L15 20 L16 8"/><path d="M11 11 L11 17" stroke-opacity="0.66"/><path d="M13 11 L13 17" stroke-opacity="0.66"/></svg>)SVG";
     case Symbol::Document:
-        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 4.2 L13.7 4.2 Q14.3 4.2 14.8 4.7 L17.5 7.4 Q18 7.9 18 8.6 L18 18.9 Q18 19.8 17.1 19.8 L7.2 19.8 Q6.3 19.8 6.3 18.9 L6.3 5.1 Q6.3 4.2 7.2 4.2 Z"/><path d="M14.2 4.5 L14.2 8.1 L17.8 8.1" stroke-opacity="0.66"/><path d="M9.4 13 L15.2 13" stroke-opacity="0.66"/><path d="M9.4 16 L15.2 16" stroke-opacity="0.66"/></svg>)SVG";
+        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/></svg>)SVG";
     case Symbol::Image:
-        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="5" width="16" height="14" rx="2.4"/><circle cx="9" cy="10" r="1.5" stroke-opacity="0.66"/><polyline points="6.5 17 11 12.5 14 15.5 16 13.5 19 17" stroke-opacity="0.66"/></svg>)SVG";
+        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><circle cx="10" cy="12" r="2"/><path d="m20 17-1.296-1.296a2.41 2.41 0 0 0-3.408 0L9 22"/></svg>)SVG";
     case Symbol::Movie:
-        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="6" width="16" height="12" rx="2.4"/><path d="M8 6 L8 18" stroke-opacity="0.66"/><path d="M16 6 L16 18" stroke-opacity="0.66"/><path d="M4 10 L20 10" stroke-opacity="0.66"/><path d="M4 14 L20 14" stroke-opacity="0.66"/></svg>)SVG";
+        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m12.296 3.464 3.02 3.956"/><path d="M20.2 6 3 11l-.9-2.4c-.3-1.1.3-2.2 1.3-2.5l13.5-4c1.1-.3 2.2.3 2.5 1.3z"/><path d="M3 11h18v8a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="m6.18 5.276 3.1 3.899"/></svg>)SVG";
     case Symbol::Plus:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5 L12 19"/><path d="M5 12 L19 12"/></svg>)SVG";
     case Symbol::XMark:
@@ -704,11 +801,11 @@ inline auto svg_source(Symbol symbol) noexcept -> std::string_view {
     case Symbol::NewDocument:
         return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 4.2 L13.7 4.2 Q14.3 4.2 14.8 4.7 L17.5 7.4 Q18 7.9 18 8.6 L18 18.9 Q18 19.8 17.1 19.8 L7.2 19.8 Q6.3 19.8 6.3 18.9 L6.3 5.1 Q6.3 4.2 7.2 4.2 Z"/><path d="M14.2 4.5 L14.2 8.1 L17.8 8.1" stroke-opacity="0.66"/><path d="M12.4 12.2 L12.4 17" stroke-opacity="0.66"/><path d="M10 14.6 L14.8 14.6" stroke-opacity="0.66"/></svg>)SVG";
     case Symbol::PdfDocument:
-        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 4.2 L13.7 4.2 Q14.3 4.2 14.8 4.7 L17.5 7.4 Q18 7.9 18 8.6 L18 18.9 Q18 19.8 17.1 19.8 L7.2 19.8 Q6.3 19.8 6.3 18.9 L6.3 5.1 Q6.3 4.2 7.2 4.2 Z"/><path d="M14.2 4.5 L14.2 8.1 L17.8 8.1" stroke-opacity="0.66"/><path d="M8.7 11.6 L15.2 11.6" stroke-opacity="0.66"/><path d="M8.7 14.2 L13.7 14.2" stroke-opacity="0.66"/><path d="M8.7 16.8 L15.2 16.8" stroke-opacity="0.42"/></svg>)SVG";
+        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>)SVG";
     case Symbol::TextDocument:
-        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M7.2 4.2 L13.7 4.2 Q14.3 4.2 14.8 4.7 L17.5 7.4 Q18 7.9 18 8.6 L18 18.9 Q18 19.8 17.1 19.8 L7.2 19.8 Q6.3 19.8 6.3 18.9 L6.3 5.1 Q6.3 4.2 7.2 4.2 Z"/><path d="M14.2 4.5 L14.2 8.1 L17.8 8.1" stroke-opacity="0.66"/><path d="M9.1 11.2 L15.2 11.2" stroke-opacity="0.66"/><path d="M9.1 13.7 L15.2 13.7" stroke-opacity="0.66"/><path d="M9.1 16.2 L13.2 16.2" stroke-opacity="0.42"/></svg>)SVG";
+        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>)SVG";
     case Symbol::Archive:
-        return R"SVG(<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="6.2" width="14" height="12.4" rx="2.2"/><path d="M5.6 10.2 L18.4 10.2" stroke-opacity="0.66"/><path d="M9.2 6.2 L9.2 18.6" stroke-opacity="0.66"/><path d="M9.2 8.2 L11.3 8.2" stroke-opacity="0.42"/><path d="M9.2 12.2 L11.3 12.2" stroke-opacity="0.42"/><path d="M9.2 16.2 L11.3 16.2" stroke-opacity="0.42"/></svg>)SVG";
+        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v11.5"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 12v-1"/><path d="M8 18v-2"/><path d="M8 7V6"/><circle cx="8" cy="20" r="2"/></svg>)SVG";
     }
     return {};
 }
@@ -721,9 +818,6 @@ inline bool supports_hierarchical_opacity(Symbol symbol) noexcept {
     case Symbol::Columns:
     case Symbol::Gallery:
     case Symbol::Trash:
-    case Symbol::Document:
-    case Symbol::Image:
-    case Symbol::Movie:
     case Symbol::Home:
     case Symbol::AirDrop:
     case Symbol::Recents:
@@ -735,9 +829,6 @@ inline bool supports_hierarchical_opacity(Symbol symbol) noexcept {
     case Symbol::SortGroup:
     case Symbol::Duplicate:
     case Symbol::NewDocument:
-    case Symbol::PdfDocument:
-    case Symbol::TextDocument:
-    case Symbol::Archive:
         return true;
     default:
         return false;
@@ -750,27 +841,29 @@ inline auto symbol_layer_count(Symbol symbol) noexcept -> unsigned int {
     case Symbol::Grid:        return 4;
     case Symbol::List:        return 6;
     case Symbol::Trash:       return 5;
-    case Symbol::Movie:       return 5;
+    case Symbol::Movie:       return 4;
     case Symbol::PdfDocument: return 5;
     case Symbol::TextDocument: return 5;
     case Symbol::Archive:     return 6;
     case Symbol::Sidebar:     return 4;
     case Symbol::SortGroup:   return 9;
     case Symbol::AirDrop:     return 5;
-    case Symbol::Document:
     case Symbol::Applications:
     case Symbol::NewDocument:
         return 4;
+    case Symbol::Document:
+        return 2;
     case Symbol::Share:
     case Symbol::Columns:
     case Symbol::Gallery:
-    case Symbol::Image:
     case Symbol::Home:
     case Symbol::Shared:
     case Symbol::NewFolder:
     case Symbol::Desktop:
     case Symbol::Download:
         return 3;
+    case Symbol::Image:
+        return 4;
     case Symbol::Search:
     case Symbol::Tag:
     case Symbol::Plus:
@@ -784,7 +877,13 @@ inline auto symbol_layer_count(Symbol symbol) noexcept -> unsigned int {
 }
 
 inline bool uses_svg_path_arcs(Symbol symbol) noexcept {
-    return symbol == Symbol::AirDrop;
+    return symbol == Symbol::AirDrop
+        || symbol == Symbol::Folder
+        || symbol == Symbol::Document
+        || symbol == Symbol::Image
+        || symbol == Symbol::PdfDocument
+        || symbol == Symbol::TextDocument
+        || symbol == Symbol::Archive;
 }
 
 inline auto rendering_capabilities(Symbol symbol) noexcept
@@ -850,6 +949,9 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
 
     bool const filled = symbol == Symbol::More;
     bool const hierarchical = supports_hierarchical_opacity(symbol);
+    float const stroke_width = filled
+        ? 0.0f
+        : (uses_lucide_source(symbol) ? 2.0f : 1.8f);
     return SymbolDescriptor{
         symbol,
         name(symbol),
@@ -865,7 +967,7 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
         reference_family(),
         reference_policy(),
         24.0f,
-        filled ? 0.0f : 1.8f,
+        stroke_width,
         SymbolStrokeCap::Round,
         SymbolStrokeJoin::Round,
         hierarchical ? 0.66f : 1.0f,
@@ -878,7 +980,7 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
         hierarchical,
         false,
         false,
-        true,
+        !uses_lucide_source(symbol),
         false,
     };
 }

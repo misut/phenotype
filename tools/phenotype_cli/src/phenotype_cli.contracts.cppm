@@ -86,6 +86,8 @@ auto theme_contract_checks() -> std::vector<Check> {
                 != std::string_view::npos
             && contract.icon_asset_policy.find("phenotype_owned_svg_symbols")
                 != std::string_view::npos
+            && contract.icon_asset_policy.find("audited_permissive_svg_sources")
+                != std::string_view::npos
             && contract.icon_asset_policy.find("without_embedded_apple_artwork")
                 != std::string_view::npos,
          .detail = std::format(
@@ -93,7 +95,7 @@ auto theme_contract_checks() -> std::vector<Check> {
              contract.iconography_policy,
              contract.icon_asset_policy),
          .hint =
-             "Default icon language should follow macOS/Finder and SF Symbols semantics while keeping phenotype-owned SVG artwork."},
+             "Default icon language should follow macOS/Finder and SF Symbols semantics while using phenotype-owned or audited permissive SVG artwork."},
         {.name = "apple_glass_color_tokens",
          .ok = contract.background
                 == theme_contract::ColorToken{242, 242, 247, 255}
