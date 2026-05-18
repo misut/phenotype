@@ -166,6 +166,12 @@ Pure support packages used by the CLI, including `phenotype_io` and
 CLI/package lane instead of the root macOS/wasm matrix. This keeps package-only
 contract work cheap while still exercising the command JSON surfaces that future
 automation depends on.
+The executable source is being split by command ownership as those surfaces
+stabilize: `phenotype_cli.common` owns shared JSON/check helpers,
+`phenotype_cli.contracts` owns the pure theme/IO contract commands,
+`phenotype_cli.file_explorer` owns file explorer observation JSON, and
+`phenotype_cli.icons` owns built-in icon command helpers. New CLI work should
+prefer adding a focused module over expanding `main.cpp`.
 
 Android workflows now follow the same CLI-first rule. The shell scripts under
 `tools/android` remain as the edge adapter implementation because they already

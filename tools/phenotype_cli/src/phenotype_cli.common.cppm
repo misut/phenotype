@@ -1,5 +1,6 @@
 export module phenotype_cli.common;
 
+import cppx.terminal;
 import phenotype.resources;
 import std;
 
@@ -97,6 +98,31 @@ auto checks_json(std::span<Check const> checks) -> std::string {
     }
     out += "]";
     return out;
+}
+
+void print_checks(std::string_view title, std::span<Check const> checks) {
+    std::println("{}", title);
+    auto lines = std::vector<cppx::terminal::StatusLine>{};
+    lines.reserve(checks.size());
+    for (auto const& check : checks) {
+        lines.push_back({
+            .label = check.name,
+            .value = check.detail,
+            .status = check.ok ? cppx::terminal::StatusKind::ok
+                               : cppx::terminal::StatusKind::fail,
+        });
+    }
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    for (auto const& check : checks) {
+        if (!check.ok && !check.hint.empty()) {
+            std::println("{}",
+                         cppx::terminal::format_diagnostic({
+                             .severity = cppx::terminal::DiagnosticSeverity::warning,
+                             .message = check.hint,
+                             .context = check.name,
+                         }));
+        }
+    }
 }
 
 auto resource_diagnostic_json(
