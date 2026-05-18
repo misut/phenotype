@@ -1032,6 +1032,10 @@ duplicate
     assert(debug_text.find("\"view_mode\"") != std::string::npos);
     assert(debug_text.find("\"Gallery View\"") != std::string::npos);
     assert(debug_text.find("\"entry_symbol_summary\"") != std::string::npos);
+    assert(debug_text.find("\"preferences\"") != std::string::npos);
+    assert(debug_text.find("\"system_settings\"") != std::string::npos);
+    assert(debug_text.find("\"Pretendard package default")
+           != std::string::npos);
     assert(debug_text.find("\"source\":\"file_explorer_shared::entry_symbol\"")
            != std::string::npos);
     assert(debug_text.find("\"presentation_role\":\"file_type\"")

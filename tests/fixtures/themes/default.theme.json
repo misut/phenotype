@@ -231,5 +231,6 @@
   "space_2xl": 32,
   "space_3xl": 48,
   "state_focus_ring_width": 2,
-  "line_height_ratio": 1.6
+  "line_height_ratio": 1.6,
+  "scroll_delta_multiplier": 1
 }

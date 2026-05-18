@@ -120,7 +120,7 @@ inline std::optional<unsigned int> stub_renderer_hit_test(
 inline void stub_open_url(char const*, unsigned int) {}
 
 inline ::phenotype::diag::PlatformCapabilitiesSnapshot stub_debug_capabilities() {
-    return {
+    ::phenotype::diag::PlatformCapabilitiesSnapshot snapshot{
         "desktop-stub",
         true,
         true,
@@ -132,6 +132,24 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot stub_debug_capabilities()
         false,
         false,
     };
+    snapshot.system_settings = ::phenotype::PlatformSystemSettingsSnapshot{
+        .source = "desktop-stub-fallback",
+        .font_family = "Pretendard",
+        .body_font_size = 16.0f,
+        .heading_font_size = 22.4f,
+        .small_font_size = 14.4f,
+        .line_height_ratio = 1.6f,
+        .font_scale = 1.0f,
+        .text_size_source = "fallback",
+        .preferred_scroller_style = "none",
+        .overlay_scrollbars = false,
+        .scroll_line_height = 25.6f,
+        .scroll_wheel_lines = 3.0f,
+        .scroll_page_mode = false,
+        .scroll_delta_multiplier = 1.0f,
+        .scroll_source = "fallback",
+    };
+    return snapshot;
 }
 
 inline json::Value stub_platform_runtime_details_json() {
@@ -141,6 +159,10 @@ inline json::Value stub_platform_runtime_details_json() {
         json::Value{
             ::phenotype::diag::detail::empty_material_renderer_contract(
                 "stub-semantic-material-fallback")});
+    runtime.emplace(
+        "system_settings",
+        ::phenotype::diag::system_settings_to_json(
+            stub_debug_capabilities().system_settings));
     return json::Value{std::move(runtime)};
 }
 

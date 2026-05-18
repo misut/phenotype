@@ -646,6 +646,7 @@ struct PlatformCapabilitiesSnapshot {
     bool reduce_motion = false;
     bool material_shader_blur = false;
     bool material_frame_history = false;
+    PlatformSystemSettingsSnapshot system_settings{};
 };
 
 struct PlatformRuntimeSnapshot {
@@ -2341,6 +2342,31 @@ inline json::Value semantic_node_to_json(SemanticNodeSnapshot const& node) {
     return json::Value{std::move(out)};
 }
 
+inline json::Value system_settings_to_json(
+        PlatformSystemSettingsSnapshot const& settings) {
+    json::Object system;
+    system.emplace("source", json::Value{settings.source});
+    system.emplace("font_family", json::Value{settings.font_family});
+    system.emplace("body_font_size", json::Value{settings.body_font_size});
+    system.emplace("heading_font_size", json::Value{settings.heading_font_size});
+    system.emplace("small_font_size", json::Value{settings.small_font_size});
+    system.emplace("line_height_ratio", json::Value{settings.line_height_ratio});
+    system.emplace("font_scale", json::Value{settings.font_scale});
+    system.emplace("text_size_source", json::Value{settings.text_size_source});
+    system.emplace(
+        "preferred_scroller_style",
+        json::Value{settings.preferred_scroller_style});
+    system.emplace("overlay_scrollbars", json::Value{settings.overlay_scrollbars});
+    system.emplace("scroll_line_height", json::Value{settings.scroll_line_height});
+    system.emplace("scroll_wheel_lines", json::Value{settings.scroll_wheel_lines});
+    system.emplace("scroll_page_mode", json::Value{settings.scroll_page_mode});
+    system.emplace(
+        "scroll_delta_multiplier",
+        json::Value{settings.scroll_delta_multiplier});
+    system.emplace("scroll_source", json::Value{settings.scroll_source});
+    return json::Value{std::move(system)};
+}
+
 inline json::Value platform_capabilities_to_json(
         PlatformCapabilitiesSnapshot const& capabilities) {
     json::Object out;
@@ -2377,6 +2403,9 @@ inline json::Value platform_capabilities_to_json(
         "increase_contrast",
         json::Value{capabilities.increase_contrast});
     out.emplace("reduce_motion", json::Value{capabilities.reduce_motion});
+    out.emplace(
+        "system_settings",
+        system_settings_to_json(capabilities.system_settings));
     return json::Value{std::move(out)};
 }
 

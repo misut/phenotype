@@ -343,6 +343,43 @@ void test_default_theme_glass_contract() {
     std::puts("PASS: default theme exposes Apple glass contract metadata");
 }
 
+void test_system_theme_preferences_are_pure_overlays() {
+    Theme theme{};
+    theme.default_font_family = "Pretendard";
+    theme.body_font_size = 14.0f;
+    theme.heading_font_size = 18.0f;
+    theme.small_font_size = 12.0f;
+    theme.scroll_delta_multiplier = 1.0f;
+
+    PlatformSystemSettingsSnapshot system{};
+    system.source = "test-system";
+    system.font_family = "System UI";
+    system.font_scale = 1.25f;
+    system.line_height_ratio = 1.6f;
+    system.scroll_delta_multiplier = 1.0f;
+
+    ThemePreferenceOverrides overrides{};
+    overrides.font_scale = 1.2f;
+    overrides.scroll_delta_multiplier = 1.5f;
+
+    auto applied = apply_system_theme_preferences(theme, system, overrides);
+    assert(applied.default_font_family == "Pretendard");
+    assert(std::fabs(applied.body_font_size - 21.0f) < 0.001f);
+    assert(std::fabs(applied.heading_font_size - 27.0f) < 0.001f);
+    assert(std::fabs(applied.small_font_size - 18.0f) < 0.001f);
+    assert(applied.scroll_delta_multiplier == 1.5f);
+
+    overrides.font_family = "UserFont";
+    overrides.body_font_size = 19.0f;
+    overrides.small_font_size = 13.0f;
+    applied = apply_system_theme_preferences(theme, system, overrides);
+    assert(applied.default_font_family == "UserFont");
+    assert(applied.body_font_size == 19.0f);
+    assert(applied.small_font_size == 13.0f);
+
+    std::puts("PASS: system theme preferences are pure overlays");
+}
+
 void test_sized_box_in_row() {
     detail::g_app.arena.reset();
 
@@ -4582,6 +4619,7 @@ int main() {
     test_measure_text_cache_dedup();
     test_set_theme_updates_and_invalidates_cache();
     test_default_theme_glass_contract();
+    test_system_theme_preferences_are_pure_overlays();
     test_sized_box_in_row();
     test_image_widget_layout_and_emit();
     test_svg_image_widget_uses_stable_paint_token();

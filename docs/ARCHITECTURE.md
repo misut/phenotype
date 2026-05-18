@@ -215,6 +215,15 @@ surface roles. The root helpers `default_theme_profile_name`,
 CLI output, and artifacts can check the same contract without giving backend
 adapters any policy authority.
 
+OS-derived typography and scrolling preferences follow the same edge-to-core
+rule. Native adapters collect a `PlatformSystemSettingsSnapshot` from their
+platform APIs, then the core applies it through the pure
+`apply_system_theme_preferences(Theme, PlatformSystemSettingsSnapshot,
+ThemePreferenceOverrides)` helper. Package defaults such as Pretendard remain
+explicit theme inputs, OS font scale and scroll policy arrive as immutable
+snapshot fields, and app/user overrides win without letting a backend mutate
+theme state directly.
+
 `layout::glass_surface_options` and `layout::glass_surface` provide the
 high-level Apple-glass surface presets used by examples. They are not a new
 renderer path: each preset lowers to `MaterialSurfaceOptions`, then to the same
@@ -849,6 +858,13 @@ material/runtime extensions.
 - **Windows**: Win32 shell + DirectWrite text measurement/atlas + Direct3D 12 renderer + IME composition overlay + native `DrawImage` for local files and async remote images. The shell creates an `HWND`, passes it plus viewport metadata through `NativeSurfaceDescriptor`, and maps `IntegratedTitlebar` to a DWM custom frame with resize-edge hit testing, caption-button delegation, blank-toolbar dragging, phenotype toolbar hit-region preservation, DPI-aware size limits, and `WM_SIZING` aspect-ratio enforcement. The renderer accepts SVG/icon `DrawArc`, `Path`, and `FillPath` commands: line/curve/arc strokes execute as color-pipeline capsules, small fills execute as color-pipeline scanline strips, and larger path fills ear-clip into the existing triangle pipeline. There is no GLFW or toolkit window shim on the Windows desktop path. Empty non-monospace font requests prefer Pretendard before falling back to Segoe UI.
 - **Android**: GameActivity-driven shell (`examples/android/`) + Vulkan renderer with three instanced pipelines: a color pipeline (FillRect / StrokeRect / RoundRect / DrawLine / Clear — same `ColorInstance { rect; color; params }` layout and `params.z` draw-type dispatch as the macOS / Windows color pipelines); a text pipeline that samples an R8 atlas rasterised via JNI into `android.graphics.Paint` / `Canvas` / `Bitmap` (UTF-8 → UTF-16 via `cppx::unicode::utf8_to_utf16` before `JNIEnv::NewString`, with empty non-monospace requests preferring Pretendard and relying on Android's deterministic default fallback when unavailable); and an image pipeline that samples a persistent 2048² RGBA8 atlas strip-packed from images decoded via NDK's `AImageDecoder` (PNG / JPEG / WebP / GIF / HEIF). Image URLs resolve through `asset://path` (bundled assets via `AAssetManager`) or absolute filesystem paths (`file://` prefix stripped); `http(s)://` renders a placeholder until Stage 7. Input routes GameActivity's `android_input_buffer` (motionEvents + keyEvents + ACTION_SCROLL axes) into `phenotype::native::detail::dispatch_*` via the `phenotype_android_dispatch_{pointer,key,char,scroll}` C ABI; the Android renderer snapshots each flushed command buffer so `renderer.hit_test` can walk the `HitRegionCmd` list in reverse without forcing another view pass. The example driver boots a baked-in counter demo via `phenotype_android_start_app`, which instantiates `detail::run_host<demo6::State, demo6::Msg>` so view/update runs entirely in-library. GLSL sources live at `src/phenotype.native.android.shaders/{color,text,image}.{vert,frag}` and are precompiled to SPIR-V via `tools/compile_android_shaders.sh` (NDK's bundled `glslc`) into `src/phenotype.native.android.shaders.inl`, which the native module includes directly. `debug_api` is feature-parity with macOS / Windows: every `renderer_flush` copies the presented swapchain image into a persistent `debug_capture_image` so `capture_frame_rgba()` reads a fresh snapshot on demand; `snapshot_json` + `write_artifact_bundle` delegate to the shared `::phenotype::diag::detail` helpers. Resume handling clears `last_paint_hash` and calls `trigger_rebuild()` from `phenotype_android_attach_surface` so the first post-`APP_CMD_INIT_WINDOW` frame paints instead of staying black. Emits `libphenotype-modules.a` via exon; the example Gradle project packages it into an APK together with `androidx.games:games-activity:3.0.5` and links `libjnigraphics.so` for both `AndroidBitmap_*` zero-copy pixel reads and the `AImageDecoder_*` family.
 - **Linux / other desktop**: shared stub backend
+
+All native capability payloads include `system_settings`: macOS uses
+CoreText/AppKit/NSScroller, Windows uses `SystemParametersInfoW`, and Android,
+WASI, and the stub backend publish deterministic fallback values until richer
+platform settings are wired through their shells. Renderers may report the same
+snapshot in `platform_runtime.details`, but they do not decide font or scroll
+policy themselves.
 
 ### Modularity guarantee
 

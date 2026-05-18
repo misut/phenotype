@@ -229,6 +229,30 @@ PLATFORM_CAPABILITY_BOOL_FIELDS = (
     "reduce_motion",
 )
 
+PLATFORM_SYSTEM_SETTING_STRING_FIELDS = (
+    "source",
+    "font_family",
+    "text_size_source",
+    "preferred_scroller_style",
+    "scroll_source",
+)
+
+PLATFORM_SYSTEM_SETTING_NUMBER_FIELDS = (
+    "body_font_size",
+    "heading_font_size",
+    "small_font_size",
+    "line_height_ratio",
+    "font_scale",
+    "scroll_line_height",
+    "scroll_wheel_lines",
+    "scroll_delta_multiplier",
+)
+
+PLATFORM_SYSTEM_SETTING_BOOL_FIELDS = (
+    "overlay_scrollbars",
+    "scroll_page_mode",
+)
+
 
 def suggested_action_for_failure(
     path: str,
@@ -821,6 +845,64 @@ def check_string_field(
         hint=hint,
         record_success=False)
     return item if isinstance(item, str) else None
+
+
+def check_platform_system_settings_contract(
+    report: Report,
+    capabilities: JsonObject,
+) -> None:
+    settings = check_object_field(
+        report,
+        capabilities,
+        "system_settings",
+        "debug.platform_capabilities",
+        likely_layer="platform-system-settings",
+        hint=(
+            "Platform adapters should expose OS-derived font and scroll "
+            "preferences as a snapshot so artifacts explain user-setting "
+            "dependent layout and input behavior."),
+    )
+    if settings is None:
+        return
+
+    for key in PLATFORM_SYSTEM_SETTING_STRING_FIELDS:
+        check_string_field(
+            report,
+            settings,
+            key,
+            "debug.platform_capabilities.system_settings",
+            allow_empty=(key == "font_family"),
+            likely_layer="platform-system-settings",
+            hint=(
+                "System settings string fields identify the platform source "
+                "and policy used to derive font/scroll preferences."),
+        )
+
+    for key in PLATFORM_SYSTEM_SETTING_NUMBER_FIELDS:
+        minimum = 0.0 if key == "scroll_wheel_lines" else 0.01
+        check_number_field(
+            report,
+            settings,
+            key,
+            "debug.platform_capabilities.system_settings",
+            min_value=minimum,
+            likely_layer="platform-system-settings",
+            hint=(
+                "System settings numeric fields must be explicit and bounded "
+                "so font scale and scroll speed differences are debuggable."),
+        )
+
+    for key in PLATFORM_SYSTEM_SETTING_BOOL_FIELDS:
+        check_bool_field(
+            report,
+            settings,
+            key,
+            "debug.platform_capabilities.system_settings",
+            likely_layer="platform-system-settings",
+            hint=(
+                "System settings booleans document platform scroller behavior "
+                "without asking the verifier to infer it from pixels."),
+        )
 
 
 def check_file_explorer_native_chrome_contract(
@@ -7888,6 +7970,8 @@ def verify(args: argparse.Namespace) -> int:
                 "material/backend features explicitly so verifier output can "
                 "explain pure planner decisions."),
         )
+
+    check_platform_system_settings_contract(report, capabilities)
 
     for key in (
         "snapshot_json",

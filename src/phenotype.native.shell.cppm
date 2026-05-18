@@ -313,9 +313,14 @@ inline float normalize_scroll_delta(platform_api const* platform,
     if (dy == 0.0) return 0.0f;
     if (line_height <= 0.0f)
         line_height = 1.0f;
-    if (platform && platform->input.scroll_delta_y)
-        return platform->input.scroll_delta_y(dy, line_height, viewport_height);
-    return static_cast<float>(dy) * line_height * 3.0f;
+    float delta = platform && platform->input.scroll_delta_y
+        ? platform->input.scroll_delta_y(dy, line_height, viewport_height)
+        : static_cast<float>(dy) * line_height * 3.0f;
+    auto const& theme = ::phenotype::current_theme();
+    float multiplier = theme.scroll_delta_multiplier;
+    if (!(multiplier > 0.0f) || !std::isfinite(multiplier))
+        multiplier = 1.0f;
+    return delta * multiplier;
 }
 
 inline void repaint_current() {
