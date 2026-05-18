@@ -300,6 +300,7 @@ struct ExplorerChromeMetrics {
     float icon_grid_label_height = 0.0f;
     float icon_grid_label_font_size = 0.0f;
     std::string icon_grid_label_policy;
+    float icon_grid_top_inset = 0.0f;
     float icon_grid_gap = 0.0f;
     float icon_grid_scroll_height = 0.0f;
     int icon_grid_columns = 0;
@@ -434,6 +435,7 @@ struct ExplorerChromeMetrics {
     std::string theme_accessibility_policy;
     std::string theme_fallback_policy;
     std::string chrome_geometry_policy;
+    std::string finder_density_policy;
     std::string window_control_marker_mode;
     std::string native_window_control_owner;
     std::string window_control_render_policy;
@@ -590,6 +592,7 @@ inline constexpr float k_desktop_icon_grid_label_height = 46.0f;
 inline constexpr float k_desktop_icon_grid_label_font_size = 14.0f;
 inline constexpr char k_desktop_icon_grid_label_policy[] =
     "finder_two_line_middle_ellipsis_preserve_suffix";
+inline constexpr float k_desktop_icon_grid_top_inset = 8.0f;
 inline constexpr float k_desktop_icon_grid_gap = 24.0f;
 
 inline constexpr std::array<ExplorerSidebarSymbol, 10>
@@ -642,6 +645,8 @@ inline auto sidebar_symbol_name_for_token(std::string_view token) noexcept
 }
 inline constexpr char k_desktop_chrome_geometry_policy[] =
     "finder_integrated_glass_chrome_geometry_v1";
+inline constexpr char k_desktop_finder_density_policy[] =
+    "finder_reference_density_icon_grid_top_inset_v1";
 
 inline bool mobile_profile(std::string_view profile) {
     return profile == "mobile";
@@ -1021,6 +1026,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_grid_label_height = 0.0f,
             .icon_grid_label_font_size = 0.0f,
             .icon_grid_label_policy = "not_applicable_mobile_row_list",
+            .icon_grid_top_inset = 0.0f,
             .icon_grid_gap = 0.0f,
             .icon_grid_scroll_height = 0.0f,
             .icon_grid_columns = 0,
@@ -1247,6 +1253,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .theme_fallback_policy =
                 std::string{theme_contract::default_theme_fallback_policy()},
             .chrome_geometry_policy = "n/a",
+            .finder_density_policy = "not_applicable_mobile_row_list",
             .window_control_marker_mode = "none",
             .native_window_control_owner = "none",
             .window_control_render_policy = "not_applicable_mobile_shell",
@@ -1359,6 +1366,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .icon_grid_label_height = k_desktop_icon_grid_label_height,
         .icon_grid_label_font_size = k_desktop_icon_grid_label_font_size,
         .icon_grid_label_policy = k_desktop_icon_grid_label_policy,
+        .icon_grid_top_inset = k_desktop_icon_grid_top_inset,
         .icon_grid_gap = k_desktop_icon_grid_gap,
         .icon_grid_scroll_height = scroll_height,
         .icon_grid_columns = columns,
@@ -1583,6 +1591,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .theme_fallback_policy =
             std::string{theme_contract::default_theme_fallback_policy()},
         .chrome_geometry_policy = k_desktop_chrome_geometry_policy,
+        .finder_density_policy = k_desktop_finder_density_policy,
         .window_control_marker_mode = "runtime-native-controls",
         .native_window_control_owner = "platform-edge",
         .window_control_render_policy =
@@ -2731,6 +2740,8 @@ inline json::Value explorer_chrome_debug_json(
     geometry.emplace("sidebar_surface_x", json::Value{chrome.sidebar_surface_x});
     geometry.emplace("sidebar_surface_y", json::Value{chrome.sidebar_surface_y});
     geometry.emplace("sidebar_first_row_y", json::Value{chrome.sidebar_first_row_y});
+    geometry.emplace("finder_density_policy", json::Value{chrome.finder_density_policy});
+    geometry.emplace("icon_grid_top_inset", json::Value{chrome.icon_grid_top_inset});
 
     json::Object icon_system;
     icon_system.emplace("module", json::Value{chrome.icon_module});
@@ -3095,6 +3106,7 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("icon_grid_label_height", json::Value{chrome.icon_grid_label_height});
     out.emplace("icon_grid_label_font_size", json::Value{chrome.icon_grid_label_font_size});
     out.emplace("icon_grid_label_policy", json::Value{chrome.icon_grid_label_policy});
+    out.emplace("icon_grid_top_inset", json::Value{chrome.icon_grid_top_inset});
     out.emplace("icon_grid_gap", json::Value{chrome.icon_grid_gap});
     out.emplace("icon_grid_scroll_height", json::Value{chrome.icon_grid_scroll_height});
     out.emplace("icon_grid_columns", json::Value{static_cast<std::int64_t>(chrome.icon_grid_columns)});
@@ -3127,6 +3139,7 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("finder_segmented_toolbar", json::Value{chrome.finder_segmented_toolbar});
     out.emplace("more_actions_open", json::Value{chrome.more_actions_open});
     out.emplace("status_bar_visible", json::Value{chrome.status_bar_visible});
+    out.emplace("finder_density_policy", json::Value{chrome.finder_density_policy});
     out.emplace("native_window", json::Value{std::move(native_window)});
     out.emplace("geometry", json::Value{std::move(geometry)});
     out.emplace("icon_system", json::Value{std::move(icon_system)});

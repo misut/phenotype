@@ -459,6 +459,14 @@
       "equals": 76.0
     },
     {
+      "path": "application.file_explorer.chrome.geometry.finder_density_policy",
+      "equals": "finder_reference_density_icon_grid_top_inset_v1"
+    },
+    {
+      "path": "application.file_explorer.chrome.geometry.icon_grid_top_inset",
+      "equals": 8.0
+    },
+    {
       "path": "application.file_explorer.chrome.sidebar_selected_row_background_alpha",
       "equals": 238
     },
@@ -1210,6 +1218,10 @@
       "equals": "finder_two_line_middle_ellipsis_preserve_suffix"
     },
     {
+      "path": "application.file_explorer.chrome.icon_grid_top_inset",
+      "equals": 8.0
+    },
+    {
       "path": "application.file_explorer.chrome.icon_grid_gap",
       "equals": 24.0
     },
@@ -1288,6 +1300,10 @@
     {
       "path": "application.file_explorer.chrome.status_bar_visible",
       "equals": false
+    },
+    {
+      "path": "application.file_explorer.chrome.finder_density_policy",
+      "equals": "finder_reference_density_icon_grid_top_inset_v1"
     },
     {
       "path": "application.file_explorer.keyboard_commands",

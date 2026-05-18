@@ -1722,7 +1722,7 @@ void finder_grid(State const& state,
                 widget::text(state.labels.no_matching_files);
                 return;
             }
-            layout::spacer(18.0f);
+            layout::spacer(chrome.icon_grid_top_inset);
             layout::scroll_view(chrome.icon_grid_scroll_height, [&] {
                 auto columns = file_explorer_demo::explorer_icon_grid_columns(chrome);
                 layout::grid(std::move(columns), chrome.icon_grid_row_height, [&] {

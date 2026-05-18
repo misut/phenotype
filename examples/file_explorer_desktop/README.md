@@ -166,11 +166,14 @@ selects the folder so the status and delete capability are observable, while a
 second activation opens it. The CLI can exercise the same behavior with
 `activate:Folder`, or bypass it with `open:Folder` when a test wants direct
 navigation.
-The icon-grid column count, visible row budget, thumbnail canvas, label size,
-titlebar reserve, sidebar row metrics, sidebar icon/label placement, toolbar
-group/icon button metrics, and Finder chrome geometry come from the shared pure
-`ExplorerChromeMetrics` contract, so `phenotype drive file-explorer --json`
-can report the same layout decisions without launching a native window.
+The icon-grid column count, visible row budget, top inset, thumbnail canvas,
+label size, titlebar reserve, sidebar row metrics, sidebar icon/label
+placement, toolbar group/icon button metrics, and Finder chrome geometry come
+from the shared pure `ExplorerChromeMetrics` contract, so
+`phenotype drive file-explorer --json` can report the same layout decisions
+without launching a native window. The `finder_density_policy` field names the
+reference-density contract that keeps the first icon row anchored by data
+instead of a renderer-local spacer.
 Finder chrome surfaces are created through `layout::glass_surface_options`
 presets, then locally constrained with those shared metrics, so the example
 uses the same material surface API that other apps can call directly.
