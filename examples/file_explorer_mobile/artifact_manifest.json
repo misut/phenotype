@@ -40,7 +40,7 @@
     "fallback": 0,
     "backdrop_sampling": 22,
     "contract_versions": {
-      "20": 22
+      "21": 22
     },
     "theme_foreground_matches_theme": 22,
     "theme_accent_matches_theme": 22,
@@ -132,6 +132,22 @@
     {
       "path": "application.file_explorer.profile",
       "equals": "mobile"
+    },
+    {
+      "path": "application.file_explorer.input_model.focus_visibility_policy",
+      "equals": "keyboard_tab_navigation_shows_ring_pointer_click_hides_ring"
+    },
+    {
+      "path": "application.file_explorer.input_model.focus_ring_style",
+      "equals": "macos_blue_keyboard_focus_ring_outset_4px_2px_stroke"
+    },
+    {
+      "path": "application.file_explorer.input_model.focus_visible",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.input_model.focus_target",
+      "equals": "none"
     },
     {
       "path": "application.file_explorer.relative_location",

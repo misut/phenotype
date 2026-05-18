@@ -133,20 +133,52 @@ fallback = []
     assert(parsed_enter.ok);
     assert(parsed_enter.input.kind
            == demo::ExplorerInputKind::ActivateSelected);
+    assert(parsed_enter.input.modality == demo::ExplorerInputModality::Keyboard);
     auto parsed_delete_key = demo::parse_explorer_input("key:delete");
     assert(parsed_delete_key.ok);
     assert(parsed_delete_key.input.kind
            == demo::ExplorerInputKind::DeleteSelected);
+    assert(parsed_delete_key.input.modality
+           == demo::ExplorerInputModality::Keyboard);
     auto parsed_duplicate_shortcut =
         demo::parse_explorer_input("shortcut:duplicate");
     assert(parsed_duplicate_shortcut.ok);
     assert(parsed_duplicate_shortcut.input.kind
            == demo::ExplorerInputKind::DuplicateSelected);
+    assert(parsed_duplicate_shortcut.input.modality
+           == demo::ExplorerInputModality::Keyboard);
     auto parsed_find_shortcut =
         demo::parse_explorer_input("shortcut:find");
     assert(parsed_find_shortcut.ok);
     assert(parsed_find_shortcut.input.kind
            == demo::ExplorerInputKind::FocusSearch);
+    assert(parsed_find_shortcut.input.modality
+           == demo::ExplorerInputModality::Keyboard);
+    auto parsed_tab = demo::parse_explorer_input("key:tab");
+    assert(parsed_tab.ok);
+    assert(parsed_tab.input.kind == demo::ExplorerInputKind::TabFocus);
+    assert(parsed_tab.input.modality == demo::ExplorerInputModality::Keyboard);
+    auto parsed_shift_tab = demo::parse_explorer_input("shift-tab");
+    assert(parsed_shift_tab.ok);
+    assert(parsed_shift_tab.input.kind
+           == demo::ExplorerInputKind::ShiftTabFocus);
+    auto parsed_focus_search = demo::parse_explorer_input("focus:search");
+    assert(parsed_focus_search.ok);
+    assert(parsed_focus_search.input.kind
+           == demo::ExplorerInputKind::FocusTarget);
+    assert(parsed_focus_search.input.value == "search");
+    auto parsed_pointer_content =
+        demo::parse_explorer_input("pointer:content-grid");
+    assert(parsed_pointer_content.ok);
+    assert(parsed_pointer_content.input.kind
+           == demo::ExplorerInputKind::PointerFocus);
+    assert(parsed_pointer_content.input.modality
+           == demo::ExplorerInputModality::Pointer);
+    assert(parsed_pointer_content.input.value == "content_grid");
+    auto parsed_click = demo::parse_explorer_input("click:README.txt");
+    assert(parsed_click.ok);
+    assert(parsed_click.input.kind == demo::ExplorerInputKind::ActivateEntry);
+    assert(parsed_click.input.modality == demo::ExplorerInputModality::Pointer);
     auto parsed_arrow_down =
         demo::parse_explorer_input("key:arrow-down");
     assert(parsed_arrow_down.ok);
@@ -247,6 +279,22 @@ duplicate
     auto expected_missing =
         demo::parse_explorer_expectation("missing-entry:Ghost.txt");
     assert(expected_missing.ok);
+    auto expected_focus =
+        demo::parse_explorer_expectation("focus-target:search");
+    assert(expected_focus.ok);
+    assert(expected_focus.expectation.kind
+           == demo::ExplorerExpectationKind::FocusTarget);
+    assert(expected_focus.expectation.value == "search");
+    auto expected_focus_visible =
+        demo::parse_explorer_expectation("focus-visible:true");
+    assert(expected_focus_visible.ok);
+    assert(expected_focus_visible.expectation.kind
+           == demo::ExplorerExpectationKind::FocusVisible);
+    auto expected_input_modality =
+        demo::parse_explorer_expectation("input-modality:keyboard");
+    assert(expected_input_modality.ok);
+    assert(expected_input_modality.expectation.kind
+           == demo::ExplorerExpectationKind::InputModality);
     auto bad_expectation = demo::parse_explorer_expectation("selected");
     assert(!bad_expectation.ok);
 
@@ -513,11 +561,11 @@ duplicate
     assert(chrome.window_control_marker_mode == "runtime-native-controls");
     auto artifact_chrome =
         demo::explorer_chrome_with_artifact_window_markers(chrome);
-    assert(artifact_chrome.content_window_control_markers);
-    assert(artifact_chrome.artifact_window_control_markers);
+    assert(!artifact_chrome.content_window_control_markers);
+    assert(!artifact_chrome.artifact_window_control_markers);
     assert(!artifact_chrome.duplicate_window_controls);
     assert(artifact_chrome.window_control_marker_mode
-           == "artifact-probe-marker");
+           == "runtime-native-controls");
     assert(!chrome.status_bar_visible);
     assert(demo::explorer_icon_grid_columns(chrome).size() == 6);
     std::string const viewport_profile = "test-status-bar-viewport";
@@ -625,9 +673,53 @@ duplicate
     assert(keyboard_snap.selected_index
            == std::min<std::size_t>(
                static_cast<std::size_t>(
-                   keyboard_chrome.icon_grid_visible_capacity),
+               keyboard_chrome.icon_grid_visible_capacity),
                keyboard_entries.size() - 1));
+    assert(keyboard_state.last_input_modality
+           == demo::ExplorerInputModality::Keyboard);
+    assert(keyboard_state.focus_target
+           == demo::ExplorerFocusTarget::ContentGrid);
+    assert(keyboard_state.focus_visible);
+    assert(demo::focus_ring_visibility_reason(keyboard_state)
+           == "keyboard_focus_navigation");
     fs::remove_all(keyboard_state.root, ec);
+
+    std::string const focus_profile = "test-focus-modality-contract";
+    auto focus_state = demo::make_state(focus_profile);
+    assert(focus_state.focus_target == demo::ExplorerFocusTarget::None);
+    assert(!focus_state.focus_visible);
+    demo::apply_explorer_input(focus_state, parsed_click.input, focus_profile);
+    assert(focus_state.selected_name == "README.txt");
+    assert(focus_state.last_input_modality
+           == demo::ExplorerInputModality::Pointer);
+    assert(focus_state.focus_target == demo::ExplorerFocusTarget::ContentGrid);
+    assert(!focus_state.focus_visible);
+    assert(demo::focus_ring_visibility_reason(focus_state)
+           == "pointer_input_hides_focus_ring");
+    demo::apply_explorer_input(focus_state, parsed_tab.input, focus_profile);
+    assert(focus_state.last_input_modality
+           == demo::ExplorerInputModality::Keyboard);
+    assert(focus_state.focus_target == demo::ExplorerFocusTarget::PreviewPanel);
+    assert(focus_state.focus_visible);
+    demo::apply_explorer_input(
+        focus_state,
+        parsed_focus_search.input,
+        focus_profile);
+    assert(focus_state.focus_target == demo::ExplorerFocusTarget::Search);
+    assert(focus_state.focus_visible);
+    demo::apply_explorer_input(
+        focus_state,
+        parsed_pointer_content.input,
+        focus_profile);
+    assert(focus_state.focus_target == demo::ExplorerFocusTarget::ContentGrid);
+    assert(!focus_state.focus_visible);
+    demo::apply_explorer_input(
+        focus_state,
+        parsed_shift_tab.input,
+        focus_profile);
+    assert(focus_state.focus_target == demo::ExplorerFocusTarget::Search);
+    assert(focus_state.focus_visible);
+    fs::remove_all(focus_state.root, ec);
 
     auto outside = state.root.parent_path()
         / "phenotype-file-explorer-outside.txt";
@@ -831,6 +923,14 @@ duplicate
     assert(debug_text.find("\"profile\"") != std::string::npos);
     assert(debug_text.find(profile) != std::string::npos);
     assert(debug_text.find("\"resource_system\"") != std::string::npos);
+    assert(debug_text.find("\"input_model\"") != std::string::npos);
+    assert(debug_text.find(
+        "\"focus_visibility_policy\":\"keyboard_tab_navigation_shows_ring_pointer_click_hides_ring\"")
+        != std::string::npos);
+    assert(debug_text.find(
+        "\"focus_ring_style\":\"macos_blue_keyboard_focus_ring_outset_4px_2px_stroke\"")
+        != std::string::npos);
+    assert(debug_text.find("\"focus_order\"") != std::string::npos);
     assert(debug_text.find("\"svg_asset_count\":1") != std::string::npos);
     assert(debug_text.find("\"preload_svg_asset_count\":1")
            != std::string::npos);
@@ -1218,6 +1318,46 @@ duplicate
     assert(keyboard_driven.snapshot.selected_index == 1);
     assert(keyboard_driven.snapshot.selected.name
            == keyboard_driven.snapshot.entries[1].name);
+    fs::remove_all(navigation_root, ec);
+
+    fs::remove_all(navigation_root, ec);
+    std::vector<demo::ExplorerInput> focus_inputs{
+        parsed_click.input,
+        parsed_tab.input,
+        parsed_pointer_content.input,
+    };
+    auto focus_driven = demo::drive_explorer(
+        navigation_profile,
+        focus_inputs);
+    assert(focus_driven.trace.size() == 3);
+    assert(focus_driven.trace[0].focus_target
+           == demo::ExplorerFocusTarget::ContentGrid);
+    assert(!focus_driven.trace[0].focus_visible);
+    assert(focus_driven.trace[0].last_input_modality
+           == demo::ExplorerInputModality::Pointer);
+    assert(focus_driven.trace[1].focus_target
+           == demo::ExplorerFocusTarget::PreviewPanel);
+    assert(focus_driven.trace[1].focus_visible);
+    assert(focus_driven.trace[2].focus_target
+           == demo::ExplorerFocusTarget::ContentGrid);
+    assert(!focus_driven.trace[2].focus_visible);
+    std::vector<demo::ExplorerExpectation> focus_expectations{
+        {.kind = demo::ExplorerExpectationKind::FocusTarget,
+         .value = "content_grid"},
+        {.kind = demo::ExplorerExpectationKind::FocusVisible,
+         .value = "false"},
+        {.kind = demo::ExplorerExpectationKind::InputModality,
+         .value = "pointer"},
+    };
+    auto checked_focus =
+        demo::check_explorer_expectations(focus_driven, focus_expectations);
+    assert(demo::explorer_expectations_ok(checked_focus));
+    auto failed_focus_visible = demo::check_explorer_expectation(
+        focus_driven,
+        {.kind = demo::ExplorerExpectationKind::FocusVisible,
+         .value = "true"});
+    assert(!failed_focus_visible.ok);
+    assert(failed_focus_visible.actual == "false");
     fs::remove_all(navigation_root, ec);
 
     demo::reset_demo_tree(state, profile);

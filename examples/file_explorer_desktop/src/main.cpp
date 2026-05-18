@@ -159,11 +159,6 @@ bool initial_more_actions_open() {
     return env_truthy(std::getenv("PHENOTYPE_FILE_EXPLORER_MORE_ACTIONS"));
 }
 
-bool initial_artifact_chrome_markers() {
-    return env_truthy(
-        std::getenv("PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS"));
-}
-
 fs::path initial_package_root() {
     if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT")) {
         if (*raw)
@@ -209,7 +204,6 @@ struct State {
     file_explorer_demo::ExplorerLabels labels;
     bool search_visible = false;
     bool more_actions_open = false;
-    bool artifact_chrome_markers = false;
 
     State()
         : explorer(initial_explorer_state()),
@@ -217,8 +211,7 @@ struct State {
               initial_locale(),
               runtime_resource_catalog())),
           search_visible(!explorer.search.empty()),
-          more_actions_open(initial_more_actions_open()),
-          artifact_chrome_markers(initial_artifact_chrome_markers()) {
+          more_actions_open(initial_more_actions_open()) {
     }
 };
 
@@ -239,10 +232,8 @@ auto file_explorer_application_debug_payload() {
     auto chrome = file_explorer_demo::explorer_chrome_metrics(
         g_debug_state->explorer,
         "desktop");
-    if (g_debug_state->artifact_chrome_markers) {
-        chrome = file_explorer_demo::explorer_chrome_with_artifact_window_markers(
-            std::move(chrome));
-    }
+    chrome = file_explorer_demo::explorer_chrome_with_artifact_window_markers(
+        std::move(chrome));
     chrome.more_actions_open = g_debug_state->more_actions_open;
     chrome.overflow_action_button_count = g_debug_state->more_actions_open
         ? 4
@@ -1333,61 +1324,11 @@ void sidebar_heading(std::string_view label) {
         stable_token(label_text) ^ 0x520000u);
 }
 
-void paint_titlebar_control_marker(phenotype::Painter& painter,
-                                   float x,
-                                   float y,
-                                   phenotype::Color fill,
-                                   phenotype::Color border) {
-    fill_round(painter,
-               x,
-               y + 1.0f,
-               k_titlebar_control_diameter,
-               k_titlebar_control_diameter,
-               k_titlebar_control_diameter * 0.5f,
-               rgba(0, 0, 0, 24));
-    fill_round(painter,
-               x,
-               y,
-               k_titlebar_control_diameter,
-               k_titlebar_control_diameter,
-               k_titlebar_control_diameter * 0.5f,
-               fill);
-    stroke_round(painter,
-                 x,
-                 y,
-                 k_titlebar_control_diameter,
-                 k_titlebar_control_diameter,
-                 k_titlebar_control_diameter * 0.5f,
-                 1.0f,
-                 border);
-}
-
-void titlebar_control_reserve(bool paint_artifact_markers) {
+void titlebar_control_reserve() {
     phenotype::widget::canvas(
         k_sidebar_row_width,
         k_titlebar_control_cluster_height,
-        [paint_artifact_markers](phenotype::Painter& painter) {
-            if (!paint_artifact_markers)
-                return;
-            paint_titlebar_control_marker(
-                painter,
-                k_titlebar_control_start_x,
-                k_titlebar_control_top,
-                rgba(255, 95, 86),
-                rgba(223, 70, 66));
-            paint_titlebar_control_marker(
-                painter,
-                k_titlebar_control_start_x + k_titlebar_control_spacing,
-                k_titlebar_control_top,
-                rgba(255, 189, 46),
-                rgba(222, 158, 38));
-            paint_titlebar_control_marker(
-                painter,
-                k_titlebar_control_start_x + k_titlebar_control_spacing * 2.0f,
-                k_titlebar_control_top,
-                rgba(39, 201, 63),
-                rgba(34, 162, 53));
-        },
+        [](phenotype::Painter&) {},
         {},
         0x530000u);
 }
@@ -1401,7 +1342,7 @@ void finder_sidebar(State const& state) {
     bool const in_root = relative == "Demo Root";
     auto const& labels = state.labels;
     layout::sidebar(k_sidebar_width, [&] {
-        titlebar_control_reserve(state.artifact_chrome_markers);
+        titlebar_control_reserve();
         sidebar_row(labels.sidebar_recents, "recents", "root", in_root);
         sidebar_row(labels.sidebar_shared, "shared", "shared",
                     relative == "Demo Root/Shared");

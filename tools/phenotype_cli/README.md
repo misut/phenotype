@@ -5,6 +5,16 @@ diagnostics, and artifact inspection. The executable presents itself as
 `phenotype` in help output so the package can be renamed or installed under
 that command later without changing command contracts.
 
+Implementation is split into CLI modules so the executable can grow without
+turning `main.cpp` into every subsystem at once:
+
+- `phenotype_cli.common` owns shared JSON escaping, path normalization, check
+  summaries, and resource diagnostic emission.
+- `phenotype_cli.file_explorer` owns file explorer drive JSON, expectation
+  JSON, keyboard/focus model JSON, and localized label emission.
+- `main.cpp` should stay responsible for command parsing, edge IO/process
+  execution, and composing the subcommand results.
+
 The initial scope is intentionally narrow:
 
 - `phenotype doctor` checks repository-local tool and documentation surfaces
@@ -30,14 +40,11 @@ The initial scope is intentionally narrow:
   explorer contract gate from the CLI surface. It runs the shared model tests,
   builds the selected native examples, captures deterministic artifacts, and
   invokes the uv-managed verifier without delegating to the shell wrapper. For
-  desktop captures, the gate injects
-  `PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS=1` so screenshots expose the
-  native window-control reserve. `phenotype run file_explorer_desktop` now uses
-  the same marker default whenever `--artifact-dir` and `--artifact-exit` are
-  combined, unless the caller explicitly supplies
-  `PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS`. The run JSON records both
-  the marker value and whether the CLI injected it. Normal interactive launches
-  leave that reserve blank and rely only on OS-owned controls. The gate can be
+  desktop captures, the gate requires the leading native-control reserve to
+  stay blank in phenotype content while debug/runtime metadata proves AppKit or
+  Win32 owns the real traffic-light/caption-button controls. The CLI no longer
+  injects artifact traffic-light markers because those can visually duplicate
+  OS-owned controls. The gate can be
   narrowed with
   `--profile`, repeated `--view-mode`, and repeated `--scenario` options for
   faster local iteration before running the full gate;
@@ -140,10 +147,12 @@ The initial scope is intentionally narrow:
   preview-painter contract, selection capabilities,
   operation receipts with resolved operation plans, preview excerpts,
   localized labels, package resource metadata, desktop keyboard command
-  descriptors, and optional expectation results. Repeated
+  descriptors, a pure `input_model` describing the last input modality,
+  focus target, focus order, and keyboard-only focus ring visibility, and
+  optional expectation results. Repeated
   `--script` files feed line-based input sequences, and repeated `--expect`
   values make the command a small state verifier for file
-  select/open/read/create/duplicate/delete/view-mode workflows. Each operation
+  select/open/read/create/duplicate/delete/view-mode/focus workflows. Each operation
   plan describes the sandboxed source/destination, read/write/delete flags,
   Trash movement, permanent delete-from-Trash, and fallback reason before the
   receipt reports whether execution succeeded. When
@@ -154,7 +163,10 @@ The initial scope is intentionally narrow:
   `key:enter`, `key:arrow-up`, `key:arrow-down`, `key:arrow-left`,
   `key:arrow-right`, `key:home`, `key:end`, `key:page-up`,
   `key:page-down`, `key:delete`, `key:escape`, `shortcut:find`,
-  `shortcut:duplicate`, and `shortcut:new-folder`.
+  `shortcut:duplicate`, and `shortcut:new-folder`. `key:tab` and
+  `shift-tab` move the pure focus target and set `focus_visible=true`, while
+  `click:*`, `pointer:*`, and `pointer-focus:*` update focus without showing
+  the ring, matching macOS-style pointer-vs-keyboard focus behavior.
 - `phenotype drive glass-showcase` applies deterministic typed inputs to the
   shared glass showcase model without opening a native window. JSON output
   includes the final state, per-input trace, public material kinds, expected
@@ -211,6 +223,16 @@ mise exec -- exon build
   --input select:Project\ Notes.txt \
   --expect location:Demo\ Root/Documents \
   --expect selected:Project\ Notes.txt
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input key:tab \
+  --expect focus-visible:true \
+  --expect focus-target:sidebar \
+  --expect input-modality:keyboard
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input click:README.txt \
+  --expect focus-visible:false \
+  --expect focus-target:content-grid \
+  --expect input-modality:pointer
 .exon/debug/phenotype_cli drive file-explorer --json \
   --script /tmp/file-explorer.drive \
   --package ../../examples/file_explorer_desktop \

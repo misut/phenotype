@@ -22,12 +22,10 @@ the system traffic-light controls are integrated into the content area instead
 of being duplicated as interactive phenotype controls. The live example keeps
 that sidebar/titlebar area as blank reserve, so the real OS-owned window
 controls have space without phenotype drawing another set of buttons. Artifact
-capture can opt in to a deterministic non-interactive traffic-light marker with
-`PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS=1`, which is what the CLI gate
-uses when it needs screenshots to expose the reserved chrome region. The
-general `phenotype run file_explorer_desktop --artifact-dir ... --artifact-exit`
-path applies the same marker default unless the environment already sets
-`PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS`. On Windows
+capture keeps that same reserve blank and verifies it with low edge/chroma
+pixel contracts plus native-window debug metadata. The CLI gate deliberately
+does not draw traffic-light probes because the real controls are owned by the
+platform shell. On Windows
 the native Win32 shell keeps the same contract through a
 DWM custom frame, using `WM_NCHITTEST` to preserve
 resize edges, caption-button behavior, blank-toolbar dragging, phenotype toolbar
@@ -45,10 +43,8 @@ state transitions without adding persistent chrome to the startup view.
 
 Startup frame artifacts intentionally capture phenotype content rather than the
 operating system's non-client controls. The top-left titlebar reserve is blank
-in normal interactive runs, while the artifact verifier launches with
-`PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS=1` so the reserve contains a
-deterministic non-interactive traffic-light marker. AppKit/Win32 still own the
-real close, minimize, maximize, and caption-button hit testing at runtime.
+in normal interactive runs and artifact captures. AppKit/Win32 own the real
+close, minimize, maximize, and caption-button hit testing at runtime.
 The manifest also checks `debug.platform_runtime.details.window` so CI can
 prove the example requested `IntegratedTitlebar`, preserved the expected
 titlebar/control reserve metrics, and is not using GLFW or another toolkit
@@ -69,9 +65,9 @@ toolbar shell, navigation/title/trailing group x-coordinates, collapsed search
 button x-coordinate, content surface origin, and the native titlebar drag and
 leading/trailing control reserve widths. Sidebar symbol and label placement,
 section spacing, selected-row radius, soft selected-row alpha policy, and
-artifact traffic-light marker
-coordinates are still asserted separately, so Finder parity regressions are
-reported as structured chrome contract failures before pixel inspection.
+blank native-control reserve coordinates are still asserted separately, so
+Finder parity regressions are reported as structured chrome contract failures
+before pixel inspection.
 The sidebar and toolbar glyphs come from `phenotype.icons`, not copied SF
 Symbols assets. They are phenotype-owned SVG symbols with a macOS-style
 rounded-outline contract and bounded secondary-layer opacity for detailed
@@ -252,10 +248,9 @@ At runtime the example reads `phenotype.package.toml` and locale files from
 `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`, `PHENOTYPE_PACKAGE_ROOT`, or the current
 working directory. `phenotype run file_explorer_desktop` sets the package-root
 environment automatically. When `--artifact-dir` and `--artifact-exit` are used
-together, the CLI also enables deterministic artifact traffic-light markers so
-the captured frame resembles the native Finder chrome instead of a blank
-content reserve. The run JSON reports that decision through
-`file_explorer_input.artifact_chrome_markers_injected`.
+together, the CLI keeps the leading titlebar reserve blank and relies on the
+runtime window debug payload plus pixel-region contracts to prove native control
+ownership without drawing duplicate traffic lights.
 The same command can feed deterministic native startup input through the shared
 model parser:
 

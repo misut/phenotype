@@ -183,6 +183,22 @@
       "equals": "desktop"
     },
     {
+      "path": "application.file_explorer.input_model.focus_visibility_policy",
+      "equals": "keyboard_tab_navigation_shows_ring_pointer_click_hides_ring"
+    },
+    {
+      "path": "application.file_explorer.input_model.focus_ring_style",
+      "equals": "macos_blue_keyboard_focus_ring_outset_4px_2px_stroke"
+    },
+    {
+      "path": "application.file_explorer.input_model.focus_visible",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.input_model.focus_target",
+      "equals": "none"
+    },
+    {
       "path": "input_debug.pressed_id",
       "equals": 4294967295
     },
@@ -352,15 +368,15 @@
     },
     {
       "path": "application.file_explorer.chrome.native_window.content_window_control_markers",
-      "equals": true
+      "equals": false
     },
     {
       "path": "application.file_explorer.chrome.native_window.artifact_window_control_markers",
-      "equals": true
+      "equals": false
     },
     {
       "path": "application.file_explorer.chrome.native_window.window_control_marker_mode",
-      "equals": "artifact-probe-marker"
+      "equals": "runtime-native-controls"
     },
     {
       "path": "application.file_explorer.chrome.native_window.titlebar_drag_region_height",
@@ -1115,15 +1131,15 @@
     },
     {
       "path": "application.file_explorer.chrome.content_window_control_markers",
-      "equals": true
+      "equals": false
     },
     {
       "path": "application.file_explorer.chrome.artifact_window_control_markers",
-      "equals": true
+      "equals": false
     },
     {
       "path": "application.file_explorer.chrome.window_control_marker_mode",
-      "equals": "artifact-probe-marker"
+      "equals": "runtime-native-controls"
     },
     {
       "path": "application.file_explorer.chrome.more_actions_open",
@@ -1460,28 +1476,28 @@
       "min_unique_colors": 4
     },
     {
-      "name": "finder-titlebar-traffic-lights",
+      "name": "finder-titlebar-native-control-reserve",
       "rect": [0.026, 0.03, 0.065, 0.04],
-      "min_luma_delta": 70.0,
-      "min_unique_colors": 18
+      "min_luma_delta": 1.0,
+      "min_unique_colors": 2
     },
     {
-      "name": "finder-titlebar-close-control",
+      "name": "finder-titlebar-close-reserve",
       "rect": [0.028, 0.034, 0.02, 0.034],
-      "min_luma_delta": 40.0,
-      "min_unique_colors": 8
+      "min_luma_delta": 1.0,
+      "min_unique_colors": 2
     },
     {
-      "name": "finder-titlebar-minimize-control",
+      "name": "finder-titlebar-minimize-reserve",
       "rect": [0.046, 0.034, 0.02, 0.034],
-      "min_luma_delta": 40.0,
-      "min_unique_colors": 8
+      "min_luma_delta": 1.0,
+      "min_unique_colors": 2
     },
     {
-      "name": "finder-titlebar-zoom-control",
+      "name": "finder-titlebar-zoom-reserve",
       "rect": [0.064, 0.034, 0.02, 0.034],
-      "min_luma_delta": 40.0,
-      "min_unique_colors": 8
+      "min_luma_delta": 1.0,
+      "min_unique_colors": 2
     },
     {
       "name": "finder-sidebar",
@@ -1544,44 +1560,44 @@
       "lte": 1.2
     },
     {
-      "region": "finder-titlebar-traffic-lights",
+      "region": "finder-titlebar-native-control-reserve",
+      "metric": "luma_stddev",
+      "lte": 1.2
+    },
+    {
+      "region": "finder-titlebar-native-control-reserve",
       "metric": "edge_energy",
-      "gte": 2.0
+      "lte": 1.0
     },
     {
-      "region": "finder-titlebar-close-control",
-      "metric": "red_mean",
-      "gte": 190.0
+      "region": "finder-titlebar-close-reserve",
+      "metric": "luma_stddev",
+      "lte": 1.2
     },
     {
-      "region": "finder-titlebar-close-control",
-      "metric": "green_mean",
-      "lte": 210.0
+      "region": "finder-titlebar-close-reserve",
+      "metric": "edge_energy",
+      "lte": 1.0
     },
     {
-      "region": "finder-titlebar-minimize-control",
-      "metric": "red_mean",
-      "gte": 190.0
+      "region": "finder-titlebar-minimize-reserve",
+      "metric": "luma_stddev",
+      "lte": 1.2
     },
     {
-      "region": "finder-titlebar-minimize-control",
-      "metric": "green_mean",
-      "gte": 150.0
+      "region": "finder-titlebar-minimize-reserve",
+      "metric": "edge_energy",
+      "lte": 1.0
     },
     {
-      "region": "finder-titlebar-minimize-control",
-      "metric": "blue_mean",
-      "lte": 200.0
+      "region": "finder-titlebar-zoom-reserve",
+      "metric": "luma_stddev",
+      "lte": 1.2
     },
     {
-      "region": "finder-titlebar-zoom-control",
-      "metric": "green_mean",
-      "gte": 160.0
-    },
-    {
-      "region": "finder-titlebar-zoom-control",
-      "metric": "red_mean",
-      "lte": 200.0
+      "region": "finder-titlebar-zoom-reserve",
+      "metric": "edge_energy",
+      "lte": 1.0
     },
     {
       "region": "finder-sidebar-selected-row-fill",
@@ -1632,6 +1648,57 @@
       "region": "finder-video-thumbnail-preview",
       "metric": "edge_energy",
       "gte": 1.5
+    }
+  ],
+  "pixel_region_metric_comparisons": [
+    {
+      "region": "finder-titlebar-close-reserve",
+      "metric": "red_mean",
+      "reference_region": "finder-titlebar-close-reserve",
+      "reference_metric": "green_mean",
+      "lte_ratio": 1.02
+    },
+    {
+      "region": "finder-titlebar-close-reserve",
+      "metric": "green_mean",
+      "reference_region": "finder-titlebar-close-reserve",
+      "reference_metric": "red_mean",
+      "lte_ratio": 1.02
+    },
+    {
+      "region": "finder-titlebar-close-reserve",
+      "metric": "blue_mean",
+      "reference_region": "finder-titlebar-close-reserve",
+      "reference_metric": "red_mean",
+      "lte_ratio": 1.02
+    },
+    {
+      "region": "finder-titlebar-minimize-reserve",
+      "metric": "red_mean",
+      "reference_region": "finder-titlebar-minimize-reserve",
+      "reference_metric": "green_mean",
+      "lte_ratio": 1.02
+    },
+    {
+      "region": "finder-titlebar-minimize-reserve",
+      "metric": "blue_mean",
+      "reference_region": "finder-titlebar-minimize-reserve",
+      "reference_metric": "red_mean",
+      "lte_ratio": 1.02
+    },
+    {
+      "region": "finder-titlebar-zoom-reserve",
+      "metric": "green_mean",
+      "reference_region": "finder-titlebar-zoom-reserve",
+      "reference_metric": "red_mean",
+      "lte_ratio": 1.02
+    },
+    {
+      "region": "finder-titlebar-zoom-reserve",
+      "metric": "blue_mean",
+      "reference_region": "finder-titlebar-zoom-reserve",
+      "reference_metric": "red_mean",
+      "lte_ratio": 1.02
     }
   ]
 }

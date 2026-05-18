@@ -32,7 +32,7 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "20": 1
+      "21": 1
     },
     "theme_foreground_matches_theme": 1,
     "theme_accent_matches_theme": 1,
