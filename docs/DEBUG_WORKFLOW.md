@@ -361,7 +361,8 @@ the exact ISC or Feather-derived MIT license and a source URL pinned to the
 catalog revision, so a future LLM can audit provenance without trusting
 `main`. The `reference_sources` array names the exact Apple HIG/SF Symbols
 semantic references, W3C SVG path reference, Lucide embedded-source reference,
-and Material Symbols Apache-2.0 future-source candidate used by the policy.
+Feather MIT license-lineage reference, and Material Symbols Apache-2.0
+future-source candidate used by the policy.
 Apple rows must stay
 `used_as_embedded_asset_source=false` and `apple_owned_artwork=true`; a failure
 there points to provenance policy before any renderer investigation. The

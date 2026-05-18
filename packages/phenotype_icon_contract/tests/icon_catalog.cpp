@@ -39,7 +39,7 @@ int main() {
            != std::string_view::npos);
     assert(icons::apple_asset_boundary().find("do not extract or embed")
            != std::string_view::npos);
-    assert(icons::reference_source_count == 5);
+    assert(icons::reference_source_count == 6);
     auto const apple_icons = icons::reference_source_at(0);
     assert(apple_icons.name.find("Apple") != std::string_view::npos);
     assert(apple_icons.url.find("developer.apple.com")
@@ -59,7 +59,15 @@ int main() {
            != std::string_view::npos);
     assert(lucide_reference.used_as_embedded_asset_source);
     assert(!lucide_reference.apple_owned_artwork);
-    auto const material_symbols = icons::reference_source_at(4);
+    auto const feather_reference = icons::reference_source_at(4);
+    assert(feather_reference.name.find("Feather") != std::string_view::npos);
+    assert(feather_reference.url.find("feathericons/feather")
+           != std::string_view::npos);
+    assert(feather_reference.license_policy.find("MIT")
+           != std::string_view::npos);
+    assert(!feather_reference.used_as_embedded_asset_source);
+    assert(!feather_reference.apple_owned_artwork);
+    auto const material_symbols = icons::reference_source_at(5);
     assert(material_symbols.url.find("material_symbols")
            != std::string_view::npos);
     assert(material_symbols.license_policy.find("Apache-2.0")

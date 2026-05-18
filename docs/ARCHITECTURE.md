@@ -58,9 +58,9 @@ MIT, or Material Symbols Apache-2.0 sources. Every embedded external source
 exposes family, icon name, exact license, license URL, pinned source URL,
 source revision, copyright, modification status, and Apple-asset boundary in
 debug metadata.
-The catalog also exposes structured
-reference-source rows for Apple HIG/SF Symbols, W3C SVG paths, Lucide, and
-Material Symbols so provenance checks can distinguish style references from
+The catalog also exposes structured reference-source rows for Apple HIG/SF
+Symbols, W3C SVG paths, Lucide, Feather Icons, and Material Symbols so
+provenance checks can distinguish style references, license lineage, and
 embedded asset sources without inspecting screenshots.
 `icons::macos_presentation(...)` is the
 pure role/state mapper for toolbar, navigation, sidebar, file-type, and action
@@ -239,8 +239,10 @@ without copying SF Symbols artwork as assets. Each symbol declares a semantic
 SF Symbols reference name, family, and policy, so the contract can say "this
 glyph is playing the same UI role as `magnifyingglass`" without embedding
 Apple's vector paths. In the current catalog, 35 of 39 built-in symbols come
-from audited Lucide SVG sources pinned to the catalog revision, while AirDrop,
-Shared, Sort Group, and More remain phenotype-owned because their
+from audited Lucide SVG sources pinned to the catalog revision. Feather Icons
+is tracked separately as MIT license-lineage metadata for Lucide symbols
+derived from Feather, while AirDrop, Shared, Sort Group, and More remain
+phenotype-owned because their
 Finder-specific metaphors or filled dot treatment need tighter product
 control. Apps can call `icons::document`,
 `icons::paint_symbol`,

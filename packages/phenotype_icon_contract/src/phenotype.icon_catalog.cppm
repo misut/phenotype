@@ -226,7 +226,7 @@ inline constexpr unsigned int lucide_source_symbol_count =
     permissive_source_symbol_count;
 inline constexpr unsigned int apple_asset_symbol_count = 0;
 inline constexpr unsigned int audited_symbol_source_count = all_symbol_count;
-inline constexpr unsigned int reference_source_count = 5;
+inline constexpr unsigned int reference_source_count = 6;
 inline constexpr unsigned int sidebar_symbol_count = 11;
 inline constexpr unsigned int toolbar_symbol_count = 15;
 inline constexpr unsigned int file_type_symbol_count = 11;
@@ -455,6 +455,15 @@ inline auto reference_source_at(unsigned int index) noexcept
             false,
         };
     case 4:
+        return {
+            "Feather Icons",
+            "https://github.com/feathericons/feather",
+            "MIT license provenance for Feather-derived Lucide symbols",
+            "MIT license; referenced for license lineage, not copied directly",
+            false,
+            false,
+        };
+    case 5:
         return {
             "Google Material Symbols",
             "https://developers.google.com/fonts/docs/material_symbols",
