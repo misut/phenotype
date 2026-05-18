@@ -230,7 +230,7 @@ inline constexpr unsigned int apple_asset_symbol_count = 0;
 inline constexpr unsigned int platform_extracted_symbol_count = 0;
 inline constexpr unsigned int runtime_fetched_symbol_count = 0;
 inline constexpr unsigned int audited_symbol_source_count = all_symbol_count;
-inline constexpr unsigned int reference_source_count = 6;
+inline constexpr unsigned int reference_source_count = 7;
 inline constexpr unsigned int sidebar_symbol_count = 11;
 inline constexpr unsigned int toolbar_symbol_count = 15;
 inline constexpr unsigned int file_type_symbol_count = 11;
@@ -408,7 +408,7 @@ inline auto preferred_external_source_policy() noexcept -> std::string_view {
 }
 
 inline auto source_acquisition_policy() noexcept -> std::string_view {
-    return "development-time import from pinned permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons or fetches remote resources";
+    return "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons or fetches remote resources";
 }
 
 inline auto lucide_source_revision() noexcept -> std::string_view {
@@ -416,7 +416,7 @@ inline auto lucide_source_revision() noexcept -> std::string_view {
 }
 
 inline auto source_attribution_policy() noexcept -> std::string_view {
-    return "embedded permissive SVG sources must expose family, icon name, exact license, pinned source URL, source revision, copyright, Apple-asset boundary, platform extraction flag, and runtime fetch flag in debug output";
+    return "embedded permissive SVG sources must expose family, icon name, exact license, pinned direct raw SVG URL, source revision, copyright, Apple-asset boundary, platform extraction flag, and runtime fetch flag in debug output";
 }
 
 inline auto apple_asset_boundary() noexcept -> std::string_view {
@@ -477,6 +477,15 @@ inline auto reference_source_at(unsigned int index) noexcept
             "https://developers.google.com/fonts/docs/material_symbols",
             "future permissive fallback source candidate",
             "Apache-2.0 license with attribution when embedded",
+            false,
+            false,
+        };
+    case 6:
+        return {
+            "Tabler Icons",
+            "https://github.com/tabler/tabler-icons",
+            "future permissive fallback source candidate",
+            "MIT license with attribution when embedded",
             false,
             false,
         };
@@ -851,73 +860,73 @@ inline auto permissive_source_icon_name(Symbol symbol) noexcept
 inline auto lucide_source_url(std::string_view icon_name) noexcept
         -> std::string_view {
     if (icon_name == "chevron-left")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-left.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-left.svg";
     if (icon_name == "chevron-right")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-right.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-right.svg";
     if (icon_name == "search")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/search.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/search.svg";
     if (icon_name == "share")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/share.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/share.svg";
     if (icon_name == "tag")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/tag.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/tag.svg";
     if (icon_name == "grid-2x2")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/grid-2x2.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/grid-2x2.svg";
     if (icon_name == "list")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/list.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/list.svg";
     if (icon_name == "columns-3")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/columns-3.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/columns-3.svg";
     if (icon_name == "gallery-horizontal")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/gallery-horizontal.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/gallery-horizontal.svg";
     if (icon_name == "folder")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/folder.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/folder.svg";
     if (icon_name == "trash-2")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/trash-2.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/trash-2.svg";
     if (icon_name == "file")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file.svg";
     if (icon_name == "file-image")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-image.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-image.svg";
     if (icon_name == "clapperboard")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/clapperboard.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/clapperboard.svg";
     if (icon_name == "plus")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/plus.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/plus.svg";
     if (icon_name == "x")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/x.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/x.svg";
     if (icon_name == "chevron-down")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-down.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-down.svg";
     if (icon_name == "chevron-up")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-up.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-up.svg";
     if (icon_name == "house")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/house.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/house.svg";
     if (icon_name == "cloud")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/cloud.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/cloud.svg";
     if (icon_name == "clock")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/clock.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/clock.svg";
     if (icon_name == "panel-left")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/panel-left.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/panel-left.svg";
     if (icon_name == "folder-plus")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/folder-plus.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/folder-plus.svg";
     if (icon_name == "app-window")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/app-window.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/app-window.svg";
     if (icon_name == "monitor")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/monitor.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/monitor.svg";
     if (icon_name == "circle-arrow-down")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/circle-arrow-down.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/circle-arrow-down.svg";
     if (icon_name == "copy")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/copy.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/copy.svg";
     if (icon_name == "file-plus")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-plus.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-plus.svg";
     if (icon_name == "file-text")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-text.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-text.svg";
     if (icon_name == "file-archive")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-archive.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-archive.svg";
     if (icon_name == "file-music")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-music.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-music.svg";
     if (icon_name == "file-code")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-code.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-code.svg";
     if (icon_name == "file-spreadsheet")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-spreadsheet.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-spreadsheet.svg";
     if (icon_name == "presentation")
-        return "https://github.com/lucide-icons/lucide/blob/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/presentation.svg";
+        return "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/presentation.svg";
     return "https://github.com/lucide-icons/lucide/tree/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons";
 }
 

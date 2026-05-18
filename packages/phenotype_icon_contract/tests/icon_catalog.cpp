@@ -30,14 +30,15 @@ int main() {
            != std::string_view::npos);
     assert(icons::preferred_external_source_policy().find("Material Symbols Apache-2.0")
            != std::string_view::npos);
-    assert(icons::source_acquisition_policy().find("pinned permissive SVG URLs")
+    assert(icons::source_acquisition_policy().find(
+               "pinned raw permissive SVG URLs")
            != std::string_view::npos);
     assert(icons::source_acquisition_policy().find("runtime uses embedded SVG strings")
            != std::string_view::npos);
     assert(icons::source_acquisition_policy().find("never extracts platform icons")
            != std::string_view::npos);
     assert(icons::lucide_source_revision().size() == 40);
-    assert(icons::source_attribution_policy().find("pinned source URL")
+    assert(icons::source_attribution_policy().find("pinned direct raw SVG URL")
            != std::string_view::npos);
     assert(icons::source_attribution_policy().find("source revision")
            != std::string_view::npos);
@@ -49,7 +50,7 @@ int main() {
            != std::string_view::npos);
     assert(icons::apple_asset_boundary().find("do not extract or embed")
            != std::string_view::npos);
-    assert(icons::reference_source_count == 6);
+    assert(icons::reference_source_count == 7);
     auto const apple_icons = icons::reference_source_at(0);
     assert(apple_icons.name.find("Apple") != std::string_view::npos);
     assert(apple_icons.url.find("developer.apple.com")
@@ -82,6 +83,13 @@ int main() {
            != std::string_view::npos);
     assert(material_symbols.license_policy.find("Apache-2.0")
            != std::string_view::npos);
+    auto const tabler_reference = icons::reference_source_at(6);
+    assert(tabler_reference.name.find("Tabler") != std::string_view::npos);
+    assert(tabler_reference.url.find("tabler/tabler-icons")
+           != std::string_view::npos);
+    assert(tabler_reference.license_policy.find("MIT")
+           != std::string_view::npos);
+    assert(!tabler_reference.used_as_embedded_asset_source);
     assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");
     assert(icons::svg_supported_path_commands().find("A Z")
            != std::string_view::npos);
@@ -202,8 +210,12 @@ int main() {
                        attribution.icon_name));
             assert(attribution.source_url.find("lucide-icons/lucide")
                    != std::string_view::npos);
+            assert(attribution.source_url.find("raw.githubusercontent.com")
+                   != std::string_view::npos);
             assert(attribution.source_url.find(icons::lucide_source_revision())
                    != std::string_view::npos);
+            assert(attribution.source_url.find("/blob/")
+                   == std::string_view::npos);
             assert(attribution.source_url.find("/main/")
                    == std::string_view::npos);
             assert(attribution.license_url == icons::lucide_license_url());

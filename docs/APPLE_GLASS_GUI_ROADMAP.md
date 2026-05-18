@@ -306,11 +306,12 @@ the reference is only a role/style anchor; the vector artwork is either
 phenotype-owned or an audited permissive SVG source such as Lucide ISC,
 Feather-derived Lucide MIT, Tabler MIT, Iconoir MIT, or Material Symbols
 Apache-2.0, with source family, icon name, exact license, license URL, pinned
-source URL, source revision, copyright, and Apple-asset boundary exposed in
-debug metadata. The catalog also exposes `reference_sources` with the Apple HIG
+direct raw SVG URL, source revision, copyright, and Apple-asset boundary exposed
+in debug metadata. The catalog also exposes `reference_sources` with the Apple HIG
 and SF Symbols design-reference URLs, the W3C SVG path reference, the active
 Lucide embedded-source reference, the Feather MIT license-lineage reference,
-and the Material Symbols Apache-2.0 candidate reference. Apple references are
+the Tabler MIT candidate reference, and the Material Symbols Apache-2.0
+candidate reference. Apple references are
 explicitly marked as non-embedded Apple-owned artwork so future file-icon work
 can be Finder-like without copying Finder or SF Symbols assets. The current
 built-in catalog uses audited Lucide SVGs pinned

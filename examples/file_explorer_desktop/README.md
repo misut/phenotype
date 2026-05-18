@@ -90,8 +90,8 @@ for detailed symbols. Each icon declares a semantic SF Symbols reference name
 as a role and proportion anchor while keeping Apple artwork out of the asset
 set. File-type glyphs may embed checked open SVG sources such as Lucide ISC or
 Feather-derived MIT icons; artifacts record source family, icon name, exact
-license, license URL, pinned source URL, source revision, copyright, and
-Apple-asset boundary beside the rendered symbol metadata.
+license, license URL, pinned direct raw SVG URL, source revision, copyright,
+and Apple-asset boundary beside the rendered symbol metadata.
 Artifacts can assert the icon module, source format,
 ownership/permissive-source boundary, reference family/policy, round stroke
 expectation, rendering mode, variant policy,
