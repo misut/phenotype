@@ -356,10 +356,13 @@ includes `source_attribution_policy`, `lucide_source_symbol_count`, and
 exclusion are machine-checkable. A healthy Finder-style desktop artifact should
 show 35 Lucide-backed symbols, 4 phenotype-owned symbols, and 0 Apple/SF
 Symbols assets; mismatches point to `phenotype.icon_catalog` attribution or
-package-resource drift before a renderer bug. The `reference_sources` array
-names the exact Apple HIG/SF Symbols semantic references, W3C SVG path
-reference, Lucide ISC embedded-source reference, and Material Symbols
-Apache-2.0 future-source candidate used by the policy. Apple rows must stay
+package-resource drift before a renderer bug. Each Lucide-backed symbol reports
+the exact ISC or Feather-derived MIT license and a source URL pinned to the
+catalog revision, so a future LLM can audit provenance without trusting
+`main`. The `reference_sources` array names the exact Apple HIG/SF Symbols
+semantic references, W3C SVG path reference, Lucide embedded-source reference,
+and Material Symbols Apache-2.0 future-source candidate used by the policy.
+Apple rows must stay
 `used_as_embedded_asset_source=false` and `apple_owned_artwork=true`; a failure
 there points to provenance policy before any renderer investigation. The
 desktop payload also includes

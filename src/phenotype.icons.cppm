@@ -476,6 +476,19 @@ inline auto preferred_external_source_policy() noexcept -> std::string_view {
     return catalog::preferred_external_source_policy();
 }
 
+inline auto lucide_source_revision() noexcept -> std::string_view {
+    return catalog::lucide_source_revision();
+}
+
+inline auto lucide_license_url() noexcept -> std::string_view {
+    return catalog::lucide_license_url();
+}
+
+inline auto lucide_icon_license(std::string_view icon_name) noexcept
+        -> std::string_view {
+    return catalog::lucide_icon_license(icon_name);
+}
+
 inline auto source_attribution_policy() noexcept -> std::string_view {
     return catalog::source_attribution_policy();
 }

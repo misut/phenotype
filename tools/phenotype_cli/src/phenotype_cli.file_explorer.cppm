@@ -379,10 +379,12 @@ export auto explorer_chrome_json(
         "\"icon_size\":{}}},"
         "\"native_window\":{{\"integrated_titlebar\":{},"
         "\"native_window_controls\":{},\"duplicate_window_controls\":{},"
+        "\"window_control_single_owner\":{},"
         "\"content_window_control_markers\":{},"
         "\"artifact_window_control_markers\":{},"
         "\"window_control_marker_mode\":{},"
         "\"native_window_control_owner\":{},"
+        "\"window_control_duplication_guard\":{},"
         "\"native_window_control_count\":{},"
         "\"content_window_control_marker_count\":{},"
         "\"artifact_window_control_marker_count\":{},"
@@ -532,10 +534,12 @@ export auto explorer_chrome_json(
         chrome.integrated_titlebar ? "true" : "false",
         chrome.native_window_controls ? "true" : "false",
         chrome.duplicate_window_controls ? "true" : "false",
+        chrome.window_control_single_owner ? "true" : "false",
         chrome.content_window_control_markers ? "true" : "false",
         chrome.artifact_window_control_markers ? "true" : "false",
         json_string(chrome.window_control_marker_mode),
         json_string(chrome.native_window_control_owner),
+        json_string(chrome.window_control_duplication_guard),
         chrome.native_window_control_count,
         chrome.content_window_control_marker_count,
         chrome.artifact_window_control_marker_count,

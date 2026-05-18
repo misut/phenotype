@@ -342,7 +342,7 @@ void test_builtin_icons_parse() {
     assert(icons::asset_policy().find("no Apple") != std::string_view::npos);
     assert(icons::asset_policy().find("audited permissive")
            != std::string_view::npos);
-    assert(icons::source_attribution_policy().find("source URL")
+    assert(icons::source_attribution_policy().find("pinned source URL")
            != std::string_view::npos);
     assert(icons::source_format() == "svg");
     assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");
@@ -510,9 +510,16 @@ void test_builtin_icons_parse() {
             ++lucide_source_count;
             assert(!descriptor.phenotype_owned);
             assert(source_attribution.family == "Lucide");
-            assert(source_attribution.license == "ISC");
+            assert(source_attribution.license == icons::lucide_icon_license(
+                       source_attribution.icon_name));
             assert(source_attribution.source_url.find("lucide-icons/lucide")
                    != std::string_view::npos);
+            assert(source_attribution.source_url.find(
+                       icons::lucide_source_revision())
+                   != std::string_view::npos);
+            assert(source_attribution.source_url.find("/main/")
+                   == std::string_view::npos);
+            assert(source_attribution.license_url == icons::lucide_license_url());
             assert(source_attribution.modified_for_phenotype);
         } else {
             assert(descriptor.phenotype_owned);
@@ -627,6 +634,10 @@ void test_builtin_icons_parse() {
            == "Lucide");
     assert(icons::source_attribution(icons::Symbol::Search).icon_name
            == "search");
+    assert(icons::source_attribution(icons::Symbol::Search).license
+           == "MIT");
+    assert(icons::source_attribution(icons::Symbol::Folder).license
+           == "ISC");
 
     auto shared = icons::descriptor(icons::Symbol::Shared);
     assert(shared.role == icons::SymbolRole::Sidebar);

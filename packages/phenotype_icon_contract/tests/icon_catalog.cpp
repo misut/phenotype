@@ -16,9 +16,13 @@ int main() {
            != std::string_view::npos);
     assert(icons::source_license_policy().find("ISC")
            != std::string_view::npos);
+    assert(icons::source_license_policy().find("Feather-derived MIT")
+           != std::string_view::npos);
     assert(icons::source_license_policy().find("Apache-2.0")
            != std::string_view::npos);
     assert(icons::preferred_external_source_policy().find("Lucide ISC")
+           != std::string_view::npos);
+    assert(icons::preferred_external_source_policy().find("Feather-derived MIT")
            != std::string_view::npos);
     assert(icons::preferred_external_source_policy().find("Tabler MIT")
            != std::string_view::npos);
@@ -27,7 +31,7 @@ int main() {
     assert(icons::preferred_external_source_policy().find("Material Symbols Apache-2.0")
            != std::string_view::npos);
     assert(icons::lucide_source_revision().size() == 40);
-    assert(icons::source_attribution_policy().find("source URL")
+    assert(icons::source_attribution_policy().find("pinned source URL")
            != std::string_view::npos);
     assert(icons::source_attribution_policy().find("source revision")
            != std::string_view::npos);
@@ -50,6 +54,8 @@ int main() {
     auto const lucide_reference = icons::reference_source_at(3);
     assert(lucide_reference.name == std::string_view{"Lucide"});
     assert(lucide_reference.license_policy.find("ISC")
+           != std::string_view::npos);
+    assert(lucide_reference.license_policy.find("Feather-derived MIT")
            != std::string_view::npos);
     assert(lucide_reference.used_as_embedded_asset_source);
     assert(!lucide_reference.apple_owned_artwork);
@@ -170,9 +176,15 @@ int main() {
             ++lucide_count;
             assert(!desc.phenotype_owned);
             assert(attribution.family == "Lucide");
-            assert(attribution.license == "ISC");
+            assert(attribution.license == icons::lucide_icon_license(
+                       attribution.icon_name));
             assert(attribution.source_url.find("lucide-icons/lucide")
                    != std::string_view::npos);
+            assert(attribution.source_url.find(icons::lucide_source_revision())
+                   != std::string_view::npos);
+            assert(attribution.source_url.find("/main/")
+                   == std::string_view::npos);
+            assert(attribution.license_url == icons::lucide_license_url());
             assert(attribution.source_revision
                    == icons::lucide_source_revision());
             assert(attribution.modified_for_phenotype);
@@ -249,6 +261,16 @@ int main() {
            == "Lucide");
     assert(icons::source_attribution(icons::Symbol::Search).icon_name
            == "search");
+    assert(icons::source_attribution(icons::Symbol::Search).license
+           == "MIT");
+    assert(icons::source_attribution(icons::Symbol::Back).license
+           == "MIT");
+    assert(icons::source_attribution(icons::Symbol::Plus).license
+           == "MIT");
+    assert(icons::source_attribution(icons::Symbol::Folder).license
+           == "ISC");
+    assert(icons::source_attribution(icons::Symbol::AudioDocument).license
+           == "ISC");
     assert(icons::sidebar_symbol_at(8) == icons::Symbol::AirDrop);
     assert(icons::toolbar_symbol_at(10) == icons::Symbol::Search);
     assert(icons::file_type_symbol_at(0) == icons::Symbol::Folder);

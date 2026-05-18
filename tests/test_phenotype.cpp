@@ -4208,6 +4208,15 @@ void test_icon_catalog_umbrella_export() {
                phenotype::icon_catalog::Symbol::Folder)
                .license
            == "ISC");
+    assert(phenotype::icon_catalog::source_attribution(
+               phenotype::icon_catalog::Symbol::Search)
+               .license
+           == "MIT");
+    assert(phenotype::icon_catalog::source_attribution(
+               phenotype::icon_catalog::Symbol::Search)
+               .source_url
+               .find(phenotype::icon_catalog::lucide_source_revision())
+           != std::string_view::npos);
     auto const capabilities = phenotype::icon_catalog::rendering_capabilities(
         phenotype::icon_catalog::Symbol::AirDrop);
     assert(capabilities.monochrome);

@@ -367,6 +367,10 @@
       "equals": false
     },
     {
+      "path": "application.file_explorer.chrome.native_window.window_control_single_owner",
+      "equals": true
+    },
+    {
       "path": "application.file_explorer.chrome.native_window.content_window_control_markers",
       "equals": false
     },
@@ -381,6 +385,10 @@
     {
       "path": "application.file_explorer.chrome.native_window.native_window_control_owner",
       "equals": "platform-edge"
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.window_control_duplication_guard",
+      "equals": "native_window_controls_single_owner"
     },
     {
       "path": "application.file_explorer.chrome.native_window.native_window_control_count",
@@ -788,15 +796,15 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_license_policy",
-      "equals": "phenotype-owned or permissive SVG only; accepted external licenses include ISC, MIT, and Apache-2.0 with attribution"
+      "equals": "phenotype-owned or permissive SVG only; accepted external licenses include ISC, Feather-derived MIT, and Apache-2.0 with per-symbol attribution"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.preferred_external_source_policy",
-      "equals": "Prefer audited SVG from Lucide ISC, Tabler MIT, Iconoir MIT, or Material Symbols Apache-2.0 before phenotype adaptation"
+      "equals": "Prefer audited SVG from Lucide ISC or Feather-derived MIT, Tabler MIT, Iconoir MIT, or Material Symbols Apache-2.0 before phenotype adaptation"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_attribution_policy",
-      "equals": "embedded permissive SVG sources must expose family, icon name, license, license URL, source URL, source revision, copyright, and Apple-asset boundary in debug output"
+      "equals": "embedded permissive SVG sources must expose family, icon name, exact license, pinned source URL, source revision, copyright, and Apple-asset boundary in debug output"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.apple_asset_boundary",
@@ -1266,12 +1274,20 @@
       "equals": false
     },
     {
+      "path": "application.file_explorer.chrome.window_control_single_owner",
+      "equals": true
+    },
+    {
       "path": "application.file_explorer.chrome.window_control_marker_mode",
       "equals": "runtime-native-controls"
     },
     {
       "path": "application.file_explorer.chrome.native_window_control_owner",
       "equals": "platform-edge"
+    },
+    {
+      "path": "application.file_explorer.chrome.window_control_duplication_guard",
+      "equals": "native_window_controls_single_owner"
     },
     {
       "path": "application.file_explorer.chrome.native_window_control_count",
