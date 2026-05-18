@@ -286,8 +286,10 @@ the same contract in both examples and tests while remaining LLM-debuggable
 without consulting AppKit.
 The same pure catalog exposes a Finder-style file-type symbol set and tint
 policy for folder/document/PDF/text/image/movie/archive glyphs, which desktop
-examples use in list and column rows without asking a native icon service for
-platform artwork.
+and mobile file explorer examples use in rows without asking a native icon
+service for platform artwork. Their shared debug payload includes
+`entry_symbol_summary` so the contract can fail as JSON before a screenshot
+comparison is needed.
 The catalog also publishes the SVG subset and arc-lowering policy, so CLI
 checks and example artifacts can catch a regression where a macOS-style glyph
 depends on an unsupported path command. AirDrop intentionally uses SVG `A/a`

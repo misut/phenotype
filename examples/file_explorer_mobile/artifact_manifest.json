@@ -146,6 +146,50 @@
       "equals": "icon"
     },
     {
+      "path": "application.file_explorer.entry_symbol_summary.source",
+      "equals": "file_explorer_shared::entry_symbol"
+    },
+    {
+      "path": "application.file_explorer.entry_symbol_summary.presentation_role",
+      "equals": "file_type"
+    },
+    {
+      "path": "application.file_explorer.entry_symbol_summary.file_type_symbol_count",
+      "equals": 7
+    },
+    {
+      "path": "application.file_explorer.entry_symbol_summary.all_visible_entries_have_symbols",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.module",
+      "equals": "phenotype.icons"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.style",
+      "equals": "macos_rounded_outline_svg"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.source_format",
+      "equals": "svg"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.owned_assets",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.uses_sf_symbols_assets",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.file_type_symbol_count",
+      "equals": 7
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.file_type_color_policy",
+      "equals": "macos_finder_file_type_tints"
+    },
+    {
       "path": "application.file_explorer.operation.plan.executable",
       "equals": false
     },

@@ -3854,11 +3854,15 @@ auto explorer_input_json(file_explorer_demo::ExplorerInput const& input)
 auto explorer_entry_json(file_explorer_demo::Entry const& entry)
     -> std::string {
     return std::format(
-        "{{\"name\":{},\"folder\":{},\"size\":{},\"kind\":{}}}",
+        "{{\"name\":{},\"folder\":{},\"size\":{},\"kind\":{},"
+        "\"symbol\":{},\"symbol_semantic_reference_name\":{}}}",
         json_string(entry.name),
         entry.folder ? "true" : "false",
         entry.size,
-        json_string(file_explorer_demo::entry_kind_label(entry)));
+        json_string(file_explorer_demo::entry_kind_label(entry)),
+        json_string(file_explorer_demo::entry_symbol_name(entry)),
+        json_string(
+            file_explorer_demo::entry_symbol_semantic_reference_name(entry)));
 }
 
 auto explorer_entries_json(
@@ -5941,7 +5945,7 @@ auto explorer_drive_json(
         "\"can_create_file\":{},\"can_create_folder\":{},"
         "\"can_delete_selected\":{},\"can_duplicate_selected\":{},"
         "\"can_preview_selected\":{}}},"
-        "\"operation\":{},\"entries\":{},\"trace\":{},"
+        "\"operation\":{},\"entry_symbol_summary\":{},\"entries\":{},\"trace\":{},"
         "\"expectations\":{}}}",
         explorer_contract_ok(result, expectations) ? "true" : "false",
         json_string(result.profile),
@@ -5981,6 +5985,7 @@ auto explorer_drive_json(
         snap.can_duplicate_selected ? "true" : "false",
         snap.can_preview_selected ? "true" : "false",
         operation_receipt_json(result.state.last_operation),
+        json::emit(file_explorer_demo::entry_symbol_summary_debug_json(snap)),
         explorer_entries_json(snap.entries),
         explorer_trace_array_json(result.trace),
         explorer_expectations_json(expectations));

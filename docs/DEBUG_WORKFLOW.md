@@ -225,6 +225,12 @@ icon size so Finder-style navigation rows can be checked from the artifact
 without reading pixels by eye. Entry samples include the resolved
 `symbol` and `symbol_semantic_reference_name`, so PDF/text/archive/image/movie
 fallback mistakes can be diagnosed from JSON before inspecting the screenshot.
+The shared payload also emits `entry_symbol_summary`, which records that the
+visible desktop or mobile entries were mapped by
+`file_explorer_shared::entry_symbol` into the `file_type` presentation role.
+Use `application.file_explorer.entry_symbol_summary.*` when a mobile Browse
+row shows the wrong glyph; use `entries_sample[]` only when the exact filename
+mapping needs inspection.
 `phenotype icons catalog --json` emits the complete all/sidebar/toolbar/file-type symbol
 contract, name/reference lookup invariants, macOS role metrics, and SVG source
 presence checks from the same pure metadata package.
@@ -244,7 +250,8 @@ icon probes when a renderer, path parser, or icon-source cache is suspect, while
 `phenotype drive file-explorer --json` embeds the desktop chrome geometry and
 icon-system contract under `chrome.geometry` and `chrome.icon_system`, including
 the resolved sidebar/toolbar/file-type presentation arrays and sample
-normal/pressed/disabled recipes; the
+normal/pressed/disabled recipes, plus per-entry file-type symbol names and
+`entry_symbol_summary`; the
 same output includes the default glass theme contract under `theme_system`. The
 verifier can assert those paths with `require_debug_details`, which keeps
 Finder workflow failures debuggable without relying on a screenshot guess.
@@ -341,7 +348,10 @@ before rendering. Core `widget::symbol_button` now composes that recipe with
 toolbar/navigation/action controls, so desktop Finder toolbar glyphs and mobile
 file-explorer navigation controls can prove from JSON and pixels that they are
 consuming the pure icon recipe rather than painting separate ad hoc pressed
-styles.
+styles. Mobile Browse rows consume the same file-type symbol contract through
+canvas buttons, so row glyph color, semantic label, and paint token should be
+debugged through `entry_symbol_summary`, `file_type_symbol_presentations`, and
+the row's button semantic label before pixel-region checks.
 
 For a package-owned or ad hoc SVG file, use `phenotype svg inspect <path>
 --json` before blaming a backend. The output includes the pure SVG subset
