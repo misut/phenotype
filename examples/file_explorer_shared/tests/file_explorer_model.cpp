@@ -455,10 +455,10 @@ duplicate
     assert(chrome.icon_outline_symbol_count == 34);
     assert(chrome.icon_hierarchical_symbol_count == 17);
     assert(chrome.icon_reference_symbol_count == 35);
-    assert(chrome.icon_svg_path_arc_symbol_count == 7);
-    assert(chrome.icon_phenotype_owned_symbol_count == 28);
-    assert(chrome.icon_permissive_source_symbol_count == 7);
-    assert(chrome.icon_lucide_source_symbol_count == 7);
+    assert(chrome.icon_svg_path_arc_symbol_count == 13);
+    assert(chrome.icon_phenotype_owned_symbol_count == 4);
+    assert(chrome.icon_permissive_source_symbol_count == 31);
+    assert(chrome.icon_lucide_source_symbol_count == 31);
     assert(chrome.icon_apple_asset_symbol_count == 0);
     assert(chrome.icon_audited_symbol_source_count == chrome.icon_total_symbol_count);
     assert(chrome.icon_interaction_phase_count == 3);
@@ -892,9 +892,9 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"svg_arc_policy\":\"circle elements and isolated circular path A/a")
            != std::string::npos);
-    assert(debug_text.find("\"svg_path_arc_symbol_count\":7")
+    assert(debug_text.find("\"svg_path_arc_symbol_count\":13")
            != std::string::npos);
-    assert(debug_text.find("\"lucide_source_symbol_count\":7")
+    assert(debug_text.find("\"lucide_source_symbol_count\":31")
            != std::string::npos);
     assert(debug_text.find("\"source_attribution_policy\"")
            != std::string::npos);
