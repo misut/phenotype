@@ -206,7 +206,7 @@ ALLOWED_MATERIAL_REFERENCE_PERFORMANCE_RESPONSES = {
     "warmup-capture",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 22
+MATERIAL_PLAN_CONTRACT_VERSION = 23
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -2565,6 +2565,8 @@ MATERIAL_OBSERVATION_BOOL_FIELDS = (
 MATERIAL_OBSERVATION_INT_FIELDS = (
     "schema_version",
     "expected_runtime_passes",
+    "expected_active_runtime_passes",
+    "expected_backdrop_runtime_passes",
     "expected_execution_stages",
     "expected_active_execution_stages",
     "expected_backdrop_execution_stages",
@@ -2900,6 +2902,13 @@ def check_material_observation_contract(
 
     passes = plan.get("passes")
     if isinstance(passes, list):
+        active_passes = sum(
+            1 for pass_plan in passes
+            if isinstance(pass_plan, dict) and pass_plan.get("active") is True)
+        backdrop_passes = sum(
+            1 for pass_plan in passes
+            if isinstance(pass_plan, dict)
+            and pass_plan.get("requires_backdrop") is True)
         report.check(
             "material observation runtime pass count matches plan",
             observation.get("expected_runtime_passes") == len(passes),
@@ -2910,6 +2919,19 @@ def check_material_observation_contract(
             likely_pass=likely_pass,
             hint="Observation pass count should mirror renderer.material_plans[].passes.",
             record_success=False)
+        for key, expected in (
+                ("expected_active_runtime_passes", active_passes),
+                ("expected_backdrop_runtime_passes", backdrop_passes)):
+            report.check(
+                f"material observation {key} matches passes",
+                observation.get(key) == expected,
+                path=f"{observation_path}.{key}",
+                expected=expected,
+                actual=observation.get(key),
+                likely_layer="material-observation",
+                likely_pass=likely_pass,
+                hint="Observation active/backdrop pass counts should mirror renderer.material_plans[].passes.",
+                record_success=False)
 
     execution_stages = plan.get("execution_stages")
     if isinstance(execution_stages, list):

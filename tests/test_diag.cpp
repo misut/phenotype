@@ -1057,6 +1057,9 @@ void test_material_runtime_record_json_contract() {
     assert(observation.at("primary_executor").as_string()
            == "fallback-fill");
     assert(observation.at("expected_runtime_passes").as_integer() == 1);
+    assert(observation.at("expected_active_runtime_passes").as_integer() == 1);
+    assert(observation.at("expected_backdrop_runtime_passes").as_integer()
+           == 0);
     assert(observation.at("expected_execution_stages").as_integer() == 3);
     assert(observation.at("expected_active_execution_stages").as_integer()
            == 3);

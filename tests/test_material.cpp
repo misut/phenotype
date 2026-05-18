@@ -51,7 +51,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 22);
+    assert(material_plan_contract_version == 23);
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(!plan.shape.capsule);
     assert(plan.theme.default_glass_tokens);
@@ -89,6 +89,8 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.observation_contract.max_frame_capture_count == 1);
     assert(plan.observation_contract.max_frame_capture_pixels == 320 * 240);
     assert(plan.observation_contract.max_surface_sample_pixels == 240 * 96);
+    assert(plan.observation_contract.expected_active_runtime_passes == 1u);
+    assert(plan.observation_contract.expected_backdrop_runtime_passes == 1u);
     std::puts("PASS: sampled backdrop access contract");
 }
 
@@ -143,6 +145,8 @@ void test_content_layer_stays_standard_material_contract() {
     assert(!plan.observation_contract.shared_frame_capture_required);
     assert(!plan.observation_contract.next_frame_capture_required);
     assert(plan.observation_contract.expected_backdrop_execution_stages == 0u);
+    assert(plan.observation_contract.expected_active_runtime_passes == 1u);
+    assert(plan.observation_contract.expected_backdrop_runtime_passes == 0u);
     assert(std::string_view(plan.observation_contract.likely_layer)
         == "material-standard-pass");
     assert(std::string_view(plan.observation_contract.likely_pass)
@@ -179,6 +183,8 @@ void test_fallback_backdrop_access_contract() {
     assert(plan.resource_budget.max_surface_sample_pixels == 0);
     assert(!plan.observation_contract.shared_frame_capture_required);
     assert(!plan.observation_contract.next_frame_capture_required);
+    assert(plan.observation_contract.expected_active_runtime_passes == 1u);
+    assert(plan.observation_contract.expected_backdrop_runtime_passes == 0u);
     assert(std::string_view(plan.observation_contract.backdrop_capture_scope)
         == "none");
     assert(std::string_view(plan.observation_contract.backdrop_capture_reason)

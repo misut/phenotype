@@ -532,11 +532,11 @@ pure capacity and artifact contract instead of silently disappearing.
 `observation_contract` repeats only debuggability-critical facts from the same
 plan: fallback expectation and reason, backdrop sampling expectation, stable
 backdrop requirement, shared and next-frame capture expectations, capture
-reason, primary pass/executor, execution-stage counts, texture-copy bounds,
-capture/sample pixel bounds, safety flags, and region/layer/pass hints. The verifier
-cross-checks it against the surrounding `MaterialPlan`, so stale serializers or
-backend-local policy drift fail at a single JSON path before pixel-region
-checks need human interpretation.
+reason, primary pass/executor, total/active/backdrop runtime-pass counts,
+execution-stage counts, texture-copy bounds, capture/sample pixel bounds, safety
+flags, and region/layer/pass hints. The verifier cross-checks it against the
+surrounding `MaterialPlan`, so stale serializers or backend-local policy drift
+fail at a single JSON path before pixel-region checks need human interpretation.
 `primary_pass` also records the pure executor role and maximum texture-copy
 pixels for that pass, so a backend
 artifact can prove whether it stayed within the render-target copy budget.

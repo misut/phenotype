@@ -1531,6 +1531,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(fallback_plan.observation_contract.primary_executor)
            == "fallback-fill");
     assert(fallback_plan.observation_contract.expected_runtime_passes == 1);
+    assert(fallback_plan.observation_contract.expected_active_runtime_passes
+           == 1);
+    assert(fallback_plan.observation_contract.expected_backdrop_runtime_passes
+           == 0);
     assert(fallback_plan.observation_contract.expected_execution_stages
            == fallback_plan.execution_stage_count);
     assert(fallback_plan.observation_contract.expected_backdrop_execution_stages
@@ -1761,6 +1765,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(glass_plan.observation_contract.backdrop_capture_reason)
            == "sample-current-frame");
     assert(glass_plan.observation_contract.expected_runtime_passes == 1);
+    assert(glass_plan.observation_contract.expected_active_runtime_passes == 1);
+    assert(glass_plan.observation_contract.expected_backdrop_runtime_passes
+           == 1);
     assert(glass_plan.observation_contract.expected_execution_stages == 4);
     assert(glass_plan.observation_contract.expected_active_execution_stages == 4);
     assert(glass_plan.observation_contract.expected_backdrop_execution_stages == 1);
@@ -2055,6 +2062,11 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "invalid-geometry");
     assert(std::string(invalid_plan.observation_contract.primary_pass)
            == "none");
+    assert(invalid_plan.observation_contract.expected_runtime_passes == 1);
+    assert(invalid_plan.observation_contract.expected_active_runtime_passes
+           == 0);
+    assert(invalid_plan.observation_contract.expected_backdrop_runtime_passes
+           == 0);
     assert(invalid_plan.observation_contract.expected_execution_stages == 0);
     assert(!invalid_plan.shape.valid);
     assert(invalid_plan.shape.kind == MaterialShapeKind::Invalid);

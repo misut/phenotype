@@ -603,9 +603,10 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - verifier expectations for region checks;
 - `observation_contract`, a pure audit contract that repeats the runtime facts
   the verifier must observe: fallback/backdrop expectations, fallback reason,
-  primary pass/executor, expected pass and execution-stage counts, texture-copy
-  bounds, shared and next-frame capture expectations, capture reason,
-  capture/sample pixel bounds, safety flags, and the region/layer/pass hints.
+  primary pass/executor, expected total/active/backdrop pass counts,
+  execution-stage counts, texture-copy bounds, shared and next-frame capture
+  expectations, capture reason, capture/sample pixel bounds, safety flags, and
+  the region/layer/pass hints.
   The Python verifier
   checks this object against the rest of the same `MaterialPlan`, so stale JSON
   writers or backend-local policy decisions are reported at
@@ -925,7 +926,10 @@ semantic material node for each functional role.
 
 The plan schema check also treats `primary_pass` as a runtime contract. Its
 sample-tap count must match the plan, and the backend `passes[]` list must
-include the same pass entry. When this fails, inspect the pass serializer before
+include the same pass entry. `observation_contract.expected_runtime_passes`
+mirrors the serialized pass list, while `expected_active_runtime_passes` and
+`expected_backdrop_runtime_passes` state which of those entries are expected to
+execute and sample backdrop. When this fails, inspect the pass serializer before
 changing material policy. Fallback metadata is similarly strict: fallback plans
 must report a non-empty `fallback_reason`, while non-fallback plans must leave
 `fallback_reason` empty so stale downgrade explanations cannot leak into glass

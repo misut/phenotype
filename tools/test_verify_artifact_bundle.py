@@ -431,6 +431,12 @@ def refresh_observation_contract(plan: dict[str, object]) -> None:
         "primary_pass": primary["name"],
         "primary_executor": primary["executor"],
         "expected_runtime_passes": len(plan["passes"]),
+        "expected_active_runtime_passes": sum(
+            1 for pass_plan in plan["passes"]
+            if isinstance(pass_plan, dict) and pass_plan["active"]),
+        "expected_backdrop_runtime_passes": sum(
+            1 for pass_plan in plan["passes"]
+            if isinstance(pass_plan, dict) and pass_plan["requires_backdrop"]),
         "expected_execution_stages": len(stages),
         "expected_active_execution_stages": sum(
             1 for stage in stages
@@ -2117,6 +2123,31 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["likely_layer"], "material-observation")
         self.assertEqual(failure["likely_pass"], "backdrop-sample-blur")
         self.assertIn("Observation stage counts", failure["hint"])
+
+    def test_observation_runtime_pass_mismatch_points_to_pure_contract(
+            self) -> None:
+        plan = sampled_material_plan()
+        observation = plan["observation_contract"]
+        assert isinstance(observation, dict)
+        observation["expected_active_runtime_passes"] = 0
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material observation expected_active_runtime_passes "
+                "matches passes"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".observation_contract.expected_active_runtime_passes")
+        self.assertEqual(failure["expected"], 1)
+        self.assertEqual(failure["actual"], 0)
+        self.assertEqual(failure["likely_layer"], "material-observation")
+        self.assertEqual(failure["likely_pass"], "backdrop-sample-blur")
+        self.assertIn("active/backdrop pass counts", failure["hint"])
 
     def test_fallback_pass_texture_copy_points_to_pass_contract(self) -> None:
         plan = material_plan()
