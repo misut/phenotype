@@ -337,7 +337,9 @@ resource bundling, and runtime fallback painters on one source-safe icon
 contract while still avoiding Apple-owned Finder or SF Symbols artwork. The
 packages also carry the Lucide license notice as a non-runtime text asset, so a
 resource bundle preserves the permissive-source notice alongside the copied SVG
-files.
+files. Entry debug JSON links each resolved file-type symbol back to the
+package asset name/source, which lets CI logs explain whether an icon mismatch
+belongs to filename classification, the package manifest, or SVG rendering.
 The catalog also publishes the SVG subset and arc-lowering policy, so CLI
 checks and example artifacts can catch a regression where a macOS-style glyph
 depends on an unsupported path command. AirDrop intentionally uses SVG `A/a`

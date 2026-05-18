@@ -651,6 +651,48 @@ inline auto file_type_symbol_contract() noexcept
     return k_file_type_symbols;
 }
 
+inline auto file_type_icon_source_family() noexcept -> std::string_view {
+    return "Lucide";
+}
+
+inline auto file_type_icon_source_revision() noexcept -> std::string_view {
+    return "5b40f2c5a76a27eeb81c8f1b1c311121dee45495";
+}
+
+inline auto file_type_icon_license_asset_source() noexcept
+        -> std::string_view {
+    return "assets/icons/file-types/LUCIDE_LICENSE.txt";
+}
+
+inline auto file_type_icon_asset_policy() noexcept -> std::string_view {
+    return "package_runtime_visible_file_type_svg_asset";
+}
+
+inline auto file_type_icon_token_for_symbol(
+        icon_catalog::Symbol symbol) noexcept -> std::string_view {
+    for (auto const& item : file_type_symbol_contract()) {
+        if (item.symbol == symbol)
+            return item.token;
+    }
+    return "document";
+}
+
+inline auto file_type_icon_asset_name_for_symbol(
+        icon_catalog::Symbol symbol) -> std::string {
+    auto out = std::string{"file_type."};
+    out += file_type_icon_token_for_symbol(symbol);
+    out += ".icon";
+    return out;
+}
+
+inline auto file_type_icon_asset_source_for_symbol(
+        icon_catalog::Symbol symbol) -> std::string {
+    auto out = std::string{"assets/icons/file-types/"};
+    out += file_type_icon_token_for_symbol(symbol);
+    out += ".svg";
+    return out;
+}
+
 inline auto sidebar_symbol_for_token(std::string_view token) noexcept
         -> icon_catalog::Symbol {
     for (auto const& item : desktop_sidebar_symbol_contract()) {
@@ -1906,7 +1948,7 @@ inline fs::path ensure_demo_tree(std::string_view profile) {
     write_file_if_missing(
         root / "Application Form 2.pdf",
         "PDF placeholder for the Recents probe scene.\n");
-    if (profile == "desktop" || profile == "test-model-contract") {
+    if (profile == "desktop" || profile.starts_with("test-model-contract")) {
         write_file_if_missing(
             root / "1_필수_중도인출 신청서.pdf",
             "PDF placeholder with Korean filename for font fallback verification.\n");
@@ -2364,16 +2406,27 @@ inline json::Value icon_presentation_debug_json(
 
 inline json::Value entry_debug_json(Entry const& entry) {
     json::Object out;
+    auto const symbol = entry_symbol(entry);
     out.emplace("name", json::Value{entry.name});
     out.emplace("kind", json::Value{entry_kind_label(entry)});
-    out.emplace("symbol", json::Value{std::string{entry_symbol_name(entry)}});
+    out.emplace("symbol", json::Value{std::string{icon_catalog::name(symbol)}});
     out.emplace(
         "symbol_semantic_reference_name",
-        json::Value{std::string{entry_symbol_semantic_reference_name(entry)}});
+        json::Value{std::string{
+            icon_catalog::semantic_reference_name(symbol)}});
+    out.emplace(
+        "symbol_package_asset_name",
+        json::Value{file_type_icon_asset_name_for_symbol(symbol)});
+    out.emplace(
+        "symbol_package_asset_source",
+        json::Value{file_type_icon_asset_source_for_symbol(symbol)});
+    out.emplace(
+        "symbol_package_asset_policy",
+        json::Value{std::string{file_type_icon_asset_policy()}});
     out.emplace(
         "symbol_presentation",
         icon_presentation_debug_json(
-            entry_symbol(entry),
+            symbol,
             icon_catalog::SymbolPresentationRole::FileType,
             icon_catalog::SymbolInteractionState{false, true},
             icon_catalog::SymbolInteractionPhase::Normal));
@@ -2410,6 +2463,19 @@ inline json::Value entry_symbol_summary_debug_json(Snapshot const& snap) {
                 icon_catalog::SymbolPresentationRole::FileType)}});
     out.emplace(
         "file_type_symbol_count",
+        json::Value{static_cast<std::int64_t>(
+            icon_catalog::file_type_symbol_count)});
+    out.emplace(
+        "package_asset_policy",
+        json::Value{std::string{file_type_icon_asset_policy()}});
+    out.emplace(
+        "package_asset_source_family",
+        json::Value{std::string{file_type_icon_source_family()}});
+    out.emplace(
+        "package_asset_source_revision",
+        json::Value{std::string{file_type_icon_source_revision()}});
+    out.emplace(
+        "package_asset_count",
         json::Value{static_cast<std::int64_t>(
             icon_catalog::file_type_symbol_count)});
     out.emplace(
@@ -2639,6 +2705,15 @@ inline json::Value file_type_symbol_tokens_debug_json(
             "semantic_reference_name",
             json::Value{std::string{
                 icon_catalog::semantic_reference_name(item.symbol)}});
+        token.emplace(
+            "package_asset_name",
+            json::Value{file_type_icon_asset_name_for_symbol(item.symbol)});
+        token.emplace(
+            "package_asset_source",
+            json::Value{file_type_icon_asset_source_for_symbol(item.symbol)});
+        token.emplace(
+            "package_asset_policy",
+            json::Value{std::string{file_type_icon_asset_policy()}});
         out.push_back(json::Value{std::move(token)});
     }
     return json::Value{std::move(out)};
@@ -2672,6 +2747,12 @@ inline json::Value file_type_symbol_presentations_debug_json(
             "semantic_reference_name",
             json::Value{std::string{
                 icon_catalog::semantic_reference_name(item.symbol)}});
+        token.emplace(
+            "package_asset_name",
+            json::Value{file_type_icon_asset_name_for_symbol(item.symbol)});
+        token.emplace(
+            "package_asset_source",
+            json::Value{file_type_icon_asset_source_for_symbol(item.symbol)});
         token.emplace(
             "source_attribution",
             icon_source_attribution_debug_json(item.symbol));
@@ -3417,20 +3498,7 @@ inline constexpr FileTypeIconAsset k_file_type_icon_assets[] = {
      "assets/icons/file-types/presentation.svg"},
 };
 
-inline auto file_type_icon_source_family() noexcept -> std::string_view {
-    return "Lucide";
-}
-
-inline auto file_type_icon_source_revision() noexcept -> std::string_view {
-    return "5b40f2c5a76a27eeb81c8f1b1c311121dee45495";
-}
-
-inline auto file_type_icon_license_asset_source() noexcept
-        -> std::string_view {
-    return "assets/icons/file-types/LUCIDE_LICENSE.txt";
-}
-
-inline bool file_type_icon_asset_name(std::string_view name) noexcept {
+inline bool is_file_type_icon_asset_name(std::string_view name) noexcept {
     return name.starts_with("file_type.") && name.ends_with(".icon");
 }
 
@@ -3468,7 +3536,7 @@ inline json::Value file_explorer_resource_system_debug_json(
 
     json::Array file_type_icon_assets;
     for (auto const& asset : catalog.assets) {
-        if (!file_type_icon_asset_name(asset.name))
+        if (!is_file_type_icon_asset_name(asset.name))
             continue;
         json::Object icon_asset;
         icon_asset.emplace("name", json::Value{asset.name});

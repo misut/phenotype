@@ -1,6 +1,7 @@
 #include <cassert>
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
@@ -8,6 +9,7 @@
 #include <iostream>
 #include <span>
 #include <string>
+#include <string_view>
 #include <vector>
 
 import file_explorer_shared;
@@ -20,6 +22,15 @@ namespace {
 [[noreturn]] void fail_assert(char const* expression, char const* file, int line) {
     std::cerr << "FAIL: " << file << ":" << line << ": " << expression << "\n";
     std::exit(1);
+}
+
+std::string unique_test_profile(std::string_view stem) {
+    auto stamp = std::chrono::steady_clock::now()
+        .time_since_epoch()
+        .count();
+    auto marker = reinterpret_cast<std::uintptr_t>(&stamp);
+    return std::string{stem} + "-" + std::to_string(stamp) + "-"
+        + std::to_string(marker);
 }
 
 } // namespace
@@ -301,12 +312,12 @@ duplicate
     auto bad_expectation = demo::parse_explorer_expectation("selected");
     assert(!bad_expectation.ok);
 
-    std::string const profile = "test-model-contract";
+    std::string const profile = unique_test_profile("test-model-contract");
     auto root = demo::demo_root(profile);
     std::error_code ec;
     fs::remove_all(root, ec);
 
-    std::string const startup_profile = "test-startup-inputs";
+    std::string const startup_profile = unique_test_profile("test-startup-inputs");
     fs::remove_all(demo::demo_root(startup_profile), ec);
     auto startup_state = demo::make_state(startup_profile);
     demo::apply_explorer_inputs(
@@ -674,7 +685,8 @@ duplicate
            == "platform_standard_controls_inside_leading_content_reserve");
     assert(!chrome.status_bar_visible);
     assert(demo::explorer_icon_grid_columns(chrome).size() == 6);
-    std::string const viewport_profile = "test-status-bar-viewport";
+    std::string const viewport_profile =
+        unique_test_profile("test-status-bar-viewport");
     auto viewport_state = demo::make_state(viewport_profile);
     demo::apply_explorer_input(
         viewport_state,
@@ -743,7 +755,8 @@ duplicate
     assert(snap.entries[5].name == "※해당 시 필독_①무주택자인 경우.pdf");
     assert(snap.entries[6].name == "[카카오] 퇴직금 지급 기준.pdf");
 
-    std::string const keyboard_profile = "test-keyboard-navigation";
+    std::string const keyboard_profile =
+        unique_test_profile("test-keyboard-navigation");
     auto keyboard_state = demo::make_state(keyboard_profile);
     auto keyboard_entries = demo::snapshot(keyboard_state).entries;
     auto keyboard_chrome =
@@ -801,7 +814,8 @@ duplicate
            == "keyboard_focus_navigation");
     fs::remove_all(keyboard_state.root, ec);
 
-    std::string const focus_profile = "test-focus-modality-contract";
+    std::string const focus_profile =
+        unique_test_profile("test-focus-modality-contract");
     auto focus_state = demo::make_state(focus_profile);
     assert(focus_state.focus_target == demo::ExplorerFocusTarget::None);
     assert(!focus_state.focus_visible);
@@ -1022,6 +1036,19 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"file_type_symbol_tokens\"")
            != std::string::npos);
+    assert(debug_text.find(
+               "\"package_asset_policy\":"
+               "\"package_runtime_visible_file_type_svg_asset\"")
+        != std::string::npos);
+    assert(debug_text.find("\"package_asset_name\":\"file_type.pdf.icon\"")
+           != std::string::npos);
+    assert(debug_text.find(
+               "\"package_asset_source\":"
+               "\"assets/icons/file-types/pdf.svg\"")
+        != std::string::npos);
+    assert(debug_text.find(
+               "\"symbol_package_asset_name\":\"file_type.pdf.icon\"")
+        != std::string::npos);
     assert(debug_text.find("\"file_type_reference_symbols\"")
            != std::string::npos);
     assert(debug_text.find("\"archivebox\"")
@@ -1363,7 +1390,7 @@ duplicate
     assert(fs::exists(state.current / "README copy.txt"));
     assert(state.status == "Duplicated README.txt to README copy.txt");
 
-    std::string const drive_profile = "test-cli-drive";
+    std::string const drive_profile = unique_test_profile("test-cli-drive");
     auto drive_root = demo::demo_root(drive_profile);
     fs::remove_all(drive_root, ec);
     std::vector<demo::ExplorerInput> inputs{
@@ -1449,7 +1476,8 @@ duplicate
     assert(failed_expectation.actual == "<none>");
     fs::remove_all(drive_root, ec);
 
-    std::string const navigation_profile = "test-cli-navigation";
+    std::string const navigation_profile =
+        unique_test_profile("test-cli-navigation");
     auto navigation_root = demo::demo_root(navigation_profile);
     fs::remove_all(navigation_root, ec);
     std::vector<demo::ExplorerInput> open_inputs{

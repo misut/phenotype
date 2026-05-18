@@ -225,6 +225,38 @@
       "equals": "icon"
     },
     {
+      "path": "application.file_explorer.entry_symbol_summary.source",
+      "equals": "file_explorer_shared::entry_symbol"
+    },
+    {
+      "path": "application.file_explorer.entry_symbol_summary.presentation_role",
+      "equals": "file_type"
+    },
+    {
+      "path": "application.file_explorer.entry_symbol_summary.file_type_symbol_count",
+      "equals": 11
+    },
+    {
+      "path": "application.file_explorer.entry_symbol_summary.package_asset_policy",
+      "equals": "package_runtime_visible_file_type_svg_asset"
+    },
+    {
+      "path": "application.file_explorer.entry_symbol_summary.package_asset_source_family",
+      "equals": "Lucide"
+    },
+    {
+      "path": "application.file_explorer.entry_symbol_summary.package_asset_source_revision",
+      "equals": "5b40f2c5a76a27eeb81c8f1b1c311121dee45495"
+    },
+    {
+      "path": "application.file_explorer.entry_symbol_summary.package_asset_count",
+      "equals": 11
+    },
+    {
+      "path": "application.file_explorer.entry_symbol_summary.all_visible_entries_have_symbols",
+      "equals": true
+    },
+    {
       "path": "application.file_explorer.selection.present",
       "equals": false
     },
@@ -1069,57 +1101,90 @@
         {
           "token": "folder",
           "symbol": "folder",
-          "semantic_reference_name": "folder"
+          "semantic_reference_name": "folder",
+          "package_asset_name": "file_type.folder.icon",
+          "package_asset_source": "assets/icons/file-types/folder.svg",
+          "package_asset_policy": "package_runtime_visible_file_type_svg_asset"
         },
         {
           "token": "document",
           "symbol": "document",
-          "semantic_reference_name": "doc"
+          "semantic_reference_name": "doc",
+          "package_asset_name": "file_type.document.icon",
+          "package_asset_source": "assets/icons/file-types/document.svg",
+          "package_asset_policy": "package_runtime_visible_file_type_svg_asset"
         },
         {
           "token": "pdf",
           "symbol": "pdf_document",
-          "semantic_reference_name": "doc.richtext"
+          "semantic_reference_name": "doc.richtext",
+          "package_asset_name": "file_type.pdf.icon",
+          "package_asset_source": "assets/icons/file-types/pdf.svg",
+          "package_asset_policy": "package_runtime_visible_file_type_svg_asset"
         },
         {
           "token": "text",
           "symbol": "text_document",
-          "semantic_reference_name": "doc.plaintext"
+          "semantic_reference_name": "doc.plaintext",
+          "package_asset_name": "file_type.text.icon",
+          "package_asset_source": "assets/icons/file-types/text.svg",
+          "package_asset_policy": "package_runtime_visible_file_type_svg_asset"
         },
         {
           "token": "image",
           "symbol": "image",
-          "semantic_reference_name": "photo"
+          "semantic_reference_name": "photo",
+          "package_asset_name": "file_type.image.icon",
+          "package_asset_source": "assets/icons/file-types/image.svg",
+          "package_asset_policy": "package_runtime_visible_file_type_svg_asset"
         },
         {
           "token": "movie",
           "symbol": "movie",
-          "semantic_reference_name": "film"
+          "semantic_reference_name": "film",
+          "package_asset_name": "file_type.movie.icon",
+          "package_asset_source": "assets/icons/file-types/movie.svg",
+          "package_asset_policy": "package_runtime_visible_file_type_svg_asset"
         },
         {
           "token": "archive",
           "symbol": "archive",
-          "semantic_reference_name": "archivebox"
+          "semantic_reference_name": "archivebox",
+          "package_asset_name": "file_type.archive.icon",
+          "package_asset_source": "assets/icons/file-types/archive.svg",
+          "package_asset_policy": "package_runtime_visible_file_type_svg_asset"
         },
         {
           "token": "audio",
           "symbol": "audio_document",
-          "semantic_reference_name": "music.note"
+          "semantic_reference_name": "music.note",
+          "package_asset_name": "file_type.audio.icon",
+          "package_asset_source": "assets/icons/file-types/audio.svg",
+          "package_asset_policy": "package_runtime_visible_file_type_svg_asset"
         },
         {
           "token": "code",
           "symbol": "code_document",
-          "semantic_reference_name": "chevron.left.forwardslash.chevron.right"
+          "semantic_reference_name": "chevron.left.forwardslash.chevron.right",
+          "package_asset_name": "file_type.code.icon",
+          "package_asset_source": "assets/icons/file-types/code.svg",
+          "package_asset_policy": "package_runtime_visible_file_type_svg_asset"
         },
         {
           "token": "spreadsheet",
           "symbol": "spreadsheet_document",
-          "semantic_reference_name": "tablecells"
+          "semantic_reference_name": "tablecells",
+          "package_asset_name": "file_type.spreadsheet.icon",
+          "package_asset_source": "assets/icons/file-types/spreadsheet.svg",
+          "package_asset_policy": "package_runtime_visible_file_type_svg_asset"
         },
         {
           "token": "presentation",
           "symbol": "presentation_document",
-          "semantic_reference_name": "rectangle.on.rectangle.angled"
+          "semantic_reference_name": "rectangle.on.rectangle.angled",
+          "package_asset_name": "file_type.presentation.icon",
+          "package_asset_source": "assets/icons/file-types/presentation.svg",
+          "package_asset_policy": "package_runtime_visible_file_type_svg_asset"
         }
       ]
     },
