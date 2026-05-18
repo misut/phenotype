@@ -90,7 +90,10 @@ The initial scope is intentionally narrow:
   per-locale fallback coverage for the default key set. The same command reads
   each declared SVG asset at the CLI edge and reports
   `svg_asset_inspections` with viewBox, shape count, paintability, unsupported
-  command count, diagnostics, and bytes from the pure SVG contract; the CLI
+  command count, diagnostics, bytes, and SHA-256 from the pure SVG contract.
+  File-type SVG assets also report a `catalog_source` block that re-parses the
+  embedded audited source associated with the pinned permissive URL and checks
+  the packaged asset against that source's viewBox and shape contract. The CLI
   only reads files and checks paths, while
   manifest and locale text parsing stay in the pure package.
 - `phenotype package list <root>` scans for package manifests below a root and

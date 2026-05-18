@@ -32,6 +32,8 @@ export struct PackageSvgAssetInspection {
     fs::path path;
     bool present = false;
     std::uintmax_t bytes = 0;
+    std::string sha256;
+    std::string integrity_error;
     bool inspected = false;
     bool ok = false;
     std::string error;
@@ -41,6 +43,11 @@ export struct PackageSvgAssetInspection {
     std::string icon_symbol;
     PackageIconSourceAttribution source_attribution;
     svg_contract::DocumentInspection inspection;
+    bool catalog_source_inspected = false;
+    bool catalog_source_ok = false;
+    bool catalog_source_shape_match = false;
+    std::uintmax_t catalog_source_bytes = 0;
+    svg_contract::DocumentInspection catalog_source_inspection;
 };
 
 export struct PackageSummary {

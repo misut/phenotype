@@ -376,12 +376,16 @@ suffix), and `phenotype package inspect --json` reports total/preload/runtime
 SVG counts plus `svg_asset_inspections` for each declared SVG file. Those
 inspections read files only at the CLI edge, parse them with the pure SVG
 contract shared by `phenotype.svg`, and report viewBox, shape count,
-unsupported command count, diagnostics, paintability, and bytes so asset
-regressions are visible in CI logs. `phenotype svg inspect <path> --json` is
-the narrow local edge probe for one file and uses the same contract, so SVG
-failures can be debugged without AppKit, Metal, or platform image decoders. The
-shared `phenotype_svg_contract` package keeps that asset inspection available
-to the Linux CLI gate without depending on the native renderer package.
+unsupported command count, diagnostics, paintability, bytes, and SHA-256 so
+asset regressions are visible in CI logs. File-type SVG assets add a second
+catalog-source inspection: the CLI parses the embedded audited source associated
+with the pinned permissive URL and verifies the packaged file keeps the same
+viewBox and shape contract without fetching the network in CI.
+`phenotype svg inspect <path> --json` is the narrow local edge probe for one file
+and uses the same contract, so SVG failures can be debugged without AppKit,
+Metal, or platform image decoders. The shared `phenotype_svg_contract` package
+keeps that asset inspection available to the Linux CLI gate without depending
+on the native renderer package.
 
 ## Input Command Boundary
 

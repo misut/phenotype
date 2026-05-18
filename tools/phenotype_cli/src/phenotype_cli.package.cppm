@@ -134,6 +134,43 @@ void attach_file_type_icon_provenance(PackageSvgAssetInspection& inspection) {
     inspection.source_attribution = package_icon_source_attribution(*symbol);
 }
 
+bool same_svg_summary(svg_contract::DocumentSummary const& lhs,
+                      svg_contract::DocumentSummary const& rhs) {
+    auto same_float = [](float a, float b) {
+        return std::abs(a - b) < 0.001f;
+    };
+    return same_float(lhs.view_min_x, rhs.view_min_x)
+        && same_float(lhs.view_min_y, rhs.view_min_y)
+        && same_float(lhs.view_width, rhs.view_width)
+        && same_float(lhs.view_height, rhs.view_height)
+        && lhs.shape_count == rhs.shape_count
+        && lhs.unsupported_count == rhs.unsupported_count
+        && lhs.paintable == rhs.paintable;
+}
+
+void attach_file_type_catalog_source_contract(
+        PackageSvgAssetInspection& inspection) {
+    if (!inspection.file_type_icon_asset || inspection.file_type_token.empty())
+        return;
+    auto symbol = file_type_symbol_for_token(inspection.file_type_token);
+    if (!symbol)
+        return;
+
+    auto const catalog_source = icon_catalog::svg_source(*symbol);
+    inspection.catalog_source_bytes = catalog_source.size();
+    inspection.catalog_source_inspected = true;
+    inspection.catalog_source_inspection =
+        svg_contract::inspect_source(catalog_source);
+    auto const& source_summary =
+        inspection.catalog_source_inspection.summary;
+    inspection.catalog_source_ok = source_summary.paintable
+        && source_summary.unsupported_count == 0
+        && !source_summary.has_diagnostics;
+    inspection.catalog_source_shape_match = same_svg_summary(
+        inspection.inspection.summary,
+        source_summary);
+}
+
 auto inspect_package_svg_asset(
         fs::path const& root,
         phenotype::AssetDescriptor const& asset)
@@ -148,6 +185,11 @@ auto inspect_package_svg_asset(
     if (!result.present) {
         result.error = "asset source is missing";
         return result;
+    }
+    if (auto digest = sha256_file_or_error(result.path)) {
+        result.sha256 = *digest;
+    } else {
+        result.integrity_error = digest.error();
     }
 
     auto const source = read_text_file(result.path);
@@ -179,6 +221,7 @@ auto inspect_package_svg_asset(
     result.ok = summary.paintable
         && summary.unsupported_count == 0
         && !summary.has_diagnostics;
+    attach_file_type_catalog_source_contract(result);
     return result;
 }
 
@@ -409,7 +452,12 @@ auto file_type_icon_provenance_failure_count(
                 || !source.embedded_source
                 || source.apple_asset
                 || source.platform_extracted
-                || source.runtime_fetch_required;
+                || source.runtime_fetch_required
+                || inspection.sha256.empty()
+                || !inspection.integrity_error.empty()
+                || !inspection.catalog_source_inspected
+                || !inspection.catalog_source_ok
+                || !inspection.catalog_source_shape_match;
         }));
 }
 
@@ -418,9 +466,26 @@ auto file_type_icon_provenance_detail(PackageSummary const& summary)
     auto const icon_count = file_type_icon_asset_count(summary);
     auto const failure_count =
         file_type_icon_provenance_failure_count(summary);
-    auto detail = std::format("file_type_icon_assets={} failures={}",
-                              icon_count,
-                              failure_count);
+    auto digest_failure_count = std::size_t{0};
+    auto catalog_source_failure_count = std::size_t{0};
+    for (auto const& inspection : summary.svg_asset_inspections) {
+        if (!inspection.file_type_icon_asset)
+            continue;
+        if (inspection.sha256.empty() || !inspection.integrity_error.empty())
+            ++digest_failure_count;
+        if (!inspection.catalog_source_inspected
+            || !inspection.catalog_source_ok
+            || !inspection.catalog_source_shape_match) {
+            ++catalog_source_failure_count;
+        }
+    }
+    auto detail = std::format(
+        "file_type_icon_assets={} failures={} "
+        "digest_failures={} catalog_source_failures={}",
+        icon_count,
+        failure_count,
+        digest_failure_count,
+        catalog_source_failure_count);
     if (failure_count == 0)
         return detail;
 
@@ -438,7 +503,12 @@ auto file_type_icon_provenance_detail(PackageSummary const& summary)
             || !source.embedded_source
             || source.apple_asset
             || source.platform_extracted
-            || source.runtime_fetch_required;
+            || source.runtime_fetch_required
+            || inspection.sha256.empty()
+            || !inspection.integrity_error.empty()
+            || !inspection.catalog_source_inspected
+            || !inspection.catalog_source_ok
+            || !inspection.catalog_source_shape_match;
         if (!failed)
             continue;
         if (shown >= 4) {
@@ -446,13 +516,17 @@ auto file_type_icon_provenance_detail(PackageSummary const& summary)
             break;
         }
         detail += std::format(
-            " {} token={} family={} license={} fetch={} platform={}",
+            " {} token={} family={} license={} fetch={} platform={} "
+            "digest={} catalog_source_ok={} shape_match={}",
             inspection.name,
             inspection.file_type_token.empty() ? "<missing>" : inspection.file_type_token,
             source.family.empty() ? "<missing>" : source.family,
             source.license.empty() ? "<missing>" : source.license,
             source.runtime_fetch_required ? "true" : "false",
-            source.platform_extracted ? "true" : "false");
+            source.platform_extracted ? "true" : "false",
+            inspection.sha256.empty() ? "<missing>" : "present",
+            inspection.catalog_source_ok ? "true" : "false",
+            inspection.catalog_source_shape_match ? "true" : "false");
         ++shown;
     }
     return detail;
@@ -698,16 +772,22 @@ auto svg_asset_inspection_json(PackageSvgAssetInspection const& inspection)
     -> std::string {
     return std::format(
         "{{\"name\":{},\"source\":{},\"path\":{},\"present\":{},"
-        "\"bytes\":{},\"inspected\":{},\"ok\":{},\"error\":{},"
+        "\"bytes\":{},\"sha256\":{},\"integrity_error\":{},"
+        "\"inspected\":{},\"ok\":{},\"error\":{},"
         "\"native_window_control_palette_hits\":{},"
         "\"file_type_icon_asset\":{},\"file_type_token\":{},"
         "\"icon_symbol\":{},\"source_attribution\":{},"
+        "\"catalog_source\":{{\"inspected\":{},\"ok\":{},"
+        "\"shape_match\":{},\"bytes\":{},\"summary\":{},"
+        "\"diagnostics\":{}}},"
         "\"summary\":{},\"diagnostics\":{}}}",
         json_string(inspection.name),
         json_string(inspection.source),
         json_string(path_string(inspection.path)),
         inspection.present ? "true" : "false",
         inspection.bytes,
+        json_string(inspection.sha256),
+        json_string(inspection.integrity_error),
         inspection.inspected ? "true" : "false",
         inspection.ok ? "true" : "false",
         json_string(inspection.error),
@@ -716,6 +796,13 @@ auto svg_asset_inspection_json(PackageSvgAssetInspection const& inspection)
         json_string(inspection.file_type_token),
         json_string(inspection.icon_symbol),
         icon_source_attribution_json(inspection.source_attribution),
+        inspection.catalog_source_inspected ? "true" : "false",
+        inspection.catalog_source_ok ? "true" : "false",
+        inspection.catalog_source_shape_match ? "true" : "false",
+        inspection.catalog_source_bytes,
+        svg_document_summary_json(
+            inspection.catalog_source_inspection.summary),
+        string_array_json(inspection.catalog_source_inspection.diagnostics),
         svg_document_summary_json(inspection.inspection.summary),
         string_array_json(inspection.inspection.diagnostics));
 }
