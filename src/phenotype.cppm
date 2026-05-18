@@ -77,6 +77,21 @@ inline bool focus_ring_visible(unsigned int callback_id) {
         && callback_id == g_app.focused_id
         && g_app.focus_visible;
 }
+
+inline bool focus_ring_hidden_by_pointer_modality(unsigned int callback_id) {
+    return callback_id != 0xFFFFFFFFu
+        && !g_app.focus_visible
+        && g_app.prev_focus_visible
+        && (callback_id == g_app.focused_id
+            || callback_id == g_app.prev_focused_id);
+}
+
+inline int focus_ring_transition_ms(unsigned int callback_id,
+                                    int normal_duration_ms) {
+    return focus_ring_hidden_by_pointer_modality(callback_id)
+        ? 0
+        : normal_duration_ms;
+}
 } // namespace detail
 
 inline auto theme_with_resource_defaults(
@@ -230,10 +245,11 @@ inline void link(str label, str href) {
     // without drifting through an unrelated hue mid-animation.
     Color const ring_off{t.state_focus_ring.r, t.state_focus_ring.g,
                          t.state_focus_ring.b, 0};
+    int const focus_ms = detail::focus_ring_transition_ms(id, 150);
     node.border_width = animate_float(
-        is_focused ? t.state_focus_ring_width : 0.0f, 150);
+        is_focused ? t.state_focus_ring_width : 0.0f, focus_ms);
     node.border_color = animate_color(
-        is_focused ? t.state_focus_ring : ring_off, 150);
+        is_focused ? t.state_focus_ring : ring_off, focus_ms);
 
     detail::g_app.callbacks.push_back([url_copy] {
     #ifdef __wasi__
@@ -426,10 +442,11 @@ inline void button(str label, Msg msg, ButtonStyleOptions options) {
     // `state_focus_ring_width`, colour cross-fades from the variant's
     // resting border to `state_focus_ring`. Paint reads both fields
     // directly.
+    int const focus_ms = detail::focus_ring_transition_ms(id, 150);
     node.border_width = animate_float(
-        is_focused ? t.state_focus_ring_width : base_border_width, 150);
+        is_focused ? t.state_focus_ring_width : base_border_width, focus_ms);
     node.border_color = animate_color(
-        is_focused ? t.state_focus_ring : base_border, 150);
+        is_focused ? t.state_focus_ring : base_border, focus_ms);
     node.cursor_type = 1;
 
     detail::g_app.callbacks.push_back([msg = std::move(msg)] {
@@ -488,10 +505,12 @@ inline void toggle(str label, bool active, Msg msg,
         // `state_focus_ring_width`, colour fades from the focus-ring
         // RGB at alpha 0 (invisible) to full alpha so checkbox/radio
         // gain a halo around the box+label without any resting border.
+        int const focus_ms =
+            ::phenotype::detail::focus_ring_transition_ms(id, 150);
         row.border_width = ::phenotype::animate_float(
-            is_focused ? t.state_focus_ring_width : 0.0f, 150);
+            is_focused ? t.state_focus_ring_width : 0.0f, focus_ms);
         row.border_color = ::phenotype::animate_color(
-            is_focused ? t.state_focus_ring : ring_off, 150);
+            is_focused ? t.state_focus_ring : ring_off, focus_ms);
         row.debug_semantic_role = interaction_role_name(role);
         row.debug_semantic_label = std::string(label.data, label.len);
         row.debug_semantic_callback_id = id;
@@ -611,10 +630,11 @@ inline void text_field(str hint, std::string const& current,
     // `state_focus_ring_width`, colour cross-fades from the resting
     // border (or `state_error_border`) to `state_focus_ring`. Pointer
     // focus still moves the caret, but only keyboard focus paints the ring.
+    int const focus_ms = detail::focus_ring_transition_ms(id, 150);
     node.border_width = animate_float(
-        is_focused ? t.state_focus_ring_width : 1.0f, 150);
+        is_focused ? t.state_focus_ring_width : 1.0f, focus_ms);
     node.border_color = animate_color(
-        is_focused ? t.state_focus_ring : resting_border, 150);
+        is_focused ? t.state_focus_ring : resting_border, focus_ms);
     detail::g_app.callbacks.push_back([] {});
     detail::g_app.callback_roles.push_back(InteractionRole::TextField);
     using MapperFn = Msg(*)(std::string);
@@ -936,10 +956,11 @@ inline void canvas_button(str label,
         auto const target_bg = is_pressed ? pressed_bg
             : (is_hovered ? hover_bg : base_bg);
         node.background = animate_color(target_bg, 150);
+        int const focus_ms = detail::focus_ring_transition_ms(id, 150);
         node.border_width = animate_float(
-            is_focused ? t.state_focus_ring_width : base_border_width, 150);
+            is_focused ? t.state_focus_ring_width : base_border_width, focus_ms);
         node.border_color = animate_color(
-            is_focused ? t.state_focus_ring : base_border, 150);
+            is_focused ? t.state_focus_ring : base_border, focus_ms);
         node.cursor_type = 1;
 
         detail::g_app.callbacks.push_back([msg = std::move(msg)] {
@@ -1142,10 +1163,11 @@ inline void switch_(str label, bool on, Msg msg) {
         // Focus chrome on the outer row so the ring wraps around
         // track + label, not just the track. Width grows from 0 to
         // `state_focus_ring_width`, colour fades in/out via alpha.
+        int const focus_ms = detail::focus_ring_transition_ms(id, 150);
         row.border_width = animate_float(
-            is_focused ? t.state_focus_ring_width : 0.0f, 150);
+            is_focused ? t.state_focus_ring_width : 0.0f, focus_ms);
         row.border_color = animate_color(
-            is_focused ? t.state_focus_ring : ring_off, 150);
+            is_focused ? t.state_focus_ring : ring_off, focus_ms);
         row.debug_semantic_role = "switch";
         row.debug_semantic_label = std::string(label.data, label.len);
         row.debug_semantic_callback_id = id;
@@ -1306,10 +1328,11 @@ inline void tabs(std::vector<str> const& items,
             // Focus ring grows from no border to
             // `state_focus_ring_width` and back, matching the rest of
             // the focusable widget set; colour fades in/out via alpha.
+            int const focus_ms = detail::focus_ring_transition_ms(id, 150);
             btn.border_width = animate_float(
-                is_focused ? t.state_focus_ring_width : 0.0f, 150);
+                is_focused ? t.state_focus_ring_width : 0.0f, focus_ms);
             btn.border_color = animate_color(
-                is_focused ? t.state_focus_ring : ring_off, 150);
+                is_focused ? t.state_focus_ring : ring_off, focus_ms);
             btn.style.padding[0] = t.space_xs;
             btn.style.padding[1] = t.space_sm;
             btn.style.padding[2] = t.space_xs;
@@ -2587,10 +2610,11 @@ void accordion(str title, F&& builder) {
             // Focus ring: width grows from 1px to
             // `state_focus_ring_width`, colour cross-fades from
             // `t.border` to `state_focus_ring`.
+            int const focus_ms = detail::focus_ring_transition_ms(id, 150);
             hd.border_width = animate_float(
-                is_focused ? t.state_focus_ring_width : 1.0f, 150);
+                is_focused ? t.state_focus_ring_width : 1.0f, focus_ms);
             hd.border_color = animate_color(
-                is_focused ? t.state_focus_ring : t.border, 150);
+                is_focused ? t.state_focus_ring : t.border, focus_ms);
             hd.border_radius = t.radius_sm;
             hd.debug_semantic_role = "accordion-header";
             hd.debug_semantic_label = std::string(title.data, title.len);
