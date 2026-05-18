@@ -231,6 +231,15 @@ mode, selected entry plus index, operation receipt, entry counts, pure chrome
 metrics, keyboard command descriptors, and the `input_model`. The operation
 receipt embeds the same plan shape as CLI drive output, so a startup artifact
 can explain the file effect contract without replaying the UI.
+The same object now includes `finder_visual_contract`, which is the first field
+to inspect when a Finder-like visual regresses. It mirrors the shared chrome
+metrics into an LLM-friendly summary: platform-owned traffic lights/caption
+buttons, no content or artifact markers, reserve-only titlebar geometry, soft
+sidebar selection with a zero-width selected-row border, keyboard-only focus
+rings, permissive SVG provenance, zero Apple/SF Symbols embedded assets, zero
+platform-extracted icons, and local artifact verification rather than default
+PR capture. A mismatch is reported as `finder-visual-contract` before pixel
+regions are interpreted.
 The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
 selected-row radius plus soft selected-row alpha policy, the
 `phenotype.icon_catalog` / `phenotype.icons` style contract

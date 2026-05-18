@@ -645,6 +645,42 @@ duplicate
            == "blank_reserve_under_os_window_controls");
     assert(chrome.native_window_control_integration_policy
            == "platform_standard_controls_inside_leading_content_reserve");
+    auto finder_contract = demo::finder_visual_contract(chrome, profile);
+    assert(finder_contract.schema_version == 1);
+    assert(finder_contract.name == "finder_visual_parity_contract");
+    assert(finder_contract.source
+           == "file_explorer_shared::finder_visual_contract");
+    assert(finder_contract.titlebar_strategy
+           == "integrated_titlebar_content_reserve_with_platform_window_controls");
+    assert(finder_contract.native_control_owner == "platform-edge");
+    assert(finder_contract.native_control_marker_policy
+           == "no_content_or_artifact_window_control_markers");
+    assert(finder_contract.native_control_geometry_role
+           == "reserve_metrics_only_not_paint_instructions");
+    assert(finder_contract.native_control_palette_policy
+           == "traffic_light_palette_forbidden_in_content_and_artifacts");
+    assert(finder_contract.sidebar_selection_style
+           == demo::k_desktop_sidebar_selection_policy);
+    assert(finder_contract.sidebar_selected_row_border_width == 0.0f);
+    assert(finder_contract.sidebar_selected_row_background_alpha
+           == demo::k_desktop_sidebar_selected_row_background_alpha);
+    assert(finder_contract.focus_ring_policy
+           == "keyboard_tab_navigation_only_pointer_click_hides_focus_ring");
+    assert(finder_contract.icon_source_policy.find("permissive SVG")
+           != std::string::npos);
+    assert(finder_contract.embedded_svg_policy.find("pinned direct raw SVG URL")
+           != std::string::npos);
+    assert(finder_contract.apple_asset_symbol_count == 0);
+    assert(finder_contract.platform_extracted_symbol_count == 0);
+    assert(finder_contract.runtime_fetched_symbol_count == 0);
+    assert(finder_contract.thumbnail_preview_policy
+           == demo::k_desktop_thumbnail_visual_policy);
+    assert(finder_contract.leading_control_reserved_width
+           == demo::k_desktop_leading_control_reserved_width);
+    assert(finder_contract.titlebar_drag_region_height
+           == demo::k_desktop_titlebar_drag_region_height);
+    assert(finder_contract.verifier_gate
+           == "local_file_explorer_artifact_verify_not_default_pr_ci");
     auto artifact_chrome =
         demo::explorer_chrome_with_native_window_control_ownership(chrome);
     assert(!artifact_chrome.content_window_control_markers);
@@ -717,6 +753,13 @@ duplicate
     assert(mobile_chrome.artifact_drawn_window_control_count == 0);
     assert(mobile_chrome.window_control_single_owner);
     assert(mobile_chrome.native_window_control_owner == "none");
+    auto mobile_finder_contract =
+        demo::finder_visual_contract(mobile_chrome, "mobile");
+    assert(mobile_finder_contract.titlebar_strategy
+           == "not_applicable_mobile_shell");
+    assert(mobile_finder_contract.native_control_owner == "none");
+    assert(mobile_finder_contract.sidebar_selection_style == "n/a");
+    assert(mobile_finder_contract.apple_asset_symbol_count == 0);
     assert(mobile_chrome.window_control_duplication_guard
            == "not_applicable_mobile_shell");
     assert(mobile_chrome.icon_module == "phenotype.icons");
@@ -986,6 +1029,17 @@ duplicate
     assert(debug_text.find(
         "\"finder_density_policy\":\"finder_reference_density_icon_grid_top_inset_v1\"")
         != std::string::npos);
+    assert(debug_text.find("\"finder_visual_contract\"") != std::string::npos);
+    assert(debug_text.find("\"name\":\"finder_visual_parity_contract\"")
+           != std::string::npos);
+    assert(debug_text.find(
+        "\"native_control_marker_policy\":\"no_content_or_artifact_window_control_markers\"")
+        != std::string::npos);
+    assert(debug_text.find(
+        "\"focus_ring_policy\":\"keyboard_tab_navigation_only_pointer_click_hides_focus_ring\"")
+        != std::string::npos);
+    assert(debug_text.find("\"apple_asset_symbol_count\":0")
+           != std::string::npos);
     assert(debug_text.find("\"sidebar_icon_size\"") != std::string::npos);
     assert(debug_text.find("\"sidebar_label_leading\"") != std::string::npos);
     assert(debug_text.find("\"icon_system\"") != std::string::npos);

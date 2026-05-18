@@ -185,6 +185,42 @@
       "equals": "desktop"
     },
     {
+      "path": "application.file_explorer.finder_visual_contract.schema_version",
+      "equals": 1
+    },
+    {
+      "path": "application.file_explorer.finder_visual_contract.name",
+      "equals": "finder_visual_parity_contract"
+    },
+    {
+      "path": "application.file_explorer.finder_visual_contract.titlebar_strategy",
+      "equals": "integrated_titlebar_content_reserve_with_platform_window_controls"
+    },
+    {
+      "path": "application.file_explorer.finder_visual_contract.native_control_marker_policy",
+      "equals": "no_content_or_artifact_window_control_markers"
+    },
+    {
+      "path": "application.file_explorer.finder_visual_contract.native_control_owner",
+      "equals": "platform-edge"
+    },
+    {
+      "path": "application.file_explorer.finder_visual_contract.sidebar_selection_style",
+      "equals": "finder_soft_selected_row_no_outline_accent_symbol"
+    },
+    {
+      "path": "application.file_explorer.finder_visual_contract.sidebar_selected_row_border_width",
+      "equals": 0.0
+    },
+    {
+      "path": "application.file_explorer.finder_visual_contract.apple_asset_symbol_count",
+      "equals": 0
+    },
+    {
+      "path": "application.file_explorer.finder_visual_contract.verifier_gate",
+      "equals": "local_file_explorer_artifact_verify_not_default_pr_ci"
+    },
+    {
       "path": "application.file_explorer.input_model.focus_visibility_policy",
       "equals": "keyboard_tab_navigation_shows_ring_pointer_click_hides_ring"
     },

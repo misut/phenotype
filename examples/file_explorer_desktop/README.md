@@ -83,6 +83,13 @@ label placement, section spacing, selected-row radius, soft selected-row alpha
 policy, blank native-control reserve coordinates, and forbidden traffic-light
 palette probes are asserted separately, so Finder parity regressions are
 reported as structured chrome contract failures before pixel inspection.
+The debug payload also emits `finder_visual_contract`, a pure summary that ties
+those metrics to the Finder parity intent: platform-owned traffic lights only,
+no content/artifact window-control markers, reserve-only titlebar geometry,
+soft sidebar selection with no selected-row border, keyboard-only focus rings,
+permissive SVG icon sources, zero Apple/SF Symbols embedded assets, zero
+platform-extracted icons, and local artifact verification rather than slow PR
+CI capture.
 The sidebar and toolbar glyphs come from `phenotype.icons`, not copied SF
 Symbols assets. They are phenotype-owned or audited permissive SVG symbols
 with a macOS-style rounded-outline contract and bounded secondary-layer opacity

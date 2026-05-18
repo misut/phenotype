@@ -752,6 +752,7 @@ export auto explorer_drive_json(
         "\"view_mode\":{{\"value\":{},\"label\":{}}},"
         "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
         "\"chrome\":{},"
+        "\"finder_visual_contract\":{},"
         "\"theme_system\":{},"
         "\"input_model\":{},"
         "\"keyboard_commands\":{},"
@@ -781,6 +782,9 @@ export auto explorer_drive_json(
         result.state.viewport_height,
         result.state.viewport_scale,
         explorer_chrome_json(result.chrome),
+        json::emit(file_explorer_demo::finder_visual_contract_debug_json(
+            result.chrome,
+            result.profile)),
         explorer_theme_system_json(result.chrome),
         explorer_input_model_json(result.state, result.profile),
         explorer_keyboard_commands_json(result.profile),
