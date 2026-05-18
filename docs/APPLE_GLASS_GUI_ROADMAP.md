@@ -398,11 +398,14 @@ Widgets currently cover:
 and current color. Static app-owned SVG assets therefore participate in the
 paint cache instead of re-running their canvas painter every frame.
 
-The style system is usable, but not yet material-aware. There is no first-class
+The style system is usable, but still early in its material-aware layer.
 `layout::material_surface` is now the low-level material container, with
 first-class `layout::toolbar`, `layout::sidebar`, and `layout::status_bar`
-helpers for app chrome. A richer glass-control style contract remains future
-work.
+helpers for app chrome. `icons::macos_control_button_style` exposes the same
+selected/hover/pressed glass-control recipe used by symbol buttons, so
+Finder-like text and canvas buttons can share native-looking chrome without
+copying sidebar/toolbar constants in each example. A richer cross-widget
+glass-control style contract remains future work.
 
 ### CLI and packaging direction
 
