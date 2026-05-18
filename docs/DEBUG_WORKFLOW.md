@@ -351,7 +351,10 @@ in normal example artifacts, while `round_stroke_symbol_count` proves outline
 glyphs stay on the macOS-like round stroke contract. The desktop payload also
 includes `source_attribution_policy`, `lucide_source_symbol_count`, and
 `apple_asset_symbol_count` so permissive-source adoption and Apple-asset
-exclusion are machine-checkable. The desktop payload also includes
+exclusion are machine-checkable. A healthy Finder-style desktop artifact should
+show 31 Lucide-backed symbols, 4 phenotype-owned symbols, and 0 Apple/SF
+Symbols assets; mismatches point to `phenotype.icon_catalog` attribution or
+package-resource drift before a renderer bug. The desktop payload also includes
 `sidebar_symbol_tokens`, the renderer-facing table that maps sidebar tokens to
 audited symbols and semantic SF Symbols reference names, so a wrong
 Recents/Shared/Desktop-style metaphor fails as data before anyone compares

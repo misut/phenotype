@@ -994,6 +994,12 @@ auto icon_catalog_checks() -> std::vector<Check> {
                 == std::string_view{"ISC"}
             && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
                    .family
+                == std::string_view{"Lucide"}
+            && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
+                   .icon_name
+                == std::string_view{"search"}
+            && icon_catalog::source_attribution(icon_catalog::Symbol::Shared)
+                   .family
                 == std::string_view{"phenotype"},
          .detail = std::string{icon_catalog::source_attribution_policy()},
          .hint =

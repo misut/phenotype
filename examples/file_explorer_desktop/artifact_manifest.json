@@ -616,15 +616,15 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.phenotype_owned_symbol_count",
-      "equals": 28
+      "equals": 4
     },
     {
       "path": "application.file_explorer.chrome.icon_system.permissive_source_symbol_count",
-      "equals": 7
+      "equals": 31
     },
     {
       "path": "application.file_explorer.chrome.icon_system.lucide_source_symbol_count",
-      "equals": 7
+      "equals": 31
     },
     {
       "path": "application.file_explorer.chrome.icon_system.apple_asset_symbol_count",
@@ -664,7 +664,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_path_arc_symbol_count",
-      "equals": 7
+      "equals": 13
     },
     {
       "path": "application.file_explorer.chrome.icon_system.round_stroke_symbol_count",

@@ -373,9 +373,9 @@ void test_builtin_icons_parse() {
            != std::string_view::npos);
     assert(icons::all_symbol_count == 35);
     assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
-    assert(icons::phenotype_owned_symbol_count == 28);
-    assert(icons::permissive_source_symbol_count == 7);
-    assert(icons::lucide_source_symbol_count == 7);
+    assert(icons::phenotype_owned_symbol_count == 4);
+    assert(icons::permissive_source_symbol_count == 31);
+    assert(icons::lucide_source_symbol_count == 31);
     assert(icons::apple_asset_symbol_count == 0);
     assert(icons::audited_symbol_source_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
@@ -392,7 +392,7 @@ void test_builtin_icons_parse() {
     assert(icons::palette_symbol_count == 0);
     assert(icons::multicolor_symbol_count == 0);
     assert(icons::reference_symbol_count == icons::all_symbol_count);
-    assert(icons::svg_path_arc_symbol_count == 7);
+    assert(icons::svg_path_arc_symbol_count == 13);
     assert(icons::round_stroke_symbol_count == icons::outline_symbol_count);
     assert(icons::reference_family() == "SF Symbols semantic reference");
     assert(icons::reference_policy().find("audited permissive")
@@ -606,7 +606,9 @@ void test_builtin_icons_parse() {
     assert(icons::source_attribution(icons::Symbol::Movie).icon_name
            == "clapperboard");
     assert(icons::source_attribution(icons::Symbol::Search).family
-           == "phenotype");
+           == "Lucide");
+    assert(icons::source_attribution(icons::Symbol::Search).icon_name
+           == "search");
 
     auto shared = icons::descriptor(icons::Symbol::Shared);
     assert(shared.role == icons::SymbolRole::Sidebar);
