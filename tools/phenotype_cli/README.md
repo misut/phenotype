@@ -11,11 +11,20 @@ turning `main.cpp` into every subsystem at once:
 - `phenotype_cli.common` owns shared JSON escaping, path normalization, text
   file IO, positional/error helpers, check summaries, and resource diagnostic
   emission.
+- `phenotype_cli.runtime` owns repository discovery, artifact bundle summaries,
+  temporary artifact directories, example build/run process execution, and
+  process-result JSON helpers. These are CLI edge adapters and should stay out
+  of pure package, icon, theme, and file explorer model modules.
 - `phenotype_cli.contracts` owns pure theme and IO contract checks/JSON for
   `phenotype theme contract` and `phenotype io contract`.
 - `phenotype_cli.file_explorer` owns file explorer drive JSON, chrome/native
   window control JSON, expectation JSON, keyboard/focus model JSON, and
   localized label emission.
+- `phenotype_cli.file_explorer_gate` owns the local file explorer artifact
+  gate: shared tests, desktop/mobile example builds, scenario artifact capture,
+  verifier argument shaping, and LLM-actionable JSON/status summaries.
+- `phenotype_cli.glass_showcase` owns the glass showcase drive command JSON,
+  expectation checking, pure input script parsing, and local artifact gate.
 - `phenotype_cli.icons` owns `phenotype icons ...` and `phenotype svg inspect`,
   including catalog checks, lookup/presentation/render JSON, SVG support
   summaries, and the icon helper payloads reused by file explorer debug output.
@@ -23,9 +32,8 @@ turning `main.cpp` into every subsystem at once:
   checks, package bundling, bundle integrity verification, and macOS app bundle
   staging helpers. It keeps filesystem/package edge IO away from command
   dispatch while preserving the pure `phenotype.resources` contract boundary.
-- `phenotype_cli.app` owns the remaining high-level command parsing, example
-  process execution, artifact gate orchestration, Android script dispatch, and
-  routing to focused modules.
+- `phenotype_cli.app` owns the remaining high-level command parsing, Android
+  script dispatch, and routing to focused modules.
 - `main.cpp` is only the executable entry point and should stay a tiny forwarder
   into `phenotype_cli.app`.
 
