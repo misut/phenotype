@@ -10,6 +10,8 @@ turning `main.cpp` into every subsystem at once:
 
 - `phenotype_cli.common` owns shared JSON escaping, path normalization, check
   summaries, and resource diagnostic emission.
+- `phenotype_cli.contracts` owns pure theme and IO contract checks/JSON for
+  `phenotype theme contract` and `phenotype io contract`.
 - `phenotype_cli.file_explorer` owns file explorer drive JSON, expectation
   JSON, keyboard/focus model JSON, and localized label emission.
 - `phenotype_cli.icons` owns icon catalog checks, lookup/presentation/render
