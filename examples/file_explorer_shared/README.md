@@ -40,6 +40,15 @@ image/video detail counts, shadow policy, and the explicit
 `uses_external_previews=false` rule. This keeps Finder-like thumbnail polish
 observable from `phenotype drive file-explorer --json` before a native renderer
 captures pixels.
+`finder_visual_contract` is the higher-level parity summary built from those
+same pure metrics. It pins the Finder-inspired titlebar strategy, native window
+control ownership, no-content-marker traffic-light policy, sidebar soft
+selection style, keyboard-only focus-ring policy, permissive SVG source policy,
+Apple/SF Symbols asset exclusion counts, thumbnail preview policy, and the
+local-only artifact verifier gate. Native artifacts and CLI drive output both
+emit this object so traffic-light duplication, icon provenance drift, or focus
+ring regressions fail as contract mismatches before anyone has to compare
+screenshots by eye.
 The desktop icon grid also reports `icon_grid_label_policy`, currently
 `finder_two_line_middle_ellipsis_preserve_suffix`, so artifacts can explain why
 long localized file names keep their suffix while being constrained to the

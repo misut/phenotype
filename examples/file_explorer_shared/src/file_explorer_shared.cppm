@@ -455,6 +455,32 @@ struct ExplorerChromeMetrics {
     std::string native_window_control_palette_policy;
 };
 
+struct FinderVisualContract {
+    int schema_version = 1;
+    std::string name;
+    std::string profile;
+    std::string source;
+    std::string reference;
+    std::string titlebar_strategy;
+    std::string native_control_owner;
+    std::string native_control_marker_policy;
+    std::string native_control_geometry_role;
+    std::string native_control_palette_policy;
+    std::string sidebar_selection_style;
+    float sidebar_selected_row_border_width = 0.0f;
+    int sidebar_selected_row_background_alpha = 0;
+    std::string focus_ring_policy;
+    std::string icon_source_policy;
+    std::string embedded_svg_policy;
+    int apple_asset_symbol_count = 0;
+    int platform_extracted_symbol_count = 0;
+    int runtime_fetched_symbol_count = 0;
+    std::string thumbnail_preview_policy;
+    float leading_control_reserved_width = 0.0f;
+    float titlebar_drag_region_height = 0.0f;
+    std::string verifier_gate;
+};
+
 struct ExplorerInputTrace {
     ExplorerInput input{};
     ExplorerChromeMetrics chrome{};
@@ -542,10 +568,25 @@ inline constexpr float k_desktop_sidebar_material_padding = 16.0f;
 inline constexpr float k_desktop_sidebar_item_gap = 4.0f;
 inline constexpr float k_desktop_sidebar_section_gap = 14.0f;
 inline constexpr float k_desktop_sidebar_selected_row_radius = 10.0f;
+inline constexpr float k_desktop_sidebar_selected_row_border_width = 0.0f;
 inline constexpr int k_desktop_sidebar_selected_row_background_alpha = 238;
 inline constexpr int k_desktop_sidebar_selected_row_hover_background_alpha = 248;
 inline constexpr char k_desktop_sidebar_selection_policy[] =
     "finder_soft_selected_row_no_outline_accent_symbol";
+inline constexpr char k_finder_visual_contract_name[] =
+    "finder_visual_parity_contract";
+inline constexpr char k_finder_visual_contract_source[] =
+    "file_explorer_shared::finder_visual_contract";
+inline constexpr char k_finder_visual_contract_reference[] =
+    "Apple HIG Materials, Icons, SF Symbols semantics, and macOS Finder visual reference without embedded Apple artwork";
+inline constexpr char k_finder_visual_titlebar_strategy[] =
+    "integrated_titlebar_content_reserve_with_platform_window_controls";
+inline constexpr char k_finder_visual_marker_policy[] =
+    "no_content_or_artifact_window_control_markers";
+inline constexpr char k_finder_visual_focus_ring_policy[] =
+    "keyboard_tab_navigation_only_pointer_click_hides_focus_ring";
+inline constexpr char k_finder_visual_verifier_gate[] =
+    "local_file_explorer_artifact_verify_not_default_pr_ci";
 inline constexpr int k_desktop_column_location_row_count = 4;
 inline constexpr float k_desktop_column_location_row_height = 30.0f;
 inline constexpr float k_desktop_column_location_icon_size = 18.0f;
@@ -2498,6 +2539,109 @@ inline json::Value entry_symbol_summary_debug_json(Snapshot const& snap) {
     return json::Value{std::move(out)};
 }
 
+inline FinderVisualContract finder_visual_contract(
+        ExplorerChromeMetrics const& chrome,
+        std::string_view profile) {
+    return FinderVisualContract{
+        .schema_version = 1,
+        .name = std::string{k_finder_visual_contract_name},
+        .profile = std::string{profile},
+        .source = std::string{k_finder_visual_contract_source},
+        .reference = std::string{k_finder_visual_contract_reference},
+        .titlebar_strategy = mobile_profile(profile)
+            ? "not_applicable_mobile_shell"
+            : std::string{k_finder_visual_titlebar_strategy},
+        .native_control_owner = chrome.native_window_control_owner,
+        .native_control_marker_policy =
+            std::string{k_finder_visual_marker_policy},
+        .native_control_geometry_role =
+            chrome.native_window_control_geometry_role,
+        .native_control_palette_policy =
+            chrome.native_window_control_palette_policy,
+        .sidebar_selection_style = chrome.sidebar_selection_policy,
+        .sidebar_selected_row_border_width =
+            k_desktop_sidebar_selected_row_border_width,
+        .sidebar_selected_row_background_alpha =
+            chrome.sidebar_selected_row_background_alpha,
+        .focus_ring_policy = std::string{k_finder_visual_focus_ring_policy},
+        .icon_source_policy = chrome.icon_source_license_policy,
+        .embedded_svg_policy = chrome.icon_source_attribution_policy,
+        .apple_asset_symbol_count = chrome.icon_apple_asset_symbol_count,
+        .platform_extracted_symbol_count =
+            chrome.icon_platform_extracted_symbol_count,
+        .runtime_fetched_symbol_count =
+            chrome.icon_runtime_fetched_symbol_count,
+        .thumbnail_preview_policy = chrome.thumbnail_visual_policy,
+        .leading_control_reserved_width =
+            chrome.leading_control_reserved_width,
+        .titlebar_drag_region_height = chrome.titlebar_drag_region_height,
+        .verifier_gate = std::string{k_finder_visual_verifier_gate},
+    };
+}
+
+inline json::Value finder_visual_contract_debug_json(
+        ExplorerChromeMetrics const& chrome,
+        std::string_view profile) {
+    auto contract = finder_visual_contract(chrome, profile);
+    json::Object out;
+    out.emplace(
+        "schema_version",
+        json::Value{static_cast<std::int64_t>(contract.schema_version)});
+    out.emplace("name", json::Value{contract.name});
+    out.emplace("profile", json::Value{contract.profile});
+    out.emplace("source", json::Value{contract.source});
+    out.emplace("reference", json::Value{contract.reference});
+    out.emplace("titlebar_strategy", json::Value{contract.titlebar_strategy});
+    out.emplace(
+        "native_control_owner",
+        json::Value{contract.native_control_owner});
+    out.emplace(
+        "native_control_marker_policy",
+        json::Value{contract.native_control_marker_policy});
+    out.emplace(
+        "native_control_geometry_role",
+        json::Value{contract.native_control_geometry_role});
+    out.emplace(
+        "native_control_palette_policy",
+        json::Value{contract.native_control_palette_policy});
+    out.emplace(
+        "sidebar_selection_style",
+        json::Value{contract.sidebar_selection_style});
+    out.emplace(
+        "sidebar_selected_row_border_width",
+        json::Value{contract.sidebar_selected_row_border_width});
+    out.emplace(
+        "sidebar_selected_row_background_alpha",
+        json::Value{static_cast<std::int64_t>(
+            contract.sidebar_selected_row_background_alpha)});
+    out.emplace("focus_ring_policy", json::Value{contract.focus_ring_policy});
+    out.emplace("icon_source_policy", json::Value{contract.icon_source_policy});
+    out.emplace("embedded_svg_policy", json::Value{contract.embedded_svg_policy});
+    out.emplace(
+        "apple_asset_symbol_count",
+        json::Value{static_cast<std::int64_t>(
+            contract.apple_asset_symbol_count)});
+    out.emplace(
+        "platform_extracted_symbol_count",
+        json::Value{static_cast<std::int64_t>(
+            contract.platform_extracted_symbol_count)});
+    out.emplace(
+        "runtime_fetched_symbol_count",
+        json::Value{static_cast<std::int64_t>(
+            contract.runtime_fetched_symbol_count)});
+    out.emplace(
+        "thumbnail_preview_policy",
+        json::Value{contract.thumbnail_preview_policy});
+    out.emplace(
+        "leading_control_reserved_width",
+        json::Value{contract.leading_control_reserved_width});
+    out.emplace(
+        "titlebar_drag_region_height",
+        json::Value{contract.titlebar_drag_region_height});
+    out.emplace("verifier_gate", json::Value{contract.verifier_gate});
+    return json::Value{std::move(out)};
+}
+
 inline json::Value operation_plan_debug_json(OperationPlan const& plan) {
     json::Object out;
     out.emplace("kind", json::Value{plan.kind});
@@ -3778,6 +3922,9 @@ inline json::Value file_explorer_debug_json(
         "operation",
         operation_receipt_debug_json(state.last_operation, snap.operation_label));
     out.emplace("chrome", explorer_chrome_debug_json(chrome));
+    out.emplace(
+        "finder_visual_contract",
+        finder_visual_contract_debug_json(chrome, profile));
     out.emplace("theme_system", explorer_theme_system_debug_json(chrome));
     out.emplace("resource_system", file_explorer_resource_system_debug_json(profile));
     out.emplace("input_model", input_model_debug_json(state, profile));

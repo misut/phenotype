@@ -28,6 +28,12 @@ from the pinned Lucide revision documented by the icon catalog, not extracted
 from Apple or platform-owned system icons. The package carries the Lucide
 license notice as a non-runtime text asset so resource bundles retain the
 permissive-source notice.
+The shared `finder_visual_contract` is still emitted for the mobile profile,
+but titlebar/window-control fields resolve to `not_applicable_mobile_shell` and
+`none`. This keeps the Apple-asset exclusion, permissive SVG source policy,
+focus-ring modality policy, and local-only verifier gate consistent across
+desktop and mobile without pretending that a mobile shell has Finder traffic
+lights.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-mobile`. The example never points at the user's real

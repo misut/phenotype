@@ -1001,6 +1001,185 @@ def check_file_explorer_native_chrome_contract(
                     "content-side controls."))
 
 
+def check_file_explorer_finder_visual_contract(
+    report: Report,
+    debug: JsonObject,
+) -> None:
+    file_explorer = object_at(debug, "application.file_explorer")
+    if file_explorer is None:
+        return
+    contract = object_at(file_explorer, "finder_visual_contract")
+    chrome = object_at(file_explorer, "chrome")
+    native_window = object_at(chrome, "native_window") if chrome else None
+    icon_system = object_at(chrome, "icon_system") if chrome else None
+    thumbnail_system = object_at(chrome, "thumbnail_system") if chrome else None
+    if contract is None:
+        report.check(
+            "file explorer exposes Finder visual parity contract",
+            False,
+            path="debug.application.file_explorer.finder_visual_contract",
+            expected="object",
+            actual=None,
+            likely_layer="finder-visual-contract",
+            likely_pass="application-debug",
+            hint=(
+                "Add the pure FinderVisualContract from file_explorer_shared "
+                "to the app debug payload so an LLM can audit Finder parity "
+                "without screenshot guessing."))
+        return
+
+    profile = file_explorer.get("profile")
+    native_controls = (
+        isinstance(native_window, dict)
+        and native_window.get("native_window_controls") is True)
+    expected_titlebar_strategy = (
+        "integrated_titlebar_content_reserve_with_platform_window_controls"
+        if native_controls
+        else "not_applicable_mobile_shell")
+    expected_owner = (
+        "platform-edge"
+        if native_controls
+        else (native_window.get("native_window_control_owner")
+              if isinstance(native_window, dict)
+              else "none"))
+    expected_geometry = (
+        "reserve_metrics_only_not_paint_instructions"
+        if native_controls
+        else "not_applicable_mobile_shell")
+    expected_palette = (
+        "traffic_light_palette_forbidden_in_content_and_artifacts"
+        if native_controls
+        else "not_applicable_mobile_shell")
+    expected_sidebar_style = (
+        "finder_soft_selected_row_no_outline_accent_symbol"
+        if profile == "desktop"
+        else "n/a")
+    expected_thumbnail = (
+        thumbnail_system.get("visual_policy")
+        if isinstance(thumbnail_system, dict)
+        else "n/a")
+
+    actual = {
+        "schema_version": contract.get("schema_version"),
+        "name": contract.get("name"),
+        "profile": contract.get("profile"),
+        "source": contract.get("source"),
+        "titlebar_strategy": contract.get("titlebar_strategy"),
+        "native_control_owner": contract.get("native_control_owner"),
+        "native_control_marker_policy": contract.get(
+            "native_control_marker_policy"),
+        "native_control_geometry_role": contract.get(
+            "native_control_geometry_role"),
+        "native_control_palette_policy": contract.get(
+            "native_control_palette_policy"),
+        "sidebar_selection_style": contract.get("sidebar_selection_style"),
+        "sidebar_selected_row_border_width": contract.get(
+            "sidebar_selected_row_border_width"),
+        "sidebar_selected_row_background_alpha": contract.get(
+            "sidebar_selected_row_background_alpha"),
+        "focus_ring_policy": contract.get("focus_ring_policy"),
+        "apple_asset_symbol_count": contract.get("apple_asset_symbol_count"),
+        "platform_extracted_symbol_count": contract.get(
+            "platform_extracted_symbol_count"),
+        "runtime_fetched_symbol_count": contract.get(
+            "runtime_fetched_symbol_count"),
+        "thumbnail_preview_policy": contract.get("thumbnail_preview_policy"),
+        "leading_control_reserved_width": contract.get(
+            "leading_control_reserved_width"),
+        "titlebar_drag_region_height": contract.get(
+            "titlebar_drag_region_height"),
+        "verifier_gate": contract.get("verifier_gate"),
+    }
+    expected_background_alpha = (
+        chrome.get("sidebar_selected_row_background_alpha")
+        if isinstance(chrome, dict)
+        else 0)
+    expected_leading_reserve = (
+        native_window.get("leading_control_reserved_width")
+        if isinstance(native_window, dict)
+        else 0)
+    expected_drag_height = (
+        native_window.get("titlebar_drag_region_height")
+        if isinstance(native_window, dict)
+        else 0)
+    icon_source_policy = contract.get("icon_source_policy")
+    embedded_svg_policy = contract.get("embedded_svg_policy")
+    reference = contract.get("reference")
+    report.check(
+        "file explorer Finder visual parity contract is coherent",
+        contract.get("schema_version") == 1
+        and contract.get("name") == "finder_visual_parity_contract"
+        and contract.get("profile") == profile
+        and contract.get("source") == (
+            "file_explorer_shared::finder_visual_contract")
+        and isinstance(reference, str)
+        and "Apple HIG" in reference
+        and "without embedded Apple artwork" in reference
+        and contract.get("titlebar_strategy") == expected_titlebar_strategy
+        and contract.get("native_control_owner") == expected_owner
+        and contract.get("native_control_marker_policy")
+        == "no_content_or_artifact_window_control_markers"
+        and contract.get("native_control_geometry_role") == expected_geometry
+        and contract.get("native_control_palette_policy") == expected_palette
+        and contract.get("sidebar_selection_style") == expected_sidebar_style
+        and contract.get("sidebar_selected_row_border_width") == 0
+        and contract.get("sidebar_selected_row_background_alpha")
+        == expected_background_alpha
+        and contract.get("focus_ring_policy")
+        == "keyboard_tab_navigation_only_pointer_click_hides_focus_ring"
+        and isinstance(icon_source_policy, str)
+        and "permissive SVG" in icon_source_policy
+        and isinstance(embedded_svg_policy, str)
+        and "pinned direct raw SVG URL" in embedded_svg_policy
+        and "platform extraction flag" in embedded_svg_policy
+        and contract.get("apple_asset_symbol_count") == 0
+        and contract.get("platform_extracted_symbol_count") == 0
+        and contract.get("runtime_fetched_symbol_count") == 0
+        and (
+            not isinstance(icon_system, dict)
+            or contract.get("apple_asset_symbol_count")
+            == icon_system.get("apple_asset_symbol_count"))
+        and contract.get("thumbnail_preview_policy") == expected_thumbnail
+        and contract.get("leading_control_reserved_width")
+        == expected_leading_reserve
+        and contract.get("titlebar_drag_region_height") == expected_drag_height
+        and contract.get("verifier_gate")
+        == "local_file_explorer_artifact_verify_not_default_pr_ci",
+        path="debug.application.file_explorer.finder_visual_contract",
+        expected={
+            "schema_version": 1,
+            "name": "finder_visual_parity_contract",
+            "profile": profile,
+            "titlebar_strategy": expected_titlebar_strategy,
+            "native_control_owner": expected_owner,
+            "native_control_marker_policy": (
+                "no_content_or_artifact_window_control_markers"),
+            "native_control_geometry_role": expected_geometry,
+            "native_control_palette_policy": expected_palette,
+            "sidebar_selection_style": expected_sidebar_style,
+            "sidebar_selected_row_border_width": 0,
+            "sidebar_selected_row_background_alpha": expected_background_alpha,
+            "focus_ring_policy": (
+                "keyboard_tab_navigation_only_pointer_click_hides_focus_ring"),
+            "apple_asset_symbol_count": 0,
+            "platform_extracted_symbol_count": 0,
+            "runtime_fetched_symbol_count": 0,
+            "thumbnail_preview_policy": expected_thumbnail,
+            "leading_control_reserved_width": expected_leading_reserve,
+            "titlebar_drag_region_height": expected_drag_height,
+            "verifier_gate": (
+                "local_file_explorer_artifact_verify_not_default_pr_ci"),
+        },
+        actual=actual,
+        likely_layer="finder-visual-contract",
+        likely_pass="application-debug",
+        hint=(
+            "The Finder visual contract should mirror the shared chrome "
+            "metrics: OS-owned traffic lights/caption buttons, no embedded "
+            "Apple/SF Symbols assets, keyboard-only focus rings, and the "
+            "same sidebar/thumbnail policies used by the renderer."))
+
+
 def list_of_strings(value: Any, key: str) -> list[str]:
     item = value.get(key) if isinstance(value, dict) else None
     if item is None:
@@ -7668,6 +7847,7 @@ def verify(args: argparse.Namespace) -> int:
                 "shared model snapshot it serializes."))
 
     check_file_explorer_native_chrome_contract(report, debug)
+    check_file_explorer_finder_visual_contract(report, debug)
 
     details = runtime.get("details")
     if args.require_runtime_detail:

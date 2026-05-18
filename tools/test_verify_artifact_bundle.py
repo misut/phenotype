@@ -843,7 +843,54 @@ def snapshot_with_file_explorer_chrome(
         "file_explorer": {
             "kind": "file_explorer",
             "profile": "desktop",
+            "finder_visual_contract": {
+                "schema_version": 1,
+                "name": "finder_visual_parity_contract",
+                "profile": "desktop",
+                "source": "file_explorer_shared::finder_visual_contract",
+                "reference": (
+                    "Apple HIG Materials, Icons, SF Symbols semantics, "
+                    "and macOS Finder visual reference without embedded "
+                    "Apple artwork"),
+                "titlebar_strategy": (
+                    "integrated_titlebar_content_reserve_with_platform_window_controls"),
+                "native_control_owner": "platform-edge",
+                "native_control_marker_policy": (
+                    "no_content_or_artifact_window_control_markers"),
+                "native_control_geometry_role": (
+                    "reserve_metrics_only_not_paint_instructions"),
+                "native_control_palette_policy": (
+                    "traffic_light_palette_forbidden_in_content_and_artifacts"),
+                "sidebar_selection_style": (
+                    "finder_soft_selected_row_no_outline_accent_symbol"),
+                "sidebar_selected_row_border_width": 0.0,
+                "sidebar_selected_row_background_alpha": 238,
+                "focus_ring_policy": (
+                    "keyboard_tab_navigation_only_pointer_click_hides_focus_ring"),
+                "icon_source_policy": (
+                    "phenotype-owned or permissive SVG only; accepted "
+                    "external licenses include Lucide ISC"),
+                "embedded_svg_policy": (
+                    "Every embedded icon source must carry a pinned direct "
+                    "raw SVG URL, source revision, platform extraction flag, "
+                    "and runtime fetch flag."),
+                "apple_asset_symbol_count": 0,
+                "platform_extracted_symbol_count": 0,
+                "runtime_fetched_symbol_count": 0,
+                "thumbnail_preview_policy": "finder_rich_preview_thumbnails_v1",
+                "leading_control_reserved_width": 176.0,
+                "titlebar_drag_region_height": 64.0,
+                "verifier_gate": (
+                    "local_file_explorer_artifact_verify_not_default_pr_ci"),
+            },
             "chrome": {
+                "sidebar_selected_row_background_alpha": 238,
+                "thumbnail_system": {
+                    "visual_policy": "finder_rich_preview_thumbnails_v1",
+                },
+                "icon_system": {
+                    "apple_asset_symbol_count": 0,
+                },
                 "native_window": {
                     "integrated_titlebar": True,
                     "native_window_controls": True,
@@ -869,6 +916,8 @@ def snapshot_with_file_explorer_chrome(
                         "reserve_metrics_only_not_paint_instructions"),
                     "native_window_control_palette_policy": (
                         "traffic_light_palette_forbidden_in_content_and_artifacts"),
+                    "leading_control_reserved_width": 176.0,
+                    "titlebar_drag_region_height": 64.0,
                 }
             },
         }
@@ -1185,6 +1234,26 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["command_descriptor_missing"],
             0)
+
+    def test_file_explorer_finder_visual_contract_rejects_drift(self) -> None:
+        snap = snapshot_with_file_explorer_chrome(material_plan())
+        contract = snap["debug"]["application"]["file_explorer"][
+            "finder_visual_contract"]
+        contract["native_control_owner"] = "content-shell"
+        contract["apple_asset_symbol_count"] = 1
+
+        code, report = self.run_verifier(snap)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "file explorer Finder visual parity contract is coherent"))
+        self.assertEqual(failure["likely_layer"], "finder-visual-contract")
+        self.assertEqual(failure["likely_pass"], "application-debug")
+        self.assertIn("OS-owned traffic lights", failure["hint"])
+        self.assertEqual(failure["actual"]["native_control_owner"], "content-shell")
+        self.assertEqual(failure["actual"]["apple_asset_symbol_count"], 1)
         self.assertEqual(
             report["material_plans"]["shape"]["valid"],
             1)

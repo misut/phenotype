@@ -195,6 +195,14 @@ mise exec -- exon build
   --expect material-count:7
 ```
 
+The same file explorer drive output and native artifacts expose
+`finder_visual_contract`, a pure Finder-parity summary derived from shared
+chrome metrics. It pins the integrated titlebar/reserve strategy, platform-owned
+traffic-light ownership, no content/artifact window-control marker policy,
+soft sidebar selected-row styling, keyboard-only focus ring behavior,
+permissive SVG icon provenance, zero Apple/SF Symbols embedded asset counts,
+and the local-only artifact verifier gate.
+
 Pull-request CI does not run these slow startup artifact captures. Code changes
 run the root test matrix, docs changes run the docs WASI build, Python verifier
 tooling changes run the uv-managed verifier checks, and CLI/package-resource
