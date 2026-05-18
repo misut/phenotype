@@ -3582,7 +3582,10 @@ using TfMsg = std::variant<Changed>;
 inline TfMsg make_changed(std::string s) { return Changed{std::move(s)}; }
 
 inline NodeHandle build_text_field(std::string const& current,
-                                   bool error, bool disabled) {
+                                   bool error,
+                                   bool disabled,
+                                   unsigned int focused_id = 0xFFFFFFFFu,
+                                   bool focus_visible = false) {
     detail::g_app.arena.reset();
     detail::g_app.callbacks.clear();
     detail::g_app.input_handlers.clear();
@@ -3594,7 +3597,8 @@ inline NodeHandle build_text_field(std::string const& current,
     // (default → error swap would otherwise return mid-fade colours).
     detail::local_store().clear();
     detail::bump_local_gen();
-    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.focused_id = focused_id;
+    detail::g_app.focus_visible = focus_visible;
 
     auto root_h = detail::alloc_node();
     detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
@@ -3665,6 +3669,35 @@ void test_text_field_disabled() {
     // Disabled fields skip the input-handler registration entirely.
     assert(detail::g_app.input_handlers.empty());
     std::puts("PASS: text_field disabled state");
+}
+
+void test_text_field_focus_ring_uses_keyboard_modality() {
+    auto const& t = detail::g_app.theme;
+    auto keyboard_h = text_field_test::build_text_field(
+        "hello",
+        /*error=*/false,
+        /*disabled=*/false,
+        /*focused_id=*/0u,
+        /*focus_visible=*/true);
+    auto& keyboard = detail::node_at(keyboard_h);
+    assert(keyboard.callback_id == 0u);
+    assert(keyboard.border_width == t.state_focus_ring_width);
+    assert(keyboard.border_color.r == t.state_focus_ring.r);
+
+    auto pointer_h = text_field_test::build_text_field(
+        "hello",
+        /*error=*/false,
+        /*disabled=*/false,
+        /*focused_id=*/0u,
+        /*focus_visible=*/false);
+    auto& pointer = detail::node_at(pointer_h);
+    assert(pointer.callback_id == 0u);
+    assert(pointer.border_width == 1.0f);
+    assert(pointer.border_color.r == t.border.r);
+
+    detail::g_app.focused_id = 0xFFFFFFFFu;
+    detail::g_app.focus_visible = false;
+    std::puts("PASS: text_field focus ring uses keyboard modality");
 }
 
 namespace text_variant_test {
@@ -4384,6 +4417,7 @@ int main() {
     test_text_field_default_placeholder();
     test_text_field_error();
     test_text_field_disabled();
+    test_text_field_focus_ring_uses_keyboard_modality();
     test_text_size_variants();
     test_text_color_variants();
     test_text_inline_code_chrome();
