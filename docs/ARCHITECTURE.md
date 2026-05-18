@@ -275,7 +275,10 @@ documents, PDFs, text documents, raster and SVG images, movies, archives,
 audio, code, spreadsheet, and presentation files. Apps choose those
 symbols through pure filename and role metadata, then expose the resolved symbol
 and semantic reference in debug JSON so native backends remain simple
-executors.
+executors. Each embedded symbol also carries source acquisition metadata: the
+URL is pinned to a permissive source revision when the glyph is Lucide-backed,
+and the attribution explicitly says that no platform icon extraction or runtime
+network fetch is required.
 
 The Finder-style file explorer uses the same SVG parser for sandboxed `.svg`
 file thumbnails. The renderer reads the already-loaded file body from the demo

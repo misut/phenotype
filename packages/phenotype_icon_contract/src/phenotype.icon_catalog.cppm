@@ -149,6 +149,8 @@ struct SymbolSourceAttribution {
     bool embedded_source = true;
     bool modified_for_phenotype = false;
     bool apple_asset = false;
+    bool platform_extracted = false;
+    bool runtime_fetch_required = false;
 };
 
 struct IconReferenceSource {
@@ -225,6 +227,8 @@ inline constexpr unsigned int permissive_source_symbol_count = 35;
 inline constexpr unsigned int lucide_source_symbol_count =
     permissive_source_symbol_count;
 inline constexpr unsigned int apple_asset_symbol_count = 0;
+inline constexpr unsigned int platform_extracted_symbol_count = 0;
+inline constexpr unsigned int runtime_fetched_symbol_count = 0;
 inline constexpr unsigned int audited_symbol_source_count = all_symbol_count;
 inline constexpr unsigned int reference_source_count = 6;
 inline constexpr unsigned int sidebar_symbol_count = 11;
@@ -403,12 +407,16 @@ inline auto preferred_external_source_policy() noexcept -> std::string_view {
     return "Prefer audited SVG from Lucide ISC or Feather-derived MIT, Tabler MIT, Iconoir MIT, or Material Symbols Apache-2.0 before phenotype adaptation";
 }
 
+inline auto source_acquisition_policy() noexcept -> std::string_view {
+    return "development-time import from pinned permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons or fetches remote resources";
+}
+
 inline auto lucide_source_revision() noexcept -> std::string_view {
     return "5b40f2c5a76a27eeb81c8f1b1c311121dee45495";
 }
 
 inline auto source_attribution_policy() noexcept -> std::string_view {
-    return "embedded permissive SVG sources must expose family, icon name, exact license, pinned source URL, source revision, copyright, and Apple-asset boundary in debug output";
+    return "embedded permissive SVG sources must expose family, icon name, exact license, pinned source URL, source revision, copyright, Apple-asset boundary, platform extraction flag, and runtime fetch flag in debug output";
 }
 
 inline auto apple_asset_boundary() noexcept -> std::string_view {
@@ -958,6 +966,8 @@ inline auto source_attribution(Symbol symbol) noexcept
             true,
             true,
             false,
+            false,
+            false,
         };
     }
     return SymbolSourceAttribution{
@@ -969,6 +979,8 @@ inline auto source_attribution(Symbol symbol) noexcept
         "phenotype-repository",
         "Copyright (c) misut",
         true,
+        false,
+        false,
         false,
         false,
     };

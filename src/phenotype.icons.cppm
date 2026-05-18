@@ -401,6 +401,10 @@ inline constexpr unsigned int lucide_source_symbol_count =
     catalog::lucide_source_symbol_count;
 inline constexpr unsigned int apple_asset_symbol_count =
     catalog::apple_asset_symbol_count;
+inline constexpr unsigned int platform_extracted_symbol_count =
+    catalog::platform_extracted_symbol_count;
+inline constexpr unsigned int runtime_fetched_symbol_count =
+    catalog::runtime_fetched_symbol_count;
 inline constexpr unsigned int audited_symbol_source_count =
     catalog::audited_symbol_source_count;
 inline constexpr unsigned int sidebar_symbol_count =
@@ -474,6 +478,10 @@ inline auto source_license_policy() noexcept -> std::string_view {
 
 inline auto preferred_external_source_policy() noexcept -> std::string_view {
     return catalog::preferred_external_source_policy();
+}
+
+inline auto source_acquisition_policy() noexcept -> std::string_view {
+    return catalog::source_acquisition_policy();
 }
 
 inline auto lucide_source_revision() noexcept -> std::string_view {

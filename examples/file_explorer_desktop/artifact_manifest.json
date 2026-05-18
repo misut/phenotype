@@ -649,6 +649,14 @@
       "equals": 0
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.platform_extracted_symbol_count",
+      "equals": 0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.runtime_fetched_symbol_count",
+      "equals": 0
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.audited_symbol_source_count",
       "equals": 39
     },
@@ -805,8 +813,12 @@
       "equals": "Prefer audited SVG from Lucide ISC or Feather-derived MIT, Tabler MIT, Iconoir MIT, or Material Symbols Apache-2.0 before phenotype adaptation"
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.source_acquisition_policy",
+      "equals": "development-time import from pinned permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons or fetches remote resources"
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.source_attribution_policy",
-      "equals": "embedded permissive SVG sources must expose family, icon name, exact license, pinned source URL, source revision, copyright, and Apple-asset boundary in debug output"
+      "equals": "embedded permissive SVG sources must expose family, icon name, exact license, pinned source URL, source revision, copyright, Apple-asset boundary, platform extraction flag, and runtime fetch flag in debug output"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.apple_asset_boundary",

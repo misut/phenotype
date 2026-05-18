@@ -164,7 +164,8 @@ auto icon_source_attribution_json(
         "\"license_url\":{},\"source_url\":{},\"source_revision\":{},"
         "\"copyright\":{},"
         "\"embedded_source\":{},\"modified_for_phenotype\":{},"
-        "\"apple_asset\":{}}}",
+        "\"apple_asset\":{},\"platform_extracted\":{},"
+        "\"runtime_fetch_required\":{}}}",
         json_string(source.family),
         json_string(source.icon_name),
         json_string(source.license),
@@ -174,7 +175,9 @@ auto icon_source_attribution_json(
         json_string(source.copyright),
         source.embedded_source ? "true" : "false",
         source.modified_for_phenotype ? "true" : "false",
-        source.apple_asset ? "true" : "false");
+        source.apple_asset ? "true" : "false",
+        source.platform_extracted ? "true" : "false",
+        source.runtime_fetch_required ? "true" : "false");
 }
 
 auto icon_reference_source_json(
@@ -852,6 +855,8 @@ auto icon_catalog_checks() -> std::vector<Check> {
     unsigned int permissive_source_count = 0;
     unsigned int lucide_source_count = 0;
     unsigned int apple_asset_count = 0;
+    unsigned int platform_extracted_count = 0;
+    unsigned int runtime_fetch_count = 0;
     bool semantic_references = true;
     bool round_stroke_contract = true;
     bool round_cap_join_contract = true;
@@ -921,9 +926,13 @@ auto icon_catalog_checks() -> std::vector<Check> {
             ++permissive_source_count;
             ++lucide_source_count;
         }
-        if (desc.uses_sf_symbols_asset
-            || icon_catalog::source_attribution(symbol).apple_asset)
+        auto const attribution = icon_catalog::source_attribution(symbol);
+        if (desc.uses_sf_symbols_asset || attribution.apple_asset)
             ++apple_asset_count;
+        if (attribution.platform_extracted)
+            ++platform_extracted_count;
+        if (attribution.runtime_fetch_required)
+            ++runtime_fetch_count;
         semantic_references =
             semantic_references && !desc.semantic_reference_name.empty();
         name_lookup_roundtrips =
@@ -1001,20 +1010,32 @@ auto icon_catalog_checks() -> std::vector<Check> {
                 == icon_catalog::permissive_source_symbol_count
             && lucide_source_count == icon_catalog::lucide_source_symbol_count
             && apple_asset_count == icon_catalog::apple_asset_symbol_count
+            && platform_extracted_count
+                == icon_catalog::platform_extracted_symbol_count
+            && runtime_fetch_count
+                == icon_catalog::runtime_fetched_symbol_count
             && icon_catalog::source_license_policy().find("ISC")
                 != std::string_view::npos
             && icon_catalog::apple_asset_boundary().find("do not extract")
                 != std::string_view::npos,
          .detail = std::format(
-             "phenotype_owned={} permissive={} lucide={} apple_asset={}",
+             "phenotype_owned={} permissive={} lucide={} apple_asset={} platform_extracted={} runtime_fetch={}",
              phenotype_owned_count,
              permissive_source_count,
              lucide_source_count,
-             apple_asset_count),
+             apple_asset_count,
+             platform_extracted_count,
+             runtime_fetch_count),
          .hint =
              "Use only phenotype-owned or audited permissive SVG sources, and never embed Apple or SF Symbols vector artwork."},
         {.name = "source_attribution",
          .ok = icon_catalog::source_attribution_policy().find("pinned source URL")
+                != std::string_view::npos
+            && icon_catalog::source_attribution_policy().find(
+                   "platform extraction flag")
+                != std::string_view::npos
+            && icon_catalog::source_acquisition_policy().find(
+                   "runtime uses embedded SVG strings")
                 != std::string_view::npos
             && icon_catalog::source_attribution(icon_catalog::Symbol::Folder)
                    .family
@@ -1041,7 +1062,11 @@ auto icon_catalog_checks() -> std::vector<Check> {
                 == std::string_view::npos
             && icon_catalog::source_attribution(icon_catalog::Symbol::Shared)
                    .family
-                == std::string_view{"phenotype"},
+                == std::string_view{"phenotype"}
+            && !icon_catalog::source_attribution(icon_catalog::Symbol::Search)
+                    .platform_extracted
+            && !icon_catalog::source_attribution(icon_catalog::Symbol::Search)
+                    .runtime_fetch_required,
          .detail = std::string{icon_catalog::source_attribution_policy()},
          .hint =
              "Every embedded icon source must carry machine-readable family, icon name, exact license, pinned source URL, and source revision metadata."},
@@ -1249,6 +1274,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"reference_policy\":{},\"asset_policy\":{},"
         "\"source_license_policy\":{},"
         "\"preferred_external_source_policy\":{},"
+        "\"source_acquisition_policy\":{},"
         "\"source_attribution_policy\":{},"
         "\"apple_asset_boundary\":{},"
         "\"interface_metaphor_policy\":{},"
@@ -1267,7 +1293,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"reference_sources\":{}}},"
         "\"counts\":{{\"all\":{},\"phenotype_owned\":{},"
         "\"permissive_source\":{},\"lucide_source\":{},"
-        "\"apple_asset\":{},\"audited_source\":{},"
+        "\"apple_asset\":{},\"platform_extracted\":{},"
+        "\"runtime_fetched\":{},\"audited_source\":{},"
         "\"sidebar\":{},\"toolbar\":{},"
         "\"file_type\":{},"
         "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
@@ -1295,6 +1322,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::asset_policy()),
         json_string(icon_catalog::source_license_policy()),
         json_string(icon_catalog::preferred_external_source_policy()),
+        json_string(icon_catalog::source_acquisition_policy()),
         json_string(icon_catalog::source_attribution_policy()),
         json_string(icon_catalog::apple_asset_boundary()),
         json_string(icon_catalog::interface_metaphor_policy()),
@@ -1320,6 +1348,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_catalog::permissive_source_symbol_count,
         icon_catalog::lucide_source_symbol_count,
         icon_catalog::apple_asset_symbol_count,
+        icon_catalog::platform_extracted_symbol_count,
+        icon_catalog::runtime_fetched_symbol_count,
         icon_catalog::audited_symbol_source_count,
         icon_catalog::sidebar_symbol_count,
         icon_catalog::toolbar_symbol_count,

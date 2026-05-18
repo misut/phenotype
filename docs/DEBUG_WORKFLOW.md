@@ -376,8 +376,10 @@ show 35 Lucide-backed symbols, 4 phenotype-owned symbols, and 0 Apple/SF
 Symbols assets; mismatches point to `phenotype.icon_catalog` attribution or
 package-resource drift before a renderer bug. Each Lucide-backed symbol reports
 the exact ISC or Feather-derived MIT license and a source URL pinned to the
-catalog revision, so a future LLM can audit provenance without trusting
-`main`. The `reference_sources` array names the exact Apple HIG/SF Symbols
+catalog revision, plus `platform_extracted=false` and
+`runtime_fetch_required=false`, so a future LLM can audit provenance without
+trusting `main` or assuming a local macOS icon service was used. The
+`reference_sources` array names the exact Apple HIG/SF Symbols
 semantic references, W3C SVG path reference, Lucide embedded-source reference,
 Feather MIT license-lineage reference, and Material Symbols Apache-2.0
 future-source candidate used by the policy.

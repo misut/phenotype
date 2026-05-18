@@ -322,6 +322,8 @@ struct ExplorerChromeMetrics {
     int icon_permissive_source_symbol_count = 0;
     int icon_lucide_source_symbol_count = 0;
     int icon_apple_asset_symbol_count = 0;
+    int icon_platform_extracted_symbol_count = 0;
+    int icon_runtime_fetched_symbol_count = 0;
     int icon_audited_symbol_source_count = 0;
     int sidebar_symbol_count = 0;
     int toolbar_symbol_count = 0;
@@ -398,6 +400,7 @@ struct ExplorerChromeMetrics {
     std::string icon_asset_policy;
     std::string icon_source_license_policy;
     std::string icon_preferred_external_source_policy;
+    std::string icon_source_acquisition_policy;
     std::string icon_source_attribution_policy;
     std::string icon_apple_asset_boundary;
     std::string icon_interface_metaphor_policy;
@@ -1070,6 +1073,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
                 static_cast<int>(icon_catalog::lucide_source_symbol_count),
             .icon_apple_asset_symbol_count =
                 static_cast<int>(icon_catalog::apple_asset_symbol_count),
+            .icon_platform_extracted_symbol_count =
+                static_cast<int>(
+                    icon_catalog::platform_extracted_symbol_count),
+            .icon_runtime_fetched_symbol_count =
+                static_cast<int>(icon_catalog::runtime_fetched_symbol_count),
             .icon_audited_symbol_source_count =
                 static_cast<int>(icon_catalog::audited_symbol_source_count),
             .sidebar_symbol_count =
@@ -1209,6 +1217,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
                 std::string{icon_catalog::source_license_policy()},
             .icon_preferred_external_source_policy =
                 std::string{icon_catalog::preferred_external_source_policy()},
+            .icon_source_acquisition_policy =
+                std::string{icon_catalog::source_acquisition_policy()},
             .icon_source_attribution_policy =
                 std::string{icon_catalog::source_attribution_policy()},
             .icon_apple_asset_boundary =
@@ -1417,6 +1427,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             static_cast<int>(icon_catalog::lucide_source_symbol_count),
         .icon_apple_asset_symbol_count =
             static_cast<int>(icon_catalog::apple_asset_symbol_count),
+        .icon_platform_extracted_symbol_count =
+            static_cast<int>(icon_catalog::platform_extracted_symbol_count),
+        .icon_runtime_fetched_symbol_count =
+            static_cast<int>(icon_catalog::runtime_fetched_symbol_count),
         .icon_audited_symbol_source_count =
             static_cast<int>(icon_catalog::audited_symbol_source_count),
         .sidebar_symbol_count =
@@ -1554,6 +1568,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             std::string{icon_catalog::source_license_policy()},
         .icon_preferred_external_source_policy =
             std::string{icon_catalog::preferred_external_source_policy()},
+        .icon_source_acquisition_policy =
+            std::string{icon_catalog::source_acquisition_policy()},
         .icon_source_attribution_policy =
             std::string{icon_catalog::source_attribution_policy()},
         .icon_apple_asset_boundary =
@@ -2217,6 +2233,10 @@ inline json::Value icon_source_attribution_debug_json(
         "modified_for_phenotype",
         json::Value{source.modified_for_phenotype});
     out.emplace("apple_asset", json::Value{source.apple_asset});
+    out.emplace("platform_extracted", json::Value{source.platform_extracted});
+    out.emplace(
+        "runtime_fetch_required",
+        json::Value{source.runtime_fetch_required});
     return json::Value{std::move(out)};
 }
 
@@ -2922,6 +2942,14 @@ inline json::Value explorer_chrome_debug_json(
         json::Value{static_cast<std::int64_t>(
             chrome.icon_apple_asset_symbol_count)});
     icon_system.emplace(
+        "platform_extracted_symbol_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_platform_extracted_symbol_count)});
+    icon_system.emplace(
+        "runtime_fetched_symbol_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_runtime_fetched_symbol_count)});
+    icon_system.emplace(
         "audited_symbol_source_count",
         json::Value{static_cast<std::int64_t>(
             chrome.icon_audited_symbol_source_count)});
@@ -3056,6 +3084,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "preferred_external_source_policy",
         json::Value{chrome.icon_preferred_external_source_policy});
+    icon_system.emplace(
+        "source_acquisition_policy",
+        json::Value{chrome.icon_source_acquisition_policy});
     icon_system.emplace(
         "source_attribution_policy",
         json::Value{chrome.icon_source_attribution_policy});
