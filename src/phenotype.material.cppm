@@ -13,6 +13,8 @@ export namespace phenotype {
 
 inline constexpr std::uint32_t material_plan_contract_version = 22;
 inline constexpr unsigned int material_max_execution_stages = 4;
+inline constexpr float material_max_blur_radius = 36.0f;
+inline constexpr unsigned int material_max_sample_taps = 25;
 
 struct MaterialGeometry {
     float x = 0.0f;
@@ -84,8 +86,8 @@ struct MaterialQualityPolicy {
     bool allow_backdrop_sampling = true;
     bool allow_noise = true;
     bool allow_shadow = true;
-    float max_blur_radius = 36.0f;
-    unsigned int max_sample_taps = 25;
+    float max_blur_radius = material_max_blur_radius;
+    unsigned int max_sample_taps = material_max_sample_taps;
     std::int64_t max_backdrop_pixels = 4'000'000;
 };
 
@@ -95,8 +97,13 @@ inline constexpr MaterialQualityPolicy default_material_quality_policy() noexcep
 
 inline MaterialQualityPolicy sanitize_material_quality_policy(
         MaterialQualityPolicy policy) noexcept {
-    policy.max_blur_radius = std::max(0.0f, policy.max_blur_radius);
-    policy.max_sample_taps = std::min(policy.max_sample_taps, 25u);
+    policy.max_blur_radius = std::clamp(
+        policy.max_blur_radius,
+        0.0f,
+        material_max_blur_radius);
+    policy.max_sample_taps = std::min(
+        policy.max_sample_taps,
+        material_max_sample_taps);
     policy.max_backdrop_pixels =
         std::max(std::int64_t{0}, policy.max_backdrop_pixels);
     return policy;
@@ -1108,7 +1115,7 @@ inline std::uint32_t material_debug_seed(MaterialDebugSeed seed,
 
 inline unsigned int material_resolve_sample_taps(
         unsigned int max_sample_taps) noexcept {
-    auto const bounded = std::min(max_sample_taps, 25u);
+    auto const bounded = std::min(max_sample_taps, material_max_sample_taps);
     if (bounded == 0u)
         return 0u;
     if (bounded < 5u)
@@ -1117,9 +1124,9 @@ inline unsigned int material_resolve_sample_taps(
         return 5u;
     if (bounded < 13u)
         return 9u;
-    if (bounded < 25u)
+    if (bounded < material_max_sample_taps)
         return 13u;
-    return 25u;
+    return material_max_sample_taps;
 }
 
 inline MaterialSamplingKernel material_resolve_sampling_kernel(
@@ -1767,8 +1774,8 @@ inline char const* material_reference_accessibility_response(
 inline bool material_reference_uses_budgeted_effects(
         MaterialPlan const& plan) noexcept {
     return plan.backdrop_sampling
-        && (plan.resource_budget.max_blur_radius < 36.0f
-            || plan.resource_budget.max_sample_taps < 25u
+        && (plan.resource_budget.max_blur_radius < material_max_blur_radius
+            || plan.resource_budget.max_sample_taps < material_max_sample_taps
             || !plan.quality_policy.allow_noise
             || !plan.quality_policy.allow_shadow);
 }

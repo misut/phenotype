@@ -592,7 +592,11 @@ starts allocating extra backdrop passes.
 Backends use the pure `default_material_quality_policy()` and
 `sanitize_material_quality_policy()` helpers instead of owning hard-coded
 material quality limits locally, so policy changes stay visible in
-`MaterialPlan` tests and artifact JSON.
+`MaterialPlan` tests and artifact JSON. The same pure constants cap executable
+blur and sample work before any backend sees the plan:
+`material_max_blur_radius` is 36 px and `material_max_sample_taps` is 25, which
+keeps shader/runtime resource bounds reviewable from source, tests, and the
+serialized `resource_budget`.
 `geometry` preserves the raw decoded `MaterialRect` rectangle, while `shape`
 records the pure executable shape: validity, surface area, min/max extent,
 radius limit, effective radius, normalized radius, rounded flag, and radius

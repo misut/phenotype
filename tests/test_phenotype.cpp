@@ -1277,8 +1277,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(default_quality.allow_backdrop_sampling);
     assert(default_quality.allow_noise);
     assert(default_quality.allow_shadow);
-    assert(default_quality.max_blur_radius == 36.0f);
-    assert(default_quality.max_sample_taps == 25);
+    assert(default_quality.max_blur_radius == material_max_blur_radius);
+    assert(default_quality.max_sample_taps == material_max_sample_taps);
     assert(default_quality.max_backdrop_pixels == 4'000'000);
 
     MaterialQualityPolicy raw_quality{};
@@ -1287,8 +1287,16 @@ void test_material_planner_backdrop_and_fallback_paths() {
     raw_quality.max_backdrop_pixels = -8;
     auto sanitized_quality = sanitize_material_quality_policy(raw_quality);
     assert(sanitized_quality.max_blur_radius == 0.0f);
-    assert(sanitized_quality.max_sample_taps == 25);
+    assert(sanitized_quality.max_sample_taps == material_max_sample_taps);
     assert(sanitized_quality.max_backdrop_pixels == 0);
+
+    raw_quality.max_blur_radius = 999.0f;
+    raw_quality.max_sample_taps = 999;
+    raw_quality.max_backdrop_pixels = 12;
+    sanitized_quality = sanitize_material_quality_policy(raw_quality);
+    assert(sanitized_quality.max_blur_radius == material_max_blur_radius);
+    assert(sanitized_quality.max_sample_taps == material_max_sample_taps);
+    assert(sanitized_quality.max_backdrop_pixels == 12);
 
     auto style = material_style_for_kind(MaterialKind::Regular, theme);
     MaterialRequest request{
@@ -1358,7 +1366,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(fallback_plan.primary_pass.executor)
            == "fallback-fill");
     assert(fallback_plan.primary_pass.max_texture_copy_pixels == 0);
-    assert(fallback_plan.resource_budget.max_sample_taps == 25);
+    assert(fallback_plan.resource_budget.max_sample_taps
+           == material_max_sample_taps);
     assert(fallback_plan.resource_budget.max_sampling_kernel_radius == 0);
     assert(fallback_plan.resource_budget.deterministic_fallback);
     assert(!fallback_plan.backdrop_access.required);
@@ -1934,6 +1943,23 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "backdrop-sample-blur");
     assert(std::string(budget_plan.execution_stages[1].name)
            == "edge-highlight");
+
+    MaterialEnvironment excessive_quality_env = glass_env;
+    excessive_quality_env.quality.max_blur_radius = 999.0f;
+    excessive_quality_env.quality.max_sample_taps = 999;
+    auto excessive_quality_plan =
+        plan_material_surface(request, excessive_quality_env);
+    assert(!excessive_quality_plan.fallback());
+    assert(excessive_quality_plan.quality_policy.max_blur_radius
+           == material_max_blur_radius);
+    assert(excessive_quality_plan.quality_policy.max_sample_taps
+           == material_max_sample_taps);
+    assert(excessive_quality_plan.resource_budget.max_blur_radius
+           == material_max_blur_radius);
+    assert(excessive_quality_plan.resource_budget.max_sample_taps
+           == material_max_sample_taps);
+    assert(excessive_quality_plan.blur_radius <= material_max_blur_radius);
+    assert(excessive_quality_plan.sample_taps <= material_max_sample_taps);
 
     MaterialEnvironment oversize_env = glass_env;
     oversize_env.quality.max_backdrop_pixels = 100;
