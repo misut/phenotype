@@ -5735,6 +5735,14 @@ inline void assign_focus(
         && modality == ExplorerInputModality::Keyboard;
 }
 
+inline void apply_modality_without_focus_change(
+        ExplorerState& state,
+        ExplorerInputModality modality) {
+    state.last_input_modality = modality;
+    if (modality != ExplorerInputModality::Keyboard)
+        state.focus_visible = false;
+}
+
 inline std::optional<std::size_t> focus_order_index(
         std::span<ExplorerFocusTarget const> order,
         ExplorerFocusTarget target) {
@@ -5837,7 +5845,7 @@ inline void apply_focus_policy_for_input(
         case ExplorerInputKind::CycleSort:
         case ExplorerInputKind::Scenario:
         default:
-            state.last_input_modality = modality;
+            apply_modality_without_focus_change(state, modality);
             return;
     }
 }

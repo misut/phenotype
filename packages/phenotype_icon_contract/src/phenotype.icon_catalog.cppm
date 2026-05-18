@@ -409,7 +409,7 @@ inline auto preferred_external_source_policy() noexcept -> std::string_view {
 }
 
 inline auto source_acquisition_policy() noexcept -> std::string_view {
-    return "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons, macOS system icons, or fetches remote resources";
+    return "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings, does not fetch remote resources, and keeps platform icon extraction disabled unless redistribution rights are explicit and audited";
 }
 
 inline auto document_cache_policy() noexcept -> std::string_view {
@@ -425,7 +425,7 @@ inline auto source_attribution_policy() noexcept -> std::string_view {
 }
 
 inline auto apple_asset_boundary() noexcept -> std::string_view {
-    return "Apple SF Symbols, Finder icons, and macOS system icons are design references only; do not extract or embed Apple-owned artwork without explicit legal clearance";
+    return "Apple SF Symbols, Finder icons, and macOS system icons are design references only; do not extract or embed Apple-owned artwork unless explicit redistribution clearance is recorded";
 }
 
 inline auto reference_source_at(unsigned int index) noexcept

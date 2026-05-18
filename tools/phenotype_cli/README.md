@@ -211,8 +211,9 @@ The initial scope is intentionally narrow:
   `key:page-down`, `key:delete`, `key:escape`, `shortcut:find`,
   `shortcut:duplicate`, and `shortcut:new-folder`. `key:tab` and
   `shift-tab` move the pure focus target and set `focus_visible=true`, while
-  `click:*`, `pointer:*`, and `pointer-focus:*` update focus without showing
-  the ring, matching macOS-style pointer-vs-keyboard focus behavior.
+  `click:*`, `pointer:*`, `pointer-focus:*`, and pointer toolbar commands
+  update focus or command state without showing the ring, matching macOS-style
+  pointer-vs-keyboard focus behavior.
 - `phenotype drive glass-showcase` applies deterministic typed inputs to the
   shared glass showcase model without opening a native window. JSON output
   includes the final state, per-input trace, public material kinds, expected

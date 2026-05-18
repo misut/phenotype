@@ -670,14 +670,11 @@ inline bool dispatch_gesture(::phenotype::GestureEvent ev) {
 inline bool dispatch_mouse_button(float mx, float my,
                                   MouseButton button, KeyAction action, int mods) {
     bool focus_visibility_cleared = false;
-    if (button == MouseButton::Left && action == KeyAction::Press
-        && ::phenotype::detail::g_app.focus_visible
-        && ::phenotype::detail::get_focused_id() != invalid_callback_id) {
-        focus_visibility_cleared = ::phenotype::detail::set_focus_id(
-            ::phenotype::detail::get_focused_id(),
-            "shell",
-            "pointer-focus-visible-reset",
-            false);
+    if (button == MouseButton::Left && action == KeyAction::Press) {
+        focus_visibility_cleared =
+            ::phenotype::detail::clear_focus_visible_for_pointer(
+                "shell",
+                "pointer-focus-visible-reset");
         if (focus_visibility_cleared)
             sync_platform_input();
     }
