@@ -596,7 +596,9 @@ material quality limits locally, so policy changes stay visible in
 blur and sample work before any backend sees the plan:
 `material_max_blur_radius` is 36 px and `material_max_sample_taps` is 25, which
 keeps shader/runtime resource bounds reviewable from source, tests, and the
-serialized `resource_budget`.
+serialized `resource_budget`. Non-finite blur limits sanitize to zero at the
+same edge, so NaN/Infinity quality input deterministically takes the bounded
+fallback path instead of leaking into shader constants.
 `geometry` preserves the raw decoded `MaterialRect` rectangle, while `shape`
 records the pure executable shape: validity, surface area, min/max extent,
 radius limit, effective radius, normalized radius, rounded flag, and radius
