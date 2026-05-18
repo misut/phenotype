@@ -183,16 +183,26 @@ mise exec -- exon build
   --input select:Project\ Notes.txt \
   --expect location:Demo\ Root/Documents \
   --expect selected:Project\ Notes.txt
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input key:tab \
+  --expect focus-visible:true \
+  --expect focus-target:sidebar \
+  --expect input-modality:keyboard
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input click:README.txt \
+  --expect focus-visible:false \
+  --expect focus-target:content-grid \
+  --expect input-modality:pointer
 ```
 
 The drive output reports the typed input trace, sandbox paths, visible entries,
 viewport, view mode, pure Finder chrome/grid metrics, selection capabilities,
 operation receipts with resolved operation plans, preview excerpt, and desktop
-keyboard command descriptors.
+keyboard command descriptors plus the shared `input_model`.
 It is useful for validating
 select/open/read/create/duplicate/delete/view-mode/resize/shortcut and
-keyboard-selection model behavior before running the slower desktop/mobile
-artifact capture gate.
+keyboard-selection/focus-modality model behavior before running the slower
+desktop/mobile artifact capture gate.
 Each operation plan records the sandbox-relative source and destination,
 whether the action reads a file, writes a file, creates a directory, moves to
 Trash, permanently deletes from Trash, and which fallback reason blocked a
@@ -200,14 +210,21 @@ failed operation.
 The parser accepts desktop-style aliases including `key:enter`, `key:delete`,
 `key:escape`, `key:arrow-up`, `key:arrow-down`, `key:arrow-left`,
 `key:arrow-right`, `key:home`, `key:end`, `key:page-up`, `key:page-down`,
-`shortcut:find`, `shortcut:duplicate`, and `shortcut:new-folder`, matching the
-native key-command registry used by the desktop example.
+`key:tab`, `shift-tab`, `shortcut:find`, `shortcut:duplicate`, and
+`shortcut:new-folder`, matching the native key-command registry used by the
+desktop example.
+`key:tab`, `shift-tab`, `focus:*`, `pointer:*`, and `click:*` expose the
+same focus contract as the renderer: keyboard focus navigation sets
+`focus_visible=true`, while pointer focus updates the target but keeps the
+ring hidden. The `input_model` records `last_input_modality`, `focus_target`,
+`focus_visible`, the focus order, the macOS-style focus ring token, and the
+reason a ring is or is not visible.
 Native file explorer artifact bundles expose the same model state under
 `debug.application.file_explorer`: profile, location, status, sort mode, view
 mode, selected entry plus index, operation receipt, entry counts, pure chrome
-metrics, and keyboard command descriptors. The operation receipt embeds the
-same plan shape as CLI drive output, so a startup artifact can explain the file
-effect contract without replaying the UI.
+metrics, keyboard command descriptors, and the `input_model`. The operation
+receipt embeds the same plan shape as CLI drive output, so a startup artifact
+can explain the file effect contract without replaying the UI.
 The desktop payload includes Finder chrome counts, sidebar symbol/label metrics,
 selected-row radius plus soft selected-row alpha policy, the
 `phenotype.icon_catalog` / `phenotype.icons` style contract
@@ -219,7 +236,7 @@ capability counts, and
 `interface_metaphor_policy`, `visual_consistency_policy`,
 `toolbar_symbol_chrome_policy`, `sidebar_symbol_color_policy`,
 `interaction_tone_policy` / `file_type_color_policy`, and
-`metrics_policy` / `hit_target_policy`), traffic-light marker
+`metrics_policy` / `hit_target_policy`), native-control reserve
 coordinates, and icon-grid density metrics such as column width, row height,
 pitch, thumbnail canvas size, label size, gap, visible rows, and visible
 capacity. Column view also records location-pane row count, row height, and
@@ -706,16 +723,13 @@ traffic-light reserve and trailing caption-button reserve. `native_controls_owne
 with `uses_glfw=false` confirms close/minimize/maximize controls and caption
 hit testing stay at the platform edge rather than being redrawn by phenotype.
 The file explorer's `debug.application.file_explorer.chrome` additionally
-publishes `content_window_control_markers=true` and three titlebar-control marker
-metrics; these describe the deterministic visual marker used in startup
-artifacts, not an input-capable duplicate of OS controls. The same chrome object
-is enabled automatically by the CLI for
-`phenotype run file_explorer_desktop --artifact-dir ... --artifact-exit`, unless
-the caller explicitly sets `PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS`.
-The run JSON records this under
-`file_explorer_input.artifact_chrome_markers` and
-`file_explorer_input.artifact_chrome_markers_injected`.
-publishes the native titlebar drag/control reserve widths plus a
+publishes `content_window_control_markers=false`,
+`artifact_window_control_markers=false`, `duplicate_window_controls=false`, and
+`window_control_marker_mode=runtime-native-controls`. The verifier pairs those
+debug details with low-detail, neutral pixel-region checks over the leading
+control reserve, so a future content-drawn traffic-light marker fails before it
+can ship as a duplicate of OS controls. The chrome object also publishes the
+native titlebar drag/control reserve widths plus a
 `geometry.policy=finder_integrated_glass_chrome_geometry_v1` object with the
 window inset/gap, sidebar surface origin, first sidebar row, toolbar shell,
 navigation/title/trailing toolbar group x-coordinates, collapsed search x, and
@@ -728,6 +742,11 @@ desktop command descriptors consumed by native key dispatch. If
 `CommandOrControl+F`, `Enter`, `DeleteOrBackspace`, `CommandOrControl+D`,
 `Shift+CommandOrControl+N`, or `Escape` drift, prefer fixing the shared
 `file_explorer_shared` command contract before changing platform key maps.
+`debug.application.file_explorer.input_model` is the native-artifact mirror of
+`phenotype drive file-explorer`: `focus_visibility_policy` must remain
+`keyboard_tab_navigation_shows_ring_pointer_click_hides_ring`, `focus_visible`
+must be false for pointer/click startup scripts, and keyboard-driven Tab
+repros should flip it to true with a concrete `focus_target`.
 On macOS, `titlebar_transparent=true`, `full_size_content_view=true`,
 `title_hidden=true`, and `background_drag_enabled=true` are read back from the
 live `NSWindow`, not inferred from the request, so a Finder-style artifact can

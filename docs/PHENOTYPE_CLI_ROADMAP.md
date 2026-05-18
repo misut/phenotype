@@ -134,7 +134,7 @@ Current commands:
 | `phenotype svg inspect <path>` | implemented | Reads a package or local SVG file at the CLI edge, then parses it through `phenotype_svg_contract` so Linux CI and native developers can see the supported SVG subset, source byte count, viewBox, shape count, unsupported command count, diagnostics, paintability, and renderer-facing `Painter` path without launching a backend. |
 | `phenotype theme contract` | implemented | Emits the pure `phenotype_theme_contract` baseline for the default Apple-like glass theme, including Pretendard typography, Liquid Glass usage boundary, macOS/Finder-style iconography policy, phenotype-owned SVG asset policy, grouped-container policy, performance bounds, accessibility fallback policy, unsupported-backend degradation policy, color tokens, radii, typography, and semantic surface roles. |
 | `phenotype io contract` | implemented | Emits the pure `phenotype.io` contract for typed input events, deterministic input scripts, output observation summaries, LLM-debuggable artifact descriptors, edge-effect placement, and release-adapter bypass policy. |
-| `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs or line-based scripts and emits a stable observation JSON with trace, entries including file-type symbol metadata, `entry_symbol_summary`, viewport, view mode, pure Finder chrome/grid metrics, default glass theme metadata, capabilities, operation receipt, preview excerpt fields, localized labels, package-resource metadata, and optional expectation results. |
+| `phenotype drive file-explorer` | implemented | Drives the shared sandboxed desktop/mobile file explorer model from typed CLI inputs or line-based scripts and emits a stable observation JSON with trace, entries including file-type symbol metadata, `entry_symbol_summary`, viewport, view mode, pure Finder chrome/grid metrics, default glass theme metadata, capabilities, operation receipt, preview excerpt fields, localized labels, package-resource metadata, the keyboard-vs-pointer `input_model` focus contract, and optional expectation results. |
 | `phenotype drive glass-showcase` | implemented | Drives the shared material probe model from typed CLI inputs or line-based scripts and emits a stable observation JSON with final state, trace, public material kinds, expected material plan count, backdrop/inspector/density/viewport state, progress value, and optional expectation results. |
 | `phenotype run <example>` | implemented | Resolves repository examples by name or path, runs `mise exec -- exon build` unless `--no-build` is supplied, executes the generated `.exon/debug/<package>` binary, passes package-root environment when a manifest exists, validates file explorer `--input`/`--script` through the shared model, and emits a stable JSON launch receipt with build/run output tails, input counts, timeout state, artifact bundle summary, optional `--observe-output` artifact observation, and explicit environment overrides. |
 
@@ -146,6 +146,12 @@ manifest/locales at startup from `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`,
 `PHENOTYPE_PACKAGE_ROOT`, or their working directory, then resolve labels and
 font defaults through the same pure `ResourceCatalog` path used by
 `phenotype drive file-explorer --package`.
+The same shared model now exposes the focus/input abstraction used by both CLI
+and native artifact debugging: `key:tab` and `shift-tab` move the focus target
+with `focus_visible=true`, while `click:*` and `pointer:*` update focus without
+showing the ring. This is the first product workflow where CLI input,
+framework focus routing, and artifact output all report the same
+keyboard-vs-pointer visibility contract.
 The glass showcase now follows the same shared-model pattern through
 `examples/glass_showcase_shared`. The native scene imports that module for
 state, update, density, viewport, and material-count contracts, while

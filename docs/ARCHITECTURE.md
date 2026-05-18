@@ -355,7 +355,13 @@ native window. `examples/file_explorer_shared` publishes Finder-style desktop
 commands as data, `examples/file_explorer_desktop` registers those descriptors
 with the core, and `phenotype drive file-explorer` accepts matching `key:` and
 `shortcut:` aliases against the same shared model, including arrow/home/end/page
-selection navigation.
+selection navigation. The shared file explorer model also emits a pure
+`input_model`: last input modality, current focus target, focus order, focus
+ring style token, and `focus_visible`. `key:tab` / `shift-tab` are keyboard
+inputs and therefore show the ring; `click:*` and `pointer:*` keep the target
+but hide the ring. Native artifacts mirror the same object under
+`debug.application.file_explorer.input_model`, so CLI output and renderer
+artifacts explain focus-ring behavior with the same value contract.
 
 ## Command buffer protocol
 
@@ -709,12 +715,11 @@ artifact/runtime debugging. macOS and Windows serialize those fields under
 metrics, leading/trailing native-control reserves, whether native OS controls
 own the caption-button/traffic-light territory, and explicit `uses_glfw=false`
 / `toolkit_window_shim=false` markers.
-Finder-style startup artifacts may render deterministic visual markers for the
-traffic-light reserve so screenshots expose the product shell, but those
-markers are opt-in artifact probes (`artifact-probe-marker`) rather than live
-runtime chrome. Interactive desktop examples keep the same reserve blank and
-report `runtime-native-controls`, leaving input and caption-button ownership in
-AppKit or Win32.
+Finder-style startup artifacts keep the leading native-control reserve blank in
+phenotype content and report `runtime-native-controls`, leaving input and
+caption-button ownership in AppKit or Win32. The artifact verifier checks that
+the reserve stays low-detail and neutral so traffic-light probes cannot regress
+into duplicate content-drawn controls.
 
 ## Unified debug plane
 

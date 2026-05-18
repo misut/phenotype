@@ -182,6 +182,14 @@ mise exec -- exon build
   --input select:Documents \
   --input key:enter \
   --expect location:Demo\ Root/Documents
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input key:tab \
+  --expect focus-visible:true \
+  --expect focus-target:sidebar
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input click:README.txt \
+  --expect focus-visible:false \
+  --expect input-modality:pointer
 .exon/debug/phenotype_cli drive glass-showcase --json \
   --script ../../examples/glass_showcase/glass_showcase.drive \
   --expect material-count:7
@@ -227,8 +235,9 @@ The same shared model is available without a native window through
 sandboxed model and emits JSON containing the input trace, visible entries,
 viewport, view mode, pure Finder chrome/grid metrics, capabilities, operation
 receipt and plan, selected preview excerpt, desktop keyboard command
-descriptors, and final snapshot. It is the lightweight CI-friendly counterpart
-to the local desktop/mobile artifact capture gate.
+descriptors, the shared `input_model`, and final snapshot. It is the
+lightweight CI-friendly counterpart to the local desktop/mobile artifact
+capture gate.
 File-operation inputs are resolved as direct child entry names in the current
 sandbox folder; path traversal or hidden-entry names produce failed operation
 receipts that can be asserted with `--expect operation:...:fail`.
@@ -238,6 +247,10 @@ deletes from Trash, or degrades with a fallback reason.
 Key and shortcut aliases such as `key:enter`, `key:delete`,
 `shortcut:duplicate`, `shortcut:find`, and `shortcut:new-folder` resolve to the
 same shared actions that the desktop native key-command registry dispatches.
+Focus aliases such as `key:tab`, `shift-tab`, `focus:search`,
+`click:README.txt`, and `pointer:content-grid` resolve to the same model-level
+focus state as native artifacts: keyboard traversal sets `focus_visible=true`,
+while pointer input changes `focus_target` without drawing the ring.
 View-mode inputs (`view:icon`, `view:list`, `view:column`, or `view:gallery`)
 use the same shared state field as the desktop toolbar and
 `PHENOTYPE_FILE_EXPLORER_VIEW`, so headless CLI traces and native artifacts
@@ -424,6 +437,9 @@ Gaps:
   observable through both `phenotype drive file-explorer` aliases and
   `debug.application.file_explorer.keyboard_commands`; arrow/home/end/page keys
   now drive the same pure selection navigation path as the CLI.
+- File explorer focus visibility is observable without native capture through
+  `phenotype drive file-explorer --expect focus-visible:...`, then mirrored in
+  `debug.application.file_explorer.input_model` for startup artifacts.
 
 ## Debug coverage
 

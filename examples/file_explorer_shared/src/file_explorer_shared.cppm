@@ -88,6 +88,26 @@ enum class ExplorerSelectionMove {
     End,
 };
 
+enum class ExplorerInputModality {
+    Unspecified,
+    Keyboard,
+    Pointer,
+    Programmatic,
+};
+
+enum class ExplorerFocusTarget {
+    None,
+    Sidebar,
+    ToolbarNavigation,
+    ToolbarView,
+    ToolbarActions,
+    Search,
+    ContentGrid,
+    PreviewPanel,
+    CreatePanel,
+    MoreActions,
+};
+
 struct Snapshot {
     fs::path root;
     fs::path current;
@@ -135,6 +155,10 @@ struct ExplorerState {
     int viewport_height = 0;
     float viewport_scale = 1.0f;
     std::size_t mobile_tab = 0;
+    ExplorerInputModality last_input_modality =
+        ExplorerInputModality::Unspecified;
+    ExplorerFocusTarget focus_target = ExplorerFocusTarget::None;
+    bool focus_visible = false;
 };
 
 enum class ExplorerInputKind {
@@ -164,11 +188,16 @@ enum class ExplorerInputKind {
     Reset,
     Scenario,
     DismissTransient,
+    FocusTarget,
+    PointerFocus,
+    TabFocus,
+    ShiftTabFocus,
 };
 
 struct ExplorerInput {
     ExplorerInputKind kind = ExplorerInputKind::Noop;
     std::string value;
+    ExplorerInputModality modality = ExplorerInputModality::Unspecified;
     SortMode sort_mode = SortMode::Name;
     ExplorerViewMode view_mode = ExplorerViewMode::Icon;
     ExplorerSelectionMove selection_move = ExplorerSelectionMove::Down;
@@ -402,6 +431,10 @@ struct ExplorerInputTrace {
     OperationReceipt operation;
     std::size_t visible_entries = 0;
     bool has_selection = false;
+    ExplorerInputModality last_input_modality =
+        ExplorerInputModality::Unspecified;
+    ExplorerFocusTarget focus_target = ExplorerFocusTarget::None;
+    bool focus_visible = false;
 };
 
 struct ExplorerDriveResult {
@@ -419,6 +452,9 @@ enum class ExplorerExpectationKind {
     MissingEntry,
     Operation,
     StatusContains,
+    FocusTarget,
+    FocusVisible,
+    InputModality,
 };
 
 struct ExplorerExpectation {
@@ -588,6 +624,129 @@ inline constexpr char k_desktop_chrome_geometry_policy[] =
 inline bool mobile_profile(std::string_view profile) {
     return profile == "mobile";
 }
+
+inline std::string lower_copy(std::string text);
+inline std::string trim(std::string_view text);
+
+inline std::string input_modality_value_name(ExplorerInputModality modality) {
+    switch (modality) {
+        case ExplorerInputModality::Keyboard: return "keyboard";
+        case ExplorerInputModality::Pointer: return "pointer";
+        case ExplorerInputModality::Programmatic: return "programmatic";
+        case ExplorerInputModality::Unspecified:
+        default:
+            return "unspecified";
+    }
+}
+
+inline std::string focus_target_value_name(ExplorerFocusTarget target) {
+    switch (target) {
+        case ExplorerFocusTarget::Sidebar: return "sidebar";
+        case ExplorerFocusTarget::ToolbarNavigation:
+            return "toolbar_navigation";
+        case ExplorerFocusTarget::ToolbarView: return "toolbar_view";
+        case ExplorerFocusTarget::ToolbarActions: return "toolbar_actions";
+        case ExplorerFocusTarget::Search: return "search";
+        case ExplorerFocusTarget::ContentGrid: return "content_grid";
+        case ExplorerFocusTarget::PreviewPanel: return "preview_panel";
+        case ExplorerFocusTarget::CreatePanel: return "create_panel";
+        case ExplorerFocusTarget::MoreActions: return "more_actions";
+        case ExplorerFocusTarget::None:
+        default:
+            return "none";
+    }
+}
+
+inline std::string focus_target_label(ExplorerFocusTarget target) {
+    switch (target) {
+        case ExplorerFocusTarget::Sidebar: return "Sidebar";
+        case ExplorerFocusTarget::ToolbarNavigation:
+            return "Toolbar Navigation";
+        case ExplorerFocusTarget::ToolbarView: return "View Controls";
+        case ExplorerFocusTarget::ToolbarActions: return "Toolbar Actions";
+        case ExplorerFocusTarget::Search: return "Search";
+        case ExplorerFocusTarget::ContentGrid: return "File Grid";
+        case ExplorerFocusTarget::PreviewPanel: return "Preview";
+        case ExplorerFocusTarget::CreatePanel: return "Create";
+        case ExplorerFocusTarget::MoreActions: return "More Actions";
+        case ExplorerFocusTarget::None:
+        default:
+            return "None";
+    }
+}
+
+inline std::optional<ExplorerFocusTarget> focus_target_from_name(
+        std::string_view value) {
+    auto name = lower_copy(trim(value));
+    if (name == "none" || name == "clear")
+        return ExplorerFocusTarget::None;
+    if (name == "sidebar" || name == "side-bar")
+        return ExplorerFocusTarget::Sidebar;
+    if (name == "toolbar-navigation" || name == "toolbar_navigation"
+        || name == "navigation" || name == "nav")
+        return ExplorerFocusTarget::ToolbarNavigation;
+    if (name == "toolbar-view" || name == "toolbar_view"
+        || name == "view-controls" || name == "view_controls")
+        return ExplorerFocusTarget::ToolbarView;
+    if (name == "toolbar-actions" || name == "toolbar_actions"
+        || name == "actions")
+        return ExplorerFocusTarget::ToolbarActions;
+    if (name == "search" || name == "find")
+        return ExplorerFocusTarget::Search;
+    if (name == "content" || name == "grid" || name == "content-grid"
+        || name == "content_grid" || name == "files")
+        return ExplorerFocusTarget::ContentGrid;
+    if (name == "preview" || name == "preview-panel"
+        || name == "preview_panel")
+        return ExplorerFocusTarget::PreviewPanel;
+    if (name == "create" || name == "create-panel"
+        || name == "create_panel")
+        return ExplorerFocusTarget::CreatePanel;
+    if (name == "more" || name == "more-actions" || name == "more_actions")
+        return ExplorerFocusTarget::MoreActions;
+    return std::nullopt;
+}
+
+inline std::span<ExplorerFocusTarget const> explorer_focus_order(
+        std::string_view profile) {
+    static constexpr std::array desktop_order{
+        ExplorerFocusTarget::Sidebar,
+        ExplorerFocusTarget::ToolbarNavigation,
+        ExplorerFocusTarget::ToolbarView,
+        ExplorerFocusTarget::ToolbarActions,
+        ExplorerFocusTarget::Search,
+        ExplorerFocusTarget::ContentGrid,
+        ExplorerFocusTarget::PreviewPanel,
+        ExplorerFocusTarget::CreatePanel,
+    };
+    static constexpr std::array mobile_order{
+        ExplorerFocusTarget::Search,
+        ExplorerFocusTarget::Sidebar,
+        ExplorerFocusTarget::ContentGrid,
+        ExplorerFocusTarget::PreviewPanel,
+        ExplorerFocusTarget::CreatePanel,
+    };
+    return mobile_profile(profile)
+        ? std::span<ExplorerFocusTarget const>{mobile_order}
+        : std::span<ExplorerFocusTarget const>{desktop_order};
+}
+
+inline std::string focus_ring_visibility_reason(
+        ExplorerState const& state) {
+    if (state.focus_target == ExplorerFocusTarget::None)
+        return "no_focused_target";
+    if (state.last_input_modality == ExplorerInputModality::Keyboard
+        && state.focus_visible)
+        return "keyboard_focus_navigation";
+    if (state.last_input_modality == ExplorerInputModality::Pointer)
+        return "pointer_input_hides_focus_ring";
+    if (state.last_input_modality == ExplorerInputModality::Programmatic)
+        return "programmatic_input_does_not_show_focus_ring";
+    return "unspecified_input_modality";
+}
+
+inline constexpr char k_focus_ring_style[] =
+    "macos_blue_keyboard_focus_ring_outset_4px_2px_stroke";
 
 inline SortMode default_sort_mode(std::string_view profile) {
     return mobile_profile(profile) ? SortMode::Name : SortMode::Recent;
@@ -1339,11 +1498,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
 
 inline ExplorerChromeMetrics explorer_chrome_with_artifact_window_markers(
         ExplorerChromeMetrics chrome) {
-    if (!chrome.native_window_controls || chrome.duplicate_window_controls)
-        return chrome;
-    chrome.content_window_control_markers = true;
-    chrome.artifact_window_control_markers = true;
-    chrome.window_control_marker_mode = "artifact-probe-marker";
+    if (chrome.native_window_controls && !chrome.duplicate_window_controls)
+        chrome.window_control_marker_mode = "runtime-native-controls";
+    chrome.content_window_control_markers = false;
+    chrome.artifact_window_control_markers = false;
     return chrome;
 }
 
@@ -2013,6 +2171,45 @@ inline json::Value keyboard_commands_debug_json(std::string_view profile) {
         commands.push_back(json::Value{std::move(item)});
     }
     return json::Value{std::move(commands)};
+}
+
+inline json::Value focus_order_debug_json(std::string_view profile) {
+    json::Array out;
+    for (auto target : explorer_focus_order(profile))
+        out.push_back(json::Value{focus_target_value_name(target)});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value input_model_debug_json(
+        ExplorerState const& state,
+        std::string_view profile) {
+    json::Object out;
+    out.emplace(
+        "abstraction_policy",
+        json::Value{
+            "external_input_to_pure_explorer_input_to_renderer_output"});
+    out.emplace(
+        "focus_visibility_policy",
+        json::Value{
+            "keyboard_tab_navigation_shows_ring_pointer_click_hides_ring"});
+    out.emplace(
+        "focus_ring_style",
+        json::Value{std::string{k_focus_ring_style}});
+    out.emplace(
+        "last_input_modality",
+        json::Value{input_modality_value_name(state.last_input_modality)});
+    out.emplace(
+        "focus_target",
+        json::Value{focus_target_value_name(state.focus_target)});
+    out.emplace(
+        "focus_target_label",
+        json::Value{focus_target_label(state.focus_target)});
+    out.emplace("focus_visible", json::Value{state.focus_visible});
+    out.emplace(
+        "focus_visibility_reason",
+        json::Value{focus_ring_visibility_reason(state)});
+    out.emplace("focus_order", focus_order_debug_json(profile));
+    return json::Value{std::move(out)};
 }
 
 inline json::Value string_array_debug_json(
@@ -2934,6 +3131,7 @@ inline json::Value file_explorer_debug_json(
     out.emplace("chrome", explorer_chrome_debug_json(chrome));
     out.emplace("theme_system", explorer_theme_system_debug_json(chrome));
     out.emplace("resource_system", file_explorer_resource_system_debug_json(profile));
+    out.emplace("input_model", input_model_debug_json(state, profile));
     out.emplace("keyboard_commands", keyboard_commands_debug_json(profile));
     out.emplace("entries_sample", json::Value{std::move(entries)});
     out.emplace("entry_symbol_summary", entry_symbol_summary_debug_json(snap));
@@ -2991,6 +3189,10 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::Reset: return "reset";
         case ExplorerInputKind::Scenario: return "scenario";
         case ExplorerInputKind::DismissTransient: return "dismiss_transient";
+        case ExplorerInputKind::FocusTarget: return "focus_target";
+        case ExplorerInputKind::PointerFocus: return "pointer_focus";
+        case ExplorerInputKind::TabFocus: return "tab_focus";
+        case ExplorerInputKind::ShiftTabFocus: return "shift_tab_focus";
     }
     return "noop";
 }
@@ -3003,6 +3205,9 @@ inline std::string explorer_input_label(ExplorerInput const& input) {
         return label + ":" + view_mode_value_name(input.view_mode);
     if (input.kind == ExplorerInputKind::MoveSelection)
         return label + ":" + selection_move_value_name(input.selection_move);
+    if (input.kind == ExplorerInputKind::FocusTarget
+        || input.kind == ExplorerInputKind::PointerFocus)
+        return label + ":" + input.value;
     if (!input.value.empty())
         return label + ":" + input.value;
     return label;
@@ -3016,6 +3221,9 @@ inline std::string explorer_expectation_kind_name(ExplorerExpectationKind kind) 
         case ExplorerExpectationKind::MissingEntry:   return "missing-entry";
         case ExplorerExpectationKind::Operation:      return "operation";
         case ExplorerExpectationKind::StatusContains: return "status-contains";
+        case ExplorerExpectationKind::FocusTarget:    return "focus-target";
+        case ExplorerExpectationKind::FocusVisible:   return "focus-visible";
+        case ExplorerExpectationKind::InputModality:  return "input-modality";
     }
     return "selected";
 }
@@ -3095,6 +3303,46 @@ inline ExplorerExpectationParseResult parse_explorer_expectation(
         return parsed_expectation({
             .kind = ExplorerExpectationKind::StatusContains,
             .value = value,
+        });
+    }
+    if (name == "focus" || name == "focus-target"
+        || name == "focus_target") {
+        auto target = focus_target_from_name(value);
+        if (!target) {
+            return expectation_parse_error(
+                "expectation 'focus-target' has unknown target: " + value);
+        }
+        return parsed_expectation({
+            .kind = ExplorerExpectationKind::FocusTarget,
+            .value = focus_target_value_name(*target),
+        });
+    }
+    if (name == "focus-visible" || name == "focus_visible") {
+        auto lowered = lower_copy(value);
+        if (lowered != "true" && lowered != "false"
+            && lowered != "1" && lowered != "0"
+            && lowered != "yes" && lowered != "no") {
+            return expectation_parse_error(
+                "expectation 'focus-visible' requires true or false");
+        }
+        bool const visible = lowered == "true" || lowered == "1"
+            || lowered == "yes";
+        return parsed_expectation({
+            .kind = ExplorerExpectationKind::FocusVisible,
+            .value = visible ? "true" : "false",
+        });
+    }
+    if (name == "modality" || name == "input-modality"
+        || name == "input_modality") {
+        auto lowered = lower_copy(value);
+        if (lowered != "keyboard" && lowered != "pointer"
+            && lowered != "programmatic" && lowered != "unspecified") {
+            return expectation_parse_error(
+                "expectation 'input-modality' requires keyboard, pointer, programmatic, or unspecified");
+        }
+        return parsed_expectation({
+            .kind = ExplorerExpectationKind::InputModality,
+            .value = lowered,
         });
     }
     if (name == "operation" || name == "op") {
@@ -3264,6 +3512,25 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         });
     };
 
+    auto parse_focus = [&](ExplorerInputKind kind,
+                           ExplorerInputModality modality)
+            -> ExplorerInputParseResult {
+        if (value.empty()) {
+            return input_parse_error(
+                "input '" + name + "' requires a focus target");
+        }
+        auto target = focus_target_from_name(value);
+        if (!target) {
+            return input_parse_error(
+                "unknown file explorer focus target: " + value);
+        }
+        return parsed_input(ExplorerInput{
+            .kind = kind,
+            .value = focus_target_value_name(*target),
+            .modality = modality,
+        });
+    };
+
     if (name == "noop")
         return parsed_input({});
     if (name == "location" || name == "loc"
@@ -3276,12 +3543,41 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
     }
     if (name == "open" || name == "open-entry")
         return require_value(ExplorerInputKind::OpenEntry);
-    if (name == "activate" || name == "click" || name == "activate-entry")
+    if (name == "click") {
+        if (value.empty())
+            return input_parse_error("input 'click' requires a value");
+        return parsed_input(ExplorerInput{
+            .kind = ExplorerInputKind::ActivateEntry,
+            .value = value,
+            .modality = ExplorerInputModality::Pointer,
+        });
+    }
+    if (name == "activate" || name == "activate-entry")
         return require_value(ExplorerInputKind::ActivateEntry);
     if (name == "open-selected" || name == "open_selection"
         || name == "activate-selected" || name == "activate_selection"
         || name == "enter") {
-        return parsed_input({.kind = ExplorerInputKind::ActivateSelected});
+        return parsed_input({
+            .kind = ExplorerInputKind::ActivateSelected,
+            .modality = ExplorerInputModality::Keyboard});
+    }
+    if (name == "tab")
+        return parsed_input({
+            .kind = ExplorerInputKind::TabFocus,
+            .modality = ExplorerInputModality::Keyboard});
+    if (name == "shift-tab" || name == "shift_tab" || name == "backtab")
+        return parsed_input({
+            .kind = ExplorerInputKind::ShiftTabFocus,
+            .modality = ExplorerInputModality::Keyboard});
+    if (name == "focus" || name == "focus-target" || name == "focus_target")
+        return parse_focus(
+            ExplorerInputKind::FocusTarget,
+            ExplorerInputModality::Keyboard);
+    if (name == "pointer" || name == "pointer-focus"
+        || name == "pointer_focus" || name == "hover") {
+        return parse_focus(
+            ExplorerInputKind::PointerFocus,
+            ExplorerInputModality::Pointer);
     }
     if (name == "move" || name == "move-selection"
         || name == "move_selection" || name == "navigate") {
@@ -3297,37 +3593,63 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
             return input_parse_error(
                 "input '" + name + "' requires a command name");
         }
+        if (command == "tab") {
+            return parsed_input({
+                .kind = ExplorerInputKind::TabFocus,
+                .modality = ExplorerInputModality::Keyboard});
+        }
+        if (command == "shift-tab" || command == "shift_tab"
+            || command == "backtab") {
+            return parsed_input({
+                .kind = ExplorerInputKind::ShiftTabFocus,
+                .modality = ExplorerInputModality::Keyboard});
+        }
         if (command == "enter" || command == "return"
             || command == "open" || command == "activate") {
-            return parsed_input({.kind = ExplorerInputKind::ActivateSelected});
+            return parsed_input({
+                .kind = ExplorerInputKind::ActivateSelected,
+                .modality = ExplorerInputModality::Keyboard});
         }
         if (command == "delete" || command == "backspace"
             || command == "trash") {
-            return parsed_input({.kind = ExplorerInputKind::DeleteSelected});
+            return parsed_input({
+                .kind = ExplorerInputKind::DeleteSelected,
+                .modality = ExplorerInputModality::Keyboard});
         }
         if (command == "find" || command == "search") {
-            return parsed_input({.kind = ExplorerInputKind::FocusSearch});
+            return parsed_input({
+                .kind = ExplorerInputKind::FocusSearch,
+                .modality = ExplorerInputModality::Keyboard});
         }
         if (auto move = selection_move_from_name(command)) {
             return parsed_input(ExplorerInput{
                 .kind = ExplorerInputKind::MoveSelection,
                 .value = selection_move_value_name(*move),
+                .modality = ExplorerInputModality::Keyboard,
                 .selection_move = *move,
             });
         }
         if (command == "escape" || command == "dismiss") {
-            return parsed_input({.kind = ExplorerInputKind::DismissTransient});
+            return parsed_input({
+                .kind = ExplorerInputKind::DismissTransient,
+                .modality = ExplorerInputModality::Keyboard});
         }
         if (command == "duplicate" || command == "copy") {
-            return parsed_input({.kind = ExplorerInputKind::DuplicateSelected});
+            return parsed_input({
+                .kind = ExplorerInputKind::DuplicateSelected,
+                .modality = ExplorerInputModality::Keyboard});
         }
         if (command == "new-folder" || command == "new_folder"
             || command == "mkdir") {
-            return parsed_input({.kind = ExplorerInputKind::CreateFolder});
+            return parsed_input({
+                .kind = ExplorerInputKind::CreateFolder,
+                .modality = ExplorerInputModality::Keyboard});
         }
         if (command == "new-file" || command == "new_file"
             || command == "touch") {
-            return parsed_input({.kind = ExplorerInputKind::CreateFile});
+            return parsed_input({
+                .kind = ExplorerInputKind::CreateFile,
+                .modality = ExplorerInputModality::Keyboard});
         }
         return input_parse_error(
             "unknown file explorer " + name + " command: " + command);
@@ -4515,7 +4837,175 @@ inline void reset_demo_tree(ExplorerState& state, std::string_view profile) {
     state.last_operation = {};
     state.sort_mode = default_sort_mode(profile);
     state.view_mode = ExplorerViewMode::Icon;
+    state.last_input_modality = ExplorerInputModality::Programmatic;
+    state.focus_target = ExplorerFocusTarget::None;
+    state.focus_visible = false;
     state.status = "Demo files reset.";
+}
+
+inline ExplorerInputModality default_input_modality(
+        ExplorerInputKind kind) {
+    switch (kind) {
+        case ExplorerInputKind::FocusSearch:
+        case ExplorerInputKind::MoveSelection:
+        case ExplorerInputKind::ActivateSelected:
+        case ExplorerInputKind::DeleteSelected:
+        case ExplorerInputKind::DuplicateSelected:
+        case ExplorerInputKind::DismissTransient:
+        case ExplorerInputKind::TabFocus:
+        case ExplorerInputKind::ShiftTabFocus:
+        case ExplorerInputKind::FocusTarget:
+            return ExplorerInputModality::Keyboard;
+        case ExplorerInputKind::SelectLocation:
+        case ExplorerInputKind::SelectEntry:
+        case ExplorerInputKind::OpenEntry:
+        case ExplorerInputKind::ActivateEntry:
+        case ExplorerInputKind::PointerFocus:
+            return ExplorerInputModality::Pointer;
+        case ExplorerInputKind::Search:
+            return ExplorerInputModality::Keyboard;
+        case ExplorerInputKind::Noop:
+        case ExplorerInputKind::ViewMode:
+        case ExplorerInputKind::Viewport:
+        case ExplorerInputKind::DraftName:
+        case ExplorerInputKind::DraftFolderName:
+        case ExplorerInputKind::DraftBody:
+        case ExplorerInputKind::CreateFile:
+        case ExplorerInputKind::CreateFolder:
+        case ExplorerInputKind::GoBack:
+        case ExplorerInputKind::GoForward:
+        case ExplorerInputKind::GoUp:
+        case ExplorerInputKind::Sort:
+        case ExplorerInputKind::CycleSort:
+        case ExplorerInputKind::Reset:
+        case ExplorerInputKind::Scenario:
+        default:
+            return ExplorerInputModality::Programmatic;
+    }
+}
+
+inline ExplorerInputModality effective_input_modality(
+        ExplorerInput const& input) {
+    if (input.modality != ExplorerInputModality::Unspecified)
+        return input.modality;
+    return default_input_modality(input.kind);
+}
+
+inline void assign_focus(
+        ExplorerState& state,
+        ExplorerFocusTarget target,
+        ExplorerInputModality modality) {
+    state.last_input_modality = modality;
+    state.focus_target = target;
+    state.focus_visible = target != ExplorerFocusTarget::None
+        && modality == ExplorerInputModality::Keyboard;
+}
+
+inline std::optional<std::size_t> focus_order_index(
+        std::span<ExplorerFocusTarget const> order,
+        ExplorerFocusTarget target) {
+    for (std::size_t i = 0; i < order.size(); ++i) {
+        if (order[i] == target)
+            return i;
+    }
+    return std::nullopt;
+}
+
+inline void move_focus_by_tab(
+        ExplorerState& state,
+        std::string_view profile,
+        bool reverse) {
+    auto order = explorer_focus_order(profile);
+    if (order.empty()) {
+        assign_focus(
+            state,
+            ExplorerFocusTarget::None,
+            ExplorerInputModality::Keyboard);
+        state.status = "No focusable targets.";
+        return;
+    }
+
+    auto index = focus_order_index(order, state.focus_target);
+    std::size_t next = 0;
+    if (index) {
+        next = reverse
+            ? (*index == 0 ? order.size() - 1 : *index - 1)
+            : ((*index + 1) % order.size());
+    } else if (reverse) {
+        next = order.size() - 1;
+    }
+    assign_focus(state, order[next], ExplorerInputModality::Keyboard);
+    state.status = std::string{"Keyboard focus moved to "}
+        + focus_target_label(state.focus_target) + ".";
+}
+
+inline void apply_focus_policy_for_input(
+        ExplorerState& state,
+        ExplorerInput const& input,
+        std::string_view profile) {
+    auto modality = effective_input_modality(input);
+    switch (input.kind) {
+        case ExplorerInputKind::TabFocus:
+            move_focus_by_tab(state, profile, false);
+            return;
+        case ExplorerInputKind::ShiftTabFocus:
+            move_focus_by_tab(state, profile, true);
+            return;
+        case ExplorerInputKind::FocusTarget:
+        case ExplorerInputKind::PointerFocus:
+            if (auto target = focus_target_from_name(input.value)) {
+                assign_focus(state, *target, modality);
+            }
+            return;
+        case ExplorerInputKind::SelectLocation:
+            assign_focus(state, ExplorerFocusTarget::Sidebar, modality);
+            return;
+        case ExplorerInputKind::FocusSearch:
+        case ExplorerInputKind::Search:
+            assign_focus(state, ExplorerFocusTarget::Search, modality);
+            return;
+        case ExplorerInputKind::SelectEntry:
+        case ExplorerInputKind::OpenEntry:
+        case ExplorerInputKind::ActivateEntry:
+        case ExplorerInputKind::ActivateSelected:
+        case ExplorerInputKind::MoveSelection:
+            assign_focus(state, ExplorerFocusTarget::ContentGrid, modality);
+            return;
+        case ExplorerInputKind::DeleteSelected:
+        case ExplorerInputKind::DuplicateSelected:
+            assign_focus(state, ExplorerFocusTarget::ContentGrid, modality);
+            return;
+        case ExplorerInputKind::CreateFile:
+        case ExplorerInputKind::CreateFolder:
+            assign_focus(state, ExplorerFocusTarget::CreatePanel, modality);
+            return;
+        case ExplorerInputKind::DismissTransient:
+            state.last_input_modality = modality;
+            state.focus_visible = state.focus_target != ExplorerFocusTarget::None
+                && modality == ExplorerInputModality::Keyboard;
+            return;
+        case ExplorerInputKind::Reset:
+            assign_focus(
+                state,
+                ExplorerFocusTarget::None,
+                ExplorerInputModality::Programmatic);
+            return;
+        case ExplorerInputKind::Noop:
+        case ExplorerInputKind::ViewMode:
+        case ExplorerInputKind::Viewport:
+        case ExplorerInputKind::DraftName:
+        case ExplorerInputKind::DraftFolderName:
+        case ExplorerInputKind::DraftBody:
+        case ExplorerInputKind::GoBack:
+        case ExplorerInputKind::GoForward:
+        case ExplorerInputKind::GoUp:
+        case ExplorerInputKind::Sort:
+        case ExplorerInputKind::CycleSort:
+        case ExplorerInputKind::Scenario:
+        default:
+            state.last_input_modality = modality;
+            return;
+    }
 }
 
 inline void remove_regular_file_if_present(fs::path const& path) {
@@ -4648,6 +5138,7 @@ inline void apply_explorer_input(
         ExplorerState& state,
         ExplorerInput const& input,
         std::string_view profile) {
+    apply_focus_policy_for_input(state, input, profile);
     switch (input.kind) {
         case ExplorerInputKind::Noop:
             state.status = "No input applied.";
@@ -4734,6 +5225,17 @@ inline void apply_explorer_input(
         case ExplorerInputKind::DismissTransient:
             state.status = "Transient UI dismissed.";
             return;
+        case ExplorerInputKind::FocusTarget:
+            state.status = "Keyboard focus set to "
+                + focus_target_label(state.focus_target) + ".";
+            return;
+        case ExplorerInputKind::PointerFocus:
+            state.status = "Pointer focus set to "
+                + focus_target_label(state.focus_target) + ".";
+            return;
+        case ExplorerInputKind::TabFocus:
+        case ExplorerInputKind::ShiftTabFocus:
+            return;
     }
 }
 
@@ -4760,6 +5262,9 @@ inline ExplorerInputTrace explorer_input_trace(
         .operation = state.last_operation,
         .visible_entries = snap.entries.size(),
         .has_selection = snap.has_selection,
+        .last_input_modality = state.last_input_modality,
+        .focus_target = state.focus_target,
+        .focus_visible = state.focus_visible,
     };
 }
 
@@ -4849,6 +5354,29 @@ inline ExplorerExpectationResult check_explorer_expectation(
             checked.detail = checked.ok
                 ? "status contained expected text"
                 : "status did not contain expected text";
+            return checked;
+        case ExplorerExpectationKind::FocusTarget:
+            checked.actual =
+                focus_target_value_name(result.state.focus_target);
+            checked.ok = checked.actual == expectation.value;
+            checked.detail = checked.ok
+                ? "focus target matched"
+                : "focus target did not match";
+            return checked;
+        case ExplorerExpectationKind::FocusVisible:
+            checked.actual = result.state.focus_visible ? "true" : "false";
+            checked.ok = checked.actual == expectation.value;
+            checked.detail = checked.ok
+                ? "focus visibility matched"
+                : "focus visibility did not match";
+            return checked;
+        case ExplorerExpectationKind::InputModality:
+            checked.actual =
+                input_modality_value_name(result.state.last_input_modality);
+            checked.ok = checked.actual == expectation.value;
+            checked.detail = checked.ok
+                ? "input modality matched"
+                : "input modality did not match";
             return checked;
     }
     checked.actual = "<unknown>";

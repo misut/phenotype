@@ -7,6 +7,8 @@ import cppx.terminal;
 import file_explorer_shared;
 import glass_showcase_shared;
 import json;
+import phenotype_cli.common;
+import phenotype_cli.file_explorer;
 import phenotype.io;
 import phenotype.icon_catalog;
 import phenotype.resources;
@@ -21,13 +23,8 @@ namespace icon_catalog = phenotype::icon_catalog;
 namespace io_contract = phenotype::io;
 namespace svg_contract = phenotype::svg_contract;
 namespace theme_contract = phenotype::theme_contract;
-
-struct Check {
-    std::string name;
-    bool ok = false;
-    std::string detail;
-    std::string hint;
-};
+using namespace phenotype_cli::common;
+using namespace phenotype_cli::file_explorer;
 
 struct ToolMigration {
     std::string legacy_path;
@@ -963,12 +960,12 @@ auto spec() -> cppx::cli::CommandSpec {
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "kind[:value]",
-                             .description = "Typed input such as viewport:900x620@2, select:README.txt, open:Documents, activate:Documents, create-file, delete, sort:recent"},
+                             .description = "Typed input such as viewport:900x620@2, click:README.txt, key:tab, focus:search, pointer:content-grid, create-file, delete, sort:recent"},
                             {.name = "expect",
                              .arity = cppx::cli::OptionArity::one,
                              .repeatable = true,
                              .value_name = "kind:value",
-                             .description = "Assert final output, such as selected:README.txt, entry:Note.txt, operation:file_delete:ok"},
+                             .description = "Assert final output, such as selected:README.txt, entry:Note.txt, operation:file_delete:ok, focus-visible:false"},
                             {.name = "locale",
                              .arity = cppx::cli::OptionArity::one,
                              .value_name = "tag",
@@ -982,6 +979,8 @@ auto spec() -> cppx::cli::CommandSpec {
                         .examples = {
                             "phenotype drive file-explorer --json --input select:README.txt --input duplicate",
                             "phenotype drive file-explorer --json --input open:Documents --input select:'Project Notes.txt'",
+                            "phenotype drive file-explorer --json --input click:README.txt --expect focus-visible:false --expect input-modality:pointer",
+                            "phenotype drive file-explorer --json --input key:tab --expect focus-visible:true --expect focus-target:sidebar",
                             "phenotype drive file-explorer --profile mobile --scenario created-preview --json",
                             "phenotype drive file-explorer --script explorer.drive --expect operation:file_create:ok --json",
                         },
@@ -1087,44 +1086,6 @@ auto spec() -> cppx::cli::CommandSpec {
         },
         .allow_positionals = false,
     };
-}
-
-auto json_escape(std::string_view text) -> std::string {
-    auto out = std::string{};
-    out.reserve(text.size() + 8);
-    for (unsigned char ch : text) {
-        switch (ch) {
-        case '\\': out += "\\\\"; break;
-        case '"': out += "\\\""; break;
-        case '\b': out += "\\b"; break;
-        case '\f': out += "\\f"; break;
-        case '\n': out += "\\n"; break;
-        case '\r': out += "\\r"; break;
-        case '\t': out += "\\t"; break;
-        default:
-            if (ch < 0x20) {
-                out += std::format("\\u{:04x}", static_cast<unsigned int>(ch));
-            } else {
-                out.push_back(static_cast<char>(ch));
-            }
-            break;
-        }
-    }
-    return out;
-}
-
-auto json_string(std::string_view text) -> std::string {
-    return std::format("\"{}\"", json_escape(text));
-}
-
-auto path_string(fs::path const& path) -> std::string {
-    return path.lexically_normal().generic_string();
-}
-
-auto absolute_path_string(fs::path const& path) -> std::string {
-    auto ec = std::error_code{};
-    auto absolute = fs::absolute(path, ec);
-    return ec ? path_string(path) : path_string(absolute);
 }
 
 auto path_exists(fs::path const& path) -> bool {
@@ -1451,12 +1412,6 @@ auto tool_migrations(fs::path const& root) -> std::vector<ToolMigration> {
     };
 }
 
-auto all_ok(std::span<Check const> checks) -> bool {
-    return std::ranges::all_of(checks, [](Check const& check) {
-        return check.ok;
-    });
-}
-
 auto check_json(Check const& check) -> std::string {
     return std::format(
         "{{\"name\":{},\"ok\":{},\"detail\":{},\"hint\":{}}}",
@@ -1464,17 +1419,6 @@ auto check_json(Check const& check) -> std::string {
         check.ok ? "true" : "false",
         json_string(check.detail),
         json_string(check.ok ? "" : check.hint));
-}
-
-auto string_array_json(std::span<std::string const> values) -> std::string {
-    auto out = std::string{"["};
-    for (std::size_t i = 0; i < values.size(); ++i) {
-        if (i > 0)
-            out += ",";
-        out += json_string(values[i]);
-    }
-    out += "]";
-    return out;
 }
 
 auto string_view_array_json(std::span<std::string_view const> values)
@@ -2332,33 +2276,6 @@ auto package_checks(PackageSummary const& summary) -> std::vector<Check> {
          .detail = std::format("{} files", summary.font_file_count),
          .hint = "Add fonts/ with Pretendard or aliases for portable UI text."},
     };
-}
-
-auto resource_diagnostic_json(phenotype::ResourceDiagnostic const& diagnostic)
-    -> std::string {
-    return std::format(
-        "{{\"severity\":{},\"kind\":{},\"path\":{},\"message\":{},"
-        "\"expected\":{},\"actual\":{}}}",
-        json_string(phenotype::resource_diagnostic_severity_name(
-            diagnostic.severity)),
-        json_string(phenotype::resource_diagnostic_kind_name(diagnostic.kind)),
-        json_string(diagnostic.path),
-        json_string(diagnostic.message),
-        json_string(diagnostic.expected),
-        json_string(diagnostic.actual));
-}
-
-auto resource_diagnostics_json(
-        std::span<phenotype::ResourceDiagnostic const> diagnostics)
-    -> std::string {
-    auto out = std::string{"["};
-    for (std::size_t i = 0; i < diagnostics.size(); ++i) {
-        if (i > 0)
-            out += ",";
-        out += resource_diagnostic_json(diagnostics[i]);
-    }
-    out += "]";
-    return out;
 }
 
 auto locale_key_array_json(
@@ -3794,154 +3711,6 @@ auto output_tail(std::string_view text, std::size_t max_bytes = 16384)
     if (text.size() <= max_bytes)
         return text;
     return text.substr(text.size() - max_bytes);
-}
-
-auto operation_receipt_json(
-        file_explorer_demo::OperationReceipt const& receipt) -> std::string {
-    auto const& plan = receipt.plan;
-    auto plan_json = std::format(
-        "{{\"kind\":{},\"display_name\":{},\"source\":{},"
-        "\"destination\":{},\"executable\":{},\"sandboxed\":{},"
-        "\"mutates_filesystem\":{},\"reads_file\":{},\"reads_directory\":{},"
-        "\"writes_file\":{},"
-        "\"creates_directory\":{},\"deletes_file\":{},"
-        "\"deletes_directory\":{},\"moves_to_trash\":{},"
-        "\"permanent_delete\":{},\"fallback_reason\":{}}}",
-        json_string(plan.kind),
-        json_string(plan.display_name),
-        json_string(plan.source),
-        json_string(plan.destination),
-        plan.executable ? "true" : "false",
-        plan.sandboxed ? "true" : "false",
-        plan.mutates_filesystem ? "true" : "false",
-        plan.reads_file ? "true" : "false",
-        plan.reads_directory ? "true" : "false",
-        plan.writes_file ? "true" : "false",
-        plan.creates_directory ? "true" : "false",
-        plan.deletes_file ? "true" : "false",
-        plan.deletes_directory ? "true" : "false",
-        plan.moves_to_trash ? "true" : "false",
-        plan.permanent_delete ? "true" : "false",
-        json_string(plan.fallback_reason));
-    return std::format(
-        "{{\"kind\":{},\"target\":{},\"ok\":{},\"detail\":{},"
-        "\"plan\":{}}}",
-        json_string(receipt.kind),
-        json_string(receipt.target),
-        receipt.ok ? "true" : "false",
-        json_string(receipt.detail),
-        plan_json);
-}
-
-auto explorer_input_json(file_explorer_demo::ExplorerInput const& input)
-    -> std::string {
-    return std::format(
-        "{{\"kind\":{},\"value\":{},\"sort_mode\":{},\"view_mode\":{},"
-        "\"selection_move\":{},"
-        "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},\"label\":{}}}",
-        json_string(file_explorer_demo::explorer_input_kind_name(input.kind)),
-        json_string(input.value),
-        json_string(file_explorer_demo::sort_mode_label(input.sort_mode)),
-        json_string(file_explorer_demo::view_mode_value_name(input.view_mode)),
-        json_string(file_explorer_demo::selection_move_value_name(
-            input.selection_move)),
-        input.viewport_width,
-        input.viewport_height,
-        input.viewport_scale,
-        json_string(file_explorer_demo::explorer_input_label(input)));
-}
-
-auto explorer_entry_json(file_explorer_demo::Entry const& entry)
-    -> std::string {
-    return std::format(
-        "{{\"name\":{},\"folder\":{},\"size\":{},\"kind\":{},"
-        "\"symbol\":{},\"symbol_semantic_reference_name\":{}}}",
-        json_string(entry.name),
-        entry.folder ? "true" : "false",
-        entry.size,
-        json_string(file_explorer_demo::entry_kind_label(entry)),
-        json_string(file_explorer_demo::entry_symbol_name(entry)),
-        json_string(
-            file_explorer_demo::entry_symbol_semantic_reference_name(entry)));
-}
-
-auto explorer_entries_json(
-        std::span<file_explorer_demo::Entry const> entries) -> std::string {
-    auto out = std::string{"["};
-    for (std::size_t i = 0; i < entries.size(); ++i) {
-        if (i > 0)
-            out += ",";
-        out += explorer_entry_json(entries[i]);
-    }
-    out += "]";
-    return out;
-}
-
-auto explorer_labels_json(file_explorer_demo::ExplorerLabels const& labels)
-    -> std::string {
-    return std::format(
-        "{{\"title\":{},\"mobile_title\":{},\"sidebar_recents\":{},"
-        "\"sidebar_shared\":{},\"favorites\":{},\"locations\":{},"
-        "\"applications\":{},\"desktop\":{},\"documents\":{},"
-        "\"pictures\":{},\"downloads\":{},\"icloud_drive\":{},"
-        "\"home\":{},\"airdrop\":{},\"trash\":{},"
-        "\"search_placeholder\":{},\"status_ready\":{},"
-        "\"tab_browse\":{},\"tab_preview\":{},\"tab_create\":{},"
-        "\"create_file\":{},\"create_folder\":{},\"duplicate\":{},"
-        "\"duplicate_file\":{},\"delete\":{},\"delete_selected\":{},"
-        "\"preview\":{},\"root\":{},\"docs\":{},\"pics\":{},"
-        "\"back\":{},\"forward\":{},\"up\":{},\"sort\":{},"
-        "\"name\":{},\"kind\":{},\"size\":{},"
-        "\"no_matching_files\":{},\"select_file_to_preview\":{},"
-        "\"select_file_from_browse\":{},\"create_hint\":{},"
-        "\"file_name\":{},\"contents\":{},\"folder_name\":{},"
-        "\"reset_demo_files\":{},\"status\":{}}}",
-        json_string(labels.title),
-        json_string(labels.mobile_title),
-        json_string(labels.sidebar_recents),
-        json_string(labels.sidebar_shared),
-        json_string(labels.favorites),
-        json_string(labels.locations),
-        json_string(labels.applications),
-        json_string(labels.desktop),
-        json_string(labels.documents),
-        json_string(labels.pictures),
-        json_string(labels.downloads),
-        json_string(labels.icloud_drive),
-        json_string(labels.home),
-        json_string(labels.airdrop),
-        json_string(labels.trash),
-        json_string(labels.search_placeholder),
-        json_string(labels.status_ready),
-        json_string(labels.tab_browse),
-        json_string(labels.tab_preview),
-        json_string(labels.tab_create),
-        json_string(labels.create_file),
-        json_string(labels.create_folder),
-        json_string(labels.duplicate),
-        json_string(labels.duplicate_file),
-        json_string(labels.delete_action),
-        json_string(labels.delete_selected),
-        json_string(labels.preview),
-        json_string(labels.root),
-        json_string(labels.docs),
-        json_string(labels.pics),
-        json_string(labels.back),
-        json_string(labels.forward),
-        json_string(labels.up),
-        json_string(labels.sort),
-        json_string(labels.name),
-        json_string(labels.kind),
-        json_string(labels.size),
-        json_string(labels.no_matching_files),
-        json_string(labels.select_file_to_preview),
-        json_string(labels.select_file_from_browse),
-        json_string(labels.create_hint),
-        json_string(labels.file_name),
-        json_string(labels.contents),
-        json_string(labels.folder_name),
-        json_string(labels.reset_demo_files),
-        json_string(labels.status));
 }
 
 enum class IconCatalogSet {
@@ -5786,56 +5555,15 @@ auto explorer_chrome_json(
             chrome)));
 }
 
-auto explorer_theme_system_json(
-        file_explorer_demo::ExplorerChromeMetrics const& chrome) -> std::string {
-    return std::format(
-        "{{\"contract_version\":{},\"profile_name\":{},"
-        "\"reference\":{},\"font_policy\":{},\"material_policy\":{},"
-        "\"iconography_policy\":{},\"icon_asset_policy\":{},"
-        "\"usage_policy\":{},\"container_policy\":{},"
-        "\"performance_policy\":{},\"accessibility_policy\":{},"
-        "\"fallback_policy\":{}}}",
-        chrome.theme_contract_version,
-        json_string(chrome.theme_profile_name),
-        json_string(chrome.theme_reference),
-        json_string(chrome.theme_font_policy),
-        json_string(chrome.theme_material_policy),
-        json_string(chrome.theme_iconography_policy),
-        json_string(chrome.theme_icon_asset_policy),
-        json_string(chrome.theme_usage_policy),
-        json_string(chrome.theme_container_policy),
-        json_string(chrome.theme_performance_policy),
-        json_string(chrome.theme_accessibility_policy),
-        json_string(chrome.theme_fallback_policy));
-}
-
-auto explorer_keyboard_commands_json(std::string_view profile) -> std::string {
-    auto commands = file_explorer_demo::file_explorer_keyboard_commands(profile);
-    auto out = std::string{"["};
-    for (std::size_t i = 0; i < commands.size(); ++i) {
-        if (i > 0)
-            out += ",";
-        auto const& command = commands[i];
-        out += std::format(
-            "{{\"action\":{},\"shortcut\":{},\"input_alias\":{},"
-            "\"allow_when_input_focused\":{}}}",
-            json_string(command.action),
-            json_string(command.shortcut),
-            json_string(command.input_alias),
-            command.allow_when_input_focused ? "true" : "false");
-    }
-    out += "]";
-    return out;
-}
-
 auto explorer_trace_json(
         file_explorer_demo::ExplorerInputTrace const& trace,
+        std::string_view profile,
         std::size_t index) -> std::string {
     return std::format(
         "{{\"index\":{},\"input\":{},\"chrome\":{},\"status\":{},"
         "\"relative_location\":{},\"selected_name\":{},"
         "\"visible_entries\":{},\"has_selection\":{},"
-        "\"operation_label\":{},\"operation\":{}}}",
+        "\"input_model\":{},\"operation_label\":{},\"operation\":{}}}",
         index,
         explorer_input_json(trace.input),
         explorer_chrome_json(trace.chrome),
@@ -5844,18 +5572,20 @@ auto explorer_trace_json(
         json_string(trace.selected_name),
         trace.visible_entries,
         trace.has_selection ? "true" : "false",
+        explorer_input_model_json(trace, profile),
         json_string(trace.operation_label),
         operation_receipt_json(trace.operation));
 }
 
 auto explorer_trace_array_json(
-        std::span<file_explorer_demo::ExplorerInputTrace const> trace)
+        std::span<file_explorer_demo::ExplorerInputTrace const> trace,
+        std::string_view profile)
     -> std::string {
     auto out = std::string{"["};
     for (std::size_t i = 0; i < trace.size(); ++i) {
         if (i > 0)
             out += ",";
-        out += explorer_trace_json(trace[i], i);
+        out += explorer_trace_json(trace[i], profile, i);
     }
     out += "]";
     return out;
@@ -5866,38 +5596,6 @@ auto explorer_drive_ok(file_explorer_demo::ExplorerDriveResult const& result)
     return std::ranges::all_of(result.trace, [](auto const& trace) {
         return trace.operation.kind.empty() || trace.operation.ok;
     });
-}
-
-auto explorer_expectation_json(
-        file_explorer_demo::ExplorerExpectationResult const& expectation)
-    -> std::string {
-    return std::format(
-        "{{\"kind\":{},\"value\":{},\"expects_operation_ok\":{},"
-        "\"operation_ok\":{},\"label\":{},\"ok\":{},\"actual\":{},"
-        "\"detail\":{}}}",
-        json_string(file_explorer_demo::explorer_expectation_kind_name(
-            expectation.expectation.kind)),
-        json_string(expectation.expectation.value),
-        expectation.expectation.expects_operation_ok ? "true" : "false",
-        expectation.expectation.operation_ok ? "true" : "false",
-        json_string(file_explorer_demo::explorer_expectation_label(
-            expectation.expectation)),
-        expectation.ok ? "true" : "false",
-        json_string(expectation.actual),
-        json_string(expectation.detail));
-}
-
-auto explorer_expectations_json(
-        std::span<file_explorer_demo::ExplorerExpectationResult const>
-            expectations) -> std::string {
-    auto out = std::string{"["};
-    for (std::size_t i = 0; i < expectations.size(); ++i) {
-        if (i > 0)
-            out += ",";
-        out += explorer_expectation_json(expectations[i]);
-    }
-    out += "]";
-    return out;
 }
 
 auto explorer_resources_json(ExplorerDriveResources const& resources)
@@ -5948,6 +5646,7 @@ auto explorer_drive_json(
         "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
         "\"chrome\":{},"
         "\"theme_system\":{},"
+        "\"input_model\":{},"
         "\"keyboard_commands\":{},"
         "\"selected\":{{\"present\":{},\"name\":{},\"kind\":{},"
         "\"index\":{},\"size\":{},\"path_label\":{},"
@@ -5976,6 +5675,7 @@ auto explorer_drive_json(
         result.state.viewport_scale,
         explorer_chrome_json(result.chrome),
         explorer_theme_system_json(result.chrome),
+        explorer_input_model_json(result.state, result.profile),
         explorer_keyboard_commands_json(result.profile),
         snap.has_selection ? "true" : "false",
         json_string(snap.has_selection ? snap.selected.name : ""),
@@ -5999,7 +5699,7 @@ auto explorer_drive_json(
         operation_receipt_json(result.state.last_operation),
         json::emit(file_explorer_demo::entry_symbol_summary_debug_json(snap)),
         explorer_entries_json(snap.entries),
-        explorer_trace_array_json(result.trace),
+        explorer_trace_array_json(result.trace, result.profile),
         explorer_expectations_json(expectations));
 }
 
@@ -7884,6 +7584,15 @@ auto file_explorer_verifier_args(fs::path const& root,
             args.insert(args.end(), extra.begin(), extra.end());
         }
     }
+    append_required_debug_detail(
+        args,
+        "application.file_explorer.input_model.focus_visibility_policy=\"keyboard_tab_navigation_shows_ring_pointer_click_hides_ring\"");
+    append_required_debug_detail(
+        args,
+        "application.file_explorer.input_model.focus_ring_style=\"macos_blue_keyboard_focus_ring_outset_4px_2px_stroke\"");
+    append_required_debug_detail(
+        args,
+        "application.file_explorer.input_model.focus_visible=false");
     auto scenario_extra =
         append_file_explorer_scenario_requirements(args, scenario);
     if (!scenario_extra)
@@ -8118,8 +7827,6 @@ auto run_file_explorer_case(fs::path const& root,
     };
     if (item.profile == "desktop")
         env["PHENOTYPE_FILE_EXPLORER_VIEW"] = item.mode;
-    if (item.profile == "desktop")
-        env["PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS"] = "1";
     if (scenario_active) {
         if (item.scenario == "more-actions-open") {
             env["PHENOTYPE_FILE_EXPLORER_MORE_ACTIONS"] = "1";
@@ -9543,6 +9250,17 @@ int run_drive_file_explorer(cppx::cli::Invocation const& invocation) {
             {.label = "view",
              .value = file_explorer_demo::view_mode_label(snap.view_mode),
              .status = cppx::terminal::StatusKind::ok},
+            {.label = "focus",
+             .value = std::format(
+                 "{} visible={} modality={}",
+                 file_explorer_demo::focus_target_value_name(
+                     result.state.focus_target),
+                 result.state.focus_visible ? "true" : "false",
+                 file_explorer_demo::input_modality_value_name(
+                     result.state.last_input_modality)),
+             .status = result.state.focus_visible
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::skip},
             {.label = "chrome",
              .value = std::format("{} cols x {} rows, viewport {}x{}@{}",
                                   result.chrome.icon_grid_columns,
@@ -9824,13 +9542,6 @@ int run_example(cppx::cli::Invocation const& invocation) {
     }
     if (summary.artifact_exit) {
         (*env)["PHENOTYPE_ARTIFACT_EXIT"] = "1";
-    }
-    if (is_file_explorer_example
-        && summary.artifact_requested
-        && summary.artifact_exit
-        && !env->contains("PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS")) {
-        (*env)["PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS"] = "1";
-        summary.file_explorer_artifact_chrome_markers_injected = true;
     }
     if (auto marker = env->find("PHENOTYPE_FILE_EXPLORER_ARTIFACT_CHROME_MARKERS");
         marker != env->end()) {

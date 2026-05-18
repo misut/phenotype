@@ -51,6 +51,13 @@ The same package publishes the desktop keyboard command contract as pure data:
 dismissal. `phenotype drive file-explorer` accepts the matching `key:` and
 `shortcut:` aliases, so headless traces and native key dispatch exercise the
 same model actions.
+It also owns the pure focus/input modality contract used by the CLI and native
+artifact debug payloads. `key:tab` and `shift-tab` move through the exported
+focus order with `focus_visible=true`; `click:*`, `pointer:*`, and
+`pointer-focus:*` update the focused target while keeping the ring hidden. The
+state records the last input modality, current focus target, focus visibility
+reason, and macOS-style focus ring token so a failure can be diagnosed from
+JSON instead of by visually guessing whether a blue ring should have appeared.
 
 The module also provides the pure file explorer `ResourceCatalog` fixture and
 locale label resolver used by the desktop and mobile examples. Package/locale
@@ -82,4 +89,14 @@ mise exec -- exon build
   --input select:Project\ Notes.txt \
   --expect location:Demo\ Root/Documents \
   --expect selected:Project\ Notes.txt
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input key:tab \
+  --expect focus-visible:true \
+  --expect focus-target:sidebar \
+  --expect input-modality:keyboard
+.exon/debug/phenotype_cli drive file-explorer --json \
+  --input click:README.txt \
+  --expect focus-visible:false \
+  --expect focus-target:content-grid \
+  --expect input-modality:pointer
 ```
