@@ -6682,8 +6682,6 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     auto const material_bytes =
         scratch.material_instances.size() * sizeof(MaterialInstanceGPU);
     bool material_uploaded = false;
-    material_summary.material_instance_count =
-        static_cast<std::uint32_t>(scratch.material_instances.size());
     auto material_upload_started = metrics::detail::now_ns();
     if (!scratch.material_instances.empty()) {
         auto const old_material_capacity = g_renderer.material_instances_capacity;

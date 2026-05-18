@@ -422,20 +422,26 @@ resolved sampling kernel, bounded execution stages, verifier expectations, and
 an `observation_contract` that mirrors the pure facts the artifact verifier
 must observe at runtime.
 `reference_model` is intentionally pure. It records that the surface follows the
-Liquid Glass-style model, the semantic thickness variant, view-bounds shape
-scope, resolved shape, tint participation, interactive/container/union/morph
-expectations, blending scope, accessibility adaptation response, performance
-response, vibrancy expectation, legibility preservation, and deterministic
-degradation policy. This keeps the Apple-reference alignment out of AppKit,
-Metal, Direct3D, Vulkan, and snapshot writers; those adapters execute or report
-the resolved plan instead of re-deciding whether a surface behaves like glass.
+Apple material model, including `technology`, `layer`, and `material_policy`.
+Functional chrome/control roles resolve to `liquid-glass` on the
+`functional-layer`; `MaterialSurfaceRole::Content` resolves to
+`standard-material` on the `content-layer`. The same model records semantic
+thickness variant, view-bounds shape scope, resolved shape, tint participation,
+interactive/container/union/morph expectations, blending scope, accessibility
+adaptation response, performance response, vibrancy expectation, legibility
+preservation, and deterministic degradation policy. This keeps Apple-reference
+alignment out of AppKit, Metal, Direct3D, Vulkan, and snapshot writers; those
+adapters execute or report the resolved plan instead of re-deciding whether a
+surface behaves like glass.
 `decision_trace` records the pure gate booleans for geometry, target readiness,
+role eligibility for Liquid Glass, content-layer standard-material selection,
 quality, backend capabilities, accessibility settings, backdrop-source
 readiness, and the first fallback blocker. `primary_pass` states whether the
-backend should run a backdrop
-blur pass or deterministic translucent fallback. `execution_stages` then expands
-that primary pass into a bounded pure list of shadow, blur/fallback, edge, and
-noise stages so artifacts can explain material work before visual inspection.
+backend should run a sampled backdrop blur pass, a standard content fill, or a
+deterministic translucent fallback. `execution_stages` then expands that
+primary pass into a bounded pure list of shadow, blur/standard/fallback, edge,
+and noise stages so artifacts can explain material work before visual
+inspection.
 `execution_stage_capacity` records the fixed plan storage capacity and
 `dropped_execution_stage_count` records overflow explicitly; any nonzero drop is
 treated as a verifier failure, which forces future stage additions to update the
@@ -559,9 +565,11 @@ records `renderer.accessibility_display_options` so a captured frame explains
 which system or test override fed the plan.
 Runtime adapters serialize the same `MaterialRuntimeRecord` shape into
 `debug.platform_runtime.details.renderer.material_plans`: macOS records the
-sampled-backdrop pass, Windows and Android record deterministic fallback
-plans, and snapshot-only targets publish an empty renderer contract with an
-explicit fallback policy. Each serialized plan carries the same
+sampled-backdrop pass for functional roles and the `standard-material-fill`
+pass for content roles; Windows and Android record deterministic fallback or
+standard-material plans according to the same pure role policy; snapshot-only
+targets publish an empty renderer contract with an explicit fallback policy.
+Each serialized plan carries the same
 `contract_version` so artifact verifiers can reject unknown material plan
 schemas before reading version-specific fields. The renderer object also carries
 `material_plan_contract_version`, allowing empty renderer contracts to advertise

@@ -859,6 +859,17 @@ namespace detail {
             "has_material",
             json::Value{plan.decision_trace.has_material});
         decision_trace.emplace(
+            "role_allows_liquid_glass",
+            json::Value{plan.decision_trace.role_allows_liquid_glass});
+        decision_trace.emplace(
+            "content_layer_standard_material",
+            json::Value{
+                plan.decision_trace.content_layer_standard_material});
+        decision_trace.emplace(
+            "liquid_glass_backdrop_candidate",
+            json::Value{
+                plan.decision_trace.liquid_glass_backdrop_candidate});
+        decision_trace.emplace(
             "target_ready",
             json::Value{plan.decision_trace.target_ready});
         decision_trace.emplace(
@@ -991,6 +1002,12 @@ namespace detail {
         reference_model.emplace(
             "technology",
             json::Value{plan.reference_model.technology});
+        reference_model.emplace(
+            "layer",
+            json::Value{plan.reference_model.layer});
+        reference_model.emplace(
+            "material_policy",
+            json::Value{plan.reference_model.material_policy});
         reference_model.emplace(
             "variant",
             json::Value{plan.reference_model.variant});

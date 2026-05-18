@@ -37,8 +37,9 @@ phenotype are:
   transparency, increased contrast, and reduced motion.
 - phenotype's custom material system should follow these semantics without
   claiming to be a drop-in replacement for Apple system components. Use the
-  `liquid-glass` backend path for functional layers and controls; use standard
-  material/fallback semantics for content-layer grouping.
+  `liquid-glass` backend path for functional layers and controls; resolve
+  content-layer grouping to `standard-material` with `standard-fill` execution
+  unless the plan is invalid and must take an explicit deterministic fallback.
 
 References:
 
@@ -188,13 +189,15 @@ snapshot, and verifier expectations. The plan also carries a
 `adaptive-backdrop-luma` curve, while deterministic fallback uses
 `fallback-flat`.
 `MaterialPlan.reference_model` maps the current Apple references into a
-backend-independent product contract: Liquid Glass is bound to a view's shape,
-uses semantic clear/thin/regular/thick thickness, may apply tint and
-interaction, may be grouped for container/union/morph behavior, must preserve
-foreground legibility/vibrancy expectations, records accessibility/performance
-adaptation responses, and must degrade deterministically when backdrop blur is
-unavailable. The macOS, Windows, Android, and WASI adapters consume or serialize
-this resolved model; they do not own the policy.
+backend-independent product contract: functional roles are `liquid-glass` on
+the `functional-layer`, content roles are `standard-material` on the
+`content-layer`, the semantic clear/thin/regular/thick thickness stays explicit,
+tint and interaction may apply, container/union/morph behavior is pure, and the
+plan must preserve foreground legibility/vibrancy expectations where relevant.
+The reference model also records accessibility/performance adaptation responses
+and deterministic degradation behavior when backdrop blur is unavailable. The
+macOS, Windows, Android, and WASI adapters consume or serialize this resolved
+model; they do not own the policy.
 The current sampled-glass kernel is a pure `weighted-5x5-manhattan` descriptor
 with the resolved tap count, kernel radius, blur step scale, and weight profile;
 fallback plans serialize the inactive `none` kernel. This keeps blur spread and
@@ -600,8 +603,9 @@ Deliverables:
   material path that is fully represented in debug output;
 - macOS Metal implementation first: `MaterialRect` is resolved through the
   pure `MaterialPlan`, preserves the functional `MaterialSurfaceRole`, samples
-  the previous captured framebuffer as the backdrop source, then applies blur,
-  tint, saturation, luminance preservation,
+  the previous captured framebuffer as the backdrop source only for
+  Liquid-Glass-eligible roles, and uses `standard-material-fill` for content
+  roles. Sampled plans apply blur, tint, saturation, luminance preservation,
   edge highlight, deterministic noise, depth/shadow, and the resolved sampling
   kernel values from the plan; runtime JSON mirrors the plan's `primary_pass`,
   sampling kernel, resource budget, fallback reason, and verifier expectations

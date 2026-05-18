@@ -111,6 +111,9 @@ def material_plan(
         "decision_trace": {
             "has_geometry": True,
             "has_material": True,
+            "role_allows_liquid_glass": True,
+            "content_layer_standard_material": False,
+            "liquid_glass_backdrop_candidate": True,
             "target_ready": True,
             "quality_switches_allow_backdrop": True,
             "backdrop_pixels_within_budget": True,
@@ -327,6 +330,7 @@ def reference_performance_response(plan: dict[str, object]) -> str:
 
 def refresh_reference_model(plan: dict[str, object]) -> None:
     kind = str(plan["kind"])
+    role = str(plan["role"])
     shape = plan["shape"]
     tint = plan["tint"]
     container = plan["container"]
@@ -338,18 +342,31 @@ def refresh_reference_model(plan: dict[str, object]) -> None:
     assert isinstance(foreground, dict)
     assert isinstance(budget, dict)
     shape_valid = bool(shape["valid"])
+    content_standard = kind != "none" and role == "content"
     blending_scope = "none"
     if kind != "none" and bool(plan["backdrop_sampling"]):
         blending_scope = "sampled-backdrop"
     elif kind != "none" and bool(plan["fallback"]):
         blending_scope = "deterministic-fallback"
+    elif content_standard:
+        blending_scope = "standard-fill"
+    layer = "inactive"
+    material_policy = "inactive"
+    if kind != "none":
+        layer = "content-layer" if content_standard else "functional-layer"
+        material_policy = (
+            "standard-material-content-layer"
+            if content_standard
+            else "liquid-glass-functional-layer")
     minimum = float(foreground["minimum_contrast_ratio"])
     legibility_preserved = (
         float(foreground["primary_contrast_ratio"]) >= minimum
         and float(foreground["secondary_contrast_ratio"]) >= minimum
         and float(foreground["accent_contrast_ratio"]) >= minimum)
     plan["reference_model"] = {
-        "technology": "liquid-glass",
+        "technology": "standard-material" if content_standard else "liquid-glass",
+        "layer": layer,
+        "material_policy": material_policy,
         "variant": kind,
         "shape": (
             "invalid"

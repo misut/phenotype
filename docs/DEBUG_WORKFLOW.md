@@ -856,7 +856,10 @@ Whenever material plans are present, the verifier also cross-checks executor
 counts against `renderer.material_plans#summary`: `plan_count`,
 `fallback_instance_count`, `material_instance_count`,
 `material_max_sample_taps`, and `material_total_sample_taps` must match the
-resolved plan aggregate. Executor stage counters must also match the pure
+resolved plan aggregate. `fallback_instance_count` means explicit
+`MaterialPlan.fallback == true`; a content-layer `standard-material-fill` pass
+is counted as a material instance with zero sample taps, not as fallback.
+Executor stage counters must also match the pure
 `execution_stages` summary: total stages, active stages, backdrop-dependent
 stages, dropped stages, primary runtime stages, backdrop-filter stages,
 fallback-fill stages, shape-shadow stages, edge-highlight stages, and

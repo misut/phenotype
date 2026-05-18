@@ -890,6 +890,9 @@ void test_material_runtime_record_json_contract() {
     assert(container.at("shape_union_expected").as_bool() == false);
     auto const& reference_model = obj.at("reference_model").as_object();
     assert(reference_model.at("technology").as_string() == "liquid-glass");
+    assert(reference_model.at("layer").as_string() == "functional-layer");
+    assert(reference_model.at("material_policy").as_string()
+           == "liquid-glass-functional-layer");
     assert(reference_model.at("variant").as_string() == "thin");
     assert(reference_model.at("shape").as_string() == "rounded-rectangle");
     assert(reference_model.at("shape_scope").as_string() == "view-bounds");
@@ -981,6 +984,11 @@ void test_material_runtime_record_json_contract() {
            >= foreground.at("minimum_contrast_ratio").as_float());
     auto const& decision_trace = obj.at("decision_trace").as_object();
     assert(decision_trace.at("has_material").as_bool() == true);
+    assert(decision_trace.at("role_allows_liquid_glass").as_bool() == true);
+    assert(decision_trace.at("content_layer_standard_material").as_bool()
+           == false);
+    assert(decision_trace.at("liquid_glass_backdrop_candidate").as_bool()
+           == true);
     assert(decision_trace.at("target_ready").as_bool() == true);
     assert(decision_trace.at("backend_supports_backdrop").as_bool() == false);
     assert(decision_trace.at("can_sample_backdrop").as_bool() == false);
