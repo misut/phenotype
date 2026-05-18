@@ -258,6 +258,8 @@ void test_snapshot_shape() {
     assert(capabilities.contains("platform_diagnostics"));
     assert(capabilities.at("material_surfaces").as_bool() == true);
     assert(capabilities.at("material_backdrop_blur").as_bool() == false);
+    assert(capabilities.at("material_shader_blur").as_bool() == false);
+    assert(capabilities.at("material_frame_history").as_bool() == false);
     assert(capabilities.at("reduce_transparency").as_bool() == false);
     assert(capabilities.at("increase_contrast").as_bool() == false);
     assert(capabilities.at("reduce_motion").as_bool() == false);
@@ -599,6 +601,8 @@ void test_material_surface_semantic_debug_fields() {
     auto const& capabilities = debug.at("platform_capabilities").as_object();
     assert(capabilities.at("material_surfaces").as_bool() == true);
     assert(capabilities.at("material_backdrop_blur").as_bool() == false);
+    assert(capabilities.at("material_shader_blur").as_bool() == false);
+    assert(capabilities.at("material_frame_history").as_bool() == false);
     assert(capabilities.at("reduce_transparency").as_bool() == false);
     assert(capabilities.at("increase_contrast").as_bool() == false);
     assert(capabilities.at("reduce_motion").as_bool() == false);
@@ -1214,6 +1218,8 @@ void test_wasi_debug_artifact_bundle_contract() {
     assert(capabilities.at("platform").as_string() == "wasi");
     assert(capabilities.at("write_artifact_bundle").as_bool() == true);
     assert(capabilities.at("capture_frame_rgba").as_bool() == false);
+    assert(capabilities.at("material_shader_blur").as_bool() == false);
+    assert(capabilities.at("material_frame_history").as_bool() == false);
 
     auto runtime_file = json::parse(
         read_text_file(bundle_dir / "platform" / "wasi-runtime.json"));

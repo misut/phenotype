@@ -7707,6 +7707,10 @@ namespace phenotype::native::detail {
 
 inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities() {
     auto accessibility = accessibility_display_options();
+    bool const material_pipeline_ready = g_renderer.material_pipeline != nullptr;
+    bool const material_frame_history =
+        g_renderer.material_backdrop_texture != nullptr
+        && g_renderer.last_material_backdrop_available;
     ::phenotype::diag::PlatformCapabilitiesSnapshot snapshot{
         "macos",
         true,
@@ -7719,11 +7723,13 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot macos_debug_capabilities(
         true,
         true,
         true,
-        true,
+        material_pipeline_ready,
     };
     snapshot.reduce_transparency = accessibility.reduce_transparency;
     snapshot.increase_contrast = accessibility.increase_contrast;
     snapshot.reduce_motion = accessibility.reduce_motion;
+    snapshot.material_shader_blur = material_pipeline_ready;
+    snapshot.material_frame_history = material_frame_history;
     return snapshot;
 }
 
@@ -7732,9 +7738,47 @@ inline json::Array material_plans_runtime_json() {
         g_renderer.scratch.material_records);
 }
 
+inline json::Object macos_metal_capabilities_json() {
+    json::Object metal;
+    auto* device = g_renderer.device;
+    metal.emplace("source", json::Value{"MTLDevice.supportsFamily"});
+    metal.emplace(
+        "reference",
+        json::Value{"https://developer.apple.com/metal/capabilities/"});
+    metal.emplace("device_present", json::Value{device != nullptr});
+    metal.emplace(
+        "supports_texture_sample_count_1",
+        json::Value{device != nullptr && device->supportsTextureSampleCount(1)});
+    metal.emplace(
+        "supports_texture_sample_count_4",
+        json::Value{device != nullptr && device->supportsTextureSampleCount(4)});
+    metal.emplace(
+        "supports_family_apple7",
+        json::Value{device != nullptr && device->supportsFamily(MTL::GPUFamilyApple7)});
+    metal.emplace(
+        "supports_family_apple8",
+        json::Value{device != nullptr && device->supportsFamily(MTL::GPUFamilyApple8)});
+    metal.emplace(
+        "supports_family_apple9",
+        json::Value{device != nullptr && device->supportsFamily(MTL::GPUFamilyApple9)});
+    metal.emplace(
+        "supports_family_mac2",
+        json::Value{device != nullptr && device->supportsFamily(MTL::GPUFamilyMac2)});
+    metal.emplace(
+        "supports_family_common3",
+        json::Value{device != nullptr && device->supportsFamily(MTL::GPUFamilyCommon3)});
+    metal.emplace(
+        "supports_family_metal3",
+        json::Value{device != nullptr && device->supportsFamily(MTL::GPUFamilyMetal3)});
+    return metal;
+}
+
 inline json::Object macos_renderer_runtime_json() {
     json::Object renderer;
     renderer.emplace("initialized", json::Value{g_renderer.initialized});
+    renderer.emplace(
+        "metal_capabilities",
+        json::Value{macos_metal_capabilities_json()});
     renderer.emplace(
         "drawable_width",
         json::Value{static_cast<std::int64_t>(g_renderer.drawable_width)});

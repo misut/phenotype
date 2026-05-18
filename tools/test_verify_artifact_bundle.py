@@ -735,18 +735,45 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
 
 
 def snapshot(plan: dict[str, object]) -> dict[str, object]:
+    decision_trace = plan.get("decision_trace")
+    if not isinstance(decision_trace, dict):
+        decision_trace = {}
+    material_surfaces = decision_trace.get("capability_material_surfaces")
+    material_backdrop_blur = decision_trace.get("capability_material_backdrop_blur")
+    material_shader_blur = decision_trace.get("capability_shader_blur")
+    material_frame_history = decision_trace.get("capability_frame_history")
     return {
         "debug": {
             "platform_capabilities": {
                 "platform": "test",
+                "read_only": True,
                 "snapshot_json": True,
+                "capture_frame_rgba": False,
                 "write_artifact_bundle": True,
                 "semantic_tree": True,
                 "input_debug": True,
                 "platform_runtime": True,
+                "frame_image": False,
                 "platform_diagnostics": False,
-                "material_surfaces": True,
-                "material_backdrop_blur": False,
+                "material_surfaces": (
+                    material_surfaces
+                    if isinstance(material_surfaces, bool)
+                    else True),
+                "material_backdrop_blur": (
+                    material_backdrop_blur
+                    if isinstance(material_backdrop_blur, bool)
+                    else False),
+                "material_shader_blur": (
+                    material_shader_blur
+                    if isinstance(material_shader_blur, bool)
+                    else False),
+                "material_frame_history": (
+                    material_frame_history
+                    if isinstance(material_frame_history, bool)
+                    else False),
+                "reduce_transparency": False,
+                "increase_contrast": False,
+                "reduce_motion": False,
             },
             "input_debug": {
                 "event": "none",

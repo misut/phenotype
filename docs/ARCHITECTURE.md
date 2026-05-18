@@ -669,6 +669,12 @@ the only layer that decides whether those inputs produce opaque fallback,
 higher contrast, reduced noise, or lower sample taps. The runtime artifact also
 records `renderer.accessibility_display_options` so a captured frame explains
 which system or test override fed the plan.
+Top-level debug capabilities expose the same material gates as explicit
+booleans: `material_surfaces`, `material_backdrop_blur`,
+`material_shader_blur`, and `material_frame_history`. These fields are not
+policy decisions; they are backend/runtime inputs that explain why
+`MaterialDecisionTrace.backend_supports_backdrop`,
+`capability_shader_blur`, and `capability_frame_history` resolved as they did.
 Runtime adapters serialize the same `MaterialRuntimeRecord` shape into
 `debug.platform_runtime.details.renderer.material_plans`: macOS records the
 sampled-backdrop pass for functional roles and the `standard-material-fill`
