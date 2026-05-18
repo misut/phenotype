@@ -473,6 +473,8 @@ duplicate
     assert(chrome.icon_permissive_source_symbol_count == 35);
     assert(chrome.icon_lucide_source_symbol_count == 35);
     assert(chrome.icon_apple_asset_symbol_count == 0);
+    assert(chrome.icon_platform_extracted_symbol_count == 0);
+    assert(chrome.icon_runtime_fetched_symbol_count == 0);
     assert(chrome.icon_audited_symbol_source_count == chrome.icon_total_symbol_count);
     assert(chrome.icon_interaction_phase_count == 3);
     assert(chrome.icon_grid_size == 24.0f);
@@ -555,6 +557,14 @@ duplicate
     assert(chrome.icon_source_attribution_policy.find("source URL")
            != std::string::npos);
     assert(chrome.icon_source_attribution_policy.find("source revision")
+           != std::string::npos);
+    assert(chrome.icon_source_attribution_policy.find("platform extraction flag")
+           != std::string::npos);
+    assert(chrome.icon_source_acquisition_policy.find(
+               "runtime uses embedded SVG strings")
+           != std::string::npos);
+    assert(chrome.icon_source_acquisition_policy.find(
+               "never extracts platform icons")
            != std::string::npos);
     assert(chrome.icon_alignment == "24x24 text-aligned symbol grid");
     assert(chrome.icon_rendering_mode == "hierarchical");
@@ -940,6 +950,16 @@ duplicate
         != std::string::npos);
     assert(debug_text.find(
         "\"svg_external_resource_policy\":\"no_external_svg_resources_or_network_fetches\"")
+        != std::string::npos);
+    assert(debug_text.find("\"platform_extracted\":false")
+        != std::string::npos);
+    assert(debug_text.find("\"runtime_fetch_required\":false")
+        != std::string::npos);
+    assert(debug_text.find("\"platform_extracted_symbol_count\":0")
+        != std::string::npos);
+    assert(debug_text.find("\"runtime_fetched_symbol_count\":0")
+        != std::string::npos);
+    assert(debug_text.find("\"source_acquisition_policy\"")
         != std::string::npos);
     assert(debug_text.find("\"icon_grid_label_font_size\"") != std::string::npos);
     assert(debug_text.find(

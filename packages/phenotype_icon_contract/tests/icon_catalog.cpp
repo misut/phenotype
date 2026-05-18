@@ -30,10 +30,20 @@ int main() {
            != std::string_view::npos);
     assert(icons::preferred_external_source_policy().find("Material Symbols Apache-2.0")
            != std::string_view::npos);
+    assert(icons::source_acquisition_policy().find("pinned permissive SVG URLs")
+           != std::string_view::npos);
+    assert(icons::source_acquisition_policy().find("runtime uses embedded SVG strings")
+           != std::string_view::npos);
+    assert(icons::source_acquisition_policy().find("never extracts platform icons")
+           != std::string_view::npos);
     assert(icons::lucide_source_revision().size() == 40);
     assert(icons::source_attribution_policy().find("pinned source URL")
            != std::string_view::npos);
     assert(icons::source_attribution_policy().find("source revision")
+           != std::string_view::npos);
+    assert(icons::source_attribution_policy().find("platform extraction flag")
+           != std::string_view::npos);
+    assert(icons::source_attribution_policy().find("runtime fetch flag")
            != std::string_view::npos);
     assert(icons::apple_asset_boundary().find("design references only")
            != std::string_view::npos);
@@ -123,6 +133,8 @@ int main() {
     assert(icons::permissive_source_symbol_count == 35);
     assert(icons::lucide_source_symbol_count == 35);
     assert(icons::apple_asset_symbol_count == 0);
+    assert(icons::platform_extracted_symbol_count == 0);
+    assert(icons::runtime_fetched_symbol_count == 0);
     assert(icons::audited_symbol_source_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);
@@ -146,6 +158,8 @@ int main() {
     unsigned int phenotype_owned_count = 0;
     unsigned int lucide_count = 0;
     unsigned int apple_asset_count = 0;
+    unsigned int platform_extracted_count = 0;
+    unsigned int runtime_fetch_count = 0;
     for (unsigned int i = 0; i < icons::all_symbol_count; ++i) {
         auto const symbol = icons::symbol_at(i);
         auto const desc = icons::descriptor(symbol);
@@ -203,8 +217,14 @@ int main() {
             assert(attribution.source_revision == "phenotype-repository");
         }
         assert(!attribution.apple_asset);
+        assert(!attribution.platform_extracted);
+        assert(!attribution.runtime_fetch_required);
         if (attribution.apple_asset)
             ++apple_asset_count;
+        if (attribution.platform_extracted)
+            ++platform_extracted_count;
+        if (attribution.runtime_fetch_required)
+            ++runtime_fetch_count;
         auto const capabilities = icons::rendering_capabilities(symbol);
         assert(capabilities.monochrome);
         assert(capabilities.hierarchical == desc.supports_hierarchical_opacity);
@@ -239,6 +259,8 @@ int main() {
     assert(phenotype_owned_count == icons::phenotype_owned_symbol_count);
     assert(lucide_count == icons::lucide_source_symbol_count);
     assert(apple_asset_count == icons::apple_asset_symbol_count);
+    assert(platform_extracted_count == icons::platform_extracted_symbol_count);
+    assert(runtime_fetch_count == icons::runtime_fetched_symbol_count);
 
     assert(icons::semantic_reference_name(icons::Symbol::AirDrop) == "airdrop");
     assert(icons::semantic_reference_name(icons::Symbol::ChevronUp)

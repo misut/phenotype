@@ -375,6 +375,10 @@ The desktop SVG thumbnail path now renders sandboxed `.svg` file bodies through
 render policy, source policy, and external-resource policy so CI can prove that
 the example is not copying Apple artwork, extracting macOS icons, or fetching
 remote SVG resources.
+The icon catalog source contract now records per-symbol platform extraction and
+runtime fetch flags as false, keeping Finder-style icons tied to pinned
+permissive SVG sources or phenotype-owned vectors rather than local macOS
+artwork.
 File explorer packages now declare `app.icon` as a package-owned SVG asset, so
 the same CLI bundle contract can later feed platform app-icon generation
 without embedding Apple artwork or depending on platform symbol fonts.

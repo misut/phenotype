@@ -397,6 +397,8 @@ export auto explorer_chrome_json(
         "\"permissive_source_symbol_count\":{},"
         "\"lucide_source_symbol_count\":{},"
         "\"apple_asset_symbol_count\":{},"
+        "\"platform_extracted_symbol_count\":{},"
+        "\"runtime_fetched_symbol_count\":{},"
         "\"audited_symbol_source_count\":{},"
         "\"sidebar_symbol_count\":{},"
         "\"toolbar_symbol_count\":{},\"file_type_symbol_count\":{},"
@@ -438,6 +440,7 @@ export auto explorer_chrome_json(
         "\"asset_policy\":{},"
         "\"source_license_policy\":{},"
         "\"preferred_external_source_policy\":{},"
+        "\"source_acquisition_policy\":{},"
         "\"source_attribution_policy\":{},"
         "\"apple_asset_boundary\":{},"
         "\"interface_metaphor_policy\":{},"
@@ -567,6 +570,8 @@ export auto explorer_chrome_json(
         chrome.icon_permissive_source_symbol_count,
         chrome.icon_lucide_source_symbol_count,
         chrome.icon_apple_asset_symbol_count,
+        chrome.icon_platform_extracted_symbol_count,
+        chrome.icon_runtime_fetched_symbol_count,
         chrome.icon_audited_symbol_source_count,
         chrome.sidebar_symbol_count,
         chrome.toolbar_symbol_count,
@@ -617,6 +622,7 @@ export auto explorer_chrome_json(
         json_string(chrome.icon_asset_policy),
         json_string(chrome.icon_source_license_policy),
         json_string(chrome.icon_preferred_external_source_policy),
+        json_string(chrome.icon_source_acquisition_policy),
         json_string(chrome.icon_source_attribution_policy),
         json_string(chrome.icon_apple_asset_boundary),
         json_string(chrome.icon_interface_metaphor_policy),
