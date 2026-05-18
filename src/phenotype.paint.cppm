@@ -1406,8 +1406,17 @@ void paint_node(R& r, M const& measurer, NodeHandle node_h,
         // unchanged (ax, ay).
         float inner_scroll_x = scroll_x - g_app.scroll_x;
         float inner_scroll_y = scroll_y - g_app.scroll_y;
-        emit_hit_region(r, ax - inner_scroll_x, ay - inner_scroll_y,
-                        node.width, node.height,
+        float const hit_slop_x = std::max(
+            0.0f,
+            (node.min_hit_width - node.width) * 0.5f);
+        float const hit_slop_y = std::max(
+            0.0f,
+            (node.min_hit_height - node.height) * 0.5f);
+        emit_hit_region(r,
+                        ax - inner_scroll_x - hit_slop_x,
+                        ay - inner_scroll_y - hit_slop_y,
+                        node.width + hit_slop_x * 2.0f,
+                        node.height + hit_slop_y * 2.0f,
                         node.callback_id, node.cursor_type);
     }
 

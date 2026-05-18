@@ -812,7 +812,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.hit_target_policy",
-      "equals": "toolbar/navigation/action=36pt, sidebar=38pt, file_type=64pt"
+      "equals": "visual toolbar/navigation/action=36pt, sidebar=38pt, file_type=64pt; activation minimum=44pt for controls"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.scale",

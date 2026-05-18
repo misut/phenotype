@@ -306,6 +306,9 @@ struct ExplorerChromeMetrics {
     float icon_toolbar_hit_target_size = 0.0f;
     float icon_sidebar_hit_target_size = 0.0f;
     float icon_action_hit_target_size = 0.0f;
+    float icon_toolbar_activation_hit_target_size = 0.0f;
+    float icon_sidebar_activation_hit_target_size = 0.0f;
+    float icon_action_activation_hit_target_size = 0.0f;
     float icon_toolbar_button_radius = 0.0f;
     int icon_toolbar_button_background_alpha = 0;
     int icon_toolbar_button_hover_background_alpha = 0;
@@ -904,6 +907,15 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_action_hit_target_size =
                 icon_catalog::hit_target_size(
                     icon_catalog::SymbolPresentationRole::Action),
+            .icon_toolbar_activation_hit_target_size =
+                icon_catalog::activation_hit_target_size(
+                    icon_catalog::SymbolPresentationRole::Toolbar),
+            .icon_sidebar_activation_hit_target_size =
+                icon_catalog::activation_hit_target_size(
+                    icon_catalog::SymbolPresentationRole::Sidebar),
+            .icon_action_activation_hit_target_size =
+                icon_catalog::activation_hit_target_size(
+                    icon_catalog::SymbolPresentationRole::Action),
             .icon_toolbar_button_radius = toolbar_chrome.corner_radius,
             .icon_toolbar_button_background_alpha =
                 toolbar_chrome.background_color.a,
@@ -1191,6 +1203,15 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
                 icon_catalog::SymbolPresentationRole::Sidebar),
         .icon_action_hit_target_size =
             icon_catalog::hit_target_size(
+                icon_catalog::SymbolPresentationRole::Action),
+        .icon_toolbar_activation_hit_target_size =
+            icon_catalog::activation_hit_target_size(
+                icon_catalog::SymbolPresentationRole::Toolbar),
+        .icon_sidebar_activation_hit_target_size =
+            icon_catalog::activation_hit_target_size(
+                icon_catalog::SymbolPresentationRole::Sidebar),
+        .icon_action_activation_hit_target_size =
+            icon_catalog::activation_hit_target_size(
                 icon_catalog::SymbolPresentationRole::Action),
         .icon_toolbar_button_radius = toolbar_chrome.corner_radius,
         .icon_toolbar_button_background_alpha =
@@ -2395,6 +2416,15 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "action_hit_target_size",
         json::Value{chrome.icon_action_hit_target_size});
+    icon_system.emplace(
+        "toolbar_activation_hit_target_size",
+        json::Value{chrome.icon_toolbar_activation_hit_target_size});
+    icon_system.emplace(
+        "sidebar_activation_hit_target_size",
+        json::Value{chrome.icon_sidebar_activation_hit_target_size});
+    icon_system.emplace(
+        "action_activation_hit_target_size",
+        json::Value{chrome.icon_action_activation_hit_target_size});
     icon_system.emplace(
         "toolbar_button_radius",
         json::Value{chrome.icon_toolbar_button_radius});

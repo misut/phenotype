@@ -259,11 +259,14 @@ executors.
 presentation policy: toolbar symbols use 24 pt secondary/selected tones,
 sidebar symbols use 26 pt primary/accent tones with a small optical vertical
 adjustment, and disabled/destructive tones are explicit pure values.
-`icon_catalog::metrics` and `icon_catalog::hit_target_size` keep the Finder-like
-role metrics pure as well: toolbar/navigation/action glyphs use 36 pt control
-targets, sidebar glyphs align to 38 pt rows, and file-type glyphs reserve larger
-targets for icon-view thumbnails. This lets the CLI and examples validate
-macOS-style icon sizing without calling AppKit or embedding SF Symbols assets.
+`icon_catalog::metrics`, `icon_catalog::hit_target_size`, and
+`icon_catalog::activation_hit_target_size` keep the Finder-like role metrics
+pure as well: toolbar/navigation/action glyphs keep compact 36 pt visual
+targets, sidebar glyphs align to 38 pt rows, file-type glyphs reserve larger
+targets for icon-view thumbnails, and interactive controls expose at least a
+44 pt activation region. This lets the CLI and examples validate macOS-style
+icon sizing and Apple HIG-style button reachability without calling AppKit or
+embedding SF Symbols assets.
 The catalog also pins HIG-derived visual-language policies for familiar
 simplified metaphors, consistent size/stroke/detail/perspective, borderless
 toolbar symbols inside grouped controls, and accent-selected sidebar symbols.
@@ -282,8 +285,8 @@ live control state to the resolved glyph presentation, and
 `icons::symbol_button_paint_token` keeps the canvas cache key aligned with that
 state. `widget::symbol_button` composes those helpers on top of
 `widget::canvas_button`, so Finder-like toolbar/navigation/action controls use
-the same contract in both examples and tests while remaining LLM-debuggable
-without consulting AppKit.
+the same visual, press-state, and activation-region contract in both examples
+and tests while remaining LLM-debuggable without consulting AppKit.
 The same pure catalog exposes a Finder-style file-type symbol set and tint
 policy for folder/document/PDF/text/image/movie/archive glyphs, which desktop
 and mobile file explorer examples use in rows without asking a native icon
@@ -339,6 +342,13 @@ Native shells translate platform key codes at the edge, then ask the core to
 dispatch a matching descriptor. The core enforces exact key/modifier matching
 and the `allow_when_input_focused` policy before invoking the callback, so
 platform adapters do not decide product shortcuts.
+
+Raw focus and visible focus are separate. Pointer focus updates
+`focused_id` for routing clicks, text input, and activation, but leaves
+`focus_visible=false` so toolbar buttons do not grow a ring after a mouse
+click. Tab and Shift-Tab traversal set `focus_visible=true`; controls read
+that keyboard-only flag for macOS-style focus-ring chrome, while text inputs
+can still present their caret and selection from raw focus.
 
 This keeps the long-term input/output abstraction model testable without a
 native window. `examples/file_explorer_shared` publishes Finder-style desktop

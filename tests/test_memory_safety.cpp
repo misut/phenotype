@@ -95,6 +95,8 @@ void reset_app() {
     app.scroll_y = 0;
     app.hovered_id = 0xFFFFFFFF;
     app.focused_id = 0xFFFFFFFF;
+    app.focus_visible = false;
+    app.prev_focus_visible = false;
     app.caret_pos = 0xFFFFFFFF;
     app.caret_visible = true;
     app.last_paint_hash = 0;

@@ -336,9 +336,12 @@ explorer artifact records those sizes and tone-policy names so the Finder-like
 icon treatment is checked as data, not as a screenshot guess. The same pure
 contract now covers symbol control chrome: selected, hover, and pressed
 background alpha, pressed symbol opacity/scale, borderless toolbar grouping,
-sidebar row radius, and hit-target policy. The desktop file explorer now routes
-that recipe through core `ButtonVisualState`, so the actual toolbar/sidebar
-renderer and the artifact JSON share one pressed-state source of truth.
+sidebar row radius, compact visual hit-target policy, and a separate 44 pt
+minimum activation-region policy for controls. The desktop file explorer now
+routes that recipe through core `ButtonVisualState`, and core button painting
+expands `HitRegion` commands from immutable style inputs, so the actual
+toolbar/sidebar renderer and the artifact JSON share one pressed-state and
+input-reachability source of truth.
 It also records the SVG subset and arc-lowering policy so a future icon
 regression can fail on an exact JSON path before anyone compares pixels. The
 AirDrop sidebar glyph now uses isolated circular SVG path arcs, so the example
@@ -402,8 +405,8 @@ failure shapes.
 The current debug plane already provides important pieces:
 
 - common `debug.platform_capabilities`;
-- `debug.input_debug` for input routing, focus, caret, selection, and
-  composition state;
+- `debug.input_debug` for input routing, raw focus, keyboard-only
+  `focus_visible`, caret, selection, and composition state;
 - `debug.semantic_tree` for accessibility-oriented structure;
 - `debug.platform_runtime` for shared and backend-specific runtime state;
 - artifact bundles with `snapshot.json`, optional `frame.bmp`, and platform

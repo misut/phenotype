@@ -71,6 +71,12 @@ inline void attach_to_scope(NodeHandle h) {
     }
     append_child(s->node, h);
 }
+
+inline bool focus_ring_visible(unsigned int callback_id) {
+    return callback_id != 0xFFFFFFFFu
+        && callback_id == g_app.focused_id
+        && g_app.focus_visible;
+}
 } // namespace detail
 
 inline auto theme_with_resource_defaults(
@@ -209,7 +215,7 @@ inline void link(str label, str href) {
     auto url_copy = node.url;
     auto id = static_cast<unsigned int>(detail::g_app.callbacks.size());
     bool const is_hovered = (id == detail::g_app.hovered_id);
-    bool const is_focused = (id == detail::g_app.focused_id);
+    bool const is_focused = detail::focus_ring_visible(id);
     // View-time hover fade between accent and the deeper hover blue.
     // `node.hover_text_color` stays unset so paint's
     // `(is_hovered && hover_text_color.a > 0)` guard falls through to
@@ -343,6 +349,8 @@ inline void button(str label, Msg msg, ButtonStyleOptions options) {
     node.style.fixed_height = options.fixed_height;
     node.style.text_align = options.text_align;
     node.interaction_role = InteractionRole::Button;
+    node.min_hit_width = options.min_hit_width;
+    node.min_hit_height = options.min_hit_height;
 
     if (options.disabled) {
         node.background = options.has_background
@@ -373,7 +381,7 @@ inline void button(str label, Msg msg, ButtonStyleOptions options) {
     auto const id = static_cast<unsigned int>(
         detail::g_app.callbacks.size());
     bool const is_hovered = (id == detail::g_app.hovered_id);
-    bool const is_focused = (id == detail::g_app.focused_id);
+    bool const is_focused = detail::focus_ring_visible(id);
     bool const is_pressed = (id == detail::g_app.pressed_id);
 
     Color base_bg, hover_bg, pressed_bg, base_border;
@@ -453,7 +461,7 @@ inline void toggle(str label, bool active, Msg msg,
     auto id = static_cast<unsigned int>(
         ::phenotype::detail::g_app.callbacks.size());
     bool const is_hovered = (id == ::phenotype::detail::g_app.hovered_id);
-    bool const is_focused = (id == ::phenotype::detail::g_app.focused_id);
+    bool const is_focused = ::phenotype::detail::focus_ring_visible(id);
     Color const ring_off{t.state_focus_ring.r, t.state_focus_ring.g,
                          t.state_focus_ring.b, 0};
     auto row_h = ::phenotype::detail::alloc_node();
@@ -852,6 +860,8 @@ inline void canvas_button(str label,
         ? options.border_radius
         : t.radius_sm;
     node.interaction_role = InteractionRole::Button;
+    node.min_hit_width = options.min_hit_width;
+    node.min_hit_height = options.min_hit_height;
     node.debug_semantic_label = std::string(label.data, label.len);
     ButtonVisualState visual_state{
         .hovered = false,
@@ -881,7 +891,7 @@ inline void canvas_button(str label,
         auto const id = static_cast<unsigned int>(
             detail::g_app.callbacks.size());
         bool const is_hovered = (id == detail::g_app.hovered_id);
-        bool const is_focused = (id == detail::g_app.focused_id);
+        bool const is_focused = detail::focus_ring_visible(id);
         bool const is_pressed = (id == detail::g_app.pressed_id);
         visual_state = ButtonVisualState{
             .hovered = is_hovered,
@@ -1114,7 +1124,7 @@ inline void switch_(str label, bool on, Msg msg) {
     auto const& t = detail::g_app.theme;
     auto id = static_cast<unsigned int>(
         detail::g_app.callbacks.size());
-    bool const is_focused = (id == detail::g_app.focused_id);
+    bool const is_focused = detail::focus_ring_visible(id);
     Color const ring_off{t.state_focus_ring.r, t.state_focus_ring.g,
                          t.state_focus_ring.b, 0};
 
@@ -1269,7 +1279,7 @@ inline void tabs(std::vector<str> const& items,
         bool is_selected = (i == selected);
         auto id = static_cast<unsigned int>(
             detail::g_app.callbacks.size());
-        bool const is_focused = (id == detail::g_app.focused_id);
+        bool const is_focused = detail::focus_ring_visible(id);
 
         auto btn_h = detail::alloc_node();
         {
@@ -1581,6 +1591,8 @@ void run(Host& host, View view, Update update) {
     saved_update = std::move(update);
     detail::g_app.input_debug = {};
     detail::g_app.callback_roles.clear();
+    detail::g_app.focus_visible = false;
+    detail::g_app.prev_focus_visible = false;
     detail::g_app.pressed_id = 0xFFFFFFFFu;
     detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
 
@@ -1667,6 +1679,9 @@ void run(Host& host, View view, Update update) {
         if (app.focused_id != app.prev_focused_id) {
             inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
         }
+        if (app.focus_visible != app.prev_focus_visible) {
+            inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
+        }
         if (app.pressed_id != app.prev_pressed_id) {
             inv |= mask_bit(app.pressed_id) | mask_bit(app.prev_pressed_id);
         }
@@ -1712,6 +1727,7 @@ void run(Host& host, View view, Update update) {
         app.prev_scroll_y   = app.scroll_y;
         app.prev_hovered_id = app.hovered_id;
         app.prev_focused_id = app.focused_id;
+        app.prev_focus_visible = app.focus_visible;
         app.prev_pressed_id = app.pressed_id;
 
         auto total = t5 - t0;
@@ -1738,6 +1754,8 @@ void run(View view, Update update) {
     saved_update = std::move(update);
     detail::g_app.input_debug = {};
     detail::g_app.callback_roles.clear();
+    detail::g_app.focus_visible = false;
+    detail::g_app.prev_focus_visible = false;
     detail::g_app.pressed_id = 0xFFFFFFFFu;
     detail::g_app.prev_pressed_id = 0xFFFFFFFFu;
 
@@ -1810,6 +1828,9 @@ void run(View view, Update update) {
         if (app.focused_id != app.prev_focused_id) {
             inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
         }
+        if (app.focus_visible != app.prev_focus_visible) {
+            inv |= mask_bit(app.focused_id) | mask_bit(app.prev_focused_id);
+        }
         if (app.pressed_id != app.prev_pressed_id) {
             inv |= mask_bit(app.pressed_id) | mask_bit(app.prev_pressed_id);
         }
@@ -1854,6 +1875,7 @@ void run(View view, Update update) {
         app.prev_scroll_y   = app.scroll_y;
         app.prev_hovered_id = app.hovered_id;
         app.prev_focused_id = app.focused_id;
+        app.prev_focus_visible = app.focus_visible;
         app.prev_pressed_id = app.pressed_id;
 
         auto total = t5 - t0;
@@ -2543,7 +2565,7 @@ void accordion(str title, F&& builder) {
     {
         auto id = static_cast<unsigned int>(
             detail::g_app.callbacks.size());
-        bool const is_focused = (id == detail::g_app.focused_id);
+        bool const is_focused = detail::focus_ring_visible(id);
 
         auto header_h = detail::alloc_node();
         {
@@ -3087,8 +3109,10 @@ inline bool select_all_focused_input(bool visible = true) {
     return true;
 }
 
-inline void assign_focus(unsigned int callback_id) {
+inline void assign_focus(unsigned int callback_id,
+                         bool focus_visible = false) {
     g_app.focused_id = callback_id;
+    g_app.focus_visible = callback_id != 0xFFFFFFFFu && focus_visible;
     if (auto const* handler = find_input_handler(callback_id)) {
         set_caret_state(handler->current, handler->current.size());
     } else {
@@ -3131,6 +3155,7 @@ inline void note_input_event(char const* event,
     snapshot.role = interaction_role_name(role);
     snapshot.focused_id = g_app.focused_id;
     snapshot.focused_role = interaction_role_name(focused_role);
+    snapshot.focus_visible = g_app.focus_visible;
     snapshot.hovered_id = g_app.hovered_id;
     snapshot.pressed_id = g_app.pressed_id;
     snapshot.scroll_x = g_app.scroll_x;
@@ -3236,12 +3261,21 @@ inline bool set_pressed_id(unsigned int callback_id,
 
 inline bool set_focus_id(unsigned int callback_id,
                          char const* source = "core",
-                         char const* detail = "focus-change") {
-    if (g_app.focused_id == callback_id) {
+                         char const* detail = "focus-change",
+                         bool focus_visible = false) {
+    bool const next_focus_visible =
+        callback_id != 0xFFFFFFFFu && focus_visible;
+    if (g_app.focused_id == callback_id
+        && g_app.focus_visible == next_focus_visible) {
         note_input_event("focus", source, detail, "ignored", callback_id);
         return false;
     }
-    assign_focus(callback_id);
+    if (g_app.focused_id == callback_id) {
+        g_app.focus_visible = next_focus_visible;
+        sync_input_debug_caret_state();
+    } else {
+        assign_focus(callback_id, next_focus_visible);
+    }
     note_input_event("focus", source, detail, "handled", callback_id);
     return true;
 }
@@ -3308,7 +3342,7 @@ inline bool handle_tab(unsigned int reverse,
         idx = (idx <= 0) ? n - 1 : idx - 1;
     else
         idx = (idx < 0 || idx >= n - 1) ? 0 : idx + 1;
-    assign_focus(g_app.focusable_ids[idx]);
+    assign_focus(g_app.focusable_ids[idx], true);
     note_input_event("tab", source, detail_name, "handled", g_app.focused_id);
     return true;
 }
@@ -3471,6 +3505,7 @@ inline diag::InputDebugSnapshot materialize_input_debug_snapshot() {
     auto snapshot = g_app.input_debug;
     snapshot.focused_id = g_app.focused_id;
     snapshot.focused_role = interaction_role_name(callback_role(g_app.focused_id));
+    snapshot.focus_visible = g_app.focus_visible;
     snapshot.hovered_id = g_app.hovered_id;
     snapshot.pressed_id = g_app.pressed_id;
     snapshot.scroll_x = g_app.scroll_x;
@@ -3593,6 +3628,7 @@ void repaint(Host& host, float scroll_x, float scroll_y) {
     app.prev_scroll_y   = app.scroll_y;
     app.prev_hovered_id = app.hovered_id;
     app.prev_focused_id = app.focused_id;
+    app.prev_focus_visible = app.focus_visible;
     app.prev_pressed_id = app.pressed_id;
 }
 #else
@@ -3627,6 +3663,7 @@ inline void repaint(float scroll_x, float scroll_y) {
     app.prev_scroll_y   = app.scroll_y;
     app.prev_hovered_id = app.hovered_id;
     app.prev_focused_id = app.focused_id;
+    app.prev_focus_visible = app.focus_visible;
     app.prev_pressed_id = app.pressed_id;
 }
 #endif
@@ -3859,6 +3896,7 @@ inline diag::PlatformRuntimeSnapshot build_platform_runtime_snapshot(
     runtime.scroll_y = g_app.scroll_y;
     runtime.content_height = get_total_height();
     runtime.focused_callback_id = optional_callback_id(g_app.focused_id);
+    runtime.focus_visible = g_app.focus_visible;
     runtime.hovered_callback_id = optional_callback_id(g_app.hovered_id);
     runtime.pressed_callback_id = optional_callback_id(g_app.pressed_id);
     runtime.details = runtime_details_override.has_value()

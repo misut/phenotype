@@ -56,6 +56,8 @@ int main() {
            == "macos_finder_role_metrics_with_explicit_hit_targets");
     assert(icons::hit_target_policy().find("sidebar=38pt")
            != std::string_view::npos);
+    assert(icons::hit_target_policy().find("activation minimum=44pt")
+           != std::string_view::npos);
     assert(icons::all_symbol_count == 35);
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);
@@ -248,6 +250,15 @@ int main() {
            == 36.0f);
     assert(icons::hit_target_size(icons::SymbolPresentationRole::Sidebar)
            == 38.0f);
+    assert(icons::activation_hit_target_size(
+               icons::SymbolPresentationRole::Toolbar)
+           == 44.0f);
+    assert(icons::activation_hit_target_size(
+               icons::SymbolPresentationRole::Sidebar)
+           == 44.0f);
+    assert(icons::activation_hit_target_size(
+               icons::SymbolPresentationRole::FileType)
+           == 64.0f);
     auto const sidebar_metrics =
         icons::metrics(icons::SymbolPresentationRole::Sidebar);
     assert(sidebar_metrics.point_size == 26.0f);

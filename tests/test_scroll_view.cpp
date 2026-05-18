@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <cassert>
 #include <cstdio>
 #include <cstring>
@@ -210,7 +211,10 @@ void test_scroll_view_hit_region_offset_matches_scroll() {
         (void)hx; (void)hw; (void)hh;
         // We only inspect the first HitRegion encountered — that's
         // the button's. Children further down emit theirs after.
-        assert(hy == layout_y - 32.0f);
+        float const hit_slop_y = std::max(
+            0.0f,
+            (button_node.min_hit_height - button_node.height) * 0.5f);
+        assert(hy == layout_y - 32.0f - hit_slop_y);
         found = true;
         break;
     }

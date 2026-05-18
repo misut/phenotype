@@ -467,7 +467,8 @@ inline auto metrics_policy() noexcept -> std::string_view {
 }
 
 inline auto hit_target_policy() noexcept -> std::string_view {
-    return "toolbar/navigation/action=36pt, sidebar=38pt, file_type=64pt";
+    return "visual toolbar/navigation/action=36pt, sidebar=38pt, "
+           "file_type=64pt; activation minimum=44pt for controls";
 }
 
 inline auto symbol_at(unsigned int index) noexcept -> Symbol {
@@ -915,6 +916,13 @@ inline float hit_target_size(SymbolPresentationRole role) noexcept {
         return 36.0f;
     }
     return 36.0f;
+}
+
+inline float activation_hit_target_size(
+        SymbolPresentationRole role) noexcept {
+    if (role == SymbolPresentationRole::FileType)
+        return hit_target_size(role);
+    return 44.0f;
 }
 
 inline float optical_y_offset(SymbolPresentationRole role) noexcept {
