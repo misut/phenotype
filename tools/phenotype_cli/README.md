@@ -8,22 +8,23 @@ that command later without changing command contracts.
 Implementation is split into CLI modules so the executable can grow without
 turning `main.cpp` into every subsystem at once:
 
-- `phenotype_cli.common` owns shared JSON escaping, path normalization, check
-  summaries, and resource diagnostic emission.
+- `phenotype_cli.common` owns shared JSON escaping, path normalization, text
+  file IO, positional/error helpers, check summaries, and resource diagnostic
+  emission.
 - `phenotype_cli.contracts` owns pure theme and IO contract checks/JSON for
   `phenotype theme contract` and `phenotype io contract`.
 - `phenotype_cli.file_explorer` owns file explorer drive JSON, chrome/native
   window control JSON, expectation JSON, keyboard/focus model JSON, and
   localized label emission.
-- `phenotype_cli.icons` owns icon catalog checks, lookup/presentation/render
-  JSON, SVG support summaries, and the icon helper payloads reused by file
-  explorer debug output.
+- `phenotype_cli.icons` owns `phenotype icons ...` and `phenotype svg inspect`,
+  including catalog checks, lookup/presentation/render JSON, SVG support
+  summaries, and the icon helper payloads reused by file explorer debug output.
 - `phenotype_cli.package` owns package manifest inspection, resource catalog
   checks, package bundling, bundle integrity verification, and macOS app bundle
   staging helpers. It keeps filesystem/package edge IO away from command
   dispatch while preserving the pure `phenotype.resources` contract boundary.
-- `main.cpp` should stay responsible for command parsing, edge IO/process
-  execution, and composing the subcommand results.
+- `main.cpp` should stay responsible for command parsing, example process
+  execution, artifact gate orchestration, and dispatching to focused modules.
 
 The initial scope is intentionally narrow:
 

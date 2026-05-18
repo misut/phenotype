@@ -1,6 +1,7 @@
 export module phenotype_cli.icons;
 
 import cppx.cli;
+import cppx.terminal;
 import file_explorer_shared;
 import phenotype.icon_catalog;
 import phenotype.svg_contract;
@@ -1263,6 +1264,405 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_symbol_set_json(IconCatalogSet::Toolbar),
         icon_symbol_set_json(IconCatalogSet::FileType),
         checks_json(checks));
+}
+
+int run_icons_catalog(cppx::cli::Invocation const& invocation) {
+    auto checks = icon_catalog_checks();
+    if (invocation.has("json")) {
+        std::println("{}", icon_catalog_json(checks));
+        return all_ok(checks) ? 0 : 1;
+    }
+
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "style",
+         .value = std::string{icon_catalog::style_name()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "source",
+         .value = std::string{icon_catalog::source_format()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "svg subset",
+         .value = std::string{icon_catalog::svg_supported_path_commands()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "symbols",
+         .value = std::format(
+             "{} total, {} sidebar, {} toolbar, {} file-type",
+             icon_catalog::all_symbol_count,
+             icon_catalog::sidebar_symbol_count,
+             icon_catalog::toolbar_symbol_count,
+             icon_catalog::file_type_symbol_count),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "reference",
+         .value = std::string{icon_catalog::reference_family()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "rendering",
+         .value = std::string{icon_catalog::rendering_capability_policy()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "assets",
+         .value = std::string{icon_catalog::asset_policy()},
+         .status = all_ok(checks) ? cppx::terminal::StatusKind::ok
+                                  : cppx::terminal::StatusKind::fail},
+    };
+    std::println("phenotype icons catalog");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    print_checks("checks", checks);
+    return all_ok(checks) ? 0 : 1;
+}
+
+int run_icons_lookup(cppx::cli::Invocation const& invocation) {
+    auto query = single_positional_text_or_error(
+        invocation,
+        "icons lookup",
+        "name-or-reference");
+    if (!query)
+        return print_error("icons lookup", query.error(), invocation.has("json"));
+
+    auto result = lookup_icon_symbol(*query);
+    if (!result) {
+        if (invocation.has("json")) {
+            std::println("{}", icon_lookup_not_found_json(*query));
+        } else {
+            std::println(
+                std::cerr,
+                "{}",
+                cppx::terminal::format_diagnostic({
+                    .severity = cppx::terminal::DiagnosticSeverity::error,
+                    .message = std::format(
+                        "symbol '{}' was not found; run 'phenotype icons catalog' to list built-in symbols",
+                        *query),
+                    .context = "icons lookup",
+                }));
+        }
+        return 2;
+    }
+
+    if (invocation.has("json")) {
+        std::println("{}", icon_lookup_json(*query, *result));
+        return 0;
+    }
+
+    auto const desc = icon_catalog::descriptor(result->symbol);
+    auto const role = icon_catalog::default_presentation_role(result->symbol);
+    auto const metrics = icon_catalog::metrics(role);
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "query",
+         .value = *query,
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "match",
+         .value = std::string{result->match_kind},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "symbol",
+         .value = std::string{desc.name},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "semantic reference",
+         .value = std::string{desc.semantic_reference_name},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "role",
+         .value = std::string{icon_catalog::symbol_presentation_role_name(role)},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "metrics",
+         .value = std::format(
+             "{}pt symbol, {}pt hit target",
+             metrics.point_size,
+             metrics.hit_target_size),
+         .status = cppx::terminal::StatusKind::ok},
+    };
+    std::println("phenotype icons lookup");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    return 0;
+}
+
+int run_icons_svg(cppx::cli::Invocation const& invocation) {
+    auto query = single_positional_text_or_error(
+        invocation,
+        "icons svg",
+        "name-or-reference");
+    if (!query)
+        return print_error("icons svg", query.error(), invocation.has("json"));
+
+    auto result = lookup_icon_symbol(*query);
+    if (!result) {
+        if (invocation.has("json")) {
+            std::println("{}", icon_svg_not_found_json(*query));
+        } else {
+            std::println(
+                std::cerr,
+                "{}",
+                cppx::terminal::format_diagnostic({
+                    .severity = cppx::terminal::DiagnosticSeverity::error,
+                    .message = std::format(
+                        "symbol '{}' was not found; run 'phenotype icons catalog' to list built-in symbols",
+                        *query),
+                    .context = "icons svg",
+                }));
+        }
+        return 2;
+    }
+
+    if (invocation.has("json")) {
+        std::println("{}", icon_svg_json(*query, *result));
+        return 0;
+    }
+
+    std::println("{}", icon_catalog::svg_source(result->symbol));
+    return 0;
+}
+
+int run_icons_present(cppx::cli::Invocation const& invocation) {
+    auto query = single_positional_text_or_error(
+        invocation,
+        "icons present",
+        "name-or-reference");
+    if (!query)
+        return print_error("icons present", query.error(), invocation.has("json"));
+
+    auto result = lookup_icon_symbol(*query);
+    if (!result) {
+        if (invocation.has("json")) {
+            std::println("{}", icon_present_not_found_json(*query));
+        } else {
+            std::println(
+                std::cerr,
+                "{}",
+                cppx::terminal::format_diagnostic({
+                    .severity = cppx::terminal::DiagnosticSeverity::error,
+                    .message = std::format(
+                        "symbol '{}' was not found; run 'phenotype icons catalog' to list built-in symbols",
+                        *query),
+                    .context = "icons present",
+                }));
+        }
+        return 2;
+    }
+
+    auto role = icon_presentation_role_from_invocation(invocation, result->symbol);
+    if (!role)
+        return print_error("icons present", role.error(), invocation.has("json"));
+    auto phase = icon_interaction_phase_from_invocation(invocation);
+    if (!phase)
+        return print_error("icons present", phase.error(), invocation.has("json"));
+
+    auto const selected = invocation.has("selected");
+    auto const enabled = !invocation.has("disabled");
+    if (invocation.has("json")) {
+        std::println(
+            "{}",
+            icon_presentation_json(
+                *query,
+                *result,
+                *role,
+                *phase,
+                selected,
+                enabled));
+        return 0;
+    }
+
+    auto const desc = icon_catalog::descriptor(result->symbol);
+    auto const metrics = icon_catalog::metrics(*role);
+    auto const recipe = icon_catalog::macos_state_recipe(
+        *role,
+        icon_catalog::SymbolInteractionState{selected, enabled},
+        *phase);
+    auto const visible_color =
+        icon_color_with_opacity(recipe.symbol_color, recipe.symbol_opacity);
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "symbol",
+         .value = std::string{desc.name},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "semantic reference",
+         .value = std::string{desc.semantic_reference_name},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "state",
+         .value = std::format(
+             "{} {} selected={} enabled={}",
+             icon_catalog::symbol_presentation_role_name(*role),
+             icon_catalog::symbol_interaction_phase_name(*phase),
+             selected ? "true" : "false",
+             enabled ? "true" : "false"),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "tone",
+         .value = std::string{icon_catalog::symbol_tone_name(recipe.symbol_tone)},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "visible rgba",
+         .value = std::format(
+             "{},{},{},{}",
+             visible_color.r,
+             visible_color.g,
+             visible_color.b,
+             visible_color.a),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "metrics",
+         .value = std::format(
+             "{}pt symbol, {}pt effective, {}pt hit target",
+             metrics.point_size,
+             metrics.point_size * recipe.scale,
+             recipe.hit_target_size),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "asset policy",
+         .value = std::string{icon_catalog::asset_policy()},
+         .status = cppx::terminal::StatusKind::ok},
+    };
+    std::println("phenotype icons present");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    return 0;
+}
+
+int run_icons_render(cppx::cli::Invocation const& invocation) {
+    auto query = single_positional_text_or_error(
+        invocation,
+        "icons render",
+        "name-or-reference");
+    if (!query)
+        return print_error("icons render", query.error(), invocation.has("json"));
+
+    auto result = lookup_icon_symbol(*query);
+    if (!result) {
+        if (invocation.has("json")) {
+            std::println("{}", icon_render_not_found_json(*query));
+        } else {
+            std::println(
+                std::cerr,
+                "{}",
+                cppx::terminal::format_diagnostic({
+                    .severity = cppx::terminal::DiagnosticSeverity::error,
+                    .message = std::format(
+                        "symbol '{}' was not found; run 'phenotype icons catalog' to list built-in symbols",
+                        *query),
+                    .context = "icons render",
+                }));
+        }
+        return 2;
+    }
+
+    auto role = icon_presentation_role_from_invocation(invocation, result->symbol);
+    if (!role)
+        return print_error("icons render", role.error(), invocation.has("json"));
+    auto phase = icon_interaction_phase_from_invocation(invocation);
+    if (!phase)
+        return print_error("icons render", phase.error(), invocation.has("json"));
+
+    auto const selected = invocation.has("selected");
+    auto const enabled = !invocation.has("disabled");
+    auto source = rendered_icon_svg_source(
+        *result,
+        *role,
+        *phase,
+        selected,
+        enabled);
+    auto output_path = fs::path{};
+    if (auto output = invocation.value("output")) {
+        output_path =
+            fs::path{absolute_path_string(fs::path{std::string{*output}})};
+        auto error = std::string{};
+        if (!write_text_file(output_path, source, error)) {
+            return print_error(
+                "icons render",
+                std::format(
+                    "failed to write rendered icon SVG to {}: {}",
+                    path_string(output_path),
+                    error),
+                invocation.has("json"));
+        }
+    }
+    if (invocation.has("json")) {
+        std::println(
+            "{}",
+            icon_render_json(
+                *query,
+                *result,
+                *role,
+                *phase,
+                selected,
+                enabled,
+                source,
+                output_path));
+        return 0;
+    }
+
+    if (!output_path.empty()) {
+        auto lines = std::vector<cppx::terminal::StatusLine>{
+            {.label = "symbol",
+             .value = std::string{icon_catalog::name(result->symbol)},
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "output",
+             .value = path_string(output_path),
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "bytes",
+             .value = std::format("{}", source.size()),
+             .status = cppx::terminal::StatusKind::ok},
+        };
+        std::println("phenotype icons render");
+        std::println("{}", cppx::terminal::format_status_frame(lines, false));
+        return 0;
+    }
+
+    std::println("{}", source);
+    return 0;
+}
+
+int run_svg_inspect(cppx::cli::Invocation const& invocation) {
+    auto path_value = single_positional_text_or_error(
+        invocation,
+        "svg inspect",
+        "path");
+    if (!path_value)
+        return print_error("svg inspect", path_value.error(), invocation.has("json"));
+
+    auto path = fs::path{std::string{*path_value}};
+    auto ec = std::error_code{};
+    if (!fs::is_regular_file(path, ec) || ec) {
+        return print_error(
+            "svg inspect",
+            std::format(
+                "SVG file '{}' is not readable",
+                path_string(path)),
+            invocation.has("json"));
+    }
+
+    auto source = read_text_file(path);
+    auto inspection = svg_contract::inspect_source(source);
+    auto const summary = inspection.summary;
+    if (invocation.has("json")) {
+        std::println("{}", svg_inspect_json(path, source, inspection));
+        return summary.paintable ? 0 : 2;
+    }
+
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "path",
+         .value = path_string(path),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "subset",
+         .value = std::string{svg_contract::subset_policy()},
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "viewBox",
+         .value = std::format(
+             "{} {} {} {}",
+             summary.view_min_x,
+             summary.view_min_y,
+             summary.view_width,
+             summary.view_height),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "shapes",
+         .value = std::format("{}", summary.shape_count),
+         .status = summary.paintable
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "unsupported",
+         .value = std::format("{}", summary.unsupported_count),
+         .status = summary.unsupported_count == 0
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "diagnostics",
+         .value = std::format("{}", summary.diagnostic_count),
+         .status = summary.diagnostic_count == 0
+            ? cppx::terminal::StatusKind::ok
+            : cppx::terminal::StatusKind::fail},
+        {.label = "render path",
+         .value = std::string{svg_contract::render_pipeline_policy()},
+         .status = cppx::terminal::StatusKind::ok},
+    };
+    std::println("phenotype svg inspect");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    return summary.paintable ? 0 : 2;
 }
 
 }
