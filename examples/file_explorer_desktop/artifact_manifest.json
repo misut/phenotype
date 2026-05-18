@@ -60,9 +60,9 @@
   "require_material_plan_summary": {
     "count": 9,
     "fallback": 0,
-    "backdrop_sampling": 9,
+    "backdrop_sampling": 8,
     "contract_versions": {
-      "20": 9
+      "21": 9
     },
     "theme_foreground_matches_theme": 0,
     "theme_accent_matches_theme": 0,
@@ -96,47 +96,74 @@
     "container_morph_transitions": 9,
     "shape_valid": 9,
     "shape_radius_clamped": 0,
+    "reference_technologies": {
+      "liquid-glass": 8,
+      "standard-material": 1
+    },
+    "reference_layers": {
+      "functional-layer": 8,
+      "content-layer": 1
+    },
+    "reference_material_policies": {
+      "liquid-glass-functional-layer": 8,
+      "standard-material-content-layer": 1
+    },
+    "reference_blending_scopes": {
+      "sampled-backdrop": 8,
+      "standard-fill": 1
+    },
     "pass_names": {
-      "backdrop-sample-blur": 9
+      "backdrop-sample-blur": 8,
+      "standard-material-fill": 1
     },
     "pass_executors": {
-      "backdrop-filter": 9
+      "backdrop-filter": 8,
+      "standard-fill": 1
     },
     "sampling_kernels": {
-      "weighted-5x5-manhattan": 9
+      "weighted-5x5-manhattan": 8,
+      "none": 1
     },
     "sampling_weight_profiles": {
-      "center4-cardinal2-diagonal1": 9
+      "center4-cardinal2-diagonal1": 8,
+      "none": 1
     },
-    "backdrop_access_required": 9,
-    "backdrop_access_stable_required": 9,
-    "backdrop_access_frame_history_required": 9,
-    "backdrop_access_shared_frame_capture": 9,
-    "backdrop_access_next_frame_capture_required": 9,
-    "backdrop_access_excludes_foreground_text": 9,
+    "backdrop_access_required": 8,
+    "backdrop_access_stable_required": 8,
+    "backdrop_access_frame_history_required": 8,
+    "backdrop_access_shared_frame_capture": 8,
+    "backdrop_access_next_frame_capture_required": 8,
+    "backdrop_access_excludes_foreground_text": 8,
     "backdrop_access_bounded": 9,
     "backdrop_access_sources": {
-      "previous-presented-frame": 9
+      "previous-presented-frame": 8,
+      "none": 1
     },
     "backdrop_capture_scopes": {
-      "shared-frame": 9
+      "shared-frame": 8,
+      "none": 1
     },
     "backdrop_capture_reasons": {
-      "sample-current-frame": 9
+      "sample-current-frame": 8,
+      "not-required": 1
     },
-    "decision_can_sample_backdrop": 9,
+    "decision_role_allows_liquid_glass": 8,
+    "decision_content_layer_standard_material": 1,
+    "decision_liquid_glass_backdrop_candidate": 8,
+    "decision_can_sample_backdrop": 8,
     "decision_backend_supports_backdrop": 9,
     "decision_backdrop_source_ready": 9,
-    "decision_next_frame_capture_required": 9,
+    "decision_next_frame_capture_required": 8,
     "decision_reduced_transparency": 0,
     "verifier_region_passes": {
       "clear-over-rich-backdrop": "backdrop-sample-blur",
       "thin-balanced-backdrop": "backdrop-sample-blur",
-      "regular-legibility-backdrop": "backdrop-sample-blur",
+      "regular-legibility-backdrop": "standard-material-fill",
       "thick-high-contrast-backdrop": "backdrop-sample-blur"
     },
     "luminance_curves": {
-      "adaptive-backdrop-luma": 9
+      "adaptive-backdrop-luma": 8,
+      "fallback-flat": 1
     }
   },
   "require_capabilities": [
@@ -1227,7 +1254,7 @@
     },
     {
       "path": "renderer.material_executor_summary.material_total_sample_taps",
-      "equals": 225
+      "equals": 200
     },
     {
       "path": "window.surface_kind",
@@ -1395,17 +1422,17 @@
     "total_surface_sample_pixels_gte": 1,
     "max_surface_sample_pixels_lte": 4000000,
     "max_surface_sample_pixels_gte": 1,
-    "total_plan_sample_taps_lte": 225,
-    "total_plan_sample_taps_gte": 225,
+    "total_plan_sample_taps_lte": 200,
+    "total_plan_sample_taps_gte": 200,
     "total_runtime_passes_gte": 1,
     "active_runtime_passes_gte": 1,
     "backdrop_runtime_passes_gte": 1,
-    "total_execution_stages_lte": 36,
-    "total_execution_stages_gte": 36,
-    "active_execution_stages_lte": 36,
-    "active_execution_stages_gte": 36,
-    "backdrop_execution_stages_lte": 9,
-    "backdrop_execution_stages_gte": 9,
+    "total_execution_stages_lte": 35,
+    "total_execution_stages_gte": 35,
+    "active_execution_stages_lte": 35,
+    "active_execution_stages_gte": 35,
+    "backdrop_execution_stages_lte": 8,
+    "backdrop_execution_stages_gte": 8,
     "dropped_execution_stages_lte": 0,
     "dropped_execution_stages_gte": 0,
     "max_execution_stage_count_lte": 4,
@@ -1589,7 +1616,7 @@
     {
       "region": "finder-toolbar",
       "metric": "edge_energy",
-      "gte": 1.8
+      "gte": 1.7
     },
     {
       "region": "finder-pdf-thumbnail-preview",

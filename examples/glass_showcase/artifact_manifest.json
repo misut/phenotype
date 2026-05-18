@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "20": 7
+      "21": 7
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -72,6 +72,12 @@
     "container_morph_transitions": 5,
     "reference_technologies": {
       "liquid-glass": 7
+    },
+    "reference_layers": {
+      "functional-layer": 7
+    },
+    "reference_material_policies": {
+      "liquid-glass-functional-layer": 7
     },
     "reference_variants": {
       "clear": 1,

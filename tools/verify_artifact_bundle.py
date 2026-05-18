@@ -66,6 +66,7 @@ ALLOWED_MATERIAL_CONTAINER_MODES = {
 ALLOWED_MATERIAL_PASS_NAMES = {
     "backdrop-sample-blur",
     "none",
+    "standard-material-fill",
     "translucent-rounded-rect",
 }
 
@@ -73,6 +74,7 @@ ALLOWED_MATERIAL_PASS_EXECUTORS = {
     "backdrop-filter",
     "fallback-fill",
     "none",
+    "standard-fill",
 }
 
 ALLOWED_MATERIAL_STAGE_NAMES = {
@@ -80,6 +82,7 @@ ALLOWED_MATERIAL_STAGE_NAMES = {
     "edge-highlight",
     "noise-dither",
     "shape-shadow",
+    "standard-material-fill",
     "translucent-rounded-rect",
 }
 
@@ -89,6 +92,7 @@ ALLOWED_MATERIAL_STAGE_EXECUTORS = {
     "fallback-fill",
     "ordered-dither",
     "shape-shadow",
+    "standard-fill",
 }
 
 ALLOWED_MATERIAL_LIKELY_LAYERS = {
@@ -99,6 +103,7 @@ ALLOWED_MATERIAL_LIKELY_LAYERS = {
     "material-foreground",
     "material-noise-pass",
     "material-shadow-pass",
+    "material-standard-pass",
 }
 
 ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
@@ -151,6 +156,19 @@ ALLOWED_MATERIAL_FOREGROUND_SOURCES = {
 
 ALLOWED_MATERIAL_REFERENCE_TECHNOLOGIES = {
     "liquid-glass",
+    "standard-material",
+}
+
+ALLOWED_MATERIAL_REFERENCE_LAYERS = {
+    "content-layer",
+    "functional-layer",
+    "inactive",
+}
+
+ALLOWED_MATERIAL_REFERENCE_POLICIES = {
+    "inactive",
+    "liquid-glass-functional-layer",
+    "standard-material-content-layer",
 }
 
 ALLOWED_MATERIAL_REFERENCE_SHAPES = {
@@ -168,6 +186,7 @@ ALLOWED_MATERIAL_REFERENCE_BLENDING_SCOPES = {
     "deterministic-fallback",
     "none",
     "sampled-backdrop",
+    "standard-fill",
 }
 
 ALLOWED_MATERIAL_REFERENCE_ACCESSIBILITY_RESPONSES = {
@@ -186,7 +205,7 @@ ALLOWED_MATERIAL_REFERENCE_PERFORMANCE_RESPONSES = {
     "warmup-capture",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 20
+MATERIAL_PLAN_CONTRACT_VERSION = 21
 
 
 def suggested_action_for_failure(
@@ -1065,6 +1084,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "reference_vibrancy_expected",
         "reference_deterministic_degradation",
         "reference_technologies",
+        "reference_layers",
+        "reference_material_policies",
         "reference_variants",
         "reference_shapes",
         "reference_shape_scopes",
@@ -1126,6 +1147,9 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "render_target_within_backdrop_budget",
         "render_target_pixel_formats",
         "decision_can_sample_backdrop",
+        "decision_role_allows_liquid_glass",
+        "decision_content_layer_standard_material",
+        "decision_liquid_glass_backdrop_candidate",
         "decision_backend_supports_backdrop",
         "decision_backdrop_source_ready",
         "decision_next_frame_capture_required",
@@ -1165,6 +1189,9 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "luminance_adapted",
             "render_target_ready",
             "render_target_within_backdrop_budget",
+            "decision_role_allows_liquid_glass",
+            "decision_content_layer_standard_material",
+            "decision_liquid_glass_backdrop_candidate",
             "decision_can_sample_backdrop",
             "decision_backend_supports_backdrop",
             "decision_backdrop_source_ready",
@@ -1227,6 +1254,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "roles": ALLOWED_MATERIAL_SURFACE_ROLES,
         "container_modes": ALLOWED_MATERIAL_CONTAINER_MODES,
         "reference_technologies": ALLOWED_MATERIAL_REFERENCE_TECHNOLOGIES,
+        "reference_layers": ALLOWED_MATERIAL_REFERENCE_LAYERS,
+        "reference_material_policies": ALLOWED_MATERIAL_REFERENCE_POLICIES,
         "reference_variants": ALLOWED_MATERIAL_KINDS,
         "reference_shapes": ALLOWED_MATERIAL_REFERENCE_SHAPES,
         "reference_shape_scopes": ALLOWED_MATERIAL_REFERENCE_SHAPE_SCOPES,
@@ -1938,6 +1967,9 @@ MATERIAL_RENDER_TARGET_BOOL_FIELDS = ("ready", "within_backdrop_budget")
 MATERIAL_DECISION_TRACE_BOOL_FIELDS = (
     "has_geometry",
     "has_material",
+    "role_allows_liquid_glass",
+    "content_layer_standard_material",
+    "liquid_glass_backdrop_candidate",
     "target_ready",
     "quality_switches_allow_backdrop",
     "backdrop_pixels_within_budget",
@@ -2532,6 +2564,8 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
         },
         "reference_model": {
             "technologies": {},
+            "layers": {},
+            "material_policies": {},
             "variants": {},
             "shapes": {},
             "shape_scopes": {},
@@ -2585,6 +2619,9 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             "pixel_formats": {},
         },
         "decision_trace": {
+            "role_allows_liquid_glass": 0,
+            "content_layer_standard_material": 0,
+            "liquid_glass_backdrop_candidate": 0,
             "can_sample_backdrop": 0,
             "backend_supports_backdrop": 0,
             "backdrop_source_ready": 0,
@@ -2914,6 +2951,12 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 "technology": (
                     "technologies",
                     ALLOWED_MATERIAL_REFERENCE_TECHNOLOGIES),
+                "layer": (
+                    "layers",
+                    ALLOWED_MATERIAL_REFERENCE_LAYERS),
+                "material_policy": (
+                    "material_policies",
+                    ALLOWED_MATERIAL_REFERENCE_POLICIES),
                 "variant": ("variants", ALLOWED_MATERIAL_KINDS),
                 "shape": ("shapes", ALLOWED_MATERIAL_REFERENCE_SHAPES),
                 "shape_scope": (
@@ -3082,12 +3125,58 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
 
             fallback = bool_at(plan, "fallback")
             backdrop_sampling = bool_at(plan, "backdrop_sampling")
+            if isinstance(kind, str) and isinstance(role, str):
+                content_standard = kind != "none" and role == "content"
+                expected_technology = (
+                    "standard-material" if content_standard else "liquid-glass")
+                expected_layer = "inactive"
+                expected_policy = "inactive"
+                if kind != "none":
+                    expected_layer = (
+                        "content-layer" if content_standard else "functional-layer")
+                    expected_policy = (
+                        "standard-material-content-layer"
+                        if content_standard
+                        else "liquid-glass-functional-layer")
+                for reference_key, expected in (
+                        ("technology", expected_technology),
+                        ("layer", expected_layer),
+                        ("material_policy", expected_policy)):
+                    if reference_key in reference_values:
+                        report.check(
+                            f"material reference {reference_key} matches role policy",
+                            reference_values[reference_key] == expected,
+                            path=f"{plan_path}.reference_model.{reference_key}",
+                            expected=expected,
+                            actual=reference_values[reference_key],
+                            likely_layer="material-reference",
+                            hint=(
+                                "Keep the pure role policy aligned with Apple "
+                                "HIG: Liquid Glass for functional chrome, "
+                                "standard material for content."),
+                            record_success=False)
+                if (content_standard
+                        and fallback is False
+                        and backdrop_sampling is not None):
+                    report.check(
+                        "content material does not sample backdrop",
+                        backdrop_sampling is False,
+                        path=f"{plan_path}.backdrop_sampling",
+                        expected=False,
+                        actual=backdrop_sampling,
+                        likely_layer="material-reference",
+                        hint=(
+                            "Content-layer surfaces should not execute the "
+                            "Liquid Glass backdrop blur path."),
+                        record_success=False)
             if isinstance(kind, str) and fallback is not None and backdrop_sampling is not None:
                 expected_scope = "none"
                 if kind != "none" and backdrop_sampling:
                     expected_scope = "sampled-backdrop"
                 elif kind != "none" and fallback:
                     expected_scope = "deterministic-fallback"
+                elif kind != "none" and role == "content":
+                    expected_scope = "standard-fill"
                 if "blending_scope" in reference_values:
                     report.check(
                         "material reference blending_scope is derived",
@@ -4038,6 +4127,9 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 if isinstance(value, bool):
                     trace_values[key] = value
                     if key in (
+                            "role_allows_liquid_glass",
+                            "content_layer_standard_material",
+                            "liquid_glass_backdrop_candidate",
                             "can_sample_backdrop",
                             "backend_supports_backdrop",
                             "backdrop_source_ready",
@@ -4076,6 +4168,57 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         "The first decision blocker should explain the same "
                         "fallback path that the plan exposes."),
                     record_success=False)
+            if isinstance(role, str):
+                expected_role_allows = role != "content"
+                actual_role_allows = trace_values.get("role_allows_liquid_glass")
+                report.check(
+                    "material decision role_allows_liquid_glass is derived",
+                    actual_role_allows == expected_role_allows,
+                    path=f"{plan_path}.decision_trace.role_allows_liquid_glass",
+                    expected=expected_role_allows,
+                    actual=actual_role_allows,
+                    likely_layer="material-decision",
+                    hint=(
+                        "Content surfaces must resolve to standard material; "
+                        "functional chrome/navigation roles may use Liquid Glass."),
+                    record_success=False)
+                if "has_material" in trace_values:
+                    expected_content_standard = (
+                        trace_values["has_material"]
+                        and not expected_role_allows)
+                    report.check(
+                        "material decision content standard policy is derived",
+                        trace_values.get("content_layer_standard_material")
+                        == expected_content_standard,
+                        path=(
+                            f"{plan_path}.decision_trace."
+                            "content_layer_standard_material"),
+                        expected=expected_content_standard,
+                        actual=trace_values.get(
+                            "content_layer_standard_material"),
+                        likely_layer="material-decision",
+                        hint=(
+                            "Content surfaces should be explicit standard "
+                            "material plans rather than Liquid Glass fallbacks."),
+                        record_success=False)
+                    expected_backdrop_candidate = (
+                        trace_values["has_material"]
+                        and expected_role_allows)
+                    report.check(
+                        "material decision liquid glass candidate is derived",
+                        trace_values.get("liquid_glass_backdrop_candidate")
+                        == expected_backdrop_candidate,
+                        path=(
+                            f"{plan_path}.decision_trace."
+                            "liquid_glass_backdrop_candidate"),
+                        expected=expected_backdrop_candidate,
+                        actual=trace_values.get(
+                            "liquid_glass_backdrop_candidate"),
+                        likely_layer="material-decision",
+                        hint=(
+                            "Only functional material roles should enter the "
+                            "Liquid Glass backdrop sampling predicate."),
+                        record_success=False)
             can_sample = trace_values.get("can_sample_backdrop")
             if can_sample is not None:
                 report.check(
@@ -4144,7 +4287,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                         "switches with the backdrop pixel budget."),
                     record_success=False)
             can_sample_inputs = (
-                "has_material",
+                "liquid_glass_backdrop_candidate",
                 "target_ready",
                 "quality_allows_backdrop",
                 "backend_supports_backdrop",
@@ -4154,7 +4297,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             )
             if all(key in trace_values for key in can_sample_inputs):
                 expected_can_sample = (
-                    trace_values["has_material"]
+                    trace_values["liquid_glass_backdrop_candidate"]
                     and trace_values["target_ready"]
                     and trace_values["quality_allows_backdrop"]
                     and trace_values["backend_supports_backdrop"]
@@ -4171,11 +4314,11 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     likely_layer=likely_layer,
                     hint=(
                         "can_sample_backdrop should be the conjunction of "
-                        "material, target, quality, backend, frame-history, "
+                        "Liquid Glass role eligibility, target, quality, backend, frame-history, "
                         "backdrop-source, and reduced-transparency gates."),
                     record_success=False)
             next_frame_inputs = (
-                "has_material",
+                "liquid_glass_backdrop_candidate",
                 "target_ready",
                 "quality_allows_backdrop",
                 "backend_supports_backdrop",
@@ -4183,7 +4326,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
             )
             if all(key in trace_values for key in next_frame_inputs):
                 expected_next_frame_capture = (
-                    trace_values["has_material"]
+                    trace_values["liquid_glass_backdrop_candidate"]
                     and trace_values["target_ready"]
                     and trace_values["quality_allows_backdrop"]
                     and trace_values["backend_supports_backdrop"]
@@ -4198,7 +4341,7 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                     likely_layer=likely_layer,
                     hint=(
                         "next_frame_capture_required should be the pure "
-                        "material, target, quality, backend, and reduced-"
+                        "Liquid Glass role, target, quality, backend, and reduced-"
                         "transparency gate for the edge frame-history copy."),
                     record_success=False)
 
@@ -5861,6 +6004,9 @@ def check_material_plan_summary_requirements(
                 actual = render_summary.get(nested_field)
                 summary_path = f"{base_path}.render_target.{nested_field}"
             elif field in (
+                    "decision_role_allows_liquid_glass",
+                    "decision_content_layer_standard_material",
+                    "decision_liquid_glass_backdrop_candidate",
                     "decision_can_sample_backdrop",
                     "decision_backend_supports_backdrop",
                     "decision_backdrop_source_ready",
@@ -5895,6 +6041,8 @@ def check_material_plan_summary_requirements(
                 summary_path = f"{base_path}.container.{nested_field}"
             elif field.startswith("reference_") and field not in (
                     "reference_technologies",
+                    "reference_layers",
+                    "reference_material_policies",
                     "reference_variants",
                     "reference_shapes",
                     "reference_shape_scopes",
@@ -6024,6 +6172,12 @@ def check_material_plan_summary_requirements(
         "reference_technologies": (
             "material-reference",
             "Inspect MaterialPlan.reference_model.technology and the pure planner schema."),
+        "reference_layers": (
+            "material-reference",
+            "Inspect MaterialPlan.reference_model.layer and the role policy."),
+        "reference_material_policies": (
+            "material-reference",
+            "Inspect MaterialPlan.reference_model.material_policy and the role policy."),
         "reference_variants": (
             "material-reference",
             "Inspect MaterialPlan.reference_model.variant and MaterialPlan.kind."),

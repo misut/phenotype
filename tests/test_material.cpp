@@ -42,7 +42,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 20);
+    assert(material_plan_contract_version == 21);
     assert(plan.theme.default_glass_tokens);
     assert(std::string(plan.theme.profile_name) == "apple-glass-light");
     assert(std::string(plan.theme.source) == "material-style");

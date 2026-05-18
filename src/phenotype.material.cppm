@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 20;
+inline constexpr std::uint32_t material_plan_contract_version = 21;
 inline constexpr unsigned int material_max_execution_stages = 4;
 
 struct MaterialGeometry {
@@ -115,6 +115,27 @@ inline char const* material_fallback_path_name(MaterialFallbackPath path) noexce
         case MaterialFallbackPath::QualityPolicy: return "quality-policy";
     }
     return "unsupported-backend";
+}
+
+inline bool material_role_allows_liquid_glass(
+        MaterialSurfaceRole role) noexcept {
+    switch (role) {
+        case MaterialSurfaceRole::Content:
+            return false;
+        case MaterialSurfaceRole::Surface:
+        case MaterialSurfaceRole::Toolbar:
+        case MaterialSurfaceRole::Sidebar:
+        case MaterialSurfaceRole::StatusBar:
+        case MaterialSurfaceRole::Navigation:
+        case MaterialSurfaceRole::Overlay:
+            return true;
+    }
+    return true;
+}
+
+inline bool material_role_uses_standard_content_layer(
+        MaterialSurfaceRole role) noexcept {
+    return !material_role_allows_liquid_glass(role);
 }
 
 struct MaterialVerifierExpectation {
@@ -308,6 +329,8 @@ struct MaterialContainerAnalysis {
 
 struct MaterialReferenceModel {
     char const* technology = "liquid-glass";
+    char const* layer = "functional-layer";
+    char const* material_policy = "liquid-glass-functional-layer";
     char const* variant = "none";
     char const* shape = "none";
     char const* shape_scope = "view-bounds";
@@ -330,6 +353,9 @@ struct MaterialReferenceModel {
 struct MaterialDecisionTrace {
     bool has_geometry = false;
     bool has_material = false;
+    bool role_allows_liquid_glass = true;
+    bool content_layer_standard_material = false;
+    bool liquid_glass_backdrop_candidate = false;
     bool target_ready = false;
     bool quality_switches_allow_backdrop = false;
     bool backdrop_pixels_within_budget = false;
@@ -405,6 +431,12 @@ struct MaterialRuntimeRecord {
     MaterialPlan plan{};
     std::uint32_t command_index = 0;
 };
+
+inline bool material_plan_uses_standard_content_layer(
+        MaterialPlan const& plan) noexcept {
+    return plan.kind != MaterialKind::None
+        && material_role_uses_standard_content_layer(plan.role);
+}
 
 inline void append_material_execution_stage(
         MaterialPlan& plan,
@@ -576,9 +608,10 @@ inline void accumulate_material_executor_plan_summary(
         MaterialExecutorSummary& summary,
         MaterialPlan const& plan) noexcept {
     ++summary.plan_count;
-    if (!plan.backdrop_sampling || plan.fallback()) {
+    if (plan.fallback()) {
         ++summary.fallback_instance_count;
     } else {
+        ++summary.material_instance_count;
         summary.material_max_sample_taps = std::max(
             summary.material_max_sample_taps,
             plan.sample_taps);
@@ -1603,7 +1636,23 @@ inline MaterialLuminanceCurve material_resolve_luminance_curve(
 }
 
 inline char const* material_plan_id(MaterialKind kind,
+                                    MaterialSurfaceRole role,
                                     bool backdrop_sampling) noexcept {
+    if (material_role_uses_standard_content_layer(role)) {
+        switch (kind) {
+            case MaterialKind::Clear:
+                return "material.clear.standard-material";
+            case MaterialKind::Thin:
+                return "material.thin.standard-material";
+            case MaterialKind::Regular:
+                return "material.regular.standard-material";
+            case MaterialKind::Thick:
+                return "material.thick.standard-material";
+            case MaterialKind::None:
+            default:
+                return "material.none";
+        }
+    }
     switch (kind) {
         case MaterialKind::Clear:
             return backdrop_sampling ? "material.clear.liquid-glass"
@@ -1638,7 +1687,34 @@ inline char const* material_reference_blending_scope(
         return "sampled-backdrop";
     if (plan.fallback())
         return "deterministic-fallback";
+    if (material_plan_uses_standard_content_layer(plan))
+        return "standard-fill";
     return "none";
+}
+
+inline char const* material_reference_technology(
+        MaterialPlan const& plan) noexcept {
+    if (material_plan_uses_standard_content_layer(plan))
+        return "standard-material";
+    return "liquid-glass";
+}
+
+inline char const* material_reference_layer(
+        MaterialPlan const& plan) noexcept {
+    if (plan.kind == MaterialKind::None)
+        return "inactive";
+    if (material_plan_uses_standard_content_layer(plan))
+        return "content-layer";
+    return "functional-layer";
+}
+
+inline char const* material_reference_policy(
+        MaterialPlan const& plan) noexcept {
+    if (plan.kind == MaterialKind::None)
+        return "inactive";
+    if (material_plan_uses_standard_content_layer(plan))
+        return "standard-material-content-layer";
+    return "liquid-glass-functional-layer";
 }
 
 inline char const* material_reference_accessibility_response(
@@ -1688,6 +1764,9 @@ inline char const* material_reference_performance_response(
 inline MaterialReferenceModel material_resolve_reference_model(
         MaterialPlan const& plan) noexcept {
     MaterialReferenceModel model{};
+    model.technology = material_reference_technology(plan);
+    model.layer = material_reference_layer(plan);
+    model.material_policy = material_reference_policy(plan);
     model.variant = material_kind_name(plan.kind);
     model.shape = material_reference_shape_name(plan.shape);
     model.blending_scope = material_reference_blending_scope(plan);
@@ -1785,6 +1864,12 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         && style.tint.a > 0
         && plan.opacity > 0.0f
         && has_geometry;
+    bool const role_allows_liquid_glass =
+        material_role_allows_liquid_glass(style.role);
+    bool const content_layer_standard_material =
+        has_material && !role_allows_liquid_glass;
+    bool const liquid_glass_backdrop_candidate =
+        has_material && role_allows_liquid_glass;
     bool const target_ready = plan.render_target.ready;
     bool const backdrop_pixels_within_budget =
         plan.render_target.within_backdrop_budget;
@@ -1803,7 +1888,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         environment.backdrop.available
         && environment.backdrop.stable;
     bool const can_sample_backdrop =
-        has_material
+        liquid_glass_backdrop_candidate
         && target_ready
         && quality_allows_backdrop
         && backend_supports_backdrop
@@ -1811,13 +1896,19 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         && backdrop_source_ready
         && !environment.capabilities.reduce_transparency;
     bool const next_frame_capture_required =
-        has_material
+        liquid_glass_backdrop_candidate
         && target_ready
         && quality_allows_backdrop
         && backend_supports_backdrop
         && !environment.capabilities.reduce_transparency;
     plan.decision_trace.has_geometry = has_geometry;
     plan.decision_trace.has_material = has_material;
+    plan.decision_trace.role_allows_liquid_glass =
+        role_allows_liquid_glass;
+    plan.decision_trace.content_layer_standard_material =
+        content_layer_standard_material;
+    plan.decision_trace.liquid_glass_backdrop_candidate =
+        liquid_glass_backdrop_candidate;
     plan.decision_trace.target_ready = target_ready;
     plan.decision_trace.quality_switches_allow_backdrop =
         quality_switches_allow_backdrop;
@@ -1856,37 +1947,47 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         plan.blur_radius = 0.0f;
         plan.opacity = 0.0f;
         plan.tint.a = 0;
-    } else if (environment.capabilities.reduce_transparency) {
+    } else if (liquid_glass_backdrop_candidate
+               && environment.capabilities.reduce_transparency) {
         plan.fallback_path = MaterialFallbackPath::ReducedTransparency;
         plan.fallback_reason = "reduced transparency disables backdrop sampling";
         plan.blur_radius = 0.0f;
         plan.saturation = 1.0f;
         plan.noise_opacity = 0.0f;
-    } else if (!quality_switches_allow_backdrop) {
+    } else if (liquid_glass_backdrop_candidate
+               && !quality_switches_allow_backdrop) {
         plan.fallback_path = MaterialFallbackPath::QualityPolicy;
         plan.fallback_reason = "quality policy disables material backdrop sampling";
         plan.blur_radius = 0.0f;
         plan.saturation = 1.0f;
         plan.noise_opacity = 0.0f;
-    } else if (!environment.capabilities.material_surfaces
-               || !environment.capabilities.material_backdrop_blur
-               || !environment.capabilities.shader_blur) {
+    } else if (liquid_glass_backdrop_candidate
+               && (!environment.capabilities.material_surfaces
+                   || !environment.capabilities.material_backdrop_blur
+                   || !environment.capabilities.shader_blur)) {
         plan.fallback_path = MaterialFallbackPath::UnsupportedBackend;
         plan.fallback_reason = "backend reports no material backdrop blur support";
         plan.blur_radius = 0.0f;
         plan.saturation = 1.0f;
         plan.noise_opacity = 0.0f;
-    } else if (!backdrop_pixels_within_budget) {
+    } else if (liquid_glass_backdrop_candidate
+               && !backdrop_pixels_within_budget) {
         plan.fallback_path = MaterialFallbackPath::QualityPolicy;
         plan.fallback_reason = "quality policy backdrop pixel budget exceeded";
         plan.blur_radius = 0.0f;
         plan.saturation = 1.0f;
         plan.noise_opacity = 0.0f;
-    } else if (!target_ready || !environment.capabilities.frame_history
-               || !environment.backdrop.available
-               || !environment.backdrop.stable) {
+    } else if (liquid_glass_backdrop_candidate
+               && (!target_ready || !environment.capabilities.frame_history
+                   || !environment.backdrop.available
+                   || !environment.backdrop.stable)) {
         plan.fallback_path = MaterialFallbackPath::NoBackdropSource;
         plan.fallback_reason = "stable backdrop source is not available for this frame";
+        plan.blur_radius = 0.0f;
+        plan.saturation = 1.0f;
+        plan.noise_opacity = 0.0f;
+    }
+    if (content_layer_standard_material) {
         plan.blur_radius = 0.0f;
         plan.saturation = 1.0f;
         plan.noise_opacity = 0.0f;
@@ -1932,7 +2033,14 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
         environment.capabilities);
     plan.reference_model = material_resolve_reference_model(plan);
 
-    plan.plan_id = material_plan_id(style.kind, plan.backdrop_sampling);
+    plan.plan_id = material_plan_id(
+        style.kind,
+        style.role,
+        plan.backdrop_sampling);
+    char const* const non_backdrop_material_layer =
+        material_plan_uses_standard_content_layer(plan)
+            ? "material-standard-pass"
+            : "material-fallback-pass";
     if (has_material && plan.backdrop_sampling && !plan.fallback()) {
         plan.primary_pass = MaterialPassExpectation{
             "backdrop-sample-blur",
@@ -1942,6 +2050,16 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
             "material-blur-pass",
             "backdrop-filter",
             plan.render_target.pixel_count,
+        };
+    } else if (content_layer_standard_material && !plan.fallback()) {
+        plan.primary_pass = MaterialPassExpectation{
+            "standard-material-fill",
+            true,
+            false,
+            0u,
+            "material-standard-pass",
+            "standard-fill",
+            0,
         };
     } else if (has_material && plan.fallback_path != MaterialFallbackPath::InvalidGeometry) {
         plan.primary_pass = MaterialPassExpectation{
@@ -2001,7 +2119,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
                 false,
                 0u,
                 plan.backdrop_sampling ? "material-edge-pass"
-                                       : "material-fallback-pass",
+                                       : non_backdrop_material_layer,
                 "edge-highlight",
                 0,
                 true,
@@ -2032,7 +2150,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.verifier.region_name = style.verifier_profile;
     plan.verifier.likely_layer = plan.backdrop_sampling
         ? "material-blur-pass"
-        : "material-fallback-pass";
+        : non_backdrop_material_layer;
     plan.verifier.likely_pass = plan.primary_pass.name;
     plan.observation_contract = material_observation_contract(plan);
     return plan;

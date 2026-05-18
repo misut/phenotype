@@ -1336,6 +1336,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(fallback_plan.render_target.pixel_format)
            == "unknown");
     assert(fallback_plan.decision_trace.has_material);
+    assert(fallback_plan.decision_trace.role_allows_liquid_glass);
+    assert(!fallback_plan.decision_trace.content_layer_standard_material);
+    assert(fallback_plan.decision_trace.liquid_glass_backdrop_candidate);
     assert(fallback_plan.decision_trace.target_ready);
     assert(!fallback_plan.decision_trace.backend_supports_backdrop);
     assert(!fallback_plan.decision_trace.can_sample_backdrop);
@@ -1405,6 +1408,10 @@ void test_material_planner_backdrop_and_fallback_paths() {
            >= fallback_plan.foreground.minimum_contrast_ratio);
     assert(std::string(fallback_plan.reference_model.technology)
            == "liquid-glass");
+    assert(std::string(fallback_plan.reference_model.layer)
+           == "functional-layer");
+    assert(std::string(fallback_plan.reference_model.material_policy)
+           == "liquid-glass-functional-layer");
     assert(std::string(fallback_plan.reference_model.variant) == "regular");
     assert(std::string(fallback_plan.reference_model.shape)
            == "rounded-rectangle");
@@ -1537,6 +1544,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!glass_plan.fallback());
     assert(glass_plan.backdrop_sampling);
     assert(glass_plan.decision_trace.backend_supports_backdrop);
+    assert(glass_plan.decision_trace.role_allows_liquid_glass);
+    assert(!glass_plan.decision_trace.content_layer_standard_material);
+    assert(glass_plan.decision_trace.liquid_glass_backdrop_candidate);
     assert(glass_plan.decision_trace.backdrop_source_ready);
     assert(glass_plan.decision_trace.can_sample_backdrop);
     assert(glass_plan.decision_trace.next_frame_capture_required);
@@ -1641,6 +1651,12 @@ void test_material_planner_backdrop_and_fallback_paths() {
            >= glass_plan.foreground.minimum_contrast_ratio);
     assert(std::string(glass_plan.reference_model.blending_scope)
            == "sampled-backdrop");
+    assert(std::string(glass_plan.reference_model.technology)
+           == "liquid-glass");
+    assert(std::string(glass_plan.reference_model.layer)
+           == "functional-layer");
+    assert(std::string(glass_plan.reference_model.material_policy)
+           == "liquid-glass-functional-layer");
     assert(std::string(glass_plan.reference_model.semantic_thickness)
            == "regular");
     assert(std::string(glass_plan.reference_model.accessibility_response)
@@ -2390,17 +2406,40 @@ void test_material_command_preserves_style_optics() {
     assert(!plan.fallback());
     assert(plan.role == MaterialSurfaceRole::Content);
     assert(plan.command_descriptor.role == MaterialSurfaceRole::Content);
+    assert(!plan.decision_trace.role_allows_liquid_glass);
+    assert(plan.decision_trace.content_layer_standard_material);
+    assert(!plan.decision_trace.liquid_glass_backdrop_candidate);
+    assert(!plan.decision_trace.can_sample_backdrop);
+    assert(!plan.decision_trace.next_frame_capture_required);
+    assert(!plan.backdrop_sampling);
+    assert(!plan.backdrop_access.shared_frame_capture);
+    assert(std::string(plan.plan_id)
+           == "material.regular.standard-material");
+    assert(std::string(plan.reference_model.technology)
+           == "standard-material");
+    assert(std::string(plan.reference_model.layer) == "content-layer");
+    assert(std::string(plan.reference_model.material_policy)
+           == "standard-material-content-layer");
+    assert(std::string(plan.reference_model.blending_scope)
+           == "standard-fill");
+    assert(std::string(plan.primary_pass.name)
+           == "standard-material-fill");
+    assert(std::string(plan.primary_pass.executor) == "standard-fill");
+    assert(std::string(plan.primary_pass.likely_layer)
+           == "material-standard-pass");
     assert(plan.container.mode == MaterialContainerMode::Union);
     assert(plan.container.container_id == 88u);
     assert(plan.container.union_id == 12u);
     assert(plan.container.interactive);
     assert(plan.container.morph_transitions);
-    assert(std::fabs(plan.saturation - 0.73f) < 0.0001f);
+    assert(plan.blur_radius == 0.0f);
+    assert(plan.sample_taps == 0u);
+    assert(plan.saturation == 1.0f);
     assert(std::fabs(plan.luminance_floor - 0.19f) < 0.0001f);
     assert(std::fabs(plan.luminance_gain - 1.31f) < 0.0001f);
     assert(std::fabs(plan.edge_highlight - 0.57f) < 0.0001f);
     assert(std::fabs(plan.edge_width - 2.25f) < 0.0001f);
-    assert(std::fabs(plan.noise_opacity - 0.031f) < 0.0001f);
+    assert(plan.noise_opacity == 0.0f);
     assert(std::fabs(plan.shadow_alpha - 0.22f) < 0.0001f);
     assert(std::fabs(plan.shadow_radius - 17.0f) < 0.0001f);
 
