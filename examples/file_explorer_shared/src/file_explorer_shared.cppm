@@ -270,6 +270,7 @@ struct ExplorerChromeMetrics {
     int thumbnail_video_strip_count = 0;
     float icon_grid_label_height = 0.0f;
     float icon_grid_label_font_size = 0.0f;
+    std::string icon_grid_label_policy;
     float icon_grid_gap = 0.0f;
     float icon_grid_scroll_height = 0.0f;
     int icon_grid_columns = 0;
@@ -526,6 +527,8 @@ inline constexpr char k_desktop_thumbnail_shadow_policy[] =
     "subtle_windowserver_like_drop_shadow";
 inline constexpr float k_desktop_icon_grid_label_height = 46.0f;
 inline constexpr float k_desktop_icon_grid_label_font_size = 14.0f;
+inline constexpr char k_desktop_icon_grid_label_policy[] =
+    "finder_two_line_middle_ellipsis_preserve_suffix";
 inline constexpr float k_desktop_icon_grid_gap = 24.0f;
 
 inline constexpr std::array<ExplorerSidebarSymbol, 10>
@@ -833,6 +836,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .thumbnail_video_strip_count = 0,
             .icon_grid_label_height = 0.0f,
             .icon_grid_label_font_size = 0.0f,
+            .icon_grid_label_policy = "not_applicable_mobile_row_list",
             .icon_grid_gap = 0.0f,
             .icon_grid_scroll_height = 0.0f,
             .icon_grid_columns = 0,
@@ -1121,6 +1125,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .thumbnail_video_strip_count = k_desktop_thumbnail_video_strip_count,
         .icon_grid_label_height = k_desktop_icon_grid_label_height,
         .icon_grid_label_font_size = k_desktop_icon_grid_label_font_size,
+        .icon_grid_label_policy = k_desktop_icon_grid_label_policy,
         .icon_grid_gap = k_desktop_icon_grid_gap,
         .icon_grid_scroll_height = scroll_height,
         .icon_grid_columns = columns,
@@ -2602,6 +2607,7 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("thumbnail_system", json::Value{std::move(thumbnail_system)});
     out.emplace("icon_grid_label_height", json::Value{chrome.icon_grid_label_height});
     out.emplace("icon_grid_label_font_size", json::Value{chrome.icon_grid_label_font_size});
+    out.emplace("icon_grid_label_policy", json::Value{chrome.icon_grid_label_policy});
     out.emplace("icon_grid_gap", json::Value{chrome.icon_grid_gap});
     out.emplace("icon_grid_scroll_height", json::Value{chrome.icon_grid_scroll_height});
     out.emplace("icon_grid_columns", json::Value{static_cast<std::int64_t>(chrome.icon_grid_columns)});

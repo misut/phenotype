@@ -795,6 +795,49 @@ void pop_utf8_codepoint(std::string& text) {
     text.erase(start);
 }
 
+std::string middle_elide_icon_label_line(
+        phenotype::Painter& painter,
+        std::string text,
+        float max_width,
+        float font_size) {
+    auto const font = finder_font();
+    auto width_of = [&](std::string const& value) {
+        return painter.measure_text(
+            value.c_str(),
+            static_cast<unsigned int>(value.size()),
+            font_size,
+            font);
+    };
+    if (width_of(text) <= max_width)
+        return text;
+
+    std::string suffix;
+    std::string head = text;
+    auto const last_break = text.find_last_of(" _-");
+    if (last_break != std::string::npos
+        && last_break + 1 < text.size()
+        && text.size() - last_break - 1 <= 24) {
+        head = trim_icon_label_line(text.substr(0, last_break));
+        suffix = text.substr(last_break + 1);
+    } else if (auto const dot = text.find_last_of('.');
+               dot != std::string::npos
+               && dot > 0
+               && text.size() - dot <= 8) {
+        head = text.substr(0, dot);
+        suffix = text.substr(dot);
+    }
+
+    while (!head.empty() && width_of(head + "..." + suffix) > max_width)
+        pop_utf8_codepoint(head);
+    if (!head.empty())
+        return head + "..." + suffix;
+
+    head = text;
+    while (!head.empty() && width_of(head + "...") > max_width)
+        pop_utf8_codepoint(head);
+    return head.empty() ? std::string{"..."} : head + "...";
+}
+
 std::vector<std::string> finder_icon_label_lines(
         phenotype::Painter& painter,
         std::string const& label,
@@ -808,36 +851,36 @@ std::vector<std::string> finder_icon_label_lines(
             font_size,
             font);
     };
-    std::vector<std::string> lines;
-    std::string current;
-    for (auto const& token : icon_label_tokens(label)) {
-        auto candidate = current + token;
-        if (!current.empty() && width_of(candidate) > max_width) {
-            lines.push_back(trim_icon_label_line(std::move(current)));
-            current = token;
-            if (lines.size() == 2)
-                break;
-        } else {
-            current = std::move(candidate);
-        }
+    auto const tokens = icon_label_tokens(label);
+    std::string first_line;
+    std::size_t next_token = 0;
+    for (; next_token < tokens.size(); ++next_token) {
+        auto candidate = first_line + tokens[next_token];
+        if (!first_line.empty() && width_of(candidate) > max_width)
+            break;
+        first_line = std::move(candidate);
     }
-    if (lines.size() < 2 && !current.empty())
-        lines.push_back(trim_icon_label_line(std::move(current)));
-    if (lines.empty())
-        lines.push_back(label);
-    if (lines.size() > 2)
-        lines.resize(2);
-    if (lines.size() == 2) {
-        auto& tail = lines.back();
-        bool truncated = false;
-        while (width_of(tail) > max_width && tail.size() > 4) {
-            pop_utf8_codepoint(tail);
-            truncated = true;
-        }
-        if (truncated && width_of(tail + "...") <= max_width)
-            tail += "...";
-    }
-    return lines;
+
+    auto first = trim_icon_label_line(std::move(first_line));
+    if (first.empty())
+        return {middle_elide_icon_label_line(
+            painter,
+            label,
+            max_width,
+            font_size)};
+
+    if (next_token >= tokens.size())
+        return {std::move(first)};
+
+    std::string remainder;
+    for (; next_token < tokens.size(); ++next_token)
+        remainder += tokens[next_token];
+    auto second = middle_elide_icon_label_line(
+        painter,
+        trim_icon_label_line(std::move(remainder)),
+        max_width,
+        font_size);
+    return {std::move(first), std::move(second)};
 }
 
 std::vector<file_explorer_demo::Entry> finder_entries(
