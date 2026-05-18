@@ -111,6 +111,13 @@ Run the package through `mise exec -- exon build` from
 classification can distinguish task-only `mise.toml` edits from toolchain
 changes.
 
+The executable entry point stays intentionally thin. `src/main.cpp` only
+forwards process arguments into `phenotype_cli.app`, while command metadata,
+shared JSON/check helpers, package inspection, icon/SVG inspection, contracts,
+and file-explorer observation live in dedicated C++ modules. New commands
+should extend those modules or add a narrowly named module instead of growing
+the entry point again.
+
 Current commands:
 
 | Command | Status | Notes |
@@ -127,7 +134,7 @@ Current commands:
 | `phenotype package list <root>` | implemented | Scans for package manifests and emits a compact resource catalog for CI and future bundling. |
 | `phenotype package bundle <path> --output <dir>` | implemented | Stages manifest-declared resources into a bundle directory and writes `phenotype.bundle.json` with copied-file records, package checks, app metadata, defaults, debug manifest references, byte counts, content metadata, the pure resource contract, and SHA-256 digests. `--format macos-app` additionally creates a development `.app` layout with `Contents/MacOS`, `Contents/Resources`, `Info.plist`, `PkgInfo`, a package-root launcher, the built example executable, and a generated `.icns` app icon derived from the package-owned SVG `app.icon` through macOS `sips` and `iconutil`. |
 | `phenotype package verify-bundle <dir>` | implemented | Rebuilds the copied package contract from a staged bundle or macOS `.app`, checks `phenotype.bundle.json`, recomputes SHA-256 for every declared resource, generated ICNS app icon, and generated app file, compares stored manifest records against the staged files, and reports the same package checks plus bundle integrity totals. |
-| `phenotype icons catalog` | implemented | Emits the pure `phenotype.icon_catalog` contract for the built-in macOS-style SVG symbol set, including Apple HIG / macOS Finder / SF Symbols semantic reference policy, owned/permissive asset policy, SVG source availability checks, source attribution checks, count checks, all/sidebar/toolbar symbol lists, Finder-style PDF/text/archive file-type symbols, per-symbol role/variant/rendering/layer metadata, regular text-aligned weight policy, explicit monochrome/hierarchical/palette/multicolor capability counts, role-aware presentation defaults, normal/hovered/pressed/selected/disabled state recipes, and Finder-style file-type tint policy. |
+| `phenotype icons catalog` | implemented | Emits the pure `phenotype.icon_catalog` contract for the built-in macOS-style SVG symbol set, including Apple HIG / macOS Finder / SF Symbols semantic reference policy, owned/permissive asset policy, explicit reference-source URLs, SVG source availability checks, source attribution checks, count checks, all/sidebar/toolbar symbol lists, Finder-style PDF/text/archive file-type symbols, per-symbol role/variant/rendering/layer metadata, regular text-aligned weight policy, explicit monochrome/hierarchical/palette/multicolor capability counts, role-aware presentation defaults, normal/hovered/pressed/selected/disabled state recipes, and Finder-style file-type tint policy. |
 | `phenotype icons svg <name-or-reference>` | implemented | Emits the raw audited SVG source for one built-in icon, or a JSON envelope with the matched symbol, semantic reference, asset policy, source attribution, rendering capabilities, byte count, and source. This gives renderer, path-parser, cache, license-audit, and package-debug flows a pure icon source probe without depending on a native window or copied Apple/SF Symbols artwork. |
 | `phenotype icons present <name-or-reference>` | implemented | Resolves one symbol's pure macOS/Finder-style presentation recipe for an explicit role, interaction phase, and selected/disabled state. JSON includes the semantic reference, owned/permissive asset policy, source attribution, rendering mode/capabilities, tone, visible symbol color after opacity, background color, symbol size, effective pressed size, hit target, inset, corner radius, and likely icon layer/pass so screenshots are not required to debug toolbar or sidebar glyph state. |
 | `phenotype icons render <name-or-reference>` | implemented | Wraps the same pure built-in glyph and macOS/Finder-style presentation recipe into a standalone SVG hit target. The raw mode emits SVG for visual probes, while `--json` reports source bytes, viewBox, role/phase state, output path receipt, visible color, background chrome, and the `standalone_svg_wrapper` pass. |
@@ -177,8 +184,10 @@ window control, and drive JSON, and
 built-in icon helper payloads. `phenotype_cli.package`
 now owns package manifest inspection, resource catalog checks, bundling, and
 bundle integrity verification so package edge IO can evolve without expanding
-the dispatcher. New CLI work should prefer adding a focused module over
-expanding `main.cpp`.
+the dispatcher. `phenotype_cli.app` owns the remaining high-level process and
+artifact/run/android dispatch glue, and `main.cpp` is only a tiny entry point.
+New CLI work should prefer adding a focused module over expanding either
+`main.cpp` or the app dispatcher.
 
 Android workflows now follow the same CLI-first rule. The shell scripts under
 `tools/android` remain as the edge adapter implementation because they already

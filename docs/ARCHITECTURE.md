@@ -55,7 +55,11 @@ SVG sources with small phenotype adaptations for hierarchical opacity; the
 policy also allows future Tabler MIT, Iconoir MIT, or Material Symbols
 Apache-2.0 sources. Every embedded external source exposes family, icon name,
 license, license URL, source URL, copyright, modification status, and
-Apple-asset boundary in debug metadata.
+source revision, modification status, and Apple-asset boundary in debug metadata.
+The catalog also exposes structured
+reference-source rows for Apple HIG/SF Symbols, W3C SVG paths, Lucide, and
+Material Symbols so provenance checks can distinguish style references from
+embedded asset sources without inspecting screenshots.
 `icons::macos_presentation(...)` is the
 pure role/state mapper for toolbar, navigation, sidebar, file-type, and action
 symbols. It resolves tone, opacity, scale, hit target, and optical offset from

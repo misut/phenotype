@@ -26,11 +26,37 @@ int main() {
            != std::string_view::npos);
     assert(icons::preferred_external_source_policy().find("Material Symbols Apache-2.0")
            != std::string_view::npos);
+    assert(icons::lucide_source_revision().size() == 40);
     assert(icons::source_attribution_policy().find("source URL")
+           != std::string_view::npos);
+    assert(icons::source_attribution_policy().find("source revision")
            != std::string_view::npos);
     assert(icons::apple_asset_boundary().find("design references only")
            != std::string_view::npos);
     assert(icons::apple_asset_boundary().find("do not extract or embed")
+           != std::string_view::npos);
+    assert(icons::reference_source_count == 5);
+    auto const apple_icons = icons::reference_source_at(0);
+    assert(apple_icons.name.find("Apple") != std::string_view::npos);
+    assert(apple_icons.url.find("developer.apple.com")
+           != std::string_view::npos);
+    assert(!apple_icons.used_as_embedded_asset_source);
+    assert(apple_icons.apple_owned_artwork);
+    auto const svg_paths = icons::reference_source_at(2);
+    assert(svg_paths.name.find("W3C SVG") != std::string_view::npos);
+    assert(svg_paths.url.find("SVG2/paths")
+           != std::string_view::npos);
+    assert(!svg_paths.apple_owned_artwork);
+    auto const lucide_reference = icons::reference_source_at(3);
+    assert(lucide_reference.name == std::string_view{"Lucide"});
+    assert(lucide_reference.license_policy.find("ISC")
+           != std::string_view::npos);
+    assert(lucide_reference.used_as_embedded_asset_source);
+    assert(!lucide_reference.apple_owned_artwork);
+    auto const material_symbols = icons::reference_source_at(4);
+    assert(material_symbols.url.find("material_symbols")
+           != std::string_view::npos);
+    assert(material_symbols.license_policy.find("Apache-2.0")
            != std::string_view::npos);
     assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");
     assert(icons::svg_supported_path_commands().find("A Z")
@@ -147,11 +173,14 @@ int main() {
             assert(attribution.license == "ISC");
             assert(attribution.source_url.find("lucide-icons/lucide")
                    != std::string_view::npos);
+            assert(attribution.source_revision
+                   == icons::lucide_source_revision());
             assert(attribution.modified_for_phenotype);
         } else {
             assert(desc.phenotype_owned);
             assert(attribution.family == "phenotype");
             assert(attribution.license == "MIT");
+            assert(attribution.source_revision == "phenotype-repository");
         }
         assert(!attribution.apple_asset);
         if (attribution.apple_asset)

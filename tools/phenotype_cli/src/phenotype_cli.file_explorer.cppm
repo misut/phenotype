@@ -2,6 +2,7 @@ export module phenotype_cli.file_explorer;
 
 import file_explorer_shared;
 import json;
+import phenotype.icon_catalog;
 import phenotype_cli.common;
 import phenotype_cli.icons;
 import phenotype.resources;
@@ -10,6 +11,7 @@ import std;
 namespace phenotype_cli::file_explorer {
 
 namespace fs = std::filesystem;
+namespace icon_catalog = phenotype::icon_catalog;
 using phenotype_cli::common::Check;
 using phenotype_cli::common::checks_json;
 using phenotype_cli::common::json_string;
@@ -421,7 +423,9 @@ export auto explorer_chrome_json(
         "\"monochrome_symbol_count\":{},"
         "\"regular_weight_symbol_count\":{},"
         "\"palette_symbol_count\":{},\"multicolor_symbol_count\":{},"
-        "\"reference_symbol_count\":{},\"svg_path_arc_symbol_count\":{},"
+        "\"reference_symbol_count\":{},\"reference_source_count\":{},"
+        "\"reference_sources\":{},"
+        "\"svg_path_arc_symbol_count\":{},"
         "\"round_stroke_symbol_count\":{},"
         "\"interaction_phase_count\":{},"
         "\"grid_size\":{},"
@@ -586,6 +590,8 @@ export auto explorer_chrome_json(
         chrome.icon_palette_symbol_count,
         chrome.icon_multicolor_symbol_count,
         chrome.icon_reference_symbol_count,
+        icon_catalog::reference_source_count,
+        icon_reference_sources_json(),
         chrome.icon_svg_path_arc_symbol_count,
         chrome.icon_round_stroke_symbol_count,
         chrome.icon_interaction_phase_count,
