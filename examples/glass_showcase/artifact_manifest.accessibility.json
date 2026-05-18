@@ -152,10 +152,10 @@
     "luminance_curves": {
       "fallback-flat": 7
     },
-    "backdrop_available": 7,
-    "backdrop_stable": 7,
+    "backdrop_available": 0,
+    "backdrop_stable": 0,
     "backdrop_sources": {
-      "previous-presented-frame": 7
+      "none": 7
     },
     "backdrop_access_required": 0,
     "backdrop_access_stable_required": 0,
@@ -195,7 +195,7 @@
     },
     "decision_can_sample_backdrop": 0,
     "decision_backend_supports_backdrop": 7,
-    "decision_backdrop_source_ready": 7,
+    "decision_backdrop_source_ready": 0,
     "decision_next_frame_capture_required": 0,
     "decision_reduced_transparency": 7,
     "decision_increase_contrast": 7,
@@ -309,7 +309,31 @@
     },
     {
       "path": "renderer.material_backdrop_source_ready",
-      "equals": true
+      "equals": false
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_policy",
+      "equals": "copy_only_when_material_plan_requires_shared_or_next_frame_capture"
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_required",
+      "equals": false
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_count",
+      "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_pixels",
+      "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_skipped_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_skip_reason",
+      "equals": "no-material-plan-frame-capture"
     }
   ],
   "require_debug_details": [
