@@ -420,6 +420,22 @@
       "equals": true
     },
     {
+      "path": "renderer.material_executor_summary.backdrop_copy_policy",
+      "equals": "copy_only_when_material_plan_requires_shared_or_next_frame_capture"
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_required",
+      "equals": true
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_skipped_count",
+      "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.backdrop_copy_skip_reason",
+      "equals": "none"
+    },
+    {
       "path": "renderer.material_executor_summary.foreground_pass_after_backdrop_copy",
       "equals": true
     },

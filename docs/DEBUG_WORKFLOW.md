@@ -424,7 +424,10 @@ rejects native window-control palette markers, and requires each file-type SVG
 to be canonically source-equivalent to the audited catalog source. A
 `svg_file_type_icon_provenance` failure with `canonical_match=false` means the
 package asset drifted from its pinned permissive source even if the rendered
-shape still looks similar. The
+shape still looks similar. For a package-independent source audit, run
+`phenotype icons file-types --json`; it emits the same file-type token list,
+semantic references, package asset paths, pinned Lucide raw SVG URLs, license
+metadata, and Apple-artwork boundary without touching the filesystem. The
 `reference_sources` array names the exact Apple HIG/SF Symbols
 semantic references, W3C SVG path reference, Lucide embedded-source reference,
 Feather MIT license-lineage reference, Tabler MIT future-source candidate, and

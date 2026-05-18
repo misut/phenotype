@@ -486,6 +486,17 @@ auto spec() -> cppx::cli::CommandSpec {
                         },
                     },
                     {
+                        .name = "file-types",
+                        .summary =
+                            "Audit Finder-style file-type SVG icon provenance",
+                        .options = {help_option(), json_option()},
+                        .allow_positionals = false,
+                        .examples = {
+                            "phenotype icons file-types --json",
+                            "phenotype icons file-types",
+                        },
+                    },
+                    {
                         .name = "svg",
                         .summary =
                             "Emit one audited built-in icon SVG source",

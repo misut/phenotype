@@ -150,6 +150,12 @@ The initial scope is intentionally narrow:
   Symbols artwork was not embedded, platform-extracted, or runtime-fetched.
   This is the fast command to run before adding file-type icons from web
   references.
+- `phenotype icons file-types` emits the file-explorer package icon contract
+  without reading package files. JSON output lists every Finder-style file-type
+  token, semantic reference, package asset name/source, package asset policy,
+  direct pinned Lucide raw SVG URL, source revision, license metadata, and the
+  Apple artwork boundary. Use it before changing `assets/icons/file-types/*.svg`
+  so package assets stay aligned with the audited permissive catalog source.
 - `phenotype icons svg <name-or-reference>` emits the exact audited SVG
   source for one built-in glyph. The default output is raw SVG for renderer or
   asset-pipeline probes; `--json` wraps the source with the matched symbol,

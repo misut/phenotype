@@ -12,6 +12,7 @@ import phenotype_cli.contracts;
 import phenotype_cli.file_explorer;
 import phenotype_cli.file_explorer_gate;
 import phenotype_cli.glass_showcase;
+import phenotype_cli.icon_file_types;
 import phenotype_cli.icon_sources;
 import phenotype_cli.icons;
 import phenotype_cli.package;
@@ -29,6 +30,7 @@ using namespace phenotype_cli::contracts;
 using namespace phenotype_cli::file_explorer;
 using namespace phenotype_cli::file_explorer_gate;
 using namespace phenotype_cli::glass_showcase;
+using namespace phenotype_cli::icon_file_types;
 using namespace phenotype_cli::icon_sources;
 using namespace phenotype_cli::icons;
 using namespace phenotype_cli::runtime;
@@ -2071,6 +2073,9 @@ int run(int argc, char** argv) {
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "icons", "sources"})
         return run_icons_sources(*parsed);
+    if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "icons", "file-types"})
+        return run_icons_file_types(*parsed);
     if (parsed->command_path
         == std::vector<std::string>{"phenotype", "icons", "svg"})
         return run_icons_svg(*parsed);
