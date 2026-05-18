@@ -615,6 +615,11 @@ void test_builtin_icons_parse() {
     assert(round_stroke_count == icons::round_stroke_symbol_count);
     assert(phenotype_owned_count == icons::phenotype_owned_symbol_count);
     assert(lucide_source_count == icons::lucide_source_symbol_count);
+    assert(icons::lucide_unique_source_icon_count == 34);
+    assert(icons::lucide_source_icon_name_at(28) == "file-text");
+    assert(icons::lucide_source_icon_name_at(
+               icons::lucide_unique_source_icon_count - 1)
+           == "presentation");
     assert(apple_asset_count == icons::apple_asset_symbol_count);
     assert(icons::source_attribution(icons::Symbol::Folder).icon_name
            == "folder");

@@ -1,32 +1,91 @@
 # Third-Party Notices
 
 This repository embeds a small audited subset of SVG icon data from Lucide for
-file-type glyphs in the phenotype icon catalog. The glyphs are used as
-macOS/Finder-style semantic references without embedding Apple, Finder, or SF
-Symbols artwork.
+toolbar, sidebar, and file-type glyphs in the phenotype icon catalog. The
+glyphs are used as macOS/Finder-style semantic references without embedding
+Apple, Finder, or SF Symbols artwork.
 
 ## Lucide Icons
 
 Source: https://github.com/lucide-icons/lucide
 
-Embedded icons:
+Embedded source revision:
+`5b40f2c5a76a27eeb81c8f1b1c311121dee45495`
 
+The runtime catalog currently reports 35 Lucide-backed semantic symbols backed
+by 34 unique Lucide source SVG files. `file-text` is intentionally shared by the
+PDF and plain-text document semantic symbols.
+
+Embedded icon source files:
+
+- `chevron-left`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-left.svg
+- `chevron-right`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-right.svg
+- `search`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/search.svg
+- `share`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/share.svg
+- `tag`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/tag.svg
+- `grid-2x2`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/grid-2x2.svg
+- `list`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/list.svg
+- `columns-3`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/columns-3.svg
+- `gallery-horizontal`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/gallery-horizontal.svg
 - `folder`:
-  https://github.com/lucide-icons/lucide/blob/main/icons/folder.svg
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/folder.svg
+- `trash-2`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/trash-2.svg
 - `file`:
-  https://github.com/lucide-icons/lucide/blob/main/icons/file.svg
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file.svg
 - `file-image`:
-  https://github.com/lucide-icons/lucide/blob/main/icons/file-image.svg
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-image.svg
 - `clapperboard`:
-  https://github.com/lucide-icons/lucide/blob/main/icons/clapperboard.svg
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/clapperboard.svg
+- `plus`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/plus.svg
+- `x`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/x.svg
+- `chevron-down`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-down.svg
+- `chevron-up`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/chevron-up.svg
+- `house`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/house.svg
+- `cloud`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/cloud.svg
+- `clock`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/clock.svg
+- `panel-left`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/panel-left.svg
+- `folder-plus`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/folder-plus.svg
+- `app-window`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/app-window.svg
+- `monitor`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/monitor.svg
+- `circle-arrow-down`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/circle-arrow-down.svg
+- `copy`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/copy.svg
+- `file-plus`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-plus.svg
 - `file-text`:
-  https://github.com/lucide-icons/lucide/blob/main/icons/file-text.svg
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-text.svg
 - `file-archive`:
-  https://github.com/lucide-icons/lucide/blob/main/icons/file-archive.svg
-
-`file-text` is used for both PDF and text document semantic symbols, so the
-runtime catalog reports seven permissive-source symbols backed by six unique
-Lucide source SVG files.
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-archive.svg
+- `file-music`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-music.svg
+- `file-code`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-code.svg
+- `file-spreadsheet`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-spreadsheet.svg
+- `presentation`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/presentation.svg
 
 License: ISC
 

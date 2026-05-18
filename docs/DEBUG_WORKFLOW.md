@@ -374,10 +374,11 @@ as a JSON contract mismatch. `svg_path_arc_symbol_count` proves that multiple
 built-in Finder sidebar and file-type symbols exercise the SVG path arc parser
 in normal example artifacts, while `round_stroke_symbol_count` proves outline
 glyphs stay on the macOS-like round stroke contract. The desktop payload also
-includes `source_attribution_policy`, `lucide_source_symbol_count`, and
-`apple_asset_symbol_count` so permissive-source adoption and Apple-asset
-exclusion are machine-checkable. A healthy Finder-style desktop artifact should
-show 35 Lucide-backed symbols, 4 phenotype-owned symbols, and 0 Apple/SF
+includes `source_attribution_policy`, `lucide_source_symbol_count`,
+`lucide_unique_source_icon_count`, and `apple_asset_symbol_count` so
+permissive-source adoption and Apple-asset exclusion are machine-checkable. A
+healthy Finder-style desktop artifact should show 35 Lucide-backed symbols, 34
+unique Lucide raw SVG source files, 4 phenotype-owned symbols, and 0 Apple/SF
 Symbols assets; mismatches point to `phenotype.icon_catalog` attribution or
 package-resource drift before a renderer bug. Each Lucide-backed symbol reports
 the exact ISC or Feather-derived MIT license and a direct raw SVG URL pinned to

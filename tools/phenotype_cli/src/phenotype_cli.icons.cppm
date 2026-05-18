@@ -205,6 +205,19 @@ auto icon_reference_sources_json() -> std::string {
     return out;
 }
 
+auto icon_lucide_source_icons_json() -> std::string {
+    auto out = std::string{"["};
+    for (unsigned int i = 0;
+         i < icon_catalog::lucide_unique_source_icon_count;
+         ++i) {
+        if (i > 0)
+            out += ",";
+        out += json_string(icon_catalog::lucide_source_icon_name_at(i));
+    }
+    out += "]";
+    return out;
+}
+
 auto icon_interaction_tones_json(bool enabled) -> std::string {
     if (!enabled)
         return "{}";
@@ -1009,6 +1022,9 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && permissive_source_count
                 == icon_catalog::permissive_source_symbol_count
             && lucide_source_count == icon_catalog::lucide_source_symbol_count
+            && icon_catalog::lucide_unique_source_icon_count == 34
+            && icon_catalog::lucide_source_icon_name_at(28)
+                == std::string_view{"file-text"}
             && apple_asset_count == icon_catalog::apple_asset_symbol_count
             && platform_extracted_count
                 == icon_catalog::platform_extracted_symbol_count
@@ -1019,10 +1035,11 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && icon_catalog::apple_asset_boundary().find("do not extract")
                 != std::string_view::npos,
          .detail = std::format(
-             "phenotype_owned={} permissive={} lucide={} apple_asset={} platform_extracted={} runtime_fetch={}",
+             "phenotype_owned={} permissive={} lucide={} lucide_unique={} apple_asset={} platform_extracted={} runtime_fetch={}",
              phenotype_owned_count,
              permissive_source_count,
              lucide_source_count,
+             icon_catalog::lucide_unique_source_icon_count,
              apple_asset_count,
              platform_extracted_count,
              runtime_fetch_count),
@@ -1308,6 +1325,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"reference_sources\":{}}},"
         "\"counts\":{{\"all\":{},\"phenotype_owned\":{},"
         "\"permissive_source\":{},\"lucide_source\":{},"
+        "\"lucide_unique_source_icons\":{},"
         "\"apple_asset\":{},\"platform_extracted\":{},"
         "\"runtime_fetched\":{},\"audited_source\":{},"
         "\"sidebar\":{},\"toolbar\":{},"
@@ -1318,6 +1336,8 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"reference\":{},\"reference_sources\":{},"
         "\"svg_path_arc\":{},\"round_stroke\":{},"
         "\"interaction_phases\":{}}},"
+        "\"source_icons\":{{\"lucide_revision\":{},"
+        "\"lucide_unique_count\":{},\"lucide_icon_names\":{}}},"
         "\"symbols\":{},\"sidebar_symbols\":{},"
         "\"toolbar_symbols\":{},\"file_type_symbols\":{},\"checks\":{}}}",
         all_ok(checks) ? "true" : "false",
@@ -1362,6 +1382,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_catalog::phenotype_owned_symbol_count,
         icon_catalog::permissive_source_symbol_count,
         icon_catalog::lucide_source_symbol_count,
+        icon_catalog::lucide_unique_source_icon_count,
         icon_catalog::apple_asset_symbol_count,
         icon_catalog::platform_extracted_symbol_count,
         icon_catalog::runtime_fetched_symbol_count,
@@ -1381,6 +1402,9 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         icon_catalog::svg_path_arc_symbol_count,
         icon_catalog::round_stroke_symbol_count,
         icon_catalog::symbol_interaction_phase_count,
+        json_string(icon_catalog::lucide_source_revision()),
+        icon_catalog::lucide_unique_source_icon_count,
+        icon_lucide_source_icons_json(),
         icon_symbol_set_json(IconCatalogSet::All),
         icon_symbol_set_json(IconCatalogSet::Sidebar),
         icon_symbol_set_json(IconCatalogSet::Toolbar),

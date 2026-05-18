@@ -4383,6 +4383,7 @@ void test_icon_catalog_umbrella_export() {
     assert(phenotype::icon_catalog::phenotype_owned_symbol_count == 4);
     assert(phenotype::icon_catalog::permissive_source_symbol_count == 35);
     assert(phenotype::icon_catalog::lucide_source_symbol_count == 35);
+    assert(phenotype::icon_catalog::lucide_unique_source_icon_count == 34);
     assert(phenotype::icon_catalog::apple_asset_symbol_count == 0);
     assert(phenotype::icon_catalog::svg_path_arc_symbol_count == 16);
     assert(phenotype::icon_catalog::round_stroke_symbol_count

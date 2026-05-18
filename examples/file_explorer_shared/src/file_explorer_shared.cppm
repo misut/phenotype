@@ -321,6 +321,7 @@ struct ExplorerChromeMetrics {
     int icon_phenotype_owned_symbol_count = 0;
     int icon_permissive_source_symbol_count = 0;
     int icon_lucide_source_symbol_count = 0;
+    int icon_lucide_unique_source_icon_count = 0;
     int icon_apple_asset_symbol_count = 0;
     int icon_platform_extracted_symbol_count = 0;
     int icon_runtime_fetched_symbol_count = 0;
@@ -560,7 +561,7 @@ inline constexpr float k_desktop_toolbar_action_group_width = 128.0f;
 inline constexpr float k_desktop_toolbar_search_collapsed_width = 48.0f;
 inline constexpr float k_desktop_toolbar_icon_button_width = 38.0f;
 inline constexpr float k_desktop_toolbar_icon_button_height = 36.0f;
-inline constexpr float k_desktop_titlebar_control_cluster_height = 52.0f;
+inline constexpr float k_desktop_titlebar_control_cluster_height = 40.0f;
 inline constexpr float k_desktop_titlebar_control_diameter = 13.0f;
 inline constexpr float k_desktop_titlebar_control_spacing = 23.0f;
 inline constexpr float k_desktop_titlebar_control_start_x = 20.0f;
@@ -1113,6 +1114,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
                 static_cast<int>(icon_catalog::permissive_source_symbol_count),
             .icon_lucide_source_symbol_count =
                 static_cast<int>(icon_catalog::lucide_source_symbol_count),
+            .icon_lucide_unique_source_icon_count =
+                static_cast<int>(
+                    icon_catalog::lucide_unique_source_icon_count),
             .icon_apple_asset_symbol_count =
                 static_cast<int>(icon_catalog::apple_asset_symbol_count),
             .icon_platform_extracted_symbol_count =
@@ -1467,6 +1471,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             static_cast<int>(icon_catalog::permissive_source_symbol_count),
         .icon_lucide_source_symbol_count =
             static_cast<int>(icon_catalog::lucide_source_symbol_count),
+        .icon_lucide_unique_source_icon_count =
+            static_cast<int>(icon_catalog::lucide_unique_source_icon_count),
         .icon_apple_asset_symbol_count =
             static_cast<int>(icon_catalog::apple_asset_symbol_count),
         .icon_platform_extracted_symbol_count =
@@ -3018,6 +3024,10 @@ inline json::Value explorer_chrome_debug_json(
         "lucide_source_symbol_count",
         json::Value{static_cast<std::int64_t>(
             chrome.icon_lucide_source_symbol_count)});
+    icon_system.emplace(
+        "lucide_unique_source_icon_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_lucide_unique_source_icon_count)});
     icon_system.emplace(
         "apple_asset_symbol_count",
         json::Value{static_cast<std::int64_t>(
