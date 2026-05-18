@@ -435,7 +435,11 @@ duplicate
            == demo::k_desktop_icon_grid_label_font_size);
     assert(chrome.icon_grid_label_policy
            == demo::k_desktop_icon_grid_label_policy);
+    assert(chrome.icon_grid_top_inset
+           == demo::k_desktop_icon_grid_top_inset);
     assert(chrome.icon_grid_gap == demo::k_desktop_icon_grid_gap);
+    assert(chrome.finder_density_policy
+           == demo::k_desktop_finder_density_policy);
     assert(chrome.toolbar_group_count == 5);
     assert(chrome.toolbar_separator_count == 3);
     assert(chrome.toolbar_icon_button_count == 11);
@@ -880,6 +884,10 @@ duplicate
     assert(debug_text.find("\"icon_grid_label_font_size\"") != std::string::npos);
     assert(debug_text.find(
         "\"icon_grid_label_policy\":\"finder_two_line_middle_ellipsis_preserve_suffix\"")
+        != std::string::npos);
+    assert(debug_text.find("\"icon_grid_top_inset\":8") != std::string::npos);
+    assert(debug_text.find(
+        "\"finder_density_policy\":\"finder_reference_density_icon_grid_top_inset_v1\"")
         != std::string::npos);
     assert(debug_text.find("\"sidebar_icon_size\"") != std::string::npos);
     assert(debug_text.find("\"sidebar_label_leading\"") != std::string::npos);

@@ -1,21 +1,28 @@
 export module phenotype_cli.file_explorer;
 
+import cppx.cli;
+import cppx.terminal;
 import file_explorer_shared;
 import json;
 import phenotype.icon_catalog;
 import phenotype_cli.common;
 import phenotype_cli.icons;
+import phenotype_cli.package;
 import phenotype.resources;
 import std;
 
 namespace phenotype_cli::file_explorer {
 
 namespace fs = std::filesystem;
+namespace cli_package = phenotype_cli::package;
 namespace icon_catalog = phenotype::icon_catalog;
 using phenotype_cli::common::Check;
+using phenotype_cli::common::all_ok;
 using phenotype_cli::common::checks_json;
 using phenotype_cli::common::json_string;
 using phenotype_cli::common::path_string;
+using phenotype_cli::common::print_error;
+using phenotype_cli::common::read_text_file;
 using phenotype_cli::common::resource_diagnostics_json;
 using namespace phenotype_cli::icons;
 
@@ -359,14 +366,15 @@ export auto explorer_chrome_json(
         "\"toolbar_group_height\":{},"
         "\"toolbar_group_radius\":{},\"toolbar_icon_button_width\":{},"
         "\"toolbar_icon_button_height\":{},\"window_radius\":{},"
+        "\"finder_density_policy\":{},"
         "\"icon_grid\":{{\"columns\":{},\"visible_rows\":{},"
         "\"visible_capacity\":{},\"column_width\":{},\"row_height\":{},"
-        "\"column_pitch\":{},\"scroll_height\":{}}},"
+        "\"top_inset\":{},\"column_pitch\":{},\"scroll_height\":{}}},"
         "\"thumbnail_system\":{},"
         "\"toolbar\":{{\"group_count\":{},\"separator_count\":{},"
         "\"icon_button_count\":{},\"overflow_action_button_count\":{},"
         "\"finder_segmented\":{},\"more_actions_open\":{},"
-        "\"status_bar_visible\":{}}},"
+        "\"status_bar_visible\":{},\"finder_density_policy\":{}}},"
         "\"column_locations\":{{\"row_count\":{},\"row_height\":{},"
         "\"icon_size\":{}}},"
         "\"native_window\":{{\"integrated_titlebar\":{},"
@@ -397,7 +405,8 @@ export auto explorer_chrome_json(
         "\"toolbar_action_group_x\":{},\"toolbar_search_group_x\":{},"
         "\"content_surface_x\":{},\"content_surface_y\":{},"
         "\"content_surface_width\":{},\"sidebar_surface_x\":{},"
-        "\"sidebar_surface_y\":{},\"sidebar_first_row_y\":{}}},"
+        "\"sidebar_surface_y\":{},\"sidebar_first_row_y\":{},"
+        "\"finder_density_policy\":{},\"icon_grid_top_inset\":{}}},"
         "\"icon_system\":{{\"module\":{},\"style\":{},"
         "\"source_format\":{},"
         "\"svg_subset_policy\":{},\"svg_supported_elements\":{},"
@@ -499,11 +508,13 @@ export auto explorer_chrome_json(
         chrome.toolbar_icon_button_width,
         chrome.toolbar_icon_button_height,
         chrome.window_radius,
+        json_string(chrome.finder_density_policy),
         chrome.icon_grid_columns,
         chrome.icon_grid_visible_rows,
         chrome.icon_grid_visible_capacity,
         chrome.icon_grid_column_width,
         chrome.icon_grid_row_height,
+        chrome.icon_grid_top_inset,
         chrome.icon_grid_column_pitch,
         chrome.icon_grid_scroll_height,
         thumbnail_system,
@@ -514,6 +525,7 @@ export auto explorer_chrome_json(
         chrome.finder_segmented_toolbar ? "true" : "false",
         chrome.more_actions_open ? "true" : "false",
         chrome.status_bar_visible ? "true" : "false",
+        json_string(chrome.finder_density_policy),
         chrome.column_location_row_count,
         chrome.column_location_row_height,
         chrome.column_location_icon_size,
@@ -557,6 +569,8 @@ export auto explorer_chrome_json(
         chrome.sidebar_surface_x,
         chrome.sidebar_surface_y,
         chrome.sidebar_first_row_y,
+        json_string(chrome.finder_density_policy),
+        chrome.icon_grid_top_inset,
         json_string(chrome.icon_module),
         json_string(chrome.icon_style),
         json_string(chrome.icon_source_format),
@@ -818,6 +832,242 @@ export auto explorer_drive_json(
         explorer_entries_json(snap.entries),
         explorer_trace_array_json(result.trace, result.profile),
         explorer_expectations_json(expectations));
+}
+
+export auto parse_explorer_input_script(fs::path const& path)
+    -> std::expected<std::vector<file_explorer_demo::ExplorerInput>, std::string> {
+    auto ec = std::error_code{};
+    if (!fs::exists(path, ec)) {
+        return std::unexpected{
+            std::format("input script does not exist: {}", path_string(path))};
+    }
+    auto text = read_text_file(path);
+    auto parsed = file_explorer_demo::parse_explorer_input_lines(
+        text,
+        path_string(path));
+    if (!parsed.ok)
+        return std::unexpected{parsed.error};
+    return std::move(parsed.inputs);
+}
+
+export auto join_explorer_input_lines(std::span<std::string const> inputs)
+    -> std::string {
+    auto out = std::string{};
+    for (auto const& input : inputs) {
+        if (!out.empty())
+            out.push_back('\n');
+        out += input;
+    }
+    return out;
+}
+
+export auto explorer_drive_resources(
+        std::string_view profile,
+        cppx::cli::Invocation const& invocation)
+    -> std::expected<ExplorerDriveResources, std::string> {
+    auto resources = ExplorerDriveResources{};
+    resources.catalog =
+        file_explorer_demo::file_explorer_resource_catalog(profile);
+
+    if (auto package_root = invocation.value("package")) {
+        auto package =
+            cli_package::package_summary(fs::path{std::string{*package_root}});
+        auto checks = cli_package::package_checks(package);
+        if (!all_ok(checks)) {
+            return std::unexpected{std::format(
+                "package resources failed checks: {}",
+                path_string(package.root))};
+        }
+        resources.source = "package";
+        resources.package_root = package.root;
+        resources.catalog = std::move(package.catalog);
+        resources.diagnostics = std::move(package.catalog_diagnostics);
+        resources.checks = std::move(checks);
+    }
+
+    resources.locale = resources.catalog.default_locale.empty()
+        ? "en"
+        : resources.catalog.default_locale;
+    if (auto locale = invocation.value("locale"))
+        resources.locale = std::string{*locale};
+    return resources;
+}
+
+export auto parse_explorer_expectations(
+        cppx::cli::Invocation const& invocation)
+    -> std::expected<std::vector<file_explorer_demo::ExplorerExpectation>,
+                     std::string> {
+    auto expectations = std::vector<file_explorer_demo::ExplorerExpectation>{};
+    for (auto const& raw : invocation.values("expect")) {
+        auto parsed = file_explorer_demo::parse_explorer_expectation(raw);
+        if (!parsed.ok)
+            return std::unexpected{parsed.error};
+        expectations.push_back(std::move(parsed.expectation));
+    }
+    return expectations;
+}
+
+export int run_drive_file_explorer(cppx::cli::Invocation const& invocation) {
+    auto profile = std::string{"desktop"};
+    if (auto value = invocation.value("profile"))
+        profile = std::string{*value};
+    auto normalized_profile = file_explorer_demo::lower_copy(profile);
+    if (normalized_profile != "desktop" && normalized_profile != "mobile") {
+        return print_error(
+            "drive file-explorer",
+            "profile must be 'desktop' or 'mobile'",
+            invocation.has("json"));
+    }
+
+    auto inputs = std::vector<file_explorer_demo::ExplorerInput>{};
+    if (auto scenario = invocation.value("scenario")) {
+        inputs.push_back({
+            .kind = file_explorer_demo::ExplorerInputKind::Scenario,
+            .value = std::string{*scenario},
+        });
+    }
+    for (auto const& script : invocation.values("script")) {
+        auto parsed = parse_explorer_input_script(fs::path{script});
+        if (!parsed) {
+            return print_error(
+                "drive file-explorer",
+                parsed.error(),
+                invocation.has("json"));
+        }
+        inputs.insert(inputs.end(),
+                      std::make_move_iterator(parsed->begin()),
+                      std::make_move_iterator(parsed->end()));
+    }
+    for (auto const& raw : invocation.values("input")) {
+        auto parsed = file_explorer_demo::parse_explorer_input(raw);
+        if (!parsed.ok) {
+            return print_error(
+                "drive file-explorer",
+                parsed.error,
+                invocation.has("json"));
+        }
+        inputs.push_back(std::move(parsed.input));
+    }
+
+    auto resources = explorer_drive_resources(normalized_profile, invocation);
+    if (!resources) {
+        return print_error(
+            "drive file-explorer",
+            resources.error(),
+            invocation.has("json"));
+    }
+    auto labels = file_explorer_demo::file_explorer_labels(
+        resources->locale,
+        resources->catalog);
+    auto expectations = parse_explorer_expectations(invocation);
+    if (!expectations) {
+        return print_error(
+            "drive file-explorer",
+            expectations.error(),
+            invocation.has("json"));
+    }
+
+    auto result = file_explorer_demo::drive_explorer(
+        normalized_profile,
+        inputs);
+    auto checked_expectations =
+        file_explorer_demo::check_explorer_expectations(
+            result,
+            *expectations);
+    if (invocation.has("json")) {
+        std::println("{}",
+                     explorer_drive_json(
+                         result,
+                         *resources,
+                         labels,
+                         checked_expectations));
+    } else {
+        auto const& snap = result.snapshot;
+        auto lines = std::vector<cppx::terminal::StatusLine>{
+            {.label = "profile",
+             .value = result.profile,
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "locale",
+             .value = resources->locale,
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "resources",
+             .value = resources->source == "package"
+                ? path_string(resources->package_root)
+                : "builtin",
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "location",
+             .value = snap.relative_location,
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "selected",
+             .value = snap.has_selection ? snap.selected.name : "<none>",
+             .status = snap.has_selection ? cppx::terminal::StatusKind::ok
+                                          : cppx::terminal::StatusKind::skip},
+            {.label = "entries",
+             .value = std::format("{} files, {} folders",
+                                  snap.file_count,
+                                  snap.folder_count),
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "view",
+             .value = file_explorer_demo::view_mode_label(snap.view_mode),
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "focus",
+             .value = std::format(
+                 "{} visible={} modality={}",
+                 file_explorer_demo::focus_target_value_name(
+                     result.state.focus_target),
+                 result.state.focus_visible ? "true" : "false",
+                 file_explorer_demo::input_modality_value_name(
+                     result.state.last_input_modality)),
+             .status = result.state.focus_visible
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::skip},
+            {.label = "chrome",
+             .value = std::format("{} cols x {} rows, viewport {}x{}@{}",
+                                  result.chrome.icon_grid_columns,
+                                  result.chrome.icon_grid_visible_rows,
+                                  result.chrome.viewport.width,
+                                  result.chrome.viewport.height,
+                                  result.chrome.viewport.scale),
+             .status = cppx::terminal::StatusKind::ok},
+            {.label = "status",
+             .value = result.state.status,
+             .status = explorer_drive_ok(result)
+                ? cppx::terminal::StatusKind::ok
+                : cppx::terminal::StatusKind::fail},
+        };
+        if (!result.state.last_operation.kind.empty()) {
+            lines.push_back({
+                .label = "operation",
+                .value = file_explorer_demo::operation_label(
+                    result.state.last_operation),
+                .status = result.state.last_operation.ok
+                    ? cppx::terminal::StatusKind::ok
+                    : cppx::terminal::StatusKind::fail,
+            });
+        }
+        std::println("phenotype drive file-explorer");
+        std::println("{}", cppx::terminal::format_status_frame(lines, false));
+        if (!checked_expectations.empty()) {
+            std::println("expectations:");
+            for (auto const& expectation : checked_expectations) {
+                std::println("  - {} -> {} ({})",
+                             file_explorer_demo::explorer_expectation_label(
+                                 expectation.expectation),
+                             expectation.ok ? "ok" : "failed",
+                             expectation.actual);
+            }
+        }
+        if (!result.trace.empty()) {
+            std::println("inputs:");
+            for (auto const& trace : result.trace) {
+                std::println("  - {} -> {}",
+                             file_explorer_demo::explorer_input_label(
+                                 trace.input),
+                             trace.status);
+            }
+        }
+    }
+    return explorer_contract_ok(result, checked_expectations) ? 0 : 1;
 }
 
 
