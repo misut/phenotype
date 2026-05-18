@@ -251,6 +251,25 @@ auto file_explorer_verifier_args(fs::path const& root,
     append_required_debug_detail(
         args,
         "application.file_explorer.input_model.focus_visible=false");
+    append_required_debug_detail(args, "platform_runtime.focus_visible=false");
+    if (profile == "desktop") {
+        append_required_debug_detail(args, "window.chrome=\"integrated_titlebar\"");
+        append_required_debug_detail(args, "window.titlebar_transparent=true");
+        append_required_debug_detail(args, "window.full_size_content_view=true");
+        append_required_debug_detail(args, "window.title_hidden=true");
+        append_required_debug_detail(
+            args,
+            "window.native_window_controls.integrated_in_content_area=true");
+        append_required_debug_detail(
+            args,
+            "window.native_window_controls.duplicate_window_controls=false");
+        append_required_debug_detail(
+            args,
+            "window.native_window_controls.content_drawn_window_control_count=0");
+        append_required_debug_detail(
+            args,
+            "window.native_window_controls.artifact_drawn_window_control_count=0");
+    }
     auto scenario_extra =
         append_file_explorer_scenario_requirements(args, scenario);
     if (!scenario_extra)

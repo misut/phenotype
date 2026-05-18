@@ -186,6 +186,10 @@
       "equals": "none"
     },
     {
+      "path": "platform_runtime.focus_visible",
+      "equals": false
+    },
+    {
       "path": "application.file_explorer.relative_location",
       "equals": "Demo Root"
     },
