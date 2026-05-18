@@ -395,12 +395,24 @@
       "equals": 0
     },
     {
+      "path": "application.file_explorer.chrome.native_window.content_drawn_window_control_count",
+      "equals": 0
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.artifact_drawn_window_control_count",
+      "equals": 0
+    },
+    {
       "path": "application.file_explorer.chrome.native_window.window_control_render_policy",
       "equals": "native_controls_runtime_only_no_content_or_artifact_markers"
     },
     {
       "path": "application.file_explorer.chrome.native_window.titlebar_control_reserve_policy",
       "equals": "blank_reserve_under_os_window_controls"
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.native_window_control_integration_policy",
+      "equals": "platform_standard_controls_inside_leading_content_reserve"
     },
     {
       "path": "application.file_explorer.chrome.native_window.titlebar_drag_region_height",
@@ -1182,12 +1194,24 @@
       "equals": 0
     },
     {
+      "path": "application.file_explorer.chrome.content_drawn_window_control_count",
+      "equals": 0
+    },
+    {
+      "path": "application.file_explorer.chrome.artifact_drawn_window_control_count",
+      "equals": 0
+    },
+    {
       "path": "application.file_explorer.chrome.window_control_render_policy",
       "equals": "native_controls_runtime_only_no_content_or_artifact_markers"
     },
     {
       "path": "application.file_explorer.chrome.titlebar_control_reserve_policy",
       "equals": "blank_reserve_under_os_window_controls"
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window_control_integration_policy",
+      "equals": "platform_standard_controls_inside_leading_content_reserve"
     },
     {
       "path": "application.file_explorer.chrome.more_actions_open",
@@ -1351,6 +1375,54 @@
     {
       "path": "window.native_controls_owned_by_os",
       "equals": true
+    },
+    {
+      "path": "window.native_window_controls.ownership_policy",
+      "equals": "platform_edge_standard_buttons_only"
+    },
+    {
+      "path": "window.native_window_controls.integration_policy",
+      "equals": "standard_buttons_inside_leading_content_reserve"
+    },
+    {
+      "path": "window.native_window_controls.expected_count",
+      "equals": 3
+    },
+    {
+      "path": "window.native_window_controls.present_count",
+      "equals": 3
+    },
+    {
+      "path": "window.native_window_controls.visible_count",
+      "equals": 3
+    },
+    {
+      "path": "window.native_window_controls.hidden_count",
+      "equals": 0
+    },
+    {
+      "path": "window.native_window_controls.within_leading_reserve_count",
+      "equals": 3
+    },
+    {
+      "path": "window.native_window_controls.all_buttons_within_leading_reserve",
+      "equals": true
+    },
+    {
+      "path": "window.native_window_controls.integrated_in_content_area",
+      "equals": true
+    },
+    {
+      "path": "window.native_window_controls.duplicate_window_controls",
+      "equals": false
+    },
+    {
+      "path": "window.native_window_controls.content_drawn_window_control_count",
+      "equals": 0
+    },
+    {
+      "path": "window.native_window_controls.artifact_drawn_window_control_count",
+      "equals": 0
     },
     {
       "path": "window.toolkit_window_shim",

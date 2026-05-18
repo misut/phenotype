@@ -798,6 +798,10 @@ def check_file_explorer_native_chrome_contract(
             "content_window_control_marker_count"),
         "artifact_window_control_marker_count": native_window.get(
             "artifact_window_control_marker_count"),
+        "content_drawn_window_control_count": native_window.get(
+            "content_drawn_window_control_count", 0),
+        "artifact_drawn_window_control_count": native_window.get(
+            "artifact_drawn_window_control_count", 0),
     }
     report.check(
         "file explorer does not draw duplicate native window controls",
@@ -805,7 +809,9 @@ def check_file_explorer_native_chrome_contract(
         and marker_fields["content_window_control_markers"] is False
         and marker_fields["artifact_window_control_markers"] is False
         and marker_fields["content_window_control_marker_count"] == 0
-        and marker_fields["artifact_window_control_marker_count"] == 0,
+        and marker_fields["artifact_window_control_marker_count"] == 0
+        and marker_fields["content_drawn_window_control_count"] == 0
+        and marker_fields["artifact_drawn_window_control_count"] == 0,
         path="debug.application.file_explorer.chrome.native_window",
         expected={
             "duplicate_window_controls": False,
@@ -813,6 +819,8 @@ def check_file_explorer_native_chrome_contract(
             "artifact_window_control_markers": False,
             "content_window_control_marker_count": 0,
             "artifact_window_control_marker_count": 0,
+            "content_drawn_window_control_count": 0,
+            "artifact_drawn_window_control_count": 0,
         },
         actual=marker_fields,
         likely_layer="native-window-chrome",
@@ -849,6 +857,53 @@ def check_file_explorer_native_chrome_contract(
                 "If traffic lights appear twice, inspect the shared "
                 "ExplorerChromeMetrics native_window_control_owner fields "
                 "before adding content-side controls."))
+
+        runtime_window = object_at(debug, "platform_runtime.details.window")
+        if isinstance(runtime_window, dict) and (
+                runtime_window.get("surface_kind") == "macos_window"):
+            runtime_controls = object_at(runtime_window, "native_window_controls")
+            actual = runtime_controls if isinstance(runtime_controls, dict) else None
+            report.check(
+                "file explorer native window buttons are integrated into content chrome",
+                isinstance(actual, dict)
+                and actual.get("ownership_policy")
+                == "platform_edge_standard_buttons_only"
+                and actual.get("integration_policy")
+                == "standard_buttons_inside_leading_content_reserve"
+                and actual.get("expected_count") == 3
+                and actual.get("present_count") == 3
+                and actual.get("visible_count") == 3
+                and actual.get("hidden_count") == 0
+                and actual.get("within_leading_reserve_count") == 3
+                and actual.get("all_buttons_within_leading_reserve") is True
+                and actual.get("integrated_in_content_area") is True
+                and actual.get("duplicate_window_controls") is False
+                and actual.get("content_drawn_window_control_count") == 0
+                and actual.get("artifact_drawn_window_control_count") == 0,
+                path="debug.platform_runtime.details.window.native_window_controls",
+                expected={
+                    "ownership_policy": "platform_edge_standard_buttons_only",
+                    "integration_policy": (
+                        "standard_buttons_inside_leading_content_reserve"),
+                    "expected_count": 3,
+                    "present_count": 3,
+                    "visible_count": 3,
+                    "hidden_count": 0,
+                    "within_leading_reserve_count": 3,
+                    "all_buttons_within_leading_reserve": True,
+                    "integrated_in_content_area": True,
+                    "duplicate_window_controls": False,
+                    "content_drawn_window_control_count": 0,
+                    "artifact_drawn_window_control_count": 0,
+                },
+                actual=actual,
+                likely_layer="native-window-chrome",
+                likely_pass="appkit-standard-window-buttons",
+                hint=(
+                    "The live AppKit traffic lights must be the only window "
+                    "buttons and must sit inside the leading content reserve; "
+                    "otherwise users see a separate titlebar or duplicated "
+                    "content-side controls."))
 
 
 def list_of_strings(value: Any, key: str) -> list[str]:

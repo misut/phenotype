@@ -666,6 +666,21 @@ inline SEL sel_is_main_window() {
     return sel;
 }
 
+inline SEL sel_is_hidden() {
+    static auto sel = sel_registerName("isHidden");
+    return sel;
+}
+
+inline SEL sel_standard_window_button() {
+    static auto sel = sel_registerName("standardWindowButton:");
+    return sel;
+}
+
+inline SEL sel_superview() {
+    static auto sel = sel_registerName("superview");
+    return sel;
+}
+
 inline SEL sel_collection_behavior() {
     static auto sel = sel_registerName("collectionBehavior");
     return sel;
@@ -7908,6 +7923,17 @@ struct WindowServerSnapshot {
     double h = 0.0;
 };
 
+struct StandardWindowButtonSnapshot {
+    std::string_view name;
+    bool present = false;
+    bool hidden = false;
+    bool visible = false;
+    bool within_leading_reserve = false;
+    ::phenotype::diag::RectSnapshot frame{};
+    ::phenotype::diag::RectSnapshot content_frame{};
+    ::phenotype::diag::RectSnapshot top_left_content_frame{};
+};
+
 inline std::optional<std::int64_t> cf_number_to_i64(CFTypeRef value) {
     if (!value || CFGetTypeID(value) != CFNumberGetTypeID())
         return std::nullopt;
@@ -7936,6 +7962,196 @@ inline std::optional<CGRect> window_bounds_from_info(CFDictionaryRef info) {
             &rect))
         return std::nullopt;
     return rect;
+}
+
+inline CGRect rect_to_top_left_space(CGRect rect, CGRect bounds) {
+    if (CGRectIsNull(rect) || CGRectIsNull(bounds))
+        return CGRectNull;
+    CGRect out = rect;
+    out.origin.y = bounds.size.height - rect.origin.y - rect.size.height;
+    return out;
+}
+
+inline bool rect_snapshot_inside_top_left_reserve(
+        ::phenotype::diag::RectSnapshot const& rect,
+        IntegratedTitlebarOptions const& options) {
+    if (!rect.valid)
+        return false;
+    constexpr float tolerance = 0.5f;
+    float const max_x = rect.x + rect.w;
+    float const max_y = rect.y + rect.h;
+    return rect.x >= -tolerance
+        && rect.y >= -tolerance
+        && max_x <= options.leading_control_reserved_width + tolerance
+        && max_y <= options.height + tolerance;
+}
+
+inline StandardWindowButtonSnapshot standard_window_button_snapshot(
+        id ns_window,
+        id content_view,
+        std::string_view name,
+        long button_kind,
+        IntegratedTitlebarOptions const& titlebar_options) {
+    auto snapshot = StandardWindowButtonSnapshot{.name = name};
+    if (!ns_window || !objc_responds_to(ns_window, sel_standard_window_button()))
+        return snapshot;
+
+    id button = objc_send<id>(
+        ns_window,
+        sel_standard_window_button(),
+        button_kind);
+    if (!button)
+        return snapshot;
+
+    snapshot.present = true;
+    snapshot.hidden = objc_responds_to(button, sel_is_hidden())
+        && objc_send<bool>(button, sel_is_hidden());
+    snapshot.visible = !snapshot.hidden;
+
+    CGRect frame = objc_responds_to(button, sel_frame())
+        ? objc_send<CGRect>(button, sel_frame())
+        : CGRectNull;
+    snapshot.frame = rect_snapshot(frame);
+
+    id superview = objc_responds_to(button, sel_superview())
+        ? objc_send<id>(button, sel_superview())
+        : nullptr;
+    CGRect content_frame = CGRectNull;
+    if (!CGRectIsNull(frame) && superview && content_view
+        && objc_responds_to(superview, sel_convert_rect_to_view())) {
+        content_frame = objc_send<CGRect>(
+            superview,
+            sel_convert_rect_to_view(),
+            frame,
+            content_view);
+    } else {
+        content_frame = frame;
+    }
+    snapshot.content_frame = rect_snapshot(content_frame);
+
+    CGRect bounds = content_view && objc_responds_to(content_view, sel_bounds())
+        ? objc_send<CGRect>(content_view, sel_bounds())
+        : CGRectNull;
+    snapshot.top_left_content_frame =
+        rect_snapshot(rect_to_top_left_space(content_frame, bounds));
+    snapshot.within_leading_reserve =
+        snapshot.visible
+        && rect_snapshot_inside_top_left_reserve(
+            snapshot.top_left_content_frame,
+            titlebar_options);
+    return snapshot;
+}
+
+inline json::Value standard_window_button_json(
+        StandardWindowButtonSnapshot const& button) {
+    json::Object out;
+    out.emplace("name", json::Value{std::string(button.name)});
+    out.emplace("present", json::Value{button.present});
+    out.emplace("hidden", json::Value{button.hidden});
+    out.emplace("visible", json::Value{button.visible});
+    out.emplace(
+        "within_leading_reserve",
+        json::Value{button.within_leading_reserve});
+    out.emplace("frame", ::phenotype::diag::rect_to_json(button.frame));
+    out.emplace(
+        "content_frame",
+        ::phenotype::diag::rect_to_json(button.content_frame));
+    out.emplace(
+        "top_left_content_frame",
+        ::phenotype::diag::rect_to_json(button.top_left_content_frame));
+    return json::Value{std::move(out)};
+}
+
+inline json::Value native_window_controls_runtime_json(
+        id ns_window,
+        id content_view,
+        IntegratedTitlebarOptions const& titlebar_options,
+        bool full_size_content_view,
+        bool titlebar_transparent,
+        bool title_hidden) {
+    auto const buttons = std::array{
+        standard_window_button_snapshot(
+            ns_window,
+            content_view,
+            "close",
+            0,
+            titlebar_options),
+        standard_window_button_snapshot(
+            ns_window,
+            content_view,
+            "minimize",
+            1,
+            titlebar_options),
+        standard_window_button_snapshot(
+            ns_window,
+            content_view,
+            "zoom",
+            2,
+            titlebar_options),
+    };
+
+    int present_count = 0;
+    int visible_count = 0;
+    int hidden_count = 0;
+    int within_reserve_count = 0;
+    json::Array button_json;
+    for (auto const& button : buttons) {
+        if (button.present)
+            ++present_count;
+        if (button.visible)
+            ++visible_count;
+        if (button.hidden)
+            ++hidden_count;
+        if (button.within_leading_reserve)
+            ++within_reserve_count;
+        button_json.push_back(standard_window_button_json(button));
+    }
+
+    bool const expected_buttons_visible = present_count == 3
+        && visible_count == 3
+        && hidden_count == 0;
+    bool const all_buttons_within_reserve = within_reserve_count == 3;
+    bool const integrated = full_size_content_view
+        && titlebar_transparent
+        && title_hidden
+        && expected_buttons_visible
+        && all_buttons_within_reserve;
+
+    json::Object controls;
+    controls.emplace(
+        "ownership_policy",
+        json::Value{"platform_edge_standard_buttons_only"});
+    controls.emplace(
+        "integration_policy",
+        json::Value{"standard_buttons_inside_leading_content_reserve"});
+    controls.emplace("expected_count", json::Value{std::int64_t{3}});
+    controls.emplace(
+        "present_count",
+        json::Value{static_cast<std::int64_t>(present_count)});
+    controls.emplace(
+        "visible_count",
+        json::Value{static_cast<std::int64_t>(visible_count)});
+    controls.emplace(
+        "hidden_count",
+        json::Value{static_cast<std::int64_t>(hidden_count)});
+    controls.emplace(
+        "within_leading_reserve_count",
+        json::Value{static_cast<std::int64_t>(within_reserve_count)});
+    controls.emplace(
+        "all_buttons_within_leading_reserve",
+        json::Value{all_buttons_within_reserve});
+    controls.emplace(
+        "integrated_in_content_area",
+        json::Value{integrated});
+    controls.emplace("duplicate_window_controls", json::Value{false});
+    controls.emplace(
+        "content_drawn_window_control_count",
+        json::Value{std::int64_t{0}});
+    controls.emplace(
+        "artifact_drawn_window_control_count",
+        json::Value{std::int64_t{0}});
+    controls.emplace("buttons", json::Value{std::move(button_json)});
+    return json::Value{std::move(controls)};
 }
 
 inline WindowServerSnapshot window_server_snapshot(id ns_window) {
@@ -8022,6 +8238,9 @@ inline json::Object macos_window_runtime_json() {
     auto ns_app = objc_send<id>(
         class_as_id(objc_getClass("NSApplication")),
         sel_shared_application());
+    id content_view = g_renderer.content_view
+        ? g_renderer.content_view
+        : (ns_window ? objc_send<id>(ns_window, sel_content_view()) : nullptr);
     bool const has_options = surface && surface->window_options_valid;
     WindowChromeStyle const chrome =
         has_options ? surface->window_chrome : WindowChromeStyle::System;
@@ -8094,6 +8313,15 @@ inline json::Object macos_window_runtime_json() {
     window.emplace("full_size_content_view", json::Value{full_size_content_view});
     window.emplace("title_hidden", json::Value{title_visibility == hidden_title});
     window.emplace("background_drag_enabled", json::Value{background_drag_enabled});
+    window.emplace(
+        "native_window_controls",
+        native_window_controls_runtime_json(
+            ns_window,
+            content_view,
+            titlebar_options,
+            full_size_content_view,
+            titlebar_transparent,
+            title_visibility == hidden_title));
     window.emplace("app_active", json::Value{app_active});
     window.emplace("window_visible", json::Value{window_visible});
     window.emplace("window_key", json::Value{window_key});

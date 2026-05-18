@@ -285,16 +285,8 @@ constexpr float k_toolbar_icon_button_width =
     file_explorer_demo::k_desktop_toolbar_icon_button_width;
 constexpr float k_toolbar_icon_button_height =
     file_explorer_demo::k_desktop_toolbar_icon_button_height;
-constexpr float k_titlebar_control_cluster_height =
+constexpr float k_native_window_control_reserve_height =
     file_explorer_demo::k_desktop_titlebar_control_cluster_height;
-constexpr float k_titlebar_control_diameter =
-    file_explorer_demo::k_desktop_titlebar_control_diameter;
-constexpr float k_titlebar_control_spacing =
-    file_explorer_demo::k_desktop_titlebar_control_spacing;
-constexpr float k_titlebar_control_start_x =
-    file_explorer_demo::k_desktop_titlebar_control_start_x;
-constexpr float k_titlebar_control_top =
-    file_explorer_demo::k_desktop_titlebar_control_top;
 constexpr float k_titlebar_drag_region_height =
     file_explorer_demo::k_desktop_titlebar_drag_region_height;
 constexpr float k_leading_control_reserved_width =
@@ -1325,10 +1317,10 @@ void sidebar_heading(std::string_view label) {
         stable_token(label_text) ^ 0x520000u);
 }
 
-void titlebar_control_reserve() {
+void native_window_control_reserve_slot() {
     phenotype::widget::canvas(
         k_sidebar_row_width,
-        k_titlebar_control_cluster_height,
+        k_native_window_control_reserve_height,
         [](phenotype::Painter&) {},
         {},
         0x530000u);
@@ -1343,7 +1335,7 @@ void finder_sidebar(State const& state) {
     bool const in_root = relative == "Demo Root";
     auto const& labels = state.labels;
     layout::sidebar(k_sidebar_width, [&] {
-        titlebar_control_reserve();
+        native_window_control_reserve_slot();
         sidebar_row(labels.sidebar_recents, "recents", "root", in_root);
         sidebar_row(labels.sidebar_shared, "shared", "shared",
                     relative == "Demo Root/Shared");

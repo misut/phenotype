@@ -811,6 +811,8 @@ def snapshot_with_file_explorer_chrome(
     artifact_markers: bool = False,
     content_marker_count: int = 0,
     artifact_marker_count: int = 0,
+    runtime_integrated: bool = True,
+    runtime_visible_count: int = 3,
 ) -> dict[str, object]:
     root = snapshot(plan)
     debug = root["debug"]
@@ -831,13 +833,35 @@ def snapshot_with_file_explorer_chrome(
                     "native_window_control_count": 3,
                     "content_window_control_marker_count": content_marker_count,
                     "artifact_window_control_marker_count": artifact_marker_count,
+                    "content_drawn_window_control_count": 0,
+                    "artifact_drawn_window_control_count": 0,
                     "window_control_render_policy": (
                         "native_controls_runtime_only_no_content_or_artifact_markers"),
                     "titlebar_control_reserve_policy": (
                         "blank_reserve_under_os_window_controls"),
+                    "native_window_control_integration_policy": (
+                        "platform_standard_controls_inside_leading_content_reserve"),
                 }
             },
         }
+    }
+    debug["platform_runtime"]["details"]["window"] = {
+        "surface_kind": "macos_window",
+        "native_window_controls": {
+            "ownership_policy": "platform_edge_standard_buttons_only",
+            "integration_policy": (
+                "standard_buttons_inside_leading_content_reserve"),
+            "expected_count": 3,
+            "present_count": 3,
+            "visible_count": runtime_visible_count,
+            "hidden_count": 3 - runtime_visible_count,
+            "within_leading_reserve_count": 3 if runtime_integrated else 2,
+            "all_buttons_within_leading_reserve": runtime_integrated,
+            "integrated_in_content_area": runtime_integrated,
+            "duplicate_window_controls": False,
+            "content_drawn_window_control_count": 0,
+            "artifact_drawn_window_control_count": 0,
+        },
     }
     return root
 
@@ -1006,6 +1030,24 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["backdrop_access"]["capture_scopes"],
             {"none": 1})
+
+    def test_file_explorer_native_chrome_contract_rejects_unintegrated_buttons(self) -> None:
+        code, report = self.run_verifier(
+            snapshot_with_file_explorer_chrome(
+                material_plan(),
+                runtime_integrated=False))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "file explorer native window buttons are integrated "
+                "into content chrome"))
+        self.assertEqual(failure["likely_layer"], "native-window-chrome")
+        self.assertEqual(
+            failure["likely_pass"],
+            "appkit-standard-window-buttons")
+        self.assertIn("leading content reserve", failure["hint"])
         self.assertEqual(
             report["material_plans"]["resource_bounds"][
                 "max_frame_capture_count"],
