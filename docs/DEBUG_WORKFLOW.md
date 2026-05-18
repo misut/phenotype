@@ -251,7 +251,8 @@ capability counts, and
 `interface_metaphor_policy`, `visual_consistency_policy`,
 `toolbar_symbol_chrome_policy`, `sidebar_symbol_color_policy`,
 `interaction_tone_policy` / `file_type_color_policy`, and
-`metrics_policy` / `hit_target_policy`), native-control reserve
+`metrics_policy` / `hit_target_policy`, plus `document_cache_policy` for the
+parsed SVG icon cache), native-control reserve
 coordinates, and icon-grid density metrics such as column width, row height,
 pitch, thumbnail canvas size, label size, gap, visible rows, and visible
 capacity. Column view also records location-pane row count, row height, and
@@ -398,6 +399,10 @@ the exact ISC or Feather-derived MIT license and a direct raw SVG URL pinned to
 the catalog revision, plus `platform_extracted=false` and
 `runtime_fetch_required=false`, so a future LLM can audit provenance without
 trusting `main` or assuming a local macOS icon service was used. The
+same payload should include
+`document_cache_policy=explicit_symbol_document_cache_keyed_by_symbol_descriptor_no_frame_parse_churn`;
+if it is missing, suspect the icon runtime/cache contract before spending time
+on backend paint output. The
 file-explorer `resource_system.file_type_icon_source_map` repeats that
 attribution next to each packaged `assets/icons/file-types/*.svg` declaration,
 so package bundle bugs and catalog provenance bugs can be separated from a

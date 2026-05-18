@@ -580,6 +580,11 @@ duplicate
     assert(chrome.icon_source_acquisition_policy.find(
                "never extracts platform icons")
            != std::string::npos);
+    assert(chrome.icon_document_cache_policy.find(
+               "keyed_by_symbol_descriptor")
+           != std::string::npos);
+    assert(chrome.icon_document_cache_policy.find("no_frame_parse_churn")
+           != std::string::npos);
     assert(chrome.icon_alignment == "24x24 text-aligned symbol grid");
     assert(chrome.icon_rendering_mode == "hierarchical");
     assert(chrome.icon_variant_policy
@@ -1020,6 +1025,8 @@ duplicate
     assert(debug_text.find("\"runtime_fetched_symbol_count\":0")
         != std::string::npos);
     assert(debug_text.find("\"source_acquisition_policy\"")
+        != std::string::npos);
+    assert(debug_text.find("\"document_cache_policy\"")
         != std::string::npos);
     assert(debug_text.find("\"icon_grid_label_font_size\"") != std::string::npos);
     assert(debug_text.find(

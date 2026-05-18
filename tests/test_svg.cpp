@@ -344,6 +344,9 @@ void test_builtin_icons_parse() {
            != std::string_view::npos);
     assert(icons::source_attribution_policy().find("pinned direct raw SVG URL")
            != std::string_view::npos);
+    assert(icons::document_cache_policy().find(
+               "keyed_by_symbol_descriptor")
+           != std::string_view::npos);
     assert(icons::source_format() == "svg");
     assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");
     assert(icons::svg_supported_elements().find("path")
@@ -445,6 +448,11 @@ void test_builtin_icons_parse() {
     assert(icons::file_type_symbol_at(10)
            == icons::Symbol::PresentationDocument);
 
+    auto const cache = icons::make_symbol_document_cache();
+    assert(cache.policy == icons::document_cache_policy());
+    assert(cache.documents.size() == icons::all_symbol_count);
+    assert(icons::cached_document_count(cache) == icons::all_symbol_count);
+
     unsigned int outline_count = 0;
     unsigned int filled_count = 0;
     unsigned int hierarchical_count = 0;
@@ -462,6 +470,7 @@ void test_builtin_icons_parse() {
         auto symbol = icons::symbol_at(i);
         auto src = icons::source(symbol);
         auto doc = icons::document(symbol);
+        auto const* cached_doc = icons::document(cache, symbol);
         auto descriptor = icons::descriptor(symbol);
         auto source_attribution = icons::source_attribution(symbol);
         auto contract_symbol = phenotype::icon_catalog::symbol_at(i);
@@ -475,6 +484,9 @@ void test_builtin_icons_parse() {
         assert(icons::symbol_from_name(icons::name(symbol)).has_value());
         assert(*icons::symbol_from_name(icons::name(symbol)) == symbol);
         assert(!src.empty());
+        assert(cached_doc != nullptr);
+        assert(cached_doc->shapes.size() == doc.shapes.size());
+        assert(!cached_doc->has_diagnostics());
         assert(descriptor.name == icons::name(symbol));
         assert(contract_descriptor.semantic_reference_name
                == descriptor.semantic_reference_name);
@@ -599,7 +611,7 @@ void test_builtin_icons_parse() {
         }
 
         CapturePainter painter;
-        icons::paint_symbol(painter, symbol, 0.0f, 0.0f, 24.0f,
+        icons::paint_symbol(painter, cache, symbol, 0.0f, 0.0f, 24.0f,
                             Color{28, 28, 30, 255});
         assert(painter.fills + painter.strokes > 0);
     }
@@ -728,6 +740,7 @@ void test_builtin_icons_parse() {
 
     CapturePainter centered_painter;
     icons::paint_symbol_centered(centered_painter,
+                                 cache,
                                  toolbar_pressed,
                                  0.0f,
                                  0.0f,
@@ -739,7 +752,7 @@ void test_builtin_icons_parse() {
            == icons::Symbol::Search);
 
     CapturePainter presentation_painter;
-    icons::paint_symbol(presentation_painter, sidebar, 0.0f, 0.0f);
+    icons::paint_symbol(presentation_painter, cache, sidebar, 0.0f, 0.0f);
     assert(presentation_painter.fills + presentation_painter.strokes > 0);
 
     std::puts("PASS: built-in phenotype icon catalog is valid SVG");

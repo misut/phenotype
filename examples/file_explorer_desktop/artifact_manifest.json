@@ -945,6 +945,10 @@
       "equals": "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons, macOS system icons, or fetches remote resources"
     },
     {
+      "path": "application.file_explorer.chrome.icon_system.document_cache_policy",
+      "equals": "explicit_symbol_document_cache_keyed_by_symbol_descriptor_no_frame_parse_churn"
+    },
+    {
       "path": "application.file_explorer.chrome.icon_system.source_attribution_policy",
       "equals": "embedded permissive SVG sources must expose family, icon name, exact license, pinned direct raw SVG URL, source revision, copyright, Apple-asset boundary, platform extraction flag, and runtime fetch flag in debug output"
     },

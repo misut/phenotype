@@ -1055,6 +1055,9 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && icon_catalog::source_acquisition_policy().find(
                    "runtime uses embedded SVG strings")
                 != std::string_view::npos
+            && icon_catalog::document_cache_policy().find(
+                   "no_frame_parse_churn")
+                != std::string_view::npos
             && icon_catalog::source_attribution(icon_catalog::Symbol::Folder)
                    .family
                 == std::string_view{"Lucide"}
@@ -1307,6 +1310,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"source_license_policy\":{},"
         "\"preferred_external_source_policy\":{},"
         "\"source_acquisition_policy\":{},"
+        "\"document_cache_policy\":{},"
         "\"source_attribution_policy\":{},"
         "\"apple_asset_boundary\":{},"
         "\"interface_metaphor_policy\":{},"
@@ -1358,6 +1362,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::source_license_policy()),
         json_string(icon_catalog::preferred_external_source_policy()),
         json_string(icon_catalog::source_acquisition_policy()),
+        json_string(icon_catalog::document_cache_policy()),
         json_string(icon_catalog::source_attribution_policy()),
         json_string(icon_catalog::apple_asset_boundary()),
         json_string(icon_catalog::interface_metaphor_policy()),
@@ -1447,6 +1452,9 @@ int run_icons_catalog(cppx::cli::Invocation const& invocation) {
          .value = std::string{icon_catalog::asset_policy()},
          .status = all_ok(checks) ? cppx::terminal::StatusKind::ok
                                   : cppx::terminal::StatusKind::fail},
+        {.label = "cache",
+         .value = std::string{icon_catalog::document_cache_policy()},
+         .status = cppx::terminal::StatusKind::ok},
     };
     std::println("phenotype icons catalog");
     std::println("{}", cppx::terminal::format_status_frame(lines, false));

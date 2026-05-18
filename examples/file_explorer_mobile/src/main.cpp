@@ -165,6 +165,8 @@ phenotype::ResourceCatalog runtime_resource_catalog() {
 }
 
 struct State {
+    phenotype::icons::SymbolDocumentCache icon_cache =
+        phenotype::icons::make_symbol_document_cache();
     file_explorer_demo::ExplorerState explorer = initial_explorer_state();
     file_explorer_demo::ExplorerLabels labels =
         file_explorer_demo::file_explorer_labels(
@@ -323,7 +325,8 @@ void paint_elided_text(phenotype::Painter& painter,
 
 void mobile_entry_row(file_explorer_demo::Entry const& entry,
                       bool selected,
-                      float row_width) {
+                      float row_width,
+                      phenotype::icons::SymbolDocumentCache const& cache) {
     using namespace phenotype;
     auto const& theme = current_theme();
     ButtonStyleOptions options;
@@ -368,7 +371,7 @@ void mobile_entry_row(file_explorer_demo::Entry const& entry,
         str{label},
         row_width,
         60.0f,
-        [entry, symbol, symbol_color, title_color, meta_color, meta, row_width](
+        [entry, symbol, symbol_color, title_color, meta_color, meta, row_width, &cache](
                 Painter& painter,
                 ButtonVisualState state) {
             auto icon_color = symbol_color;
@@ -376,6 +379,7 @@ void mobile_entry_row(file_explorer_demo::Entry const& entry,
                 icon_color = with_alpha(icon_color, 210);
             icons::paint_symbol_centered(
                 painter,
+                cache,
                 symbol,
                 10.0f,
                 12.0f,
@@ -588,7 +592,8 @@ void browse_tab(
                         mobile_entry_row(
                             entry,
                             entry.name == state.explorer.selected_name,
-                            row_width);
+                            row_width,
+                            state.icon_cache);
                     },
                     SpaceToken::Sm,
                     SpaceToken::Xs);
