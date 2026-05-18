@@ -423,6 +423,9 @@ struct ExplorerChromeMetrics {
     std::string thumbnail_pdf_policy;
     std::string thumbnail_image_policy;
     std::string thumbnail_svg_policy;
+    std::string thumbnail_svg_render_policy;
+    std::string thumbnail_svg_preview_source_policy;
+    std::string thumbnail_svg_external_resource_policy;
     std::string thumbnail_video_policy;
     std::string thumbnail_shadow_policy;
     std::string theme_profile_name;
@@ -589,6 +592,12 @@ inline constexpr char k_desktop_thumbnail_image_policy[] =
     "rounded_screenshot_strip_with_layered_blurred_content";
 inline constexpr char k_desktop_thumbnail_svg_policy[] =
     "rounded_svg_vector_preview_with_source_safe_svg_badge";
+inline constexpr char k_desktop_thumbnail_svg_render_policy[] =
+    "phenotype_svg_subset_renders_file_body_inside_finder_preview";
+inline constexpr char k_desktop_thumbnail_svg_preview_source_policy[] =
+    "sandbox_file_body_only_no_system_icon_extraction";
+inline constexpr char k_desktop_thumbnail_svg_external_resource_policy[] =
+    "no_external_svg_resources_or_network_fetches";
 inline constexpr char k_desktop_thumbnail_video_policy[] =
     "wide_video_preview_with_filmstrip_and_content_bands";
 inline constexpr char k_desktop_thumbnail_shadow_policy[] =
@@ -1239,6 +1248,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .thumbnail_pdf_policy = "n/a",
             .thumbnail_image_policy = "n/a",
             .thumbnail_svg_policy = "n/a",
+            .thumbnail_svg_render_policy = "n/a",
+            .thumbnail_svg_preview_source_policy = "n/a",
+            .thumbnail_svg_external_resource_policy = "n/a",
             .thumbnail_video_policy = "n/a",
             .thumbnail_shadow_policy = "n/a",
             .theme_profile_name =
@@ -1581,6 +1593,11 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .thumbnail_pdf_policy = k_desktop_thumbnail_pdf_policy,
         .thumbnail_image_policy = k_desktop_thumbnail_image_policy,
         .thumbnail_svg_policy = k_desktop_thumbnail_svg_policy,
+        .thumbnail_svg_render_policy = k_desktop_thumbnail_svg_render_policy,
+        .thumbnail_svg_preview_source_policy =
+            k_desktop_thumbnail_svg_preview_source_policy,
+        .thumbnail_svg_external_resource_policy =
+            k_desktop_thumbnail_svg_external_resource_policy,
         .thumbnail_video_policy = k_desktop_thumbnail_video_policy,
         .thumbnail_shadow_policy = k_desktop_thumbnail_shadow_policy,
         .theme_profile_name =
@@ -3130,6 +3147,15 @@ inline json::Value explorer_chrome_debug_json(
     thumbnail_system.emplace(
         "svg_policy",
         json::Value{chrome.thumbnail_svg_policy});
+    thumbnail_system.emplace(
+        "svg_render_policy",
+        json::Value{chrome.thumbnail_svg_render_policy});
+    thumbnail_system.emplace(
+        "svg_preview_source_policy",
+        json::Value{chrome.thumbnail_svg_preview_source_policy});
+    thumbnail_system.emplace(
+        "svg_external_resource_policy",
+        json::Value{chrome.thumbnail_svg_external_resource_policy});
     thumbnail_system.emplace(
         "video_policy",
         json::Value{chrome.thumbnail_video_policy});

@@ -281,7 +281,20 @@ The desktop thumbnail contract is adjacent to those metrics under
 `chrome.thumbnail_system`: PDF pages, raster image strips, SVG vector previews,
 movie strips, and shadow policy are all named separately, and
 `uses_external_previews=false` confirms that no native Quick Look or platform
-icon-service query is needed for CI artifacts.
+icon-service query is needed for CI artifacts. SVG thumbnails also expose
+`svg_render_policy`, `svg_preview_source_policy`, and
+`svg_external_resource_policy`; together these say that the desktop preview
+renders the sandbox file body through `phenotype.svg`, does not extract macOS
+icons, and does not fetch external SVG resources.
+To verify that path explicitly, run the local-only scenario:
+
+```sh
+tools/phenotype_cli/.exon/debug/phenotype_cli artifact verify-file-explorer \
+  --profile desktop \
+  --view-mode icon \
+  --scenario svg-selected
+```
+
 The native runtime window payload also reports `visibility_state` and
 `ready_for_user_interaction`; when a Dock icon exists without a usable window,
 the failure should point at `debug.platform_runtime.details.window.*` before
