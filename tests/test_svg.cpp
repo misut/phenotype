@@ -371,20 +371,20 @@ void test_builtin_icons_parse() {
     assert(icons::default_weight_policy() == "regular_text_weight_aligned");
     assert(icons::rendering_capability_policy().find("sf_symbols_mode_names")
            != std::string_view::npos);
-    assert(icons::all_symbol_count == 35);
+    assert(icons::all_symbol_count == 39);
     assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
     assert(icons::phenotype_owned_symbol_count == 4);
-    assert(icons::permissive_source_symbol_count == 31);
-    assert(icons::lucide_source_symbol_count == 31);
+    assert(icons::permissive_source_symbol_count == 35);
+    assert(icons::lucide_source_symbol_count == 35);
     assert(icons::apple_asset_symbol_count == 0);
     assert(icons::audited_symbol_source_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
     assert(phenotype::icon_catalog::sidebar_symbol_count == icons::sidebar_symbol_count);
     assert(icons::toolbar_symbol_count == 15);
     assert(phenotype::icon_catalog::toolbar_symbol_count == icons::toolbar_symbol_count);
-    assert(icons::file_type_symbol_count == 7);
+    assert(icons::file_type_symbol_count == 11);
     assert(phenotype::icon_catalog::file_type_symbol_count == icons::file_type_symbol_count);
-    assert(icons::outline_symbol_count == 34);
+    assert(icons::outline_symbol_count == 38);
     assert(icons::filled_symbol_count == 1);
     assert(icons::hierarchical_symbol_count == 17);
     assert(icons::monochrome_symbol_count == icons::all_symbol_count);
@@ -392,7 +392,7 @@ void test_builtin_icons_parse() {
     assert(icons::palette_symbol_count == 0);
     assert(icons::multicolor_symbol_count == 0);
     assert(icons::reference_symbol_count == icons::all_symbol_count);
-    assert(icons::svg_path_arc_symbol_count == 13);
+    assert(icons::svg_path_arc_symbol_count == 16);
     assert(icons::round_stroke_symbol_count == icons::outline_symbol_count);
     assert(icons::reference_family() == "SF Symbols semantic reference");
     assert(icons::reference_policy().find("audited permissive")
@@ -425,10 +425,16 @@ void test_builtin_icons_parse() {
         icons::macos_file_type_color(icons::Symbol::PdfDocument);
     auto const archive_color =
         icons::macos_file_type_color(icons::Symbol::Archive);
+    auto const spreadsheet_color =
+        icons::macos_file_type_color(icons::Symbol::SpreadsheetDocument);
+    auto const presentation_color =
+        icons::macos_file_type_color(icons::Symbol::PresentationDocument);
     assert(folder_color.b > folder_color.r);
     assert(movie_color.b > movie_color.g);
     assert(pdf_color.r > pdf_color.g);
     assert(archive_color.r > archive_color.b);
+    assert(spreadsheet_color.g > spreadsheet_color.r);
+    assert(presentation_color.r > presentation_color.b);
     assert(icons::point_size(icons::SymbolScale::Small) == 20.0f);
     assert(icons::point_size(icons::SymbolScale::Medium) == 24.0f);
     assert(icons::point_size(icons::SymbolScale::Large) == 26.0f);
@@ -436,6 +442,8 @@ void test_builtin_icons_parse() {
     assert(icons::file_type_symbol_at(2) == icons::Symbol::PdfDocument);
     assert(phenotype::icon_catalog::file_type_symbol_at(6)
            == phenotype::icon_catalog::Symbol::Archive);
+    assert(icons::file_type_symbol_at(10)
+           == icons::Symbol::PresentationDocument);
 
     unsigned int outline_count = 0;
     unsigned int filled_count = 0;
@@ -605,6 +613,16 @@ void test_builtin_icons_parse() {
            == "folder");
     assert(icons::source_attribution(icons::Symbol::Movie).icon_name
            == "clapperboard");
+    assert(icons::source_attribution(icons::Symbol::AudioDocument).icon_name
+           == "file-music");
+    assert(icons::source_attribution(icons::Symbol::CodeDocument).icon_name
+           == "file-code");
+    assert(icons::source_attribution(
+               icons::Symbol::SpreadsheetDocument).icon_name
+           == "file-spreadsheet");
+    assert(icons::source_attribution(
+               icons::Symbol::PresentationDocument).icon_name
+           == "presentation");
     assert(icons::source_attribution(icons::Symbol::Search).family
            == "Lucide");
     assert(icons::source_attribution(icons::Symbol::Search).icon_name

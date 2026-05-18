@@ -451,24 +451,24 @@ duplicate
            == demo::k_desktop_column_location_icon_size);
     assert(chrome.titlebar_control_count
            == demo::k_desktop_titlebar_control_count);
-    assert(chrome.icon_total_symbol_count == 35);
+    assert(chrome.icon_total_symbol_count == 39);
     assert(chrome.sidebar_symbol_count == 11);
     assert(chrome.toolbar_symbol_count == 15);
-    assert(chrome.file_type_symbol_count == 7);
+    assert(chrome.file_type_symbol_count == 11);
     assert(chrome.icon_filled_symbol_count == 1);
-    assert(chrome.icon_outline_symbol_count == 34);
+    assert(chrome.icon_outline_symbol_count == 38);
     assert(chrome.icon_hierarchical_symbol_count == 17);
-    assert(chrome.icon_reference_symbol_count == 35);
-    assert(chrome.icon_svg_path_arc_symbol_count == 13);
+    assert(chrome.icon_reference_symbol_count == 39);
+    assert(chrome.icon_svg_path_arc_symbol_count == 16);
     assert(chrome.icon_phenotype_owned_symbol_count == 4);
-    assert(chrome.icon_permissive_source_symbol_count == 31);
-    assert(chrome.icon_lucide_source_symbol_count == 31);
+    assert(chrome.icon_permissive_source_symbol_count == 35);
+    assert(chrome.icon_lucide_source_symbol_count == 35);
     assert(chrome.icon_apple_asset_symbol_count == 0);
     assert(chrome.icon_audited_symbol_source_count == chrome.icon_total_symbol_count);
     assert(chrome.icon_interaction_phase_count == 3);
     assert(chrome.icon_grid_size == 24.0f);
     assert(demo::desktop_sidebar_symbol_contract().size() == 10);
-    assert(demo::file_type_symbol_contract().size() == 7);
+    assert(demo::file_type_symbol_contract().size() == 11);
     for (std::size_t i = 0; i < demo::file_type_symbol_contract().size(); ++i) {
         assert(demo::file_type_symbol_contract()[i].symbol
                == phenotype::icon_catalog::file_type_symbol_at(
@@ -482,6 +482,10 @@ duplicate
     demo::Entry pdf_entry{.name = "Application Form 3.pdf"};
     demo::Entry text_entry{.name = "README.txt"};
     demo::Entry archive_entry{.name = "Archive.zip"};
+    demo::Entry audio_entry{.name = "Voice Memo.m4a"};
+    demo::Entry code_entry{.name = "Glass Theme Notes.cpp"};
+    demo::Entry sheet_entry{.name = "Expense Matrix.csv"};
+    demo::Entry presentation_entry{.name = "Design Review.key"};
     assert(demo::entry_symbol_name(pdf_entry) == "pdf_document");
     assert(demo::entry_symbol_semantic_reference_name(pdf_entry)
            == "doc.richtext");
@@ -491,6 +495,19 @@ duplicate
     assert(demo::entry_symbol_name(archive_entry) == "archive");
     assert(demo::entry_symbol_semantic_reference_name(archive_entry)
            == "archivebox");
+    assert(demo::entry_symbol_name(audio_entry) == "audio_document");
+    assert(demo::entry_symbol_semantic_reference_name(audio_entry)
+           == "music.note");
+    assert(demo::entry_symbol_name(code_entry) == "code_document");
+    assert(demo::entry_symbol_semantic_reference_name(code_entry)
+           == "chevron.left.forwardslash.chevron.right");
+    assert(demo::entry_symbol_name(sheet_entry) == "spreadsheet_document");
+    assert(demo::entry_symbol_semantic_reference_name(sheet_entry)
+           == "tablecells");
+    assert(demo::entry_symbol_name(presentation_entry)
+           == "presentation_document");
+    assert(demo::entry_symbol_semantic_reference_name(presentation_entry)
+           == "rectangle.on.rectangle.angled");
     assert(chrome.icon_default_stroke_width == 2.0f);
     assert(chrome.icon_secondary_opacity == 1.0f);
     assert(chrome.icon_toolbar_activation_hit_target_size == 44.0f);
@@ -653,8 +670,8 @@ duplicate
     assert(mobile_chrome.native_window_control_owner == "none");
     assert(mobile_chrome.icon_module == "phenotype.icons");
     assert(mobile_chrome.icon_style == "macos_rounded_outline_svg");
-    assert(mobile_chrome.file_type_symbol_count == 7);
-    assert(mobile_chrome.icon_reference_symbol_count == 35);
+    assert(mobile_chrome.file_type_symbol_count == 11);
+    assert(mobile_chrome.icon_reference_symbol_count == 39);
     assert(!mobile_chrome.owned_icon_assets);
     assert(mobile_chrome.audited_permissive_icon_assets);
     assert(!mobile_chrome.uses_apple_icon_assets);
@@ -902,9 +919,9 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"svg_arc_policy\":\"circle elements and isolated circular path A/a")
            != std::string::npos);
-    assert(debug_text.find("\"svg_path_arc_symbol_count\":13")
+    assert(debug_text.find("\"svg_path_arc_symbol_count\":16")
            != std::string::npos);
-    assert(debug_text.find("\"lucide_source_symbol_count\":31")
+    assert(debug_text.find("\"lucide_source_symbol_count\":35")
            != std::string::npos);
     assert(debug_text.find("\"source_attribution_policy\"")
            != std::string::npos);
@@ -936,13 +953,17 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"file_type_color_policy\":\"macos_finder_file_type_tints\"")
            != std::string::npos);
-    assert(debug_text.find("\"file_type_symbol_count\":7")
+    assert(debug_text.find("\"file_type_symbol_count\":11")
            != std::string::npos);
     assert(debug_text.find("\"file_type_symbol_tokens\"")
            != std::string::npos);
     assert(debug_text.find("\"file_type_reference_symbols\"")
            != std::string::npos);
     assert(debug_text.find("\"archivebox\"")
+           != std::string::npos);
+    assert(debug_text.find("\"music.note\"")
+           != std::string::npos);
+    assert(debug_text.find("\"spreadsheet_document\"")
            != std::string::npos);
     assert(debug_text.find("\"toolbar_symbol_presentations\"")
            != std::string::npos);

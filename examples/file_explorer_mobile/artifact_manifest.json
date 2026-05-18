@@ -36,76 +36,76 @@
   "require_material_plans": true,
   "require_material_semantic_runtime_match": true,
   "require_material_plan_summary": {
-    "count": 22,
+    "count": 26,
     "fallback": 0,
-    "backdrop_sampling": 22,
+    "backdrop_sampling": 26,
     "contract_versions": {
-      "22": 22
+      "22": 26
     },
-    "theme_foreground_matches_theme": 22,
-    "theme_accent_matches_theme": 22,
-    "theme_tint_matches_surface": 22,
-    "theme_border_matches_theme": 22,
-    "theme_default_glass_tokens": 22,
+    "theme_foreground_matches_theme": 26,
+    "theme_accent_matches_theme": 26,
+    "theme_tint_matches_surface": 26,
+    "theme_border_matches_theme": 26,
+    "theme_default_glass_tokens": 26,
     "theme_profile_names": {
-      "apple-glass-light": 22
+      "apple-glass-light": 26
     },
     "theme_sources": {
-      "material-style": 22
+      "material-style": 26
     },
     "theme_token_policies": {
-      "explicit-material-style-tokens": 22
+      "explicit-material-style-tokens": 26
     },
     "roles": {
-      "surface": 19,
+      "surface": 23,
       "toolbar": 1,
       "navigation": 1,
       "status_bar": 1
     },
     "container_modes": {
-      "container": 22
+      "container": 26
     },
     "container_ids": {
-      "3100": 22
+      "3100": 26
     },
-    "container_participating": 22,
+    "container_participating": 26,
     "container_unioned": 0,
     "container_interactive": 0,
-    "container_morph_transitions": 22,
-    "shape_valid": 22,
+    "container_morph_transitions": 26,
+    "shape_valid": 26,
     "shape_radius_clamped": 0,
     "pass_names": {
-      "backdrop-sample-blur": 22
+      "backdrop-sample-blur": 26
     },
     "pass_executors": {
-      "backdrop-filter": 22
+      "backdrop-filter": 26
     },
     "sampling_kernels": {
-      "weighted-5x5-manhattan": 22
+      "weighted-5x5-manhattan": 26
     },
     "sampling_weight_profiles": {
-      "center4-cardinal2-diagonal1": 22
+      "center4-cardinal2-diagonal1": 26
     },
-    "backdrop_access_required": 22,
-    "backdrop_access_stable_required": 22,
-    "backdrop_access_frame_history_required": 22,
-    "backdrop_access_shared_frame_capture": 22,
-    "backdrop_access_next_frame_capture_required": 22,
-    "backdrop_access_excludes_foreground_text": 22,
-    "backdrop_access_bounded": 22,
+    "backdrop_access_required": 26,
+    "backdrop_access_stable_required": 26,
+    "backdrop_access_frame_history_required": 26,
+    "backdrop_access_shared_frame_capture": 26,
+    "backdrop_access_next_frame_capture_required": 26,
+    "backdrop_access_excludes_foreground_text": 26,
+    "backdrop_access_bounded": 26,
     "backdrop_access_sources": {
-      "previous-presented-frame": 22
+      "previous-presented-frame": 26
     },
     "backdrop_capture_scopes": {
-      "shared-frame": 22
+      "shared-frame": 26
     },
     "backdrop_capture_reasons": {
-      "sample-current-frame": 22
+      "sample-current-frame": 26
     },
-    "decision_can_sample_backdrop": 22,
-    "decision_backend_supports_backdrop": 22,
-    "decision_backdrop_source_ready": 22,
-    "decision_next_frame_capture_required": 22,
+    "decision_can_sample_backdrop": 26,
+    "decision_backend_supports_backdrop": 26,
+    "decision_backdrop_source_ready": 26,
+    "decision_next_frame_capture_required": 26,
     "decision_reduced_transparency": 0,
     "verifier_region_passes": {
       "clear-over-rich-backdrop": "backdrop-sample-blur",
@@ -114,7 +114,7 @@
       "thick-high-contrast-backdrop": "backdrop-sample-blur"
     },
     "luminance_curves": {
-      "adaptive-backdrop-luma": 22
+      "adaptive-backdrop-luma": 26
     }
   },
   "require_capabilities": [
@@ -171,7 +171,7 @@
     },
     {
       "path": "application.file_explorer.entry_symbol_summary.file_type_symbol_count",
-      "equals": 7
+      "equals": 11
     },
     {
       "path": "application.file_explorer.entry_symbol_summary.all_visible_entries_have_symbols",
@@ -207,7 +207,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.file_type_symbol_count",
-      "equals": 7
+      "equals": 11
     },
     {
       "path": "application.file_explorer.chrome.icon_system.file_type_color_policy",
@@ -317,7 +317,7 @@
     },
     {
       "path": "renderer.material_executor_summary.material_total_sample_taps",
-      "equals": 550
+      "equals": 650
     }
   ],
   "require_runtime_numeric_bounds": [
@@ -352,17 +352,17 @@
     "total_surface_sample_pixels_gte": 1,
     "max_surface_sample_pixels_lte": 4000000,
     "max_surface_sample_pixels_gte": 1,
-    "total_plan_sample_taps_lte": 550,
-    "total_plan_sample_taps_gte": 550,
+    "total_plan_sample_taps_lte": 650,
+    "total_plan_sample_taps_gte": 650,
     "total_runtime_passes_gte": 1,
     "active_runtime_passes_gte": 1,
     "backdrop_runtime_passes_gte": 1,
-    "total_execution_stages_lte": 88,
-    "total_execution_stages_gte": 88,
-    "active_execution_stages_lte": 88,
-    "active_execution_stages_gte": 88,
-    "backdrop_execution_stages_lte": 22,
-    "backdrop_execution_stages_gte": 22,
+    "total_execution_stages_lte": 104,
+    "total_execution_stages_gte": 104,
+    "active_execution_stages_lte": 104,
+    "active_execution_stages_gte": 104,
+    "backdrop_execution_stages_lte": 26,
+    "backdrop_execution_stages_gte": 26,
     "dropped_execution_stages_lte": 0,
     "dropped_execution_stages_gte": 0,
     "max_execution_stage_count_lte": 4,

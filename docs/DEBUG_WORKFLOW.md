@@ -244,7 +244,7 @@ pitch, thumbnail canvas size, label size, gap, visible rows, and visible
 capacity. Column view also records location-pane row count, row height, and
 icon size so Finder-style navigation rows can be checked from the artifact
 without reading pixels by eye. Entry samples include the resolved
-`symbol` and `symbol_semantic_reference_name`, so PDF/text/archive/image/movie
+`symbol` and `symbol_semantic_reference_name`, so PDF/text/archive/image/movie/audio/code/spreadsheet/presentation
 fallback mistakes can be diagnosed from JSON before inspecting the screenshot.
 The shared payload also emits `entry_symbol_summary`, which records that the
 visible desktop or mobile entries were mapped by
@@ -354,7 +354,7 @@ glyphs stay on the macOS-like round stroke contract. The desktop payload also
 includes `source_attribution_policy`, `lucide_source_symbol_count`, and
 `apple_asset_symbol_count` so permissive-source adoption and Apple-asset
 exclusion are machine-checkable. A healthy Finder-style desktop artifact should
-show 31 Lucide-backed symbols, 4 phenotype-owned symbols, and 0 Apple/SF
+show 35 Lucide-backed symbols, 4 phenotype-owned symbols, and 0 Apple/SF
 Symbols assets; mismatches point to `phenotype.icon_catalog` attribution or
 package-resource drift before a renderer bug. The `reference_sources` array
 names the exact Apple HIG/SF Symbols semantic references, W3C SVG path
@@ -367,7 +367,8 @@ desktop payload also includes
 audited symbols and semantic SF Symbols reference names, so a wrong
 Recents/Shared/Desktop-style metaphor fails as data before anyone compares
 pixels. `file_type_symbol_tokens` performs the same check for icon-grid
-fallback symbols, including PDF, text, image, movie, archive, document, and
+fallback symbols, including PDF, text, image, movie, archive, audio, code,
+spreadsheet, presentation, document, and
 folder entries. `sidebar_symbol_presentations`,
 `toolbar_symbol_presentations`, `file_type_symbol_presentations`, and
 `presentation_samples` then resolve those semantic tokens into the same

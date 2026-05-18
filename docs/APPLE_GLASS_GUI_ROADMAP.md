@@ -313,12 +313,12 @@ candidate reference. Apple references are explicitly marked as non-embedded
 Apple-owned artwork so future file-icon work can be Finder-like without copying
 Finder or SF Symbols assets. The current built-in catalog uses audited Lucide
 ISC SVGs for
-31 of 35 symbols across toolbar, sidebar, action, and file-type roles, leaving
+35 of 39 symbols across toolbar, sidebar, action, and file-type roles, leaving
 only AirDrop, Shared, Sort Group, and More as phenotype-owned glyphs where the
 Finder-specific metaphor or filled dot treatment is safer to control locally.
 A pure Finder-style file-type
 tint policy now gives
-folder/document/PDF/text/image/movie/archive glyphs deterministic colors for
+folder/document/PDF/text/image/movie/archive/audio/code/spreadsheet/presentation glyphs deterministic colors for
 list and column rows without querying native platform icon services. The CLI command
 `phenotype icons catalog --json` exposes the same contract for CI and LLM
 debugging on Linux without importing native GUI code, and `phenotype icons svg

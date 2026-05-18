@@ -236,7 +236,7 @@ The catalog intentionally follows general Apple HIG-style optical proportions
 without copying SF Symbols artwork as assets. Each symbol declares a semantic
 SF Symbols reference name, family, and policy, so the contract can say "this
 glyph is playing the same UI role as `magnifyingglass`" without embedding
-Apple's vector paths. In the current catalog, 31 of 35 built-in symbols come
+Apple's vector paths. In the current catalog, 35 of 39 built-in symbols come
 from audited Lucide ISC SVG sources, while AirDrop, Shared, Sort Group, and
 More remain phenotype-owned because their Finder-specific metaphors or filled
 dot treatment need tighter product control. Apps can call `icons::document`,
@@ -266,7 +266,8 @@ monochrome/hierarchical/palette/multicolor, count constants, and index accessors
 for all, sidebar, and toolbar symbols) so examples and artifact verifiers can assert the style contract
 without pixel guessing.
 The built-in set includes Finder-style file-type glyphs for folders, generic
-documents, PDFs, text documents, images, movies, and archives. Apps choose those
+documents, PDFs, text documents, images, movies, archives, audio, code,
+spreadsheet, and presentation files. Apps choose those
 symbols through pure filename and role metadata, then expose the resolved symbol
 and semantic reference in debug JSON so native backends remain simple
 executors.
@@ -303,7 +304,8 @@ state. `widget::symbol_button` composes those helpers on top of
 the same visual, press-state, and activation-region contract in both examples
 and tests while remaining LLM-debuggable without consulting AppKit.
 The same pure catalog exposes a Finder-style file-type symbol set and tint
-policy for folder/document/PDF/text/image/movie/archive glyphs, which desktop
+policy for folder, document, PDF, text, image, movie, archive, audio, code,
+spreadsheet, and presentation glyphs, which desktop
 and mobile file explorer examples use in rows without asking a native icon
 service for platform artwork. Their shared debug payload includes
 `entry_symbol_summary` so the contract can fail as JSON before a screenshot
