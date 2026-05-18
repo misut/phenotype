@@ -625,14 +625,19 @@ Fallback plans therefore report `0` taps, while `quality_policy.max_sample_taps`
 preserves the caller's upper bound and `resource_budget.max_sample_taps`
 records the executable kernel selected by the planner. The supported sampled
 backdrop kernels are 1, 5, 9, 13, and 25 taps; the planner chooses the largest
-kernel that does not exceed the policy limit. `sampling_kernel.name` is
-`weighted-5x5-manhattan` for active sampled glass and `none` for deterministic
-fallback. Its `blur_step_scale` is part of the pure contract and is uploaded to
-the macOS material shader, so changing blur spread requires changing the plan,
-serializer, verifier vocabulary, and docs together. Reduced-motion plans
-disable material noise and cap backdrop sample taps before a backend executes
-the pass; increased-contrast plans raise opacity and luminance legibility in
-the same pure layer.
+kernel that does not exceed the policy limit. The pure policy sanitizer clamps
+that limit to the engine cap (`material_max_sample_taps`, currently 25) and
+also clamps executable blur to `material_max_blur_radius` (currently 36 px)
+before a backend receives the plan. The artifact verifier repeats those cap
+checks for `quality_policy` and `resource_budget`, so over-budget shader work
+fails with the exact JSON path instead of becoming backend-specific behavior.
+`sampling_kernel.name` is `weighted-5x5-manhattan` for active sampled glass and
+`none` for deterministic fallback. Its `blur_step_scale` is part of the pure
+contract and is uploaded to the macOS material shader, so changing blur spread
+requires changing the plan, serializer, verifier vocabulary, and docs together.
+Reduced-motion plans disable material noise and cap backdrop sample taps before
+a backend executes the pass; increased-contrast plans raise opacity and
+luminance legibility in the same pure layer.
 `luminance_curve` is the backend-executed contrast transform. Active sampled
 glass must use `adaptive-backdrop-luma` with `backdrop_driven: true`; fallback
 plans must use `fallback-flat` with `backdrop_driven: false`. `floor` and
@@ -979,8 +984,12 @@ Use `require_material_quality_policy` when a material gate must prove the
 resolved pure policy stayed enabled and bounded. It can require backdrop
 sampling, noise, and shadow to remain allowed for every plan, and can bound the
 maximum quality-policy blur radius, sample taps, and backdrop pixel budget seen
-in the artifact. `max_backdrop_pixels_lte` is the pure planning limit for
-backdrop copy/blur eligibility; compare it with
+in the artifact. Even without manifest overrides, the verifier rejects
+`quality_policy.max_blur_radius`, `quality_policy.max_sample_taps`,
+`resource_budget.max_blur_radius`, or `resource_budget.max_sample_taps` values
+that exceed the engine caps surfaced by `phenotype.material`.
+`max_backdrop_pixels_lte` is the pure planning limit for backdrop copy/blur
+eligibility; compare it with
 `renderer.material_executor_summary.backdrop_copy_pixels` when diagnosing how
 many pixels the backend actually copied in a frame.
 

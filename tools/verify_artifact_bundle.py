@@ -207,6 +207,8 @@ ALLOWED_MATERIAL_REFERENCE_PERFORMANCE_RESPONSES = {
 }
 
 MATERIAL_PLAN_CONTRACT_VERSION = 22
+MATERIAL_MAX_BLUR_RADIUS = 36.0
+MATERIAL_MAX_SAMPLE_TAPS = 25
 
 
 def suggested_action_for_failure(
@@ -2811,9 +2813,9 @@ def material_plan_uses_budgeted_effects(plan: JsonObject) -> bool:
     if isinstance(resource_budget, dict):
         max_blur = number_at(resource_budget, "max_blur_radius")
         max_taps = number_at(resource_budget, "max_sample_taps")
-        if max_blur is not None and float(max_blur) < 36.0:
+        if max_blur is not None and float(max_blur) < MATERIAL_MAX_BLUR_RADIUS:
             return True
-        if max_taps is not None and int(max_taps) < 25:
+        if max_taps is not None and int(max_taps) < MATERIAL_MAX_SAMPLE_TAPS:
             return True
     if isinstance(quality_policy, dict):
         if bool_at(quality_policy, "allow_noise") is False:
@@ -5380,10 +5382,34 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 if isinstance(policy_limit, (int, float)):
                     quality_summary = summary["quality_policy"]
                     if key == "max_blur_radius":
+                        report.check(
+                            "material quality policy blur radius respects engine cap",
+                            float(policy_limit) <= MATERIAL_MAX_BLUR_RADIUS,
+                            path=f"{plan_path}.quality_policy.{key}",
+                            expected={"<=": MATERIAL_MAX_BLUR_RADIUS},
+                            actual=float(policy_limit),
+                            likely_layer=likely_layer,
+                            likely_pass="quality-policy",
+                            hint=(
+                                "Clamp MaterialQualityPolicy.max_blur_radius "
+                                "with material_max_blur_radius before backend execution."),
+                            record_success=False)
                         quality_summary["max_blur_radius"] = max(
                             float(quality_summary["max_blur_radius"]),
                             float(policy_limit))
                     elif key == "max_sample_taps":
+                        report.check(
+                            "material quality policy sample taps respect engine cap",
+                            int(policy_limit) <= MATERIAL_MAX_SAMPLE_TAPS,
+                            path=f"{plan_path}.quality_policy.{key}",
+                            expected={"<=": MATERIAL_MAX_SAMPLE_TAPS},
+                            actual=int(policy_limit),
+                            likely_layer=likely_layer,
+                            likely_pass="quality-policy",
+                            hint=(
+                                "Clamp MaterialQualityPolicy.max_sample_taps "
+                                "with material_max_sample_taps before backend execution."),
+                            record_success=False)
                         quality_summary["max_sample_taps"] = max(
                             int(quality_summary["max_sample_taps"]),
                             int(policy_limit))
@@ -5412,6 +5438,18 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 likely_layer=likely_layer,
                 hint="Blur radius should be clamped in the pure plan.")
             if isinstance(max_blur_radius, (int, float)):
+                report.check(
+                    "material resource budget blur radius respects engine cap",
+                    float(max_blur_radius) <= MATERIAL_MAX_BLUR_RADIUS,
+                    path=f"{plan_path}.resource_budget.max_blur_radius",
+                    expected={"<=": MATERIAL_MAX_BLUR_RADIUS},
+                    actual=float(max_blur_radius),
+                    likely_layer=likely_layer,
+                    likely_pass="resource-budget",
+                    hint=(
+                        "MaterialPlan.resource_budget.max_blur_radius should "
+                        "not exceed material_max_blur_radius."),
+                    record_success=False)
                 bounds["max_budget_blur_radius"] = max(
                     float(bounds["max_budget_blur_radius"]),
                     float(max_blur_radius))
@@ -5424,6 +5462,18 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 likely_layer=likely_layer,
                 hint="Sample tap budget should be bounded in the pure plan.")
             if isinstance(max_sample_taps, (int, float)):
+                report.check(
+                    "material resource budget sample taps respect engine cap",
+                    int(max_sample_taps) <= MATERIAL_MAX_SAMPLE_TAPS,
+                    path=f"{plan_path}.resource_budget.max_sample_taps",
+                    expected={"<=": MATERIAL_MAX_SAMPLE_TAPS},
+                    actual=int(max_sample_taps),
+                    likely_layer=likely_layer,
+                    likely_pass="resource-budget",
+                    hint=(
+                        "MaterialPlan.resource_budget.max_sample_taps should "
+                        "not exceed material_max_sample_taps."),
+                    record_success=False)
                 bounds["max_sample_taps"] = max(
                     int(bounds["max_sample_taps"]),
                     int(max_sample_taps))

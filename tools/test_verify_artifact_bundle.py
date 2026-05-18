@@ -1004,6 +1004,50 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
             0)
 
+    def test_material_quality_policy_over_engine_cap_is_llm_actionable(self) -> None:
+        plan = material_plan()
+        quality = plan["quality_policy"]
+        assert isinstance(quality, dict)
+        quality["max_blur_radius"] = 40.0
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material quality policy blur radius respects engine cap"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".quality_policy.max_blur_radius")
+        self.assertEqual(failure["expected"], {"<=": 36.0})
+        self.assertEqual(failure["actual"], 40.0)
+        self.assertEqual(failure["likely_pass"], "quality-policy")
+        self.assertIn("material_max_blur_radius", failure["hint"])
+
+    def test_material_resource_budget_over_engine_cap_is_llm_actionable(self) -> None:
+        plan = material_plan()
+        budget = plan["resource_budget"]
+        assert isinstance(budget, dict)
+        budget["max_sample_taps"] = 26
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material resource budget sample taps respect engine cap"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".resource_budget.max_sample_taps")
+        self.assertEqual(failure["expected"], {"<=": 25})
+        self.assertEqual(failure["actual"], 26)
+        self.assertEqual(failure["likely_pass"], "resource-budget")
+        self.assertIn("material_max_sample_taps", failure["hint"])
+
     def test_file_explorer_native_chrome_contract_accepts_platform_owner(self) -> None:
         code, report = self.run_verifier(
             snapshot_with_file_explorer_chrome(material_plan()))
