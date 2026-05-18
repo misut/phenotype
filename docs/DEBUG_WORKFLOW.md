@@ -450,9 +450,13 @@ image cache.
 `phenotype package inspect --json <package>` now runs the same SVG contract for
 every declared package SVG asset. Check
 `resource_catalog.svg_asset_inspections[*]` or the `svg_asset_inspection` check
-before launching a renderer: `present`, `bytes`, `paintable`,
+before launching a renderer: `present`, `bytes`, `sha256`, `paintable`,
 `unsupported_count`, and `diagnostics` tell whether the packaged vector image is
-valid under the same bounded parser that `widget::svg_image` uses.
+valid under the same bounded parser that `widget::svg_image` uses. For
+file-type icons, inspect `catalog_source`: it parses the embedded audited SVG
+source tied to the pinned permissive URL and reports whether the packaged asset
+keeps the same viewBox and shape contract without depending on a CI network
+fetch.
 
 The same artifact exposes `application.file_explorer.theme_system.*` from the
 pure `phenotype_theme_contract` package. That block names the Apple-like glass

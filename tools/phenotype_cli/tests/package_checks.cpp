@@ -25,6 +25,7 @@ int main() {
         {.name = "file_type.pdf.icon",
          .source = "assets/icons/file-types/pdf.svg",
          .present = true,
+         .sha256 = std::string(64, 'a'),
          .inspected = true,
          .ok = true,
          .file_type_icon_asset = true,
@@ -39,7 +40,10 @@ int main() {
              .source_revision = "5b40f2c5",
              .embedded_source = true,
              .platform_extracted = false,
-             .runtime_fetch_required = false}});
+             .runtime_fetch_required = false},
+         .catalog_source_inspected = true,
+         .catalog_source_ok = true,
+         .catalog_source_shape_match = true});
 
     auto checks = cli_package::package_checks(summary);
     auto find_check = [&](std::string const& name) {
@@ -63,5 +67,9 @@ int main() {
     auto provenance_check = find_check("svg_file_type_icon_provenance");
     assert(provenance_check.ok);
     assert(provenance_check.detail.find("file_type_icon_assets=1")
+        != std::string::npos);
+    assert(provenance_check.detail.find("digest_failures=0")
+        != std::string::npos);
+    assert(provenance_check.detail.find("catalog_source_failures=0")
         != std::string::npos);
 }
