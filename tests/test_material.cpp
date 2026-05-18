@@ -38,6 +38,15 @@ MaterialRequest regular_request() {
     };
 }
 
+MaterialRequest content_request() {
+    auto style = material_style_for_kind(MaterialKind::Regular, Theme{});
+    style.role = MaterialSurfaceRole::Content;
+    return MaterialRequest{
+        style,
+        MaterialGeometry{12.0f, 20.0f, 240.0f, 96.0f, 10.0f},
+    };
+}
+
 void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
@@ -81,6 +90,64 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.observation_contract.max_frame_capture_pixels == 320 * 240);
     assert(plan.observation_contract.max_surface_sample_pixels == 240 * 96);
     std::puts("PASS: sampled backdrop access contract");
+}
+
+void test_content_layer_stays_standard_material_contract() {
+    auto plan = plan_material_surface(content_request(), sampled_environment());
+
+    assert(!plan.fallback());
+    assert(plan.role == MaterialSurfaceRole::Content);
+    assert(plan.command_descriptor.role == MaterialSurfaceRole::Content);
+    assert(!plan.decision_trace.role_allows_liquid_glass);
+    assert(plan.decision_trace.content_layer_standard_material);
+    assert(!plan.decision_trace.liquid_glass_backdrop_candidate);
+    assert(plan.decision_trace.backend_supports_backdrop);
+    assert(!plan.decision_trace.can_sample_backdrop);
+    assert(!plan.decision_trace.next_frame_capture_required);
+    assert(!plan.backdrop_sampling);
+    assert(plan.blur_radius == 0.0f);
+    assert(plan.saturation == 1.0f);
+    assert(plan.noise_opacity == 0.0f);
+    assert(plan.sample_taps == 0u);
+    assert(std::string_view(plan.plan_id)
+        == "material.regular.standard-material");
+    assert(std::string_view(plan.reference_model.technology)
+        == "standard-material");
+    assert(std::string_view(plan.reference_model.layer)
+        == "content-layer");
+    assert(std::string_view(plan.reference_model.material_policy)
+        == "standard-material-content-layer");
+    assert(std::string_view(plan.reference_model.blending_scope)
+        == "standard-fill");
+    assert(!plan.backdrop_access.required);
+    assert(!plan.backdrop_access.shared_frame_capture);
+    assert(!plan.backdrop_access.next_frame_capture_required);
+    assert(std::string_view(plan.backdrop_access.capture_scope) == "none");
+    assert(std::string_view(plan.backdrop_access.capture_reason)
+        == "not-required");
+    assert(std::string_view(plan.sampling_kernel.name) == "none");
+    assert(plan.sampling_kernel.sample_taps == 0u);
+    assert(!plan.sampling_kernel.requires_backdrop);
+    assert(std::string_view(plan.primary_pass.name)
+        == "standard-material-fill");
+    assert(plan.primary_pass.active);
+    assert(!plan.primary_pass.requires_backdrop);
+    assert(plan.primary_pass.sample_taps == 0u);
+    assert(std::string_view(plan.primary_pass.likely_layer)
+        == "material-standard-pass");
+    assert(std::string_view(plan.primary_pass.executor)
+        == "standard-fill");
+    assert(plan.observation_contract.runtime_plan_required);
+    assert(!plan.observation_contract.fallback_expected);
+    assert(!plan.observation_contract.backdrop_sampling_expected);
+    assert(!plan.observation_contract.shared_frame_capture_required);
+    assert(!plan.observation_contract.next_frame_capture_required);
+    assert(plan.observation_contract.expected_backdrop_execution_stages == 0u);
+    assert(std::string_view(plan.observation_contract.likely_layer)
+        == "material-standard-pass");
+    assert(std::string_view(plan.observation_contract.likely_pass)
+        == "standard-material-fill");
+    std::puts("PASS: content layer stays standard material contract");
 }
 
 void test_fallback_backdrop_access_contract() {
@@ -222,6 +289,7 @@ void test_surface_sample_pixels_are_scaled_and_bounded() {
 
 int main() {
     test_sampled_backdrop_access_contract();
+    test_content_layer_stays_standard_material_contract();
     test_fallback_backdrop_access_contract();
     test_custom_theme_snapshot_contract();
     test_command_material_preserves_theme_snapshot_contract();

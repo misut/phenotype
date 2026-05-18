@@ -716,6 +716,34 @@ inline void canvas(float width, float height,
     detail::attach_to_scope(h);
 }
 
+// Canvas rendering with an explicit semantic node. Use this when custom
+// painting must stay visually bounded while artifacts still need a readable
+// label for verifier/debug workflows.
+inline void semantic_canvas(float width, float height,
+                            str semantic_label,
+                            std::function<void(Painter&)> paint_fn,
+                            std::function<void(GestureEvent const&)> on_gesture = {},
+                            std::uint64_t paint_token = 0,
+                            str semantic_role = str{"text"}) {
+    auto h = detail::alloc_node();
+    auto& node = detail::node_at(h);
+    node.style.max_width = width;
+    node.style.fixed_height = height;
+    node.debug_semantic_role =
+        std::string{semantic_role.data, semantic_role.len};
+    node.debug_semantic_label =
+        std::string{semantic_label.data, semantic_label.len};
+    node.paint_fn = std::move(paint_fn);
+    node.paint_token = paint_token;
+    if (on_gesture) {
+        auto gid = static_cast<unsigned int>(
+            detail::g_app.gesture_callbacks.size());
+        detail::g_app.gesture_callbacks.push_back(std::move(on_gesture));
+        node.gesture_callback_id = gid;
+    }
+    detail::attach_to_scope(h);
+}
+
 inline void svg_image(svg::Document document,
                       float width,
                       float height,

@@ -391,10 +391,13 @@ single artifact. The
 `reference_sources` array names the exact Apple HIG/SF Symbols
 semantic references, W3C SVG path reference, Lucide embedded-source reference,
 Feather MIT license-lineage reference, Tabler MIT future-source candidate, and
-Material Symbols Apache-2.0 future-source candidate used by the policy.
+Iconoir MIT future-source candidate, and Material Symbols Apache-2.0
+future-source candidate used by the policy.
 Apple rows must stay
 `used_as_embedded_asset_source=false` and `apple_owned_artwork=true`; a failure
-there points to provenance policy before any renderer investigation. The
+there points to provenance policy before any renderer investigation. macOS
+system-icon extraction is also out of policy unless a future reference row
+records explicit redistribution clearance. The
 desktop payload also includes
 `sidebar_symbol_tokens`, the renderer-facing table that maps sidebar tokens to
 audited symbols and semantic SF Symbols reference names, so a wrong

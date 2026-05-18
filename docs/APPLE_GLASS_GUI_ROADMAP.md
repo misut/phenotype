@@ -310,8 +310,8 @@ direct raw SVG URL, source revision, copyright, and Apple-asset boundary exposed
 in debug metadata. The catalog also exposes `reference_sources` with the Apple HIG
 and SF Symbols design-reference URLs, the W3C SVG path reference, the active
 Lucide embedded-source reference, the Feather MIT license-lineage reference,
-the Tabler MIT candidate reference, and the Material Symbols Apache-2.0
-candidate reference. Apple references are
+the Tabler MIT candidate reference, the Iconoir MIT candidate reference, and
+the Material Symbols Apache-2.0 candidate reference. Apple references are
 explicitly marked as non-embedded Apple-owned artwork so future file-icon work
 can be Finder-like without copying Finder or SF Symbols assets. The current
 built-in catalog uses audited Lucide SVGs pinned
@@ -319,6 +319,9 @@ to a fixed source revision for
 35 of 39 symbols across toolbar, sidebar, action, and file-type roles, leaving
 only AirDrop, Shared, Sort Group, and More as phenotype-owned glyphs where the
 Finder-specific metaphor or filled dot treatment is safer to control locally.
+Future icon imports must use permissive SVG sources found through web/reference
+research first; macOS system-icon or Finder-artwork extraction stays out of
+policy unless explicit redistribution clearance is recorded in the catalog.
 A pure Finder-style file-type
 tint policy now gives
 folder/document/PDF/text/image/SVG image/movie/archive/audio/code/spreadsheet/presentation glyphs deterministic colors for

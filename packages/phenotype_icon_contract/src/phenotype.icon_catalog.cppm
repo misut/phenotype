@@ -230,7 +230,7 @@ inline constexpr unsigned int apple_asset_symbol_count = 0;
 inline constexpr unsigned int platform_extracted_symbol_count = 0;
 inline constexpr unsigned int runtime_fetched_symbol_count = 0;
 inline constexpr unsigned int audited_symbol_source_count = all_symbol_count;
-inline constexpr unsigned int reference_source_count = 7;
+inline constexpr unsigned int reference_source_count = 8;
 inline constexpr unsigned int sidebar_symbol_count = 11;
 inline constexpr unsigned int toolbar_symbol_count = 15;
 inline constexpr unsigned int file_type_symbol_count = 11;
@@ -400,7 +400,7 @@ inline auto asset_policy() noexcept -> std::string_view {
 }
 
 inline auto source_license_policy() noexcept -> std::string_view {
-    return "phenotype-owned or permissive SVG only; accepted external licenses include ISC, Feather-derived MIT, and Apache-2.0 with per-symbol attribution";
+    return "phenotype-owned or permissive SVG only; accepted external licenses include Lucide ISC, Feather-derived MIT, Tabler MIT, Iconoir MIT, and Apache-2.0 with per-symbol attribution";
 }
 
 inline auto preferred_external_source_policy() noexcept -> std::string_view {
@@ -408,7 +408,7 @@ inline auto preferred_external_source_policy() noexcept -> std::string_view {
 }
 
 inline auto source_acquisition_policy() noexcept -> std::string_view {
-    return "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons or fetches remote resources";
+    return "development-time import from pinned raw permissive SVG URLs only; runtime uses embedded SVG strings and never extracts platform icons, macOS system icons, or fetches remote resources";
 }
 
 inline auto lucide_source_revision() noexcept -> std::string_view {
@@ -484,6 +484,15 @@ inline auto reference_source_at(unsigned int index) noexcept
         return {
             "Tabler Icons",
             "https://github.com/tabler/tabler-icons",
+            "future permissive fallback source candidate",
+            "MIT license with attribution when embedded",
+            false,
+            false,
+        };
+    case 7:
+        return {
+            "Iconoir",
+            "https://github.com/iconoir-icons/iconoir",
             "future permissive fallback source candidate",
             "MIT license with attribution when embedded",
             false,
