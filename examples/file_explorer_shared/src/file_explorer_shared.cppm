@@ -310,6 +310,9 @@ struct ExplorerChromeMetrics {
     int toolbar_icon_button_count = 0;
     int column_location_row_count = 0;
     int titlebar_control_count = 0;
+    int native_window_control_count = 0;
+    int content_window_control_marker_count = 0;
+    int artifact_window_control_marker_count = 0;
     int overflow_action_button_count = 0;
     int icon_total_symbol_count = 0;
     int sidebar_symbol_count = 0;
@@ -419,6 +422,9 @@ struct ExplorerChromeMetrics {
     std::string theme_fallback_policy;
     std::string chrome_geometry_policy;
     std::string window_control_marker_mode;
+    std::string native_window_control_owner;
+    std::string window_control_render_policy;
+    std::string titlebar_control_reserve_policy;
 };
 
 struct ExplorerInputTrace {
@@ -1009,6 +1015,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .toolbar_icon_button_count = 4,
             .column_location_row_count = 0,
             .titlebar_control_count = 0,
+            .native_window_control_count = 0,
+            .content_window_control_marker_count = 0,
+            .artifact_window_control_marker_count = 0,
             .icon_total_symbol_count =
                 static_cast<int>(icon_catalog::all_symbol_count),
             .sidebar_symbol_count =
@@ -1196,6 +1205,10 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
                 std::string{theme_contract::default_theme_fallback_policy()},
             .chrome_geometry_policy = "n/a",
             .window_control_marker_mode = "none",
+            .native_window_control_owner = "none",
+            .window_control_render_policy = "not_applicable_mobile_shell",
+            .titlebar_control_reserve_policy =
+                "not_applicable_mobile_shell",
         };
     }
     auto columns = desktop_icon_grid_column_count(viewport);
@@ -1307,6 +1320,9 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .toolbar_icon_button_count = 11,
         .column_location_row_count = k_desktop_column_location_row_count,
         .titlebar_control_count = k_desktop_titlebar_control_count,
+        .native_window_control_count = k_desktop_titlebar_control_count,
+        .content_window_control_marker_count = 0,
+        .artifact_window_control_marker_count = 0,
         .icon_total_symbol_count =
             static_cast<int>(icon_catalog::all_symbol_count),
         .sidebar_symbol_count =
@@ -1493,15 +1509,36 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             std::string{theme_contract::default_theme_fallback_policy()},
         .chrome_geometry_policy = k_desktop_chrome_geometry_policy,
         .window_control_marker_mode = "runtime-native-controls",
+        .native_window_control_owner = "platform-edge",
+        .window_control_render_policy =
+            "native_controls_runtime_only_no_content_or_artifact_markers",
+        .titlebar_control_reserve_policy =
+            "blank_reserve_under_os_window_controls",
     };
 }
 
-inline ExplorerChromeMetrics explorer_chrome_with_artifact_window_markers(
+inline ExplorerChromeMetrics explorer_chrome_with_native_window_control_ownership(
         ExplorerChromeMetrics chrome) {
-    if (chrome.native_window_controls && !chrome.duplicate_window_controls)
+    chrome.duplicate_window_controls = false;
+    if (chrome.native_window_controls)
         chrome.window_control_marker_mode = "runtime-native-controls";
     chrome.content_window_control_markers = false;
     chrome.artifact_window_control_markers = false;
+    chrome.content_window_control_marker_count = 0;
+    chrome.artifact_window_control_marker_count = 0;
+    if (chrome.native_window_controls) {
+        if (chrome.native_window_control_count <= 0)
+            chrome.native_window_control_count = chrome.titlebar_control_count;
+        chrome.native_window_control_owner = "platform-edge";
+        chrome.window_control_render_policy =
+            "native_controls_runtime_only_no_content_or_artifact_markers";
+        chrome.titlebar_control_reserve_policy =
+            "blank_reserve_under_os_window_controls";
+    } else {
+        chrome.native_window_control_count = 0;
+        chrome.native_window_control_owner = "none";
+        chrome.window_control_marker_mode = "none";
+    }
     return chrome;
 }
 
@@ -2486,6 +2523,26 @@ inline json::Value explorer_chrome_debug_json(
     native_window.emplace("artifact_window_control_markers", json::Value{chrome.artifact_window_control_markers});
     native_window.emplace("window_control_marker_mode", json::Value{chrome.window_control_marker_mode});
     native_window.emplace(
+        "native_window_control_owner",
+        json::Value{chrome.native_window_control_owner});
+    native_window.emplace(
+        "native_window_control_count",
+        json::Value{static_cast<std::int64_t>(chrome.native_window_control_count)});
+    native_window.emplace(
+        "content_window_control_marker_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.content_window_control_marker_count)});
+    native_window.emplace(
+        "artifact_window_control_marker_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.artifact_window_control_marker_count)});
+    native_window.emplace(
+        "window_control_render_policy",
+        json::Value{chrome.window_control_render_policy});
+    native_window.emplace(
+        "titlebar_control_reserve_policy",
+        json::Value{chrome.titlebar_control_reserve_policy});
+    native_window.emplace(
         "titlebar_drag_region_height",
         json::Value{chrome.titlebar_drag_region_height});
     native_window.emplace(
@@ -2846,6 +2903,9 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("column_location_row_count", json::Value{static_cast<std::int64_t>(chrome.column_location_row_count)});
     out.emplace("column_location_row_height", json::Value{chrome.column_location_row_height});
     out.emplace("titlebar_control_count", json::Value{static_cast<std::int64_t>(chrome.titlebar_control_count)});
+    out.emplace("native_window_control_count", json::Value{static_cast<std::int64_t>(chrome.native_window_control_count)});
+    out.emplace("content_window_control_marker_count", json::Value{static_cast<std::int64_t>(chrome.content_window_control_marker_count)});
+    out.emplace("artifact_window_control_marker_count", json::Value{static_cast<std::int64_t>(chrome.artifact_window_control_marker_count)});
     out.emplace("overflow_action_button_count", json::Value{static_cast<std::int64_t>(chrome.overflow_action_button_count)});
     out.emplace("sidebar_symbol_count", json::Value{static_cast<std::int64_t>(chrome.sidebar_symbol_count)});
     out.emplace("toolbar_symbol_count", json::Value{static_cast<std::int64_t>(chrome.toolbar_symbol_count)});
@@ -2853,6 +2913,9 @@ inline json::Value explorer_chrome_debug_json(
     out.emplace("content_window_control_markers", json::Value{chrome.content_window_control_markers});
     out.emplace("artifact_window_control_markers", json::Value{chrome.artifact_window_control_markers});
     out.emplace("window_control_marker_mode", json::Value{chrome.window_control_marker_mode});
+    out.emplace("native_window_control_owner", json::Value{chrome.native_window_control_owner});
+    out.emplace("window_control_render_policy", json::Value{chrome.window_control_render_policy});
+    out.emplace("titlebar_control_reserve_policy", json::Value{chrome.titlebar_control_reserve_policy});
     out.emplace("finder_segmented_toolbar", json::Value{chrome.finder_segmented_toolbar});
     out.emplace("more_actions_open", json::Value{chrome.more_actions_open});
     out.emplace("status_bar_visible", json::Value{chrome.status_bar_visible});

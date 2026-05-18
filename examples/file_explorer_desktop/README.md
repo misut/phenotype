@@ -59,15 +59,17 @@ Finder toolbar group, separator, icon-button, and compact Recents icon-grid
 density metrics from that payload, including thumbnail canvas, label, font,
 grid-gap sizing, contextual `status_bar_visible` state, and the
 `window_control_marker_mode` split between live native controls and artifact
-probe markers. It also checks the pure `geometry` object for the integrated
-chrome contract: window inset/gap, sidebar surface origin, first sidebar row,
-toolbar shell, navigation/title/trailing group x-coordinates, collapsed search
-button x-coordinate, content surface origin, and the native titlebar drag and
-leading/trailing control reserve widths. Sidebar symbol and label placement,
-section spacing, selected-row radius, soft selected-row alpha policy, and
-blank native-control reserve coordinates are still asserted separately, so
-Finder parity regressions are reported as structured chrome contract failures
-before pixel inspection.
+probe markers. It records `native_window_control_owner=platform-edge`, a native
+control count, zero content/artifact marker counts, and a render policy that
+allows only runtime OS controls. It also checks the pure `geometry` object for
+the integrated chrome contract: window inset/gap, sidebar surface origin, first
+sidebar row, toolbar shell, navigation/title/trailing group x-coordinates,
+collapsed search button x-coordinate, content surface origin, and the native
+titlebar drag and leading/trailing control reserve widths. Sidebar symbol and
+label placement, section spacing, selected-row radius, soft selected-row alpha
+policy, blank native-control reserve coordinates, and forbidden traffic-light
+palette probes are asserted separately, so Finder parity regressions are
+reported as structured chrome contract failures before pixel inspection.
 The sidebar and toolbar glyphs come from `phenotype.icons`, not copied SF
 Symbols assets. They are phenotype-owned SVG symbols with a macOS-style
 rounded-outline contract and bounded secondary-layer opacity for detailed

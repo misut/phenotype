@@ -725,12 +725,17 @@ hit testing stay at the platform edge rather than being redrawn by phenotype.
 The file explorer's `debug.application.file_explorer.chrome` additionally
 publishes `content_window_control_markers=false`,
 `artifact_window_control_markers=false`, `duplicate_window_controls=false`, and
-`window_control_marker_mode=runtime-native-controls`. The verifier pairs those
-debug details with low-detail, neutral pixel-region checks over the leading
-control reserve, so a future content-drawn traffic-light marker fails before it
-can ship as a duplicate of OS controls. `phenotype package inspect` additionally
-rejects package app icons that embed macOS traffic-light marker colors, so icon
-assets cannot reintroduce the same native-control visual cue. The chrome object
+`window_control_marker_mode=runtime-native-controls`. It also reports
+`native_window_control_owner=platform-edge`, native-control count, zero
+content/artifact marker counts, and the
+`native_controls_runtime_only_no_content_or_artifact_markers` render policy. The
+verifier checks that invariant independently of the manifest and pairs it with
+low-detail, neutral pixel-region checks plus forbidden traffic-light palette
+checks over the leading control reserve, so a future content-drawn
+traffic-light marker fails before it can ship as a duplicate of OS controls.
+`phenotype package inspect` additionally rejects package app icons that embed
+macOS traffic-light marker colors, so icon assets cannot reintroduce the same
+native-control visual cue. The chrome object
 also publishes the native titlebar drag/control reserve widths plus a
 `geometry.policy=finder_integrated_glass_chrome_geometry_v1` object with the
 window inset/gap, sidebar surface origin, first sidebar row, toolbar shell,

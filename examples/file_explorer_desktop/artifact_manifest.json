@@ -379,6 +379,30 @@
       "equals": "runtime-native-controls"
     },
     {
+      "path": "application.file_explorer.chrome.native_window.native_window_control_owner",
+      "equals": "platform-edge"
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.native_window_control_count",
+      "equals": 3
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.content_window_control_marker_count",
+      "equals": 0
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.artifact_window_control_marker_count",
+      "equals": 0
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.window_control_render_policy",
+      "equals": "native_controls_runtime_only_no_content_or_artifact_markers"
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window.titlebar_control_reserve_policy",
+      "equals": "blank_reserve_under_os_window_controls"
+    },
+    {
       "path": "application.file_explorer.chrome.native_window.titlebar_drag_region_height",
       "equals": 64.0
     },
@@ -1142,6 +1166,30 @@
       "equals": "runtime-native-controls"
     },
     {
+      "path": "application.file_explorer.chrome.native_window_control_owner",
+      "equals": "platform-edge"
+    },
+    {
+      "path": "application.file_explorer.chrome.native_window_control_count",
+      "equals": 3
+    },
+    {
+      "path": "application.file_explorer.chrome.content_window_control_marker_count",
+      "equals": 0
+    },
+    {
+      "path": "application.file_explorer.chrome.artifact_window_control_marker_count",
+      "equals": 0
+    },
+    {
+      "path": "application.file_explorer.chrome.window_control_render_policy",
+      "equals": "native_controls_runtime_only_no_content_or_artifact_markers"
+    },
+    {
+      "path": "application.file_explorer.chrome.titlebar_control_reserve_policy",
+      "equals": "blank_reserve_under_os_window_controls"
+    },
+    {
       "path": "application.file_explorer.chrome.more_actions_open",
       "equals": false
     },
@@ -1699,6 +1747,29 @@
       "reference_region": "finder-titlebar-zoom-reserve",
       "reference_metric": "red_mean",
       "lte_ratio": 1.02
+    }
+  ],
+  "forbid_pixel_region_colors": [
+    {
+      "region": "finder-titlebar-native-control-reserve",
+      "name": "macos-close-red-marker",
+      "rgb": [255, 95, 87],
+      "tolerance": 28,
+      "max_pixels": 0
+    },
+    {
+      "region": "finder-titlebar-native-control-reserve",
+      "name": "macos-minimize-yellow-marker",
+      "rgb": [255, 189, 46],
+      "tolerance": 28,
+      "max_pixels": 0
+    },
+    {
+      "region": "finder-titlebar-native-control-reserve",
+      "name": "macos-zoom-green-marker",
+      "rgb": [40, 200, 64],
+      "tolerance": 28,
+      "max_pixels": 0
     }
   ]
 }
