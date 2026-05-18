@@ -218,7 +218,9 @@ same focus contract as the renderer: keyboard focus navigation sets
 `focus_visible=true`, while pointer focus updates the target but keeps the
 ring hidden. The `input_model` records `last_input_modality`, `focus_target`,
 `focus_visible`, the focus order, the macOS-style focus ring token, and the
-reason a ring is or is not visible.
+reason a ring is or is not visible. The native shell applies the same reset
+before platform-consumed left-button presses, which prevents titlebar, IME, or
+other edge adapters from preserving a keyboard ring after a pointer click.
 Native file explorer artifact bundles expose the same model state under
 `debug.application.file_explorer`: profile, location, status, sort mode, view
 mode, selected entry plus index, operation receipt, entry counts, pure chrome

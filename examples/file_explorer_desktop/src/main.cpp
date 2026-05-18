@@ -24,6 +24,7 @@ namespace fs = std::filesystem;
 
 struct SelectLocation { std::string id; };
 struct SelectEntry { std::string name; };
+struct ExplorerInputMessage { file_explorer_demo::ExplorerInput input; };
 struct SetViewMode { file_explorer_demo::ExplorerViewMode mode; };
 struct ToolbarAction { std::string label; };
 struct SearchChanged { std::string text; };
@@ -49,6 +50,7 @@ struct Noop {};
 using Msg = std::variant<
     SelectLocation,
     SelectEntry,
+    ExplorerInputMessage,
     SetViewMode,
     ToolbarAction,
     SearchChanged,
@@ -137,6 +139,47 @@ file_explorer_demo::ExplorerState initial_explorer_state() {
         }
     }
     return state;
+}
+
+file_explorer_demo::ExplorerInput explorer_input(
+        file_explorer_demo::ExplorerInputKind kind,
+        file_explorer_demo::ExplorerInputModality modality) {
+    return file_explorer_demo::ExplorerInput{
+        .kind = kind,
+        .modality = modality,
+    };
+}
+
+file_explorer_demo::ExplorerInput pointer_input(
+        file_explorer_demo::ExplorerInputKind kind) {
+    return explorer_input(
+        kind,
+        file_explorer_demo::ExplorerInputModality::Pointer);
+}
+
+file_explorer_demo::ExplorerInput keyboard_input(
+        file_explorer_demo::ExplorerInputKind kind) {
+    return explorer_input(
+        kind,
+        file_explorer_demo::ExplorerInputModality::Keyboard);
+}
+
+file_explorer_demo::ExplorerInput keyboard_move_input(
+        file_explorer_demo::ExplorerSelectionMove move) {
+    auto input = keyboard_input(
+        file_explorer_demo::ExplorerInputKind::MoveSelection);
+    input.value = file_explorer_demo::selection_move_value_name(move);
+    input.selection_move = move;
+    return input;
+}
+
+void apply_desktop_input(
+        file_explorer_demo::ExplorerState& explorer,
+        file_explorer_demo::ExplorerInput input) {
+    file_explorer_demo::apply_explorer_input(
+        explorer,
+        input,
+        "desktop");
 }
 
 std::string initial_locale() {
@@ -888,69 +931,93 @@ void update(State& state, Msg msg) {
         using T = std::decay_t<decltype(m)>;
         if constexpr (std::same_as<T, SelectLocation>) {
             state.more_actions_open = false;
-            file_explorer_demo::select_location(explorer, m.id);
+            auto input = pointer_input(
+                file_explorer_demo::ExplorerInputKind::SelectLocation);
+            input.value = m.id;
+            apply_desktop_input(explorer, std::move(input));
         } else if constexpr (std::same_as<T, SelectEntry>) {
             state.more_actions_open = false;
-            file_explorer_demo::activate_entry(explorer, m.name);
+            auto input = pointer_input(
+                file_explorer_demo::ExplorerInputKind::ActivateEntry);
+            input.value = m.name;
+            apply_desktop_input(explorer, std::move(input));
+        } else if constexpr (std::same_as<T, ExplorerInputMessage>) {
+            state.more_actions_open = false;
+            apply_desktop_input(explorer, m.input);
         } else if constexpr (std::same_as<T, SetViewMode>) {
             state.more_actions_open = false;
-            file_explorer_demo::apply_explorer_input(
-                explorer,
-                {
-                    .kind = file_explorer_demo::ExplorerInputKind::ViewMode,
-                    .value = file_explorer_demo::view_mode_value_name(m.mode),
-                    .view_mode = m.mode,
-                },
-                "desktop");
+            auto input = pointer_input(
+                file_explorer_demo::ExplorerInputKind::ViewMode);
+            input.value = file_explorer_demo::view_mode_value_name(m.mode);
+            input.view_mode = m.mode;
+            apply_desktop_input(explorer, std::move(input));
         } else if constexpr (std::same_as<T, ToolbarAction>) {
             state.more_actions_open = false;
             explorer.status = m.label + " action is available in the native toolbar contract.";
         } else if constexpr (std::same_as<T, SearchChanged>) {
-            file_explorer_demo::set_search_filter(explorer, m.text);
+            auto input = keyboard_input(
+                file_explorer_demo::ExplorerInputKind::Search);
+            input.value = m.text;
+            apply_desktop_input(explorer, std::move(input));
             state.search_visible = true;
         } else if constexpr (std::same_as<T, ToggleSearch>) {
             state.more_actions_open = false;
             state.search_visible = !state.search_visible;
             if (!state.search_visible) {
-                file_explorer_demo::set_search_filter(explorer, {});
+                auto input = pointer_input(
+                    file_explorer_demo::ExplorerInputKind::Search);
+                apply_desktop_input(explorer, std::move(input));
             } else {
-                explorer.status = "Search ready.";
+                apply_desktop_input(
+                    explorer,
+                    pointer_input(file_explorer_demo::ExplorerInputKind::FocusSearch));
             }
         } else if constexpr (std::same_as<T, ShowSearch>) {
             state.more_actions_open = false;
             state.search_visible = true;
-            explorer.status = "Search ready.";
+            apply_desktop_input(
+                explorer,
+                keyboard_input(file_explorer_demo::ExplorerInputKind::FocusSearch));
         } else if constexpr (std::same_as<T, DismissTransient>) {
             if (state.more_actions_open) {
                 state.more_actions_open = false;
                 explorer.status = "More actions closed.";
             } else if (state.search_visible) {
                 state.search_visible = false;
-                file_explorer_demo::set_search_filter(explorer, {});
+                auto input = keyboard_input(
+                    file_explorer_demo::ExplorerInputKind::Search);
+                apply_desktop_input(explorer, std::move(input));
             } else {
                 explorer.status = "Ready";
             }
         } else if constexpr (std::same_as<T, MoveSelection>) {
             state.more_actions_open = false;
-            file_explorer_demo::move_selection(
-                explorer,
-                m.move,
-                "desktop");
+            apply_desktop_input(explorer, keyboard_move_input(m.move));
         } else if constexpr (std::same_as<T, CreateFile>) {
             state.more_actions_open = false;
-            file_explorer_demo::create_file(explorer);
+            apply_desktop_input(
+                explorer,
+                pointer_input(file_explorer_demo::ExplorerInputKind::CreateFile));
         } else if constexpr (std::same_as<T, CreateFolder>) {
             state.more_actions_open = false;
-            file_explorer_demo::create_folder(explorer);
+            apply_desktop_input(
+                explorer,
+                pointer_input(file_explorer_demo::ExplorerInputKind::CreateFolder));
         } else if constexpr (std::same_as<T, DeleteSelected>) {
             state.more_actions_open = false;
-            file_explorer_demo::delete_selected(explorer);
+            apply_desktop_input(
+                explorer,
+                pointer_input(file_explorer_demo::ExplorerInputKind::DeleteSelected));
         } else if constexpr (std::same_as<T, DuplicateSelected>) {
             state.more_actions_open = false;
-            file_explorer_demo::duplicate_selected(explorer);
+            apply_desktop_input(
+                explorer,
+                pointer_input(file_explorer_demo::ExplorerInputKind::DuplicateSelected));
         } else if constexpr (std::same_as<T, ActivateSelected>) {
             state.more_actions_open = false;
-            file_explorer_demo::activate_selected_entry(explorer);
+            apply_desktop_input(
+                explorer,
+                keyboard_input(file_explorer_demo::ExplorerInputKind::ActivateSelected));
         } else if constexpr (std::same_as<T, ToggleMoreActions>) {
             state.more_actions_open = !state.more_actions_open;
             explorer.status = state.more_actions_open
@@ -958,16 +1025,24 @@ void update(State& state, Msg msg) {
                 : "Ready";
         } else if constexpr (std::same_as<T, GoBack>) {
             state.more_actions_open = false;
-            file_explorer_demo::go_back(explorer);
+            apply_desktop_input(
+                explorer,
+                pointer_input(file_explorer_demo::ExplorerInputKind::GoBack));
         } else if constexpr (std::same_as<T, GoForward>) {
             state.more_actions_open = false;
-            file_explorer_demo::go_forward(explorer);
+            apply_desktop_input(
+                explorer,
+                pointer_input(file_explorer_demo::ExplorerInputKind::GoForward));
         } else if constexpr (std::same_as<T, GoUp>) {
             state.more_actions_open = false;
-            file_explorer_demo::go_up(explorer);
+            apply_desktop_input(
+                explorer,
+                pointer_input(file_explorer_demo::ExplorerInputKind::GoUp));
         } else if constexpr (std::same_as<T, CycleSort>) {
             state.more_actions_open = false;
-            file_explorer_demo::cycle_sort_mode(explorer);
+            apply_desktop_input(
+                explorer,
+                pointer_input(file_explorer_demo::ExplorerInputKind::CycleSort));
         } else if constexpr (std::same_as<T, Refresh>) {
             state.more_actions_open = false;
             explorer.status = "Refreshed " + file_explorer_demo::relative_location(
@@ -1975,6 +2050,50 @@ void finder_key_command(phenotype::native::Key key,
         });
 }
 
+ExplorerInputMessage explorer_key_message(
+        file_explorer_demo::ExplorerInput input) {
+    input.modality = file_explorer_demo::ExplorerInputModality::Keyboard;
+    return ExplorerInputMessage{std::move(input)};
+}
+
+ExplorerInputMessage explorer_key_message(
+        file_explorer_demo::ExplorerInputKind kind) {
+    return explorer_key_message(keyboard_input(kind));
+}
+
+void finder_key_input(phenotype::native::Key key,
+                      int modifiers,
+                      file_explorer_demo::ExplorerInput input,
+                      char const* label,
+                      bool allow_when_input_focused = false) {
+    finder_key_command(
+        key,
+        modifiers,
+        explorer_key_message(std::move(input)),
+        label,
+        allow_when_input_focused);
+}
+
+void finder_key_input(phenotype::native::Key key,
+                      int modifiers,
+                      file_explorer_demo::ExplorerInputKind kind,
+                      char const* label,
+                      bool allow_when_input_focused = false) {
+    finder_key_input(
+        key,
+        modifiers,
+        keyboard_input(kind),
+        label,
+        allow_when_input_focused);
+}
+
+void finder_key_move(phenotype::native::Key key,
+                     int modifiers,
+                     file_explorer_demo::ExplorerSelectionMove move,
+                     char const* label) {
+    finder_key_input(key, modifiers, keyboard_move_input(move), label);
+}
+
 void register_finder_key_commands() {
     using phenotype::native::Key;
     using phenotype::native::Modifier;
@@ -1985,67 +2104,112 @@ void register_finder_key_commands() {
 
     finder_key_command(Key::F, super, ShowSearch{}, "show_search", true);
     finder_key_command(Key::F, control, ShowSearch{}, "show_search", true);
-    finder_key_command(Key::Enter, none, ActivateSelected{}, "activate_selected");
-    finder_key_command(Key::KpEnter, none, ActivateSelected{}, "activate_selected");
-    finder_key_command(
+    finder_key_input(
+        Key::Enter,
+        none,
+        file_explorer_demo::ExplorerInputKind::ActivateSelected,
+        "activate_selected");
+    finder_key_input(
+        Key::KpEnter,
+        none,
+        file_explorer_demo::ExplorerInputKind::ActivateSelected,
+        "activate_selected");
+    finder_key_move(
         Key::Up,
         none,
-        MoveSelection{file_explorer_demo::ExplorerSelectionMove::Up},
+        file_explorer_demo::ExplorerSelectionMove::Up,
         "move_selection_up");
-    finder_key_command(
+    finder_key_move(
         Key::Down,
         none,
-        MoveSelection{file_explorer_demo::ExplorerSelectionMove::Down},
+        file_explorer_demo::ExplorerSelectionMove::Down,
         "move_selection_down");
-    finder_key_command(
+    finder_key_move(
         Key::Left,
         none,
-        MoveSelection{file_explorer_demo::ExplorerSelectionMove::Left},
+        file_explorer_demo::ExplorerSelectionMove::Left,
         "move_selection_left");
-    finder_key_command(
+    finder_key_move(
         Key::Right,
         none,
-        MoveSelection{file_explorer_demo::ExplorerSelectionMove::Right},
+        file_explorer_demo::ExplorerSelectionMove::Right,
         "move_selection_right");
-    finder_key_command(
+    finder_key_move(
         Key::Home,
         none,
-        MoveSelection{file_explorer_demo::ExplorerSelectionMove::Home},
+        file_explorer_demo::ExplorerSelectionMove::Home,
         "move_selection_home");
-    finder_key_command(
+    finder_key_move(
         Key::End,
         none,
-        MoveSelection{file_explorer_demo::ExplorerSelectionMove::End},
+        file_explorer_demo::ExplorerSelectionMove::End,
         "move_selection_end");
-    finder_key_command(
+    finder_key_move(
         Key::PageUp,
         none,
-        MoveSelection{file_explorer_demo::ExplorerSelectionMove::PageUp},
+        file_explorer_demo::ExplorerSelectionMove::PageUp,
         "move_selection_page_up");
-    finder_key_command(
+    finder_key_move(
         Key::PageDown,
         none,
-        MoveSelection{file_explorer_demo::ExplorerSelectionMove::PageDown},
+        file_explorer_demo::ExplorerSelectionMove::PageDown,
         "move_selection_page_down");
-    finder_key_command(Key::Backspace, none, DeleteSelected{}, "delete_selected");
-    finder_key_command(Key::Delete, none, DeleteSelected{}, "delete_selected");
-    finder_key_command(Key::Backspace, super, DeleteSelected{}, "delete_selected");
-    finder_key_command(Key::Backspace, control, DeleteSelected{}, "delete_selected");
-    finder_key_command(Key::Delete, super, DeleteSelected{}, "delete_selected");
-    finder_key_command(Key::Delete, control, DeleteSelected{}, "delete_selected");
-    finder_key_command(Key::D, super, DuplicateSelected{}, "duplicate_selected");
-    finder_key_command(Key::D, control, DuplicateSelected{}, "duplicate_selected");
-    finder_key_command(
+    finder_key_input(
+        Key::Backspace,
+        none,
+        file_explorer_demo::ExplorerInputKind::DeleteSelected,
+        "delete_selected");
+    finder_key_input(
+        Key::Delete,
+        none,
+        file_explorer_demo::ExplorerInputKind::DeleteSelected,
+        "delete_selected");
+    finder_key_input(
+        Key::Backspace,
+        super,
+        file_explorer_demo::ExplorerInputKind::DeleteSelected,
+        "delete_selected");
+    finder_key_input(
+        Key::Backspace,
+        control,
+        file_explorer_demo::ExplorerInputKind::DeleteSelected,
+        "delete_selected");
+    finder_key_input(
+        Key::Delete,
+        super,
+        file_explorer_demo::ExplorerInputKind::DeleteSelected,
+        "delete_selected");
+    finder_key_input(
+        Key::Delete,
+        control,
+        file_explorer_demo::ExplorerInputKind::DeleteSelected,
+        "delete_selected");
+    finder_key_input(
+        Key::D,
+        super,
+        file_explorer_demo::ExplorerInputKind::DuplicateSelected,
+        "duplicate_selected");
+    finder_key_input(
+        Key::D,
+        control,
+        file_explorer_demo::ExplorerInputKind::DuplicateSelected,
+        "duplicate_selected");
+    finder_key_input(
         Key::N,
         shift | super,
-        CreateFolder{},
+        file_explorer_demo::ExplorerInputKind::CreateFolder,
         "create_folder");
-    finder_key_command(
+    finder_key_input(
         Key::N,
         shift | control,
-        CreateFolder{},
+        file_explorer_demo::ExplorerInputKind::CreateFolder,
         "create_folder");
-    finder_key_command(Key::Escape, none, DismissTransient{}, "dismiss_transient", true);
+    finder_key_input(
+        Key::Escape,
+        none,
+        file_explorer_demo::ExplorerInputKind::DismissTransient,
+        "dismiss_transient",
+        true);
 }
 
 void view(State const& state) {
