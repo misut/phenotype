@@ -1147,6 +1147,20 @@ duplicate
         != std::string::npos);
     assert(debug_text.find("\"file_type.pdf.icon\"")
         != std::string::npos);
+    assert(debug_text.find("\"file_type_icon_source_map\"")
+        != std::string::npos);
+    assert(debug_text.find("\"package_declared\":true")
+        != std::string::npos);
+    assert(debug_text.find(
+               "\"source_url\":"
+               "\"https://raw.githubusercontent.com/lucide-icons/lucide/"
+               "5b40f2c5a76a27eeb81c8f1b1c311121dee45495/"
+               "icons/file-text.svg\"")
+        != std::string::npos);
+    assert(debug_text.find("\"runtime_fetch_required\":false")
+        != std::string::npos);
+    assert(debug_text.find("\"platform_extracted\":false")
+        != std::string::npos);
     assert(debug_text.find("\"app_icon\"") != std::string::npos);
     assert(debug_text.find("\"declared\":true") != std::string::npos);
     assert(debug_text.find("\"svg\":true") != std::string::npos);

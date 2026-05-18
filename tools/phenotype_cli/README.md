@@ -76,7 +76,8 @@ The initial scope is intentionally narrow:
   application/debug metadata, declared resource counts, referenced `source`
   files, CLI-owned debug verifier metadata, app-icon SVG policy, Pretendard
   default-font policy, CJK fallback coverage, SVG asset layout,
-  native-chrome-safe SVG asset palettes, locale layout, and font layout.
+  source-safe file-type icon provenance, native-chrome-safe SVG asset palettes,
+  locale layout, and font layout.
   JSON output includes the normalized `ResourceCatalog` produced
   by the shared pure `phenotype.resources` path package plus its pure
   `ResourceCatalogContract`. The contract reports asset preload/runtime-visible
@@ -165,11 +166,13 @@ The initial scope is intentionally narrow:
   fail before a backend image cache or platform renderer is involved. For
   Finder-style packages, it also rejects any packaged SVG asset that embeds
   macOS traffic-light marker colors because those controls belong to the native
-  shell. The file explorer desktop/mobile packages use this path for their
-  runtime-visible file-type icons, all sourced from pinned permissive Lucide raw
-  SVG URLs and checked without network access at runtime. The same packages
-  declare a non-runtime Lucide license text asset so `package bundle` copies
-  the permissive-source notice with the SVG files.
+  shell, and it annotates `file_type.*.icon` assets with the same pinned source
+  URL/license/provenance contract used by the pure icon catalog. The file
+  explorer desktop/mobile packages use this path for their runtime-visible
+  file-type icons, all sourced from pinned permissive Lucide raw SVG URLs and
+  checked without network access at runtime. The same packages declare a
+  non-runtime Lucide license text asset so `package bundle` copies the
+  permissive-source notice with the SVG files.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible

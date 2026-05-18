@@ -3502,6 +3502,50 @@ inline bool is_file_type_icon_asset_name(std::string_view name) noexcept {
     return name.starts_with("file_type.") && name.ends_with(".icon");
 }
 
+inline json::Value file_type_icon_source_map_debug_json(
+        phenotype::ResourceCatalog const& catalog) {
+    json::Object out;
+    for (auto const& item : file_type_symbol_contract()) {
+        auto asset_name = file_type_icon_asset_name_for_symbol(item.symbol);
+        auto asset_source = file_type_icon_asset_source_for_symbol(item.symbol);
+        json::Object entry;
+        entry.emplace(
+            "symbol",
+            json::Value{std::string{icon_catalog::name(item.symbol)}});
+        entry.emplace(
+            "semantic_reference_name",
+            json::Value{std::string{
+                icon_catalog::semantic_reference_name(item.symbol)}});
+        entry.emplace("package_asset_name", json::Value{asset_name});
+        entry.emplace("package_asset_source", json::Value{asset_source});
+        entry.emplace(
+            "package_asset_policy",
+            json::Value{std::string{file_type_icon_asset_policy()}});
+        if (auto asset = phenotype::find_asset(catalog, asset_name)) {
+            entry.emplace("package_declared", json::Value{true});
+            entry.emplace(
+                "package_content_type",
+                json::Value{asset->get().content_type});
+            entry.emplace(
+                "package_runtime_visible",
+                json::Value{asset->get().runtime_visible});
+            entry.emplace(
+                "package_preload",
+                json::Value{asset->get().preload});
+        } else {
+            entry.emplace("package_declared", json::Value{false});
+            entry.emplace("package_content_type", json::Value{""});
+            entry.emplace("package_runtime_visible", json::Value{false});
+            entry.emplace("package_preload", json::Value{false});
+        }
+        entry.emplace(
+            "source_attribution",
+            icon_source_attribution_debug_json(item.symbol));
+        out.emplace(std::string{item.token}, json::Value{std::move(entry)});
+    }
+    return json::Value{std::move(out)};
+}
+
 inline json::Value file_explorer_resource_system_debug_json(
         std::string_view profile) {
     auto catalog = file_explorer_resource_catalog(profile);
@@ -3642,6 +3686,9 @@ inline json::Value file_explorer_resource_system_debug_json(
     out.emplace(
         "file_type_icon_assets",
         json::Value{std::move(file_type_icon_assets)});
+    out.emplace(
+        "file_type_icon_source_map",
+        file_type_icon_source_map_debug_json(catalog));
     out.emplace(
         "svg_asset_policy",
         json::Value{std::string{phenotype::svg_asset_contract_policy()}});

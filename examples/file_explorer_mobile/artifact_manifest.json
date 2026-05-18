@@ -282,6 +282,46 @@
       "equals": "assets/icons/file-types/LUCIDE_LICENSE.txt"
     },
     {
+      "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.package_asset_name",
+      "equals": "file_type.pdf.icon"
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.package_asset_source",
+      "equals": "assets/icons/file-types/pdf.svg"
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.package_declared",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.package_content_type",
+      "equals": "image/svg+xml"
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.package_runtime_visible",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.source_attribution.license",
+      "equals": "ISC"
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.source_attribution.source_url",
+      "equals": "https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-text.svg"
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.source_attribution.runtime_fetch_required",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.source_attribution.platform_extracted",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.resource_system.file_type_icon_source_map.pdf.source_attribution.apple_asset",
+      "equals": false
+    },
+    {
       "path": "application.file_explorer.resource_system.svg_asset_policy",
       "equals": "package_svg_assets_must_declare_image_svg_xml_and_svg_source_suffix"
     },

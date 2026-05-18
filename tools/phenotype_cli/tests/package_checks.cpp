@@ -21,6 +21,25 @@ int main() {
          .inspected = true,
          .ok = true,
          .native_window_control_palette_hits = {"#ff5f57"}});
+    summary.svg_asset_inspections.push_back(
+        {.name = "file_type.pdf.icon",
+         .source = "assets/icons/file-types/pdf.svg",
+         .present = true,
+         .inspected = true,
+         .ok = true,
+         .file_type_icon_asset = true,
+         .file_type_token = "pdf",
+         .icon_symbol = "pdf_document",
+         .source_attribution = {
+             .family = "Lucide",
+             .icon_name = "file-text",
+             .license = "ISC",
+             .license_url = "https://example.invalid/LICENSE",
+             .source_url = "https://example.invalid/file-text.svg",
+             .source_revision = "5b40f2c5",
+             .embedded_source = true,
+             .platform_extracted = false,
+             .runtime_fetch_required = false}});
 
     auto checks = cli_package::package_checks(summary);
     auto find_check = [&](std::string const& name) {
@@ -39,5 +58,10 @@ int main() {
     auto asset_check = find_check("svg_assets_native_chrome_palette");
     assert(!asset_check.ok);
     assert(asset_check.detail.find("file.pdf=[#ff5f57]")
+        != std::string::npos);
+
+    auto provenance_check = find_check("svg_file_type_icon_provenance");
+    assert(provenance_check.ok);
+    assert(provenance_check.detail.find("file_type_icon_assets=1")
         != std::string::npos);
 }
