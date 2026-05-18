@@ -751,6 +751,21 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         std::string_view profile) {
     auto viewport = effective_viewport(state, profile);
     if (mobile_profile(profile)) {
+        auto const toolbar_chrome = icon_catalog::macos_control_chrome(
+            icon_catalog::SymbolPresentationRole::Toolbar,
+            icon_catalog::SymbolInteractionState{false, true});
+        auto const toolbar_selected_chrome = icon_catalog::macos_control_chrome(
+            icon_catalog::SymbolPresentationRole::Toolbar,
+            icon_catalog::SymbolInteractionState{true, true});
+        auto const toolbar_pressed_recipe = icon_catalog::macos_state_recipe(
+            icon_catalog::SymbolPresentationRole::Toolbar,
+            icon_catalog::SymbolInteractionState{false, true},
+            icon_catalog::SymbolInteractionPhase::Pressed);
+        auto const sidebar_selected_pressed_recipe =
+            icon_catalog::macos_state_recipe(
+                icon_catalog::SymbolPresentationRole::Sidebar,
+                icon_catalog::SymbolInteractionState{true, true},
+                icon_catalog::SymbolInteractionPhase::Pressed);
         return ExplorerChromeMetrics{
             .viewport = viewport,
             .integrated_titlebar_height = 0.0f,
@@ -825,41 +840,82 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .icon_grid_visible_capacity = 0,
             .toolbar_group_count = 0,
             .toolbar_separator_count = 0,
-            .toolbar_icon_button_count = 0,
+            .toolbar_icon_button_count = 4,
             .column_location_row_count = 0,
             .titlebar_control_count = 0,
-            .icon_total_symbol_count = 0,
-            .sidebar_symbol_count = 0,
-            .toolbar_symbol_count = 0,
-            .icon_filled_symbol_count = 0,
-            .icon_outline_symbol_count = 0,
-            .icon_hierarchical_symbol_count = 0,
-            .icon_monochrome_symbol_count = 0,
-            .icon_regular_weight_symbol_count = 0,
-            .icon_palette_symbol_count = 0,
-            .icon_multicolor_symbol_count = 0,
-            .icon_reference_symbol_count = 0,
-            .icon_svg_path_arc_symbol_count = 0,
-            .icon_round_stroke_symbol_count = 0,
-            .icon_interaction_phase_count = 0,
-            .icon_grid_size = 0.0f,
-            .icon_default_stroke_width = 0.0f,
-            .icon_secondary_opacity = 0.0f,
-            .icon_toolbar_point_size = 0.0f,
-            .icon_sidebar_point_size = 0.0f,
-            .icon_sidebar_optical_y_offset = 0.0f,
-            .icon_toolbar_hit_target_size = 0.0f,
-            .icon_sidebar_hit_target_size = 0.0f,
-            .icon_action_hit_target_size = 0.0f,
-            .icon_toolbar_button_radius = 0.0f,
-            .icon_toolbar_button_background_alpha = 0,
-            .icon_toolbar_button_hover_background_alpha = 0,
-            .icon_toolbar_selected_button_background_alpha = 0,
-            .icon_toolbar_selected_button_hover_background_alpha = 0,
-            .icon_toolbar_pressed_button_background_alpha = 0,
-            .icon_sidebar_selected_pressed_background_alpha = 0,
-            .icon_pressed_symbol_opacity = 0.0f,
-            .icon_pressed_scale = 0.0f,
+            .icon_total_symbol_count =
+                static_cast<int>(icon_catalog::all_symbol_count),
+            .sidebar_symbol_count =
+                static_cast<int>(icon_catalog::sidebar_symbol_count),
+            .toolbar_symbol_count =
+                static_cast<int>(icon_catalog::toolbar_symbol_count),
+            .file_type_symbol_count =
+                static_cast<int>(icon_catalog::file_type_symbol_count),
+            .icon_filled_symbol_count =
+                static_cast<int>(icon_catalog::filled_symbol_count),
+            .icon_outline_symbol_count =
+                static_cast<int>(icon_catalog::outline_symbol_count),
+            .icon_hierarchical_symbol_count =
+                static_cast<int>(icon_catalog::hierarchical_symbol_count),
+            .icon_monochrome_symbol_count =
+                static_cast<int>(icon_catalog::monochrome_symbol_count),
+            .icon_regular_weight_symbol_count =
+                static_cast<int>(icon_catalog::regular_weight_symbol_count),
+            .icon_palette_symbol_count =
+                static_cast<int>(icon_catalog::palette_symbol_count),
+            .icon_multicolor_symbol_count =
+                static_cast<int>(icon_catalog::multicolor_symbol_count),
+            .icon_reference_symbol_count =
+                static_cast<int>(icon_catalog::reference_symbol_count),
+            .icon_svg_path_arc_symbol_count =
+                static_cast<int>(icon_catalog::svg_path_arc_symbol_count),
+            .icon_round_stroke_symbol_count =
+                static_cast<int>(icon_catalog::round_stroke_symbol_count),
+            .icon_interaction_phase_count =
+                static_cast<int>(icon_catalog::symbol_interaction_phase_count),
+            .icon_grid_size =
+                icon_catalog::descriptor(
+                    icon_catalog::Symbol::Document).grid_size,
+            .icon_default_stroke_width =
+                icon_catalog::descriptor(
+                    icon_catalog::Symbol::Document).default_stroke_width,
+            .icon_secondary_opacity =
+                icon_catalog::descriptor(
+                    icon_catalog::Symbol::Document).secondary_opacity,
+            .icon_toolbar_point_size =
+                icon_catalog::metrics(
+                    icon_catalog::SymbolPresentationRole::Toolbar).point_size,
+            .icon_sidebar_point_size =
+                icon_catalog::metrics(
+                    icon_catalog::SymbolPresentationRole::Sidebar).point_size,
+            .icon_sidebar_optical_y_offset =
+                icon_catalog::metrics(
+                    icon_catalog::SymbolPresentationRole::Sidebar).optical_y_offset,
+            .icon_toolbar_hit_target_size =
+                icon_catalog::hit_target_size(
+                    icon_catalog::SymbolPresentationRole::Toolbar),
+            .icon_sidebar_hit_target_size =
+                icon_catalog::hit_target_size(
+                    icon_catalog::SymbolPresentationRole::Sidebar),
+            .icon_action_hit_target_size =
+                icon_catalog::hit_target_size(
+                    icon_catalog::SymbolPresentationRole::Action),
+            .icon_toolbar_button_radius = toolbar_chrome.corner_radius,
+            .icon_toolbar_button_background_alpha =
+                toolbar_chrome.background_color.a,
+            .icon_toolbar_button_hover_background_alpha =
+                toolbar_chrome.hover_background_color.a,
+            .icon_toolbar_selected_button_background_alpha =
+                toolbar_selected_chrome.background_color.a,
+            .icon_toolbar_selected_button_hover_background_alpha =
+                toolbar_selected_chrome.hover_background_color.a,
+            .icon_toolbar_pressed_button_background_alpha =
+                toolbar_pressed_recipe.background_color.a,
+            .icon_sidebar_selected_pressed_background_alpha =
+                sidebar_selected_pressed_recipe.background_color.a,
+            .icon_pressed_symbol_opacity =
+                toolbar_pressed_recipe.symbol_opacity,
+            .icon_pressed_scale = toolbar_pressed_recipe.scale,
             .column_location_row_height = 0.0f,
             .column_location_icon_size = 0.0f,
             .integrated_titlebar = false,
@@ -867,68 +923,102 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .duplicate_window_controls = false,
             .content_window_control_markers = false,
             .finder_segmented_toolbar = false,
-            .owned_icon_assets = false,
+            .owned_icon_assets = true,
             .uses_sf_symbols_assets = false,
-            .icon_round_stroke_contract = false,
-            .icon_text_weight_aligned = false,
-            .icon_monochrome_rendering = false,
-            .icon_hierarchical_opacity = false,
+            .icon_round_stroke_contract = true,
+            .icon_text_weight_aligned = true,
+            .icon_monochrome_rendering = true,
+            .icon_hierarchical_opacity = true,
             .icon_palette_rendering = false,
             .icon_multicolor_rendering = false,
             .thumbnail_uses_external_previews = false,
             .artifact_window_control_markers = false,
             .status_bar_visible = false,
-            .theme_contract_version = 0,
-            .icon_module = "text_controls",
-            .icon_style = "mobile_text_buttons",
-            .icon_source_format = "none",
-            .icon_svg_subset_policy = "n/a",
-            .icon_svg_supported_elements = "n/a",
-            .icon_svg_supported_path_commands = "n/a",
-            .icon_svg_supported_style_attributes = "n/a",
-            .icon_svg_arc_policy = "n/a",
-            .icon_stroke_geometry_policy = "n/a",
-            .icon_stroke_cap_policy = "n/a",
-            .icon_stroke_join_policy = "n/a",
-            .icon_design_reference = "mobile text controls",
-            .icon_reference_family = "n/a",
-            .icon_reference_policy = "n/a",
-            .icon_asset_policy = "no vector icon assets in mobile profile",
-            .icon_interface_metaphor_policy = "n/a",
-            .icon_visual_consistency_policy = "n/a",
-            .icon_alignment = "n/a",
-            .icon_rendering_mode = "n/a",
-            .icon_default_weight = "n/a",
-            .icon_rendering_capability_policy = "n/a",
-            .icon_variant_policy = "n/a",
-            .icon_presentation_policy = "n/a",
-            .icon_tone_policy = "n/a",
-            .icon_interaction_tone_policy = "n/a",
-            .icon_symbol_control_chrome_policy = "n/a",
-            .icon_symbol_interaction_phase_policy = "n/a",
-            .icon_toolbar_symbol_chrome_policy = "n/a",
-            .icon_sidebar_symbol_color_policy = "n/a",
-            .icon_file_type_color_policy = "n/a",
-            .icon_metrics_policy = "n/a",
-            .icon_hit_target_policy = "n/a",
-            .icon_scale = "n/a",
+            .theme_contract_version =
+                static_cast<int>(theme_contract::theme_contract_version),
+            .icon_module = "phenotype.icons",
+            .icon_style = std::string{icon_catalog::style_name()},
+            .icon_source_format = std::string{icon_catalog::source_format()},
+            .icon_svg_subset_policy =
+                std::string{icon_catalog::svg_subset_policy()},
+            .icon_svg_supported_elements =
+                std::string{icon_catalog::svg_supported_elements()},
+            .icon_svg_supported_path_commands =
+                std::string{icon_catalog::svg_supported_path_commands()},
+            .icon_svg_supported_style_attributes =
+                std::string{icon_catalog::svg_supported_style_attributes()},
+            .icon_svg_arc_policy = std::string{icon_catalog::svg_arc_policy()},
+            .icon_stroke_geometry_policy =
+                std::string{icon_catalog::stroke_geometry_policy()},
+            .icon_stroke_cap_policy =
+                std::string{icon_catalog::stroke_cap_policy()},
+            .icon_stroke_join_policy =
+                std::string{icon_catalog::stroke_join_policy()},
+            .icon_design_reference =
+                std::string{icon_catalog::style_reference()},
+            .icon_reference_family =
+                std::string{icon_catalog::reference_family()},
+            .icon_reference_policy =
+                std::string{icon_catalog::reference_policy()},
+            .icon_asset_policy = std::string{icon_catalog::asset_policy()},
+            .icon_interface_metaphor_policy =
+                std::string{icon_catalog::interface_metaphor_policy()},
+            .icon_visual_consistency_policy =
+                std::string{icon_catalog::visual_consistency_policy()},
+            .icon_alignment = std::string{icon_catalog::alignment_policy()},
+            .icon_rendering_mode = "hierarchical",
+            .icon_default_weight =
+                std::string{icon_catalog::default_weight_policy()},
+            .icon_rendering_capability_policy =
+                std::string{icon_catalog::rendering_capability_policy()},
+            .icon_variant_policy = std::string{icon_catalog::variant_policy()},
+            .icon_presentation_policy =
+                std::string{icon_catalog::presentation_policy()},
+            .icon_tone_policy = std::string{icon_catalog::tone_policy()},
+            .icon_interaction_tone_policy =
+                std::string{icon_catalog::interaction_tone_policy()},
+            .icon_symbol_control_chrome_policy =
+                std::string{icon_catalog::symbol_control_chrome_policy()},
+            .icon_symbol_interaction_phase_policy =
+                std::string{icon_catalog::symbol_interaction_phase_policy()},
+            .icon_toolbar_symbol_chrome_policy =
+                std::string{icon_catalog::toolbar_symbol_chrome_policy()},
+            .icon_sidebar_symbol_color_policy =
+                std::string{icon_catalog::sidebar_symbol_color_policy()},
+            .icon_file_type_color_policy =
+                std::string{icon_catalog::file_type_color_policy()},
+            .icon_metrics_policy = std::string{icon_catalog::metrics_policy()},
+            .icon_hit_target_policy =
+                std::string{icon_catalog::hit_target_policy()},
+            .icon_scale = std::string{icon_catalog::default_scale_policy()},
             .thumbnail_visual_policy = "n/a",
             .thumbnail_asset_policy = "n/a",
             .thumbnail_pdf_policy = "n/a",
             .thumbnail_image_policy = "n/a",
             .thumbnail_video_policy = "n/a",
             .thumbnail_shadow_policy = "n/a",
-            .theme_profile_name = "n/a",
-            .theme_reference = "n/a",
-            .theme_font_policy = "n/a",
-            .theme_material_policy = "n/a",
-            .theme_iconography_policy = "n/a",
-            .theme_icon_asset_policy = "n/a",
-            .theme_usage_policy = "n/a",
-            .theme_container_policy = "n/a",
-            .theme_performance_policy = "n/a",
-            .theme_accessibility_policy = "n/a",
-            .theme_fallback_policy = "n/a",
+            .theme_profile_name =
+                std::string{theme_contract::default_theme_profile_name()},
+            .theme_reference =
+                std::string{theme_contract::default_theme_reference()},
+            .theme_font_policy =
+                std::string{theme_contract::default_theme_font_policy()},
+            .theme_material_policy =
+                std::string{theme_contract::default_theme_material_policy()},
+            .theme_iconography_policy =
+                std::string{theme_contract::default_theme_iconography_policy()},
+            .theme_icon_asset_policy =
+                std::string{theme_contract::default_theme_icon_asset_policy()},
+            .theme_usage_policy =
+                std::string{theme_contract::default_theme_usage_policy()},
+            .theme_container_policy =
+                std::string{theme_contract::default_theme_container_policy()},
+            .theme_performance_policy =
+                std::string{theme_contract::default_theme_performance_policy()},
+            .theme_accessibility_policy =
+                std::string{theme_contract::default_theme_accessibility_policy()},
+            .theme_fallback_policy =
+                std::string{theme_contract::default_theme_fallback_policy()},
             .chrome_geometry_policy = "n/a",
             .window_control_marker_mode = "none",
         };
@@ -1781,6 +1871,50 @@ inline json::Value entry_debug_json(Entry const& entry) {
             icon_catalog::SymbolInteractionPhase::Normal));
     out.emplace("folder", json::Value{entry.folder});
     out.emplace("size", json::Value{static_cast<std::int64_t>(entry.size)});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value entry_symbol_summary_debug_json(Snapshot const& snap) {
+    json::Object by_symbol;
+    std::int64_t symbolized = 0;
+    for (unsigned int i = 0; i < icon_catalog::file_type_symbol_count; ++i) {
+        auto const symbol = icon_catalog::file_type_symbol_at(i);
+        std::int64_t count = 0;
+        for (auto const& entry : snap.entries) {
+            if (entry_symbol(entry) == symbol)
+                ++count;
+        }
+        if (count > 0)
+            symbolized += count;
+        by_symbol.emplace(
+            std::string{icon_catalog::name(symbol)},
+            json::Value{count});
+    }
+
+    json::Object out;
+    out.emplace(
+        "source",
+        json::Value{"file_explorer_shared::entry_symbol"});
+    out.emplace(
+        "presentation_role",
+        json::Value{std::string{
+            icon_catalog::symbol_presentation_role_name(
+                icon_catalog::SymbolPresentationRole::FileType)}});
+    out.emplace(
+        "file_type_symbol_count",
+        json::Value{static_cast<std::int64_t>(
+            icon_catalog::file_type_symbol_count)});
+    out.emplace(
+        "visible_entry_count",
+        json::Value{static_cast<std::int64_t>(snap.entries.size())});
+    out.emplace(
+        "visible_entry_symbol_count",
+        json::Value{symbolized});
+    out.emplace(
+        "all_visible_entries_have_symbols",
+        json::Value{symbolized == static_cast<std::int64_t>(
+            snap.entries.size())});
+    out.emplace("by_symbol", json::Value{std::move(by_symbol)});
     return json::Value{std::move(out)};
 }
 
@@ -2766,6 +2900,7 @@ inline json::Value file_explorer_debug_json(
     out.emplace("resource_system", file_explorer_resource_system_debug_json(profile));
     out.emplace("keyboard_commands", keyboard_commands_debug_json(profile));
     out.emplace("entries_sample", json::Value{std::move(entries)});
+    out.emplace("entry_symbol_summary", entry_symbol_summary_debug_json(snap));
     out.emplace("mobile_tab", json::Value{static_cast<std::int64_t>(state.mobile_tab)});
     return json::Value{std::move(out)};
 }

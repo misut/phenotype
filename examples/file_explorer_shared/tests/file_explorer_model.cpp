@@ -536,8 +536,16 @@ duplicate
     assert(mobile_chrome.icon_grid_columns == 0);
     assert(mobile_chrome.toolbar_group_count == 0);
     assert(mobile_chrome.toolbar_separator_count == 0);
-    assert(mobile_chrome.toolbar_icon_button_count == 0);
+    assert(mobile_chrome.toolbar_icon_button_count == 4);
     assert(mobile_chrome.titlebar_control_count == 0);
+    assert(mobile_chrome.icon_module == "phenotype.icons");
+    assert(mobile_chrome.icon_style == "macos_rounded_outline_svg");
+    assert(mobile_chrome.file_type_symbol_count == 7);
+    assert(mobile_chrome.icon_reference_symbol_count == 35);
+    assert(mobile_chrome.owned_icon_assets);
+    assert(!mobile_chrome.uses_sf_symbols_assets);
+    assert(mobile_chrome.icon_file_type_color_policy
+           == "macos_finder_file_type_tints");
     assert(!mobile_chrome.content_window_control_markers);
     assert(!mobile_chrome.finder_segmented_toolbar);
     assert(!mobile_chrome.status_bar_visible);
@@ -699,6 +707,14 @@ duplicate
     assert(debug_text.find("\"file_explorer\"") != std::string::npos);
     assert(debug_text.find("\"view_mode\"") != std::string::npos);
     assert(debug_text.find("\"Gallery View\"") != std::string::npos);
+    assert(debug_text.find("\"entry_symbol_summary\"") != std::string::npos);
+    assert(debug_text.find("\"source\":\"file_explorer_shared::entry_symbol\"")
+           != std::string::npos);
+    assert(debug_text.find("\"presentation_role\":\"file_type\"")
+           != std::string::npos);
+    assert(debug_text.find("\"all_visible_entries_have_symbols\":true")
+           != std::string::npos);
+    assert(debug_text.find("\"text_document\"") != std::string::npos);
     assert(debug_text.find("\"icon_grid_column_pitch\"") != std::string::npos);
     assert(debug_text.find("\"icon_grid_thumbnail_width\"") != std::string::npos);
     assert(debug_text.find("\"thumbnail_system\"") != std::string::npos);
