@@ -717,11 +717,15 @@ own the caption-button/traffic-light territory, and explicit `uses_glfw=false`
 / `toolkit_window_shim=false` markers.
 Finder-style startup artifacts keep the leading native-control reserve blank in
 phenotype content and report `runtime-native-controls`, leaving input and
-caption-button ownership in AppKit or Win32. The artifact verifier checks that
-the reserve stays low-detail and neutral so traffic-light probes cannot regress
-into duplicate content-drawn controls. Package inspection also keeps app icons
-free of traffic-light marker palettes, which prevents packaged assets from
-visually implying a second set of native controls.
+caption-button ownership in AppKit or Win32. `ExplorerChromeMetrics` also
+records `native_window_control_owner=platform-edge`, the native-control count,
+zero content/artifact marker counts, and a render policy that forbids app-drawn
+traffic-light probes. The artifact verifier checks both the structured
+ownership invariant and the neutral/forbidden-palette titlebar reserve, so
+traffic-light probes cannot regress into duplicate content-drawn controls.
+Package inspection also keeps app icons free of traffic-light marker palettes,
+which prevents packaged assets from visually implying a second set of native
+controls.
 
 ## Unified debug plane
 

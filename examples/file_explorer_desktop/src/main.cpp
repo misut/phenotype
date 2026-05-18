@@ -232,8 +232,9 @@ auto file_explorer_application_debug_payload() {
     auto chrome = file_explorer_demo::explorer_chrome_metrics(
         g_debug_state->explorer,
         "desktop");
-    chrome = file_explorer_demo::explorer_chrome_with_artifact_window_markers(
-        std::move(chrome));
+    chrome =
+        file_explorer_demo::explorer_chrome_with_native_window_control_ownership(
+            std::move(chrome));
     chrome.more_actions_open = g_debug_state->more_actions_open;
     chrome.overflow_action_button_count = g_debug_state->more_actions_open
         ? 4

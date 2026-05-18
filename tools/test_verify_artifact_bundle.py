@@ -803,6 +803,45 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
     }
 
 
+def snapshot_with_file_explorer_chrome(
+    plan: dict[str, object],
+    *,
+    duplicate: bool = False,
+    content_markers: bool = False,
+    artifact_markers: bool = False,
+    content_marker_count: int = 0,
+    artifact_marker_count: int = 0,
+) -> dict[str, object]:
+    root = snapshot(plan)
+    debug = root["debug"]
+    assert isinstance(debug, dict)
+    debug["application"] = {
+        "file_explorer": {
+            "kind": "file_explorer",
+            "profile": "desktop",
+            "chrome": {
+                "native_window": {
+                    "integrated_titlebar": True,
+                    "native_window_controls": True,
+                    "duplicate_window_controls": duplicate,
+                    "content_window_control_markers": content_markers,
+                    "artifact_window_control_markers": artifact_markers,
+                    "window_control_marker_mode": "runtime-native-controls",
+                    "native_window_control_owner": "platform-edge",
+                    "native_window_control_count": 3,
+                    "content_window_control_marker_count": content_marker_count,
+                    "artifact_window_control_marker_count": artifact_marker_count,
+                    "window_control_render_policy": (
+                        "native_controls_runtime_only_no_content_or_artifact_markers"),
+                    "titlebar_control_reserve_policy": (
+                        "blank_reserve_under_os_window_controls"),
+                }
+            },
+        }
+    }
+    return root
+
+
 def write_synthetic_bmp(path: Path) -> None:
     width = 8
     height = 2
@@ -910,6 +949,28 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["max_plan_sample_taps"],
             0)
+
+    def test_file_explorer_native_chrome_contract_accepts_platform_owner(self) -> None:
+        code, report = self.run_verifier(
+            snapshot_with_file_explorer_chrome(material_plan()))
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+
+    def test_file_explorer_native_chrome_contract_rejects_content_markers(self) -> None:
+        code, report = self.run_verifier(
+            snapshot_with_file_explorer_chrome(
+                material_plan(),
+                content_markers=True,
+                content_marker_count=3))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "file explorer does not draw duplicate native window controls")
+        self.assertEqual(failure["likely_layer"], "native-window-chrome")
+        self.assertEqual(failure["likely_pass"], "window-control-marker")
+        self.assertIn("reserve the titlebar", failure["hint"])
         self.assertEqual(
             report["material_plans"]["resource_bounds"]["max_sample_taps"],
             25)
@@ -2202,6 +2263,44 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         regions = {item["name"]: item for item in report["pixel_regions"]}
         self.assertEqual(regions["close-control"]["red_mean"], 255.0)
         self.assertEqual(regions["zoom-control"]["green_mean"], 201.0)
+
+    def test_forbidden_pixel_region_color_failure_is_llm_actionable(self) -> None:
+        manifest = {
+            "require_frame": True,
+            "pixel_regions": [
+                {
+                    "name": "native-control-reserve",
+                    "rect": [0.0, 0.0, 1.0, 1.0],
+                    "min_luma_delta": 0,
+                    "min_unique_colors": 1,
+                }
+            ],
+            "forbid_pixel_region_colors": [
+                {
+                    "region": "native-control-reserve",
+                    "name": "macos-close-red-marker",
+                    "rgb": [255, 95, 87],
+                    "tolerance": 4,
+                    "max_pixels": 0,
+                }
+            ],
+        }
+        code, report = self.run_verifier(
+            snapshot(material_plan()),
+            manifest,
+            frame_writer=write_channel_probe_bmp)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "forbidden pixel color absent: macos-close-red-marker"))
+        self.assertEqual(failure["path"], (
+            "frame.bmp#native-control-reserve.forbidden_color."
+            "macos-close-red-marker"))
+        self.assertEqual(failure["likely_layer"], "native-window-chrome")
+        self.assertEqual(failure["likely_pass"], "window-control-marker")
+        self.assertIn("Native traffic lights belong to the OS", failure["hint"])
 
     def test_pixel_region_metric_comparison_failure_is_llm_actionable(self) -> None:
         manifest = {

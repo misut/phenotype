@@ -775,6 +775,82 @@ def check_string_field(
     return item if isinstance(item, str) else None
 
 
+def check_file_explorer_native_chrome_contract(
+    report: Report,
+    debug: JsonObject,
+) -> None:
+    file_explorer = object_at(debug, "application.file_explorer")
+    if file_explorer is None:
+        return
+    chrome = object_at(file_explorer, "chrome")
+    if chrome is None:
+        return
+    native_window = object_at(chrome, "native_window")
+    if native_window is None:
+        return
+
+    native_controls = native_window.get("native_window_controls") is True
+    marker_fields = {
+        "duplicate_window_controls": native_window.get("duplicate_window_controls"),
+        "content_window_control_markers": native_window.get("content_window_control_markers"),
+        "artifact_window_control_markers": native_window.get("artifact_window_control_markers"),
+        "content_window_control_marker_count": native_window.get(
+            "content_window_control_marker_count"),
+        "artifact_window_control_marker_count": native_window.get(
+            "artifact_window_control_marker_count"),
+    }
+    report.check(
+        "file explorer does not draw duplicate native window controls",
+        marker_fields["duplicate_window_controls"] is False
+        and marker_fields["content_window_control_markers"] is False
+        and marker_fields["artifact_window_control_markers"] is False
+        and marker_fields["content_window_control_marker_count"] == 0
+        and marker_fields["artifact_window_control_marker_count"] == 0,
+        path="debug.application.file_explorer.chrome.native_window",
+        expected={
+            "duplicate_window_controls": False,
+            "content_window_control_markers": False,
+            "artifact_window_control_markers": False,
+            "content_window_control_marker_count": 0,
+            "artifact_window_control_marker_count": 0,
+        },
+        actual=marker_fields,
+        likely_layer="native-window-chrome",
+        likely_pass="window-control-marker",
+        hint=(
+            "File explorer content and artifacts must reserve the titlebar "
+            "area; macOS traffic lights or Windows caption buttons are owned "
+            "by the native window edge."))
+    if native_controls:
+        report.check(
+            "file explorer native window controls are platform-owned",
+            native_window.get("native_window_control_owner") == "platform-edge"
+            and native_window.get("window_control_marker_mode")
+            == "runtime-native-controls"
+            and isinstance(native_window.get("native_window_control_count"), int)
+            and native_window.get("native_window_control_count") > 0,
+            path="debug.application.file_explorer.chrome.native_window",
+            expected={
+                "native_window_control_owner": "platform-edge",
+                "window_control_marker_mode": "runtime-native-controls",
+                "native_window_control_count": ">0",
+            },
+            actual={
+                "native_window_control_owner": native_window.get(
+                    "native_window_control_owner"),
+                "window_control_marker_mode": native_window.get(
+                    "window_control_marker_mode"),
+                "native_window_control_count": native_window.get(
+                    "native_window_control_count"),
+            },
+            likely_layer="native-window-chrome",
+            likely_pass="runtime-native-controls",
+            hint=(
+                "If traffic lights appear twice, inspect the shared "
+                "ExplorerChromeMetrics native_window_control_owner fields "
+                "before adding content-side controls."))
+
+
 def list_of_strings(value: Any, key: str) -> list[str]:
     item = value.get(key) if isinstance(value, dict) else None
     if item is None:
@@ -915,6 +991,53 @@ def pixel_region_metric_comparison_specs_from_manifest(value: Any) -> list[JsonO
             raise ValueError(
                 f"pixel_region_metric_comparisons[{index}] must contain gte_ratio or lte_ratio")
         specs.append(spec)
+    return specs
+
+
+def color_channel(value: Any, field: str) -> int:
+    if not isinstance(value, int) or isinstance(value, bool) or value < 0 or value > 255:
+        raise ValueError(f"{field} must be an integer between 0 and 255")
+    return value
+
+
+def pixel_region_forbidden_color_specs_from_manifest(value: Any) -> list[JsonObject]:
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("forbid_pixel_region_colors must be a list")
+    specs: list[JsonObject] = []
+    for index, entry in enumerate(value):
+        if not isinstance(entry, dict):
+            raise ValueError(f"forbid_pixel_region_colors[{index}] must be an object")
+        region = entry.get("region")
+        if not isinstance(region, str) or not region:
+            raise ValueError(
+                f"forbid_pixel_region_colors[{index}].region must be a non-empty string")
+        name = entry.get("name", "forbidden-color")
+        if not isinstance(name, str) or not name:
+            raise ValueError(
+                f"forbid_pixel_region_colors[{index}].name must be a non-empty string")
+        rgb = entry.get("rgb")
+        if not isinstance(rgb, list) or len(rgb) != 3:
+            raise ValueError(
+                f"forbid_pixel_region_colors[{index}].rgb must contain three channels")
+        tolerance = non_negative_int(
+            entry.get("tolerance", 0),
+            f"forbid_pixel_region_colors[{index}].tolerance")
+        max_pixels = non_negative_int(
+            entry.get("max_pixels", 0),
+            f"forbid_pixel_region_colors[{index}].max_pixels")
+        specs.append({
+            "region": region,
+            "name": name,
+            "rgb": [
+                color_channel(rgb[0], f"forbid_pixel_region_colors[{index}].rgb[0]"),
+                color_channel(rgb[1], f"forbid_pixel_region_colors[{index}].rgb[1]"),
+                color_channel(rgb[2], f"forbid_pixel_region_colors[{index}].rgb[2]"),
+            ],
+            "tolerance": tolerance,
+            "max_pixels": max_pixels,
+        })
     return specs
 
 
@@ -1557,6 +1680,9 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         args.require_pixel_region_metric_comparison.extend(
             pixel_region_metric_comparison_specs_from_manifest(
                 manifest.get("pixel_region_metric_comparisons")))
+        args.forbid_pixel_region_color.extend(
+            pixel_region_forbidden_color_specs_from_manifest(
+                manifest.get("forbid_pixel_region_colors")))
 
     except ValueError as exc:
         report.check("manifest schema is valid", False, str(exc))
@@ -1569,6 +1695,8 @@ def apply_manifest(args: argparse.Namespace, report: Report) -> bool:
         "pixel_region_metrics": len(manifest.get("pixel_region_metrics", []) or []),
         "pixel_region_metric_comparisons": len(
             manifest.get("pixel_region_metric_comparisons", []) or []),
+        "forbid_pixel_region_colors": len(
+            manifest.get("forbid_pixel_region_colors", []) or []),
         "runtime_numeric_bounds": len(
             manifest.get("require_runtime_numeric_bounds", []) or []),
     }
@@ -1764,6 +1892,54 @@ def analyze_bmp_region(path: Path, frame: JsonObject, rect: tuple[int, int, int,
         "width": w,
         "x": x,
         "y": y,
+    }
+
+
+def count_bmp_region_color(
+    path: Path,
+    frame: JsonObject,
+    rect: tuple[int, int, int, int],
+    rgb: list[int],
+    tolerance: int,
+) -> JsonObject:
+    x, y, w, h = rect
+    width = int(frame["width"])
+    height = int(frame["height"])
+    bits_per_pixel = int(frame["bits_per_pixel"])
+    pixel_offset = int(frame["pixel_offset"])
+    top_down = bool(frame["top_down"])
+    bytes_per_pixel = bits_per_pixel // 8
+    row_bytes = ((width * bits_per_pixel + 31) // 32) * 4
+
+    with path.open("rb") as handle:
+        data = handle.read()
+
+    sampled = 0
+    matches = 0
+    target_r, target_g, target_b = rgb
+    for py in range(y, y + h):
+        source_y = py if top_down else height - 1 - py
+        row_start = pixel_offset + source_y * row_bytes
+        for px in range(x, x + w):
+            offset = row_start + px * bytes_per_pixel
+            if offset + bytes_per_pixel > len(data):
+                raise ValueError("pixel region reads beyond BMP data")
+            b = data[offset]
+            g = data[offset + 1]
+            r = data[offset + 2]
+            sampled += 1
+            if (
+                abs(int(r) - int(target_r)) <= tolerance
+                and abs(int(g) - int(target_g)) <= tolerance
+                and abs(int(b) - int(target_b)) <= tolerance
+            ):
+                matches += 1
+    return {
+        "matching_pixels": matches,
+        "sampled_pixels": sampled,
+        "ratio": round(matches / sampled, 6) if sampled else 0.0,
+        "rgb": rgb,
+        "tolerance": tolerance,
     }
 
 
@@ -7236,6 +7412,8 @@ def verify(args: argparse.Namespace) -> int:
                 "Check the app-specific debug payload provider and the "
                 "shared model snapshot it serializes."))
 
+    check_file_explorer_native_chrome_contract(report, debug)
+
     details = runtime.get("details")
     if args.require_runtime_detail:
         report.check("runtime details object exists", isinstance(details, dict))
@@ -7554,7 +7732,7 @@ def verify(args: argparse.Namespace) -> int:
         frame = None
         if args.require_frame or frame_capability is True:
             report.check("frame.bmp exists", False, str(frame_path))
-        elif args.require_pixel_region:
+        elif args.require_pixel_region or args.forbid_pixel_region_color:
             report.check(
                 "frame.bmp exists for pixel-region checks",
                 False,
@@ -7654,6 +7832,69 @@ def verify(args: argparse.Namespace) -> int:
             for region in pixel_regions
             if isinstance(region.get("name"), str)
         }
+        for index, spec in enumerate(args.forbid_pixel_region_color):
+            region_name = str(spec.get("region", ""))
+            region = pixel_region_by_name.get(region_name)
+            report.check(
+                f"forbidden pixel color region exists: {region_name}",
+                isinstance(region, dict),
+                path=f"manifest.forbid_pixel_region_colors[{index}].region",
+                expected="existing pixel region",
+                actual=region_name,
+                region=region_name,
+                likely_layer="artifact-manifest",
+                hint="Add the named region to pixel_regions before forbidding colors.",
+                record_success=False)
+            if not isinstance(region, dict):
+                continue
+            try:
+                rect = (
+                    int(region["x"]),
+                    int(region["y"]),
+                    int(region["width"]),
+                    int(region["height"]),
+                )
+                rgb = spec.get("rgb")
+                if not isinstance(rgb, list):
+                    raise ValueError("rgb must be a list")
+                color_summary = count_bmp_region_color(
+                    frame_path,
+                    frame,
+                    rect,
+                    [int(rgb[0]), int(rgb[1]), int(rgb[2])],
+                    int(spec.get("tolerance", 0)))
+            except (KeyError, TypeError, ValueError) as exc:
+                report.check(
+                    f"forbidden pixel color spec is valid: {region_name}",
+                    False,
+                    str(exc),
+                    path=f"manifest.forbid_pixel_region_colors[{index}]",
+                    expected="valid region color probe",
+                    actual=spec,
+                    region=region_name,
+                    likely_layer="artifact-manifest",
+                    hint="Fix the forbidden color manifest entry.",
+                    record_success=False)
+                continue
+            max_pixels = int(spec.get("max_pixels", 0))
+            matching_pixels = int(color_summary["matching_pixels"])
+            report.check(
+                f"forbidden pixel color absent: {spec.get('name')}",
+                matching_pixels <= max_pixels,
+                (
+                    f"expected <= {max_pixels} matching pixels, "
+                    f"got {matching_pixels}"
+                ),
+                path=f"frame.bmp#{region_name}.forbidden_color.{spec.get('name')}",
+                expected={"max_pixels": max_pixels, "rgb": spec.get("rgb")},
+                actual=color_summary,
+                region=region_name,
+                likely_layer="native-window-chrome",
+                likely_pass="window-control-marker",
+                hint=(
+                    "The titlebar reserve must stay visually neutral. Native "
+                    "traffic lights belong to the OS window frame, not the "
+                    "captured phenotype content or artifact-only overlays."))
         for index, spec in enumerate(args.require_pixel_region_metric):
             region_name = str(spec.get("region", ""))
             metric = str(spec.get("metric", ""))
@@ -7969,6 +8210,7 @@ def parse_args(argv: list[str]) -> argparse.Namespace:
         require_material_quality_policy=None,
         require_runtime_numeric_bound=[],
         require_pixel_region_metric_comparison=[],
+        forbid_pixel_region_color=[],
         require_material_semantic_runtime_match=False)
     return parser.parse_args(argv)
 
