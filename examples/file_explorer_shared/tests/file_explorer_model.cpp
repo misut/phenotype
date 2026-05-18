@@ -1,5 +1,6 @@
 #include <cassert>
 #include <algorithm>
+#include <chrono>
 #include <cstdlib>
 #include <cstdio>
 #include <filesystem>
@@ -425,6 +426,14 @@ duplicate
     assert(chrome.thumbnail_pdf_policy == demo::k_desktop_thumbnail_pdf_policy);
     assert(chrome.thumbnail_image_policy
            == demo::k_desktop_thumbnail_image_policy);
+    assert(chrome.thumbnail_svg_policy
+           == demo::k_desktop_thumbnail_svg_policy);
+    assert(chrome.thumbnail_svg_render_policy
+           == demo::k_desktop_thumbnail_svg_render_policy);
+    assert(chrome.thumbnail_svg_preview_source_policy
+           == demo::k_desktop_thumbnail_svg_preview_source_policy);
+    assert(chrome.thumbnail_svg_external_resource_policy
+           == demo::k_desktop_thumbnail_svg_external_resource_policy);
     assert(chrome.thumbnail_video_policy
            == demo::k_desktop_thumbnail_video_policy);
     assert(chrome.thumbnail_shadow_policy
@@ -817,19 +826,27 @@ duplicate
     assert(focus_state.focus_visible);
     fs::remove_all(focus_state.root, ec);
 
-    auto outside = state.root.parent_path()
-        / "phenotype-file-explorer-outside.txt";
+    auto const outside_name = std::string{"phenotype-file-explorer-outside-"}
+        + profile
+        + "-"
+        + std::to_string(
+            std::chrono::steady_clock::now().time_since_epoch().count())
+        + ".txt";
+    auto const outside_relative = std::string{"../"} + outside_name;
+    auto const outside_windows_relative = std::string{"..\\"} + outside_name;
+    auto outside = state.root.parent_path() / outside_name;
+    fs::remove(outside, ec);
     {
         std::ofstream out(outside, std::ios::binary);
         out << "This file must stay outside the demo sandbox.\n";
     }
     assert(fs::exists(outside));
-    demo::select_entry(state, "../phenotype-file-explorer-outside.txt");
+    demo::select_entry(state, outside_relative);
     assert(state.selected_name.empty());
     assert(state.last_operation.kind == "file_read");
     assert(!state.last_operation.ok);
     assert(fs::exists(outside));
-    demo::select_entry(state, R"(..\phenotype-file-explorer-outside.txt)");
+    demo::select_entry(state, outside_windows_relative);
     assert(state.selected_name.empty());
     assert(!state.last_operation.ok);
     assert(fs::exists(outside));
@@ -837,13 +854,13 @@ duplicate
     assert(state.selected_name.empty());
     assert(!state.last_operation.ok);
     assert(fs::exists(outside));
-    state.selected_name = "../phenotype-file-explorer-outside.txt";
+    state.selected_name = outside_relative;
     demo::delete_selected(state);
     assert(state.selected_name.empty());
     assert(state.last_operation.kind == "file_delete");
     assert(!state.last_operation.ok);
     assert(fs::exists(outside));
-    state.selected_name = "../phenotype-file-explorer-outside.txt";
+    state.selected_name = outside_relative;
     demo::duplicate_selected(state);
     assert(state.selected_name.empty());
     assert(state.last_operation.kind == "file_duplicate");
@@ -917,6 +934,12 @@ duplicate
            != std::string::npos);
     assert(debug_text.find(
         "\"svg_policy\":\"rounded_svg_vector_preview_with_source_safe_svg_badge\"")
+        != std::string::npos);
+    assert(debug_text.find(
+        "\"svg_render_policy\":\"phenotype_svg_subset_renders_file_body_inside_finder_preview\"")
+        != std::string::npos);
+    assert(debug_text.find(
+        "\"svg_external_resource_policy\":\"no_external_svg_resources_or_network_fetches\"")
         != std::string::npos);
     assert(debug_text.find("\"icon_grid_label_font_size\"") != std::string::npos);
     assert(debug_text.find(

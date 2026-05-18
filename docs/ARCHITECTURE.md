@@ -276,6 +276,13 @@ audio, code, spreadsheet, and presentation files. Apps choose those
 symbols through pure filename and role metadata, then expose the resolved symbol
 and semantic reference in debug JSON so native backends remain simple
 executors.
+
+The Finder-style file explorer uses the same SVG parser for sandboxed `.svg`
+file thumbnails. The renderer reads the already-loaded file body from the demo
+model, paints it through `phenotype.svg` inside the thumbnail frame, and records
+that policy in `chrome.thumbnail_system`. This keeps file icons source-safe:
+macOS system artwork remains a reference only, no platform icon extraction runs
+on the hot path, and SVG external resources are not fetched.
 `icons::presentation` adds the default macOS-inspired
 presentation policy: toolbar symbols use 24 pt secondary/selected tones,
 sidebar symbols use 26 pt primary/accent tones with a small optical vertical

@@ -1204,6 +1204,18 @@
       "equals": "rounded_svg_vector_preview_with_source_safe_svg_badge"
     },
     {
+      "path": "application.file_explorer.chrome.thumbnail_system.svg_render_policy",
+      "equals": "phenotype_svg_subset_renders_file_body_inside_finder_preview"
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.svg_preview_source_policy",
+      "equals": "sandbox_file_body_only_no_system_icon_extraction"
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.svg_external_resource_policy",
+      "equals": "no_external_svg_resources_or_network_fetches"
+    },
+    {
       "path": "application.file_explorer.chrome.thumbnail_system.video_policy",
       "equals": "wide_video_preview_with_filmstrip_and_content_bands"
     },

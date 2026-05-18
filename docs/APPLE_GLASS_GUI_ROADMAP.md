@@ -370,6 +370,11 @@ without leaving an LLM to infer layout drift from pixels alone. Its sidebar
 selection contract records the soft selected-row alpha policy used by the
 desktop example, keeping the active Recents row light enough for Finder-style
 glass instead of turning it into a heavy opaque button.
+The desktop SVG thumbnail path now renders sandboxed `.svg` file bodies through
+`phenotype.svg` inside the Finder-like preview frame. Debug artifacts name the
+render policy, source policy, and external-resource policy so CI can prove that
+the example is not copying Apple artwork, extracting macOS icons, or fetching
+remote SVG resources.
 File explorer packages now declare `app.icon` as a package-owned SVG asset, so
 the same CLI bundle contract can later feed platform app-icon generation
 without embedding Apple artwork or depending on platform symbol fonts.

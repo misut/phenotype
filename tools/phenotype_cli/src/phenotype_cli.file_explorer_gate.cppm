@@ -84,6 +84,7 @@ auto default_file_explorer_scenarios() -> std::vector<std::string> {
         "deleted-folder",
         "duplicated-file",
         "documents-preview",
+        "svg-selected",
         "history-forward",
         "sorted-kind",
         "search-active",
@@ -237,6 +238,18 @@ auto append_file_explorer_scenario_requirements(
         append_required_label_contains(
             args, "Operation: file_read ok - Project Notes.txt");
         append_required_label_contains(args, "Finder-like desktop layout");
+    } else if (scenario == "svg-selected") {
+        append_required_label_contains(args, "Glass Symbol.svg");
+        append_required_label_contains(
+            args, "Operation: file_read ok - Glass Symbol.svg");
+        append_required_debug_detail(
+            args, "application.file_explorer.selection.present=true");
+        append_required_debug_detail(
+            args, "application.file_explorer.selection.name=\"Glass Symbol.svg\"");
+        append_required_debug_detail(
+            args, "application.file_explorer.chrome.thumbnail_system.svg_render_policy=\"phenotype_svg_subset_renders_file_body_inside_finder_preview\"");
+        append_required_debug_detail(
+            args, "application.file_explorer.chrome.thumbnail_system.svg_external_resource_policy=\"no_external_svg_resources_or_network_fetches\"");
     } else if (scenario == "history-forward") {
         append_required_label_contains(args, "Project Notes.txt");
         append_required_label_contains(
@@ -376,7 +389,7 @@ auto run_file_explorer_verifier(fs::path const& root,
 }
 
 auto is_desktop_only_file_explorer_scenario(std::string_view scenario) -> bool {
-    return scenario == "more-actions-open";
+    return scenario == "more-actions-open" || scenario == "svg-selected";
 }
 
 auto artifact_dir_for_case(std::optional<fs::path> const& root,
@@ -590,6 +603,8 @@ auto run_file_explorer_case(fs::path const& root,
         if (item.scenario == "more-actions-open") {
             env["PHENOTYPE_FILE_EXPLORER_MORE_ACTIONS"] = "1";
             env["PHENOTYPE_FILE_EXPLORER_INPUTS"] = "select:README.txt";
+        } else if (item.scenario == "svg-selected") {
+            env["PHENOTYPE_FILE_EXPLORER_INPUTS"] = "select:Glass Symbol.svg";
         } else {
             env["PHENOTYPE_FILE_EXPLORER_SCENARIO"] = item.scenario;
         }

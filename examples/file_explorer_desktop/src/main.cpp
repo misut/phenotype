@@ -17,6 +17,7 @@
 import file_explorer_shared;
 import phenotype;
 import phenotype.native;
+import phenotype.svg;
 
 namespace {
 
@@ -550,7 +551,7 @@ bool movie_extension(std::string_view ext) {
     return ext == "mov" || ext == "mp4" || ext == "m4v";
 }
 
-std::uint64_t stable_token(std::string const& value) {
+std::uint64_t stable_token(std::string_view value) {
     std::uint64_t h = 1469598103934665603ull;
     for (unsigned char ch : value) {
         h ^= ch;
@@ -641,9 +642,56 @@ void paint_pdf_thumbnail(phenotype::Painter& painter,
                  9.0f, rgba(80, 87, 96), finder_font());
 }
 
+void paint_svg_preview_fallback(phenotype::Painter& painter,
+                                float x,
+                                float y) {
+    phenotype::PathBuilder curve;
+    curve.move_to(x + 14.0f, y + 25.0f);
+    curve.cubic_to(
+        x + 27.0f, y + 9.0f,
+        x + 57.0f, y + 9.0f,
+        x + 74.0f, y + 25.0f);
+    painter.stroke_path(curve, 2.2f, rgba(0, 122, 255, 210));
+    fill_round(painter, x + 10.0f, y + 12.0f, 6.0f, 6.0f, 3.0f,
+               rgba(0, 122, 255, 160));
+    fill_round(painter, x + 70.0f, y + 12.0f, 6.0f, 6.0f, 3.0f,
+               rgba(0, 122, 255, 160));
+}
+
+void paint_svg_file_preview(phenotype::Painter& painter,
+                            std::string_view source,
+                            float x,
+                            float y,
+                            float w,
+                            float h,
+                            bool selected) {
+    auto doc = phenotype::svg::parse(source);
+    if (!doc.empty()) {
+        auto const current_color = selected
+            ? rgba(0, 122, 255)
+            : rgba(68, 76, 88);
+        phenotype::svg::paint(
+            painter,
+            doc,
+            x + 10.0f,
+            y + 7.0f,
+            w - 20.0f,
+            h - 14.0f,
+            phenotype::svg::RenderOptions{current_color, true});
+    } else {
+        paint_svg_preview_fallback(painter, x, y);
+    }
+    fill_round(painter, x + w - 29.0f, y + h - 15.0f, 24.0f, 11.0f, 5.5f,
+               selected ? rgba(0, 122, 255, 220) : rgba(238, 243, 251, 235));
+    painter.text(x + w - 25.0f, y + h - 7.0f, "SVG", 3, 7.5f,
+                 selected ? rgba(255, 255, 255) : rgba(75, 82, 92),
+                 finder_font());
+}
+
 void paint_image_thumbnail(phenotype::Painter& painter,
                            bool selected,
-                           bool svg_file) {
+                           bool svg_file,
+                           std::string_view svg_source) {
     auto border = selected ? rgba(0, 122, 255) : rgba(224, 228, 234);
     float const w = file_explorer_demo::k_desktop_thumbnail_media_preview_width;
     float const h = file_explorer_demo::k_desktop_thumbnail_media_preview_height;
@@ -664,19 +712,7 @@ void paint_image_thumbnail(phenotype::Painter& painter,
     fill_rect(painter, x + 3.0f, y + 4.0f, w - 6.0f, 2.0f,
               rgba(235, 239, 245));
     if (svg_file) {
-        phenotype::PathBuilder curve;
-        curve.move_to(x + 14.0f, y + 25.0f);
-        curve.cubic_to(
-            x + 27.0f, y + 9.0f,
-            x + 57.0f, y + 9.0f,
-            x + 74.0f, y + 25.0f);
-        painter.stroke_path(curve, 2.2f, rgba(0, 122, 255, 210));
-        fill_round(painter, x + 10.0f, y + 12.0f, 6.0f, 6.0f, 3.0f,
-                   rgba(0, 122, 255, 160));
-        fill_round(painter, x + 70.0f, y + 12.0f, 6.0f, 6.0f, 3.0f,
-                   rgba(0, 122, 255, 160));
-        painter.text(x + 34.0f, y + 25.0f, "SVG", 3, 9.0f,
-                     rgba(75, 82, 92), finder_font());
+        paint_svg_file_preview(painter, svg_source, x, y, w, h, selected);
         return;
     }
     fill_round(painter, x + 10.0f, y + 13.0f, 26.0f, 10.0f, 4.0f,
@@ -747,7 +783,8 @@ void paint_folder_thumbnail(phenotype::Painter& painter,
 
 void paint_item_thumbnail(phenotype::Painter& painter,
                           file_explorer_demo::Entry const& entry,
-                          bool selected) {
+                          bool selected,
+                          std::string_view preview_source = {}) {
     if (entry.folder) {
         paint_folder_thumbnail(painter, selected);
         return;
@@ -756,12 +793,28 @@ void paint_item_thumbnail(phenotype::Painter& painter,
     if (ext == "pdf") {
         paint_pdf_thumbnail(painter, entry.name, selected);
     } else if (image_extension(ext)) {
-        paint_image_thumbnail(painter, selected, svg_image_extension(ext));
+        paint_image_thumbnail(
+            painter,
+            selected,
+            svg_image_extension(ext),
+            preview_source);
     } else if (movie_extension(ext)) {
         paint_video_thumbnail(painter, selected);
     } else {
         paint_text_thumbnail(painter, selected);
     }
+}
+
+std::uint64_t thumbnail_paint_token(file_explorer_demo::Entry const& entry,
+                                    bool selected,
+                                    std::string_view preview_source = {},
+                                    std::uint64_t salt = 0) {
+    auto token = stable_token(entry.name) ^ salt;
+    if (svg_image_extension(extension_lower(entry.name)))
+        token ^= stable_token(preview_source) << 1u;
+    if (selected)
+        token ^= 0x100000u;
+    return token;
 }
 
 phenotype::Color entry_symbol_color(
@@ -1759,15 +1812,24 @@ void finder_grid(State const& state,
                     for (auto const& entry : entries) {
                         bool const selected = snap.has_selection
                             && snap.selected.name == entry.name;
+                        auto const preview_source = selected
+                            ? snap.preview
+                            : std::string{};
                         layout::column([&] {
                             widget::canvas(chrome.icon_grid_thumbnail_width,
                                 chrome.icon_grid_thumbnail_height,
-                                [entry, selected](Painter& painter) {
-                                    paint_item_thumbnail(painter, entry, selected);
+                                [entry, selected, preview_source](Painter& painter) {
+                                    paint_item_thumbnail(
+                                        painter,
+                                        entry,
+                                        selected,
+                                        preview_source);
                                 },
                                 {},
-                                stable_token(entry.name)
-                                    ^ (selected ? 0x100000u : 0u));
+                                thumbnail_paint_token(
+                                    entry,
+                                    selected,
+                                    preview_source));
                             finder_icon_label_button(
                                 entry.name,
                                 selected,
@@ -1913,11 +1975,20 @@ void finder_column_view(State const& state,
                         widget::text(state.labels.preview, TextSize::Small, TextColor::Muted);
                         if (snap.has_selection) {
                             widget::canvas(160.0f, 110.0f,
-                                [entry = snap.selected](Painter& painter) {
-                                    paint_item_thumbnail(painter, entry, true);
+                                [entry = snap.selected,
+                                 preview = snap.preview](Painter& painter) {
+                                    paint_item_thumbnail(
+                                        painter,
+                                        entry,
+                                        true,
+                                        preview);
                                 },
                                 {},
-                                stable_token(snap.selected.name) ^ 0x440000u);
+                                thumbnail_paint_token(
+                                    snap.selected,
+                                    true,
+                                    snap.preview,
+                                    0x440000u));
                             widget::text(snap.selected.name, TextSize::Heading);
                             widget::text(file_explorer_demo::entry_kind_label(snap.selected),
                                          TextSize::Small,
@@ -1943,6 +2014,9 @@ void finder_gallery_view(State const& state,
     file_explorer_demo::Entry hero = snap.has_selection && !snap.selected.name.empty()
         ? snap.selected
         : (entries.empty() ? file_explorer_demo::Entry{} : entries.front());
+    auto const hero_preview = snap.has_selection && hero.name == snap.selected.name
+        ? snap.preview
+        : std::string{};
     bool const has_hero = !hero.name.empty();
     layout::material_surface(
         content_surface_options(),
@@ -1953,11 +2027,11 @@ void finder_gallery_view(State const& state,
             }
             layout::row([&] {
                 widget::canvas(220.0f, 150.0f,
-                    [hero](Painter& painter) {
-                        paint_item_thumbnail(painter, hero, true);
+                    [hero, hero_preview](Painter& painter) {
+                        paint_item_thumbnail(painter, hero, true, hero_preview);
                     },
                     {},
-                    stable_token(hero.name) ^ 0x550000u);
+                    thumbnail_paint_token(hero, true, hero_preview, 0x550000u));
                 layout::weighted(1.0f, [&] {
                     layout::column([&] {
                         widget::text(hero.name, TextSize::Heading);
@@ -1977,14 +2051,25 @@ void finder_gallery_view(State const& state,
                 layout::grid(std::move(columns), 142.0f, [&] {
                     for (auto const& entry : entries) {
                         bool const selected = entry.name == hero.name;
+                        auto const preview_source =
+                            snap.has_selection && entry.name == snap.selected.name
+                            ? snap.preview
+                            : std::string{};
                         layout::column([&] {
                             widget::canvas(128.0f, 76.0f,
-                                [entry, selected](Painter& painter) {
-                                    paint_item_thumbnail(painter, entry, selected);
+                                [entry, selected, preview_source](Painter& painter) {
+                                    paint_item_thumbnail(
+                                        painter,
+                                        entry,
+                                        selected,
+                                        preview_source);
                                 },
                                 {},
-                                stable_token(entry.name)
-                                    ^ (selected ? 0x560000u : 0u));
+                                thumbnail_paint_token(
+                                    entry,
+                                    selected,
+                                    preview_source,
+                                    0x560000u));
                             finder_button(entry.name,
                                           SelectEntry{entry.name},
                                           selected,
