@@ -413,7 +413,13 @@ on backend paint output. The
 file-explorer `resource_system.file_type_icon_source_map` repeats that
 attribution next to each packaged `assets/icons/file-types/*.svg` declaration,
 so package bundle bugs and catalog provenance bugs can be separated from a
-single artifact. The
+single artifact. `phenotype package inspect --json` goes one step further for
+checked-in package files: it computes each SVG digest, parses the SVG subset,
+rejects native window-control palette markers, and requires each file-type SVG
+to be canonically source-equivalent to the audited catalog source. A
+`svg_file_type_icon_provenance` failure with `canonical_match=false` means the
+package asset drifted from its pinned permissive source even if the rendered
+shape still looks similar. The
 `reference_sources` array names the exact Apple HIG/SF Symbols
 semantic references, W3C SVG path reference, Lucide embedded-source reference,
 Feather MIT license-lineage reference, Tabler MIT future-source candidate, and
@@ -876,6 +882,18 @@ semantic material fields are correct but runtime plans drift, inspect the
 command descriptor decode path before changing backend policy.
 Use `--require-material-plan` when a bundle must contain resolved material
 plans.
+
+For macOS material execution, inspect
+`debug.platform_runtime.details.renderer.material_executor_summary` before
+looking at pixels. `backdrop_copy_policy` must be
+`copy_only_when_material_plan_requires_shared_or_next_frame_capture`;
+`backdrop_copy_required=false` with
+`backdrop_copy_skip_reason=no-material-plan-frame-capture` is the expected
+stable path for frames that contain no functional liquid-glass capture work.
+When the pure planner requires warmup or sampled backdrop access,
+`backdrop_copy_required=true`, `backdrop_copy_count=1`, and
+`backdrop_copy_pixels` should match the drawable size unless the skip reason
+names a Metal texture or blit-encoder failure.
 
 Manifests can also set `require_material_plan_summary` to assert the resolved
 material aggregate, not just the per-plan schema. Supported keys are `count`,

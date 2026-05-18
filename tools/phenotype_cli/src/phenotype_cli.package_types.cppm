@@ -46,6 +46,7 @@ export struct PackageSvgAssetInspection {
     bool catalog_source_inspected = false;
     bool catalog_source_ok = false;
     bool catalog_source_shape_match = false;
+    bool catalog_source_canonical_match = false;
     std::uintmax_t catalog_source_bytes = 0;
     svg_contract::DocumentInspection catalog_source_inspection;
 };

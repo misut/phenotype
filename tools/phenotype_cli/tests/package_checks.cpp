@@ -43,7 +43,8 @@ int main() {
              .runtime_fetch_required = false},
          .catalog_source_inspected = true,
          .catalog_source_ok = true,
-         .catalog_source_shape_match = true});
+         .catalog_source_shape_match = true,
+         .catalog_source_canonical_match = true});
 
     auto checks = cli_package::package_checks(summary);
     auto find_check = [&](std::string const& name) {

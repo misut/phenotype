@@ -148,8 +148,52 @@ bool same_svg_summary(svg_contract::DocumentSummary const& lhs,
         && lhs.paintable == rhs.paintable;
 }
 
+bool same_canonical_svg_source(std::string_view lhs,
+                               std::string_view rhs) {
+    auto lhs_it = lhs.begin();
+    auto rhs_it = rhs.begin();
+    bool lhs_quoted = false;
+    bool rhs_quoted = false;
+    char lhs_quote = '\0';
+    char rhs_quote = '\0';
+    auto next_relevant = [](std::string_view::iterator& it,
+                            std::string_view::iterator end,
+                            bool quoted) {
+        while (!quoted && it != end
+               && std::isspace(static_cast<unsigned char>(*it))) {
+            ++it;
+        }
+    };
+    auto advance_quote = [](char ch, bool& quoted, char& quote) {
+        if (quoted) {
+            if (ch == quote) {
+                quoted = false;
+                quote = '\0';
+            }
+            return;
+        }
+        if (ch == '"' || ch == '\'') {
+            quoted = true;
+            quote = ch;
+        }
+    };
+    while (true) {
+        next_relevant(lhs_it, lhs.end(), lhs_quoted);
+        next_relevant(rhs_it, rhs.end(), rhs_quoted);
+        if (lhs_it == lhs.end() || rhs_it == rhs.end())
+            return lhs_it == lhs.end() && rhs_it == rhs.end();
+        if (*lhs_it != *rhs_it)
+            return false;
+        advance_quote(*lhs_it, lhs_quoted, lhs_quote);
+        advance_quote(*rhs_it, rhs_quoted, rhs_quote);
+        ++lhs_it;
+        ++rhs_it;
+    }
+}
+
 void attach_file_type_catalog_source_contract(
-        PackageSvgAssetInspection& inspection) {
+        PackageSvgAssetInspection& inspection,
+        std::string_view package_source) {
     if (!inspection.file_type_icon_asset || inspection.file_type_token.empty())
         return;
     auto symbol = file_type_symbol_for_token(inspection.file_type_token);
@@ -158,6 +202,8 @@ void attach_file_type_catalog_source_contract(
 
     auto const catalog_source = icon_catalog::svg_source(*symbol);
     inspection.catalog_source_bytes = catalog_source.size();
+    inspection.catalog_source_canonical_match =
+        same_canonical_svg_source(package_source, catalog_source);
     inspection.catalog_source_inspected = true;
     inspection.catalog_source_inspection =
         svg_contract::inspect_source(catalog_source);
@@ -221,7 +267,7 @@ auto inspect_package_svg_asset(
     result.ok = summary.paintable
         && summary.unsupported_count == 0
         && !summary.has_diagnostics;
-    attach_file_type_catalog_source_contract(result);
+    attach_file_type_catalog_source_contract(result, source);
     return result;
 }
 
@@ -457,7 +503,8 @@ auto file_type_icon_provenance_failure_count(
                 || !inspection.integrity_error.empty()
                 || !inspection.catalog_source_inspected
                 || !inspection.catalog_source_ok
-                || !inspection.catalog_source_shape_match;
+                || !inspection.catalog_source_shape_match
+                || !inspection.catalog_source_canonical_match;
         }));
 }
 
@@ -475,7 +522,8 @@ auto file_type_icon_provenance_detail(PackageSummary const& summary)
             ++digest_failure_count;
         if (!inspection.catalog_source_inspected
             || !inspection.catalog_source_ok
-            || !inspection.catalog_source_shape_match) {
+            || !inspection.catalog_source_shape_match
+            || !inspection.catalog_source_canonical_match) {
             ++catalog_source_failure_count;
         }
     }
@@ -508,7 +556,8 @@ auto file_type_icon_provenance_detail(PackageSummary const& summary)
             || !inspection.integrity_error.empty()
             || !inspection.catalog_source_inspected
             || !inspection.catalog_source_ok
-            || !inspection.catalog_source_shape_match;
+            || !inspection.catalog_source_shape_match
+            || !inspection.catalog_source_canonical_match;
         if (!failed)
             continue;
         if (shown >= 4) {
@@ -517,7 +566,7 @@ auto file_type_icon_provenance_detail(PackageSummary const& summary)
         }
         detail += std::format(
             " {} token={} family={} license={} fetch={} platform={} "
-            "digest={} catalog_source_ok={} shape_match={}",
+            "digest={} catalog_source_ok={} shape_match={} canonical_match={}",
             inspection.name,
             inspection.file_type_token.empty() ? "<missing>" : inspection.file_type_token,
             source.family.empty() ? "<missing>" : source.family,
@@ -526,7 +575,8 @@ auto file_type_icon_provenance_detail(PackageSummary const& summary)
             source.platform_extracted ? "true" : "false",
             inspection.sha256.empty() ? "<missing>" : "present",
             inspection.catalog_source_ok ? "true" : "false",
-            inspection.catalog_source_shape_match ? "true" : "false");
+            inspection.catalog_source_shape_match ? "true" : "false",
+            inspection.catalog_source_canonical_match ? "true" : "false");
         ++shown;
     }
     return detail;
@@ -635,7 +685,7 @@ export auto package_checks(PackageSummary const& summary) -> std::vector<Check> 
         {.name = "svg_file_type_icon_provenance",
          .ok = file_type_icon_provenance_ok(summary),
          .detail = file_type_icon_provenance_detail(summary),
-         .hint = "File-type SVG package assets must map to audited source attribution with a pinned URL, no Apple artwork, no platform extraction, and no runtime fetch."},
+         .hint = "File-type SVG package assets must be canonically source-equivalent to the audited icon catalog SVG, map to pinned source attribution, and avoid Apple artwork, platform extraction, and runtime fetch."},
         {.name = "manifest_sources",
          .ok = summary.source_reference_count > 0
              && summary.missing_sources.empty(),
@@ -778,7 +828,7 @@ auto svg_asset_inspection_json(PackageSvgAssetInspection const& inspection)
         "\"file_type_icon_asset\":{},\"file_type_token\":{},"
         "\"icon_symbol\":{},\"source_attribution\":{},"
         "\"catalog_source\":{{\"inspected\":{},\"ok\":{},"
-        "\"shape_match\":{},\"bytes\":{},\"summary\":{},"
+        "\"shape_match\":{},\"canonical_match\":{},\"bytes\":{},\"summary\":{},"
         "\"diagnostics\":{}}},"
         "\"summary\":{},\"diagnostics\":{}}}",
         json_string(inspection.name),
@@ -799,6 +849,7 @@ auto svg_asset_inspection_json(PackageSvgAssetInspection const& inspection)
         inspection.catalog_source_inspected ? "true" : "false",
         inspection.catalog_source_ok ? "true" : "false",
         inspection.catalog_source_shape_match ? "true" : "false",
+        inspection.catalog_source_canonical_match ? "true" : "false",
         inspection.catalog_source_bytes,
         svg_document_summary_json(
             inspection.catalog_source_inspection.summary),

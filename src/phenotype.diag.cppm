@@ -1892,6 +1892,17 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(summary.backdrop_copy_count)});
         out.emplace(
+            "backdrop_copy_policy",
+            json::Value{std::string{material_backdrop_copy_policy()}});
+        out.emplace(
+            "backdrop_copy_required",
+            json::Value{material_executor_requires_frame_capture(summary)});
+        out.emplace(
+            "backdrop_copy_skipped_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.backdrop_copy_skipped_count)});
+        out.emplace(
             "execution_stage_count",
             json::Value{
                 static_cast<std::int64_t>(summary.execution_stage_count)});
@@ -1998,6 +2009,11 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.foreground_text_remap_count)});
+        out.emplace(
+            "backdrop_copy_skip_reason",
+            json::Value{summary.backdrop_copy_skip_reason
+                            ? summary.backdrop_copy_skip_reason
+                            : "none"});
         out.emplace("cpu_decode_ns", json::Value{summary.cpu_decode_ns});
         out.emplace(
             "cpu_material_upload_ns",
