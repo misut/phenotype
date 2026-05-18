@@ -65,8 +65,11 @@ artifact debug payloads. `key:tab` and `shift-tab` move through the exported
 focus order with `focus_visible=true`; `click:*`, `pointer:*`, and
 `pointer-focus:*` update the focused target while keeping the ring hidden. The
 state records the last input modality, current focus target, focus visibility
-reason, and macOS-style focus ring token so a failure can be diagnosed from
-JSON instead of by visually guessing whether a blue ring should have appeared.
+reason, and macOS-style focus ring token, and the artifact gate also requires
+the engine runtime `platform_runtime.focus_visible=false` after pointer-driven
+startup frames. That keeps the model and native shell in lockstep so a failure
+can be diagnosed from JSON instead of by visually guessing whether a blue ring
+should have appeared.
 
 The module also provides the pure file explorer `ResourceCatalog` fixture and
 locale label resolver used by the desktop and mobile examples. Package/locale

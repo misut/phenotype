@@ -1068,6 +1068,22 @@ static void test_shell_pointer_hover_click_and_tab_navigation() {
     assert(phenotype::detail::get_focused_id() == link_id);
     debug = phenotype::diag::input_debug_snapshot();
     assert(debug.focus_visible == true);
+
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x, y, LEGACY_MOUSE_BUTTON_LEFT, LEGACY_PRESS, 0));
+    assert(g_observed_state.button_activations == 2);
+    assert(phenotype::detail::get_focused_id() == button_id);
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.event == "click");
+    assert(debug.detail == "pointer-click");
+    assert(debug.result == "handled");
+    assert(debug.callback_id == button_id);
+    assert(debug.focused_id == button_id);
+    assert(debug.focus_visible == false);
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x, y, LEGACY_MOUSE_BUTTON_LEFT, LEGACY_RELEASE, 0));
+    debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.focus_visible == false);
     std::puts("PASS: shared shell pointer hover/click and tab navigation");
 }
 
