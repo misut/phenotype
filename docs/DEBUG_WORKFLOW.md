@@ -27,9 +27,19 @@ Every diagnostics snapshot keeps the same top-level `debug` object:
 - `platform_diagnostics`
 - `material_surfaces`
 - `material_backdrop_blur`
+- `material_shader_blur`
+- `material_frame_history`
 - `reduce_transparency`
 - `increase_contrast`
 - `reduce_motion`
+
+The material capability fields intentionally mirror the pure planner gates:
+`material_surfaces`, `material_backdrop_blur`, and `material_shader_blur`
+describe backend support, while `material_frame_history` describes whether a
+previous foreground-free frame is available for sampled backdrop execution.
+The verifier treats these as required booleans, not optional hints, and
+cross-checks the stable backend support fields against each serialized
+`MaterialPlan.decision_trace`.
 
 The common snapshot schema remains the source of truth for all platforms:
 

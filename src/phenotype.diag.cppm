@@ -644,6 +644,8 @@ struct PlatformCapabilitiesSnapshot {
     bool reduce_transparency = false;
     bool increase_contrast = false;
     bool reduce_motion = false;
+    bool material_shader_blur = false;
+    bool material_frame_history = false;
 };
 
 struct PlatformRuntimeSnapshot {
@@ -2362,6 +2364,12 @@ inline json::Value platform_capabilities_to_json(
     out.emplace(
         "material_backdrop_blur",
         json::Value{capabilities.material_backdrop_blur});
+    out.emplace(
+        "material_shader_blur",
+        json::Value{capabilities.material_shader_blur});
+    out.emplace(
+        "material_frame_history",
+        json::Value{capabilities.material_frame_history});
     out.emplace(
         "reduce_transparency",
         json::Value{capabilities.reduce_transparency});

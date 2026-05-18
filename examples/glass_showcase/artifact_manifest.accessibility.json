@@ -282,6 +282,7 @@
   },
   "require_capabilities": [
     "material_backdrop_blur",
+    "material_shader_blur",
     "reduce_transparency",
     "increase_contrast",
     "reduce_motion"

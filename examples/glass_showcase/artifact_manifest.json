@@ -285,7 +285,9 @@
     "max_backdrop_pixels_lte": 4000000
   },
   "require_capabilities": [
-    "material_backdrop_blur"
+    "material_backdrop_blur",
+    "material_shader_blur",
+    "material_frame_history"
   ],
   "require_runtime_details": [
     {

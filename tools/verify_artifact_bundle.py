@@ -210,6 +210,25 @@ MATERIAL_PLAN_CONTRACT_VERSION = 23
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
+PLATFORM_CAPABILITY_BOOL_FIELDS = (
+    "read_only",
+    "snapshot_json",
+    "capture_frame_rgba",
+    "write_artifact_bundle",
+    "semantic_tree",
+    "input_debug",
+    "platform_runtime",
+    "frame_image",
+    "platform_diagnostics",
+    "material_surfaces",
+    "material_backdrop_blur",
+    "material_shader_blur",
+    "material_frame_history",
+    "reduce_transparency",
+    "increase_contrast",
+    "reduce_motion",
+)
+
 
 def suggested_action_for_failure(
     path: str,
@@ -229,6 +248,10 @@ def suggested_action_for_failure(
         return (
             "Inspect MaterialPlan.luminance_curve, backdrop luminance analysis, "
             "and the backend material shader curve inputs.")
+    if likely_layer == "platform-capability":
+        return (
+            "Inspect diag::PlatformCapabilitiesSnapshot, the platform capability "
+            "provider, and the backend runtime details that should explain these gates.")
     if likely_pass:
         return (
             f"Inspect the {likely_pass} material pass serialization and the "
@@ -3072,7 +3095,12 @@ def expected_reference_performance_response(
     return "standard"
 
 
-def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObject:
+def summarize_material_plans(
+    plans: Any,
+    report: Report,
+    path: str,
+    platform_capabilities: JsonObject | None = None,
+) -> JsonObject:
     summary: JsonObject = {
         "count": 0,
         "fallback": 0,
@@ -4818,6 +4846,28 @@ def summarize_material_plans(plans: Any, report: Report, path: str) -> JsonObjec
                 trace_values.get("capability_material_backdrop_blur"),
                 trace_values.get("capability_shader_blur"),
             )
+            if isinstance(platform_capabilities, dict):
+                for trace_key, capability_key in (
+                        ("capability_material_surfaces", "material_surfaces"),
+                        ("capability_material_backdrop_blur", "material_backdrop_blur"),
+                        ("capability_shader_blur", "material_shader_blur")):
+                    trace_value = trace_values.get(trace_key)
+                    capability_value = bool_at(platform_capabilities, capability_key)
+                    if isinstance(trace_value, bool) and capability_value is not None:
+                        report.check(
+                            "material decision trace matches platform capability",
+                            trace_value == capability_value,
+                            path=f"{plan_path}.decision_trace.{trace_key}",
+                            expected={capability_key: capability_value},
+                            actual=trace_value,
+                            likely_layer="platform-capability",
+                            likely_pass="material-planner-input",
+                            hint=(
+                                "Backend material capability booleans should "
+                                "enter MaterialEnvironment unchanged. If this "
+                                "fails, inspect the platform capability provider "
+                                "and the MaterialEnvironment construction."),
+                            record_success=False)
             if all(isinstance(value, bool) for value in backend_inputs):
                 expected_backend = all(backend_inputs)
                 report.check(
@@ -7826,6 +7876,19 @@ def verify(args: argparse.Namespace) -> int:
     assert semantic_tree is not None
     assert runtime is not None
 
+    for key in PLATFORM_CAPABILITY_BOOL_FIELDS:
+        check_bool_field(
+            report,
+            capabilities,
+            key,
+            "debug.platform_capabilities",
+            likely_layer="platform-capability",
+            hint=(
+                "Platform capabilities must expose supported and unsupported "
+                "material/backend features explicitly so verifier output can "
+                "explain pure planner decisions."),
+        )
+
     for key in (
         "snapshot_json",
         "write_artifact_bundle",
@@ -8090,7 +8153,8 @@ def verify(args: argparse.Namespace) -> int:
             material_plan_summary = summarize_material_plans(
                 material_plans,
                 report,
-                "debug.platform_runtime.details.renderer.material_plans")
+                "debug.platform_runtime.details.renderer.material_plans",
+                capabilities)
             report.data["material_plans"] = material_plan_summary
             if args.require_material_plan:
                 report.check(
