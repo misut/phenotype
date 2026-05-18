@@ -1071,6 +1071,40 @@ static void test_shell_pointer_hover_click_and_tab_navigation() {
     std::puts("PASS: shared shell pointer hover/click and tab navigation");
 }
 
+static void test_shell_platform_consumed_pointer_hides_focus_ring() {
+    using namespace input_regression;
+
+    Harness harness;
+    auto [x, y] = harness.point_for(button_id);
+    phenotype::detail::set_focus_id(
+        button_id,
+        "test",
+        "keyboard-setup",
+        true);
+    assert(phenotype::detail::get_focused_id() == button_id);
+    assert(phenotype::detail::g_app.focus_visible);
+
+    harness.platform.input.handle_mouse_button =
+        +[](float, float, int button, int action, int) {
+            return button == LEGACY_MOUSE_BUTTON_LEFT
+                && action == LEGACY_PRESS;
+        };
+
+    assert(phenotype::native::detail::dispatch_mouse_button(
+        x, y, LEGACY_MOUSE_BUTTON_LEFT, LEGACY_PRESS, 0));
+    assert(g_observed_state.button_activations == 0);
+    assert(phenotype::detail::get_focused_id() == button_id);
+    assert(!phenotype::detail::g_app.focus_visible);
+    auto debug = phenotype::diag::input_debug_snapshot();
+    assert(debug.event == "click");
+    assert(debug.detail == "pointer-click");
+    assert(debug.result == "platform-consumed");
+    assert(debug.focused_id == button_id);
+    assert(!debug.focus_visible);
+    assert(has_metric("click", "pointer-click", "platform-consumed"));
+    std::puts("PASS: platform-consumed pointer hides keyboard focus ring");
+}
+
 static void test_shell_activation_keys_respect_roles() {
     using namespace input_regression;
 
@@ -3770,6 +3804,7 @@ static void test_stub_renderer_hit_test() {
 int main() {
     test_window_options_integrated_titlebar_contract();
     test_shell_pointer_hover_click_and_tab_navigation();
+    test_shell_platform_consumed_pointer_hides_focus_ring();
     test_shell_activation_keys_respect_roles();
     test_shell_text_space_char_and_enter_behavior();
     test_shell_key_commands_respect_input_focus_policy();

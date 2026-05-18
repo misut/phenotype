@@ -7690,7 +7690,10 @@ def verify(args: argparse.Namespace) -> int:
         expected="boolean keyboard focus modality",
         actual=runtime.get("focus_visible"),
         likely_layer="input-runtime",
-        hint="Check core focus modality propagation from focus_visible into the debug plane.")
+        hint=(
+            "Check core focus modality propagation from focus_visible into "
+            "the debug plane. Pointer and platform-consumed pointer presses "
+            "must clear stale keyboard focus rings."))
 
     report.check("semantic root role is root", semantic_tree.get("role") == "root")
     summary = summarize_semantic_tree(semantic_tree)

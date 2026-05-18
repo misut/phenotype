@@ -359,7 +359,10 @@ Raw focus and visible focus are separate. Pointer focus updates
 `focus_visible=false` so toolbar buttons do not grow a ring after a mouse
 click. Tab and Shift-Tab traversal set `focus_visible=true`; controls read
 that keyboard-only flag for macOS-style focus-ring chrome, while text inputs
-can still present their caret and selection from raw focus.
+can still present their caret and selection from raw focus. Native shells also
+clear `focus_visible` before forwarding a left-button press to any platform
+input adapter, so AppKit/IME/titlebar hooks that consume the pointer event
+cannot leave a stale keyboard ring behind.
 
 This keeps the long-term input/output abstraction model testable without a
 native window. `examples/file_explorer_shared` publishes Finder-style desktop

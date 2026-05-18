@@ -669,6 +669,19 @@ inline bool dispatch_gesture(::phenotype::GestureEvent ev) {
 
 inline bool dispatch_mouse_button(float mx, float my,
                                   MouseButton button, KeyAction action, int mods) {
+    bool focus_visibility_cleared = false;
+    if (button == MouseButton::Left && action == KeyAction::Press
+        && ::phenotype::detail::g_app.focus_visible
+        && ::phenotype::detail::get_focused_id() != invalid_callback_id) {
+        focus_visibility_cleared = ::phenotype::detail::set_focus_id(
+            ::phenotype::detail::get_focused_id(),
+            "shell",
+            "pointer-focus-visible-reset",
+            false);
+        if (focus_visibility_cleared)
+            sync_platform_input();
+    }
+
     if (g_app_state.host && g_app_state.host->platform
         && g_app_state.host->platform->input.handle_mouse_button
         && g_app_state.host->platform->input.handle_mouse_button(
@@ -678,7 +691,7 @@ inline bool dispatch_mouse_button(float mx, float my,
             pressed_changed = ::phenotype::detail::set_pressed_id(
                 invalid_callback_id, "shell", "platform-release");
         }
-        if (pressed_changed)
+        if (focus_visibility_cleared || pressed_changed)
             ::phenotype::detail::trigger_rebuild();
         else
             repaint_current();
@@ -745,11 +758,13 @@ inline bool dispatch_mouse_button(float mx, float my,
         // keeps the no-callback paths (text_field click) animated.
         // Caret-only updates stay on `repaint_current` since the caret
         // is drawn at paint time.
-        if (pressed_changed || focus_changed || activated)
+        if (focus_visibility_cleared || pressed_changed || focus_changed
+            || activated)
             ::phenotype::detail::trigger_rebuild();
         else if (caret_changed)
             repaint_current();
-        return pressed_changed || focus_changed || caret_changed || activated;
+        return focus_visibility_cleared || pressed_changed || focus_changed
+            || caret_changed || activated;
     }
 
     g_app_state.drag_selecting = false;
@@ -762,9 +777,9 @@ inline bool dispatch_mouse_button(float mx, float my,
         sync_platform_input();
     if (cleared)
         reset_caret_blink_timer();
-    if (cleared || pressed_cleared)
+    if (focus_visibility_cleared || cleared || pressed_cleared)
         ::phenotype::detail::trigger_rebuild();
-    return cleared || pressed_cleared;
+    return focus_visibility_cleared || cleared || pressed_cleared;
 }
 
 inline bool dispatch_mouse_button(float mx, float my,
