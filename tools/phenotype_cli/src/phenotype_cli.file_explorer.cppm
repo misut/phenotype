@@ -1,12 +1,21 @@
 export module phenotype_cli.file_explorer;
 
 import file_explorer_shared;
+import json;
 import phenotype_cli.common;
+import phenotype_cli.icons;
+import phenotype.resources;
 import std;
 
 namespace phenotype_cli::file_explorer {
 
+namespace fs = std::filesystem;
+using phenotype_cli::common::Check;
+using phenotype_cli::common::checks_json;
 using phenotype_cli::common::json_string;
+using phenotype_cli::common::path_string;
+using phenotype_cli::common::resource_diagnostics_json;
+using namespace phenotype_cli::icons;
 
 export auto operation_receipt_json(
         file_explorer_demo::OperationReceipt const& receipt) -> std::string {
@@ -291,5 +300,493 @@ export auto explorer_expectations_json(
     out += "]";
     return out;
 }
+
+export struct ExplorerDriveResources {
+    std::string source = "builtin";
+    fs::path package_root;
+    std::string locale = "en";
+    phenotype::ResourceCatalog catalog;
+    std::vector<phenotype::ResourceDiagnostic> diagnostics;
+    std::vector<Check> checks;
+};
+
+auto output_tail(std::string_view text, std::size_t max_bytes)
+    -> std::string_view {
+    if (text.size() <= max_bytes)
+        return text;
+    return text.substr(text.size() - max_bytes);
+}
+
+export auto explorer_chrome_json(
+        file_explorer_demo::ExplorerChromeMetrics const& chrome) -> std::string {
+    auto const thumbnail_system = std::format(
+        "{{\"visual_policy\":{},\"asset_policy\":{},"
+        "\"pdf_policy\":{},\"image_policy\":{},\"video_policy\":{},"
+        "\"shadow_policy\":{},\"uses_external_previews\":{},"
+        "\"pdf_page_width\":{},\"pdf_page_height\":{},"
+        "\"pdf_page_radius\":{},\"pdf_fold_size\":{},"
+        "\"media_preview_width\":{},\"media_preview_height\":{},"
+        "\"media_preview_radius\":{},\"pdf_detail_line_count\":{},"
+        "\"image_sample_block_count\":{},\"video_strip_count\":{}}}",
+        json_string(chrome.thumbnail_visual_policy),
+        json_string(chrome.thumbnail_asset_policy),
+        json_string(chrome.thumbnail_pdf_policy),
+        json_string(chrome.thumbnail_image_policy),
+        json_string(chrome.thumbnail_video_policy),
+        json_string(chrome.thumbnail_shadow_policy),
+        chrome.thumbnail_uses_external_previews ? "true" : "false",
+        chrome.thumbnail_pdf_page_width,
+        chrome.thumbnail_pdf_page_height,
+        chrome.thumbnail_pdf_page_radius,
+        chrome.thumbnail_pdf_fold_size,
+        chrome.thumbnail_media_preview_width,
+        chrome.thumbnail_media_preview_height,
+        chrome.thumbnail_media_preview_radius,
+        chrome.thumbnail_pdf_detail_line_count,
+        chrome.thumbnail_image_sample_block_count,
+        chrome.thumbnail_video_strip_count);
+    return std::format(
+        "{{\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
+        "\"integrated_titlebar_height\":{},\"sidebar_width\":{},"
+        "\"sidebar_row_width\":{},\"sidebar_row_height\":{},"
+        "\"sidebar_heading_height\":{},"
+        "\"sidebar_selected_row_radius\":{},"
+        "\"sidebar_selected_row_background_alpha\":{},"
+        "\"sidebar_selected_row_hover_background_alpha\":{},"
+        "\"sidebar_selection_policy\":{},"
+        "\"toolbar_group_height\":{},"
+        "\"toolbar_group_radius\":{},\"toolbar_icon_button_width\":{},"
+        "\"toolbar_icon_button_height\":{},\"window_radius\":{},"
+        "\"icon_grid\":{{\"columns\":{},\"visible_rows\":{},"
+        "\"visible_capacity\":{},\"column_width\":{},\"row_height\":{},"
+        "\"column_pitch\":{},\"scroll_height\":{}}},"
+        "\"thumbnail_system\":{},"
+        "\"toolbar\":{{\"group_count\":{},\"separator_count\":{},"
+        "\"icon_button_count\":{},\"overflow_action_button_count\":{},"
+        "\"finder_segmented\":{},\"more_actions_open\":{},"
+        "\"status_bar_visible\":{}}},"
+        "\"column_locations\":{{\"row_count\":{},\"row_height\":{},"
+        "\"icon_size\":{}}},"
+        "\"native_window\":{{\"integrated_titlebar\":{},"
+        "\"native_window_controls\":{},\"duplicate_window_controls\":{},"
+        "\"content_window_control_markers\":{},"
+        "\"artifact_window_control_markers\":{},"
+        "\"window_control_marker_mode\":{},"
+        "\"native_window_control_owner\":{},"
+        "\"native_window_control_count\":{},"
+        "\"content_window_control_marker_count\":{},"
+        "\"artifact_window_control_marker_count\":{},"
+        "\"content_drawn_window_control_count\":{},"
+        "\"artifact_drawn_window_control_count\":{},"
+        "\"window_control_render_policy\":{},"
+        "\"titlebar_control_reserve_policy\":{},"
+        "\"native_window_control_integration_policy\":{},"
+        "\"titlebar_drag_region_height\":{},"
+        "\"leading_control_reserved_width\":{},"
+        "\"trailing_control_reserved_width\":{}}},"
+        "\"geometry\":{{\"policy\":{},\"window_content_inset\":{},"
+        "\"window_gap\":{},\"toolbar_shell_x\":{},"
+        "\"toolbar_shell_y\":{},\"toolbar_shell_width\":{},"
+        "\"toolbar_shell_height\":{},\"toolbar_group_y\":{},"
+        "\"toolbar_navigation_group_x\":{},\"toolbar_title_x\":{},"
+        "\"toolbar_view_group_x\":{},\"toolbar_sort_group_x\":{},"
+        "\"toolbar_action_group_x\":{},\"toolbar_search_group_x\":{},"
+        "\"content_surface_x\":{},\"content_surface_y\":{},"
+        "\"content_surface_width\":{},\"sidebar_surface_x\":{},"
+        "\"sidebar_surface_y\":{},\"sidebar_first_row_y\":{}}},"
+        "\"icon_system\":{{\"module\":{},\"style\":{},"
+        "\"source_format\":{},"
+        "\"svg_subset_policy\":{},\"svg_supported_elements\":{},"
+        "\"svg_supported_path_commands\":{},"
+        "\"svg_supported_style_attributes\":{},"
+        "\"svg_arc_policy\":{},"
+        "\"stroke_geometry_policy\":{},\"stroke_cap_policy\":{},"
+        "\"stroke_join_policy\":{},"
+        "\"owned_assets\":{},"
+        "\"uses_sf_symbols_assets\":{},\"round_stroke_contract\":{},"
+        "\"total_symbol_count\":{},\"sidebar_symbol_count\":{},"
+        "\"toolbar_symbol_count\":{},\"file_type_symbol_count\":{},"
+        "\"filled_symbol_count\":{},"
+        "\"outline_symbol_count\":{},\"hierarchical_symbol_count\":{},"
+        "\"monochrome_symbol_count\":{},"
+        "\"regular_weight_symbol_count\":{},"
+        "\"palette_symbol_count\":{},\"multicolor_symbol_count\":{},"
+        "\"reference_symbol_count\":{},\"svg_path_arc_symbol_count\":{},"
+        "\"round_stroke_symbol_count\":{},"
+        "\"interaction_phase_count\":{},"
+        "\"grid_size\":{},"
+        "\"default_stroke_width\":{},\"secondary_opacity\":{},"
+        "\"toolbar_point_size\":{},\"sidebar_point_size\":{},"
+        "\"sidebar_optical_y_offset\":{},"
+        "\"toolbar_hit_target_size\":{},"
+        "\"sidebar_hit_target_size\":{},"
+        "\"action_hit_target_size\":{},"
+        "\"toolbar_activation_hit_target_size\":{},"
+        "\"sidebar_activation_hit_target_size\":{},"
+        "\"action_activation_hit_target_size\":{},"
+        "\"toolbar_button_radius\":{},"
+        "\"toolbar_button_background_alpha\":{},"
+        "\"toolbar_button_hover_background_alpha\":{},"
+        "\"toolbar_selected_button_background_alpha\":{},"
+        "\"toolbar_selected_button_hover_background_alpha\":{},"
+        "\"toolbar_pressed_button_background_alpha\":{},"
+        "\"sidebar_selected_pressed_background_alpha\":{},"
+        "\"pressed_symbol_opacity\":{},\"pressed_scale\":{},"
+        "\"column_location_icon_size\":{},"
+        "\"text_weight_aligned\":{},"
+        "\"monochrome_rendering\":{},"
+        "\"hierarchical_opacity\":{},"
+        "\"palette_rendering\":{},\"multicolor_rendering\":{},"
+        "\"design_reference\":{},"
+        "\"reference_family\":{},\"reference_policy\":{},"
+        "\"asset_policy\":{},"
+        "\"interface_metaphor_policy\":{},"
+        "\"visual_consistency_policy\":{},"
+        "\"alignment\":{},\"rendering_mode\":{},"
+        "\"default_weight\":{},"
+        "\"rendering_capability_policy\":{},"
+        "\"variant_policy\":{},\"presentation_policy\":{},"
+        "\"tone_policy\":{},\"interaction_tone_policy\":{},"
+        "\"symbol_control_chrome_policy\":{},"
+        "\"symbol_interaction_phase_policy\":{},"
+        "\"toolbar_symbol_chrome_policy\":{},"
+        "\"sidebar_symbol_color_policy\":{},"
+        "\"interaction_tones\":{},"
+        "\"file_type_color_policy\":{},"
+        "\"metrics_policy\":{},\"hit_target_policy\":{},"
+        "\"scale\":{},"
+        "\"sidebar_reference_symbols\":{},"
+        "\"sidebar_symbol_tokens\":{},"
+        "\"sidebar_symbol_presentations\":{},"
+        "\"toolbar_reference_symbols\":{},"
+        "\"toolbar_symbol_presentations\":{},"
+        "\"file_type_symbol_tokens\":{},"
+        "\"file_type_reference_symbols\":{},"
+        "\"file_type_symbol_presentations\":{},"
+        "\"presentation_samples\":{}}}}}",
+        chrome.viewport.width,
+        chrome.viewport.height,
+        chrome.viewport.scale,
+        chrome.integrated_titlebar_height,
+        chrome.sidebar_width,
+        chrome.sidebar_row_width,
+        chrome.sidebar_row_height,
+        chrome.sidebar_heading_height,
+        chrome.sidebar_selected_row_radius,
+        chrome.sidebar_selected_row_background_alpha,
+        chrome.sidebar_selected_row_hover_background_alpha,
+        json_string(chrome.sidebar_selection_policy),
+        chrome.toolbar_group_height,
+        chrome.toolbar_group_radius,
+        chrome.toolbar_icon_button_width,
+        chrome.toolbar_icon_button_height,
+        chrome.window_radius,
+        chrome.icon_grid_columns,
+        chrome.icon_grid_visible_rows,
+        chrome.icon_grid_visible_capacity,
+        chrome.icon_grid_column_width,
+        chrome.icon_grid_row_height,
+        chrome.icon_grid_column_pitch,
+        chrome.icon_grid_scroll_height,
+        thumbnail_system,
+        chrome.toolbar_group_count,
+        chrome.toolbar_separator_count,
+        chrome.toolbar_icon_button_count,
+        chrome.overflow_action_button_count,
+        chrome.finder_segmented_toolbar ? "true" : "false",
+        chrome.more_actions_open ? "true" : "false",
+        chrome.status_bar_visible ? "true" : "false",
+        chrome.column_location_row_count,
+        chrome.column_location_row_height,
+        chrome.column_location_icon_size,
+        chrome.integrated_titlebar ? "true" : "false",
+        chrome.native_window_controls ? "true" : "false",
+        chrome.duplicate_window_controls ? "true" : "false",
+        chrome.content_window_control_markers ? "true" : "false",
+        chrome.artifact_window_control_markers ? "true" : "false",
+        json_string(chrome.window_control_marker_mode),
+        json_string(chrome.native_window_control_owner),
+        chrome.native_window_control_count,
+        chrome.content_window_control_marker_count,
+        chrome.artifact_window_control_marker_count,
+        chrome.content_drawn_window_control_count,
+        chrome.artifact_drawn_window_control_count,
+        json_string(chrome.window_control_render_policy),
+        json_string(chrome.titlebar_control_reserve_policy),
+        json_string(chrome.native_window_control_integration_policy),
+        chrome.titlebar_drag_region_height,
+        chrome.leading_control_reserved_width,
+        chrome.trailing_control_reserved_width,
+        json_string(chrome.chrome_geometry_policy),
+        chrome.window_content_inset,
+        chrome.window_gap,
+        chrome.toolbar_shell_x,
+        chrome.toolbar_shell_y,
+        chrome.toolbar_shell_width,
+        chrome.toolbar_shell_height,
+        chrome.toolbar_group_y,
+        chrome.toolbar_navigation_group_x,
+        chrome.toolbar_title_x,
+        chrome.toolbar_view_group_x,
+        chrome.toolbar_sort_group_x,
+        chrome.toolbar_action_group_x,
+        chrome.toolbar_search_group_x,
+        chrome.content_surface_x,
+        chrome.content_surface_y,
+        chrome.content_surface_width,
+        chrome.sidebar_surface_x,
+        chrome.sidebar_surface_y,
+        chrome.sidebar_first_row_y,
+        json_string(chrome.icon_module),
+        json_string(chrome.icon_style),
+        json_string(chrome.icon_source_format),
+        json_string(chrome.icon_svg_subset_policy),
+        json_string(chrome.icon_svg_supported_elements),
+        json_string(chrome.icon_svg_supported_path_commands),
+        json_string(chrome.icon_svg_supported_style_attributes),
+        json_string(chrome.icon_svg_arc_policy),
+        json_string(chrome.icon_stroke_geometry_policy),
+        json_string(chrome.icon_stroke_cap_policy),
+        json_string(chrome.icon_stroke_join_policy),
+        chrome.owned_icon_assets ? "true" : "false",
+        chrome.uses_sf_symbols_assets ? "true" : "false",
+        chrome.icon_round_stroke_contract ? "true" : "false",
+        chrome.icon_total_symbol_count,
+        chrome.sidebar_symbol_count,
+        chrome.toolbar_symbol_count,
+        chrome.file_type_symbol_count,
+        chrome.icon_filled_symbol_count,
+        chrome.icon_outline_symbol_count,
+        chrome.icon_hierarchical_symbol_count,
+        chrome.icon_monochrome_symbol_count,
+        chrome.icon_regular_weight_symbol_count,
+        chrome.icon_palette_symbol_count,
+        chrome.icon_multicolor_symbol_count,
+        chrome.icon_reference_symbol_count,
+        chrome.icon_svg_path_arc_symbol_count,
+        chrome.icon_round_stroke_symbol_count,
+        chrome.icon_interaction_phase_count,
+        chrome.icon_grid_size,
+        chrome.icon_default_stroke_width,
+        chrome.icon_secondary_opacity,
+        chrome.icon_toolbar_point_size,
+        chrome.icon_sidebar_point_size,
+        chrome.icon_sidebar_optical_y_offset,
+        chrome.icon_toolbar_hit_target_size,
+        chrome.icon_sidebar_hit_target_size,
+        chrome.icon_action_hit_target_size,
+        chrome.icon_toolbar_activation_hit_target_size,
+        chrome.icon_sidebar_activation_hit_target_size,
+        chrome.icon_action_activation_hit_target_size,
+        chrome.icon_toolbar_button_radius,
+        chrome.icon_toolbar_button_background_alpha,
+        chrome.icon_toolbar_button_hover_background_alpha,
+        chrome.icon_toolbar_selected_button_background_alpha,
+        chrome.icon_toolbar_selected_button_hover_background_alpha,
+        chrome.icon_toolbar_pressed_button_background_alpha,
+        chrome.icon_sidebar_selected_pressed_background_alpha,
+        chrome.icon_pressed_symbol_opacity,
+        chrome.icon_pressed_scale,
+        chrome.column_location_icon_size,
+        chrome.icon_text_weight_aligned ? "true" : "false",
+        chrome.icon_monochrome_rendering ? "true" : "false",
+        chrome.icon_hierarchical_opacity ? "true" : "false",
+        chrome.icon_palette_rendering ? "true" : "false",
+        chrome.icon_multicolor_rendering ? "true" : "false",
+        json_string(chrome.icon_design_reference),
+        json_string(chrome.icon_reference_family),
+        json_string(chrome.icon_reference_policy),
+        json_string(chrome.icon_asset_policy),
+        json_string(chrome.icon_interface_metaphor_policy),
+        json_string(chrome.icon_visual_consistency_policy),
+        json_string(chrome.icon_alignment),
+        json_string(chrome.icon_rendering_mode),
+        json_string(chrome.icon_default_weight),
+        json_string(chrome.icon_rendering_capability_policy),
+        json_string(chrome.icon_variant_policy),
+        json_string(chrome.icon_presentation_policy),
+        json_string(chrome.icon_tone_policy),
+        json_string(chrome.icon_interaction_tone_policy),
+        json_string(chrome.icon_symbol_control_chrome_policy),
+        json_string(chrome.icon_symbol_interaction_phase_policy),
+        json_string(chrome.icon_toolbar_symbol_chrome_policy),
+        json_string(chrome.icon_sidebar_symbol_color_policy),
+        icon_interaction_tones_json(
+            chrome.icon_interaction_tone_policy != "n/a"),
+        json_string(chrome.icon_file_type_color_policy),
+        json_string(chrome.icon_metrics_policy),
+        json_string(chrome.icon_hit_target_policy),
+        json_string(chrome.icon_scale),
+        icon_reference_names_json(
+            IconCatalogSet::Sidebar,
+            chrome.icon_reference_symbol_count > 0),
+        sidebar_symbol_tokens_json(chrome.icon_reference_symbol_count > 0),
+        json::emit(file_explorer_demo::sidebar_symbol_presentations_debug_json(
+            chrome)),
+        icon_reference_names_json(
+            IconCatalogSet::Toolbar,
+            chrome.icon_reference_symbol_count > 0),
+        json::emit(file_explorer_demo::toolbar_symbol_presentations_debug_json(
+            chrome)),
+        json::emit(file_explorer_demo::file_type_symbol_tokens_debug_json(
+            chrome)),
+        json::emit(
+            file_explorer_demo::file_type_icon_reference_symbols_debug_json(
+                chrome)),
+        json::emit(file_explorer_demo::file_type_symbol_presentations_debug_json(
+            chrome)),
+        json::emit(file_explorer_demo::icon_presentation_samples_debug_json(
+            chrome)));
+}
+
+export auto explorer_trace_json(
+        file_explorer_demo::ExplorerInputTrace const& trace,
+        std::string_view profile,
+        std::size_t index) -> std::string {
+    return std::format(
+        "{{\"index\":{},\"input\":{},\"chrome\":{},\"status\":{},"
+        "\"relative_location\":{},\"selected_name\":{},"
+        "\"visible_entries\":{},\"has_selection\":{},"
+        "\"input_model\":{},\"operation_label\":{},\"operation\":{}}}",
+        index,
+        explorer_input_json(trace.input),
+        explorer_chrome_json(trace.chrome),
+        json_string(trace.status),
+        json_string(trace.relative_location),
+        json_string(trace.selected_name),
+        trace.visible_entries,
+        trace.has_selection ? "true" : "false",
+        explorer_input_model_json(trace, profile),
+        json_string(trace.operation_label),
+        operation_receipt_json(trace.operation));
+}
+
+export auto explorer_trace_array_json(
+        std::span<file_explorer_demo::ExplorerInputTrace const> trace,
+        std::string_view profile)
+    -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < trace.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += explorer_trace_json(trace[i], profile, i);
+    }
+    out += "]";
+    return out;
+}
+
+export auto explorer_drive_ok(file_explorer_demo::ExplorerDriveResult const& result)
+    -> bool {
+    return std::ranges::all_of(result.trace, [](auto const& trace) {
+        return trace.operation.kind.empty() || trace.operation.ok;
+    });
+}
+
+export auto explorer_resources_json(ExplorerDriveResources const& resources)
+    -> std::string {
+    return std::format(
+        "{{\"source\":{},\"package_root\":{},\"locale\":{},"
+        "\"application_id\":{},\"display_name\":{},\"entry\":{},"
+        "\"default_locale\":{},\"default_font_family\":{},"
+        "\"diagnostics\":{},\"checks\":{}}}",
+        json_string(resources.source),
+        json_string(path_string(resources.package_root)),
+        json_string(resources.locale),
+        json_string(resources.catalog.application.id),
+        json_string(resources.catalog.application.display_name),
+        json_string(resources.catalog.application.entry),
+        json_string(resources.catalog.default_locale),
+        json_string(resources.catalog.default_font_family),
+        resource_diagnostics_json(resources.diagnostics),
+        checks_json(resources.checks));
+}
+
+export auto explorer_contract_ok(
+        file_explorer_demo::ExplorerDriveResult const& result,
+        std::span<file_explorer_demo::ExplorerExpectationResult const>
+            expectations) -> bool {
+    auto const expectations_ok =
+        file_explorer_demo::explorer_expectations_ok(expectations);
+    if (!expectations.empty())
+        return expectations_ok;
+    return explorer_drive_ok(result);
+}
+
+export auto explorer_drive_json(
+        file_explorer_demo::ExplorerDriveResult const& result,
+        ExplorerDriveResources const& resources,
+        file_explorer_demo::ExplorerLabels const& labels,
+        std::span<file_explorer_demo::ExplorerExpectationResult const>
+            expectations)
+    -> std::string {
+    auto const& snap = result.snapshot;
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"drive file-explorer\","
+        "\"ok\":{},\"profile\":{},\"input_count\":{},"
+        "\"resources\":{},\"labels\":{},"
+        "\"root\":{},\"current\":{},\"relative_location\":{},"
+        "\"status\":{},\"sort_label\":{},"
+        "\"view_mode\":{{\"value\":{},\"label\":{}}},"
+        "\"viewport\":{{\"w\":{},\"h\":{},\"scale\":{}}},"
+        "\"chrome\":{},"
+        "\"theme_system\":{},"
+        "\"input_model\":{},"
+        "\"keyboard_commands\":{},"
+        "\"selected\":{{\"present\":{},\"name\":{},\"kind\":{},"
+        "\"index\":{},\"size\":{},\"path_label\":{},"
+        "\"preview_excerpt\":{}}},"
+        "\"counts\":{{\"visible_entries\":{},\"files\":{},\"folders\":{}}},"
+        "\"capabilities\":{{\"can_go_back\":{},\"can_go_forward\":{},"
+        "\"can_create_file\":{},\"can_create_folder\":{},"
+        "\"can_delete_selected\":{},\"can_duplicate_selected\":{},"
+        "\"can_preview_selected\":{}}},"
+        "\"operation\":{},\"entry_symbol_summary\":{},\"entries\":{},\"trace\":{},"
+        "\"expectations\":{}}}",
+        explorer_contract_ok(result, expectations) ? "true" : "false",
+        json_string(result.profile),
+        result.trace.size(),
+        explorer_resources_json(resources),
+        explorer_labels_json(labels),
+        json_string(path_string(result.state.root)),
+        json_string(path_string(result.state.current)),
+        json_string(snap.relative_location),
+        json_string(result.state.status),
+        json_string(snap.sort_label),
+        json_string(file_explorer_demo::view_mode_value_name(snap.view_mode)),
+        json_string(file_explorer_demo::view_mode_label(snap.view_mode)),
+        result.state.viewport_width,
+        result.state.viewport_height,
+        result.state.viewport_scale,
+        explorer_chrome_json(result.chrome),
+        explorer_theme_system_json(result.chrome),
+        explorer_input_model_json(result.state, result.profile),
+        explorer_keyboard_commands_json(result.profile),
+        snap.has_selection ? "true" : "false",
+        json_string(snap.has_selection ? snap.selected.name : ""),
+        json_string(snap.selected_kind_label),
+        snap.has_selection
+            ? static_cast<std::int64_t>(snap.selected_index)
+            : -1,
+        json_string(snap.selected_size_label),
+        json_string(snap.selected_path_label),
+        json_string(output_tail(snap.preview, 512)),
+        snap.entries.size(),
+        snap.file_count,
+        snap.folder_count,
+        snap.can_go_back ? "true" : "false",
+        snap.can_go_forward ? "true" : "false",
+        snap.can_create_file ? "true" : "false",
+        snap.can_create_folder ? "true" : "false",
+        snap.can_delete_selected ? "true" : "false",
+        snap.can_duplicate_selected ? "true" : "false",
+        snap.can_preview_selected ? "true" : "false",
+        operation_receipt_json(result.state.last_operation),
+        json::emit(file_explorer_demo::entry_symbol_summary_debug_json(snap)),
+        explorer_entries_json(snap.entries),
+        explorer_trace_array_json(result.trace, result.profile),
+        explorer_expectations_json(expectations));
+}
+
+
 
 }
