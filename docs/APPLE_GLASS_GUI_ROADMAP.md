@@ -339,10 +339,14 @@ tint policy now gives
 folder/document/PDF/text/image/SVG image/movie/archive/audio/code/spreadsheet/presentation glyphs deterministic colors for
 list and column rows without querying native platform icon services. The CLI command
 `phenotype icons catalog --json` exposes the same contract for CI and LLM
-debugging on Linux without importing native GUI code, and `phenotype icons svg
-<name-or-reference>` exposes the exact audited SVG source for one glyph plus
-its attribution and rendering capability envelope when a renderer, parser, or
-icon cache needs a pure source-level probe.
+debugging on Linux without importing native GUI code. `phenotype icons sources
+--json` provides the shorter source-review view for adding icons from web
+references: pinned Lucide raw SVG URLs, source revision, license URL, symbol
+usage, phenotype-owned fallback symbols, and explicit zero Apple/platform
+extraction counts. `phenotype icons svg <name-or-reference>` exposes the exact
+audited SVG source for one glyph plus its attribution and rendering capability
+envelope when a renderer, parser, or icon cache needs a pure source-level
+probe.
 The macOS Metal
 renderer executes diagonal icon strokes as triangle bodies with round caps
 instead of dot chains, keeping toolbar/search/sidebar symbols continuous while

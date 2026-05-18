@@ -143,6 +143,13 @@ The initial scope is intentionally narrow:
   same presentation role, metrics, ownership, and reference policy as the full
   catalog. This gives tests, examples, and LLM debugging a small probe when a
   Finder-style sidebar or toolbar token maps to the wrong visual metaphor.
+- `phenotype icons sources` emits the compact provenance audit for the
+  embedded icon sources. JSON output reports the Lucide source revision, unique
+  pinned raw SVG records, symbols that use each source icon, license URL,
+  phenotype-owned symbols, reference-source rows, and checks that Apple/SF
+  Symbols artwork was not embedded, platform-extracted, or runtime-fetched.
+  This is the fast command to run before adding file-type icons from web
+  references.
 - `phenotype icons svg <name-or-reference>` emits the exact audited SVG
   source for one built-in glyph. The default output is raw SVG for renderer or
   asset-pipeline probes; `--json` wraps the source with the matched symbol,

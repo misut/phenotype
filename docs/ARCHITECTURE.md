@@ -375,6 +375,10 @@ debugging before anyone inspects a screenshot. `phenotype icons svg
 <name-or-reference>` exposes the exact built-in SVG source from the same pure
 catalog with the matched rendering capability envelope, so renderer and parser
 failures can be reproduced without launching a native window. `phenotype icons
+sources --json` is the compact provenance audit for web-sourced icons: it
+lists each pinned Lucide raw SVG source, the symbols using it, license URL,
+source revision, phenotype-owned symbols, and the Apple/platform-extraction
+boundary checks without dumping every catalog presentation field. `phenotype icons
 present <name-or-reference>` resolves the same state recipe for a chosen role,
 phase, selected state, and disabled state, including the effective visible
 symbol color, background chrome, hit target, and likely icon layer/pass.

@@ -475,6 +475,17 @@ auto spec() -> cppx::cli::CommandSpec {
                         },
                     },
                     {
+                        .name = "sources",
+                        .summary =
+                            "Audit embedded icon source provenance and license boundaries",
+                        .options = {help_option(), json_option()},
+                        .allow_positionals = false,
+                        .examples = {
+                            "phenotype icons sources --json",
+                            "phenotype icons sources",
+                        },
+                    },
+                    {
                         .name = "svg",
                         .summary =
                             "Emit one audited built-in icon SVG source",

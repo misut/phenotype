@@ -281,6 +281,11 @@ capabilities. `phenotype icons present <name-or-reference> --role ... --phase
 ... --json` resolves the exact macOS-style presentation recipe for one glyph
 state, including visible RGBA, background chrome, effective size, hit target,
 source attribution, and likely layer/pass.
+`phenotype icons sources --json` is the compact license/provenance probe:
+it lists every pinned Lucide raw SVG source, the symbols that use it, the
+source revision, exact license URL, phenotype-owned fallback symbols, and
+checks that Apple/SF Symbols artwork was not embedded, platform-extracted, or
+runtime-fetched.
 `phenotype icons render <name-or-reference> --role ... --phase ... --json`
 emits the same state as a standalone SVG wrapper with explicit source bytes,
 viewBox, optional `--output` write path, background chrome, and
