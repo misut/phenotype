@@ -4150,7 +4150,11 @@ void test_icon_catalog_umbrella_export() {
            == phenotype::icon_catalog::all_symbol_count);
     assert(phenotype::icon_catalog::palette_symbol_count == 0);
     assert(phenotype::icon_catalog::multicolor_symbol_count == 0);
-    assert(phenotype::icon_catalog::svg_path_arc_symbol_count == 1);
+    assert(phenotype::icon_catalog::phenotype_owned_symbol_count == 28);
+    assert(phenotype::icon_catalog::permissive_source_symbol_count == 7);
+    assert(phenotype::icon_catalog::lucide_source_symbol_count == 7);
+    assert(phenotype::icon_catalog::apple_asset_symbol_count == 0);
+    assert(phenotype::icon_catalog::svg_path_arc_symbol_count == 7);
     assert(phenotype::icon_catalog::round_stroke_symbol_count
            == phenotype::icon_catalog::outline_symbol_count);
     assert(phenotype::icon_catalog::semantic_reference_name(
@@ -4158,6 +4162,12 @@ void test_icon_catalog_umbrella_export() {
            == "airdrop");
     assert(phenotype::icon_catalog::uses_svg_path_arcs(
                phenotype::icon_catalog::Symbol::AirDrop));
+    assert(phenotype::icon_catalog::uses_lucide_source(
+               phenotype::icon_catalog::Symbol::Folder));
+    assert(phenotype::icon_catalog::source_attribution(
+               phenotype::icon_catalog::Symbol::Folder)
+               .license
+           == "ISC");
     auto const capabilities = phenotype::icon_catalog::rendering_capabilities(
         phenotype::icon_catalog::Symbol::AirDrop);
     assert(capabilities.monochrome);

@@ -156,6 +156,24 @@ auto icon_rendering_capabilities_json(
         capabilities.multicolor ? "true" : "false");
 }
 
+auto icon_source_attribution_json(
+        icon_catalog::SymbolSourceAttribution const& source) -> std::string {
+    return std::format(
+        "{{\"family\":{},\"icon_name\":{},\"license\":{},"
+        "\"license_url\":{},\"source_url\":{},\"copyright\":{},"
+        "\"embedded_source\":{},\"modified_for_phenotype\":{},"
+        "\"apple_asset\":{}}}",
+        json_string(source.family),
+        json_string(source.icon_name),
+        json_string(source.license),
+        json_string(source.license_url),
+        json_string(source.source_url),
+        json_string(source.copyright),
+        source.embedded_source ? "true" : "false",
+        source.modified_for_phenotype ? "true" : "false",
+        source.apple_asset ? "true" : "false");
+}
+
 auto icon_interaction_tones_json(bool enabled) -> std::string {
     if (!enabled)
         return "{}";
@@ -200,6 +218,7 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         presentation_role,
         icon_catalog::SymbolInteractionState{false, false});
     auto const source = icon_catalog::svg_source(symbol);
+    auto const source_attribution = icon_catalog::source_attribution(symbol);
     auto const color = icon_catalog::macos_light_tone_color(tone);
     auto const file_type_color = icon_catalog::macos_file_type_color(symbol);
     auto const control_chrome = icon_catalog::macos_control_chrome(
@@ -227,7 +246,9 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         "\"rendering_capabilities\":{},"
         "\"uses_svg_path_arcs\":{},"
         "\"phenotype_owned\":{},\"uses_sf_symbols_asset\":{},"
+        "\"uses_lucide_source\":{},"
         "\"has_svg_source\":{},\"source_bytes\":{},"
+        "\"source_attribution\":{},"
         "\"file_type_color\":{},"
         "\"presentation\":{{\"role\":{},\"tone\":{},"
         "\"selected_tone\":{},\"disabled_tone\":{},\"scale\":{},"
@@ -267,8 +288,10 @@ auto icon_symbol_json(icon_catalog::Symbol symbol,
         icon_catalog::uses_svg_path_arcs(symbol) ? "true" : "false",
         desc.phenotype_owned ? "true" : "false",
         desc.uses_sf_symbols_asset ? "true" : "false",
+        icon_catalog::uses_lucide_source(symbol) ? "true" : "false",
         source.empty() ? "false" : "true",
         source.size(),
+        icon_source_attribution_json(source_attribution),
         icon_color_json(file_type_color),
         json_string(icon_catalog::symbol_presentation_role_name(
             presentation_role)),
@@ -347,12 +370,15 @@ auto icon_svg_json(std::string_view query,
     auto const desc = icon_catalog::descriptor(result.symbol);
     auto const source = icon_catalog::svg_source(result.symbol);
     auto const capabilities = icon_catalog::rendering_capabilities(result.symbol);
+    auto const source_attribution =
+        icon_catalog::source_attribution(result.symbol);
     return std::format(
         "{{\"schema_version\":1,\"command\":\"icons svg\","
         "\"ok\":true,\"query\":{},\"match_kind\":{},"
         "\"symbol\":{},\"semantic_reference_name\":{},"
         "\"source_format\":\"svg\",\"asset_policy\":{},"
         "\"source_license_policy\":{},\"apple_asset_boundary\":{},"
+        "\"source_attribution\":{},"
         "\"rendering_capabilities\":{},"
         "\"source_bytes\":{},\"source\":{}}}",
         json_string(query),
@@ -362,6 +388,7 @@ auto icon_svg_json(std::string_view query,
         json_string(icon_catalog::asset_policy()),
         json_string(icon_catalog::source_license_policy()),
         json_string(icon_catalog::apple_asset_boundary()),
+        icon_source_attribution_json(source_attribution),
         icon_rendering_capabilities_json(capabilities),
         source.size(),
         json_string(source));
@@ -450,6 +477,8 @@ auto icon_presentation_json(std::string_view query,
         icon_catalog::SymbolInteractionState{selected, enabled},
         phase);
     auto const capabilities = icon_catalog::rendering_capabilities(result.symbol);
+    auto const source_attribution =
+        icon_catalog::source_attribution(result.symbol);
     auto const visible_color =
         icon_color_with_opacity(recipe.symbol_color, recipe.symbol_opacity);
     auto const content_inset =
@@ -460,6 +489,7 @@ auto icon_presentation_json(std::string_view query,
         "\"symbol\":{},\"semantic_reference_name\":{},"
         "\"reference_policy\":{},\"asset_policy\":{},"
         "\"source_license_policy\":{},\"apple_asset_boundary\":{},"
+        "\"source_attribution\":{},"
         "\"state\":{{\"role\":{},\"phase\":{},\"selected\":{},"
         "\"enabled\":{}}},"
         "\"presentation\":{{\"policy\":{},\"metrics_policy\":{},"
@@ -482,6 +512,7 @@ auto icon_presentation_json(std::string_view query,
         json_string(icon_catalog::asset_policy()),
         json_string(icon_catalog::source_license_policy()),
         json_string(icon_catalog::apple_asset_boundary()),
+        icon_source_attribution_json(source_attribution),
         json_string(icon_catalog::symbol_presentation_role_name(role)),
         json_string(icon_catalog::symbol_interaction_phase_name(phase)),
         selected ? "true" : "false",
@@ -563,6 +594,8 @@ auto rendered_icon_svg_source(IconLookupResult const& result,
         phase);
     auto const visible_color =
         icon_color_with_opacity(recipe.symbol_color, recipe.symbol_opacity);
+    auto const source_attribution =
+        icon_catalog::source_attribution(result.symbol);
     auto const effective_point_size = metrics.point_size * recipe.scale;
     auto const content_inset =
         (recipe.hit_target_size - effective_point_size) / 2.0f;
@@ -619,6 +652,8 @@ auto icon_render_json(std::string_view query,
         phase);
     auto const visible_color =
         icon_color_with_opacity(recipe.symbol_color, recipe.symbol_opacity);
+    auto const source_attribution =
+        icon_catalog::source_attribution(result.symbol);
     auto const output_json = output_path.empty()
         ? std::string{"null"}
         : std::format(
@@ -630,7 +665,8 @@ auto icon_render_json(std::string_view query,
         "\"ok\":true,\"query\":{},\"match_kind\":{},"
         "\"symbol\":{},\"semantic_reference_name\":{},"
         "\"asset_policy\":{},\"source_license_policy\":{},"
-        "\"apple_asset_boundary\":{},\"state\":{{\"role\":{},\"phase\":{},"
+        "\"apple_asset_boundary\":{},\"source_attribution\":{},"
+        "\"state\":{{\"role\":{},\"phase\":{},"
         "\"selected\":{},\"enabled\":{}}},"
         "\"presentation\":{{\"policy\":{},\"symbol_tone\":{},"
         "\"visible_symbol_color\":{},\"background_color\":{},"
@@ -648,6 +684,7 @@ auto icon_render_json(std::string_view query,
         json_string(icon_catalog::asset_policy()),
         json_string(icon_catalog::source_license_policy()),
         json_string(icon_catalog::apple_asset_boundary()),
+        icon_source_attribution_json(source_attribution),
         json_string(icon_catalog::symbol_presentation_role_name(role)),
         json_string(icon_catalog::symbol_interaction_phase_name(phase)),
         selected ? "true" : "false",
@@ -783,8 +820,10 @@ auto icon_catalog_checks() -> std::vector<Check> {
     unsigned int multicolor_count = 0;
     unsigned int arc_path_count = 0;
     unsigned int round_stroke_count = 0;
-    bool all_owned = true;
-    bool no_sf_assets = true;
+    unsigned int phenotype_owned_count = 0;
+    unsigned int permissive_source_count = 0;
+    unsigned int lucide_source_count = 0;
+    unsigned int apple_asset_count = 0;
     bool semantic_references = true;
     bool round_stroke_contract = true;
     bool round_cap_join_contract = true;
@@ -845,8 +884,15 @@ auto icon_catalog_checks() -> std::vector<Check> {
             ++arc_path_count;
         if (desc.round_stroke)
             ++round_stroke_count;
-        all_owned = all_owned && desc.phenotype_owned;
-        no_sf_assets = no_sf_assets && !desc.uses_sf_symbols_asset;
+        if (desc.phenotype_owned)
+            ++phenotype_owned_count;
+        if (icon_catalog::uses_lucide_source(symbol)) {
+            ++permissive_source_count;
+            ++lucide_source_count;
+        }
+        if (desc.uses_sf_symbols_asset
+            || icon_catalog::source_attribution(symbol).apple_asset)
+            ++apple_asset_count;
         semantic_references =
             semantic_references && !desc.semantic_reference_name.empty();
         name_lookup_roundtrips =
@@ -918,22 +964,45 @@ auto icon_catalog_checks() -> std::vector<Check> {
          .hint =
              "Keep the icon catalog anchored to Apple HIG, macOS Finder, and SF Symbols semantic names."},
         {.name = "asset_ownership",
-         .ok = all_owned && no_sf_assets
+         .ok = phenotype_owned_count
+                == icon_catalog::phenotype_owned_symbol_count
+            && permissive_source_count
+                == icon_catalog::permissive_source_symbol_count
+            && lucide_source_count == icon_catalog::lucide_source_symbol_count
+            && apple_asset_count == icon_catalog::apple_asset_symbol_count
             && icon_catalog::source_license_policy().find("ISC")
                 != std::string_view::npos
             && icon_catalog::apple_asset_boundary().find("do not extract")
                 != std::string_view::npos,
-         .detail = std::format("phenotype_owned={} uses_sf_symbols_asset={}",
-                               all_owned ? "true" : "false",
-                               no_sf_assets ? "false" : "true"),
+         .detail = std::format(
+             "phenotype_owned={} permissive={} lucide={} apple_asset={}",
+             phenotype_owned_count,
+             permissive_source_count,
+             lucide_source_count,
+             apple_asset_count),
          .hint =
-             "Do not embed Apple or SF Symbols vector artwork in the built-in catalog."},
+             "Use only phenotype-owned or audited permissive SVG sources, and never embed Apple or SF Symbols vector artwork."},
+        {.name = "source_attribution",
+         .ok = icon_catalog::source_attribution_policy().find("source URL")
+                != std::string_view::npos
+            && icon_catalog::source_attribution(icon_catalog::Symbol::Folder)
+                   .family
+                == std::string_view{"Lucide"}
+            && icon_catalog::source_attribution(icon_catalog::Symbol::Document)
+                   .license
+                == std::string_view{"ISC"}
+            && icon_catalog::source_attribution(icon_catalog::Symbol::Search)
+                   .family
+                == std::string_view{"phenotype"},
+         .detail = std::string{icon_catalog::source_attribution_policy()},
+         .hint =
+             "Every embedded icon source must carry machine-readable family, icon name, license, and source URL metadata."},
         {.name = "svg_source_contract",
          .ok = svg_source_contract
             && icon_catalog::svg_source(icon_catalog::Symbol::Applications)
                    .find("stroke-linecap=\"round\"")
                 != std::string_view::npos,
-         .detail = "all built-in symbols expose phenotype-owned SVG source",
+         .detail = "all built-in symbols expose audited SVG source",
          .hint =
              "Keep icon SVG source in phenotype.icon_catalog so CLI diagnostics can inspect icons without platform renderer dependencies."},
         {.name = "semantic_references",
@@ -1106,6 +1175,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"reference_policy\":{},\"asset_policy\":{},"
         "\"source_license_policy\":{},"
         "\"preferred_external_source_policy\":{},"
+        "\"source_attribution_policy\":{},"
         "\"apple_asset_boundary\":{},"
         "\"interface_metaphor_policy\":{},"
         "\"visual_consistency_policy\":{},"
@@ -1120,7 +1190,10 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         "\"sidebar_symbol_color_policy\":{},"
         "\"file_type_color_policy\":{},\"default_scale\":{},"
         "\"metrics_policy\":{},\"hit_target_policy\":{}}},"
-        "\"counts\":{{\"all\":{},\"sidebar\":{},\"toolbar\":{},"
+        "\"counts\":{{\"all\":{},\"phenotype_owned\":{},"
+        "\"permissive_source\":{},\"lucide_source\":{},"
+        "\"apple_asset\":{},\"audited_source\":{},"
+        "\"sidebar\":{},\"toolbar\":{},"
         "\"file_type\":{},"
         "\"outline\":{},\"filled\":{},\"hierarchical\":{},"
         "\"monochrome\":{},\"regular_weight\":{},"
@@ -1146,6 +1219,7 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::asset_policy()),
         json_string(icon_catalog::source_license_policy()),
         json_string(icon_catalog::preferred_external_source_policy()),
+        json_string(icon_catalog::source_attribution_policy()),
         json_string(icon_catalog::apple_asset_boundary()),
         json_string(icon_catalog::interface_metaphor_policy()),
         json_string(icon_catalog::visual_consistency_policy()),
@@ -1165,6 +1239,11 @@ auto icon_catalog_json(std::span<Check const> checks) -> std::string {
         json_string(icon_catalog::metrics_policy()),
         json_string(icon_catalog::hit_target_policy()),
         icon_catalog::all_symbol_count,
+        icon_catalog::phenotype_owned_symbol_count,
+        icon_catalog::permissive_source_symbol_count,
+        icon_catalog::lucide_source_symbol_count,
+        icon_catalog::apple_asset_symbol_count,
+        icon_catalog::audited_symbol_source_count,
         icon_catalog::sidebar_symbol_count,
         icon_catalog::toolbar_symbol_count,
         icon_catalog::file_type_symbol_count,

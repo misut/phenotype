@@ -12,15 +12,15 @@ The compact location strip includes the same sandboxed Trash location as the
 desktop sidebar.
 The Browse action strip uses the shared `widget::symbol_button` contract for
 sort, back, forward, and parent navigation controls. Those buttons resolve
-through the same phenotype-owned SVG catalog and macOS-style state recipes as
-the desktop Finder toolbar, including disabled navigation states and semantic
-labels for artifacts.
+through the same audited SVG catalog and macOS-style state recipes as the
+desktop Finder toolbar, including disabled navigation states, source
+attribution, and semantic labels for artifacts.
 Browse rows consume the shared `file_explorer_shared::entry_symbol` contract
 too: folders, PDF/text/image/movie/archive files, and generic documents render
-through the same phenotype-owned file-type SVG symbols and Finder-style tint
-policy as the desktop icon grid. The startup artifact manifest verifies the
-pure entry-symbol summary so a mobile row/icon mismatch is visible from JSON
-before pixel inspection.
+through the same audited file-type SVG symbols and Finder-style tint policy as
+the desktop icon grid. The startup artifact manifest verifies the pure
+entry-symbol summary so a mobile row/icon mismatch is visible from JSON before
+pixel inspection.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-mobile`. The example never points at the user's real

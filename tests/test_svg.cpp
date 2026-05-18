@@ -340,6 +340,10 @@ void test_builtin_icons_parse() {
     assert(icons::style_name() == "macos_rounded_outline_svg");
     assert(icons::style_reference().find("Apple HIG") != std::string_view::npos);
     assert(icons::asset_policy().find("no Apple") != std::string_view::npos);
+    assert(icons::asset_policy().find("audited permissive")
+           != std::string_view::npos);
+    assert(icons::source_attribution_policy().find("source URL")
+           != std::string_view::npos);
     assert(icons::source_format() == "svg");
     assert(icons::svg_subset_policy() == "bounded_svg_icon_subset");
     assert(icons::svg_supported_elements().find("path")
@@ -369,6 +373,11 @@ void test_builtin_icons_parse() {
            != std::string_view::npos);
     assert(icons::all_symbol_count == 35);
     assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
+    assert(icons::phenotype_owned_symbol_count == 28);
+    assert(icons::permissive_source_symbol_count == 7);
+    assert(icons::lucide_source_symbol_count == 7);
+    assert(icons::apple_asset_symbol_count == 0);
+    assert(icons::audited_symbol_source_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
     assert(phenotype::icon_catalog::sidebar_symbol_count == icons::sidebar_symbol_count);
     assert(icons::toolbar_symbol_count == 15);
@@ -377,16 +386,16 @@ void test_builtin_icons_parse() {
     assert(phenotype::icon_catalog::file_type_symbol_count == icons::file_type_symbol_count);
     assert(icons::outline_symbol_count == 34);
     assert(icons::filled_symbol_count == 1);
-    assert(icons::hierarchical_symbol_count == 23);
+    assert(icons::hierarchical_symbol_count == 17);
     assert(icons::monochrome_symbol_count == icons::all_symbol_count);
     assert(icons::regular_weight_symbol_count == icons::all_symbol_count);
     assert(icons::palette_symbol_count == 0);
     assert(icons::multicolor_symbol_count == 0);
     assert(icons::reference_symbol_count == icons::all_symbol_count);
-    assert(icons::svg_path_arc_symbol_count == 1);
+    assert(icons::svg_path_arc_symbol_count == 7);
     assert(icons::round_stroke_symbol_count == icons::outline_symbol_count);
     assert(icons::reference_family() == "SF Symbols semantic reference");
-    assert(icons::reference_policy().find("phenotype-owned")
+    assert(icons::reference_policy().find("audited permissive")
            != std::string_view::npos);
     assert(icons::interface_metaphor_policy()
            == "familiar_simplified_macos_symbol_metaphors");
@@ -438,11 +447,15 @@ void test_builtin_icons_parse() {
     unsigned int reference_count = 0;
     unsigned int arc_path_count = 0;
     unsigned int round_stroke_count = 0;
+    unsigned int phenotype_owned_count = 0;
+    unsigned int lucide_source_count = 0;
+    unsigned int apple_asset_count = 0;
     for (unsigned int i = 0; i < icons::all_symbol_count; ++i) {
         auto symbol = icons::symbol_at(i);
         auto src = icons::source(symbol);
         auto doc = icons::document(symbol);
         auto descriptor = icons::descriptor(symbol);
+        auto source_attribution = icons::source_attribution(symbol);
         auto contract_symbol = phenotype::icon_catalog::symbol_at(i);
         auto contract_descriptor =
             phenotype::icon_catalog::descriptor(contract_symbol);
@@ -483,7 +496,24 @@ void test_builtin_icons_parse() {
         assert(descriptor.default_weight == icons::SymbolWeight::Regular);
         assert(icons::symbol_weight_name(descriptor.default_weight)
                == "regular");
-        assert(descriptor.phenotype_owned);
+        if (descriptor.phenotype_owned)
+            ++phenotype_owned_count;
+        if (icons::uses_lucide_source(symbol)) {
+            ++lucide_source_count;
+            assert(!descriptor.phenotype_owned);
+            assert(source_attribution.family == "Lucide");
+            assert(source_attribution.license == "ISC");
+            assert(source_attribution.source_url.find("lucide-icons/lucide")
+                   != std::string_view::npos);
+            assert(source_attribution.modified_for_phenotype);
+        } else {
+            assert(descriptor.phenotype_owned);
+            assert(source_attribution.family == "phenotype");
+            assert(source_attribution.license == "MIT");
+        }
+        assert(!source_attribution.apple_asset);
+        if (source_attribution.apple_asset)
+            ++apple_asset_count;
         assert(!descriptor.uses_sf_symbols_asset);
         assert(descriptor.uses_current_color);
         auto const capabilities = icons::rendering_capabilities(symbol);
@@ -547,6 +577,11 @@ void test_builtin_icons_parse() {
             assert(src.find(" A") != std::string_view::npos);
             assert(count_path_verb(doc.shapes[1].path, PathVerb::ArcTo) > 0);
         }
+        if (icons::uses_lucide_source(symbol)) {
+            assert(src.find("lucide") == std::string_view::npos);
+            assert(src.find(R"(xmlns="http://www.w3.org/2000/svg")")
+                   != std::string_view::npos);
+        }
 
         CapturePainter painter;
         icons::paint_symbol(painter, symbol, 0.0f, 0.0f, 24.0f,
@@ -563,6 +598,15 @@ void test_builtin_icons_parse() {
     assert(reference_count == icons::reference_symbol_count);
     assert(arc_path_count == icons::svg_path_arc_symbol_count);
     assert(round_stroke_count == icons::round_stroke_symbol_count);
+    assert(phenotype_owned_count == icons::phenotype_owned_symbol_count);
+    assert(lucide_source_count == icons::lucide_source_symbol_count);
+    assert(apple_asset_count == icons::apple_asset_symbol_count);
+    assert(icons::source_attribution(icons::Symbol::Folder).icon_name
+           == "folder");
+    assert(icons::source_attribution(icons::Symbol::Movie).icon_name
+           == "clapperboard");
+    assert(icons::source_attribution(icons::Symbol::Search).family
+           == "phenotype");
 
     auto shared = icons::descriptor(icons::Symbol::Shared);
     assert(shared.role == icons::SymbolRole::Sidebar);

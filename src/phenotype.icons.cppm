@@ -319,6 +319,8 @@ struct SymbolRenderingCapabilities {
     std::string_view policy;
 };
 
+using SymbolSourceAttribution = catalog::SymbolSourceAttribution;
+
 struct SymbolPresentation {
     Symbol symbol = Symbol::Document;
     SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
@@ -387,6 +389,16 @@ struct SymbolMetrics {
 };
 
 inline constexpr unsigned int all_symbol_count = catalog::all_symbol_count;
+inline constexpr unsigned int phenotype_owned_symbol_count =
+    catalog::phenotype_owned_symbol_count;
+inline constexpr unsigned int permissive_source_symbol_count =
+    catalog::permissive_source_symbol_count;
+inline constexpr unsigned int lucide_source_symbol_count =
+    catalog::lucide_source_symbol_count;
+inline constexpr unsigned int apple_asset_symbol_count =
+    catalog::apple_asset_symbol_count;
+inline constexpr unsigned int audited_symbol_source_count =
+    catalog::audited_symbol_source_count;
 inline constexpr unsigned int sidebar_symbol_count =
     catalog::sidebar_symbol_count;
 inline constexpr unsigned int toolbar_symbol_count =
@@ -458,6 +470,10 @@ inline auto source_license_policy() noexcept -> std::string_view {
 
 inline auto preferred_external_source_policy() noexcept -> std::string_view {
     return catalog::preferred_external_source_policy();
+}
+
+inline auto source_attribution_policy() noexcept -> std::string_view {
+    return catalog::source_attribution_policy();
 }
 
 inline auto apple_asset_boundary() noexcept -> std::string_view {
@@ -579,6 +595,20 @@ inline auto symbol_from_semantic_reference_name(
     if (!found.has_value())
         return std::nullopt;
     return from_catalog_symbol(*found);
+}
+
+inline bool uses_lucide_source(Symbol symbol) noexcept {
+    return catalog::uses_lucide_source(to_catalog_symbol(symbol));
+}
+
+inline auto permissive_source_icon_name(Symbol symbol) noexcept
+        -> std::string_view {
+    return catalog::permissive_source_icon_name(to_catalog_symbol(symbol));
+}
+
+inline auto source_attribution(Symbol symbol) noexcept
+        -> SymbolSourceAttribution {
+    return catalog::source_attribution(to_catalog_symbol(symbol));
 }
 
 inline bool supports_hierarchical_opacity(Symbol symbol) noexcept {

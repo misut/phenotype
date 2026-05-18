@@ -47,16 +47,20 @@ parsed document to phenotype `PathBuilder` commands, so native, WASM, and test
 surfaces consume the same draw-command path instead of calling platform SVG
 APIs from core code.
 
-`phenotype.icons` builds on that parser with phenotype-owned SVG symbols. The
-catalog keeps macOS/Finder/SF Symbols names only as semantic references: it
-does not embed Apple or SF Symbols artwork. `icons::macos_presentation(...)`
-is the pure role/state mapper for toolbar, navigation, sidebar, file-type, and
-action symbols. It resolves tone, opacity, scale, hit target, and optical offset
-from explicit immutable inputs, while backends only paint the resulting SVG
-paths. `widget::symbol_button` is the core control helper for those symbols: it
-lowers the same pure recipe to `ButtonStyleOptions`, `ButtonVisualState`, a
-centered SVG paint callback, semantic button labels, and deterministic paint
-tokens so examples do not hand-roll macOS-style toolbar chrome.
+`phenotype.icons` builds on that parser with phenotype-owned and audited
+permissive SVG symbols. The catalog keeps macOS/Finder/SF Symbols names only as
+semantic references: it does not embed Apple or SF Symbols artwork. File-type
+glyphs can use checked open SVG sources such as Lucide ISC icons, and every
+embedded external source exposes family, icon name, license, license URL,
+source URL, copyright, and Apple-asset boundary in debug metadata.
+`icons::macos_presentation(...)` is the
+pure role/state mapper for toolbar, navigation, sidebar, file-type, and action
+symbols. It resolves tone, opacity, scale, hit target, and optical offset from
+explicit immutable inputs, while backends only paint the resulting SVG paths.
+`widget::symbol_button` is the core control helper for those symbols: it lowers
+the same pure recipe to `ButtonStyleOptions`, `ButtonVisualState`, a centered
+SVG paint callback, semantic button labels, and deterministic paint tokens so
+examples do not hand-roll macOS-style toolbar chrome.
 
 ## View-time animation
 
@@ -174,7 +178,7 @@ tokens rather than Apple private API or copied platform assets, so examples can
 look native while remaining portable across macOS, Windows, Android, and WASI.
 `packages/phenotype_theme_contract` owns the pure metadata contract for this
 baseline: profile, reference, font/material policies, Liquid Glass usage
-boundary, macOS/Finder-style iconography policy, phenotype-owned SVG asset
+boundary, macOS/Finder-style iconography policy, owned/permissive SVG asset
 policy, container grouping, performance bounds, accessibility fallbacks,
 unsupported-backend degradation, color tokens, radii, typography, and expected
 surface roles. The root helpers `default_theme_profile_name`,
@@ -798,7 +802,7 @@ phenotype (umbrella re-export)
 ├── phenotype.resources   — path package with pure ResourceCatalog descriptors, lookup, fallback, diagnostics
 ├── phenotype.icon_catalog — path package with pure built-in icon metadata
 ├── phenotype.svg         — pure SVG subset parser + Painter renderer
-├── phenotype.icons       — phenotype-owned SVG icon catalog
+├── phenotype.icons       — audited SVG icon catalog
 ├── phenotype.io          — pure input frame and output observation contracts
 ├── phenotype.theme_contract — pure Apple-like glass theme contract metadata
 ├── phenotype.state       — Arena, AppState, Scope, InputHandler, message queue

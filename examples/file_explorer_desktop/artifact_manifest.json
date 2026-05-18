@@ -592,7 +592,15 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.owned_assets",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.audited_permissive_assets",
       "equals": true
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.uses_apple_icon_assets",
+      "equals": false
     },
     {
       "path": "application.file_explorer.chrome.icon_system.uses_sf_symbols_assets",
@@ -604,6 +612,26 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.total_symbol_count",
+      "equals": 35
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.phenotype_owned_symbol_count",
+      "equals": 28
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.permissive_source_symbol_count",
+      "equals": 7
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.lucide_source_symbol_count",
+      "equals": 7
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.apple_asset_symbol_count",
+      "equals": 0
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.audited_symbol_source_count",
       "equals": 35
     },
     {
@@ -628,7 +656,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.hierarchical_symbol_count",
-      "equals": 23
+      "equals": 17
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_symbol_count",
@@ -636,7 +664,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_path_arc_symbol_count",
-      "equals": 1
+      "equals": 7
     },
     {
       "path": "application.file_explorer.chrome.icon_system.round_stroke_symbol_count",
@@ -652,11 +680,11 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.default_stroke_width",
-      "equals": 1.7999999523162842
+      "equals": 2.0
     },
     {
       "path": "application.file_explorer.chrome.icon_system.secondary_opacity",
-      "equals": 0.6600000262260437
+      "equals": 1.0
     },
     {
       "path": "application.file_explorer.chrome.icon_system.toolbar_point_size",
@@ -740,11 +768,11 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_policy",
-      "equals": "semantic reference only; phenotype-owned SVG artwork"
+      "equals": "semantic reference only; no Apple or SF Symbols vector artwork; embedded sources are phenotype-owned or audited permissive SVG"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.asset_policy",
-      "equals": "phenotype-owned vector assets; no Apple or SF Symbols artwork embedded"
+      "equals": "phenotype-owned or audited permissive vector assets; no Apple or SF Symbols artwork embedded"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_license_policy",
@@ -753,6 +781,10 @@
     {
       "path": "application.file_explorer.chrome.icon_system.preferred_external_source_policy",
       "equals": "Lucide ISC or Material Symbols Apache-2.0 may be used as audited source references before phenotype adaptation"
+    },
+    {
+      "path": "application.file_explorer.chrome.icon_system.source_attribution_policy",
+      "equals": "embedded permissive SVG sources must expose family, icon name, license, license URL, source URL, copyright, and Apple-asset boundary in debug output"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.apple_asset_boundary",

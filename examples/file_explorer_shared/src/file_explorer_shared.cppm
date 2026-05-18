@@ -317,6 +317,11 @@ struct ExplorerChromeMetrics {
     int artifact_drawn_window_control_count = 0;
     int overflow_action_button_count = 0;
     int icon_total_symbol_count = 0;
+    int icon_phenotype_owned_symbol_count = 0;
+    int icon_permissive_source_symbol_count = 0;
+    int icon_lucide_source_symbol_count = 0;
+    int icon_apple_asset_symbol_count = 0;
+    int icon_audited_symbol_source_count = 0;
     int sidebar_symbol_count = 0;
     int toolbar_symbol_count = 0;
     int file_type_symbol_count = 0;
@@ -360,6 +365,8 @@ struct ExplorerChromeMetrics {
     bool content_window_control_markers = false;
     bool finder_segmented_toolbar = false;
     bool owned_icon_assets = false;
+    bool audited_permissive_icon_assets = false;
+    bool uses_apple_icon_assets = false;
     bool uses_sf_symbols_assets = false;
     bool icon_round_stroke_contract = false;
     bool icon_text_weight_aligned = false;
@@ -389,6 +396,7 @@ struct ExplorerChromeMetrics {
     std::string icon_asset_policy;
     std::string icon_source_license_policy;
     std::string icon_preferred_external_source_policy;
+    std::string icon_source_attribution_policy;
     std::string icon_apple_asset_boundary;
     std::string icon_interface_metaphor_policy;
     std::string icon_visual_consistency_policy;
@@ -1030,6 +1038,16 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .artifact_drawn_window_control_count = 0,
             .icon_total_symbol_count =
                 static_cast<int>(icon_catalog::all_symbol_count),
+            .icon_phenotype_owned_symbol_count =
+                static_cast<int>(icon_catalog::phenotype_owned_symbol_count),
+            .icon_permissive_source_symbol_count =
+                static_cast<int>(icon_catalog::permissive_source_symbol_count),
+            .icon_lucide_source_symbol_count =
+                static_cast<int>(icon_catalog::lucide_source_symbol_count),
+            .icon_apple_asset_symbol_count =
+                static_cast<int>(icon_catalog::apple_asset_symbol_count),
+            .icon_audited_symbol_source_count =
+                static_cast<int>(icon_catalog::audited_symbol_source_count),
             .sidebar_symbol_count =
                 static_cast<int>(icon_catalog::sidebar_symbol_count),
             .toolbar_symbol_count =
@@ -1117,7 +1135,14 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .duplicate_window_controls = false,
             .content_window_control_markers = false,
             .finder_segmented_toolbar = false,
-            .owned_icon_assets = true,
+            .owned_icon_assets =
+                icon_catalog::phenotype_owned_symbol_count
+                == icon_catalog::all_symbol_count,
+            .audited_permissive_icon_assets =
+                icon_catalog::audited_symbol_source_count
+                == icon_catalog::all_symbol_count,
+            .uses_apple_icon_assets =
+                icon_catalog::apple_asset_symbol_count > 0,
             .uses_sf_symbols_assets = false,
             .icon_round_stroke_contract = true,
             .icon_text_weight_aligned = true,
@@ -1159,6 +1184,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
                 std::string{icon_catalog::source_license_policy()},
             .icon_preferred_external_source_policy =
                 std::string{icon_catalog::preferred_external_source_policy()},
+            .icon_source_attribution_policy =
+                std::string{icon_catalog::source_attribution_policy()},
             .icon_apple_asset_boundary =
                 std::string{icon_catalog::apple_asset_boundary()},
             .icon_interface_metaphor_policy =
@@ -1349,6 +1376,16 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .artifact_drawn_window_control_count = 0,
         .icon_total_symbol_count =
             static_cast<int>(icon_catalog::all_symbol_count),
+        .icon_phenotype_owned_symbol_count =
+            static_cast<int>(icon_catalog::phenotype_owned_symbol_count),
+        .icon_permissive_source_symbol_count =
+            static_cast<int>(icon_catalog::permissive_source_symbol_count),
+        .icon_lucide_source_symbol_count =
+            static_cast<int>(icon_catalog::lucide_source_symbol_count),
+        .icon_apple_asset_symbol_count =
+            static_cast<int>(icon_catalog::apple_asset_symbol_count),
+        .icon_audited_symbol_source_count =
+            static_cast<int>(icon_catalog::audited_symbol_source_count),
         .sidebar_symbol_count =
             static_cast<int>(icon_catalog::sidebar_symbol_count),
         .toolbar_symbol_count =
@@ -1435,7 +1472,13 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .duplicate_window_controls = false,
         .content_window_control_markers = false,
         .finder_segmented_toolbar = true,
-        .owned_icon_assets = true,
+        .owned_icon_assets =
+            icon_catalog::phenotype_owned_symbol_count
+            == icon_catalog::all_symbol_count,
+        .audited_permissive_icon_assets =
+            icon_catalog::audited_symbol_source_count
+            == icon_catalog::all_symbol_count,
+        .uses_apple_icon_assets = icon_catalog::apple_asset_symbol_count > 0,
         .uses_sf_symbols_assets = false,
         .icon_round_stroke_contract = true,
         .icon_text_weight_aligned = true,
@@ -1477,6 +1520,8 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             std::string{icon_catalog::source_license_policy()},
         .icon_preferred_external_source_policy =
             std::string{icon_catalog::preferred_external_source_policy()},
+        .icon_source_attribution_policy =
+            std::string{icon_catalog::source_attribution_policy()},
         .icon_apple_asset_boundary =
             std::string{icon_catalog::apple_asset_boundary()},
         .icon_interface_metaphor_policy =
@@ -2025,6 +2070,24 @@ inline json::Value icon_color_debug_json(icon_catalog::SymbolColor color) {
     return json::Value{std::move(out)};
 }
 
+inline json::Value icon_source_attribution_debug_json(
+        icon_catalog::Symbol symbol) {
+    auto const source = icon_catalog::source_attribution(symbol);
+    json::Object out;
+    out.emplace("family", json::Value{std::string{source.family}});
+    out.emplace("icon_name", json::Value{std::string{source.icon_name}});
+    out.emplace("license", json::Value{std::string{source.license}});
+    out.emplace("license_url", json::Value{std::string{source.license_url}});
+    out.emplace("source_url", json::Value{std::string{source.source_url}});
+    out.emplace("copyright", json::Value{std::string{source.copyright}});
+    out.emplace("embedded_source", json::Value{source.embedded_source});
+    out.emplace(
+        "modified_for_phenotype",
+        json::Value{source.modified_for_phenotype});
+    out.emplace("apple_asset", json::Value{source.apple_asset});
+    return json::Value{std::move(out)};
+}
+
 inline icon_catalog::SymbolColor icon_color_with_opacity(
         icon_catalog::SymbolColor color,
         float opacity) {
@@ -2073,6 +2136,9 @@ inline json::Value icon_presentation_debug_json(
     out.emplace(
         "semantic_reference_name",
         json::Value{std::string{desc.semantic_reference_name}});
+    out.emplace(
+        "source_attribution",
+        icon_source_attribution_debug_json(symbol));
     out.emplace(
         "role",
         json::Value{std::string{
@@ -2433,6 +2499,9 @@ inline json::Value file_type_symbol_presentations_debug_json(
             json::Value{std::string{
                 icon_catalog::semantic_reference_name(item.symbol)}});
         token.emplace(
+            "source_attribution",
+            icon_source_attribution_debug_json(item.symbol));
+        token.emplace(
             "presentation",
             icon_presentation_debug_json(
                 item.symbol,
@@ -2663,11 +2732,37 @@ inline json::Value explorer_chrome_debug_json(
         "stroke_join_policy",
         json::Value{chrome.icon_stroke_join_policy});
     icon_system.emplace("owned_assets", json::Value{chrome.owned_icon_assets});
+    icon_system.emplace(
+        "audited_permissive_assets",
+        json::Value{chrome.audited_permissive_icon_assets});
+    icon_system.emplace(
+        "uses_apple_icon_assets",
+        json::Value{chrome.uses_apple_icon_assets});
     icon_system.emplace("uses_sf_symbols_assets", json::Value{chrome.uses_sf_symbols_assets});
     icon_system.emplace("round_stroke_contract", json::Value{chrome.icon_round_stroke_contract});
     icon_system.emplace(
         "total_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.icon_total_symbol_count)});
+    icon_system.emplace(
+        "phenotype_owned_symbol_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_phenotype_owned_symbol_count)});
+    icon_system.emplace(
+        "permissive_source_symbol_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_permissive_source_symbol_count)});
+    icon_system.emplace(
+        "lucide_source_symbol_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_lucide_source_symbol_count)});
+    icon_system.emplace(
+        "apple_asset_symbol_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_apple_asset_symbol_count)});
+    icon_system.emplace(
+        "audited_symbol_source_count",
+        json::Value{static_cast<std::int64_t>(
+            chrome.icon_audited_symbol_source_count)});
     icon_system.emplace(
         "sidebar_symbol_count",
         json::Value{static_cast<std::int64_t>(chrome.sidebar_symbol_count)});
@@ -2792,6 +2887,9 @@ inline json::Value explorer_chrome_debug_json(
     icon_system.emplace(
         "preferred_external_source_policy",
         json::Value{chrome.icon_preferred_external_source_policy});
+    icon_system.emplace(
+        "source_attribution_policy",
+        json::Value{chrome.icon_source_attribution_policy});
     icon_system.emplace(
         "apple_asset_boundary",
         json::Value{chrome.icon_apple_asset_boundary});

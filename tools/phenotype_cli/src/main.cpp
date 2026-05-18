@@ -669,7 +669,7 @@ auto spec() -> cppx::cli::CommandSpec {
                     {
                         .name = "svg",
                         .summary =
-                            "Emit one phenotype-owned built-in icon SVG source",
+                            "Emit one audited built-in icon SVG source",
                         .options = {help_option(), json_option()},
                         .positional_name = "name-or-reference",
                         .positional_description =

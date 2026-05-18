@@ -807,19 +807,35 @@ def check_file_explorer_native_chrome_contract(
         "native_window_control_palette_policy": native_window.get(
             "native_window_control_palette_policy"),
     }
-    report.check(
-        "file explorer does not draw duplicate native window controls",
+    no_drawn_controls = (
         marker_fields["duplicate_window_controls"] is False
         and marker_fields["content_window_control_markers"] is False
         and marker_fields["artifact_window_control_markers"] is False
         and marker_fields["content_window_control_marker_count"] == 0
         and marker_fields["artifact_window_control_marker_count"] == 0
         and marker_fields["content_drawn_window_control_count"] == 0
-        and marker_fields["artifact_drawn_window_control_count"] == 0
-        and marker_fields["native_window_control_geometry_role"]
+        and marker_fields["artifact_drawn_window_control_count"] == 0)
+    expected_geometry_role = (
+        "reserve_metrics_only_not_paint_instructions"
+        if native_controls
+        else ["not_applicable_mobile_shell", "none"])
+    expected_palette_policy = (
+        "traffic_light_palette_forbidden_in_content_and_artifacts"
+        if native_controls
+        else ["not_applicable_mobile_shell", "none"])
+    policy_ok = (
+        marker_fields["native_window_control_geometry_role"]
         == "reserve_metrics_only_not_paint_instructions"
         and marker_fields["native_window_control_palette_policy"]
-        == "traffic_light_palette_forbidden_in_content_and_artifacts",
+        == "traffic_light_palette_forbidden_in_content_and_artifacts"
+    ) if native_controls else (
+        marker_fields["native_window_control_geometry_role"]
+        in expected_geometry_role
+        and marker_fields["native_window_control_palette_policy"]
+        in expected_palette_policy)
+    report.check(
+        "file explorer does not draw duplicate native window controls",
+        no_drawn_controls and policy_ok,
         path="debug.application.file_explorer.chrome.native_window",
         expected={
             "duplicate_window_controls": False,
@@ -829,10 +845,8 @@ def check_file_explorer_native_chrome_contract(
             "artifact_window_control_marker_count": 0,
             "content_drawn_window_control_count": 0,
             "artifact_drawn_window_control_count": 0,
-            "native_window_control_geometry_role":
-                "reserve_metrics_only_not_paint_instructions",
-            "native_window_control_palette_policy": (
-                "traffic_light_palette_forbidden_in_content_and_artifacts"),
+            "native_window_control_geometry_role": expected_geometry_role,
+            "native_window_control_palette_policy": expected_palette_policy,
         },
         actual=marker_fields,
         likely_layer="native-window-chrome",

@@ -453,9 +453,14 @@ duplicate
     assert(chrome.file_type_symbol_count == 7);
     assert(chrome.icon_filled_symbol_count == 1);
     assert(chrome.icon_outline_symbol_count == 34);
-    assert(chrome.icon_hierarchical_symbol_count == 23);
+    assert(chrome.icon_hierarchical_symbol_count == 17);
     assert(chrome.icon_reference_symbol_count == 35);
-    assert(chrome.icon_svg_path_arc_symbol_count == 1);
+    assert(chrome.icon_svg_path_arc_symbol_count == 7);
+    assert(chrome.icon_phenotype_owned_symbol_count == 28);
+    assert(chrome.icon_permissive_source_symbol_count == 7);
+    assert(chrome.icon_lucide_source_symbol_count == 7);
+    assert(chrome.icon_apple_asset_symbol_count == 0);
+    assert(chrome.icon_audited_symbol_source_count == chrome.icon_total_symbol_count);
     assert(chrome.icon_interaction_phase_count == 3);
     assert(chrome.icon_grid_size == 24.0f);
     assert(demo::desktop_sidebar_symbol_contract().size() == 10);
@@ -482,8 +487,8 @@ duplicate
     assert(demo::entry_symbol_name(archive_entry) == "archive");
     assert(demo::entry_symbol_semantic_reference_name(archive_entry)
            == "archivebox");
-    assert(chrome.icon_default_stroke_width == 1.8f);
-    assert(chrome.icon_secondary_opacity == 0.66f);
+    assert(chrome.icon_default_stroke_width == 2.0f);
+    assert(chrome.icon_secondary_opacity == 1.0f);
     assert(chrome.icon_toolbar_activation_hit_target_size == 44.0f);
     assert(chrome.icon_sidebar_activation_hit_target_size == 44.0f);
     assert(chrome.icon_action_activation_hit_target_size == 44.0f);
@@ -509,9 +514,11 @@ duplicate
     assert(chrome.icon_design_reference.find("macOS Finder")
            != std::string::npos);
     assert(chrome.icon_reference_family == "SF Symbols semantic reference");
-    assert(chrome.icon_reference_policy.find("phenotype-owned")
+    assert(chrome.icon_reference_policy.find("audited permissive")
            != std::string::npos);
     assert(chrome.icon_asset_policy.find("no Apple") != std::string::npos);
+    assert(chrome.icon_source_attribution_policy.find("source URL")
+           != std::string::npos);
     assert(chrome.icon_alignment == "24x24 text-aligned symbol grid");
     assert(chrome.icon_rendering_mode == "hierarchical");
     assert(chrome.icon_variant_policy
@@ -547,7 +554,9 @@ duplicate
            != std::string::npos);
     assert(chrome.chrome_geometry_policy
            == demo::k_desktop_chrome_geometry_policy);
-    assert(chrome.owned_icon_assets);
+    assert(!chrome.owned_icon_assets);
+    assert(chrome.audited_permissive_icon_assets);
+    assert(!chrome.uses_apple_icon_assets);
     assert(!chrome.uses_sf_symbols_assets);
     assert(chrome.icon_round_stroke_contract);
     assert(chrome.icon_text_weight_aligned);
@@ -640,7 +649,9 @@ duplicate
     assert(mobile_chrome.icon_style == "macos_rounded_outline_svg");
     assert(mobile_chrome.file_type_symbol_count == 7);
     assert(mobile_chrome.icon_reference_symbol_count == 35);
-    assert(mobile_chrome.owned_icon_assets);
+    assert(!mobile_chrome.owned_icon_assets);
+    assert(mobile_chrome.audited_permissive_icon_assets);
+    assert(!mobile_chrome.uses_apple_icon_assets);
     assert(!mobile_chrome.uses_sf_symbols_assets);
     assert(mobile_chrome.icon_file_type_color_policy
            == "macos_finder_file_type_tints");
@@ -881,7 +892,11 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"svg_arc_policy\":\"circle elements and isolated circular path A/a")
            != std::string::npos);
-    assert(debug_text.find("\"svg_path_arc_symbol_count\":1")
+    assert(debug_text.find("\"svg_path_arc_symbol_count\":7")
+           != std::string::npos);
+    assert(debug_text.find("\"lucide_source_symbol_count\":7")
+           != std::string::npos);
+    assert(debug_text.find("\"source_attribution_policy\"")
            != std::string::npos);
     assert(debug_text.find("\"hierarchical_opacity\":true")
            != std::string::npos);

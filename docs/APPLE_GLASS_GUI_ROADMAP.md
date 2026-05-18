@@ -278,7 +278,7 @@ through root metadata helpers plus
 tools verify the intended Apple-glass theme without adding platform-specific
 keys to every theme fixture. CLI and file explorer artifacts read the same
 package-level contract, including macOS/Finder-style iconography,
-phenotype-owned SVG asset policy, usage, container, performance,
+owned/permissive SVG asset policy, usage, container, performance,
 accessibility, and unsupported-backend fallback policies.
 High-level `layout::glass_surface_options` / `layout::glass_surface` presets
 now sit above the generic material surface API. They keep execution on the
@@ -302,15 +302,18 @@ catalog follows Apple-style proportions, text-aligned medium-scale metrics,
 macOS-like rounded stroke caps/joins, and bounded secondary-stroke opacity for
 symbols with detail layers without copying SF Symbols assets. Each built-in
 symbol carries a semantic SF Symbols reference name and explicit policy that
-the reference is only a role/style anchor; the vector artwork remains
-phenotype-owned SVG. A pure Finder-style file-type tint policy now gives
+the reference is only a role/style anchor; the vector artwork is either
+phenotype-owned or an audited permissive SVG source such as Lucide ISC, with
+source family, icon name, license, license URL, source URL, copyright, and
+Apple-asset boundary exposed in debug metadata. A pure Finder-style file-type
+tint policy now gives
 folder/document/PDF/text/image/movie/archive glyphs deterministic colors for
 list and column rows without querying native platform icon services. The CLI command
 `phenotype icons catalog --json` exposes the same contract for CI and LLM
 debugging on Linux without importing native GUI code, and `phenotype icons svg
-<name-or-reference>` exposes the exact phenotype-owned SVG source for one
-glyph plus its rendering capability envelope when a renderer, parser, or icon
-cache needs a pure source-level probe.
+<name-or-reference>` exposes the exact audited SVG source for one glyph plus
+its attribution and rendering capability envelope when a renderer, parser, or
+icon cache needs a pure source-level probe.
 The macOS Metal
 renderer executes diagonal icon strokes as triangle bodies with round caps
 instead of dot chains, keeping toolbar/search/sidebar symbols continuous while
