@@ -719,7 +719,9 @@ Finder-style startup artifacts keep the leading native-control reserve blank in
 phenotype content and report `runtime-native-controls`, leaving input and
 caption-button ownership in AppKit or Win32. The artifact verifier checks that
 the reserve stays low-detail and neutral so traffic-light probes cannot regress
-into duplicate content-drawn controls.
+into duplicate content-drawn controls. Package inspection also keeps app icons
+free of traffic-light marker palettes, which prevents packaged assets from
+visually implying a second set of native controls.
 
 ## Unified debug plane
 

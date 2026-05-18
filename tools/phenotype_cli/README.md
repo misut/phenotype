@@ -12,6 +12,9 @@ turning `main.cpp` into every subsystem at once:
   summaries, and resource diagnostic emission.
 - `phenotype_cli.file_explorer` owns file explorer drive JSON, expectation
   JSON, keyboard/focus model JSON, and localized label emission.
+- `phenotype_cli.icons` owns icon catalog checks, lookup/presentation/render
+  JSON, SVG support summaries, and the icon helper payloads reused by file
+  explorer debug output.
 - `main.cpp` should stay responsible for command parsing, edge IO/process
   execution, and composing the subcommand results.
 
@@ -53,8 +56,9 @@ The initial scope is intentionally narrow:
 - `phenotype package inspect <path>` checks the proposed package manifest,
   application/debug metadata, declared resource counts, referenced `source`
   files, CLI-owned debug verifier metadata, app-icon SVG policy, Pretendard
-  default-font policy, CJK fallback coverage, SVG asset layout, locale layout, and
-  font layout. JSON output includes the normalized `ResourceCatalog` produced
+  default-font policy, CJK fallback coverage, SVG asset layout,
+  native-chrome-safe app-icon palettes, locale layout, and font layout.
+  JSON output includes the normalized `ResourceCatalog` produced
   by the shared pure `phenotype.resources` path package plus its pure
   `ResourceCatalogContract`. The contract reports asset preload/runtime-visible
   intent, SVG asset counts and policy, `app.icon` SVG/preload state, default
@@ -136,7 +140,9 @@ The initial scope is intentionally narrow:
   data, which makes SVG asset support observable without starting a native
   renderer. `phenotype package inspect --json` uses the same inspector for all
   manifest-declared SVG assets, so packaged icons and runtime-visible SVG images
-  fail before a backend image cache or platform renderer is involved.
+  fail before a backend image cache or platform renderer is involved. For
+  Finder-style packages, it also rejects app icons that embed macOS
+  traffic-light marker colors because those controls belong to the native shell.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible
