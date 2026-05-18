@@ -72,7 +72,22 @@ int main() {
     assert(result.state.viewport_height == 820);
     assert(result.state.viewport_scale == 2.0f);
     assert(demo::expected_material_plan_count(result.state) == 6);
+    assert(demo::expected_material_probe_count(result.state) == 6);
     assert(demo::progress_value(result.state) == 0.85f);
+    auto closed_contract = demo::glass_probe_contract(result.state);
+    assert(closed_contract.active_material_probe_count == 6);
+    assert(closed_contract.total_expected_execution_stages == 24);
+    assert(closed_contract.sample_taps_per_probe == 25);
+    assert(closed_contract.max_blur_radius == 36.0f);
+    auto blur_probe = demo::glass_material_probe_at(5);
+    assert(blur_probe.name == std::string_view{"visible_blur_probe"});
+    assert(blur_probe.has_union_id);
+    assert(blur_probe.union_id == 1u);
+    assert(blur_probe.expected_pass == std::string_view{"backdrop-sample-blur"});
+    assert(blur_probe.requires_edge_highlight);
+    assert(blur_probe.excludes_foreground_text);
+    assert(demo::glass_probe_material_kind_name(blur_probe.kind)
+           == std::string_view{"thin"});
 
     auto expectations = std::vector<demo::GlassExpectation>{
         demo::parse_glass_expectation("backdrop:high").expectation,
@@ -92,4 +107,26 @@ int main() {
     assert(reset_result.state.inspector_open);
     assert(reset_result.state.selected_density == demo::k_default_density);
     assert(demo::expected_material_plan_count(reset_result.state) == 7);
+    auto open_contract = demo::glass_probe_contract(reset_result.state);
+    assert(open_contract.active_material_probe_count == 7);
+    assert(open_contract.total_expected_execution_stages == 28);
+    auto debug_probe = demo::glass_material_probe_at(6);
+    assert(debug_probe.requires_inspector_open);
+    assert(demo::glass_probe_is_active(debug_probe, reset_result.state));
+    assert(!demo::glass_probe_is_active(debug_probe, result.state));
+
+    auto debug_payload =
+        demo::glass_showcase_application_debug_json(reset_result.state);
+    auto& application = debug_payload.as_object();
+    assert(application.contains("glass_showcase"));
+    auto& showcase = application["glass_showcase"].as_object();
+    assert(showcase["kind"].as_string() == "glass_showcase");
+    auto& contract = showcase["probe_contract"].as_object();
+    assert(contract["contract_name"].as_string()
+           == "glass_showcase_material_probe_contract");
+    assert(contract["active_material_probe_count"].as_integer() == 7);
+    auto& probes = contract["material_probes"].as_object();
+    assert(probes.contains("visible_blur_probe"));
+    assert(probes["visible_blur_probe"].as_object()["kind"].as_string()
+           == "thin");
 }

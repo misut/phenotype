@@ -504,6 +504,7 @@ def value_at(value: Any, path: str) -> tuple[bool, Any]:
 
 def material_failure_context(
     capabilities: JsonObject,
+    debug: JsonObject,
     runtime: JsonObject,
     semantic_summary: JsonObject,
     renderer_details: JsonObject | None,
@@ -581,6 +582,27 @@ def material_failure_context(
             "increase_contrast")
         material_contract["decision_reduce_motion"] = decision_trace.get(
             "reduce_motion")
+    probe_contract = object_at(
+        debug,
+        "application.glass_showcase.probe_contract")
+    if isinstance(probe_contract, dict):
+        material_probes = probe_contract.get("material_probes")
+        material_contract["app_probe_contract_name"] = (
+            probe_contract.get("contract_name"))
+        material_contract["app_probe_reference_technology"] = (
+            probe_contract.get("reference_technology"))
+        material_contract["app_probe_active_count"] = (
+            probe_contract.get("active_material_probe_count"))
+        material_contract["app_probe_stage_count_per_probe"] = (
+            probe_contract.get("stage_count_per_probe"))
+        material_contract["app_probe_total_expected_execution_stages"] = (
+            probe_contract.get("total_expected_execution_stages"))
+        material_contract["app_probe_fallback_contract"] = (
+            probe_contract.get("fallback_contract"))
+        material_contract["app_probe_material_probes_present"] = (
+            isinstance(material_probes, dict))
+        if isinstance(material_probes, dict):
+            material_contract["app_probe_names"] = sorted(material_probes.keys())
     context["material_contract"] = material_contract
     return context
 
@@ -7936,6 +7958,7 @@ def verify(args: argparse.Namespace) -> int:
 
     report.data["artifact_context"] = material_failure_context(
         capabilities,
+        debug,
         runtime,
         summary,
         renderer_details,

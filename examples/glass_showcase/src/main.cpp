@@ -10,15 +10,41 @@ namespace glass = glass_showcase_demo;
 using State = glass::State;
 using Msg = glass::Msg;
 
+static State const* g_debug_state = nullptr;
+
+static auto glass_showcase_application_debug_payload() {
+    if (!g_debug_state)
+        return glass::glass_showcase_application_debug_json(State{});
+    return glass::glass_showcase_application_debug_json(*g_debug_state);
+}
+
+static phenotype::MaterialKind material_kind(
+        glass::GlassProbeMaterialKind kind) {
+    switch (kind) {
+        case glass::GlassProbeMaterialKind::Clear:
+            return phenotype::MaterialKind::Clear;
+        case glass::GlassProbeMaterialKind::Thin:
+            return phenotype::MaterialKind::Thin;
+        case glass::GlassProbeMaterialKind::Regular:
+            return phenotype::MaterialKind::Regular;
+        case glass::GlassProbeMaterialKind::Thick:
+            return phenotype::MaterialKind::Thick;
+    }
+    return phenotype::MaterialKind::Regular;
+}
+
 static std::string material_contract_text(
-    phenotype::MaterialKind kind,
-    char const* expected_contrast) {
+        glass::GlassMaterialProbe const& probe) {
     std::string text = "kind: ";
-    text += phenotype::material_kind_name(kind);
-    text += "\nfallback: translucent rounded rect available";
-    text += "\nfunctional layer: macOS sampled backdrop when available";
-    text += "\ncontrast intent: ";
-    text += expected_contrast;
+    text += glass::glass_probe_material_kind_name(probe.kind);
+    text += "\npass: ";
+    text += probe.expected_pass;
+    text += "\nexecutor: ";
+    text += probe.expected_executor;
+    text += "\nluminance: ";
+    text += probe.expected_luminance_curve;
+    text += "\nfallback: ";
+    text += probe.fallback_path;
     return text;
 }
 
@@ -79,23 +105,26 @@ static void paint_backdrop(phenotype::Painter& painter, bool high_contrast) {
 }
 
 static void material_panel(
-    phenotype::MaterialKind kind,
-    phenotype::str title,
-    phenotype::str description,
-    char const* contrast_intent) {
+        glass::GlassMaterialProbe const& probe) {
     using namespace phenotype;
-    layout::material_surface(kind, [&] {
-        widget::text(title);
+    layout::material_surface(material_kind(probe.kind), [&] {
+        widget::text(phenotype::str{probe.label.data(),
+                                    static_cast<unsigned int>(
+                                        probe.label.size())});
         layout::spacer(4);
-        widget::text(description);
+        widget::text(phenotype::str{probe.description.data(),
+                                    static_cast<unsigned int>(
+                                        probe.description.size())});
         layout::spacer(8);
-        widget::code(material_contract_text(kind, contrast_intent));
+        widget::code(material_contract_text(probe));
     });
 }
 
 static void view(State const& state) {
     using namespace phenotype;
+    g_debug_state = &state;
     auto input_debug = phenotype::diag::input_debug_snapshot();
+    auto const probe_contract = glass::glass_probe_contract(state);
 
     layout::scaffold(
         [] {
@@ -143,29 +172,13 @@ static void view(State const& state) {
                         .morph_transitions = true,
                     },
                     [] {
-                        material_panel(
-                            MaterialKind::Clear,
-                            "Clear Material",
-                            "Lowest opacity surface for contextual controls over rich content.",
-                            "context");
+                        material_panel(glass::glass_material_probe_at(0));
                         layout::spacer(8);
-                        material_panel(
-                            MaterialKind::Thin,
-                            "Thin Material",
-                            "Balanced surface for floating navigation and secondary controls.",
-                            "balanced");
+                        material_panel(glass::glass_material_probe_at(1));
                         layout::spacer(8);
-                        material_panel(
-                            MaterialKind::Regular,
-                            "Regular Material",
-                            "Default legible glass layer for primary controls and inspectors.",
-                            "legible");
+                        material_panel(glass::glass_material_probe_at(2));
                         layout::spacer(8);
-                        material_panel(
-                            MaterialKind::Thick,
-                            "Thick Material",
-                            "High-contrast surface for dense text over active content.",
-                            "high-contrast");
+                        material_panel(glass::glass_material_probe_at(3));
                     });
             });
 
@@ -178,10 +191,19 @@ static void view(State const& state) {
                     .morph_transitions = false,
                 },
                 [&] {
-                    layout::material_surface(MaterialKind::Regular, [&] {
-                        widget::text("Control Layer");
+                    auto const control_probe =
+                        glass::glass_material_probe_at(4);
+                    layout::material_surface(
+                        material_kind(control_probe.kind), [&] {
+                        widget::text(phenotype::str{
+                            control_probe.label.data(),
+                            static_cast<unsigned int>(
+                                control_probe.label.size())});
                         layout::spacer(6);
-                        widget::text("This panel combines material semantics with ordinary controls so input, focus, and artifact labels stay debuggable.");
+                        widget::text(phenotype::str{
+                            control_probe.description.data(),
+                            static_cast<unsigned int>(
+                                control_probe.description.size())});
                         layout::spacer(8);
                         {
                             std::vector<phenotype::str> tabs;
@@ -204,10 +226,16 @@ static void view(State const& state) {
 
             if (state.inspector_open) {
                 layout::spacer(12);
-                layout::material_surface(MaterialKind::Thick, [&] {
-                    widget::text("Debug Contract");
+                auto const debug_probe = glass::glass_material_probe_at(6);
+                layout::material_surface(material_kind(debug_probe.kind), [&] {
+                    widget::text(phenotype::str{
+                        debug_probe.label.data(),
+                        static_cast<unsigned int>(debug_probe.label.size())});
                     layout::spacer(6);
-                    widget::text("Artifact checks should require material roles, all four material kinds, frame output, and stable semantic labels from this scene.");
+                    widget::text(phenotype::str{
+                        debug_probe.description.data(),
+                        static_cast<unsigned int>(
+                            debug_probe.description.size())});
                     layout::spacer(8);
                     std::string info = "viewport: ";
                     info += std::to_string(state.viewport_width);
@@ -219,7 +247,13 @@ static void view(State const& state) {
                     info += input_debug.event.empty() ? "none" : input_debug.event;
                     info += "\ninput result: ";
                     info += input_debug.result.empty() ? "none" : input_debug.result;
-                    info += "\nmaterial_backdrop_blur: see snapshot capabilities";
+                    info += "\nprobe contract: ";
+                    info += probe_contract.contract_name;
+                    info += "\nactive probes: ";
+                    info += std::to_string(probe_contract.active_material_probe_count);
+                    info += "\nexpected stages: ";
+                    info += std::to_string(
+                        probe_contract.total_expected_execution_stages);
                     widget::code(info);
                 });
             }
@@ -241,12 +275,20 @@ static void view(State const& state) {
                         .morph_transitions = true,
                     },
                     [] {
+                        auto const blur_probe =
+                            glass::glass_material_probe_at(5);
                         layout::material_surface(
-                            MaterialKind::Thin,
-                            [] {
-                                widget::text("Visible Blur Probe");
+                            material_kind(blur_probe.kind),
+                            [blur_probe] {
+                                widget::text(phenotype::str{
+                                    blur_probe.label.data(),
+                                    static_cast<unsigned int>(
+                                        blur_probe.label.size())});
                                 layout::spacer(4);
-                                widget::text("Samples the deterministic backdrop.");
+                                widget::text(phenotype::str{
+                                    blur_probe.description.data(),
+                                    static_cast<unsigned int>(
+                                        blur_probe.description.size())});
                             },
                             SpaceToken::Sm,
                             SpaceToken::Xs);
@@ -257,6 +299,8 @@ static void view(State const& state) {
 }
 
 int main() {
+    phenotype::diag::set_application_debug_provider(
+        glass_showcase_application_debug_payload);
     return phenotype::native::run_app<State, Msg>(
         glass::k_default_viewport_width,
         glass::k_default_viewport_height,

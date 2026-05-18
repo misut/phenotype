@@ -1,6 +1,8 @@
 module;
 #include <algorithm>
+#include <array>
 #include <cstddef>
+#include <cstdint>
 #include <cstdlib>
 #include <optional>
 #include <span>
@@ -14,6 +16,8 @@ module;
 
 export module glass_showcase_shared;
 
+import json;
+
 export namespace glass_showcase_demo {
 
 inline constexpr int k_default_viewport_width = 520;
@@ -24,6 +28,163 @@ inline constexpr std::size_t k_default_density = 1;
 inline constexpr std::size_t k_material_kind_count = 4;
 inline constexpr std::size_t k_base_material_plan_count = 6;
 inline constexpr std::size_t k_inspector_material_plan_count = 1;
+inline constexpr std::size_t k_total_material_probe_count =
+    k_base_material_plan_count + k_inspector_material_plan_count;
+inline constexpr std::size_t k_probe_stage_count = 4;
+inline constexpr std::size_t k_probe_sample_taps = 25;
+inline constexpr float k_probe_max_blur_radius = 36.0f;
+
+enum class GlassProbeMaterialKind {
+    Clear,
+    Thin,
+    Regular,
+    Thick,
+};
+
+struct GlassMaterialProbe {
+    std::string_view name;
+    std::string_view label;
+    std::string_view description;
+    GlassProbeMaterialKind kind = GlassProbeMaterialKind::Regular;
+    std::uint32_t container_id = 0;
+    std::uint32_t union_id = 0;
+    bool has_container_id = false;
+    bool has_union_id = false;
+    bool requires_inspector_open = false;
+    bool interactive = false;
+    bool morph_transitions = false;
+    std::string_view verifier_profile;
+    std::string_view likely_layer = "material-blur-pass";
+    std::string_view expected_pass = "backdrop-sample-blur";
+    std::string_view expected_executor = "backdrop-filter";
+    std::string_view expected_luminance_curve = "adaptive-backdrop-luma";
+    std::string_view expected_sampling_kernel = "weighted-5x5-manhattan";
+    std::string_view fallback_path = "translucent-rounded-rect";
+    bool requires_backdrop_sampling = true;
+    bool requires_luminance_preservation = true;
+    bool requires_edge_highlight = true;
+    bool requires_noise_dither = true;
+    bool excludes_foreground_text = true;
+    std::size_t stage_count = k_probe_stage_count;
+};
+
+struct GlassProbeContract {
+    std::string_view contract_name = "glass_showcase_material_probe_contract";
+    std::uint32_t schema_version = 1;
+    std::string_view reference_technology = "liquid-glass";
+    std::string_view reference_material_policy =
+        "liquid-glass-functional-layer";
+    std::string_view reference_guidance =
+        "Apple Liquid Glass custom views and HIG Materials: blur content behind the surface, preserve vibrant foreground legibility, and degrade deterministically";
+    std::string_view backdrop_sampling_contract =
+        "deterministic backdrop probe canvas with foreground text excluded";
+    std::string_view fallback_contract =
+        "translucent rounded rectangle when sampled backdrop is unavailable";
+    std::string_view pixel_contract =
+        "backdrop-pattern, visible-blur-probe, and visible-blur-smoothness regions";
+    std::size_t material_probe_count = k_total_material_probe_count;
+    std::size_t base_material_probe_count = k_base_material_plan_count;
+    std::size_t inspector_material_probe_count =
+        k_inspector_material_plan_count;
+    std::size_t active_material_probe_count = k_total_material_probe_count;
+    std::size_t stage_count_per_probe = k_probe_stage_count;
+    std::size_t sample_taps_per_probe = k_probe_sample_taps;
+    float max_blur_radius = k_probe_max_blur_radius;
+    std::size_t total_expected_execution_stages =
+        k_total_material_probe_count * k_probe_stage_count;
+};
+
+inline auto glass_probe_material_kind_name(
+        GlassProbeMaterialKind kind) -> std::string_view {
+    switch (kind) {
+        case GlassProbeMaterialKind::Clear: return "clear";
+        case GlassProbeMaterialKind::Thin: return "thin";
+        case GlassProbeMaterialKind::Regular: return "regular";
+        case GlassProbeMaterialKind::Thick: return "thick";
+    }
+    return "regular";
+}
+
+inline constexpr std::array<GlassMaterialProbe, k_total_material_probe_count>
+    k_material_probes{{
+        {
+            .name = "ramp_clear",
+            .label = "Clear Material",
+            .description =
+                "Lowest opacity surface for contextual controls over rich content.",
+            .kind = GlassProbeMaterialKind::Clear,
+            .container_id = 1001u,
+            .has_container_id = true,
+            .morph_transitions = true,
+            .verifier_profile = "clear-over-rich-backdrop",
+        },
+        {
+            .name = "ramp_thin",
+            .label = "Thin Material",
+            .description =
+                "Balanced surface for floating navigation and secondary controls.",
+            .kind = GlassProbeMaterialKind::Thin,
+            .container_id = 1001u,
+            .has_container_id = true,
+            .morph_transitions = true,
+            .verifier_profile = "thin-balanced-backdrop",
+        },
+        {
+            .name = "ramp_regular",
+            .label = "Regular Material",
+            .description =
+                "Default legible glass layer for primary controls and inspectors.",
+            .kind = GlassProbeMaterialKind::Regular,
+            .container_id = 1001u,
+            .has_container_id = true,
+            .morph_transitions = true,
+            .verifier_profile = "regular-legibility-backdrop",
+        },
+        {
+            .name = "ramp_thick",
+            .label = "Thick Material",
+            .description =
+                "High-contrast surface for dense text over active content.",
+            .kind = GlassProbeMaterialKind::Thick,
+            .container_id = 1001u,
+            .has_container_id = true,
+            .morph_transitions = true,
+            .verifier_profile = "thick-high-contrast-backdrop",
+        },
+        {
+            .name = "control_layer",
+            .label = "Control Layer",
+            .description =
+                "Interactive regular material proving input, focus, and controls stay debuggable.",
+            .kind = GlassProbeMaterialKind::Regular,
+            .container_id = 1003u,
+            .has_container_id = true,
+            .interactive = true,
+            .verifier_profile = "regular-legibility-backdrop",
+        },
+        {
+            .name = "visible_blur_probe",
+            .label = "Visible Blur Probe",
+            .description =
+                "Overlay thin material sampling the deterministic backdrop.",
+            .kind = GlassProbeMaterialKind::Thin,
+            .container_id = 1002u,
+            .union_id = 1u,
+            .has_container_id = true,
+            .has_union_id = true,
+            .morph_transitions = true,
+            .verifier_profile = "thin-balanced-backdrop",
+        },
+        {
+            .name = "debug_contract",
+            .label = "Debug Contract",
+            .description =
+                "Inspector thick material exposing the probe scene contract in artifacts.",
+            .kind = GlassProbeMaterialKind::Thick,
+            .requires_inspector_open = true,
+            .verifier_profile = "thick-high-contrast-backdrop",
+        },
+    }};
 
 struct ToggleBackdrop {};
 struct SetBackdropContrast { bool high_contrast = false; };
@@ -57,6 +218,209 @@ struct State {
     int viewport_height = k_default_viewport_height;
     float viewport_scale = k_default_viewport_scale;
 };
+
+inline std::size_t expected_material_probe_count(State const& state) {
+    return k_base_material_plan_count
+        + (state.inspector_open ? k_inspector_material_plan_count : 0);
+}
+
+inline GlassProbeContract glass_probe_contract(State const& state) {
+    auto contract = GlassProbeContract{};
+    contract.active_material_probe_count = expected_material_probe_count(state);
+    contract.total_expected_execution_stages =
+        contract.active_material_probe_count * contract.stage_count_per_probe;
+    return contract;
+}
+
+inline GlassMaterialProbe glass_material_probe_at(std::size_t index) {
+    if (index >= k_material_probes.size())
+        return k_material_probes.front();
+    return k_material_probes[index];
+}
+
+inline bool glass_probe_is_active(GlassMaterialProbe const& probe,
+                                  State const& state) {
+    return !probe.requires_inspector_open || state.inspector_open;
+}
+
+inline json::Value glass_material_probe_debug_json(
+        GlassMaterialProbe const& probe) {
+    json::Object out;
+    out.emplace("name", json::Value{std::string{probe.name}});
+    out.emplace("label", json::Value{std::string{probe.label}});
+    out.emplace("description", json::Value{std::string{probe.description}});
+    out.emplace(
+        "kind",
+        json::Value{std::string{glass_probe_material_kind_name(probe.kind)}});
+    out.emplace(
+        "container_id",
+        json::Value{static_cast<std::int64_t>(probe.container_id)});
+    out.emplace(
+        "union_id",
+        json::Value{static_cast<std::int64_t>(probe.union_id)});
+    out.emplace("has_container_id", json::Value{probe.has_container_id});
+    out.emplace("has_union_id", json::Value{probe.has_union_id});
+    out.emplace(
+        "requires_inspector_open",
+        json::Value{probe.requires_inspector_open});
+    out.emplace("interactive", json::Value{probe.interactive});
+    out.emplace("morph_transitions", json::Value{probe.morph_transitions});
+    out.emplace(
+        "verifier_profile",
+        json::Value{std::string{probe.verifier_profile}});
+    out.emplace(
+        "likely_layer",
+        json::Value{std::string{probe.likely_layer}});
+    out.emplace(
+        "expected_pass",
+        json::Value{std::string{probe.expected_pass}});
+    out.emplace(
+        "expected_executor",
+        json::Value{std::string{probe.expected_executor}});
+    out.emplace(
+        "expected_luminance_curve",
+        json::Value{std::string{probe.expected_luminance_curve}});
+    out.emplace(
+        "expected_sampling_kernel",
+        json::Value{std::string{probe.expected_sampling_kernel}});
+    out.emplace(
+        "fallback_path",
+        json::Value{std::string{probe.fallback_path}});
+    out.emplace(
+        "requires_backdrop_sampling",
+        json::Value{probe.requires_backdrop_sampling});
+    out.emplace(
+        "requires_luminance_preservation",
+        json::Value{probe.requires_luminance_preservation});
+    out.emplace(
+        "requires_edge_highlight",
+        json::Value{probe.requires_edge_highlight});
+    out.emplace(
+        "requires_noise_dither",
+        json::Value{probe.requires_noise_dither});
+    out.emplace(
+        "excludes_foreground_text",
+        json::Value{probe.excludes_foreground_text});
+    out.emplace(
+        "stage_count",
+        json::Value{static_cast<std::int64_t>(probe.stage_count)});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value glass_probe_contract_debug_json(State const& state) {
+    auto const contract = glass_probe_contract(state);
+    json::Object probes;
+    for (auto const& probe : k_material_probes) {
+        if (glass_probe_is_active(probe, state)) {
+            probes.emplace(
+                std::string{probe.name},
+                glass_material_probe_debug_json(probe));
+        }
+    }
+
+    json::Object out;
+    out.emplace(
+        "contract_name",
+        json::Value{std::string{contract.contract_name}});
+    out.emplace(
+        "schema_version",
+        json::Value{static_cast<std::int64_t>(contract.schema_version)});
+    out.emplace(
+        "reference_technology",
+        json::Value{std::string{contract.reference_technology}});
+    out.emplace(
+        "reference_material_policy",
+        json::Value{std::string{contract.reference_material_policy}});
+    out.emplace(
+        "reference_guidance",
+        json::Value{std::string{contract.reference_guidance}});
+    out.emplace(
+        "backdrop_sampling_contract",
+        json::Value{std::string{contract.backdrop_sampling_contract}});
+    out.emplace(
+        "fallback_contract",
+        json::Value{std::string{contract.fallback_contract}});
+    out.emplace(
+        "pixel_contract",
+        json::Value{std::string{contract.pixel_contract}});
+    out.emplace(
+        "material_probe_count",
+        json::Value{static_cast<std::int64_t>(
+            contract.material_probe_count)});
+    out.emplace(
+        "base_material_probe_count",
+        json::Value{static_cast<std::int64_t>(
+            contract.base_material_probe_count)});
+    out.emplace(
+        "inspector_material_probe_count",
+        json::Value{static_cast<std::int64_t>(
+            contract.inspector_material_probe_count)});
+    out.emplace(
+        "active_material_probe_count",
+        json::Value{static_cast<std::int64_t>(
+            contract.active_material_probe_count)});
+    out.emplace(
+        "stage_count_per_probe",
+        json::Value{static_cast<std::int64_t>(
+            contract.stage_count_per_probe)});
+    out.emplace(
+        "sample_taps_per_probe",
+        json::Value{static_cast<std::int64_t>(
+            contract.sample_taps_per_probe)});
+    out.emplace("max_blur_radius", json::Value{contract.max_blur_radius});
+    out.emplace(
+        "total_expected_execution_stages",
+        json::Value{static_cast<std::int64_t>(
+            contract.total_expected_execution_stages)});
+    out.emplace("material_probes", json::Value{std::move(probes)});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value glass_state_debug_json(State const& state) {
+    json::Object viewport;
+    viewport.emplace(
+        "width",
+        json::Value{static_cast<std::int64_t>(state.viewport_width)});
+    viewport.emplace(
+        "height",
+        json::Value{static_cast<std::int64_t>(state.viewport_height)});
+    viewport.emplace("scale", json::Value{state.viewport_scale});
+
+    json::Object out;
+    out.emplace(
+        "backdrop",
+        json::Value{std::string{
+            state.high_contrast_backdrop ? "high" : "standard"}});
+    out.emplace(
+        "high_contrast_backdrop",
+        json::Value{state.high_contrast_backdrop});
+    out.emplace(
+        "inspector",
+        json::Value{std::string{state.inspector_open ? "open" : "closed"}});
+    out.emplace("inspector_open", json::Value{state.inspector_open});
+    out.emplace(
+        "density_index",
+        json::Value{static_cast<std::int64_t>(state.selected_density)});
+    out.emplace("note", json::Value{state.note});
+    out.emplace("viewport", json::Value{std::move(viewport)});
+    out.emplace(
+        "expected_material_plan_count",
+        json::Value{static_cast<std::int64_t>(
+            expected_material_probe_count(state))});
+    return json::Value{std::move(out)};
+}
+
+inline json::Value glass_showcase_application_debug_json(State const& state) {
+    json::Object showcase;
+    showcase.emplace("schema_version", json::Value{1});
+    showcase.emplace("kind", json::Value{"glass_showcase"});
+    showcase.emplace("state", glass_state_debug_json(state));
+    showcase.emplace("probe_contract", glass_probe_contract_debug_json(state));
+
+    json::Object out;
+    out.emplace("glass_showcase", json::Value{std::move(showcase)});
+    return json::Value{std::move(out)};
+}
 
 enum class GlassInputKind {
     Noop,
@@ -398,8 +762,7 @@ inline float progress_value(State const& state) {
 }
 
 inline std::size_t expected_material_plan_count(State const& state) {
-    return k_base_material_plan_count
-        + (state.inspector_open ? k_inspector_material_plan_count : 0);
+    return expected_material_probe_count(state);
 }
 
 inline std::vector<std::string> public_material_kinds() {

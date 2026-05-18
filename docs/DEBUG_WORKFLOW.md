@@ -320,8 +320,12 @@ mise exec -- exon build
 
 The output reports the shared glass state, per-input trace, public material
 kinds, expected material plan count, backdrop/inspector/density/viewport state,
-and expectation results. It is useful for validating the probe scene's input
-abstraction before running `phenotype artifact verify-glass-showcase`.
+the pure `GlassProbeContract`, active probe count, expected pass, sampling
+kernel, luminance, fallback metadata, and expectation results. Native artifacts
+expose the same contract at `debug.application.glass_showcase`, so a verifier
+failure can identify the intended material probe before pixel-region analysis
+starts. It is useful for validating the probe scene's input abstraction before
+running `phenotype artifact verify-glass-showcase`.
 
 ## Desktop example artifact hook
 

@@ -309,6 +309,64 @@
       "equals": true
     }
   ],
+  "require_debug_details": [
+    {
+      "path": "application.glass_showcase.kind",
+      "equals": "glass_showcase"
+    },
+    {
+      "path": "application.glass_showcase.schema_version",
+      "equals": 1
+    },
+    {
+      "path": "application.glass_showcase.state.inspector_open",
+      "equals": true
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.contract_name",
+      "equals": "glass_showcase_material_probe_contract"
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.reference_technology",
+      "equals": "liquid-glass"
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.active_material_probe_count",
+      "equals": 7
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.stage_count_per_probe",
+      "equals": 4
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.sample_taps_per_probe",
+      "equals": 25
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.total_expected_execution_stages",
+      "equals": 28
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.material_probes.visible_blur_probe.kind",
+      "equals": "thin"
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.material_probes.visible_blur_probe.union_id",
+      "equals": 1
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.material_probes.visible_blur_probe.expected_pass",
+      "equals": "backdrop-sample-blur"
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.material_probes.control_layer.interactive",
+      "equals": true
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.material_probes.debug_contract.requires_inspector_open",
+      "equals": true
+    }
+  ],
   "require_runtime_numeric_bounds": [
     {
       "path": "renderer.material_executor_summary.plan_count",
