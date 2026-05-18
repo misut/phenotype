@@ -291,6 +291,46 @@ void test_surface_sample_pixels_are_scaled_and_bounded() {
     std::puts("PASS: surface sample pixels are scaled and bounded");
 }
 
+void test_executor_frame_capture_policy_contract() {
+    assert(std::string_view(material_backdrop_copy_policy())
+        == "copy_only_when_material_plan_requires_shared_or_next_frame_capture");
+
+    MaterialExecutorSummary empty_summary{};
+    assert(!material_executor_requires_frame_capture(empty_summary));
+
+    MaterialExecutorSummary standard_summary{};
+    accumulate_material_executor_plan_summary(
+        standard_summary,
+        plan_material_surface(content_request(), sampled_environment()));
+    assert(standard_summary.plan_count == 1u);
+    assert(standard_summary.planned_frame_capture_count == 0u);
+    assert(standard_summary.planned_frame_capture_pixels == 0);
+    assert(!material_executor_requires_frame_capture(standard_summary));
+
+    auto warmup_env = sampled_environment();
+    warmup_env.capabilities.frame_history = false;
+    warmup_env.backdrop.available = false;
+    warmup_env.backdrop.stable = false;
+    warmup_env.backdrop.source = "none";
+    MaterialExecutorSummary warmup_summary{};
+    accumulate_material_executor_plan_summary(
+        warmup_summary,
+        plan_material_surface(regular_request(), warmup_env));
+    assert(warmup_summary.plan_count == 1u);
+    assert(warmup_summary.planned_frame_capture_count == 1u);
+    assert(warmup_summary.planned_frame_capture_pixels == 320 * 240);
+    assert(material_executor_requires_frame_capture(warmup_summary));
+
+    MaterialExecutorSummary sampled_summary{};
+    accumulate_material_executor_plan_summary(
+        sampled_summary,
+        plan_material_surface(regular_request(), sampled_environment()));
+    assert(sampled_summary.planned_frame_capture_count == 1u);
+    assert(sampled_summary.planned_frame_capture_pixels == 320 * 240);
+    assert(material_executor_requires_frame_capture(sampled_summary));
+    std::puts("PASS: executor frame capture policy contract");
+}
+
 } // namespace
 
 int main() {
@@ -301,6 +341,7 @@ int main() {
     test_command_material_preserves_theme_snapshot_contract();
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
+    test_executor_frame_capture_policy_contract();
     std::puts("\nAll material tests passed.");
     return 0;
 }

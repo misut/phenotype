@@ -6949,8 +6949,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     g_renderer.last_material_backdrop_available = false;
     g_renderer.last_material_backdrop_excludes_foreground_text = false;
     bool const capture_frame_history =
-        material_summary.planned_frame_capture_count > 0;
-    if (ensure_material_backdrop_texture(fbw, fbh)) {
+        material_executor_requires_frame_capture(material_summary);
+    if (capture_frame_history && ensure_material_backdrop_texture(fbw, fbh)) {
         if (auto* blit = command_buffer->blitCommandEncoder()) {
             MTL::Origin origin{0, 0, 0};
             MTL::Size size{
@@ -6972,13 +6972,23 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
             g_renderer.last_material_backdrop_available = true;
             g_renderer.last_material_backdrop_excludes_foreground_text = true;
             material_summary.backdrop_copy_excludes_foreground_text = true;
-            if (capture_frame_history) {
-                material_summary.backdrop_copy_count = 1;
-                material_summary.backdrop_copy_pixels =
-                    static_cast<std::int64_t>(fbw)
-                    * static_cast<std::int64_t>(fbh);
-            }
+            material_summary.backdrop_copy_count = 1;
+            material_summary.backdrop_copy_pixels =
+                static_cast<std::int64_t>(fbw)
+                * static_cast<std::int64_t>(fbh);
+        } else {
+            material_summary.backdrop_copy_skipped_count = 1;
+            material_summary.backdrop_copy_skip_reason =
+                "metal-blit-encoder-unavailable";
         }
+    } else if (capture_frame_history) {
+        material_summary.backdrop_copy_skipped_count = 1;
+        material_summary.backdrop_copy_skip_reason =
+            "material-backdrop-texture-unavailable";
+    } else {
+        material_summary.backdrop_copy_skipped_count = 1;
+        material_summary.backdrop_copy_skip_reason =
+            "no-material-plan-frame-capture";
     }
 
     if (defer_foreground_pass) {

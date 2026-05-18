@@ -603,6 +603,7 @@ struct MaterialExecutorSummary {
     std::uint32_t fallback_instance_count = 0;
     std::uint32_t material_draw_calls = 0;
     std::uint32_t backdrop_copy_count = 0;
+    std::uint32_t backdrop_copy_skipped_count = 0;
     std::uint32_t execution_stage_count = 0;
     std::uint32_t active_execution_stage_count = 0;
     std::uint32_t backdrop_execution_stage_count = 0;
@@ -628,10 +629,21 @@ struct MaterialExecutorSummary {
     std::uint32_t material_buffer_reallocations = 0;
     std::uint32_t foreground_text_candidate_count = 0;
     std::uint32_t foreground_text_remap_count = 0;
+    char const* backdrop_copy_skip_reason = "none";
     std::int64_t cpu_decode_ns = 0;
     std::int64_t cpu_material_upload_ns = 0;
     std::int64_t cpu_total_ns = 0;
 };
+
+inline char const* material_backdrop_copy_policy() noexcept {
+    return "copy_only_when_material_plan_requires_shared_or_next_frame_capture";
+}
+
+inline bool material_executor_requires_frame_capture(
+        MaterialExecutorSummary const& summary) noexcept {
+    return summary.planned_frame_capture_count > 0
+        && summary.planned_frame_capture_pixels > 0;
+}
 
 inline bool material_stage_matches(
         char const* actual,

@@ -71,6 +71,14 @@ explicit immutable inputs, while backends only paint the resulting SVG paths.
 the same pure recipe to `ButtonStyleOptions`, `ButtonVisualState`, a centered
 SVG paint callback, semantic button labels, and deterministic paint tokens so
 examples do not hand-roll macOS-style toolbar chrome.
+File explorer package SVGs are checked against this catalog at the CLI edge:
+`phenotype package inspect` parses each declared `file_type.*.icon` asset,
+records its SHA-256 digest, verifies that it has no native traffic-light
+palette markers, attaches the pinned source attribution, and requires the
+package SVG to be canonically source-equivalent to the audited catalog SVG.
+That leaves formatting freedom for checked-in SVG files while still catching
+asset drift, platform icon extraction, and accidental Apple/Finder/SF Symbols
+artwork before a renderer sees the package.
 
 ## View-time animation
 
@@ -679,10 +687,15 @@ timings. It also records `foreground_text_candidate_count` and
 `foreground_text_remap_count`, proving whether the backend consumed
 `MaterialPlan.foreground` for text commands without treating the counters as
 planner inputs. macOS additionally separates the material backdrop texture from
-the final debug/readback texture: it copies the backdrop source after
+the final debug/readback texture. The backend only allocates or blits that
+backdrop texture when the pure executor summary says a shared-frame or
+next-frame capture is required; standard content material and non-material
+frames skip the full-frame copy and report `backdrop_copy_skip_reason`.
+When a capture is required, macOS copies the backdrop source after
 non-foreground scene work, then draws text and overlays in a foreground pass,
 and finally captures the complete frame for artifacts. The executor summary
-publishes `backdrop_copy_excludes_foreground_text` and
+publishes `backdrop_copy_policy`, `backdrop_copy_required`,
+`backdrop_copy_excludes_foreground_text`, and
 `foreground_pass_after_backdrop_copy` so artifact gates can detect a future
 foreground-feedback regression. These fields let artifact gates prove the
 backend stayed inside deterministic resource limits while also leaving

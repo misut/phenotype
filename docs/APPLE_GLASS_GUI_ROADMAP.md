@@ -256,6 +256,12 @@ edge and passes them as immutable planner inputs. Reduce Transparency resolves
 to the deterministic material fallback path, Increase Contrast adjusts opacity
 and luminance legibility in the pure plan, and Reduce Motion disables material
 noise while lowering sampled-backdrop taps.
+The same backend now treats full-frame backdrop copies as an execution of the
+pure material plan summary rather than a frame-global habit: it allocates and
+blits the material backdrop texture only when `MaterialExecutorSummary` reports
+required shared-frame or next-frame capture, and it publishes
+`backdrop_copy_policy`, `backdrop_copy_required`, and
+`backdrop_copy_skip_reason` for artifact debugging.
 
 ### Theme and widgets
 
@@ -322,6 +328,12 @@ Finder-specific metaphor or filled dot treatment is safer to control locally.
 Future icon imports must use permissive SVG sources found through web/reference
 research first; macOS system-icon or Finder-artwork extraction stays out of
 policy unless explicit redistribution clearance is recorded in the catalog.
+The file explorer package gate now also requires each packaged file-type SVG
+to be canonically source-equivalent to the audited icon catalog SVG while
+keeping a package SHA-256 digest, license URL, pinned raw source URL, source
+revision, and Apple/system extraction flags in CLI debug output. This is the
+safe path for adding Finder-like icons from web references without copying
+Apple-owned assets.
 A pure Finder-style file-type
 tint policy now gives
 folder/document/PDF/text/image/SVG image/movie/archive/audio/code/spreadsheet/presentation glyphs deterministic colors for
