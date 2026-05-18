@@ -24,8 +24,8 @@ that sidebar/titlebar area as blank reserve, so the real OS-owned window
 controls have space without phenotype drawing another set of buttons. Artifact
 capture keeps that same reserve blank and verifies it with low edge/chroma
 pixel contracts plus native-window debug metadata. The CLI gate deliberately
-does not draw traffic-light probes because the real controls are owned by the
-platform shell. On Windows
+does not draw traffic-light probes, and the package icon avoids traffic-light
+marker colors, because the real controls are owned by the platform shell. On Windows
 the native Win32 shell keeps the same contract through a
 DWM custom frame, using `WM_NCHITTEST` to preserve
 resize edges, caption-button behavior, blank-toolbar dragging, phenotype toolbar
@@ -127,8 +127,8 @@ another app window". The consolidated `visibility_state` and
 CI. The AppKit shell installs a small native application delegate that reorders
 the existing window when the app becomes active or the Dock icon is reopened;
 if the launch path still cannot make the window visible/key/main, stderr names
-the exact state before the event loop continues. The example's traffic-light
-marker is visual-only, artifact-only, and is not wired to phenotype input.
+the exact state before the event loop continues. The example no longer emits
+traffic-light markers in either live content or artifact-only paths.
 
 The toolbar search control starts as a Finder-style icon button. Activating it
 reveals a search field wired to the shared file model, so desktop and mobile

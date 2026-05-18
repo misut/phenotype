@@ -728,8 +728,10 @@ publishes `content_window_control_markers=false`,
 `window_control_marker_mode=runtime-native-controls`. The verifier pairs those
 debug details with low-detail, neutral pixel-region checks over the leading
 control reserve, so a future content-drawn traffic-light marker fails before it
-can ship as a duplicate of OS controls. The chrome object also publishes the
-native titlebar drag/control reserve widths plus a
+can ship as a duplicate of OS controls. `phenotype package inspect` additionally
+rejects package app icons that embed macOS traffic-light marker colors, so icon
+assets cannot reintroduce the same native-control visual cue. The chrome object
+also publishes the native titlebar drag/control reserve widths plus a
 `geometry.policy=finder_integrated_glass_chrome_geometry_v1` object with the
 window inset/gap, sidebar surface origin, first sidebar row, toolbar shell,
 navigation/title/trailing toolbar group x-coordinates, collapsed search x, and

@@ -67,6 +67,38 @@ auto string_array_json(std::span<std::string const> values) -> std::string {
     return out;
 }
 
+auto string_view_array_json(std::span<std::string_view const> values)
+        -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < values.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += json_string(values[i]);
+    }
+    out += "]";
+    return out;
+}
+
+auto check_json(Check const& check) -> std::string {
+    return std::format(
+        "{{\"name\":{},\"ok\":{},\"detail\":{},\"hint\":{}}}",
+        json_string(check.name),
+        check.ok ? "true" : "false",
+        json_string(check.detail),
+        json_string(check.ok ? "" : check.hint));
+}
+
+auto checks_json(std::span<Check const> checks) -> std::string {
+    auto out = std::string{"["};
+    for (std::size_t i = 0; i < checks.size(); ++i) {
+        if (i > 0)
+            out += ",";
+        out += check_json(checks[i]);
+    }
+    out += "]";
+    return out;
+}
+
 auto resource_diagnostic_json(
         phenotype::ResourceDiagnostic const& diagnostic) -> std::string {
     return std::format(
