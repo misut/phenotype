@@ -5,6 +5,7 @@ import cppx.process;
 import cppx.process.system;
 import cppx.terminal;
 import glass_showcase_shared;
+import json;
 import phenotype_cli.common;
 import phenotype_cli.runtime;
 import std;
@@ -52,6 +53,12 @@ export auto glass_state_json(glass_showcase_demo::State const& state)
         state.viewport_scale,
         glass_showcase_demo::progress_value(state),
         glass_showcase_demo::expected_material_plan_count(state));
+}
+
+export auto glass_probe_contract_json(
+        glass_showcase_demo::State const& state) -> std::string {
+    return json::emit(
+        glass_showcase_demo::glass_probe_contract_debug_json(state));
 }
 
 export auto glass_input_json(glass_showcase_demo::GlassInput const& input)
@@ -136,12 +143,13 @@ export auto glass_material_contract_json(
         "\"overlay_surface_present\":true,\"expected_material_plan_count\":{},"
         "\"backdrop_sampling_contract\":\"deterministic backdrop probe canvas\","
         "\"fallback_contract\":\"translucent rounded rect available\","
-        "\"state\":{}}}",
+        "\"probe_contract\":{},\"state\":{}}}",
         string_array_json(kinds),
         glass_showcase_demo::k_material_kind_count,
         glass_showcase_demo::k_base_material_plan_count,
         state.inspector_open ? "true" : "false",
         glass_showcase_demo::expected_material_plan_count(state),
+        glass_probe_contract_json(state),
         glass_state_json(state));
 }
 

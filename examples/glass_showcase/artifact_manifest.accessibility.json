@@ -312,6 +312,32 @@
       "equals": true
     }
   ],
+  "require_debug_details": [
+    {
+      "path": "application.glass_showcase.kind",
+      "equals": "glass_showcase"
+    },
+    {
+      "path": "application.glass_showcase.state.inspector_open",
+      "equals": true
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.contract_name",
+      "equals": "glass_showcase_material_probe_contract"
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.active_material_probe_count",
+      "equals": 7
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.fallback_contract",
+      "equals": "translucent rounded rectangle when sampled backdrop is unavailable"
+    },
+    {
+      "path": "application.glass_showcase.probe_contract.material_probes.debug_contract.requires_inspector_open",
+      "equals": true
+    }
+  ],
   "require_runtime_numeric_bounds": [
     {
       "path": "renderer.material_executor_summary.plan_count",

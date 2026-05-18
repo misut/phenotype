@@ -896,6 +896,39 @@ def snapshot_with_file_explorer_chrome(
     return root
 
 
+def snapshot_with_glass_probe_contract(
+    plan: dict[str, object],
+) -> dict[str, object]:
+    root = snapshot(plan)
+    debug = root["debug"]
+    assert isinstance(debug, dict)
+    debug["application"] = {
+        "glass_showcase": {
+            "kind": "glass_showcase",
+            "probe_contract": {
+                "contract_name": "glass_showcase_material_probe_contract",
+                "reference_technology": "liquid-glass",
+                "active_material_probe_count": 7,
+                "stage_count_per_probe": 4,
+                "total_expected_execution_stages": 28,
+                "fallback_contract": (
+                    "translucent rounded rectangle when sampled backdrop is unavailable"),
+                "material_probes": {
+                    "visible_blur_probe": {
+                        "kind": "thin",
+                        "expected_pass": "backdrop-sample-blur",
+                    },
+                    "debug_contract": {
+                        "kind": "thick",
+                        "requires_inspector_open": True,
+                    },
+                },
+            },
+        }
+    }
+    return root
+
+
 def write_synthetic_bmp(path: Path) -> None:
     width = 8
     height = 2
@@ -1268,7 +1301,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             }
         }
 
-        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+        code, report = self.run_verifier(
+            snapshot_with_glass_probe_contract(material_plan()),
+            manifest)
 
         self.assertEqual(code, 0)
         self.assertTrue(report["ok"])
@@ -1358,7 +1393,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             },
         }
 
-        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+        code, report = self.run_verifier(
+            snapshot_with_glass_probe_contract(material_plan()),
+            manifest)
 
         self.assertEqual(code, 0)
         self.assertTrue(report["ok"])
@@ -2187,7 +2224,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 }
             ],
         }
-        code, report = self.run_verifier(snapshot(material_plan()), manifest)
+        code, report = self.run_verifier(
+            snapshot_with_glass_probe_contract(material_plan()),
+            manifest)
 
         self.assertEqual(code, 1)
         failure = next(
@@ -2255,6 +2294,20 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(material_contract["decision_reduced_transparency"], 0)
         self.assertEqual(material_contract["decision_increase_contrast"], 0)
         self.assertEqual(material_contract["decision_reduce_motion"], 0)
+        self.assertEqual(
+            material_contract["app_probe_contract_name"],
+            "glass_showcase_material_probe_contract")
+        self.assertEqual(
+            material_contract["app_probe_reference_technology"],
+            "liquid-glass")
+        self.assertEqual(material_contract["app_probe_active_count"], 7)
+        self.assertEqual(
+            material_contract["app_probe_total_expected_execution_stages"],
+            28)
+        self.assertTrue(material_contract["app_probe_material_probes_present"])
+        self.assertEqual(
+            material_contract["app_probe_names"],
+            ["debug_contract", "visible_blur_probe"])
 
     def test_material_executor_summary_mismatch_is_llm_actionable(self) -> None:
         root = snapshot(material_plan())
