@@ -317,9 +317,12 @@ in debug metadata. The catalog also exposes `reference_sources` with the Apple H
 and SF Symbols design-reference URLs, the W3C SVG path reference, the active
 Lucide embedded-source reference, the Feather MIT license-lineage reference,
 the Tabler MIT candidate reference, the Iconoir MIT candidate reference, and
-the Material Symbols Apache-2.0 candidate reference. Apple references are
-explicitly marked as non-embedded Apple-owned artwork so future file-icon work
-can be Finder-like without copying Finder or SF Symbols assets. The current
+the Material Symbols Apache-2.0 candidate reference. Each reference row now
+also carries an official license URL, source acquisition mode, embedding
+permission, notice requirement, runtime-fetch flag, and platform-extraction
+flag. Apple references are explicitly marked as non-embedded Apple-owned
+artwork with runtime fetch and platform extraction disabled, so future file-icon
+work can be Finder-like without copying Finder or SF Symbols assets. The current
 built-in catalog uses audited Lucide SVGs pinned
 to a fixed source revision for
 35 of 39 symbols across toolbar, sidebar, action, and file-type roles, leaving
@@ -341,9 +344,10 @@ list and column rows without querying native platform icon services. The CLI com
 `phenotype icons catalog --json` exposes the same contract for CI and LLM
 debugging on Linux without importing native GUI code. `phenotype icons sources
 --json` provides the shorter source-review view for adding icons from web
-references: pinned Lucide raw SVG URLs, source revision, license URL, symbol
-usage, phenotype-owned fallback symbols, and explicit zero Apple/platform
-extraction counts. `phenotype icons svg <name-or-reference>` exposes the exact
+references: pinned Lucide raw SVG URLs, source revision, license URL, official
+reference-source license URLs, source acquisition modes, symbol usage,
+phenotype-owned fallback symbols, and explicit zero Apple/platform extraction
+counts. `phenotype icons svg <name-or-reference>` exposes the exact
 audited SVG source for one glyph plus its attribution and rendering capability
 envelope when a renderer, parser, or icon cache needs a pure source-level
 probe.

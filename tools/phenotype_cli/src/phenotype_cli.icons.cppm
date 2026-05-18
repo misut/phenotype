@@ -184,14 +184,23 @@ auto icon_reference_source_json(
         icon_catalog::IconReferenceSource const& source) -> std::string {
     return std::format(
         "{{\"name\":{},\"url\":{},\"role\":{},\"license_policy\":{},"
+        "\"license_url\":{},\"source_acquisition\":{},"
         "\"used_as_embedded_asset_source\":{},"
-        "\"apple_owned_artwork\":{}}}",
+        "\"apple_owned_artwork\":{},\"may_embed_svg_source\":{},"
+        "\"requires_notice\":{},\"runtime_fetch_allowed\":{},"
+        "\"platform_extraction_allowed\":{}}}",
         json_string(source.name),
         json_string(source.url),
         json_string(source.role),
         json_string(source.license_policy),
+        json_string(source.license_url),
+        json_string(source.source_acquisition),
         source.used_as_embedded_asset_source ? "true" : "false",
-        source.apple_owned_artwork ? "true" : "false");
+        source.apple_owned_artwork ? "true" : "false",
+        source.may_embed_svg_source ? "true" : "false",
+        source.requires_notice ? "true" : "false",
+        source.runtime_fetch_allowed ? "true" : "false",
+        source.platform_extraction_allowed ? "true" : "false");
 }
 
 auto icon_reference_sources_json() -> std::string {
@@ -1107,33 +1116,53 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && icon_catalog::reference_source_at(0).apple_owned_artwork
             && !icon_catalog::reference_source_at(0)
                     .used_as_embedded_asset_source
+            && !icon_catalog::reference_source_at(0).may_embed_svg_source
+            && !icon_catalog::reference_source_at(0).runtime_fetch_allowed
+            && !icon_catalog::reference_source_at(0)
+                    .platform_extraction_allowed
             && icon_catalog::reference_source_at(2).url.find("SVG2/paths")
                 != std::string_view::npos
             && icon_catalog::reference_source_at(3)
                     .used_as_embedded_asset_source
+            && icon_catalog::reference_source_at(3).may_embed_svg_source
+            && icon_catalog::reference_source_at(3).requires_notice
+            && icon_catalog::reference_source_at(3)
+                   .source_acquisition.find("pinned_raw_svg")
+                != std::string_view::npos
             && icon_catalog::reference_source_at(3).license_policy.find("ISC")
+                != std::string_view::npos
+            && icon_catalog::reference_source_at(3)
+                   .license_url.find("lucide.dev/license")
                 != std::string_view::npos
             && icon_catalog::reference_source_at(4)
                     .license_policy.find("MIT")
                 != std::string_view::npos
             && !icon_catalog::reference_source_at(4)
                     .used_as_embedded_asset_source
+            && icon_catalog::reference_source_at(4).requires_notice
             && icon_catalog::reference_source_at(5)
                     .license_policy.find("Apache-2.0")
                 != std::string_view::npos
+            && icon_catalog::reference_source_at(5).may_embed_svg_source
+            && icon_catalog::reference_source_at(5).requires_notice
             && icon_catalog::reference_source_at(6)
                     .license_policy.find("MIT")
                 != std::string_view::npos
+            && icon_catalog::reference_source_at(6).may_embed_svg_source
+            && icon_catalog::reference_source_at(6).requires_notice
             && icon_catalog::reference_source_at(7)
                     .license_policy.find("MIT")
-                != std::string_view::npos,
+                != std::string_view::npos
+            && icon_catalog::reference_source_at(7).may_embed_svg_source
+            && icon_catalog::reference_source_at(7).requires_notice,
          .detail = std::format(
-             "references={} embedded_source={} apple_reference={}",
+             "references={} embedded_source={} license_url={} apple_reference={}",
              icon_catalog::reference_source_count,
              icon_catalog::reference_source_at(3).name,
+             icon_catalog::reference_source_at(3).license_url,
              icon_catalog::reference_source_at(0).name),
          .hint =
-             "Keep icon reference sources explicit so provenance is debuggable without assuming Apple artwork was embedded."},
+             "Keep icon reference sources explicit so provenance, license URL, notice requirement, and no-Apple-artwork boundaries are debuggable."},
         {.name = "svg_source_contract",
          .ok = svg_source_contract
             && icon_catalog::svg_source(icon_catalog::Symbol::Applications)

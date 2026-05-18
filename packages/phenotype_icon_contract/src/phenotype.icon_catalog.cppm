@@ -158,8 +158,14 @@ struct IconReferenceSource {
     std::string_view url;
     std::string_view role;
     std::string_view license_policy;
+    std::string_view license_url;
+    std::string_view source_acquisition;
     bool used_as_embedded_asset_source = false;
     bool apple_owned_artwork = false;
+    bool may_embed_svg_source = false;
+    bool requires_notice = false;
+    bool runtime_fetch_allowed = false;
+    bool platform_extraction_allowed = false;
 };
 
 struct SymbolColor {
@@ -437,8 +443,14 @@ inline auto reference_source_at(unsigned int index) noexcept
             "https://developer.apple.com/design/human-interface-guidelines/icons",
             "semantic and platform style reference",
             "reference only; do not embed Apple-owned artwork",
+            "https://www.apple.com/legal/intellectual-property/guidelinesfor3rdparties.html",
+            "reference_only_no_embedding",
             false,
             true,
+            false,
+            false,
+            false,
+            false,
         };
     case 1:
         return {
@@ -446,8 +458,14 @@ inline auto reference_source_at(unsigned int index) noexcept
             "https://developer.apple.com/design/human-interface-guidelines/sf-symbols",
             "semantic symbol naming and rendering mode reference",
             "reference only; do not embed SF Symbols artwork",
+            "https://developer.apple.com/design/human-interface-guidelines/sf-symbols",
+            "semantic_reference_only_no_exported_vectors",
             false,
             true,
+            false,
+            false,
+            false,
+            false,
         };
     case 2:
         return {
@@ -455,6 +473,12 @@ inline auto reference_source_at(unsigned int index) noexcept
             "https://www.w3.org/TR/SVG2/paths.html",
             "SVG path command parser reference",
             "open web standard reference",
+            "https://www.w3.org/copyright/software-license/",
+            "parser_reference_only",
+            false,
+            false,
+            false,
+            false,
             false,
             false,
         };
@@ -464,7 +488,13 @@ inline auto reference_source_at(unsigned int index) noexcept
             "https://lucide.dev/",
             "audited permissive SVG source for embedded glyphs",
             "ISC plus Feather-derived MIT license with attribution",
+            "https://lucide.dev/license",
+            "pinned_raw_svg_development_time_import",
             true,
+            false,
+            true,
+            true,
+            false,
             false,
         };
     case 4:
@@ -473,6 +503,12 @@ inline auto reference_source_at(unsigned int index) noexcept
             "https://github.com/feathericons/feather",
             "MIT license provenance for Feather-derived Lucide symbols",
             "MIT license; referenced for license lineage, not copied directly",
+            "https://github.com/feathericons/feather/blob/master/LICENSE",
+            "license_lineage_reference_only",
+            false,
+            false,
+            false,
+            true,
             false,
             false,
         };
@@ -482,6 +518,12 @@ inline auto reference_source_at(unsigned int index) noexcept
             "https://developers.google.com/fonts/docs/material_symbols",
             "future permissive fallback source candidate",
             "Apache-2.0 license with attribution when embedded",
+            "https://github.com/google/material-design-icons/blob/master/LICENSE",
+            "candidate_pinned_raw_svg_development_time_import",
+            false,
+            false,
+            true,
+            true,
             false,
             false,
         };
@@ -491,6 +533,12 @@ inline auto reference_source_at(unsigned int index) noexcept
             "https://github.com/tabler/tabler-icons",
             "future permissive fallback source candidate",
             "MIT license with attribution when embedded",
+            "https://github.com/tabler/tabler-icons/blob/main/LICENSE",
+            "candidate_pinned_raw_svg_development_time_import",
+            false,
+            false,
+            true,
+            true,
             false,
             false,
         };
@@ -500,6 +548,12 @@ inline auto reference_source_at(unsigned int index) noexcept
             "https://github.com/iconoir-icons/iconoir",
             "future permissive fallback source candidate",
             "MIT license with attribution when embedded",
+            "https://github.com/iconoir-icons/iconoir/blob/main/LICENSE",
+            "candidate_pinned_raw_svg_development_time_import",
+            false,
+            false,
+            true,
+            true,
             false,
             false,
         };

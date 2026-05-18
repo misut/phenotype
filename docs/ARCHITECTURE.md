@@ -59,10 +59,12 @@ exposes family, icon name, exact license, license URL, pinned direct raw SVG
 URL, source revision, copyright, modification status, and Apple-asset boundary
 in debug metadata.
 The catalog also exposes structured reference-source rows for Apple HIG/SF
-Symbols, W3C SVG paths, Lucide, Feather Icons, Tabler Icons, and Material
-Symbols so
-provenance checks can distinguish style references, license lineage, and
-embedded asset sources without inspecting screenshots.
+Symbols, W3C SVG paths, Lucide, Feather Icons, Tabler Icons, Iconoir, and
+Material Symbols. Each row records the official license URL, acquisition mode,
+embedding permission, notice requirement, runtime-fetch flag, and
+platform-extraction flag, so provenance checks can distinguish style
+references, license lineage, future source candidates, and embedded asset
+sources without inspecting screenshots.
 `icons::macos_presentation(...)` is the
 pure role/state mapper for toolbar, navigation, sidebar, file-type, and action
 symbols. It resolves tone, opacity, scale, hit target, and optical offset from
