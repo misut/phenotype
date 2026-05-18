@@ -564,10 +564,14 @@ duplicate
            == demo::k_desktop_titlebar_control_count);
     assert(chrome.content_window_control_marker_count == 0);
     assert(chrome.artifact_window_control_marker_count == 0);
+    assert(chrome.content_drawn_window_control_count == 0);
+    assert(chrome.artifact_drawn_window_control_count == 0);
     assert(chrome.window_control_render_policy
            == "native_controls_runtime_only_no_content_or_artifact_markers");
     assert(chrome.titlebar_control_reserve_policy
            == "blank_reserve_under_os_window_controls");
+    assert(chrome.native_window_control_integration_policy
+           == "platform_standard_controls_inside_leading_content_reserve");
     auto artifact_chrome =
         demo::explorer_chrome_with_native_window_control_ownership(chrome);
     assert(!artifact_chrome.content_window_control_markers);
@@ -592,11 +596,15 @@ duplicate
     assert(!repaired_chrome.artifact_window_control_markers);
     assert(repaired_chrome.content_window_control_marker_count == 0);
     assert(repaired_chrome.artifact_window_control_marker_count == 0);
+    assert(repaired_chrome.content_drawn_window_control_count == 0);
+    assert(repaired_chrome.artifact_drawn_window_control_count == 0);
     assert(repaired_chrome.native_window_control_owner == "platform-edge");
     assert(repaired_chrome.window_control_marker_mode
            == "runtime-native-controls");
     assert(repaired_chrome.native_window_control_count
            == demo::k_desktop_titlebar_control_count);
+    assert(repaired_chrome.native_window_control_integration_policy
+           == "platform_standard_controls_inside_leading_content_reserve");
     assert(!chrome.status_bar_visible);
     assert(demo::explorer_icon_grid_columns(chrome).size() == 6);
     std::string const viewport_profile = "test-status-bar-viewport";
@@ -625,6 +633,8 @@ duplicate
     assert(mobile_chrome.native_window_control_count == 0);
     assert(mobile_chrome.content_window_control_marker_count == 0);
     assert(mobile_chrome.artifact_window_control_marker_count == 0);
+    assert(mobile_chrome.content_drawn_window_control_count == 0);
+    assert(mobile_chrome.artifact_drawn_window_control_count == 0);
     assert(mobile_chrome.native_window_control_owner == "none");
     assert(mobile_chrome.icon_module == "phenotype.icons");
     assert(mobile_chrome.icon_style == "macos_rounded_outline_svg");
@@ -956,7 +966,12 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"content_window_control_marker_count\":0")
            != std::string::npos);
+    assert(debug_text.find("\"content_drawn_window_control_count\":0")
+           != std::string::npos);
     assert(debug_text.find("\"content_window_control_markers\":false")
+           != std::string::npos);
+    assert(debug_text.find(
+        "\"native_window_control_integration_policy\":\"platform_standard_controls_inside_leading_content_reserve\"")
            != std::string::npos);
     assert(debug_text.find("\"titlebar_control_start_x\"") != std::string::npos);
     assert(debug_text.find("\"profile\"") != std::string::npos);

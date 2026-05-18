@@ -23,9 +23,13 @@ of being duplicated as interactive phenotype controls. The live example keeps
 that sidebar/titlebar area as blank reserve, so the real OS-owned window
 controls have space without phenotype drawing another set of buttons. Artifact
 capture keeps that same reserve blank and verifies it with low edge/chroma
-pixel contracts plus native-window debug metadata. The CLI gate deliberately
-does not draw traffic-light probes, and the package icon avoids traffic-light
-marker colors, because the real controls are owned by the platform shell. On Windows
+pixel contracts plus native-window debug metadata. The macOS runtime snapshot
+also records the actual AppKit standard window buttons, their count, and their
+top-left content frames, so the verifier can fail if the buttons move back into
+a separate titlebar or if phenotype content starts drawing a second set. The
+CLI gate deliberately does not draw traffic-light probes, and the package icon
+avoids traffic-light marker colors, because the real controls are owned by the
+platform shell. On Windows
 the native Win32 shell keeps the same contract through a
 DWM custom frame, using `WM_NCHITTEST` to preserve
 resize edges, caption-button behavior, blank-toolbar dragging, phenotype toolbar
@@ -60,8 +64,11 @@ density metrics from that payload, including thumbnail canvas, label, font,
 grid-gap sizing, contextual `status_bar_visible` state, and the
 `window_control_marker_mode` split between live native controls and artifact
 probe markers. It records `native_window_control_owner=platform-edge`, a native
-control count, zero content/artifact marker counts, and a render policy that
-allows only runtime OS controls. It also checks the pure `geometry` object for
+control count, zero content/artifact marker and drawn-control counts, the
+`platform_standard_controls_inside_leading_content_reserve` integration policy,
+and a render policy that allows only runtime OS controls. It also checks the
+platform `window.native_window_controls` object for AppKit standard button
+presence and content-reserve integration, then checks the pure `geometry` object for
 the integrated chrome contract: window inset/gap, sidebar surface origin, first
 sidebar row, toolbar shell, navigation/title/trailing group x-coordinates,
 collapsed search button x-coordinate, content surface origin, and the native

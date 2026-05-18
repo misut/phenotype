@@ -3751,8 +3751,11 @@ auto explorer_chrome_json(
         "\"native_window_control_count\":{},"
         "\"content_window_control_marker_count\":{},"
         "\"artifact_window_control_marker_count\":{},"
+        "\"content_drawn_window_control_count\":{},"
+        "\"artifact_drawn_window_control_count\":{},"
         "\"window_control_render_policy\":{},"
         "\"titlebar_control_reserve_policy\":{},"
+        "\"native_window_control_integration_policy\":{},"
         "\"titlebar_drag_region_height\":{},"
         "\"leading_control_reserved_width\":{},"
         "\"trailing_control_reserved_width\":{}}},"
@@ -3881,8 +3884,11 @@ auto explorer_chrome_json(
         chrome.native_window_control_count,
         chrome.content_window_control_marker_count,
         chrome.artifact_window_control_marker_count,
+        chrome.content_drawn_window_control_count,
+        chrome.artifact_drawn_window_control_count,
         json_string(chrome.window_control_render_policy),
         json_string(chrome.titlebar_control_reserve_policy),
+        json_string(chrome.native_window_control_integration_policy),
         chrome.titlebar_drag_region_height,
         chrome.leading_control_reserved_width,
         chrome.trailing_control_reserved_width,

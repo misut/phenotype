@@ -722,12 +722,21 @@ mean the example requested native integrated chrome, including the leading
 traffic-light reserve and trailing caption-button reserve. `native_controls_owned_by_os=true`
 with `uses_glfw=false` confirms close/minimize/maximize controls and caption
 hit testing stay at the platform edge rather than being redrawn by phenotype.
+The same `window` object now includes `native_window_controls`: on macOS the
+verifier expects AppKit `standardWindowButton:` controls to report
+`ownership_policy=platform_edge_standard_buttons_only`, all three visible
+buttons, `all_buttons_within_leading_reserve=true`, and
+`integrated_in_content_area=true`. That check follows AppKit's full-size
+content/titlebar transparency model, where content can sit under the titlebar
+while the standard window buttons remain in the window hierarchy.
 The file explorer's `debug.application.file_explorer.chrome` additionally
 publishes `content_window_control_markers=false`,
 `artifact_window_control_markers=false`, `duplicate_window_controls=false`, and
 `window_control_marker_mode=runtime-native-controls`. It also reports
 `native_window_control_owner=platform-edge`, native-control count, zero
-content/artifact marker counts, and the
+content/artifact marker and drawn-control counts, the
+`platform_standard_controls_inside_leading_content_reserve` integration policy,
+and the
 `native_controls_runtime_only_no_content_or_artifact_markers` render policy. The
 verifier checks that invariant independently of the manifest and pairs it with
 low-detail, neutral pixel-region checks plus forbidden traffic-light palette
