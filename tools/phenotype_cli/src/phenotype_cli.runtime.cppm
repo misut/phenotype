@@ -23,22 +23,6 @@ struct ArtifactSummary {
     std::size_t platform_file_count = 0;
 };
 
-auto path_exists(fs::path const& path) -> bool {
-    auto ec = std::error_code{};
-    return fs::exists(path, ec);
-}
-
-auto path_is_directory(fs::path const& path) -> bool {
-    auto ec = std::error_code{};
-    return fs::is_directory(path, ec);
-}
-
-auto file_size_or_zero(fs::path const& path) -> std::uintmax_t {
-    auto ec = std::error_code{};
-    auto size = fs::file_size(path, ec);
-    return ec ? 0 : size;
-}
-
 auto trim_copy(std::string_view text) -> std::string {
     auto begin = text.begin();
     auto end = text.end();
@@ -121,22 +105,6 @@ auto quoted_value_for_key(std::string_view line, std::string_view key)
     return std::nullopt;
 }
 
-auto count_regular_files(fs::path const& root) -> std::size_t {
-    if (!path_is_directory(root))
-        return 0;
-
-    auto count = std::size_t{0};
-    auto ec = std::error_code{};
-    auto options = fs::directory_options::skip_permission_denied;
-    for (auto it = fs::recursive_directory_iterator(root, options, ec);
-         !ec && it != fs::recursive_directory_iterator{};
-         it.increment(ec)) {
-        if (it->is_regular_file(ec))
-            ++count;
-    }
-    return count;
-}
-
 auto find_repo_root(fs::path start) -> std::optional<fs::path> {
     auto ec = std::error_code{};
     start = fs::absolute(start, ec);
@@ -178,13 +146,6 @@ auto output_line_count(std::string_view text) -> std::size_t {
         + (text.back() == '\n' ? 0 : 1);
 }
 
-auto output_tail(std::string_view text, std::size_t max_bytes = 16384)
-    -> std::string_view {
-    if (text.size() <= max_bytes)
-        return text;
-    return text.substr(text.size() - max_bytes);
-}
-
 auto process_result_detail_json(
         std::optional<cppx::process::CapturedProcessResult> const& result)
     -> std::string {
@@ -201,14 +162,6 @@ auto process_result_detail_json(
         output_line_count(result->stderr_text),
         json_string(output_tail(result->stdout_text)),
         json_string(output_tail(result->stderr_text)));
-}
-
-auto executable_filename(std::string const& package_name) -> std::string {
-#if defined(_WIN32)
-    return package_name + ".exe";
-#else
-    return package_name;
-#endif
 }
 
 auto exon_package_name(fs::path const& example_root)
