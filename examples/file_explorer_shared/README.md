@@ -40,6 +40,10 @@ image/video detail counts, shadow policy, and the explicit
 `uses_external_previews=false` rule. This keeps Finder-like thumbnail polish
 observable from `phenotype drive file-explorer --json` before a native renderer
 captures pixels.
+The desktop icon grid also reports `icon_grid_label_policy`, currently
+`finder_two_line_middle_ellipsis_preserve_suffix`, so artifacts can explain why
+long localized file names keep their suffix while being constrained to the
+Finder-style two-line label area.
 The same package publishes the desktop keyboard command contract as pure data:
 `CommandOrControl+F` for search, `Enter` for selection activation,
 `DeleteOrBackspace` for Trash movement, `CommandOrControl+D` for duplicate,

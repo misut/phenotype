@@ -1071,6 +1071,10 @@
       "equals": 14.0
     },
     {
+      "path": "application.file_explorer.chrome.icon_grid_label_policy",
+      "equals": "finder_two_line_middle_ellipsis_preserve_suffix"
+    },
+    {
       "path": "application.file_explorer.chrome.icon_grid_gap",
       "equals": 24.0
     },

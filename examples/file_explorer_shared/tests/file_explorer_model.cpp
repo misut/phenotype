@@ -385,6 +385,8 @@ duplicate
            == demo::k_desktop_icon_grid_label_height);
     assert(chrome.icon_grid_label_font_size
            == demo::k_desktop_icon_grid_label_font_size);
+    assert(chrome.icon_grid_label_policy
+           == demo::k_desktop_icon_grid_label_policy);
     assert(chrome.icon_grid_gap == demo::k_desktop_icon_grid_gap);
     assert(chrome.toolbar_group_count == 5);
     assert(chrome.toolbar_separator_count == 3);
@@ -723,6 +725,9 @@ duplicate
     assert(debug_text.find("\"uses_external_previews\":false")
            != std::string::npos);
     assert(debug_text.find("\"icon_grid_label_font_size\"") != std::string::npos);
+    assert(debug_text.find(
+        "\"icon_grid_label_policy\":\"finder_two_line_middle_ellipsis_preserve_suffix\"")
+        != std::string::npos);
     assert(debug_text.find("\"sidebar_icon_size\"") != std::string::npos);
     assert(debug_text.find("\"sidebar_label_leading\"") != std::string::npos);
     assert(debug_text.find("\"icon_system\"") != std::string::npos);
