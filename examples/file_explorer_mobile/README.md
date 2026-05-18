@@ -22,6 +22,12 @@ through the same audited file-type SVG symbols and Finder-style tint policy as
 the desktop icon grid. The startup artifact manifest verifies the pure
 entry-symbol summary so a mobile row/icon mismatch is visible from JSON before
 pixel inspection.
+The mobile package manifest also includes the same runtime-visible
+`assets/icons/file-types/` SVG files as the desktop package. They are sourced
+from the pinned Lucide revision documented by the icon catalog, not extracted
+from Apple or platform-owned system icons. The package carries the Lucide
+license notice as a non-runtime text asset so resource bundles retain the
+permissive-source notice.
 
 All filesystem writes stay inside an example-owned temp directory named
 `phenotype-file-explorer-mobile`. The example never points at the user's real
@@ -31,8 +37,10 @@ The directory also includes an initial `phenotype.package.toml` plus `assets/`,
 `locales/`, and `fonts/` fixtures. These are consumed by the new
 `tools/phenotype_cli package inspect` command and describe the
 asset/i18n/Pretendard bundle contract. The package icon is a phenotype-owned
-SVG asset with a macOS-like rounded document-window composition; the CLI checks
-that `app.icon` is SVG/preloaded and that Pretendard has a CJK-capable fallback.
+SVG asset with a macOS-like rounded document-window composition, and the
+runtime-visible file-type icons are audited permissive SVG assets; the CLI
+checks that every declared SVG is present/preloaded, traffic-light-palette safe,
+and that Pretendard has a CJK-capable fallback.
 Runtime labels are resolved through the shared pure `ResourceCatalog` helper in
 `file_explorer_shared`, while file reads and package inspection remain
 CLI/example edge work. Set

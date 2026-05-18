@@ -119,6 +119,13 @@ mapping for Finder-like fallbacks: PDF, text, image, movie, archive, audio,
 code, spreadsheet, presentation, document,
 and folder entries resolve to audited SVG symbols and semantic reference names
 before any native renderer sees them.
+The package manifest now carries the same eleven file-type icons as
+runtime-visible SVG assets under `assets/icons/file-types/`, sourced from the
+pinned Lucide revision recorded by the icon catalog. That keeps desktop
+packaging, CLI inspection, and the pure debug contract aligned with the
+fallback painters instead of relying on platform file icons. The package also
+bundles the pinned Lucide license notice as a non-runtime asset so copied
+resource bundles retain the permissive-source notice.
 When file-type or toolbar glyphs need more realism, prefer permissive SVG
 sources such as Lucide ISC, Feather-derived MIT glyphs, or other audited open
 icon sets and record the exact source/license in the package contract. Do not

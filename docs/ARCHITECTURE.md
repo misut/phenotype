@@ -330,6 +330,14 @@ and mobile file explorer examples use in rows without asking a native icon
 service for platform artwork. Their shared debug payload includes
 `entry_symbol_summary` so the contract can fail as JSON before a screenshot
 comparison is needed.
+The desktop and mobile packages also declare those eleven file-type icons as
+runtime-visible SVG assets under `assets/icons/file-types/`, sourced from the
+same pinned Lucide revision as the pure catalog. This keeps package inspection,
+resource bundling, and runtime fallback painters on one source-safe icon
+contract while still avoiding Apple-owned Finder or SF Symbols artwork. The
+packages also carry the Lucide license notice as a non-runtime text asset, so a
+resource bundle preserves the permissive-source notice alongside the copied SVG
+files.
 The catalog also publishes the SVG subset and arc-lowering policy, so CLI
 checks and example artifacts can catch a regression where a macOS-style glyph
 depends on an unsupported path command. AirDrop intentionally uses SVG `A/a`

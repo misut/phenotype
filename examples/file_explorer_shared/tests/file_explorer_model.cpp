@@ -49,8 +49,10 @@ int main() {
     auto contract = phenotype::resource_catalog_contract(
         catalog,
         std::span<std::string_view const>{required_locale_keys});
-    assert(contract.svg_asset_count == 1);
-    assert(contract.preload_svg_asset_count == 1);
+    assert(contract.asset_count == 13);
+    assert(contract.svg_asset_count == 12);
+    assert(contract.preload_svg_asset_count == 12);
+    assert(contract.runtime_visible_svg_asset_count == 11);
     assert(contract.app_icon_declared);
     assert(contract.app_icon_svg);
     assert(contract.app_icon_preload);
@@ -1099,11 +1101,25 @@ duplicate
         "\"focus_ring_style\":\"macos_blue_keyboard_focus_ring_outset_4px_2px_stroke\"")
         != std::string::npos);
     assert(debug_text.find("\"focus_order\"") != std::string::npos);
-    assert(debug_text.find("\"svg_asset_count\":1") != std::string::npos);
-    assert(debug_text.find("\"preload_svg_asset_count\":1")
-           != std::string::npos);
-    assert(debug_text.find("\"runtime_visible_svg_asset_count\":0")
-           != std::string::npos);
+    assert(debug_text.find("\"svg_asset_count\":12") != std::string::npos);
+    assert(debug_text.find("\"preload_svg_asset_count\":12")
+        != std::string::npos);
+    assert(debug_text.find("\"runtime_visible_svg_asset_count\":11")
+        != std::string::npos);
+    assert(debug_text.find("\"file_type_icon_asset_count\":11")
+        != std::string::npos);
+    assert(debug_text.find("\"file_type_icon_source_family\":\"Lucide\"")
+        != std::string::npos);
+    assert(debug_text.find(
+               "\"file_type_icon_source_revision\":"
+               "\"5b40f2c5a76a27eeb81c8f1b1c311121dee45495\"")
+        != std::string::npos);
+    assert(debug_text.find(
+               "\"file_type_icon_license_asset\":"
+               "\"assets/icons/file-types/LUCIDE_LICENSE.txt\"")
+        != std::string::npos);
+    assert(debug_text.find("\"file_type.pdf.icon\"")
+        != std::string::npos);
     assert(debug_text.find("\"app_icon\"") != std::string::npos);
     assert(debug_text.find("\"declared\":true") != std::string::npos);
     assert(debug_text.find("\"svg\":true") != std::string::npos);
