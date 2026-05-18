@@ -12,7 +12,7 @@ UV_PYTHON = { value = "{{ tools.python.path }}", tools = true }
 
 [tasks."tools:artifact:pycompile"]
 description = "Compile the artifact verifier with the uv-managed Python environment"
-run = "uv run --frozen python -m py_compile tools/verify_artifact_bundle.py"
+run = "uv run --frozen python -m py_compile tools/verify_artifact_bundle.py tools/test_verify_artifact_bundle.py"
 
 [tasks."tools:artifact:test"]
 description = "Run artifact verifier Python contract tests with uv"

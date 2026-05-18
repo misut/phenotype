@@ -62,7 +62,7 @@
     "fallback": 0,
     "backdrop_sampling": 8,
     "contract_versions": {
-      "21": 9
+      "22": 9
     },
     "theme_foreground_matches_theme": 0,
     "theme_accent_matches_theme": 0,
@@ -780,7 +780,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.preferred_external_source_policy",
-      "equals": "Lucide ISC or Material Symbols Apache-2.0 may be used as audited source references before phenotype adaptation"
+      "equals": "Prefer audited SVG from Lucide ISC, Tabler MIT, Iconoir MIT, or Material Symbols Apache-2.0 before phenotype adaptation"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_attribution_policy",

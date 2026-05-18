@@ -1317,7 +1317,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(std::string(fallback_plan.container.mode_name) == "isolated");
     assert(!fallback_plan.container.participates);
     assert(fallback_plan.shape.valid);
+    assert(fallback_plan.shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(fallback_plan.shape.rounded);
+    assert(!fallback_plan.shape.capsule);
     assert(!fallback_plan.shape.radius_clamped);
     assert(fallback_plan.shape.surface_area == 240.0f * 96.0f);
     assert(fallback_plan.shape.min_extent == 96.0f);
@@ -1737,11 +1739,14 @@ void test_material_planner_backdrop_and_fallback_paths() {
         plan_material_surface(clamped_shape_request, glass_env);
     assert(!clamped_shape_plan.fallback());
     assert(clamped_shape_plan.shape.valid);
+    assert(clamped_shape_plan.shape.kind == MaterialShapeKind::Capsule);
     assert(clamped_shape_plan.shape.rounded);
+    assert(clamped_shape_plan.shape.capsule);
     assert(clamped_shape_plan.shape.radius_clamped);
     assert(clamped_shape_plan.shape.radius_limit == 48.0f);
     assert(clamped_shape_plan.shape.effective_radius == 48.0f);
     assert(clamped_shape_plan.shape.normalized_radius == 1.0f);
+    assert(std::string(clamped_shape_plan.reference_model.shape) == "capsule");
 
     MaterialEnvironment reduced_motion_container_env = glass_env;
     reduced_motion_container_env.capabilities.reduce_motion = true;
@@ -1969,7 +1974,9 @@ void test_material_planner_backdrop_and_fallback_paths() {
            == "none");
     assert(invalid_plan.observation_contract.expected_execution_stages == 0);
     assert(!invalid_plan.shape.valid);
+    assert(invalid_plan.shape.kind == MaterialShapeKind::Invalid);
     assert(!invalid_plan.shape.rounded);
+    assert(!invalid_plan.shape.capsule);
     assert(invalid_plan.shape.effective_radius == 0.0f);
     assert(std::string(invalid_plan.reference_model.shape) == "invalid");
     assert(!invalid_plan.reference_model.view_bounds_anchored);

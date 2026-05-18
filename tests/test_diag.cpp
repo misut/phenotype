@@ -917,7 +917,9 @@ void test_material_runtime_record_json_contract() {
     assert(reference_model.at("deterministic_degradation").as_bool() == true);
     auto const& shape = obj.at("shape").as_object();
     assert(shape.at("valid").as_bool() == true);
+    assert(shape.at("kind").as_string() == "rounded-rectangle");
     assert(shape.at("rounded").as_bool() == true);
+    assert(shape.at("capsule").as_bool() == false);
     assert(shape.at("radius_clamped").as_bool() == false);
     assert(shape.at("surface_area").as_float() == 160.0f * 64.0f);
     assert(shape.at("min_extent").as_float() == 64.0f);
@@ -1091,6 +1093,7 @@ void test_material_runtime_record_json_contract() {
     assert(pure_summary.unioned_count == 0);
     assert(pure_summary.valid_shape_count == 1);
     assert(pure_summary.rounded_shape_count == 1);
+    assert(pure_summary.capsule_shape_count == 0);
     assert(pure_summary.radius_clamped_count == 0);
     assert(pure_summary.foreground_backdrop_driven_count == 0);
     assert(pure_summary.foreground_high_contrast_count == 0);
@@ -1125,6 +1128,7 @@ void test_material_runtime_record_json_contract() {
     assert(summary_obj.at("morph_transition_count").as_integer() == 0);
     assert(summary_obj.at("valid_shape_count").as_integer() == 1);
     assert(summary_obj.at("rounded_shape_count").as_integer() == 1);
+    assert(summary_obj.at("capsule_shape_count").as_integer() == 0);
     assert(summary_obj.at("radius_clamped_count").as_integer() == 0);
     assert(summary_obj.at("foreground_backdrop_driven_count").as_integer()
            == 0);

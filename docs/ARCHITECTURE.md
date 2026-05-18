@@ -50,9 +50,10 @@ APIs from core code.
 `phenotype.icons` builds on that parser with phenotype-owned and audited
 permissive SVG symbols. The catalog keeps macOS/Finder/SF Symbols names only as
 semantic references: it does not embed Apple or SF Symbols artwork. File-type
-glyphs can use checked open SVG sources such as Lucide ISC icons, and every
-embedded external source exposes family, icon name, license, license URL,
-source URL, copyright, and Apple-asset boundary in debug metadata.
+glyphs can use checked open SVG sources such as Lucide ISC, Tabler MIT,
+Iconoir MIT, or Material Symbols Apache-2.0 icons, and every embedded external
+source exposes family, icon name, license, license URL, source URL, copyright,
+and Apple-asset boundary in debug metadata.
 `icons::macos_presentation(...)` is the
 pure role/state mapper for toolbar, navigation, sidebar, file-type, and action
 symbols. It resolves tone, opacity, scale, hit target, and optical offset from

@@ -303,9 +303,10 @@ macOS-like rounded stroke caps/joins, and bounded secondary-stroke opacity for
 symbols with detail layers without copying SF Symbols assets. Each built-in
 symbol carries a semantic SF Symbols reference name and explicit policy that
 the reference is only a role/style anchor; the vector artwork is either
-phenotype-owned or an audited permissive SVG source such as Lucide ISC, with
-source family, icon name, license, license URL, source URL, copyright, and
-Apple-asset boundary exposed in debug metadata. A pure Finder-style file-type
+phenotype-owned or an audited permissive SVG source such as Lucide ISC, Tabler
+MIT, Iconoir MIT, or Material Symbols Apache-2.0, with source family, icon name,
+license, license URL, source URL, copyright, and Apple-asset boundary exposed in
+debug metadata. A pure Finder-style file-type
 tint policy now gives
 folder/document/PDF/text/image/movie/archive glyphs deterministic colors for
 list and column rows without querying native platform icon services. The CLI command

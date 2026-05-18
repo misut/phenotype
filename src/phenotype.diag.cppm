@@ -820,7 +820,11 @@ namespace detail {
 
         json::Object shape;
         shape.emplace("valid", json::Value{plan.shape.valid});
+        shape.emplace(
+            "kind",
+            json::Value{material_shape_kind_name(plan.shape.kind)});
         shape.emplace("rounded", json::Value{plan.shape.rounded});
+        shape.emplace("capsule", json::Value{plan.shape.capsule});
         shape.emplace("radius_clamped",
                       json::Value{plan.shape.radius_clamped});
         shape.emplace("surface_area",
@@ -1790,6 +1794,10 @@ namespace detail {
             "rounded_shape_count",
             json::Value{
                 static_cast<std::int64_t>(summary.rounded_shape_count)});
+        out.emplace(
+            "capsule_shape_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.capsule_shape_count)});
         out.emplace(
             "radius_clamped_count",
             json::Value{
