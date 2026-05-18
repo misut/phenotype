@@ -76,7 +76,7 @@ The initial scope is intentionally narrow:
   application/debug metadata, declared resource counts, referenced `source`
   files, CLI-owned debug verifier metadata, app-icon SVG policy, Pretendard
   default-font policy, CJK fallback coverage, SVG asset layout,
-  native-chrome-safe app-icon palettes, locale layout, and font layout.
+  native-chrome-safe SVG asset palettes, locale layout, and font layout.
   JSON output includes the normalized `ResourceCatalog` produced
   by the shared pure `phenotype.resources` path package plus its pure
   `ResourceCatalogContract`. The contract reports asset preload/runtime-visible
@@ -163,8 +163,9 @@ The initial scope is intentionally narrow:
   renderer. `phenotype package inspect --json` uses the same inspector for all
   manifest-declared SVG assets, so packaged icons and runtime-visible SVG images
   fail before a backend image cache or platform renderer is involved. For
-  Finder-style packages, it also rejects app icons that embed macOS
-  traffic-light marker colors because those controls belong to the native shell.
+  Finder-style packages, it also rejects any packaged SVG asset that embeds
+  macOS traffic-light marker colors because those controls belong to the native
+  shell.
 - `phenotype drive file-explorer` applies deterministic typed inputs to the
   shared desktop/mobile file explorer model without opening a native window.
   JSON output includes the input trace, sandbox root/current paths, visible
