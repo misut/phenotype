@@ -862,11 +862,14 @@ auto icon_catalog_checks() -> std::vector<Check> {
     bool metric_contract = true;
     bool svg_source_contract = true;
     bool file_type_symbol_set_contract =
-        icon_catalog::file_type_symbol_count == 7
+        icon_catalog::file_type_symbol_count == 11
         && icon_catalog::file_type_symbol_at(0) == icon_catalog::Symbol::Folder
         && icon_catalog::file_type_symbol_at(2)
             == icon_catalog::Symbol::PdfDocument
-        && icon_catalog::file_type_symbol_at(6) == icon_catalog::Symbol::Archive;
+        && icon_catalog::file_type_symbol_at(6)
+            == icon_catalog::Symbol::Archive
+        && icon_catalog::file_type_symbol_at(10)
+            == icon_catalog::Symbol::PresentationDocument;
     auto const toolbar_chrome = icon_catalog::macos_control_chrome(
         icon_catalog::SymbolPresentationRole::Toolbar,
         icon_catalog::SymbolInteractionState{false, true});
@@ -1098,7 +1101,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
              icon_catalog::file_type_symbol_count,
              icon_catalog::name(icon_catalog::file_type_symbol_at(0)),
              icon_catalog::name(icon_catalog::file_type_symbol_at(2)),
-             icon_catalog::name(icon_catalog::file_type_symbol_at(6))),
+             icon_catalog::name(icon_catalog::file_type_symbol_at(10))),
          .hint =
              "Keep Finder-like file-type glyphs exposed as a pure catalog set for examples, CLI, and artifact contracts."},
         {.name = "stroke_and_weight",

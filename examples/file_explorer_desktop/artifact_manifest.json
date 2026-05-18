@@ -348,7 +348,7 @@
     },
     {
       "path": "application.file_explorer.counts.files",
-      "equals": 22
+      "equals": 26
     },
     {
       "path": "application.file_explorer.counts.folders",
@@ -620,7 +620,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.total_symbol_count",
-      "equals": 35
+      "equals": 39
     },
     {
       "path": "application.file_explorer.chrome.icon_system.phenotype_owned_symbol_count",
@@ -628,11 +628,11 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.permissive_source_symbol_count",
-      "equals": 31
+      "equals": 35
     },
     {
       "path": "application.file_explorer.chrome.icon_system.lucide_source_symbol_count",
-      "equals": 31
+      "equals": 35
     },
     {
       "path": "application.file_explorer.chrome.icon_system.apple_asset_symbol_count",
@@ -640,7 +640,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.audited_symbol_source_count",
-      "equals": 35
+      "equals": 39
     },
     {
       "path": "application.file_explorer.chrome.icon_system.sidebar_symbol_count",
@@ -652,7 +652,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.file_type_symbol_count",
-      "equals": 7
+      "equals": 11
     },
     {
       "path": "application.file_explorer.chrome.icon_system.filled_symbol_count",
@@ -660,7 +660,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.outline_symbol_count",
-      "equals": 34
+      "equals": 38
     },
     {
       "path": "application.file_explorer.chrome.icon_system.hierarchical_symbol_count",
@@ -668,7 +668,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_symbol_count",
-      "equals": 35
+      "equals": 39
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_source_count",
@@ -676,11 +676,11 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_path_arc_symbol_count",
-      "equals": 13
+      "equals": 16
     },
     {
       "path": "application.file_explorer.chrome.icon_system.round_stroke_symbol_count",
-      "equals": 34
+      "equals": 38
     },
     {
       "path": "application.file_explorer.chrome.icon_system.interaction_phase_count",
@@ -1062,6 +1062,26 @@
           "token": "archive",
           "symbol": "archive",
           "semantic_reference_name": "archivebox"
+        },
+        {
+          "token": "audio",
+          "symbol": "audio_document",
+          "semantic_reference_name": "music.note"
+        },
+        {
+          "token": "code",
+          "symbol": "code_document",
+          "semantic_reference_name": "chevron.left.forwardslash.chevron.right"
+        },
+        {
+          "token": "spreadsheet",
+          "symbol": "spreadsheet_document",
+          "semantic_reference_name": "tablecells"
+        },
+        {
+          "token": "presentation",
+          "symbol": "presentation_document",
+          "semantic_reference_name": "rectangle.on.rectangle.angled"
         }
       ]
     },
@@ -1074,7 +1094,11 @@
         "doc.plaintext",
         "photo",
         "film",
-        "archivebox"
+        "archivebox",
+        "music.note",
+        "chevron.left.forwardslash.chevron.right",
+        "tablecells",
+        "rectangle.on.rectangle.angled"
       ]
     },
     {

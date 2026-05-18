@@ -16,7 +16,8 @@ through the same audited SVG catalog and macOS-style state recipes as the
 desktop Finder toolbar, including disabled navigation states, source
 attribution, and semantic labels for artifacts.
 Browse rows consume the shared `file_explorer_shared::entry_symbol` contract
-too: folders, PDF/text/image/movie/archive files, and generic documents render
+too: folders, PDF/text/image/movie/archive/audio/code/spreadsheet/presentation
+files, and generic documents render
 through the same audited file-type SVG symbols and Finder-style tint policy as
 the desktop icon grid. The startup artifact manifest verifies the pure
 entry-symbol summary so a mobile row/icon mismatch is visible from JSON before

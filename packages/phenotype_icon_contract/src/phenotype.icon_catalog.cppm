@@ -41,6 +41,10 @@ enum class Symbol : unsigned int {
     PdfDocument,
     TextDocument,
     Archive,
+    AudioDocument,
+    CodeDocument,
+    SpreadsheetDocument,
+    PresentationDocument,
 };
 
 enum class SymbolRole {
@@ -215,9 +219,9 @@ struct SymbolMetrics {
     float optical_y_offset = 0.0f;
 };
 
-inline constexpr unsigned int all_symbol_count = 35;
+inline constexpr unsigned int all_symbol_count = 39;
 inline constexpr unsigned int phenotype_owned_symbol_count = 4;
-inline constexpr unsigned int permissive_source_symbol_count = 31;
+inline constexpr unsigned int permissive_source_symbol_count = 35;
 inline constexpr unsigned int lucide_source_symbol_count =
     permissive_source_symbol_count;
 inline constexpr unsigned int apple_asset_symbol_count = 0;
@@ -225,8 +229,8 @@ inline constexpr unsigned int audited_symbol_source_count = all_symbol_count;
 inline constexpr unsigned int reference_source_count = 5;
 inline constexpr unsigned int sidebar_symbol_count = 11;
 inline constexpr unsigned int toolbar_symbol_count = 15;
-inline constexpr unsigned int file_type_symbol_count = 7;
-inline constexpr unsigned int outline_symbol_count = 34;
+inline constexpr unsigned int file_type_symbol_count = 11;
+inline constexpr unsigned int outline_symbol_count = 38;
 inline constexpr unsigned int filled_symbol_count = 1;
 inline constexpr unsigned int hierarchical_symbol_count = 17;
 inline constexpr unsigned int monochrome_symbol_count = all_symbol_count;
@@ -234,7 +238,7 @@ inline constexpr unsigned int regular_weight_symbol_count = all_symbol_count;
 inline constexpr unsigned int palette_symbol_count = 0;
 inline constexpr unsigned int multicolor_symbol_count = 0;
 inline constexpr unsigned int reference_symbol_count = all_symbol_count;
-inline constexpr unsigned int svg_path_arc_symbol_count = 13;
+inline constexpr unsigned int svg_path_arc_symbol_count = 16;
 inline constexpr unsigned int round_stroke_symbol_count = outline_symbol_count;
 inline constexpr unsigned int symbol_interaction_phase_count = 3;
 
@@ -275,6 +279,10 @@ inline auto name(Symbol symbol) noexcept -> std::string_view {
     case Symbol::PdfDocument:  return "pdf_document";
     case Symbol::TextDocument: return "text_document";
     case Symbol::Archive:      return "archive";
+    case Symbol::AudioDocument: return "audio_document";
+    case Symbol::CodeDocument: return "code_document";
+    case Symbol::SpreadsheetDocument: return "spreadsheet_document";
+    case Symbol::PresentationDocument: return "presentation_document";
     }
     return "unknown";
 }
@@ -609,6 +617,10 @@ inline auto symbol_at(unsigned int index) noexcept -> Symbol {
     case 32: return Symbol::PdfDocument;
     case 33: return Symbol::TextDocument;
     case 34: return Symbol::Archive;
+    case 35: return Symbol::AudioDocument;
+    case 36: return Symbol::CodeDocument;
+    case 37: return Symbol::SpreadsheetDocument;
+    case 38: return Symbol::PresentationDocument;
     }
     return Symbol::Document;
 }
@@ -660,6 +672,10 @@ inline auto file_type_symbol_at(unsigned int index) noexcept -> Symbol {
     case 4: return Symbol::Image;
     case 5: return Symbol::Movie;
     case 6: return Symbol::Archive;
+    case 7: return Symbol::AudioDocument;
+    case 8: return Symbol::CodeDocument;
+    case 9: return Symbol::SpreadsheetDocument;
+    case 10: return Symbol::PresentationDocument;
     }
     return Symbol::Document;
 }
@@ -712,6 +728,10 @@ inline auto semantic_reference_name(Symbol symbol) noexcept
     case Symbol::PdfDocument:  return "doc.richtext";
     case Symbol::TextDocument: return "doc.plaintext";
     case Symbol::Archive:      return "archivebox";
+    case Symbol::AudioDocument: return "music.note";
+    case Symbol::CodeDocument: return "chevron.left.forwardslash.chevron.right";
+    case Symbol::SpreadsheetDocument: return "tablecells";
+    case Symbol::PresentationDocument: return "rectangle.on.rectangle.angled";
     }
     return "doc";
 }
@@ -759,6 +779,10 @@ inline bool uses_lucide_source(Symbol symbol) noexcept {
     case Symbol::PdfDocument:
     case Symbol::TextDocument:
     case Symbol::Archive:
+    case Symbol::AudioDocument:
+    case Symbol::CodeDocument:
+    case Symbol::SpreadsheetDocument:
+    case Symbol::PresentationDocument:
         return true;
     default:
         return false;
@@ -799,6 +823,10 @@ inline auto permissive_source_icon_name(Symbol symbol) noexcept
     case Symbol::PdfDocument:  return "file-text";
     case Symbol::TextDocument: return "file-text";
     case Symbol::Archive:      return "file-archive";
+    case Symbol::AudioDocument: return "file-music";
+    case Symbol::CodeDocument: return "file-code";
+    case Symbol::SpreadsheetDocument: return "file-spreadsheet";
+    case Symbol::PresentationDocument: return "presentation";
     default:                   return name(symbol);
     }
 }
@@ -865,6 +893,14 @@ inline auto lucide_source_url(std::string_view icon_name) noexcept
         return "https://github.com/lucide-icons/lucide/blob/main/icons/file-text.svg";
     if (icon_name == "file-archive")
         return "https://github.com/lucide-icons/lucide/blob/main/icons/file-archive.svg";
+    if (icon_name == "file-music")
+        return "https://github.com/lucide-icons/lucide/blob/main/icons/file-music.svg";
+    if (icon_name == "file-code")
+        return "https://github.com/lucide-icons/lucide/blob/main/icons/file-code.svg";
+    if (icon_name == "file-spreadsheet")
+        return "https://github.com/lucide-icons/lucide/blob/main/icons/file-spreadsheet.svg";
+    if (icon_name == "presentation")
+        return "https://github.com/lucide-icons/lucide/blob/main/icons/presentation.svg";
     return "https://github.com/lucide-icons/lucide/tree/main/icons";
 }
 
@@ -963,6 +999,14 @@ inline auto lucide_svg_source(Symbol symbol) noexcept -> std::string_view {
         return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 9H8"/><path d="M16 13H8"/><path d="M16 17H8"/></svg>)SVG";
     case Symbol::Archive:
         return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M13.659 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v11.5"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 12v-1"/><path d="M8 18v-2"/><path d="M8 7V6"/><circle cx="8" cy="20" r="2"/></svg>)SVG";
+    case Symbol::AudioDocument:
+        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11.65 22H18a2 2 0 0 0 2-2V8a2.4 2.4 0 0 0-.706-1.706l-3.588-3.588A2.4 2.4 0 0 0 14 2H6a2 2 0 0 0-2 2v10.35"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 20v-7l3 1.474"/><circle cx="6" cy="20" r="2"/></svg>)SVG";
+    case Symbol::CodeDocument:
+        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M10 12.5 8 15l2 2.5"/><path d="m14 12.5 2 2.5-2 2.5"/></svg>)SVG";
+    case Symbol::SpreadsheetDocument:
+        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z"/><path d="M14 2v5a1 1 0 0 0 1 1h5"/><path d="M8 13h2"/><path d="M14 13h2"/><path d="M8 17h2"/><path d="M14 17h2"/></svg>)SVG";
+    case Symbol::PresentationDocument:
+        return R"SVG(<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 3h20"/><path d="M21 3v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V3"/><path d="m7 21 5-5 5 5"/></svg>)SVG";
     default:
         return {};
     }
@@ -1082,6 +1126,10 @@ inline auto symbol_layer_count(Symbol symbol) noexcept -> unsigned int {
     case Symbol::PdfDocument: return 5;
     case Symbol::TextDocument: return 5;
     case Symbol::Archive:     return 6;
+    case Symbol::AudioDocument: return 4;
+    case Symbol::CodeDocument: return 4;
+    case Symbol::SpreadsheetDocument: return 6;
+    case Symbol::PresentationDocument: return 3;
     case Symbol::Sidebar:     return 2;
     case Symbol::SortGroup:   return 9;
     case Symbol::AirDrop:     return 5;
@@ -1127,7 +1175,10 @@ inline bool uses_svg_path_arcs(Symbol symbol) noexcept {
         || symbol == Symbol::NewDocument
         || symbol == Symbol::PdfDocument
         || symbol == Symbol::TextDocument
-        || symbol == Symbol::Archive;
+        || symbol == Symbol::Archive
+        || symbol == Symbol::AudioDocument
+        || symbol == Symbol::CodeDocument
+        || symbol == Symbol::SpreadsheetDocument;
 }
 
 inline auto rendering_capabilities(Symbol symbol) noexcept
@@ -1157,6 +1208,10 @@ inline auto descriptor(Symbol symbol) noexcept -> SymbolDescriptor {
     case Symbol::PdfDocument:
     case Symbol::TextDocument:
     case Symbol::Archive:
+    case Symbol::AudioDocument:
+    case Symbol::CodeDocument:
+    case Symbol::SpreadsheetDocument:
+    case Symbol::PresentationDocument:
         role = SymbolRole::FileType;
         break;
     case Symbol::Home:
@@ -1501,6 +1556,14 @@ inline auto macos_file_type_color(Symbol symbol) noexcept -> SymbolColor {
         return {48, 176, 199, 255};
     case Symbol::Movie:
         return {88, 86, 214, 255};
+    case Symbol::AudioDocument:
+        return {175, 82, 222, 255};
+    case Symbol::CodeDocument:
+        return {52, 120, 246, 255};
+    case Symbol::SpreadsheetDocument:
+        return {52, 199, 89, 255};
+    case Symbol::PresentationDocument:
+        return {255, 149, 0, 255};
     case Symbol::PdfDocument:
         return {255, 69, 58, 255};
     case Symbol::TextDocument:

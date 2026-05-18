@@ -114,7 +114,8 @@ The desktop sidebar additionally exposes the pure `token -> symbol -> semantic
 reference` table used by the renderer (`recents -> recents -> clock`,
 `download -> download -> arrow.down.circle`, and so on), without depending on
 platform icon fonts or bundled Apple assets. File entries use the same pure
-mapping for Finder-like fallbacks: PDF, text, image, movie, archive, document,
+mapping for Finder-like fallbacks: PDF, text, image, movie, archive, audio,
+code, spreadsheet, presentation, document,
 and folder entries resolve to audited SVG symbols and semantic reference names
 before any native renderer sees them.
 When file-type or toolbar glyphs need more realism, prefer permissive SVG

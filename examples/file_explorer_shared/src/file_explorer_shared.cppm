@@ -609,7 +609,7 @@ inline constexpr std::array<ExplorerSidebarSymbol, 10>
         {"trash", icon_catalog::Symbol::Trash},
     }};
 
-inline constexpr std::array<ExplorerSidebarSymbol, 7>
+inline constexpr std::array<ExplorerSidebarSymbol, 11>
     k_file_type_symbols{{
         {"folder", icon_catalog::Symbol::Folder},
         {"document", icon_catalog::Symbol::Document},
@@ -618,6 +618,10 @@ inline constexpr std::array<ExplorerSidebarSymbol, 7>
         {"image", icon_catalog::Symbol::Image},
         {"movie", icon_catalog::Symbol::Movie},
         {"archive", icon_catalog::Symbol::Archive},
+        {"audio", icon_catalog::Symbol::AudioDocument},
+        {"code", icon_catalog::Symbol::CodeDocument},
+        {"spreadsheet", icon_catalog::Symbol::SpreadsheetDocument},
+        {"presentation", icon_catalog::Symbol::PresentationDocument},
     }};
 
 inline auto desktop_sidebar_symbol_contract() noexcept
@@ -1885,6 +1889,18 @@ inline fs::path ensure_demo_tree(std::string_view profile) {
         root / "Archive.zip",
         "ZIP placeholder rendered as a text-style fallback thumbnail.\n");
     write_file_if_missing(
+        root / "Expense Matrix.csv",
+        "category,amount\nDesign,12\nEngineering,24\nQA,8\n");
+    write_file_if_missing(
+        root / "Glass Theme Notes.cpp",
+        "import phenotype;\n\nint main() {\n    return 0;\n}\n");
+    write_file_if_missing(
+        root / "Design Review.key",
+        "Presentation placeholder for Finder-like file-type glyph coverage.\n");
+    write_file_if_missing(
+        root / "Voice Memo.m4a",
+        "Audio placeholder for Finder-like file-type glyph coverage.\n");
+    write_file_if_missing(
         root / "Documents" / "Project Notes.txt",
         "Finder-like desktop layout\n"
         "- Sidebar locations\n"
@@ -1925,6 +1941,17 @@ inline std::string entry_kind_label(Entry const& entry) {
         return "Movie";
     if (ext == "zip")
         return "Archive";
+    if (ext == "mp3" || ext == "m4a" || ext == "wav" || ext == "aac"
+        || ext == "flac")
+        return "Audio";
+    if (ext == "cpp" || ext == "cc" || ext == "cxx" || ext == "h"
+        || ext == "hpp" || ext == "js" || ext == "ts" || ext == "json"
+        || ext == "toml")
+        return "Code";
+    if (ext == "csv" || ext == "xls" || ext == "xlsx" || ext == "numbers")
+        return "Spreadsheet";
+    if (ext == "key" || ext == "ppt" || ext == "pptx")
+        return "Presentation";
     if (ext.empty())
         return "Document";
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) {
@@ -1947,6 +1974,17 @@ inline icon_catalog::Symbol entry_symbol(Entry const& entry) {
         return icon_catalog::Symbol::TextDocument;
     if (ext == "zip")
         return icon_catalog::Symbol::Archive;
+    if (ext == "mp3" || ext == "m4a" || ext == "wav" || ext == "aac"
+        || ext == "flac")
+        return icon_catalog::Symbol::AudioDocument;
+    if (ext == "cpp" || ext == "cc" || ext == "cxx" || ext == "h"
+        || ext == "hpp" || ext == "js" || ext == "ts" || ext == "json"
+        || ext == "toml")
+        return icon_catalog::Symbol::CodeDocument;
+    if (ext == "csv" || ext == "xls" || ext == "xlsx" || ext == "numbers")
+        return icon_catalog::Symbol::SpreadsheetDocument;
+    if (ext == "key" || ext == "ppt" || ext == "pptx")
+        return icon_catalog::Symbol::PresentationDocument;
     return icon_catalog::Symbol::Document;
 }
 
@@ -4224,6 +4262,14 @@ inline int finder_recents_rank(std::string_view name) {
         return 20;
     if (name == "资产证明.pdf")
         return 21;
+    if (name == "Voice Memo.m4a")
+        return 22;
+    if (name == "Glass Theme Notes.cpp")
+        return 23;
+    if (name == "Expense Matrix.csv")
+        return 24;
+    if (name == "Design Review.key")
+        return 25;
     return 1000;
 }
 

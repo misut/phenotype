@@ -313,7 +313,8 @@ probe.
 The file explorer debug payload also exposes file-type symbol tokens, a shared
 `entry_symbol_summary`, and per-entry resolved `symbol`,
 `symbol_semantic_reference_name`, and file-type presentation fields, so PDF,
-text, archive, image, movie, folder, and generic document fallbacks can be
+text, archive, image, movie, audio, code, spreadsheet, presentation, folder,
+and generic document fallbacks can be
 verified without relying on screenshot-only icon recognition.
 
 ## Widget coverage

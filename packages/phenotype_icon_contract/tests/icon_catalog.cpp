@@ -104,16 +104,16 @@ int main() {
            != std::string_view::npos);
     assert(icons::hit_target_policy().find("activation minimum=44pt")
            != std::string_view::npos);
-    assert(icons::all_symbol_count == 35);
+    assert(icons::all_symbol_count == 39);
     assert(icons::phenotype_owned_symbol_count == 4);
-    assert(icons::permissive_source_symbol_count == 31);
-    assert(icons::lucide_source_symbol_count == 31);
+    assert(icons::permissive_source_symbol_count == 35);
+    assert(icons::lucide_source_symbol_count == 35);
     assert(icons::apple_asset_symbol_count == 0);
     assert(icons::audited_symbol_source_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);
-    assert(icons::file_type_symbol_count == 7);
-    assert(icons::outline_symbol_count == 34);
+    assert(icons::file_type_symbol_count == 11);
+    assert(icons::outline_symbol_count == 38);
     assert(icons::filled_symbol_count == 1);
     assert(icons::hierarchical_symbol_count == 17);
     assert(icons::monochrome_symbol_count == icons::all_symbol_count);
@@ -121,7 +121,7 @@ int main() {
     assert(icons::palette_symbol_count == 0);
     assert(icons::multicolor_symbol_count == 0);
     assert(icons::reference_symbol_count == icons::all_symbol_count);
-    assert(icons::svg_path_arc_symbol_count == 13);
+    assert(icons::svg_path_arc_symbol_count == 16);
     assert(icons::round_stroke_symbol_count == icons::outline_symbol_count);
 
     unsigned int outline_count = 0;
@@ -235,6 +235,16 @@ int main() {
            == "folder");
     assert(icons::source_attribution(icons::Symbol::Movie).icon_name
            == "clapperboard");
+    assert(icons::source_attribution(icons::Symbol::AudioDocument).icon_name
+           == "file-music");
+    assert(icons::source_attribution(icons::Symbol::CodeDocument).icon_name
+           == "file-code");
+    assert(icons::source_attribution(
+               icons::Symbol::SpreadsheetDocument).icon_name
+           == "file-spreadsheet");
+    assert(icons::source_attribution(
+               icons::Symbol::PresentationDocument).icon_name
+           == "presentation");
     assert(icons::source_attribution(icons::Symbol::Search).family
            == "Lucide");
     assert(icons::source_attribution(icons::Symbol::Search).icon_name
@@ -244,6 +254,12 @@ int main() {
     assert(icons::file_type_symbol_at(0) == icons::Symbol::Folder);
     assert(icons::file_type_symbol_at(2) == icons::Symbol::PdfDocument);
     assert(icons::file_type_symbol_at(6) == icons::Symbol::Archive);
+    assert(icons::file_type_symbol_at(7) == icons::Symbol::AudioDocument);
+    assert(icons::file_type_symbol_at(8) == icons::Symbol::CodeDocument);
+    assert(icons::file_type_symbol_at(9)
+           == icons::Symbol::SpreadsheetDocument);
+    assert(icons::file_type_symbol_at(10)
+           == icons::Symbol::PresentationDocument);
     assert(icons::interaction_tone_policy() == "macos_finder_interaction_tones");
     assert(icons::macos_interaction_tone(
                icons::SymbolPresentationRole::Sidebar,
@@ -318,12 +334,18 @@ int main() {
         icons::macos_file_type_color(icons::Symbol::PdfDocument);
     auto const archive_color =
         icons::macos_file_type_color(icons::Symbol::Archive);
+    auto const spreadsheet_color =
+        icons::macos_file_type_color(icons::Symbol::SpreadsheetDocument);
+    auto const presentation_color =
+        icons::macos_file_type_color(icons::Symbol::PresentationDocument);
     auto const document_color =
         icons::macos_file_type_color(icons::Symbol::Document);
     assert(folder_color.b > folder_color.r);
     assert(image_color.g > document_color.g);
     assert(pdf_color.r > pdf_color.g);
     assert(archive_color.r > archive_color.b);
+    assert(spreadsheet_color.g > spreadsheet_color.r);
+    assert(presentation_color.r > presentation_color.b);
     assert(document_color.r == document_color.g);
     assert(document_color.a == 255);
     assert(icons::symbol_presentation_role_name(
