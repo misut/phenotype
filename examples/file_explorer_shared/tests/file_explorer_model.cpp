@@ -486,6 +486,7 @@ duplicate
     demo::Entry code_entry{.name = "Glass Theme Notes.cpp"};
     demo::Entry sheet_entry{.name = "Expense Matrix.csv"};
     demo::Entry presentation_entry{.name = "Design Review.key"};
+    demo::Entry svg_entry{.name = "Glass Symbol.svg"};
     assert(demo::entry_symbol_name(pdf_entry) == "pdf_document");
     assert(demo::entry_symbol_semantic_reference_name(pdf_entry)
            == "doc.richtext");
@@ -508,6 +509,10 @@ duplicate
            == "presentation_document");
     assert(demo::entry_symbol_semantic_reference_name(presentation_entry)
            == "rectangle.on.rectangle.angled");
+    assert(demo::entry_kind_label(svg_entry) == "SVG Image");
+    assert(demo::entry_symbol_name(svg_entry) == "image");
+    assert(demo::entry_symbol_semantic_reference_name(svg_entry)
+           == "photo");
     assert(chrome.icon_default_stroke_width == 2.0f);
     assert(chrome.icon_secondary_opacity == 1.0f);
     assert(chrome.icon_toolbar_activation_hit_target_size == 44.0f);
@@ -910,6 +915,9 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"uses_external_previews\":false")
            != std::string::npos);
+    assert(debug_text.find(
+        "\"svg_policy\":\"rounded_svg_vector_preview_with_source_safe_svg_badge\"")
+        != std::string::npos);
     assert(debug_text.find("\"icon_grid_label_font_size\"") != std::string::npos);
     assert(debug_text.find(
         "\"icon_grid_label_policy\":\"finder_two_line_middle_ellipsis_preserve_suffix\"")

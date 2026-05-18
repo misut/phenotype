@@ -244,7 +244,7 @@ pitch, thumbnail canvas size, label size, gap, visible rows, and visible
 capacity. Column view also records location-pane row count, row height, and
 icon size so Finder-style navigation rows can be checked from the artifact
 without reading pixels by eye. Entry samples include the resolved
-`symbol` and `symbol_semantic_reference_name`, so PDF/text/archive/image/movie/audio/code/spreadsheet/presentation
+`symbol` and `symbol_semantic_reference_name`, so PDF/text/archive/image/SVG image/movie/audio/code/spreadsheet/presentation
 fallback mistakes can be diagnosed from JSON before inspecting the screenshot.
 The shared payload also emits `entry_symbol_summary`, which records that the
 visible desktop or mobile entries were mapped by
@@ -277,6 +277,11 @@ plus per-entry file-type symbol names and `entry_symbol_summary`; the
 same output includes the default glass theme contract under `theme_system`. The
 verifier can assert those paths with `require_debug_details`, which keeps
 Finder workflow failures debuggable without relying on a screenshot guess.
+The desktop thumbnail contract is adjacent to those metrics under
+`chrome.thumbnail_system`: PDF pages, raster image strips, SVG vector previews,
+movie strips, and shadow policy are all named separately, and
+`uses_external_previews=false` confirms that no native Quick Look or platform
+icon-service query is needed for CI artifacts.
 The native runtime window payload also reports `visibility_state` and
 `ready_for_user_interaction`; when a Dock icon exists without a usable window,
 the failure should point at `debug.platform_runtime.details.window.*` before

@@ -33,6 +33,8 @@
     "契約書_サンプル.pdf",
     "资产证明.pdf",
     "Application Form 2.pdf",
+    "line_4.png",
+    "Glass Symbol.svg",
     "Screen Recording 2025-11-04.mov",
     "Screen Recording 2025-11-07.mov",
     "Archive.zip",
@@ -348,7 +350,7 @@
     },
     {
       "path": "application.file_explorer.counts.files",
-      "equals": 26
+      "equals": 28
     },
     {
       "path": "application.file_explorer.counts.folders",
@@ -680,7 +682,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_source_count",
-      "equals": 5
+      "equals": 6
     },
     {
       "path": "application.file_explorer.chrome.icon_system.svg_path_arc_symbol_count",
@@ -1196,6 +1198,10 @@
     {
       "path": "application.file_explorer.chrome.thumbnail_system.image_policy",
       "equals": "rounded_screenshot_strip_with_layered_blurred_content"
+    },
+    {
+      "path": "application.file_explorer.chrome.thumbnail_system.svg_policy",
+      "equals": "rounded_svg_vector_preview_with_source_safe_svg_badge"
     },
     {
       "path": "application.file_explorer.chrome.thumbnail_system.video_policy",

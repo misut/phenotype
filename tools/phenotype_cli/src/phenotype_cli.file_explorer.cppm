@@ -6,6 +6,7 @@ import file_explorer_shared;
 import json;
 import phenotype.icon_catalog;
 import phenotype_cli.common;
+import phenotype_cli.file_explorer_json;
 import phenotype_cli.icons;
 import phenotype_cli.package;
 import phenotype.resources;
@@ -25,43 +26,6 @@ using phenotype_cli::common::print_error;
 using phenotype_cli::common::read_text_file;
 using phenotype_cli::common::resource_diagnostics_json;
 using namespace phenotype_cli::icons;
-
-export auto operation_receipt_json(
-        file_explorer_demo::OperationReceipt const& receipt) -> std::string {
-    auto const& plan = receipt.plan;
-    auto plan_json = std::format(
-        "{{\"kind\":{},\"display_name\":{},\"source\":{},"
-        "\"destination\":{},\"executable\":{},\"sandboxed\":{},"
-        "\"mutates_filesystem\":{},\"reads_file\":{},\"reads_directory\":{},"
-        "\"writes_file\":{},"
-        "\"creates_directory\":{},\"deletes_file\":{},"
-        "\"deletes_directory\":{},\"moves_to_trash\":{},"
-        "\"permanent_delete\":{},\"fallback_reason\":{}}}",
-        json_string(plan.kind),
-        json_string(plan.display_name),
-        json_string(plan.source),
-        json_string(plan.destination),
-        plan.executable ? "true" : "false",
-        plan.sandboxed ? "true" : "false",
-        plan.mutates_filesystem ? "true" : "false",
-        plan.reads_file ? "true" : "false",
-        plan.reads_directory ? "true" : "false",
-        plan.writes_file ? "true" : "false",
-        plan.creates_directory ? "true" : "false",
-        plan.deletes_file ? "true" : "false",
-        plan.deletes_directory ? "true" : "false",
-        plan.moves_to_trash ? "true" : "false",
-        plan.permanent_delete ? "true" : "false",
-        json_string(plan.fallback_reason));
-    return std::format(
-        "{{\"kind\":{},\"target\":{},\"ok\":{},\"detail\":{},"
-        "\"plan\":{}}}",
-        json_string(receipt.kind),
-        json_string(receipt.target),
-        receipt.ok ? "true" : "false",
-        json_string(receipt.detail),
-        plan_json);
-}
 
 export auto explorer_input_json(file_explorer_demo::ExplorerInput const& input)
     -> std::string {
@@ -331,7 +295,8 @@ export auto explorer_chrome_json(
     auto const thumbnail_system = std::format(
         "{{\"visual_policy\":{},\"asset_policy\":{},"
         "\"pdf_policy\":{},\"image_policy\":{},\"video_policy\":{},"
-        "\"shadow_policy\":{},\"uses_external_previews\":{},"
+        "\"svg_policy\":{},\"shadow_policy\":{},"
+        "\"uses_external_previews\":{},"
         "\"pdf_page_width\":{},\"pdf_page_height\":{},"
         "\"pdf_page_radius\":{},\"pdf_fold_size\":{},"
         "\"media_preview_width\":{},\"media_preview_height\":{},"
@@ -342,6 +307,7 @@ export auto explorer_chrome_json(
         json_string(chrome.thumbnail_pdf_policy),
         json_string(chrome.thumbnail_image_policy),
         json_string(chrome.thumbnail_video_policy),
+        json_string(chrome.thumbnail_svg_policy),
         json_string(chrome.thumbnail_shadow_policy),
         chrome.thumbnail_uses_external_previews ? "true" : "false",
         chrome.thumbnail_pdf_page_width,
