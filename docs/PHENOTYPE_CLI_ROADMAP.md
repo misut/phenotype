@@ -168,6 +168,7 @@ contract work cheap while still exercising the command JSON surfaces that future
 automation depends on.
 The executable source is being split by command ownership as those surfaces
 stabilize: `phenotype_cli.common` owns shared JSON/check helpers,
+`phenotype_cli.commands` owns the `cppx.cli` command tree and option metadata,
 `phenotype_cli.contracts` owns the pure theme/IO contract commands,
 `phenotype_cli.file_explorer` owns file explorer observation, chrome/native
 window control, and drive JSON, and
