@@ -15,6 +15,15 @@ turning `main.cpp` into every subsystem at once:
   temporary artifact directories, example build/run process execution, and
   process-result JSON helpers. These are CLI edge adapters and should stay out
   of pure package, icon, theme, and file explorer model modules.
+- `phenotype_cli.command_tree` owns machine-readable command tree emission for
+  `phenotype commands --json`, keeping recursive command metadata formatting
+  away from command dispatch.
+- `phenotype_cli.doctor` owns repository-local health checks and the
+  legacy-tool-to-CLI migration matrix for `phenotype doctor`.
+- `phenotype_cli.artifacts` owns artifact summary, uv-managed verifier
+  invocation, snapshot/material observation, and LLM-actionable
+  likely-layer/suggestion reporting for `phenotype artifact ...` and
+  `phenotype observe`.
 - `phenotype_cli.contracts` owns pure theme and IO contract checks/JSON for
   `phenotype theme contract` and `phenotype io contract`.
 - `phenotype_cli.file_explorer` owns file explorer drive JSON, chrome/native
@@ -36,8 +45,8 @@ turning `main.cpp` into every subsystem at once:
   checks, package bundling, bundle integrity verification, and macOS app bundle
   staging helpers. It keeps filesystem/package edge IO away from command
   dispatch while preserving the pure `phenotype.resources` contract boundary.
-- `phenotype_cli.app` owns the remaining high-level command parsing, Android
-  script dispatch, and routing to focused modules.
+- `phenotype_cli.app` owns the remaining high-level command parsing, example
+  run orchestration, Android script dispatch, and routing to focused modules.
 - `main.cpp` is only the executable entry point and should stay a tiny forwarder
   into `phenotype_cli.app`.
 
