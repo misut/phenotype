@@ -22,22 +22,6 @@ namespace icon_catalog = phenotype::icon_catalog;
 namespace svg_contract = phenotype::svg_contract;
 using namespace phenotype_cli::common;
 
-auto path_exists(fs::path const& path) -> bool {
-    auto ec = std::error_code{};
-    return fs::exists(path, ec);
-}
-
-auto path_is_directory(fs::path const& path) -> bool {
-    auto ec = std::error_code{};
-    return fs::is_directory(path, ec);
-}
-
-auto file_size_or_zero(fs::path const& path) -> std::uintmax_t {
-    auto ec = std::error_code{};
-    auto size = fs::file_size(path, ec);
-    return ec ? 0 : size;
-}
-
 auto sha256_file_or_error(fs::path const& path)
     -> std::expected<std::string, std::string> {
     auto digest = cppx::checksum::system::sha256_file(path);
@@ -49,130 +33,9 @@ auto sha256_file_or_error(fs::path const& path)
         digest.error().message)};
 }
 
-auto safe_relative_path(fs::path const& path) -> bool {
-    if (path.empty() || path.is_absolute())
-        return false;
-    for (auto const& part : path.lexically_normal()) {
-        if (part == "..")
-            return false;
-    }
-    return true;
-}
-
-auto path_stays_under_root(fs::path const& root,
-                           fs::path const& path,
-                           std::string& error) -> bool {
-    auto ec = std::error_code{};
-    auto canonical_root = fs::weakly_canonical(root, ec);
-    if (ec) {
-        error = ec.message();
-        return false;
-    }
-    auto canonical_path = fs::weakly_canonical(path, ec);
-    if (ec) {
-        error = ec.message();
-        return false;
-    }
-
-    auto relative = canonical_path.lexically_relative(canonical_root);
-    if (relative.empty()) {
-        error = "source path must stay under the package root";
-        return false;
-    }
-    for (auto const& part : relative) {
-        if (part == "..") {
-            error = "source path must stay under the package root";
-            return false;
-        }
-    }
-    return true;
-}
-
-auto count_regular_files(fs::path const& root) -> std::size_t {
-    if (!path_is_directory(root))
-        return 0;
-
-    auto count = std::size_t{0};
-    auto ec = std::error_code{};
-    auto options = fs::directory_options::skip_permission_denied;
-    for (auto it = fs::recursive_directory_iterator(root, options, ec);
-         !ec && it != fs::recursive_directory_iterator{};
-         it.increment(ec)) {
-        if (it->is_regular_file(ec))
-            ++count;
-    }
-    return count;
-}
-
 auto parse_locale_strings(fs::path const& path)
     -> std::vector<phenotype::LocaleString> {
     return phenotype::parse_resource_locale_strings(read_text_file(path));
-}
-
-auto json_object_member(json::Object const& object, std::string_view key)
-    -> json::Value const* {
-    auto found = object.find(std::string{key});
-    return found == object.end() ? nullptr : &found->second;
-}
-
-auto json_at(json::Value const& value,
-             std::initializer_list<std::string_view> path)
-    -> json::Value const* {
-    auto current = &value;
-    for (auto key : path) {
-        if (!current || !current->is_object())
-            return nullptr;
-        current = json_object_member(current->as_object(), key);
-    }
-    return current;
-}
-
-auto json_array_at(json::Value const& value,
-                   std::initializer_list<std::string_view> path)
-    -> json::Array const* {
-    auto const* found = json_at(value, path);
-    return found && found->is_array() ? &found->as_array() : nullptr;
-}
-
-auto json_string_at(json::Value const& value,
-                    std::initializer_list<std::string_view> path)
-    -> std::optional<std::string> {
-    auto const* found = json_at(value, path);
-    if (!found || !found->is_string())
-        return std::nullopt;
-    return found->as_string();
-}
-
-auto json_integer_at(json::Value const& value,
-                     std::initializer_list<std::string_view> path)
-    -> std::optional<std::int64_t> {
-    auto const* found = json_at(value, path);
-    if (!found || !found->is_number())
-        return std::nullopt;
-    return found->as_integer();
-}
-
-auto json_bool_at(json::Value const& value,
-                  std::initializer_list<std::string_view> path)
-    -> std::optional<bool> {
-    auto const* found = json_at(value, path);
-    if (!found || !found->is_bool())
-        return std::nullopt;
-    return found->as_bool();
-}
-
-auto output_tail(std::string_view text, std::size_t max_bytes) -> std::string_view {
-    if (text.size() <= max_bytes)
-        return text;
-    return text.substr(text.size() - max_bytes);
-}
-
-auto executable_filename(std::string const& package_name) -> std::string {
-#if defined(_WIN32)
-    return package_name + ".exe";
-#else
-    return package_name;
-#endif
 }
 
 auto first_positional_or_error(cppx::cli::Invocation const& invocation,
@@ -1802,8 +1665,6 @@ auto macos_app_info_plist(PackageSummary const& package,
         xml_escape(package.version));
 }
 
-auto executable_filename(std::string const& package_name) -> std::string;
-
 auto macos_app_launcher_script(std::string_view binary_name) -> std::string {
     return std::format(
         "#!/bin/sh\n"
@@ -1826,8 +1687,6 @@ auto macos_app_icon_file_name(PackageSummary const& package)
         return {};
     return package.entry + ".icns";
 }
-
-auto output_tail(std::string_view text, std::size_t max_bytes) -> std::string_view;
 
 auto process_failure_message(std::string_view tool,
                              cppx::process::CapturedProcessResult const& result)

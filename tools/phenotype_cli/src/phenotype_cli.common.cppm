@@ -2,6 +2,7 @@ export module phenotype_cli.common;
 
 import cppx.cli;
 import cppx.terminal;
+import json;
 import phenotype.resources;
 import std;
 
@@ -59,6 +60,154 @@ auto read_text_file(std::filesystem::path const& path) -> std::string {
     return std::string{
         std::istreambuf_iterator<char>{input},
         std::istreambuf_iterator<char>{}};
+}
+
+auto path_exists(std::filesystem::path const& path) -> bool {
+    auto ec = std::error_code{};
+    return std::filesystem::exists(path, ec);
+}
+
+auto path_is_directory(std::filesystem::path const& path) -> bool {
+    auto ec = std::error_code{};
+    return std::filesystem::is_directory(path, ec);
+}
+
+auto file_size_or_zero(std::filesystem::path const& path) -> std::uintmax_t {
+    auto ec = std::error_code{};
+    auto size = std::filesystem::file_size(path, ec);
+    return ec ? 0 : size;
+}
+
+auto safe_relative_path(std::filesystem::path const& path) -> bool {
+    if (path.empty() || path.is_absolute())
+        return false;
+    for (auto const& part : path.lexically_normal()) {
+        if (part == "..")
+            return false;
+    }
+    return true;
+}
+
+auto path_stays_under_root(std::filesystem::path const& root,
+                           std::filesystem::path const& path,
+                           std::string& error) -> bool {
+    auto ec = std::error_code{};
+    auto canonical_root = std::filesystem::weakly_canonical(root, ec);
+    if (ec) {
+        error = ec.message();
+        return false;
+    }
+    auto canonical_path = std::filesystem::weakly_canonical(path, ec);
+    if (ec) {
+        error = ec.message();
+        return false;
+    }
+
+    auto relative = canonical_path.lexically_relative(canonical_root);
+    if (relative.empty()) {
+        error = "source path must stay under the package root";
+        return false;
+    }
+    for (auto const& part : relative) {
+        if (part == "..") {
+            error = "source path must stay under the package root";
+            return false;
+        }
+    }
+    return true;
+}
+
+auto count_regular_files(std::filesystem::path const& root) -> std::size_t {
+    if (!path_is_directory(root))
+        return 0;
+
+    auto count = std::size_t{0};
+    auto ec = std::error_code{};
+    auto options = std::filesystem::directory_options::skip_permission_denied;
+    for (auto it = std::filesystem::recursive_directory_iterator(
+             root,
+             options,
+             ec);
+         !ec && it != std::filesystem::recursive_directory_iterator{};
+         it.increment(ec)) {
+        if (it->is_regular_file(ec))
+            ++count;
+    }
+    return count;
+}
+
+auto output_tail(std::string_view text, std::size_t max_bytes = 16384)
+        -> std::string_view {
+    if (text.size() <= max_bytes)
+        return text;
+    return text.substr(text.size() - max_bytes);
+}
+
+auto executable_filename(std::string const& package_name) -> std::string {
+#if defined(_WIN32)
+    return package_name + ".exe";
+#else
+    return package_name;
+#endif
+}
+
+auto json_object_member(json::Object const& object, std::string_view key)
+    -> json::Value const* {
+    auto found = object.find(std::string{key});
+    return found == object.end() ? nullptr : &found->second;
+}
+
+auto json_at(json::Value const& value,
+             std::initializer_list<std::string_view> path)
+    -> json::Value const* {
+    auto current = &value;
+    for (auto key : path) {
+        if (!current || !current->is_object())
+            return nullptr;
+        current = json_object_member(current->as_object(), key);
+    }
+    return current;
+}
+
+auto json_array_at(json::Value const& value,
+                   std::initializer_list<std::string_view> path)
+    -> json::Array const* {
+    auto const* found = json_at(value, path);
+    return found && found->is_array() ? &found->as_array() : nullptr;
+}
+
+auto json_object_at(json::Value const& value,
+                    std::initializer_list<std::string_view> path)
+    -> json::Object const* {
+    auto const* found = json_at(value, path);
+    return found && found->is_object() ? &found->as_object() : nullptr;
+}
+
+auto json_string_at(json::Value const& value,
+                    std::initializer_list<std::string_view> path)
+    -> std::optional<std::string> {
+    auto const* found = json_at(value, path);
+    if (!found || !found->is_string())
+        return std::nullopt;
+    return found->as_string();
+}
+
+auto json_integer_at(json::Value const& value,
+                     std::initializer_list<std::string_view> path)
+    -> std::optional<std::int64_t> {
+    auto const* found = json_at(value, path);
+    if (!found || !found->is_number())
+        return std::nullopt;
+    return found->as_integer();
+}
+
+auto json_bool_at(json::Value const& value,
+                  std::initializer_list<std::string_view> path)
+    -> std::optional<bool> {
+    auto const* found = json_at(value, path);
+    if (!found || !found->is_bool())
+        return std::nullopt;
+    return found->as_bool();
 }
 
 auto write_text_file(std::filesystem::path const& path,

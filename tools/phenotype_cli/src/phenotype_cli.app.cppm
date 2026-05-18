@@ -138,45 +138,6 @@ struct ExampleRunSummary {
     std::string error;
 };
 
-auto safe_relative_path(fs::path const& path) -> bool {
-    if (path.empty() || path.is_absolute())
-        return false;
-    for (auto const& part : path.lexically_normal()) {
-        if (part == "..")
-            return false;
-    }
-    return true;
-}
-
-auto path_stays_under_root(fs::path const& root,
-                           fs::path const& path,
-                           std::string& error) -> bool {
-    auto ec = std::error_code{};
-    auto canonical_root = fs::weakly_canonical(root, ec);
-    if (ec) {
-        error = ec.message();
-        return false;
-    }
-    auto canonical_path = fs::weakly_canonical(path, ec);
-    if (ec) {
-        error = ec.message();
-        return false;
-    }
-
-    auto relative = canonical_path.lexically_relative(canonical_root);
-    if (relative.empty()) {
-        error = "source path must stay under the package root";
-        return false;
-    }
-    for (auto const& part : relative) {
-        if (part == "..") {
-            error = "source path must stay under the package root";
-            return false;
-        }
-    }
-    return true;
-}
-
 auto join_path(fs::path const& base, fs::path const& child) -> std::string {
     auto ec = std::error_code{};
     return path_string(fs::relative(base / child, base, ec));
@@ -420,65 +381,6 @@ auto artifact_json(ArtifactSummary const& summary,
         summary.platform_directory ? "true" : "false",
         summary.platform_file_count,
         checks_json(checks));
-}
-
-auto json_object_member(json::Object const& object, std::string_view key)
-    -> json::Value const* {
-    auto found = object.find(std::string{key});
-    return found == object.end() ? nullptr : &found->second;
-}
-
-auto json_at(json::Value const& value,
-             std::initializer_list<std::string_view> path)
-    -> json::Value const* {
-    auto const* current = &value;
-    for (auto key : path) {
-        if (!current || !current->is_object())
-            return nullptr;
-        current = json_object_member(current->as_object(), key);
-    }
-    return current;
-}
-
-auto json_object_at(json::Value const& value,
-                    std::initializer_list<std::string_view> path)
-    -> json::Object const* {
-    auto const* found = json_at(value, path);
-    return found && found->is_object() ? &found->as_object() : nullptr;
-}
-
-auto json_array_at(json::Value const& value,
-                   std::initializer_list<std::string_view> path)
-    -> json::Array const* {
-    auto const* found = json_at(value, path);
-    return found && found->is_array() ? &found->as_array() : nullptr;
-}
-
-auto json_string_at(json::Value const& value,
-                    std::initializer_list<std::string_view> path)
-    -> std::optional<std::string> {
-    auto const* found = json_at(value, path);
-    if (!found || !found->is_string())
-        return std::nullopt;
-    return found->as_string();
-}
-
-auto json_integer_at(json::Value const& value,
-                     std::initializer_list<std::string_view> path)
-    -> std::optional<std::int64_t> {
-    auto const* found = json_at(value, path);
-    if (!found || !found->is_number())
-        return std::nullopt;
-    return found->as_integer();
-}
-
-auto json_bool_at(json::Value const& value,
-                  std::initializer_list<std::string_view> path)
-    -> std::optional<bool> {
-    auto const* found = json_at(value, path);
-    if (!found || !found->is_bool())
-        return std::nullopt;
-    return found->as_bool();
 }
 
 void append_unique(std::vector<std::string>& values, std::string value) {

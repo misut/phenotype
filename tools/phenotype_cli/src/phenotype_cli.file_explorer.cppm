@@ -283,13 +283,6 @@ export struct ExplorerDriveResources {
     std::vector<Check> checks;
 };
 
-auto output_tail(std::string_view text, std::size_t max_bytes)
-    -> std::string_view {
-    if (text.size() <= max_bytes)
-        return text;
-    return text.substr(text.size() - max_bytes);
-}
-
 export auto explorer_chrome_json(
         file_explorer_demo::ExplorerChromeMetrics const& chrome) -> std::string {
     auto const thumbnail_system = std::format(
