@@ -4,6 +4,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <limits>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -1297,6 +1298,14 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(sanitized_quality.max_blur_radius == material_max_blur_radius);
     assert(sanitized_quality.max_sample_taps == material_max_sample_taps);
     assert(sanitized_quality.max_backdrop_pixels == 12);
+
+    raw_quality.max_blur_radius = std::numeric_limits<float>::quiet_NaN();
+    sanitized_quality = sanitize_material_quality_policy(raw_quality);
+    assert(sanitized_quality.max_blur_radius == 0.0f);
+
+    raw_quality.max_blur_radius = std::numeric_limits<float>::infinity();
+    sanitized_quality = sanitize_material_quality_policy(raw_quality);
+    assert(sanitized_quality.max_blur_radius == 0.0f);
 
     auto style = material_style_for_kind(MaterialKind::Regular, theme);
     MaterialRequest request{

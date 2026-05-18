@@ -28,6 +28,10 @@ turning `main.cpp` into every subsystem at once:
 - `phenotype_cli.icons` owns `phenotype icons ...` and `phenotype svg inspect`,
   including catalog checks, lookup/presentation/render JSON, SVG support
   summaries, and the icon helper payloads reused by file explorer debug output.
+- `phenotype_cli.package_types` owns the exported immutable package, SVG
+  inspection, and bundle summary value types so command routing and future
+  packaging submodules can share the contract without importing package IO
+  helpers.
 - `phenotype_cli.package` owns package manifest inspection, resource catalog
   checks, package bundling, bundle integrity verification, and macOS app bundle
   staging helpers. It keeps filesystem/package edge IO away from command

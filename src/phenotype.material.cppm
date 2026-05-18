@@ -97,10 +97,12 @@ inline constexpr MaterialQualityPolicy default_material_quality_policy() noexcep
 
 inline MaterialQualityPolicy sanitize_material_quality_policy(
         MaterialQualityPolicy policy) noexcept {
-    policy.max_blur_radius = std::clamp(
-        policy.max_blur_radius,
-        0.0f,
-        material_max_blur_radius);
+    policy.max_blur_radius = std::isfinite(policy.max_blur_radius)
+        ? std::clamp(
+            policy.max_blur_radius,
+            0.0f,
+            material_max_blur_radius)
+        : 0.0f;
     policy.max_sample_taps = std::min(
         policy.max_sample_taps,
         material_max_sample_taps);
