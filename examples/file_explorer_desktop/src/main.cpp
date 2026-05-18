@@ -537,6 +537,19 @@ std::string extension_lower(std::string const& name) {
     return ext;
 }
 
+bool svg_image_extension(std::string_view ext) {
+    return ext == "svg" || ext == "svgz";
+}
+
+bool image_extension(std::string_view ext) {
+    return ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "heic"
+        || ext == "heif" || ext == "webp" || svg_image_extension(ext);
+}
+
+bool movie_extension(std::string_view ext) {
+    return ext == "mov" || ext == "mp4" || ext == "m4v";
+}
+
 std::uint64_t stable_token(std::string const& value) {
     std::uint64_t h = 1469598103934665603ull;
     for (unsigned char ch : value) {
@@ -629,7 +642,8 @@ void paint_pdf_thumbnail(phenotype::Painter& painter,
 }
 
 void paint_image_thumbnail(phenotype::Painter& painter,
-                           bool selected) {
+                           bool selected,
+                           bool svg_file) {
     auto border = selected ? rgba(0, 122, 255) : rgba(224, 228, 234);
     float const w = file_explorer_demo::k_desktop_thumbnail_media_preview_width;
     float const h = file_explorer_demo::k_desktop_thumbnail_media_preview_height;
@@ -649,6 +663,22 @@ void paint_image_thumbnail(phenotype::Painter& painter,
     stroke_round(painter, x, y, w, h, radius, 1.0f, border);
     fill_rect(painter, x + 3.0f, y + 4.0f, w - 6.0f, 2.0f,
               rgba(235, 239, 245));
+    if (svg_file) {
+        phenotype::PathBuilder curve;
+        curve.move_to(x + 14.0f, y + 25.0f);
+        curve.cubic_to(
+            x + 27.0f, y + 9.0f,
+            x + 57.0f, y + 9.0f,
+            x + 74.0f, y + 25.0f);
+        painter.stroke_path(curve, 2.2f, rgba(0, 122, 255, 210));
+        fill_round(painter, x + 10.0f, y + 12.0f, 6.0f, 6.0f, 3.0f,
+                   rgba(0, 122, 255, 160));
+        fill_round(painter, x + 70.0f, y + 12.0f, 6.0f, 6.0f, 3.0f,
+                   rgba(0, 122, 255, 160));
+        painter.text(x + 34.0f, y + 25.0f, "SVG", 3, 9.0f,
+                     rgba(75, 82, 92), finder_font());
+        return;
+    }
     fill_round(painter, x + 10.0f, y + 13.0f, 26.0f, 10.0f, 4.0f,
                rgba(210, 215, 224));
     fill_round(painter, x + 40.0f, y + 13.0f, 18.0f, 10.0f, 4.0f,
@@ -725,9 +755,9 @@ void paint_item_thumbnail(phenotype::Painter& painter,
     auto ext = extension_lower(entry.name);
     if (ext == "pdf") {
         paint_pdf_thumbnail(painter, entry.name, selected);
-    } else if (ext == "png" || ext == "jpg" || ext == "jpeg") {
-        paint_image_thumbnail(painter, selected);
-    } else if (ext == "mov" || ext == "mp4") {
+    } else if (image_extension(ext)) {
+        paint_image_thumbnail(painter, selected, svg_image_extension(ext));
+    } else if (movie_extension(ext)) {
         paint_video_thumbnail(painter, selected);
     } else {
         paint_text_thumbnail(painter, selected);

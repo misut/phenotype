@@ -320,7 +320,7 @@ only AirDrop, Shared, Sort Group, and More as phenotype-owned glyphs where the
 Finder-specific metaphor or filled dot treatment is safer to control locally.
 A pure Finder-style file-type
 tint policy now gives
-folder/document/PDF/text/image/movie/archive/audio/code/spreadsheet/presentation glyphs deterministic colors for
+folder/document/PDF/text/image/SVG image/movie/archive/audio/code/spreadsheet/presentation glyphs deterministic colors for
 list and column rows without querying native platform icon services. The CLI command
 `phenotype icons catalog --json` exposes the same contract for CI and LLM
 debugging on Linux without importing native GUI code, and `phenotype icons svg
@@ -465,7 +465,7 @@ Current runnable examples under `examples/`:
 |---|---|---|
 | `examples/native` | Native widget showcase | Best desktop acceptance scene for shared widgets, input debug, images, scrolling, resizing |
 | `examples/glass_showcase` | Material showcase | Exercises deterministic backdrop regions, macOS sampled backdrop material, all public material kinds, material foreground/vibrancy metadata, semantic material metadata, and startup artifact capture |
-| `examples/file_explorer_desktop` | Finder-style desktop app example | Exercises glass toolbar/sidebar/icon-grid composition, Finder-like action clusters, document/image/video/folder thumbnail probes, and sandboxed select/open/read/create/duplicate/delete file workflows |
+| `examples/file_explorer_desktop` | Finder-style desktop app example | Exercises glass toolbar/sidebar/icon-grid composition, Finder-like action clusters, document/raster-image/SVG/vector/video/folder thumbnail probes, and sandboxed select/open/read/create/duplicate/delete file workflows |
 | `examples/file_explorer_mobile` | Mobile file explorer app example | Exercises a compact browse/preview/create flow with the same sandboxed file model, duplicate/delete action metadata, and all material kinds |
 | `examples/android` | Android APK example | Exercises GameActivity/Vulkan/native Android route |
 

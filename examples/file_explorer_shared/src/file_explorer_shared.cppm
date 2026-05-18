@@ -422,6 +422,7 @@ struct ExplorerChromeMetrics {
     std::string thumbnail_asset_policy;
     std::string thumbnail_pdf_policy;
     std::string thumbnail_image_policy;
+    std::string thumbnail_svg_policy;
     std::string thumbnail_video_policy;
     std::string thumbnail_shadow_policy;
     std::string theme_profile_name;
@@ -586,6 +587,8 @@ inline constexpr char k_desktop_thumbnail_pdf_policy[] =
     "page_preview_with_fold_header_table_rows_and_bottom_highlight";
 inline constexpr char k_desktop_thumbnail_image_policy[] =
     "rounded_screenshot_strip_with_layered_blurred_content";
+inline constexpr char k_desktop_thumbnail_svg_policy[] =
+    "rounded_svg_vector_preview_with_source_safe_svg_badge";
 inline constexpr char k_desktop_thumbnail_video_policy[] =
     "wide_video_preview_with_filmstrip_and_content_bands";
 inline constexpr char k_desktop_thumbnail_shadow_policy[] =
@@ -1235,6 +1238,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
             .thumbnail_asset_policy = "n/a",
             .thumbnail_pdf_policy = "n/a",
             .thumbnail_image_policy = "n/a",
+            .thumbnail_svg_policy = "n/a",
             .thumbnail_video_policy = "n/a",
             .thumbnail_shadow_policy = "n/a",
             .theme_profile_name =
@@ -1576,6 +1580,7 @@ inline ExplorerChromeMetrics explorer_chrome_metrics(
         .thumbnail_asset_policy = k_desktop_thumbnail_asset_policy,
         .thumbnail_pdf_policy = k_desktop_thumbnail_pdf_policy,
         .thumbnail_image_policy = k_desktop_thumbnail_image_policy,
+        .thumbnail_svg_policy = k_desktop_thumbnail_svg_policy,
         .thumbnail_video_policy = k_desktop_thumbnail_video_policy,
         .thumbnail_shadow_policy = k_desktop_thumbnail_shadow_policy,
         .theme_profile_name =
@@ -1779,6 +1784,23 @@ inline std::string extension_lower(std::string const& name) {
     return ext;
 }
 
+inline bool svg_image_extension(std::string_view ext) noexcept {
+    return ext == "svg" || ext == "svgz";
+}
+
+inline bool raster_image_extension(std::string_view ext) noexcept {
+    return ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "heic"
+        || ext == "heif" || ext == "webp";
+}
+
+inline bool image_extension(std::string_view ext) noexcept {
+    return raster_image_extension(ext) || svg_image_extension(ext);
+}
+
+inline bool movie_extension(std::string_view ext) noexcept {
+    return ext == "mov" || ext == "mp4" || ext == "m4v";
+}
+
 inline fs::path demo_root(std::string_view profile) {
     std::string name = "phenotype-file-explorer-";
     name += profile;
@@ -1896,6 +1918,19 @@ inline fs::path ensure_demo_tree(std::string_view profile) {
         root / "line_8.png",
         "PNG placeholder rendered as a light rounded Finder thumbnail.\n");
     write_file_if_missing(
+        root / "line_4.png",
+        "PNG placeholder rendered as a light rounded Finder thumbnail.\n");
+    write_file_if_missing(
+        root / "Glass Symbol.svg",
+        "<svg xmlns=\"http://www.w3.org/2000/svg\" "
+        "viewBox=\"0 0 48 48\" fill=\"none\">\n"
+        "  <rect x=\"6\" y=\"6\" width=\"36\" height=\"36\" "
+        "rx=\"10\" fill=\"white\"/>\n"
+        "  <path d=\"M15 30 C19 20 29 20 33 30\" "
+        "stroke=\"#007AFF\" stroke-width=\"3\" "
+        "stroke-linecap=\"round\"/>\n"
+        "</svg>\n");
+    write_file_if_missing(
         root / "Screen Recording 2025-11-04.mov",
         "MOV placeholder rendered as a wide video thumbnail.\n");
     write_file_if_missing(
@@ -1963,9 +1998,11 @@ inline std::string entry_kind_label(Entry const& entry) {
     auto ext = extension_lower(entry.name);
     if (ext == "pdf")
         return "PDF Document";
-    if (ext == "png" || ext == "jpg" || ext == "jpeg")
+    if (svg_image_extension(ext))
+        return "SVG Image";
+    if (raster_image_extension(ext))
         return "Image";
-    if (ext == "mov" || ext == "mp4")
+    if (movie_extension(ext))
         return "Movie";
     if (ext == "zip")
         return "Archive";
@@ -1994,9 +2031,9 @@ inline icon_catalog::Symbol entry_symbol(Entry const& entry) {
     auto ext = extension_lower(entry.name);
     if (ext == "pdf")
         return icon_catalog::Symbol::PdfDocument;
-    if (ext == "png" || ext == "jpg" || ext == "jpeg")
+    if (image_extension(ext))
         return icon_catalog::Symbol::Image;
-    if (ext == "mov" || ext == "mp4")
+    if (movie_extension(ext))
         return icon_catalog::Symbol::Movie;
     if (ext == "txt" || ext == "md")
         return icon_catalog::Symbol::TextDocument;
@@ -3090,6 +3127,9 @@ inline json::Value explorer_chrome_debug_json(
     thumbnail_system.emplace(
         "image_policy",
         json::Value{chrome.thumbnail_image_policy});
+    thumbnail_system.emplace(
+        "svg_policy",
+        json::Value{chrome.thumbnail_svg_policy});
     thumbnail_system.emplace(
         "video_policy",
         json::Value{chrome.thumbnail_video_policy});
@@ -4274,38 +4314,42 @@ inline int finder_recents_rank(std::string_view name) {
         return 8;
     if (name == "line_8.png")
         return 9;
-    if (name == "Screen Recording 2025-11-04.mov")
+    if (name == "line_4.png")
         return 10;
-    if (name == "Screen Recording 2025-11-05.mov")
+    if (name == "Screen Recording 2025-11-04.mov")
         return 11;
-    if (name == "Screen Recording 2025-11-06.mov")
+    if (name == "Screen Recording 2025-11-05.mov")
         return 12;
-    if (name == "Screen Recording 2025-11-07.mov")
+    if (name == "Screen Recording 2025-11-06.mov")
         return 13;
-    if (name == "Screenshot 2025-11-05.png")
+    if (name == "Screen Recording 2025-11-07.mov")
         return 14;
-    if (name == "Screenshot 2025-11-06.png")
+    if (name == "Screenshot 2025-11-05.png")
         return 15;
-    if (name == "README.txt")
+    if (name == "Screenshot 2025-11-06.png")
         return 16;
-    if (name == "Application Form 3.pdf")
+    if (name == "Glass Symbol.svg")
         return 17;
-    if (name == "Application Form 2.pdf")
+    if (name == "README.txt")
         return 18;
-    if (name == "Archive.zip")
+    if (name == "Application Form 3.pdf")
         return 19;
-    if (name == "契約書_サンプル.pdf")
+    if (name == "Application Form 2.pdf")
         return 20;
-    if (name == "资产证明.pdf")
+    if (name == "Archive.zip")
         return 21;
-    if (name == "Voice Memo.m4a")
+    if (name == "契約書_サンプル.pdf")
         return 22;
-    if (name == "Glass Theme Notes.cpp")
+    if (name == "资产证明.pdf")
         return 23;
-    if (name == "Expense Matrix.csv")
+    if (name == "Voice Memo.m4a")
         return 24;
-    if (name == "Design Review.key")
+    if (name == "Glass Theme Notes.cpp")
         return 25;
+    if (name == "Expense Matrix.csv")
+        return 26;
+    if (name == "Design Review.key")
+        return 27;
     return 1000;
 }
 
