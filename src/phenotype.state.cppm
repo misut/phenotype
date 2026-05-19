@@ -171,6 +171,20 @@ struct KeyCommand {
     std::string debug_label;
 };
 
+enum class InputModality {
+    None,
+    Keyboard,
+    Pointer,
+    Programmatic,
+};
+
+enum class FocusVisibilityReason {
+    NoFocus,
+    KeyboardFocusNavigation,
+    PointerInputHidesFocusRing,
+    ProgrammaticFocusHidden,
+};
+
 struct AppState {
     Theme theme;
     Arena arena;
@@ -182,6 +196,9 @@ struct AppState {
     unsigned int hovered_id = 0xFFFFFFFF;
     unsigned int focused_id = 0xFFFFFFFF;
     bool focus_visible = false;
+    InputModality focus_input_modality = InputModality::None;
+    FocusVisibilityReason focus_visibility_reason =
+        FocusVisibilityReason::NoFocus;
     unsigned int pressed_id = 0xFFFFFFFF;
     unsigned int caret_pos = 0xFFFFFFFFu;
     unsigned int selection_anchor = 0xFFFFFFFFu;

@@ -44,15 +44,15 @@ cross-checks the stable backend support fields against each serialized
 The common snapshot schema remains the source of truth for all platforms:
 
 - `input_debug` reports the last input event, hovered/focused/pressed callback
-  state, keyboard-only `focus_visible` modality, caret geometry, and
-  composition state.
+  state, keyboard-only `focus_visible` state, `input_modality`,
+  `focus_visibility_reason`, caret geometry, and composition state.
 - `semantic_tree` serializes the same accessibility-oriented semantic tree on every target.
   Root-level overlays are included in paint/focus order and keep screen-fixed
   visibility semantics, so dialogs, popovers, and material probes cannot vanish
   from artifact debugging when the document underneath is scrolled.
 - `platform_runtime` always includes the shared viewport, scroll, focus,
-  `focus_visible`, hover, and press state plus a platform-specific `details`
-  object.
+  `focus_visible`, `input_modality`, `focus_visibility_reason`, hover, and
+  press state plus a platform-specific `details` object.
 - Native desktop `platform_runtime.details.window` records the resolved window
   surface kind, requested `WindowOptions`, integrated titlebar metrics,
   native-control ownership, and `uses_glfw=false` / `toolkit_window_shim=false`
@@ -246,6 +246,11 @@ ring hidden. The `input_model` records `last_input_modality`, `focus_target`,
 reason a ring is or is not visible. The native shell applies the same reset
 before platform-consumed left-button presses, which prevents titlebar, IME, or
 other edge adapters from preserving a keyboard ring after a pointer click.
+The shared debug plane mirrors this at top level:
+`debug.input_debug.input_modality` and
+`debug.input_debug.focus_visibility_reason` describe the most recent input
+event, while `debug.platform_runtime.input_modality` and
+`debug.platform_runtime.focus_visibility_reason` describe the rendered frame.
 File Explorer also clears `focus_visible` for pointer/programmatic commands such
 as view-mode, sort, refresh, and toolbar action clicks even when the logical
 focus target remains unchanged.
@@ -986,8 +991,11 @@ desktop command descriptors consumed by native key dispatch. If
 `debug.application.file_explorer.input_model` is the native-artifact mirror of
 `phenotype drive file-explorer`: `focus_visibility_policy` must remain
 `keyboard_tab_navigation_shows_ring_pointer_click_hides_ring`, `focus_visible`
-must be false for pointer/click startup scripts, and keyboard-driven Tab
-repros should flip it to true with a concrete `focus_target`.
+must be false for pointer/click startup scripts, and the shared debug plane
+must report `input_modality=pointer` plus
+`focus_visibility_reason=pointer_input_hides_focus_ring` for pointer repros.
+Keyboard-driven Tab repros should flip `focus_visible` to true with a concrete
+`focus_target` and `focus_visibility_reason=keyboard_focus_navigation`.
 On macOS, `titlebar_transparent=true`, `full_size_content_view=true`,
 `title_hidden=true`, and `background_drag_enabled=true` are read back from the
 live `NSWindow`, not inferred from the request, so a Finder-style artifact can

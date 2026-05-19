@@ -516,6 +516,10 @@ can still present their caret and selection from raw focus. Native shells also
 clear `focus_visible` before forwarding a left-button press to any platform
 input adapter, so AppKit/IME/titlebar hooks that consume the pointer event
 cannot leave a stale keyboard ring behind.
+The debug plane also carries `input_modality` and
+`focus_visibility_reason`, with values like `keyboard_focus_navigation` and
+`pointer_input_hides_focus_ring`, so an artifact can explain the ring state
+without requiring a visual guess.
 Pure app input models mirror this split: pointer and programmatic commands that
 do not move the logical focus target still clear `focus_visible`, while only
 keyboard traversal or explicit keyboard focus commands can enable the ring.

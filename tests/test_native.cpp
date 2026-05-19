@@ -1139,6 +1139,8 @@ static void test_shell_platform_consumed_pointer_hides_focus_ring() {
     assert(debug.result == "platform-consumed");
     assert(debug.focused_id == button_id);
     assert(!debug.focus_visible);
+    assert(debug.input_modality == "pointer");
+    assert(debug.focus_visibility_reason == "pointer_input_hides_focus_ring");
     assert(has_metric("click", "pointer-click", "platform-consumed"));
     std::puts("PASS: platform-consumed pointer hides keyboard focus ring");
 }

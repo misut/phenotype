@@ -775,7 +775,11 @@ inline bool dispatch_mouse_button(float mx, float my,
         bool pressed_changed = ::phenotype::detail::set_pressed_id(
             *hit, "shell", "pointer-press");
         bool focus_changed = ::phenotype::detail::set_focus_id(
-            *hit, "shell", "pointer-focus");
+            *hit,
+            "shell",
+            "pointer-focus",
+            false,
+            ::phenotype::InputModality::Pointer);
         bool caret_changed = false;
         if (::phenotype::detail::focused_is_input()
             && ::phenotype::detail::get_focused_id() == *hit) {
