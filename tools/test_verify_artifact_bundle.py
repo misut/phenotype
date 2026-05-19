@@ -1011,6 +1011,10 @@ def snapshot_with_file_explorer_chrome(
             "preferences": {
                 "system_settings": {
                     "source": "test-fallback",
+                    "font_scale_available": False,
+                    "line_height_available": False,
+                    "scroll_metrics_available": True,
+                    "color_scheme_available": True,
                 },
                 "app_overrides": {
                     "apply_system_font_metrics": True,
@@ -1309,6 +1313,23 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 ".used_system_font_metrics"))
         self.assertEqual(failure["likely_layer"], "file-explorer-preferences")
         self.assertIn("Resolver evidence booleans", failure["hint"])
+
+    def test_file_explorer_preferences_contract_rejects_missing_availability_flag(self) -> None:
+        snap = snapshot_with_file_explorer_chrome(material_plan())
+        settings = snap["debug"]["application"]["file_explorer"][
+            "preferences"]["system_settings"]
+        del settings["scroll_metrics_available"]
+
+        code, report = self.run_verifier(snap)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["path"] == (
+                "debug.application.file_explorer.preferences.system_settings"
+                ".scroll_metrics_available"))
+        self.assertEqual(failure["likely_layer"], "file-explorer-preferences")
+        self.assertIn("availability flags", failure["hint"])
 
     def test_file_explorer_native_chrome_contract_rejects_content_markers(self) -> None:
         code, report = self.run_verifier(

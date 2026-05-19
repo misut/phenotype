@@ -546,7 +546,10 @@ result under
 example applied before rendering. `resolution` is emitted from the core
 `ResolvedThemePreferences` value, so it records whether the effective theme
 actually consumed OS font metrics, OS scroll metrics, OS appearance, user font
-scale, user font sizes, user line height, or user scroll speed. Use this block
+scale, user font sizes, user line height, or user scroll speed. The mirrored
+`system_settings` object includes availability booleans for font scale, line
+height, scroll metrics, and color scheme so a fallback value is not mistaken for
+an OS preference. Use this block
 when text size, family source, font-weight adjustment, vertical or horizontal
 wheel/trackpad speed, scrollbar behavior, touch slop, double-click timeout, key
 repeat timing, caret blink, or accent color looks wrong but the
@@ -1054,7 +1057,11 @@ File explorer artifacts also mirror the app override
 state at `debug.application.file_explorer.preferences.app_overrides` and the
 resolved theme at `debug.application.file_explorer.preferences.effective_theme`,
 including `color_scheme`, font family/scale, `apply_system_scroll_metrics`, and
-both scroll multipliers. The adjacent
+both scroll multipliers. `debug.application.file_explorer.preferences.system_settings`
+must include `font_scale_available`, `line_height_available`,
+`scroll_metrics_available`, and `color_scheme_available`. The local file
+explorer artifact gate pins the app color-scheme override to `light` for stable
+pixel thresholds while still recording OS appearance availability; the adjacent
 `debug.application.file_explorer.preferences.resolution` object names the pure
 resolver decisions, such as `used_system_font_metrics`,
 `used_system_scroll_metrics`, `used_user_font_size`, and
