@@ -92,7 +92,8 @@ working directory. `phenotype run file_explorer_mobile` sets the package-root
 environment automatically.
 The example also applies the native `system_settings` snapshot before
 `set_theme`: Pretendard remains the package default, OS font scale and scroll
-policy become pure theme inputs, and user overrides win. Direct launches can use
+policy become pure theme inputs, OS font family/accent are captured for opt-in
+overrides, and user overrides win. Direct launches can use
 `PHENOTYPE_FILE_EXPLORER_FONT_FAMILY`, `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT`,
 `PHENOTYPE_FILE_EXPLORER_FONT_SCALE`, and
 `PHENOTYPE_FILE_EXPLORER_SCROLL_SPEED`; the resulting edge snapshot, overrides,

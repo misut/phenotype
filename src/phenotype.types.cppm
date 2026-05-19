@@ -356,19 +356,31 @@ struct Theme {
 struct PlatformSystemSettingsSnapshot {
     std::string source = "fallback";
     std::string font_family;
+    std::string font_family_source = "fallback";
     float body_font_size = 0.0f;
     float heading_font_size = 0.0f;
     float small_font_size = 0.0f;
     float line_height_ratio = 1.6f;
     float font_scale = 1.0f;
     std::string text_size_source = "fallback";
+    int font_weight_adjustment = 0;
+    std::string font_weight_source = "fallback";
     std::string preferred_scroller_style = "unknown";
     bool overlay_scrollbars = false;
     float scroll_line_height = 0.0f;
     float scroll_wheel_lines = 3.0f;
     bool scroll_page_mode = false;
+    float scroll_vertical_factor = 0.0f;
+    float scroll_horizontal_factor = 0.0f;
+    float scroll_bar_size = 0.0f;
+    float touch_slop = 0.0f;
+    float scroll_friction = 0.0f;
     float scroll_delta_multiplier = 1.0f;
     std::string scroll_source = "fallback";
+    bool accent_color_available = false;
+    Color accent_color = {0, 122, 255, 255};
+    std::string accent_color_source = "fallback";
+    bool accent_color_opaque = true;
 };
 
 struct ThemePreferenceOverrides {
@@ -381,6 +393,7 @@ struct ThemePreferenceOverrides {
     float scroll_delta_multiplier = 1.0f;
     bool prefer_system_font_family = false;
     bool apply_system_font_scale = true;
+    bool apply_system_accent_color = false;
 };
 
 inline float bounded_theme_preference(
@@ -484,6 +497,16 @@ inline Theme apply_system_theme_preferences(
         1.0f,
         0.25f,
         4.0f);
+    if (overrides.apply_system_accent_color
+        && system.accent_color_available
+        && system.accent_color.a > 0) {
+        auto accent = system.accent_color;
+        accent.a = 255;
+        theme.accent = accent;
+        theme.accent_strong = lerp_color(accent, Color{0, 0, 0, 255}, 0.24f);
+        theme.state_active_bg = theme.accent_strong;
+        theme.state_focus_ring = theme.accent;
+    }
     return theme;
 }
 

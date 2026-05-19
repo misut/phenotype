@@ -1104,6 +1104,9 @@ duplicate
     assert(debug_text.find("\"entry_symbol_summary\"") != std::string::npos);
     assert(debug_text.find("\"preferences\"") != std::string::npos);
     assert(debug_text.find("\"system_settings\"") != std::string::npos);
+    assert(debug_text.find("\"font_family_source\"") != std::string::npos);
+    assert(debug_text.find("\"font_weight_adjustment\"") != std::string::npos);
+    assert(debug_text.find("\"scroll_vertical_factor\"") != std::string::npos);
     assert(debug_text.find("\"Pretendard package default")
            != std::string::npos);
     assert(debug_text.find("\"source\":\"file_explorer_shared::entry_symbol\"")

@@ -233,6 +233,11 @@ inline SEL sel_color_using_color_space() {
     return sel;
 }
 
+inline SEL sel_control_accent_color() {
+    static auto sel = sel_registerName("controlAccentColor");
+    return sel;
+}
+
 inline SEL sel_convert_rect_to_view() {
     static auto sel = sel_registerName("convertRect:toView:");
     return sel;
@@ -4319,10 +4324,59 @@ inline std::string scroller_style_name(long style) {
     return "unknown";
 }
 
+inline unsigned char srgb_byte(double value) {
+    if (!std::isfinite(value))
+        return 0;
+    if (value < 0.0)
+        value = 0.0;
+    if (value > 1.0)
+        value = 1.0;
+    return static_cast<unsigned char>(value * 255.0 + 0.5);
+}
+
+inline std::optional<::phenotype::Color> nscolor_to_srgb_color(id color) {
+    auto color_space_class = static_cast<Class>(objc_getClass("NSColorSpace"));
+    if (!color || !color_space_class)
+        return std::nullopt;
+    auto rgb_space = objc_send<id>(
+        class_as_id(color_space_class),
+        sel_generic_rgb_color_space());
+    if (!rgb_space)
+        return std::nullopt;
+    auto rgb_color = objc_send<id>(
+        color,
+        sel_color_using_color_space(),
+        rgb_space);
+    if (!rgb_color
+        || !objc_responds_to(rgb_color, sel_get_red_green_blue_alpha())) {
+        return std::nullopt;
+    }
+
+    double r = 0.0;
+    double g = 0.0;
+    double b = 0.0;
+    double a = 1.0;
+    objc_send<void>(
+        rgb_color,
+        sel_get_red_green_blue_alpha(),
+        &r,
+        &g,
+        &b,
+        &a);
+    return ::phenotype::Color{
+        srgb_byte(r),
+        srgb_byte(g),
+        srgb_byte(b),
+        srgb_byte(a),
+    };
+}
+
 inline ::phenotype::PlatformSystemSettingsSnapshot
 macos_system_settings_snapshot() {
     ::phenotype::PlatformSystemSettingsSnapshot snapshot{};
     snapshot.source = "macos-appkit-coretext";
+    snapshot.font_family_source =
+        "CTFontCopyFamilyName(kCTFontUIFontSystem)";
     snapshot.text_size_source =
         "CTFontCreateUIFontForLanguage(kCTFontUIFontSystem)";
     snapshot.scroll_source =
@@ -4374,6 +4428,21 @@ macos_system_settings_snapshot() {
     snapshot.overlay_scrollbars = scroller_style == 1;
     snapshot.scroll_wheel_lines = 0.0f;
     snapshot.scroll_page_mode = false;
+    auto color_class = static_cast<Class>(objc_getClass("NSColor"));
+    if (color_class
+        && objc_responds_to(
+            class_as_id(color_class),
+            sel_control_accent_color())) {
+        auto accent = objc_send<id>(
+            class_as_id(color_class),
+            sel_control_accent_color());
+        if (auto color = nscolor_to_srgb_color(accent)) {
+            snapshot.accent_color_available = true;
+            snapshot.accent_color = *color;
+            snapshot.accent_color_source = "NSColor.controlAccentColor";
+            snapshot.accent_color_opaque = color->a == 255;
+        }
+    }
     return snapshot;
 }
 

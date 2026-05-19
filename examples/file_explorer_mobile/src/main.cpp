@@ -187,19 +187,36 @@ file_explorer_demo::SystemPreferenceSnapshot system_preference_snapshot(
     return {
         .source = system.source,
         .font_family = system.font_family,
+        .font_family_source = system.font_family_source,
         .body_font_size = system.body_font_size,
         .heading_font_size = system.heading_font_size,
         .small_font_size = system.small_font_size,
         .line_height_ratio = system.line_height_ratio,
         .font_scale = system.font_scale,
         .text_size_source = system.text_size_source,
+        .font_weight_adjustment = system.font_weight_adjustment,
+        .font_weight_source = system.font_weight_source,
         .preferred_scroller_style = system.preferred_scroller_style,
         .overlay_scrollbars = system.overlay_scrollbars,
         .scroll_line_height = system.scroll_line_height,
         .scroll_wheel_lines = system.scroll_wheel_lines,
         .scroll_page_mode = system.scroll_page_mode,
+        .scroll_vertical_factor = system.scroll_vertical_factor,
+        .scroll_horizontal_factor = system.scroll_horizontal_factor,
+        .scroll_bar_size = system.scroll_bar_size,
+        .touch_slop = system.touch_slop,
+        .scroll_friction = system.scroll_friction,
         .scroll_delta_multiplier = system.scroll_delta_multiplier,
         .scroll_source = system.scroll_source,
+        .accent_color_available = system.accent_color_available,
+        .accent_color = {
+            static_cast<int>(system.accent_color.r),
+            static_cast<int>(system.accent_color.g),
+            static_cast<int>(system.accent_color.b),
+            static_cast<int>(system.accent_color.a),
+        },
+        .accent_color_source = system.accent_color_source,
+        .accent_color_opaque = system.accent_color_opaque,
     };
 }
 
@@ -215,6 +232,7 @@ file_explorer_demo::ThemePreferenceSnapshot theme_preference_snapshot(
         .scroll_delta_multiplier = overrides.scroll_delta_multiplier,
         .prefer_system_font_family = overrides.prefer_system_font_family,
         .apply_system_font_scale = overrides.apply_system_font_scale,
+        .apply_system_accent_color = overrides.apply_system_accent_color,
     };
 }
 
@@ -289,6 +307,7 @@ phenotype::ThemePreferenceOverrides theme_preferences_from_state(
         .scroll_delta_multiplier = preferences.scroll_delta_multiplier,
         .prefer_system_font_family = preferences.prefer_system_font_family,
         .apply_system_font_scale = preferences.apply_system_font_scale,
+        .apply_system_accent_color = preferences.apply_system_accent_color,
     };
 }
 

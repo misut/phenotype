@@ -2347,12 +2347,18 @@ inline json::Value system_settings_to_json(
     json::Object system;
     system.emplace("source", json::Value{settings.source});
     system.emplace("font_family", json::Value{settings.font_family});
+    system.emplace("font_family_source", json::Value{settings.font_family_source});
     system.emplace("body_font_size", json::Value{settings.body_font_size});
     system.emplace("heading_font_size", json::Value{settings.heading_font_size});
     system.emplace("small_font_size", json::Value{settings.small_font_size});
     system.emplace("line_height_ratio", json::Value{settings.line_height_ratio});
     system.emplace("font_scale", json::Value{settings.font_scale});
     system.emplace("text_size_source", json::Value{settings.text_size_source});
+    system.emplace(
+        "font_weight_adjustment",
+        json::Value{static_cast<std::int64_t>(
+            settings.font_weight_adjustment)});
+    system.emplace("font_weight_source", json::Value{settings.font_weight_source});
     system.emplace(
         "preferred_scroller_style",
         json::Value{settings.preferred_scroller_style});
@@ -2361,9 +2367,30 @@ inline json::Value system_settings_to_json(
     system.emplace("scroll_wheel_lines", json::Value{settings.scroll_wheel_lines});
     system.emplace("scroll_page_mode", json::Value{settings.scroll_page_mode});
     system.emplace(
+        "scroll_vertical_factor",
+        json::Value{settings.scroll_vertical_factor});
+    system.emplace(
+        "scroll_horizontal_factor",
+        json::Value{settings.scroll_horizontal_factor});
+    system.emplace("scroll_bar_size", json::Value{settings.scroll_bar_size});
+    system.emplace("touch_slop", json::Value{settings.touch_slop});
+    system.emplace("scroll_friction", json::Value{settings.scroll_friction});
+    system.emplace(
         "scroll_delta_multiplier",
         json::Value{settings.scroll_delta_multiplier});
     system.emplace("scroll_source", json::Value{settings.scroll_source});
+    system.emplace(
+        "accent_color_available",
+        json::Value{settings.accent_color_available});
+    system.emplace(
+        "accent_color",
+        detail::color_to_json(settings.accent_color));
+    system.emplace(
+        "accent_color_source",
+        json::Value{settings.accent_color_source});
+    system.emplace(
+        "accent_color_opaque",
+        json::Value{settings.accent_color_opaque});
     return json::Value{std::move(system)};
 }
 
