@@ -6480,6 +6480,8 @@ inline void android_input_sync() {
 
 inline bool android_input_uses_shared_caret_blink() { return true; }
 
+inline int android_input_caret_blink_interval_ms() { return 530; }
+
 inline bool android_input_handle_cursor_pos(float /*x*/, float /*y*/) {
     return false; // let the shell update hover + focus
 }
@@ -6775,6 +6777,11 @@ struct AndroidViewConfigurationMetrics {
     float scroll_bar_size = 0.0f;
     float touch_slop = 0.0f;
     float scroll_friction = 0.0f;
+    float double_click_interval_ms = 500.0f;
+    float key_repeat_delay_ms = 500.0f;
+    float key_repeat_interval_ms = 50.0f;
+    bool has_scroll_metrics = false;
+    bool has_input_timing = false;
 };
 
 inline std::optional<AndroidViewConfigurationMetrics>
@@ -6845,13 +6852,26 @@ android_view_configuration_metrics() {
             return std::nullopt;
         return static_cast<float>(value);
     };
+    auto read_static_int = [&](char const* name) -> std::optional<float> {
+        jmethodID method = env->GetStaticMethodID(view_config_cls, name, "()I");
+        if (!method || check_and_clear_exception(env)) {
+            check_and_clear_exception(env);
+            return std::nullopt;
+        }
+        jint const value = env->CallStaticIntMethod(view_config_cls, method);
+        if (check_and_clear_exception(env))
+            return std::nullopt;
+        return static_cast<float>(value);
+    };
 
     if (auto value = read_float("getScaledVerticalScrollFactor")) {
         metrics.vertical_scroll_factor = *value;
+        metrics.has_scroll_metrics = true;
         any = true;
     }
     if (auto value = read_float("getScaledHorizontalScrollFactor")) {
         metrics.horizontal_scroll_factor = *value;
+        metrics.has_scroll_metrics = true;
         any = true;
     }
     if (auto value = read_int("getScaledScrollBarSize")) {
@@ -6860,6 +6880,21 @@ android_view_configuration_metrics() {
     }
     if (auto value = read_int("getScaledTouchSlop")) {
         metrics.touch_slop = *value;
+        any = true;
+    }
+    if (auto value = read_static_int("getDoubleTapTimeout")) {
+        metrics.double_click_interval_ms = *value;
+        metrics.has_input_timing = true;
+        any = true;
+    }
+    if (auto value = read_static_int("getKeyRepeatTimeout")) {
+        metrics.key_repeat_delay_ms = *value;
+        metrics.has_input_timing = true;
+        any = true;
+    }
+    if (auto value = read_static_int("getKeyRepeatDelay")) {
+        metrics.key_repeat_interval_ms = *value;
+        metrics.has_input_timing = true;
         any = true;
     }
 
@@ -6908,6 +6943,12 @@ android_system_settings_snapshot() {
     snapshot.scroll_page_mode = false;
     snapshot.scroll_delta_multiplier = 1.0f;
     snapshot.scroll_source = "AMOTION_EVENT_AXIS_VSCROLL fallback";
+    snapshot.double_click_interval_ms = 500.0f;
+    snapshot.key_repeat_delay_ms = 500.0f;
+    snapshot.key_repeat_interval_ms = 50.0f;
+    snapshot.caret_blink_interval_ms = 530.0f;
+    snapshot.input_timing_source =
+        "android-fallback-until-ViewConfiguration-is-available";
     auto accessibility = android_accessibility_display_options();
     snapshot.reduce_transparency = accessibility.reduce_transparency;
     snapshot.increase_contrast = accessibility.increase_contrast;
@@ -6951,8 +6992,10 @@ android_system_settings_snapshot() {
             snapshot.body_font_size * snapshot.line_height_ratio;
     }
     if (auto metrics = android_view_configuration_metrics()) {
-        snapshot.scroll_source =
-            "ViewConfiguration.getScaledVerticalScrollFactor";
+        if (metrics->has_scroll_metrics) {
+            snapshot.scroll_source =
+                "ViewConfiguration.getScaledVerticalScrollFactor";
+        }
         snapshot.scroll_vertical_factor =
             metrics->vertical_scroll_factor;
         snapshot.scroll_horizontal_factor =
@@ -6960,6 +7003,28 @@ android_system_settings_snapshot() {
         snapshot.scroll_bar_size = metrics->scroll_bar_size;
         snapshot.touch_slop = metrics->touch_slop;
         snapshot.scroll_friction = metrics->scroll_friction;
+        if (metrics->has_input_timing) {
+            snapshot.double_click_interval_ms =
+                ::phenotype::bounded_theme_preference(
+                    metrics->double_click_interval_ms,
+                    500.0f,
+                    50.0f,
+                    5000.0f);
+            snapshot.key_repeat_delay_ms =
+                ::phenotype::bounded_theme_preference(
+                    metrics->key_repeat_delay_ms,
+                    500.0f,
+                    50.0f,
+                    5000.0f);
+            snapshot.key_repeat_interval_ms =
+                ::phenotype::bounded_theme_preference(
+                    metrics->key_repeat_interval_ms,
+                    50.0f,
+                    10.0f,
+                    1000.0f);
+            snapshot.input_timing_source =
+                "ViewConfiguration.getDoubleTapTimeout/getKeyRepeatTimeout/getKeyRepeatDelay";
+        }
         float const fallback_delta = snapshot.scroll_line_height * 3.0f;
         if (snapshot.scroll_vertical_factor > 0.0f
             && fallback_delta > 0.0f
@@ -7815,6 +7880,7 @@ inline platform_api build_android_platform() {
         android_input_detach,
         android_input_sync,
         android_input_uses_shared_caret_blink,
+        android_input_caret_blink_interval_ms,
         android_input_handle_cursor_pos,
         android_input_handle_mouse_button,
         android_input_dismiss_transient,

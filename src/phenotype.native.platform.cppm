@@ -191,6 +191,7 @@ struct input_api {
     void (*detach)() = nullptr;
     void (*sync)() = nullptr;
     bool (*uses_shared_caret_blink)() = nullptr;
+    int (*caret_blink_interval_ms)() = nullptr;
     bool (*handle_cursor_pos)(float x, float y) = nullptr;
     bool (*handle_mouse_button)(float x, float y,
                                 int button, int action, int mods) = nullptr;

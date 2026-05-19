@@ -269,6 +269,7 @@ PLATFORM_SYSTEM_SETTING_STRING_FIELDS = (
     "font_weight_source",
     "preferred_scroller_style",
     "scroll_source",
+    "input_timing_source",
     "preferred_locale",
     "preferred_locale_source",
     "color_scheme",
@@ -294,6 +295,10 @@ PLATFORM_SYSTEM_SETTING_NUMBER_FIELDS = (
     "scroll_friction",
     "scroll_delta_multiplier",
     "scroll_horizontal_delta_multiplier",
+    "double_click_interval_ms",
+    "key_repeat_delay_ms",
+    "key_repeat_interval_ms",
+    "caret_blink_interval_ms",
 )
 
 PLATFORM_SYSTEM_SETTING_NUMBER_MINIMUMS = {
@@ -304,6 +309,7 @@ PLATFORM_SYSTEM_SETTING_NUMBER_MINIMUMS = {
     "scroll_bar_size": 0.0,
     "touch_slop": 0.0,
     "scroll_friction": 0.0,
+    "caret_blink_interval_ms": 0.0,
 }
 
 PLATFORM_SYSTEM_SETTING_BOOL_FIELDS = (

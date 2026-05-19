@@ -140,6 +140,11 @@ struct SystemPreferenceSnapshot {
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
     std::string scroll_source = "fallback";
+    float double_click_interval_ms = 500.0f;
+    float key_repeat_delay_ms = 500.0f;
+    float key_repeat_interval_ms = 50.0f;
+    float caret_blink_interval_ms = 530.0f;
+    std::string input_timing_source = "fallback";
     std::string preferred_locale = "en";
     std::string preferred_locale_source = "fallback";
     std::string color_scheme = "light";
@@ -2915,6 +2920,21 @@ inline json::Value system_settings_debug_json(
         "scroll_horizontal_delta_multiplier",
         json::Value{settings.scroll_horizontal_delta_multiplier});
     out.emplace("scroll_source", json::Value{settings.scroll_source});
+    out.emplace(
+        "double_click_interval_ms",
+        json::Value{settings.double_click_interval_ms});
+    out.emplace(
+        "key_repeat_delay_ms",
+        json::Value{settings.key_repeat_delay_ms});
+    out.emplace(
+        "key_repeat_interval_ms",
+        json::Value{settings.key_repeat_interval_ms});
+    out.emplace(
+        "caret_blink_interval_ms",
+        json::Value{settings.caret_blink_interval_ms});
+    out.emplace(
+        "input_timing_source",
+        json::Value{settings.input_timing_source});
     out.emplace("preferred_locale", json::Value{settings.preferred_locale});
     out.emplace(
         "preferred_locale_source",

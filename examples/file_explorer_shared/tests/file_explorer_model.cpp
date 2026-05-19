@@ -1179,6 +1179,10 @@ duplicate
     assert(debug_text.find("\"scroll_vertical_factor\"") != std::string::npos);
     assert(debug_text.find("\"scroll_horizontal_delta_multiplier\"")
            != std::string::npos);
+    assert(debug_text.find("\"double_click_interval_ms\"") != std::string::npos);
+    assert(debug_text.find("\"key_repeat_delay_ms\"") != std::string::npos);
+    assert(debug_text.find("\"caret_blink_interval_ms\"") != std::string::npos);
+    assert(debug_text.find("\"input_timing_source\"") != std::string::npos);
     assert(debug_text.find("\"preferred_locale\"") != std::string::npos);
     assert(debug_text.find("\"preferred_locale_source\"") != std::string::npos);
     assert(debug_text.find("\"color_scheme\"") != std::string::npos);
