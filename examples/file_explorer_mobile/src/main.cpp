@@ -158,6 +158,8 @@ std::optional<float> env_float(
 
 phenotype::ThemePreferenceOverrides initial_theme_preference_overrides() {
     phenotype::ThemePreferenceOverrides overrides{};
+    overrides.prefer_system_color_scheme = true;
+    overrides.apply_system_accent_color = true;
     if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_FONT_FAMILY")) {
         if (std::string_view{raw} == "system") {
             overrides.prefer_system_font_family = true;
@@ -172,6 +174,42 @@ phenotype::ThemePreferenceOverrides initial_theme_preference_overrides() {
             0.75f,
             1.8f)) {
         overrides.font_scale = *scale;
+    }
+    if (auto size = env_float(
+            std::getenv("PHENOTYPE_FILE_EXPLORER_FONT_SIZE"),
+            8.0f,
+            40.0f)) {
+        overrides.body_font_size = *size;
+    }
+    if (auto size = env_float(
+            std::getenv("PHENOTYPE_FILE_EXPLORER_BODY_FONT_SIZE"),
+            8.0f,
+            40.0f)) {
+        overrides.body_font_size = *size;
+    }
+    if (auto size = env_float(
+            std::getenv("PHENOTYPE_FILE_EXPLORER_HEADING_FONT_SIZE"),
+            10.0f,
+            56.0f)) {
+        overrides.heading_font_size = *size;
+    }
+    if (auto size = env_float(
+            std::getenv("PHENOTYPE_FILE_EXPLORER_SMALL_FONT_SIZE"),
+            8.0f,
+            32.0f)) {
+        overrides.small_font_size = *size;
+    }
+    if (auto ratio = env_float(
+            std::getenv("PHENOTYPE_FILE_EXPLORER_LINE_HEIGHT"),
+            1.0f,
+            2.2f)) {
+        overrides.line_height_ratio = *ratio;
+    }
+    if (auto ratio = env_float(
+            std::getenv("PHENOTYPE_FILE_EXPLORER_LINE_HEIGHT_RATIO"),
+            1.0f,
+            2.2f)) {
+        overrides.line_height_ratio = *ratio;
     }
     if (auto speed = env_float(
             std::getenv("PHENOTYPE_FILE_EXPLORER_SCROLL_SPEED"),

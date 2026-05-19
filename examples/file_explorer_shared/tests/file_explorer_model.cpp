@@ -1,6 +1,7 @@
 #include <cassert>
 #include <algorithm>
 #include <chrono>
+#include <cmath>
 #include <cstdint>
 #include <cstdlib>
 #include <cstdio>
@@ -284,6 +285,25 @@ fallback = []
     auto parsed_large_font_scale = demo::parse_explorer_input("font-scale:5");
     assert(parsed_large_font_scale.ok);
     assert(parsed_large_font_scale.input.value == "1.8");
+    auto parsed_font_size = demo::parse_explorer_input("font-size:17");
+    assert(parsed_font_size.ok);
+    assert(parsed_font_size.input.kind
+           == demo::ExplorerInputKind::SetBodyFontSize);
+    assert(parsed_font_size.input.value == "17");
+    auto parsed_heading_font_size =
+        demo::parse_explorer_input("heading-font-size:22");
+    assert(parsed_heading_font_size.ok);
+    assert(parsed_heading_font_size.input.kind
+           == demo::ExplorerInputKind::SetHeadingFontSize);
+    auto parsed_small_font_size =
+        demo::parse_explorer_input("small-font-size:13");
+    assert(parsed_small_font_size.ok);
+    assert(parsed_small_font_size.input.kind
+           == demo::ExplorerInputKind::SetSmallFontSize);
+    auto parsed_line_height = demo::parse_explorer_input("line-height:1.45");
+    assert(parsed_line_height.ok);
+    assert(parsed_line_height.input.kind
+           == demo::ExplorerInputKind::SetLineHeightRatio);
     auto parsed_scroll_speed = demo::parse_explorer_input("scroll-speed:1.5");
     assert(parsed_scroll_speed.ok);
     assert(parsed_scroll_speed.input.kind
@@ -376,7 +396,9 @@ duplicate
     fs::remove_all(demo::demo_root(preference_profile), ec);
     auto preference_state = demo::make_state(preference_profile);
     auto preference_sequence = demo::parse_explorer_input_sequence(
-        "font-family:system;font-scale:1.25;scroll-speed:1.5;"
+        "font-family:system;font-scale:1.25;font-size:17;"
+        "heading-font-size:22;small-font-size:13;line-height:1.45;"
+        "scroll-speed:1.5;"
         "horizontal-scroll-speed:2;color-scheme:system");
     assert(preference_sequence.ok);
     demo::apply_explorer_inputs(
@@ -387,6 +409,11 @@ duplicate
     assert(preference_state.theme_preferences.prefer_system_font_family);
     assert(preference_state.theme_preferences.font_family.empty());
     assert(preference_state.theme_preferences.font_scale == 1.25f);
+    assert(preference_state.theme_preferences.body_font_size == 17.0f);
+    assert(preference_state.theme_preferences.heading_font_size == 22.0f);
+    assert(preference_state.theme_preferences.small_font_size == 13.0f);
+    assert(std::fabs(preference_state.theme_preferences.line_height_ratio - 1.45f)
+           < 0.001f);
     assert(preference_state.theme_preferences.scroll_delta_multiplier == 1.5f);
     assert(preference_state.theme_preferences.scroll_horizontal_delta_multiplier
            == 2.0f);

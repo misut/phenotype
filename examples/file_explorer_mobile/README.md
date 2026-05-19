@@ -92,12 +92,18 @@ working directory. `phenotype run file_explorer_mobile` sets the package-root
 environment automatically.
 The example also applies the native `system_settings` snapshot before
 `set_theme`: Pretendard remains the package default, OS font scale and scroll
-policy become pure theme inputs, OS font family/accent are captured for opt-in
-overrides, and user overrides win. Direct launches can use
+policy become pure theme inputs, system appearance/accent are applied by
+default, OS font family remains an opt-in override, and user overrides win.
+Direct launches can use
 `PHENOTYPE_FILE_EXPLORER_FONT_FAMILY`, `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT`,
-`PHENOTYPE_FILE_EXPLORER_FONT_SCALE`, and
-`PHENOTYPE_FILE_EXPLORER_SCROLL_SPEED`; the resulting edge snapshot, overrides,
-and effective theme are written to
+`PHENOTYPE_FILE_EXPLORER_FONT_SCALE`, `PHENOTYPE_FILE_EXPLORER_FONT_SIZE`,
+`PHENOTYPE_FILE_EXPLORER_HEADING_FONT_SIZE`,
+`PHENOTYPE_FILE_EXPLORER_SMALL_FONT_SIZE`,
+`PHENOTYPE_FILE_EXPLORER_LINE_HEIGHT`,
+`PHENOTYPE_FILE_EXPLORER_LINE_HEIGHT_RATIO`,
+`PHENOTYPE_FILE_EXPLORER_SCROLL_SPEED`, and
+`PHENOTYPE_FILE_EXPLORER_HORIZONTAL_SCROLL_SPEED`; the resulting edge snapshot,
+overrides, and effective theme are written to
 `application.file_explorer.preferences` in the artifact.
 The same command can feed deterministic native startup input through the shared
 model parser:
@@ -117,8 +123,9 @@ semicolon-separated inputs, and `PHENOTYPE_FILE_EXPLORER_SCRIPT` points at the
 same line-based script format used by `phenotype drive file-explorer
 --script`. Preference commands use the same app input layer, so
 `font-family:system`, `font-family:Pretendard`, `font-scale:1.2`,
-`scroll-speed:1.4`, and `horizontal-scroll-speed:2` update the shared state
-before the native theme is resolved.
+`font-size:17`, `heading-font-size:22`, `small-font-size:13`,
+`line-height:1.45`, `scroll-speed:1.4`, and `horizontal-scroll-speed:2` update
+the shared state before the native theme is resolved.
 File reads and environment access remain example edge work; parsing and input
 application stay in `file_explorer_shared`.
 The mobile Create tab exposes the same preference inputs as app buttons

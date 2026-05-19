@@ -86,9 +86,9 @@ the shared model exposes `chrome.thumbnail_system` in CLI/debug JSON, and the
 desktop manifest samples PDF, image, and video thumbnail regions so visual drift
 is reported as concrete pixel-region metrics rather than a manual screenshot
 guess.
-Both file explorer profiles also expose font-family, font-scale, vertical
-scroll-speed, and horizontal scroll-speed preference inputs through the shared
-model. Native examples apply
+Both file explorer profiles also expose font-family, font-scale, exact
+body/heading/small font-size, line-height, vertical scroll-speed, and horizontal
+scroll-speed preference inputs through the shared model. Native examples apply
 those app overrides after the platform system-settings snapshot is captured, so
 artifacts can distinguish OS defaults from user-selected theme changes. The
 desktop More menu and mobile Create tab both call the same shared preference
@@ -268,7 +268,9 @@ Focus aliases such as `key:tab`, `shift-tab`, `focus:search`,
 focus state as native artifacts: keyboard traversal sets `focus_visible=true`,
 while pointer input changes `focus_target` without drawing the ring.
 Preference aliases such as `font-family:system`, `font-scale:1.25`,
-`scroll-speed:1.5`, `horizontal-scroll-speed:2`, and `color-scheme:system`
+`font-size:17`, `heading-font-size:22`, `small-font-size:13`,
+`line-height:1.45`, `scroll-speed:1.5`, `horizontal-scroll-speed:2`, and
+`color-scheme:system`
 drive the same pure
 `ThemePreferenceOverrides` path as the native file explorer settings controls.
 Artifacts record the OS snapshot (`color_scheme`, appearance/accessibility
@@ -319,9 +321,9 @@ effective theme values used at launch. This keeps OS font family source, OS font
 scale, font-weight adjustment, OS scroll policy/factors, separate OS and app
 vertical/horizontal scroll multipliers, system accent capture, Pretendard package
 defaults, and direct environment overrides debuggable from the same artifact
-bundle. Pretendard stays the default family; choosing the OS family or applying
-the OS accent is an explicit app override so visual contracts can stay
-deterministic.
+bundle. Pretendard stays the default family; choosing the OS family is an
+explicit app override, while system appearance and accent are applied by the
+native file explorer examples and recorded in artifacts.
 Native file explorer artifacts publish the same contract under
 `application.file_explorer.resource_system`: application id/version/entry,
 platform list, SVG/preload/runtime-visible asset counts, app icon SVG/preload
