@@ -493,12 +493,32 @@
       "equals": "NSEvent.doubleClickInterval/keyRepeatDelay/keyRepeatInterval"
     },
     {
+      "path": "application.file_explorer.preferences.system_settings.font_scale_available",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.preferences.system_settings.line_height_available",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.preferences.system_settings.scroll_metrics_available",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.preferences.system_settings.color_scheme_available",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.preferences.app_overrides.color_scheme",
+      "equals": "light"
+    },
+    {
       "path": "application.file_explorer.preferences.effective_theme.font_family",
       "equals": "Pretendard"
     },
     {
       "path": "application.file_explorer.preferences.resolution.used_system_color_scheme",
-      "equals": true
+      "equals": false
     },
     {
       "path": "application.file_explorer.preferences.resolution.used_system_font_metrics",

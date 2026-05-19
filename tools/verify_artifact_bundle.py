@@ -1000,6 +1000,25 @@ def check_file_explorer_preferences_contract(
                 "font and scroll preference failures are LLM-debuggable."),
         )
 
+    settings = object_at(preferences, "system_settings")
+    if settings is not None:
+        for key in (
+            "font_scale_available",
+            "line_height_available",
+            "scroll_metrics_available",
+            "color_scheme_available",
+        ):
+            check_bool_field(
+                report,
+                settings,
+                key,
+                f"{path}.system_settings",
+                likely_layer="file-explorer-preferences",
+                hint=(
+                    "System preference availability flags should distinguish "
+                    "OS-derived values from fallback defaults before resolver "
+                    "evidence claims a system setting was consumed."))
+
     effective = object_at(preferences, "effective_theme")
     if effective is not None:
         check_string_field(
