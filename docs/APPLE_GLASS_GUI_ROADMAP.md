@@ -284,6 +284,9 @@ Theme support has matured beyond the original small token set:
 - state colors for hover, active, disabled, error, and focus;
 - semantic colors for success, warning, info, and error;
 - JSON parsing with partial overrides and string color forms;
+- OS/system preference capture for font family, system/small text size,
+  accessibility display settings, accent color, scroller style, scrollbar size,
+  and axis-specific scroll factors before app overrides are applied;
 - structural widget snapshot tests for the core widget surface.
 
 The default theme now starts from an Apple-like glass baseline: Pretendard for

@@ -511,9 +511,11 @@ geometry now have separate JSON owners.
 
 `debug.platform_capabilities.system_settings` records OS-derived typography,
 accent, and scrolling inputs before the theme overlay runs. macOS fills this
-from CoreText/AppKit/NSScroller, Windows from `SystemParametersInfoW`, DWM, and
-`GetSystemMetrics`, Android from `Resources.getConfiguration()` and
-`ViewConfiguration`, and unsupported targets publish deterministic fallback
+from CoreText, `NSFont.systemFontSize` / `smallSystemFontSize`,
+`NSEvent.hasPreciseScrollingDeltas`, `NSScroller.preferredScrollerStyle`, and
+regular-control scroller width; Windows from `SystemParametersInfoW`, DWM, and
+`GetSystemMetrics`; Android from `Resources.getConfiguration()` and
+`ViewConfiguration`; and unsupported targets publish deterministic fallback
 values. Accessibility display inputs sit next to the renderer details:
 macOS uses `NSWorkspace`, Windows uses `SystemParametersInfoW`, and Android uses
 public animation-scale and UI-contrast APIs. File explorer artifacts mirror the result under
@@ -981,8 +983,10 @@ it can also count
 appearance and accessibility fields as first-class evidence: inspect
 `debug.platform_capabilities.system_settings.color_scheme`,
 `appearance_name`, `color_scheme_source`, `reduce_transparency`,
-`increase_contrast`, `reduce_motion`, and `accessibility_source` before
-changing theme tokens. File explorer artifacts also mirror the app override
+`increase_contrast`, `reduce_motion`, `accessibility_source`,
+`text_size_source`, `scroll_source`, `scroll_vertical_factor`,
+`scroll_horizontal_factor`, and `scroll_bar_size` before changing theme tokens.
+File explorer artifacts also mirror the app override
 state at `debug.application.file_explorer.preferences.app_overrides` and the
 resolved theme at `debug.application.file_explorer.preferences.effective_theme`,
 including `color_scheme`, font family/scale, and both scroll multipliers.

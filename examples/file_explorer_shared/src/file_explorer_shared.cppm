@@ -6760,6 +6760,8 @@ struct ExplorerLabels {
     std::string preferences_text_smaller = "Text -";
     std::string preferences_scroll_faster = "Scroll +";
     std::string preferences_scroll_slower = "Scroll -";
+    std::string preferences_horizontal_scroll_faster = "H Scroll +";
+    std::string preferences_horizontal_scroll_slower = "H Scroll -";
     std::string preferences_system_appearance = "System Look";
     std::string preferences_light_appearance = "Light";
     std::string preferences_dark_appearance = "Dark";
@@ -6874,6 +6876,8 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"preferences.text_smaller", "Text -"},
         {"preferences.scroll_faster", "Scroll +"},
         {"preferences.scroll_slower", "Scroll -"},
+        {"preferences.horizontal_scroll_faster", "H Scroll +"},
+        {"preferences.horizontal_scroll_slower", "H Scroll -"},
         {"preferences.system_appearance", "System Look"},
         {"preferences.light_appearance", "Light"},
         {"preferences.dark_appearance", "Dark"},
@@ -6937,6 +6941,8 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"preferences.text_smaller", "글자 -"},
         {"preferences.scroll_faster", "스크롤 +"},
         {"preferences.scroll_slower", "스크롤 -"},
+        {"preferences.horizontal_scroll_faster", "가로 스크롤 +"},
+        {"preferences.horizontal_scroll_slower", "가로 스크롤 -"},
         {"preferences.system_appearance", "시스템"},
         {"preferences.light_appearance", "라이트"},
         {"preferences.dark_appearance", "다크"},
@@ -7072,6 +7078,12 @@ inline ExplorerLabels file_explorer_labels(
     labels.preferences_scroll_slower = get(
         "preferences.scroll_slower",
         labels.preferences_scroll_slower);
+    labels.preferences_horizontal_scroll_faster = get(
+        "preferences.horizontal_scroll_faster",
+        labels.preferences_horizontal_scroll_faster);
+    labels.preferences_horizontal_scroll_slower = get(
+        "preferences.horizontal_scroll_slower",
+        labels.preferences_horizontal_scroll_slower);
     labels.preferences_system_appearance = get(
         "preferences.system_appearance",
         labels.preferences_system_appearance);
