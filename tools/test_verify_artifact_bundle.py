@@ -1023,10 +1023,13 @@ def snapshot_with_file_explorer_chrome(
                     "line_height_available": True,
                     "scroll_metrics_available": True,
                     "color_scheme_available": True,
+                    "reduce_motion_available": True,
                     "accent_color_available": True,
                 },
                 "app_overrides": {
                     "apply_system_font_metrics": True,
+                    "apply_system_reduce_motion": True,
+                    "motion_duration_multiplier": 1.0,
                 },
                 "effective_theme": {
                     "font_family": "Pretendard",
@@ -1037,6 +1040,7 @@ def snapshot_with_file_explorer_chrome(
                     "line_height_ratio": 1.6,
                     "scroll_delta_multiplier": 1.0,
                     "scroll_horizontal_delta_multiplier": 1.0,
+                    "motion_duration_multiplier": 1.0,
                 },
                 "resolution": {
                     "used_system_font_family": False,
@@ -1050,6 +1054,8 @@ def snapshot_with_file_explorer_chrome(
                     "used_system_scroll_metrics": True,
                     "used_user_scroll_scale": False,
                     "used_system_accent_color": True,
+                    "used_system_reduce_motion": False,
+                    "used_user_motion_scale": False,
                 },
             },
             "chrome": {

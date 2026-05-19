@@ -233,5 +233,6 @@
   "state_focus_ring_width": 2,
   "line_height_ratio": 1.4,
   "scroll_delta_multiplier": 1,
-  "scroll_horizontal_delta_multiplier": 1
+  "scroll_horizontal_delta_multiplier": 1,
+  "motion_duration_multiplier": 1
 }

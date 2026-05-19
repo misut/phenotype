@@ -176,6 +176,10 @@ struct window_api {
                       WindowOptions const* options) = nullptr;
 };
 
+struct system_api {
+    PlatformSystemSettingsSnapshot (*settings)() = nullptr;
+};
+
 struct renderer_api {
     void (*init)(native_surface_handle surface) = nullptr;
     void (*flush)(unsigned char const* buf, unsigned int len) = nullptr;
@@ -247,6 +251,7 @@ struct platform_api {
     char const* startup_message = nullptr;
     dialog_api dialog{};
     window_api window{};
+    system_api system{};
 };
 
 inline constexpr unsigned int invalid_callback_id = 0xFFFFFFFFu;

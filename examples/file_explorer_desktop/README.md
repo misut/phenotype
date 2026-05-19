@@ -296,15 +296,17 @@ environment automatically. When `--artifact-dir` and `--artifact-exit` are used
 together, the CLI keeps the leading titlebar reserve blank and relies on the
 runtime window debug payload plus pixel-region contracts to prove native control
 ownership without drawing duplicate traffic lights.
-The example also applies the native `system_settings` snapshot before
-`set_theme`: Pretendard remains the package default, OS font size metrics and
-scroll policy become pure theme inputs, system appearance/accent are applied by
-default, OS preferred locale seeds the startup language when supported, OS font
-family remains an opt-in override, native input timing is captured for
-double-click, key repeat, and caret blink diagnostics, and user overrides win.
+The example also applies the native `system_settings` snapshot from
+`phenotype::native::system_settings()` before `set_theme`: Pretendard remains
+the package default, OS font size metrics and scroll policy become pure theme
+inputs, system appearance/accent are applied by default, OS preferred locale
+seeds the startup language when supported, OS font family remains an opt-in
+override, native input timing is captured for double-click, key repeat, and
+caret blink diagnostics, OS Reduce Motion collapses phenotype animation
+durations through the resolved theme, and user overrides win.
 Artifacts include the pure theme `resolution` block so a verifier can tell
-whether the effective font sizes and scroll multipliers came from the OS,
-application overrides, or package defaults.
+whether the effective font sizes, scroll multipliers, and motion-duration
+multiplier came from the OS, application overrides, or package defaults.
 Direct launches can use
 `PHENOTYPE_FILE_EXPLORER_FONT_FAMILY`, `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT`,
 `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT_METRICS`,
@@ -315,7 +317,8 @@ Direct launches can use
 `PHENOTYPE_FILE_EXPLORER_LINE_HEIGHT`,
 `PHENOTYPE_FILE_EXPLORER_LINE_HEIGHT_RATIO`,
 `PHENOTYPE_FILE_EXPLORER_SCROLL_SPEED`, and
-`PHENOTYPE_FILE_EXPLORER_HORIZONTAL_SCROLL_SPEED`; the resulting edge snapshot,
+`PHENOTYPE_FILE_EXPLORER_HORIZONTAL_SCROLL_SPEED`, and
+`PHENOTYPE_FILE_EXPLORER_MOTION_SCALE`; the resulting edge snapshot,
 overrides, and effective theme are written to
 `application.file_explorer.preferences` in the artifact.
 The same command can feed deterministic native startup input through the shared
@@ -344,9 +347,10 @@ resolved. macOS records the last local scroll event under
 `debug.platform_runtime.details.input.scroll`, so raw AppKit deltas, precise
 scroll mode, app multipliers, and normalized logical-pixel deltas can be
 checked without guessing from the captured image.
-The native example captures OS settings before the first frame and refreshes
-them when app input triggers theme sync, so font, appearance, accent, and scroll
-policy changes can be reflected without restarting the demo.
+The native example captures OS settings through the product native API before
+the first frame and refreshes them when app input triggers theme sync, so font,
+appearance, accent, and scroll policy changes can be reflected without
+restarting the demo.
 The desktop More menu exposes the same family, OS/package text-size policy,
 text scale, body-size, line-height, appearance, and scroll controls as shared
 file explorer inputs.

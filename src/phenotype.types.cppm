@@ -300,6 +300,7 @@ struct Theme {
     float line_height_ratio  = 1.6f;
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
+    float motion_duration_multiplier = 1.0f;
 
     // Layout
     float max_content_width  = 720.0f;
@@ -445,6 +446,10 @@ inline auto theme_contract_system_snapshot(
             system.accent_color.b,
             system.accent_color.a,
         },
+        .reduce_motion = system.reduce_motion,
+        .reduce_motion_available =
+            system_setting_source_is_available(system.accessibility_source)
+            || system_setting_source_is_available(system.source),
     };
 }
 
@@ -459,6 +464,7 @@ inline auto theme_contract_preference_base(Theme const& theme)
         .scroll_delta_multiplier = theme.scroll_delta_multiplier,
         .scroll_horizontal_delta_multiplier =
             theme.scroll_horizontal_delta_multiplier,
+        .motion_duration_multiplier = theme.motion_duration_multiplier,
     };
 }
 
@@ -474,6 +480,7 @@ struct ResolvedThemePreferences {
     float effective_line_height_ratio = 1.6f;
     float effective_scroll_delta_multiplier = 1.0f;
     float effective_scroll_horizontal_delta_multiplier = 1.0f;
+    float effective_motion_duration_multiplier = 1.0f;
     bool used_user_font_family = false;
     bool used_system_font_family = false;
     bool used_user_color_scheme = false;
@@ -487,6 +494,8 @@ struct ResolvedThemePreferences {
     bool used_system_scroll_metrics = false;
     bool used_user_scroll_scale = false;
     bool used_system_accent_color = false;
+    bool used_system_reduce_motion = false;
+    bool used_user_motion_scale = false;
 };
 
 inline float bounded_theme_preference(
@@ -499,6 +508,12 @@ inline float bounded_theme_preference(
         fallback,
         minimum,
         maximum);
+}
+
+inline float bounded_motion_duration_multiplier(
+        float value,
+        float fallback) noexcept {
+    return theme_contract::bounded_motion_duration_multiplier(value, fallback);
 }
 
 inline bool theme_color_scheme_is_dark(std::string_view scheme) noexcept {
@@ -752,6 +767,10 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
         theme.state_focus_ring = theme.accent;
         resolved.used_system_accent_color = true;
     }
+    theme.motion_duration_multiplier =
+        bounded_motion_duration_multiplier(
+            contract_resolution.effective_motion_duration_multiplier,
+            theme.motion_duration_multiplier);
     resolved.theme = theme;
     resolved.requested_color_scheme =
         contract_resolution.requested_color_scheme;
@@ -766,6 +785,8 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
         theme.scroll_delta_multiplier;
     resolved.effective_scroll_horizontal_delta_multiplier =
         theme.scroll_horizontal_delta_multiplier;
+    resolved.effective_motion_duration_multiplier =
+        theme.motion_duration_multiplier;
     resolved.used_user_font_family =
         contract_resolution.used_user_font_family;
     resolved.used_system_font_family =
@@ -792,6 +813,10 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
         contract_resolution.used_user_scroll_scale;
     resolved.used_system_accent_color =
         contract_resolution.used_system_accent_color;
+    resolved.used_system_reduce_motion =
+        contract_resolution.used_system_reduce_motion;
+    resolved.used_user_motion_scale =
+        contract_resolution.used_user_motion_scale;
     return resolved;
 }
 
@@ -873,6 +898,7 @@ inline bool theme_matches_default_glass_contract(Theme const& theme) {
         && theme.line_height_ratio == contract.typography.line_height_ratio
         && theme.scroll_delta_multiplier == 1.0f
         && theme.scroll_horizontal_delta_multiplier == 1.0f
+        && theme.motion_duration_multiplier == 1.0f
         && theme.state_focus_ring == theme.accent;
 }
 

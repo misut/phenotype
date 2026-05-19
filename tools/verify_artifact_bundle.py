@@ -1016,6 +1016,7 @@ def check_file_explorer_preferences_contract(
             "line_height_available",
             "scroll_metrics_available",
             "color_scheme_available",
+            "reduce_motion_available",
             "accent_color_available",
         ):
             check_bool_field(
@@ -1065,6 +1066,41 @@ def check_file_explorer_preferences_contract(
                 hint=(
                     "Effective theme numeric fields should be bounded values "
                     "from the pure resolver, not inferred from pixels."))
+        check_number_field(
+            report,
+            effective,
+            "motion_duration_multiplier",
+            f"{path}.effective_theme",
+            min_value=0.0,
+            max_value=4.0,
+            likely_layer="file-explorer-preferences",
+            hint=(
+                "The effective motion-duration multiplier should come from "
+                "the pure resolver so OS Reduce Motion can disable "
+                "animations without backend policy."))
+
+    app_overrides = object_at(preferences, "app_overrides")
+    if app_overrides is not None:
+        check_bool_field(
+            report,
+            app_overrides,
+            "apply_system_reduce_motion",
+            f"{path}.app_overrides",
+            likely_layer="file-explorer-preferences",
+            hint=(
+                "The app override payload should record whether OS Reduce "
+                "Motion is allowed to affect the resolved theme."))
+        check_number_field(
+            report,
+            app_overrides,
+            "motion_duration_multiplier",
+            f"{path}.app_overrides",
+            min_value=0.0,
+            max_value=4.0,
+            likely_layer="file-explorer-preferences",
+            hint=(
+                "The app override payload should record the user/app motion "
+                "scale before resolver output is inspected."))
 
     resolution = object_at(preferences, "resolution")
     if resolution is not None:
@@ -1080,6 +1116,8 @@ def check_file_explorer_preferences_contract(
             "used_system_scroll_metrics",
             "used_user_scroll_scale",
             "used_system_accent_color",
+            "used_system_reduce_motion",
+            "used_user_motion_scale",
         ):
             check_bool_field(
                 report,
@@ -1101,6 +1139,7 @@ def check_file_explorer_preferences_contract(
                 ("used_system_scroll_metrics", "scroll_metrics_available"),
                 ("used_system_color_scheme", "color_scheme_available"),
                 ("used_system_accent_color", "accent_color_available"),
+                ("used_system_reduce_motion", "reduce_motion_available"),
             ):
                 used_value = resolution.get(used_key)
                 available_value = settings.get(availability_key)

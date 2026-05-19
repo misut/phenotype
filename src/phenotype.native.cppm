@@ -101,6 +101,26 @@ inline platform_api const& current_platform() {
     return detail::select_platform();
 }
 
+inline PlatformSystemSettingsSnapshot system_settings() {
+    auto const& platform = current_platform();
+    if (platform.system.settings)
+        return platform.system.settings();
+    if (platform.debug.capabilities)
+        return platform.debug.capabilities().system_settings;
+    return {};
+}
+
+inline ResolvedThemePreferences resolve_native_theme_preferences(
+        Theme theme,
+        ThemePreferenceOverrides const& overrides = {},
+        std::string_view source = "native-system-settings") {
+    return ::phenotype::resolve_system_theme_preferences(
+        theme,
+        system_settings(),
+        overrides,
+        source);
+}
+
 namespace text {
 
 using ::phenotype::native::TextAtlas;

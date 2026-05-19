@@ -9742,6 +9742,7 @@ inline platform_api const& macos_platform() {
             detail::configure_window,
         },
     };
+    api.system.settings = detail::macos_system_settings_snapshot;
     return api;
 #else
     static platform_api api{};

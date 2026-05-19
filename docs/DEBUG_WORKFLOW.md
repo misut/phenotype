@@ -548,10 +548,11 @@ result under
 example applied before rendering. `resolution` is emitted from the core
 `ResolvedThemePreferences` value, so it records whether the effective theme
 actually consumed OS font metrics, OS scroll metrics, OS appearance, user font
-scale, user font sizes, user line height, or user scroll speed. The mirrored
+scale, user font sizes, user line height, user scroll speed, OS Reduce Motion,
+or user motion scale. The mirrored
 `system_settings` object includes availability booleans for font family, font
-metrics, font scale, line height, scroll metrics, color scheme, and accent color
-so a fallback value is not mistaken for an OS preference. Use this block
+metrics, font scale, line height, scroll metrics, color scheme, Reduce Motion,
+and accent color so a fallback value is not mistaken for an OS preference. Use this block
 when text size, family source, font-weight adjustment, vertical or horizontal
 wheel/trackpad speed, scrollbar behavior, touch slop, double-click timeout, key
 repeat timing, caret blink, or accent color looks wrong but the
@@ -1058,18 +1059,20 @@ and `caret_blink_interval_ms` before changing theme tokens.
 File explorer artifacts also mirror the app override
 state at `debug.application.file_explorer.preferences.app_overrides` and the
 resolved theme at `debug.application.file_explorer.preferences.effective_theme`,
-including `color_scheme`, font family/scale, `apply_system_scroll_metrics`, and
-both scroll multipliers. `debug.application.file_explorer.preferences.system_settings`
+including `color_scheme`, font family/scale, `apply_system_scroll_metrics`,
+`apply_system_reduce_motion`, both scroll multipliers, and
+`motion_duration_multiplier`. `debug.application.file_explorer.preferences.system_settings`
 must include `font_family_available`, `font_metrics_available`,
 `font_scale_available`, `line_height_available`, `scroll_metrics_available`, and
-`color_scheme_available`, plus `accent_color_available` when accent capture is
-reported. The local file
+`color_scheme_available`, plus `reduce_motion_available` and
+`accent_color_available` when those captures are reported. The local file
 explorer artifact gate pins the app color-scheme override to `light` for stable
 pixel thresholds while still recording OS appearance availability; the adjacent
 `debug.application.file_explorer.preferences.resolution` object names the pure
 resolver decisions, such as `used_system_font_metrics`,
 `used_system_scroll_metrics`, `used_user_font_size`, and
-`used_user_scroll_scale`, before native runtime input deltas are considered.
+`used_user_scroll_scale`, `used_system_reduce_motion`, and
+`used_user_motion_scale`, before native runtime input deltas are considered.
 macOS runtime artifacts additionally expose
 `debug.platform_runtime.details.input.scroll.normalized_delta_x/y` and
 `app_vertical_multiplier` / `app_horizontal_multiplier` for the last local

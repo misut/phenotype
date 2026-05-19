@@ -422,7 +422,7 @@ duplicate
         "font-family:system;font-scale:1.25;font-size:17;"
         "heading-font-size:22;small-font-size:13;line-height:1.45;"
         "system-font-metrics:false;system-scroll-metrics:app;scroll-speed:1.5;"
-        "horizontal-scroll-speed:2;color-scheme:system");
+        "horizontal-scroll-speed:2;motion-scale:0;color-scheme:system");
     assert(preference_sequence.ok);
     demo::apply_explorer_inputs(
         preference_state,
@@ -442,6 +442,8 @@ duplicate
     assert(preference_state.theme_preferences.scroll_delta_multiplier == 1.5f);
     assert(preference_state.theme_preferences.scroll_horizontal_delta_multiplier
            == 2.0f);
+    assert(preference_state.theme_preferences.motion_duration_multiplier
+           == 0.0f);
     assert(preference_state.theme_preferences.prefer_system_color_scheme);
     assert(preference_state.status == "Using the OS appearance.");
     auto preference_debug_text = json::emit(
@@ -470,7 +472,11 @@ duplicate
            != std::string::npos);
     assert(preference_debug_text.find("\"used_user_scroll_scale\"")
            != std::string::npos);
+    assert(preference_debug_text.find("\"used_user_motion_scale\"")
+           != std::string::npos);
     assert(preference_debug_text.find("\"scroll_delta_multiplier\":1.5")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"motion_duration_multiplier\":0")
            != std::string::npos);
     assert(preference_debug_text.find("\"apply_system_scroll_metrics\":false")
            != std::string::npos);
@@ -760,7 +766,7 @@ duplicate
     assert(chrome.icon_file_type_color_policy
            == "macos_finder_file_type_tints");
     assert(chrome.icon_scale == "medium");
-    assert(chrome.theme_contract_version == 1);
+    assert(chrome.theme_contract_version == 2);
     assert(chrome.theme_profile_name == "apple-glass-light");
     assert(chrome.theme_reference.find("Liquid Glass") != std::string::npos);
     assert(chrome.theme_font_policy.find("Pretendard") != std::string::npos);

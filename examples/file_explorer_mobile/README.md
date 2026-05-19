@@ -90,15 +90,17 @@ At runtime the example reads `phenotype.package.toml` and locale files from
 `PHENOTYPE_FILE_EXPLORER_PACKAGE_ROOT`, `PHENOTYPE_PACKAGE_ROOT`, or the current
 working directory. `phenotype run file_explorer_mobile` sets the package-root
 environment automatically.
-The example also applies the native `system_settings` snapshot before
-`set_theme`: Pretendard remains the package default, OS font size metrics and
-scroll policy become pure theme inputs, system appearance/accent are applied by
-default, OS preferred locale seeds the startup language when supported, OS font
-family remains an opt-in override, native input timing is captured for
-double-tap, key repeat, and caret blink diagnostics, and user overrides win.
+The example also applies the native `system_settings` snapshot from
+`phenotype::native::system_settings()` before `set_theme`: Pretendard remains
+the package default, OS font size metrics and scroll policy become pure theme
+inputs, system appearance/accent are applied by default, OS preferred locale
+seeds the startup language when supported, OS font family remains an opt-in
+override, native input timing is captured for double-tap, key repeat, and caret
+blink diagnostics, OS Reduce Motion collapses phenotype animation durations
+through the resolved theme, and user overrides win.
 Artifacts include the pure theme `resolution` block so a verifier can tell
-whether the effective font sizes and scroll multipliers came from the OS,
-application overrides, or package defaults.
+whether the effective font sizes, scroll multipliers, and motion-duration
+multiplier came from the OS, application overrides, or package defaults.
 Direct launches can use
 `PHENOTYPE_FILE_EXPLORER_FONT_FAMILY`, `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT`,
 `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT_METRICS`,
@@ -109,7 +111,8 @@ Direct launches can use
 `PHENOTYPE_FILE_EXPLORER_LINE_HEIGHT`,
 `PHENOTYPE_FILE_EXPLORER_LINE_HEIGHT_RATIO`,
 `PHENOTYPE_FILE_EXPLORER_SCROLL_SPEED`, and
-`PHENOTYPE_FILE_EXPLORER_HORIZONTAL_SCROLL_SPEED`; the resulting edge snapshot,
+`PHENOTYPE_FILE_EXPLORER_HORIZONTAL_SCROLL_SPEED`, and
+`PHENOTYPE_FILE_EXPLORER_MOTION_SCALE`; the resulting edge snapshot,
 overrides, and effective theme are written to
 `application.file_explorer.preferences` in the artifact.
 The same command can feed deterministic native startup input through the shared
@@ -135,9 +138,10 @@ same line-based script format used by `phenotype drive file-explorer
 `line-height:1.45`, `system-scroll-metrics:app`, `scroll-speed:1.4`, and
 `horizontal-scroll-speed:2` update the shared state before the native theme is
 resolved.
-The native example captures OS settings before the first frame and refreshes
-them when app input triggers theme sync, so font, appearance, accent, and scroll
-policy changes can be reflected without restarting the demo.
+The native example captures OS settings through the product native API before
+the first frame and refreshes them when app input triggers theme sync, so font,
+appearance, accent, and scroll policy changes can be reflected without
+restarting the demo.
 File reads and environment access remain example edge work; parsing and input
 application stay in `file_explorer_shared`.
 The mobile Create tab exposes the same preference inputs as app buttons

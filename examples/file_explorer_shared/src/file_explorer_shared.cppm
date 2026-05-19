@@ -146,6 +146,7 @@ struct SystemPreferenceSnapshot {
     bool line_height_available = false;
     bool scroll_metrics_available = false;
     bool color_scheme_available = false;
+    bool reduce_motion_available = false;
     float double_click_interval_ms = 500.0f;
     float key_repeat_delay_ms = 500.0f;
     float key_repeat_interval_ms = 50.0f;
@@ -182,6 +183,8 @@ struct ThemePreferenceSnapshot {
     bool apply_system_font_scale = true;
     bool apply_system_scroll_metrics = true;
     bool apply_system_accent_color = false;
+    bool apply_system_reduce_motion = true;
+    float motion_duration_multiplier = 1.0f;
 };
 
 struct Snapshot {
@@ -246,6 +249,7 @@ struct ExplorerState {
     float effective_line_height_ratio = 1.6f;
     float effective_scroll_delta_multiplier = 1.0f;
     float effective_scroll_horizontal_delta_multiplier = 1.0f;
+    float effective_motion_duration_multiplier = 1.0f;
     bool used_system_font_family = false;
     bool used_system_color_scheme = false;
     bool used_system_font_metrics = false;
@@ -257,6 +261,8 @@ struct ExplorerState {
     bool used_system_scroll_metrics = false;
     bool used_user_scroll_scale = false;
     bool used_system_accent_color = false;
+    bool used_system_reduce_motion = false;
+    bool used_user_motion_scale = false;
 };
 
 enum class ExplorerInputKind {
@@ -300,6 +306,7 @@ enum class ExplorerInputKind {
     SetSystemScrollMetrics,
     SetScrollSpeed,
     SetHorizontalScrollSpeed,
+    SetMotionScale,
     SetColorScheme,
 };
 
@@ -666,6 +673,7 @@ struct RuntimePreferenceState {
     float effective_line_height_ratio = 1.6f;
     float effective_scroll_delta_multiplier = 1.0f;
     float effective_scroll_horizontal_delta_multiplier = 1.0f;
+    float effective_motion_duration_multiplier = 1.0f;
     bool used_system_font_family = false;
     bool used_system_color_scheme = false;
     bool used_system_font_metrics = false;
@@ -677,6 +685,8 @@ struct RuntimePreferenceState {
     bool used_system_scroll_metrics = false;
     bool used_user_scroll_scale = false;
     bool used_system_accent_color = false;
+    bool used_system_reduce_motion = false;
+    bool used_user_motion_scale = false;
 };
 
 struct ExplorerSidebarSymbol {
@@ -2971,6 +2981,9 @@ inline json::Value system_settings_debug_json(
         "color_scheme_available",
         json::Value{settings.color_scheme_available});
     out.emplace(
+        "reduce_motion_available",
+        json::Value{settings.reduce_motion_available});
+    out.emplace(
         "double_click_interval_ms",
         json::Value{settings.double_click_interval_ms});
     out.emplace(
@@ -3065,6 +3078,12 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
     overrides.emplace(
         "apply_system_accent_color",
         json::Value{state.theme_preferences.apply_system_accent_color});
+    overrides.emplace(
+        "apply_system_reduce_motion",
+        json::Value{state.theme_preferences.apply_system_reduce_motion});
+    overrides.emplace(
+        "motion_duration_multiplier",
+        json::Value{state.theme_preferences.motion_duration_multiplier});
 
     json::Object effective;
     effective.emplace(
@@ -3091,6 +3110,9 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
     effective.emplace(
         "scroll_horizontal_delta_multiplier",
         json::Value{state.effective_scroll_horizontal_delta_multiplier});
+    effective.emplace(
+        "motion_duration_multiplier",
+        json::Value{state.effective_motion_duration_multiplier});
 
     json::Object resolution;
     resolution.emplace(
@@ -3126,6 +3148,12 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
     resolution.emplace(
         "used_system_accent_color",
         json::Value{state.used_system_accent_color});
+    resolution.emplace(
+        "used_system_reduce_motion",
+        json::Value{state.used_system_reduce_motion});
+    resolution.emplace(
+        "used_user_motion_scale",
+        json::Value{state.used_user_motion_scale});
 
     json::Object out;
     out.emplace("source", json::Value{state.preferences_source});
@@ -4419,6 +4447,7 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::SetScrollSpeed: return "set_scroll_speed";
         case ExplorerInputKind::SetHorizontalScrollSpeed:
             return "set_horizontal_scroll_speed";
+        case ExplorerInputKind::SetMotionScale: return "set_motion_scale";
         case ExplorerInputKind::SetColorScheme: return "set_color_scheme";
     }
     return "noop";
@@ -4482,6 +4511,23 @@ inline std::optional<float> parse_preference_number(
         value = minimum;
     if (value > maximum)
         value = maximum;
+    return value;
+}
+
+inline std::optional<float> parse_motion_preference_number(
+        std::string_view raw) {
+    auto text = trim(raw);
+    if (text.empty())
+        return std::nullopt;
+    auto owned = std::string{text};
+    char* end = nullptr;
+    auto value = std::strtof(owned.c_str(), &end);
+    if (end == owned.c_str() || (end && *end != '\0'))
+        return std::nullopt;
+    if (!(value >= 0.0f))
+        return std::nullopt;
+    if (value > 4.0f)
+        value = 4.0f;
     return value;
 }
 
@@ -5110,6 +5156,18 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
             .value = compact_preference_number(*parsed),
         });
     }
+    if (name == "motion-scale" || name == "motion_scale"
+        || name == "animation-scale" || name == "animation_scale") {
+        auto parsed = parse_motion_preference_number(value);
+        if (!parsed) {
+            return input_parse_error(
+                "input 'motion-scale' requires a number from 0 to 4");
+        }
+        return parsed_input({
+            .kind = ExplorerInputKind::SetMotionScale,
+            .value = compact_preference_number(*parsed),
+        });
+    }
     if (name == "appearance" || name == "color-scheme"
         || name == "color_scheme") {
         auto lowered = lower_copy(trim(value));
@@ -5716,6 +5774,8 @@ inline void apply_runtime_preferences(
         preferences.effective_scroll_delta_multiplier;
     state.effective_scroll_horizontal_delta_multiplier =
         preferences.effective_scroll_horizontal_delta_multiplier;
+    state.effective_motion_duration_multiplier =
+        preferences.effective_motion_duration_multiplier;
     state.used_system_font_family = preferences.used_system_font_family;
     state.used_system_color_scheme = preferences.used_system_color_scheme;
     state.used_system_font_metrics = preferences.used_system_font_metrics;
@@ -5727,6 +5787,8 @@ inline void apply_runtime_preferences(
     state.used_system_scroll_metrics = preferences.used_system_scroll_metrics;
     state.used_user_scroll_scale = preferences.used_user_scroll_scale;
     state.used_system_accent_color = preferences.used_system_accent_color;
+    state.used_system_reduce_motion = preferences.used_system_reduce_motion;
+    state.used_user_motion_scale = preferences.used_user_motion_scale;
 }
 
 inline fs::path location_path(ExplorerState const& state, std::string_view id) {
@@ -6846,6 +6908,20 @@ inline void apply_explorer_input(
             state.theme_preferences.scroll_horizontal_delta_multiplier = *speed;
             state.status = "Horizontal scroll speed set to "
                 + compact_preference_number(*speed) + "x.";
+            return;
+        }
+        case ExplorerInputKind::SetMotionScale: {
+            auto scale = parse_motion_preference_number(input.value);
+            if (!scale) {
+                state.status = "Motion scale input was invalid.";
+                return;
+            }
+            state.preferences_source = "application-input";
+            state.theme_preferences.motion_duration_multiplier = *scale;
+            state.status = *scale == 0.0f
+                ? "Animation motion disabled."
+                : "Animation motion set to "
+                    + compact_preference_number(*scale) + "x.";
             return;
         }
         case ExplorerInputKind::SetColorScheme: {

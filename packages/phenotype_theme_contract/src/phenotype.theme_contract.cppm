@@ -7,7 +7,7 @@ export module phenotype.theme_contract;
 
 export namespace phenotype::theme_contract {
 
-inline constexpr unsigned int theme_contract_version = 1;
+inline constexpr unsigned int theme_contract_version = 2;
 
 struct ColorToken {
     unsigned char r = 0;
@@ -72,6 +72,7 @@ struct ThemePreferenceBase {
     float line_height_ratio = 1.6f;
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
+    float motion_duration_multiplier = 1.0f;
 };
 
 struct SystemThemePreferenceSnapshot {
@@ -92,6 +93,8 @@ struct SystemThemePreferenceSnapshot {
     bool color_scheme_available = false;
     bool accent_color_available = false;
     ColorToken accent_color = {0, 122, 255, 255};
+    bool reduce_motion = false;
+    bool reduce_motion_available = false;
 };
 
 struct ThemePreferenceOverrides {
@@ -110,6 +113,8 @@ struct ThemePreferenceOverrides {
     bool apply_system_font_scale = true;
     bool apply_system_scroll_metrics = true;
     bool apply_system_accent_color = false;
+    bool apply_system_reduce_motion = true;
+    float motion_duration_multiplier = 1.0f;
 };
 
 struct ResolvedThemePreferences {
@@ -123,6 +128,7 @@ struct ResolvedThemePreferences {
     float effective_line_height_ratio = 1.6f;
     float effective_scroll_delta_multiplier = 1.0f;
     float effective_scroll_horizontal_delta_multiplier = 1.0f;
+    float effective_motion_duration_multiplier = 1.0f;
     bool used_user_font_family = false;
     bool used_system_font_family = false;
     bool used_user_color_scheme = false;
@@ -136,6 +142,8 @@ struct ResolvedThemePreferences {
     bool used_system_scroll_metrics = false;
     bool used_user_scroll_scale = false;
     bool used_system_accent_color = false;
+    bool used_system_reduce_motion = false;
+    bool used_user_motion_scale = false;
 };
 
 inline auto default_glass_theme_contract() noexcept
@@ -191,6 +199,7 @@ inline auto theme_preference_base(DefaultGlassThemeContract const& contract)
         .line_height_ratio = contract.typography.line_height_ratio,
         .scroll_delta_multiplier = 1.0f,
         .scroll_horizontal_delta_multiplier = 1.0f,
+        .motion_duration_multiplier = 1.0f,
     };
 }
 
@@ -205,6 +214,16 @@ inline float bounded_theme_preference(
         return minimum;
     if (value > maximum)
         return maximum;
+    return value;
+}
+
+inline float bounded_motion_duration_multiplier(
+        float value,
+        float fallback) noexcept {
+    if (value < 0.0f || !std::isfinite(value))
+        return fallback;
+    if (value > 4.0f)
+        return 4.0f;
     return value;
 }
 
@@ -232,6 +251,8 @@ inline auto resolve_theme_preferences(
         base.scroll_delta_multiplier;
     resolved.effective_scroll_horizontal_delta_multiplier =
         base.scroll_horizontal_delta_multiplier;
+    resolved.effective_motion_duration_multiplier =
+        base.motion_duration_multiplier;
 
     if (!overrides.font_family.empty()) {
         resolved.effective_font_family = overrides.font_family;
@@ -421,6 +442,20 @@ inline auto resolve_theme_preferences(
         overrides.apply_system_accent_color
         && system.accent_color_available
         && system.accent_color.a > 0;
+    if (overrides.apply_system_reduce_motion
+        && system.reduce_motion_available
+        && system.reduce_motion) {
+        resolved.effective_motion_duration_multiplier = 0.0f;
+        resolved.used_system_reduce_motion = true;
+    }
+    auto const app_motion_scale = bounded_motion_duration_multiplier(
+        overrides.motion_duration_multiplier,
+        1.0f);
+    resolved.used_user_motion_scale = app_motion_scale != 1.0f;
+    resolved.effective_motion_duration_multiplier =
+        bounded_motion_duration_multiplier(
+            resolved.effective_motion_duration_multiplier * app_motion_scale,
+            base.motion_duration_multiplier);
     return resolved;
 }
 

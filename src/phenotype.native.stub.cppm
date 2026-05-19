@@ -123,20 +123,8 @@ inline std::optional<unsigned int> stub_renderer_hit_test(
 
 inline void stub_open_url(char const*, unsigned int) {}
 
-inline ::phenotype::diag::PlatformCapabilitiesSnapshot stub_debug_capabilities() {
-    ::phenotype::diag::PlatformCapabilitiesSnapshot snapshot{
-        "desktop-stub",
-        true,
-        true,
-        false,
-        true,
-        true,
-        true,
-        true,
-        false,
-        false,
-    };
-    snapshot.system_settings = ::phenotype::PlatformSystemSettingsSnapshot{
+inline ::phenotype::PlatformSystemSettingsSnapshot stub_system_settings() {
+    return ::phenotype::PlatformSystemSettingsSnapshot{
         .source = "desktop-stub-fallback",
         .font_family = "Pretendard",
         .body_font_size = 16.0f,
@@ -163,6 +151,22 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot stub_debug_capabilities()
         .color_scheme_source = "desktop-stub-fallback",
         .accessibility_source = "desktop-stub-fallback",
     };
+}
+
+inline ::phenotype::diag::PlatformCapabilitiesSnapshot stub_debug_capabilities() {
+    ::phenotype::diag::PlatformCapabilitiesSnapshot snapshot{
+        "desktop-stub",
+        true,
+        true,
+        false,
+        true,
+        true,
+        true,
+        true,
+        false,
+        false,
+    };
+    snapshot.system_settings = stub_system_settings();
     return snapshot;
 }
 
@@ -263,6 +267,7 @@ inline platform_api make_stub_platform(char const* name,
     };
     api.open_url = detail::stub_open_url;
     api.startup_message = startup_message;
+    api.system.settings = detail::stub_system_settings;
     return api;
 }
 

@@ -288,7 +288,8 @@ constexpr char const* DEFAULT_THEME_JSON = R"json({
   "state_focus_ring_width": 2,
   "line_height_ratio": 1.6,
   "scroll_delta_multiplier": 1,
-  "scroll_horizontal_delta_multiplier": 1
+  "scroll_horizontal_delta_multiplier": 1,
+  "motion_duration_multiplier": 1
 }
 )json";
 
@@ -527,7 +528,8 @@ constexpr char const* DARK_THEME_JSON = R"json({
   "state_focus_ring_width": 2,
   "line_height_ratio": 1.6,
   "scroll_delta_multiplier": 1,
-  "scroll_horizontal_delta_multiplier": 1
+  "scroll_horizontal_delta_multiplier": 1,
+  "motion_duration_multiplier": 1
 }
 )json";
 
@@ -766,7 +768,8 @@ constexpr char const* WARM_THEME_JSON = R"json({
   "state_focus_ring_width": 2,
   "line_height_ratio": 1.6,
   "scroll_delta_multiplier": 1,
-  "scroll_horizontal_delta_multiplier": 1
+  "scroll_horizontal_delta_multiplier": 1,
+  "motion_duration_multiplier": 1
 }
 )json";
 
@@ -1005,7 +1008,8 @@ constexpr char const* DENSE_THEME_JSON = R"json({
   "state_focus_ring_width": 2,
   "line_height_ratio": 1.4,
   "scroll_delta_multiplier": 1,
-  "scroll_horizontal_delta_multiplier": 1
+  "scroll_horizontal_delta_multiplier": 1,
+  "motion_duration_multiplier": 1
 }
 )json";
 
@@ -1074,6 +1078,7 @@ void test_default_theme_roundtrip() {
     assert(t.line_height_ratio > 1.59f && t.line_height_ratio < 1.61f);
     assert(t.scroll_delta_multiplier == 1.0f);
     assert(t.scroll_horizontal_delta_multiplier == 1.0f);
+    assert(t.motion_duration_multiplier == 1.0f);
     assert(t.max_content_width == 720.0f);
 
     std::puts("PASS: default theme round-trip");
@@ -1107,6 +1112,7 @@ void test_dark_theme_roundtrip() {
     assert(t.line_height_ratio > 1.59f && t.line_height_ratio < 1.61f);
     assert(t.scroll_delta_multiplier == 1.0f);
     assert(t.scroll_horizontal_delta_multiplier == 1.0f);
+    assert(t.motion_duration_multiplier == 1.0f);
 
     std::puts("PASS: dark theme round-trip");
 }
@@ -1134,6 +1140,7 @@ void test_warm_theme_roundtrip() {
     assert(t.semantic_success_bg.r == 236);
     assert(t.scroll_delta_multiplier == 1.0f);
     assert(t.scroll_horizontal_delta_multiplier == 1.0f);
+    assert(t.motion_duration_multiplier == 1.0f);
 
     std::puts("PASS: warm theme round-trip");
 }
@@ -1154,6 +1161,7 @@ void test_dense_theme_roundtrip() {
     assert(t.line_height_ratio > 1.39f && t.line_height_ratio < 1.41f);
     assert(t.scroll_delta_multiplier == 1.0f);
     assert(t.scroll_horizontal_delta_multiplier == 1.0f);
+    assert(t.motion_duration_multiplier == 1.0f);
 
     assert(t.space_xs == 2.0f);
     assert(t.space_sm == 4.0f);
