@@ -241,7 +241,11 @@ multiplier, and the boolean evidence for which system or user preference inputs
 were consumed.
 Applications should read the snapshot through `phenotype::native::system_settings()`;
 debug capability snapshots carry the same payload for artifacts, but app code
-does not need to route product theme decisions through the diagnostic API.
+does not need to route product theme decisions through the diagnostic API. Apps
+that only need the edge side effect can call
+`phenotype::native::set_native_theme_preferences(...)`, which captures the same
+snapshot, runs the pure resolver, applies the resulting `Theme`, and returns the
+full `ResolvedThemePreferences` evidence for logging or artifacts.
 Font family source, text-size source, font-weight adjustment, vertical and
 horizontal scroll factors, scrollbar size, touch slop, scroll friction, and
 preferred locale source are recorded when the platform exposes them. Input
