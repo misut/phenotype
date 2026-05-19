@@ -694,13 +694,18 @@ If the quality policy disables backdrop sampling, reduces the blur/tap budget
 to zero, or the render target exceeds `max_backdrop_pixels`, the pure planner
 returns `fallback_path: quality-policy` instead of leaving the backend to infer
 that downgrade.
-macOS probes `NSWorkspace` accessibility display preferences at the native
-edge and passes the immutable `reduce_transparency`, `increase_contrast`, and
-`reduce_motion` booleans into `MaterialEnvironment`. The pure planner remains
-the only layer that decides whether those inputs produce opaque fallback,
-higher contrast, reduced noise, or lower sample taps. The runtime artifact also
-records `renderer.accessibility_display_options` so a captured frame explains
-which system or test override fed the plan.
+Native backends probe platform accessibility display preferences at the edge and
+pass immutable `reduce_transparency`, `increase_contrast`, and `reduce_motion`
+booleans into `MaterialEnvironment`. macOS reads AppKit `NSWorkspace` display
+options, Windows reads `SystemParametersInfoW` high-contrast,
+client-area-animation, and overlapped-content settings, and Android reads the
+public `Settings.Global` animation scales plus `UiModeManager.getContrast()`.
+The pure planner remains the only layer that decides whether those inputs
+produce opaque fallback, higher contrast, reduced noise, or lower sample taps.
+Runtime artifacts record `renderer.accessibility_display_options` so a captured
+frame explains which system or test override fed the plan; unsupported platform
+signals stay deterministic false instead of being inferred in backend drawing
+code.
 Top-level debug capabilities expose the same material gates as explicit
 booleans: `material_surfaces`, `material_backdrop_blur`,
 `material_shader_blur`, and `material_frame_history`. These fields are not

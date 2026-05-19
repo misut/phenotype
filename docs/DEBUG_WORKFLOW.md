@@ -514,7 +514,9 @@ accent, and scrolling inputs before the theme overlay runs. macOS fills this
 from CoreText/AppKit/NSScroller, Windows from `SystemParametersInfoW`, DWM, and
 `GetSystemMetrics`, Android from `Resources.getConfiguration()` and
 `ViewConfiguration`, and unsupported targets publish deterministic fallback
-values. File explorer artifacts mirror the result under
+values. Accessibility display inputs sit next to the renderer details:
+macOS uses `NSWorkspace`, Windows uses `SystemParametersInfoW`, and Android uses
+public animation-scale and UI-contrast APIs. File explorer artifacts mirror the result under
 `application.file_explorer.preferences`: `system_settings` is the edge snapshot,
 `app_overrides` is the pure override input, and `effective_theme` is what the
 example applied before rendering. Use this block when text size, family source,
@@ -579,8 +581,8 @@ mise exec -- exon build
 `--observe-output` allocates an artifact directory if needed, implies
 `PHENOTYPE_ARTIFACT_EXIT=1`, and embeds the same parsed semantic/material/
 runtime observation produced by `phenotype observe` in the JSON run receipt.
-The macOS native backend reads accessibility display preferences from
-`NSWorkspace` by default. For deterministic artifact capture, set
+Native backends read accessibility display preferences at the platform edge by
+default. For deterministic artifact capture, set
 `PHENOTYPE_ACCESSIBILITY_DISPLAY=standard` to disable those inputs, or set
 `PHENOTYPE_ACCESSIBILITY_DISPLAY=reduce-transparency,increase-contrast,reduce-motion`
 with any subset of tokens to exercise the pure accessibility downgrade paths.
@@ -847,10 +849,10 @@ renderer material plan contract version, resolved plan count, fallback paths,
 pass executors, first decision blockers, and accessibility decision counts so
 CI logs can explain which semantic/runtime contract surface drifted before
 opening the full bundle.
-On macOS, also inspect
+On native backends, also inspect
 `debug.platform_runtime.details.renderer.accessibility_display_options`; it
-records whether the frame used live system settings, `standard` gate settings,
-or an explicit environment override before the pure planner produced
+records whether the frame used live system settings, deterministic fallback
+settings, or an explicit environment override before the pure planner produced
 `decision_trace.reduced_transparency`, `decision_trace.increase_contrast`, and
 `decision_trace.reduce_motion`.
 For Finder-style desktop windows, inspect

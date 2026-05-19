@@ -189,9 +189,25 @@
     {
       "path": "renderer.material_backdrop_source_ready",
       "equals": false
+    },
+    {
+      "path": "renderer.accessibility_display_options.source",
+      "equals": "Settings.Global+UiModeManager.getContrast"
     }
   ],
   "require_runtime_numeric_bounds": [
+    {
+      "path": "renderer.accessibility_display_options.window_animation_scale",
+      "gte": 0
+    },
+    {
+      "path": "renderer.accessibility_display_options.transition_animation_scale",
+      "gte": 0
+    },
+    {
+      "path": "renderer.accessibility_display_options.animator_duration_scale",
+      "gte": 0
+    },
     {
       "path": "renderer.material_executor_summary.plan_count",
       "equals": 1

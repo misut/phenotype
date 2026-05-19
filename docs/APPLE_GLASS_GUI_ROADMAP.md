@@ -251,11 +251,15 @@ optics/effects descriptor and material container identity into every backend as
 `MaterialCommandDescriptor`, so runtime plans no longer need to reconstruct
 app-chrome intent, saturation, luminance, edge, noise, shadow, or grouped glass
 identity from the current theme.
-The macOS backend now reads AppKit accessibility display preferences at the
-edge and passes them as immutable planner inputs. Reduce Transparency resolves
-to the deterministic material fallback path, Increase Contrast adjusts opacity
-and luminance legibility in the pure plan, and Reduce Motion disables material
-noise while lowering sampled-backdrop taps.
+Native backends now read platform accessibility display preferences at the
+edge and pass them as immutable planner inputs. macOS uses AppKit
+`NSWorkspace` display options, Windows uses `SystemParametersInfoW` accessibility
+and UI-effect settings, and Android uses public animation-scale and UI-contrast
+APIs. Reduce Transparency resolves to the deterministic material fallback path,
+Increase Contrast adjusts opacity and luminance legibility in the pure plan,
+and Reduce Motion disables material noise while lowering sampled-backdrop taps.
+When a platform does not expose an equivalent public signal, the value remains a
+documented deterministic fallback rather than a backend-side visual guess.
 The same backend now treats full-frame backdrop copies as an execution of the
 pure material plan summary rather than a frame-global habit: it allocates and
 blits the material backdrop texture only when `MaterialExecutorSummary` reports

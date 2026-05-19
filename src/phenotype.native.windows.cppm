@@ -31,6 +31,13 @@ module;
 #ifdef DrawText
 #undef DrawText
 #endif
+
+#ifndef SPI_GETDISABLEOVERLAPPEDCONTENT
+#define SPI_GETDISABLEOVERLAPPEDCONTENT 0x1040
+#endif
+#ifndef SPI_GETCLIENTAREAANIMATION
+#define SPI_GETCLIENTAREAANIMATION 0x1042
+#endif
 #endif
 #endif
 
@@ -84,7 +91,42 @@ inline bool env_enabled(char const* name) {
 #endif
 }
 
+inline bool env_token_enabled(std::string_view config,
+                              std::string_view token) {
+    std::size_t start = 0;
+    while (start < config.size()) {
+        while (start < config.size()
+               && (config[start] == ',' || config[start] == ';'
+                   || config[start] == ' ' || config[start] == '|')) {
+            ++start;
+        }
+        auto end = start;
+        while (end < config.size()
+               && config[end] != ',' && config[end] != ';'
+               && config[end] != ' ' && config[end] != '|') {
+            ++end;
+        }
+        if (config.substr(start, end - start) == token)
+            return true;
+        start = end;
+    }
+    return false;
+}
+
+struct WindowsAccessibilityDisplayOptions {
+    bool reduce_transparency = false;
+    bool increase_contrast = false;
+    bool reduce_motion = false;
+    std::string source = "SystemParametersInfoW";
+};
+
 #ifdef _WIN32
+inline WindowsAccessibilityDisplayOptions
+windows_accessibility_display_options();
+
+inline json::Value windows_accessibility_display_options_json(
+        WindowsAccessibilityDisplayOptions const& options);
+
 inline float dpi_scale_for_hwnd(HWND hwnd) {
     UINT dpi = 96;
     if (hwnd) {
@@ -1457,6 +1499,7 @@ struct RendererState {
     UINT last_render_height = 0;
     UINT64 next_fence_value = 1;
     std::uint32_t material_frame_sequence = 0;
+    WindowsAccessibilityDisplayOptions accessibility_options{};
     MaterialExecutorSummary material_executor_summary{};
     HRESULT last_failure_hr = S_OK;
     HRESULT device_removed_reason = S_OK;
@@ -5373,11 +5416,18 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     float text_scale = surface_content_scale(g_renderer.surface);
     float line_height_ratio = ::phenotype::detail::g_app.theme.line_height_ratio;
+    auto const accessibility = windows_accessibility_display_options();
+    g_renderer.accessibility_options = accessibility;
     MaterialEnvironment material_env{};
     material_env.capabilities.material_surfaces = true;
     material_env.capabilities.material_backdrop_blur = false;
     material_env.capabilities.shader_blur = false;
     material_env.capabilities.frame_history = g_renderer.last_frame_available;
+    material_env.capabilities.reduce_transparency =
+        accessibility.reduce_transparency;
+    material_env.capabilities.increase_contrast =
+        accessibility.increase_contrast;
+    material_env.capabilities.reduce_motion = accessibility.reduce_motion;
     material_env.backdrop.available = false;
     material_env.backdrop.stable = false;
     material_env.backdrop.source = "windows-d3d12-fallback";
@@ -5829,6 +5879,80 @@ inline UINT windows_scroll_wheel_lines() {
     return lines;
 }
 
+inline WindowsAccessibilityDisplayOptions
+windows_system_accessibility_display_options() {
+    WindowsAccessibilityDisplayOptions options{};
+    options.source = "SystemParametersInfoW";
+
+    BOOL disable_overlapped_content = FALSE;
+    if (SystemParametersInfoW(SPI_GETDISABLEOVERLAPPEDCONTENT,
+                              0,
+                              &disable_overlapped_content,
+                              0)) {
+        options.reduce_transparency = disable_overlapped_content != FALSE;
+    }
+
+    HIGHCONTRASTW high_contrast{};
+    high_contrast.cbSize = sizeof(high_contrast);
+    if (SystemParametersInfoW(SPI_GETHIGHCONTRAST,
+                              sizeof(high_contrast),
+                              &high_contrast,
+                              0)) {
+        options.increase_contrast =
+            (high_contrast.dwFlags & HCF_HIGHCONTRASTON) != 0;
+    }
+
+    BOOL client_area_animation = TRUE;
+    if (SystemParametersInfoW(SPI_GETCLIENTAREAANIMATION,
+                              0,
+                              &client_area_animation,
+                              0)) {
+        options.reduce_motion = client_area_animation == FALSE;
+    }
+
+    return options;
+}
+
+inline WindowsAccessibilityDisplayOptions
+windows_accessibility_display_options() {
+    char raw[256]{};
+    DWORD const len = GetEnvironmentVariableA(
+        "PHENOTYPE_ACCESSIBILITY_DISPLAY",
+        raw,
+        static_cast<DWORD>(std::size(raw)));
+    if (len == 0 || len >= std::size(raw))
+        return windows_system_accessibility_display_options();
+
+    std::string_view config{raw, static_cast<std::size_t>(len)};
+    if (config == "system" || config == "default")
+        return windows_system_accessibility_display_options();
+
+    WindowsAccessibilityDisplayOptions options{};
+    options.source = "PHENOTYPE_ACCESSIBILITY_DISPLAY";
+    options.reduce_transparency =
+        env_token_enabled(config, "reduce-transparency");
+    options.increase_contrast =
+        env_token_enabled(config, "increase-contrast");
+    options.reduce_motion = env_token_enabled(config, "reduce-motion");
+    return options;
+}
+
+inline json::Value windows_accessibility_display_options_json(
+        WindowsAccessibilityDisplayOptions const& options) {
+    json::Object accessibility;
+    accessibility.emplace("source", json::Value{options.source});
+    accessibility.emplace(
+        "reduce_transparency",
+        json::Value{options.reduce_transparency});
+    accessibility.emplace(
+        "increase_contrast",
+        json::Value{options.increase_contrast});
+    accessibility.emplace(
+        "reduce_motion",
+        json::Value{options.reduce_motion});
+    return json::Value{std::move(accessibility)};
+}
+
 inline ::phenotype::PlatformSystemSettingsSnapshot
 windows_system_settings_snapshot() {
     ::phenotype::PlatformSystemSettingsSnapshot snapshot{};
@@ -5907,6 +6031,7 @@ inline bool windows_uses_shared_caret_blink() {
 }
 
 inline ::phenotype::diag::PlatformCapabilitiesSnapshot windows_debug_capabilities() {
+    auto const accessibility = windows_accessibility_display_options();
     ::phenotype::diag::PlatformCapabilitiesSnapshot snapshot{
         "windows",
         true,
@@ -5919,6 +6044,9 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot windows_debug_capabilitie
         true,
         true,
     };
+    snapshot.reduce_transparency = accessibility.reduce_transparency;
+    snapshot.increase_contrast = accessibility.increase_contrast;
+    snapshot.reduce_motion = accessibility.reduce_motion;
     snapshot.system_settings = windows_system_settings_snapshot();
     return snapshot;
 }
@@ -5965,6 +6093,10 @@ inline json::Object windows_renderer_runtime_json() {
     renderer.emplace("failure_label", json::Value{g_renderer.last_failure_label});
     renderer.emplace("material_pipeline_ready", json::Value{false});
     renderer.emplace("material_backdrop_source_ready", json::Value{false});
+    renderer.emplace(
+        "accessibility_display_options",
+        windows_accessibility_display_options_json(
+            g_renderer.accessibility_options));
     renderer.emplace(
         "material_plan_contract_version",
         json::Value{
