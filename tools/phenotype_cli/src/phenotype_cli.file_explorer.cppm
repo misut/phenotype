@@ -8,6 +8,7 @@ import phenotype.icon_catalog;
 import phenotype_cli.common;
 import phenotype_cli.file_explorer_json;
 import phenotype_cli.icons;
+import phenotype_cli.icons_common;
 import phenotype_cli.package;
 import phenotype.resources;
 import std;

@@ -189,9 +189,11 @@ invocation, snapshot/material observation, and likely-layer suggestions,
 `phenotype_cli.contracts` owns the pure theme/IO contract commands,
 `phenotype_cli.file_explorer` owns file explorer observation, chrome/native
 window control, and drive JSON, `phenotype_cli.icons` owns icon/SVG command
-routing plus built-in icon helper payloads, `phenotype_cli.icons_checks` owns
-catalog check generation, and `phenotype_cli.icons_svg_inspect` owns SVG support
-and inspection JSON.
+routing plus built-in icon helper payloads, `phenotype_cli.icons_common` owns
+shared lookup/role/color/source helpers, `phenotype_cli.icons_render` owns
+standalone rendered-icon SVG wrapping, `phenotype_cli.icons_checks` owns catalog
+check generation, and `phenotype_cli.icons_svg_inspect` owns SVG support and
+inspection JSON.
 Package work is now split by ownership instead of accumulating in one command
 module: `phenotype_cli.package_inspect` owns manifest/resource catalog checks,
 `phenotype_cli.package_json` owns package JSON envelopes,

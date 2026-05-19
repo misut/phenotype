@@ -37,9 +37,12 @@ turning `main.cpp` into every subsystem at once:
   expectation checking, pure input script parsing, and local artifact gate.
 - `phenotype_cli.icons` owns `phenotype icons ...` and `phenotype svg inspect`
   command routing plus lookup/presentation/render JSON and the icon helper
-  payloads reused by file explorer debug output. `phenotype_cli.icons_checks`
-  keeps catalog checks separate from command routing, and
-  `phenotype_cli.icons_svg_inspect` owns SVG support and inspection JSON.
+  payloads reused by file explorer debug output. `phenotype_cli.icons_common`
+  owns shared lookup, role parsing, color/source JSON, and interaction helpers;
+  `phenotype_cli.icons_render` owns standalone rendered-icon SVG wrapping;
+  `phenotype_cli.icons_checks` keeps catalog checks separate from command
+  routing; and `phenotype_cli.icons_svg_inspect` owns SVG support and
+  inspection JSON.
 - `phenotype_cli.package_types` owns the exported immutable package, SVG
   inspection, and bundle summary value types so command routing and future
   packaging submodules can share the contract without importing package IO
