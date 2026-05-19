@@ -169,6 +169,14 @@ phenotype::ThemePreferenceOverrides initial_theme_preference_overrides() {
     }
     if (env_truthy(std::getenv("PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT")))
         overrides.prefer_system_font_family = true;
+    if (env_truthy(std::getenv(
+            "PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT_METRICS"))) {
+        overrides.apply_system_font_metrics = true;
+    }
+    if (env_truthy(std::getenv(
+            "PHENOTYPE_FILE_EXPLORER_DISABLE_SYSTEM_FONT_METRICS"))) {
+        overrides.apply_system_font_metrics = false;
+    }
     if (auto scale = env_float(
             std::getenv("PHENOTYPE_FILE_EXPLORER_FONT_SCALE"),
             0.75f,
@@ -298,6 +306,7 @@ file_explorer_demo::ThemePreferenceSnapshot theme_preference_snapshot(
             overrides.scroll_horizontal_delta_multiplier,
         .prefer_system_font_family = overrides.prefer_system_font_family,
         .prefer_system_color_scheme = overrides.prefer_system_color_scheme,
+        .apply_system_font_metrics = overrides.apply_system_font_metrics,
         .apply_system_font_scale = overrides.apply_system_font_scale,
         .apply_system_accent_color = overrides.apply_system_accent_color,
     };
@@ -385,6 +394,7 @@ phenotype::ThemePreferenceOverrides theme_preferences_from_state(
             preferences.scroll_horizontal_delta_multiplier,
         .prefer_system_font_family = preferences.prefer_system_font_family,
         .prefer_system_color_scheme = preferences.prefer_system_color_scheme,
+        .apply_system_font_metrics = preferences.apply_system_font_metrics,
         .apply_system_font_scale = preferences.apply_system_font_scale,
         .apply_system_accent_color = preferences.apply_system_accent_color,
     };

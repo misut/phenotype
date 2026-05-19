@@ -62,9 +62,12 @@ The common snapshot schema remains the source of truth for all platforms:
   and front-window occlusion state, so a native app that owns a Dock icon but
   ordered a 0x0 window, stayed behind another app window, or failed to move into
   the active Space fails the artifact contract with an exact runtime path
-  instead of a visual-only symptom. `visibility_state` and
-  `ready_for_user_interaction` condense those platform readbacks into a single
-  launch-health contract for direct-run failures.
+  instead of a visual-only symptom. `artifact_capture_visibility_state` and
+  `artifact_capture_ready` describe the local artifact gate requirement: a
+  visible, onscreen native window that can be captured even when the automation
+  process is not the foreground app. `visibility_state` and
+  `ready_for_user_interaction` stay stricter and condense key/main/active
+  readbacks for direct-run failures.
 
 `phenotype_diag_export()` remains the WASI export surface for the snapshot JSON.
 
@@ -330,10 +333,13 @@ tools/phenotype_cli/.exon/debug/phenotype_cli artifact verify-file-explorer \
   --scenario svg-selected
 ```
 
-The native runtime window payload also reports `visibility_state` and
-`ready_for_user_interaction`; when a Dock icon exists without a usable window,
-the failure should point at `debug.platform_runtime.details.window.*` before
-any pixel-region analysis starts.
+The native runtime window payload also reports
+`artifact_capture_visibility_state`, `artifact_capture_ready`,
+`visibility_state`, and `ready_for_user_interaction`; when a Dock icon exists
+without a usable window, the failure should point at
+`debug.platform_runtime.details.window.*` before any pixel-region analysis
+starts. Local artifact gates should use the artifact capture fields, while
+manual launch debugging can inspect the stricter key/main/active fields.
 
 For material probe input debugging that does not need a native window, use the
 matching glass showcase drive command:

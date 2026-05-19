@@ -165,6 +165,7 @@ struct ThemePreferenceSnapshot {
     float scroll_horizontal_delta_multiplier = 1.0f;
     bool prefer_system_font_family = false;
     bool prefer_system_color_scheme = false;
+    bool apply_system_font_metrics = true;
     bool apply_system_font_scale = true;
     bool apply_system_accent_color = false;
 };
@@ -268,6 +269,7 @@ enum class ExplorerInputKind {
     SetHeadingFontSize,
     SetSmallFontSize,
     SetLineHeightRatio,
+    SetSystemFontMetrics,
     SetScrollSpeed,
     SetHorizontalScrollSpeed,
     SetColorScheme,
@@ -2974,6 +2976,9 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
         "prefer_system_color_scheme",
         json::Value{state.theme_preferences.prefer_system_color_scheme});
     overrides.emplace(
+        "apply_system_font_metrics",
+        json::Value{state.theme_preferences.apply_system_font_metrics});
+    overrides.emplace(
         "apply_system_font_scale",
         json::Value{state.theme_preferences.apply_system_font_scale});
     overrides.emplace(
@@ -3010,7 +3015,7 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
     out.emplace(
         "font_policy",
         json::Value{
-            "Pretendard package default, OS font metrics applied, user override wins"});
+            "Pretendard package default, OS font size metrics applied, user override wins"});
     out.emplace(
         "appearance_policy",
         json::Value{
@@ -4279,6 +4284,8 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::SetSmallFontSize: return "set_small_font_size";
         case ExplorerInputKind::SetLineHeightRatio:
             return "set_line_height_ratio";
+        case ExplorerInputKind::SetSystemFontMetrics:
+            return "set_system_font_metrics";
         case ExplorerInputKind::SetScrollSpeed: return "set_scroll_speed";
         case ExplorerInputKind::SetHorizontalScrollSpeed:
             return "set_horizontal_scroll_speed";
@@ -4842,6 +4849,27 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         return parsed_input({
             .kind = ExplorerInputKind::SetFontFamily,
             .value = value,
+        });
+    }
+    if (name == "system-font-metrics"
+        || name == "system_font_metrics"
+        || name == "font-metrics"
+        || name == "font_metrics"
+        || name == "use-system-font-size"
+        || name == "use_system_font_size") {
+        auto lowered = lower_copy(trim(value.empty()
+            ? std::string_view{"true"}
+            : std::string_view{value}));
+        if (lowered != "true" && lowered != "1" && lowered != "yes"
+            && lowered != "on" && lowered != "system"
+            && lowered != "false" && lowered != "0" && lowered != "no"
+            && lowered != "off" && lowered != "package") {
+            return input_parse_error(
+                "input 'system-font-metrics' requires true, false, system, or package");
+        }
+        return parsed_input({
+            .kind = ExplorerInputKind::SetSystemFontMetrics,
+            .value = lowered,
         });
     }
     if (name == "font-scale" || name == "font_scale"
@@ -6144,6 +6172,7 @@ inline ExplorerInputModality default_input_modality(
         case ExplorerInputKind::SetHeadingFontSize:
         case ExplorerInputKind::SetSmallFontSize:
         case ExplorerInputKind::SetLineHeightRatio:
+        case ExplorerInputKind::SetSystemFontMetrics:
         case ExplorerInputKind::SetScrollSpeed:
         case ExplorerInputKind::SetHorizontalScrollSpeed:
         case ExplorerInputKind::SetColorScheme:
@@ -6284,6 +6313,7 @@ inline void apply_focus_policy_for_input(
         case ExplorerInputKind::SetHeadingFontSize:
         case ExplorerInputKind::SetSmallFontSize:
         case ExplorerInputKind::SetLineHeightRatio:
+        case ExplorerInputKind::SetSystemFontMetrics:
         case ExplorerInputKind::SetScrollSpeed:
         case ExplorerInputKind::SetHorizontalScrollSpeed:
         case ExplorerInputKind::SetColorScheme:
@@ -6588,6 +6618,24 @@ inline void apply_explorer_input(
             state.theme_preferences.line_height_ratio = *ratio;
             state.status = "Line height set to "
                 + compact_preference_number(*ratio) + "x.";
+            return;
+        }
+        case ExplorerInputKind::SetSystemFontMetrics: {
+            auto value = lower_copy(trim(input.value));
+            bool const enabled = value.empty()
+                || value == "true" || value == "1" || value == "yes"
+                || value == "on" || value == "system";
+            bool const disabled = value == "false" || value == "0"
+                || value == "no" || value == "off" || value == "package";
+            if (!enabled && !disabled) {
+                state.status = "System font metrics input was invalid.";
+                return;
+            }
+            state.preferences_source = "application-input";
+            state.theme_preferences.apply_system_font_metrics = enabled;
+            state.status = enabled
+                ? "Using OS font size metrics."
+                : "Using package font size metrics.";
             return;
         }
         case ExplorerInputKind::SetScrollSpeed: {

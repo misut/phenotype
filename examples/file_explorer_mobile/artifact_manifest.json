@@ -388,7 +388,7 @@
     },
     {
       "path": "application.file_explorer.preferences.font_policy",
-      "equals": "Pretendard package default, OS font metrics applied, user override wins"
+      "equals": "Pretendard package default, OS font size metrics applied, user override wins"
     },
     {
       "path": "application.file_explorer.preferences.appearance_policy",
@@ -401,6 +401,10 @@
     {
       "path": "application.file_explorer.preferences.effective_theme.font_family",
       "equals": "Pretendard"
+    },
+    {
+      "path": "application.file_explorer.preferences.app_overrides.apply_system_font_metrics",
+      "equals": true
     },
     {
       "path": "application.file_explorer.preferences.app_overrides.apply_system_font_scale",

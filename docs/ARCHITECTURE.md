@@ -221,7 +221,7 @@ preferences follow the same edge-to-core rule. Native adapters collect a
 it through the pure
 `apply_system_theme_preferences(Theme, PlatformSystemSettingsSnapshot,
 ThemePreferenceOverrides)` helper. Package defaults such as Pretendard remain
-explicit theme inputs, OS font scale and scroll policy arrive as immutable
+explicit theme inputs, OS font metrics and scroll policy arrive as immutable
 snapshot fields, and app/user overrides win without letting a backend mutate
 theme state directly.
 Font family source, text-size source, font-weight adjustment, vertical and
@@ -235,8 +235,11 @@ Windows uses `SystemParametersInfoW(SPI_GETNONCLIENTMETRICS)`,
 `SPI_GETWHEELSCROLLLINES`, `SPI_GETWHEELSCROLLCHARS`, `GetSystemMetrics`, and
 DWM, and Android uses `Resources.getConfiguration()` plus
 `ViewConfiguration`. The base theme keeps Pretendard as the product default;
-switching to the OS family is an explicit app override, while OS text scale and
-axis-specific scroll multipliers are safe pure inputs by default.
+switching to the OS family is an explicit app override, while OS
+body/heading/small text metrics, line height, and axis-specific scroll
+multipliers are safe pure inputs by default. Apps can disable
+`apply_system_font_metrics` to keep package point sizes while still applying the
+platform text scale.
 The same snapshot records `color_scheme`, `appearance_name`, and accessibility
 display booleans (`reduce_transparency`, `increase_contrast`, `reduce_motion`).
 macOS resolves appearance through `NSApplication.effectiveAppearance` and

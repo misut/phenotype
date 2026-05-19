@@ -91,11 +91,13 @@ At runtime the example reads `phenotype.package.toml` and locale files from
 working directory. `phenotype run file_explorer_mobile` sets the package-root
 environment automatically.
 The example also applies the native `system_settings` snapshot before
-`set_theme`: Pretendard remains the package default, OS font scale and scroll
-policy become pure theme inputs, system appearance/accent are applied by
+`set_theme`: Pretendard remains the package default, OS font size metrics and
+scroll policy become pure theme inputs, system appearance/accent are applied by
 default, OS font family remains an opt-in override, and user overrides win.
 Direct launches can use
 `PHENOTYPE_FILE_EXPLORER_FONT_FAMILY`, `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT`,
+`PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT_METRICS`,
+`PHENOTYPE_FILE_EXPLORER_DISABLE_SYSTEM_FONT_METRICS`,
 `PHENOTYPE_FILE_EXPLORER_FONT_SCALE`, `PHENOTYPE_FILE_EXPLORER_FONT_SIZE`,
 `PHENOTYPE_FILE_EXPLORER_HEADING_FONT_SIZE`,
 `PHENOTYPE_FILE_EXPLORER_SMALL_FONT_SIZE`,
@@ -123,7 +125,8 @@ semicolon-separated inputs, and `PHENOTYPE_FILE_EXPLORER_SCRIPT` points at the
 same line-based script format used by `phenotype drive file-explorer
 --script`. Preference commands use the same app input layer, so
 `font-family:system`, `font-family:Pretendard`, `font-scale:1.2`,
-`font-size:17`, `heading-font-size:22`, `small-font-size:13`,
+`system-font-metrics:false`, `font-size:17`, `heading-font-size:22`,
+`small-font-size:13`,
 `line-height:1.45`, `scroll-speed:1.4`, and `horizontal-scroll-speed:2` update
 the shared state before the native theme is resolved.
 File reads and environment access remain example edge work; parsing and input

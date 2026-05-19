@@ -9088,6 +9088,33 @@ inline json::Object macos_window_runtime_json() {
         "ready_for_user_interaction",
         json::Value{ready_for_user_interaction});
     window.emplace("visibility_state", json::Value{visibility_state});
+    bool const artifact_capture_ready =
+        ns_window
+        && window_visible
+        && server.valid
+        && server.onscreen
+        && !server.occluded_by_front_app_window;
+    auto const* artifact_visibility_state = "ready";
+    if (!ns_window) {
+        artifact_visibility_state = "missing-window";
+    } else if (!window_visible) {
+        artifact_visibility_state = "window-not-visible";
+    } else if (!server.valid) {
+        artifact_visibility_state = "window-server-bounds-missing";
+    } else if (!server.onscreen) {
+        artifact_visibility_state = "window-server-offscreen";
+    } else if (server.occluded_by_front_app_window) {
+        artifact_visibility_state = "occluded-by-front-app-window";
+    }
+    window.emplace(
+        "artifact_capture_ready",
+        json::Value{artifact_capture_ready});
+    window.emplace(
+        "artifact_capture_visibility_state",
+        json::Value{artifact_visibility_state});
+    window.emplace(
+        "artifact_capture_contract",
+        json::Value{"visible-onscreen-native-window"});
     window.emplace(
         "launch_visibility_contract",
         json::Value{"visible-key-main-frontmost-native-window"});
