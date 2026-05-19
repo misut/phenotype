@@ -544,8 +544,9 @@ with the core, and `phenotype drive file-explorer` accepts matching `key:` and
 selection navigation. The shared file explorer model also emits a pure
 `input_model`: last input modality, current focus target, focus order, focus
 ring style token, and `focus_visible`. `key:tab` / `shift-tab` are keyboard
-inputs and therefore show the ring; `click:*` and `pointer:*` keep the target
-but hide the ring. Native artifacts mirror the same object under
+inputs and therefore show the ring; `click:*` and `pointer:*` keep or move the
+target but hide the ring, including the More action menu's explicit
+`more_actions` target. Native artifacts mirror the same object under
 `debug.application.file_explorer.input_model`, so CLI output and renderer
 artifacts explain focus-ring behavior with the same value contract.
 

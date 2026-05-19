@@ -35,9 +35,11 @@ turning `main.cpp` into every subsystem at once:
   verifier argument shaping, and LLM-actionable JSON/status summaries.
 - `phenotype_cli.glass_showcase` owns the glass showcase drive command JSON,
   expectation checking, pure input script parsing, and local artifact gate.
-- `phenotype_cli.icons` owns `phenotype icons ...` and `phenotype svg inspect`,
-  including catalog checks, lookup/presentation/render JSON, SVG support
-  summaries, and the icon helper payloads reused by file explorer debug output.
+- `phenotype_cli.icons` owns `phenotype icons ...` and `phenotype svg inspect`
+  command routing plus lookup/presentation/render JSON and the icon helper
+  payloads reused by file explorer debug output. `phenotype_cli.icons_checks`
+  keeps catalog checks separate from command routing, and
+  `phenotype_cli.icons_svg_inspect` owns SVG support and inspection JSON.
 - `phenotype_cli.package_types` owns the exported immutable package, SVG
   inspection, and bundle summary value types so command routing and future
   packaging submodules can share the contract without importing package IO
@@ -250,8 +252,10 @@ The initial scope is intentionally narrow:
   `shortcut:duplicate`, and `shortcut:new-folder`. `key:tab` and
   `shift-tab` move the pure focus target and set `focus_visible=true`, while
   `click:*`, `pointer:*`, `pointer-focus:*`, and pointer toolbar commands
-  update focus or command state without showing the ring, matching macOS-style
-  pointer-vs-keyboard focus behavior.
+  update focus or command state without showing the ring. The More action menu
+  records the distinct `more_actions` pointer target, so artifacts can
+  distinguish the action cluster from the opened menu while still matching
+  macOS-style pointer-vs-keyboard focus behavior.
 - `phenotype drive glass-showcase` applies deterministic typed inputs to the
   shared glass showcase model without opening a native window. JSON output
   includes the final state, per-input trace, public material kinds, expected

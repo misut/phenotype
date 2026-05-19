@@ -1656,7 +1656,7 @@ void update(State& state, Msg msg) {
                 explorer,
                 keyboard_input(file_explorer_demo::ExplorerInputKind::ActivateSelected));
         } else if constexpr (std::same_as<T, ToggleMoreActions>) {
-            apply_desktop_pointer_focus(explorer, "toolbar_actions");
+            apply_desktop_pointer_focus(explorer, "more_actions");
             state.more_actions_open = !state.more_actions_open;
             explorer.status = state.more_actions_open
                 ? "More actions ready."
