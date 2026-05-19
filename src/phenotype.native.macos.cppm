@@ -431,6 +431,21 @@ inline SEL sel_preferred_scroller_style() {
     return sel;
 }
 
+inline SEL sel_scroller_width_for_control_size_scroller_style() {
+    static auto sel = sel_registerName("scrollerWidthForControlSize:scrollerStyle:");
+    return sel;
+}
+
+inline SEL sel_system_font_size() {
+    static auto sel = sel_registerName("systemFontSize");
+    return sel;
+}
+
+inline SEL sel_small_system_font_size() {
+    static auto sel = sel_registerName("smallSystemFontSize");
+    return sel;
+}
+
 inline SEL sel_move_left() {
     static auto sel = sel_registerName("moveLeft:");
     return sel;
@@ -4339,6 +4354,36 @@ inline std::string scroller_style_name(long style) {
     return "unknown";
 }
 
+inline std::optional<float> appkit_class_float_noarg(char const* class_name,
+                                                     SEL selector) {
+    auto type = static_cast<Class>(objc_getClass(class_name));
+    if (!type || !objc_responds_to(class_as_id(type), selector))
+        return std::nullopt;
+    double const value = objc_send<double>(class_as_id(type), selector);
+    if (!(value > 0.0) || !std::isfinite(value))
+        return std::nullopt;
+    return static_cast<float>(value);
+}
+
+inline std::optional<float> appkit_scroller_width(long scroller_style) {
+    auto scroller_class = static_cast<Class>(objc_getClass("NSScroller"));
+    if (!scroller_class
+        || !objc_responds_to(
+            class_as_id(scroller_class),
+            sel_scroller_width_for_control_size_scroller_style())) {
+        return std::nullopt;
+    }
+    constexpr long ns_regular_control_size = 0;
+    double const width = objc_send<double>(
+        class_as_id(scroller_class),
+        sel_scroller_width_for_control_size_scroller_style(),
+        ns_regular_control_size,
+        scroller_style);
+    if (!(width >= 0.0) || !std::isfinite(width))
+        return std::nullopt;
+    return static_cast<float>(width);
+}
+
 inline std::string objc_string_to_utf8(id value) {
     if (!value || !objc_responds_to(value, sel_utf8_string()))
         return {};
@@ -4444,11 +4489,12 @@ macos_system_settings_snapshot() {
     snapshot.font_family_source =
         "CTFontCopyFamilyName(kCTFontUIFontSystem)";
     snapshot.text_size_source =
-        "CTFontCreateUIFontForLanguage(kCTFontUIFontSystem)";
+        "NSFont.systemFontSize/smallSystemFontSize";
     snapshot.scroll_source =
-        "NSEvent.scrollingDelta with NSScroller.preferredScrollerStyle";
+        "NSEvent.scrollingDelta/hasPreciseScrollingDeltas with NSScroller.preferredScrollerStyle";
     snapshot.line_height_ratio = 1.6f;
     snapshot.scroll_delta_multiplier = 1.0f;
+    snapshot.scroll_horizontal_delta_multiplier = 1.0f;
     auto accessibility = accessibility_display_options();
     snapshot.reduce_transparency = accessibility.reduce_transparency;
     snapshot.increase_contrast = accessibility.increase_contrast;
@@ -4458,17 +4504,27 @@ macos_system_settings_snapshot() {
         snapshot,
         accessibility.increase_contrast);
 
-    CTFontRef raw_font =
-        CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 0.0, nullptr);
+    auto system_font_size = appkit_class_float_noarg(
+        "NSFont",
+        sel_system_font_size());
+    auto small_system_font_size = appkit_class_float_noarg(
+        "NSFont",
+        sel_small_system_font_size());
+
+    CTFontRef raw_font = CTFontCreateUIFontForLanguage(
+        kCTFontUIFontSystem,
+        system_font_size.value_or(0.0f),
+        nullptr);
     if (!raw_font)
         raw_font = CTFontCreateUIFontForLanguage(
             kCTFontUIFontSystem,
-            13.0,
+            system_font_size.value_or(13.0f),
             nullptr);
     auto font = CFGuard<CTFontRef>(raw_font);
     if (font) {
         snapshot.body_font_size = bounded_system_setting(
-            static_cast<float>(CTFontGetSize(font.ref)),
+            system_font_size.value_or(
+                static_cast<float>(CTFontGetSize(font.ref))),
             13.0f,
             8.0f,
             40.0f);
@@ -4484,7 +4540,11 @@ macos_system_settings_snapshot() {
         0.75f,
         1.8f);
     snapshot.heading_font_size = snapshot.body_font_size * 1.2857143f;
-    snapshot.small_font_size = snapshot.body_font_size * 0.8571429f;
+    snapshot.small_font_size = bounded_system_setting(
+        small_system_font_size.value_or(snapshot.body_font_size * 0.8571429f),
+        snapshot.body_font_size * 0.8571429f,
+        8.0f,
+        32.0f);
     snapshot.scroll_line_height =
         snapshot.body_font_size * snapshot.line_height_ratio;
 
@@ -4500,8 +4560,14 @@ macos_system_settings_snapshot() {
     }
     snapshot.preferred_scroller_style = scroller_style_name(scroller_style);
     snapshot.overlay_scrollbars = scroller_style == 1;
-    snapshot.scroll_wheel_lines = 0.0f;
+    snapshot.scroll_wheel_lines = 1.0f;
     snapshot.scroll_page_mode = false;
+    snapshot.scroll_vertical_factor = snapshot.scroll_line_height;
+    snapshot.scroll_horizontal_factor = snapshot.scroll_line_height;
+    if (scroller_style >= 0) {
+        if (auto width = appkit_scroller_width(scroller_style))
+            snapshot.scroll_bar_size = *width;
+    }
     auto color_class = static_cast<Class>(objc_getClass("NSColor"));
     if (color_class
         && objc_responds_to(

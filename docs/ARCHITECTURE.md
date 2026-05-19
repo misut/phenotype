@@ -226,7 +226,11 @@ snapshot fields, and app/user overrides win without letting a backend mutate
 theme state directly.
 Font family source, text-size source, font-weight adjustment, vertical and
 horizontal scroll factors, scrollbar size, touch slop, and scroll friction are
-recorded when the platform exposes them. macOS uses CoreText/AppKit/NSScroller,
+recorded when the platform exposes them. macOS uses CoreText for the resolved
+system family, `NSFont.systemFontSize` / `smallSystemFontSize` for UI text
+sizes, `NSEvent.hasPreciseScrollingDeltas` semantics for line-vs-pixel wheel
+normalization, and `NSScroller.preferredScrollerStyle` plus regular-control
+scroller width for scrollbar policy,
 Windows uses `SystemParametersInfoW(SPI_GETNONCLIENTMETRICS)`,
 `SPI_GETWHEELSCROLLLINES`, `SPI_GETWHEELSCROLLCHARS`, `GetSystemMetrics`, and
 DWM, and Android uses `Resources.getConfiguration()` plus
@@ -904,8 +908,9 @@ material/runtime extensions.
 - **Linux / other desktop**: shared stub backend
 
 All native capability payloads include `system_settings`: macOS uses
-CoreText/AppKit/NSScroller/NSWorkspace, Windows uses `SystemParametersInfoW`
-plus DWM and the Personalize app-theme registry value, and Android uses Java
+CoreText/`NSFont`/`NSEvent`/`NSScroller`/`NSWorkspace`, Windows uses
+`SystemParametersInfoW` plus DWM and the Personalize app-theme registry value,
+and Android uses Java
 resource/configuration APIs reached through the GameActivity edge. WASI and the
 stub backend publish deterministic fallback values.
 `scroll_delta_multiplier` and `scroll_horizontal_delta_multiplier` are pure

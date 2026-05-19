@@ -208,6 +208,18 @@ ExplorerInputMessage scroll_speed_step_message(
         std::to_string(value));
 }
 
+ExplorerInputMessage horizontal_scroll_speed_step_message(
+        file_explorer_demo::ExplorerState const& explorer,
+        float delta) {
+    auto value = std::clamp(
+        explorer.theme_preferences.scroll_horizontal_delta_multiplier + delta,
+        0.25f,
+        4.0f);
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetHorizontalScrollSpeed,
+        std::to_string(value));
+}
+
 file_explorer_demo::ExplorerInput keyboard_input(
         file_explorer_demo::ExplorerInputKind kind) {
     return explorer_input(
@@ -2106,7 +2118,7 @@ void finder_more_actions(State const& state,
             "More Actions Menu");
         options.kind = MaterialKind::Regular;
         options.max_width = 376.0f;
-        options.fixed_height = 216.0f;
+        options.fixed_height = 284.0f;
         options.border_radius = k_toolbar_group_radius;
         layout::material_surface(
             options,
@@ -2161,6 +2173,10 @@ void finder_more_actions(State const& state,
                             0x6714u);
                     }, SpaceToken::Xs);
                     layout::row([&] {
+                        auto const* horizontal_faster =
+                            state.labels.preferences_horizontal_scroll_faster.c_str();
+                        auto const* horizontal_slower =
+                            state.labels.preferences_horizontal_scroll_slower.c_str();
                         more_action_item(
                             state.labels.preferences_scroll_faster.c_str(),
                             scroll_speed_step_message(state.explorer, 0.25f),
@@ -2174,17 +2190,35 @@ void finder_more_actions(State const& state,
                             icons::Symbol::ChevronUp,
                             0x6716u);
                         more_action_item(
+                            horizontal_faster,
+                            horizontal_scroll_speed_step_message(
+                                state.explorer,
+                                0.25f),
+                            true,
+                            icons::Symbol::Columns,
+                            0x6717u);
+                        more_action_item(
+                            horizontal_slower,
+                            horizontal_scroll_speed_step_message(
+                                state.explorer,
+                                -0.25f),
+                            true,
+                            icons::Symbol::List,
+                            0x6718u);
+                    }, SpaceToken::Xs);
+                    layout::row([&] {
+                        more_action_item(
                             state.labels.preferences_system_appearance.c_str(),
                             color_scheme_message("system"),
                             true,
                             icons::Symbol::Gallery,
-                            0x6717u);
+                            0x6719u);
                         more_action_item(
                             state.labels.preferences_dark_appearance.c_str(),
                             color_scheme_message("dark"),
                             true,
                             icons::Symbol::Movie,
-                            0x6718u);
+                            0x6720u);
                     }, SpaceToken::Xs);
                 }, SpaceToken::Xs);
             });

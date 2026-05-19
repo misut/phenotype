@@ -1954,6 +1954,11 @@ static void test_macos_common_debug_contract_entry_points() {
     assert(capabilities.system_settings.scroll_delta_multiplier > 0.0f);
     assert(capabilities.system_settings.scroll_horizontal_delta_multiplier
            > 0.0f);
+    assert(capabilities.system_settings.scroll_vertical_factor > 0.0f);
+    assert(capabilities.system_settings.scroll_horizontal_factor > 0.0f);
+    assert(capabilities.system_settings.scroll_source.find(
+               "hasPreciseScrollingDeltas")
+           != std::string::npos);
     assert(!capabilities.system_settings.accent_color_source.empty());
 
     auto snapshot_json = phenotype::native::debug::snapshot_json();

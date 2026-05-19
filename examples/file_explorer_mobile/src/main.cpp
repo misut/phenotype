@@ -480,6 +480,18 @@ ExplorerInputMessage scroll_speed_step_message(
         std::to_string(value));
 }
 
+ExplorerInputMessage horizontal_scroll_speed_step_message(
+        file_explorer_demo::ExplorerState const& explorer,
+        float delta) {
+    auto value = std::clamp(
+        explorer.theme_preferences.scroll_horizontal_delta_multiplier + delta,
+        0.25f,
+        4.0f);
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetHorizontalScrollSpeed,
+        std::to_string(value));
+}
+
 void mobile_symbol_button(std::string const& label,
                           phenotype::icons::Symbol symbol,
                           Msg msg,
@@ -968,6 +980,14 @@ void create_tab(State const& state) {
             widget::button<Msg>(
                 state.labels.preferences_scroll_slower,
                 scroll_speed_step_message(explorer, -0.25f));
+        }, SpaceToken::Xs);
+        layout::row([&] {
+            widget::button<Msg>(
+                state.labels.preferences_horizontal_scroll_faster,
+                horizontal_scroll_speed_step_message(explorer, 0.25f));
+            widget::button<Msg>(
+                state.labels.preferences_horizontal_scroll_slower,
+                horizontal_scroll_speed_step_message(explorer, -0.25f));
         }, SpaceToken::Xs);
         layout::row([&] {
             widget::button<Msg>(
