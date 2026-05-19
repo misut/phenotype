@@ -8936,6 +8936,7 @@ inline platform_api const& macos_platform() {
             nullptr,
             detail::input_dismiss_transient,
             nullptr,
+            nullptr,
         },
         {
             detail::macos_debug_capabilities,

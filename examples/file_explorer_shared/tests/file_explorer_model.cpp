@@ -396,6 +396,9 @@ duplicate
            != std::string::npos);
     assert(preference_debug_text.find("\"scroll_delta_multiplier\":1.5")
            != std::string::npos);
+    assert(preference_debug_text.find(
+               "\"scroll_horizontal_delta_multiplier\"")
+           != std::string::npos);
     fs::remove_all(preference_state.root, ec);
 
     auto state = demo::make_state(profile);
@@ -1107,6 +1110,8 @@ duplicate
     assert(debug_text.find("\"font_family_source\"") != std::string::npos);
     assert(debug_text.find("\"font_weight_adjustment\"") != std::string::npos);
     assert(debug_text.find("\"scroll_vertical_factor\"") != std::string::npos);
+    assert(debug_text.find("\"scroll_horizontal_delta_multiplier\"")
+           != std::string::npos);
     assert(debug_text.find("\"Pretendard package default")
            != std::string::npos);
     assert(debug_text.find("\"source\":\"file_explorer_shared::entry_symbol\"")

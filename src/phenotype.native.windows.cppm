@@ -5879,6 +5879,38 @@ inline UINT windows_scroll_wheel_lines() {
     return lines;
 }
 
+inline UINT windows_scroll_wheel_chars() {
+    UINT chars = 3;
+    if (!SystemParametersInfoW(SPI_GETWHEELSCROLLCHARS, 0, &chars, 0))
+        chars = 3;
+    return chars;
+}
+
+inline float windows_scroll_delta_x(double dx,
+                                    float line_height,
+                                    float viewport_width) {
+    if (dx == 0.0) return 0.0f;
+
+    if (line_height <= 0.0f)
+        line_height = 1.0f;
+
+    UINT chars = windows_scroll_wheel_chars();
+    if (chars == 0u)
+        return 0.0f;
+
+    if (chars == WHEEL_PAGESCROLL) {
+        float page = viewport_width - line_height;
+        if (page < line_height)
+            page = line_height;
+        return static_cast<float>(dx) * page;
+    }
+
+    float const character_width = line_height * 0.5f;
+    return static_cast<float>(dx)
+        * static_cast<float>(chars)
+        * character_width;
+}
+
 inline WindowsAccessibilityDisplayOptions
 windows_system_accessibility_display_options() {
     WindowsAccessibilityDisplayOptions options{};
@@ -5996,6 +6028,7 @@ windows_system_settings_snapshot() {
     }
 
     UINT const lines = windows_scroll_wheel_lines();
+    UINT const chars = windows_scroll_wheel_chars();
     snapshot.scroll_line_height =
         snapshot.body_font_size * snapshot.line_height_ratio;
     snapshot.scroll_wheel_lines = lines == WHEEL_PAGESCROLL
@@ -6005,6 +6038,9 @@ windows_system_settings_snapshot() {
     snapshot.scroll_vertical_factor = snapshot.scroll_page_mode
         ? 0.0f
         : snapshot.scroll_wheel_lines * snapshot.scroll_line_height;
+    snapshot.scroll_horizontal_factor = chars == WHEEL_PAGESCROLL
+        ? 0.0f
+        : static_cast<float>(chars) * snapshot.scroll_line_height * 0.5f;
     snapshot.scroll_bar_size =
         static_cast<float>(GetSystemMetrics(SM_CXVSCROLL));
     snapshot.preferred_scroller_style = "system";
@@ -6536,6 +6572,7 @@ inline platform_api const& windows_platform() {
             detail::input_handle_mouse_button,
             detail::input_dismiss_transient,
             detail::windows_scroll_delta_y,
+            detail::windows_scroll_delta_x,
         },
         {
             detail::windows_debug_capabilities,

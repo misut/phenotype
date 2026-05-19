@@ -356,7 +356,8 @@ void test_system_theme_preferences_are_pure_overlays() {
     system.font_family = "System UI";
     system.font_scale = 1.25f;
     system.line_height_ratio = 1.6f;
-    system.scroll_delta_multiplier = 1.0f;
+    system.scroll_delta_multiplier = 1.25f;
+    system.scroll_horizontal_delta_multiplier = 0.5f;
     system.accent_color_available = true;
     system.accent_color = Color{88, 86, 214, 255};
     system.accent_color_source = "test-accent";
@@ -370,7 +371,9 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert(std::fabs(applied.body_font_size - 21.0f) < 0.001f);
     assert(std::fabs(applied.heading_font_size - 27.0f) < 0.001f);
     assert(std::fabs(applied.small_font_size - 18.0f) < 0.001f);
-    assert(applied.scroll_delta_multiplier == 1.5f);
+    assert(std::fabs(applied.scroll_delta_multiplier - 1.875f) < 0.001f);
+    assert(std::fabs(applied.scroll_horizontal_delta_multiplier - 0.75f)
+           < 0.001f);
     assert(applied.accent == theme.accent);
 
     overrides.font_family = "UserFont";
@@ -3744,6 +3747,55 @@ void test_macos_control_button_style_contract() {
     std::puts("PASS: macOS control button style contract");
 }
 
+void test_glass_control_button_style_material_contract() {
+    set_theme(Theme{});
+
+    auto style = widget::glass_control_button_style(GlassControlStyleOptions{
+        .kind = MaterialKind::Thin,
+        .role = MaterialSurfaceRole::Toolbar,
+        .selected = true,
+        .width = 104.0f,
+        .height = 32.0f,
+    });
+    assert(style.has_material);
+    assert(style.material.kind == MaterialKind::Thin);
+    assert(style.material.role == MaterialSurfaceRole::Toolbar);
+    assert(style.material.fallback);
+    assert(style.has_background);
+    assert(style.has_hover_background);
+    assert(style.has_pressed_background);
+    assert(style.max_width == 104.0f);
+    assert(style.fixed_height == 32.0f);
+    assert(style.text_align == TextAlign::Center);
+
+    auto btn_h = button_test::build_button_with_options(style);
+    auto& btn = detail::node_at(btn_h);
+    assert(btn.interaction_role == InteractionRole::Button);
+    assert(btn.material.kind == MaterialKind::Thin);
+    assert(btn.material.role == MaterialSurfaceRole::Toolbar);
+    assert(btn.material.fallback);
+    assert(btn.material.tint == btn.background);
+    assert(btn.material.border == btn.border_color);
+    assert(btn.material.foreground == btn.text_color);
+    assert(btn.min_hit_width == minimum_button_activation_size);
+    assert(btn.min_hit_height == minimum_button_activation_size);
+
+    auto disabled_style = widget::glass_control_button_style(
+        GlassControlStyleOptions{
+            .kind = MaterialKind::Regular,
+            .role = MaterialSurfaceRole::Navigation,
+            .disabled = true,
+        });
+    auto disabled_h = button_test::build_button_with_options(disabled_style);
+    auto& disabled = detail::node_at(disabled_h);
+    assert(disabled.material.kind == MaterialKind::Regular);
+    assert(disabled.material.role == MaterialSurfaceRole::Navigation);
+    assert(!disabled.focusable);
+    assert(!disabled.debug_semantic_enabled);
+
+    std::puts("PASS: glass control button style emits material contract");
+}
+
 void test_symbol_button_minimum_hit_region_contract() {
     icons::SymbolButtonOptions options;
     options.role = icons::SymbolPresentationRole::Toolbar;
@@ -4680,6 +4732,7 @@ int main() {
     test_canvas_button_disabled_custom_chrome();
     test_symbol_button_macos_contract();
     test_macos_control_button_style_contract();
+    test_glass_control_button_style_material_contract();
     test_symbol_button_minimum_hit_region_contract();
     test_symbol_button_visual_state_token_contract();
     test_symbol_button_disabled_contract();

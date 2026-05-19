@@ -323,6 +323,23 @@ inline float normalize_scroll_delta(platform_api const* platform,
     return delta * multiplier;
 }
 
+inline float normalize_scroll_delta_x(platform_api const* platform,
+                                      double dx,
+                                      float line_height,
+                                      float viewport_width) {
+    if (dx == 0.0) return 0.0f;
+    if (line_height <= 0.0f)
+        line_height = 1.0f;
+    float delta = platform && platform->input.scroll_delta_x
+        ? platform->input.scroll_delta_x(dx, line_height, viewport_width)
+        : static_cast<float>(dx) * line_height * 3.0f;
+    auto const& theme = ::phenotype::current_theme();
+    float multiplier = theme.scroll_horizontal_delta_multiplier;
+    if (!(multiplier > 0.0f) || !std::isfinite(multiplier))
+        multiplier = 1.0f;
+    return delta * multiplier;
+}
+
 inline void repaint_current() {
     if (!g_app_state.host)
         return;
@@ -916,7 +933,11 @@ inline bool dispatch_scroll_xy(double dx, double dy,
         changed |= dispatch_scroll(dy, viewport_height_value);
     if (dx != 0.0) {
         float line_h = scroll_line_height();
-        float dxp = static_cast<float>(dx) * line_h * 3.0f;
+        float dxp = normalize_scroll_delta_x(
+            g_app_state.host ? g_app_state.host->platform : nullptr,
+            dx,
+            line_h,
+            viewport_width_value);
         if (dxp != 0.0f)
             changed |= dispatch_scroll_pixels_x(dxp,
                                                 viewport_width_value,

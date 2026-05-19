@@ -232,9 +232,12 @@ PLATFORM_CAPABILITY_BOOL_FIELDS = (
 PLATFORM_SYSTEM_SETTING_STRING_FIELDS = (
     "source",
     "font_family",
+    "font_family_source",
     "text_size_source",
+    "font_weight_source",
     "preferred_scroller_style",
     "scroll_source",
+    "accent_color_source",
 )
 
 PLATFORM_SYSTEM_SETTING_NUMBER_FIELDS = (
@@ -243,14 +246,33 @@ PLATFORM_SYSTEM_SETTING_NUMBER_FIELDS = (
     "small_font_size",
     "line_height_ratio",
     "font_scale",
+    "font_weight_adjustment",
     "scroll_line_height",
     "scroll_wheel_lines",
+    "scroll_vertical_factor",
+    "scroll_horizontal_factor",
+    "scroll_bar_size",
+    "touch_slop",
+    "scroll_friction",
     "scroll_delta_multiplier",
+    "scroll_horizontal_delta_multiplier",
 )
+
+PLATFORM_SYSTEM_SETTING_NUMBER_MINIMUMS = {
+    "font_weight_adjustment": -1000.0,
+    "scroll_wheel_lines": 0.0,
+    "scroll_vertical_factor": 0.0,
+    "scroll_horizontal_factor": 0.0,
+    "scroll_bar_size": 0.0,
+    "touch_slop": 0.0,
+    "scroll_friction": 0.0,
+}
 
 PLATFORM_SYSTEM_SETTING_BOOL_FIELDS = (
     "overlay_scrollbars",
     "scroll_page_mode",
+    "accent_color_available",
+    "accent_color_opaque",
 )
 
 
@@ -879,7 +901,7 @@ def check_platform_system_settings_contract(
         )
 
     for key in PLATFORM_SYSTEM_SETTING_NUMBER_FIELDS:
-        minimum = 0.0 if key == "scroll_wheel_lines" else 0.01
+        minimum = PLATFORM_SYSTEM_SETTING_NUMBER_MINIMUMS.get(key, 0.01)
         check_number_field(
             report,
             settings,

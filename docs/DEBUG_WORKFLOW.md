@@ -520,8 +520,11 @@ public animation-scale and UI-contrast APIs. File explorer artifacts mirror the 
 `application.file_explorer.preferences`: `system_settings` is the edge snapshot,
 `app_overrides` is the pure override input, and `effective_theme` is what the
 example applied before rendering. Use this block when text size, family source,
-font-weight adjustment, wheel/trackpad speed, scrollbar behavior, touch slop, or
-accent color looks wrong but the material/icon/resource contracts are green.
+font-weight adjustment, vertical or horizontal wheel/trackpad speed, scrollbar
+behavior, touch slop, or accent color looks wrong but the material/icon/resource
+contracts are green. The vertical and horizontal scroll multipliers are separate
+so Android `ViewConfiguration` factors and Windows
+`SPI_GETWHEELSCROLLCHARS` drift can be diagnosed without replaying native input.
 Pretendard remains the package default; OS font family and OS accent are
 explicit opt-in overrides so Finder verifier pixels stay deterministic unless a
 scenario asks for dynamic system chrome.
