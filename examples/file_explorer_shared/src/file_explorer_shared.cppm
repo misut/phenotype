@@ -162,6 +162,7 @@ struct ThemePreferenceSnapshot {
     float small_font_size = 0.0f;
     float line_height_ratio = 0.0f;
     float scroll_delta_multiplier = 1.0f;
+    float scroll_horizontal_delta_multiplier = 1.0f;
     bool prefer_system_font_family = false;
     bool prefer_system_color_scheme = false;
     bool apply_system_font_scale = true;
@@ -264,6 +265,7 @@ enum class ExplorerInputKind {
     SetFontFamily,
     SetFontScale,
     SetScrollSpeed,
+    SetHorizontalScrollSpeed,
     SetColorScheme,
 };
 
@@ -2958,6 +2960,10 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
         "scroll_delta_multiplier",
         json::Value{state.theme_preferences.scroll_delta_multiplier});
     overrides.emplace(
+        "scroll_horizontal_delta_multiplier",
+        json::Value{
+            state.theme_preferences.scroll_horizontal_delta_multiplier});
+    overrides.emplace(
         "prefer_system_font_family",
         json::Value{state.theme_preferences.prefer_system_font_family});
     overrides.emplace(
@@ -3004,7 +3010,8 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
     out.emplace(
         "scroll_policy",
         json::Value{
-            "OS scroll deltas/line settings at edge, theme multiplier is pure input"});
+            "OS scroll deltas/line settings at edge, axis theme multipliers "
+            "are pure inputs"});
     return json::Value{std::move(out)};
 }
 
@@ -4259,6 +4266,8 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::SetFontFamily: return "set_font_family";
         case ExplorerInputKind::SetFontScale: return "set_font_scale";
         case ExplorerInputKind::SetScrollSpeed: return "set_scroll_speed";
+        case ExplorerInputKind::SetHorizontalScrollSpeed:
+            return "set_horizontal_scroll_speed";
         case ExplorerInputKind::SetColorScheme: return "set_color_scheme";
     }
     return "noop";
@@ -4842,6 +4851,22 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         }
         return parsed_input({
             .kind = ExplorerInputKind::SetScrollSpeed,
+            .value = compact_preference_number(*parsed),
+        });
+    }
+    if (name == "horizontal-scroll-speed"
+        || name == "horizontal_scroll_speed"
+        || name == "scroll-x-speed"
+        || name == "scroll_x_speed"
+        || name == "scroll-x-scale"
+        || name == "scroll_x_scale") {
+        auto parsed = parse_preference_number(value, 0.25f, 4.0f);
+        if (!parsed) {
+            return input_parse_error(
+                "input 'horizontal-scroll-speed' requires a positive number");
+        }
+        return parsed_input({
+            .kind = ExplorerInputKind::SetHorizontalScrollSpeed,
             .value = compact_preference_number(*parsed),
         });
     }
@@ -6055,6 +6080,7 @@ inline ExplorerInputModality default_input_modality(
         case ExplorerInputKind::SetFontFamily:
         case ExplorerInputKind::SetFontScale:
         case ExplorerInputKind::SetScrollSpeed:
+        case ExplorerInputKind::SetHorizontalScrollSpeed:
         case ExplorerInputKind::SetColorScheme:
         default:
             return ExplorerInputModality::Programmatic;
@@ -6190,6 +6216,7 @@ inline void apply_focus_policy_for_input(
         case ExplorerInputKind::SetFontFamily:
         case ExplorerInputKind::SetFontScale:
         case ExplorerInputKind::SetScrollSpeed:
+        case ExplorerInputKind::SetHorizontalScrollSpeed:
         case ExplorerInputKind::SetColorScheme:
         default:
             apply_modality_without_focus_change(state, modality);
@@ -6455,6 +6482,18 @@ inline void apply_explorer_input(
             state.preferences_source = "application-input";
             state.theme_preferences.scroll_delta_multiplier = *speed;
             state.status = "Scroll speed set to "
+                + compact_preference_number(*speed) + "x.";
+            return;
+        }
+        case ExplorerInputKind::SetHorizontalScrollSpeed: {
+            auto speed = parse_preference_number(input.value, 0.25f, 4.0f);
+            if (!speed) {
+                state.status = "Horizontal scroll speed input was invalid.";
+                return;
+            }
+            state.preferences_source = "application-input";
+            state.theme_preferences.scroll_horizontal_delta_multiplier = *speed;
+            state.status = "Horizontal scroll speed set to "
                 + compact_preference_number(*speed) + "x.";
             return;
         }

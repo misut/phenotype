@@ -367,6 +367,7 @@ void test_system_theme_preferences_are_pure_overlays() {
     ThemePreferenceOverrides overrides{};
     overrides.font_scale = 1.2f;
     overrides.scroll_delta_multiplier = 1.5f;
+    overrides.scroll_horizontal_delta_multiplier = 2.0f;
 
     auto applied = apply_system_theme_preferences(theme, system, overrides);
     assert(applied.default_font_family == "Pretendard");
@@ -374,7 +375,7 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert(std::fabs(applied.heading_font_size - 27.0f) < 0.001f);
     assert(std::fabs(applied.small_font_size - 18.0f) < 0.001f);
     assert(std::fabs(applied.scroll_delta_multiplier - 1.875f) < 0.001f);
-    assert(std::fabs(applied.scroll_horizontal_delta_multiplier - 0.75f)
+    assert(std::fabs(applied.scroll_horizontal_delta_multiplier - 1.5f)
            < 0.001f);
     assert(applied.accent == theme.accent);
 

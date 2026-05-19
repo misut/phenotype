@@ -401,6 +401,7 @@ struct ThemePreferenceOverrides {
     float small_font_size = 0.0f;
     float line_height_ratio = 0.0f;
     float scroll_delta_multiplier = 1.0f;
+    float scroll_horizontal_delta_multiplier = 1.0f;
     bool prefer_system_font_family = false;
     bool prefer_system_color_scheme = false;
     bool apply_system_font_scale = true;
@@ -562,7 +563,13 @@ inline Theme apply_system_theme_preferences(
         1.0f,
         0.25f,
         4.0f);
+    float const app_horizontal_scroll_scale = bounded_theme_preference(
+        overrides.scroll_horizontal_delta_multiplier,
+        1.0f,
+        0.25f,
+        4.0f);
     horizontal_scroll_scale *= app_scroll_scale;
+    horizontal_scroll_scale *= app_horizontal_scroll_scale;
     scroll_scale *= app_scroll_scale;
     theme.scroll_delta_multiplier = bounded_theme_preference(
         scroll_scale,

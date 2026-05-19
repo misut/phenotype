@@ -321,13 +321,16 @@ For direct launches, `PHENOTYPE_FILE_EXPLORER_INPUTS` accepts newline- or
 semicolon-separated inputs, and `PHENOTYPE_FILE_EXPLORER_SCRIPT` points at the
 same line-based script format used by `phenotype drive file-explorer
 --script`. Preference commands use the same app input layer, so
-`font-family:system`, `font-family:Pretendard`, `font-scale:1.2`, and
-`scroll-speed:1.4` update the shared state before the native theme is resolved.
+`font-family:system`, `font-family:Pretendard`, `font-scale:1.2`,
+`scroll-speed:1.4`, and `horizontal-scroll-speed:2` update the shared state
+before the native theme is resolved.
 File reads and environment access remain example edge work; parsing and input
 application stay in `file_explorer_shared`.
 The desktop More menu exposes the same preference inputs as native buttons
 (`System`, `Pretendard`, `Text +/-`, and `Scroll +/-`) so interactive changes
 and CLI-driven startup replay share one model contract.
+The desktop canvas labels read `Theme::default_font_family`, so OS/user font
+family overrides affect both widget text and Finder-style custom drawing.
 
 The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity,
