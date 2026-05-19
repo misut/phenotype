@@ -211,6 +211,14 @@ fallback = []
     assert(parsed_pointer_content.input.modality
            == demo::ExplorerInputModality::Pointer);
     assert(parsed_pointer_content.input.value == "content_grid");
+    auto parsed_pointer_more =
+        demo::parse_explorer_input("pointer:more-actions");
+    assert(parsed_pointer_more.ok);
+    assert(parsed_pointer_more.input.kind
+           == demo::ExplorerInputKind::PointerFocus);
+    assert(parsed_pointer_more.input.modality
+           == demo::ExplorerInputModality::Pointer);
+    assert(parsed_pointer_more.input.value == "more_actions");
     auto parsed_click = demo::parse_explorer_input("click:README.txt");
     assert(parsed_click.ok);
     assert(parsed_click.input.kind == demo::ExplorerInputKind::ActivateEntry);
@@ -1069,6 +1077,20 @@ duplicate
         focus_profile);
     assert(focus_state.focus_target == demo::ExplorerFocusTarget::Search);
     assert(focus_state.focus_visible);
+    demo::apply_explorer_input(
+        focus_state,
+        parsed_pointer_content.input,
+        focus_profile);
+    assert(focus_state.focus_target == demo::ExplorerFocusTarget::ContentGrid);
+    assert(!focus_state.focus_visible);
+    demo::apply_explorer_input(
+        focus_state,
+        parsed_pointer_more.input,
+        focus_profile);
+    assert(focus_state.focus_target == demo::ExplorerFocusTarget::MoreActions);
+    assert(!focus_state.focus_visible);
+    assert(demo::focus_ring_visibility_reason(focus_state)
+           == "pointer_input_hides_focus_ring");
     demo::apply_explorer_input(
         focus_state,
         parsed_pointer_content.input,

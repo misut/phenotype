@@ -113,10 +113,10 @@ changes.
 
 The executable entry point stays intentionally thin. `src/main.cpp` only
 forwards process arguments into `phenotype_cli.app`, while command metadata,
-shared JSON/check helpers, package inspection, icon/SVG inspection, contracts,
-file-explorer observation, and glass-showcase observation live in dedicated C++
-modules. New commands should extend those modules or add a narrowly named
-module instead of growing the entry point again.
+shared JSON/check helpers, package inspection, icon command routing, catalog
+checks, SVG inspection, contracts, file-explorer observation, and glass-showcase
+observation live in dedicated C++ modules. New commands should extend those
+modules or add a narrowly named module instead of growing the entry point again.
 
 Current commands:
 
@@ -188,8 +188,10 @@ reporting, `phenotype_cli.artifacts` owns artifact summary, uv-managed verifier
 invocation, snapshot/material observation, and likely-layer suggestions,
 `phenotype_cli.contracts` owns the pure theme/IO contract commands,
 `phenotype_cli.file_explorer` owns file explorer observation, chrome/native
-window control, and drive JSON, and `phenotype_cli.icons` owns the icon and SVG
-inspection command runners plus built-in icon helper payloads.
+window control, and drive JSON, `phenotype_cli.icons` owns icon/SVG command
+routing plus built-in icon helper payloads, `phenotype_cli.icons_checks` owns
+catalog check generation, and `phenotype_cli.icons_svg_inspect` owns SVG support
+and inspection JSON.
 Package work is now split by ownership instead of accumulating in one command
 module: `phenotype_cli.package_inspect` owns manifest/resource catalog checks,
 `phenotype_cli.package_json` owns package JSON envelopes,
