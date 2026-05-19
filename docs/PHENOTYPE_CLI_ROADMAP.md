@@ -227,7 +227,8 @@ only `PHENOTYPE_FILE_EXPLORER_INPUTS` plus
 values at startup and call the shared parser/apply functions before the first
 artifact frame. This keeps deterministic GUI input replay available to CI and
 LLM debugging without introducing a second native event stack. Preference
-inputs (`font-family:system`, `font-scale:1.2`, `scroll-speed:1.4`) use this
+inputs (`font-family:system`, `font-scale:1.2`, `scroll-speed:1.4`,
+`horizontal-scroll-speed:2`) use this
 same path and are synced back into the native `phenotype::Theme` before the
 first frame, so OS-derived settings and user overrides share one contract. The
 observed OS snapshot includes font-family source, text scale, font-weight

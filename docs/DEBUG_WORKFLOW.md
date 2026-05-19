@@ -565,9 +565,10 @@ counts in the run receipt, and passes only
 native process. This keeps file reads, process execution, and environment
 access at the edge while allowing artifact bundles to prove the result of GUI
 input replay. The same route covers application preference inputs such as
-`font-family:system`, `font-scale:1.2`, and `scroll-speed:1.4`; artifacts then
+`font-family:system`, `font-scale:1.2`, `scroll-speed:1.4`, and
+`horizontal-scroll-speed:2`; artifacts then
 record `application.file_explorer.preferences.source=application-input` plus
-the resolved effective font and scroll multiplier.
+the resolved effective font and axis-specific scroll multipliers.
 For a single command that drives input and observes native output, use
 `--observe-output`:
 

@@ -179,6 +179,12 @@ phenotype::ThemePreferenceOverrides initial_theme_preference_overrides() {
             4.0f)) {
         overrides.scroll_delta_multiplier = *speed;
     }
+    if (auto speed = env_float(
+            std::getenv("PHENOTYPE_FILE_EXPLORER_HORIZONTAL_SCROLL_SPEED"),
+            0.25f,
+            4.0f)) {
+        overrides.scroll_horizontal_delta_multiplier = *speed;
+    }
     if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_COLOR_SCHEME")) {
         if (std::string_view{raw} == "system") {
             overrides.prefer_system_color_scheme = true;
@@ -250,6 +256,8 @@ file_explorer_demo::ThemePreferenceSnapshot theme_preference_snapshot(
         .small_font_size = overrides.small_font_size,
         .line_height_ratio = overrides.line_height_ratio,
         .scroll_delta_multiplier = overrides.scroll_delta_multiplier,
+        .scroll_horizontal_delta_multiplier =
+            overrides.scroll_horizontal_delta_multiplier,
         .prefer_system_font_family = overrides.prefer_system_font_family,
         .prefer_system_color_scheme = overrides.prefer_system_color_scheme,
         .apply_system_font_scale = overrides.apply_system_font_scale,
@@ -335,6 +343,8 @@ phenotype::ThemePreferenceOverrides theme_preferences_from_state(
         .small_font_size = preferences.small_font_size,
         .line_height_ratio = preferences.line_height_ratio,
         .scroll_delta_multiplier = preferences.scroll_delta_multiplier,
+        .scroll_horizontal_delta_multiplier =
+            preferences.scroll_horizontal_delta_multiplier,
         .prefer_system_font_family = preferences.prefer_system_font_family,
         .prefer_system_color_scheme = preferences.prefer_system_color_scheme,
         .apply_system_font_scale = preferences.apply_system_font_scale,

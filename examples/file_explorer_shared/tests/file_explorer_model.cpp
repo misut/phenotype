@@ -292,6 +292,12 @@ fallback = []
     auto parsed_slow_scroll = demo::parse_explorer_input("scroll-speed:0.1");
     assert(parsed_slow_scroll.ok);
     assert(parsed_slow_scroll.input.value == "0.25");
+    auto parsed_horizontal_scroll =
+        demo::parse_explorer_input("scroll-x-speed:2.25");
+    assert(parsed_horizontal_scroll.ok);
+    assert(parsed_horizontal_scroll.input.kind
+           == demo::ExplorerInputKind::SetHorizontalScrollSpeed);
+    assert(parsed_horizontal_scroll.input.value == "2.25");
     auto parsed_bad_font_scale = demo::parse_explorer_input("font-scale:big");
     assert(!parsed_bad_font_scale.ok);
     assert(parsed_bad_font_scale.error.find("font-scale") != std::string::npos);
@@ -370,7 +376,8 @@ duplicate
     fs::remove_all(demo::demo_root(preference_profile), ec);
     auto preference_state = demo::make_state(preference_profile);
     auto preference_sequence = demo::parse_explorer_input_sequence(
-        "font-family:system;font-scale:1.25;scroll-speed:1.5;color-scheme:system");
+        "font-family:system;font-scale:1.25;scroll-speed:1.5;"
+        "horizontal-scroll-speed:2;color-scheme:system");
     assert(preference_sequence.ok);
     demo::apply_explorer_inputs(
         preference_state,
@@ -381,6 +388,8 @@ duplicate
     assert(preference_state.theme_preferences.font_family.empty());
     assert(preference_state.theme_preferences.font_scale == 1.25f);
     assert(preference_state.theme_preferences.scroll_delta_multiplier == 1.5f);
+    assert(preference_state.theme_preferences.scroll_horizontal_delta_multiplier
+           == 2.0f);
     assert(preference_state.theme_preferences.prefer_system_color_scheme);
     assert(preference_state.status == "Using the OS appearance.");
     auto preference_debug_text = json::emit(
@@ -398,6 +407,9 @@ duplicate
     assert(preference_debug_text.find("\"font_scale\":1.25")
            != std::string::npos);
     assert(preference_debug_text.find("\"scroll_delta_multiplier\":1.5")
+           != std::string::npos);
+    assert(preference_debug_text.find(
+               "\"scroll_horizontal_delta_multiplier\":2")
            != std::string::npos);
     assert(preference_debug_text.find("\"prefer_system_color_scheme\":true")
            != std::string::npos);
