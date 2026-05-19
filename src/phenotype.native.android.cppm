@@ -12,12 +12,14 @@
 module;
 
 #if defined(__ANDROID__)
+#include <cstdlib>
 #include <cstdint>
 #include <cstring>
 
 #define VK_USE_PLATFORM_ANDROID_KHR 1
 #include <vulkan/vulkan.h>
 #include <android/native_window.h>
+#include <android/api-level.h>
 #include <android/log.h>
 #include <android/bitmap.h>
 #include <android/asset_manager.h>
@@ -1555,6 +1557,20 @@ inline ImageCacheEntry const* ensure_image_cache_entry(std::string const& url) {
     return &entry;
 }
 
+struct AndroidAccessibilityDisplayOptions {
+    bool reduce_transparency = false;
+    bool increase_contrast = false;
+    bool reduce_motion = false;
+    float ui_contrast = 0.0f;
+    float window_animation_scale = 1.0f;
+    float transition_animation_scale = 1.0f;
+    float animator_duration_scale = 1.0f;
+    std::string source = "android-public-api";
+};
+
+inline AndroidAccessibilityDisplayOptions
+android_accessibility_display_options();
+
 struct android_renderer {
     VkInstance instance;
     VkPhysicalDevice physical_device;
@@ -1648,6 +1664,8 @@ struct android_renderer {
     double perf_record_ms_sum = 0.0;
     double perf_total_ms_sum  = 0.0;
     std::uint32_t material_frame_sequence = 0;
+    std::uint32_t last_material_accessibility_signature = 0;
+    AndroidAccessibilityDisplayOptions accessibility_options{};
     MaterialExecutorSummary material_executor_summary{};
 
     // Stage 4 text pipeline. Atlas image + view grow on demand;
@@ -4908,11 +4926,17 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                                                  FrameScratch& out) {
     out.batches.push_back(ScissorBatch{});
     auto commands = ::phenotype::parse_commands(buf, len);
+    auto const accessibility = android_accessibility_display_options();
     MaterialEnvironment material_env{};
     material_env.capabilities.material_surfaces = true;
     material_env.capabilities.material_backdrop_blur = false;
     material_env.capabilities.shader_blur = false;
     material_env.capabilities.frame_history = false;
+    material_env.capabilities.reduce_transparency =
+        accessibility.reduce_transparency;
+    material_env.capabilities.increase_contrast =
+        accessibility.increase_contrast;
+    material_env.capabilities.reduce_motion = accessibility.reduce_motion;
     material_env.backdrop.source = "android-vulkan-fallback";
     material_env.quality = default_material_quality_policy();
     std::uint32_t command_index = 0;
@@ -5537,6 +5561,273 @@ inline std::uint64_t fnv1a_hash(unsigned char const* data,
     return h == 0 ? 1ULL : h;
 }
 
+inline bool accessibility_env_token_enabled(std::string_view config,
+                                            std::string_view token) {
+    std::size_t start = 0;
+    while (start < config.size()) {
+        while (start < config.size()
+               && (config[start] == ',' || config[start] == ';'
+                   || config[start] == ' ' || config[start] == '|')) {
+            ++start;
+        }
+        auto end = start;
+        while (end < config.size()
+               && config[end] != ',' && config[end] != ';'
+               && config[end] != ' ' && config[end] != '|') {
+            ++end;
+        }
+        if (config.substr(start, end - start) == token)
+            return true;
+        start = end;
+    }
+    return false;
+}
+
+inline std::optional<float> android_global_float_setting(
+        char const* setting_name,
+        float default_value) {
+    ScopedEnv senv(g_jni.vm);
+    if (!senv || !g_android_activity) return std::nullopt;
+
+    JNIEnv* env = senv.env;
+    auto drop = [&](jobject ref) {
+        if (ref) env->DeleteLocalRef(ref);
+    };
+
+    jclass activity_cls = env->GetObjectClass(g_android_activity);
+    if (!activity_cls || check_and_clear_exception(env)) {
+        drop(activity_cls);
+        return std::nullopt;
+    }
+
+    jmethodID get_content_resolver = env->GetMethodID(
+        activity_cls,
+        "getContentResolver",
+        "()Landroid/content/ContentResolver;");
+    drop(activity_cls);
+    if (!get_content_resolver || check_and_clear_exception(env))
+        return std::nullopt;
+
+    jobject resolver = env->CallObjectMethod(
+        g_android_activity,
+        get_content_resolver);
+    if (!resolver || check_and_clear_exception(env)) {
+        drop(resolver);
+        return std::nullopt;
+    }
+
+    jclass global_cls = env->FindClass("android/provider/Settings$Global");
+    if (!global_cls || check_and_clear_exception(env)) {
+        drop(global_cls);
+        drop(resolver);
+        return std::nullopt;
+    }
+
+    jmethodID get_float = env->GetStaticMethodID(
+        global_cls,
+        "getFloat",
+        "(Landroid/content/ContentResolver;Ljava/lang/String;F)F");
+    if (!get_float || check_and_clear_exception(env)) {
+        drop(global_cls);
+        drop(resolver);
+        return std::nullopt;
+    }
+
+    jstring key = env->NewStringUTF(setting_name);
+    if (!key || check_and_clear_exception(env)) {
+        drop(key);
+        drop(global_cls);
+        drop(resolver);
+        return std::nullopt;
+    }
+
+    float const value = env->CallStaticFloatMethod(
+        global_cls,
+        get_float,
+        resolver,
+        key,
+        default_value);
+    bool const failed = check_and_clear_exception(env);
+    drop(key);
+    drop(global_cls);
+    drop(resolver);
+    if (failed || !std::isfinite(value))
+        return std::nullopt;
+    return value;
+}
+
+inline std::optional<float> android_ui_contrast() {
+    if (android_get_device_api_level() < 34)
+        return std::nullopt;
+
+    ScopedEnv senv(g_jni.vm);
+    if (!senv || !g_android_activity) return std::nullopt;
+
+    JNIEnv* env = senv.env;
+    auto drop = [&](jobject ref) {
+        if (ref) env->DeleteLocalRef(ref);
+    };
+
+    jclass context_cls = env->FindClass("android/content/Context");
+    if (!context_cls || check_and_clear_exception(env)) {
+        drop(context_cls);
+        return std::nullopt;
+    }
+
+    jfieldID service_id = env->GetStaticFieldID(
+        context_cls,
+        "UI_MODE_SERVICE",
+        "Ljava/lang/String;");
+    if (!service_id || check_and_clear_exception(env)) {
+        drop(context_cls);
+        return std::nullopt;
+    }
+
+    auto service_name = static_cast<jstring>(
+        env->GetStaticObjectField(context_cls, service_id));
+    drop(context_cls);
+    if (!service_name || check_and_clear_exception(env)) {
+        drop(service_name);
+        return std::nullopt;
+    }
+
+    jclass activity_cls = env->GetObjectClass(g_android_activity);
+    if (!activity_cls || check_and_clear_exception(env)) {
+        drop(activity_cls);
+        drop(service_name);
+        return std::nullopt;
+    }
+
+    jmethodID get_system_service = env->GetMethodID(
+        activity_cls,
+        "getSystemService",
+        "(Ljava/lang/String;)Ljava/lang/Object;");
+    drop(activity_cls);
+    if (!get_system_service || check_and_clear_exception(env)) {
+        drop(service_name);
+        return std::nullopt;
+    }
+
+    jobject service = env->CallObjectMethod(
+        g_android_activity,
+        get_system_service,
+        service_name);
+    drop(service_name);
+    if (!service || check_and_clear_exception(env)) {
+        drop(service);
+        return std::nullopt;
+    }
+
+    jclass service_cls = env->GetObjectClass(service);
+    if (!service_cls || check_and_clear_exception(env)) {
+        drop(service_cls);
+        drop(service);
+        return std::nullopt;
+    }
+
+    jmethodID get_contrast =
+        env->GetMethodID(service_cls, "getContrast", "()F");
+    drop(service_cls);
+    if (!get_contrast || check_and_clear_exception(env)) {
+        drop(service);
+        return std::nullopt;
+    }
+
+    float const contrast = env->CallFloatMethod(service, get_contrast);
+    bool const failed = check_and_clear_exception(env);
+    drop(service);
+    if (failed || !std::isfinite(contrast))
+        return std::nullopt;
+    return contrast;
+}
+
+inline AndroidAccessibilityDisplayOptions
+android_system_accessibility_display_options() {
+    AndroidAccessibilityDisplayOptions options{};
+    options.source = "Settings.Global+UiModeManager.getContrast";
+
+    if (auto contrast = android_ui_contrast()) {
+        options.ui_contrast = *contrast;
+        options.increase_contrast = *contrast > 0.0f;
+    }
+
+    if (auto value = android_global_float_setting(
+            "window_animation_scale",
+            1.0f)) {
+        options.window_animation_scale = *value;
+    }
+    if (auto value = android_global_float_setting(
+            "transition_animation_scale",
+            1.0f)) {
+        options.transition_animation_scale = *value;
+    }
+    if (auto value = android_global_float_setting(
+            "animator_duration_scale",
+            1.0f)) {
+        options.animator_duration_scale = *value;
+    }
+    options.reduce_motion =
+        options.window_animation_scale <= 0.0f
+        || options.transition_animation_scale <= 0.0f
+        || options.animator_duration_scale <= 0.0f;
+
+    return options;
+}
+
+inline AndroidAccessibilityDisplayOptions
+android_accessibility_display_options() {
+    auto const* raw = std::getenv("PHENOTYPE_ACCESSIBILITY_DISPLAY");
+    if (!raw || raw[0] == '\0')
+        return android_system_accessibility_display_options();
+
+    std::string_view config{raw};
+    if (config == "system" || config == "default")
+        return android_system_accessibility_display_options();
+
+    AndroidAccessibilityDisplayOptions options{};
+    options.source = "PHENOTYPE_ACCESSIBILITY_DISPLAY";
+    options.reduce_transparency =
+        accessibility_env_token_enabled(config, "reduce-transparency");
+    options.increase_contrast =
+        accessibility_env_token_enabled(config, "increase-contrast");
+    options.reduce_motion =
+        accessibility_env_token_enabled(config, "reduce-motion");
+    return options;
+}
+
+inline std::uint32_t android_accessibility_signature(
+        AndroidAccessibilityDisplayOptions const& options) noexcept {
+    return (options.reduce_transparency ? 1u : 0u)
+        | (options.increase_contrast ? 2u : 0u)
+        | (options.reduce_motion ? 4u : 0u);
+}
+
+inline json::Value android_accessibility_display_options_json(
+        AndroidAccessibilityDisplayOptions const& options) {
+    json::Object accessibility;
+    accessibility.emplace("source", json::Value{options.source});
+    accessibility.emplace(
+        "reduce_transparency",
+        json::Value{options.reduce_transparency});
+    accessibility.emplace(
+        "increase_contrast",
+        json::Value{options.increase_contrast});
+    accessibility.emplace(
+        "reduce_motion",
+        json::Value{options.reduce_motion});
+    accessibility.emplace("ui_contrast", json::Value{options.ui_contrast});
+    accessibility.emplace(
+        "window_animation_scale",
+        json::Value{options.window_animation_scale});
+    accessibility.emplace(
+        "transition_animation_scale",
+        json::Value{options.transition_animation_scale});
+    accessibility.emplace(
+        "animator_duration_scale",
+        json::Value{options.animator_duration_scale});
+    return json::Value{std::move(accessibility)};
+}
+
 inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     if (!g_renderer.initialized) return;
     if (buf == nullptr || len == 0) {
@@ -5563,10 +5854,24 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     // hundreds of thousands of TriVertexGPU per frame and a few
     // hundred microseconds of vkCmd recording.
     std::uint64_t const cur_hash = fnv1a_hash(buf, len);
+    bool const command_stream_changed =
+        !g_renderer.last_scratch_valid
+        || g_renderer.last_buf_hash == 0
+        || g_renderer.last_buf_hash != cur_hash;
+    auto accessibility = g_renderer.accessibility_options;
+    auto accessibility_signature =
+        g_renderer.last_material_accessibility_signature;
+    if (command_stream_changed) {
+        accessibility = android_accessibility_display_options();
+        accessibility_signature = android_accessibility_signature(accessibility);
+        g_renderer.accessibility_options = accessibility;
+    }
     bool const can_skip_decode =
         g_renderer.last_scratch_valid
         && g_renderer.last_buf_hash != 0
-        && g_renderer.last_buf_hash == cur_hash;
+        && g_renderer.last_buf_hash == cur_hash
+        && g_renderer.last_material_accessibility_signature
+            == accessibility_signature;
 
     auto t_decode_end = t_start;
     FrameScratch local_scratch;
@@ -5580,6 +5885,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         material_env.capabilities.material_backdrop_blur = false;
         material_env.capabilities.shader_blur = false;
         material_env.capabilities.frame_history = g_renderer.last_frame_available;
+        material_env.capabilities.reduce_transparency =
+            accessibility.reduce_transparency;
+        material_env.capabilities.increase_contrast =
+            accessibility.increase_contrast;
+        material_env.capabilities.reduce_motion =
+            accessibility.reduce_motion;
         material_env.backdrop.available = false;
         material_env.backdrop.stable = false;
         material_env.backdrop.source = "android-vulkan-fallback";
@@ -5948,6 +6259,8 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         g_renderer.last_have_text = have_text;
         g_renderer.last_have_images = have_images;
         g_renderer.last_scratch_valid = true;
+        g_renderer.last_material_accessibility_signature =
+            accessibility_signature;
     }
     g_renderer.last_buf_hash = cur_hash;
 
@@ -6558,6 +6871,7 @@ android_system_settings_snapshot() {
 }
 
 inline ::phenotype::diag::PlatformCapabilitiesSnapshot android_debug_capabilities() {
+    auto const accessibility = android_accessibility_display_options();
     ::phenotype::diag::PlatformCapabilitiesSnapshot snapshot{
         /*platform=*/"android",
         /*read_only=*/true,
@@ -6570,6 +6884,9 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot android_debug_capabilitie
         /*frame_image=*/true,
         /*platform_diagnostics=*/true,
     };
+    snapshot.reduce_transparency = accessibility.reduce_transparency;
+    snapshot.increase_contrast = accessibility.increase_contrast;
+    snapshot.reduce_motion = accessibility.reduce_motion;
     snapshot.system_settings = android_system_settings_snapshot();
     return snapshot;
 }
@@ -6599,6 +6916,10 @@ inline ::json::Object android_renderer_runtime_json() {
         ::json::Value{g_renderer.tri_pipeline != VK_NULL_HANDLE});
     r.emplace("material_pipeline_ready", ::json::Value{false});
     r.emplace("material_backdrop_source_ready", ::json::Value{false});
+    r.emplace(
+        "accessibility_display_options",
+        android_accessibility_display_options_json(
+            g_renderer.accessibility_options));
     r.emplace(
         "material_plan_contract_version",
         ::json::Value{
