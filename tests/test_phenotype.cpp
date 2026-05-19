@@ -379,6 +379,13 @@ void test_system_theme_preferences_are_pure_overlays() {
            < 0.001f);
     assert(applied.accent == theme.accent);
 
+    overrides.apply_system_scroll_metrics = false;
+    applied = apply_system_theme_preferences(theme, system, overrides);
+    assert(std::fabs(applied.scroll_delta_multiplier - 1.5f) < 0.001f);
+    assert(std::fabs(applied.scroll_horizontal_delta_multiplier - 3.0f)
+           < 0.001f);
+    overrides.apply_system_scroll_metrics = true;
+
     system.body_font_size = 13.0f;
     system.heading_font_size = 17.0f;
     system.small_font_size = 11.0f;

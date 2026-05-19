@@ -1761,6 +1761,26 @@ inline constexpr unsigned long long ns_event_phase_may_begin = 1ull << 5;
 
 inline bool g_force_disable_system_caret_for_tests = false;
 
+struct MacOSScrollRuntimeEvent {
+    bool available = false;
+    char const* source = "none";
+    bool has_precise_scrolling_deltas = false;
+    double raw_delta_x = 0.0;
+    double raw_delta_y = 0.0;
+    float line_height = 0.0f;
+    float app_vertical_multiplier = 1.0f;
+    float app_horizontal_multiplier = 1.0f;
+    float normalized_delta_x = 0.0f;
+    float normalized_delta_y = 0.0f;
+    float viewport_width = 0.0f;
+    float viewport_height = 0.0f;
+    unsigned long long phase = 0;
+    unsigned long long momentum_phase = 0;
+    bool scroll_tracking_changed = false;
+    bool handled_x = false;
+    bool handled_y = false;
+};
+
 struct ImeState {
     id ns_window = nullptr;
     id content_view = nullptr;
@@ -1786,6 +1806,7 @@ struct ImeState {
     CGRect last_character_rect_host = CGRectNull;
     long long last_indicator_display_mode = -1;
     CGRect last_character_rect_screen = CGRectNull;
+    MacOSScrollRuntimeEvent last_scroll_event{};
 };
 
 inline ImeState g_ime;
@@ -6608,6 +6629,45 @@ inline bool sync_scroll_tracking_state(unsigned long long phase,
     return true;
 }
 
+inline void record_macos_scroll_runtime_event(
+        double raw_delta_x,
+        double raw_delta_y,
+        bool has_precise_scrolling_deltas,
+        float line_height,
+        float app_vertical_multiplier,
+        float app_horizontal_multiplier,
+        float normalized_delta_x,
+        float normalized_delta_y,
+        float viewport_width,
+        float viewport_height,
+        unsigned long long phase,
+        unsigned long long momentum_phase,
+        bool scroll_tracking_changed,
+        bool handled_x,
+        bool handled_y) {
+    g_ime.last_scroll_event = MacOSScrollRuntimeEvent{
+        .available = true,
+        .source = has_precise_scrolling_deltas
+            ? "NSEvent.scrollingDelta precise"
+            : "NSEvent.scrollingDelta line",
+        .has_precise_scrolling_deltas = has_precise_scrolling_deltas,
+        .raw_delta_x = raw_delta_x,
+        .raw_delta_y = raw_delta_y,
+        .line_height = line_height,
+        .app_vertical_multiplier = app_vertical_multiplier,
+        .app_horizontal_multiplier = app_horizontal_multiplier,
+        .normalized_delta_x = normalized_delta_x,
+        .normalized_delta_y = normalized_delta_y,
+        .viewport_width = viewport_width,
+        .viewport_height = viewport_height,
+        .phase = phase,
+        .momentum_phase = momentum_phase,
+        .scroll_tracking_changed = scroll_tracking_changed,
+        .handled_x = handled_x,
+        .handled_y = handled_y,
+    };
+}
+
 inline float current_scroll_viewport_height() {
     return viewport_height();
 }
@@ -6677,32 +6737,54 @@ inline bool handle_local_scroll_event(id event) {
     auto phase = objc_send<unsigned long long>(event, sel_phase());
     auto momentum_phase = objc_send<unsigned long long>(event, sel_momentum_phase());
     bool scroll_tracking_changed = sync_scroll_tracking_state(phase, momentum_phase);
+    float line_height = scroll_line_height();
     float normalized_delta = macos_normalize_scroll_delta(
         scrolling_delta_y,
         has_precise_scrolling_deltas,
-        scroll_line_height());
+        line_height);
     float normalized_delta_x = macos_normalize_scroll_delta(
         scrolling_delta_x,
         has_precise_scrolling_deltas,
-        scroll_line_height());
-    normalized_delta *= macos_scroll_delta_multiplier(false);
-    normalized_delta_x *= macos_scroll_delta_multiplier(true);
+        line_height);
+    float const vertical_multiplier = macos_scroll_delta_multiplier(false);
+    float const horizontal_multiplier = macos_scroll_delta_multiplier(true);
+    normalized_delta *= vertical_multiplier;
+    normalized_delta_x *= horizontal_multiplier;
     float viewport_height_value = current_scroll_viewport_height();
     float viewport_width_value = current_scroll_viewport_width();
     bool handled = false;
+    bool handled_y = false;
+    bool handled_x = false;
     if (normalized_delta != 0.0f) {
-        handled = dispatch_scroll_pixels(
+        handled_y = dispatch_scroll_pixels(
             normalized_delta,
             viewport_height_value,
             has_precise_scrolling_deltas ? "wheel-precise" : "wheel-line");
+        handled = handled_y;
     }
     if (normalized_delta_x != 0.0f) {
-        bool handled_x = dispatch_scroll_pixels_x(
+        handled_x = dispatch_scroll_pixels_x(
             normalized_delta_x,
             viewport_width_value,
             has_precise_scrolling_deltas ? "wheel-precise-x" : "wheel-line-x");
         handled = handled || handled_x;
     }
+    record_macos_scroll_runtime_event(
+        scrolling_delta_x,
+        scrolling_delta_y,
+        has_precise_scrolling_deltas,
+        line_height,
+        vertical_multiplier,
+        horizontal_multiplier,
+        normalized_delta_x,
+        normalized_delta,
+        viewport_width_value,
+        viewport_height_value,
+        phase,
+        momentum_phase,
+        scroll_tracking_changed,
+        handled_x,
+        handled_y);
     if (scroll_tracking_changed
         && normalized_delta == 0.0f
         && normalized_delta_x == 0.0f
@@ -7864,6 +7946,55 @@ inline float scroll_delta_multiplier(bool horizontal) {
     return detail::macos_scroll_delta_multiplier(horizontal);
 }
 
+inline void record_scroll_runtime_event_for_tests(
+        double raw_delta_x,
+        double raw_delta_y,
+        bool has_precise_scrolling_deltas,
+        float line_height,
+        float app_vertical_multiplier,
+        float app_horizontal_multiplier,
+        float normalized_delta_x,
+        float normalized_delta_y,
+        bool handled_x,
+        bool handled_y) {
+    detail::record_macos_scroll_runtime_event(
+        raw_delta_x,
+        raw_delta_y,
+        has_precise_scrolling_deltas,
+        line_height,
+        app_vertical_multiplier,
+        app_horizontal_multiplier,
+        normalized_delta_x,
+        normalized_delta_y,
+        640.0f,
+        480.0f,
+        detail::ns_event_phase_changed,
+        detail::ns_event_phase_none,
+        false,
+        handled_x,
+        handled_y);
+}
+
+inline bool last_scroll_event_available_for_tests() {
+    return detail::g_ime.last_scroll_event.available;
+}
+
+inline std::string last_scroll_event_source_for_tests() {
+    return detail::g_ime.last_scroll_event.source;
+}
+
+inline float last_scroll_event_normalized_y_for_tests() {
+    return detail::g_ime.last_scroll_event.normalized_delta_y;
+}
+
+inline float last_scroll_event_vertical_multiplier_for_tests() {
+    return detail::g_ime.last_scroll_event.app_vertical_multiplier;
+}
+
+inline bool last_scroll_event_handled_y_for_tests() {
+    return detail::g_ime.last_scroll_event.handled_y;
+}
+
 inline CompositionVisualDebug build_visual_text(std::string const& committed,
                                                 std::size_t replacement_start,
                                                 std::size_t replacement_end,
@@ -8595,6 +8726,53 @@ inline json::Object macos_text_input_runtime_json() {
     return text_input;
 }
 
+inline json::Object macos_input_runtime_json() {
+    auto const& scroll = g_ime.last_scroll_event;
+    json::Object scroll_json;
+    scroll_json.emplace("available", json::Value{scroll.available});
+    scroll_json.emplace("source", json::Value{std::string{scroll.source}});
+    scroll_json.emplace(
+        "has_precise_scrolling_deltas",
+        json::Value{scroll.has_precise_scrolling_deltas});
+    scroll_json.emplace("raw_delta_x", json::Value{scroll.raw_delta_x});
+    scroll_json.emplace("raw_delta_y", json::Value{scroll.raw_delta_y});
+    scroll_json.emplace("line_height", json::Value{scroll.line_height});
+    scroll_json.emplace(
+        "app_vertical_multiplier",
+        json::Value{scroll.app_vertical_multiplier});
+    scroll_json.emplace(
+        "app_horizontal_multiplier",
+        json::Value{scroll.app_horizontal_multiplier});
+    scroll_json.emplace(
+        "normalized_delta_x",
+        json::Value{scroll.normalized_delta_x});
+    scroll_json.emplace(
+        "normalized_delta_y",
+        json::Value{scroll.normalized_delta_y});
+    scroll_json.emplace("viewport_width", json::Value{scroll.viewport_width});
+    scroll_json.emplace("viewport_height", json::Value{scroll.viewport_height});
+    scroll_json.emplace(
+        "phase",
+        json::Value{static_cast<std::int64_t>(scroll.phase)});
+    scroll_json.emplace(
+        "momentum_phase",
+        json::Value{static_cast<std::int64_t>(scroll.momentum_phase)});
+    scroll_json.emplace(
+        "scroll_tracking_changed",
+        json::Value{scroll.scroll_tracking_changed});
+    scroll_json.emplace("handled_x", json::Value{scroll.handled_x});
+    scroll_json.emplace("handled_y", json::Value{scroll.handled_y});
+
+    json::Object input;
+    input.emplace(
+        "scroll_contract",
+        json::Value{
+            "NSEvent scrollingDelta values are already OS-adjusted; phenotype "
+            "applies explicit theme multipliers at the backend edge"});
+    input.emplace("scroll", json::Value{std::move(scroll_json)});
+    return input;
+}
+
 struct WindowServerSnapshot {
     bool valid = false;
     bool onscreen = false;
@@ -9128,6 +9306,7 @@ inline json::Value macos_platform_runtime_details_json_with_reason(
     runtime.emplace("renderer", json::Value{macos_renderer_runtime_json()});
     runtime.emplace("images", json::Value{macos_images_runtime_json()});
     runtime.emplace("text_input", json::Value{macos_text_input_runtime_json()});
+    runtime.emplace("input", json::Value{macos_input_runtime_json()});
     runtime.emplace("window", json::Value{macos_window_runtime_json()});
     if (!artifact_reason.empty()) {
         runtime.emplace(

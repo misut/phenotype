@@ -184,6 +184,12 @@ ExplorerInputMessage color_scheme_message(std::string value) {
         std::move(value));
 }
 
+ExplorerInputMessage system_scroll_metrics_message(std::string value) {
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetSystemScrollMetrics,
+        std::move(value));
+}
+
 ExplorerInputMessage font_scale_step_message(
         file_explorer_demo::ExplorerState const& explorer,
         float delta) {
@@ -309,6 +315,14 @@ phenotype::ThemePreferenceOverrides initial_theme_preference_overrides() {
     if (env_truthy(std::getenv(
             "PHENOTYPE_FILE_EXPLORER_DISABLE_SYSTEM_FONT_METRICS"))) {
         overrides.apply_system_font_metrics = false;
+    }
+    if (env_truthy(std::getenv(
+            "PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_SCROLL_METRICS"))) {
+        overrides.apply_system_scroll_metrics = true;
+    }
+    if (env_truthy(std::getenv(
+            "PHENOTYPE_FILE_EXPLORER_DISABLE_SYSTEM_SCROLL_METRICS"))) {
+        overrides.apply_system_scroll_metrics = false;
     }
     if (auto scale = env_float(
             std::getenv("PHENOTYPE_FILE_EXPLORER_FONT_SCALE"),
@@ -441,6 +455,8 @@ file_explorer_demo::ThemePreferenceSnapshot theme_preference_snapshot(
         .prefer_system_color_scheme = overrides.prefer_system_color_scheme,
         .apply_system_font_metrics = overrides.apply_system_font_metrics,
         .apply_system_font_scale = overrides.apply_system_font_scale,
+        .apply_system_scroll_metrics =
+            overrides.apply_system_scroll_metrics,
         .apply_system_accent_color = overrides.apply_system_accent_color,
     };
 }
@@ -533,6 +549,8 @@ phenotype::ThemePreferenceOverrides theme_preferences_from_state(
         .prefer_system_color_scheme = preferences.prefer_system_color_scheme,
         .apply_system_font_metrics = preferences.apply_system_font_metrics,
         .apply_system_font_scale = preferences.apply_system_font_scale,
+        .apply_system_scroll_metrics =
+            preferences.apply_system_scroll_metrics,
         .apply_system_accent_color = preferences.apply_system_accent_color,
     };
 }
@@ -2253,6 +2271,20 @@ void finder_more_actions(State const& state,
                             true,
                             icons::Symbol::List,
                             0x6718u);
+                    }, SpaceToken::Xs);
+                    layout::row([&] {
+                        more_action_item(
+                            state.labels.preferences_system_scroll.c_str(),
+                            system_scroll_metrics_message("system"),
+                            true,
+                            icons::Symbol::Columns,
+                            0x671bu);
+                        more_action_item(
+                            state.labels.preferences_app_scroll.c_str(),
+                            system_scroll_metrics_message("app"),
+                            true,
+                            icons::Symbol::List,
+                            0x671cu);
                     }, SpaceToken::Xs);
                     layout::row([&] {
                         more_action_item(

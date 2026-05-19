@@ -310,6 +310,12 @@ fallback = []
     assert(parsed_font_metrics.input.kind
            == demo::ExplorerInputKind::SetSystemFontMetrics);
     assert(parsed_font_metrics.input.value == "false");
+    auto parsed_scroll_metrics =
+        demo::parse_explorer_input("system-scroll-metrics:app");
+    assert(parsed_scroll_metrics.ok);
+    assert(parsed_scroll_metrics.input.kind
+           == demo::ExplorerInputKind::SetSystemScrollMetrics);
+    assert(parsed_scroll_metrics.input.value == "app");
     auto parsed_scroll_speed = demo::parse_explorer_input("scroll-speed:1.5");
     assert(parsed_scroll_speed.ok);
     assert(parsed_scroll_speed.input.kind
@@ -404,7 +410,7 @@ duplicate
     auto preference_sequence = demo::parse_explorer_input_sequence(
         "font-family:system;font-scale:1.25;font-size:17;"
         "heading-font-size:22;small-font-size:13;line-height:1.45;"
-        "system-font-metrics:false;scroll-speed:1.5;"
+        "system-font-metrics:false;system-scroll-metrics:app;scroll-speed:1.5;"
         "horizontal-scroll-speed:2;color-scheme:system");
     assert(preference_sequence.ok);
     demo::apply_explorer_inputs(
@@ -421,6 +427,7 @@ duplicate
     assert(std::fabs(preference_state.theme_preferences.line_height_ratio - 1.45f)
            < 0.001f);
     assert(!preference_state.theme_preferences.apply_system_font_metrics);
+    assert(!preference_state.theme_preferences.apply_system_scroll_metrics);
     assert(preference_state.theme_preferences.scroll_delta_multiplier == 1.5f);
     assert(preference_state.theme_preferences.scroll_horizontal_delta_multiplier
            == 2.0f);
@@ -441,6 +448,8 @@ duplicate
     assert(preference_debug_text.find("\"font_scale\":1.25")
            != std::string::npos);
     assert(preference_debug_text.find("\"scroll_delta_multiplier\":1.5")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"apply_system_scroll_metrics\":false")
            != std::string::npos);
     assert(preference_debug_text.find(
                "\"scroll_horizontal_delta_multiplier\":2")

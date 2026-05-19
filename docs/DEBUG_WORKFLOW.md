@@ -536,6 +536,15 @@ so Android `ViewConfiguration` factors, Windows
 without replaying native input. Pretendard remains the package default font
 family; file explorer examples opt in to system appearance and accent by
 default, while the OS font family is still an explicit app/user override.
+`app_overrides.apply_system_scroll_metrics=false` disables static platform
+scroll multipliers such as future backend-provided scale factors; per-event
+platform deltas still originate at the native edge. On macOS, inspect
+`debug.platform_runtime.details.input.scroll` when scroll speed feels wrong:
+it records the raw `NSEvent.scrollingDeltaX/Y`, whether AppKit marked the event
+as precise, the theme multipliers, normalized logical-pixel deltas, scroll
+phase, and handled flags. That path is the supported evidence trail because
+AppKit exposes OS-adjusted event deltas rather than a public global scroll
+speed scalar.
 
 `application.file_explorer.resource_system.*` is the package/debug-resource
 counterpart. It records the file explorer application id/version/entry,
@@ -575,7 +584,8 @@ access at the edge while allowing artifact bundles to prove the result of GUI
 input replay. The same route covers application preference inputs such as
 `font-family:system`, `font-scale:1.2`, `font-size:17`,
 `heading-font-size:22`, `small-font-size:13`, `line-height:1.45`,
-`scroll-speed:1.4`, and `horizontal-scroll-speed:2`; artifacts then
+`system-scroll-metrics:app`, `scroll-speed:1.4`, and
+`horizontal-scroll-speed:2`; artifacts then
 record `application.file_explorer.preferences.source=application-input` plus
 the resolved effective font metrics and axis-specific scroll multipliers.
 For a single command that drives input and observes native output, use
@@ -1008,7 +1018,11 @@ appearance and accessibility fields as first-class evidence: inspect
 File explorer artifacts also mirror the app override
 state at `debug.application.file_explorer.preferences.app_overrides` and the
 resolved theme at `debug.application.file_explorer.preferences.effective_theme`,
-including `color_scheme`, font family/scale, and both scroll multipliers.
+including `color_scheme`, font family/scale, `apply_system_scroll_metrics`, and
+both scroll multipliers. macOS runtime artifacts additionally expose
+`debug.platform_runtime.details.input.scroll.normalized_delta_x/y` and
+`app_vertical_multiplier` / `app_horizontal_multiplier` for the last local
+scroll event.
 Foreground gates can additionally
 pin `foreground_backdrop_driven`, `foreground_high_contrast`,
 `foreground_vibrant`, `foreground_deterministic`,
