@@ -158,6 +158,50 @@ file_explorer_demo::ExplorerInput pointer_input(
         file_explorer_demo::ExplorerInputModality::Pointer);
 }
 
+file_explorer_demo::ExplorerInput preference_input(
+        file_explorer_demo::ExplorerInputKind kind,
+        std::string value) {
+    auto input = pointer_input(kind);
+    input.value = std::move(value);
+    return input;
+}
+
+ExplorerInputMessage preference_message(
+        file_explorer_demo::ExplorerInputKind kind,
+        std::string value) {
+    return ExplorerInputMessage{preference_input(kind, std::move(value))};
+}
+
+ExplorerInputMessage font_family_message(std::string value) {
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetFontFamily,
+        std::move(value));
+}
+
+ExplorerInputMessage font_scale_step_message(
+        file_explorer_demo::ExplorerState const& explorer,
+        float delta) {
+    auto value = std::clamp(
+        explorer.theme_preferences.font_scale + delta,
+        0.75f,
+        1.8f);
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetFontScale,
+        std::to_string(value));
+}
+
+ExplorerInputMessage scroll_speed_step_message(
+        file_explorer_demo::ExplorerState const& explorer,
+        float delta) {
+    auto value = std::clamp(
+        explorer.theme_preferences.scroll_delta_multiplier + delta,
+        0.25f,
+        4.0f);
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetScrollSpeed,
+        std::to_string(value));
+}
+
 file_explorer_demo::ExplorerInput keyboard_input(
         file_explorer_demo::ExplorerInputKind kind) {
     return explorer_input(
@@ -463,7 +507,7 @@ auto file_explorer_application_debug_payload() {
             std::move(chrome));
     chrome.more_actions_open = g_debug_state->more_actions_open;
     chrome.overflow_action_button_count = g_debug_state->more_actions_open
-        ? 4
+        ? 10
         : 0;
     return file_explorer_demo::file_explorer_application_debug_json(
         g_debug_state->explorer,
@@ -1995,31 +2039,75 @@ void finder_more_actions(State const& state,
             "More Actions Menu");
         options.kind = MaterialKind::Regular;
         options.max_width = 376.0f;
-        options.fixed_height = 72.0f;
+        options.fixed_height = 216.0f;
         options.border_radius = k_toolbar_group_radius;
         layout::material_surface(
             options,
             [&] {
-                more_action_item(state.labels.create_file.c_str(),
-                                 CreateFile{},
-                                 snap.can_create_file,
-                                 icons::Symbol::NewDocument,
-                                 0x6701u);
-                more_action_item(state.labels.create_folder.c_str(),
-                                 CreateFolder{},
-                                 snap.can_create_folder,
-                                 icons::Symbol::NewFolder,
-                                 0x6702u);
-                more_action_item(state.labels.duplicate.c_str(),
-                                 DuplicateSelected{},
-                                 snap.can_duplicate_selected,
-                                 icons::Symbol::Duplicate,
-                                 0x6703u);
-                more_action_item(state.labels.delete_action.c_str(),
-                                 DeleteSelected{},
-                                 snap.can_delete_selected,
-                                 icons::Symbol::Trash,
-                                 0x6704u);
+                layout::column([&] {
+                    layout::row([&] {
+                        more_action_item(state.labels.create_file.c_str(),
+                                         CreateFile{},
+                                         snap.can_create_file,
+                                         icons::Symbol::NewDocument,
+                                         0x6701u);
+                        more_action_item(state.labels.create_folder.c_str(),
+                                         CreateFolder{},
+                                         snap.can_create_folder,
+                                         icons::Symbol::NewFolder,
+                                         0x6702u);
+                        more_action_item(state.labels.duplicate.c_str(),
+                                         DuplicateSelected{},
+                                         snap.can_duplicate_selected,
+                                         icons::Symbol::Duplicate,
+                                         0x6703u);
+                        more_action_item(state.labels.delete_action.c_str(),
+                                         DeleteSelected{},
+                                         snap.can_delete_selected,
+                                         icons::Symbol::Trash,
+                                         0x6704u);
+                    }, SpaceToken::Xs);
+                    layout::row([&] {
+                        more_action_item(
+                            state.labels.preferences_system_font.c_str(),
+                            font_family_message("system"),
+                            true,
+                            icons::Symbol::Document,
+                            0x6711u);
+                        more_action_item(
+                            state.labels.preferences_package_font.c_str(),
+                            font_family_message("pretendard"),
+                            true,
+                            icons::Symbol::TextDocument,
+                            0x6712u);
+                        more_action_item(
+                            state.labels.preferences_text_larger.c_str(),
+                            font_scale_step_message(state.explorer, 0.1f),
+                            true,
+                            icons::Symbol::Plus,
+                            0x6713u);
+                        more_action_item(
+                            state.labels.preferences_text_smaller.c_str(),
+                            font_scale_step_message(state.explorer, -0.1f),
+                            true,
+                            icons::Symbol::ChevronDown,
+                            0x6714u);
+                    }, SpaceToken::Xs);
+                    layout::row([&] {
+                        more_action_item(
+                            state.labels.preferences_scroll_faster.c_str(),
+                            scroll_speed_step_message(state.explorer, 0.25f),
+                            true,
+                            icons::Symbol::ChevronDown,
+                            0x6715u);
+                        more_action_item(
+                            state.labels.preferences_scroll_slower.c_str(),
+                            scroll_speed_step_message(state.explorer, -0.25f),
+                            true,
+                            icons::Symbol::ChevronUp,
+                            0x6716u);
+                    }, SpaceToken::Xs);
+                }, SpaceToken::Xs);
             });
     },
     SpaceToken::Xs,

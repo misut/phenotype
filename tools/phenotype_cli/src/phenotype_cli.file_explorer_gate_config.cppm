@@ -51,6 +51,7 @@ auto default_file_explorer_scenarios() -> std::vector<std::string> {
         "history-forward",
         "sorted-kind",
         "search-active",
+        "preferences-panel",
     };
 }
 

@@ -6196,6 +6196,13 @@ inline void apply_startup_scenario(
         return;
     }
 
+    if (name == "preferences-panel" || name == "preferences") {
+        select_location(state, "root");
+        state.mobile_tab = 2;
+        state.status = "Display preferences ready.";
+        return;
+    }
+
     state.status = "Unknown startup scenario: " + std::string(scenario);
 }
 
@@ -6565,6 +6572,13 @@ struct ExplorerLabels {
     std::string contents = "Contents";
     std::string folder_name = "Folder name";
     std::string reset_demo_files = "Reset Demo Files";
+    std::string preferences = "Display";
+    std::string preferences_system_font = "System";
+    std::string preferences_package_font = "Pretendard";
+    std::string preferences_text_larger = "Text +";
+    std::string preferences_text_smaller = "Text -";
+    std::string preferences_scroll_faster = "Scroll +";
+    std::string preferences_scroll_slower = "Scroll -";
     std::string status = "Status";
 };
 
@@ -6669,6 +6683,13 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"create.contents", "Contents"},
         {"create.folder_name", "Folder name"},
         {"create.reset_demo_files", "Reset Demo Files"},
+        {"preferences.title", "Display"},
+        {"preferences.system_font", "System"},
+        {"preferences.package_font", "Pretendard"},
+        {"preferences.text_larger", "Text +"},
+        {"preferences.text_smaller", "Text -"},
+        {"preferences.scroll_faster", "Scroll +"},
+        {"preferences.scroll_slower", "Scroll -"},
         {"status.title", "Status"},
     });
     phenotype::LocaleDescriptor ko{
@@ -6722,6 +6743,13 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"create.contents", "내용"},
         {"create.folder_name", "폴더 이름"},
         {"create.reset_demo_files", "데모 파일 초기화"},
+        {"preferences.title", "표시"},
+        {"preferences.system_font", "시스템"},
+        {"preferences.package_font", "Pretendard"},
+        {"preferences.text_larger", "글자 +"},
+        {"preferences.text_smaller", "글자 -"},
+        {"preferences.scroll_faster", "스크롤 +"},
+        {"preferences.scroll_slower", "스크롤 -"},
         {"status.title", "상태"},
     });
     catalog.locales = {std::move(en), std::move(ko)};
@@ -6835,6 +6863,25 @@ inline ExplorerLabels file_explorer_labels(
     labels.contents = get("create.contents", labels.contents);
     labels.folder_name = get("create.folder_name", labels.folder_name);
     labels.reset_demo_files = get("create.reset_demo_files", labels.reset_demo_files);
+    labels.preferences = get("preferences.title", labels.preferences);
+    labels.preferences_system_font = get(
+        "preferences.system_font",
+        labels.preferences_system_font);
+    labels.preferences_package_font = get(
+        "preferences.package_font",
+        labels.preferences_package_font);
+    labels.preferences_text_larger = get(
+        "preferences.text_larger",
+        labels.preferences_text_larger);
+    labels.preferences_text_smaller = get(
+        "preferences.text_smaller",
+        labels.preferences_text_smaller);
+    labels.preferences_scroll_faster = get(
+        "preferences.scroll_faster",
+        labels.preferences_scroll_faster);
+    labels.preferences_scroll_slower = get(
+        "preferences.scroll_slower",
+        labels.preferences_scroll_slower);
     labels.status = get("status.title", labels.status);
     return labels;
 }

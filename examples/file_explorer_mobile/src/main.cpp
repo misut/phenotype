@@ -25,6 +25,7 @@ namespace fs = std::filesystem;
 
 struct SelectLocation { std::string id; };
 struct SelectEntry { std::string name; };
+struct ExplorerInputMessage { file_explorer_demo::ExplorerInput input; };
 struct SearchChanged { std::string text; };
 struct DraftNameChanged { std::string text; };
 struct DraftFolderNameChanged { std::string text; };
@@ -44,6 +45,7 @@ struct Resized { int width; int height; float scale; };
 using Msg = std::variant<
     SelectLocation,
     SelectEntry,
+    ExplorerInputMessage,
     SearchChanged,
     DraftNameChanged,
     DraftFolderNameChanged,
@@ -366,6 +368,52 @@ Msg on_draft_body_changed(std::string text) {
     return DraftBodyChanged{std::move(text)};
 }
 
+file_explorer_demo::ExplorerInput preference_input(
+        file_explorer_demo::ExplorerInputKind kind,
+        std::string value) {
+    return file_explorer_demo::ExplorerInput{
+        .kind = kind,
+        .value = std::move(value),
+        .modality = file_explorer_demo::ExplorerInputModality::Pointer,
+    };
+}
+
+ExplorerInputMessage preference_message(
+        file_explorer_demo::ExplorerInputKind kind,
+        std::string value) {
+    return ExplorerInputMessage{preference_input(kind, std::move(value))};
+}
+
+ExplorerInputMessage font_family_message(std::string value) {
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetFontFamily,
+        std::move(value));
+}
+
+ExplorerInputMessage font_scale_step_message(
+        file_explorer_demo::ExplorerState const& explorer,
+        float delta) {
+    auto value = std::clamp(
+        explorer.theme_preferences.font_scale + delta,
+        0.75f,
+        1.8f);
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetFontScale,
+        std::to_string(value));
+}
+
+ExplorerInputMessage scroll_speed_step_message(
+        file_explorer_demo::ExplorerState const& explorer,
+        float delta) {
+    auto value = std::clamp(
+        explorer.theme_preferences.scroll_delta_multiplier + delta,
+        0.25f,
+        4.0f);
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetScrollSpeed,
+        std::to_string(value));
+}
+
 void mobile_symbol_button(std::string const& label,
                           phenotype::icons::Symbol symbol,
                           Msg msg,
@@ -584,6 +632,11 @@ void update(State& state, Msg msg) {
             file_explorer_demo::open_entry(explorer, m.name);
             if (!explorer.selected_name.empty())
                 explorer.mobile_tab = 1;
+        } else if constexpr (std::same_as<T, ExplorerInputMessage>) {
+            file_explorer_demo::apply_explorer_input(
+                explorer,
+                m.input,
+                "mobile");
         } else if constexpr (std::same_as<T, SearchChanged>) {
             file_explorer_demo::set_search_filter(explorer, m.text);
         } else if constexpr (std::same_as<T, DraftNameChanged>) {
@@ -824,6 +877,32 @@ void create_tab(State const& state) {
             ButtonVariant::Default);
         layout::spacer(6);
         widget::button<Msg>(state.labels.reset_demo_files, ResetDemo{});
+        layout::spacer(12);
+        widget::text(state.labels.preferences);
+        layout::row([&] {
+            widget::button<Msg>(
+                state.labels.preferences_system_font,
+                font_family_message("system"));
+            widget::button<Msg>(
+                state.labels.preferences_package_font,
+                font_family_message("pretendard"));
+        }, SpaceToken::Xs);
+        layout::row([&] {
+            widget::button<Msg>(
+                state.labels.preferences_text_larger,
+                font_scale_step_message(explorer, 0.1f));
+            widget::button<Msg>(
+                state.labels.preferences_text_smaller,
+                font_scale_step_message(explorer, -0.1f));
+        }, SpaceToken::Xs);
+        layout::row([&] {
+            widget::button<Msg>(
+                state.labels.preferences_scroll_faster,
+                scroll_speed_step_message(explorer, 0.25f));
+            widget::button<Msg>(
+                state.labels.preferences_scroll_slower,
+                scroll_speed_step_message(explorer, -0.25f));
+        }, SpaceToken::Xs);
     }, SpaceToken::Md, SpaceToken::Sm);
 }
 

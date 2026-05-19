@@ -73,8 +73,12 @@ int main() {
     assert(contract.debug_verifier_declared);
     assert(demo::file_explorer_labels("ko", "desktop").sidebar_recents
         == "최근 항목");
+    assert(demo::file_explorer_labels("ko", "desktop").preferences_scroll_faster
+        == "스크롤 +");
     assert(demo::file_explorer_labels("ko", catalog).sidebar_recents
         == "최근 항목");
+    assert(demo::file_explorer_labels("en", catalog).preferences_system_font
+        == "System");
     assert(demo::file_explorer_labels("ja", "desktop").sidebar_recents
         == "Recents");
     assert(demo::file_explorer_labels("ko", "mobile").tab_create == "만들기");
@@ -1571,6 +1575,10 @@ duplicate
     for (auto const& entry : snap.entries) {
         assert(demo::lower_copy(entry.name).find("screen") != std::string::npos);
     }
+
+    demo::apply_startup_scenario(state, "preferences-panel");
+    assert(state.mobile_tab == 2);
+    assert(state.status == "Display preferences ready.");
 
     demo::apply_startup_scenario(state, "duplicated-file");
     assert(state.selected_name == "README copy.txt");

@@ -324,6 +324,9 @@ same line-based script format used by `phenotype drive file-explorer
 `scroll-speed:1.4` update the shared state before the native theme is resolved.
 File reads and environment access remain example edge work; parsing and input
 application stay in `file_explorer_shared`.
+The desktop More menu exposes the same preference inputs as native buttons
+(`System`, `Pretendard`, `Text +/-`, and `Scroll +/-`) so interactive changes
+and CLI-driven startup replay share one model contract.
 
 The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity,
@@ -341,12 +344,14 @@ content surface has a machine-readable artifact contract.
 It also captures deterministic startup scenarios through
 `PHENOTYPE_FILE_EXPLORER_SCENARIO`: `created-preview`, `deleted-file`,
 `trash-view`, `created-folder`, `deleted-folder`, `duplicated-file`,
-`documents-preview`, `history-forward`, `sorted-kind`, and `search-active`.
+`documents-preview`, `history-forward`, `sorted-kind`, `search-active`, and
+`preferences-panel`.
 Set `PHENOTYPE_FILE_EXPLORER_SCENARIOS=more-actions-open` when the desktop-only
 More overflow contract needs a local artifact. These scenarios make create,
 Trash movement, duplicate, folder operation, navigation history, file preview
-behavior, sort state, active search, and overflow action availability visible
-in the semantic artifact without requiring manual click playback. File and
+behavior, sort state, active search, mobile preference controls, and overflow
+action availability visible in the semantic artifact without requiring manual
+click playback. File and
 folder operation scenarios also expose an `Operation: ...` receipt in the
 status surface so the artifact can identify the action kind, target, and
 result.

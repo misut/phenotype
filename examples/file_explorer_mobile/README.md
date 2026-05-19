@@ -119,6 +119,9 @@ same line-based script format used by `phenotype drive file-explorer
 `scroll-speed:1.4` update the shared state before the native theme is resolved.
 File reads and environment access remain example edge work; parsing and input
 application stay in `file_explorer_shared`.
+The mobile Create tab exposes the same preference inputs as app buttons
+(`System`, `Pretendard`, `Text +/-`, and `Scroll +/-`) so touch changes and
+CLI-driven startup replay share one model contract.
 
 The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity, and
@@ -126,10 +129,12 @@ bounded material resource budgets.
 
 The local gate also captures `created-preview`, `deleted-file`,
 `trash-view`, `created-folder`, `deleted-folder`, `duplicated-file`,
-`documents-preview`, `history-forward`, `sorted-kind`, and `search-active`
-startup scenarios through `PHENOTYPE_FILE_EXPLORER_SCENARIO`. These scenario
+`documents-preview`, `history-forward`, `sorted-kind`, `search-active`, and
+`preferences-panel` startup scenarios through
+`PHENOTYPE_FILE_EXPLORER_SCENARIO`. These scenario
 artifacts keep mobile file/folder create, Trash movement, duplicate, navigation
-history, preview behavior, sort state, and active search debuggable without
-interactive input replay. File and folder operation scenarios also write an
+history, preview behavior, sort state, active search, and preference controls
+debuggable without interactive input replay. File and folder operation
+scenarios also write an
 `Operation: ...` receipt into the status surface so the same shared model
 contract is visible on mobile artifacts.
