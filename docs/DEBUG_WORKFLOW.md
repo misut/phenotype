@@ -554,7 +554,10 @@ counts in the run receipt, and passes only
 `PHENOTYPE_FILE_EXPLORER_INPUTS`/`PHENOTYPE_FILE_EXPLORER_SCRIPT` into the
 native process. This keeps file reads, process execution, and environment
 access at the edge while allowing artifact bundles to prove the result of GUI
-input replay.
+input replay. The same route covers application preference inputs such as
+`font-family:system`, `font-scale:1.2`, and `scroll-speed:1.4`; artifacts then
+record `application.file_explorer.preferences.source=application-input` plus
+the resolved effective font and scroll multiplier.
 For a single command that drives input and observes native output, use
 `--observe-output`:
 

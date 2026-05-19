@@ -117,7 +117,6 @@ void apply_startup_inputs(file_explorer_demo::ExplorerState& state,
 
 file_explorer_demo::ExplorerState initial_explorer_state() {
     auto state = file_explorer_demo::make_state("mobile");
-    apply_startup_inputs(state, "mobile");
     return state;
 }
 
@@ -273,6 +272,40 @@ phenotype::ResourceCatalog runtime_resource_catalog() {
 }
 
 file_explorer_demo::RuntimePreferenceState g_runtime_preferences;
+phenotype::Theme g_base_theme;
+phenotype::PlatformSystemSettingsSnapshot g_system_settings;
+
+phenotype::ThemePreferenceOverrides theme_preferences_from_state(
+        file_explorer_demo::ThemePreferenceSnapshot const& preferences) {
+    return phenotype::ThemePreferenceOverrides{
+        .font_family = preferences.font_family,
+        .font_scale = preferences.font_scale,
+        .body_font_size = preferences.body_font_size,
+        .heading_font_size = preferences.heading_font_size,
+        .small_font_size = preferences.small_font_size,
+        .line_height_ratio = preferences.line_height_ratio,
+        .scroll_delta_multiplier = preferences.scroll_delta_multiplier,
+        .prefer_system_font_family = preferences.prefer_system_font_family,
+        .apply_system_font_scale = preferences.apply_system_font_scale,
+    };
+}
+
+void sync_runtime_theme(file_explorer_demo::ExplorerState& explorer) {
+    auto overrides = theme_preferences_from_state(explorer.theme_preferences);
+    auto theme = phenotype::apply_system_theme_preferences(
+        g_base_theme,
+        g_system_settings,
+        overrides);
+    auto runtime = runtime_preference_state(
+        theme,
+        g_system_settings,
+        overrides);
+    if (explorer.preferences_source == "application-input")
+        runtime.source = explorer.preferences_source;
+    g_runtime_preferences = runtime;
+    file_explorer_demo::apply_runtime_preferences(explorer, runtime);
+    phenotype::set_theme(theme);
+}
 
 struct State {
     phenotype::icons::SymbolDocumentCache icon_cache =
@@ -288,6 +321,8 @@ struct State {
         file_explorer_demo::apply_runtime_preferences(
             explorer,
             g_runtime_preferences);
+        apply_startup_inputs(explorer, "mobile");
+        sync_runtime_theme(explorer);
     }
 };
 
@@ -592,6 +627,7 @@ void update(State& state, Msg msg) {
             explorer.viewport_scale = m.scale;
         }
     }, msg);
+    sync_runtime_theme(explorer);
 }
 
 void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
@@ -841,6 +877,8 @@ int main() {
     auto const system_settings =
         phenotype::native::debug::capabilities().system_settings;
     auto const theme_preferences = initial_theme_preference_overrides();
+    g_base_theme = theme;
+    g_system_settings = system_settings;
     theme = phenotype::apply_system_theme_preferences(
         theme,
         system_settings,
