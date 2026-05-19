@@ -155,17 +155,18 @@ On macOS, the same runtime object reports live `NSWindow` chrome state:
 transparent titlebar, full-size content view, hidden native title, and
 background dragging must all be enabled. These fields are actual platform
 readbacks, not request echoes.
-On macOS it additionally checks WindowServer bounds, onscreen state, app
-activation, active-Space collection behavior, and key/main window state, which
-catches regressions where the process owns a Dock icon but the ordered NSWindow
-is still hidden, backgrounded, in another Space, or not eligible for foreground
-interaction. The artifact also records WindowServer z-order fields
+On macOS it additionally checks WindowServer bounds, onscreen state, artifact
+capture readiness, active-Space collection behavior, and key/main window state,
+which catches regressions where the process owns a Dock icon but the ordered
+NSWindow is still hidden, backgrounded, in another Space, or not eligible for
+foreground interaction. The artifact also records WindowServer z-order fields
 (`window_server_order_index`, `window_server_app_order_index`, and
 `window_server_occluded_by_front_app_window`) so a launch failure can distinguish
 "no NSWindow", "offscreen/minimized NSWindow", and "created but covered by
-another app window". The consolidated `visibility_state` and
-`ready_for_user_interaction` fields summarize the same readbacks for humans and
-CI. The AppKit shell installs a small native application delegate that reorders
+another app window". The artifact gate uses `artifact_capture_visibility_state`
+and `artifact_capture_ready`; the stricter `visibility_state` and
+`ready_for_user_interaction` fields remain for manual foreground launch
+debugging. The AppKit shell installs a small native application delegate that reorders
 the existing window when the app becomes active or the Dock icon is reopened;
 if the launch path still cannot make the window visible/key/main, stderr names
 the exact state before the event loop continues. The example no longer emits
@@ -296,11 +297,13 @@ together, the CLI keeps the leading titlebar reserve blank and relies on the
 runtime window debug payload plus pixel-region contracts to prove native control
 ownership without drawing duplicate traffic lights.
 The example also applies the native `system_settings` snapshot before
-`set_theme`: Pretendard remains the package default, OS font scale and scroll
-policy become pure theme inputs, system appearance/accent are applied by
+`set_theme`: Pretendard remains the package default, OS font size metrics and
+scroll policy become pure theme inputs, system appearance/accent are applied by
 default, OS font family remains an opt-in override, and user overrides win.
 Direct launches can use
 `PHENOTYPE_FILE_EXPLORER_FONT_FAMILY`, `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT`,
+`PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT_METRICS`,
+`PHENOTYPE_FILE_EXPLORER_DISABLE_SYSTEM_FONT_METRICS`,
 `PHENOTYPE_FILE_EXPLORER_FONT_SCALE`, `PHENOTYPE_FILE_EXPLORER_FONT_SIZE`,
 `PHENOTYPE_FILE_EXPLORER_HEADING_FONT_SIZE`,
 `PHENOTYPE_FILE_EXPLORER_SMALL_FONT_SIZE`,
@@ -328,7 +331,8 @@ semicolon-separated inputs, and `PHENOTYPE_FILE_EXPLORER_SCRIPT` points at the
 same line-based script format used by `phenotype drive file-explorer
 --script`. Preference commands use the same app input layer, so
 `font-family:system`, `font-family:Pretendard`, `font-scale:1.2`,
-`font-size:17`, `heading-font-size:22`, `small-font-size:13`,
+`system-font-metrics:false`, `font-size:17`, `heading-font-size:22`,
+`small-font-size:13`,
 `line-height:1.45`, `scroll-speed:1.4`, and `horizontal-scroll-speed:2` update
 the shared state before the native theme is resolved.
 File reads and environment access remain example edge work; parsing and input

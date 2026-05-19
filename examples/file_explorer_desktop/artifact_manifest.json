@@ -470,7 +470,7 @@
     },
     {
       "path": "application.file_explorer.preferences.font_policy",
-      "equals": "Pretendard package default, OS font metrics applied, user override wins"
+      "equals": "Pretendard package default, OS font size metrics applied, user override wins"
     },
     {
       "path": "application.file_explorer.preferences.appearance_policy",
@@ -483,6 +483,10 @@
     {
       "path": "application.file_explorer.preferences.effective_theme.font_family",
       "equals": "Pretendard"
+    },
+    {
+      "path": "application.file_explorer.preferences.app_overrides.apply_system_font_metrics",
+      "equals": true
     },
     {
       "path": "application.file_explorer.preferences.app_overrides.apply_system_font_scale",
@@ -1836,39 +1840,27 @@
       "equals": true
     },
     {
-      "path": "window.window_server_frontmost_app_window",
+      "path": "window.artifact_capture_ready",
       "equals": true
+    },
+    {
+      "path": "window.artifact_capture_visibility_state",
+      "equals": "ready"
+    },
+    {
+      "path": "window.artifact_capture_contract",
+      "equals": "visible-onscreen-native-window"
     },
     {
       "path": "window.window_server_occluded_by_front_app_window",
       "equals": false
     },
     {
-      "path": "window.ready_for_user_interaction",
-      "equals": true
-    },
-    {
-      "path": "window.visibility_state",
-      "equals": "ready"
-    },
-    {
       "path": "window.launch_visibility_contract",
       "equals": "visible-key-main-frontmost-native-window"
     },
     {
-      "path": "window.app_active",
-      "equals": true
-    },
-    {
       "path": "window.window_visible",
-      "equals": true
-    },
-    {
-      "path": "window.window_key",
-      "equals": true
-    },
-    {
-      "path": "window.window_main",
       "equals": true
     },
     {

@@ -379,6 +379,18 @@ void test_system_theme_preferences_are_pure_overlays() {
            < 0.001f);
     assert(applied.accent == theme.accent);
 
+    system.body_font_size = 13.0f;
+    system.heading_font_size = 17.0f;
+    system.small_font_size = 11.0f;
+    overrides = ThemePreferenceOverrides{};
+    applied = apply_system_theme_preferences(theme, system, overrides);
+    assert(std::fabs(applied.body_font_size - 13.0f) < 0.001f);
+    assert(std::fabs(applied.heading_font_size - 17.0f) < 0.001f);
+    assert(std::fabs(applied.small_font_size - 11.0f) < 0.001f);
+    overrides.apply_system_font_metrics = false;
+    applied = apply_system_theme_preferences(theme, system, overrides);
+    assert(std::fabs(applied.body_font_size - 17.5f) < 0.001f);
+
     overrides.font_family = "UserFont";
     overrides.body_font_size = 19.0f;
     overrides.small_font_size = 13.0f;

@@ -404,6 +404,7 @@ struct ThemePreferenceOverrides {
     float scroll_horizontal_delta_multiplier = 1.0f;
     bool prefer_system_font_family = false;
     bool prefer_system_color_scheme = false;
+    bool apply_system_font_metrics = true;
     bool apply_system_font_scale = true;
     bool apply_system_accent_color = false;
 };
@@ -487,8 +488,38 @@ inline Theme apply_system_theme_preferences(
         resolved_color_scheme.clear();
     }
 
+    float const base_body_font_size = theme.body_font_size;
+    bool const use_system_font_metrics =
+        overrides.apply_system_font_metrics
+        && system.body_font_size > 0.0f
+        && std::isfinite(system.body_font_size);
+    if (use_system_font_metrics) {
+        float const body = bounded_theme_preference(
+            system.body_font_size,
+            theme.body_font_size,
+            8.0f,
+            40.0f);
+        float const metric_scale = base_body_font_size > 0.0f
+            ? body / base_body_font_size
+            : 1.0f;
+        theme.body_font_size = body;
+        theme.heading_font_size = bounded_theme_preference(
+            system.heading_font_size,
+            theme.heading_font_size * metric_scale,
+            10.0f,
+            56.0f);
+        theme.hero_title_size *= metric_scale;
+        theme.hero_subtitle_size *= metric_scale;
+        theme.code_font_size *= metric_scale;
+        theme.small_font_size = bounded_theme_preference(
+            system.small_font_size,
+            theme.small_font_size * metric_scale,
+            8.0f,
+            32.0f);
+    }
+
     float scale = 1.0f;
-    if (overrides.apply_system_font_scale) {
+    if (!use_system_font_metrics && overrides.apply_system_font_scale) {
         scale *= bounded_theme_preference(
             system.font_scale,
             1.0f,

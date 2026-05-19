@@ -6403,6 +6403,15 @@ inline json::Object windows_window_runtime_json() {
         json::Value{ready_for_user_interaction});
     window.emplace("visibility_state", json::Value{visibility_state});
     window.emplace(
+        "artifact_capture_ready",
+        json::Value{ready_for_user_interaction});
+    window.emplace(
+        "artifact_capture_visibility_state",
+        json::Value{visibility_state});
+    window.emplace(
+        "artifact_capture_contract",
+        json::Value{"visible-onscreen-native-window"});
+    window.emplace(
         "launch_visibility_contract",
         json::Value{"visible-restored-native-window"});
     return window;
