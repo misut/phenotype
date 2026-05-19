@@ -431,6 +431,21 @@ inline SEL sel_preferred_scroller_style() {
     return sel;
 }
 
+inline SEL sel_preferred_languages() {
+    static auto sel = sel_registerName("preferredLanguages");
+    return sel;
+}
+
+inline SEL sel_count() {
+    static auto sel = sel_registerName("count");
+    return sel;
+}
+
+inline SEL sel_object_at_index() {
+    static auto sel = sel_registerName("objectAtIndex:");
+    return sel;
+}
+
 inline SEL sel_scroller_width_for_control_size_scroller_style() {
     static auto sel = sel_registerName("scrollerWidthForControlSize:scrollerStyle:");
     return sel;
@@ -829,6 +844,36 @@ inline std::string cf_string_to_utf8(CFStringRef value) {
     }
     out.resize(std::strlen(out.c_str()));
     return out;
+}
+
+inline std::string ns_string_to_utf8(id value) {
+    if (!value || !objc_responds_to(value, sel_utf8_string()))
+        return {};
+    char const* raw = objc_send<char const*>(value, sel_utf8_string());
+    return raw && raw[0] != '\0' ? std::string{raw} : std::string{};
+}
+
+inline std::string macos_preferred_locale() {
+    auto locale_class = static_cast<Class>(objc_getClass("NSLocale"));
+    if (!locale_class)
+        return {};
+    auto locale_type = class_as_id(locale_class);
+    if (!objc_responds_to(locale_type, sel_preferred_languages()))
+        return {};
+    id languages = objc_send<id>(locale_type, sel_preferred_languages());
+    if (!languages
+        || !objc_responds_to(languages, sel_count())
+        || !objc_responds_to(languages, sel_object_at_index())) {
+        return {};
+    }
+    auto const count = objc_send<unsigned long>(languages, sel_count());
+    if (count == 0)
+        return {};
+    id first = objc_send<id>(
+        languages,
+        sel_object_at_index(),
+        static_cast<unsigned long>(0));
+    return ns_string_to_utf8(first);
 }
 
 inline CTFontRef create_preferred_sans_font() {
@@ -4513,6 +4558,7 @@ macos_system_settings_snapshot() {
         "NSFont.systemFontSize/smallSystemFontSize";
     snapshot.scroll_source =
         "NSEvent.scrollingDelta/hasPreciseScrollingDeltas with NSScroller.preferredScrollerStyle";
+    snapshot.preferred_locale_source = "NSLocale.preferredLanguages";
     snapshot.line_height_ratio = 1.6f;
     snapshot.scroll_delta_multiplier = 1.0f;
     snapshot.scroll_horizontal_delta_multiplier = 1.0f;
@@ -4604,6 +4650,8 @@ macos_system_settings_snapshot() {
             snapshot.accent_color_opaque = color->a == 255;
         }
     }
+    if (auto locale = macos_preferred_locale(); !locale.empty())
+        snapshot.preferred_locale = std::move(locale);
     return snapshot;
 }
 

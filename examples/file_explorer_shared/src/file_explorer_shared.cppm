@@ -140,6 +140,8 @@ struct SystemPreferenceSnapshot {
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
     std::string scroll_source = "fallback";
+    std::string preferred_locale = "en";
+    std::string preferred_locale_source = "fallback";
     std::string color_scheme = "light";
     std::string color_scheme_source = "fallback";
     std::string appearance_name;
@@ -2913,6 +2915,10 @@ inline json::Value system_settings_debug_json(
         "scroll_horizontal_delta_multiplier",
         json::Value{settings.scroll_horizontal_delta_multiplier});
     out.emplace("scroll_source", json::Value{settings.scroll_source});
+    out.emplace("preferred_locale", json::Value{settings.preferred_locale});
+    out.emplace(
+        "preferred_locale_source",
+        json::Value{settings.preferred_locale_source});
     out.emplace("color_scheme", json::Value{settings.color_scheme});
     out.emplace(
         "color_scheme_source",
@@ -7231,6 +7237,32 @@ inline std::string localized_or(
     if (auto value = phenotype::localized_string(catalog, key, locale))
         return value->value;
     return std::string{fallback};
+}
+
+inline auto normalize_locale_tag(std::string_view tag) -> std::string {
+    auto out = std::string{tag};
+    for (auto& ch : out) {
+        if (ch == '_')
+            ch = '-';
+    }
+    return out;
+}
+
+inline auto resolve_supported_locale(
+        phenotype::ResourceCatalog const& catalog,
+        std::string_view requested) -> std::string {
+    auto normalized = normalize_locale_tag(requested);
+    if (normalized.empty())
+        return catalog.default_locale;
+    if (phenotype::find_locale(catalog, normalized))
+        return normalized;
+    auto separator = normalized.find('-');
+    if (separator != std::string::npos) {
+        auto language = normalized.substr(0, separator);
+        if (phenotype::find_locale(catalog, language))
+            return language;
+    }
+    return catalog.default_locale;
 }
 
 inline ExplorerLabels file_explorer_labels(

@@ -379,6 +379,8 @@ struct PlatformSystemSettingsSnapshot {
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
     std::string scroll_source = "fallback";
+    std::string preferred_locale = "en";
+    std::string preferred_locale_source = "fallback";
     std::string color_scheme = "light";
     std::string color_scheme_source = "fallback";
     std::string appearance_name;

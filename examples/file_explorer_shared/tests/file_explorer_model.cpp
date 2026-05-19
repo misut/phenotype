@@ -86,6 +86,9 @@ int main() {
         == "System");
     assert(demo::file_explorer_labels("ja", "desktop").sidebar_recents
         == "Recents");
+    assert(demo::resolve_supported_locale(catalog, "ko-KR") == "ko");
+    assert(demo::resolve_supported_locale(catalog, "ko_KR") == "ko");
+    assert(demo::resolve_supported_locale(catalog, "ja-JP") == "en");
     assert(demo::file_explorer_labels("ko", "mobile").tab_create == "만들기");
     auto packaged_texts = std::vector<demo::PackageResourceText>{
         {.source = "locales/ko.toml",
@@ -1176,6 +1179,8 @@ duplicate
     assert(debug_text.find("\"scroll_vertical_factor\"") != std::string::npos);
     assert(debug_text.find("\"scroll_horizontal_delta_multiplier\"")
            != std::string::npos);
+    assert(debug_text.find("\"preferred_locale\"") != std::string::npos);
+    assert(debug_text.find("\"preferred_locale_source\"") != std::string::npos);
     assert(debug_text.find("\"color_scheme\"") != std::string::npos);
     assert(debug_text.find("\"accessibility_source\"") != std::string::npos);
     assert(debug_text.find("\"Pretendard package default")

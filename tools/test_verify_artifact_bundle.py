@@ -835,6 +835,8 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                     "scroll_delta_multiplier": 1.0,
                     "scroll_horizontal_delta_multiplier": 1.0,
                     "scroll_source": "fallback",
+                    "preferred_locale": "en",
+                    "preferred_locale_source": "test",
                     "color_scheme": "light",
                     "color_scheme_source": "test",
                     "appearance_name": "test-light",

@@ -425,6 +425,8 @@ file_explorer_demo::SystemPreferenceSnapshot system_preference_snapshot(
         .scroll_horizontal_delta_multiplier =
             system.scroll_horizontal_delta_multiplier,
         .scroll_source = system.scroll_source,
+        .preferred_locale = system.preferred_locale,
+        .preferred_locale_source = system.preferred_locale_source,
         .color_scheme = system.color_scheme,
         .color_scheme_source = system.color_scheme_source,
         .appearance_name = system.appearance_name,
@@ -546,6 +548,16 @@ void refresh_system_settings_from_platform() {
     g_system_settings = capture_system_settings();
 }
 
+std::string resolved_initial_locale() {
+    auto const& catalog = runtime_resource_catalog();
+    char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_LOCALE");
+    if (raw && *raw)
+        return file_explorer_demo::resolve_supported_locale(catalog, raw);
+    return file_explorer_demo::resolve_supported_locale(
+        catalog,
+        g_system_settings.preferred_locale);
+}
+
 phenotype::ThemePreferenceOverrides theme_preferences_from_state(
         file_explorer_demo::ThemePreferenceSnapshot const& preferences) {
     return phenotype::ThemePreferenceOverrides{
@@ -628,7 +640,7 @@ struct State {
     State()
         : explorer(initial_explorer_state()),
           labels(file_explorer_demo::file_explorer_labels(
-              initial_locale(),
+              resolved_initial_locale(),
               runtime_resource_catalog())),
           search_visible(!explorer.search.empty()),
           more_actions_open(initial_more_actions_open()) {
