@@ -379,6 +379,13 @@ struct PlatformSystemSettingsSnapshot {
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
     std::string scroll_source = "fallback";
+    std::string color_scheme = "light";
+    std::string color_scheme_source = "fallback";
+    std::string appearance_name;
+    bool reduce_transparency = false;
+    bool increase_contrast = false;
+    bool reduce_motion = false;
+    std::string accessibility_source = "fallback";
     bool accent_color_available = false;
     Color accent_color = {0, 122, 255, 255};
     std::string accent_color_source = "fallback";
@@ -387,6 +394,7 @@ struct PlatformSystemSettingsSnapshot {
 
 struct ThemePreferenceOverrides {
     std::string font_family;
+    std::string color_scheme;
     float font_scale = 1.0f;
     float body_font_size = 0.0f;
     float heading_font_size = 0.0f;
@@ -394,6 +402,7 @@ struct ThemePreferenceOverrides {
     float line_height_ratio = 0.0f;
     float scroll_delta_multiplier = 1.0f;
     bool prefer_system_font_family = false;
+    bool prefer_system_color_scheme = false;
     bool apply_system_font_scale = true;
     bool apply_system_accent_color = false;
 };
@@ -412,6 +421,47 @@ inline float bounded_theme_preference(
     return value;
 }
 
+inline bool theme_color_scheme_is_dark(std::string const& scheme) noexcept {
+    return scheme == "dark" || scheme == "high-contrast-dark";
+}
+
+inline bool theme_color_scheme_is_light(std::string const& scheme) noexcept {
+    return scheme == "light" || scheme == "high-contrast-light";
+}
+
+inline Theme apply_dark_color_scheme(Theme theme) {
+    theme.background = {28, 28, 30, 255};
+    theme.foreground = {242, 242, 247, 255};
+    theme.muted = {174, 174, 178, 255};
+    theme.border = {72, 72, 74, 255};
+    theme.surface = {44, 44, 46, 238};
+    theme.code_bg = {58, 58, 60, 255};
+    theme.hero_bg = theme.background;
+    theme.hero_fg = theme.foreground;
+    theme.hero_muted = theme.muted;
+    theme.state_hover_bg = {58, 58, 60, 255};
+    theme.state_hover_fg = theme.foreground;
+    theme.state_disabled_bg = {44, 44, 46, 255};
+    theme.state_disabled_fg = {99, 99, 102, 255};
+    theme.state_disabled_border = theme.border;
+    theme.state_error_bg = {64, 36, 38, 255};
+    theme.state_error_fg = {255, 214, 214, 255};
+    theme.state_error_border = {255, 69, 58, 255};
+    theme.semantic_success_bg = {24, 54, 36, 255};
+    theme.semantic_success_fg = {190, 245, 205, 255};
+    theme.semantic_success_border = {48, 209, 88, 255};
+    theme.semantic_warning_bg = {66, 52, 22, 255};
+    theme.semantic_warning_fg = {255, 232, 163, 255};
+    theme.semantic_warning_border = {255, 214, 10, 255};
+    theme.semantic_info_bg = {28, 43, 74, 255};
+    theme.semantic_info_fg = {208, 224, 255, 255};
+    theme.semantic_info_border = {100, 210, 255, 255};
+    theme.semantic_error_bg = theme.state_error_bg;
+    theme.semantic_error_fg = theme.state_error_fg;
+    theme.semantic_error_border = theme.state_error_border;
+    return theme;
+}
+
 inline Theme apply_system_theme_preferences(
         Theme theme,
         PlatformSystemSettingsSnapshot const& system,
@@ -421,6 +471,19 @@ inline Theme apply_system_theme_preferences(
     } else if (overrides.prefer_system_font_family
                && !system.font_family.empty()) {
         theme.default_font_family = system.font_family;
+    }
+
+    std::string resolved_color_scheme;
+    if (!overrides.color_scheme.empty()) {
+        resolved_color_scheme = overrides.color_scheme;
+    } else if (overrides.prefer_system_color_scheme) {
+        resolved_color_scheme = system.color_scheme;
+    }
+    if (theme_color_scheme_is_dark(resolved_color_scheme)) {
+        theme = apply_dark_color_scheme(theme);
+    } else if (!resolved_color_scheme.empty()
+               && !theme_color_scheme_is_light(resolved_color_scheme)) {
+        resolved_color_scheme.clear();
     }
 
     float scale = 1.0f;

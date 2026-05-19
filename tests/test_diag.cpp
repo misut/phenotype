@@ -281,6 +281,13 @@ void test_snapshot_shape() {
     (void)system_settings.at("scroll_friction").as_float();
     (void)system_settings.at("scroll_delta_multiplier").as_float();
     (void)system_settings.at("scroll_horizontal_delta_multiplier").as_float();
+    assert(system_settings.at("color_scheme").is_string());
+    assert(system_settings.at("color_scheme_source").is_string());
+    assert(system_settings.at("appearance_name").is_string());
+    assert(system_settings.at("reduce_transparency").is_bool());
+    assert(system_settings.at("increase_contrast").is_bool());
+    assert(system_settings.at("reduce_motion").is_bool());
+    assert(system_settings.at("accessibility_source").is_string());
     assert(system_settings.at("accent_color_available").is_bool());
     assert(system_settings.at("accent_color").is_object());
     assert(system_settings.at("accent_color_source").is_string());

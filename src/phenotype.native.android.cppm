@@ -6503,6 +6503,8 @@ struct AndroidConfigurationPreferences {
     float font_scale = 1.0f;
     int font_weight_adjustment = 0;
     bool has_font_weight_adjustment = false;
+    int ui_mode = 0;
+    bool has_ui_mode = false;
 };
 
 inline std::optional<AndroidConfigurationPreferences>
@@ -6597,6 +6599,15 @@ android_configuration_preferences() {
         check_and_clear_exception(env);
     }
 
+    jfieldID ui_mode_id = env->GetFieldID(configuration_cls, "uiMode", "I");
+    if (ui_mode_id && !check_and_clear_exception(env)) {
+        preferences.ui_mode = env->GetIntField(configuration, ui_mode_id);
+        if (!check_and_clear_exception(env))
+            preferences.has_ui_mode = true;
+    } else {
+        check_and_clear_exception(env);
+    }
+
     drop(configuration_cls);
     drop(configuration);
     return preferences;
@@ -6678,6 +6689,27 @@ inline std::optional<::phenotype::Color> android_system_accent_color() {
         static_cast<unsigned char>(packed & 0xFFu),
         static_cast<unsigned char>((packed >> 24) & 0xFFu),
     };
+}
+
+inline void apply_android_configuration_appearance(
+        ::phenotype::PlatformSystemSettingsSnapshot& snapshot,
+        AndroidConfigurationPreferences const& config) {
+    if (!config.has_ui_mode)
+        return;
+    constexpr int ui_mode_night_mask = 0x30;
+    constexpr int ui_mode_night_no = 0x10;
+    constexpr int ui_mode_night_yes = 0x20;
+    int const night = config.ui_mode & ui_mode_night_mask;
+    snapshot.appearance_name =
+        "Configuration.uiMode=" + std::to_string(config.ui_mode);
+    snapshot.color_scheme_source = "Resources.getConfiguration().uiMode";
+    if (night == ui_mode_night_yes) {
+        snapshot.color_scheme = "dark";
+    } else if (night == ui_mode_night_no) {
+        snapshot.color_scheme = "light";
+    } else {
+        snapshot.color_scheme_source = "fallback";
+    }
 }
 
 struct AndroidViewConfigurationMetrics {
@@ -6818,10 +6850,24 @@ android_system_settings_snapshot() {
     snapshot.scroll_page_mode = false;
     snapshot.scroll_delta_multiplier = 1.0f;
     snapshot.scroll_source = "AMOTION_EVENT_AXIS_VSCROLL fallback";
+    auto accessibility = android_accessibility_display_options();
+    snapshot.reduce_transparency = accessibility.reduce_transparency;
+    snapshot.increase_contrast = accessibility.increase_contrast;
+    snapshot.reduce_motion = accessibility.reduce_motion;
+    snapshot.accessibility_source = accessibility.source;
+    if (accessibility.increase_contrast)
+        snapshot.color_scheme = "high-contrast-light";
     if (auto config = android_configuration_preferences()) {
         snapshot.source = "android-jni-resources-configuration";
         snapshot.text_size_source =
             "Resources.getConfiguration().fontScale";
+        apply_android_configuration_appearance(snapshot, *config);
+        if (accessibility.increase_contrast
+            && snapshot.color_scheme == "dark") {
+            snapshot.color_scheme = "high-contrast-dark";
+        } else if (accessibility.increase_contrast) {
+            snapshot.color_scheme = "high-contrast-light";
+        }
         snapshot.font_scale = ::phenotype::bounded_theme_preference(
             config->font_scale,
             1.0f,

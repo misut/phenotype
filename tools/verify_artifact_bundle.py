@@ -237,6 +237,10 @@ PLATFORM_SYSTEM_SETTING_STRING_FIELDS = (
     "font_weight_source",
     "preferred_scroller_style",
     "scroll_source",
+    "color_scheme",
+    "color_scheme_source",
+    "appearance_name",
+    "accessibility_source",
     "accent_color_source",
 )
 
@@ -271,6 +275,9 @@ PLATFORM_SYSTEM_SETTING_NUMBER_MINIMUMS = {
 PLATFORM_SYSTEM_SETTING_BOOL_FIELDS = (
     "overlay_scrollbars",
     "scroll_page_mode",
+    "reduce_transparency",
+    "increase_contrast",
+    "reduce_motion",
     "accent_color_available",
     "accent_color_opaque",
 )
@@ -893,7 +900,7 @@ def check_platform_system_settings_contract(
             settings,
             key,
             "debug.platform_capabilities.system_settings",
-            allow_empty=(key == "font_family"),
+            allow_empty=(key == "font_family" or key == "appearance_name"),
             likely_layer="platform-system-settings",
             hint=(
                 "System settings string fields identify the platform source "

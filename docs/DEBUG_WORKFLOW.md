@@ -971,7 +971,16 @@ it can also count
 `verifier_require_container_morph_contract`. Theme gates can additionally pin
 `theme_foreground_matches_theme`, `theme_accent_matches_theme`,
 `theme_tint_matches_surface`, `theme_border_matches_theme`, and
-`theme_default_glass_tokens`. Foreground gates can additionally
+`theme_default_glass_tokens`. Platform system-settings failures now include
+appearance and accessibility fields as first-class evidence: inspect
+`debug.platform_capabilities.system_settings.color_scheme`,
+`appearance_name`, `color_scheme_source`, `reduce_transparency`,
+`increase_contrast`, `reduce_motion`, and `accessibility_source` before
+changing theme tokens. File explorer artifacts also mirror the app override
+state at `debug.application.file_explorer.preferences.app_overrides` and the
+resolved theme at `debug.application.file_explorer.preferences.effective_theme`,
+including `color_scheme`, font family/scale, and both scroll multipliers.
+Foreground gates can additionally
 pin `foreground_backdrop_driven`, `foreground_high_contrast`,
 `foreground_vibrant`, `foreground_deterministic`,
 `foreground_min_primary_contrast_gte`, and

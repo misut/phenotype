@@ -358,6 +358,8 @@ void test_system_theme_preferences_are_pure_overlays() {
     system.line_height_ratio = 1.6f;
     system.scroll_delta_multiplier = 1.25f;
     system.scroll_horizontal_delta_multiplier = 0.5f;
+    system.color_scheme = "dark";
+    system.color_scheme_source = "test-appearance";
     system.accent_color_available = true;
     system.accent_color = Color{88, 86, 214, 255};
     system.accent_color_source = "test-accent";
@@ -387,6 +389,21 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert((applied.accent == Color{88, 86, 214, 255}));
     assert(applied.state_focus_ring == applied.accent);
     assert(applied.state_active_bg == applied.accent_strong);
+
+    overrides = ThemePreferenceOverrides{};
+    overrides.prefer_system_color_scheme = true;
+    applied = apply_system_theme_preferences(theme, system, overrides);
+    assert((applied.background == Color{28, 28, 30, 255}));
+    assert((applied.foreground == Color{242, 242, 247, 255}));
+    assert((applied.surface == Color{44, 44, 46, 238}));
+
+    overrides.prefer_system_color_scheme = false;
+    overrides.color_scheme = "light";
+    applied = apply_system_theme_preferences(theme, system, overrides);
+    assert(applied.background == theme.background);
+    overrides.color_scheme = "high-contrast-dark";
+    applied = apply_system_theme_preferences(theme, system, overrides);
+    assert((applied.background == Color{28, 28, 30, 255}));
 
     std::puts("PASS: system theme preferences are pure overlays");
 }

@@ -656,6 +656,21 @@ inline SEL sel_shared_application() {
     return sel;
 }
 
+inline SEL sel_effective_appearance() {
+    static auto sel = sel_registerName("effectiveAppearance");
+    return sel;
+}
+
+inline SEL sel_current_appearance() {
+    static auto sel = sel_registerName("currentAppearance");
+    return sel;
+}
+
+inline SEL sel_name() {
+    static auto sel = sel_registerName("name");
+    return sel;
+}
+
 inline SEL sel_is_active() {
     static auto sel = sel_registerName("isActive");
     return sel;
@@ -4324,6 +4339,57 @@ inline std::string scroller_style_name(long style) {
     return "unknown";
 }
 
+inline std::string objc_string_to_utf8(id value) {
+    if (!value || !objc_responds_to(value, sel_utf8_string()))
+        return {};
+    char const* raw = objc_send<char const*>(value, sel_utf8_string());
+    return raw ? std::string{raw} : std::string{};
+}
+
+inline std::string macos_effective_appearance_name() {
+    id appearance = nullptr;
+    auto app_class = static_cast<Class>(objc_getClass("NSApplication"));
+    if (app_class) {
+        auto app = objc_send<id>(class_as_id(app_class), sel_shared_application());
+        if (app && objc_responds_to(app, sel_effective_appearance())) {
+            appearance = objc_send<id>(app, sel_effective_appearance());
+        }
+    }
+    if (!appearance) {
+        auto appearance_class =
+            static_cast<Class>(objc_getClass("NSAppearance"));
+        if (appearance_class
+            && objc_responds_to(
+                class_as_id(appearance_class),
+                sel_current_appearance())) {
+            appearance = objc_send<id>(
+                class_as_id(appearance_class),
+                sel_current_appearance());
+        }
+    }
+    if (!appearance || !objc_responds_to(appearance, sel_name()))
+        return {};
+    return objc_string_to_utf8(objc_send<id>(appearance, sel_name()));
+}
+
+inline void apply_appearance_to_system_snapshot(
+        ::phenotype::PlatformSystemSettingsSnapshot& snapshot,
+        bool increase_contrast) {
+    auto name = macos_effective_appearance_name();
+    snapshot.appearance_name = name;
+    snapshot.color_scheme_source = name.empty()
+        ? "fallback"
+        : "NSApplication.effectiveAppearance.name";
+    bool const dark = name.find("Dark") != std::string::npos
+        || name.find("dark") != std::string::npos;
+    if (increase_contrast)
+        snapshot.color_scheme = dark
+            ? "high-contrast-dark"
+            : "high-contrast-light";
+    else
+        snapshot.color_scheme = dark ? "dark" : "light";
+}
+
 inline unsigned char srgb_byte(double value) {
     if (!std::isfinite(value))
         return 0;
@@ -4383,6 +4449,14 @@ macos_system_settings_snapshot() {
         "NSEvent.scrollingDelta with NSScroller.preferredScrollerStyle";
     snapshot.line_height_ratio = 1.6f;
     snapshot.scroll_delta_multiplier = 1.0f;
+    auto accessibility = accessibility_display_options();
+    snapshot.reduce_transparency = accessibility.reduce_transparency;
+    snapshot.increase_contrast = accessibility.increase_contrast;
+    snapshot.reduce_motion = accessibility.reduce_motion;
+    snapshot.accessibility_source = accessibility.source;
+    apply_appearance_to_system_snapshot(
+        snapshot,
+        accessibility.increase_contrast);
 
     CTFontRef raw_font =
         CTFontCreateUIFontForLanguage(kCTFontUIFontSystem, 0.0, nullptr);

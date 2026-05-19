@@ -2382,6 +2382,21 @@ inline json::Value system_settings_to_json(
         "scroll_horizontal_delta_multiplier",
         json::Value{settings.scroll_horizontal_delta_multiplier});
     system.emplace("scroll_source", json::Value{settings.scroll_source});
+    system.emplace("color_scheme", json::Value{settings.color_scheme});
+    system.emplace(
+        "color_scheme_source",
+        json::Value{settings.color_scheme_source});
+    system.emplace("appearance_name", json::Value{settings.appearance_name});
+    system.emplace(
+        "reduce_transparency",
+        json::Value{settings.reduce_transparency});
+    system.emplace(
+        "increase_contrast",
+        json::Value{settings.increase_contrast});
+    system.emplace("reduce_motion", json::Value{settings.reduce_motion});
+    system.emplace(
+        "accessibility_source",
+        json::Value{settings.accessibility_source});
     system.emplace(
         "accent_color_available",
         json::Value{settings.accent_color_available});
