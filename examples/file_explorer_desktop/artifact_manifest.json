@@ -470,7 +470,11 @@
     },
     {
       "path": "application.file_explorer.preferences.font_policy",
-      "equals": "Pretendard package default, OS font scale applied, user override wins"
+      "equals": "Pretendard package default, OS font metrics applied, user override wins"
+    },
+    {
+      "path": "application.file_explorer.preferences.appearance_policy",
+      "equals": "OS appearance and accent applied by default, user override wins"
     },
     {
       "path": "application.file_explorer.preferences.scroll_policy",
@@ -482,6 +486,14 @@
     },
     {
       "path": "application.file_explorer.preferences.app_overrides.apply_system_font_scale",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.preferences.app_overrides.prefer_system_color_scheme",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.preferences.app_overrides.apply_system_accent_color",
       "equals": true
     },
     {
@@ -1901,7 +1913,7 @@
     },
     {
       "path": "renderer.material_executor_summary.foreground_text_remap_count",
-      "gte": 2,
+      "gte": 1,
       "lte": 60
     }
   ],

@@ -6034,7 +6034,8 @@ windows_system_settings_snapshot() {
     snapshot.text_size_source = "SystemParametersInfoW(SPI_GETNONCLIENTMETRICS)";
     snapshot.font_weight_source =
         "SystemParametersInfoW(SPI_GETNONCLIENTMETRICS).lfMessageFont";
-    snapshot.scroll_source = "SystemParametersInfoW(SPI_GETWHEELSCROLLLINES)";
+    snapshot.scroll_source =
+        "SystemParametersInfoW(SPI_GETWHEELSCROLLLINES/SPI_GETWHEELSCROLLCHARS)";
     snapshot.font_family = "Segoe UI";
     snapshot.body_font_size = 12.0f;
     snapshot.heading_font_size = 15.5f;

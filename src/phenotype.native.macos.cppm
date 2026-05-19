@@ -6343,6 +6343,16 @@ inline float macos_normalize_scroll_delta(double scrolling_delta_y,
     return static_cast<float>(scrolling_delta_y) * line_height;
 }
 
+inline float macos_scroll_delta_multiplier(bool horizontal) {
+    auto const& theme = ::phenotype::current_theme();
+    float multiplier = horizontal
+        ? theme.scroll_horizontal_delta_multiplier
+        : theme.scroll_delta_multiplier;
+    if (!(multiplier > 0.0f) || !std::isfinite(multiplier))
+        return 1.0f;
+    return multiplier;
+}
+
 inline bool scroll_phase_active(unsigned long long phase) {
     return phase != ns_event_phase_none;
 }
@@ -6441,26 +6451,22 @@ inline bool handle_local_scroll_event(id event) {
         scrolling_delta_x,
         has_precise_scrolling_deltas,
         scroll_line_height());
+    normalized_delta *= macos_scroll_delta_multiplier(false);
+    normalized_delta_x *= macos_scroll_delta_multiplier(true);
     float viewport_height_value = current_scroll_viewport_height();
     float viewport_width_value = current_scroll_viewport_width();
     bool handled = false;
     if (normalized_delta != 0.0f) {
-        handled = has_precise_scrolling_deltas
-            ? dispatch_scroll_pixels(normalized_delta,
-                                     viewport_height_value,
-                                     "wheel-precise")
-            : dispatch_scroll_lines(scrolling_delta_y,
-                                    viewport_height_value,
-                                    "wheel-line");
+        handled = dispatch_scroll_pixels(
+            normalized_delta,
+            viewport_height_value,
+            has_precise_scrolling_deltas ? "wheel-precise" : "wheel-line");
     }
     if (normalized_delta_x != 0.0f) {
-        bool handled_x = has_precise_scrolling_deltas
-            ? dispatch_scroll_pixels_x(normalized_delta_x,
-                                       viewport_width_value,
-                                       "wheel-precise-x")
-            : dispatch_scroll_lines_x(scrolling_delta_x,
-                                      viewport_width_value,
-                                      "wheel-line-x");
+        bool handled_x = dispatch_scroll_pixels_x(
+            normalized_delta_x,
+            viewport_width_value,
+            has_precise_scrolling_deltas ? "wheel-precise-x" : "wheel-line-x");
         handled = handled || handled_x;
     }
     if (scroll_tracking_changed
@@ -7574,6 +7580,10 @@ inline float normalize_scroll_delta(double scrolling_delta_y,
         scrolling_delta_y,
         has_precise_scrolling_deltas,
         line_height);
+}
+
+inline float scroll_delta_multiplier(bool horizontal) {
+    return detail::macos_scroll_delta_multiplier(horizontal);
 }
 
 inline CompositionVisualDebug build_visual_text(std::string const& committed,

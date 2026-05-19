@@ -1723,6 +1723,7 @@ static void test_macos_utf16_utf8_range_helpers() {
 
 static void test_macos_scroll_delta_normalization() {
     using phenotype::native::macos_test::normalize_scroll_delta;
+    using phenotype::native::macos_test::scroll_delta_multiplier;
 
     float precise = normalize_scroll_delta(-12.5, true, 25.6f);
     float line = normalize_scroll_delta(-2.0, false, 25.6f);
@@ -1731,6 +1732,16 @@ static void test_macos_scroll_delta_normalization() {
     assert(std::fabs(precise + 12.5f) < 0.001f);
     assert(std::fabs(line + 51.2f) < 0.001f);
     assert(std::fabs(default_line - 2.0f) < 0.001f);
+
+    auto original = phenotype::current_theme();
+    auto themed = original;
+    themed.scroll_delta_multiplier = 1.75f;
+    themed.scroll_horizontal_delta_multiplier = 0.5f;
+    phenotype::set_theme(themed);
+    assert(std::fabs(scroll_delta_multiplier(false) - 1.75f) < 0.001f);
+    assert(std::fabs(scroll_delta_multiplier(true) - 0.5f) < 0.001f);
+    phenotype::set_theme(original);
+
     std::puts("PASS: macOS scroll delta normalization");
 }
 

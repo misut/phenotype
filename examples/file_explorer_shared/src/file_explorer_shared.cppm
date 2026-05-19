@@ -264,6 +264,10 @@ enum class ExplorerInputKind {
     ShiftTabFocus,
     SetFontFamily,
     SetFontScale,
+    SetBodyFontSize,
+    SetHeadingFontSize,
+    SetSmallFontSize,
+    SetLineHeightRatio,
     SetScrollSpeed,
     SetHorizontalScrollSpeed,
     SetColorScheme,
@@ -3006,7 +3010,11 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
     out.emplace(
         "font_policy",
         json::Value{
-            "Pretendard package default, OS font scale applied, user override wins"});
+            "Pretendard package default, OS font metrics applied, user override wins"});
+    out.emplace(
+        "appearance_policy",
+        json::Value{
+            "OS appearance and accent applied by default, user override wins"});
     out.emplace(
         "scroll_policy",
         json::Value{
@@ -4265,6 +4273,12 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::ShiftTabFocus: return "shift_tab_focus";
         case ExplorerInputKind::SetFontFamily: return "set_font_family";
         case ExplorerInputKind::SetFontScale: return "set_font_scale";
+        case ExplorerInputKind::SetBodyFontSize: return "set_body_font_size";
+        case ExplorerInputKind::SetHeadingFontSize:
+            return "set_heading_font_size";
+        case ExplorerInputKind::SetSmallFontSize: return "set_small_font_size";
+        case ExplorerInputKind::SetLineHeightRatio:
+            return "set_line_height_ratio";
         case ExplorerInputKind::SetScrollSpeed: return "set_scroll_speed";
         case ExplorerInputKind::SetHorizontalScrollSpeed:
             return "set_horizontal_scroll_speed";
@@ -4839,6 +4853,53 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         }
         return parsed_input({
             .kind = ExplorerInputKind::SetFontScale,
+            .value = compact_preference_number(*parsed),
+        });
+    }
+    if (name == "font-size" || name == "font_size"
+        || name == "body-font-size" || name == "body_font_size") {
+        auto parsed = parse_preference_number(value, 8.0f, 40.0f);
+        if (!parsed) {
+            return input_parse_error(
+                "input 'font-size' requires a positive point size");
+        }
+        return parsed_input({
+            .kind = ExplorerInputKind::SetBodyFontSize,
+            .value = compact_preference_number(*parsed),
+        });
+    }
+    if (name == "heading-font-size" || name == "heading_font_size") {
+        auto parsed = parse_preference_number(value, 10.0f, 56.0f);
+        if (!parsed) {
+            return input_parse_error(
+                "input 'heading-font-size' requires a positive point size");
+        }
+        return parsed_input({
+            .kind = ExplorerInputKind::SetHeadingFontSize,
+            .value = compact_preference_number(*parsed),
+        });
+    }
+    if (name == "small-font-size" || name == "small_font_size"
+        || name == "caption-font-size" || name == "caption_font_size") {
+        auto parsed = parse_preference_number(value, 8.0f, 32.0f);
+        if (!parsed) {
+            return input_parse_error(
+                "input 'small-font-size' requires a positive point size");
+        }
+        return parsed_input({
+            .kind = ExplorerInputKind::SetSmallFontSize,
+            .value = compact_preference_number(*parsed),
+        });
+    }
+    if (name == "line-height" || name == "line_height"
+        || name == "line-height-ratio" || name == "line_height_ratio") {
+        auto parsed = parse_preference_number(value, 1.0f, 2.2f);
+        if (!parsed) {
+            return input_parse_error(
+                "input 'line-height' requires a positive ratio");
+        }
+        return parsed_input({
+            .kind = ExplorerInputKind::SetLineHeightRatio,
             .value = compact_preference_number(*parsed),
         });
     }
@@ -6079,6 +6140,10 @@ inline ExplorerInputModality default_input_modality(
         case ExplorerInputKind::Scenario:
         case ExplorerInputKind::SetFontFamily:
         case ExplorerInputKind::SetFontScale:
+        case ExplorerInputKind::SetBodyFontSize:
+        case ExplorerInputKind::SetHeadingFontSize:
+        case ExplorerInputKind::SetSmallFontSize:
+        case ExplorerInputKind::SetLineHeightRatio:
         case ExplorerInputKind::SetScrollSpeed:
         case ExplorerInputKind::SetHorizontalScrollSpeed:
         case ExplorerInputKind::SetColorScheme:
@@ -6215,6 +6280,10 @@ inline void apply_focus_policy_for_input(
         case ExplorerInputKind::Scenario:
         case ExplorerInputKind::SetFontFamily:
         case ExplorerInputKind::SetFontScale:
+        case ExplorerInputKind::SetBodyFontSize:
+        case ExplorerInputKind::SetHeadingFontSize:
+        case ExplorerInputKind::SetSmallFontSize:
+        case ExplorerInputKind::SetLineHeightRatio:
         case ExplorerInputKind::SetScrollSpeed:
         case ExplorerInputKind::SetHorizontalScrollSpeed:
         case ExplorerInputKind::SetColorScheme:
@@ -6471,6 +6540,54 @@ inline void apply_explorer_input(
             state.theme_preferences.font_scale = *scale;
             state.status = "Text size set to "
                 + compact_preference_number(*scale) + "x.";
+            return;
+        }
+        case ExplorerInputKind::SetBodyFontSize: {
+            auto size = parse_preference_number(input.value, 8.0f, 40.0f);
+            if (!size) {
+                state.status = "Body font size input was invalid.";
+                return;
+            }
+            state.preferences_source = "application-input";
+            state.theme_preferences.body_font_size = *size;
+            state.status = "Body font size set to "
+                + compact_preference_number(*size) + "pt.";
+            return;
+        }
+        case ExplorerInputKind::SetHeadingFontSize: {
+            auto size = parse_preference_number(input.value, 10.0f, 56.0f);
+            if (!size) {
+                state.status = "Heading font size input was invalid.";
+                return;
+            }
+            state.preferences_source = "application-input";
+            state.theme_preferences.heading_font_size = *size;
+            state.status = "Heading font size set to "
+                + compact_preference_number(*size) + "pt.";
+            return;
+        }
+        case ExplorerInputKind::SetSmallFontSize: {
+            auto size = parse_preference_number(input.value, 8.0f, 32.0f);
+            if (!size) {
+                state.status = "Small font size input was invalid.";
+                return;
+            }
+            state.preferences_source = "application-input";
+            state.theme_preferences.small_font_size = *size;
+            state.status = "Small font size set to "
+                + compact_preference_number(*size) + "pt.";
+            return;
+        }
+        case ExplorerInputKind::SetLineHeightRatio: {
+            auto ratio = parse_preference_number(input.value, 1.0f, 2.2f);
+            if (!ratio) {
+                state.status = "Line height input was invalid.";
+                return;
+            }
+            state.preferences_source = "application-input";
+            state.theme_preferences.line_height_ratio = *ratio;
+            state.status = "Line height set to "
+                + compact_preference_number(*ratio) + "x.";
             return;
         }
         case ExplorerInputKind::SetScrollSpeed: {

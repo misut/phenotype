@@ -525,11 +525,11 @@ example applied before rendering. Use this block when text size, family source,
 font-weight adjustment, vertical or horizontal wheel/trackpad speed, scrollbar
 behavior, touch slop, or accent color looks wrong but the material/icon/resource
 contracts are green. The vertical and horizontal scroll multipliers are separate
-so Android `ViewConfiguration` factors and Windows
-`SPI_GETWHEELSCROLLCHARS` drift can be diagnosed without replaying native input.
-Pretendard remains the package default; OS font family and OS accent are
-explicit opt-in overrides so Finder verifier pixels stay deterministic unless a
-scenario asks for dynamic system chrome.
+so Android `ViewConfiguration` factors, Windows
+`SPI_GETWHEELSCROLLCHARS`, and macOS trackpad/wheel paths can be diagnosed
+without replaying native input. Pretendard remains the package default font
+family; file explorer examples opt in to system appearance and accent by
+default, while the OS font family is still an explicit app/user override.
 
 `application.file_explorer.resource_system.*` is the package/debug-resource
 counterpart. It records the file explorer application id/version/entry,
@@ -567,10 +567,11 @@ counts in the run receipt, and passes only
 native process. This keeps file reads, process execution, and environment
 access at the edge while allowing artifact bundles to prove the result of GUI
 input replay. The same route covers application preference inputs such as
-`font-family:system`, `font-scale:1.2`, `scroll-speed:1.4`, and
-`horizontal-scroll-speed:2`; artifacts then
+`font-family:system`, `font-scale:1.2`, `font-size:17`,
+`heading-font-size:22`, `small-font-size:13`, `line-height:1.45`,
+`scroll-speed:1.4`, and `horizontal-scroll-speed:2`; artifacts then
 record `application.file_explorer.preferences.source=application-input` plus
-the resolved effective font and axis-specific scroll multipliers.
+the resolved effective font metrics and axis-specific scroll multipliers.
 For a single command that drives input and observes native output, use
 `--observe-output`:
 
