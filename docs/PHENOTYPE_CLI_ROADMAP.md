@@ -226,7 +226,10 @@ only `PHENOTYPE_FILE_EXPLORER_INPUTS` plus
 `PHENOTYPE_FILE_EXPLORER_SCRIPT`. The desktop/mobile examples read those edge
 values at startup and call the shared parser/apply functions before the first
 artifact frame. This keeps deterministic GUI input replay available to CI and
-LLM debugging without introducing a second native event stack.
+LLM debugging without introducing a second native event stack. Preference
+inputs (`font-family:system`, `font-scale:1.2`, `scroll-speed:1.4`) use this
+same path and are synced back into the native `phenotype::Theme` before the
+first frame, so OS-derived settings and user overrides share one contract.
 `--observe-output` closes that loop for native runs: it implies deterministic
 artifact exit, creates an artifact directory when the caller did not supply one,
 then parses the resulting `snapshot.json` through the same C++ output

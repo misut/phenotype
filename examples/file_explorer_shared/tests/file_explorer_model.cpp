@@ -258,6 +258,37 @@ fallback = []
     auto parsed_bad = demo::parse_explorer_input("sort:date");
     assert(!parsed_bad.ok);
     assert(parsed_bad.error.find("sort") != std::string::npos);
+    auto parsed_font_system = demo::parse_explorer_input("font-family:system");
+    assert(parsed_font_system.ok);
+    assert(parsed_font_system.input.kind
+           == demo::ExplorerInputKind::SetFontFamily);
+    assert(parsed_font_system.input.value == "system");
+    auto parsed_font_package = demo::parse_explorer_input("font:pretendard");
+    assert(parsed_font_package.ok);
+    assert(parsed_font_package.input.kind
+           == demo::ExplorerInputKind::SetFontFamily);
+    assert(parsed_font_package.input.value == "pretendard");
+    auto parsed_font_scale = demo::parse_explorer_input("font-scale:1.25");
+    assert(parsed_font_scale.ok);
+    assert(parsed_font_scale.input.kind
+           == demo::ExplorerInputKind::SetFontScale);
+    assert(parsed_font_scale.input.value == "1.25");
+    assert(demo::explorer_input_label(parsed_font_scale.input)
+           == "set_font_scale:1.25");
+    auto parsed_large_font_scale = demo::parse_explorer_input("font-scale:5");
+    assert(parsed_large_font_scale.ok);
+    assert(parsed_large_font_scale.input.value == "1.8");
+    auto parsed_scroll_speed = demo::parse_explorer_input("scroll-speed:1.5");
+    assert(parsed_scroll_speed.ok);
+    assert(parsed_scroll_speed.input.kind
+           == demo::ExplorerInputKind::SetScrollSpeed);
+    assert(parsed_scroll_speed.input.value == "1.5");
+    auto parsed_slow_scroll = demo::parse_explorer_input("scroll-speed:0.1");
+    assert(parsed_slow_scroll.ok);
+    assert(parsed_slow_scroll.input.value == "0.25");
+    auto parsed_bad_font_scale = demo::parse_explorer_input("font-scale:big");
+    assert(!parsed_bad_font_scale.ok);
+    assert(parsed_bad_font_scale.error.find("font-scale") != std::string::npos);
     auto parsed_lines = demo::parse_explorer_input_lines(R"(
 # Native startup script.
 input viewport:760x540@2
@@ -327,6 +358,41 @@ duplicate
     assert(startup_state.selected_name == "README copy.txt");
     assert(startup_state.last_operation.kind == "file_duplicate");
     fs::remove_all(startup_state.root, ec);
+
+    std::string const preference_profile =
+        unique_test_profile("test-preference-inputs");
+    fs::remove_all(demo::demo_root(preference_profile), ec);
+    auto preference_state = demo::make_state(preference_profile);
+    auto preference_sequence = demo::parse_explorer_input_sequence(
+        "font-family:system;font-scale:1.25;scroll-speed:1.5");
+    assert(preference_sequence.ok);
+    demo::apply_explorer_inputs(
+        preference_state,
+        preference_sequence.inputs,
+        preference_profile);
+    assert(preference_state.preferences_source == "application-input");
+    assert(preference_state.theme_preferences.prefer_system_font_family);
+    assert(preference_state.theme_preferences.font_family.empty());
+    assert(preference_state.theme_preferences.font_scale == 1.25f);
+    assert(preference_state.theme_preferences.scroll_delta_multiplier == 1.5f);
+    assert(preference_state.status == "Scroll speed set to 1.5x.");
+    auto preference_debug_text = json::emit(
+        demo::file_explorer_application_debug_json(
+            preference_state,
+            demo::snapshot(preference_state),
+            demo::explorer_chrome_metrics(
+                preference_state,
+                preference_profile),
+            preference_profile));
+    assert(preference_debug_text.find("\"source\":\"application-input\"")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"prefer_system_font_family\":true")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"font_scale\":1.25")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"scroll_delta_multiplier\":1.5")
+           != std::string::npos);
+    fs::remove_all(preference_state.root, ec);
 
     auto state = demo::make_state(profile);
     assert(state.viewport_width == demo::k_desktop_default_viewport_width);

@@ -229,6 +229,9 @@ enum class ExplorerInputKind {
     PointerFocus,
     TabFocus,
     ShiftTabFocus,
+    SetFontFamily,
+    SetFontScale,
+    SetScrollSpeed,
 };
 
 struct ExplorerInput {
@@ -4150,6 +4153,9 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::PointerFocus: return "pointer_focus";
         case ExplorerInputKind::TabFocus: return "tab_focus";
         case ExplorerInputKind::ShiftTabFocus: return "shift_tab_focus";
+        case ExplorerInputKind::SetFontFamily: return "set_font_family";
+        case ExplorerInputKind::SetFontScale: return "set_font_scale";
+        case ExplorerInputKind::SetScrollSpeed: return "set_scroll_speed";
     }
     return "noop";
 }
@@ -4183,6 +4189,36 @@ inline std::string explorer_expectation_kind_name(ExplorerExpectationKind kind) 
         case ExplorerExpectationKind::InputModality:  return "input-modality";
     }
     return "selected";
+}
+
+inline std::string compact_preference_number(float value) {
+    auto out = std::to_string(value);
+    while (!out.empty() && out.back() == '0')
+        out.pop_back();
+    if (!out.empty() && out.back() == '.')
+        out.pop_back();
+    return out.empty() ? "0" : out;
+}
+
+inline std::optional<float> parse_preference_number(
+        std::string_view raw,
+        float minimum,
+        float maximum) {
+    auto text = trim(raw);
+    if (text.empty())
+        return std::nullopt;
+    auto owned = std::string{text};
+    char* end = nullptr;
+    auto value = std::strtof(owned.c_str(), &end);
+    if (end == owned.c_str() || (end && *end != '\0'))
+        return std::nullopt;
+    if (!(value > 0.0f))
+        return std::nullopt;
+    if (value < minimum)
+        value = minimum;
+    if (value > maximum)
+        value = maximum;
+    return value;
 }
 
 inline std::string explorer_expectation_label(
@@ -4672,6 +4708,39 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
     }
     if (name == "cycle-sort")
         return parsed_input({.kind = ExplorerInputKind::CycleSort});
+    if (name == "font" || name == "font-family" || name == "font_family") {
+        if (value.empty())
+            return input_parse_error(
+                "input 'font-family' requires system, pretendard, or a family");
+        return parsed_input({
+            .kind = ExplorerInputKind::SetFontFamily,
+            .value = value,
+        });
+    }
+    if (name == "font-scale" || name == "font_scale"
+        || name == "text-scale" || name == "text_size") {
+        auto parsed = parse_preference_number(value, 0.75f, 1.8f);
+        if (!parsed) {
+            return input_parse_error(
+                "input 'font-scale' requires a positive number");
+        }
+        return parsed_input({
+            .kind = ExplorerInputKind::SetFontScale,
+            .value = compact_preference_number(*parsed),
+        });
+    }
+    if (name == "scroll-speed" || name == "scroll_speed"
+        || name == "scroll-scale" || name == "scroll_scale") {
+        auto parsed = parse_preference_number(value, 0.25f, 4.0f);
+        if (!parsed) {
+            return input_parse_error(
+                "input 'scroll-speed' requires a positive number");
+        }
+        return parsed_input({
+            .kind = ExplorerInputKind::SetScrollSpeed,
+            .value = compact_preference_number(*parsed),
+        });
+    }
     if (name == "reset")
         return parsed_input({.kind = ExplorerInputKind::Reset});
     if (name == "scenario")
@@ -5861,6 +5930,9 @@ inline ExplorerInputModality default_input_modality(
         case ExplorerInputKind::CycleSort:
         case ExplorerInputKind::Reset:
         case ExplorerInputKind::Scenario:
+        case ExplorerInputKind::SetFontFamily:
+        case ExplorerInputKind::SetFontScale:
+        case ExplorerInputKind::SetScrollSpeed:
         default:
             return ExplorerInputModality::Programmatic;
     }
@@ -5992,6 +6064,9 @@ inline void apply_focus_policy_for_input(
         case ExplorerInputKind::Sort:
         case ExplorerInputKind::CycleSort:
         case ExplorerInputKind::Scenario:
+        case ExplorerInputKind::SetFontFamily:
+        case ExplorerInputKind::SetFontScale:
+        case ExplorerInputKind::SetScrollSpeed:
         default:
             apply_modality_without_focus_change(state, modality);
             return;
@@ -6206,6 +6281,52 @@ inline void apply_explorer_input(
         case ExplorerInputKind::CycleSort:
             cycle_sort_mode(state);
             return;
+        case ExplorerInputKind::SetFontFamily: {
+            auto family = trim(input.value);
+            auto lowered = lower_copy(family);
+            state.preferences_source = "application-input";
+            if (lowered == "system" || lowered == "os") {
+                state.theme_preferences.prefer_system_font_family = true;
+                state.theme_preferences.font_family.clear();
+                state.status = "Using the OS font family.";
+            } else if (lowered == "default" || lowered == "pretendard"
+                       || lowered == "package") {
+                state.theme_preferences.prefer_system_font_family = false;
+                state.theme_preferences.font_family = "Pretendard";
+                state.status = "Using the package font family.";
+            } else if (!family.empty()) {
+                state.theme_preferences.prefer_system_font_family = false;
+                state.theme_preferences.font_family = std::string{family};
+                state.status = "Font family set to " + std::string{family} + ".";
+            } else {
+                state.status = "Font family input was empty.";
+            }
+            return;
+        }
+        case ExplorerInputKind::SetFontScale: {
+            auto scale = parse_preference_number(input.value, 0.75f, 1.8f);
+            if (!scale) {
+                state.status = "Font scale input was invalid.";
+                return;
+            }
+            state.preferences_source = "application-input";
+            state.theme_preferences.font_scale = *scale;
+            state.status = "Text size set to "
+                + compact_preference_number(*scale) + "x.";
+            return;
+        }
+        case ExplorerInputKind::SetScrollSpeed: {
+            auto speed = parse_preference_number(input.value, 0.25f, 4.0f);
+            if (!speed) {
+                state.status = "Scroll speed input was invalid.";
+                return;
+            }
+            state.preferences_source = "application-input";
+            state.theme_preferences.scroll_delta_multiplier = *speed;
+            state.status = "Scroll speed set to "
+                + compact_preference_number(*speed) + "x.";
+            return;
+        }
         case ExplorerInputKind::Reset:
             reset_demo_tree(state, profile);
             return;

@@ -319,8 +319,11 @@ mise exec -- exon build
 For direct launches, `PHENOTYPE_FILE_EXPLORER_INPUTS` accepts newline- or
 semicolon-separated inputs, and `PHENOTYPE_FILE_EXPLORER_SCRIPT` points at the
 same line-based script format used by `phenotype drive file-explorer
---script`. File reads and environment access remain example edge work; parsing
-and input application stay in `file_explorer_shared`.
+--script`. Preference commands use the same app input layer, so
+`font-family:system`, `font-family:Pretendard`, `font-scale:1.2`, and
+`scroll-speed:1.4` update the shared state before the native theme is resolved.
+File reads and environment access remain example edge work; parsing and input
+application stay in `file_explorer_shared`.
 
 The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity,
