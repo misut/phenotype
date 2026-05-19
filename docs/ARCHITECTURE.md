@@ -694,13 +694,15 @@ plan, matching Apple's guidance to coordinate related glass surfaces while still
 respecting accessibility settings.
 When a stable backdrop descriptor is available, the pure planner also copies
 its source, readiness flags, foreground-exclusion flag, sanitized luminance
-statistics, response bucket, and floor/gain/edge deltas into
-`MaterialPlan.backdrop`. The same value drives the
-`MaterialPlan.luminance_curve` gamma/midpoint/contrast and edge-highlight
-adjustment before the plan reaches a backend. This keeps legibility policy in
-the deterministic layer as blur, tint, and fallback decisions, and lets
-artifacts explain why a material responded to dark, bright, flat, or neutral
-backdrop content.
+statistics, luminance response bucket, optical response buckets, and
+floor/gain/edge/tint/saturation/depth deltas into `MaterialPlan.backdrop`.
+The same value drives the `MaterialPlan.luminance_curve`
+gamma/midpoint/contrast, tint alpha, saturation, opacity, edge-highlight, and
+shadow-depth adjustment before the plan reaches a backend. This keeps
+legibility and Liquid Glass optical policy in the deterministic layer as blur,
+tint, and fallback decisions, and lets artifacts explain why a material
+responded to dark, bright, flat, or neutral backdrop content without requiring
+a visual guess.
 Artifact gates can separately bound actual plan taps and resource-budget taps,
 which lets fallback scenes require zero executed taps while preserving the
 backend's allowed quality budget in the same artifact.

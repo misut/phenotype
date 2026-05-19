@@ -1285,6 +1285,18 @@ namespace detail {
             "luminance_response",
             json::Value{plan.backdrop.luminance_response});
         backdrop.emplace(
+            "frosting_response",
+            json::Value{plan.backdrop.frosting_response});
+        backdrop.emplace(
+            "tint_response",
+            json::Value{plan.backdrop.tint_response});
+        backdrop.emplace(
+            "saturation_response",
+            json::Value{plan.backdrop.saturation_response});
+        backdrop.emplace(
+            "depth_response",
+            json::Value{plan.backdrop.depth_response});
+        backdrop.emplace(
             "luminance_floor_delta",
             json::Value{plan.backdrop.luminance_floor_delta});
         backdrop.emplace(
@@ -1293,6 +1305,24 @@ namespace detail {
         backdrop.emplace(
             "edge_highlight_delta",
             json::Value{plan.backdrop.edge_highlight_delta});
+        backdrop.emplace(
+            "opacity_delta",
+            json::Value{plan.backdrop.opacity_delta});
+        backdrop.emplace(
+            "tint_alpha_delta",
+            json::Value{plan.backdrop.tint_alpha_delta});
+        backdrop.emplace(
+            "saturation_delta",
+            json::Value{plan.backdrop.saturation_delta});
+        backdrop.emplace(
+            "shadow_alpha_delta",
+            json::Value{plan.backdrop.shadow_alpha_delta});
+        backdrop.emplace(
+            "shadow_radius_delta",
+            json::Value{plan.backdrop.shadow_radius_delta});
+        backdrop.emplace(
+            "response_strength",
+            json::Value{plan.backdrop.response_strength});
 
         json::Object backdrop_access;
         backdrop_access.emplace(

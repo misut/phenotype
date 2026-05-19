@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 23;
+inline constexpr std::uint32_t material_plan_contract_version = 24;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
 inline constexpr unsigned int material_max_sample_taps = 25;
@@ -279,9 +279,19 @@ struct MaterialBackdropAnalysis {
     float luma_span = 1.0f;
     char const* source = "none";
     char const* luminance_response = "not-sampled";
+    char const* frosting_response = "not-sampled";
+    char const* tint_response = "not-sampled";
+    char const* saturation_response = "not-sampled";
+    char const* depth_response = "not-sampled";
     float luminance_floor_delta = 0.0f;
     float luminance_gain_delta = 0.0f;
     float edge_highlight_delta = 0.0f;
+    float opacity_delta = 0.0f;
+    float tint_alpha_delta = 0.0f;
+    float saturation_delta = 0.0f;
+    float shadow_alpha_delta = 0.0f;
+    float shadow_radius_delta = 0.0f;
+    float response_strength = 0.0f;
 };
 
 struct MaterialBackdropAccess {
@@ -1569,19 +1579,102 @@ inline char const* material_luminance_response_name(
     return "neutral";
 }
 
+inline char const* material_frosting_response_name(
+        bool dark,
+        bool bright,
+        bool flat) noexcept {
+    if (dark)
+        return "dark-frost-lift";
+    if (bright)
+        return "bright-frost-thin";
+    if (flat)
+        return "flat-edge-frost";
+    return "balanced";
+}
+
+inline char const* material_tint_response_name(
+        bool dark,
+        bool bright,
+        bool flat) noexcept {
+    if (dark)
+        return "lift-dark-backdrop";
+    if (bright)
+        return "thin-bright-backdrop";
+    if (flat)
+        return "stabilize-flat-backdrop";
+    return "preserve";
+}
+
+inline char const* material_saturation_response_name(
+        bool dark,
+        bool bright,
+        bool flat) noexcept {
+    if (dark)
+        return "lift-dark-color";
+    if (bright)
+        return "compress-bright-color";
+    if (flat)
+        return "restore-flat-color";
+    return "preserve";
+}
+
+inline char const* material_depth_response_name(
+        bool dark,
+        bool bright,
+        bool flat) noexcept {
+    if (dark)
+        return "soften-dark-depth";
+    if (bright)
+        return "restore-bright-depth";
+    if (flat)
+        return "restore-flat-depth";
+    return "standard";
+}
+
+inline float material_apply_scalar_delta(float& value,
+                                         float delta,
+                                         float min_value,
+                                         float max_value) noexcept {
+    if (std::fabs(delta) <= 0.000001f)
+        return 0.0f;
+    auto const before = value;
+    auto const lower = std::min(min_value, before);
+    auto const upper = std::max(max_value, before);
+    value = std::clamp(value + delta, lower, upper);
+    return value - before;
+}
+
+inline float material_apply_tint_alpha_delta(Color& tint,
+                                             float delta) noexcept {
+    auto const before = tint.a;
+    auto const adjusted =
+        static_cast<int>(before)
+        + static_cast<int>(std::round(delta * 255.0f));
+    tint.a = static_cast<unsigned char>(std::clamp(adjusted, 0, 255));
+    return static_cast<float>(
+        static_cast<int>(tint.a) - static_cast<int>(before)) / 255.0f;
+}
+
 inline void apply_backdrop_luminance_policy(MaterialPlan& plan) noexcept {
     auto const luma_mean = plan.backdrop.luma_mean;
     auto const luma_span = plan.backdrop.luma_span;
     auto const floor_before = plan.luminance_floor;
     auto const gain_before = plan.luminance_gain;
     auto const edge_before = plan.edge_highlight;
+    auto const opacity_before = plan.opacity;
+    auto const saturation_before = plan.saturation;
+    auto const shadow_alpha_before = plan.shadow_alpha;
+    auto const shadow_radius_before = plan.shadow_radius;
     bool dark = false;
     bool bright = false;
     bool flat = false;
+    float darkness = 0.0f;
+    float brightness = 0.0f;
+    float flatness = 0.0f;
 
     if (luma_mean < 0.35f) {
         dark = true;
-        auto const darkness = std::clamp((0.35f - luma_mean) / 0.35f, 0.0f, 1.0f);
+        darkness = std::clamp((0.35f - luma_mean) / 0.35f, 0.0f, 1.0f);
         plan.luminance_floor = std::max(
             plan.luminance_floor,
             0.08f + 0.08f * darkness);
@@ -1593,7 +1686,7 @@ inline void apply_backdrop_luminance_policy(MaterialPlan& plan) noexcept {
             plan.edge_highlight + 0.06f * darkness);
     } else if (luma_mean > 0.72f) {
         bright = true;
-        auto const brightness = std::clamp((luma_mean - 0.72f) / 0.28f, 0.0f, 1.0f);
+        brightness = std::clamp((luma_mean - 0.72f) / 0.28f, 0.0f, 1.0f);
         plan.luminance_gain = std::max(
             1.0f,
             plan.luminance_gain - 0.04f * brightness);
@@ -1604,20 +1697,62 @@ inline void apply_backdrop_luminance_policy(MaterialPlan& plan) noexcept {
 
     if (luma_span < 0.12f) {
         flat = true;
-        auto const flatness = std::clamp((0.12f - luma_span) / 0.12f, 0.0f, 1.0f);
+        flatness = std::clamp((0.12f - luma_span) / 0.12f, 0.0f, 1.0f);
         plan.edge_highlight = std::min(
             1.0f,
             plan.edge_highlight + 0.04f * flatness);
     }
 
+    plan.backdrop.opacity_delta = material_apply_scalar_delta(
+        plan.opacity,
+        0.035f * darkness - 0.020f * brightness + 0.015f * flatness,
+        0.0f,
+        1.0f);
+    plan.backdrop.tint_alpha_delta = material_apply_tint_alpha_delta(
+        plan.tint,
+        0.045f * darkness - 0.030f * brightness + 0.015f * flatness);
+    plan.backdrop.saturation_delta = material_apply_scalar_delta(
+        plan.saturation,
+        0.040f * darkness - 0.045f * brightness + 0.055f * flatness,
+        0.0f,
+        1.3f);
+    plan.backdrop.shadow_alpha_delta = material_apply_scalar_delta(
+        plan.shadow_alpha,
+        -0.015f * darkness + 0.025f * brightness + 0.015f * flatness,
+        0.0f,
+        0.4f);
+    plan.backdrop.shadow_radius_delta = material_apply_scalar_delta(
+        plan.shadow_radius,
+        -0.50f * darkness + 1.50f * brightness + 0.75f * flatness,
+        0.0f,
+        40.0f);
+
     plan.backdrop.luminance_response =
         material_luminance_response_name(dark, bright, flat);
+    plan.backdrop.frosting_response =
+        material_frosting_response_name(dark, bright, flat);
+    plan.backdrop.tint_response =
+        material_tint_response_name(dark, bright, flat);
+    plan.backdrop.saturation_response =
+        material_saturation_response_name(dark, bright, flat);
+    plan.backdrop.depth_response =
+        material_depth_response_name(dark, bright, flat);
     plan.backdrop.luminance_floor_delta =
         plan.luminance_floor - floor_before;
     plan.backdrop.luminance_gain_delta =
         plan.luminance_gain - gain_before;
     plan.backdrop.edge_highlight_delta =
         plan.edge_highlight - edge_before;
+    plan.backdrop.response_strength =
+        std::max(std::max(darkness, brightness), flatness);
+    if (plan.backdrop.response_strength < 0.0001f) {
+        plan.backdrop.opacity_delta = plan.opacity - opacity_before;
+        plan.backdrop.saturation_delta = plan.saturation - saturation_before;
+        plan.backdrop.shadow_alpha_delta =
+            plan.shadow_alpha - shadow_alpha_before;
+        plan.backdrop.shadow_radius_delta =
+            plan.shadow_radius - shadow_radius_before;
+    }
 }
 
 inline MaterialBackdropAccess material_resolve_backdrop_access(

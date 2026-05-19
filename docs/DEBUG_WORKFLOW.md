@@ -626,7 +626,8 @@ the actual `material_plans` executed for the frame. Each plan includes:
 - `backdrop_sampling`, `fallback`, `fallback_path`, and `fallback_reason`;
 - `backdrop`, including source, readiness flags, whether foreground text was
   excluded from the source, sanitized luminance statistics, luminance response,
-  and floor/gain/edge deltas;
+  optical frosting/tint/saturation/depth responses, and
+  floor/gain/edge/opacity/tint-alpha/saturation/shadow deltas;
 - `backdrop_access`, including whether the plan requires a stable frame-history
   source, whether that source is a shared frame capture, the capture scope, the
   capture reason, maximum capture count, maximum capture pixels, maximum
@@ -795,8 +796,11 @@ Foreground gates can pin `foreground_schemes`, `foreground_sources`,
 `foreground_minimum_contrast_gte`.
 `backdrop.luminance_response` is `not-sampled` for fallback plans and one of
 `neutral`, `dark`, `bright`, `flat`, `dark-flat`, or `bright-flat` for sampled
-plans. The adjacent delta fields show whether the pure planner actually changed
-the luminance floor, luminance gain, or edge highlight for that backdrop.
+plans. Sampled plans also report `frosting_response`, `tint_response`,
+`saturation_response`, and `depth_response`; fallback plans keep those fields
+at `not-sampled`. The adjacent delta fields show whether the pure planner
+actually changed the luminance floor, luminance gain, edge highlight, opacity,
+tint alpha, saturation, shadow alpha, or shadow radius for that backdrop.
 macOS writes sampled-backdrop plans when the previous frame capture is ready.
 Windows and Android write the same plan schema with `fallback_path:
 unsupported-backend` and `primary_pass.name: translucent-rounded-rect`.
@@ -957,7 +961,8 @@ material aggregate, not just the per-plan schema. Supported keys are `count`,
 exact count maps for `fallback_paths`, `fallback_reasons`, `kinds`, `roles`,
 `contract_versions`, `pass_names`, `backdrop_sources`,
 `backdrop_access_sources`, `backdrop_capture_scopes`,
-`backdrop_capture_reasons`, `luminance_responses`,
+`backdrop_capture_reasons`, `luminance_responses`, `frosting_responses`,
+`tint_responses`, `saturation_responses`, `depth_responses`,
 `render_target_pixel_formats`, `pass_executors`, `stage_names`,
 `stage_executors`, `sampling_kernels`,
 `sampling_weight_profiles`, `luminance_curves`, `decision_blockers`,
