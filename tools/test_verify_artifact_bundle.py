@@ -166,6 +166,11 @@ def material_plan(
             "luma_max": 1.0,
             "luma_mean": 0.5,
             "luma_span": 1.0,
+            "luma_sample_count": 0,
+            "luma_sample_grid_width": 0,
+            "luma_sample_grid_height": 0,
+            "luma_sample_frame": 0,
+            "luma_sample_status": "not-sampled",
             "source": "none",
             "luminance_response": "not-sampled",
             "frosting_response": "not-sampled",
@@ -742,6 +747,23 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "material_buffer_reallocations": 0,
         "foreground_text_candidate_count": 1,
         "foreground_text_remap_count": 1,
+        "backdrop_descriptor_luma_available": False,
+        "backdrop_descriptor_luma_min": plan["backdrop"]["luma_min"],
+        "backdrop_descriptor_luma_max": plan["backdrop"]["luma_max"],
+        "backdrop_descriptor_luma_mean": plan["backdrop"]["luma_mean"],
+        "backdrop_descriptor_luma_sample_count": (
+            plan["backdrop"]["luma_sample_count"]),
+        "backdrop_descriptor_luma_grid_width": (
+            plan["backdrop"]["luma_sample_grid_width"]),
+        "backdrop_descriptor_luma_grid_height": (
+            plan["backdrop"]["luma_sample_grid_height"]),
+        "backdrop_descriptor_luma_frame": (
+            plan["backdrop"]["luma_sample_frame"]),
+        "backdrop_descriptor_luma_status": (
+            plan["backdrop"]["luma_sample_status"]),
+        "backdrop_descriptor_source": plan["backdrop"]["source"],
+        "backdrop_luma_sampling_skipped_count": 0,
+        "backdrop_luma_sampling_skip_reason": "none",
         "cpu_decode_ns": 100,
         "cpu_material_upload_ns": 0,
         "cpu_total_ns": 200,
@@ -882,6 +904,19 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                     "renderer": {
                         "material_plan_contract_version": (
                             verifier.MATERIAL_PLAN_CONTRACT_VERSION),
+                        "material_backdrop_luma_descriptor": {
+                            "available": False,
+                            "luma_min": 0.0,
+                            "luma_max": 1.0,
+                            "luma_mean": 0.5,
+                            "sample_count": 0,
+                            "sample_grid_width": 0,
+                            "sample_grid_height": 0,
+                            "sample_frame": 0,
+                            "status": "unsupported-fallback",
+                            "pending": False,
+                            "skipped_sample_count": 0,
+                        },
                         "material_plan_count": 1,
                         "material_plans": [plan],
                         "material_runtime_summary": material_runtime_summary(plan),

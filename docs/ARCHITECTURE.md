@@ -627,6 +627,13 @@ backdrop-driven, and whether all shader inputs are bounded. Sampled glass uses
 `adaptive-backdrop-luma`; deterministic fallback uses `fallback-flat`. macOS
 uploads gamma, midpoint, contrast, and edge lift to Metal so adaptive backdrop
 legibility is executed from the pure plan instead of a backend-local heuristic.
+`MaterialBackdropDescriptor` also carries the sampled luminance provenance:
+sample count, fixed grid dimensions, source frame, and sample status. The macOS
+edge fills those fields from a small asynchronous 5x5 BGRA grid sampled from the
+foreground-excluded previous frame, while unsupported backends publish a
+deterministic zero-sample descriptor. The pure planner only consumes completed
+samples from a prior command buffer; it never blocks the frame waiting for CPU
+readback.
 `foreground` is the pure text/icon legibility recommendation for content drawn
 on top of a material surface. It records primary, secondary, and accent colors,
 the foreground scheme/source, estimated background luminance, contrast ratios,
@@ -751,15 +758,19 @@ drift such as a clamped radius not matching the backend-executed radius.
 Backends separately publish `renderer.material_executor_summary` for edge-only
 execution telemetry: material instances, fallback instances, material draw
 calls, planned shared frame capture count/pixels, planned surface sample
-pixels, upload bytes/capacity, framebuffer-history copy bounds, and CPU enqueue
-timings. It also records `foreground_text_candidate_count` and
-`foreground_text_remap_count`, proving whether the backend consumed
-`MaterialPlan.foreground` for text commands without treating the counters as
-planner inputs. macOS additionally separates the material backdrop texture from
-the final debug/readback texture. The backend only allocates or blits that
-backdrop texture when the pure executor summary says a shared-frame or
-next-frame capture is required; standard content material and non-material
-frames skip the full-frame copy and report `backdrop_copy_skip_reason`.
+pixels, upload bytes/capacity, framebuffer-history copy bounds, CPU enqueue
+timings, `foreground_text_candidate_count`, and
+`foreground_text_remap_count`. The same summary includes the exact backdrop
+luminance descriptor that fed the pure planner (`backdrop_descriptor_luma_*`)
+and any bounded sampling skip reason. `renderer.material_backdrop_luma_descriptor`
+exposes the latest observed backend descriptor independently of the plans, so an
+artifact can tell whether the backend had a completed async sample, a pending
+sample, or a deterministic unsupported fallback. macOS additionally separates
+the material backdrop texture from the final debug/readback texture. The
+backend only allocates or blits that backdrop texture when the pure executor
+summary says a shared-frame or next-frame capture is required; standard content
+material and non-material frames skip the full-frame copy and report
+`backdrop_copy_skip_reason`.
 When a capture is required, macOS copies the backdrop source after
 non-foreground scene work, then draws text and overlays in a foreground pass,
 and finally captures the complete frame for artifacts. The executor summary

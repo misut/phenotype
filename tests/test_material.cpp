@@ -24,6 +24,11 @@ MaterialEnvironment sampled_environment() {
     env.backdrop.luma_min = 0.2f;
     env.backdrop.luma_max = 0.8f;
     env.backdrop.luma_mean = 0.5f;
+    env.backdrop.luma_sample_count = 25;
+    env.backdrop.luma_sample_grid_width = 5;
+    env.backdrop.luma_sample_grid_height = 5;
+    env.backdrop.luma_sample_frame = 7;
+    env.backdrop.luma_sample_status = "sampled-async-grid";
     env.render_target.width = 320;
     env.render_target.height = 240;
     env.render_target.scale = 1.0f;
@@ -52,7 +57,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 24);
+    assert(material_plan_contract_version == 25);
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(!plan.shape.capsule);
     assert(plan.theme.default_glass_tokens);
@@ -92,6 +97,12 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.observation_contract.max_surface_sample_pixels == 240 * 96);
     assert(plan.observation_contract.expected_active_runtime_passes == 1u);
     assert(plan.observation_contract.expected_backdrop_runtime_passes == 1u);
+    assert(plan.backdrop.luma_sample_count == 25u);
+    assert(plan.backdrop.luma_sample_grid_width == 5u);
+    assert(plan.backdrop.luma_sample_grid_height == 5u);
+    assert(plan.backdrop.luma_sample_frame == 7u);
+    assert(std::string_view(plan.backdrop.luma_sample_status)
+        == "sampled-async-grid");
     std::puts("PASS: sampled backdrop access contract");
 }
 

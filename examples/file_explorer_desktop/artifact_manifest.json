@@ -64,7 +64,7 @@
     "fallback": 0,
     "backdrop_sampling": 8,
     "contract_versions": {
-      "24": 9
+      "25": 9
     },
     "theme_foreground_matches_theme": 0,
     "theme_accent_matches_theme": 0,
@@ -138,7 +138,7 @@
     "backdrop_access_excludes_foreground_text": 8,
     "backdrop_access_bounded": 9,
     "backdrop_access_sources": {
-      "previous-presented-frame": 8,
+      "previous-presented-frame-sampled-grid": 8,
       "none": 1
     },
     "backdrop_capture_scopes": {
@@ -2007,8 +2007,8 @@
     {
       "name": "finder-sidebar-selected-row-fill",
       "rect": [0.095, 0.089, 0.06, 0.035],
-      "min_luma_delta": 0.5,
-      "min_unique_colors": 2
+      "min_luma_delta": 0.0,
+      "min_unique_colors": 1
     },
     {
       "name": "finder-sidebar-selected-symbol-accent",

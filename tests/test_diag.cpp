@@ -1196,6 +1196,20 @@ void test_material_runtime_record_json_contract() {
     executor_summary.fallback_instance_count = 1;
     executor_summary.foreground_text_candidate_count = 2;
     executor_summary.foreground_text_remap_count = 1;
+    MaterialBackdropDescriptor sampled_backdrop;
+    sampled_backdrop.available = true;
+    sampled_backdrop.luma_min = 0.2f;
+    sampled_backdrop.luma_max = 0.8f;
+    sampled_backdrop.luma_mean = 0.4f;
+    sampled_backdrop.luma_sample_count = 25;
+    sampled_backdrop.luma_sample_grid_width = 5;
+    sampled_backdrop.luma_sample_grid_height = 5;
+    sampled_backdrop.luma_sample_frame = 9;
+    sampled_backdrop.luma_sample_status = "sampled-async-grid";
+    sampled_backdrop.source = "previous-presented-frame-sampled-grid";
+    set_material_executor_backdrop_descriptor_summary(
+        executor_summary,
+        sampled_backdrop);
     executor_summary.cpu_decode_ns = 120;
     auto executor = diag::detail::material_executor_summary_json(
         executor_summary);
@@ -1211,12 +1225,23 @@ void test_material_runtime_record_json_contract() {
     assert(executor_obj.at("foreground_text_candidate_count").as_integer()
            == 2);
     assert(executor_obj.at("foreground_text_remap_count").as_integer() == 1);
+    assert(executor_obj.at("backdrop_descriptor_luma_available").as_bool());
+    assert(executor_obj.at("backdrop_descriptor_luma_sample_count")
+               .as_integer() == 25);
+    assert(executor_obj.at("backdrop_descriptor_luma_status").as_string()
+           == "sampled-async-grid");
+    assert(executor_obj.at("backdrop_descriptor_source").as_string()
+           == "previous-presented-frame-sampled-grid");
     assert(executor_obj.at("cpu_decode_ns").as_integer() == 120);
 
     auto empty = diag::detail::empty_material_renderer_contract(
         "test-semantic-fallback");
     assert(empty.at("material_pipeline_ready").as_bool() == false);
     assert(empty.at("material_backdrop_source_ready").as_bool() == false);
+    assert(empty.at("material_backdrop_luma_descriptor").as_object()
+               .at("available").as_bool() == false);
+    assert(empty.at("material_backdrop_luma_descriptor").as_object()
+               .at("status").as_string() == "unsupported-fallback");
     assert(empty.at("material_plan_contract_version").as_integer()
            == material_plan_contract_version);
     assert(empty.at("material_plan_count").as_integer() == 0);
