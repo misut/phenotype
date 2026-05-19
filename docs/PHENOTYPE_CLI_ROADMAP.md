@@ -229,7 +229,11 @@ artifact frame. This keeps deterministic GUI input replay available to CI and
 LLM debugging without introducing a second native event stack. Preference
 inputs (`font-family:system`, `font-scale:1.2`, `scroll-speed:1.4`) use this
 same path and are synced back into the native `phenotype::Theme` before the
-first frame, so OS-derived settings and user overrides share one contract.
+first frame, so OS-derived settings and user overrides share one contract. The
+observed OS snapshot includes font-family source, text scale, font-weight
+adjustment, scroll factors, scrollbar/touch metrics, and accent capture; the
+default package family remains Pretendard unless the input layer explicitly opts
+into the OS family.
 `--observe-output` closes that loop for native runs: it implies deterministic
 artifact exit, creates an artifact directory when the caller did not supply one,
 then parses the resulting `snapshot.json` through the same C++ output

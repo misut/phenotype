@@ -5833,7 +5833,11 @@ inline ::phenotype::PlatformSystemSettingsSnapshot
 windows_system_settings_snapshot() {
     ::phenotype::PlatformSystemSettingsSnapshot snapshot{};
     snapshot.source = "windows-systemparametersinfo";
+    snapshot.font_family_source =
+        "SystemParametersInfoW(SPI_GETNONCLIENTMETRICS).lfMessageFont";
     snapshot.text_size_source = "SystemParametersInfoW(SPI_GETNONCLIENTMETRICS)";
+    snapshot.font_weight_source =
+        "SystemParametersInfoW(SPI_GETNONCLIENTMETRICS).lfMessageFont";
     snapshot.scroll_source = "SystemParametersInfoW(SPI_GETWHEELSCROLLLINES)";
     snapshot.font_family = "Segoe UI";
     snapshot.body_font_size = 12.0f;
@@ -5863,6 +5867,8 @@ windows_system_settings_snapshot() {
                 snapshot.font_scale = px / 12.0f;
             }
         }
+        snapshot.font_weight_adjustment =
+            static_cast<int>(metrics.lfMessageFont.lfWeight) - 400;
     }
 
     UINT const lines = windows_scroll_wheel_lines();
@@ -5872,9 +5878,27 @@ windows_system_settings_snapshot() {
         ? 0.0f
         : static_cast<float>(lines);
     snapshot.scroll_page_mode = lines == WHEEL_PAGESCROLL;
+    snapshot.scroll_vertical_factor = snapshot.scroll_page_mode
+        ? 0.0f
+        : snapshot.scroll_wheel_lines * snapshot.scroll_line_height;
+    snapshot.scroll_bar_size =
+        static_cast<float>(GetSystemMetrics(SM_CXVSCROLL));
     snapshot.preferred_scroller_style = "system";
     snapshot.overlay_scrollbars = false;
     snapshot.scroll_delta_multiplier = 1.0f;
+    DWORD colorization = 0;
+    BOOL opaque = FALSE;
+    if (SUCCEEDED(DwmGetColorizationColor(&colorization, &opaque))) {
+        snapshot.accent_color_available = true;
+        snapshot.accent_color = ::phenotype::Color{
+            static_cast<unsigned char>((colorization >> 16) & 0xFFu),
+            static_cast<unsigned char>((colorization >> 8) & 0xFFu),
+            static_cast<unsigned char>(colorization & 0xFFu),
+            static_cast<unsigned char>((colorization >> 24) & 0xFFu),
+        };
+        snapshot.accent_color_source = "DwmGetColorizationColor";
+        snapshot.accent_color_opaque = opaque != FALSE;
+    }
     return snapshot;
 }
 

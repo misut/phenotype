@@ -267,11 +267,23 @@ void test_snapshot_shape() {
         capabilities.at("system_settings").as_object();
     assert(system_settings.at("source").is_string());
     assert(system_settings.at("font_family").is_string());
+    assert(system_settings.at("font_family_source").is_string());
     (void)system_settings.at("body_font_size").as_float();
     (void)system_settings.at("font_scale").as_float();
+    (void)system_settings.at("font_weight_adjustment").as_integer();
+    assert(system_settings.at("font_weight_source").is_string());
     assert(system_settings.at("preferred_scroller_style").is_string());
     (void)system_settings.at("scroll_line_height").as_float();
+    (void)system_settings.at("scroll_vertical_factor").as_float();
+    (void)system_settings.at("scroll_horizontal_factor").as_float();
+    (void)system_settings.at("scroll_bar_size").as_float();
+    (void)system_settings.at("touch_slop").as_float();
+    (void)system_settings.at("scroll_friction").as_float();
     (void)system_settings.at("scroll_delta_multiplier").as_float();
+    assert(system_settings.at("accent_color_available").is_bool());
+    assert(system_settings.at("accent_color").is_object());
+    assert(system_settings.at("accent_color_source").is_string());
+    assert(system_settings.at("accent_color_opaque").is_bool());
 
     auto const& input_debug = debug.at("input_debug").as_object();
     assert(input_debug.contains("event"));

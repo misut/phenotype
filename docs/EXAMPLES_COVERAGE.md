@@ -306,9 +306,12 @@ example-specific canvas labels pass the same family explicitly so the Finder
 scene and package manifest agree on typography.
 The examples also publish `application.file_explorer.preferences`, which joins
 the platform `system_settings` snapshot with app/user overrides and the
-effective theme values used at launch. This keeps OS font scale, OS scroll
-policy, Pretendard package defaults, and direct environment overrides
-debuggable from the same artifact bundle.
+effective theme values used at launch. This keeps OS font family source, OS font
+scale, font-weight adjustment, OS scroll policy/factors, system accent capture,
+Pretendard package defaults, and direct environment overrides debuggable from
+the same artifact bundle. Pretendard stays the default family; choosing the OS
+family or applying the OS accent is an explicit app override so visual contracts
+can stay deterministic.
 Native file explorer artifacts publish the same contract under
 `application.file_explorer.resource_system`: application id/version/entry,
 platform list, SVG/preload/runtime-visible asset counts, app icon SVG/preload

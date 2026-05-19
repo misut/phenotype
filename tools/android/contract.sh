@@ -105,6 +105,10 @@ step "verify artifact"
     --require-debug-detail \
         platform_capabilities.system_settings.source='"android-jni-resources-configuration"' \
     --require-debug-detail \
-        platform_capabilities.system_settings.text_size_source='"Resources.getConfiguration().fontScale"')
+        platform_capabilities.system_settings.text_size_source='"Resources.getConfiguration().fontScale"' \
+    --require-debug-detail \
+        platform_capabilities.system_settings.font_family_source='"android-system-sans-fallback"' \
+    --require-debug-detail \
+        platform_capabilities.system_settings.scroll_source='"ViewConfiguration.getScaledVerticalScrollFactor"')
 
 printf '\nandroid contract artifact: %s\n' "$CONTRACT_OUT"

@@ -108,22 +108,41 @@ enum class ExplorerFocusTarget {
     MoreActions,
 };
 
+struct RgbaColorSnapshot {
+    int r = 0;
+    int g = 122;
+    int b = 255;
+    int a = 255;
+};
+
 struct SystemPreferenceSnapshot {
     std::string source = "fallback";
     std::string font_family;
+    std::string font_family_source = "fallback";
     float body_font_size = 0.0f;
     float heading_font_size = 0.0f;
     float small_font_size = 0.0f;
     float line_height_ratio = 1.6f;
     float font_scale = 1.0f;
     std::string text_size_source = "fallback";
+    int font_weight_adjustment = 0;
+    std::string font_weight_source = "fallback";
     std::string preferred_scroller_style = "unknown";
     bool overlay_scrollbars = false;
     float scroll_line_height = 0.0f;
     float scroll_wheel_lines = 3.0f;
     bool scroll_page_mode = false;
+    float scroll_vertical_factor = 0.0f;
+    float scroll_horizontal_factor = 0.0f;
+    float scroll_bar_size = 0.0f;
+    float touch_slop = 0.0f;
+    float scroll_friction = 0.0f;
     float scroll_delta_multiplier = 1.0f;
     std::string scroll_source = "fallback";
+    bool accent_color_available = false;
+    RgbaColorSnapshot accent_color{};
+    std::string accent_color_source = "fallback";
+    bool accent_color_opaque = true;
 };
 
 struct ThemePreferenceSnapshot {
@@ -136,6 +155,7 @@ struct ThemePreferenceSnapshot {
     float scroll_delta_multiplier = 1.0f;
     bool prefer_system_font_family = false;
     bool apply_system_font_scale = true;
+    bool apply_system_accent_color = false;
 };
 
 struct Snapshot {
@@ -2820,15 +2840,31 @@ inline json::Value input_model_debug_json(
 
 inline json::Value system_settings_debug_json(
         SystemPreferenceSnapshot const& settings) {
+    json::Object accent_color;
+    accent_color.emplace("r", json::Value{static_cast<std::int64_t>(
+        settings.accent_color.r)});
+    accent_color.emplace("g", json::Value{static_cast<std::int64_t>(
+        settings.accent_color.g)});
+    accent_color.emplace("b", json::Value{static_cast<std::int64_t>(
+        settings.accent_color.b)});
+    accent_color.emplace("a", json::Value{static_cast<std::int64_t>(
+        settings.accent_color.a)});
+
     json::Object out;
     out.emplace("source", json::Value{settings.source});
     out.emplace("font_family", json::Value{settings.font_family});
+    out.emplace("font_family_source", json::Value{settings.font_family_source});
     out.emplace("body_font_size", json::Value{settings.body_font_size});
     out.emplace("heading_font_size", json::Value{settings.heading_font_size});
     out.emplace("small_font_size", json::Value{settings.small_font_size});
     out.emplace("line_height_ratio", json::Value{settings.line_height_ratio});
     out.emplace("font_scale", json::Value{settings.font_scale});
     out.emplace("text_size_source", json::Value{settings.text_size_source});
+    out.emplace(
+        "font_weight_adjustment",
+        json::Value{static_cast<std::int64_t>(
+            settings.font_weight_adjustment)});
+    out.emplace("font_weight_source", json::Value{settings.font_weight_source});
     out.emplace(
         "preferred_scroller_style",
         json::Value{settings.preferred_scroller_style});
@@ -2837,9 +2873,28 @@ inline json::Value system_settings_debug_json(
     out.emplace("scroll_wheel_lines", json::Value{settings.scroll_wheel_lines});
     out.emplace("scroll_page_mode", json::Value{settings.scroll_page_mode});
     out.emplace(
+        "scroll_vertical_factor",
+        json::Value{settings.scroll_vertical_factor});
+    out.emplace(
+        "scroll_horizontal_factor",
+        json::Value{settings.scroll_horizontal_factor});
+    out.emplace("scroll_bar_size", json::Value{settings.scroll_bar_size});
+    out.emplace("touch_slop", json::Value{settings.touch_slop});
+    out.emplace("scroll_friction", json::Value{settings.scroll_friction});
+    out.emplace(
         "scroll_delta_multiplier",
         json::Value{settings.scroll_delta_multiplier});
     out.emplace("scroll_source", json::Value{settings.scroll_source});
+    out.emplace(
+        "accent_color_available",
+        json::Value{settings.accent_color_available});
+    out.emplace("accent_color", json::Value{std::move(accent_color)});
+    out.emplace(
+        "accent_color_source",
+        json::Value{settings.accent_color_source});
+    out.emplace(
+        "accent_color_opaque",
+        json::Value{settings.accent_color_opaque});
     return json::Value{std::move(out)};
 }
 
@@ -2872,6 +2927,9 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
     overrides.emplace(
         "apply_system_font_scale",
         json::Value{state.theme_preferences.apply_system_font_scale});
+    overrides.emplace(
+        "apply_system_accent_color",
+        json::Value{state.theme_preferences.apply_system_accent_color});
 
     json::Object effective;
     effective.emplace(

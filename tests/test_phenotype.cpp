@@ -357,6 +357,9 @@ void test_system_theme_preferences_are_pure_overlays() {
     system.font_scale = 1.25f;
     system.line_height_ratio = 1.6f;
     system.scroll_delta_multiplier = 1.0f;
+    system.accent_color_available = true;
+    system.accent_color = Color{88, 86, 214, 255};
+    system.accent_color_source = "test-accent";
 
     ThemePreferenceOverrides overrides{};
     overrides.font_scale = 1.2f;
@@ -368,14 +371,19 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert(std::fabs(applied.heading_font_size - 27.0f) < 0.001f);
     assert(std::fabs(applied.small_font_size - 18.0f) < 0.001f);
     assert(applied.scroll_delta_multiplier == 1.5f);
+    assert(applied.accent == theme.accent);
 
     overrides.font_family = "UserFont";
     overrides.body_font_size = 19.0f;
     overrides.small_font_size = 13.0f;
+    overrides.apply_system_accent_color = true;
     applied = apply_system_theme_preferences(theme, system, overrides);
     assert(applied.default_font_family == "UserFont");
     assert(applied.body_font_size == 19.0f);
     assert(applied.small_font_size == 13.0f);
+    assert((applied.accent == Color{88, 86, 214, 255}));
+    assert(applied.state_focus_ring == applied.accent);
+    assert(applied.state_active_bg == applied.accent_strong);
 
     std::puts("PASS: system theme preferences are pure overlays");
 }

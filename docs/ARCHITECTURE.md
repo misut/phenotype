@@ -215,14 +215,31 @@ surface roles. The root helpers `default_theme_profile_name`,
 CLI output, and artifacts can check the same contract without giving backend
 adapters any policy authority.
 
-OS-derived typography and scrolling preferences follow the same edge-to-core
-rule. Native adapters collect a `PlatformSystemSettingsSnapshot` from their
-platform APIs, then the core applies it through the pure
+OS-derived typography, scrolling, and accent-color preferences follow the same
+edge-to-core rule. Native adapters collect a
+`PlatformSystemSettingsSnapshot` from their platform APIs, then the core applies
+it through the pure
 `apply_system_theme_preferences(Theme, PlatformSystemSettingsSnapshot,
 ThemePreferenceOverrides)` helper. Package defaults such as Pretendard remain
 explicit theme inputs, OS font scale and scroll policy arrive as immutable
 snapshot fields, and app/user overrides win without letting a backend mutate
 theme state directly.
+Font family source, text-size source, font-weight adjustment, vertical scroll
+factor, scrollbar size, touch slop, and scroll friction are recorded when the
+platform exposes them. macOS uses CoreText/AppKit/NSScroller, Windows uses
+`SystemParametersInfoW`, `GetSystemMetrics`, and DWM, and Android uses
+`Resources.getConfiguration()` plus `ViewConfiguration`. The base theme keeps
+Pretendard as the product default; switching to the OS family is an explicit app
+override, while OS text scale and scroll multiplier are safe pure inputs by
+default.
+Accent colors are also captured in this snapshot. macOS resolves
+`NSColor.controlAccentColor` in a generic RGB color space, Windows reads
+`DwmGetColorizationColor` and decodes its documented `0xAARRGGBB` value, and
+Android reads `android.R.color.system_accent1_600` through the same Java
+resource bridge used for `fontScale`. Applying that accent to app chrome is an
+explicit pure override (`apply_system_accent_color`) so verifier scenes can
+keep deterministic blue contracts until their pixel expectations become
+dynamic.
 The Android native edge cannot obtain `fontScale` from NDK
 `AConfiguration`, so the GameActivity driver passes the Java activity object
 to the backend and the backend reads
@@ -866,11 +883,11 @@ material/runtime extensions.
 - **Linux / other desktop**: shared stub backend
 
 All native capability payloads include `system_settings`: macOS uses
-CoreText/AppKit/NSScroller, Windows uses `SystemParametersInfoW`, and Android,
-WASI, and the stub backend publish deterministic fallback values until richer
-platform settings are wired through their shells. Renderers may report the same
-snapshot in `platform_runtime.details`, but they do not decide font or scroll
-policy themselves.
+CoreText/AppKit/NSScroller, Windows uses `SystemParametersInfoW` plus DWM, and
+Android uses Java resource/configuration APIs reached through the GameActivity
+edge. WASI and the stub backend publish deterministic fallback values. Renderers
+may report the same snapshot in `platform_runtime.details`, but they do not
+decide font, accent, or scroll policy themselves.
 
 ### Modularity guarantee
 

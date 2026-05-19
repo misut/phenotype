@@ -30,7 +30,9 @@ and IME composition remain follow-up work.
 The driver calls four bootstrap hooks at `android_main` startup:
 `phenotype_android_bind_jvm(app->activity->vm)` (text pipeline's JNI
 attach), `phenotype_android_bind_activity(app->activity->javaGameActivity)`
-(OS resource/configuration preferences such as Android `fontScale`),
+(OS resource/configuration preferences such as Android `fontScale`,
+`fontWeightAdjustment`, dynamic accent resources, and `ViewConfiguration`
+scroll metrics),
 `phenotype_android_bind_assets(app->activity->assetManager)` (`asset://`
 URL resolver), and `phenotype_android_start_app()` on the first
 `APP_CMD_INIT_WINDOW` (instantiates the library-side

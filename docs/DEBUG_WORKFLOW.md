@@ -509,15 +509,20 @@ when a Finder artifact looks visually off but material plans and icon metadata
 still pass: theme drift, material planning, backend execution, and example
 geometry now have separate JSON owners.
 
-`debug.platform_capabilities.system_settings` records OS-derived typography and
-scrolling inputs before the theme overlay runs. macOS fills this from
-CoreText/AppKit/NSScroller, Windows from `SystemParametersInfoW`, and unsupported
-targets publish deterministic fallback values. File explorer artifacts mirror the
-result under `application.file_explorer.preferences`: `system_settings` is the
-edge snapshot, `app_overrides` is the pure override input, and
-`effective_theme` is what the example applied before rendering. Use this block
-when text size, family fallback, wheel speed, or overlay-scrollbar behavior looks
-wrong but the material/icon/resource contracts are green.
+`debug.platform_capabilities.system_settings` records OS-derived typography,
+accent, and scrolling inputs before the theme overlay runs. macOS fills this
+from CoreText/AppKit/NSScroller, Windows from `SystemParametersInfoW`, DWM, and
+`GetSystemMetrics`, Android from `Resources.getConfiguration()` and
+`ViewConfiguration`, and unsupported targets publish deterministic fallback
+values. File explorer artifacts mirror the result under
+`application.file_explorer.preferences`: `system_settings` is the edge snapshot,
+`app_overrides` is the pure override input, and `effective_theme` is what the
+example applied before rendering. Use this block when text size, family source,
+font-weight adjustment, wheel/trackpad speed, scrollbar behavior, touch slop, or
+accent color looks wrong but the material/icon/resource contracts are green.
+Pretendard remains the package default; OS font family and OS accent are
+explicit opt-in overrides so Finder verifier pixels stay deterministic unless a
+scenario asks for dynamic system chrome.
 
 `application.file_explorer.resource_system.*` is the package/debug-resource
 counterpart. It records the file explorer application id/version/entry,

@@ -6184,7 +6184,14 @@ inline void android_open_url(char const* url, unsigned int len) {
 
 // ---- Stage 7 debug plane --------------------------------------------
 
-inline std::optional<float> android_configuration_font_scale() {
+struct AndroidConfigurationPreferences {
+    float font_scale = 1.0f;
+    int font_weight_adjustment = 0;
+    bool has_font_weight_adjustment = false;
+};
+
+inline std::optional<AndroidConfigurationPreferences>
+android_configuration_preferences() {
     ScopedEnv senv(g_jni.vm);
     if (!senv || !g_android_activity) return std::nullopt;
 
@@ -6248,19 +6255,231 @@ inline std::optional<float> android_configuration_font_scale() {
 
     jfieldID font_scale_id =
         env->GetFieldID(configuration_cls, "fontScale", "F");
-    drop(configuration_cls);
     if (!font_scale_id || check_and_clear_exception(env)) {
+        drop(configuration_cls);
         drop(configuration);
         return std::nullopt;
     }
 
-    float const scale = env->GetFloatField(configuration, font_scale_id);
-    drop(configuration);
-    if (check_and_clear_exception(env) || !(scale > 0.0f)
-        || !std::isfinite(scale)) {
+    AndroidConfigurationPreferences preferences;
+    preferences.font_scale =
+        env->GetFloatField(configuration, font_scale_id);
+    if (check_and_clear_exception(env) || !(preferences.font_scale > 0.0f)
+        || !std::isfinite(preferences.font_scale)) {
+        drop(configuration_cls);
+        drop(configuration);
         return std::nullopt;
     }
-    return scale;
+
+    jfieldID font_weight_adjustment_id =
+        env->GetFieldID(configuration_cls, "fontWeightAdjustment", "I");
+    if (font_weight_adjustment_id && !check_and_clear_exception(env)) {
+        preferences.font_weight_adjustment =
+            env->GetIntField(configuration, font_weight_adjustment_id);
+        if (!check_and_clear_exception(env))
+            preferences.has_font_weight_adjustment = true;
+    } else {
+        check_and_clear_exception(env);
+    }
+
+    drop(configuration_cls);
+    drop(configuration);
+    return preferences;
+}
+
+inline std::optional<::phenotype::Color> android_system_accent_color() {
+    ScopedEnv senv(g_jni.vm);
+    if (!senv || !g_android_activity) return std::nullopt;
+
+    JNIEnv* env = senv.env;
+    auto drop = [&](jobject ref) {
+        if (ref) env->DeleteLocalRef(ref);
+    };
+
+    jclass activity_cls = env->GetObjectClass(g_android_activity);
+    if (!activity_cls || check_and_clear_exception(env)) {
+        drop(activity_cls);
+        return std::nullopt;
+    }
+    jmethodID get_resources = env->GetMethodID(
+        activity_cls,
+        "getResources",
+        "()Landroid/content/res/Resources;");
+    drop(activity_cls);
+    if (!get_resources || check_and_clear_exception(env))
+        return std::nullopt;
+
+    jobject resources = env->CallObjectMethod(
+        g_android_activity,
+        get_resources);
+    if (!resources || check_and_clear_exception(env)) {
+        drop(resources);
+        return std::nullopt;
+    }
+
+    jclass color_cls = env->FindClass("android/R$color");
+    if (!color_cls || check_and_clear_exception(env)) {
+        drop(color_cls);
+        drop(resources);
+        return std::nullopt;
+    }
+    jfieldID accent_id = env->GetStaticFieldID(
+        color_cls,
+        "system_accent1_600",
+        "I");
+    if (!accent_id || check_and_clear_exception(env)) {
+        drop(color_cls);
+        drop(resources);
+        return std::nullopt;
+    }
+    jint const resource_id = env->GetStaticIntField(color_cls, accent_id);
+    drop(color_cls);
+    if (check_and_clear_exception(env)) {
+        drop(resources);
+        return std::nullopt;
+    }
+
+    jclass resources_cls = env->GetObjectClass(resources);
+    if (!resources_cls || check_and_clear_exception(env)) {
+        drop(resources_cls);
+        drop(resources);
+        return std::nullopt;
+    }
+    jmethodID get_color = env->GetMethodID(resources_cls, "getColor", "(I)I");
+    drop(resources_cls);
+    if (!get_color || check_and_clear_exception(env)) {
+        drop(resources);
+        return std::nullopt;
+    }
+
+    jint const color = env->CallIntMethod(resources, get_color, resource_id);
+    drop(resources);
+    if (check_and_clear_exception(env))
+        return std::nullopt;
+    auto const packed = static_cast<std::uint32_t>(color);
+    return ::phenotype::Color{
+        static_cast<unsigned char>((packed >> 16) & 0xFFu),
+        static_cast<unsigned char>((packed >> 8) & 0xFFu),
+        static_cast<unsigned char>(packed & 0xFFu),
+        static_cast<unsigned char>((packed >> 24) & 0xFFu),
+    };
+}
+
+struct AndroidViewConfigurationMetrics {
+    float vertical_scroll_factor = 0.0f;
+    float horizontal_scroll_factor = 0.0f;
+    float scroll_bar_size = 0.0f;
+    float touch_slop = 0.0f;
+    float scroll_friction = 0.0f;
+};
+
+inline std::optional<AndroidViewConfigurationMetrics>
+android_view_configuration_metrics() {
+    ScopedEnv senv(g_jni.vm);
+    if (!senv || !g_android_activity) return std::nullopt;
+
+    JNIEnv* env = senv.env;
+    auto drop = [&](jobject ref) {
+        if (ref) env->DeleteLocalRef(ref);
+    };
+
+    jclass view_config_cls = env->FindClass("android/view/ViewConfiguration");
+    if (!view_config_cls || check_and_clear_exception(env)) {
+        drop(view_config_cls);
+        return std::nullopt;
+    }
+
+    jmethodID get_config = env->GetStaticMethodID(
+        view_config_cls,
+        "get",
+        "(Landroid/content/Context;)Landroid/view/ViewConfiguration;");
+    if (!get_config || check_and_clear_exception(env)) {
+        drop(view_config_cls);
+        return std::nullopt;
+    }
+
+    jobject config = env->CallStaticObjectMethod(
+        view_config_cls,
+        get_config,
+        g_android_activity);
+    if (!config || check_and_clear_exception(env)) {
+        drop(config);
+        drop(view_config_cls);
+        return std::nullopt;
+    }
+
+    jclass config_cls = env->GetObjectClass(config);
+    if (!config_cls || check_and_clear_exception(env)) {
+        drop(config_cls);
+        drop(config);
+        drop(view_config_cls);
+        return std::nullopt;
+    }
+
+    AndroidViewConfigurationMetrics metrics;
+    bool any = false;
+
+    auto read_float = [&](char const* name) -> std::optional<float> {
+        jmethodID method = env->GetMethodID(config_cls, name, "()F");
+        if (!method || check_and_clear_exception(env)) {
+            check_and_clear_exception(env);
+            return std::nullopt;
+        }
+        float const value = env->CallFloatMethod(config, method);
+        if (check_and_clear_exception(env) || !std::isfinite(value))
+            return std::nullopt;
+        return value;
+    };
+    auto read_int = [&](char const* name) -> std::optional<float> {
+        jmethodID method = env->GetMethodID(config_cls, name, "()I");
+        if (!method || check_and_clear_exception(env)) {
+            check_and_clear_exception(env);
+            return std::nullopt;
+        }
+        jint const value = env->CallIntMethod(config, method);
+        if (check_and_clear_exception(env))
+            return std::nullopt;
+        return static_cast<float>(value);
+    };
+
+    if (auto value = read_float("getScaledVerticalScrollFactor")) {
+        metrics.vertical_scroll_factor = *value;
+        any = true;
+    }
+    if (auto value = read_float("getScaledHorizontalScrollFactor")) {
+        metrics.horizontal_scroll_factor = *value;
+        any = true;
+    }
+    if (auto value = read_int("getScaledScrollBarSize")) {
+        metrics.scroll_bar_size = *value;
+        any = true;
+    }
+    if (auto value = read_int("getScaledTouchSlop")) {
+        metrics.touch_slop = *value;
+        any = true;
+    }
+
+    jmethodID get_scroll_friction = env->GetStaticMethodID(
+        view_config_cls,
+        "getScrollFriction",
+        "()F");
+    if (get_scroll_friction && !check_and_clear_exception(env)) {
+        float const value =
+            env->CallStaticFloatMethod(view_config_cls, get_scroll_friction);
+        if (!check_and_clear_exception(env) && std::isfinite(value)) {
+            metrics.scroll_friction = value;
+            any = true;
+        }
+    } else {
+        check_and_clear_exception(env);
+    }
+
+    drop(config_cls);
+    drop(config);
+    drop(view_config_cls);
+    if (!any)
+        return std::nullopt;
+    return metrics;
 }
 
 inline ::phenotype::PlatformSystemSettingsSnapshot
@@ -6268,6 +6487,7 @@ android_system_settings_snapshot() {
     ::phenotype::PlatformSystemSettingsSnapshot snapshot{};
     snapshot.source = "android-fallback";
     snapshot.font_family = "sans";
+    snapshot.font_family_source = "android-system-sans-fallback";
     snapshot.body_font_size = 16.0f;
     snapshot.heading_font_size = 22.4f;
     snapshot.small_font_size = 14.4f;
@@ -6283,15 +6503,21 @@ android_system_settings_snapshot() {
     snapshot.scroll_page_mode = false;
     snapshot.scroll_delta_multiplier = 1.0f;
     snapshot.scroll_source = "AMOTION_EVENT_AXIS_VSCROLL fallback";
-    if (auto scale = android_configuration_font_scale()) {
+    if (auto config = android_configuration_preferences()) {
         snapshot.source = "android-jni-resources-configuration";
         snapshot.text_size_source =
             "Resources.getConfiguration().fontScale";
         snapshot.font_scale = ::phenotype::bounded_theme_preference(
-            *scale,
+            config->font_scale,
             1.0f,
             0.75f,
             1.8f);
+        if (config->has_font_weight_adjustment) {
+            snapshot.font_weight_adjustment =
+                config->font_weight_adjustment;
+            snapshot.font_weight_source =
+                "Resources.getConfiguration().fontWeightAdjustment";
+        }
         snapshot.body_font_size = 16.0f * snapshot.font_scale;
         snapshot.heading_font_size =
             snapshot.body_font_size * 1.4f;
@@ -6299,6 +6525,34 @@ android_system_settings_snapshot() {
             snapshot.body_font_size * 0.9f;
         snapshot.scroll_line_height =
             snapshot.body_font_size * snapshot.line_height_ratio;
+    }
+    if (auto metrics = android_view_configuration_metrics()) {
+        snapshot.scroll_source =
+            "ViewConfiguration.getScaledVerticalScrollFactor";
+        snapshot.scroll_vertical_factor =
+            metrics->vertical_scroll_factor;
+        snapshot.scroll_horizontal_factor =
+            metrics->horizontal_scroll_factor;
+        snapshot.scroll_bar_size = metrics->scroll_bar_size;
+        snapshot.touch_slop = metrics->touch_slop;
+        snapshot.scroll_friction = metrics->scroll_friction;
+        float const fallback_delta = snapshot.scroll_line_height * 3.0f;
+        if (snapshot.scroll_vertical_factor > 0.0f
+            && fallback_delta > 0.0f
+            && std::isfinite(snapshot.scroll_vertical_factor)) {
+            snapshot.scroll_delta_multiplier =
+                ::phenotype::bounded_theme_preference(
+                    snapshot.scroll_vertical_factor / fallback_delta,
+                    1.0f,
+                    0.25f,
+                    4.0f);
+        }
+    }
+    if (auto accent = android_system_accent_color()) {
+        snapshot.accent_color_available = true;
+        snapshot.accent_color = *accent;
+        snapshot.accent_color_source = "android.R.color.system_accent1_600";
+        snapshot.accent_color_opaque = accent->a == 255;
     }
     return snapshot;
 }
