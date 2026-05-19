@@ -220,6 +220,30 @@ ExplorerInputMessage body_font_size_step_message(
         std::to_string(value));
 }
 
+ExplorerInputMessage heading_font_size_step_message(
+        file_explorer_demo::ExplorerState const& explorer,
+        float delta) {
+    auto const base = explorer.theme_preferences.heading_font_size > 0.0f
+        ? explorer.theme_preferences.heading_font_size
+        : explorer.effective_heading_font_size;
+    auto value = std::clamp(base + delta, 10.0f, 56.0f);
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetHeadingFontSize,
+        std::to_string(value));
+}
+
+ExplorerInputMessage small_font_size_step_message(
+        file_explorer_demo::ExplorerState const& explorer,
+        float delta) {
+    auto const base = explorer.theme_preferences.small_font_size > 0.0f
+        ? explorer.theme_preferences.small_font_size
+        : explorer.effective_small_font_size;
+    auto value = std::clamp(base + delta, 8.0f, 32.0f);
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetSmallFontSize,
+        std::to_string(value));
+}
+
 ExplorerInputMessage line_height_step_message(
         file_explorer_demo::ExplorerState const& explorer,
         float delta) {
@@ -721,6 +745,7 @@ struct State {
 };
 
 State const* g_debug_state = nullptr;
+constexpr int k_more_actions_button_count = 26;
 
 auto file_explorer_application_debug_payload() {
     if (!g_debug_state) {
@@ -742,7 +767,7 @@ auto file_explorer_application_debug_payload() {
             std::move(chrome));
     chrome.more_actions_open = g_debug_state->more_actions_open;
     chrome.overflow_action_button_count = g_debug_state->more_actions_open
-        ? 10
+        ? k_more_actions_button_count
         : 0;
     return file_explorer_demo::file_explorer_application_debug_json(
         g_debug_state->explorer,
@@ -2275,7 +2300,7 @@ void finder_more_actions(State const& state,
             "More Actions Menu");
         options.kind = MaterialKind::Regular;
         options.max_width = 376.0f;
-        options.fixed_height = 328.0f;
+        options.fixed_height = 392.0f;
         options.border_radius = k_toolbar_group_radius;
         layout::material_surface(
             options,
@@ -2368,6 +2393,32 @@ void finder_more_actions(State const& state,
                             true,
                             icons::Symbol::Columns,
                             0x6724u);
+                    }, SpaceToken::Xs);
+                    layout::row([&] {
+                        more_action_item(
+                            state.labels.preferences_heading_larger.c_str(),
+                            heading_font_size_step_message(state.explorer, 1.0f),
+                            true,
+                            icons::Symbol::TextDocument,
+                            0x6725u);
+                        more_action_item(
+                            state.labels.preferences_heading_smaller.c_str(),
+                            heading_font_size_step_message(state.explorer, -1.0f),
+                            true,
+                            icons::Symbol::ChevronDown,
+                            0x6726u);
+                        more_action_item(
+                            state.labels.preferences_small_larger.c_str(),
+                            small_font_size_step_message(state.explorer, 1.0f),
+                            true,
+                            icons::Symbol::Plus,
+                            0x6727u);
+                        more_action_item(
+                            state.labels.preferences_small_smaller.c_str(),
+                            small_font_size_step_message(state.explorer, -1.0f),
+                            true,
+                            icons::Symbol::ChevronDown,
+                            0x6728u);
                     }, SpaceToken::Xs);
                     layout::row([&] {
                         auto const* horizontal_faster =

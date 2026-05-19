@@ -121,6 +121,15 @@ inline ResolvedThemePreferences resolve_native_theme_preferences(
         source);
 }
 
+inline ResolvedThemePreferences set_native_theme_preferences(
+        Theme theme,
+        ThemePreferenceOverrides const& overrides = {},
+        std::string_view source = "native-system-settings") {
+    auto resolved = resolve_native_theme_preferences(theme, overrides, source);
+    ::phenotype::set_theme(resolved.theme);
+    return resolved;
+}
+
 namespace text {
 
 using ::phenotype::native::TextAtlas;

@@ -120,6 +120,7 @@ static void test_window_options_integrated_titlebar_contract() {
 }
 
 static void test_native_system_settings_product_api() {
+    auto original_theme = phenotype::current_theme();
     auto settings = phenotype::native::system_settings();
     auto capabilities = phenotype::native::debug::capabilities();
     assert(!settings.source.empty());
@@ -138,6 +139,19 @@ static void test_native_system_settings_product_api() {
     assert(resolved.source == "native-product-api-test");
     assert(resolved.effective_body_font_size > 0.0f);
     assert(resolved.effective_scroll_delta_multiplier > 0.0f);
+
+    Theme applied_base{};
+    applied_base.body_font_size = 15.0f;
+    auto applied = phenotype::native::set_native_theme_preferences(
+        applied_base,
+        overrides,
+        "native-product-api-apply-test");
+    assert(applied.source == "native-product-api-apply-test");
+    assert(phenotype::current_theme().body_font_size
+           == applied.theme.body_font_size);
+    assert(phenotype::current_theme().scroll_delta_multiplier
+           == applied.theme.scroll_delta_multiplier);
+    phenotype::set_theme(original_theme);
     std::puts("PASS: native system settings product API");
 }
 

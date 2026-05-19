@@ -167,13 +167,15 @@ auto append_file_explorer_scenario_requirements(
         append_required_label(args, "Pretendard");
         append_required_label(args, "Text +");
         append_required_label(args, "Text -");
+        append_required_label(args, "Heading +");
+        append_required_label(args, "Small +");
         append_required_label(args, "Scroll +");
         append_required_label(args, "Scroll -");
         append_required_label_contains(args, "Selected README.txt");
         append_required_debug_detail(
             args, "application.file_explorer.chrome.more_actions_open=true");
         append_required_debug_detail(
-            args, "application.file_explorer.chrome.overflow_action_button_count=10");
+            args, "application.file_explorer.chrome.overflow_action_button_count=26");
         append_required_debug_detail(
             args, "application.file_explorer.selection.present=true");
         append_required_debug_detail(
@@ -184,6 +186,8 @@ auto append_file_explorer_scenario_requirements(
         append_required_label(args, "Pretendard");
         append_required_label(args, "Text +");
         append_required_label(args, "Text -");
+        append_required_label(args, "Heading +");
+        append_required_label(args, "Small +");
         append_required_label(args, "Scroll +");
         append_required_label(args, "Scroll -");
         append_required_debug_detail(
