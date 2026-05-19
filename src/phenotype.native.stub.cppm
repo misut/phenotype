@@ -58,6 +58,10 @@ inline bool stub_uses_shared_caret_blink() {
     return true;
 }
 
+inline int stub_caret_blink_interval_ms() {
+    return 530;
+}
+
 inline void stub_input_sync() {
     auto snapshot = ::phenotype::detail::focused_input_snapshot();
     if (!snapshot.valid || !snapshot.caret_visible) {
@@ -148,6 +152,11 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot stub_debug_capabilities()
         .scroll_page_mode = false,
         .scroll_delta_multiplier = 1.0f,
         .scroll_source = "fallback",
+        .double_click_interval_ms = 500.0f,
+        .key_repeat_delay_ms = 500.0f,
+        .key_repeat_interval_ms = 50.0f,
+        .caret_blink_interval_ms = 530.0f,
+        .input_timing_source = "desktop-stub-fallback",
         .preferred_locale = "en",
         .preferred_locale_source = "desktop-stub-fallback",
         .color_scheme = "light",
@@ -239,6 +248,7 @@ inline platform_api make_stub_platform(char const* name,
         detail::stub_input_detach,
         detail::stub_input_sync,
         detail::stub_uses_shared_caret_blink,
+        detail::stub_caret_blink_interval_ms,
         nullptr,
         nullptr,
         nullptr,

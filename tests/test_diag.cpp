@@ -281,6 +281,11 @@ void test_snapshot_shape() {
     (void)system_settings.at("scroll_friction").as_float();
     (void)system_settings.at("scroll_delta_multiplier").as_float();
     (void)system_settings.at("scroll_horizontal_delta_multiplier").as_float();
+    (void)system_settings.at("double_click_interval_ms").as_float();
+    (void)system_settings.at("key_repeat_delay_ms").as_float();
+    (void)system_settings.at("key_repeat_interval_ms").as_float();
+    (void)system_settings.at("caret_blink_interval_ms").as_float();
+    assert(system_settings.at("input_timing_source").is_string());
     assert(system_settings.at("preferred_locale").is_string());
     assert(system_settings.at("preferred_locale_source").is_string());
     assert(system_settings.at("color_scheme").is_string());

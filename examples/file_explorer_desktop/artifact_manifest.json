@@ -485,6 +485,14 @@
       "equals": "native edge captures OS settings before first frame and refreshes them at update-boundary theme sync"
     },
     {
+      "path": "platform_capabilities.system_settings.input_timing_source",
+      "equals": "NSEvent.doubleClickInterval/keyRepeatDelay/keyRepeatInterval"
+    },
+    {
+      "path": "application.file_explorer.preferences.system_settings.input_timing_source",
+      "equals": "NSEvent.doubleClickInterval/keyRepeatDelay/keyRepeatInterval"
+    },
+    {
       "path": "application.file_explorer.preferences.effective_theme.font_family",
       "equals": "Pretendard"
     },

@@ -109,6 +109,8 @@ step "verify artifact"
     --require-debug-detail \
         platform_capabilities.system_settings.font_family_source='"android-system-sans-fallback"' \
     --require-debug-detail \
-        platform_capabilities.system_settings.scroll_source='"ViewConfiguration.getScaledVerticalScrollFactor"')
+        platform_capabilities.system_settings.scroll_source='"ViewConfiguration.getScaledVerticalScrollFactor"' \
+    --require-debug-detail \
+        platform_capabilities.system_settings.input_timing_source='"ViewConfiguration.getDoubleTapTimeout/getKeyRepeatTimeout/getKeyRepeatDelay"')
 
 printf '\nandroid contract artifact: %s\n' "$CONTRACT_OUT"

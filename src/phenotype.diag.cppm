@@ -2501,6 +2501,21 @@ inline json::Value system_settings_to_json(
         "scroll_horizontal_delta_multiplier",
         json::Value{settings.scroll_horizontal_delta_multiplier});
     system.emplace("scroll_source", json::Value{settings.scroll_source});
+    system.emplace(
+        "double_click_interval_ms",
+        json::Value{settings.double_click_interval_ms});
+    system.emplace(
+        "key_repeat_delay_ms",
+        json::Value{settings.key_repeat_delay_ms});
+    system.emplace(
+        "key_repeat_interval_ms",
+        json::Value{settings.key_repeat_interval_ms});
+    system.emplace(
+        "caret_blink_interval_ms",
+        json::Value{settings.caret_blink_interval_ms});
+    system.emplace(
+        "input_timing_source",
+        json::Value{settings.input_timing_source});
     system.emplace("preferred_locale", json::Value{settings.preferred_locale});
     system.emplace(
         "preferred_locale_source",

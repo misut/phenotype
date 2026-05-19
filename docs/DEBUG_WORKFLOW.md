@@ -516,12 +516,15 @@ still pass: theme drift, material planning, backend execution, and example
 geometry now have separate JSON owners.
 
 `debug.platform_capabilities.system_settings` records OS-derived typography,
-preferred locale, accent, and scrolling inputs before the theme overlay runs.
+preferred locale, accent, scrolling, and input timing before the theme overlay
+runs.
 macOS fills this from CoreText, `NSFont.systemFontSize` / `smallSystemFontSize`,
 `NSEvent.hasPreciseScrollingDeltas`, `NSScroller.preferredScrollerStyle`,
+`NSEvent.doubleClickInterval` / `keyRepeatDelay` / `keyRepeatInterval`,
 `NSLocale.preferredLanguages`, and
 regular-control scroller width; Windows from `SystemParametersInfoW`, DWM,
-`GetSystemMetrics`, and `GetUserDefaultLocaleName`; Android from
+`GetSystemMetrics`, `GetDoubleClickTime`, `GetCaretBlinkTime`, and
+`GetUserDefaultLocaleName`; Android from
 `Resources.getConfiguration()` and `ViewConfiguration`; and unsupported targets
 publish deterministic fallback values. Accessibility display inputs sit next to
 the renderer details:
@@ -532,7 +535,8 @@ result under
 `app_overrides` is the pure override input, and `effective_theme` is what the
 example applied before rendering. Use this block when text size, family source,
 font-weight adjustment, vertical or horizontal wheel/trackpad speed, scrollbar
-behavior, touch slop, or accent color looks wrong but the material/icon/resource
+behavior, touch slop, double-click timeout, key repeat timing, caret blink, or
+accent color looks wrong but the material/icon/resource
 contracts are green. The vertical and horizontal scroll multipliers are separate
 so Android `ViewConfiguration` factors, Windows
 `SPI_GETWHEELSCROLLCHARS`, and macOS trackpad/wheel paths can be diagnosed
@@ -550,6 +554,10 @@ as precise, the theme multipliers, normalized logical-pixel deltas, scroll
 phase, and handled flags. That path is the supported evidence trail because
 AppKit exposes OS-adjusted event deltas rather than a public global scroll
 speed scalar.
+For text input feel, inspect `double_click_interval_ms`,
+`key_repeat_delay_ms`, `key_repeat_interval_ms`, `caret_blink_interval_ms`,
+and `input_timing_source`; native shells consume the caret interval only at the
+input edge, while pure theme planning remains unaffected.
 The file explorer examples refresh their native system-settings snapshot at
 update-boundary theme sync. If an artifact disagrees with the current OS
 settings, first check `application.file_explorer.preferences.system_refresh_policy`
@@ -1025,7 +1033,9 @@ appearance and accessibility fields as first-class evidence: inspect
 `appearance_name`, `color_scheme_source`, `reduce_transparency`,
 `increase_contrast`, `reduce_motion`, `accessibility_source`,
 `text_size_source`, `scroll_source`, `scroll_vertical_factor`,
-`scroll_horizontal_factor`, and `scroll_bar_size` before changing theme tokens.
+`scroll_horizontal_factor`, `scroll_bar_size`, `input_timing_source`,
+`double_click_interval_ms`, `key_repeat_delay_ms`, `key_repeat_interval_ms`,
+and `caret_blink_interval_ms` before changing theme tokens.
 File explorer artifacts also mirror the app override
 state at `debug.application.file_explorer.preferences.app_overrides` and the
 resolved theme at `debug.application.file_explorer.preferences.effective_theme`,

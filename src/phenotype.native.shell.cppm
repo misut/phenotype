@@ -292,6 +292,19 @@ inline bool platform_uses_shared_caret_blink() {
     return platform->input.uses_shared_caret_blink();
 }
 
+inline std::optional<std::chrono::milliseconds>
+platform_caret_blink_interval() {
+    auto const* platform = g_app_state.host ? g_app_state.host->platform : nullptr;
+    if (!platform || !platform->input.caret_blink_interval_ms)
+        return std::chrono::milliseconds{530};
+    int const interval = platform->input.caret_blink_interval_ms();
+    if (interval == 0)
+        return std::nullopt;
+    if (interval < 100 || interval > 5000)
+        return std::chrono::milliseconds{530};
+    return std::chrono::milliseconds{interval};
+}
+
 inline std::optional<unsigned int> hit_test(float x, float y,
                                             float scroll_x, float scroll_y) {
     if (!g_app_state.host || !g_app_state.host->platform
@@ -387,8 +400,6 @@ inline void bind_host(native_host& host,
     ::phenotype::detail::set_scroll_y(scroll_y);
     ::phenotype::detail::set_hover_id_without_event(invalid_callback_id);
 }
-
-inline constexpr auto caret_blink_interval = std::chrono::milliseconds(530);
 
 inline float measure_utf8_prefix(::phenotype::FocusedInputSnapshot const& snapshot,
                                  std::size_t bytes) {
@@ -500,8 +511,15 @@ inline void reset_caret_blink_timer() {
         g_app_state.caret_blink_armed = false;
         return;
     }
+    auto const interval = platform_caret_blink_interval();
+    if (!interval) {
+        g_app_state.caret_blink_armed = false;
+        if (!::phenotype::detail::get_caret_visible())
+            ::phenotype::detail::toggle_caret();
+        return;
+    }
     g_app_state.caret_blink_armed = true;
-    g_app_state.next_caret_blink = std::chrono::steady_clock::now() + caret_blink_interval;
+    g_app_state.next_caret_blink = std::chrono::steady_clock::now() + *interval;
 }
 
 inline void tick_caret_blink() {
@@ -513,6 +531,11 @@ inline void tick_caret_blink() {
         g_app_state.caret_blink_armed = false;
         return;
     }
+    auto const interval = platform_caret_blink_interval();
+    if (!interval) {
+        g_app_state.caret_blink_armed = false;
+        return;
+    }
     if (!g_app_state.caret_blink_armed) {
         reset_caret_blink_timer();
         return;
@@ -521,7 +544,7 @@ inline void tick_caret_blink() {
     if (now < g_app_state.next_caret_blink)
         return;
     ::phenotype::detail::toggle_caret();
-    g_app_state.next_caret_blink = now + caret_blink_interval;
+    g_app_state.next_caret_blink = now + *interval;
     repaint_current();
 }
 

@@ -461,6 +461,21 @@ inline SEL sel_small_system_font_size() {
     return sel;
 }
 
+inline SEL sel_double_click_interval() {
+    static auto sel = sel_registerName("doubleClickInterval");
+    return sel;
+}
+
+inline SEL sel_key_repeat_delay() {
+    static auto sel = sel_registerName("keyRepeatDelay");
+    return sel;
+}
+
+inline SEL sel_key_repeat_interval() {
+    static auto sel = sel_registerName("keyRepeatInterval");
+    return sel;
+}
+
 inline SEL sel_move_left() {
     static auto sel = sel_registerName("moveLeft:");
     return sel;
@@ -4558,6 +4573,8 @@ macos_system_settings_snapshot() {
         "NSFont.systemFontSize/smallSystemFontSize";
     snapshot.scroll_source =
         "NSEvent.scrollingDelta/hasPreciseScrollingDeltas with NSScroller.preferredScrollerStyle";
+    snapshot.input_timing_source =
+        "NSEvent.doubleClickInterval/keyRepeatDelay/keyRepeatInterval";
     snapshot.preferred_locale_source = "NSLocale.preferredLanguages";
     snapshot.line_height_ratio = 1.6f;
     snapshot.scroll_delta_multiplier = 1.0f;
@@ -4614,6 +4631,35 @@ macos_system_settings_snapshot() {
         32.0f);
     snapshot.scroll_line_height =
         snapshot.body_font_size * snapshot.line_height_ratio;
+
+    if (auto seconds = appkit_class_float_noarg(
+            "NSEvent",
+            sel_double_click_interval())) {
+        snapshot.double_click_interval_ms = bounded_system_setting(
+            *seconds * 1000.0f,
+            500.0f,
+            50.0f,
+            5000.0f);
+    }
+    if (auto seconds = appkit_class_float_noarg(
+            "NSEvent",
+            sel_key_repeat_delay())) {
+        snapshot.key_repeat_delay_ms = bounded_system_setting(
+            *seconds * 1000.0f,
+            500.0f,
+            50.0f,
+            5000.0f);
+    }
+    if (auto seconds = appkit_class_float_noarg(
+            "NSEvent",
+            sel_key_repeat_interval())) {
+        snapshot.key_repeat_interval_ms = bounded_system_setting(
+            *seconds * 1000.0f,
+            50.0f,
+            10.0f,
+            1000.0f);
+    }
+    snapshot.caret_blink_interval_ms = 530.0f;
 
     long scroller_style = -1;
     auto scroller_class = static_cast<Class>(objc_getClass("NSScroller"));
@@ -5584,6 +5630,10 @@ inline bool system_caret_supported() {
 
 inline bool macos_uses_shared_caret_blink() {
     return !system_caret_supported();
+}
+
+inline int macos_caret_blink_interval_ms() {
+    return 530;
 }
 
 inline bool use_custom_caret_overlay() {
@@ -9659,6 +9709,7 @@ inline platform_api const& macos_platform() {
             detail::input_detach,
             detail::input_sync,
             detail::macos_uses_shared_caret_blink,
+            detail::macos_caret_blink_interval_ms,
             nullptr,
             nullptr,
             detail::input_dismiss_transient,

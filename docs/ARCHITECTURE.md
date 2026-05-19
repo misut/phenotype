@@ -226,16 +226,20 @@ snapshot fields, and app/user overrides win without letting a backend mutate
 theme state directly.
 Font family source, text-size source, font-weight adjustment, vertical and
 horizontal scroll factors, scrollbar size, touch slop, scroll friction, and
-preferred locale source are recorded when the platform exposes them. macOS uses
+preferred locale source are recorded when the platform exposes them. Input
+timing is captured beside those fields so double-click, key repeat, and caret
+blink behavior is debuggable without guessing from UI video. macOS uses
 CoreText for the resolved system family, `NSFont.systemFontSize` /
 `smallSystemFontSize` for UI text
 sizes, `NSEvent.hasPreciseScrollingDeltas` semantics for line-vs-pixel wheel
 normalization, `NSScroller.preferredScrollerStyle` plus regular-control
-scroller width for scrollbar policy, and `NSLocale.preferredLanguages` for the
-initial language tag.
+scroller width for scrollbar policy, `NSEvent.doubleClickInterval` /
+`keyRepeatDelay` / `keyRepeatInterval` for input timing, and
+`NSLocale.preferredLanguages` for the initial language tag.
 Windows uses `SystemParametersInfoW(SPI_GETNONCLIENTMETRICS)`,
 `SPI_GETWHEELSCROLLLINES`, `SPI_GETWHEELSCROLLCHARS`, `GetSystemMetrics`,
-`GetUserDefaultLocaleName`, and DWM. Android uses `Resources.getConfiguration()` plus
+`GetDoubleClickTime`, `GetCaretBlinkTime`, `GetUserDefaultLocaleName`, and DWM.
+Android uses `Resources.getConfiguration()` plus
 `ViewConfiguration`. The base theme keeps Pretendard as the product default;
 switching to the OS family is an explicit app override, while OS
 body/heading/small text metrics, line height, and axis-specific scroll
@@ -933,10 +937,10 @@ material/runtime extensions.
 
 All native capability payloads include `system_settings`: macOS uses
 CoreText/`NSFont`/`NSEvent`/`NSScroller`/`NSLocale`/`NSWorkspace`, Windows uses
-`SystemParametersInfoW` plus DWM, `GetUserDefaultLocaleName`, and the
-Personalize app-theme registry value, and Android uses Java
-resource/configuration APIs reached through the GameActivity edge. WASI and the
-stub backend publish deterministic fallback values.
+`SystemParametersInfoW` plus DWM, `GetDoubleClickTime`, `GetCaretBlinkTime`,
+`GetUserDefaultLocaleName`, and the Personalize app-theme registry value, and
+Android uses Java resource/configuration APIs reached through the GameActivity
+edge. WASI and the stub backend publish deterministic fallback values.
 `scroll_delta_multiplier` and `scroll_horizontal_delta_multiplier` are pure
 theme inputs; native wheel callbacks only translate platform events into
 logical pixels before the app/user multiplier is applied. Renderers may report
@@ -945,6 +949,9 @@ scroll event under `platform_runtime.details.input.scroll`, including raw
 `NSEvent` deltas, precise-delta mode, line height, app multipliers, normalized
 deltas, phase, and handled flags. Renderers do not decide font, appearance,
 accessibility, accent, or scroll policy themselves.
+Caret blink timing is consumed by the native shell input adapter only; it is
+reported in `system_settings` and never participates in pure layout or material
+planning.
 
 ### Modularity guarantee
 

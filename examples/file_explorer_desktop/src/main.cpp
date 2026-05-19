@@ -425,6 +425,11 @@ file_explorer_demo::SystemPreferenceSnapshot system_preference_snapshot(
         .scroll_horizontal_delta_multiplier =
             system.scroll_horizontal_delta_multiplier,
         .scroll_source = system.scroll_source,
+        .double_click_interval_ms = system.double_click_interval_ms,
+        .key_repeat_delay_ms = system.key_repeat_delay_ms,
+        .key_repeat_interval_ms = system.key_repeat_interval_ms,
+        .caret_blink_interval_ms = system.caret_blink_interval_ms,
+        .input_timing_source = system.input_timing_source,
         .preferred_locale = system.preferred_locale,
         .preferred_locale_source = system.preferred_locale_source,
         .color_scheme = system.color_scheme,

@@ -5887,6 +5887,47 @@ inline UINT windows_scroll_wheel_chars() {
     return chars;
 }
 
+inline int windows_caret_blink_interval_ms() {
+    UINT const interval = GetCaretBlinkTime();
+    if (interval == INFINITE)
+        return 0;
+    if (interval < 100u || interval > 5000u)
+        return 530;
+    return static_cast<int>(interval);
+}
+
+inline float windows_keyboard_repeat_delay_ms() {
+    int delay_setting = 1;
+    if (!SystemParametersInfoW(
+            SPI_GETKEYBOARDDELAY,
+            0,
+            &delay_setting,
+            0)) {
+        delay_setting = 1;
+    }
+    if (delay_setting < 0)
+        delay_setting = 0;
+    if (delay_setting > 3)
+        delay_setting = 3;
+    return 250.0f + static_cast<float>(delay_setting) * 250.0f;
+}
+
+inline float windows_keyboard_repeat_interval_ms() {
+    DWORD speed_setting = 25;
+    if (!SystemParametersInfoW(
+            SPI_GETKEYBOARDSPEED,
+            0,
+            &speed_setting,
+            0)) {
+        speed_setting = 25;
+    }
+    if (speed_setting > 31u)
+        speed_setting = 31u;
+    float const repeats_per_second =
+        2.5f + (static_cast<float>(speed_setting) * (27.5f / 31.0f));
+    return 1000.0f / repeats_per_second;
+}
+
 inline float windows_scroll_delta_x(double dx,
                                     float line_height,
                                     float viewport_width) {
@@ -6048,6 +6089,8 @@ windows_system_settings_snapshot() {
         "SystemParametersInfoW(SPI_GETNONCLIENTMETRICS).lfMessageFont";
     snapshot.scroll_source =
         "SystemParametersInfoW(SPI_GETWHEELSCROLLLINES/SPI_GETWHEELSCROLLCHARS)";
+    snapshot.input_timing_source =
+        "GetDoubleClickTime/GetCaretBlinkTime/SystemParametersInfoW(SPI_GETKEYBOARDDELAY/SPI_GETKEYBOARDSPEED)";
     snapshot.preferred_locale_source = "GetUserDefaultLocaleName";
     snapshot.font_family = "Segoe UI";
     snapshot.body_font_size = 12.0f;
@@ -6108,6 +6151,33 @@ windows_system_settings_snapshot() {
     snapshot.preferred_scroller_style = "system";
     snapshot.overlay_scrollbars = false;
     snapshot.scroll_delta_multiplier = 1.0f;
+    snapshot.double_click_interval_ms =
+        ::phenotype::bounded_theme_preference(
+            static_cast<float>(GetDoubleClickTime()),
+            500.0f,
+            50.0f,
+            5000.0f);
+    snapshot.key_repeat_delay_ms =
+        ::phenotype::bounded_theme_preference(
+            windows_keyboard_repeat_delay_ms(),
+            500.0f,
+            50.0f,
+            5000.0f);
+    snapshot.key_repeat_interval_ms =
+        ::phenotype::bounded_theme_preference(
+            windows_keyboard_repeat_interval_ms(),
+            50.0f,
+            10.0f,
+            1000.0f);
+    int const caret_blink_interval = windows_caret_blink_interval_ms();
+    snapshot.caret_blink_interval_ms =
+        caret_blink_interval == 0
+            ? 0.0f
+            : ::phenotype::bounded_theme_preference(
+                static_cast<float>(caret_blink_interval),
+                530.0f,
+                100.0f,
+                5000.0f);
     DWORD colorization = 0;
     BOOL opaque = FALSE;
     if (SUCCEEDED(DwmGetColorizationColor(&colorization, &opaque))) {
@@ -6658,6 +6728,7 @@ inline platform_api const& windows_platform() {
             detail::input_detach,
             detail::sync_ime_windows,
             detail::windows_uses_shared_caret_blink,
+            detail::windows_caret_blink_interval_ms,
             detail::input_handle_cursor_pos,
             detail::input_handle_mouse_button,
             detail::input_dismiss_transient,
