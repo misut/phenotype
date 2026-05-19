@@ -4617,6 +4617,14 @@ struct RendererState {
     MTL::Texture* material_backdrop_texture = nullptr;
     int material_backdrop_width = 0;
     int material_backdrop_height = 0;
+    MTL::Buffer* material_backdrop_luma_sample_buf = nullptr;
+    std::size_t material_backdrop_luma_sample_capacity = 0;
+    MTL::CommandBuffer* material_backdrop_luma_pending_command_buffer = nullptr;
+    std::uint32_t material_backdrop_luma_pending_sample_count = 0;
+    std::uint32_t material_backdrop_luma_pending_grid_width = 0;
+    std::uint32_t material_backdrop_luma_pending_grid_height = 0;
+    std::uint32_t material_backdrop_luma_pending_frame = 0;
+    std::uint32_t material_backdrop_luma_skipped_sample_count = 0;
     MTL::Buffer* frame_readback_buf = nullptr;
     std::size_t frame_readback_capacity = 0;
     MTL::Texture* image_atlas_texture = nullptr;
@@ -4638,6 +4646,15 @@ struct RendererState {
     bool last_frame_available = false;
     bool last_material_backdrop_available = false;
     bool last_material_backdrop_excludes_foreground_text = false;
+    bool last_material_backdrop_luma_available = false;
+    float last_material_backdrop_luma_min = 0.0f;
+    float last_material_backdrop_luma_max = 1.0f;
+    float last_material_backdrop_luma_mean = 0.5f;
+    std::uint32_t last_material_backdrop_luma_sample_count = 0;
+    std::uint32_t last_material_backdrop_luma_grid_width = 0;
+    std::uint32_t last_material_backdrop_luma_grid_height = 0;
+    std::uint32_t last_material_backdrop_luma_frame = 0;
+    char const* last_material_backdrop_luma_status = "not-sampled";
     bool initialized = false;
 };
 
@@ -4816,6 +4833,8 @@ inline bool ensure_debug_capture_texture(int width, int height) {
     return g_renderer.debug_capture_texture != nullptr;
 }
 
+inline void release_material_backdrop_luma_pending_command_buffer();
+
 inline bool ensure_material_backdrop_texture(int width, int height) {
     if (width <= 0 || height <= 0)
         return false;
@@ -4826,12 +4845,19 @@ inline bool ensure_material_backdrop_texture(int width, int height) {
     }
 
     if (g_renderer.material_backdrop_texture) {
+        release_material_backdrop_luma_pending_command_buffer();
         g_renderer.material_backdrop_texture->release();
         g_renderer.material_backdrop_texture = nullptr;
         g_renderer.material_backdrop_width = 0;
         g_renderer.material_backdrop_height = 0;
         g_renderer.last_material_backdrop_available = false;
         g_renderer.last_material_backdrop_excludes_foreground_text = false;
+        g_renderer.last_material_backdrop_luma_available = false;
+        g_renderer.last_material_backdrop_luma_sample_count = 0;
+        g_renderer.last_material_backdrop_luma_grid_width = 0;
+        g_renderer.last_material_backdrop_luma_grid_height = 0;
+        g_renderer.last_material_backdrop_luma_frame = 0;
+        g_renderer.last_material_backdrop_luma_status = "not-sampled";
     }
 
     auto* tex_desc = MTL::TextureDescriptor::texture2DDescriptor(
@@ -4847,6 +4873,214 @@ inline bool ensure_material_backdrop_texture(int width, int height) {
         g_renderer.material_backdrop_height = height;
     }
     return g_renderer.material_backdrop_texture != nullptr;
+}
+
+inline constexpr std::uint32_t k_material_backdrop_luma_grid_width = 5;
+inline constexpr std::uint32_t k_material_backdrop_luma_grid_height = 5;
+inline constexpr std::size_t k_material_backdrop_luma_row_stride = 256;
+
+inline std::size_t material_backdrop_luma_sample_required_bytes(
+        std::uint32_t sample_count) noexcept {
+    return static_cast<std::size_t>(sample_count)
+         * k_material_backdrop_luma_row_stride;
+}
+
+inline bool ensure_material_backdrop_luma_sample_buffer(
+        std::uint32_t sample_count) {
+    auto const required =
+        material_backdrop_luma_sample_required_bytes(sample_count);
+    if (required == 0)
+        return false;
+    if (required <= g_renderer.material_backdrop_luma_sample_capacity
+        && g_renderer.material_backdrop_luma_sample_buf) {
+        return true;
+    }
+
+    std::size_t new_capacity =
+        g_renderer.material_backdrop_luma_sample_capacity > 0
+            ? g_renderer.material_backdrop_luma_sample_capacity
+            : k_material_backdrop_luma_row_stride * 32u;
+    while (new_capacity < required)
+        new_capacity *= 2u;
+
+    auto* replacement = g_renderer.device->newBuffer(
+        NS::UInteger(new_capacity),
+        MTL::ResourceStorageModeShared);
+    if (!replacement)
+        return false;
+
+    if (g_renderer.material_backdrop_luma_sample_buf)
+        g_renderer.material_backdrop_luma_sample_buf->release();
+    g_renderer.material_backdrop_luma_sample_buf = replacement;
+    g_renderer.material_backdrop_luma_sample_capacity = new_capacity;
+    return true;
+}
+
+inline float material_backdrop_sample_luma(std::uint8_t b,
+                                           std::uint8_t g,
+                                           std::uint8_t r) noexcept {
+    return (0.2126f * static_cast<float>(r)
+            + 0.7152f * static_cast<float>(g)
+            + 0.0722f * static_cast<float>(b)) / 255.0f;
+}
+
+inline void release_material_backdrop_luma_pending_command_buffer() {
+    if (g_renderer.material_backdrop_luma_pending_command_buffer) {
+        g_renderer.material_backdrop_luma_pending_command_buffer->release();
+        g_renderer.material_backdrop_luma_pending_command_buffer = nullptr;
+    }
+    g_renderer.material_backdrop_luma_pending_sample_count = 0;
+    g_renderer.material_backdrop_luma_pending_grid_width = 0;
+    g_renderer.material_backdrop_luma_pending_grid_height = 0;
+    g_renderer.material_backdrop_luma_pending_frame = 0;
+}
+
+inline void process_completed_material_backdrop_luma_sample() {
+    auto* command_buffer =
+        g_renderer.material_backdrop_luma_pending_command_buffer;
+    if (!command_buffer)
+        return;
+
+    auto const status = command_buffer->status();
+    if (status != MTL::CommandBufferStatusCompleted
+        && status != MTL::CommandBufferStatusError) {
+        return;
+    }
+
+    if (status == MTL::CommandBufferStatusError
+        || !g_renderer.material_backdrop_luma_sample_buf
+        || g_renderer.material_backdrop_luma_pending_sample_count == 0) {
+        g_renderer.last_material_backdrop_luma_available = false;
+        g_renderer.last_material_backdrop_luma_sample_count = 0;
+        g_renderer.last_material_backdrop_luma_status =
+            status == MTL::CommandBufferStatusError
+                ? "sample-command-buffer-error"
+                : "sample-buffer-unavailable";
+        release_material_backdrop_luma_pending_command_buffer();
+        return;
+    }
+
+    auto const* mapped = static_cast<std::uint8_t const*>(
+        g_renderer.material_backdrop_luma_sample_buf->contents());
+    if (!mapped) {
+        g_renderer.last_material_backdrop_luma_available = false;
+        g_renderer.last_material_backdrop_luma_sample_count = 0;
+        g_renderer.last_material_backdrop_luma_status =
+            "sample-buffer-unmapped";
+        release_material_backdrop_luma_pending_command_buffer();
+        return;
+    }
+
+    float luma_min = 1.0f;
+    float luma_max = 0.0f;
+    float luma_sum = 0.0f;
+    std::uint32_t sampled = 0;
+    for (std::uint32_t i = 0;
+         i < g_renderer.material_backdrop_luma_pending_sample_count;
+         ++i) {
+        auto const* pixel =
+            mapped + static_cast<std::size_t>(i)
+                   * k_material_backdrop_luma_row_stride;
+        auto const luma =
+            material_backdrop_sample_luma(pixel[0], pixel[1], pixel[2]);
+        luma_min = std::min(luma_min, luma);
+        luma_max = std::max(luma_max, luma);
+        luma_sum += luma;
+        ++sampled;
+    }
+
+    if (sampled > 0) {
+        g_renderer.last_material_backdrop_luma_available = true;
+        g_renderer.last_material_backdrop_luma_min = luma_min;
+        g_renderer.last_material_backdrop_luma_max = luma_max;
+        g_renderer.last_material_backdrop_luma_mean =
+            luma_sum / static_cast<float>(sampled);
+        g_renderer.last_material_backdrop_luma_sample_count = sampled;
+        g_renderer.last_material_backdrop_luma_grid_width =
+            g_renderer.material_backdrop_luma_pending_grid_width;
+        g_renderer.last_material_backdrop_luma_grid_height =
+            g_renderer.material_backdrop_luma_pending_grid_height;
+        g_renderer.last_material_backdrop_luma_frame =
+            g_renderer.material_backdrop_luma_pending_frame;
+        g_renderer.last_material_backdrop_luma_status =
+            "sampled-async-grid";
+    }
+    release_material_backdrop_luma_pending_command_buffer();
+}
+
+inline bool schedule_material_backdrop_luma_sample(
+        MTL::BlitCommandEncoder* blit,
+        MTL::CommandBuffer* command_buffer,
+        MTL::Texture* source,
+        int width,
+        int height,
+        std::uint32_t frame_index,
+        MaterialExecutorSummary& summary) {
+    if (!blit || !command_buffer || !source || width <= 0 || height <= 0) {
+        ++summary.backdrop_luma_sampling_skipped_count;
+        summary.backdrop_luma_sampling_skip_reason =
+            "sample-source-unavailable";
+        return false;
+    }
+    if (g_renderer.material_backdrop_luma_pending_command_buffer) {
+        ++summary.backdrop_luma_sampling_skipped_count;
+        summary.backdrop_luma_sampling_skip_reason =
+            "previous-sample-pending";
+        ++g_renderer.material_backdrop_luma_skipped_sample_count;
+        return false;
+    }
+
+    constexpr std::uint32_t grid_w = k_material_backdrop_luma_grid_width;
+    constexpr std::uint32_t grid_h = k_material_backdrop_luma_grid_height;
+    constexpr std::uint32_t sample_count = grid_w * grid_h;
+    if (!ensure_material_backdrop_luma_sample_buffer(sample_count)) {
+        ++summary.backdrop_luma_sampling_skipped_count;
+        summary.backdrop_luma_sampling_skip_reason =
+            "sample-buffer-unavailable";
+        return false;
+    }
+
+    for (std::uint32_t gy = 0; gy < grid_h; ++gy) {
+        for (std::uint32_t gx = 0; gx < grid_w; ++gx) {
+            auto const index = gy * grid_w + gx;
+            auto const x = static_cast<std::uint32_t>(
+                (static_cast<std::uint64_t>(gx) + 1u)
+                * static_cast<std::uint64_t>(width)
+                / static_cast<std::uint64_t>(grid_w + 1u));
+            auto const y = static_cast<std::uint32_t>(
+                (static_cast<std::uint64_t>(gy) + 1u)
+                * static_cast<std::uint64_t>(height)
+                / static_cast<std::uint64_t>(grid_h + 1u));
+            MTL::Origin origin{
+                NS::UInteger(std::min<std::uint32_t>(
+                    x, static_cast<std::uint32_t>(width - 1))),
+                NS::UInteger(std::min<std::uint32_t>(
+                    y, static_cast<std::uint32_t>(height - 1))),
+                NS::UInteger(0),
+            };
+            MTL::Size size{NS::UInteger(1), NS::UInteger(1), NS::UInteger(1)};
+            blit->copyFromTexture(
+                source,
+                NS::UInteger(0),
+                NS::UInteger(0),
+                origin,
+                size,
+                g_renderer.material_backdrop_luma_sample_buf,
+                NS::UInteger(
+                    static_cast<std::size_t>(index)
+                    * k_material_backdrop_luma_row_stride),
+                NS::UInteger(k_material_backdrop_luma_row_stride),
+                NS::UInteger(k_material_backdrop_luma_row_stride));
+        }
+    }
+
+    g_renderer.material_backdrop_luma_pending_sample_count = sample_count;
+    g_renderer.material_backdrop_luma_pending_grid_width = grid_w;
+    g_renderer.material_backdrop_luma_pending_grid_height = grid_h;
+    g_renderer.material_backdrop_luma_pending_frame = frame_index;
+    command_buffer->retain();
+    g_renderer.material_backdrop_luma_pending_command_buffer = command_buffer;
+    return true;
 }
 
 inline bool ensure_frame_readback_buffer(std::size_t required) {
@@ -6823,6 +7057,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     double cb = 0.98;
     double ca = 1.0;
     (void)process_completed_images();
+    process_completed_material_backdrop_luma_sample();
     int fbw = 0;
     int fbh = 0;
     surface_framebuffer_size(g_renderer.surface, fbw, fbh);
@@ -6859,6 +7094,26 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     material_env.backdrop.source = backdrop_ready
         ? "previous-presented-frame"
         : "none";
+    if (backdrop_ready && g_renderer.last_material_backdrop_luma_available) {
+        material_env.backdrop.luma_min =
+            g_renderer.last_material_backdrop_luma_min;
+        material_env.backdrop.luma_max =
+            g_renderer.last_material_backdrop_luma_max;
+        material_env.backdrop.luma_mean =
+            g_renderer.last_material_backdrop_luma_mean;
+        material_env.backdrop.luma_sample_count =
+            g_renderer.last_material_backdrop_luma_sample_count;
+        material_env.backdrop.luma_sample_grid_width =
+            g_renderer.last_material_backdrop_luma_grid_width;
+        material_env.backdrop.luma_sample_grid_height =
+            g_renderer.last_material_backdrop_luma_grid_height;
+        material_env.backdrop.luma_sample_frame =
+            g_renderer.last_material_backdrop_luma_frame;
+        material_env.backdrop.luma_sample_status =
+            g_renderer.last_material_backdrop_luma_status;
+        material_env.backdrop.source =
+            "previous-presented-frame-sampled-grid";
+    }
     material_env.render_target.width = fbw;
     material_env.render_target.height = fbh;
     material_env.render_target.scale = frame_scale;
@@ -6905,6 +7160,9 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         g_renderer.scratch.foreground_text_candidate_count;
     material_summary.foreground_text_remap_count =
         g_renderer.scratch.foreground_text_remap_count;
+    set_material_executor_backdrop_descriptor_summary(
+        material_summary,
+        material_env.backdrop);
     for (auto const& record : g_renderer.scratch.material_records) {
         accumulate_material_executor_plan_summary(
             material_summary,
@@ -7268,6 +7526,14 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                 NS::UInteger(0),
                 NS::UInteger(0),
                 origin);
+            (void)schedule_material_backdrop_luma_sample(
+                blit,
+                command_buffer,
+                drawable->texture(),
+                fbw,
+                fbh,
+                material_env.debug_seed.frame,
+                material_summary);
             blit->endEncoding();
             g_renderer.last_material_backdrop_available = true;
             g_renderer.last_material_backdrop_excludes_foreground_text = true;
@@ -7302,6 +7568,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
         auto* foreground_encoder =
             command_buffer->renderCommandEncoder(foreground_pass);
         if (!foreground_encoder) {
+            release_material_backdrop_luma_pending_command_buffer();
             pool->release();
             return;
         }
@@ -7342,6 +7609,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
                     overlay_color_bytes,
                     "overlay_color_instances")) {
                 foreground_encoder->endEncoding();
+                release_material_backdrop_luma_pending_command_buffer();
                 pool->release();
                 return;
             }
@@ -7408,12 +7676,15 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 }
 
 inline void renderer_shutdown() {
+    release_material_backdrop_luma_pending_command_buffer();
     if (g_renderer.sampler) { g_renderer.sampler->release(); g_renderer.sampler = nullptr; }
     if (g_renderer.debug_capture_texture) { g_renderer.debug_capture_texture->release(); g_renderer.debug_capture_texture = nullptr; }
     if (g_renderer.material_backdrop_texture) { g_renderer.material_backdrop_texture->release(); g_renderer.material_backdrop_texture = nullptr; }
+    if (g_renderer.material_backdrop_luma_sample_buf) { g_renderer.material_backdrop_luma_sample_buf->release(); g_renderer.material_backdrop_luma_sample_buf = nullptr; }
     g_renderer.last_frame_available = false;
     g_renderer.last_material_backdrop_available = false;
     g_renderer.last_material_backdrop_excludes_foreground_text = false;
+    g_renderer.last_material_backdrop_luma_available = false;
     if (g_renderer.frame_readback_buf) { g_renderer.frame_readback_buf->release(); g_renderer.frame_readback_buf = nullptr; }
     if (g_renderer.image_atlas_texture) { g_renderer.image_atlas_texture->release(); g_renderer.image_atlas_texture = nullptr; }
     if (g_renderer.text_atlas_texture) { g_renderer.text_atlas_texture->release(); g_renderer.text_atlas_texture = nullptr; }
@@ -7455,6 +7726,7 @@ inline void renderer_shutdown() {
     g_renderer.image_instances_capacity = 0;
     g_renderer.text_instances_capacity = 0;
     g_renderer.frame_readback_capacity = 0;
+    g_renderer.material_backdrop_luma_sample_capacity = 0;
     g_renderer.drawable_width = 0;
     g_renderer.drawable_height = 0;
     g_renderer.debug_capture_width = 0;
@@ -7464,6 +7736,12 @@ inline void renderer_shutdown() {
     g_renderer.last_render_width = 0;
     g_renderer.last_render_height = 0;
     g_renderer.material_frame_sequence = 0;
+    g_renderer.material_backdrop_luma_skipped_sample_count = 0;
+    g_renderer.last_material_backdrop_luma_sample_count = 0;
+    g_renderer.last_material_backdrop_luma_grid_width = 0;
+    g_renderer.last_material_backdrop_luma_grid_height = 0;
+    g_renderer.last_material_backdrop_luma_frame = 0;
+    g_renderer.last_material_backdrop_luma_status = "not-sampled";
     g_renderer.material_executor_summary = MaterialExecutorSummary{};
     g_renderer.last_frame_available = false;
     g_renderer.surface = nullptr;
@@ -8116,6 +8394,51 @@ inline json::Object macos_renderer_runtime_json() {
             g_renderer.material_backdrop_texture != nullptr
             && g_renderer.last_material_backdrop_available
             && g_renderer.last_material_backdrop_excludes_foreground_text});
+    json::Object luma_descriptor;
+    luma_descriptor.emplace(
+        "available",
+        json::Value{g_renderer.last_material_backdrop_luma_available});
+    luma_descriptor.emplace(
+        "luma_min",
+        json::Value{g_renderer.last_material_backdrop_luma_min});
+    luma_descriptor.emplace(
+        "luma_max",
+        json::Value{g_renderer.last_material_backdrop_luma_max});
+    luma_descriptor.emplace(
+        "luma_mean",
+        json::Value{g_renderer.last_material_backdrop_luma_mean});
+    luma_descriptor.emplace(
+        "sample_count",
+        json::Value{static_cast<std::int64_t>(
+            g_renderer.last_material_backdrop_luma_sample_count)});
+    luma_descriptor.emplace(
+        "sample_grid_width",
+        json::Value{static_cast<std::int64_t>(
+            g_renderer.last_material_backdrop_luma_grid_width)});
+    luma_descriptor.emplace(
+        "sample_grid_height",
+        json::Value{static_cast<std::int64_t>(
+            g_renderer.last_material_backdrop_luma_grid_height)});
+    luma_descriptor.emplace(
+        "sample_frame",
+        json::Value{static_cast<std::int64_t>(
+            g_renderer.last_material_backdrop_luma_frame)});
+    luma_descriptor.emplace(
+        "status",
+        json::Value{g_renderer.last_material_backdrop_luma_status
+                        ? g_renderer.last_material_backdrop_luma_status
+                        : "not-sampled"});
+    luma_descriptor.emplace(
+        "pending",
+        json::Value{
+            g_renderer.material_backdrop_luma_pending_command_buffer != nullptr});
+    luma_descriptor.emplace(
+        "skipped_sample_count",
+        json::Value{static_cast<std::int64_t>(
+            g_renderer.material_backdrop_luma_skipped_sample_count)});
+    renderer.emplace(
+        "material_backdrop_luma_descriptor",
+        json::Value{std::move(luma_descriptor)});
     renderer.emplace(
         "readback_buffer_ready",
         json::Value{g_renderer.frame_readback_buf != nullptr});

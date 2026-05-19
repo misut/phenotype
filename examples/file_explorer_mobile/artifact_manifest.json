@@ -40,7 +40,7 @@
     "fallback": 0,
     "backdrop_sampling": 28,
     "contract_versions": {
-      "24": 28
+      "25": 28
     },
     "theme_foreground_matches_theme": 28,
     "theme_accent_matches_theme": 28,
@@ -91,7 +91,7 @@
     "backdrop_access_excludes_foreground_text": 28,
     "backdrop_access_bounded": 28,
     "backdrop_access_sources": {
-      "previous-presented-frame": 28
+      "previous-presented-frame-sampled-grid": 28
     },
     "backdrop_capture_scopes": {
       "shared-frame": 28

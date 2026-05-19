@@ -6974,6 +6974,27 @@ inline ::json::Object android_renderer_runtime_json() {
         ::json::Value{g_renderer.tri_pipeline != VK_NULL_HANDLE});
     r.emplace("material_pipeline_ready", ::json::Value{false});
     r.emplace("material_backdrop_source_ready", ::json::Value{false});
+    ::json::Object luma_descriptor;
+    luma_descriptor.emplace("available", ::json::Value{false});
+    luma_descriptor.emplace("luma_min", ::json::Value{0.0});
+    luma_descriptor.emplace("luma_max", ::json::Value{1.0});
+    luma_descriptor.emplace("luma_mean", ::json::Value{0.5});
+    luma_descriptor.emplace("sample_count", ::json::Value{std::int64_t{0}});
+    luma_descriptor.emplace(
+        "sample_grid_width",
+        ::json::Value{std::int64_t{0}});
+    luma_descriptor.emplace(
+        "sample_grid_height",
+        ::json::Value{std::int64_t{0}});
+    luma_descriptor.emplace("sample_frame", ::json::Value{std::int64_t{0}});
+    luma_descriptor.emplace("status", ::json::Value{"unsupported-fallback"});
+    luma_descriptor.emplace("pending", ::json::Value{false});
+    luma_descriptor.emplace(
+        "skipped_sample_count",
+        ::json::Value{std::int64_t{0}});
+    r.emplace(
+        "material_backdrop_luma_descriptor",
+        ::json::Value{std::move(luma_descriptor)});
     r.emplace(
         "accessibility_display_options",
         android_accessibility_display_options_json(

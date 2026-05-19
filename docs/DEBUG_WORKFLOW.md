@@ -735,7 +735,12 @@ plans must use `fallback-flat` with `backdrop_driven: false`. `floor` and
 `gain` must match `MaterialPlan.luminance_floor` and
 `MaterialPlan.luminance_gain`, while `gamma`, `midpoint`, `contrast`, and
 `edge_lift` are bounded shader inputs. A curve failure should be debugged from
-`MaterialPlan.backdrop` first, then from the backend shader input upload.
+`MaterialPlan.backdrop` first, then from the backend shader input upload. The
+backdrop object now includes `luma_sample_count`,
+`luma_sample_grid_width`, `luma_sample_grid_height`, `luma_sample_frame`, and
+`luma_sample_status`. On macOS, non-zero values mean the pure plan consumed a
+completed asynchronous 5x5 previous-frame sample; zero with `not-sampled` means
+the plan used deterministic neutral luminance for that frame.
 `foreground` is the material text/icon legibility contract. Active sampled glass
 must report `backdrop_driven: true` and `uses_vibrancy: true`; deterministic
 fallback reports a fallback or accessibility source. The verifier checks that
@@ -771,6 +776,13 @@ instead of a silent debug-plane mismatch.
 The renderer contract also publishes `material_plan_contract_version` next to
 `material_plans[]`, so snapshot-only or empty material renderers still expose the
 same artifact schema version without requiring a per-plan object.
+`renderer.material_backdrop_luma_descriptor` is the edge-side view of that same
+contract. It reports the latest observed luma min/max/mean, sample grid, sample
+frame, pending state, skipped sample count, and status such as
+`sampled-async-grid` or `unsupported-fallback`. If a material plan looks neutral
+while the frame image is visibly dark or bright, inspect this object before the
+shader: it tells you whether the backend had a completed sample available for
+the pure planner.
 The adjacent `verifier` object is also derived from the same plan:
 `require_backdrop_source` mirrors `backdrop_sampling`,
 `require_edge_highlight` is true only for non-fallback plans with a positive

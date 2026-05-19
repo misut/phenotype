@@ -238,7 +238,7 @@ ALLOWED_MATERIAL_REFERENCE_PERFORMANCE_RESPONSES = {
     "warmup-capture",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 24
+MATERIAL_PLAN_CONTRACT_VERSION = 25
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -2700,6 +2700,12 @@ MATERIAL_BACKDROP_LUMA_FIELDS = (
     "luma_max",
     "luma_mean",
     "luma_span",
+)
+MATERIAL_BACKDROP_LUMA_SAMPLE_FIELDS = (
+    "luma_sample_count",
+    "luma_sample_grid_width",
+    "luma_sample_grid_height",
+    "luma_sample_frame",
 )
 MATERIAL_BACKDROP_DELTA_FIELDS = (
     "luminance_floor_delta",
@@ -5266,6 +5272,54 @@ def summarize_material_plans(
                     likely_layer=likely_layer,
                     hint="Keep MaterialBackdropAnalysis.luma_span derived from min/max.",
                     record_success=False)
+            for key in MATERIAL_BACKDROP_LUMA_SAMPLE_FIELDS:
+                value = check_number_field(
+                    report,
+                    backdrop,
+                    key,
+                    f"{plan_path}.backdrop",
+                    min_value=0.0,
+                    likely_layer=likely_layer,
+                    hint=(
+                        "Backdrop sample metadata must be deterministic, "
+                        "bounded, and serialized by MaterialBackdropAnalysis."))
+                if isinstance(value, (int, float)) and not isinstance(value, bool):
+                    report.check(
+                        f"material backdrop {key} is integer-valued",
+                        float(value).is_integer(),
+                        path=f"{plan_path}.backdrop.{key}",
+                        expected="integer-valued number",
+                        actual=value,
+                        likely_layer=likely_layer,
+                        hint=(
+                            "Serialize sample counts, grid dimensions, and "
+                            "frame ids as whole numbers."),
+                        record_success=False)
+            sample_status = check_string_field(
+                report,
+                backdrop,
+                "luma_sample_status",
+                f"{plan_path}.backdrop",
+                likely_layer=likely_layer,
+                hint=(
+                    "Expose whether backdrop luminance came from an async "
+                    "grid sample or a deterministic fallback."))
+            sample_count = backdrop.get("luma_sample_count")
+            if isinstance(sample_status, str) and isinstance(sample_count, (int, float)):
+                report.check(
+                    "material backdrop sampled status matches sample count",
+                    (float(sample_count) > 0.0) == (sample_status != "not-sampled"),
+                    path=f"{plan_path}.backdrop.luma_sample_status",
+                    expected="not-sampled iff sample count is zero",
+                    actual={
+                        "luma_sample_status": sample_status,
+                        "luma_sample_count": sample_count,
+                    },
+                    likely_layer=likely_layer,
+                    hint=(
+                        "Keep the pure descriptor metadata aligned with the "
+                        "backend sampling result used for planning."),
+                    record_success=False)
             max_abs_delta_for_plan = 0.0
             max_abs_optical_delta_for_plan = 0.0
             for key in MATERIAL_BACKDROP_DELTA_FIELDS:
@@ -7746,6 +7800,14 @@ def check_material_executor_summary_contract(
         "material_buffer_reallocations",
         "foreground_text_candidate_count",
         "foreground_text_remap_count",
+        "backdrop_descriptor_luma_min",
+        "backdrop_descriptor_luma_max",
+        "backdrop_descriptor_luma_mean",
+        "backdrop_descriptor_luma_sample_count",
+        "backdrop_descriptor_luma_grid_width",
+        "backdrop_descriptor_luma_grid_height",
+        "backdrop_descriptor_luma_frame",
+        "backdrop_luma_sampling_skipped_count",
         "cpu_decode_ns",
         "cpu_material_upload_ns",
         "cpu_total_ns",
@@ -7766,6 +7828,7 @@ def check_material_executor_summary_contract(
     bool_fields = (
         "backdrop_copy_excludes_foreground_text",
         "foreground_pass_after_backdrop_copy",
+        "backdrop_descriptor_luma_available",
     )
     for field in bool_fields:
         actual = executor_summary.get(field)
@@ -7942,6 +8005,95 @@ def check_material_executor_summary_contract(
             hint=(
                 "Shared frame capture pixel budget should mirror the largest "
                 "MaterialPlan.backdrop_access.max_frame_capture_pixels."))
+
+
+def check_renderer_backdrop_luma_descriptor_contract(
+        renderer_details: JsonObject,
+        report: Report) -> None:
+    base_path = "debug.platform_runtime.details.renderer.material_backdrop_luma_descriptor"
+    descriptor = renderer_details.get("material_backdrop_luma_descriptor")
+    report.check(
+        "renderer material backdrop luma descriptor is object",
+        isinstance(descriptor, dict),
+        path=base_path,
+        expected="object",
+        actual=type(descriptor).__name__,
+        likely_layer="platform-runtime",
+        likely_pass="material-backdrop-descriptor",
+        hint=(
+            "Backends should publish the observed or deterministic fallback "
+            "backdrop luminance descriptor next to material plan telemetry."))
+    if not isinstance(descriptor, dict):
+        return
+
+    available = check_bool_field(
+        report,
+        descriptor,
+        "available",
+        base_path,
+        likely_layer="platform-runtime",
+        likely_pass="material-backdrop-descriptor",
+        hint="Backdrop descriptor availability must be explicit.")
+    check_bool_field(
+        report,
+        descriptor,
+        "pending",
+        base_path,
+        likely_layer="platform-runtime",
+        likely_pass="material-backdrop-descriptor",
+        hint="Async sample pending state must be explicit.")
+    for key in (
+            "luma_min",
+            "luma_max",
+            "luma_mean",
+            "sample_count",
+            "sample_grid_width",
+            "sample_grid_height",
+            "sample_frame",
+            "skipped_sample_count"):
+        max_value = 1.0 if key.startswith("luma_") else None
+        check_number_field(
+            report,
+            descriptor,
+            key,
+            base_path,
+            min_value=0.0,
+            max_value=max_value,
+            likely_layer="platform-runtime",
+            likely_pass="material-backdrop-descriptor",
+            hint=(
+                "Keep renderer backdrop luminance descriptor numeric, "
+                "bounded, and machine-readable."))
+    status = check_string_field(
+        report,
+        descriptor,
+        "status",
+        base_path,
+        likely_layer="platform-runtime",
+        hint="Expose the descriptor source status for LLM-actionable triage.")
+    sample_count = descriptor.get("sample_count")
+    if isinstance(available, bool) and isinstance(sample_count, (int, float)):
+        report.check(
+            "renderer material backdrop luma availability matches sample count",
+            available == (float(sample_count) > 0.0),
+            path=f"{base_path}.available",
+            expected="true iff sample_count is positive",
+            actual={"available": available, "sample_count": sample_count},
+            likely_layer="platform-runtime",
+            likely_pass="material-backdrop-descriptor",
+            hint=(
+                "Set the descriptor available flag only after a completed "
+                "sample has been consumed by the backend."))
+    if isinstance(status, str):
+        report.check(
+            "renderer material backdrop luma status is actionable",
+            bool(status),
+            path=f"{base_path}.status",
+            expected="non-empty string",
+            actual=status,
+            likely_layer="platform-runtime",
+            likely_pass="material-backdrop-descriptor",
+            hint="Use a stable status such as sampled-async-grid or unsupported-fallback.")
 
 
 def check_material_quality_policy_requirements(
@@ -8437,6 +8589,9 @@ def verify(args: argparse.Namespace) -> int:
             likely_layer="platform-runtime",
             hint="The backend must write renderer.material_plans into runtime details.")
     if renderer_details is not None:
+        check_renderer_backdrop_luma_descriptor_contract(
+            renderer_details,
+            report)
         material_plans = renderer_details.get("material_plans")
         if args.require_material_plan or material_plans is not None:
             renderer_contract_version = renderer_details.get(

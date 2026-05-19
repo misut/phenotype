@@ -1280,6 +1280,27 @@ namespace detail {
         backdrop.emplace("luma_max", json::Value{plan.backdrop.luma_max});
         backdrop.emplace("luma_mean", json::Value{plan.backdrop.luma_mean});
         backdrop.emplace("luma_span", json::Value{plan.backdrop.luma_span});
+        backdrop.emplace(
+            "luma_sample_count",
+            json::Value{static_cast<std::int64_t>(
+                plan.backdrop.luma_sample_count)});
+        backdrop.emplace(
+            "luma_sample_grid_width",
+            json::Value{static_cast<std::int64_t>(
+                plan.backdrop.luma_sample_grid_width)});
+        backdrop.emplace(
+            "luma_sample_grid_height",
+            json::Value{static_cast<std::int64_t>(
+                plan.backdrop.luma_sample_grid_height)});
+        backdrop.emplace(
+            "luma_sample_frame",
+            json::Value{static_cast<std::int64_t>(
+                plan.backdrop.luma_sample_frame)});
+        backdrop.emplace(
+            "luma_sample_status",
+            json::Value{plan.backdrop.luma_sample_status
+                            ? plan.backdrop.luma_sample_status
+                            : "not-sampled"});
         backdrop.emplace("source", json::Value{plan.backdrop.source});
         backdrop.emplace(
             "luminance_response",
@@ -2043,6 +2064,53 @@ namespace detail {
                 static_cast<std::int64_t>(
                     summary.foreground_text_remap_count)});
         out.emplace(
+            "backdrop_descriptor_luma_available",
+            json::Value{summary.backdrop_descriptor_luma_available});
+        out.emplace(
+            "backdrop_descriptor_luma_min",
+            json::Value{summary.backdrop_descriptor_luma_min});
+        out.emplace(
+            "backdrop_descriptor_luma_max",
+            json::Value{summary.backdrop_descriptor_luma_max});
+        out.emplace(
+            "backdrop_descriptor_luma_mean",
+            json::Value{summary.backdrop_descriptor_luma_mean});
+        out.emplace(
+            "backdrop_descriptor_luma_sample_count",
+            json::Value{static_cast<std::int64_t>(
+                summary.backdrop_descriptor_luma_sample_count)});
+        out.emplace(
+            "backdrop_descriptor_luma_grid_width",
+            json::Value{static_cast<std::int64_t>(
+                summary.backdrop_descriptor_luma_grid_width)});
+        out.emplace(
+            "backdrop_descriptor_luma_grid_height",
+            json::Value{static_cast<std::int64_t>(
+                summary.backdrop_descriptor_luma_grid_height)});
+        out.emplace(
+            "backdrop_descriptor_luma_frame",
+            json::Value{static_cast<std::int64_t>(
+                summary.backdrop_descriptor_luma_frame)});
+        out.emplace(
+            "backdrop_descriptor_luma_status",
+            json::Value{summary.backdrop_descriptor_luma_status
+                            ? summary.backdrop_descriptor_luma_status
+                            : "not-sampled"});
+        out.emplace(
+            "backdrop_descriptor_source",
+            json::Value{summary.backdrop_descriptor_source
+                            ? summary.backdrop_descriptor_source
+                            : "none"});
+        out.emplace(
+            "backdrop_luma_sampling_skipped_count",
+            json::Value{static_cast<std::int64_t>(
+                summary.backdrop_luma_sampling_skipped_count)});
+        out.emplace(
+            "backdrop_luma_sampling_skip_reason",
+            json::Value{summary.backdrop_luma_sampling_skip_reason
+                            ? summary.backdrop_luma_sampling_skip_reason
+                            : "none"});
+        out.emplace(
             "backdrop_copy_skip_reason",
             json::Value{summary.backdrop_copy_skip_reason
                             ? summary.backdrop_copy_skip_reason
@@ -2060,6 +2128,27 @@ namespace detail {
         json::Object renderer;
         renderer.emplace("material_pipeline_ready", json::Value{false});
         renderer.emplace("material_backdrop_source_ready", json::Value{false});
+        json::Object luma_descriptor;
+        luma_descriptor.emplace("available", json::Value{false});
+        luma_descriptor.emplace("luma_min", json::Value{0.0});
+        luma_descriptor.emplace("luma_max", json::Value{1.0});
+        luma_descriptor.emplace("luma_mean", json::Value{0.5});
+        luma_descriptor.emplace("sample_count", json::Value{std::int64_t{0}});
+        luma_descriptor.emplace(
+            "sample_grid_width",
+            json::Value{std::int64_t{0}});
+        luma_descriptor.emplace(
+            "sample_grid_height",
+            json::Value{std::int64_t{0}});
+        luma_descriptor.emplace("sample_frame", json::Value{std::int64_t{0}});
+        luma_descriptor.emplace("status", json::Value{"unsupported-fallback"});
+        luma_descriptor.emplace("pending", json::Value{false});
+        luma_descriptor.emplace(
+            "skipped_sample_count",
+            json::Value{std::int64_t{0}});
+        renderer.emplace(
+            "material_backdrop_luma_descriptor",
+            json::Value{std::move(luma_descriptor)});
         renderer.emplace(
             "material_plan_contract_version",
             json::Value{

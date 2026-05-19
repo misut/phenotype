@@ -36,7 +36,7 @@
       "reduced transparency disables backdrop sampling": 7
     },
     "contract_versions": {
-      "24": 7
+      "25": 7
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,

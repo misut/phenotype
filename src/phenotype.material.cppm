@@ -11,7 +11,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 24;
+inline constexpr std::uint32_t material_plan_contract_version = 25;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
 inline constexpr unsigned int material_max_sample_taps = 25;
@@ -72,6 +72,11 @@ struct MaterialBackdropDescriptor {
     float luma_min = 0.0f;
     float luma_max = 1.0f;
     float luma_mean = 0.5f;
+    std::uint32_t luma_sample_count = 0;
+    std::uint32_t luma_sample_grid_width = 0;
+    std::uint32_t luma_sample_grid_height = 0;
+    std::uint64_t luma_sample_frame = 0;
+    char const* luma_sample_status = "not-sampled";
     char const* source = "none";
 };
 
@@ -277,6 +282,11 @@ struct MaterialBackdropAnalysis {
     float luma_max = 1.0f;
     float luma_mean = 0.5f;
     float luma_span = 1.0f;
+    std::uint32_t luma_sample_count = 0;
+    std::uint32_t luma_sample_grid_width = 0;
+    std::uint32_t luma_sample_grid_height = 0;
+    std::uint64_t luma_sample_frame = 0;
+    char const* luma_sample_status = "not-sampled";
     char const* source = "none";
     char const* luminance_response = "not-sampled";
     char const* frosting_response = "not-sampled";
@@ -639,6 +649,18 @@ struct MaterialExecutorSummary {
     std::uint32_t material_buffer_reallocations = 0;
     std::uint32_t foreground_text_candidate_count = 0;
     std::uint32_t foreground_text_remap_count = 0;
+    bool backdrop_descriptor_luma_available = false;
+    float backdrop_descriptor_luma_min = 0.0f;
+    float backdrop_descriptor_luma_max = 1.0f;
+    float backdrop_descriptor_luma_mean = 0.5f;
+    std::uint32_t backdrop_descriptor_luma_sample_count = 0;
+    std::uint32_t backdrop_descriptor_luma_grid_width = 0;
+    std::uint32_t backdrop_descriptor_luma_grid_height = 0;
+    std::uint64_t backdrop_descriptor_luma_frame = 0;
+    char const* backdrop_descriptor_luma_status = "not-sampled";
+    char const* backdrop_descriptor_source = "none";
+    std::uint32_t backdrop_luma_sampling_skipped_count = 0;
+    char const* backdrop_luma_sampling_skip_reason = "none";
     char const* backdrop_copy_skip_reason = "none";
     std::int64_t cpu_decode_ns = 0;
     std::int64_t cpu_material_upload_ns = 0;
@@ -653,6 +675,37 @@ inline bool material_executor_requires_frame_capture(
         MaterialExecutorSummary const& summary) noexcept {
     return summary.planned_frame_capture_count > 0
         && summary.planned_frame_capture_pixels > 0;
+}
+
+inline float material_safe_luma(float value, float fallback) noexcept;
+
+inline void set_material_executor_backdrop_descriptor_summary(
+        MaterialExecutorSummary& summary,
+        MaterialBackdropDescriptor const& backdrop) noexcept {
+    summary.backdrop_descriptor_luma_available =
+        backdrop.available && backdrop.luma_sample_count > 0;
+    summary.backdrop_descriptor_luma_min =
+        material_safe_luma(backdrop.luma_min, 0.0f);
+    summary.backdrop_descriptor_luma_max =
+        std::max(summary.backdrop_descriptor_luma_min,
+                 material_safe_luma(backdrop.luma_max, 1.0f));
+    summary.backdrop_descriptor_luma_mean = std::clamp(
+        material_safe_luma(backdrop.luma_mean, 0.5f),
+        summary.backdrop_descriptor_luma_min,
+        summary.backdrop_descriptor_luma_max);
+    summary.backdrop_descriptor_luma_sample_count =
+        backdrop.luma_sample_count;
+    summary.backdrop_descriptor_luma_grid_width =
+        backdrop.luma_sample_grid_width;
+    summary.backdrop_descriptor_luma_grid_height =
+        backdrop.luma_sample_grid_height;
+    summary.backdrop_descriptor_luma_frame = backdrop.luma_sample_frame;
+    summary.backdrop_descriptor_luma_status =
+        backdrop.luma_sample_status && backdrop.luma_sample_status[0]
+            ? backdrop.luma_sample_status
+            : "not-sampled";
+    summary.backdrop_descriptor_source =
+        backdrop.source && backdrop.source[0] ? backdrop.source : "none";
 }
 
 inline bool material_stage_matches(
@@ -1463,6 +1516,14 @@ inline MaterialBackdropAnalysis analyze_material_backdrop(
         analysis.luma_min,
         analysis.luma_max);
     analysis.luma_span = analysis.luma_max - analysis.luma_min;
+    analysis.luma_sample_count = backdrop.luma_sample_count;
+    analysis.luma_sample_grid_width = backdrop.luma_sample_grid_width;
+    analysis.luma_sample_grid_height = backdrop.luma_sample_grid_height;
+    analysis.luma_sample_frame = backdrop.luma_sample_frame;
+    analysis.luma_sample_status =
+        backdrop.luma_sample_status && backdrop.luma_sample_status[0]
+            ? backdrop.luma_sample_status
+            : "not-sampled";
     analysis.source = backdrop.source && backdrop.source[0]
         ? backdrop.source
         : "none";

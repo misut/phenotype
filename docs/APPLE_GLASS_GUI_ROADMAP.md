@@ -275,6 +275,12 @@ blits the material backdrop texture only when `MaterialExecutorSummary` reports
 required shared-frame or next-frame capture, and it publishes
 `backdrop_copy_policy`, `backdrop_copy_required`, and
 `backdrop_copy_skip_reason` for artifact debugging.
+macOS also samples the copied foreground-excluded backdrop with a fixed 5x5
+asynchronous BGRA grid. Completed samples are consumed by the next pure
+`MaterialEnvironment.backdrop`; pending or unsupported samples degrade to the
+neutral deterministic descriptor and are reported through
+`renderer.material_backdrop_luma_descriptor` plus
+`MaterialPlan.backdrop.luma_sample_*`.
 
 ### Theme and widgets
 
