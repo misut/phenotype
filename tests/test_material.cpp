@@ -319,6 +319,31 @@ void test_command_material_preserves_theme_snapshot_contract() {
     std::puts("PASS: command material preserves theme snapshot contract");
 }
 
+void test_foreground_contrast_gap_uses_absolute_contrast_candidate() {
+    auto dark_theme = apply_dark_color_scheme(Theme{});
+    auto request = MaterialRequest{
+        material_style_for_kind(MaterialKind::Regular, dark_theme),
+        MaterialGeometry{12.0f, 20.0f, 240.0f, 96.0f, 10.0f},
+    };
+    auto env = sampled_environment();
+    env.backdrop.luma_min = 0.26f;
+    env.backdrop.luma_max = 0.38f;
+    env.backdrop.luma_mean = 0.32f;
+
+    auto plan = plan_material_surface(request, env);
+
+    assert(plan.backdrop_sampling);
+    assert(plan.foreground.primary_contrast_ratio
+           >= plan.foreground.minimum_contrast_ratio);
+    assert(plan.foreground.secondary_contrast_ratio
+           >= plan.foreground.minimum_contrast_ratio);
+    assert(plan.foreground.accent_contrast_ratio
+           >= plan.foreground.minimum_contrast_ratio);
+    assert(plan.reference_model.legibility_preserved);
+    assert((plan.foreground.primary == Color{0, 0, 0, 255}));
+    std::puts("PASS: foreground contrast gap uses absolute contrast candidate");
+}
+
 void test_warmup_backdrop_access_contract() {
     auto env = sampled_environment();
     env.capabilities.frame_history = false;
@@ -428,6 +453,7 @@ int main() {
     test_fallback_backdrop_access_contract();
     test_custom_theme_snapshot_contract();
     test_command_material_preserves_theme_snapshot_contract();
+    test_foreground_contrast_gap_uses_absolute_contrast_candidate();
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     test_executor_frame_capture_policy_contract();

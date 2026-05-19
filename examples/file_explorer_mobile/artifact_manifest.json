@@ -411,6 +411,14 @@
       "equals": "NSEvent.doubleClickInterval/keyRepeatDelay/keyRepeatInterval"
     },
     {
+      "path": "application.file_explorer.preferences.system_settings.font_family_available",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.preferences.system_settings.font_metrics_available",
+      "equals": true
+    },
+    {
       "path": "application.file_explorer.preferences.system_settings.font_scale_available",
       "equals": true
     },

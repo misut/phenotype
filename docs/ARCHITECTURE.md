@@ -225,9 +225,10 @@ Linux-safe `phenotype_theme_contract` package as
 `resolve_theme_preferences(ThemePreferenceBase, SystemThemePreferenceSnapshot,
 ThemePreferenceOverrides)`, so CLI and CI tooling can evaluate
 `system_settings + app_overrides -> effective_theme` without importing native
-rendering modules. The portable snapshot carries availability bits for
-font scale, line height, scroll metrics, and color scheme so debug evidence can
-distinguish an OS-derived value from a package fallback. The older
+rendering modules. The portable snapshot carries availability bits for font
+family, font metrics, font scale, line height, scroll metrics, and color scheme
+so debug evidence can distinguish an OS-derived value from a package fallback.
+The older
 `apply_system_theme_preferences(...)` API remains as a compatibility wrapper
 that returns only the resolved `Theme`. Package defaults such as Pretendard
 remain explicit theme inputs, OS font metrics and scroll policy arrive as
@@ -253,9 +254,10 @@ Windows uses `SystemParametersInfoW(SPI_GETNONCLIENTMETRICS)`,
 `GetDoubleClickTime`, `GetCaretBlinkTime`, `GetUserDefaultLocaleName`, and DWM.
 Android uses `Resources.getConfiguration()` plus
 `ViewConfiguration`. The base theme keeps Pretendard as the product default;
-switching to the OS family is an explicit app override, while OS
-body/heading/small text metrics, line height, and axis-specific scroll
-multipliers are safe pure inputs by default. Apps can disable
+switching to the OS family is an explicit app override and only resolves when
+`font_family_available=true`, while OS body/heading/small text metrics only
+override package sizes when `font_metrics_available=true`. Line height and
+axis-specific scroll multipliers are safe pure inputs by default. Apps can disable
 `apply_system_font_metrics` to keep package point sizes while still applying the
 platform text scale, and `apply_system_scroll_metrics` to ignore static
 platform scroll multipliers while preserving explicit app scroll speed.

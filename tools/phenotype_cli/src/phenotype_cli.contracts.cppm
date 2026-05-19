@@ -253,7 +253,8 @@ auto system_theme_preferences_json(
         "\"line_height_ratio\":{},\"font_scale\":{},"
         "\"scroll_delta_multiplier\":{},"
         "\"scroll_horizontal_delta_multiplier\":{},"
-        "\"color_scheme\":{},\"font_scale_available\":{},"
+        "\"color_scheme\":{},\"font_family_available\":{},"
+        "\"font_metrics_available\":{},\"font_scale_available\":{},"
         "\"line_height_available\":{},\"scroll_metrics_available\":{},"
         "\"color_scheme_available\":{},\"accent_color_available\":{},"
         "\"accent_color\":{}}}",
@@ -266,6 +267,8 @@ auto system_theme_preferences_json(
         system.scroll_delta_multiplier,
         system.scroll_horizontal_delta_multiplier,
         json_string(system.color_scheme),
+        system.font_family_available ? "true" : "false",
+        system.font_metrics_available ? "true" : "false",
         system.font_scale_available ? "true" : "false",
         system.line_height_available ? "true" : "false",
         system.scroll_metrics_available ? "true" : "false",
@@ -408,6 +411,12 @@ auto theme_resolve_inputs(cppx::cli::Invocation const& invocation)
     }
     system.font_scale_available = invocation.value("system-font-scale")
         .has_value();
+    system.font_family_available = invocation.value("system-font-family")
+        .has_value();
+    system.font_metrics_available =
+        invocation.value("system-body-font-size").has_value()
+        || invocation.value("system-heading-font-size").has_value()
+        || invocation.value("system-small-font-size").has_value();
     system.line_height_available = invocation.value("system-line-height")
         .has_value();
     system.scroll_metrics_available =

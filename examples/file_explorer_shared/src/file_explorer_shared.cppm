@@ -140,6 +140,8 @@ struct SystemPreferenceSnapshot {
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
     std::string scroll_source = "fallback";
+    bool font_family_available = false;
+    bool font_metrics_available = false;
     bool font_scale_available = false;
     bool line_height_available = false;
     bool scroll_metrics_available = false;
@@ -2950,6 +2952,12 @@ inline json::Value system_settings_debug_json(
         "scroll_horizontal_delta_multiplier",
         json::Value{settings.scroll_horizontal_delta_multiplier});
     out.emplace("scroll_source", json::Value{settings.scroll_source});
+    out.emplace(
+        "font_family_available",
+        json::Value{settings.font_family_available});
+    out.emplace(
+        "font_metrics_available",
+        json::Value{settings.font_metrics_available});
     out.emplace(
         "font_scale_available",
         json::Value{settings.font_scale_available});

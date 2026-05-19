@@ -835,6 +835,12 @@ def snapshot(plan: dict[str, object]) -> dict[str, object]:
                     "scroll_delta_multiplier": 1.0,
                     "scroll_horizontal_delta_multiplier": 1.0,
                     "scroll_source": "fallback",
+                    "font_family_available": True,
+                    "font_metrics_available": True,
+                    "font_scale_available": False,
+                    "line_height_available": False,
+                    "scroll_metrics_available": False,
+                    "color_scheme_available": True,
                     "double_click_interval_ms": 500.0,
                     "key_repeat_delay_ms": 500.0,
                     "key_repeat_interval_ms": 50.0,
@@ -1011,10 +1017,13 @@ def snapshot_with_file_explorer_chrome(
             "preferences": {
                 "system_settings": {
                     "source": "test-fallback",
+                    "font_family_available": False,
+                    "font_metrics_available": True,
                     "font_scale_available": False,
-                    "line_height_available": False,
+                    "line_height_available": True,
                     "scroll_metrics_available": True,
                     "color_scheme_available": True,
+                    "accent_color_available": True,
                 },
                 "app_overrides": {
                     "apply_system_font_metrics": True,
@@ -1330,6 +1339,31 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 ".scroll_metrics_available"))
         self.assertEqual(failure["likely_layer"], "file-explorer-preferences")
         self.assertIn("availability flags", failure["hint"])
+
+    def test_file_explorer_preferences_contract_rejects_used_system_without_availability(self) -> None:
+        snap = snapshot_with_file_explorer_chrome(material_plan())
+        preferences = snap["debug"]["application"]["file_explorer"]["preferences"]
+        settings = preferences["system_settings"]
+        resolution = preferences["resolution"]
+        settings["font_metrics_available"] = False
+        resolution["used_system_font_metrics"] = True
+
+        code, report = self.run_verifier(snap)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["path"] == (
+                "debug.application.file_explorer.preferences.resolution"
+                ".used_system_font_metrics"))
+        self.assertEqual(failure["likely_pass"], "preference-resolution")
+        self.assertEqual(
+            failure["actual"],
+            {
+                "used_system_font_metrics": True,
+                "font_metrics_available": False,
+            })
+        self.assertIn("cannot claim an OS preference", failure["hint"])
 
     def test_file_explorer_native_chrome_contract_rejects_content_markers(self) -> None:
         code, report = self.run_verifier(
