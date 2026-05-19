@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <string>
 #include <string_view>
@@ -51,7 +52,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 23);
+    assert(material_plan_contract_version == 24);
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(!plan.shape.capsule);
     assert(plan.theme.default_glass_tokens);
@@ -92,6 +93,82 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.observation_contract.expected_active_runtime_passes == 1u);
     assert(plan.observation_contract.expected_backdrop_runtime_passes == 1u);
     std::puts("PASS: sampled backdrop access contract");
+}
+
+void test_backdrop_optical_response_contract() {
+    auto env = sampled_environment();
+
+    auto neutral_plan = plan_material_surface(regular_request(), env);
+    assert(std::string_view(neutral_plan.backdrop.frosting_response)
+        == "balanced");
+    assert(std::string_view(neutral_plan.backdrop.tint_response)
+        == "preserve");
+    assert(std::string_view(neutral_plan.backdrop.saturation_response)
+        == "preserve");
+    assert(std::string_view(neutral_plan.backdrop.depth_response)
+        == "standard");
+    assert(std::fabs(neutral_plan.backdrop.opacity_delta) < 0.0001f);
+    assert(std::fabs(neutral_plan.backdrop.tint_alpha_delta) < 0.0001f);
+    assert(std::fabs(neutral_plan.backdrop.saturation_delta) < 0.0001f);
+    assert(std::fabs(neutral_plan.backdrop.shadow_alpha_delta) < 0.0001f);
+    assert(std::fabs(neutral_plan.backdrop.shadow_radius_delta) < 0.0001f);
+    assert(std::fabs(neutral_plan.backdrop.response_strength) < 0.0001f);
+
+    env.backdrop.luma_min = 0.02f;
+    env.backdrop.luma_max = 0.28f;
+    env.backdrop.luma_mean = 0.12f;
+    auto dark_plan = plan_material_surface(regular_request(), env);
+    assert(std::string_view(dark_plan.backdrop.frosting_response)
+        == "dark-frost-lift");
+    assert(std::string_view(dark_plan.backdrop.tint_response)
+        == "lift-dark-backdrop");
+    assert(std::string_view(dark_plan.backdrop.saturation_response)
+        == "lift-dark-color");
+    assert(std::string_view(dark_plan.backdrop.depth_response)
+        == "soften-dark-depth");
+    assert(dark_plan.backdrop.opacity_delta > 0.0f);
+    assert(dark_plan.backdrop.tint_alpha_delta > 0.0f);
+    assert(dark_plan.backdrop.saturation_delta > 0.0f);
+    assert(dark_plan.backdrop.shadow_alpha_delta < 0.0f);
+    assert(dark_plan.backdrop.shadow_radius_delta < 0.0f);
+    assert(dark_plan.backdrop.response_strength > 0.0f);
+
+    env.backdrop.luma_min = 0.84f;
+    env.backdrop.luma_max = 0.97f;
+    env.backdrop.luma_mean = 0.90f;
+    auto bright_plan = plan_material_surface(regular_request(), env);
+    assert(std::string_view(bright_plan.backdrop.frosting_response)
+        == "bright-frost-thin");
+    assert(std::string_view(bright_plan.backdrop.tint_response)
+        == "thin-bright-backdrop");
+    assert(std::string_view(bright_plan.backdrop.saturation_response)
+        == "compress-bright-color");
+    assert(std::string_view(bright_plan.backdrop.depth_response)
+        == "restore-bright-depth");
+    assert(bright_plan.backdrop.opacity_delta < 0.0f);
+    assert(bright_plan.backdrop.tint_alpha_delta < 0.0f);
+    assert(bright_plan.backdrop.saturation_delta < 0.0f);
+    assert(bright_plan.backdrop.shadow_alpha_delta > 0.0f);
+    assert(bright_plan.backdrop.shadow_radius_delta > 0.0f);
+
+    env.backdrop.luma_min = 0.46f;
+    env.backdrop.luma_max = 0.50f;
+    env.backdrop.luma_mean = 0.48f;
+    auto flat_plan = plan_material_surface(regular_request(), env);
+    assert(std::string_view(flat_plan.backdrop.frosting_response)
+        == "flat-edge-frost");
+    assert(std::string_view(flat_plan.backdrop.tint_response)
+        == "stabilize-flat-backdrop");
+    assert(std::string_view(flat_plan.backdrop.saturation_response)
+        == "restore-flat-color");
+    assert(std::string_view(flat_plan.backdrop.depth_response)
+        == "restore-flat-depth");
+    assert(flat_plan.backdrop.opacity_delta > 0.0f);
+    assert(flat_plan.backdrop.tint_alpha_delta > 0.0f);
+    assert(flat_plan.backdrop.saturation_delta > 0.0f);
+    assert(flat_plan.backdrop.shadow_alpha_delta > 0.0f);
+    assert(flat_plan.backdrop.shadow_radius_delta > 0.0f);
+    std::puts("PASS: backdrop optical response contract");
 }
 
 void test_content_layer_stays_standard_material_contract() {
@@ -335,6 +412,7 @@ void test_executor_frame_capture_policy_contract() {
 
 int main() {
     test_sampled_backdrop_access_contract();
+    test_backdrop_optical_response_contract();
     test_content_layer_stays_standard_material_contract();
     test_fallback_backdrop_access_contract();
     test_custom_theme_snapshot_contract();

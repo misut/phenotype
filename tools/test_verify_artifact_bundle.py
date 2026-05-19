@@ -168,9 +168,19 @@ def material_plan(
             "luma_span": 1.0,
             "source": "none",
             "luminance_response": "not-sampled",
+            "frosting_response": "not-sampled",
+            "tint_response": "not-sampled",
+            "saturation_response": "not-sampled",
+            "depth_response": "not-sampled",
             "luminance_floor_delta": 0.0,
             "luminance_gain_delta": 0.0,
             "edge_highlight_delta": 0.0,
+            "opacity_delta": 0.0,
+            "tint_alpha_delta": 0.0,
+            "saturation_delta": 0.0,
+            "shadow_alpha_delta": 0.0,
+            "shadow_radius_delta": 0.0,
+            "response_strength": 0.0,
         },
         "backdrop_access": {
             "required": False,
@@ -489,6 +499,10 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "excludes_foreground_text": True,
         "source": "previous-presented-frame",
         "luminance_response": "neutral",
+        "frosting_response": "balanced",
+        "tint_response": "preserve",
+        "saturation_response": "preserve",
+        "depth_response": "standard",
     })
     plan["backdrop_access"].update({
         "required": True,
@@ -2004,8 +2018,13 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "roles": {"surface": 1},
                 "backdrop_sources": {"none": 1},
                 "luminance_responses": {"not-sampled": 1},
+                "frosting_responses": {"not-sampled": 1},
+                "tint_responses": {"not-sampled": 1},
+                "saturation_responses": {"not-sampled": 1},
+                "depth_responses": {"not-sampled": 1},
                 "luminance_curves": {"fallback-flat": 1},
                 "luminance_adapted": 0,
+                "backdrop_optical_adapted": 0,
                 "render_target_ready": 1,
                 "render_target_within_backdrop_budget": 1,
                 "render_target_pixel_formats": {"rgba8unorm": 1},
@@ -2450,6 +2469,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             material_contract["fallback_paths"],
             {"unsupported-backend": 1})
+        self.assertEqual(
+            material_contract["backdrop"]["luminance_responses"],
+            {"not-sampled": 1})
+        self.assertEqual(
+            material_contract["backdrop"]["frosting_responses"],
+            {"not-sampled": 1})
         self.assertEqual(material_contract["plan_shape"]["rounded"], 1)
         self.assertEqual(
             material_contract["decision_first_blockers"],

@@ -222,8 +222,17 @@ material backdrop texture from the final artifact/readback texture, copying the
 backdrop source before the foreground text pass, and reporting the ordering in
 `renderer.material_executor_summary`. Unsupported, reduced-transparency,
 invalid, and quality-policy fallback plans keep this access contract inactive.
-with zero capture/sample budgets. macOS performs the actual texture copy at the
-edge and reports it through `material_executor_summary`, while other backends
+with zero capture/sample budgets. `MaterialPlan.backdrop` also carries pure
+optical response metadata: `frosting_response`, `tint_response`,
+`saturation_response`, `depth_response`, and numeric deltas for opacity, tint
+alpha, saturation, shadow alpha, and shadow radius, plus the existing luminance
+floor/gain/edge deltas. Dark, bright, and flat backdrop buckets can therefore
+change the actual sampled-glass inputs in the pure plan while artifacts explain
+the exact response. Neutral sampled backdrops keep balanced/preserve/standard
+responses and zero deltas; fallback plans report `not-sampled` responses and
+zero optical deltas.
+macOS performs the actual texture copy at the edge and reports it through
+`material_executor_summary`, while other backends
 can keep the same contract and explicitly fall back.
 `MaterialPlan.foreground` resolves primary, secondary, and accent foreground
 recommendations with a named scheme, source, estimated background luminance,

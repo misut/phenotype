@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "23": 7
+      "24": 7
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -178,6 +178,19 @@
       "neutral": 7
     },
     "luminance_adapted": 0,
+    "frosting_responses": {
+      "balanced": 7
+    },
+    "tint_responses": {
+      "preserve": 7
+    },
+    "saturation_responses": {
+      "preserve": 7
+    },
+    "depth_responses": {
+      "standard": 7
+    },
+    "backdrop_optical_adapted": 0,
     "foreground_schemes": {
       "vibrant-balanced": 5,
       "vibrant-dark": 2

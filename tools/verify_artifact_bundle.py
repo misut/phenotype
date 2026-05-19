@@ -116,6 +116,38 @@ ALLOWED_MATERIAL_LUMINANCE_RESPONSES = {
     "not-sampled",
 }
 
+ALLOWED_MATERIAL_FROSTING_RESPONSES = {
+    "balanced",
+    "bright-frost-thin",
+    "dark-frost-lift",
+    "flat-edge-frost",
+    "not-sampled",
+}
+
+ALLOWED_MATERIAL_TINT_RESPONSES = {
+    "lift-dark-backdrop",
+    "not-sampled",
+    "preserve",
+    "stabilize-flat-backdrop",
+    "thin-bright-backdrop",
+}
+
+ALLOWED_MATERIAL_SATURATION_RESPONSES = {
+    "compress-bright-color",
+    "lift-dark-color",
+    "not-sampled",
+    "preserve",
+    "restore-flat-color",
+}
+
+ALLOWED_MATERIAL_DEPTH_RESPONSES = {
+    "not-sampled",
+    "restore-bright-depth",
+    "restore-flat-depth",
+    "soften-dark-depth",
+    "standard",
+}
+
 ALLOWED_MATERIAL_SAMPLING_KERNELS = {
     "none",
     "weighted-5x5-manhattan",
@@ -206,7 +238,7 @@ ALLOWED_MATERIAL_REFERENCE_PERFORMANCE_RESPONSES = {
     "warmup-capture",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 23
+MATERIAL_PLAN_CONTRACT_VERSION = 24
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -647,6 +679,7 @@ def material_failure_context(
             "fallback_paths")
         material_contract["pass_executors"] = material_plan_summary.get(
             "pass_executors")
+        material_contract["backdrop"] = material_plan_summary.get("backdrop")
         material_contract["foreground"] = material_plan_summary.get(
             "foreground")
         material_contract["theme"] = material_plan_summary.get("theme")
@@ -1714,6 +1747,11 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "backdrop_capture_reasons",
         "luminance_responses",
         "luminance_adapted",
+        "frosting_responses",
+        "tint_responses",
+        "saturation_responses",
+        "depth_responses",
+        "backdrop_optical_adapted",
         "foreground_schemes",
         "foreground_sources",
         "foreground_backdrop_driven",
@@ -1774,6 +1812,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "backdrop_access_excludes_foreground_text",
             "backdrop_access_bounded",
             "luminance_adapted",
+            "backdrop_optical_adapted",
             "render_target_ready",
             "render_target_within_backdrop_budget",
             "decision_role_allows_liquid_glass",
@@ -1862,6 +1901,10 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "luminance_curves": ALLOWED_MATERIAL_LUMINANCE_CURVES,
         "backdrop_capture_scopes": ALLOWED_MATERIAL_BACKDROP_CAPTURE_SCOPES,
         "luminance_responses": ALLOWED_MATERIAL_LUMINANCE_RESPONSES,
+        "frosting_responses": ALLOWED_MATERIAL_FROSTING_RESPONSES,
+        "tint_responses": ALLOWED_MATERIAL_TINT_RESPONSES,
+        "saturation_responses": ALLOWED_MATERIAL_SATURATION_RESPONSES,
+        "depth_responses": ALLOWED_MATERIAL_DEPTH_RESPONSES,
         "foreground_schemes": ALLOWED_MATERIAL_FOREGROUND_SCHEMES,
         "foreground_sources": ALLOWED_MATERIAL_FOREGROUND_SOURCES,
     }
@@ -2662,6 +2705,18 @@ MATERIAL_BACKDROP_DELTA_FIELDS = (
     "luminance_floor_delta",
     "luminance_gain_delta",
     "edge_highlight_delta",
+    "opacity_delta",
+    "tint_alpha_delta",
+    "saturation_delta",
+    "shadow_alpha_delta",
+    "shadow_radius_delta",
+    "response_strength",
+)
+MATERIAL_BACKDROP_RESPONSE_FIELDS = (
+    ("frosting_response", ALLOWED_MATERIAL_FROSTING_RESPONSES),
+    ("tint_response", ALLOWED_MATERIAL_TINT_RESPONSES),
+    ("saturation_response", ALLOWED_MATERIAL_SATURATION_RESPONSES),
+    ("depth_response", ALLOWED_MATERIAL_DEPTH_RESPONSES),
 )
 MATERIAL_VERIFIER_FIELDS = (
     "require_backdrop_source",
@@ -3306,11 +3361,22 @@ def summarize_material_plans(
             "excludes_foreground_text": 0,
             "sources": {},
             "luminance_responses": {},
+            "frosting_responses": {},
+            "tint_responses": {},
+            "saturation_responses": {},
+            "depth_responses": {},
             "luminance_adapted": 0,
+            "optical_adapted": 0,
             "max_luma_span": 0.0,
             "max_abs_floor_delta": 0.0,
             "max_abs_gain_delta": 0.0,
             "max_abs_edge_delta": 0.0,
+            "max_abs_opacity_delta": 0.0,
+            "max_abs_tint_alpha_delta": 0.0,
+            "max_abs_saturation_delta": 0.0,
+            "max_abs_shadow_alpha_delta": 0.0,
+            "max_abs_shadow_radius_delta": 0.0,
+            "max_response_strength": 0.0,
         },
         "backdrop_access": {
             "required": 0,
@@ -5201,6 +5267,7 @@ def summarize_material_plans(
                     hint="Keep MaterialBackdropAnalysis.luma_span derived from min/max.",
                     record_success=False)
             max_abs_delta_for_plan = 0.0
+            max_abs_optical_delta_for_plan = 0.0
             for key in MATERIAL_BACKDROP_DELTA_FIELDS:
                 value = check_number_field(
                     report,
@@ -5214,16 +5281,37 @@ def summarize_material_plans(
                         "luminance_floor_delta": "max_abs_floor_delta",
                         "luminance_gain_delta": "max_abs_gain_delta",
                         "edge_highlight_delta": "max_abs_edge_delta",
+                        "opacity_delta": "max_abs_opacity_delta",
+                        "tint_alpha_delta": "max_abs_tint_alpha_delta",
+                        "saturation_delta": "max_abs_saturation_delta",
+                        "shadow_alpha_delta": "max_abs_shadow_alpha_delta",
+                        "shadow_radius_delta": "max_abs_shadow_radius_delta",
+                        "response_strength": "max_response_strength",
                     }[key]
+                    magnitude = (
+                        float(value)
+                        if key == "response_strength"
+                        else abs(float(value)))
                     backdrop_summary[summary_key] = max(
                         float(backdrop_summary[summary_key]),
-                        abs(float(value)))
-                    max_abs_delta_for_plan = max(
-                        max_abs_delta_for_plan,
-                        abs(float(value)))
+                        magnitude)
+                    if key in (
+                            "luminance_floor_delta",
+                            "luminance_gain_delta",
+                            "edge_highlight_delta"):
+                        max_abs_delta_for_plan = max(
+                            max_abs_delta_for_plan,
+                            magnitude)
+                    else:
+                        max_abs_optical_delta_for_plan = max(
+                            max_abs_optical_delta_for_plan,
+                            magnitude)
             if max_abs_delta_for_plan > 0.0001:
                 backdrop_summary["luminance_adapted"] = int(
                     backdrop_summary["luminance_adapted"]) + 1
+            if max_abs_optical_delta_for_plan > 0.0001:
+                backdrop_summary["optical_adapted"] = int(
+                    backdrop_summary["optical_adapted"]) + 1
             source = check_string_field(
                 report,
                 backdrop,
@@ -5253,6 +5341,42 @@ def summarize_material_plans(
                     likely_layer=likely_layer,
                     hint="Update the verifier vocabulary with intentional new pure responses.",
                     record_success=False)
+            response_values: dict[str, str | None] = {
+                "luminance_response": response
+                    if isinstance(response, str) else None,
+            }
+            for key, allowed_values in MATERIAL_BACKDROP_RESPONSE_FIELDS:
+                response_value = check_string_field(
+                    report,
+                    backdrop,
+                    key,
+                    f"{plan_path}.backdrop",
+                    likely_layer=likely_layer,
+                    hint=(
+                        "Backdrop optical responses should explain pure "
+                        "tint, saturation, frosting, or depth policy."))
+                if isinstance(response_value, str):
+                    response_values[key] = response_value
+                    summary_key = {
+                        "frosting_response": "frosting_responses",
+                        "tint_response": "tint_responses",
+                        "saturation_response": "saturation_responses",
+                        "depth_response": "depth_responses",
+                    }[key]
+                    responses_for_key = backdrop_summary[summary_key]
+                    responses_for_key[response_value] = (
+                        responses_for_key.get(response_value, 0) + 1)
+                    report.check(
+                        f"material backdrop {key} is known",
+                        response_value in allowed_values,
+                        path=f"{plan_path}.backdrop.{key}",
+                        expected=sorted(allowed_values),
+                        actual=response_value,
+                        likely_layer=likely_layer,
+                        hint=(
+                            "Update the verifier vocabulary with intentional "
+                            "new pure optical responses."),
+                        record_success=False)
             if backdrop_sampling is True:
                 report.check(
                     "material sampled backdrop descriptor is ready",
@@ -5283,6 +5407,22 @@ def summarize_material_plans(
                     likely_layer=likely_layer,
                     hint="Run apply_backdrop_luminance_policy for sampled plans.",
                     record_success=False)
+                for key in (
+                        "frosting_response",
+                        "tint_response",
+                        "saturation_response",
+                        "depth_response"):
+                    report.check(
+                        f"material sampled backdrop {key} is sampled",
+                        response_values.get(key) != "not-sampled",
+                        path=f"{plan_path}.backdrop.{key}",
+                        expected="not not-sampled",
+                        actual=response_values.get(key),
+                        likely_layer=likely_layer,
+                        hint=(
+                            "Run the pure backdrop optical response policy for "
+                            "sampled plans."),
+                        record_success=False)
             elif backdrop_sampling is False:
                 report.check(
                     "material fallback backdrop response is not-sampled",
@@ -5293,6 +5433,40 @@ def summarize_material_plans(
                     likely_layer=likely_layer,
                     hint="Fallback plans should not report sampled luminance policy.",
                     record_success=False)
+                report.check(
+                    "material fallback backdrop luminance deltas are zero",
+                    max_abs_delta_for_plan <= 0.0001,
+                    path=f"{plan_path}.backdrop",
+                    expected={"max_abs_luminance_delta<=": 0.0001},
+                    actual=max_abs_delta_for_plan,
+                    likely_layer=likely_layer,
+                    hint="Fallback plans should not apply sampled luminance deltas.",
+                    record_success=False)
+                report.check(
+                    "material fallback backdrop optical deltas are zero",
+                    max_abs_optical_delta_for_plan <= 0.0001,
+                    path=f"{plan_path}.backdrop",
+                    expected={"max_abs_optical_delta<=": 0.0001},
+                    actual=max_abs_optical_delta_for_plan,
+                    likely_layer=likely_layer,
+                    hint="Fallback plans should not apply sampled tint/saturation/depth deltas.",
+                    record_success=False)
+                for key in (
+                        "frosting_response",
+                        "tint_response",
+                        "saturation_response",
+                        "depth_response"):
+                    report.check(
+                        f"material fallback backdrop {key} is not-sampled",
+                        response_values.get(key) == "not-sampled",
+                        path=f"{plan_path}.backdrop.{key}",
+                        expected="not-sampled",
+                        actual=response_values.get(key),
+                        likely_layer=likely_layer,
+                        hint=(
+                            "Fallback plans should not report sampled optical "
+                            "backdrop policy."),
+                        record_success=False)
 
         next_frame_capture = None
         capture_reason = None
@@ -6724,6 +6898,7 @@ def check_material_plan_summary_requirements(
             "backdrop_access_excludes_foreground_text",
             "backdrop_access_bounded",
             "luminance_adapted",
+            "backdrop_optical_adapted",
             "render_target_ready",
             "render_target_within_backdrop_budget",
             "decision_can_sample_backdrop",
@@ -6784,6 +6959,12 @@ def check_material_plan_summary_requirements(
                     backdrop_summary = {}
                 actual = backdrop_summary.get("luminance_adapted")
                 summary_path = f"{base_path}.backdrop.luminance_adapted"
+            elif field == "backdrop_optical_adapted":
+                backdrop_summary = summary.get("backdrop")
+                if not isinstance(backdrop_summary, dict):
+                    backdrop_summary = {}
+                actual = backdrop_summary.get("optical_adapted")
+                summary_path = f"{base_path}.backdrop.optical_adapted"
             elif field in (
                     "render_target_ready",
                     "render_target_within_backdrop_budget"):
@@ -7026,6 +7207,18 @@ def check_material_plan_summary_requirements(
         "luminance_responses": (
             "material-backdrop",
             "Inspect MaterialPlan.backdrop.luminance_response and pure contrast policy."),
+        "frosting_responses": (
+            "material-backdrop",
+            "Inspect MaterialPlan.backdrop.frosting_response and pure blur/frost policy."),
+        "tint_responses": (
+            "material-backdrop",
+            "Inspect MaterialPlan.backdrop.tint_response and pure tint policy."),
+        "saturation_responses": (
+            "material-backdrop",
+            "Inspect MaterialPlan.backdrop.saturation_response and pure color policy."),
+        "depth_responses": (
+            "material-backdrop",
+            "Inspect MaterialPlan.backdrop.depth_response and pure depth/shadow policy."),
         "render_target_pixel_formats": (
             "material-render-target",
             "Inspect MaterialPlan.render_target.pixel_format and backend target metadata."),
@@ -7084,6 +7277,10 @@ def check_material_plan_summary_requirements(
             "backdrop_capture_scopes",
             "backdrop_capture_reasons",
             "luminance_responses",
+            "frosting_responses",
+            "tint_responses",
+            "saturation_responses",
+            "depth_responses",
             "render_target_pixel_formats",
             "decision_blockers",
             "verifier_profiles",
@@ -7150,6 +7347,16 @@ def check_material_plan_summary_requirements(
                     backdrop_summary = {}
                 actual = backdrop_summary.get("luminance_responses")
                 summary_path = f"{base_path}.backdrop.luminance_responses"
+            elif field in (
+                    "frosting_responses",
+                    "tint_responses",
+                    "saturation_responses",
+                    "depth_responses"):
+                backdrop_summary = summary.get("backdrop")
+                if not isinstance(backdrop_summary, dict):
+                    backdrop_summary = {}
+                actual = backdrop_summary.get(field)
+                summary_path = f"{base_path}.backdrop.{field}"
             elif field == "render_target_pixel_formats":
                 render_summary = summary.get("render_target")
                 if not isinstance(render_summary, dict):

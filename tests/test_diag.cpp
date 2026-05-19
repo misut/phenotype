@@ -979,8 +979,19 @@ void test_material_runtime_record_json_contract() {
     assert(obj.at("fallback_reason").as_string()
            == "backend reports no material backdrop blur support");
     assert(obj.at("backdrop_sampling").as_bool() == false);
-    assert(obj.at("backdrop").as_object()
-               .at("excludes_foreground_text").as_bool() == false);
+    auto const& backdrop = obj.at("backdrop").as_object();
+    assert(backdrop.at("excludes_foreground_text").as_bool() == false);
+    assert(backdrop.at("luminance_response").as_string() == "not-sampled");
+    assert(backdrop.at("frosting_response").as_string() == "not-sampled");
+    assert(backdrop.at("tint_response").as_string() == "not-sampled");
+    assert(backdrop.at("saturation_response").as_string() == "not-sampled");
+    assert(backdrop.at("depth_response").as_string() == "not-sampled");
+    assert(std::fabs(backdrop.at("opacity_delta").as_float()) < 0.0001f);
+    assert(std::fabs(backdrop.at("tint_alpha_delta").as_float()) < 0.0001f);
+    assert(std::fabs(backdrop.at("saturation_delta").as_float()) < 0.0001f);
+    assert(std::fabs(backdrop.at("shadow_alpha_delta").as_float()) < 0.0001f);
+    assert(std::fabs(backdrop.at("shadow_radius_delta").as_float()) < 0.0001f);
+    assert(std::fabs(backdrop.at("response_strength").as_float()) < 0.0001f);
     assert(obj.at("backdrop_access").as_object()
                .at("excludes_foreground_text").as_bool() == false);
     assert(obj.at("sample_taps").as_integer() == 0);
