@@ -190,12 +190,17 @@ invocation, snapshot/material observation, and likely-layer suggestions,
 `phenotype_cli.file_explorer` owns file explorer observation, chrome/native
 window control, and drive JSON, and `phenotype_cli.icons` owns the icon and SVG
 inspection command runners plus built-in icon helper payloads.
-`phenotype_cli.package` now owns package manifest inspection, resource catalog
-checks, bundling, and bundle integrity verification so package edge IO can
-evolve without expanding the dispatcher. `phenotype_cli.app` owns the remaining
-example-run and Android process glue plus top-level routing, and `main.cpp` is
-only a tiny entry point. New CLI work should prefer adding a focused module over
-expanding either `main.cpp` or the app dispatcher.
+Package work is now split by ownership instead of accumulating in one command
+module: `phenotype_cli.package_inspect` owns manifest/resource catalog checks,
+`phenotype_cli.package_json` owns package JSON envelopes,
+`phenotype_cli.package_bundle_json` owns staged-bundle JSON and stored manifest
+comparison, and `phenotype_cli.package` keeps only package command routing plus
+bundle staging/macOS app edge work. The facade re-exports those submodules so
+older imports keep the same surface while the implementation stays reviewable.
+`phenotype_cli.app` owns the remaining example-run and Android process glue
+plus top-level routing, and `main.cpp` is only a tiny entry point. New CLI work
+should prefer adding a focused module over expanding either `main.cpp` or the
+app dispatcher.
 
 Android workflows now follow the same CLI-first rule. The shell scripts under
 `tools/android` remain as the edge adapter implementation because they already

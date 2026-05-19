@@ -42,10 +42,17 @@ turning `main.cpp` into every subsystem at once:
   inspection, and bundle summary value types so command routing and future
   packaging submodules can share the contract without importing package IO
   helpers.
-- `phenotype_cli.package` owns package manifest inspection, resource catalog
-  checks, package bundling, bundle integrity verification, and macOS app bundle
-  staging helpers. It keeps filesystem/package edge IO away from command
-  dispatch while preserving the pure `phenotype.resources` contract boundary.
+- `phenotype_cli.package_inspect` owns package manifest inspection and resource
+  catalog checks. It reads files at the CLI edge, then lowers manifest and
+  locale text into the pure `phenotype.resources` contract.
+- `phenotype_cli.package_json` owns package/resource JSON envelopes for
+  `package inspect` and `package list`, keeping machine-readable output
+  formatting separate from filesystem work.
+- `phenotype_cli.package_bundle_json` owns staged-bundle JSON, stored manifest
+  parsing, digest comparison, and bundle integrity checks.
+- `phenotype_cli.package` owns package command routing plus bundle staging and
+  macOS app bundle helpers. It re-exports the package submodules so existing
+  consumers can keep importing `phenotype_cli.package`.
 - `phenotype_cli.app` owns the remaining high-level command parsing, example
   run orchestration, Android script dispatch, and routing to focused modules.
 - `main.cpp` is only the executable entry point and should stay a tiny forwarder
