@@ -88,9 +88,11 @@ is reported as concrete pixel-region metrics rather than a manual screenshot
 guess.
 Both file explorer profiles also expose font-family, font-scale, exact
 body/heading/small font-size, line-height, vertical scroll-speed, and horizontal
-scroll-speed preference inputs through the shared model. Native examples apply
-those app overrides after the platform system-settings snapshot is captured, so
-artifacts can distinguish OS defaults from user-selected theme changes. The
+scroll-speed preference inputs through the shared model, plus a
+`system-scroll-metrics` switch that lets artifacts prove whether static
+platform scroll multipliers are applied. Native examples apply those app
+overrides after the platform system-settings snapshot is captured, so artifacts
+can distinguish OS defaults from user-selected theme changes. The
 desktop More menu and mobile Create tab both call the same shared preference
 inputs, which keeps interactive controls, startup scripts, and CLI-driven
 artifact replay on one contract.
@@ -269,8 +271,8 @@ focus state as native artifacts: keyboard traversal sets `focus_visible=true`,
 while pointer input changes `focus_target` without drawing the ring.
 Preference aliases such as `font-family:system`, `font-scale:1.25`,
 `font-size:17`, `heading-font-size:22`, `small-font-size:13`,
-`line-height:1.45`, `scroll-speed:1.5`, `horizontal-scroll-speed:2`, and
-`color-scheme:system`
+`line-height:1.45`, `system-scroll-metrics:app`, `scroll-speed:1.5`,
+`horizontal-scroll-speed:2`, and `color-scheme:system`
 drive the same pure
 `ThemePreferenceOverrides` path as the native file explorer settings controls.
 Artifacts record the OS snapshot (`color_scheme`, appearance/accessibility
@@ -319,9 +321,10 @@ The examples also publish `application.file_explorer.preferences`, which joins
 the platform `system_settings` snapshot with app/user overrides and the
 effective theme values used at launch. This keeps OS font family source, OS font
 scale, font-weight adjustment, OS scroll policy/factors, separate OS and app
-vertical/horizontal scroll multipliers, system accent capture, Pretendard package
-defaults, and direct environment overrides debuggable from the same artifact
-bundle. Pretendard stays the default family; choosing the OS family is an
+vertical/horizontal scroll multipliers, the `apply_system_scroll_metrics`
+switch, system accent capture, Pretendard package defaults, and direct
+environment overrides debuggable from the same artifact bundle. Pretendard stays
+the default family; choosing the OS family is an
 explicit app override, while system appearance and accent are applied by the
 native file explorer examples and recorded in artifacts.
 Native file explorer artifacts publish the same contract under

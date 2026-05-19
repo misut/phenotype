@@ -229,7 +229,8 @@ artifact frame. This keeps deterministic GUI input replay available to CI and
 LLM debugging without introducing a second native event stack. Preference
 inputs (`font-family:system`, `font-scale:1.2`, `font-size:17`,
 `heading-font-size:22`, `small-font-size:13`, `line-height:1.45`,
-`scroll-speed:1.4`, `horizontal-scroll-speed:2`) use this
+`system-scroll-metrics:app`, `scroll-speed:1.4`,
+`horizontal-scroll-speed:2`) use this
 same path and are synced back into the native `phenotype::Theme` before the
 first frame, so OS-derived settings and user overrides share one contract. The
 observed OS snapshot includes font-family source, text scale, font-weight

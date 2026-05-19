@@ -406,6 +406,7 @@ struct ThemePreferenceOverrides {
     bool prefer_system_color_scheme = false;
     bool apply_system_font_metrics = true;
     bool apply_system_font_scale = true;
+    bool apply_system_scroll_metrics = true;
     bool apply_system_accent_color = false;
 };
 
@@ -579,16 +580,20 @@ inline Theme apply_system_theme_preferences(
             2.2f);
     }
 
-    float scroll_scale = bounded_theme_preference(
-        system.scroll_delta_multiplier,
-        1.0f,
-        0.25f,
-        4.0f);
-    float horizontal_scroll_scale = bounded_theme_preference(
-        system.scroll_horizontal_delta_multiplier,
-        scroll_scale,
-        0.25f,
-        4.0f);
+    float scroll_scale = overrides.apply_system_scroll_metrics
+        ? bounded_theme_preference(
+            system.scroll_delta_multiplier,
+            1.0f,
+            0.25f,
+            4.0f)
+        : 1.0f;
+    float horizontal_scroll_scale = overrides.apply_system_scroll_metrics
+        ? bounded_theme_preference(
+            system.scroll_horizontal_delta_multiplier,
+            scroll_scale,
+            0.25f,
+            4.0f)
+        : 1.0f;
     float const app_scroll_scale = bounded_theme_preference(
         overrides.scroll_delta_multiplier,
         1.0f,

@@ -239,7 +239,11 @@ switching to the OS family is an explicit app override, while OS
 body/heading/small text metrics, line height, and axis-specific scroll
 multipliers are safe pure inputs by default. Apps can disable
 `apply_system_font_metrics` to keep package point sizes while still applying the
-platform text scale.
+platform text scale, and `apply_system_scroll_metrics` to ignore static
+platform scroll multipliers while preserving explicit app scroll speed.
+macOS does not expose a supported global scroll-speed scalar; its runtime
+contract records the OS-adjusted `NSEvent.scrollingDeltaX/Y` event, precise vs
+line mode, app multipliers, and dispatched logical-pixel deltas instead.
 The same snapshot records `color_scheme`, `appearance_name`, and accessibility
 display booleans (`reduce_transparency`, `increase_contrast`, `reduce_motion`).
 macOS resolves appearance through `NSApplication.effectiveAppearance` and
@@ -930,8 +934,11 @@ stub backend publish deterministic fallback values.
 `scroll_delta_multiplier` and `scroll_horizontal_delta_multiplier` are pure
 theme inputs; native wheel callbacks only translate platform events into
 logical pixels before the app/user multiplier is applied. Renderers may report
-the same snapshot in `platform_runtime.details`, but they do not decide font,
-appearance, accessibility, accent, or scroll policy themselves.
+the same snapshot in `platform_runtime.details`. macOS also reports the last
+scroll event under `platform_runtime.details.input.scroll`, including raw
+`NSEvent` deltas, precise-delta mode, line height, app multipliers, normalized
+deltas, phase, and handled flags. Renderers do not decide font, appearance,
+accessibility, accent, or scroll policy themselves.
 
 ### Modularity guarantee
 

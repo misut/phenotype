@@ -333,8 +333,12 @@ same line-based script format used by `phenotype drive file-explorer
 `font-family:system`, `font-family:Pretendard`, `font-scale:1.2`,
 `system-font-metrics:false`, `font-size:17`, `heading-font-size:22`,
 `small-font-size:13`,
-`line-height:1.45`, `scroll-speed:1.4`, and `horizontal-scroll-speed:2` update
-the shared state before the native theme is resolved.
+`line-height:1.45`, `system-scroll-metrics:app`, `scroll-speed:1.4`, and
+`horizontal-scroll-speed:2` update the shared state before the native theme is
+resolved. macOS records the last local scroll event under
+`debug.platform_runtime.details.input.scroll`, so raw AppKit deltas, precise
+scroll mode, app multipliers, and normalized logical-pixel deltas can be
+checked without guessing from the captured image.
 File reads and environment access remain example edge work; parsing and input
 application stay in `file_explorer_shared`.
 The desktop More menu exposes the same preference inputs as native buttons

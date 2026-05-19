@@ -167,6 +167,7 @@ struct ThemePreferenceSnapshot {
     bool prefer_system_color_scheme = false;
     bool apply_system_font_metrics = true;
     bool apply_system_font_scale = true;
+    bool apply_system_scroll_metrics = true;
     bool apply_system_accent_color = false;
 };
 
@@ -270,6 +271,7 @@ enum class ExplorerInputKind {
     SetSmallFontSize,
     SetLineHeightRatio,
     SetSystemFontMetrics,
+    SetSystemScrollMetrics,
     SetScrollSpeed,
     SetHorizontalScrollSpeed,
     SetColorScheme,
@@ -2982,6 +2984,9 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
         "apply_system_font_scale",
         json::Value{state.theme_preferences.apply_system_font_scale});
     overrides.emplace(
+        "apply_system_scroll_metrics",
+        json::Value{state.theme_preferences.apply_system_scroll_metrics});
+    overrides.emplace(
         "apply_system_accent_color",
         json::Value{state.theme_preferences.apply_system_accent_color});
 
@@ -3023,8 +3028,8 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
     out.emplace(
         "scroll_policy",
         json::Value{
-            "OS scroll deltas/line settings at edge, axis theme multipliers "
-            "are pure inputs"});
+            "OS scroll deltas/line settings at edge, app can disable static "
+            "OS scroll multipliers, axis theme multipliers are pure inputs"});
     return json::Value{std::move(out)};
 }
 
@@ -4286,6 +4291,8 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
             return "set_line_height_ratio";
         case ExplorerInputKind::SetSystemFontMetrics:
             return "set_system_font_metrics";
+        case ExplorerInputKind::SetSystemScrollMetrics:
+            return "set_system_scroll_metrics";
         case ExplorerInputKind::SetScrollSpeed: return "set_scroll_speed";
         case ExplorerInputKind::SetHorizontalScrollSpeed:
             return "set_horizontal_scroll_speed";
@@ -4869,6 +4876,27 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
         }
         return parsed_input({
             .kind = ExplorerInputKind::SetSystemFontMetrics,
+            .value = lowered,
+        });
+    }
+    if (name == "system-scroll-metrics"
+        || name == "system_scroll_metrics"
+        || name == "scroll-metrics"
+        || name == "scroll_metrics"
+        || name == "use-system-scroll"
+        || name == "use_system_scroll") {
+        auto lowered = lower_copy(trim(value.empty()
+            ? std::string_view{"true"}
+            : std::string_view{value}));
+        if (lowered != "true" && lowered != "1" && lowered != "yes"
+            && lowered != "on" && lowered != "system"
+            && lowered != "false" && lowered != "0" && lowered != "no"
+            && lowered != "off" && lowered != "app") {
+            return input_parse_error(
+                "input 'system-scroll-metrics' requires true, false, system, or app");
+        }
+        return parsed_input({
+            .kind = ExplorerInputKind::SetSystemScrollMetrics,
             .value = lowered,
         });
     }
@@ -6173,6 +6201,7 @@ inline ExplorerInputModality default_input_modality(
         case ExplorerInputKind::SetSmallFontSize:
         case ExplorerInputKind::SetLineHeightRatio:
         case ExplorerInputKind::SetSystemFontMetrics:
+        case ExplorerInputKind::SetSystemScrollMetrics:
         case ExplorerInputKind::SetScrollSpeed:
         case ExplorerInputKind::SetHorizontalScrollSpeed:
         case ExplorerInputKind::SetColorScheme:
@@ -6638,6 +6667,24 @@ inline void apply_explorer_input(
                 : "Using package font size metrics.";
             return;
         }
+        case ExplorerInputKind::SetSystemScrollMetrics: {
+            auto value = lower_copy(trim(input.value));
+            bool const enabled = value.empty()
+                || value == "true" || value == "1" || value == "yes"
+                || value == "on" || value == "system";
+            bool const disabled = value == "false" || value == "0"
+                || value == "no" || value == "off" || value == "app";
+            if (!enabled && !disabled) {
+                state.status = "System scroll metrics input was invalid.";
+                return;
+            }
+            state.preferences_source = "application-input";
+            state.theme_preferences.apply_system_scroll_metrics = enabled;
+            state.status = enabled
+                ? "Using OS scroll metrics."
+                : "Using app-only scroll metrics.";
+            return;
+        }
         case ExplorerInputKind::SetScrollSpeed: {
             auto speed = parse_preference_number(input.value, 0.25f, 4.0f);
             if (!speed) {
@@ -6927,6 +6974,8 @@ struct ExplorerLabels {
     std::string preferences_scroll_slower = "Scroll -";
     std::string preferences_horizontal_scroll_faster = "H Scroll +";
     std::string preferences_horizontal_scroll_slower = "H Scroll -";
+    std::string preferences_system_scroll = "System Scroll";
+    std::string preferences_app_scroll = "App Scroll";
     std::string preferences_system_appearance = "System Look";
     std::string preferences_light_appearance = "Light";
     std::string preferences_dark_appearance = "Dark";
@@ -7043,6 +7092,8 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"preferences.scroll_slower", "Scroll -"},
         {"preferences.horizontal_scroll_faster", "H Scroll +"},
         {"preferences.horizontal_scroll_slower", "H Scroll -"},
+        {"preferences.system_scroll", "System Scroll"},
+        {"preferences.app_scroll", "App Scroll"},
         {"preferences.system_appearance", "System Look"},
         {"preferences.light_appearance", "Light"},
         {"preferences.dark_appearance", "Dark"},
@@ -7108,6 +7159,8 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"preferences.scroll_slower", "스크롤 -"},
         {"preferences.horizontal_scroll_faster", "가로 스크롤 +"},
         {"preferences.horizontal_scroll_slower", "가로 스크롤 -"},
+        {"preferences.system_scroll", "시스템 스크롤"},
+        {"preferences.app_scroll", "앱 스크롤"},
         {"preferences.system_appearance", "시스템"},
         {"preferences.light_appearance", "라이트"},
         {"preferences.dark_appearance", "다크"},
@@ -7249,6 +7302,12 @@ inline ExplorerLabels file_explorer_labels(
     labels.preferences_horizontal_scroll_slower = get(
         "preferences.horizontal_scroll_slower",
         labels.preferences_horizontal_scroll_slower);
+    labels.preferences_system_scroll = get(
+        "preferences.system_scroll",
+        labels.preferences_system_scroll);
+    labels.preferences_app_scroll = get(
+        "preferences.app_scroll",
+        labels.preferences_app_scroll);
     labels.preferences_system_appearance = get(
         "preferences.system_appearance",
         labels.preferences_system_appearance);

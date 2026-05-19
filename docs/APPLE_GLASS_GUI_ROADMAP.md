@@ -292,7 +292,8 @@ Theme support has matured beyond the original small token set:
 - JSON parsing with partial overrides and string color forms;
 - OS/system preference capture for font family, system/small text size,
   accessibility display settings, accent color, scroller style, scrollbar size,
-  and axis-specific scroll factors before app overrides are applied;
+  axis-specific scroll factors, and app-controlled system scroll metric usage
+  before app overrides are applied;
 - structural widget snapshot tests for the core widget surface.
 
 The default theme now starts from an Apple-like glass baseline: Pretendard for

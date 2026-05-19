@@ -127,13 +127,15 @@ same line-based script format used by `phenotype drive file-explorer
 `font-family:system`, `font-family:Pretendard`, `font-scale:1.2`,
 `system-font-metrics:false`, `font-size:17`, `heading-font-size:22`,
 `small-font-size:13`,
-`line-height:1.45`, `scroll-speed:1.4`, and `horizontal-scroll-speed:2` update
-the shared state before the native theme is resolved.
+`line-height:1.45`, `system-scroll-metrics:app`, `scroll-speed:1.4`, and
+`horizontal-scroll-speed:2` update the shared state before the native theme is
+resolved.
 File reads and environment access remain example edge work; parsing and input
 application stay in `file_explorer_shared`.
 The mobile Create tab exposes the same preference inputs as app buttons
-(`System`, `Pretendard`, `Text +/-`, and `Scroll +/-`) so touch changes and
-CLI-driven startup replay share one model contract.
+(`System`, `Pretendard`, `Text +/-`, `Scroll +/-`, and system/app scroll
+policy) so touch changes and CLI-driven startup replay share one model
+contract.
 
 The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity, and

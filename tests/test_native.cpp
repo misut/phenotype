@@ -1723,7 +1723,9 @@ static void test_macos_utf16_utf8_range_helpers() {
 
 static void test_macos_scroll_delta_normalization() {
     using phenotype::native::macos_test::normalize_scroll_delta;
+    using phenotype::native::macos_test::record_scroll_runtime_event_for_tests;
     using phenotype::native::macos_test::scroll_delta_multiplier;
+    using phenotype::native::macos_test::last_scroll_event_vertical_multiplier_for_tests;
 
     float precise = normalize_scroll_delta(-12.5, true, 25.6f);
     float line = normalize_scroll_delta(-2.0, false, 25.6f);
@@ -1741,6 +1743,28 @@ static void test_macos_scroll_delta_normalization() {
     assert(std::fabs(scroll_delta_multiplier(false) - 1.75f) < 0.001f);
     assert(std::fabs(scroll_delta_multiplier(true) - 0.5f) < 0.001f);
     phenotype::set_theme(original);
+
+    record_scroll_runtime_event_for_tests(
+        0.0,
+        -3.0,
+        false,
+        20.0f,
+        1.5f,
+        2.0f,
+        0.0f,
+        -90.0f,
+        false,
+        true);
+    assert(phenotype::native::macos_test::last_scroll_event_available_for_tests());
+    assert(phenotype::native::macos_test::last_scroll_event_source_for_tests()
+           == "NSEvent.scrollingDelta line");
+    assert(std::fabs(
+               phenotype::native::macos_test::last_scroll_event_normalized_y_for_tests()
+               + 90.0f)
+           < 0.001f);
+    auto vertical_multiplier = last_scroll_event_vertical_multiplier_for_tests();
+    assert(std::fabs(vertical_multiplier - 1.5f) < 0.001f);
+    assert(phenotype::native::macos_test::last_scroll_event_handled_y_for_tests());
 
     std::puts("PASS: macOS scroll delta normalization");
 }

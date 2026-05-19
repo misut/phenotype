@@ -177,6 +177,14 @@ phenotype::ThemePreferenceOverrides initial_theme_preference_overrides() {
             "PHENOTYPE_FILE_EXPLORER_DISABLE_SYSTEM_FONT_METRICS"))) {
         overrides.apply_system_font_metrics = false;
     }
+    if (env_truthy(std::getenv(
+            "PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_SCROLL_METRICS"))) {
+        overrides.apply_system_scroll_metrics = true;
+    }
+    if (env_truthy(std::getenv(
+            "PHENOTYPE_FILE_EXPLORER_DISABLE_SYSTEM_SCROLL_METRICS"))) {
+        overrides.apply_system_scroll_metrics = false;
+    }
     if (auto scale = env_float(
             std::getenv("PHENOTYPE_FILE_EXPLORER_FONT_SCALE"),
             0.75f,
@@ -308,6 +316,8 @@ file_explorer_demo::ThemePreferenceSnapshot theme_preference_snapshot(
         .prefer_system_color_scheme = overrides.prefer_system_color_scheme,
         .apply_system_font_metrics = overrides.apply_system_font_metrics,
         .apply_system_font_scale = overrides.apply_system_font_scale,
+        .apply_system_scroll_metrics =
+            overrides.apply_system_scroll_metrics,
         .apply_system_accent_color = overrides.apply_system_accent_color,
     };
 }
@@ -396,6 +406,8 @@ phenotype::ThemePreferenceOverrides theme_preferences_from_state(
         .prefer_system_color_scheme = preferences.prefer_system_color_scheme,
         .apply_system_font_metrics = preferences.apply_system_font_metrics,
         .apply_system_font_scale = preferences.apply_system_font_scale,
+        .apply_system_scroll_metrics =
+            preferences.apply_system_scroll_metrics,
         .apply_system_accent_color = preferences.apply_system_accent_color,
     };
 }
@@ -501,6 +513,12 @@ ExplorerInputMessage font_family_message(std::string value) {
 ExplorerInputMessage color_scheme_message(std::string value) {
     return preference_message(
         file_explorer_demo::ExplorerInputKind::SetColorScheme,
+        std::move(value));
+}
+
+ExplorerInputMessage system_scroll_metrics_message(std::string value) {
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetSystemScrollMetrics,
         std::move(value));
 }
 
@@ -1036,6 +1054,14 @@ void create_tab(State const& state) {
             widget::button<Msg>(
                 state.labels.preferences_horizontal_scroll_slower,
                 horizontal_scroll_speed_step_message(explorer, -0.25f));
+        }, SpaceToken::Xs);
+        layout::row([&] {
+            widget::button<Msg>(
+                state.labels.preferences_system_scroll,
+                system_scroll_metrics_message("system"));
+            widget::button<Msg>(
+                state.labels.preferences_app_scroll,
+                system_scroll_metrics_message("app"));
         }, SpaceToken::Xs);
         layout::row([&] {
             widget::button<Msg>(
