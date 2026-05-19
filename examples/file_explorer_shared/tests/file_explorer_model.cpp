@@ -58,6 +58,7 @@ int main() {
     assert(catalog.debug.verifier == "phenotype artifact verify-file-explorer");
     auto required_locale_keys =
         demo::resource_contract_locale_keys(catalog);
+    assert(required_locale_keys.size() == 66);
     auto contract = phenotype::resource_catalog_contract(
         catalog,
         std::span<std::string_view const>{required_locale_keys});
@@ -76,6 +77,11 @@ int main() {
         == "최근 항목");
     assert(demo::file_explorer_labels("ko", "desktop").preferences_scroll_faster
         == "스크롤 +");
+    assert(demo::file_explorer_labels("ko", "desktop").preferences_body_larger
+        == "본문 +");
+    assert(demo::file_explorer_labels("ko", "desktop")
+               .preferences_line_height_tighter
+        == "행간 -");
     assert(demo::file_explorer_labels("ko", "desktop").preferences_system_text_size
         == "OS 크기");
     assert(demo::file_explorer_labels("ko", "desktop").preferences_dark_appearance
