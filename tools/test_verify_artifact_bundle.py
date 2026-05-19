@@ -1008,6 +1008,37 @@ def snapshot_with_file_explorer_chrome(
                 "verifier_gate": (
                     "local_file_explorer_artifact_verify_not_default_pr_ci"),
             },
+            "preferences": {
+                "system_settings": {
+                    "source": "test-fallback",
+                },
+                "app_overrides": {
+                    "apply_system_font_metrics": True,
+                },
+                "effective_theme": {
+                    "font_family": "Pretendard",
+                    "color_scheme": "light",
+                    "body_font_size": 16.0,
+                    "heading_font_size": 22.0,
+                    "small_font_size": 14.0,
+                    "line_height_ratio": 1.6,
+                    "scroll_delta_multiplier": 1.0,
+                    "scroll_horizontal_delta_multiplier": 1.0,
+                },
+                "resolution": {
+                    "used_system_font_family": False,
+                    "used_system_color_scheme": True,
+                    "used_system_font_metrics": True,
+                    "used_system_font_scale": False,
+                    "used_user_font_scale": False,
+                    "used_user_font_size": False,
+                    "used_system_line_height": True,
+                    "used_user_line_height": False,
+                    "used_system_scroll_metrics": True,
+                    "used_user_scroll_scale": False,
+                    "used_system_accent_color": True,
+                },
+            },
             "chrome": {
                 "sidebar_selected_row_background_alpha": 238,
                 "thumbnail_system": {
@@ -1261,6 +1292,23 @@ class ArtifactVerifierContractTest(unittest.TestCase):
 
         self.assertEqual(code, 0)
         self.assertTrue(report["ok"])
+
+    def test_file_explorer_preferences_contract_rejects_missing_resolution_flag(self) -> None:
+        snap = snapshot_with_file_explorer_chrome(material_plan())
+        resolution = snap["debug"]["application"]["file_explorer"][
+            "preferences"]["resolution"]
+        del resolution["used_system_font_metrics"]
+
+        code, report = self.run_verifier(snap)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["path"] == (
+                "debug.application.file_explorer.preferences.resolution"
+                ".used_system_font_metrics"))
+        self.assertEqual(failure["likely_layer"], "file-explorer-preferences")
+        self.assertIn("Resolver evidence booleans", failure["hint"])
 
     def test_file_explorer_native_chrome_contract_rejects_content_markers(self) -> None:
         code, report = self.run_verifier(

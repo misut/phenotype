@@ -415,6 +415,26 @@
       "equals": "Pretendard"
     },
     {
+      "path": "application.file_explorer.preferences.resolution.used_system_color_scheme",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.preferences.resolution.used_system_font_metrics",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.preferences.resolution.used_system_scroll_metrics",
+      "equals": true
+    },
+    {
+      "path": "application.file_explorer.preferences.resolution.used_user_font_size",
+      "equals": false
+    },
+    {
+      "path": "application.file_explorer.preferences.resolution.used_user_scroll_scale",
+      "equals": false
+    },
+    {
       "path": "application.file_explorer.preferences.app_overrides.apply_system_font_metrics",
       "equals": true
     },

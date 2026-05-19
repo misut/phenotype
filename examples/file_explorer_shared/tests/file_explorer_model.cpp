@@ -452,6 +452,18 @@ duplicate
            != std::string::npos);
     assert(preference_debug_text.find("\"font_scale\":1.25")
            != std::string::npos);
+    assert(preference_debug_text.find("\"effective_theme\"")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"heading_font_size\"")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"line_height_ratio\"")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"resolution\"")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"used_system_font_metrics\"")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"used_user_scroll_scale\"")
+           != std::string::npos);
     assert(preference_debug_text.find("\"scroll_delta_multiplier\":1.5")
            != std::string::npos);
     assert(preference_debug_text.find("\"apply_system_scroll_metrics\":false")

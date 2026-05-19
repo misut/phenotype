@@ -235,9 +235,22 @@ struct ExplorerState {
     std::string effective_font_family = "Pretendard";
     std::string effective_color_scheme = "light";
     float effective_body_font_size = 16.0f;
+    float effective_heading_font_size = 20.0f;
     float effective_small_font_size = 14.4f;
+    float effective_line_height_ratio = 1.6f;
     float effective_scroll_delta_multiplier = 1.0f;
     float effective_scroll_horizontal_delta_multiplier = 1.0f;
+    bool used_system_font_family = false;
+    bool used_system_color_scheme = false;
+    bool used_system_font_metrics = false;
+    bool used_system_font_scale = false;
+    bool used_user_font_scale = false;
+    bool used_user_font_size = false;
+    bool used_system_line_height = false;
+    bool used_user_line_height = false;
+    bool used_system_scroll_metrics = false;
+    bool used_user_scroll_scale = false;
+    bool used_system_accent_color = false;
 };
 
 enum class ExplorerInputKind {
@@ -642,9 +655,22 @@ struct RuntimePreferenceState {
     std::string effective_font_family = "Pretendard";
     std::string effective_color_scheme = "light";
     float effective_body_font_size = 16.0f;
+    float effective_heading_font_size = 20.0f;
     float effective_small_font_size = 14.4f;
+    float effective_line_height_ratio = 1.6f;
     float effective_scroll_delta_multiplier = 1.0f;
     float effective_scroll_horizontal_delta_multiplier = 1.0f;
+    bool used_system_font_family = false;
+    bool used_system_color_scheme = false;
+    bool used_system_font_metrics = false;
+    bool used_system_font_scale = false;
+    bool used_user_font_scale = false;
+    bool used_user_font_size = false;
+    bool used_system_line_height = false;
+    bool used_user_line_height = false;
+    bool used_system_scroll_metrics = false;
+    bool used_user_scroll_scale = false;
+    bool used_system_accent_color = false;
 };
 
 struct ExplorerSidebarSymbol {
@@ -3027,14 +3053,55 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
         "body_font_size",
         json::Value{state.effective_body_font_size});
     effective.emplace(
+        "heading_font_size",
+        json::Value{state.effective_heading_font_size});
+    effective.emplace(
         "small_font_size",
         json::Value{state.effective_small_font_size});
+    effective.emplace(
+        "line_height_ratio",
+        json::Value{state.effective_line_height_ratio});
     effective.emplace(
         "scroll_delta_multiplier",
         json::Value{state.effective_scroll_delta_multiplier});
     effective.emplace(
         "scroll_horizontal_delta_multiplier",
         json::Value{state.effective_scroll_horizontal_delta_multiplier});
+
+    json::Object resolution;
+    resolution.emplace(
+        "used_system_font_family",
+        json::Value{state.used_system_font_family});
+    resolution.emplace(
+        "used_system_color_scheme",
+        json::Value{state.used_system_color_scheme});
+    resolution.emplace(
+        "used_system_font_metrics",
+        json::Value{state.used_system_font_metrics});
+    resolution.emplace(
+        "used_system_font_scale",
+        json::Value{state.used_system_font_scale});
+    resolution.emplace(
+        "used_user_font_scale",
+        json::Value{state.used_user_font_scale});
+    resolution.emplace(
+        "used_user_font_size",
+        json::Value{state.used_user_font_size});
+    resolution.emplace(
+        "used_system_line_height",
+        json::Value{state.used_system_line_height});
+    resolution.emplace(
+        "used_user_line_height",
+        json::Value{state.used_user_line_height});
+    resolution.emplace(
+        "used_system_scroll_metrics",
+        json::Value{state.used_system_scroll_metrics});
+    resolution.emplace(
+        "used_user_scroll_scale",
+        json::Value{state.used_user_scroll_scale});
+    resolution.emplace(
+        "used_system_accent_color",
+        json::Value{state.used_system_accent_color});
 
     json::Object out;
     out.emplace("source", json::Value{state.preferences_source});
@@ -3043,6 +3110,7 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
         system_settings_debug_json(state.system_settings));
     out.emplace("app_overrides", json::Value{std::move(overrides)});
     out.emplace("effective_theme", json::Value{std::move(effective)});
+    out.emplace("resolution", json::Value{std::move(resolution)});
     out.emplace(
         "font_policy",
         json::Value{
@@ -5615,11 +5683,26 @@ inline void apply_runtime_preferences(
     state.effective_font_family = preferences.effective_font_family;
     state.effective_color_scheme = preferences.effective_color_scheme;
     state.effective_body_font_size = preferences.effective_body_font_size;
+    state.effective_heading_font_size =
+        preferences.effective_heading_font_size;
     state.effective_small_font_size = preferences.effective_small_font_size;
+    state.effective_line_height_ratio =
+        preferences.effective_line_height_ratio;
     state.effective_scroll_delta_multiplier =
         preferences.effective_scroll_delta_multiplier;
     state.effective_scroll_horizontal_delta_multiplier =
         preferences.effective_scroll_horizontal_delta_multiplier;
+    state.used_system_font_family = preferences.used_system_font_family;
+    state.used_system_color_scheme = preferences.used_system_color_scheme;
+    state.used_system_font_metrics = preferences.used_system_font_metrics;
+    state.used_system_font_scale = preferences.used_system_font_scale;
+    state.used_user_font_scale = preferences.used_user_font_scale;
+    state.used_user_font_size = preferences.used_user_font_size;
+    state.used_system_line_height = preferences.used_system_line_height;
+    state.used_user_line_height = preferences.used_user_line_height;
+    state.used_system_scroll_metrics = preferences.used_system_scroll_metrics;
+    state.used_user_scroll_scale = preferences.used_user_scroll_scale;
+    state.used_system_accent_color = preferences.used_system_accent_color;
 }
 
 inline fs::path location_path(ExplorerState const& state, std::string_view id) {

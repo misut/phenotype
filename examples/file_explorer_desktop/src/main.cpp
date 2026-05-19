@@ -475,25 +475,34 @@ file_explorer_demo::ThemePreferenceSnapshot theme_preference_snapshot(
 }
 
 file_explorer_demo::RuntimePreferenceState runtime_preference_state(
-        phenotype::Theme const& theme,
+        phenotype::ResolvedThemePreferences const& resolved,
         phenotype::PlatformSystemSettingsSnapshot system_settings,
         phenotype::ThemePreferenceOverrides theme_preferences) {
     file_explorer_demo::RuntimePreferenceState state{};
-    state.source = "native-debug-capabilities+environment-overrides";
+    state.source = resolved.source;
     state.system_settings = system_preference_snapshot(system_settings);
     state.theme_preferences = theme_preference_snapshot(theme_preferences);
-    state.effective_font_family = theme.default_font_family;
-    state.effective_color_scheme = phenotype::theme_color_scheme_is_dark(
-        theme_preferences.prefer_system_color_scheme
-            ? system_settings.color_scheme
-            : theme_preferences.color_scheme)
-        ? "dark"
-        : "light";
-    state.effective_body_font_size = theme.body_font_size;
-    state.effective_small_font_size = theme.small_font_size;
-    state.effective_scroll_delta_multiplier = theme.scroll_delta_multiplier;
+    state.effective_font_family = resolved.effective_font_family;
+    state.effective_color_scheme = resolved.effective_color_scheme;
+    state.effective_body_font_size = resolved.effective_body_font_size;
+    state.effective_heading_font_size = resolved.effective_heading_font_size;
+    state.effective_small_font_size = resolved.effective_small_font_size;
+    state.effective_line_height_ratio = resolved.effective_line_height_ratio;
+    state.effective_scroll_delta_multiplier =
+        resolved.effective_scroll_delta_multiplier;
     state.effective_scroll_horizontal_delta_multiplier =
-        theme.scroll_horizontal_delta_multiplier;
+        resolved.effective_scroll_horizontal_delta_multiplier;
+    state.used_system_font_family = resolved.used_system_font_family;
+    state.used_system_color_scheme = resolved.used_system_color_scheme;
+    state.used_system_font_metrics = resolved.used_system_font_metrics;
+    state.used_system_font_scale = resolved.used_system_font_scale;
+    state.used_user_font_scale = resolved.used_user_font_scale;
+    state.used_user_font_size = resolved.used_user_font_size;
+    state.used_system_line_height = resolved.used_system_line_height;
+    state.used_user_line_height = resolved.used_user_line_height;
+    state.used_system_scroll_metrics = resolved.used_system_scroll_metrics;
+    state.used_user_scroll_scale = resolved.used_user_scroll_scale;
+    state.used_system_accent_color = resolved.used_system_accent_color;
     return state;
 }
 
@@ -589,19 +598,20 @@ phenotype::ThemePreferenceOverrides theme_preferences_from_state(
 void sync_runtime_theme(file_explorer_demo::ExplorerState& explorer) {
     refresh_system_settings_from_platform();
     auto overrides = theme_preferences_from_state(explorer.theme_preferences);
-    auto theme = phenotype::apply_system_theme_preferences(
+    auto resolved = phenotype::resolve_system_theme_preferences(
         g_base_theme,
         g_system_settings,
-        overrides);
+        overrides,
+        "native-debug-capabilities+environment-overrides");
     auto runtime = runtime_preference_state(
-        theme,
+        resolved,
         g_system_settings,
         overrides);
     if (explorer.preferences_source == "application-input")
         runtime.source = explorer.preferences_source;
     g_runtime_preferences = runtime;
     file_explorer_demo::apply_runtime_preferences(explorer, runtime);
-    phenotype::set_theme(theme);
+    phenotype::set_theme(resolved.theme);
 }
 
 struct SvgPreviewDocumentCacheEntry {
@@ -2995,15 +3005,16 @@ int main() {
     auto const theme_preferences = initial_theme_preference_overrides();
     g_base_theme = theme;
     g_system_settings = system_settings;
-    theme = phenotype::apply_system_theme_preferences(
+    auto const resolved = phenotype::resolve_system_theme_preferences(
         theme,
         system_settings,
-        theme_preferences);
+        theme_preferences,
+        "native-debug-capabilities+environment-overrides");
     g_runtime_preferences = runtime_preference_state(
-        theme,
+        resolved,
         system_settings,
         theme_preferences);
-    phenotype::set_theme(theme);
+    phenotype::set_theme(resolved.theme);
     phenotype::diag::set_application_debug_provider(
         file_explorer_application_debug_payload);
 
