@@ -873,6 +873,10 @@ planning, or paint code. Release builds may keep the neutral input/output
 types as thin value bridges while omitting artifact writers and driver
 endpoints unless the package manifest explicitly requests them. See
 `docs/PHENOTYPE_CLI_ROADMAP.md` for the command surface and migration plan.
+The package CLI implementation mirrors that boundary: inspection/checks,
+package JSON, staged-bundle JSON, and bundle/app staging live in separate
+modules so manifest parsing, output formatting, digest comparison, and
+filesystem writes can be reviewed independently.
 
 `phenotype.resources` is the pure value boundary between package manifests and
 runtime code. It lives in the internal `packages/phenotype_resources` path
