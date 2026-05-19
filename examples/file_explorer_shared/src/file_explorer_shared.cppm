@@ -138,6 +138,7 @@ struct SystemPreferenceSnapshot {
     float touch_slop = 0.0f;
     float scroll_friction = 0.0f;
     float scroll_delta_multiplier = 1.0f;
+    float scroll_horizontal_delta_multiplier = 1.0f;
     std::string scroll_source = "fallback";
     bool accent_color_available = false;
     RgbaColorSnapshot accent_color{};
@@ -216,6 +217,7 @@ struct ExplorerState {
     float effective_body_font_size = 16.0f;
     float effective_small_font_size = 14.4f;
     float effective_scroll_delta_multiplier = 1.0f;
+    float effective_scroll_horizontal_delta_multiplier = 1.0f;
 };
 
 enum class ExplorerInputKind {
@@ -613,6 +615,7 @@ struct RuntimePreferenceState {
     float effective_body_font_size = 16.0f;
     float effective_small_font_size = 14.4f;
     float effective_scroll_delta_multiplier = 1.0f;
+    float effective_scroll_horizontal_delta_multiplier = 1.0f;
 };
 
 struct ExplorerSidebarSymbol {
@@ -2884,6 +2887,9 @@ inline json::Value system_settings_debug_json(
     out.emplace(
         "scroll_delta_multiplier",
         json::Value{settings.scroll_delta_multiplier});
+    out.emplace(
+        "scroll_horizontal_delta_multiplier",
+        json::Value{settings.scroll_horizontal_delta_multiplier});
     out.emplace("scroll_source", json::Value{settings.scroll_source});
     out.emplace(
         "accent_color_available",
@@ -2944,6 +2950,9 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
     effective.emplace(
         "scroll_delta_multiplier",
         json::Value{state.effective_scroll_delta_multiplier});
+    effective.emplace(
+        "scroll_horizontal_delta_multiplier",
+        json::Value{state.effective_scroll_horizontal_delta_multiplier});
 
     json::Object out;
     out.emplace("source", json::Value{state.preferences_source});
@@ -5383,6 +5392,8 @@ inline void apply_runtime_preferences(
     state.effective_small_font_size = preferences.effective_small_font_size;
     state.effective_scroll_delta_multiplier =
         preferences.effective_scroll_delta_multiplier;
+    state.effective_scroll_horizontal_delta_multiplier =
+        preferences.effective_scroll_horizontal_delta_multiplier;
 }
 
 inline fs::path location_path(ExplorerState const& state, std::string_view id) {

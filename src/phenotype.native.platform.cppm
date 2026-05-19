@@ -198,6 +198,9 @@ struct input_api {
     float (*scroll_delta_y)(double dy,
                             float line_height,
                             float viewport_height) = nullptr;
+    float (*scroll_delta_x)(double dx,
+                            float line_height,
+                            float viewport_width) = nullptr;
 };
 
 using DebugFrameCapture = ::phenotype::diag::detail::ArtifactFrameCapture;

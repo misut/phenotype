@@ -337,6 +337,63 @@ inline void cell(str content,
 // reads the same pattern as `widget::switch_`. Paint's hover_background
 // fallback stays available for widgets (tabs, link) that haven't been
 // migrated yet.
+inline void apply_button_material(LayoutNode& node,
+                                  ButtonStyleOptions const& options) {
+    if (!options.has_material || options.material.kind == MaterialKind::None)
+        return;
+    node.material = options.material;
+    node.material.tint = node.background;
+    node.material.border = node.border_color;
+    node.material.foreground = node.text_color;
+}
+
+inline ButtonStyleOptions glass_control_button_style(
+        GlassControlStyleOptions options = {}) {
+    auto const& t = detail::g_app.theme;
+    auto const kind = options.selected && options.kind == MaterialKind::None
+        ? MaterialKind::Thin
+        : options.kind;
+    auto material = material_style_for_kind(kind, t);
+    material.role = options.role;
+    material.fallback = kind != MaterialKind::None;
+    material.tint = options.selected
+        ? material_with_alpha(t.surface, 198)
+        : material.tint;
+    material.border = material_with_alpha(
+        t.border,
+        static_cast<unsigned char>(options.selected ? 190 : 120));
+
+    ButtonStyleOptions style;
+    style.disabled = options.disabled;
+    style.has_material = kind != MaterialKind::None;
+    style.material = material;
+    style.has_background = true;
+    style.background = material.tint;
+    style.has_hover_background = true;
+    style.hover_background = material_with_alpha(
+        t.surface,
+        static_cast<unsigned char>(options.selected ? 222 : 150));
+    style.has_pressed_background = true;
+    style.pressed_background = material_with_alpha(
+        t.surface,
+        static_cast<unsigned char>(options.selected ? 238 : 176));
+    style.has_border_color = true;
+    style.border_color = material.border;
+    style.has_text_color = true;
+    style.text_color = options.selected ? t.foreground : t.muted;
+    style.border_width = options.selected ? 1.0f : 0.0f;
+    style.border_radius = options.border_radius >= 0.0f
+        ? options.border_radius
+        : t.radius_md;
+    style.font_size = options.font_size;
+    style.max_width = options.width;
+    style.fixed_height = options.height;
+    style.min_hit_width = minimum_button_activation_size;
+    style.min_hit_height = minimum_button_activation_size;
+    style.text_align = options.text_align;
+    return style;
+}
+
 template<typename Msg>
 inline void button(str label, Msg msg, ButtonStyleOptions options) {
     auto h = detail::alloc_node();
@@ -386,6 +443,7 @@ inline void button(str label, Msg msg, ButtonStyleOptions options) {
         node.border_width = options.border_width >= 0.0f
             ? options.border_width
             : 1.0f;
+        apply_button_material(node, options);
         node.cursor_type = 0;
         node.focusable = false;
         node.debug_semantic_enabled = false;
@@ -452,6 +510,7 @@ inline void button(str label, Msg msg, ButtonStyleOptions options) {
         is_focused ? t.state_focus_ring_width : base_border_width, focus_ms);
     node.border_color = animate_color(
         is_focused ? t.state_focus_ring : base_border, focus_ms);
+    apply_button_material(node, options);
     node.cursor_type = 1;
 
     detail::g_app.callbacks.push_back([msg = std::move(msg)] {
@@ -472,6 +531,13 @@ inline void button(str label, Msg msg,
     options.variant = variant;
     options.disabled = disabled;
     button(label, std::move(msg), options);
+}
+
+template<typename Msg>
+inline void glass_button(str label,
+                         Msg msg,
+                         GlassControlStyleOptions options = {}) {
+    button(label, std::move(msg), glass_control_button_style(options));
 }
 
 namespace _impl {
@@ -949,6 +1015,7 @@ inline void canvas_button(str label,
         node.border_width = options.border_width >= 0.0f
             ? options.border_width
             : 1.0f;
+        apply_button_material(node, options);
         node.cursor_type = 0;
         node.focusable = false;
         node.debug_semantic_enabled = false;
@@ -1006,6 +1073,7 @@ inline void canvas_button(str label,
             is_focused ? t.state_focus_ring_width : base_border_width, focus_ms);
         node.border_color = animate_color(
             is_focused ? t.state_focus_ring : base_border, focus_ms);
+        apply_button_material(node, options);
         node.cursor_type = 1;
 
         detail::g_app.callbacks.push_back([msg = std::move(msg)] {

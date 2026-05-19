@@ -299,6 +299,7 @@ struct Theme {
     float small_font_size    = 14.4f;  // 0.9rem
     float line_height_ratio  = 1.6f;
     float scroll_delta_multiplier = 1.0f;
+    float scroll_horizontal_delta_multiplier = 1.0f;
 
     // Layout
     float max_content_width  = 720.0f;
@@ -376,6 +377,7 @@ struct PlatformSystemSettingsSnapshot {
     float touch_slop = 0.0f;
     float scroll_friction = 0.0f;
     float scroll_delta_multiplier = 1.0f;
+    float scroll_horizontal_delta_multiplier = 1.0f;
     std::string scroll_source = "fallback";
     bool accent_color_available = false;
     Color accent_color = {0, 122, 255, 255};
@@ -487,13 +489,25 @@ inline Theme apply_system_theme_preferences(
         1.0f,
         0.25f,
         4.0f);
-    scroll_scale *= bounded_theme_preference(
+    float horizontal_scroll_scale = bounded_theme_preference(
+        system.scroll_horizontal_delta_multiplier,
+        scroll_scale,
+        0.25f,
+        4.0f);
+    float const app_scroll_scale = bounded_theme_preference(
         overrides.scroll_delta_multiplier,
         1.0f,
         0.25f,
         4.0f);
+    horizontal_scroll_scale *= app_scroll_scale;
+    scroll_scale *= app_scroll_scale;
     theme.scroll_delta_multiplier = bounded_theme_preference(
         scroll_scale,
+        1.0f,
+        0.25f,
+        4.0f);
+    theme.scroll_horizontal_delta_multiplier = bounded_theme_preference(
+        horizontal_scroll_scale,
         1.0f,
         0.25f,
         4.0f);
@@ -580,6 +594,7 @@ inline bool theme_matches_default_glass_contract(Theme const& theme) {
         && theme.small_font_size == contract.typography.small_font_size
         && theme.line_height_ratio == contract.typography.line_height_ratio
         && theme.scroll_delta_multiplier == 1.0f
+        && theme.scroll_horizontal_delta_multiplier == 1.0f
         && theme.state_focus_ring == theme.accent;
 }
 
@@ -876,6 +891,8 @@ inline constexpr float minimum_button_activation_size = 44.0f;
 struct ButtonStyleOptions {
     ButtonVariant variant = ButtonVariant::Default;
     bool disabled = false;
+    bool has_material = false;
+    MaterialStyle material = {};
     bool has_background = false;
     Color background = {};
     bool has_hover_background = false;
@@ -898,6 +915,18 @@ struct ButtonStyleOptions {
     float min_hit_width = minimum_button_activation_size;
     float min_hit_height = minimum_button_activation_size;
     TextAlign text_align = TextAlign::Start;
+};
+
+struct GlassControlStyleOptions {
+    MaterialKind kind = MaterialKind::Clear;
+    MaterialSurfaceRole role = MaterialSurfaceRole::Navigation;
+    bool selected = false;
+    bool disabled = false;
+    float width = 0.0f;
+    float height = -1.0f;
+    float border_radius = -1.0f;
+    float font_size = 0.0f;
+    TextAlign text_align = TextAlign::Center;
 };
 
 struct ButtonVisualState {

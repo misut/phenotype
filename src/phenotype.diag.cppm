@@ -2378,6 +2378,9 @@ inline json::Value system_settings_to_json(
     system.emplace(
         "scroll_delta_multiplier",
         json::Value{settings.scroll_delta_multiplier});
+    system.emplace(
+        "scroll_horizontal_delta_multiplier",
+        json::Value{settings.scroll_horizontal_delta_multiplier});
     system.emplace("scroll_source", json::Value{settings.scroll_source});
     system.emplace(
         "accent_color_available",

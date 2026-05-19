@@ -6484,10 +6484,12 @@ inline bool android_input_dismiss_transient() {
 
 inline float android_input_scroll_delta_y(double dy, float line_height,
                                           float /*viewport*/) {
-    // Stage 6 doesn't surface scroll events yet, but keep the math
-    // consistent with the desktop default so the hook is ready when
-    // we wire AMOTION_EVENT_ACTION_SCROLL in Stage 7.
     return static_cast<float>(dy) * line_height * 3.0f;
+}
+
+inline float android_input_scroll_delta_x(double dx, float line_height,
+                                          float /*viewport*/) {
+    return static_cast<float>(dx) * line_height * 3.0f;
 }
 
 inline void android_open_url(char const* url, unsigned int len) {
@@ -6857,6 +6859,16 @@ android_system_settings_snapshot() {
                 ::phenotype::bounded_theme_preference(
                     snapshot.scroll_vertical_factor / fallback_delta,
                     1.0f,
+                    0.25f,
+                    4.0f);
+        }
+        if (snapshot.scroll_horizontal_factor > 0.0f
+            && fallback_delta > 0.0f
+            && std::isfinite(snapshot.scroll_horizontal_factor)) {
+            snapshot.scroll_horizontal_delta_multiplier =
+                ::phenotype::bounded_theme_preference(
+                    snapshot.scroll_horizontal_factor / fallback_delta,
+                    snapshot.scroll_delta_multiplier,
                     0.25f,
                     4.0f);
         }
@@ -7677,6 +7689,7 @@ inline platform_api build_android_platform() {
         android_input_handle_mouse_button,
         android_input_dismiss_transient,
         android_input_scroll_delta_y,
+        android_input_scroll_delta_x,
     };
     api.debug = {
         android_debug_capabilities,

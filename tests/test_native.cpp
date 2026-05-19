@@ -1952,6 +1952,8 @@ static void test_macos_common_debug_contract_entry_points() {
     assert(!capabilities.system_settings.font_weight_source.empty());
     assert(capabilities.system_settings.font_scale > 0.0f);
     assert(capabilities.system_settings.scroll_delta_multiplier > 0.0f);
+    assert(capabilities.system_settings.scroll_horizontal_delta_multiplier
+           > 0.0f);
     assert(!capabilities.system_settings.accent_color_source.empty());
 
     auto snapshot_json = phenotype::native::debug::snapshot_json();
@@ -3077,6 +3079,8 @@ static void test_windows_common_debug_contract_entry_points() {
     assert(!capabilities.system_settings.font_weight_source.empty());
     assert(capabilities.system_settings.font_scale > 0.0f);
     assert(capabilities.system_settings.scroll_delta_multiplier > 0.0f);
+    assert(capabilities.system_settings.scroll_horizontal_delta_multiplier
+           > 0.0f);
     assert(!capabilities.system_settings.accent_color_source.empty());
 
     auto snapshot_json = phenotype::native::debug::snapshot_json();
@@ -3560,6 +3564,36 @@ static void test_windows_scroll_delta_uses_system_settings() {
     std::puts("PASS: windows scroll delta uses system settings");
 }
 
+static void test_windows_horizontal_scroll_delta_uses_system_settings() {
+    auto const scroll_delta = windows_platform().input.scroll_delta_x;
+    assert(scroll_delta != nullptr);
+
+    constexpr float line_height = 25.6f;
+    constexpr float viewport_width = 360.0f;
+
+    UINT chars = 3;
+    auto ok = SystemParametersInfoW(SPI_GETWHEELSCROLLCHARS, 0, &chars, 0);
+    assert(ok != 0);
+
+    float expected = 0.0f;
+    if (chars == WHEEL_PAGESCROLL) {
+        expected = viewport_width - line_height;
+        if (expected < line_height)
+            expected = line_height;
+    } else if (chars != 0u) {
+        expected = static_cast<float>(chars) * line_height * 0.5f;
+    }
+
+    float zero = scroll_delta(0.0, line_height, viewport_width);
+    float forward = scroll_delta(1.0, line_height, viewport_width);
+    float backward = scroll_delta(-1.0, line_height, viewport_width);
+
+    assert(zero == 0.0f);
+    assert(std::fabs(forward - expected) < 0.001f);
+    assert(std::fabs(backward + expected) < 0.001f);
+    std::puts("PASS: windows horizontal scroll delta uses system settings");
+}
+
 static void test_windows_ime_repaint_requests_are_deferred_until_sync() {
     using namespace input_regression;
 
@@ -3910,6 +3944,7 @@ int main() {
     test_windows_renderer_rejects_truncated_text_payload();
     test_windows_text_field_key_dispatch();
     test_windows_scroll_delta_uses_system_settings();
+    test_windows_horizontal_scroll_delta_uses_system_settings();
     test_windows_ime_repaint_requests_are_deferred_until_sync();
     test_windows_ime_startcomposition_captures_current_selection_range();
     test_windows_ime_composition_visual_replaces_placeholder();

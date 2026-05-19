@@ -224,14 +224,15 @@ ThemePreferenceOverrides)` helper. Package defaults such as Pretendard remain
 explicit theme inputs, OS font scale and scroll policy arrive as immutable
 snapshot fields, and app/user overrides win without letting a backend mutate
 theme state directly.
-Font family source, text-size source, font-weight adjustment, vertical scroll
-factor, scrollbar size, touch slop, and scroll friction are recorded when the
-platform exposes them. macOS uses CoreText/AppKit/NSScroller, Windows uses
-`SystemParametersInfoW`, `GetSystemMetrics`, and DWM, and Android uses
-`Resources.getConfiguration()` plus `ViewConfiguration`. The base theme keeps
-Pretendard as the product default; switching to the OS family is an explicit app
-override, while OS text scale and scroll multiplier are safe pure inputs by
-default.
+Font family source, text-size source, font-weight adjustment, vertical and
+horizontal scroll factors, scrollbar size, touch slop, and scroll friction are
+recorded when the platform exposes them. macOS uses CoreText/AppKit/NSScroller,
+Windows uses `SystemParametersInfoW(SPI_GETNONCLIENTMETRICS)`,
+`SPI_GETWHEELSCROLLLINES`, `SPI_GETWHEELSCROLLCHARS`, `GetSystemMetrics`, and
+DWM, and Android uses `Resources.getConfiguration()` plus
+`ViewConfiguration`. The base theme keeps Pretendard as the product default;
+switching to the OS family is an explicit app override, while OS text scale and
+axis-specific scroll multipliers are safe pure inputs by default.
 Accent colors are also captured in this snapshot. macOS resolves
 `NSColor.controlAccentColor` in a generic RGB color space, Windows reads
 `DwmGetColorizationColor` and decodes its documented `0xAARRGGBB` value, and
@@ -890,9 +891,12 @@ material/runtime extensions.
 All native capability payloads include `system_settings`: macOS uses
 CoreText/AppKit/NSScroller, Windows uses `SystemParametersInfoW` plus DWM, and
 Android uses Java resource/configuration APIs reached through the GameActivity
-edge. WASI and the stub backend publish deterministic fallback values. Renderers
-may report the same snapshot in `platform_runtime.details`, but they do not
-decide font, accent, or scroll policy themselves.
+edge. WASI and the stub backend publish deterministic fallback values.
+`scroll_delta_multiplier` and `scroll_horizontal_delta_multiplier` are pure
+theme inputs; native wheel callbacks only translate platform events into
+logical pixels before the app/user multiplier is applied. Renderers may report
+the same snapshot in `platform_runtime.details`, but they do not decide font,
+accent, or scroll policy themselves.
 
 ### Modularity guarantee
 

@@ -322,6 +322,8 @@ file_explorer_demo::SystemPreferenceSnapshot system_preference_snapshot(
         .touch_slop = system.touch_slop,
         .scroll_friction = system.scroll_friction,
         .scroll_delta_multiplier = system.scroll_delta_multiplier,
+        .scroll_horizontal_delta_multiplier =
+            system.scroll_horizontal_delta_multiplier,
         .scroll_source = system.scroll_source,
         .accent_color_available = system.accent_color_available,
         .accent_color = {
@@ -363,6 +365,8 @@ file_explorer_demo::RuntimePreferenceState runtime_preference_state(
     state.effective_body_font_size = theme.body_font_size;
     state.effective_small_font_size = theme.small_font_size;
     state.effective_scroll_delta_multiplier = theme.scroll_delta_multiplier;
+    state.effective_scroll_horizontal_delta_multiplier =
+        theme.scroll_horizontal_delta_multiplier;
     return state;
 }
 

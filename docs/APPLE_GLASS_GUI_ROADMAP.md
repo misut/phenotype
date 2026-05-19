@@ -431,8 +431,11 @@ first-class `layout::toolbar`, `layout::sidebar`, and `layout::status_bar`
 helpers for app chrome. `icons::macos_control_button_style` exposes the same
 selected/hover/pressed glass-control recipe used by symbol buttons, so
 Finder-like text and canvas buttons can share native-looking chrome without
-copying sidebar/toolbar constants in each example. A richer cross-widget
-glass-control style contract remains future work.
+copying sidebar/toolbar constants in each example. `ButtonStyleOptions` now has
+an optional `MaterialStyle`, and `widget::glass_control_button_style` /
+`widget::glass_button` attach resolved material metadata to regular and canvas
+buttons. Segmented controls and popovers still need the same first-class
+material-aware treatment.
 
 ### CLI and packaging direction
 
@@ -770,8 +773,8 @@ Current seed:
 The initial G0-G4 path is now landed. The next useful PR should avoid another
 schema-only increment unless a real failure appears. Recommended directions:
 
-- expand first-class material-aware controls beyond the new glass surface
-  presets, especially buttons, segmented controls, and popovers;
+- expand first-class material-aware controls beyond glass buttons, especially
+  segmented controls and popovers;
 - tighten macOS material executor budgets after collecting a small sample of
   local and CI timing/copy values;
 - add Android CI emulator wiring if runner capacity and cost are acceptable;

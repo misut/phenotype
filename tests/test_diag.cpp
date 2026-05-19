@@ -280,6 +280,7 @@ void test_snapshot_shape() {
     (void)system_settings.at("touch_slop").as_float();
     (void)system_settings.at("scroll_friction").as_float();
     (void)system_settings.at("scroll_delta_multiplier").as_float();
+    (void)system_settings.at("scroll_horizontal_delta_multiplier").as_float();
     assert(system_settings.at("accent_color_available").is_bool());
     assert(system_settings.at("accent_color").is_object());
     assert(system_settings.at("accent_color_source").is_string());

@@ -238,6 +238,7 @@ inline platform_api make_stub_platform(char const* name,
         nullptr,
         nullptr,
         nullptr,
+        nullptr,
     };
     api.debug = {
         detail::stub_debug_capabilities,
