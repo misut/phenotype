@@ -91,14 +91,14 @@ permissive SVG icon sources, zero Apple/SF Symbols embedded assets, zero
 platform-extracted icons, and local artifact verification rather than slow PR
 CI capture.
 The sidebar and toolbar glyphs come from `phenotype.icons`, not copied SF
-Symbols assets. They are phenotype-owned or audited permissive SVG symbols
-with a macOS-style rounded-outline contract and bounded secondary-layer opacity
-for detailed symbols. Each icon declares a semantic SF Symbols reference name
+Symbols assets. They are audited permissive Lucide SVG symbols with a
+macOS-style rounded-outline contract and bounded secondary-layer opacity for
+detailed symbols. Each icon declares a semantic SF Symbols reference name
 as a role and proportion anchor while keeping Apple artwork out of the asset
-set. File-type glyphs may embed checked open SVG sources such as Lucide ISC or
-Feather-derived MIT icons; artifacts record source family, icon name, exact
-license, license URL, pinned direct raw SVG URL, source revision, copyright,
-and Apple-asset boundary beside the rendered symbol metadata.
+set. File-type glyphs and toolbar/sidebar buttons use the same pinned Lucide
+revision; artifacts record source family, icon name, exact license, license
+URL, pinned direct raw SVG URL, source revision, copyright, and Apple-asset
+boundary beside the rendered symbol metadata.
 Artifacts can assert the icon module, source format,
 ownership/permissive-source boundary, reference family/policy, round stroke
 expectation, rendering mode, variant policy,
@@ -215,8 +215,8 @@ home folder.
 The directory also includes an initial `phenotype.package.toml` plus `assets/`,
 `locales/`, and `fonts/` fixtures. These are consumed by the new
 `tools/phenotype_cli package inspect` command and describe the
-asset/i18n/Pretendard bundle contract. The package icon is a phenotype-owned
-SVG asset with a macOS-like rounded document-window composition; the CLI checks
+asset/i18n/Pretendard bundle contract. The package icon is a themed Lucide
+`folder-open` SVG asset; the CLI checks
 that `app.icon` is SVG/preloaded and that Pretendard has a CJK-capable fallback.
 Runtime labels are resolved through the shared pure `ResourceCatalog` helper in
 `file_explorer_shared`, while file reads and package inspection remain

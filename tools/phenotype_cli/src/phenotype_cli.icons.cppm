@@ -1031,7 +1031,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
             && permissive_source_count
                 == icon_catalog::permissive_source_symbol_count
             && lucide_source_count == icon_catalog::lucide_source_symbol_count
-            && icon_catalog::lucide_unique_source_icon_count == 34
+            && icon_catalog::lucide_unique_source_icon_count == 38
             && icon_catalog::lucide_source_icon_name_at(28)
                 == std::string_view{"file-text"}
             && apple_asset_count == icon_catalog::apple_asset_symbol_count
@@ -1053,7 +1053,7 @@ auto icon_catalog_checks() -> std::vector<Check> {
              platform_extracted_count,
              runtime_fetch_count),
          .hint =
-             "Use only phenotype-owned or audited permissive SVG sources, and never embed Apple or SF Symbols vector artwork."},
+             "Use only audited permissive SVG sources, and never embed Apple or SF Symbols vector artwork."},
         {.name = "source_attribution",
          .ok = icon_catalog::source_attribution_policy().find(
                    "pinned direct raw SVG URL")
@@ -1103,7 +1103,10 @@ auto icon_catalog_checks() -> std::vector<Check> {
                 == std::string_view::npos
             && icon_catalog::source_attribution(icon_catalog::Symbol::Shared)
                    .family
-                == std::string_view{"phenotype"}
+                == std::string_view{"Lucide"}
+            && icon_catalog::source_attribution(icon_catalog::Symbol::Shared)
+                   .icon_name
+                == std::string_view{"folder-symlink"}
             && !icon_catalog::source_attribution(icon_catalog::Symbol::Search)
                     .platform_extracted
             && !icon_catalog::source_attribution(icon_catalog::Symbol::Search)

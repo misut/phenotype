@@ -2,6 +2,7 @@ module;
 #include <cstdint>
 #include <cstring>
 #include <optional>
+#include <string>
 #include <string_view>
 #include <vector>
 export module phenotype.icons;
@@ -326,6 +327,15 @@ struct SymbolRenderingCapabilities {
 
 using SymbolSourceAttribution = catalog::SymbolSourceAttribution;
 
+struct FileTypeIconDescriptor {
+    Symbol symbol = Symbol::Document;
+    std::string_view token;
+    std::string_view kind_label;
+    std::string package_asset_name;
+    std::string package_asset_source;
+    std::string_view extension_family;
+};
+
 struct SymbolPresentation {
     Symbol symbol = Symbol::Document;
     SymbolPresentationRole role = SymbolPresentationRole::Toolbar;
@@ -425,6 +435,8 @@ inline constexpr unsigned int toolbar_symbol_count =
     catalog::toolbar_symbol_count;
 inline constexpr unsigned int file_type_symbol_count =
     catalog::file_type_symbol_count;
+inline constexpr unsigned int file_type_extension_rule_count =
+    catalog::file_type_extension_rule_count;
 inline constexpr unsigned int outline_symbol_count =
     catalog::outline_symbol_count;
 inline constexpr unsigned int filled_symbol_count =
@@ -467,6 +479,113 @@ inline auto toolbar_symbol_at(unsigned int index) noexcept -> Symbol {
 
 inline auto file_type_symbol_at(unsigned int index) noexcept -> Symbol {
     return from_catalog_symbol(catalog::file_type_symbol_at(index));
+}
+
+inline bool is_file_type_symbol(Symbol symbol) noexcept {
+    return catalog::is_file_type_symbol(to_catalog_symbol(symbol));
+}
+
+inline auto file_type_token(Symbol symbol) noexcept -> std::string_view {
+    return catalog::file_type_token(to_catalog_symbol(symbol));
+}
+
+inline auto file_type_kind_label(Symbol symbol) noexcept -> std::string_view {
+    return catalog::file_type_kind_label(to_catalog_symbol(symbol));
+}
+
+inline auto file_type_extension_family(Symbol symbol) noexcept
+        -> std::string_view {
+    return catalog::file_type_extension_family(to_catalog_symbol(symbol));
+}
+
+inline auto file_type_symbol_from_token(std::string_view token) noexcept
+        -> std::optional<Symbol> {
+    auto const found = catalog::file_type_symbol_from_token(token);
+    if (!found.has_value())
+        return std::nullopt;
+    return from_catalog_symbol(*found);
+}
+
+inline auto file_type_package_asset_name(Symbol symbol) -> std::string {
+    return catalog::file_type_package_asset_name(to_catalog_symbol(symbol));
+}
+
+inline auto file_type_package_asset_source(Symbol symbol) -> std::string {
+    return catalog::file_type_package_asset_source(to_catalog_symbol(symbol));
+}
+
+inline auto file_type_icon_descriptor(Symbol symbol)
+        -> FileTypeIconDescriptor {
+    auto const base =
+        catalog::file_type_icon_descriptor(to_catalog_symbol(symbol));
+    return FileTypeIconDescriptor{
+        from_catalog_symbol(base.symbol),
+        base.token,
+        base.kind_label,
+        base.package_asset_name,
+        base.package_asset_source,
+        base.extension_family,
+    };
+}
+
+inline bool file_extension_is_svg_image(std::string_view ext) noexcept {
+    return catalog::file_extension_is_svg_image(ext);
+}
+
+inline bool file_extension_is_raster_image(std::string_view ext) noexcept {
+    return catalog::file_extension_is_raster_image(ext);
+}
+
+inline bool file_extension_is_image(std::string_view ext) noexcept {
+    return catalog::file_extension_is_image(ext);
+}
+
+inline bool file_extension_is_movie(std::string_view ext) noexcept {
+    return catalog::file_extension_is_movie(ext);
+}
+
+inline bool file_extension_is_audio(std::string_view ext) noexcept {
+    return catalog::file_extension_is_audio(ext);
+}
+
+inline bool file_extension_is_code(std::string_view ext) noexcept {
+    return catalog::file_extension_is_code(ext);
+}
+
+inline bool file_extension_is_spreadsheet(std::string_view ext) noexcept {
+    return catalog::file_extension_is_spreadsheet(ext);
+}
+
+inline bool file_extension_is_presentation(std::string_view ext) noexcept {
+    return catalog::file_extension_is_presentation(ext);
+}
+
+inline bool file_extension_is_archive(std::string_view ext) noexcept {
+    return catalog::file_extension_is_archive(ext);
+}
+
+inline auto known_file_type_symbol_for_extension(
+        std::string_view ext) noexcept -> std::optional<Symbol> {
+    auto const found = catalog::known_file_type_symbol_for_extension(ext);
+    if (!found.has_value())
+        return std::nullopt;
+    return from_catalog_symbol(*found);
+}
+
+inline auto known_file_type_kind_label_for_extension(
+        std::string_view ext) noexcept -> std::optional<std::string_view> {
+    return catalog::known_file_type_kind_label_for_extension(ext);
+}
+
+inline auto file_type_symbol_for_extension(std::string_view ext) noexcept
+        -> Symbol {
+    return from_catalog_symbol(catalog::file_type_symbol_for_extension(ext));
+}
+
+inline auto file_type_symbol_for_entry(std::string_view ext,
+                                       bool directory) noexcept -> Symbol {
+    return from_catalog_symbol(
+        catalog::file_type_symbol_for_entry(ext, directory));
 }
 
 inline auto symbol_from_name(std::string_view symbol_name) noexcept

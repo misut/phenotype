@@ -42,9 +42,9 @@ home folder.
 The directory also includes an initial `phenotype.package.toml` plus `assets/`,
 `locales/`, and `fonts/` fixtures. These are consumed by the new
 `tools/phenotype_cli package inspect` command and describe the
-asset/i18n/Pretendard bundle contract. The package icon is a phenotype-owned
-SVG asset with a macOS-like rounded document-window composition, and the
-runtime-visible file-type icons are audited permissive SVG assets; the CLI
+asset/i18n/Pretendard bundle contract. The package icon is a themed Lucide
+`folder-open` SVG asset, and the runtime-visible file-type icons are audited
+permissive SVG assets; the CLI
 checks that every declared SVG is present/preloaded, traffic-light-palette safe,
 and that Pretendard has a CJK-capable fallback.
 Runtime labels are resolved through the shared pure `ResourceCatalog` helper in

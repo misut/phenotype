@@ -12,9 +12,10 @@ Source: https://github.com/lucide-icons/lucide
 Embedded source revision:
 `5b40f2c5a76a27eeb81c8f1b1c311121dee45495`
 
-The runtime catalog currently reports 35 Lucide-backed semantic symbols backed
-by 34 unique Lucide source SVG files. `file-text` is intentionally shared by the
-PDF and plain-text document semantic symbols.
+The runtime catalog currently reports 39 Lucide-backed semantic symbols backed
+by 38 unique Lucide source SVG files. `file-text` is intentionally shared by the
+PDF and plain-text document semantic symbols. File explorer package app icons
+also use the pinned Lucide `folder-open` SVG source.
 
 Embedded icon source files:
 
@@ -86,6 +87,16 @@ Embedded icon source files:
   https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/file-spreadsheet.svg
 - `presentation`:
   https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/presentation.svg
+- `ellipsis`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/ellipsis.svg
+- `radio`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/radio.svg
+- `folder-symlink`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/folder-symlink.svg
+- `arrow-up-down`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/arrow-up-down.svg
+- `folder-open`:
+  https://raw.githubusercontent.com/lucide-icons/lucide/5b40f2c5a76a27eeb81c8f1b1c311121dee45495/icons/folder-open.svg
 
 License: ISC
 

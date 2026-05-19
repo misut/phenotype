@@ -95,7 +95,7 @@ auto theme_contract_checks() -> std::vector<Check> {
              contract.iconography_policy,
              contract.icon_asset_policy),
          .hint =
-             "Default icon language should follow macOS/Finder and SF Symbols semantics while using phenotype-owned or audited permissive SVG artwork."},
+             "Default icon language should follow macOS/Finder and SF Symbols semantics while using audited permissive SVG artwork."},
         {.name = "apple_glass_color_tokens",
          .ok = contract.background
                 == theme_contract::ColorToken{242, 242, 247, 255}

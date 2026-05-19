@@ -4702,10 +4702,12 @@ void test_icon_catalog_umbrella_export() {
            == phenotype::icon_catalog::all_symbol_count);
     assert(phenotype::icon_catalog::palette_symbol_count == 0);
     assert(phenotype::icon_catalog::multicolor_symbol_count == 0);
-    assert(phenotype::icon_catalog::phenotype_owned_symbol_count == 4);
-    assert(phenotype::icon_catalog::permissive_source_symbol_count == 35);
-    assert(phenotype::icon_catalog::lucide_source_symbol_count == 35);
-    assert(phenotype::icon_catalog::lucide_unique_source_icon_count == 34);
+    assert(phenotype::icon_catalog::phenotype_owned_symbol_count == 0);
+    assert(phenotype::icon_catalog::permissive_source_symbol_count
+           == phenotype::icon_catalog::all_symbol_count);
+    assert(phenotype::icon_catalog::lucide_source_symbol_count
+           == phenotype::icon_catalog::all_symbol_count);
+    assert(phenotype::icon_catalog::lucide_unique_source_icon_count == 38);
     assert(phenotype::icon_catalog::apple_asset_symbol_count == 0);
     assert(phenotype::icon_catalog::svg_path_arc_symbol_count == 16);
     assert(phenotype::icon_catalog::round_stroke_symbol_count
@@ -4731,7 +4733,7 @@ void test_icon_catalog_umbrella_export() {
                .find(phenotype::icon_catalog::lucide_source_revision())
            != std::string_view::npos);
     auto const capabilities = phenotype::icon_catalog::rendering_capabilities(
-        phenotype::icon_catalog::Symbol::AirDrop);
+        phenotype::icon_catalog::Symbol::Recents);
     assert(capabilities.monochrome);
     assert(capabilities.hierarchical);
     assert(!capabilities.palette);

@@ -47,8 +47,8 @@ parsed document to phenotype `PathBuilder` commands, so native, WASM, and test
 surfaces consume the same draw-command path instead of calling platform SVG
 APIs from core code.
 
-`phenotype.icons` builds on that parser with phenotype-owned and audited
-permissive SVG symbols. The catalog keeps macOS/Finder/SF Symbols names only as
+`phenotype.icons` builds on that parser with audited permissive SVG symbols.
+The catalog keeps macOS/Finder/SF Symbols names only as
 semantic references: it does not embed Apple or SF Symbols artwork. Most
 toolbar, sidebar, action, and file-type glyphs currently use audited Lucide SVG
 sources pinned to a fixed source revision, with each symbol reporting either
@@ -81,6 +81,11 @@ package SVG to be canonically source-equivalent to the audited catalog SVG.
 That leaves formatting freedom for checked-in SVG files while still catching
 asset drift, platform icon extraction, and accidental Apple/Finder/SF Symbols
 artwork before a renderer sees the package.
+The catalog also owns the pure file-extension classifier used by examples:
+directory state plus a normalized extension resolves to a file-type symbol,
+token, package asset name/source, and kind label before any UI or backend code
+draws an icon. This keeps Finder-like file semantics in the icon contract
+instead of duplicating extension tables in each example or native backend.
 
 ## View-time animation
 
@@ -343,13 +348,11 @@ The catalog intentionally follows general Apple HIG-style optical proportions
 without copying SF Symbols artwork as assets. Each symbol declares a semantic
 SF Symbols reference name, family, and policy, so the contract can say "this
 glyph is playing the same UI role as `magnifyingglass`" without embedding
-Apple's vector paths. In the current catalog, 35 of 39 built-in symbols come
-from audited Lucide SVG sources pinned to the catalog revision. Feather Icons
-is tracked separately as MIT license-lineage metadata for Lucide symbols
-derived from Feather, while AirDrop, Shared, Sort Group, and More remain
-phenotype-owned because their
-Finder-specific metaphors or filled dot treatment need tighter product
-control. Apps can call `icons::document`,
+Apple's vector paths. In the current catalog, all 39 built-in symbols come
+from audited Lucide SVG sources pinned to the catalog revision, including More,
+AirDrop, Shared, and Sort Group. Feather Icons is tracked separately as MIT
+license-lineage metadata for Lucide symbols derived from Feather. Apps can call
+`icons::document`,
 `icons::paint_symbol`,
 or `widget::icon`; the widget helper paints through `widget::canvas` and uses a
 deterministic paint token so stable icons do not re-emit every frame.
@@ -440,6 +443,10 @@ and mobile file explorer examples use in rows without asking a native icon
 service for platform artwork. Their shared debug payload includes
 `entry_symbol_summary` so the contract can fail as JSON before a screenshot
 comparison is needed.
+The entry symbol path delegates extension classification to
+`phenotype.icon_catalog`, so SVG/raster images, movies, audio, code,
+spreadsheets, presentations, archives, PDFs, text, folders, and unknown
+documents resolve through one audited icon module.
 The desktop and mobile packages also declare those eleven file-type icons as
 runtime-visible SVG assets under `assets/icons/file-types/`, sourced from the
 same pinned Lucide revision as the pure catalog. This keeps package inspection,
@@ -469,8 +476,9 @@ catalog with the matched rendering capability envelope, so renderer and parser
 failures can be reproduced without launching a native window. `phenotype icons
 sources --json` is the compact provenance audit for web-sourced icons: it
 lists each pinned Lucide raw SVG source, the symbols using it, license URL,
-source revision, phenotype-owned symbols, and the Apple/platform-extraction
-boundary checks without dumping every catalog presentation field. `phenotype icons
+source revision, remaining phenotype-owned count, and the
+Apple/platform-extraction boundary checks without dumping every catalog
+presentation field. `phenotype icons
 present <name-or-reference>` resolves the same state recipe for a chosen role,
 phase, selected state, and disabled state, including the effective visible
 symbol color, background chrome, hit target, and likely icon layer/pass.

@@ -87,6 +87,7 @@ auto file_type_icon_checks() -> std::vector<Check> {
     auto platform_extracted_count = 0u;
     auto runtime_fetch_count = 0u;
     auto declared_package_source_count = 0u;
+    auto catalog_token_count = 0u;
 
     for (auto const& item : symbols) {
         auto const source = icon_catalog::source_attribution(item.symbol);
@@ -108,7 +109,32 @@ auto file_type_icon_checks() -> std::vector<Check> {
             == expected_source) {
             ++declared_package_source_count;
         }
+        if (icon_catalog::file_type_token(item.symbol) == item.token)
+            ++catalog_token_count;
     }
+
+    auto const extension_mapping_ok =
+        icon_catalog::file_type_symbol_for_extension("pdf")
+            == icon_catalog::Symbol::PdfDocument
+        && icon_catalog::file_type_symbol_for_extension("SVG")
+            == icon_catalog::Symbol::Image
+        && icon_catalog::file_type_symbol_for_extension("mov")
+            == icon_catalog::Symbol::Movie
+        && icon_catalog::file_type_symbol_for_extension("m4a")
+            == icon_catalog::Symbol::AudioDocument
+        && icon_catalog::file_type_symbol_for_extension("cpp")
+            == icon_catalog::Symbol::CodeDocument
+        && icon_catalog::file_type_symbol_for_extension("csv")
+            == icon_catalog::Symbol::SpreadsheetDocument
+        && icon_catalog::file_type_symbol_for_extension("key")
+            == icon_catalog::Symbol::PresentationDocument
+        && icon_catalog::file_type_symbol_for_extension("unknown")
+            == icon_catalog::Symbol::Document
+        && icon_catalog::file_type_symbol_for_entry("unknown", true)
+            == icon_catalog::Symbol::Folder
+        && icon_catalog::known_file_type_kind_label_for_extension("svg")
+            == std::optional<std::string_view>{
+                std::string_view{"SVG Image"}};
 
     return {
         {.name = "file_type_icon_catalog",
@@ -119,6 +145,16 @@ auto file_type_icon_checks() -> std::vector<Check> {
              icon_catalog::file_type_symbol_count),
          .hint =
              "Keep file_explorer_shared::file_type_symbol_contract aligned with phenotype.icon_catalog."},
+        {.name = "file_type_extension_classifier",
+         .ok = extension_mapping_ok
+            && catalog_token_count == symbols.size()
+            && icon_catalog::file_type_extension_rule_count == 36,
+         .detail = std::format(
+             "tokens={} extension_rules={}",
+             catalog_token_count,
+             icon_catalog::file_type_extension_rule_count),
+         .hint =
+             "Keep extension-to-symbol and file-type token mapping in phenotype.icon_catalog so examples do not fork Finder-like file semantics."},
         {.name = "file_type_icon_sources",
          .ok = lucide_source_count == symbols.size()
             && direct_source_count == symbols.size(),
@@ -177,7 +213,8 @@ auto file_type_icons_json(std::span<Check const> checks) -> std::string {
         "\"source_acquisition_policy\":{},\"apple_asset_boundary\":{},"
         "\"package_asset_policy\":{},\"license_asset\":{}}},"
         "\"counts\":{{\"file_type_symbols\":{},"
-        "\"lucide_file_type_symbols\":{},\"apple_asset_symbols\":{},"
+        "\"extension_rules\":{},\"lucide_file_type_symbols\":{},"
+        "\"apple_asset_symbols\":{},"
         "\"platform_extracted_symbols\":{},\"runtime_fetched_symbols\":{}}},"
         "\"source_revision\":{},\"records\":{},\"checks\":{}}}",
         all_ok(checks) ? "true" : "false",
@@ -187,6 +224,7 @@ auto file_type_icons_json(std::span<Check const> checks) -> std::string {
         json_string(file_explorer_demo::file_type_icon_asset_policy()),
         json_string(file_explorer_demo::file_type_icon_license_asset_source()),
         symbols.size(),
+        icon_catalog::file_type_extension_rule_count,
         lucide_count,
         apple_asset_count,
         platform_extracted_count,

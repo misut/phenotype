@@ -848,7 +848,7 @@ inline auto file_type_icon_source_family() noexcept -> std::string_view {
 }
 
 inline auto file_type_icon_source_revision() noexcept -> std::string_view {
-    return "5b40f2c5a76a27eeb81c8f1b1c311121dee45495";
+    return icon_catalog::lucide_source_revision();
 }
 
 inline auto file_type_icon_license_asset_source() noexcept
@@ -862,27 +862,17 @@ inline auto file_type_icon_asset_policy() noexcept -> std::string_view {
 
 inline auto file_type_icon_token_for_symbol(
         icon_catalog::Symbol symbol) noexcept -> std::string_view {
-    for (auto const& item : file_type_symbol_contract()) {
-        if (item.symbol == symbol)
-            return item.token;
-    }
-    return "document";
+    return icon_catalog::file_type_token(symbol);
 }
 
 inline auto file_type_icon_asset_name_for_symbol(
         icon_catalog::Symbol symbol) -> std::string {
-    auto out = std::string{"file_type."};
-    out += file_type_icon_token_for_symbol(symbol);
-    out += ".icon";
-    return out;
+    return icon_catalog::file_type_package_asset_name(symbol);
 }
 
 inline auto file_type_icon_asset_source_for_symbol(
         icon_catalog::Symbol symbol) -> std::string {
-    auto out = std::string{"assets/icons/file-types/"};
-    out += file_type_icon_token_for_symbol(symbol);
-    out += ".svg";
-    return out;
+    return icon_catalog::file_type_package_asset_source(symbol);
 }
 
 inline auto sidebar_symbol_for_token(std::string_view token) noexcept
@@ -2067,20 +2057,19 @@ inline std::string extension_lower(std::string const& name) {
 }
 
 inline bool svg_image_extension(std::string_view ext) noexcept {
-    return ext == "svg" || ext == "svgz";
+    return icon_catalog::file_extension_is_svg_image(ext);
 }
 
 inline bool raster_image_extension(std::string_view ext) noexcept {
-    return ext == "png" || ext == "jpg" || ext == "jpeg" || ext == "heic"
-        || ext == "heif" || ext == "webp";
+    return icon_catalog::file_extension_is_raster_image(ext);
 }
 
 inline bool image_extension(std::string_view ext) noexcept {
-    return raster_image_extension(ext) || svg_image_extension(ext);
+    return icon_catalog::file_extension_is_image(ext);
 }
 
 inline bool movie_extension(std::string_view ext) noexcept {
-    return ext == "mov" || ext == "mp4" || ext == "m4v";
+    return icon_catalog::file_extension_is_movie(ext);
 }
 
 inline fs::path demo_root(std::string_view profile) {
@@ -2276,31 +2265,18 @@ inline std::string format_size(std::uintmax_t size) {
 
 inline std::string entry_kind_label(Entry const& entry) {
     if (entry.folder)
-        return "Folder";
+        return std::string{icon_catalog::file_type_kind_label(
+            icon_catalog::Symbol::Folder)};
     auto ext = extension_lower(entry.name);
-    if (ext == "pdf")
-        return "PDF Document";
-    if (svg_image_extension(ext))
-        return "SVG Image";
-    if (raster_image_extension(ext))
-        return "Image";
-    if (movie_extension(ext))
-        return "Movie";
-    if (ext == "zip")
-        return "Archive";
-    if (ext == "mp3" || ext == "m4a" || ext == "wav" || ext == "aac"
-        || ext == "flac")
-        return "Audio";
-    if (ext == "cpp" || ext == "cc" || ext == "cxx" || ext == "h"
-        || ext == "hpp" || ext == "js" || ext == "ts" || ext == "json"
-        || ext == "toml")
-        return "Code";
-    if (ext == "csv" || ext == "xls" || ext == "xlsx" || ext == "numbers")
-        return "Spreadsheet";
-    if (ext == "key" || ext == "ppt" || ext == "pptx")
-        return "Presentation";
+    if (auto symbol = icon_catalog::known_file_type_symbol_for_extension(ext);
+        symbol.has_value() && *symbol != icon_catalog::Symbol::TextDocument) {
+        if (auto label =
+                icon_catalog::known_file_type_kind_label_for_extension(ext))
+            return std::string{*label};
+    }
     if (ext.empty())
-        return "Document";
+        return std::string{icon_catalog::file_type_kind_label(
+            icon_catalog::Symbol::Document)};
     std::transform(ext.begin(), ext.end(), ext.begin(), [](unsigned char ch) {
         return static_cast<char>(std::toupper(ch));
     });
@@ -2308,31 +2284,9 @@ inline std::string entry_kind_label(Entry const& entry) {
 }
 
 inline icon_catalog::Symbol entry_symbol(Entry const& entry) {
-    if (entry.folder)
-        return icon_catalog::Symbol::Folder;
-    auto ext = extension_lower(entry.name);
-    if (ext == "pdf")
-        return icon_catalog::Symbol::PdfDocument;
-    if (image_extension(ext))
-        return icon_catalog::Symbol::Image;
-    if (movie_extension(ext))
-        return icon_catalog::Symbol::Movie;
-    if (ext == "txt" || ext == "md")
-        return icon_catalog::Symbol::TextDocument;
-    if (ext == "zip")
-        return icon_catalog::Symbol::Archive;
-    if (ext == "mp3" || ext == "m4a" || ext == "wav" || ext == "aac"
-        || ext == "flac")
-        return icon_catalog::Symbol::AudioDocument;
-    if (ext == "cpp" || ext == "cc" || ext == "cxx" || ext == "h"
-        || ext == "hpp" || ext == "js" || ext == "ts" || ext == "json"
-        || ext == "toml")
-        return icon_catalog::Symbol::CodeDocument;
-    if (ext == "csv" || ext == "xls" || ext == "xlsx" || ext == "numbers")
-        return icon_catalog::Symbol::SpreadsheetDocument;
-    if (ext == "key" || ext == "ppt" || ext == "pptx")
-        return icon_catalog::Symbol::PresentationDocument;
-    return icon_catalog::Symbol::Document;
+    return icon_catalog::file_type_symbol_for_entry(
+        extension_lower(entry.name),
+        entry.folder);
 }
 
 inline std::string_view entry_symbol_name(Entry const& entry) {
