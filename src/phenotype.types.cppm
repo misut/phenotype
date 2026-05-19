@@ -399,23 +399,62 @@ struct PlatformSystemSettingsSnapshot {
     bool accent_color_opaque = true;
 };
 
-struct ThemePreferenceOverrides {
-    std::string font_family;
-    std::string color_scheme;
-    float font_scale = 1.0f;
-    float body_font_size = 0.0f;
-    float heading_font_size = 0.0f;
-    float small_font_size = 0.0f;
-    float line_height_ratio = 0.0f;
-    float scroll_delta_multiplier = 1.0f;
-    float scroll_horizontal_delta_multiplier = 1.0f;
-    bool prefer_system_font_family = false;
-    bool prefer_system_color_scheme = false;
-    bool apply_system_font_metrics = true;
-    bool apply_system_font_scale = true;
-    bool apply_system_scroll_metrics = true;
-    bool apply_system_accent_color = false;
-};
+using ThemePreferenceOverrides = theme_contract::ThemePreferenceOverrides;
+
+inline bool system_setting_source_is_available(std::string_view source) noexcept {
+    return !source.empty()
+        && source != "fallback"
+        && source != "unknown";
+}
+
+inline auto theme_contract_system_snapshot(
+        PlatformSystemSettingsSnapshot const& system)
+        -> theme_contract::SystemThemePreferenceSnapshot {
+    return {
+        .font_family = system.font_family,
+        .body_font_size = system.body_font_size,
+        .heading_font_size = system.heading_font_size,
+        .small_font_size = system.small_font_size,
+        .line_height_ratio = system.line_height_ratio,
+        .font_scale = system.font_scale,
+        .scroll_delta_multiplier = system.scroll_delta_multiplier,
+        .scroll_horizontal_delta_multiplier =
+            system.scroll_horizontal_delta_multiplier,
+        .color_scheme = system.color_scheme,
+        .font_scale_available =
+            system_setting_source_is_available(system.text_size_source)
+            || system_setting_source_is_available(system.source),
+        .line_height_available =
+            system_setting_source_is_available(system.text_size_source)
+            || system_setting_source_is_available(system.source),
+        .scroll_metrics_available =
+            system_setting_source_is_available(system.scroll_source)
+            || system_setting_source_is_available(system.source),
+        .color_scheme_available =
+            system_setting_source_is_available(system.color_scheme_source),
+        .accent_color_available = system.accent_color_available,
+        .accent_color = {
+            system.accent_color.r,
+            system.accent_color.g,
+            system.accent_color.b,
+            system.accent_color.a,
+        },
+    };
+}
+
+inline auto theme_contract_preference_base(Theme const& theme)
+        -> theme_contract::ThemePreferenceBase {
+    return {
+        .default_font_family = theme.default_font_family,
+        .body_font_size = theme.body_font_size,
+        .heading_font_size = theme.heading_font_size,
+        .small_font_size = theme.small_font_size,
+        .line_height_ratio = theme.line_height_ratio,
+        .scroll_delta_multiplier = theme.scroll_delta_multiplier,
+        .scroll_horizontal_delta_multiplier =
+            theme.scroll_horizontal_delta_multiplier,
+    };
+}
 
 struct ResolvedThemePreferences {
     Theme theme{};
@@ -449,21 +488,19 @@ inline float bounded_theme_preference(
         float fallback,
         float minimum,
         float maximum) noexcept {
-    if (!(value > 0.0f) || !std::isfinite(value))
-        return fallback;
-    if (value < minimum)
-        return minimum;
-    if (value > maximum)
-        return maximum;
-    return value;
+    return theme_contract::bounded_theme_preference(
+        value,
+        fallback,
+        minimum,
+        maximum);
 }
 
-inline bool theme_color_scheme_is_dark(std::string const& scheme) noexcept {
-    return scheme == "dark" || scheme == "high-contrast-dark";
+inline bool theme_color_scheme_is_dark(std::string_view scheme) noexcept {
+    return theme_contract::theme_color_scheme_is_dark(scheme);
 }
 
-inline bool theme_color_scheme_is_light(std::string const& scheme) noexcept {
-    return scheme == "light" || scheme == "high-contrast-light";
+inline bool theme_color_scheme_is_light(std::string_view scheme) noexcept {
+    return theme_contract::theme_color_scheme_is_light(scheme);
 }
 
 inline Theme apply_dark_color_scheme(Theme theme) {
@@ -504,8 +541,14 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
         PlatformSystemSettingsSnapshot const& system,
         ThemePreferenceOverrides const& overrides = {},
         std::string_view source = "default") {
+    auto const contract_system = theme_contract_system_snapshot(system);
+    auto const contract_resolution = theme_contract::resolve_theme_preferences(
+        theme_contract_preference_base(theme),
+        contract_system,
+        overrides,
+        source);
     ResolvedThemePreferences resolved;
-    resolved.source = std::string{source};
+    resolved.source = contract_resolution.source;
 
     if (!overrides.font_family.empty()) {
         theme.default_font_family = overrides.font_family;
@@ -520,7 +563,8 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
     if (!overrides.color_scheme.empty()) {
         resolved_color_scheme = overrides.color_scheme;
         resolved.used_user_color_scheme = true;
-    } else if (overrides.prefer_system_color_scheme) {
+    } else if (overrides.prefer_system_color_scheme
+               && contract_system.color_scheme_available) {
         resolved_color_scheme = system.color_scheme;
         resolved.used_system_color_scheme = true;
     }
@@ -569,7 +613,9 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
     }
 
     float scale = 1.0f;
-    if (!use_system_font_metrics && overrides.apply_system_font_scale) {
+    if (!use_system_font_metrics
+        && overrides.apply_system_font_scale
+        && contract_system.font_scale_available) {
         auto const system_scale = bounded_theme_preference(
             system.font_scale,
             1.0f,
@@ -632,7 +678,8 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
             1.0f,
             2.2f);
         resolved.used_user_line_height = true;
-    } else if (system.line_height_ratio > 0.0f
+    } else if (contract_system.line_height_available
+               && system.line_height_ratio > 0.0f
                && std::isfinite(system.line_height_ratio)) {
         theme.line_height_ratio = bounded_theme_preference(
             system.line_height_ratio,
@@ -642,14 +689,17 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
         resolved.used_system_line_height = true;
     }
 
-    float scroll_scale = overrides.apply_system_scroll_metrics
+    bool const use_system_scroll_metrics =
+        overrides.apply_system_scroll_metrics
+        && contract_system.scroll_metrics_available;
+    float scroll_scale = use_system_scroll_metrics
         ? bounded_theme_preference(
             system.scroll_delta_multiplier,
             1.0f,
             0.25f,
             4.0f)
         : 1.0f;
-    float horizontal_scroll_scale = overrides.apply_system_scroll_metrics
+    float horizontal_scroll_scale = use_system_scroll_metrics
         ? bounded_theme_preference(
             system.scroll_horizontal_delta_multiplier,
             scroll_scale,
@@ -657,11 +707,7 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
             4.0f)
         : 1.0f;
     resolved.used_system_scroll_metrics =
-        overrides.apply_system_scroll_metrics
-        && ((system.scroll_delta_multiplier > 0.0f
-             && std::isfinite(system.scroll_delta_multiplier))
-            || (system.scroll_horizontal_delta_multiplier > 0.0f
-                && std::isfinite(system.scroll_horizontal_delta_multiplier)));
+        contract_resolution.used_system_scroll_metrics;
     float const app_scroll_scale = bounded_theme_preference(
         overrides.scroll_delta_multiplier,
         1.0f,
@@ -699,6 +745,10 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
         resolved.used_system_accent_color = true;
     }
     resolved.theme = theme;
+    resolved.requested_color_scheme =
+        contract_resolution.requested_color_scheme;
+    resolved.effective_color_scheme =
+        contract_resolution.effective_color_scheme;
     resolved.effective_font_family = theme.default_font_family;
     resolved.effective_body_font_size = theme.body_font_size;
     resolved.effective_heading_font_size = theme.heading_font_size;
@@ -708,6 +758,32 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
         theme.scroll_delta_multiplier;
     resolved.effective_scroll_horizontal_delta_multiplier =
         theme.scroll_horizontal_delta_multiplier;
+    resolved.used_user_font_family =
+        contract_resolution.used_user_font_family;
+    resolved.used_system_font_family =
+        contract_resolution.used_system_font_family;
+    resolved.used_user_color_scheme =
+        contract_resolution.used_user_color_scheme;
+    resolved.used_system_color_scheme =
+        contract_resolution.used_system_color_scheme;
+    resolved.used_system_font_metrics =
+        contract_resolution.used_system_font_metrics;
+    resolved.used_system_font_scale =
+        contract_resolution.used_system_font_scale;
+    resolved.used_user_font_scale =
+        contract_resolution.used_user_font_scale;
+    resolved.used_user_font_size =
+        contract_resolution.used_user_font_size;
+    resolved.used_system_line_height =
+        contract_resolution.used_system_line_height;
+    resolved.used_user_line_height =
+        contract_resolution.used_user_line_height;
+    resolved.used_system_scroll_metrics =
+        contract_resolution.used_system_scroll_metrics;
+    resolved.used_user_scroll_scale =
+        contract_resolution.used_user_scroll_scale;
+    resolved.used_system_accent_color =
+        contract_resolution.used_system_accent_color;
     return resolved;
 }
 
