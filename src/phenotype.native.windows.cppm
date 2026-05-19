@@ -22,6 +22,7 @@ module;
 #pragma comment(lib, "dwmapi.lib")
 #pragma comment(lib, "dxgi.lib")
 #pragma comment(lib, "dwrite.lib")
+#pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "gdi32.lib")
 #pragma comment(lib, "imm32.lib")
 #pragma comment(lib, "ole32.lib")
@@ -5969,6 +5970,45 @@ windows_accessibility_display_options() {
     return options;
 }
 
+inline std::optional<bool> windows_apps_use_light_theme() {
+    DWORD value = 1;
+    DWORD size = sizeof(value);
+    LONG const status = RegGetValueW(
+        HKEY_CURRENT_USER,
+        L"Software\\Microsoft\\Windows\\CurrentVersion\\Themes\\Personalize",
+        L"AppsUseLightTheme",
+        RRF_RT_REG_DWORD,
+        nullptr,
+        &value,
+        &size);
+    if (status != ERROR_SUCCESS || size != sizeof(value))
+        return std::nullopt;
+    return value != 0;
+}
+
+inline void apply_windows_appearance_to_system_snapshot(
+        ::phenotype::PlatformSystemSettingsSnapshot& snapshot,
+        bool increase_contrast) {
+    if (auto light = windows_apps_use_light_theme()) {
+        snapshot.color_scheme_source =
+            "HKCU Themes Personalize AppsUseLightTheme";
+        snapshot.appearance_name = *light
+            ? "AppsUseLightTheme=1"
+            : "AppsUseLightTheme=0";
+        if (increase_contrast)
+            snapshot.color_scheme = *light
+                ? "high-contrast-light"
+                : "high-contrast-dark";
+        else
+            snapshot.color_scheme = *light ? "light" : "dark";
+        return;
+    }
+    snapshot.color_scheme = increase_contrast
+        ? "high-contrast-light"
+        : "light";
+    snapshot.color_scheme_source = "fallback";
+}
+
 inline json::Value windows_accessibility_display_options_json(
         WindowsAccessibilityDisplayOptions const& options) {
     json::Object accessibility;
@@ -6001,6 +6041,14 @@ windows_system_settings_snapshot() {
     snapshot.small_font_size = 11.0f;
     snapshot.line_height_ratio = 1.6f;
     snapshot.font_scale = 1.0f;
+    auto accessibility = windows_accessibility_display_options();
+    snapshot.reduce_transparency = accessibility.reduce_transparency;
+    snapshot.increase_contrast = accessibility.increase_contrast;
+    snapshot.reduce_motion = accessibility.reduce_motion;
+    snapshot.accessibility_source = accessibility.source;
+    apply_windows_appearance_to_system_snapshot(
+        snapshot,
+        accessibility.increase_contrast);
 
     NONCLIENTMETRICSW metrics{};
     metrics.cbSize = sizeof(metrics);

@@ -178,6 +178,12 @@ ExplorerInputMessage font_family_message(std::string value) {
         std::move(value));
 }
 
+ExplorerInputMessage color_scheme_message(std::string value) {
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetColorScheme,
+        std::move(value));
+}
+
 ExplorerInputMessage font_scale_step_message(
         file_explorer_demo::ExplorerState const& explorer,
         float delta) {
@@ -294,6 +300,16 @@ phenotype::ThemePreferenceOverrides initial_theme_preference_overrides() {
             4.0f)) {
         overrides.scroll_delta_multiplier = *speed;
     }
+    if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_COLOR_SCHEME")) {
+        if (std::string_view{raw} == "system") {
+            overrides.prefer_system_color_scheme = true;
+        } else if (std::string_view{raw} == "dark"
+                   || std::string_view{raw} == "light"
+                   || std::string_view{raw} == "high-contrast-dark"
+                   || std::string_view{raw} == "high-contrast-light") {
+            overrides.color_scheme = raw;
+        }
+    }
     return overrides;
 }
 
@@ -325,6 +341,13 @@ file_explorer_demo::SystemPreferenceSnapshot system_preference_snapshot(
         .scroll_horizontal_delta_multiplier =
             system.scroll_horizontal_delta_multiplier,
         .scroll_source = system.scroll_source,
+        .color_scheme = system.color_scheme,
+        .color_scheme_source = system.color_scheme_source,
+        .appearance_name = system.appearance_name,
+        .reduce_transparency = system.reduce_transparency,
+        .increase_contrast = system.increase_contrast,
+        .reduce_motion = system.reduce_motion,
+        .accessibility_source = system.accessibility_source,
         .accent_color_available = system.accent_color_available,
         .accent_color = {
             static_cast<int>(system.accent_color.r),
@@ -341,6 +364,7 @@ file_explorer_demo::ThemePreferenceSnapshot theme_preference_snapshot(
         phenotype::ThemePreferenceOverrides const& overrides) {
     return {
         .font_family = overrides.font_family,
+        .color_scheme = overrides.color_scheme,
         .font_scale = overrides.font_scale,
         .body_font_size = overrides.body_font_size,
         .heading_font_size = overrides.heading_font_size,
@@ -348,6 +372,7 @@ file_explorer_demo::ThemePreferenceSnapshot theme_preference_snapshot(
         .line_height_ratio = overrides.line_height_ratio,
         .scroll_delta_multiplier = overrides.scroll_delta_multiplier,
         .prefer_system_font_family = overrides.prefer_system_font_family,
+        .prefer_system_color_scheme = overrides.prefer_system_color_scheme,
         .apply_system_font_scale = overrides.apply_system_font_scale,
         .apply_system_accent_color = overrides.apply_system_accent_color,
     };
@@ -362,6 +387,12 @@ file_explorer_demo::RuntimePreferenceState runtime_preference_state(
     state.system_settings = system_preference_snapshot(system_settings);
     state.theme_preferences = theme_preference_snapshot(theme_preferences);
     state.effective_font_family = theme.default_font_family;
+    state.effective_color_scheme = phenotype::theme_color_scheme_is_dark(
+        theme_preferences.prefer_system_color_scheme
+            ? system_settings.color_scheme
+            : theme_preferences.color_scheme)
+        ? "dark"
+        : "light";
     state.effective_body_font_size = theme.body_font_size;
     state.effective_small_font_size = theme.small_font_size;
     state.effective_scroll_delta_multiplier = theme.scroll_delta_multiplier;
@@ -422,6 +453,7 @@ phenotype::ThemePreferenceOverrides theme_preferences_from_state(
         file_explorer_demo::ThemePreferenceSnapshot const& preferences) {
     return phenotype::ThemePreferenceOverrides{
         .font_family = preferences.font_family,
+        .color_scheme = preferences.color_scheme,
         .font_scale = preferences.font_scale,
         .body_font_size = preferences.body_font_size,
         .heading_font_size = preferences.heading_font_size,
@@ -429,6 +461,7 @@ phenotype::ThemePreferenceOverrides theme_preferences_from_state(
         .line_height_ratio = preferences.line_height_ratio,
         .scroll_delta_multiplier = preferences.scroll_delta_multiplier,
         .prefer_system_font_family = preferences.prefer_system_font_family,
+        .prefer_system_color_scheme = preferences.prefer_system_color_scheme,
         .apply_system_font_scale = preferences.apply_system_font_scale,
         .apply_system_accent_color = preferences.apply_system_accent_color,
     };
@@ -2129,6 +2162,18 @@ void finder_more_actions(State const& state,
                             true,
                             icons::Symbol::ChevronUp,
                             0x6716u);
+                        more_action_item(
+                            state.labels.preferences_system_appearance.c_str(),
+                            color_scheme_message("system"),
+                            true,
+                            icons::Symbol::Gallery,
+                            0x6717u);
+                        more_action_item(
+                            state.labels.preferences_dark_appearance.c_str(),
+                            color_scheme_message("dark"),
+                            true,
+                            icons::Symbol::Movie,
+                            0x6718u);
                     }, SpaceToken::Xs);
                 }, SpaceToken::Xs);
             });

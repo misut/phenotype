@@ -215,8 +215,8 @@ surface roles. The root helpers `default_theme_profile_name`,
 CLI output, and artifacts can check the same contract without giving backend
 adapters any policy authority.
 
-OS-derived typography, scrolling, and accent-color preferences follow the same
-edge-to-core rule. Native adapters collect a
+OS-derived typography, appearance, accessibility, scrolling, and accent-color
+preferences follow the same edge-to-core rule. Native adapters collect a
 `PlatformSystemSettingsSnapshot` from their platform APIs, then the core applies
 it through the pure
 `apply_system_theme_preferences(Theme, PlatformSystemSettingsSnapshot,
@@ -233,6 +233,19 @@ DWM, and Android uses `Resources.getConfiguration()` plus
 `ViewConfiguration`. The base theme keeps Pretendard as the product default;
 switching to the OS family is an explicit app override, while OS text scale and
 axis-specific scroll multipliers are safe pure inputs by default.
+The same snapshot records `color_scheme`, `appearance_name`, and accessibility
+display booleans (`reduce_transparency`, `increase_contrast`, `reduce_motion`).
+macOS resolves appearance through `NSApplication.effectiveAppearance` and
+accessibility display preferences through `NSWorkspace`. Android reads
+`Configuration.uiMode` for night mode and the existing public contrast/animation
+bridges for accessibility. Windows records accessibility through
+`SystemParametersInfoW`; app light/dark preference is captured separately from
+the documented Personalize registry value and marked with its own source string.
+Apps opt into system appearance with `prefer_system_color_scheme` or force a
+deterministic `color_scheme` override such as `light`, `dark`, or
+`high-contrast-dark`. The pure helper applies the Apple-like dark palette only
+from those explicit overrides, so artifact tests can keep deterministic light
+expectations while real apps can follow the OS.
 Accent colors are also captured in this snapshot. macOS resolves
 `NSColor.controlAccentColor` in a generic RGB color space, Windows reads
 `DwmGetColorizationColor` and decodes its documented `0xAARRGGBB` value, and
@@ -889,14 +902,15 @@ material/runtime extensions.
 - **Linux / other desktop**: shared stub backend
 
 All native capability payloads include `system_settings`: macOS uses
-CoreText/AppKit/NSScroller, Windows uses `SystemParametersInfoW` plus DWM, and
-Android uses Java resource/configuration APIs reached through the GameActivity
-edge. WASI and the stub backend publish deterministic fallback values.
+CoreText/AppKit/NSScroller/NSWorkspace, Windows uses `SystemParametersInfoW`
+plus DWM and the Personalize app-theme registry value, and Android uses Java
+resource/configuration APIs reached through the GameActivity edge. WASI and the
+stub backend publish deterministic fallback values.
 `scroll_delta_multiplier` and `scroll_horizontal_delta_multiplier` are pure
 theme inputs; native wheel callbacks only translate platform events into
 logical pixels before the app/user multiplier is applied. Renderers may report
 the same snapshot in `platform_runtime.details`, but they do not decide font,
-accent, or scroll policy themselves.
+appearance, accessibility, accent, or scroll policy themselves.
 
 ### Modularity guarantee
 

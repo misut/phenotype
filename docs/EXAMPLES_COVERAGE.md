@@ -266,6 +266,13 @@ Focus aliases such as `key:tab`, `shift-tab`, `focus:search`,
 `click:README.txt`, and `pointer:content-grid` resolve to the same model-level
 focus state as native artifacts: keyboard traversal sets `focus_visible=true`,
 while pointer input changes `focus_target` without drawing the ring.
+Preference aliases such as `font-family:system`, `font-scale:1.25`,
+`scroll-speed:1.5`, and `color-scheme:system` drive the same pure
+`ThemePreferenceOverrides` path as the native file explorer settings controls.
+Artifacts record the OS snapshot (`color_scheme`, appearance/accessibility
+sources, font metrics, and axis-specific scroll factors), the app overrides, and
+the resolved effective theme so OS-level preferences and app-level overrides can
+be debugged without guessing from pixels.
 View-mode inputs (`view:icon`, `view:list`, `view:column`, or `view:gallery`)
 use the same shared state field as the desktop toolbar and
 `PHENOTYPE_FILE_EXPLORER_VIEW`, so headless CLI traces and native artifacts

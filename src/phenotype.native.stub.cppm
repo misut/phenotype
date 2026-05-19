@@ -148,6 +148,9 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot stub_debug_capabilities()
         .scroll_page_mode = false,
         .scroll_delta_multiplier = 1.0f,
         .scroll_source = "fallback",
+        .color_scheme = "light",
+        .color_scheme_source = "desktop-stub-fallback",
+        .accessibility_source = "desktop-stub-fallback",
     };
     return snapshot;
 }

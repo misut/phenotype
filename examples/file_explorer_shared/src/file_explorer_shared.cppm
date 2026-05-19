@@ -140,6 +140,13 @@ struct SystemPreferenceSnapshot {
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
     std::string scroll_source = "fallback";
+    std::string color_scheme = "light";
+    std::string color_scheme_source = "fallback";
+    std::string appearance_name;
+    bool reduce_transparency = false;
+    bool increase_contrast = false;
+    bool reduce_motion = false;
+    std::string accessibility_source = "fallback";
     bool accent_color_available = false;
     RgbaColorSnapshot accent_color{};
     std::string accent_color_source = "fallback";
@@ -148,6 +155,7 @@ struct SystemPreferenceSnapshot {
 
 struct ThemePreferenceSnapshot {
     std::string font_family;
+    std::string color_scheme;
     float font_scale = 1.0f;
     float body_font_size = 0.0f;
     float heading_font_size = 0.0f;
@@ -155,6 +163,7 @@ struct ThemePreferenceSnapshot {
     float line_height_ratio = 0.0f;
     float scroll_delta_multiplier = 1.0f;
     bool prefer_system_font_family = false;
+    bool prefer_system_color_scheme = false;
     bool apply_system_font_scale = true;
     bool apply_system_accent_color = false;
 };
@@ -214,6 +223,7 @@ struct ExplorerState {
     ThemePreferenceSnapshot theme_preferences{};
     std::string preferences_source = "default";
     std::string effective_font_family = "Pretendard";
+    std::string effective_color_scheme = "light";
     float effective_body_font_size = 16.0f;
     float effective_small_font_size = 14.4f;
     float effective_scroll_delta_multiplier = 1.0f;
@@ -254,6 +264,7 @@ enum class ExplorerInputKind {
     SetFontFamily,
     SetFontScale,
     SetScrollSpeed,
+    SetColorScheme,
 };
 
 struct ExplorerInput {
@@ -612,6 +623,7 @@ struct RuntimePreferenceState {
     SystemPreferenceSnapshot system_settings{};
     ThemePreferenceSnapshot theme_preferences{};
     std::string effective_font_family = "Pretendard";
+    std::string effective_color_scheme = "light";
     float effective_body_font_size = 16.0f;
     float effective_small_font_size = 14.4f;
     float effective_scroll_delta_multiplier = 1.0f;
@@ -2891,6 +2903,21 @@ inline json::Value system_settings_debug_json(
         "scroll_horizontal_delta_multiplier",
         json::Value{settings.scroll_horizontal_delta_multiplier});
     out.emplace("scroll_source", json::Value{settings.scroll_source});
+    out.emplace("color_scheme", json::Value{settings.color_scheme});
+    out.emplace(
+        "color_scheme_source",
+        json::Value{settings.color_scheme_source});
+    out.emplace("appearance_name", json::Value{settings.appearance_name});
+    out.emplace(
+        "reduce_transparency",
+        json::Value{settings.reduce_transparency});
+    out.emplace(
+        "increase_contrast",
+        json::Value{settings.increase_contrast});
+    out.emplace("reduce_motion", json::Value{settings.reduce_motion});
+    out.emplace(
+        "accessibility_source",
+        json::Value{settings.accessibility_source});
     out.emplace(
         "accent_color_available",
         json::Value{settings.accent_color_available});
@@ -2909,6 +2936,9 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
     overrides.emplace(
         "font_family",
         json::Value{state.theme_preferences.font_family});
+    overrides.emplace(
+        "color_scheme",
+        json::Value{state.theme_preferences.color_scheme});
     overrides.emplace(
         "font_scale",
         json::Value{state.theme_preferences.font_scale});
@@ -2931,6 +2961,9 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
         "prefer_system_font_family",
         json::Value{state.theme_preferences.prefer_system_font_family});
     overrides.emplace(
+        "prefer_system_color_scheme",
+        json::Value{state.theme_preferences.prefer_system_color_scheme});
+    overrides.emplace(
         "apply_system_font_scale",
         json::Value{state.theme_preferences.apply_system_font_scale});
     overrides.emplace(
@@ -2941,6 +2974,9 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
     effective.emplace(
         "font_family",
         json::Value{state.effective_font_family});
+    effective.emplace(
+        "color_scheme",
+        json::Value{state.effective_color_scheme});
     effective.emplace(
         "body_font_size",
         json::Value{state.effective_body_font_size});
@@ -4223,6 +4259,7 @@ inline std::string explorer_input_kind_name(ExplorerInputKind kind) {
         case ExplorerInputKind::SetFontFamily: return "set_font_family";
         case ExplorerInputKind::SetFontScale: return "set_font_scale";
         case ExplorerInputKind::SetScrollSpeed: return "set_scroll_speed";
+        case ExplorerInputKind::SetColorScheme: return "set_color_scheme";
     }
     return "noop";
 }
@@ -4808,6 +4845,21 @@ inline ExplorerInputParseResult parse_explorer_input(std::string_view raw) {
             .value = compact_preference_number(*parsed),
         });
     }
+    if (name == "appearance" || name == "color-scheme"
+        || name == "color_scheme") {
+        auto lowered = lower_copy(trim(value));
+        if (lowered != "system" && lowered != "light"
+            && lowered != "dark" && lowered != "high-contrast-light"
+            && lowered != "high-contrast-dark") {
+            return input_parse_error(
+                "input 'color-scheme' requires system, light, dark, "
+                "high-contrast-light, or high-contrast-dark");
+        }
+        return parsed_input({
+            .kind = ExplorerInputKind::SetColorScheme,
+            .value = lowered,
+        });
+    }
     if (name == "reset")
         return parsed_input({.kind = ExplorerInputKind::Reset});
     if (name == "scenario")
@@ -5388,6 +5440,7 @@ inline void apply_runtime_preferences(
     state.system_settings = preferences.system_settings;
     state.theme_preferences = preferences.theme_preferences;
     state.effective_font_family = preferences.effective_font_family;
+    state.effective_color_scheme = preferences.effective_color_scheme;
     state.effective_body_font_size = preferences.effective_body_font_size;
     state.effective_small_font_size = preferences.effective_small_font_size;
     state.effective_scroll_delta_multiplier =
@@ -6002,6 +6055,7 @@ inline ExplorerInputModality default_input_modality(
         case ExplorerInputKind::SetFontFamily:
         case ExplorerInputKind::SetFontScale:
         case ExplorerInputKind::SetScrollSpeed:
+        case ExplorerInputKind::SetColorScheme:
         default:
             return ExplorerInputModality::Programmatic;
     }
@@ -6136,6 +6190,7 @@ inline void apply_focus_policy_for_input(
         case ExplorerInputKind::SetFontFamily:
         case ExplorerInputKind::SetFontScale:
         case ExplorerInputKind::SetScrollSpeed:
+        case ExplorerInputKind::SetColorScheme:
         default:
             apply_modality_without_focus_change(state, modality);
             return;
@@ -6403,6 +6458,24 @@ inline void apply_explorer_input(
                 + compact_preference_number(*speed) + "x.";
             return;
         }
+        case ExplorerInputKind::SetColorScheme: {
+            auto scheme = lower_copy(trim(input.value));
+            state.preferences_source = "application-input";
+            if (scheme == "system") {
+                state.theme_preferences.prefer_system_color_scheme = true;
+                state.theme_preferences.color_scheme.clear();
+                state.status = "Using the OS appearance.";
+            } else if (scheme == "light" || scheme == "dark"
+                       || scheme == "high-contrast-light"
+                       || scheme == "high-contrast-dark") {
+                state.theme_preferences.prefer_system_color_scheme = false;
+                state.theme_preferences.color_scheme = std::string{scheme};
+                state.status = "Appearance set to " + std::string{scheme} + ".";
+            } else {
+                state.status = "Appearance input was invalid.";
+            }
+            return;
+        }
         case ExplorerInputKind::Reset:
             reset_demo_tree(state, profile);
             return;
@@ -6648,6 +6721,9 @@ struct ExplorerLabels {
     std::string preferences_text_smaller = "Text -";
     std::string preferences_scroll_faster = "Scroll +";
     std::string preferences_scroll_slower = "Scroll -";
+    std::string preferences_system_appearance = "System Look";
+    std::string preferences_light_appearance = "Light";
+    std::string preferences_dark_appearance = "Dark";
     std::string status = "Status";
 };
 
@@ -6759,6 +6835,9 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"preferences.text_smaller", "Text -"},
         {"preferences.scroll_faster", "Scroll +"},
         {"preferences.scroll_slower", "Scroll -"},
+        {"preferences.system_appearance", "System Look"},
+        {"preferences.light_appearance", "Light"},
+        {"preferences.dark_appearance", "Dark"},
         {"status.title", "Status"},
     });
     phenotype::LocaleDescriptor ko{
@@ -6819,6 +6898,9 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"preferences.text_smaller", "글자 -"},
         {"preferences.scroll_faster", "스크롤 +"},
         {"preferences.scroll_slower", "스크롤 -"},
+        {"preferences.system_appearance", "시스템"},
+        {"preferences.light_appearance", "라이트"},
+        {"preferences.dark_appearance", "다크"},
         {"status.title", "상태"},
     });
     catalog.locales = {std::move(en), std::move(ko)};
@@ -6951,6 +7033,15 @@ inline ExplorerLabels file_explorer_labels(
     labels.preferences_scroll_slower = get(
         "preferences.scroll_slower",
         labels.preferences_scroll_slower);
+    labels.preferences_system_appearance = get(
+        "preferences.system_appearance",
+        labels.preferences_system_appearance);
+    labels.preferences_light_appearance = get(
+        "preferences.light_appearance",
+        labels.preferences_light_appearance);
+    labels.preferences_dark_appearance = get(
+        "preferences.dark_appearance",
+        labels.preferences_dark_appearance);
     labels.status = get("status.title", labels.status);
     return labels;
 }

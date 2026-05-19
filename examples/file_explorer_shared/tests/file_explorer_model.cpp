@@ -75,6 +75,8 @@ int main() {
         == "최근 항목");
     assert(demo::file_explorer_labels("ko", "desktop").preferences_scroll_faster
         == "스크롤 +");
+    assert(demo::file_explorer_labels("ko", "desktop").preferences_dark_appearance
+        == "다크");
     assert(demo::file_explorer_labels("ko", catalog).sidebar_recents
         == "최근 항목");
     assert(demo::file_explorer_labels("en", catalog).preferences_system_font
@@ -368,7 +370,7 @@ duplicate
     fs::remove_all(demo::demo_root(preference_profile), ec);
     auto preference_state = demo::make_state(preference_profile);
     auto preference_sequence = demo::parse_explorer_input_sequence(
-        "font-family:system;font-scale:1.25;scroll-speed:1.5");
+        "font-family:system;font-scale:1.25;scroll-speed:1.5;color-scheme:system");
     assert(preference_sequence.ok);
     demo::apply_explorer_inputs(
         preference_state,
@@ -379,7 +381,8 @@ duplicate
     assert(preference_state.theme_preferences.font_family.empty());
     assert(preference_state.theme_preferences.font_scale == 1.25f);
     assert(preference_state.theme_preferences.scroll_delta_multiplier == 1.5f);
-    assert(preference_state.status == "Scroll speed set to 1.5x.");
+    assert(preference_state.theme_preferences.prefer_system_color_scheme);
+    assert(preference_state.status == "Using the OS appearance.");
     auto preference_debug_text = json::emit(
         demo::file_explorer_application_debug_json(
             preference_state,
@@ -395,6 +398,8 @@ duplicate
     assert(preference_debug_text.find("\"font_scale\":1.25")
            != std::string::npos);
     assert(preference_debug_text.find("\"scroll_delta_multiplier\":1.5")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"prefer_system_color_scheme\":true")
            != std::string::npos);
     assert(preference_debug_text.find(
                "\"scroll_horizontal_delta_multiplier\"")
@@ -1112,6 +1117,8 @@ duplicate
     assert(debug_text.find("\"scroll_vertical_factor\"") != std::string::npos);
     assert(debug_text.find("\"scroll_horizontal_delta_multiplier\"")
            != std::string::npos);
+    assert(debug_text.find("\"color_scheme\"") != std::string::npos);
+    assert(debug_text.find("\"accessibility_source\"") != std::string::npos);
     assert(debug_text.find("\"Pretendard package default")
            != std::string::npos);
     assert(debug_text.find("\"source\":\"file_explorer_shared::entry_symbol\"")
