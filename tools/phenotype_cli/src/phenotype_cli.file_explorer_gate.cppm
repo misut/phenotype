@@ -163,15 +163,33 @@ auto append_file_explorer_scenario_requirements(
         append_required_label(args, "New Folder");
         append_required_label(args, "Duplicate");
         append_required_label(args, "Delete");
+        append_required_label(args, "System");
+        append_required_label(args, "Pretendard");
+        append_required_label(args, "Text +");
+        append_required_label(args, "Text -");
+        append_required_label(args, "Scroll +");
+        append_required_label(args, "Scroll -");
         append_required_label_contains(args, "Selected README.txt");
         append_required_debug_detail(
             args, "application.file_explorer.chrome.more_actions_open=true");
         append_required_debug_detail(
-            args, "application.file_explorer.chrome.overflow_action_button_count=4");
+            args, "application.file_explorer.chrome.overflow_action_button_count=10");
         append_required_debug_detail(
             args, "application.file_explorer.selection.present=true");
         append_required_debug_detail(
             args, "application.file_explorer.selection.name=\"README.txt\"");
+    } else if (scenario == "preferences-panel") {
+        append_required_label(args, "Display");
+        append_required_label(args, "System");
+        append_required_label(args, "Pretendard");
+        append_required_label(args, "Text +");
+        append_required_label(args, "Text -");
+        append_required_label(args, "Scroll +");
+        append_required_label(args, "Scroll -");
+        append_required_debug_detail(
+            args, "application.file_explorer.mobile_tab=2");
+        append_required_debug_detail(
+            args, "application.file_explorer.status=\"Display preferences ready.\"");
     } else {
         return std::unexpected{std::format(
             "unknown file explorer startup scenario: {}",
@@ -300,6 +318,10 @@ auto run_file_explorer_verifier(fs::path const& root,
 
 auto is_desktop_only_file_explorer_scenario(std::string_view scenario) -> bool {
     return scenario == "more-actions-open" || scenario == "svg-selected";
+}
+
+auto is_mobile_only_file_explorer_scenario(std::string_view scenario) -> bool {
+    return scenario == "preferences-panel";
 }
 
 auto artifact_dir_for_case(std::optional<fs::path> const& root,
@@ -748,8 +770,10 @@ export int run_artifact_verify_file_explorer(
                 return emit_file_explorer_gate(summary, invocation, exit_code);
         }
         for (auto const& scenario : summary.scenarios) {
-            if (scenario == "default")
+            if (scenario == "default"
+                || is_mobile_only_file_explorer_scenario(scenario)) {
                 continue;
+            }
             auto case_id = std::format("icon-{}", scenario);
             auto dir = artifact_dir_for_case(
                 desktop_artifact_root,

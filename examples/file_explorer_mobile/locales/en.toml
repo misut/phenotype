@@ -55,5 +55,14 @@ contents = "Contents"
 folder_name = "Folder name"
 reset_demo_files = "Reset Demo Files"
 
+[preferences]
+title = "Display"
+system_font = "System"
+package_font = "Pretendard"
+text_larger = "Text +"
+text_smaller = "Text -"
+scroll_faster = "Scroll +"
+scroll_slower = "Scroll -"
+
 [status]
 title = "Status"

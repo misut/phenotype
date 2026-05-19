@@ -55,5 +55,14 @@ contents = "내용"
 folder_name = "폴더 이름"
 reset_demo_files = "데모 파일 초기화"
 
+[preferences]
+title = "표시"
+system_font = "시스템"
+package_font = "Pretendard"
+text_larger = "글자 +"
+text_smaller = "글자 -"
+scroll_faster = "스크롤 +"
+scroll_slower = "스크롤 -"
+
 [status]
 title = "상태"

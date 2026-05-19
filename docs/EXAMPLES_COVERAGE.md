@@ -89,7 +89,10 @@ guess.
 Both file explorer profiles also expose font-family, font-scale, and
 scroll-speed preference inputs through the shared model. Native examples apply
 those app overrides after the platform system-settings snapshot is captured, so
-artifacts can distinguish OS defaults from user-selected theme changes.
+artifacts can distinguish OS defaults from user-selected theme changes. The
+desktop More menu and mobile Create tab both call the same shared preference
+inputs, which keeps interactive controls, startup scripts, and CLI-driven
+artifact replay on one contract.
 
 From the repo root, verify a generated bundle through the CLI verifier edge
 before using it as a debugging artifact:
