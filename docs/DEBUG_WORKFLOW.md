@@ -313,7 +313,7 @@ state, including visible RGBA, background chrome, effective size, hit target,
 source attribution, and likely layer/pass.
 `phenotype icons sources --json` is the compact license/provenance probe:
 it lists every pinned Lucide raw SVG source, the symbols that use it, the
-source revision, exact license URL, phenotype-owned fallback symbols, and
+source revision, exact license URL, remaining phenotype-owned count, and
 checks that Apple/SF Symbols artwork was not embedded, platform-extracted, or
 runtime-fetched.
 `phenotype icons render <name-or-reference> --role ... --phase ... --json`
@@ -434,8 +434,8 @@ glyphs stay on the macOS-like round stroke contract. The desktop payload also
 includes `source_attribution_policy`, `lucide_source_symbol_count`,
 `lucide_unique_source_icon_count`, and `apple_asset_symbol_count` so
 permissive-source adoption and Apple-asset exclusion are machine-checkable. A
-healthy Finder-style desktop artifact should show 35 Lucide-backed symbols, 34
-unique Lucide raw SVG source files, 4 phenotype-owned symbols, and 0 Apple/SF
+healthy Finder-style desktop artifact should show 39 Lucide-backed symbols, 38
+unique Lucide raw SVG source files, 0 phenotype-owned symbols, and 0 Apple/SF
 Symbols assets; mismatches point to `phenotype.icon_catalog` attribution or
 package-resource drift before a renderer bug. Each Lucide-backed symbol reports
 the exact ISC or Feather-derived MIT license and a direct raw SVG URL pinned to

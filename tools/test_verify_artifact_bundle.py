@@ -1003,7 +1003,7 @@ def snapshot_with_file_explorer_chrome(
                 "focus_ring_policy": (
                     "keyboard_tab_navigation_only_pointer_click_hides_focus_ring"),
                 "icon_source_policy": (
-                    "phenotype-owned or permissive SVG only; accepted "
+                    "audited permissive SVG only; accepted "
                     "external licenses include Lucide ISC"),
                 "embedded_svg_policy": (
                     "Every embedded icon source must carry a pinned direct "

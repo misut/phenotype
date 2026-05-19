@@ -2,6 +2,7 @@
 #include <cmath>
 #include <cstdio>
 #include <cstring>
+#include <string>
 #include <string_view>
 
 import phenotype.icons;
@@ -367,7 +368,7 @@ void test_builtin_icons_parse() {
     assert(icons::stroke_cap_policy() == "round");
     assert(icons::stroke_join_policy() == "round");
     assert(icons::alignment_policy() == "24x24 text-aligned symbol grid");
-    assert(icons::variant_policy() == "outline primary with filled action variants");
+    assert(icons::variant_policy() == "outline-only with role-aware symbol chrome");
     assert(icons::tone_policy()
            == "primary, secondary, selected, accent, disabled, destructive");
     assert(icons::default_scale_policy() == "medium");
@@ -376,9 +377,9 @@ void test_builtin_icons_parse() {
            != std::string_view::npos);
     assert(icons::all_symbol_count == 39);
     assert(phenotype::icon_catalog::all_symbol_count == icons::all_symbol_count);
-    assert(icons::phenotype_owned_symbol_count == 4);
-    assert(icons::permissive_source_symbol_count == 35);
-    assert(icons::lucide_source_symbol_count == 35);
+    assert(icons::phenotype_owned_symbol_count == 0);
+    assert(icons::permissive_source_symbol_count == icons::all_symbol_count);
+    assert(icons::lucide_source_symbol_count == icons::all_symbol_count);
     assert(icons::apple_asset_symbol_count == 0);
     assert(icons::audited_symbol_source_count == icons::all_symbol_count);
     assert(icons::sidebar_symbol_count == 11);
@@ -387,9 +388,9 @@ void test_builtin_icons_parse() {
     assert(phenotype::icon_catalog::toolbar_symbol_count == icons::toolbar_symbol_count);
     assert(icons::file_type_symbol_count == 11);
     assert(phenotype::icon_catalog::file_type_symbol_count == icons::file_type_symbol_count);
-    assert(icons::outline_symbol_count == 38);
-    assert(icons::filled_symbol_count == 1);
-    assert(icons::hierarchical_symbol_count == 17);
+    assert(icons::outline_symbol_count == icons::all_symbol_count);
+    assert(icons::filled_symbol_count == 0);
+    assert(icons::hierarchical_symbol_count == 14);
     assert(icons::monochrome_symbol_count == icons::all_symbol_count);
     assert(icons::regular_weight_symbol_count == icons::all_symbol_count);
     assert(icons::palette_symbol_count == 0);
@@ -447,6 +448,41 @@ void test_builtin_icons_parse() {
            == phenotype::icon_catalog::Symbol::Archive);
     assert(icons::file_type_symbol_at(10)
            == icons::Symbol::PresentationDocument);
+    assert(icons::file_type_extension_rule_count == 36);
+    assert(icons::file_type_token(icons::Symbol::PdfDocument) == "pdf");
+    assert(icons::file_type_kind_label(icons::Symbol::PdfDocument)
+           == "PDF Document");
+    assert(icons::file_type_extension_family(icons::Symbol::Image)
+           == "raster_or_svg_image");
+    assert(icons::is_file_type_symbol(icons::Symbol::Image));
+    assert(!icons::is_file_type_symbol(icons::Symbol::Search));
+    auto const pdf_icon =
+        icons::file_type_icon_descriptor(icons::Symbol::PdfDocument);
+    assert(pdf_icon.symbol == icons::Symbol::PdfDocument);
+    assert(pdf_icon.package_asset_name == std::string{"file_type.pdf.icon"});
+    assert(pdf_icon.package_asset_source
+           == std::string{"assets/icons/file-types/pdf.svg"});
+    assert(*icons::file_type_symbol_from_token("presentation")
+           == icons::Symbol::PresentationDocument);
+    assert(!icons::file_type_symbol_from_token("missing").has_value());
+    assert(icons::file_extension_is_svg_image("SVG"));
+    assert(icons::file_extension_is_image("webp"));
+    assert(icons::file_extension_is_movie("m4v"));
+    assert(icons::file_extension_is_audio("flac"));
+    assert(icons::file_extension_is_code("toml"));
+    assert(icons::file_extension_is_spreadsheet("xlsx"));
+    assert(icons::file_extension_is_presentation("key"));
+    assert(icons::file_extension_is_archive("zip"));
+    assert(icons::file_type_symbol_for_extension("svg")
+           == icons::Symbol::Image);
+    assert(icons::file_type_symbol_for_extension("unknown")
+           == icons::Symbol::Document);
+    assert(icons::file_type_symbol_for_entry("unknown", true)
+           == icons::Symbol::Folder);
+    assert(*icons::known_file_type_kind_label_for_extension("svg")
+           == std::string_view{"SVG Image"});
+    assert(!icons::known_file_type_kind_label_for_extension("unknown")
+            .has_value());
 
     auto const cache = icons::make_symbol_document_cache();
     assert(cache.policy == icons::document_cache_policy());
@@ -561,27 +597,19 @@ void test_builtin_icons_parse() {
             ++palette_count;
         if (descriptor.supports_multicolor)
             ++multicolor_count;
-        if (symbol != icons::Symbol::More) {
-            ++outline_count;
-            assert(descriptor.variant == icons::SymbolVariant::Outline);
-            assert(icons::symbol_variant_name(descriptor.variant) == "outline");
-            assert(src.find(R"(stroke-linecap="round")") != std::string_view::npos);
-            assert(src.find(R"(stroke-linejoin="round")") != std::string_view::npos);
-            assert(descriptor.round_stroke);
-            assert(descriptor.stroke_cap == icons::SymbolStrokeCap::Round);
-            assert(descriptor.stroke_join == icons::SymbolStrokeJoin::Round);
-            assert(icons::symbol_stroke_cap_name(descriptor.stroke_cap)
-                   == std::string_view{"round"});
-            assert(icons::symbol_stroke_join_name(descriptor.stroke_join)
-                   == std::string_view{"round"});
-            assert(!descriptor.filled);
-        } else {
-            ++filled_count;
-            assert(descriptor.variant == icons::SymbolVariant::Fill);
-            assert(icons::symbol_variant_name(descriptor.variant) == "fill");
-            assert(descriptor.filled);
-            assert(!descriptor.round_stroke);
-        }
+        ++outline_count;
+        assert(descriptor.variant == icons::SymbolVariant::Outline);
+        assert(icons::symbol_variant_name(descriptor.variant) == "outline");
+        assert(src.find(R"(stroke-linecap="round")") != std::string_view::npos);
+        assert(src.find(R"(stroke-linejoin="round")") != std::string_view::npos);
+        assert(descriptor.round_stroke);
+        assert(descriptor.stroke_cap == icons::SymbolStrokeCap::Round);
+        assert(descriptor.stroke_join == icons::SymbolStrokeJoin::Round);
+        assert(icons::symbol_stroke_cap_name(descriptor.stroke_cap)
+               == std::string_view{"round"});
+        assert(icons::symbol_stroke_join_name(descriptor.stroke_join)
+               == std::string_view{"round"});
+        assert(!descriptor.filled);
         if (descriptor.supports_hierarchical_opacity) {
             ++hierarchical_count;
             assert(descriptor.preferred_rendering
@@ -601,8 +629,8 @@ void test_builtin_icons_parse() {
         assert(!doc.has_diagnostics());
         if (symbol == icons::Symbol::AirDrop) {
             assert(icons::uses_svg_path_arcs(symbol));
-            assert(src.find(" A") != std::string_view::npos);
-            assert(count_path_verb(doc.shapes[1].path, PathVerb::ArcTo) > 0);
+            assert(src.find("a6 6") != std::string_view::npos);
+            assert(count_path_verb(doc.shapes[0].path, PathVerb::ArcTo) > 0);
         }
         if (icons::uses_lucide_source(symbol)) {
             assert(src.find("lucide") == std::string_view::npos);
@@ -627,11 +655,11 @@ void test_builtin_icons_parse() {
     assert(round_stroke_count == icons::round_stroke_symbol_count);
     assert(phenotype_owned_count == icons::phenotype_owned_symbol_count);
     assert(lucide_source_count == icons::lucide_source_symbol_count);
-    assert(icons::lucide_unique_source_icon_count == 34);
+    assert(icons::lucide_unique_source_icon_count == 38);
     assert(icons::lucide_source_icon_name_at(28) == "file-text");
     assert(icons::lucide_source_icon_name_at(
                icons::lucide_unique_source_icon_count - 1)
-           == "presentation");
+           == "arrow-up-down");
     assert(apple_asset_count == icons::apple_asset_symbol_count);
     assert(icons::source_attribution(icons::Symbol::Folder).icon_name
            == "folder");
@@ -647,6 +675,14 @@ void test_builtin_icons_parse() {
     assert(icons::source_attribution(
                icons::Symbol::PresentationDocument).icon_name
            == "presentation");
+    assert(icons::source_attribution(icons::Symbol::More).icon_name
+           == "ellipsis");
+    assert(icons::source_attribution(icons::Symbol::AirDrop).icon_name
+           == "radio");
+    assert(icons::source_attribution(icons::Symbol::Shared).icon_name
+           == "folder-symlink");
+    assert(icons::source_attribution(icons::Symbol::SortGroup).icon_name
+           == "arrow-up-down");
     assert(icons::source_attribution(icons::Symbol::Search).family
            == "Lucide");
     assert(icons::source_attribution(icons::Symbol::Search).icon_name
@@ -659,7 +695,7 @@ void test_builtin_icons_parse() {
     auto shared = icons::descriptor(icons::Symbol::Shared);
     assert(shared.role == icons::SymbolRole::Sidebar);
     assert(icons::symbol_role_name(shared.role) == "sidebar");
-    assert(shared.supports_hierarchical_opacity);
+    assert(!shared.supports_hierarchical_opacity);
     assert(shared.semantic_reference_name == "folder.badge.person.crop");
     assert(icons::sidebar_symbol_at(1) == icons::Symbol::Shared);
     assert(icons::toolbar_symbol_at(10) == icons::Symbol::Search);

@@ -649,15 +649,17 @@ duplicate
     assert(chrome.sidebar_symbol_count == 11);
     assert(chrome.toolbar_symbol_count == 15);
     assert(chrome.file_type_symbol_count == 11);
-    assert(chrome.icon_filled_symbol_count == 1);
-    assert(chrome.icon_outline_symbol_count == 38);
-    assert(chrome.icon_hierarchical_symbol_count == 17);
+    assert(chrome.icon_filled_symbol_count == 0);
+    assert(chrome.icon_outline_symbol_count == chrome.icon_total_symbol_count);
+    assert(chrome.icon_hierarchical_symbol_count == 14);
     assert(chrome.icon_reference_symbol_count == 39);
     assert(chrome.icon_svg_path_arc_symbol_count == 16);
-    assert(chrome.icon_phenotype_owned_symbol_count == 4);
-    assert(chrome.icon_permissive_source_symbol_count == 35);
-    assert(chrome.icon_lucide_source_symbol_count == 35);
-    assert(chrome.icon_lucide_unique_source_icon_count == 34);
+    assert(chrome.icon_phenotype_owned_symbol_count == 0);
+    assert(chrome.icon_permissive_source_symbol_count
+           == chrome.icon_total_symbol_count);
+    assert(chrome.icon_lucide_source_symbol_count
+           == chrome.icon_total_symbol_count);
+    assert(chrome.icon_lucide_unique_source_icon_count == 38);
     assert(chrome.icon_apple_asset_symbol_count == 0);
     assert(chrome.icon_platform_extracted_symbol_count == 0);
     assert(chrome.icon_runtime_fetched_symbol_count == 0);
@@ -670,7 +672,15 @@ duplicate
         assert(demo::file_type_symbol_contract()[i].symbol
                == phenotype::icon_catalog::file_type_symbol_at(
                    static_cast<unsigned int>(i)));
+        assert(demo::file_type_symbol_contract()[i].token
+               == phenotype::icon_catalog::file_type_token(
+                   demo::file_type_symbol_contract()[i].symbol));
     }
+    assert(phenotype::icon_catalog::file_type_symbol_for_extension("SVG")
+           == phenotype::icon_catalog::Symbol::Image);
+    assert(*phenotype::icon_catalog::known_file_type_kind_label_for_extension(
+               "svg")
+           == std::string_view{"SVG Image"});
     assert(demo::sidebar_symbol_name_for_token("recents") == "recents");
     assert(demo::sidebar_symbol_name_for_token("shared") == "shared");
     assert(demo::sidebar_symbol_name_for_token("desktop") == "desktop");
@@ -760,7 +770,7 @@ duplicate
     assert(chrome.icon_alignment == "24x24 text-aligned symbol grid");
     assert(chrome.icon_rendering_mode == "hierarchical");
     assert(chrome.icon_variant_policy
-           == "outline primary with filled action variants");
+           == "outline-only with role-aware symbol chrome");
     assert(chrome.icon_interaction_tone_policy
            == "macos_finder_interaction_tones");
     assert(chrome.icon_symbol_control_chrome_policy
@@ -1286,9 +1296,9 @@ duplicate
            != std::string::npos);
     assert(debug_text.find("\"svg_path_arc_symbol_count\":16")
            != std::string::npos);
-    assert(debug_text.find("\"lucide_source_symbol_count\":35")
+    assert(debug_text.find("\"lucide_source_symbol_count\":39")
            != std::string::npos);
-    assert(debug_text.find("\"lucide_unique_source_icon_count\":34")
+    assert(debug_text.find("\"lucide_unique_source_icon_count\":38")
            != std::string::npos);
     assert(debug_text.find("\"source_attribution_policy\"")
            != std::string::npos);

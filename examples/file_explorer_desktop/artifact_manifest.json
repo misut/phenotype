@@ -882,19 +882,19 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.phenotype_owned_symbol_count",
-      "equals": 4
+      "equals": 0
     },
     {
       "path": "application.file_explorer.chrome.icon_system.permissive_source_symbol_count",
-      "equals": 35
+      "equals": 39
     },
     {
       "path": "application.file_explorer.chrome.icon_system.lucide_source_symbol_count",
-      "equals": 35
+      "equals": 39
     },
     {
       "path": "application.file_explorer.chrome.icon_system.lucide_unique_source_icon_count",
-      "equals": 34
+      "equals": 38
     },
     {
       "path": "application.file_explorer.chrome.icon_system.apple_asset_symbol_count",
@@ -926,15 +926,15 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.filled_symbol_count",
-      "equals": 1
+      "equals": 0
     },
     {
       "path": "application.file_explorer.chrome.icon_system.outline_symbol_count",
-      "equals": 38
+      "equals": 39
     },
     {
       "path": "application.file_explorer.chrome.icon_system.hierarchical_symbol_count",
-      "equals": 17
+      "equals": 14
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_symbol_count",
@@ -950,7 +950,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.round_stroke_symbol_count",
-      "equals": 38
+      "equals": 39
     },
     {
       "path": "application.file_explorer.chrome.icon_system.interaction_phase_count",
@@ -1050,15 +1050,15 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.reference_policy",
-      "equals": "semantic reference only; no Apple or SF Symbols vector artwork; embedded sources are phenotype-owned or audited permissive SVG"
+      "equals": "semantic reference only; no Apple or SF Symbols vector artwork; embedded sources are audited permissive SVG"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.asset_policy",
-      "equals": "phenotype-owned or audited permissive vector assets; no Apple or SF Symbols artwork embedded"
+      "equals": "audited permissive vector assets; no Apple or SF Symbols artwork embedded"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.source_license_policy",
-      "equals": "phenotype-owned or permissive SVG only; accepted external licenses include Lucide ISC, Feather-derived MIT, Tabler MIT, Iconoir MIT, and Apache-2.0 with per-symbol attribution"
+      "equals": "audited permissive SVG only; accepted external licenses include Lucide ISC, Feather-derived MIT, Tabler MIT, Iconoir MIT, and Apache-2.0 with per-symbol attribution"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.preferred_external_source_policy",
@@ -1098,7 +1098,7 @@
     },
     {
       "path": "application.file_explorer.chrome.icon_system.variant_policy",
-      "equals": "outline primary with filled action variants"
+      "equals": "outline-only with role-aware symbol chrome"
     },
     {
       "path": "application.file_explorer.chrome.icon_system.presentation_policy",

@@ -331,8 +331,8 @@ catalog follows Apple-style proportions, text-aligned medium-scale metrics,
 macOS-like rounded stroke caps/joins, and bounded secondary-stroke opacity for
 symbols with detail layers without copying SF Symbols assets. Each built-in
 symbol carries a semantic SF Symbols reference name and explicit policy that
-the reference is only a role/style anchor; the vector artwork is either
-phenotype-owned or an audited permissive SVG source such as Lucide ISC,
+the reference is only a role/style anchor; the vector artwork is an audited
+permissive SVG source such as Lucide ISC,
 Feather-derived Lucide MIT, Tabler MIT, Iconoir MIT, or Material Symbols
 Apache-2.0, with source family, icon name, exact license, license URL, pinned
 direct raw SVG URL, source revision, copyright, and Apple-asset boundary exposed
@@ -346,11 +346,9 @@ permission, notice requirement, runtime-fetch flag, and platform-extraction
 flag. Apple references are explicitly marked as non-embedded Apple-owned
 artwork with runtime fetch and platform extraction disabled, so future file-icon
 work can be Finder-like without copying Finder or SF Symbols assets. The current
-built-in catalog uses audited Lucide SVGs pinned
-to a fixed source revision for
-35 of 39 symbols across toolbar, sidebar, action, and file-type roles, leaving
-only AirDrop, Shared, Sort Group, and More as phenotype-owned glyphs where the
-Finder-specific metaphor or filled dot treatment is safer to control locally.
+built-in catalog uses audited Lucide SVGs pinned to a fixed source revision for
+all 39 symbols across toolbar, sidebar, action, and file-type roles, including
+AirDrop, Shared, Sort Group, and More.
 Future icon imports must use permissive SVG sources found through web/reference
 research first; macOS system-icon or Finder-artwork extraction stays out of
 policy unless explicit redistribution clearance is recorded in the catalog.
@@ -368,8 +366,8 @@ list and column rows without querying native platform icon services. The CLI com
 debugging on Linux without importing native GUI code. `phenotype icons sources
 --json` provides the shorter source-review view for adding icons from web
 references: pinned Lucide raw SVG URLs, source revision, license URL, official
-reference-source license URLs, source acquisition modes, symbol usage,
-phenotype-owned fallback symbols, and explicit zero Apple/platform extraction
+reference-source license URLs, source acquisition modes, symbol usage, remaining
+phenotype-owned count, and explicit zero Apple/platform extraction
 counts. `phenotype icons svg <name-or-reference>` exposes the exact
 audited SVG source for one glyph plus its attribution and rendering capability
 envelope when a renderer, parser, or icon cache needs a pure source-level
@@ -424,7 +422,7 @@ the example is not copying Apple artwork, extracting macOS icons, or fetching
 remote SVG resources.
 The icon catalog source contract now records per-symbol platform extraction and
 runtime fetch flags as false, keeping Finder-style icons tied to pinned
-permissive SVG sources or phenotype-owned vectors rather than local macOS
+permissive SVG sources rather than local macOS
 artwork.
 File explorer packages now declare `app.icon` as a package-owned SVG asset, so
 the same CLI bundle contract can later feed platform app-icon generation

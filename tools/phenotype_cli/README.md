@@ -164,7 +164,7 @@ The initial scope is intentionally narrow:
 - `phenotype icons sources` emits the compact provenance audit for the
   embedded icon sources. JSON output reports the Lucide source revision, unique
   pinned raw SVG records, symbols that use each source icon, license URL,
-  phenotype-owned symbols, reference-source rows, and checks that Apple/SF
+  remaining phenotype-owned count, reference-source rows, and checks that Apple/SF
   Symbols artwork was not embedded, platform-extracted, or runtime-fetched.
   This is the fast command to run before adding file-type icons from web
   references.

@@ -79,6 +79,14 @@ longer hard-coded separately in each UI. The shared `phenotype.resources`
 package also computes `ResourceCatalogContract`, so CLI package inspection can
 report default locale/font resolution, asset preload intent, and per-locale
 fallback coverage without opening a native window or reading platform APIs.
+File-type icon classification is delegated to `phenotype.icon_catalog`: folder
+state plus extension resolves to the shared symbol, token, Finder-style kind
+label, and package asset path before the model emits `entry_symbol_summary`.
+This keeps desktop, mobile, CLI, and package inspection on one audited SVG icon
+contract instead of maintaining separate extension tables. The file explorer
+examples intentionally source sidebar, toolbar, file-type, and package app
+icons from the pinned Lucide revision rather than embedding hand-drawn Finder
+lookalikes or platform-extracted artwork.
 
 ## Run
 

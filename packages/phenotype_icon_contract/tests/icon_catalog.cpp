@@ -1,5 +1,6 @@
 #include <cassert>
 #include <cstdio>
+#include <string>
 #include <string_view>
 
 import phenotype.icon_catalog;
@@ -189,10 +190,10 @@ int main() {
     assert(icons::hit_target_policy().find("activation minimum=44pt")
            != std::string_view::npos);
     assert(icons::all_symbol_count == 39);
-    assert(icons::phenotype_owned_symbol_count == 4);
-    assert(icons::permissive_source_symbol_count == 35);
-    assert(icons::lucide_source_symbol_count == 35);
-    assert(icons::lucide_unique_source_icon_count == 34);
+    assert(icons::phenotype_owned_symbol_count == 0);
+    assert(icons::permissive_source_symbol_count == icons::all_symbol_count);
+    assert(icons::lucide_source_symbol_count == icons::all_symbol_count);
+    assert(icons::lucide_unique_source_icon_count == 38);
     assert(icons::apple_asset_symbol_count == 0);
     assert(icons::platform_extracted_symbol_count == 0);
     assert(icons::runtime_fetched_symbol_count == 0);
@@ -200,9 +201,9 @@ int main() {
     assert(icons::sidebar_symbol_count == 11);
     assert(icons::toolbar_symbol_count == 15);
     assert(icons::file_type_symbol_count == 11);
-    assert(icons::outline_symbol_count == 38);
-    assert(icons::filled_symbol_count == 1);
-    assert(icons::hierarchical_symbol_count == 17);
+    assert(icons::outline_symbol_count == icons::all_symbol_count);
+    assert(icons::filled_symbol_count == 0);
+    assert(icons::hierarchical_symbol_count == 14);
     assert(icons::monochrome_symbol_count == icons::all_symbol_count);
     assert(icons::regular_weight_symbol_count == icons::all_symbol_count);
     assert(icons::palette_symbol_count == 0);
@@ -214,7 +215,7 @@ int main() {
     assert(icons::lucide_source_icon_name_at(28) == "file-text");
     assert(icons::lucide_source_icon_name_at(
                icons::lucide_unique_source_icon_count - 1)
-           == "presentation");
+           == "arrow-up-down");
     unsigned int unique_source_count = 0;
     for (unsigned int i = 0; i < icons::lucide_unique_source_icon_count; ++i) {
         auto const icon_name = icons::lucide_source_icon_name_at(i);
@@ -359,6 +360,18 @@ int main() {
            == "archivebox");
     assert(icons::uses_svg_path_arcs(icons::Symbol::AirDrop));
     assert(icons::uses_lucide_source(icons::Symbol::Folder));
+    assert(icons::uses_lucide_source(icons::Symbol::More));
+    assert(icons::uses_lucide_source(icons::Symbol::AirDrop));
+    assert(icons::uses_lucide_source(icons::Symbol::Shared));
+    assert(icons::uses_lucide_source(icons::Symbol::SortGroup));
+    assert(icons::source_attribution(icons::Symbol::More).icon_name
+           == "ellipsis");
+    assert(icons::source_attribution(icons::Symbol::AirDrop).icon_name
+           == "radio");
+    assert(icons::source_attribution(icons::Symbol::Shared).icon_name
+           == "folder-symlink");
+    assert(icons::source_attribution(icons::Symbol::SortGroup).icon_name
+           == "arrow-up-down");
     assert(icons::source_attribution(icons::Symbol::Folder).icon_name
            == "folder");
     assert(icons::source_attribution(icons::Symbol::Movie).icon_name
@@ -398,6 +411,67 @@ int main() {
            == icons::Symbol::SpreadsheetDocument);
     assert(icons::file_type_symbol_at(10)
            == icons::Symbol::PresentationDocument);
+    assert(icons::file_type_extension_rule_count == 36);
+    assert(icons::is_file_type_symbol(icons::Symbol::Folder));
+    assert(icons::is_file_type_symbol(icons::Symbol::PdfDocument));
+    assert(!icons::is_file_type_symbol(icons::Symbol::Search));
+    assert(icons::file_type_token(icons::Symbol::PdfDocument) == "pdf");
+    assert(icons::file_type_token(icons::Symbol::Search) == "document");
+    assert(icons::file_type_kind_label(icons::Symbol::PdfDocument)
+           == "PDF Document");
+    assert(icons::file_type_kind_label(icons::Symbol::Image) == "Image");
+    assert(icons::file_type_extension_family(icons::Symbol::Image)
+           == "raster_or_svg_image");
+    assert(icons::file_type_symbol_from_token("presentation").has_value());
+    assert(*icons::file_type_symbol_from_token("presentation")
+           == icons::Symbol::PresentationDocument);
+    assert(!icons::file_type_symbol_from_token("missing").has_value());
+    auto const pdf_icon =
+        icons::file_type_icon_descriptor(icons::Symbol::PdfDocument);
+    assert(pdf_icon.symbol == icons::Symbol::PdfDocument);
+    assert(pdf_icon.token == "pdf");
+    assert(pdf_icon.kind_label == "PDF Document");
+    assert(pdf_icon.package_asset_name == std::string{"file_type.pdf.icon"});
+    assert(pdf_icon.package_asset_source
+           == std::string{"assets/icons/file-types/pdf.svg"});
+    auto const normalized_icon =
+        icons::file_type_icon_descriptor(icons::Symbol::Search);
+    assert(normalized_icon.symbol == icons::Symbol::Document);
+    assert(icons::file_extension_is_svg_image("SVG"));
+    assert(icons::file_extension_is_raster_image("heic"));
+    assert(icons::file_extension_is_image("svgz"));
+    assert(icons::file_extension_is_movie("MOV"));
+    assert(icons::file_extension_is_audio("m4a"));
+    assert(icons::file_extension_is_code("CPP"));
+    assert(icons::file_extension_is_spreadsheet("numbers"));
+    assert(icons::file_extension_is_presentation("key"));
+    assert(icons::file_extension_is_archive("zip"));
+    assert(icons::file_type_symbol_for_extension("pdf")
+           == icons::Symbol::PdfDocument);
+    assert(icons::file_type_symbol_for_extension("svg")
+           == icons::Symbol::Image);
+    assert(icons::file_type_symbol_for_extension("mov")
+           == icons::Symbol::Movie);
+    assert(icons::file_type_symbol_for_extension("m4a")
+           == icons::Symbol::AudioDocument);
+    assert(icons::file_type_symbol_for_extension("cpp")
+           == icons::Symbol::CodeDocument);
+    assert(icons::file_type_symbol_for_extension("csv")
+           == icons::Symbol::SpreadsheetDocument);
+    assert(icons::file_type_symbol_for_extension("pptx")
+           == icons::Symbol::PresentationDocument);
+    assert(icons::file_type_symbol_for_extension("unknown")
+           == icons::Symbol::Document);
+    assert(icons::file_type_symbol_for_entry("unknown", true)
+           == icons::Symbol::Folder);
+    assert(icons::known_file_type_kind_label_for_extension("svg")
+           .has_value());
+    assert(*icons::known_file_type_kind_label_for_extension("svg")
+           == std::string_view{"SVG Image"});
+    assert(*icons::known_file_type_kind_label_for_extension("png")
+           == std::string_view{"Image"});
+    assert(!icons::known_file_type_kind_label_for_extension("unknown")
+            .has_value());
     assert(icons::interaction_tone_policy() == "macos_finder_interaction_tones");
     assert(icons::macos_interaction_tone(
                icons::SymbolPresentationRole::Sidebar,
