@@ -3030,6 +3030,11 @@ inline json::Value preferences_debug_json(ExplorerState const& state) {
         json::Value{
             "OS scroll deltas/line settings at edge, app can disable static "
             "OS scroll multipliers, axis theme multipliers are pure inputs"});
+    out.emplace(
+        "system_refresh_policy",
+        json::Value{
+            "native edge captures OS settings before first frame and refreshes "
+            "them at update-boundary theme sync"});
     return json::Value{std::move(out)};
 }
 
@@ -6343,6 +6348,7 @@ inline void apply_focus_policy_for_input(
         case ExplorerInputKind::SetSmallFontSize:
         case ExplorerInputKind::SetLineHeightRatio:
         case ExplorerInputKind::SetSystemFontMetrics:
+        case ExplorerInputKind::SetSystemScrollMetrics:
         case ExplorerInputKind::SetScrollSpeed:
         case ExplorerInputKind::SetHorizontalScrollSpeed:
         case ExplorerInputKind::SetColorScheme:
@@ -6968,6 +6974,8 @@ struct ExplorerLabels {
     std::string preferences = "Display";
     std::string preferences_system_font = "System";
     std::string preferences_package_font = "Pretendard";
+    std::string preferences_system_text_size = "OS Size";
+    std::string preferences_package_text_size = "App Size";
     std::string preferences_text_larger = "Text +";
     std::string preferences_text_smaller = "Text -";
     std::string preferences_scroll_faster = "Scroll +";
@@ -7086,6 +7094,8 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"preferences.title", "Display"},
         {"preferences.system_font", "System"},
         {"preferences.package_font", "Pretendard"},
+        {"preferences.system_text_size", "OS Size"},
+        {"preferences.package_text_size", "App Size"},
         {"preferences.text_larger", "Text +"},
         {"preferences.text_smaller", "Text -"},
         {"preferences.scroll_faster", "Scroll +"},
@@ -7153,6 +7163,8 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"preferences.title", "표시"},
         {"preferences.system_font", "시스템"},
         {"preferences.package_font", "Pretendard"},
+        {"preferences.system_text_size", "OS 크기"},
+        {"preferences.package_text_size", "앱 크기"},
         {"preferences.text_larger", "글자 +"},
         {"preferences.text_smaller", "글자 -"},
         {"preferences.scroll_faster", "스크롤 +"},
@@ -7284,6 +7296,12 @@ inline ExplorerLabels file_explorer_labels(
     labels.preferences_package_font = get(
         "preferences.package_font",
         labels.preferences_package_font);
+    labels.preferences_system_text_size = get(
+        "preferences.system_text_size",
+        labels.preferences_system_text_size);
+    labels.preferences_package_text_size = get(
+        "preferences.package_text_size",
+        labels.preferences_package_text_size);
     labels.preferences_text_larger = get(
         "preferences.text_larger",
         labels.preferences_text_larger);

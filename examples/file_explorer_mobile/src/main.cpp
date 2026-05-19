@@ -389,6 +389,14 @@ file_explorer_demo::RuntimePreferenceState g_runtime_preferences;
 phenotype::Theme g_base_theme;
 phenotype::PlatformSystemSettingsSnapshot g_system_settings;
 
+phenotype::PlatformSystemSettingsSnapshot capture_system_settings() {
+    return phenotype::native::debug::capabilities().system_settings;
+}
+
+void refresh_system_settings_from_platform() {
+    g_system_settings = capture_system_settings();
+}
+
 phenotype::ThemePreferenceOverrides theme_preferences_from_state(
         file_explorer_demo::ThemePreferenceSnapshot const& preferences) {
     return phenotype::ThemePreferenceOverrides{
@@ -413,6 +421,7 @@ phenotype::ThemePreferenceOverrides theme_preferences_from_state(
 }
 
 void sync_runtime_theme(file_explorer_demo::ExplorerState& explorer) {
+    refresh_system_settings_from_platform();
     auto overrides = theme_preferences_from_state(explorer.theme_preferences);
     auto theme = phenotype::apply_system_theme_preferences(
         g_base_theme,
@@ -519,6 +528,12 @@ ExplorerInputMessage color_scheme_message(std::string value) {
 ExplorerInputMessage system_scroll_metrics_message(std::string value) {
     return preference_message(
         file_explorer_demo::ExplorerInputKind::SetSystemScrollMetrics,
+        std::move(value));
+}
+
+ExplorerInputMessage system_font_metrics_message(std::string value) {
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetSystemFontMetrics,
         std::move(value));
 }
 
@@ -1033,6 +1048,14 @@ void create_tab(State const& state) {
         }, SpaceToken::Xs);
         layout::row([&] {
             widget::button<Msg>(
+                state.labels.preferences_system_text_size,
+                system_font_metrics_message("system"));
+            widget::button<Msg>(
+                state.labels.preferences_package_text_size,
+                system_font_metrics_message("package"));
+        }, SpaceToken::Xs);
+        layout::row([&] {
+            widget::button<Msg>(
                 state.labels.preferences_text_larger,
                 font_scale_step_message(explorer, 0.1f));
             widget::button<Msg>(
@@ -1121,8 +1144,7 @@ int main() {
     theme = phenotype::theme_with_resource_defaults(
         theme,
         runtime_resource_catalog());
-    auto const system_settings =
-        phenotype::native::debug::capabilities().system_settings;
+    auto const system_settings = capture_system_settings();
     auto const theme_preferences = initial_theme_preference_overrides();
     g_base_theme = theme;
     g_system_settings = system_settings;

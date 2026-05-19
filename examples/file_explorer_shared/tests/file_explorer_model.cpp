@@ -76,6 +76,8 @@ int main() {
         == "최근 항목");
     assert(demo::file_explorer_labels("ko", "desktop").preferences_scroll_faster
         == "스크롤 +");
+    assert(demo::file_explorer_labels("ko", "desktop").preferences_system_text_size
+        == "OS 크기");
     assert(demo::file_explorer_labels("ko", "desktop").preferences_dark_appearance
         == "다크");
     assert(demo::file_explorer_labels("ko", catalog).sidebar_recents
@@ -450,6 +452,8 @@ duplicate
     assert(preference_debug_text.find("\"scroll_delta_multiplier\":1.5")
            != std::string::npos);
     assert(preference_debug_text.find("\"apply_system_scroll_metrics\":false")
+           != std::string::npos);
+    assert(preference_debug_text.find("\"system_refresh_policy\"")
            != std::string::npos);
     assert(preference_debug_text.find(
                "\"scroll_horizontal_delta_multiplier\":2")

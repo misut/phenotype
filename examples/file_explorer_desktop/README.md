@@ -339,6 +339,11 @@ resolved. macOS records the last local scroll event under
 `debug.platform_runtime.details.input.scroll`, so raw AppKit deltas, precise
 scroll mode, app multipliers, and normalized logical-pixel deltas can be
 checked without guessing from the captured image.
+The native example captures OS settings before the first frame and refreshes
+them when app input triggers theme sync, so font, appearance, accent, and scroll
+policy changes can be reflected without restarting the demo.
+The desktop More menu exposes the same family, OS/package text-size policy,
+text scale, appearance, and scroll controls as shared file explorer inputs.
 File reads and environment access remain example edge work; parsing and input
 application stay in `file_explorer_shared`.
 The desktop More menu exposes the same preference inputs as native buttons

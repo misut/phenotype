@@ -545,6 +545,12 @@ as precise, the theme multipliers, normalized logical-pixel deltas, scroll
 phase, and handled flags. That path is the supported evidence trail because
 AppKit exposes OS-adjusted event deltas rather than a public global scroll
 speed scalar.
+The file explorer examples refresh their native system-settings snapshot at
+update-boundary theme sync. If an artifact disagrees with the current OS
+settings, first check `application.file_explorer.preferences.system_refresh_policy`
+and compare `debug.platform_capabilities.system_settings` with
+`application.file_explorer.preferences.system_settings` before changing theme
+tokens.
 
 `application.file_explorer.resource_system.*` is the package/debug-resource
 counterpart. It records the file explorer application id/version/entry,

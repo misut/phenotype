@@ -92,10 +92,13 @@ scroll-speed preference inputs through the shared model, plus a
 `system-scroll-metrics` switch that lets artifacts prove whether static
 platform scroll multipliers are applied. Native examples apply those app
 overrides after the platform system-settings snapshot is captured, so artifacts
-can distinguish OS defaults from user-selected theme changes. The
+can distinguish OS defaults from user-selected theme changes. Desktop and mobile
+refresh that native snapshot at update-boundary theme sync, which keeps
+appearance/font/accent/scroll changes observable after the next input. The
 desktop More menu and mobile Create tab both call the same shared preference
-inputs, which keeps interactive controls, startup scripts, and CLI-driven
-artifact replay on one contract.
+inputs, including system/package font-size policy buttons, which keeps
+interactive controls, startup scripts, and CLI-driven artifact replay on one
+contract.
 
 From the repo root, verify a generated bundle through the CLI verifier edge
 before using it as a debugging artifact:
