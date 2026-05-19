@@ -310,7 +310,7 @@ void test_set_theme_updates_and_invalidates_cache() {
 
 void test_default_theme_glass_contract() {
     Theme theme{};
-    assert(theme_contract::theme_contract_version == 1);
+    assert(theme_contract::theme_contract_version == 2);
     assert(theme_contract::glass_surface_roles().size() == 7);
     assert(default_theme_profile_name() == "apple-glass-light");
     assert(default_theme_reference().find("Apple HIG Materials")
@@ -365,6 +365,8 @@ void test_system_theme_preferences_are_pure_overlays() {
     system.accent_color_available = true;
     system.accent_color = Color{88, 86, 214, 255};
     system.accent_color_source = "test-accent";
+    system.reduce_motion = true;
+    system.accessibility_source = "test-accessibility";
 
     ThemePreferenceOverrides overrides{};
     overrides.font_scale = 1.2f;
@@ -399,12 +401,19 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert(resolved.used_system_line_height);
     assert(resolved.used_system_scroll_metrics);
     assert(resolved.used_user_scroll_scale);
+    assert(resolved.used_system_reduce_motion);
+    assert(!resolved.used_user_motion_scale);
     assert(pure_resolved.used_system_scroll_metrics
            == resolved.used_system_scroll_metrics);
     assert(pure_resolved.used_user_scroll_scale
            == resolved.used_user_scroll_scale);
+    assert(pure_resolved.used_system_reduce_motion
+           == resolved.used_system_reduce_motion);
     assert(std::fabs(pure_resolved.effective_body_font_size
                      - resolved.effective_body_font_size)
+           < 0.001f);
+    assert(std::fabs(pure_resolved.effective_motion_duration_multiplier
+                     - resolved.effective_motion_duration_multiplier)
            < 0.001f);
     assert(applied.default_font_family == "Pretendard");
     assert(std::fabs(applied.body_font_size - 21.0f) < 0.001f);
@@ -413,6 +422,7 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert(std::fabs(applied.scroll_delta_multiplier - 1.875f) < 0.001f);
     assert(std::fabs(applied.scroll_horizontal_delta_multiplier - 1.5f)
            < 0.001f);
+    assert(std::fabs(applied.motion_duration_multiplier - 0.0f) < 0.001f);
     assert(applied.accent == theme.accent);
 
     PlatformSystemSettingsSnapshot fallback_system{};
@@ -432,10 +442,26 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert(!fallback_resolved.used_system_font_scale);
     assert(!fallback_resolved.used_system_line_height);
     assert(!fallback_resolved.used_system_scroll_metrics);
+    assert(!fallback_resolved.used_system_reduce_motion);
     assert(std::fabs(fallback_resolved.theme.body_font_size - 14.0f) < 0.001f);
     assert(std::fabs(fallback_resolved.theme.line_height_ratio - 1.6f)
            < 0.001f);
     assert(std::fabs(fallback_resolved.theme.scroll_delta_multiplier - 1.0f)
+           < 0.001f);
+    assert(std::fabs(fallback_resolved.theme.motion_duration_multiplier - 1.0f)
+           < 0.001f);
+
+    ThemePreferenceOverrides motion_overrides{};
+    motion_overrides.apply_system_reduce_motion = false;
+    motion_overrides.motion_duration_multiplier = 0.5f;
+    auto motion_resolved = resolve_system_theme_preferences(
+        theme,
+        system,
+        motion_overrides,
+        "motion-source");
+    assert(!motion_resolved.used_system_reduce_motion);
+    assert(motion_resolved.used_user_motion_scale);
+    assert(std::fabs(motion_resolved.theme.motion_duration_multiplier - 0.5f)
            < 0.001f);
 
     overrides.apply_system_scroll_metrics = false;

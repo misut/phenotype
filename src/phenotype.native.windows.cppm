@@ -6764,6 +6764,7 @@ inline platform_api const& windows_platform() {
             detail::configure_window,
         },
     };
+    api.system.settings = detail::windows_system_settings_snapshot;
     return api;
 #else
     static platform_api api = make_stub_platform(

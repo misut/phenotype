@@ -7895,6 +7895,7 @@ inline platform_api build_android_platform() {
     };
     api.open_url = android_open_url;
     api.dialog.open_file = dialog::open_file;
+    api.system.settings = android_system_settings_snapshot;
     return api;
 }
 

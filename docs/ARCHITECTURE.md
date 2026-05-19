@@ -226,8 +226,9 @@ Linux-safe `phenotype_theme_contract` package as
 ThemePreferenceOverrides)`, so CLI and CI tooling can evaluate
 `system_settings + app_overrides -> effective_theme` without importing native
 rendering modules. The portable snapshot carries availability bits for font
-family, font metrics, font scale, line height, scroll metrics, and color scheme
-so debug evidence can distinguish an OS-derived value from a package fallback.
+family, font metrics, font scale, line height, scroll metrics, color scheme,
+and Reduce Motion so debug evidence can distinguish an OS-derived value from a
+package fallback.
 The older
 `apply_system_theme_preferences(...)` API remains as a compatibility wrapper
 that returns only the resolved `Theme`. Package defaults such as Pretendard
@@ -235,8 +236,12 @@ remain explicit theme inputs, OS font metrics and scroll policy arrive as
 immutable snapshot fields, and app/user overrides win without letting a backend
 mutate theme state directly. The resolver also returns
 `ResolvedThemePreferences`, which records the effective font family, color
-scheme, type sizes, line height, scroll multipliers, and the boolean evidence
-for which system or user preference inputs were consumed.
+scheme, type sizes, line height, scroll multipliers, motion-duration
+multiplier, and the boolean evidence for which system or user preference inputs
+were consumed.
+Applications should read the snapshot through `phenotype::native::system_settings()`;
+debug capability snapshots carry the same payload for artifacts, but app code
+does not need to route product theme decisions through the diagnostic API.
 Font family source, text-size source, font-weight adjustment, vertical and
 horizontal scroll factors, scrollbar size, touch slop, scroll friction, and
 preferred locale source are recorded when the platform exposes them. Input
@@ -955,10 +960,12 @@ CoreText/`NSFont`/`NSEvent`/`NSScroller`/`NSLocale`/`NSWorkspace`, Windows uses
 `GetUserDefaultLocaleName`, and the Personalize app-theme registry value, and
 Android uses Java resource/configuration APIs reached through the GameActivity
 edge. WASI and the stub backend publish deterministic fallback values.
-`scroll_delta_multiplier` and `scroll_horizontal_delta_multiplier` are pure
-theme inputs; native wheel callbacks only translate platform events into
-logical pixels before the app/user multiplier is applied. Renderers may report
-the same snapshot in `platform_runtime.details`. macOS also reports the last
+`scroll_delta_multiplier`, `scroll_horizontal_delta_multiplier`, and
+`motion_duration_multiplier` are pure theme inputs; native wheel callbacks only
+translate platform events into logical pixels before the app/user multiplier is
+applied, and view-time animation helpers scale their duration from the resolved
+theme so OS Reduce Motion snaps transitions without backend policy. Renderers
+may report the same snapshot in `platform_runtime.details`. macOS also reports the last
 scroll event under `platform_runtime.details.input.scroll`, including raw
 `NSEvent` deltas, precise-delta mode, line height, app multipliers, normalized
 deltas, phase, and handled flags. Renderers do not decide font, appearance,

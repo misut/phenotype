@@ -318,7 +318,7 @@
     },
     {
       "path": "application.file_explorer.theme_system.contract_version",
-      "equals": 1
+      "equals": 2
     },
     {
       "path": "application.file_explorer.theme_system.profile_name",

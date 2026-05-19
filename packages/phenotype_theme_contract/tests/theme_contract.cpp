@@ -9,7 +9,7 @@ namespace theme = phenotype::theme_contract;
 
 int main() {
     auto contract = theme::default_glass_theme_contract();
-    assert(theme::theme_contract_version == 1);
+    assert(theme::theme_contract_version == 2);
     assert(contract.profile_name == "apple-glass-light");
     assert(contract.reference.find("Apple HIG Materials")
            != std::string_view::npos);
@@ -97,6 +97,8 @@ int main() {
     system.color_scheme_available = true;
     system.accent_color_available = true;
     system.accent_color = {88, 86, 214, 255};
+    system.reduce_motion = true;
+    system.reduce_motion_available = true;
 
     theme::ThemePreferenceOverrides overrides{};
     overrides.prefer_system_font_family = true;
@@ -124,6 +126,8 @@ int main() {
     assert(resolved.used_system_scroll_metrics);
     assert(resolved.used_user_scroll_scale);
     assert(resolved.used_system_accent_color);
+    assert(resolved.used_system_reduce_motion);
+    assert(!resolved.used_user_motion_scale);
     assert(std::fabs(resolved.effective_body_font_size - 24.0f) < 0.001f);
     assert(std::fabs(resolved.effective_heading_font_size - 33.6f) < 0.001f);
     assert(std::fabs(resolved.effective_small_font_size - 21.6f) < 0.001f);
@@ -132,6 +136,21 @@ int main() {
            < 0.001f);
     assert(std::fabs(resolved.effective_scroll_horizontal_delta_multiplier
                      - 1.5f)
+           < 0.001f);
+    assert(std::fabs(resolved.effective_motion_duration_multiplier - 0.0f)
+           < 0.001f);
+
+    theme::ThemePreferenceOverrides motion_overrides{};
+    motion_overrides.apply_system_reduce_motion = false;
+    motion_overrides.motion_duration_multiplier = 0.5f;
+    auto motion_resolved = theme::resolve_theme_preferences(
+        base,
+        system,
+        motion_overrides);
+    assert(!motion_resolved.used_system_reduce_motion);
+    assert(motion_resolved.used_user_motion_scale);
+    assert(std::fabs(motion_resolved.effective_motion_duration_multiplier
+                     - 0.5f)
            < 0.001f);
     std::puts("PASS: pure theme contract metadata");
 }

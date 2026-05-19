@@ -1621,6 +1621,22 @@ inline Color anim_lerp(Color a, Color b, float t) noexcept {
     return Color{ mix(a.r, b.r), mix(a.g, b.g), mix(a.b, b.b), mix(a.a, b.a) };
 }
 
+inline int scaled_animation_duration_ms(int duration_ms) noexcept {
+    if (duration_ms <= 0)
+        return 0;
+    float multiplier = g_app.theme.motion_duration_multiplier;
+    if (!(multiplier > 0.0f))
+        return 0;
+    if (multiplier > 4.0f)
+        multiplier = 4.0f;
+    float const scaled = static_cast<float>(duration_ms) * multiplier;
+    if (scaled < 1.0f)
+        return 1;
+    if (scaled > 60000.0f)
+        return 60000;
+    return static_cast<int>(scaled + 0.5f);
+}
+
 }  // namespace detail
 
 template <typename T>
@@ -1629,8 +1645,10 @@ T animate_value(T target, int duration_ms,
     auto& s = framework_local<detail::AnimationState<T>>(
         detail::AnimationState<T>{}, 0, loc);
     auto now_ms = detail::steady_ms();
+    auto const effective_duration_ms =
+        detail::scaled_animation_duration_ms(duration_ms);
 
-    if (!s.initialized || duration_ms <= 0) {
+    if (!s.initialized || effective_duration_ms <= 0) {
         // First call, or "instant" mode — snap to target without
         // interpolating. `duration_ms <= 0` is also the way callers
         // turn animation off entirely for a given site, so we keep
@@ -1646,7 +1664,7 @@ T animate_value(T target, int duration_ms,
     if (elapsed_ms < 0) elapsed_ms = 0;
     float progress = std::min(1.0f,
         static_cast<float>(elapsed_ms)
-        / static_cast<float>(duration_ms));
+        / static_cast<float>(effective_duration_ms));
     T current = detail::anim_lerp(s.start_value, s.target, progress);
 
     // Signal to the host loop that we still want another frame so

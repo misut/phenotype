@@ -119,6 +119,28 @@ static void test_window_options_integrated_titlebar_contract() {
     std::puts("PASS: window options integrated titlebar contract");
 }
 
+static void test_native_system_settings_product_api() {
+    auto settings = phenotype::native::system_settings();
+    auto capabilities = phenotype::native::debug::capabilities();
+    assert(!settings.source.empty());
+    assert(settings.source == capabilities.system_settings.source);
+    assert(settings.font_scale > 0.0f);
+    assert(settings.scroll_delta_multiplier > 0.0f);
+    assert(settings.scroll_horizontal_delta_multiplier > 0.0f);
+
+    ThemePreferenceOverrides overrides{};
+    overrides.prefer_system_color_scheme = true;
+    overrides.apply_system_scroll_metrics = true;
+    auto resolved = phenotype::native::resolve_native_theme_preferences(
+        Theme{},
+        overrides,
+        "native-product-api-test");
+    assert(resolved.source == "native-product-api-test");
+    assert(resolved.effective_body_font_size > 0.0f);
+    assert(resolved.effective_scroll_delta_multiplier > 0.0f);
+    std::puts("PASS: native system settings product API");
+}
+
 static void append_u32(std::vector<unsigned char>& buf, unsigned int value) {
     auto offset = buf.size();
     buf.resize(offset + 4);
@@ -3905,6 +3927,7 @@ static void test_stub_renderer_hit_test() {
 
 int main() {
     test_window_options_integrated_titlebar_contract();
+    test_native_system_settings_product_api();
     test_shell_pointer_hover_click_and_tab_navigation();
     test_shell_platform_consumed_pointer_hides_focus_ring();
     test_shell_activation_keys_respect_roles();

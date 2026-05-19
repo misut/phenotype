@@ -140,14 +140,15 @@ bool env_truthy(char const* raw) {
 std::optional<float> env_float(
         char const* raw,
         float minimum,
-        float maximum) {
+        float maximum,
+        bool allow_zero = false) {
     if (!raw || !*raw)
         return std::nullopt;
     char* end = nullptr;
     float value = std::strtof(raw, &end);
     if (end == raw || (end && *end != '\0'))
         return std::nullopt;
-    if (!(value > 0.0f))
+    if (allow_zero ? !(value >= 0.0f) : !(value > 0.0f))
         return std::nullopt;
     if (value < minimum)
         value = minimum;
@@ -239,6 +240,13 @@ phenotype::ThemePreferenceOverrides initial_theme_preference_overrides() {
             4.0f)) {
         overrides.scroll_horizontal_delta_multiplier = *speed;
     }
+    if (auto scale = env_float(
+            std::getenv("PHENOTYPE_FILE_EXPLORER_MOTION_SCALE"),
+            0.0f,
+            4.0f,
+            true)) {
+        overrides.motion_duration_multiplier = *scale;
+    }
     if (char const* raw = std::getenv("PHENOTYPE_FILE_EXPLORER_COLOR_SCHEME")) {
         if (std::string_view{raw} == "system") {
             overrides.prefer_system_color_scheme = true;
@@ -288,6 +296,7 @@ file_explorer_demo::SystemPreferenceSnapshot system_preference_snapshot(
         .line_height_available = contract_system.line_height_available,
         .scroll_metrics_available = contract_system.scroll_metrics_available,
         .color_scheme_available = contract_system.color_scheme_available,
+        .reduce_motion_available = contract_system.reduce_motion_available,
         .double_click_interval_ms = system.double_click_interval_ms,
         .key_repeat_delay_ms = system.key_repeat_delay_ms,
         .key_repeat_interval_ms = system.key_repeat_interval_ms,
@@ -334,6 +343,8 @@ file_explorer_demo::ThemePreferenceSnapshot theme_preference_snapshot(
         .apply_system_scroll_metrics =
             overrides.apply_system_scroll_metrics,
         .apply_system_accent_color = overrides.apply_system_accent_color,
+        .apply_system_reduce_motion = overrides.apply_system_reduce_motion,
+        .motion_duration_multiplier = overrides.motion_duration_multiplier,
     };
 }
 
@@ -355,6 +366,8 @@ file_explorer_demo::RuntimePreferenceState runtime_preference_state(
         resolved.effective_scroll_delta_multiplier;
     state.effective_scroll_horizontal_delta_multiplier =
         resolved.effective_scroll_horizontal_delta_multiplier;
+    state.effective_motion_duration_multiplier =
+        resolved.effective_motion_duration_multiplier;
     state.used_system_font_family = resolved.used_system_font_family;
     state.used_system_color_scheme = resolved.used_system_color_scheme;
     state.used_system_font_metrics = resolved.used_system_font_metrics;
@@ -366,6 +379,8 @@ file_explorer_demo::RuntimePreferenceState runtime_preference_state(
     state.used_system_scroll_metrics = resolved.used_system_scroll_metrics;
     state.used_user_scroll_scale = resolved.used_user_scroll_scale;
     state.used_system_accent_color = resolved.used_system_accent_color;
+    state.used_system_reduce_motion = resolved.used_system_reduce_motion;
+    state.used_user_motion_scale = resolved.used_user_motion_scale;
     return state;
 }
 
@@ -414,7 +429,7 @@ phenotype::Theme g_base_theme;
 phenotype::PlatformSystemSettingsSnapshot g_system_settings;
 
 phenotype::PlatformSystemSettingsSnapshot capture_system_settings() {
-    return phenotype::native::debug::capabilities().system_settings;
+    return phenotype::native::system_settings();
 }
 
 void refresh_system_settings_from_platform() {
@@ -451,6 +466,8 @@ phenotype::ThemePreferenceOverrides theme_preferences_from_state(
         .apply_system_scroll_metrics =
             preferences.apply_system_scroll_metrics,
         .apply_system_accent_color = preferences.apply_system_accent_color,
+        .apply_system_reduce_motion = preferences.apply_system_reduce_motion,
+        .motion_duration_multiplier = preferences.motion_duration_multiplier,
     };
 }
 
@@ -461,7 +478,7 @@ void sync_runtime_theme(file_explorer_demo::ExplorerState& explorer) {
         g_base_theme,
         g_system_settings,
         overrides,
-        "native-debug-capabilities+environment-overrides");
+        "native-system-settings+environment-overrides");
     auto runtime = runtime_preference_state(
         resolved,
         g_system_settings,
@@ -1227,7 +1244,7 @@ int main() {
         theme,
         system_settings,
         theme_preferences,
-        "native-debug-capabilities+environment-overrides");
+        "native-system-settings+environment-overrides");
     g_runtime_preferences = runtime_preference_state(
         resolved,
         system_settings,

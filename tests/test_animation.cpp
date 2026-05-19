@@ -26,6 +26,8 @@ extern "C" {
 namespace {
 
 void reset() {
+    set_theme(Theme{});
+    detail::g_app.has_active_animations = false;
     detail::local_store().clear();
 }
 
@@ -71,6 +73,26 @@ void test_zero_duration_skips_interpolation() {
     assert(v == 50.0f);
     detail::prune_local_store();
     std::puts("PASS: zero duration skips interpolation");
+}
+
+// System Reduce Motion resolves to theme.motion_duration_multiplier == 0,
+// which should make all view-time animation sites behave like instant
+// updates even if the widget asks for a non-zero duration.
+void test_theme_motion_multiplier_skips_interpolation() {
+    reset();
+    Theme theme{};
+    theme.motion_duration_multiplier = 0.0f;
+    set_theme(theme);
+    detail::bump_local_gen();
+    anim_float_helper(0.0f, 200);
+    detail::prune_local_store();
+
+    detail::bump_local_gen();
+    auto v = anim_float_helper(50.0f, 200);
+    detail::prune_local_store();
+    assert(v == 50.0f);
+    assert(!detail::g_app.has_active_animations);
+    std::puts("PASS: theme motion multiplier skips interpolation");
 }
 
 // Mid-flight target reads return a value strictly between start and
@@ -153,6 +175,7 @@ void test_independent_call_sites() {
 int main() {
     test_first_call_snaps_to_target();
     test_zero_duration_skips_interpolation();
+    test_theme_motion_multiplier_skips_interpolation();
     test_color_interpolates_mid_flight();
     test_animation_completes_after_duration();
     test_independent_call_sites();
