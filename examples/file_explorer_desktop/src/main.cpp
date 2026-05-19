@@ -190,6 +190,12 @@ ExplorerInputMessage system_scroll_metrics_message(std::string value) {
         std::move(value));
 }
 
+ExplorerInputMessage system_font_metrics_message(std::string value) {
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetSystemFontMetrics,
+        std::move(value));
+}
+
 ExplorerInputMessage font_scale_step_message(
         file_explorer_demo::ExplorerState const& explorer,
         float delta) {
@@ -532,6 +538,14 @@ file_explorer_demo::RuntimePreferenceState g_runtime_preferences;
 phenotype::Theme g_base_theme;
 phenotype::PlatformSystemSettingsSnapshot g_system_settings;
 
+phenotype::PlatformSystemSettingsSnapshot capture_system_settings() {
+    return phenotype::native::debug::capabilities().system_settings;
+}
+
+void refresh_system_settings_from_platform() {
+    g_system_settings = capture_system_settings();
+}
+
 phenotype::ThemePreferenceOverrides theme_preferences_from_state(
         file_explorer_demo::ThemePreferenceSnapshot const& preferences) {
     return phenotype::ThemePreferenceOverrides{
@@ -556,6 +570,7 @@ phenotype::ThemePreferenceOverrides theme_preferences_from_state(
 }
 
 void sync_runtime_theme(file_explorer_demo::ExplorerState& explorer) {
+    refresh_system_settings_from_platform();
     auto overrides = theme_preferences_from_state(explorer.theme_preferences);
     auto theme = phenotype::apply_system_theme_preferences(
         g_base_theme,
@@ -2226,6 +2241,20 @@ void finder_more_actions(State const& state,
                             icons::Symbol::TextDocument,
                             0x6712u);
                         more_action_item(
+                            state.labels.preferences_system_text_size.c_str(),
+                            system_font_metrics_message("system"),
+                            true,
+                            icons::Symbol::Search,
+                            0x671du);
+                        more_action_item(
+                            state.labels.preferences_package_text_size.c_str(),
+                            system_font_metrics_message("package"),
+                            true,
+                            icons::Symbol::Document,
+                            0x671eu);
+                    }, SpaceToken::Xs);
+                    layout::row([&] {
+                        more_action_item(
                             state.labels.preferences_text_larger.c_str(),
                             font_scale_step_message(state.explorer, 0.1f),
                             true,
@@ -2945,8 +2974,7 @@ int main() {
     theme.radius_sm = 10.0f;
     theme.radius_md = 14.0f;
     theme.radius_lg = 22.0f;
-    auto const system_settings =
-        phenotype::native::debug::capabilities().system_settings;
+    auto const system_settings = capture_system_settings();
     auto const theme_preferences = initial_theme_preference_overrides();
     g_base_theme = theme;
     g_system_settings = system_settings;

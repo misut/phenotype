@@ -244,6 +244,10 @@ platform scroll multipliers while preserving explicit app scroll speed.
 macOS does not expose a supported global scroll-speed scalar; its runtime
 contract records the OS-adjusted `NSEvent.scrollingDeltaX/Y` event, precise vs
 line mode, app multipliers, and dispatched logical-pixel deltas instead.
+Native examples capture the platform snapshot before the first frame and refresh
+it at update-boundary theme sync, so an OS font, appearance, accent, or scroll
+policy change is picked up on the next app input without giving the renderer
+policy authority.
 The same snapshot records `color_scheme`, `appearance_name`, and accessibility
 display booleans (`reduce_transparency`, `increase_contrast`, `reduce_motion`).
 macOS resolves appearance through `NSApplication.effectiveAppearance` and
