@@ -315,6 +315,12 @@ PLATFORM_SYSTEM_SETTING_NUMBER_MINIMUMS = {
 PLATFORM_SYSTEM_SETTING_BOOL_FIELDS = (
     "overlay_scrollbars",
     "scroll_page_mode",
+    "font_family_available",
+    "font_metrics_available",
+    "font_scale_available",
+    "line_height_available",
+    "scroll_metrics_available",
+    "color_scheme_available",
     "reduce_transparency",
     "increase_contrast",
     "reduce_motion",
@@ -970,8 +976,9 @@ def check_platform_system_settings_contract(
             "debug.platform_capabilities.system_settings",
             likely_layer="platform-system-settings",
             hint=(
-                "System settings booleans document platform scroller behavior "
-                "without asking the verifier to infer it from pixels."),
+                "System settings booleans document which OS font, scroll, "
+                "appearance, and accessibility values are available without "
+                "asking the verifier to infer them from pixels."),
         )
 
 
@@ -1003,10 +1010,13 @@ def check_file_explorer_preferences_contract(
     settings = object_at(preferences, "system_settings")
     if settings is not None:
         for key in (
+            "font_family_available",
+            "font_metrics_available",
             "font_scale_available",
             "line_height_available",
             "scroll_metrics_available",
             "color_scheme_available",
+            "accent_color_available",
         ):
             check_bool_field(
                 report,
@@ -1081,6 +1091,42 @@ def check_file_explorer_preferences_contract(
                     "Resolver evidence booleans should explain whether OS "
                     "settings, package defaults, or user overrides produced "
                     "the effective theme."))
+
+        if settings is not None:
+            for used_key, availability_key in (
+                ("used_system_font_family", "font_family_available"),
+                ("used_system_font_metrics", "font_metrics_available"),
+                ("used_system_font_scale", "font_scale_available"),
+                ("used_system_line_height", "line_height_available"),
+                ("used_system_scroll_metrics", "scroll_metrics_available"),
+                ("used_system_color_scheme", "color_scheme_available"),
+                ("used_system_accent_color", "accent_color_available"),
+            ):
+                used_value = resolution.get(used_key)
+                available_value = settings.get(availability_key)
+                if not isinstance(used_value, bool) or not isinstance(
+                    available_value,
+                    bool,
+                ):
+                    continue
+                report.check(
+                    (
+                        f"{path}.resolution.{used_key} matches "
+                        f"system_settings.{availability_key}"
+                    ),
+                    not (used_value and not available_value),
+                    path=f"{path}.resolution.{used_key}",
+                    expected={availability_key: True},
+                    actual={
+                        used_key: used_value,
+                        availability_key: available_value,
+                    },
+                    likely_layer="file-explorer-preferences",
+                    likely_pass="preference-resolution",
+                    hint=(
+                        "Resolver evidence cannot claim an OS preference was "
+                        "consumed unless the mirrored system_settings "
+                        "availability flag says that OS value was captured."))
 
 
 def check_file_explorer_native_chrome_contract(

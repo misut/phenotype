@@ -1274,7 +1274,8 @@ inline Color material_pick_readable_color(Color preferred,
         return best;
     auto const dark = Color{17, 24, 39, 255};
     auto const light = Color{255, 255, 255, 255};
-    Color const candidates[2] = {dark, light};
+    auto const absolute_dark = Color{0, 0, 0, 255};
+    Color const candidates[3] = {dark, light, absolute_dark};
     for (auto candidate : candidates) {
         auto const contrast = material_contrast_ratio(candidate, background_luma);
         if (contrast > best_contrast) {

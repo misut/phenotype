@@ -427,6 +427,8 @@ file_explorer_demo::SystemPreferenceSnapshot system_preference_snapshot(
         .scroll_horizontal_delta_multiplier =
             system.scroll_horizontal_delta_multiplier,
         .scroll_source = system.scroll_source,
+        .font_family_available = contract_system.font_family_available,
+        .font_metrics_available = contract_system.font_metrics_available,
         .font_scale_available = contract_system.font_scale_available,
         .line_height_available = contract_system.line_height_available,
         .scroll_metrics_available = contract_system.scroll_metrics_available,

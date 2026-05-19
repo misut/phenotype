@@ -148,8 +148,10 @@ fields and app overrides, then compare the JSON `resolved.effective_theme` and
 `resolved.resolution` booleans with an artifact's
 `application.file_explorer.preferences` block. The `input.system` object also
 reports availability bits; a default value such as `font_scale=1.0` should only
-set `used_system_font_scale=true` when `font_scale_available=true`, which keeps
-fallback artifacts from pretending they consumed OS preferences.
+set `used_system_font_scale=true` when `font_scale_available=true`, and a
+fallback font family or point size should only set the system-family/metrics
+evidence bits when `font_family_available` or `font_metrics_available` is true.
+This keeps fallback artifacts from pretending they consumed OS preferences.
 
 `io contract` reports the `phenotype.io` version, accepted input event kinds,
 output observation kinds, deterministic replay sample, LLM-debuggable artifact
@@ -547,9 +549,9 @@ example applied before rendering. `resolution` is emitted from the core
 `ResolvedThemePreferences` value, so it records whether the effective theme
 actually consumed OS font metrics, OS scroll metrics, OS appearance, user font
 scale, user font sizes, user line height, or user scroll speed. The mirrored
-`system_settings` object includes availability booleans for font scale, line
-height, scroll metrics, and color scheme so a fallback value is not mistaken for
-an OS preference. Use this block
+`system_settings` object includes availability booleans for font family, font
+metrics, font scale, line height, scroll metrics, color scheme, and accent color
+so a fallback value is not mistaken for an OS preference. Use this block
 when text size, family source, font-weight adjustment, vertical or horizontal
 wheel/trackpad speed, scrollbar behavior, touch slop, double-click timeout, key
 repeat timing, caret blink, or accent color looks wrong but the
@@ -1058,8 +1060,10 @@ state at `debug.application.file_explorer.preferences.app_overrides` and the
 resolved theme at `debug.application.file_explorer.preferences.effective_theme`,
 including `color_scheme`, font family/scale, `apply_system_scroll_metrics`, and
 both scroll multipliers. `debug.application.file_explorer.preferences.system_settings`
-must include `font_scale_available`, `line_height_available`,
-`scroll_metrics_available`, and `color_scheme_available`. The local file
+must include `font_family_available`, `font_metrics_available`,
+`font_scale_available`, `line_height_available`, `scroll_metrics_available`, and
+`color_scheme_available`, plus `accent_color_available` when accent capture is
+reported. The local file
 explorer artifact gate pins the app color-scheme override to `light` for stable
 pixel thresholds while still recording OS appearance availability; the adjacent
 `debug.application.file_explorer.preferences.resolution` object names the pure

@@ -2463,6 +2463,7 @@ inline json::Value semantic_node_to_json(SemanticNodeSnapshot const& node) {
 
 inline json::Value system_settings_to_json(
         PlatformSystemSettingsSnapshot const& settings) {
+    auto const availability = theme_contract_system_snapshot(settings);
     json::Object system;
     system.emplace("source", json::Value{settings.source});
     system.emplace("font_family", json::Value{settings.font_family});
@@ -2501,6 +2502,24 @@ inline json::Value system_settings_to_json(
         "scroll_horizontal_delta_multiplier",
         json::Value{settings.scroll_horizontal_delta_multiplier});
     system.emplace("scroll_source", json::Value{settings.scroll_source});
+    system.emplace(
+        "font_family_available",
+        json::Value{availability.font_family_available});
+    system.emplace(
+        "font_metrics_available",
+        json::Value{availability.font_metrics_available});
+    system.emplace(
+        "font_scale_available",
+        json::Value{availability.font_scale_available});
+    system.emplace(
+        "line_height_available",
+        json::Value{availability.line_height_available});
+    system.emplace(
+        "scroll_metrics_available",
+        json::Value{availability.scroll_metrics_available});
+    system.emplace(
+        "color_scheme_available",
+        json::Value{availability.color_scheme_available});
     system.emplace(
         "double_click_interval_ms",
         json::Value{settings.double_click_interval_ms});

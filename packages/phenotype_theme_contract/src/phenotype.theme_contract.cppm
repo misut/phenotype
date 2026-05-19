@@ -84,6 +84,8 @@ struct SystemThemePreferenceSnapshot {
     float scroll_delta_multiplier = 1.0f;
     float scroll_horizontal_delta_multiplier = 1.0f;
     std::string color_scheme = "light";
+    bool font_family_available = false;
+    bool font_metrics_available = false;
     bool font_scale_available = false;
     bool line_height_available = false;
     bool scroll_metrics_available = false;
@@ -235,6 +237,7 @@ inline auto resolve_theme_preferences(
         resolved.effective_font_family = overrides.font_family;
         resolved.used_user_font_family = true;
     } else if (overrides.prefer_system_font_family
+               && system.font_family_available
                && !system.font_family.empty()) {
         resolved.effective_font_family = system.font_family;
         resolved.used_system_font_family = true;
@@ -263,6 +266,7 @@ inline auto resolve_theme_preferences(
 
     bool const use_system_font_metrics =
         overrides.apply_system_font_metrics
+        && system.font_metrics_available
         && system.body_font_size > 0.0f
         && std::isfinite(system.body_font_size);
     resolved.used_system_font_metrics = use_system_font_metrics;

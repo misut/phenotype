@@ -60,17 +60,23 @@ int main() {
     assert(!default_resolved.used_system_scroll_metrics);
     assert(!default_resolved.used_system_color_scheme);
     theme::SystemThemePreferenceSnapshot unavailable_system{};
+    unavailable_system.font_family = "Unavailable System UI";
+    unavailable_system.body_font_size = 18.0f;
     unavailable_system.color_scheme = "dark";
     unavailable_system.font_scale = 1.4f;
     unavailable_system.line_height_ratio = 1.8f;
     unavailable_system.scroll_delta_multiplier = 2.0f;
     theme::ThemePreferenceOverrides unavailable_overrides{};
+    unavailable_overrides.prefer_system_font_family = true;
     unavailable_overrides.prefer_system_color_scheme = true;
     auto unavailable_resolved = theme::resolve_theme_preferences(
         base,
         unavailable_system,
         unavailable_overrides);
     assert(unavailable_resolved.effective_color_scheme == "light");
+    assert(unavailable_resolved.effective_font_family == "Pretendard");
+    assert(!unavailable_resolved.used_system_font_family);
+    assert(!unavailable_resolved.used_system_font_metrics);
     assert(!unavailable_resolved.used_system_color_scheme);
     assert(!unavailable_resolved.used_system_font_scale);
     assert(!unavailable_resolved.used_system_line_height);
@@ -83,6 +89,8 @@ int main() {
     system.scroll_delta_multiplier = 1.25f;
     system.scroll_horizontal_delta_multiplier = 0.5f;
     system.color_scheme = "dark";
+    system.font_family_available = true;
+    system.font_metrics_available = true;
     system.font_scale_available = true;
     system.line_height_available = true;
     system.scroll_metrics_available = true;

@@ -421,6 +421,12 @@ inline auto theme_contract_system_snapshot(
         .scroll_horizontal_delta_multiplier =
             system.scroll_horizontal_delta_multiplier,
         .color_scheme = system.color_scheme,
+        .font_family_available =
+            !system.font_family.empty()
+            && system_setting_source_is_available(system.font_family_source),
+        .font_metrics_available =
+            system_setting_source_is_available(system.text_size_source)
+            || system_setting_source_is_available(system.source),
         .font_scale_available =
             system_setting_source_is_available(system.text_size_source)
             || system_setting_source_is_available(system.source),
@@ -554,6 +560,7 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
         theme.default_font_family = overrides.font_family;
         resolved.used_user_font_family = true;
     } else if (overrides.prefer_system_font_family
+               && contract_system.font_family_available
                && !system.font_family.empty()) {
         theme.default_font_family = system.font_family;
         resolved.used_system_font_family = true;
@@ -584,6 +591,7 @@ inline ResolvedThemePreferences resolve_system_theme_preferences(
     float const base_body_font_size = theme.body_font_size;
     bool const use_system_font_metrics =
         overrides.apply_system_font_metrics
+        && contract_system.font_metrics_available
         && system.body_font_size > 0.0f
         && std::isfinite(system.body_font_size);
     resolved.used_system_font_metrics = use_system_font_metrics;

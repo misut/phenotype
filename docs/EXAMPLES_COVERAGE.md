@@ -281,9 +281,9 @@ Preference aliases such as `font-family:system`, `font-scale:1.25`,
 drive the same pure
 `ThemePreferenceOverrides` path as the native file explorer settings controls.
 Artifacts record the OS snapshot (`color_scheme`, appearance/accessibility
-sources, font metrics, and axis-specific scroll factors), the app overrides, and
-the resolved effective theme so OS-level preferences and app-level overrides can
-be debugged without guessing from pixels.
+sources, font family/metrics availability, accent availability, and axis-specific
+scroll factors), the app overrides, and the resolved effective theme so OS-level
+preferences and app-level overrides can be debugged without guessing from pixels.
 View-mode inputs (`view:icon`, `view:list`, `view:column`, or `view:gallery`)
 use the same shared state field as the desktop toolbar and
 `PHENOTYPE_FILE_EXPLORER_VIEW`, so headless CLI traces and native artifacts
@@ -324,11 +324,12 @@ example-specific canvas labels pass the same family explicitly so the Finder
 scene and package manifest agree on typography.
 The examples also publish `application.file_explorer.preferences`, which joins
 the platform `system_settings` snapshot with app/user overrides and the
-effective theme values used at launch. This keeps OS font family source, OS font
-scale, font-weight adjustment, OS scroll policy/factors, separate OS and app
+effective theme values used at launch. This keeps OS font family source,
+font-family availability, OS font metrics availability, OS font scale,
+font-weight adjustment, OS scroll policy/factors, separate OS and app
 vertical/horizontal scroll multipliers, the `apply_system_scroll_metrics`
-switch, OS preferred locale/source, system accent capture, Pretendard package
-defaults, and direct
+switch, OS preferred locale/source, system accent capture and availability,
+Pretendard package defaults, and direct
 environment overrides debuggable from the same artifact bundle. Pretendard stays
 the default family; choosing the OS family is an
 explicit app override, while system appearance and accent are applied by the
