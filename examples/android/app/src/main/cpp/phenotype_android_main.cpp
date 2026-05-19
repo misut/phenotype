@@ -19,6 +19,7 @@ extern "C" {
 // URLs; GameActivity exposes the manager at app->activity->assetManager.
 // Stage 6 adds the view/update loop + input dispatch.
 void phenotype_android_bind_jvm(void* jvm);
+void phenotype_android_bind_activity(void* activity);
 void phenotype_android_bind_assets(void* asset_manager);
 void phenotype_android_attach_surface(void* native_window);
 void phenotype_android_detach_surface(void);
@@ -136,6 +137,7 @@ extern "C" void android_main(android_app* app) {
     // resolve to APK-bundled files.
     if (app->activity) {
         phenotype_android_bind_jvm(app->activity->vm);
+        phenotype_android_bind_activity(app->activity->javaGameActivity);
         phenotype_android_bind_assets(app->activity->assetManager);
     }
     if (auto const* msg = phenotype_android_startup_message()) {

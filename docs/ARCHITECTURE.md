@@ -223,6 +223,12 @@ ThemePreferenceOverrides)` helper. Package defaults such as Pretendard remain
 explicit theme inputs, OS font scale and scroll policy arrive as immutable
 snapshot fields, and app/user overrides win without letting a backend mutate
 theme state directly.
+The Android native edge cannot obtain `fontScale` from NDK
+`AConfiguration`, so the GameActivity driver passes the Java activity object
+to the backend and the backend reads
+`Resources.getConfiguration().fontScale` through JNI when producing the same
+snapshot. If that bridge is unavailable, Android falls back to the deterministic
+1.0 scale and reports the fallback source in diagnostics.
 
 `layout::glass_surface_options` and `layout::glass_surface` provide the
 high-level Apple-glass surface presets used by examples. They are not a new

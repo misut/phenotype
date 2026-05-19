@@ -411,6 +411,7 @@ struct jni_refs {
 };
 
 inline jni_refs g_jni{};
+inline jobject g_android_activity = nullptr;
 
 // Scoped JNIEnv helper. On a thread that's already attached (the
 // GameActivity render thread is) `attached` stays false and Detach is
@@ -451,6 +452,13 @@ inline bool check_and_clear_exception(JNIEnv* env) {
         return true;
     }
     return false;
+}
+
+inline void delete_global_ref(JNIEnv* env, jobject& ref) {
+    if (env && ref) {
+        env->DeleteGlobalRef(ref);
+        ref = nullptr;
+    }
 }
 
 // Builds a java/lang/String from a UTF-8 byte range. Routes through
@@ -6176,6 +6184,85 @@ inline void android_open_url(char const* url, unsigned int len) {
 
 // ---- Stage 7 debug plane --------------------------------------------
 
+inline std::optional<float> android_configuration_font_scale() {
+    ScopedEnv senv(g_jni.vm);
+    if (!senv || !g_android_activity) return std::nullopt;
+
+    JNIEnv* env = senv.env;
+    auto drop = [&](jobject ref) {
+        if (ref) env->DeleteLocalRef(ref);
+    };
+
+    jclass activity_cls = env->GetObjectClass(g_android_activity);
+    if (!activity_cls || check_and_clear_exception(env)) {
+        drop(activity_cls);
+        return std::nullopt;
+    }
+
+    jmethodID get_resources = env->GetMethodID(
+        activity_cls,
+        "getResources",
+        "()Landroid/content/res/Resources;");
+    drop(activity_cls);
+    if (!get_resources || check_and_clear_exception(env))
+        return std::nullopt;
+
+    jobject resources = env->CallObjectMethod(
+        g_android_activity,
+        get_resources);
+    if (!resources || check_and_clear_exception(env)) {
+        drop(resources);
+        return std::nullopt;
+    }
+
+    jclass resources_cls = env->GetObjectClass(resources);
+    if (!resources_cls || check_and_clear_exception(env)) {
+        drop(resources_cls);
+        drop(resources);
+        return std::nullopt;
+    }
+
+    jmethodID get_configuration = env->GetMethodID(
+        resources_cls,
+        "getConfiguration",
+        "()Landroid/content/res/Configuration;");
+    drop(resources_cls);
+    if (!get_configuration || check_and_clear_exception(env)) {
+        drop(resources);
+        return std::nullopt;
+    }
+
+    jobject configuration = env->CallObjectMethod(resources, get_configuration);
+    drop(resources);
+    if (!configuration || check_and_clear_exception(env)) {
+        drop(configuration);
+        return std::nullopt;
+    }
+
+    jclass configuration_cls = env->GetObjectClass(configuration);
+    if (!configuration_cls || check_and_clear_exception(env)) {
+        drop(configuration_cls);
+        drop(configuration);
+        return std::nullopt;
+    }
+
+    jfieldID font_scale_id =
+        env->GetFieldID(configuration_cls, "fontScale", "F");
+    drop(configuration_cls);
+    if (!font_scale_id || check_and_clear_exception(env)) {
+        drop(configuration);
+        return std::nullopt;
+    }
+
+    float const scale = env->GetFloatField(configuration, font_scale_id);
+    drop(configuration);
+    if (check_and_clear_exception(env) || !(scale > 0.0f)
+        || !std::isfinite(scale)) {
+        return std::nullopt;
+    }
+    return scale;
+}
+
 inline ::phenotype::PlatformSystemSettingsSnapshot
 android_system_settings_snapshot() {
     ::phenotype::PlatformSystemSettingsSnapshot snapshot{};
@@ -6196,6 +6283,23 @@ android_system_settings_snapshot() {
     snapshot.scroll_page_mode = false;
     snapshot.scroll_delta_multiplier = 1.0f;
     snapshot.scroll_source = "AMOTION_EVENT_AXIS_VSCROLL fallback";
+    if (auto scale = android_configuration_font_scale()) {
+        snapshot.source = "android-jni-resources-configuration";
+        snapshot.text_size_source =
+            "Resources.getConfiguration().fontScale";
+        snapshot.font_scale = ::phenotype::bounded_theme_preference(
+            *scale,
+            1.0f,
+            0.75f,
+            1.8f);
+        snapshot.body_font_size = 16.0f * snapshot.font_scale;
+        snapshot.heading_font_size =
+            snapshot.body_font_size * 1.4f;
+        snapshot.small_font_size =
+            snapshot.body_font_size * 0.9f;
+        snapshot.scroll_line_height =
+            snapshot.body_font_size * snapshot.line_height_ratio;
+    }
     return snapshot;
 }
 
@@ -7121,6 +7225,18 @@ __attribute__((visibility("default")))
 void phenotype_android_bind_jvm(void* jvm) {
     namespace d = phenotype::native::detail;
     d::g_jni.vm = static_cast<JavaVM*>(jvm);
+}
+
+__attribute__((visibility("default")))
+void phenotype_android_bind_activity(void* activity) {
+    namespace d = phenotype::native::detail;
+    d::ScopedEnv senv(d::g_jni.vm);
+    if (!senv) return;
+    d::delete_global_ref(senv.env, d::g_android_activity);
+    if (!activity) return;
+    d::g_android_activity = senv.env->NewGlobalRef(
+        static_cast<jobject>(activity));
+    d::check_and_clear_exception(senv.env);
 }
 
 __attribute__((visibility("default")))
