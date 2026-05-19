@@ -78,6 +78,31 @@ inline bool focus_ring_visible(unsigned int callback_id) {
         && g_app.focus_visible;
 }
 
+inline char const* input_modality_name(InputModality modality) {
+    switch (modality) {
+        case InputModality::Keyboard: return "keyboard";
+        case InputModality::Pointer: return "pointer";
+        case InputModality::Programmatic: return "programmatic";
+        case InputModality::None:
+        default: return "none";
+    }
+}
+
+inline char const* focus_visibility_reason_name(
+        FocusVisibilityReason reason) {
+    switch (reason) {
+        case FocusVisibilityReason::KeyboardFocusNavigation:
+            return "keyboard_focus_navigation";
+        case FocusVisibilityReason::PointerInputHidesFocusRing:
+            return "pointer_input_hides_focus_ring";
+        case FocusVisibilityReason::ProgrammaticFocusHidden:
+            return "programmatic_focus_hidden";
+        case FocusVisibilityReason::NoFocus:
+        default:
+            return "no_focus";
+    }
+}
+
 inline icons::SymbolDocumentCache const& icon_document_cache() {
     static auto const cache = icons::make_symbol_document_cache();
     return cache;
@@ -3266,10 +3291,33 @@ inline bool select_all_focused_input(bool visible = true) {
     return true;
 }
 
-inline void assign_focus(unsigned int callback_id,
-                         bool focus_visible = false) {
+inline FocusVisibilityReason resolved_focus_visibility_reason(
+        unsigned int callback_id,
+        bool focus_visible,
+        InputModality modality) {
+    if (callback_id == 0xFFFFFFFFu)
+        return FocusVisibilityReason::NoFocus;
+    if (focus_visible)
+        return FocusVisibilityReason::KeyboardFocusNavigation;
+    if (modality == InputModality::Pointer)
+        return FocusVisibilityReason::PointerInputHidesFocusRing;
+    return FocusVisibilityReason::ProgrammaticFocusHidden;
+}
+
+inline void assign_focus(
+        unsigned int callback_id,
+        bool focus_visible = false,
+        InputModality modality = InputModality::Programmatic) {
     g_app.focused_id = callback_id;
     g_app.focus_visible = callback_id != 0xFFFFFFFFu && focus_visible;
+    if (callback_id == 0xFFFFFFFFu)
+        g_app.focus_input_modality = InputModality::None;
+    else
+        g_app.focus_input_modality = modality;
+    g_app.focus_visibility_reason = resolved_focus_visibility_reason(
+        callback_id,
+        g_app.focus_visible,
+        g_app.focus_input_modality);
     if (auto const* handler = find_input_handler(callback_id)) {
         set_caret_state(handler->current, handler->current.size());
     } else {
@@ -3313,6 +3361,10 @@ inline void note_input_event(char const* event,
     snapshot.focused_id = g_app.focused_id;
     snapshot.focused_role = interaction_role_name(focused_role);
     snapshot.focus_visible = g_app.focus_visible;
+    snapshot.input_modality =
+        input_modality_name(g_app.focus_input_modality);
+    snapshot.focus_visibility_reason =
+        focus_visibility_reason_name(g_app.focus_visibility_reason);
     snapshot.hovered_id = g_app.hovered_id;
     snapshot.pressed_id = g_app.pressed_id;
     snapshot.scroll_x = g_app.scroll_x;
@@ -3419,19 +3471,33 @@ inline bool set_pressed_id(unsigned int callback_id,
 inline bool set_focus_id(unsigned int callback_id,
                          char const* source = "core",
                          char const* detail = "focus-change",
-                         bool focus_visible = false) {
+                         bool focus_visible = false,
+                         InputModality modality = InputModality::Programmatic) {
     bool const next_focus_visible =
         callback_id != 0xFFFFFFFFu && focus_visible;
+    auto const next_modality = callback_id == 0xFFFFFFFFu
+        ? InputModality::None
+        : (next_focus_visible && modality == InputModality::Programmatic
+              ? InputModality::Keyboard
+              : modality);
+    auto const next_reason = resolved_focus_visibility_reason(
+        callback_id,
+        next_focus_visible,
+        next_modality);
     if (g_app.focused_id == callback_id
-        && g_app.focus_visible == next_focus_visible) {
+        && g_app.focus_visible == next_focus_visible
+        && g_app.focus_input_modality == next_modality
+        && g_app.focus_visibility_reason == next_reason) {
         note_input_event("focus", source, detail, "ignored", callback_id);
         return false;
     }
     if (g_app.focused_id == callback_id) {
         g_app.focus_visible = next_focus_visible;
+        g_app.focus_input_modality = next_modality;
+        g_app.focus_visibility_reason = next_reason;
         sync_input_debug_caret_state();
     } else {
-        assign_focus(callback_id, next_focus_visible);
+        assign_focus(callback_id, next_focus_visible, next_modality);
     }
     note_input_event("focus", source, detail, "handled", callback_id);
     return true;
@@ -3442,7 +3508,12 @@ inline bool clear_focus_visible_for_pointer(
         char const* detail = "pointer-focus-visible-reset") {
     if (!g_app.focus_visible || g_app.focused_id == 0xFFFFFFFFu)
         return false;
-    return set_focus_id(g_app.focused_id, source, detail, false);
+    return set_focus_id(
+        g_app.focused_id,
+        source,
+        detail,
+        false,
+        InputModality::Pointer);
 }
 
 inline unsigned int get_focused_id() {
@@ -3507,7 +3578,7 @@ inline bool handle_tab(unsigned int reverse,
         idx = (idx <= 0) ? n - 1 : idx - 1;
     else
         idx = (idx < 0 || idx >= n - 1) ? 0 : idx + 1;
-    assign_focus(g_app.focusable_ids[idx], true);
+    assign_focus(g_app.focusable_ids[idx], true, InputModality::Keyboard);
     note_input_event("tab", source, detail_name, "handled", g_app.focused_id);
     return true;
 }
@@ -3671,6 +3742,10 @@ inline diag::InputDebugSnapshot materialize_input_debug_snapshot() {
     snapshot.focused_id = g_app.focused_id;
     snapshot.focused_role = interaction_role_name(callback_role(g_app.focused_id));
     snapshot.focus_visible = g_app.focus_visible;
+    snapshot.input_modality =
+        input_modality_name(g_app.focus_input_modality);
+    snapshot.focus_visibility_reason =
+        focus_visibility_reason_name(g_app.focus_visibility_reason);
     snapshot.hovered_id = g_app.hovered_id;
     snapshot.pressed_id = g_app.pressed_id;
     snapshot.scroll_x = g_app.scroll_x;
@@ -4062,6 +4137,9 @@ inline diag::PlatformRuntimeSnapshot build_platform_runtime_snapshot(
     runtime.content_height = get_total_height();
     runtime.focused_callback_id = optional_callback_id(g_app.focused_id);
     runtime.focus_visible = g_app.focus_visible;
+    runtime.input_modality = input_modality_name(g_app.focus_input_modality);
+    runtime.focus_visibility_reason =
+        focus_visibility_reason_name(g_app.focus_visibility_reason);
     runtime.hovered_callback_id = optional_callback_id(g_app.hovered_id);
     runtime.pressed_callback_id = optional_callback_id(g_app.pressed_id);
     runtime.details = runtime_details_override.has_value()

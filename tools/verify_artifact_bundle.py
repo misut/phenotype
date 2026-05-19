@@ -242,6 +242,20 @@ MATERIAL_PLAN_CONTRACT_VERSION = 25
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
+ALLOWED_INPUT_MODALITIES = {
+    "none",
+    "keyboard",
+    "pointer",
+    "programmatic",
+}
+
+ALLOWED_FOCUS_VISIBILITY_REASONS = {
+    "no_focus",
+    "keyboard_focus_navigation",
+    "pointer_input_hides_focus_ring",
+    "programmatic_focus_hidden",
+}
+
 PLATFORM_CAPABILITY_BOOL_FIELDS = (
     "read_only",
     "snapshot_json",
@@ -8711,9 +8725,33 @@ def verify(args: argparse.Namespace) -> int:
         "result",
         "pressed_id",
         "focus_visible",
+        "input_modality",
+        "focus_visibility_reason",
         "caret_rect",
     ):
         report.check(f"input_debug contains {key}", key in input_debug)
+    input_modality = string_at(input_debug, "input_modality")
+    focus_reason = string_at(input_debug, "focus_visibility_reason")
+    report.check(
+        "input_debug input modality is known",
+        input_modality in ALLOWED_INPUT_MODALITIES,
+        path="debug.input_debug.input_modality",
+        expected=sorted(ALLOWED_INPUT_MODALITIES),
+        actual=input_modality,
+        likely_layer="input-runtime",
+        hint=(
+            "Core input debug must explain whether the current focus state "
+            "came from keyboard, pointer, programmatic code, or no focus."))
+    report.check(
+        "input_debug focus visibility reason is known",
+        focus_reason in ALLOWED_FOCUS_VISIBILITY_REASONS,
+        path="debug.input_debug.focus_visibility_reason",
+        expected=sorted(ALLOWED_FOCUS_VISIBILITY_REASONS),
+        actual=focus_reason,
+        likely_layer="input-runtime",
+        hint=(
+            "Core input debug must explain why the focus ring is visible or "
+            "hidden so pointer-click focus-ring regressions are LLM-debuggable."))
     report.check(
         "runtime contains pressed callback state",
         "pressed_callback_id" in runtime,
@@ -8735,6 +8773,27 @@ def verify(args: argparse.Namespace) -> int:
             "Check core focus modality propagation from focus_visible into "
             "the debug plane. Pointer and platform-consumed pointer presses "
             "must clear stale keyboard focus rings."))
+    runtime_modality = string_at(runtime, "input_modality")
+    runtime_focus_reason = string_at(runtime, "focus_visibility_reason")
+    report.check(
+        "runtime input modality is known",
+        runtime_modality in ALLOWED_INPUT_MODALITIES,
+        path="debug.platform_runtime.input_modality",
+        expected=sorted(ALLOWED_INPUT_MODALITIES),
+        actual=runtime_modality,
+        likely_layer="input-runtime",
+        hint="Check core runtime focus state propagation into the debug plane.")
+    report.check(
+        "runtime focus visibility reason is known",
+        runtime_focus_reason in ALLOWED_FOCUS_VISIBILITY_REASONS,
+        path="debug.platform_runtime.focus_visibility_reason",
+        expected=sorted(ALLOWED_FOCUS_VISIBILITY_REASONS),
+        actual=runtime_focus_reason,
+        likely_layer="input-runtime",
+        hint=(
+            "Check core runtime focus state propagation; keyboard Tab should "
+            "report keyboard_focus_navigation, while pointer focus should "
+            "report pointer_input_hides_focus_ring."))
 
     report.check("semantic root role is root", semantic_tree.get("role") == "root")
     summary = summarize_semantic_tree(semantic_tree)

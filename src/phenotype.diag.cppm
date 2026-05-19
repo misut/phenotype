@@ -570,6 +570,8 @@ struct InputDebugSnapshot {
     unsigned int focused_id = 0xFFFFFFFFu;
     std::string focused_role = "none";
     bool focus_visible = false;
+    std::string input_modality = "none";
+    std::string focus_visibility_reason = "no_focus";
     unsigned int hovered_id = 0xFFFFFFFFu;
     unsigned int pressed_id = 0xFFFFFFFFu;
     float scroll_x = 0.0f;
@@ -658,6 +660,8 @@ struct PlatformRuntimeSnapshot {
     float content_height = 0.0f;
     std::optional<unsigned int> focused_callback_id;
     bool focus_visible = false;
+    std::string input_modality = "none";
+    std::string focus_visibility_reason = "no_focus";
     std::optional<unsigned int> hovered_callback_id;
     std::optional<unsigned int> pressed_callback_id;
     json::Value details = json::Value{json::Object{}};
@@ -2358,6 +2362,10 @@ inline json::Value input_debug_to_json(InputDebugSnapshot const& snapshot) {
     out.emplace("focused_id", json::Value{static_cast<std::int64_t>(snapshot.focused_id)});
     out.emplace("focused_role", json::Value{snapshot.focused_role});
     out.emplace("focus_visible", json::Value{snapshot.focus_visible});
+    out.emplace("input_modality", json::Value{snapshot.input_modality});
+    out.emplace(
+        "focus_visibility_reason",
+        json::Value{snapshot.focus_visibility_reason});
     out.emplace("hovered_id", json::Value{static_cast<std::int64_t>(snapshot.hovered_id)});
     out.emplace("pressed_id", json::Value{static_cast<std::int64_t>(snapshot.pressed_id)});
     out.emplace("scroll_x", json::Value{snapshot.scroll_x});
@@ -2624,6 +2632,10 @@ inline json::Value platform_runtime_to_json(
         "focused_callback_id",
         callback_id_to_json(runtime.focused_callback_id));
     out.emplace("focus_visible", json::Value{runtime.focus_visible});
+    out.emplace("input_modality", json::Value{runtime.input_modality});
+    out.emplace(
+        "focus_visibility_reason",
+        json::Value{runtime.focus_visibility_reason});
     out.emplace(
         "hovered_callback_id",
         callback_id_to_json(runtime.hovered_callback_id));

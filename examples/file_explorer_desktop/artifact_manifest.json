@@ -241,12 +241,28 @@
       "equals": 4294967295
     },
     {
+      "path": "input_debug.input_modality",
+      "equals": "none"
+    },
+    {
+      "path": "input_debug.focus_visibility_reason",
+      "equals": "no_focus"
+    },
+    {
       "path": "platform_runtime.pressed_callback_id",
       "equals": null
     },
     {
       "path": "platform_runtime.focus_visible",
       "equals": false
+    },
+    {
+      "path": "platform_runtime.input_modality",
+      "equals": "none"
+    },
+    {
+      "path": "platform_runtime.focus_visibility_reason",
+      "equals": "no_focus"
     },
     {
       "path": "application.file_explorer.relative_location",

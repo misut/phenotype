@@ -310,11 +310,15 @@ void test_snapshot_shape() {
     assert(input_debug.contains("event"));
     assert(input_debug.contains("pressed_id"));
     assert(input_debug.contains("focus_visible"));
+    assert(input_debug.contains("input_modality"));
+    assert(input_debug.contains("focus_visibility_reason"));
     assert(input_debug.contains("caret_rect"));
 
     auto const& runtime = debug.at("platform_runtime").as_object();
     assert(runtime.contains("pressed_callback_id"));
     assert(runtime.contains("focus_visible"));
+    assert(runtime.contains("input_modality"));
+    assert(runtime.contains("focus_visibility_reason"));
 #ifdef __wasi__
     assert(capabilities.at("platform").as_string() == "wasi");
     assert(capabilities.at("capture_frame_rgba").as_bool() == false);

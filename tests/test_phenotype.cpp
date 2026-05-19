@@ -3513,15 +3513,24 @@ void test_focus_visible_tracks_keyboard_modality() {
     auto debug = diag::input_debug_snapshot();
     assert(debug.focused_id == 7u);
     assert(debug.focus_visible == true);
+    assert(debug.input_modality == "keyboard");
+    assert(debug.focus_visibility_reason == "keyboard_focus_navigation");
 
     bool const pointer_focus =
-        detail::set_focus_id(7u, "test", "pointer-focus");
+        detail::set_focus_id(
+            7u,
+            "test",
+            "pointer-focus",
+            false,
+            InputModality::Pointer);
     assert(pointer_focus);
     assert(detail::g_app.focused_id == 7u);
     assert(detail::g_app.focus_visible == false);
     debug = diag::input_debug_snapshot();
     assert(debug.focused_id == 7u);
     assert(debug.focus_visible == false);
+    assert(debug.input_modality == "pointer");
+    assert(debug.focus_visibility_reason == "pointer_input_hides_focus_ring");
 
     detail::g_app.focusable_ids.clear();
     detail::g_app.focused_id = 0xFFFFFFFFu;
