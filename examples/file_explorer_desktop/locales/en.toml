@@ -63,6 +63,9 @@ text_larger = "Text +"
 text_smaller = "Text -"
 scroll_faster = "Scroll +"
 scroll_slower = "Scroll -"
+system_appearance = "System Look"
+light_appearance = "Light"
+dark_appearance = "Dark"
 
 [status]
 title = "Status"

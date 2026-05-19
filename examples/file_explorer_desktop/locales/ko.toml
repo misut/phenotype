@@ -63,6 +63,9 @@ text_larger = "글자 +"
 text_smaller = "글자 -"
 scroll_faster = "스크롤 +"
 scroll_slower = "스크롤 -"
+system_appearance = "시스템"
+light_appearance = "라이트"
+dark_appearance = "다크"
 
 [status]
 title = "상태"
