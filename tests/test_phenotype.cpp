@@ -370,6 +370,27 @@ void test_system_theme_preferences_are_pure_overlays() {
     overrides.scroll_horizontal_delta_multiplier = 2.0f;
 
     auto applied = apply_system_theme_preferences(theme, system, overrides);
+    auto resolved = resolve_system_theme_preferences(
+        theme,
+        system,
+        overrides,
+        "test-preferences");
+    assert(resolved.source == "test-preferences");
+    assert(resolved.theme.default_font_family == applied.default_font_family);
+    assert(std::fabs(resolved.effective_body_font_size - 21.0f) < 0.001f);
+    assert(std::fabs(resolved.effective_heading_font_size - 27.0f) < 0.001f);
+    assert(std::fabs(resolved.effective_small_font_size - 18.0f) < 0.001f);
+    assert(std::fabs(resolved.effective_line_height_ratio - 1.6f) < 0.001f);
+    assert(resolved.effective_font_family == "Pretendard");
+    assert(resolved.effective_color_scheme == "light");
+    assert(!resolved.used_system_font_family);
+    assert(!resolved.used_system_color_scheme);
+    assert(!resolved.used_system_font_metrics);
+    assert(resolved.used_system_font_scale);
+    assert(resolved.used_user_font_scale);
+    assert(resolved.used_system_line_height);
+    assert(resolved.used_system_scroll_metrics);
+    assert(resolved.used_user_scroll_scale);
     assert(applied.default_font_family == "Pretendard");
     assert(std::fabs(applied.body_font_size - 21.0f) < 0.001f);
     assert(std::fabs(applied.heading_font_size - 27.0f) < 0.001f);
@@ -391,6 +412,10 @@ void test_system_theme_preferences_are_pure_overlays() {
     system.small_font_size = 11.0f;
     overrides = ThemePreferenceOverrides{};
     applied = apply_system_theme_preferences(theme, system, overrides);
+    resolved = resolve_system_theme_preferences(theme, system, overrides);
+    assert(resolved.used_system_font_metrics);
+    assert(!resolved.used_system_font_scale);
+    assert(!resolved.used_user_font_scale);
     assert(std::fabs(applied.body_font_size - 13.0f) < 0.001f);
     assert(std::fabs(applied.heading_font_size - 17.0f) < 0.001f);
     assert(std::fabs(applied.small_font_size - 11.0f) < 0.001f);
@@ -403,6 +428,10 @@ void test_system_theme_preferences_are_pure_overlays() {
     overrides.small_font_size = 13.0f;
     overrides.apply_system_accent_color = true;
     applied = apply_system_theme_preferences(theme, system, overrides);
+    resolved = resolve_system_theme_preferences(theme, system, overrides);
+    assert(resolved.used_user_font_family);
+    assert(resolved.used_user_font_size);
+    assert(resolved.used_system_accent_color);
     assert(applied.default_font_family == "UserFont");
     assert(applied.body_font_size == 19.0f);
     assert(applied.small_font_size == 13.0f);
@@ -413,6 +442,9 @@ void test_system_theme_preferences_are_pure_overlays() {
     overrides = ThemePreferenceOverrides{};
     overrides.prefer_system_color_scheme = true;
     applied = apply_system_theme_preferences(theme, system, overrides);
+    resolved = resolve_system_theme_preferences(theme, system, overrides);
+    assert(resolved.used_system_color_scheme);
+    assert(resolved.effective_color_scheme == "dark");
     assert((applied.background == Color{28, 28, 30, 255}));
     assert((applied.foreground == Color{242, 242, 247, 255}));
     assert((applied.surface == Color{44, 44, 46, 238}));
@@ -423,6 +455,9 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert(applied.background == theme.background);
     overrides.color_scheme = "high-contrast-dark";
     applied = apply_system_theme_preferences(theme, system, overrides);
+    resolved = resolve_system_theme_preferences(theme, system, overrides);
+    assert(resolved.used_user_color_scheme);
+    assert(resolved.effective_color_scheme == "high-contrast-dark");
     assert((applied.background == Color{28, 28, 30, 255}));
 
     std::puts("PASS: system theme preferences are pure overlays");

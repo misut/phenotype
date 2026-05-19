@@ -417,6 +417,33 @@ struct ThemePreferenceOverrides {
     bool apply_system_accent_color = false;
 };
 
+struct ResolvedThemePreferences {
+    Theme theme{};
+    std::string source = "default";
+    std::string requested_color_scheme;
+    std::string effective_color_scheme = "light";
+    std::string effective_font_family = "Pretendard";
+    float effective_body_font_size = 16.0f;
+    float effective_heading_font_size = 20.0f;
+    float effective_small_font_size = 14.4f;
+    float effective_line_height_ratio = 1.6f;
+    float effective_scroll_delta_multiplier = 1.0f;
+    float effective_scroll_horizontal_delta_multiplier = 1.0f;
+    bool used_user_font_family = false;
+    bool used_system_font_family = false;
+    bool used_user_color_scheme = false;
+    bool used_system_color_scheme = false;
+    bool used_system_font_metrics = false;
+    bool used_system_font_scale = false;
+    bool used_user_font_scale = false;
+    bool used_user_font_size = false;
+    bool used_system_line_height = false;
+    bool used_user_line_height = false;
+    bool used_system_scroll_metrics = false;
+    bool used_user_scroll_scale = false;
+    bool used_system_accent_color = false;
+};
+
 inline float bounded_theme_preference(
         float value,
         float fallback,
@@ -472,35 +499,50 @@ inline Theme apply_dark_color_scheme(Theme theme) {
     return theme;
 }
 
-inline Theme apply_system_theme_preferences(
+inline ResolvedThemePreferences resolve_system_theme_preferences(
         Theme theme,
         PlatformSystemSettingsSnapshot const& system,
-        ThemePreferenceOverrides const& overrides = {}) {
+        ThemePreferenceOverrides const& overrides = {},
+        std::string_view source = "default") {
+    ResolvedThemePreferences resolved;
+    resolved.source = std::string{source};
+
     if (!overrides.font_family.empty()) {
         theme.default_font_family = overrides.font_family;
+        resolved.used_user_font_family = true;
     } else if (overrides.prefer_system_font_family
                && !system.font_family.empty()) {
         theme.default_font_family = system.font_family;
+        resolved.used_system_font_family = true;
     }
 
     std::string resolved_color_scheme;
     if (!overrides.color_scheme.empty()) {
         resolved_color_scheme = overrides.color_scheme;
+        resolved.used_user_color_scheme = true;
     } else if (overrides.prefer_system_color_scheme) {
         resolved_color_scheme = system.color_scheme;
+        resolved.used_system_color_scheme = true;
     }
+    resolved.requested_color_scheme = resolved_color_scheme;
     if (theme_color_scheme_is_dark(resolved_color_scheme)) {
         theme = apply_dark_color_scheme(theme);
     } else if (!resolved_color_scheme.empty()
                && !theme_color_scheme_is_light(resolved_color_scheme)) {
         resolved_color_scheme.clear();
+        resolved.used_user_color_scheme = false;
+        resolved.used_system_color_scheme = false;
     }
+    resolved.effective_color_scheme = resolved_color_scheme.empty()
+        ? "light"
+        : resolved_color_scheme;
 
     float const base_body_font_size = theme.body_font_size;
     bool const use_system_font_metrics =
         overrides.apply_system_font_metrics
         && system.body_font_size > 0.0f
         && std::isfinite(system.body_font_size);
+    resolved.used_system_font_metrics = use_system_font_metrics;
     if (use_system_font_metrics) {
         float const body = bounded_theme_preference(
             system.body_font_size,
@@ -528,17 +570,25 @@ inline Theme apply_system_theme_preferences(
 
     float scale = 1.0f;
     if (!use_system_font_metrics && overrides.apply_system_font_scale) {
-        scale *= bounded_theme_preference(
+        auto const system_scale = bounded_theme_preference(
             system.font_scale,
             1.0f,
             0.75f,
             1.8f);
+        scale *= system_scale;
+        resolved.used_system_font_scale =
+            system.font_scale > 0.0f && std::isfinite(system.font_scale);
     }
-    scale *= bounded_theme_preference(
+    auto const user_scale = bounded_theme_preference(
         overrides.font_scale,
         1.0f,
         0.75f,
         1.8f);
+    scale *= user_scale;
+    resolved.used_user_font_scale =
+        overrides.font_scale > 0.0f
+        && std::isfinite(overrides.font_scale)
+        && user_scale != 1.0f;
 
     theme.body_font_size *= scale;
     theme.heading_font_size *= scale;
@@ -554,6 +604,7 @@ inline Theme apply_system_theme_preferences(
             theme.body_font_size,
             8.0f,
             40.0f);
+        resolved.used_user_font_size = true;
     }
     if (overrides.heading_font_size > 0.0f
         && std::isfinite(overrides.heading_font_size)) {
@@ -562,6 +613,7 @@ inline Theme apply_system_theme_preferences(
             theme.heading_font_size,
             10.0f,
             56.0f);
+        resolved.used_user_font_size = true;
     }
     if (overrides.small_font_size > 0.0f
         && std::isfinite(overrides.small_font_size)) {
@@ -570,6 +622,7 @@ inline Theme apply_system_theme_preferences(
             theme.small_font_size,
             8.0f,
             32.0f);
+        resolved.used_user_font_size = true;
     }
     if (overrides.line_height_ratio > 0.0f
         && std::isfinite(overrides.line_height_ratio)) {
@@ -578,6 +631,7 @@ inline Theme apply_system_theme_preferences(
             theme.line_height_ratio,
             1.0f,
             2.2f);
+        resolved.used_user_line_height = true;
     } else if (system.line_height_ratio > 0.0f
                && std::isfinite(system.line_height_ratio)) {
         theme.line_height_ratio = bounded_theme_preference(
@@ -585,6 +639,7 @@ inline Theme apply_system_theme_preferences(
             theme.line_height_ratio,
             1.0f,
             2.2f);
+        resolved.used_system_line_height = true;
     }
 
     float scroll_scale = overrides.apply_system_scroll_metrics
@@ -601,6 +656,12 @@ inline Theme apply_system_theme_preferences(
             0.25f,
             4.0f)
         : 1.0f;
+    resolved.used_system_scroll_metrics =
+        overrides.apply_system_scroll_metrics
+        && ((system.scroll_delta_multiplier > 0.0f
+             && std::isfinite(system.scroll_delta_multiplier))
+            || (system.scroll_horizontal_delta_multiplier > 0.0f
+                && std::isfinite(system.scroll_horizontal_delta_multiplier)));
     float const app_scroll_scale = bounded_theme_preference(
         overrides.scroll_delta_multiplier,
         1.0f,
@@ -611,6 +672,8 @@ inline Theme apply_system_theme_preferences(
         1.0f,
         0.25f,
         4.0f);
+    resolved.used_user_scroll_scale =
+        app_scroll_scale != 1.0f || app_horizontal_scroll_scale != 1.0f;
     horizontal_scroll_scale *= app_scroll_scale;
     horizontal_scroll_scale *= app_horizontal_scroll_scale;
     scroll_scale *= app_scroll_scale;
@@ -633,8 +696,26 @@ inline Theme apply_system_theme_preferences(
         theme.accent_strong = lerp_color(accent, Color{0, 0, 0, 255}, 0.24f);
         theme.state_active_bg = theme.accent_strong;
         theme.state_focus_ring = theme.accent;
+        resolved.used_system_accent_color = true;
     }
-    return theme;
+    resolved.theme = theme;
+    resolved.effective_font_family = theme.default_font_family;
+    resolved.effective_body_font_size = theme.body_font_size;
+    resolved.effective_heading_font_size = theme.heading_font_size;
+    resolved.effective_small_font_size = theme.small_font_size;
+    resolved.effective_line_height_ratio = theme.line_height_ratio;
+    resolved.effective_scroll_delta_multiplier =
+        theme.scroll_delta_multiplier;
+    resolved.effective_scroll_horizontal_delta_multiplier =
+        theme.scroll_horizontal_delta_multiplier;
+    return resolved;
+}
+
+inline Theme apply_system_theme_preferences(
+        Theme theme,
+        PlatformSystemSettingsSnapshot const& system,
+        ThemePreferenceOverrides const& overrides = {}) {
+    return resolve_system_theme_preferences(theme, system, overrides).theme;
 }
 
 inline auto default_theme_profile_name() noexcept -> std::string_view {

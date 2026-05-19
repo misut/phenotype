@@ -96,6 +96,9 @@ scroll policy become pure theme inputs, system appearance/accent are applied by
 default, OS preferred locale seeds the startup language when supported, OS font
 family remains an opt-in override, native input timing is captured for
 double-tap, key repeat, and caret blink diagnostics, and user overrides win.
+Artifacts include the pure theme `resolution` block so a verifier can tell
+whether the effective font sizes and scroll multipliers came from the OS,
+application overrides, or package defaults.
 Direct launches can use
 `PHENOTYPE_FILE_EXPLORER_FONT_FAMILY`, `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT`,
 `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT_METRICS`,

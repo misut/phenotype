@@ -975,6 +975,95 @@ def check_platform_system_settings_contract(
         )
 
 
+def check_file_explorer_preferences_contract(
+    report: Report,
+    debug: JsonObject,
+) -> None:
+    file_explorer = object_at(debug, "application.file_explorer")
+    if file_explorer is None:
+        return
+    preferences = object_at(file_explorer, "preferences")
+    if preferences is None:
+        return
+
+    path = "debug.application.file_explorer.preferences"
+    for key in ("system_settings", "app_overrides", "effective_theme", "resolution"):
+        check_object_field(
+            report,
+            preferences,
+            key,
+            path,
+            likely_layer="file-explorer-preferences",
+            hint=(
+                "File explorer artifacts should expose system inputs, app "
+                "overrides, the effective theme, and resolver decisions so "
+                "font and scroll preference failures are LLM-debuggable."),
+        )
+
+    effective = object_at(preferences, "effective_theme")
+    if effective is not None:
+        check_string_field(
+            report,
+            effective,
+            "font_family",
+            f"{path}.effective_theme",
+            likely_layer="file-explorer-preferences",
+            hint=(
+                "The effective theme must name the font family used to render "
+                "text."))
+        check_string_field(
+            report,
+            effective,
+            "color_scheme",
+            f"{path}.effective_theme",
+            likely_layer="file-explorer-preferences",
+            hint="The effective theme must name the resolved appearance scheme.")
+        for key in (
+            "body_font_size",
+            "heading_font_size",
+            "small_font_size",
+            "line_height_ratio",
+            "scroll_delta_multiplier",
+            "scroll_horizontal_delta_multiplier",
+        ):
+            check_number_field(
+                report,
+                effective,
+                key,
+                f"{path}.effective_theme",
+                min_value=0.01,
+                likely_layer="file-explorer-preferences",
+                hint=(
+                    "Effective theme numeric fields should be bounded values "
+                    "from the pure resolver, not inferred from pixels."))
+
+    resolution = object_at(preferences, "resolution")
+    if resolution is not None:
+        for key in (
+            "used_system_font_family",
+            "used_system_color_scheme",
+            "used_system_font_metrics",
+            "used_system_font_scale",
+            "used_user_font_scale",
+            "used_user_font_size",
+            "used_system_line_height",
+            "used_user_line_height",
+            "used_system_scroll_metrics",
+            "used_user_scroll_scale",
+            "used_system_accent_color",
+        ):
+            check_bool_field(
+                report,
+                resolution,
+                key,
+                f"{path}.resolution",
+                likely_layer="file-explorer-preferences",
+                hint=(
+                    "Resolver evidence booleans should explain whether OS "
+                    "settings, package defaults, or user overrides produced "
+                    "the effective theme."))
+
+
 def check_file_explorer_native_chrome_contract(
     report: Report,
     debug: JsonObject,
@@ -8413,6 +8502,7 @@ def verify(args: argparse.Namespace) -> int:
 
     check_file_explorer_native_chrome_contract(report, debug)
     check_file_explorer_finder_visual_contract(report, debug)
+    check_file_explorer_preferences_contract(report, debug)
 
     details = runtime.get("details")
     if args.require_runtime_detail:

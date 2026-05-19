@@ -219,11 +219,16 @@ OS-derived typography, preferred locale, appearance, accessibility, scrolling,
 and accent-color preferences follow the same edge-to-core rule. Native adapters
 collect a `PlatformSystemSettingsSnapshot` from their platform APIs, then the
 core applies it through the pure
-`apply_system_theme_preferences(Theme, PlatformSystemSettingsSnapshot,
-ThemePreferenceOverrides)` helper. Package defaults such as Pretendard remain
-explicit theme inputs, OS font metrics and scroll policy arrive as immutable
-snapshot fields, and app/user overrides win without letting a backend mutate
-theme state directly.
+`resolve_system_theme_preferences(Theme, PlatformSystemSettingsSnapshot,
+ThemePreferenceOverrides)` helper; the older
+`apply_system_theme_preferences(...)` API remains as a compatibility wrapper
+that returns only the resolved `Theme`. Package defaults such as Pretendard
+remain explicit theme inputs, OS font metrics and scroll policy arrive as
+immutable snapshot fields, and app/user overrides win without letting a backend
+mutate theme state directly. The resolver also returns
+`ResolvedThemePreferences`, which records the effective font family, color
+scheme, type sizes, line height, scroll multipliers, and the boolean evidence
+for which system or user preference inputs were consumed.
 Font family source, text-size source, font-weight adjustment, vertical and
 horizontal scroll factors, scrollbar size, touch slop, scroll friction, and
 preferred locale source are recorded when the platform exposes them. Input
