@@ -215,25 +215,27 @@ surface roles. The root helpers `default_theme_profile_name`,
 CLI output, and artifacts can check the same contract without giving backend
 adapters any policy authority.
 
-OS-derived typography, appearance, accessibility, scrolling, and accent-color
-preferences follow the same edge-to-core rule. Native adapters collect a
-`PlatformSystemSettingsSnapshot` from their platform APIs, then the core applies
-it through the pure
+OS-derived typography, preferred locale, appearance, accessibility, scrolling,
+and accent-color preferences follow the same edge-to-core rule. Native adapters
+collect a `PlatformSystemSettingsSnapshot` from their platform APIs, then the
+core applies it through the pure
 `apply_system_theme_preferences(Theme, PlatformSystemSettingsSnapshot,
 ThemePreferenceOverrides)` helper. Package defaults such as Pretendard remain
 explicit theme inputs, OS font metrics and scroll policy arrive as immutable
 snapshot fields, and app/user overrides win without letting a backend mutate
 theme state directly.
 Font family source, text-size source, font-weight adjustment, vertical and
-horizontal scroll factors, scrollbar size, touch slop, and scroll friction are
-recorded when the platform exposes them. macOS uses CoreText for the resolved
-system family, `NSFont.systemFontSize` / `smallSystemFontSize` for UI text
+horizontal scroll factors, scrollbar size, touch slop, scroll friction, and
+preferred locale source are recorded when the platform exposes them. macOS uses
+CoreText for the resolved system family, `NSFont.systemFontSize` /
+`smallSystemFontSize` for UI text
 sizes, `NSEvent.hasPreciseScrollingDeltas` semantics for line-vs-pixel wheel
-normalization, and `NSScroller.preferredScrollerStyle` plus regular-control
-scroller width for scrollbar policy,
+normalization, `NSScroller.preferredScrollerStyle` plus regular-control
+scroller width for scrollbar policy, and `NSLocale.preferredLanguages` for the
+initial language tag.
 Windows uses `SystemParametersInfoW(SPI_GETNONCLIENTMETRICS)`,
-`SPI_GETWHEELSCROLLLINES`, `SPI_GETWHEELSCROLLCHARS`, `GetSystemMetrics`, and
-DWM, and Android uses `Resources.getConfiguration()` plus
+`SPI_GETWHEELSCROLLLINES`, `SPI_GETWHEELSCROLLCHARS`, `GetSystemMetrics`,
+`GetUserDefaultLocaleName`, and DWM. Android uses `Resources.getConfiguration()` plus
 `ViewConfiguration`. The base theme keeps Pretendard as the product default;
 switching to the OS family is an explicit app override, while OS
 body/heading/small text metrics, line height, and axis-specific scroll
@@ -930,9 +932,9 @@ material/runtime extensions.
 - **Linux / other desktop**: shared stub backend
 
 All native capability payloads include `system_settings`: macOS uses
-CoreText/`NSFont`/`NSEvent`/`NSScroller`/`NSWorkspace`, Windows uses
-`SystemParametersInfoW` plus DWM and the Personalize app-theme registry value,
-and Android uses Java
+CoreText/`NSFont`/`NSEvent`/`NSScroller`/`NSLocale`/`NSWorkspace`, Windows uses
+`SystemParametersInfoW` plus DWM, `GetUserDefaultLocaleName`, and the
+Personalize app-theme registry value, and Android uses Java
 resource/configuration APIs reached through the GameActivity edge. WASI and the
 stub backend publish deterministic fallback values.
 `scroll_delta_multiplier` and `scroll_horizontal_delta_multiplier` are pure

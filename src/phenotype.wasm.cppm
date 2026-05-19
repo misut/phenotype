@@ -42,6 +42,8 @@ inline ::phenotype::diag::PlatformCapabilitiesSnapshot debug_capabilities() {
         .scroll_page_mode = false,
         .scroll_delta_multiplier = 1.0f,
         .scroll_source = "fallback",
+        .preferred_locale = "en",
+        .preferred_locale_source = "wasi-fallback",
         .color_scheme = "light",
         .color_scheme_source = "wasi-fallback",
         .accessibility_source = "wasi-fallback",

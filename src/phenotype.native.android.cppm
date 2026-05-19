@@ -478,6 +478,19 @@ inline jstring make_jstring_utf8(JNIEnv* env, char const* text,
         static_cast<jsize>(u16->size()));
 }
 
+inline std::string jstring_to_utf8(JNIEnv* env, jstring value) {
+    if (!env || !value)
+        return {};
+    char const* raw = env->GetStringUTFChars(value, nullptr);
+    if (!raw) {
+        check_and_clear_exception(env);
+        return {};
+    }
+    std::string out{raw};
+    env->ReleaseStringUTFChars(value, raw);
+    return out;
+}
+
 // Packs phenotype::Color (0..255 RGBA) into the 0xAARRGGBB int
 // android.graphics.Color uses.
 inline jint pack_android_color(float r, float g, float b, float a) {
@@ -6505,6 +6518,8 @@ struct AndroidConfigurationPreferences {
     bool has_font_weight_adjustment = false;
     int ui_mode = 0;
     bool has_ui_mode = false;
+    std::string preferred_locale;
+    bool has_preferred_locale = false;
 };
 
 inline std::optional<AndroidConfigurationPreferences>
@@ -6604,6 +6619,48 @@ android_configuration_preferences() {
         preferences.ui_mode = env->GetIntField(configuration, ui_mode_id);
         if (!check_and_clear_exception(env))
             preferences.has_ui_mode = true;
+    } else {
+        check_and_clear_exception(env);
+    }
+
+    jmethodID get_locales = env->GetMethodID(
+        configuration_cls,
+        "getLocales",
+        "()Landroid/os/LocaleList;");
+    if (get_locales && !check_and_clear_exception(env)) {
+        jobject locales = env->CallObjectMethod(configuration, get_locales);
+        if (locales && !check_and_clear_exception(env)) {
+            jclass locales_cls = env->GetObjectClass(locales);
+            if (locales_cls && !check_and_clear_exception(env)) {
+                jmethodID to_language_tags = env->GetMethodID(
+                    locales_cls,
+                    "toLanguageTags",
+                    "()Ljava/lang/String;");
+                if (to_language_tags && !check_and_clear_exception(env)) {
+                    auto tags = static_cast<jstring>(
+                        env->CallObjectMethod(locales, to_language_tags));
+                    if (tags && !check_and_clear_exception(env)) {
+                        auto value = jstring_to_utf8(env, tags);
+                        auto comma = value.find(',');
+                        if (comma != std::string::npos)
+                            value.resize(comma);
+                        if (!value.empty()) {
+                            preferences.preferred_locale = std::move(value);
+                            preferences.has_preferred_locale = true;
+                        }
+                    } else {
+                        check_and_clear_exception(env);
+                    }
+                    drop(tags);
+                } else {
+                    check_and_clear_exception(env);
+                }
+            }
+            drop(locales_cls);
+        } else {
+            check_and_clear_exception(env);
+        }
+        drop(locales);
     } else {
         check_and_clear_exception(env);
     }
@@ -6842,6 +6899,7 @@ android_system_settings_snapshot() {
     snapshot.font_scale = 1.0f;
     snapshot.text_size_source =
         "fallback-until-android-configuration-font-scale-is-plumbed";
+    snapshot.preferred_locale_source = "android-fallback";
     snapshot.preferred_scroller_style = "overlay";
     snapshot.overlay_scrollbars = true;
     snapshot.scroll_line_height = snapshot.body_font_size
@@ -6878,6 +6936,11 @@ android_system_settings_snapshot() {
                 config->font_weight_adjustment;
             snapshot.font_weight_source =
                 "Resources.getConfiguration().fontWeightAdjustment";
+        }
+        if (config->has_preferred_locale) {
+            snapshot.preferred_locale = config->preferred_locale;
+            snapshot.preferred_locale_source =
+                "Resources.getConfiguration().getLocales().toLanguageTags";
         }
         snapshot.body_font_size = 16.0f * snapshot.font_scale;
         snapshot.heading_font_size =

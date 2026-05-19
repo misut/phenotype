@@ -90,7 +90,9 @@ Both file explorer profiles also expose font-family, font-scale, exact
 body/heading/small font-size, line-height, vertical scroll-speed, and horizontal
 scroll-speed preference inputs through the shared model, plus a
 `system-scroll-metrics` switch that lets artifacts prove whether static
-platform scroll multipliers are applied. Native examples apply those app
+platform scroll multipliers are applied. Native examples also use the OS
+preferred locale as the startup language when the package declares a matching
+locale and no app locale override is present. Native examples apply those app
 overrides after the platform system-settings snapshot is captured, so artifacts
 can distinguish OS defaults from user-selected theme changes. Desktop and mobile
 refresh that native snapshot at update-boundary theme sync, which keeps
@@ -325,7 +327,8 @@ the platform `system_settings` snapshot with app/user overrides and the
 effective theme values used at launch. This keeps OS font family source, OS font
 scale, font-weight adjustment, OS scroll policy/factors, separate OS and app
 vertical/horizontal scroll multipliers, the `apply_system_scroll_metrics`
-switch, system accent capture, Pretendard package defaults, and direct
+switch, OS preferred locale/source, system accent capture, Pretendard package
+defaults, and direct
 environment overrides debuggable from the same artifact bundle. Pretendard stays
 the default family; choosing the OS family is an
 explicit app override, while system appearance and accent are applied by the

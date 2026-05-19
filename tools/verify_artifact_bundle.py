@@ -269,6 +269,8 @@ PLATFORM_SYSTEM_SETTING_STRING_FIELDS = (
     "font_weight_source",
     "preferred_scroller_style",
     "scroll_source",
+    "preferred_locale",
+    "preferred_locale_source",
     "color_scheme",
     "color_scheme_source",
     "appearance_name",

@@ -516,15 +516,18 @@ still pass: theme drift, material planning, backend execution, and example
 geometry now have separate JSON owners.
 
 `debug.platform_capabilities.system_settings` records OS-derived typography,
-accent, and scrolling inputs before the theme overlay runs. macOS fills this
-from CoreText, `NSFont.systemFontSize` / `smallSystemFontSize`,
-`NSEvent.hasPreciseScrollingDeltas`, `NSScroller.preferredScrollerStyle`, and
-regular-control scroller width; Windows from `SystemParametersInfoW`, DWM, and
-`GetSystemMetrics`; Android from `Resources.getConfiguration()` and
-`ViewConfiguration`; and unsupported targets publish deterministic fallback
-values. Accessibility display inputs sit next to the renderer details:
+preferred locale, accent, and scrolling inputs before the theme overlay runs.
+macOS fills this from CoreText, `NSFont.systemFontSize` / `smallSystemFontSize`,
+`NSEvent.hasPreciseScrollingDeltas`, `NSScroller.preferredScrollerStyle`,
+`NSLocale.preferredLanguages`, and
+regular-control scroller width; Windows from `SystemParametersInfoW`, DWM,
+`GetSystemMetrics`, and `GetUserDefaultLocaleName`; Android from
+`Resources.getConfiguration()` and `ViewConfiguration`; and unsupported targets
+publish deterministic fallback values. Accessibility display inputs sit next to
+the renderer details:
 macOS uses `NSWorkspace`, Windows uses `SystemParametersInfoW`, and Android uses
-public animation-scale and UI-contrast APIs. File explorer artifacts mirror the result under
+public animation-scale and UI-contrast APIs. File explorer artifacts mirror the
+result under
 `application.file_explorer.preferences`: `system_settings` is the edge snapshot,
 `app_overrides` is the pure override input, and `effective_theme` is what the
 example applied before rendering. Use this block when text size, family source,
@@ -533,7 +536,9 @@ behavior, touch slop, or accent color looks wrong but the material/icon/resource
 contracts are green. The vertical and horizontal scroll multipliers are separate
 so Android `ViewConfiguration` factors, Windows
 `SPI_GETWHEELSCROLLCHARS`, and macOS trackpad/wheel paths can be diagnosed
-without replaying native input. Pretendard remains the package default font
+without replaying native input. The startup locale resolves an explicit app
+override first, then the OS preferred locale, then the package default locale.
+Pretendard remains the package default font
 family; file explorer examples opt in to system appearance and accent by
 default, while the OS font family is still an explicit app/user override.
 `app_overrides.apply_system_scroll_metrics=false` disables static platform

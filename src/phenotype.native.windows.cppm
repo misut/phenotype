@@ -6009,6 +6009,18 @@ inline void apply_windows_appearance_to_system_snapshot(
     snapshot.color_scheme_source = "fallback";
 }
 
+inline std::string windows_preferred_locale() {
+    wchar_t locale_name[LOCALE_NAME_MAX_LENGTH]{};
+    int const chars = GetUserDefaultLocaleName(
+        locale_name,
+        LOCALE_NAME_MAX_LENGTH);
+    if (chars <= 1)
+        return {};
+    auto length = static_cast<std::size_t>(chars - 1);
+    return cppx::unicode::wide_to_utf8(
+        std::wstring_view{locale_name, length}).value_or(std::string{});
+}
+
 inline json::Value windows_accessibility_display_options_json(
         WindowsAccessibilityDisplayOptions const& options) {
     json::Object accessibility;
@@ -6036,6 +6048,7 @@ windows_system_settings_snapshot() {
         "SystemParametersInfoW(SPI_GETNONCLIENTMETRICS).lfMessageFont";
     snapshot.scroll_source =
         "SystemParametersInfoW(SPI_GETWHEELSCROLLLINES/SPI_GETWHEELSCROLLCHARS)";
+    snapshot.preferred_locale_source = "GetUserDefaultLocaleName";
     snapshot.font_family = "Segoe UI";
     snapshot.body_font_size = 12.0f;
     snapshot.heading_font_size = 15.5f;
@@ -6108,6 +6121,8 @@ windows_system_settings_snapshot() {
         snapshot.accent_color_source = "DwmGetColorizationColor";
         snapshot.accent_color_opaque = opaque != FALSE;
     }
+    if (auto locale = windows_preferred_locale(); !locale.empty())
+        snapshot.preferred_locale = std::move(locale);
     return snapshot;
 }
 

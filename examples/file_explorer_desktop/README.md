@@ -299,7 +299,8 @@ ownership without drawing duplicate traffic lights.
 The example also applies the native `system_settings` snapshot before
 `set_theme`: Pretendard remains the package default, OS font size metrics and
 scroll policy become pure theme inputs, system appearance/accent are applied by
-default, OS font family remains an opt-in override, and user overrides win.
+default, OS preferred locale seeds the startup language when supported, OS font
+family remains an opt-in override, and user overrides win.
 Direct launches can use
 `PHENOTYPE_FILE_EXPLORER_FONT_FAMILY`, `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT`,
 `PHENOTYPE_FILE_EXPLORER_USE_SYSTEM_FONT_METRICS`,

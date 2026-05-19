@@ -281,6 +281,8 @@ void test_snapshot_shape() {
     (void)system_settings.at("scroll_friction").as_float();
     (void)system_settings.at("scroll_delta_multiplier").as_float();
     (void)system_settings.at("scroll_horizontal_delta_multiplier").as_float();
+    assert(system_settings.at("preferred_locale").is_string());
+    assert(system_settings.at("preferred_locale_source").is_string());
     assert(system_settings.at("color_scheme").is_string());
     assert(system_settings.at("color_scheme_source").is_string());
     assert(system_settings.at("appearance_name").is_string());
