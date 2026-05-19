@@ -492,7 +492,7 @@
     },
     {
       "path": "application.file_explorer.resource_system.locales.required_key_count",
-      "equals": 62
+      "equals": 66
     },
     {
       "path": "application.file_explorer.resource_system.debug.verifier_declared",

@@ -141,9 +141,9 @@ policy changes can be reflected without restarting the demo.
 File reads and environment access remain example edge work; parsing and input
 application stay in `file_explorer_shared`.
 The mobile Create tab exposes the same preference inputs as app buttons
-(`System`, `Pretendard`, OS/app text size, `Text +/-`, `Scroll +/-`, and
-system/app scroll policy) so touch changes and CLI-driven startup replay share
-one model contract.
+(`System`, `Pretendard`, OS/app text size, `Text +/-`, `Body +/-`,
+`Line +/-`, `Scroll +/-`, and system/app scroll policy) so touch changes and
+CLI-driven startup replay share one model contract.
 
 The checked-in manifest requires stable labels and roles, every public
 `MaterialKind`, resolved material plans, semantic/runtime material parity, and

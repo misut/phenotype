@@ -348,12 +348,13 @@ The native example captures OS settings before the first frame and refreshes
 them when app input triggers theme sync, so font, appearance, accent, and scroll
 policy changes can be reflected without restarting the demo.
 The desktop More menu exposes the same family, OS/package text-size policy,
-text scale, appearance, and scroll controls as shared file explorer inputs.
+text scale, body-size, line-height, appearance, and scroll controls as shared
+file explorer inputs.
 File reads and environment access remain example edge work; parsing and input
 application stay in `file_explorer_shared`.
-The desktop More menu exposes the same preference inputs as native buttons
-(`System`, `Pretendard`, `Text +/-`, and `Scroll +/-`) so interactive changes
-and CLI-driven startup replay share one model contract.
+The native buttons (`System`, `Pretendard`, `Text +/-`, `Body +/-`,
+`Line +/-`, and `Scroll +/-`) share the same model contract as CLI-driven
+startup replay.
 The desktop canvas labels read `Theme::default_font_family`, so OS/user font
 family overrides affect both widget text and Finder-style custom drawing.
 

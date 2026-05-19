@@ -7111,6 +7111,10 @@ struct ExplorerLabels {
     std::string preferences_package_text_size = "App Size";
     std::string preferences_text_larger = "Text +";
     std::string preferences_text_smaller = "Text -";
+    std::string preferences_body_larger = "Body +";
+    std::string preferences_body_smaller = "Body -";
+    std::string preferences_line_height_taller = "Line +";
+    std::string preferences_line_height_tighter = "Line -";
     std::string preferences_scroll_faster = "Scroll +";
     std::string preferences_scroll_slower = "Scroll -";
     std::string preferences_horizontal_scroll_faster = "H Scroll +";
@@ -7231,6 +7235,10 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"preferences.package_text_size", "App Size"},
         {"preferences.text_larger", "Text +"},
         {"preferences.text_smaller", "Text -"},
+        {"preferences.body_larger", "Body +"},
+        {"preferences.body_smaller", "Body -"},
+        {"preferences.line_height_taller", "Line +"},
+        {"preferences.line_height_tighter", "Line -"},
         {"preferences.scroll_faster", "Scroll +"},
         {"preferences.scroll_slower", "Scroll -"},
         {"preferences.horizontal_scroll_faster", "H Scroll +"},
@@ -7300,6 +7308,10 @@ inline phenotype::ResourceCatalog file_explorer_resource_catalog(
         {"preferences.package_text_size", "앱 크기"},
         {"preferences.text_larger", "글자 +"},
         {"preferences.text_smaller", "글자 -"},
+        {"preferences.body_larger", "본문 +"},
+        {"preferences.body_smaller", "본문 -"},
+        {"preferences.line_height_taller", "행간 +"},
+        {"preferences.line_height_tighter", "행간 -"},
         {"preferences.scroll_faster", "스크롤 +"},
         {"preferences.scroll_slower", "스크롤 -"},
         {"preferences.horizontal_scroll_faster", "가로 스크롤 +"},
@@ -7467,6 +7479,18 @@ inline ExplorerLabels file_explorer_labels(
     labels.preferences_text_smaller = get(
         "preferences.text_smaller",
         labels.preferences_text_smaller);
+    labels.preferences_body_larger = get(
+        "preferences.body_larger",
+        labels.preferences_body_larger);
+    labels.preferences_body_smaller = get(
+        "preferences.body_smaller",
+        labels.preferences_body_smaller);
+    labels.preferences_line_height_taller = get(
+        "preferences.line_height_taller",
+        labels.preferences_line_height_taller);
+    labels.preferences_line_height_tighter = get(
+        "preferences.line_height_tighter",
+        labels.preferences_line_height_tighter);
     labels.preferences_scroll_faster = get(
         "preferences.scroll_faster",
         labels.preferences_scroll_faster);

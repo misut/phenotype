@@ -208,6 +208,30 @@ ExplorerInputMessage font_scale_step_message(
         std::to_string(value));
 }
 
+ExplorerInputMessage body_font_size_step_message(
+        file_explorer_demo::ExplorerState const& explorer,
+        float delta) {
+    auto const base = explorer.theme_preferences.body_font_size > 0.0f
+        ? explorer.theme_preferences.body_font_size
+        : explorer.effective_body_font_size;
+    auto value = std::clamp(base + delta, 8.0f, 40.0f);
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetBodyFontSize,
+        std::to_string(value));
+}
+
+ExplorerInputMessage line_height_step_message(
+        file_explorer_demo::ExplorerState const& explorer,
+        float delta) {
+    auto const base = explorer.theme_preferences.line_height_ratio > 0.0f
+        ? explorer.theme_preferences.line_height_ratio
+        : explorer.effective_line_height_ratio;
+    auto value = std::clamp(base + delta, 1.0f, 2.2f);
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetLineHeightRatio,
+        std::to_string(value));
+}
+
 ExplorerInputMessage scroll_speed_step_message(
         file_explorer_demo::ExplorerState const& explorer,
         float delta) {
@@ -2234,7 +2258,7 @@ void finder_more_actions(State const& state,
             "More Actions Menu");
         options.kind = MaterialKind::Regular;
         options.max_width = 376.0f;
-        options.fixed_height = 284.0f;
+        options.fixed_height = 328.0f;
         options.border_radius = k_toolbar_group_radius;
         layout::material_surface(
             options,
@@ -2301,6 +2325,32 @@ void finder_more_actions(State const& state,
                             true,
                             icons::Symbol::ChevronDown,
                             0x6714u);
+                    }, SpaceToken::Xs);
+                    layout::row([&] {
+                        more_action_item(
+                            state.labels.preferences_body_larger.c_str(),
+                            body_font_size_step_message(state.explorer, 1.0f),
+                            true,
+                            icons::Symbol::Plus,
+                            0x6721u);
+                        more_action_item(
+                            state.labels.preferences_body_smaller.c_str(),
+                            body_font_size_step_message(state.explorer, -1.0f),
+                            true,
+                            icons::Symbol::ChevronDown,
+                            0x6722u);
+                        more_action_item(
+                            state.labels.preferences_line_height_taller.c_str(),
+                            line_height_step_message(state.explorer, 0.1f),
+                            true,
+                            icons::Symbol::List,
+                            0x6723u);
+                        more_action_item(
+                            state.labels.preferences_line_height_tighter.c_str(),
+                            line_height_step_message(state.explorer, -0.1f),
+                            true,
+                            icons::Symbol::Columns,
+                            0x6724u);
                     }, SpaceToken::Xs);
                     layout::row([&] {
                         auto const* horizontal_faster =

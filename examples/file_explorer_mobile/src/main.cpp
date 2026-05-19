@@ -584,6 +584,30 @@ ExplorerInputMessage font_scale_step_message(
         std::to_string(value));
 }
 
+ExplorerInputMessage body_font_size_step_message(
+        file_explorer_demo::ExplorerState const& explorer,
+        float delta) {
+    auto const base = explorer.theme_preferences.body_font_size > 0.0f
+        ? explorer.theme_preferences.body_font_size
+        : explorer.effective_body_font_size;
+    auto value = std::clamp(base + delta, 8.0f, 40.0f);
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetBodyFontSize,
+        std::to_string(value));
+}
+
+ExplorerInputMessage line_height_step_message(
+        file_explorer_demo::ExplorerState const& explorer,
+        float delta) {
+    auto const base = explorer.theme_preferences.line_height_ratio > 0.0f
+        ? explorer.theme_preferences.line_height_ratio
+        : explorer.effective_line_height_ratio;
+    auto value = std::clamp(base + delta, 1.0f, 2.2f);
+    return preference_message(
+        file_explorer_demo::ExplorerInputKind::SetLineHeightRatio,
+        std::to_string(value));
+}
+
 ExplorerInputMessage scroll_speed_step_message(
         file_explorer_demo::ExplorerState const& explorer,
         float delta) {
@@ -1096,6 +1120,22 @@ void create_tab(State const& state) {
             widget::button<Msg>(
                 state.labels.preferences_text_smaller,
                 font_scale_step_message(explorer, -0.1f));
+        }, SpaceToken::Xs);
+        layout::row([&] {
+            widget::button<Msg>(
+                state.labels.preferences_body_larger,
+                body_font_size_step_message(explorer, 1.0f));
+            widget::button<Msg>(
+                state.labels.preferences_body_smaller,
+                body_font_size_step_message(explorer, -1.0f));
+        }, SpaceToken::Xs);
+        layout::row([&] {
+            widget::button<Msg>(
+                state.labels.preferences_line_height_taller,
+                line_height_step_message(explorer, 0.1f));
+            widget::button<Msg>(
+                state.labels.preferences_line_height_tighter,
+                line_height_step_message(explorer, -0.1f));
         }, SpaceToken::Xs);
         layout::row([&] {
             widget::button<Msg>(
