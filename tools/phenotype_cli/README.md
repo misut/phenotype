@@ -25,7 +25,8 @@ turning `main.cpp` into every subsystem at once:
   likely-layer/suggestion reporting for `phenotype artifact ...` and
   `phenotype observe`.
 - `phenotype_cli.contracts` owns pure theme and IO contract checks/JSON for
-  `phenotype theme contract` and `phenotype io contract`.
+  `phenotype theme contract`, `phenotype theme resolve`, and
+  `phenotype io contract`.
 - `phenotype_cli.file_explorer` owns file explorer drive JSON, chrome/native
   window control JSON, expectation JSON, keyboard/focus model JSON, and
   localized label emission.
@@ -85,6 +86,14 @@ The initial scope is intentionally narrow:
   faster local iteration before running the full gate;
   `tools/verify_file_explorer_artifacts.sh` is a thin compatibility wrapper
   that builds and delegates to this command.
+- `phenotype theme resolve` runs the same pure theme preference resolver used
+  by examples without importing the native `phenotype` package. It accepts
+  explicit OS snapshot fields and app overrides, then reports the effective
+  font family, color scheme, text metrics, scroll multipliers, and resolution
+  booleans as JSON. OS fields include availability bits, so fallback defaults
+  remain distinct from preferences actually supplied by a backend or test.
+  This is the CLI-friendly path for checking
+  `system_settings + app_overrides -> effective_theme` on Linux CI.
 - `phenotype package inspect <path>` checks the proposed package manifest,
   application/debug metadata, declared resource counts, referenced `source`
   files, CLI-owned debug verifier metadata, app-icon SVG policy, Pretendard

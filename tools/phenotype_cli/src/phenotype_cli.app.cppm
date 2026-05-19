@@ -1031,6 +1031,9 @@ int run(int argc, char** argv) {
         == std::vector<std::string>{"phenotype", "theme", "contract"})
         return run_theme_contract(*parsed);
     if (parsed->command_path
+        == std::vector<std::string>{"phenotype", "theme", "resolve"})
+        return run_theme_resolve(*parsed);
+    if (parsed->command_path
         == std::vector<std::string>{"phenotype", "io", "contract"})
         return run_io_contract(*parsed);
     if (parsed->command_path

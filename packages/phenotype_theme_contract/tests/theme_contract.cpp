@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cmath>
 #include <cstdio>
 #include <string_view>
 
@@ -51,5 +52,78 @@ int main() {
     assert(contract.radius.lg == 22.0f);
     assert(contract.typography.default_font_family == "Pretendard");
     assert(theme::glass_surface_roles().size() == 7);
+
+    auto base = theme::theme_preference_base(contract);
+    auto default_resolved = theme::resolve_theme_preferences(base, {});
+    assert(!default_resolved.used_system_font_scale);
+    assert(!default_resolved.used_system_line_height);
+    assert(!default_resolved.used_system_scroll_metrics);
+    assert(!default_resolved.used_system_color_scheme);
+    theme::SystemThemePreferenceSnapshot unavailable_system{};
+    unavailable_system.color_scheme = "dark";
+    unavailable_system.font_scale = 1.4f;
+    unavailable_system.line_height_ratio = 1.8f;
+    unavailable_system.scroll_delta_multiplier = 2.0f;
+    theme::ThemePreferenceOverrides unavailable_overrides{};
+    unavailable_overrides.prefer_system_color_scheme = true;
+    auto unavailable_resolved = theme::resolve_theme_preferences(
+        base,
+        unavailable_system,
+        unavailable_overrides);
+    assert(unavailable_resolved.effective_color_scheme == "light");
+    assert(!unavailable_resolved.used_system_color_scheme);
+    assert(!unavailable_resolved.used_system_font_scale);
+    assert(!unavailable_resolved.used_system_line_height);
+    assert(!unavailable_resolved.used_system_scroll_metrics);
+
+    theme::SystemThemePreferenceSnapshot system{};
+    system.font_family = "System UI";
+    system.font_scale = 1.25f;
+    system.line_height_ratio = 1.7f;
+    system.scroll_delta_multiplier = 1.25f;
+    system.scroll_horizontal_delta_multiplier = 0.5f;
+    system.color_scheme = "dark";
+    system.font_scale_available = true;
+    system.line_height_available = true;
+    system.scroll_metrics_available = true;
+    system.color_scheme_available = true;
+    system.accent_color_available = true;
+    system.accent_color = {88, 86, 214, 255};
+
+    theme::ThemePreferenceOverrides overrides{};
+    overrides.prefer_system_font_family = true;
+    overrides.prefer_system_color_scheme = true;
+    overrides.apply_system_font_metrics = false;
+    overrides.apply_system_accent_color = true;
+    overrides.font_scale = 1.2f;
+    overrides.scroll_delta_multiplier = 1.5f;
+    overrides.scroll_horizontal_delta_multiplier = 2.0f;
+
+    auto resolved = theme::resolve_theme_preferences(
+        base,
+        system,
+        overrides,
+        "test-theme-resolve");
+    assert(resolved.source == "test-theme-resolve");
+    assert(resolved.effective_font_family == "System UI");
+    assert(resolved.effective_color_scheme == "dark");
+    assert(resolved.used_system_font_family);
+    assert(resolved.used_system_color_scheme);
+    assert(!resolved.used_system_font_metrics);
+    assert(resolved.used_system_font_scale);
+    assert(resolved.used_user_font_scale);
+    assert(resolved.used_system_line_height);
+    assert(resolved.used_system_scroll_metrics);
+    assert(resolved.used_user_scroll_scale);
+    assert(resolved.used_system_accent_color);
+    assert(std::fabs(resolved.effective_body_font_size - 24.0f) < 0.001f);
+    assert(std::fabs(resolved.effective_heading_font_size - 33.6f) < 0.001f);
+    assert(std::fabs(resolved.effective_small_font_size - 21.6f) < 0.001f);
+    assert(std::fabs(resolved.effective_line_height_ratio - 1.7f) < 0.001f);
+    assert(std::fabs(resolved.effective_scroll_delta_multiplier - 1.875f)
+           < 0.001f);
+    assert(std::fabs(resolved.effective_scroll_horizontal_delta_multiplier
+                     - 1.5f)
+           < 0.001f);
     std::puts("PASS: pure theme contract metadata");
 }

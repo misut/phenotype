@@ -356,8 +356,10 @@ void test_system_theme_preferences_are_pure_overlays() {
     system.font_family = "System UI";
     system.font_scale = 1.25f;
     system.line_height_ratio = 1.6f;
+    system.text_size_source = "test-text-size";
     system.scroll_delta_multiplier = 1.25f;
     system.scroll_horizontal_delta_multiplier = 0.5f;
+    system.scroll_source = "test-scroll";
     system.color_scheme = "dark";
     system.color_scheme_source = "test-appearance";
     system.accent_color_available = true;
@@ -375,7 +377,13 @@ void test_system_theme_preferences_are_pure_overlays() {
         system,
         overrides,
         "test-preferences");
+    auto pure_resolved = theme_contract::resolve_theme_preferences(
+        theme_contract_preference_base(theme),
+        theme_contract_system_snapshot(system),
+        overrides,
+        "test-preferences");
     assert(resolved.source == "test-preferences");
+    assert(pure_resolved.source == resolved.source);
     assert(resolved.theme.default_font_family == applied.default_font_family);
     assert(std::fabs(resolved.effective_body_font_size - 21.0f) < 0.001f);
     assert(std::fabs(resolved.effective_heading_font_size - 27.0f) < 0.001f);
@@ -391,6 +399,13 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert(resolved.used_system_line_height);
     assert(resolved.used_system_scroll_metrics);
     assert(resolved.used_user_scroll_scale);
+    assert(pure_resolved.used_system_scroll_metrics
+           == resolved.used_system_scroll_metrics);
+    assert(pure_resolved.used_user_scroll_scale
+           == resolved.used_user_scroll_scale);
+    assert(std::fabs(pure_resolved.effective_body_font_size
+                     - resolved.effective_body_font_size)
+           < 0.001f);
     assert(applied.default_font_family == "Pretendard");
     assert(std::fabs(applied.body_font_size - 21.0f) < 0.001f);
     assert(std::fabs(applied.heading_font_size - 27.0f) < 0.001f);
@@ -399,6 +414,29 @@ void test_system_theme_preferences_are_pure_overlays() {
     assert(std::fabs(applied.scroll_horizontal_delta_multiplier - 1.5f)
            < 0.001f);
     assert(applied.accent == theme.accent);
+
+    PlatformSystemSettingsSnapshot fallback_system{};
+    fallback_system.color_scheme = "dark";
+    fallback_system.font_scale = 1.4f;
+    fallback_system.line_height_ratio = 1.8f;
+    fallback_system.scroll_delta_multiplier = 2.0f;
+    ThemePreferenceOverrides fallback_overrides{};
+    fallback_overrides.prefer_system_color_scheme = true;
+    auto fallback_resolved = resolve_system_theme_preferences(
+        theme,
+        fallback_system,
+        fallback_overrides,
+        "fallback-source");
+    assert(fallback_resolved.effective_color_scheme == "light");
+    assert(!fallback_resolved.used_system_color_scheme);
+    assert(!fallback_resolved.used_system_font_scale);
+    assert(!fallback_resolved.used_system_line_height);
+    assert(!fallback_resolved.used_system_scroll_metrics);
+    assert(std::fabs(fallback_resolved.theme.body_font_size - 14.0f) < 0.001f);
+    assert(std::fabs(fallback_resolved.theme.line_height_ratio - 1.6f)
+           < 0.001f);
+    assert(std::fabs(fallback_resolved.theme.scroll_delta_multiplier - 1.0f)
+           < 0.001f);
 
     overrides.apply_system_scroll_metrics = false;
     applied = apply_system_theme_preferences(theme, system, overrides);

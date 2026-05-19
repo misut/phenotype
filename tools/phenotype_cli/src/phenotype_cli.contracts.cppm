@@ -197,6 +197,263 @@ auto theme_contract_json(std::span<Check const> checks) -> std::string {
         checks_json(checks));
 }
 
+auto parse_float_option(std::string_view text,
+                        std::string_view option_name)
+        -> std::expected<float, std::string> {
+    if (text.empty()) {
+        return std::unexpected{
+            std::format("--{} requires a numeric value", option_name)};
+    }
+    float value = 0.0f;
+    auto first = text.data();
+    auto last = text.data() + text.size();
+    auto [ptr, ec] = std::from_chars(first, last, value);
+    if (ec != std::errc{} || ptr != last || !std::isfinite(value)) {
+        return std::unexpected{
+            std::format("--{} must be a finite number", option_name)};
+    }
+    return value;
+}
+
+auto apply_float_option(cppx::cli::Invocation const& invocation,
+                        std::string_view name,
+                        float& target) -> std::expected<void, std::string> {
+    auto value = invocation.value(std::string{name});
+    if (!value)
+        return {};
+    auto parsed = parse_float_option(*value, name);
+    if (!parsed)
+        return std::unexpected{parsed.error()};
+    target = *parsed;
+    return {};
+}
+
+auto theme_preference_base_json(theme_contract::ThemePreferenceBase const& base)
+        -> std::string {
+    return std::format(
+        "{{\"default_font_family\":{},\"body_font_size\":{},"
+        "\"heading_font_size\":{},\"small_font_size\":{},"
+        "\"line_height_ratio\":{},\"scroll_delta_multiplier\":{},"
+        "\"scroll_horizontal_delta_multiplier\":{}}}",
+        json_string(base.default_font_family),
+        base.body_font_size,
+        base.heading_font_size,
+        base.small_font_size,
+        base.line_height_ratio,
+        base.scroll_delta_multiplier,
+        base.scroll_horizontal_delta_multiplier);
+}
+
+auto system_theme_preferences_json(
+        theme_contract::SystemThemePreferenceSnapshot const& system)
+        -> std::string {
+    return std::format(
+        "{{\"font_family\":{},\"body_font_size\":{},"
+        "\"heading_font_size\":{},\"small_font_size\":{},"
+        "\"line_height_ratio\":{},\"font_scale\":{},"
+        "\"scroll_delta_multiplier\":{},"
+        "\"scroll_horizontal_delta_multiplier\":{},"
+        "\"color_scheme\":{},\"font_scale_available\":{},"
+        "\"line_height_available\":{},\"scroll_metrics_available\":{},"
+        "\"color_scheme_available\":{},\"accent_color_available\":{},"
+        "\"accent_color\":{}}}",
+        json_string(system.font_family),
+        system.body_font_size,
+        system.heading_font_size,
+        system.small_font_size,
+        system.line_height_ratio,
+        system.font_scale,
+        system.scroll_delta_multiplier,
+        system.scroll_horizontal_delta_multiplier,
+        json_string(system.color_scheme),
+        system.font_scale_available ? "true" : "false",
+        system.line_height_available ? "true" : "false",
+        system.scroll_metrics_available ? "true" : "false",
+        system.color_scheme_available ? "true" : "false",
+        system.accent_color_available ? "true" : "false",
+        theme_color_json(system.accent_color));
+}
+
+auto theme_preference_overrides_json(
+        theme_contract::ThemePreferenceOverrides const& overrides)
+        -> std::string {
+    return std::format(
+        "{{\"font_family\":{},\"color_scheme\":{},\"font_scale\":{},"
+        "\"body_font_size\":{},\"heading_font_size\":{},"
+        "\"small_font_size\":{},\"line_height_ratio\":{},"
+        "\"scroll_delta_multiplier\":{},"
+        "\"scroll_horizontal_delta_multiplier\":{},"
+        "\"prefer_system_font_family\":{},"
+        "\"prefer_system_color_scheme\":{},"
+        "\"apply_system_font_metrics\":{},"
+        "\"apply_system_font_scale\":{},"
+        "\"apply_system_scroll_metrics\":{},"
+        "\"apply_system_accent_color\":{}}}",
+        json_string(overrides.font_family),
+        json_string(overrides.color_scheme),
+        overrides.font_scale,
+        overrides.body_font_size,
+        overrides.heading_font_size,
+        overrides.small_font_size,
+        overrides.line_height_ratio,
+        overrides.scroll_delta_multiplier,
+        overrides.scroll_horizontal_delta_multiplier,
+        overrides.prefer_system_font_family ? "true" : "false",
+        overrides.prefer_system_color_scheme ? "true" : "false",
+        overrides.apply_system_font_metrics ? "true" : "false",
+        overrides.apply_system_font_scale ? "true" : "false",
+        overrides.apply_system_scroll_metrics ? "true" : "false",
+        overrides.apply_system_accent_color ? "true" : "false");
+}
+
+auto resolved_theme_preferences_json(
+        theme_contract::ResolvedThemePreferences const& resolved)
+        -> std::string {
+    return std::format(
+        "{{\"source\":{},\"requested_color_scheme\":{},"
+        "\"effective_theme\":{{\"font_family\":{},"
+        "\"color_scheme\":{},\"body_font_size\":{},"
+        "\"heading_font_size\":{},\"small_font_size\":{},"
+        "\"line_height_ratio\":{},\"scroll_delta_multiplier\":{},"
+        "\"scroll_horizontal_delta_multiplier\":{}}},"
+        "\"resolution\":{{\"used_user_font_family\":{},"
+        "\"used_system_font_family\":{},"
+        "\"used_user_color_scheme\":{},"
+        "\"used_system_color_scheme\":{},"
+        "\"used_system_font_metrics\":{},"
+        "\"used_system_font_scale\":{},"
+        "\"used_user_font_scale\":{},"
+        "\"used_user_font_size\":{},"
+        "\"used_system_line_height\":{},"
+        "\"used_user_line_height\":{},"
+        "\"used_system_scroll_metrics\":{},"
+        "\"used_user_scroll_scale\":{},"
+        "\"used_system_accent_color\":{}}}}}",
+        json_string(resolved.source),
+        json_string(resolved.requested_color_scheme),
+        json_string(resolved.effective_font_family),
+        json_string(resolved.effective_color_scheme),
+        resolved.effective_body_font_size,
+        resolved.effective_heading_font_size,
+        resolved.effective_small_font_size,
+        resolved.effective_line_height_ratio,
+        resolved.effective_scroll_delta_multiplier,
+        resolved.effective_scroll_horizontal_delta_multiplier,
+        resolved.used_user_font_family ? "true" : "false",
+        resolved.used_system_font_family ? "true" : "false",
+        resolved.used_user_color_scheme ? "true" : "false",
+        resolved.used_system_color_scheme ? "true" : "false",
+        resolved.used_system_font_metrics ? "true" : "false",
+        resolved.used_system_font_scale ? "true" : "false",
+        resolved.used_user_font_scale ? "true" : "false",
+        resolved.used_user_font_size ? "true" : "false",
+        resolved.used_system_line_height ? "true" : "false",
+        resolved.used_user_line_height ? "true" : "false",
+        resolved.used_system_scroll_metrics ? "true" : "false",
+        resolved.used_user_scroll_scale ? "true" : "false",
+        resolved.used_system_accent_color ? "true" : "false");
+}
+
+auto theme_resolve_inputs(cppx::cli::Invocation const& invocation)
+        -> std::expected<
+            std::tuple<
+                theme_contract::ThemePreferenceBase,
+                theme_contract::SystemThemePreferenceSnapshot,
+                theme_contract::ThemePreferenceOverrides,
+                std::string>,
+            std::string> {
+    using ThemeResolveInputs = std::tuple<
+        theme_contract::ThemePreferenceBase,
+        theme_contract::SystemThemePreferenceSnapshot,
+        theme_contract::ThemePreferenceOverrides,
+        std::string>;
+    auto base = theme_contract::theme_preference_base(
+        theme_contract::default_glass_theme_contract());
+    auto system = theme_contract::SystemThemePreferenceSnapshot{};
+    auto overrides = theme_contract::ThemePreferenceOverrides{};
+    auto source = std::string{
+        invocation.value("source").value_or("cli-theme-resolve")};
+
+    if (auto value = invocation.value("system-font-family"))
+        system.font_family = *value;
+    if (auto value = invocation.value("system-color-scheme"))
+        system.color_scheme = *value;
+    if (auto value = invocation.value("font-family"))
+        overrides.font_family = *value;
+    if (auto value = invocation.value("color-scheme"))
+        overrides.color_scheme = *value;
+
+    for (auto [name, target] : {
+             std::pair<std::string_view, float*>{
+                 "system-font-scale", &system.font_scale},
+             {"system-body-font-size", &system.body_font_size},
+             {"system-heading-font-size", &system.heading_font_size},
+             {"system-small-font-size", &system.small_font_size},
+             {"system-line-height", &system.line_height_ratio},
+             {"system-scroll", &system.scroll_delta_multiplier},
+             {"system-horizontal-scroll",
+              &system.scroll_horizontal_delta_multiplier},
+             {"font-scale", &overrides.font_scale},
+             {"body-font-size", &overrides.body_font_size},
+             {"heading-font-size", &overrides.heading_font_size},
+             {"small-font-size", &overrides.small_font_size},
+             {"line-height", &overrides.line_height_ratio},
+             {"scroll", &overrides.scroll_delta_multiplier},
+             {"horizontal-scroll",
+              &overrides.scroll_horizontal_delta_multiplier},
+         }) {
+        auto applied = apply_float_option(invocation, name, *target);
+        if (!applied)
+            return std::unexpected{applied.error()};
+    }
+    system.font_scale_available = invocation.value("system-font-scale")
+        .has_value();
+    system.line_height_available = invocation.value("system-line-height")
+        .has_value();
+    system.scroll_metrics_available =
+        invocation.value("system-scroll").has_value()
+        || invocation.value("system-horizontal-scroll").has_value();
+    system.color_scheme_available = invocation.value("system-color-scheme")
+        .has_value();
+
+    overrides.prefer_system_font_family =
+        invocation.has("prefer-system-font-family");
+    overrides.prefer_system_color_scheme =
+        invocation.has("prefer-system-color-scheme");
+    overrides.apply_system_font_metrics =
+        !invocation.has("no-system-font-metrics");
+    overrides.apply_system_font_scale =
+        !invocation.has("no-system-font-scale");
+    overrides.apply_system_scroll_metrics =
+        !invocation.has("no-system-scroll-metrics");
+    overrides.apply_system_accent_color =
+        invocation.has("apply-system-accent");
+    system.accent_color_available = invocation.has("apply-system-accent");
+    return ThemeResolveInputs{
+        base, system, overrides, std::move(source)};
+}
+
+auto theme_resolve_json(
+        theme_contract::ThemePreferenceBase const& base,
+        theme_contract::SystemThemePreferenceSnapshot const& system,
+        theme_contract::ThemePreferenceOverrides const& overrides,
+        theme_contract::ResolvedThemePreferences const& resolved)
+        -> std::string {
+    return std::format(
+        "{{\"schema_version\":1,\"command\":\"theme resolve\","
+        "\"ok\":true,\"contract_version\":{},"
+        "\"policy\":{},\"input\":{{\"base\":{},\"system\":{},"
+        "\"app_overrides\":{}}},\"resolved\":{}}}",
+        theme_contract::theme_contract_version,
+        json_string(
+            "pure theme preference resolution: explicit app overrides win, "
+            "then opted-in OS settings, then package defaults"),
+        theme_preference_base_json(base),
+        system_theme_preferences_json(system),
+        theme_preference_overrides_json(overrides),
+        resolved_theme_preferences_json(resolved));
+}
+
 auto input_event_kinds_json() -> std::string {
     auto out = std::string{"["};
     for (std::size_t i = 0; i < io_contract::input_event_kinds.size(); ++i) {
@@ -440,6 +697,72 @@ export int run_theme_contract(cppx::cli::Invocation const& invocation) {
     std::println("{}", cppx::terminal::format_status_frame(lines, false));
     print_checks("checks", checks);
     return all_ok(checks) ? 0 : 1;
+}
+
+export int run_theme_resolve(cppx::cli::Invocation const& invocation) {
+    auto inputs = theme_resolve_inputs(invocation);
+    if (!inputs) {
+        return print_error(
+            "theme resolve",
+            inputs.error(),
+            invocation.has("json"));
+    }
+    auto const& [base, system, overrides, source] = *inputs;
+    auto resolved = theme_contract::resolve_theme_preferences(
+        base,
+        system,
+        overrides,
+        source);
+
+    if (invocation.has("json")) {
+        std::println(
+            "{}",
+            theme_resolve_json(base, system, overrides, resolved));
+        return 0;
+    }
+
+    auto lines = std::vector<cppx::terminal::StatusLine>{
+        {.label = "source",
+         .value = resolved.source,
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "font",
+         .value = std::format(
+             "{} body={} heading={} small={} line_height={}",
+             resolved.effective_font_family,
+             resolved.effective_body_font_size,
+             resolved.effective_heading_font_size,
+             resolved.effective_small_font_size,
+             resolved.effective_line_height_ratio),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "appearance",
+         .value = resolved.effective_color_scheme,
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "scroll",
+         .value = std::format(
+             "vertical={} horizontal={}",
+             resolved.effective_scroll_delta_multiplier,
+             resolved.effective_scroll_horizontal_delta_multiplier),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "system",
+         .value = std::format(
+             "font_metrics={} font_scale={} scroll_metrics={} accent={}",
+             resolved.used_system_font_metrics ? "true" : "false",
+             resolved.used_system_font_scale ? "true" : "false",
+             resolved.used_system_scroll_metrics ? "true" : "false",
+             resolved.used_system_accent_color ? "true" : "false"),
+         .status = cppx::terminal::StatusKind::ok},
+        {.label = "user",
+         .value = std::format(
+             "font_family={} font_size={} font_scale={} scroll_scale={}",
+             resolved.used_user_font_family ? "true" : "false",
+             resolved.used_user_font_size ? "true" : "false",
+             resolved.used_user_font_scale ? "true" : "false",
+             resolved.used_user_scroll_scale ? "true" : "false"),
+         .status = cppx::terminal::StatusKind::ok},
+    };
+    std::println("phenotype theme resolve");
+    std::println("{}", cppx::terminal::format_status_frame(lines, false));
+    return 0;
 }
 
 export int run_io_contract(cppx::cli::Invocation const& invocation) {

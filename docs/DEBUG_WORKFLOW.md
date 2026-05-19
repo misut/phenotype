@@ -130,6 +130,9 @@ pure contract surface:
 cd tools/phenotype_cli
 mise exec -- exon build
 .exon/debug/phenotype_cli theme contract --json
+.exon/debug/phenotype_cli theme resolve \
+  --prefer-system-color-scheme --system-color-scheme dark \
+  --font-scale 1.2 --scroll 1.5 --json
 .exon/debug/phenotype_cli io contract --json
 ```
 
@@ -140,6 +143,13 @@ grouped-container policy, performance bounds, accessibility fallback policy,
 unsupported-backend degradation policy, color tokens, radii, typography, and
 semantic surface roles. It should stay green before debugging theme-dependent
 artifact differences.
+`theme resolve` is the Linux-safe pure preference probe: provide OS snapshot
+fields and app overrides, then compare the JSON `resolved.effective_theme` and
+`resolved.resolution` booleans with an artifact's
+`application.file_explorer.preferences` block. The `input.system` object also
+reports availability bits; a default value such as `font_scale=1.0` should only
+set `used_system_font_scale=true` when `font_scale_available=true`, which keeps
+fallback artifacts from pretending they consumed OS preferences.
 
 `io contract` reports the `phenotype.io` version, accepted input event kinds,
 output observation kinds, deterministic replay sample, LLM-debuggable artifact

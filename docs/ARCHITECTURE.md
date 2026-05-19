@@ -220,7 +220,14 @@ and accent-color preferences follow the same edge-to-core rule. Native adapters
 collect a `PlatformSystemSettingsSnapshot` from their platform APIs, then the
 core applies it through the pure
 `resolve_system_theme_preferences(Theme, PlatformSystemSettingsSnapshot,
-ThemePreferenceOverrides)` helper; the older
+ThemePreferenceOverrides)` helper. The portable resolver contract lives in the
+Linux-safe `phenotype_theme_contract` package as
+`resolve_theme_preferences(ThemePreferenceBase, SystemThemePreferenceSnapshot,
+ThemePreferenceOverrides)`, so CLI and CI tooling can evaluate
+`system_settings + app_overrides -> effective_theme` without importing native
+rendering modules. The portable snapshot carries availability bits for
+font scale, line height, scroll metrics, and color scheme so debug evidence can
+distinguish an OS-derived value from a package fallback. The older
 `apply_system_theme_preferences(...)` API remains as a compatibility wrapper
 that returns only the resolved `Theme`. Package defaults such as Pretendard
 remain explicit theme inputs, OS font metrics and scroll policy arrive as
@@ -1010,7 +1017,7 @@ phenotype (umbrella re-export)
 ├── phenotype.svg         — pure SVG subset parser + Painter renderer
 ├── phenotype.icons       — audited SVG icon catalog
 ├── phenotype.io          — pure input frame and output observation contracts
-├── phenotype.theme_contract — pure Apple-like glass theme contract metadata
+├── phenotype.theme_contract — pure Apple-like glass theme and preference resolver metadata
 ├── phenotype.state       — Arena, AppState, Scope, InputHandler, message queue
 ├── phenotype.diag        — OTel-shaped Counter, Gauge, Histogram, log ring, JSON snapshot
 ├── phenotype.layout      — flexbox engine, measure_text cache, vDOM diff
