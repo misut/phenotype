@@ -101,6 +101,10 @@ mkdir -p "$CONTRACT_OUT/platform"
 
 step "verify artifact"
 (cd "$PHENOTYPE_ROOT" && run_uv_python tools/verify_artifact_bundle.py "$CONTRACT_OUT" \
-    --manifest examples/android/artifact_manifest.json)
+    --manifest examples/android/artifact_manifest.json \
+    --require-debug-detail \
+        platform_capabilities.system_settings.source='"android-jni-resources-configuration"' \
+    --require-debug-detail \
+        platform_capabilities.system_settings.text_size_source='"Resources.getConfiguration().fontScale"')
 
 printf '\nandroid contract artifact: %s\n' "$CONTRACT_OUT"

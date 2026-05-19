@@ -27,11 +27,13 @@ the current view against the fresh Vulkan state instead of short-
 circuiting via the unchanged-buffer fast path. Soft keyboard show/hide
 and IME composition remain follow-up work.
 
-The driver calls three bootstrap hooks at `android_main` startup:
+The driver calls four bootstrap hooks at `android_main` startup:
 `phenotype_android_bind_jvm(app->activity->vm)` (text pipeline's JNI
-attach), `phenotype_android_bind_assets(app->activity->assetManager)`
-(`asset://` URL resolver), and `phenotype_android_start_app()` on the
-first `APP_CMD_INIT_WINDOW` (instantiates the library-side
+attach), `phenotype_android_bind_activity(app->activity->javaGameActivity)`
+(OS resource/configuration preferences such as Android `fontScale`),
+`phenotype_android_bind_assets(app->activity->assetManager)` (`asset://`
+URL resolver), and `phenotype_android_start_app()` on the first
+`APP_CMD_INIT_WINDOW` (instantiates the library-side
 `run_host<demo6::State, demo6::Msg>` so view + update wire into the
 shell).
 
