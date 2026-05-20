@@ -67,8 +67,25 @@
     },
     "container_participating": 28,
     "container_unioned": 0,
-    "container_interactive": 0,
+    "container_interactive": 1,
     "container_morph_transitions": 28,
+    "reference_interactive_response": 1,
+    "interaction_enabled": 1,
+    "interaction_active": 0,
+    "interaction_states": {
+      "idle": 1,
+      "inactive": 27
+    },
+    "interaction_response_models": {
+      "liquid-glass-interaction": 1,
+      "none": 27
+    },
+    "interaction_motion_policies": {
+      "animated-optical-response": 1,
+      "static": 27
+    },
+    "optical_interaction_active": 0,
+    "optical_interaction_modulates_optics": 0,
     "shape_valid": 28,
     "shape_radius_clamped": 0,
     "pass_names": {

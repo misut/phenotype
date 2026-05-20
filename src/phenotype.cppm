@@ -2315,6 +2315,7 @@ struct MaterialSurfaceOptions {
     float border_width = -1.0f;
     char const* semantic_label = "";
     bool inherit_material_container = true;
+    bool interactive = false;
     MaterialContainerDescriptor container{};
 };
 
@@ -2351,6 +2352,8 @@ inline void configure_material_surface(LayoutNode& node,
     node.material.container = options.inherit_material_container
         ? current_material_container()
         : options.container;
+    if (options.interactive)
+        node.material.container.interactive = true;
     node.background = node.material.tint;
     node.border_color = node.material.border;
     node.border_width = options.border_width >= 0.0f
@@ -2440,6 +2443,7 @@ inline MaterialSurfaceOptions glass_surface_options(
             options.padding = SpaceToken::Xs;
             options.gap = SpaceToken::Xs;
             options.cross_align = CrossAxisAlignment::Center;
+            options.interactive = true;
             options.semantic_label = chrome_label_or(
                 semantic_label,
                 "Toolbar Group");
@@ -2451,6 +2455,7 @@ inline MaterialSurfaceOptions glass_surface_options(
             options.padding = SpaceToken::Sm;
             options.gap = SpaceToken::Xs;
             options.cross_align = CrossAxisAlignment::Center;
+            options.interactive = true;
             options.semantic_label = chrome_label_or(
                 semantic_label,
                 "Navigation");
@@ -2532,6 +2537,7 @@ template<typename F>
     requires std::is_invocable_v<F>
 void navigation(MaterialSurfaceOptions options, F&& builder) {
     options.role = MaterialSurfaceRole::Navigation;
+    options.interactive = true;
     options.semantic_label = chrome_label_or(options.semantic_label,
                                              "Navigation");
     material_surface(options, std::forward<F>(builder));
@@ -2553,6 +2559,7 @@ void navigation(F&& builder,
             .cross_align = CrossAxisAlignment::Center,
             .main_align = MainAxisAlignment::Start,
             .semantic_label = "Navigation",
+            .interactive = true,
         },
         std::forward<F>(builder));
 }

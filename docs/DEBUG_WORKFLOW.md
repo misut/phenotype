@@ -791,8 +791,9 @@ effect reductions, warming up frame history for the next frame, or taking a
 deterministic fallback.
 `MaterialPlan.interaction` records the pure interaction response that feeds
 that reference model. `enabled` mirrors a non-inactive interactive material
-container, `active` is true only when hover, press, focus, or pointer presence
-produces a positive response strength, `state` uses the stable
+container or `MaterialSurfaceOptions.interactive` surface opt-in, `active` is
+true only when hover, press, focus, or pointer presence produces a positive
+response strength, `state` uses the stable
 `inactive`/`idle`/`focused`/`hovered`/`pressed` vocabulary, and
 `response_model` is either `none` or `liquid-glass-interaction`.
 Reduced-motion plans keep the response deterministic, cap the response
@@ -813,7 +814,12 @@ pointer containment against the material rectangle and merges it with callback
 hover/press/focus state before emitting `MaterialRect`. A focused material cue
 requires keyboard-visible focus (`focus_visible=true`); pointer focus should
 leave `interaction.focused=false` while still allowing hover, press, or
-`pointer_inside` to drive glass response.
+`pointer_inside` to drive glass response. If `command_descriptor.interaction`
+shows the expected hover/press/pointer data but `MaterialPlan.interaction`
+still has `enabled=false`, inspect
+`MaterialPlan.command_descriptor.container.interactive` and the source
+`MaterialSurfaceOptions.interactive` / `material_container(... interactive=true)`
+call before changing a backend pass.
 `MaterialPlan.geometry` preserves the raw decoded rectangle. `MaterialPlan.shape`
 is the pure executable shape contract: validity, surface area, min/max extent,
 radius limit, effective radius, normalized radius, rounded flag, and whether the

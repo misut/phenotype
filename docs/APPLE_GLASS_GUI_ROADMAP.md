@@ -198,7 +198,11 @@ artifact-writing code while still giving each adapter an executable response
 contract. The renderer now also resolves live pointer position and subtree
 hover/press/focus ids into the descriptor before command emission, preserving
 explicit probe descriptors while allowing real controls inside an interactive
-glass container to drive the same pure response path.
+glass container to drive the same pure response path. Surface-level control
+chrome can now opt in with `MaterialSurfaceOptions.interactive`; the built-in
+toolbar-group and navigation glass presets use that opt-in so Finder-style
+toolbar clusters and segmented navigation controls expose interaction response
+without requiring every app to wrap them in a separate material container.
 `MaterialPlan.optical_response` is the compact schema-stable summary of that
 contract. It classifies each surface as sampled backdrop glass, content-layer
 standard material, deterministic fallback, or inactive, then records the
