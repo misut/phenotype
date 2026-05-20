@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 from pathlib import Path
 import struct
 import sys
@@ -351,7 +352,7 @@ ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS = {
     "pointer-specular",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 32
+MATERIAL_PLAN_CONTRACT_VERSION = 33
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -1015,6 +1016,41 @@ def container_identity_signature(value: JsonObject | None) -> str | None:
         "spacing": value.get("spacing"),
         "interactive": value.get("interactive"),
     })
+
+
+def material_container_surface_from(
+        plan: JsonObject,
+        container: JsonObject) -> JsonObject | None:
+    geometry = plan.get("geometry")
+    shape = plan.get("shape")
+    if not isinstance(geometry, dict) or not isinstance(shape, dict):
+        return None
+    values: JsonObject = {}
+    for key in ("x", "y", "w", "h"):
+        number = number_at(geometry, key)
+        if number is None:
+            return None
+        values[key] = float(number)
+    blend_distance = number_at(container, "blend_distance")
+    if blend_distance is None:
+        blend_distance = number_at(container, "spacing")
+    if blend_distance is None:
+        return None
+    values["blend_distance"] = float(blend_distance)
+    values["shape_valid"] = shape.get("valid") is True
+    values["shape_union_expected"] = container.get("shape_union_expected") is True
+    values["morph_transitions"] = container.get("morph_transitions") is True
+    return values
+
+
+def material_container_surface_gap(a: JsonObject, b: JsonObject) -> float:
+    ax2 = float(a["x"]) + max(0.0, float(a["w"]))
+    ay2 = float(a["y"]) + max(0.0, float(a["h"]))
+    bx2 = float(b["x"]) + max(0.0, float(b["w"]))
+    by2 = float(b["y"]) + max(0.0, float(b["h"]))
+    dx = max(float(b["x"]) - ax2, float(a["x"]) - bx2, 0.0)
+    dy = max(float(b["y"]) - ay2, float(a["y"]) - by2, 0.0)
+    return math.sqrt(dx * dx + dy * dy)
 
 
 def check_object_field(
@@ -2085,6 +2121,17 @@ MATERIAL_CONTAINER_GROUP_SUMMARY_FIELDS = (
     "max_active_surfaces",
     "max_sampled_backdrop_surfaces",
     "max_fallback_surfaces",
+    "total_shape_pair_count",
+    "blend_candidate_pair_count",
+    "union_candidate_pair_count",
+    "morph_candidate_pair_count",
+    "separated_pair_count",
+    "min_shape_gap",
+    "max_shape_gap",
+    "max_blend_distance",
+    "max_group_bounds_width",
+    "max_group_bounds_height",
+    "max_group_bounds_area",
 )
 
 MATERIAL_CONTAINER_GROUP_SPEC_FIELDS = {
@@ -2101,7 +2148,31 @@ MATERIAL_CONTAINER_GROUP_SPEC_FIELDS = {
     "container_max_sampled_backdrop_surfaces": (
         "max_sampled_backdrop_surfaces"),
     "container_max_fallback_surfaces": "max_fallback_surfaces",
+    "container_total_shape_pair_count": "total_shape_pair_count",
+    "container_blend_candidate_pair_count": "blend_candidate_pair_count",
+    "container_union_candidate_pair_count": "union_candidate_pair_count",
+    "container_morph_candidate_pair_count": "morph_candidate_pair_count",
+    "container_separated_pair_count": "separated_pair_count",
+    "container_min_shape_gap": "min_shape_gap",
+    "container_max_shape_gap": "max_shape_gap",
+    "container_max_blend_distance": "max_blend_distance",
+    "container_max_group_bounds_width": "max_group_bounds_width",
+    "container_max_group_bounds_height": "max_group_bounds_height",
+    "container_max_group_bounds_area": "max_group_bounds_area",
 }
+
+MATERIAL_CONTAINER_GROUP_FLOAT_SPEC_FIELDS = {
+    "container_min_shape_gap",
+    "container_max_shape_gap",
+    "container_max_blend_distance",
+    "container_max_group_bounds_width",
+    "container_max_group_bounds_height",
+    "container_max_group_bounds_area",
+}
+
+MATERIAL_CONTAINER_GROUP_INTEGER_SPEC_FIELDS = tuple(
+    field for field in MATERIAL_CONTAINER_GROUP_SPEC_FIELDS
+    if field not in MATERIAL_CONTAINER_GROUP_FLOAT_SPEC_FIELDS)
 
 
 def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
@@ -2299,7 +2370,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "container_unioned",
             "container_interactive",
             "container_morph_transitions",
-            *MATERIAL_CONTAINER_GROUP_SPEC_FIELDS.keys(),
+            *MATERIAL_CONTAINER_GROUP_INTEGER_SPEC_FIELDS,
             "reference_view_bounds_anchored",
             "reference_shape_matches_geometry",
             "reference_tint_applied",
@@ -2362,6 +2433,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "shape_max_radius_limit_gte",
             "shape_max_normalized_radius_lte",
             "shape_max_normalized_radius_gte",
+            *MATERIAL_CONTAINER_GROUP_FLOAT_SPEC_FIELDS,
             "foreground_min_primary_contrast_gte",
             "foreground_minimum_contrast_gte"):
         if field in value:
@@ -4051,6 +4123,17 @@ def summarize_material_plans(
             "max_active_surfaces": 0,
             "max_sampled_backdrop_surfaces": 0,
             "max_fallback_surfaces": 0,
+            "total_shape_pair_count": 0,
+            "blend_candidate_pair_count": 0,
+            "union_candidate_pair_count": 0,
+            "morph_candidate_pair_count": 0,
+            "separated_pair_count": 0,
+            "min_shape_gap": 0.0,
+            "max_shape_gap": 0.0,
+            "max_blend_distance": 0.0,
+            "max_group_bounds_width": 0.0,
+            "max_group_bounds_height": 0.0,
+            "max_group_bounds_area": 0.0,
         },
         "reference_model": {
             "technologies": {},
@@ -4697,8 +4780,16 @@ def summarize_material_plans(
                     "morph_surfaces": 0,
                     "interactive_surfaces": 0,
                     "shared_backdrop_scope_surfaces": 0,
+                    "surfaces": [],
                 })
                 group["surface_count"] = int(group["surface_count"]) + 1
+                surfaces = group.get("surfaces")
+                if isinstance(surfaces, list):
+                    surface = material_container_surface_from(
+                        plan,
+                        plan_container)
+                    if surface is not None:
+                        surfaces.append(surface)
                 primary_pass_for_group = plan.get("primary_pass")
                 if (isinstance(primary_pass_for_group, dict)
                         and primary_pass_for_group.get("active") is True):
@@ -9314,6 +9405,71 @@ def summarize_material_plans(
         if fallback_surfaces > 0 and active_surfaces > fallback_surfaces:
             group_summary["fallback_mixed_group_count"] = (
                 int(group_summary["fallback_mixed_group_count"]) + 1)
+        surfaces = [
+            surface for surface in group.get("surfaces", [])
+            if isinstance(surface, dict)
+            and surface.get("shape_valid") is True
+        ]
+        if surfaces:
+            group_max_blend = max(
+                float(surface["blend_distance"]) for surface in surfaces)
+            group_summary["max_blend_distance"] = max(
+                float(group_summary["max_blend_distance"]),
+                group_max_blend)
+            min_x = min(float(surface["x"]) for surface in surfaces)
+            min_y = min(float(surface["y"]) for surface in surfaces)
+            max_x = max(
+                float(surface["x"]) + max(0.0, float(surface["w"]))
+                for surface in surfaces)
+            max_y = max(
+                float(surface["y"]) + max(0.0, float(surface["h"]))
+                for surface in surfaces)
+            bounds_width = max(0.0, max_x - min_x)
+            bounds_height = max(0.0, max_y - min_y)
+            group_summary["max_group_bounds_width"] = max(
+                float(group_summary["max_group_bounds_width"]),
+                bounds_width)
+            group_summary["max_group_bounds_height"] = max(
+                float(group_summary["max_group_bounds_height"]),
+                bounds_height)
+            group_summary["max_group_bounds_area"] = max(
+                float(group_summary["max_group_bounds_area"]),
+                bounds_width * bounds_height)
+        for left, a in enumerate(surfaces):
+            for b in surfaces[left + 1:]:
+                gap = material_container_surface_gap(a, b)
+                previous_pairs = int(group_summary["total_shape_pair_count"])
+                group_summary["total_shape_pair_count"] = previous_pairs + 1
+                if previous_pairs == 0:
+                    group_summary["min_shape_gap"] = gap
+                    group_summary["max_shape_gap"] = gap
+                else:
+                    group_summary["min_shape_gap"] = min(
+                        float(group_summary["min_shape_gap"]),
+                        gap)
+                    group_summary["max_shape_gap"] = max(
+                        float(group_summary["max_shape_gap"]),
+                        gap)
+                blend_distance = min(
+                    float(a["blend_distance"]),
+                    float(b["blend_distance"]))
+                group_summary["max_blend_distance"] = max(
+                    float(group_summary["max_blend_distance"]),
+                    blend_distance)
+                if gap <= blend_distance:
+                    group_summary["blend_candidate_pair_count"] = (
+                        int(group_summary["blend_candidate_pair_count"]) + 1)
+                    if (a.get("shape_union_expected") is True
+                            or b.get("shape_union_expected") is True):
+                        group_summary["union_candidate_pair_count"] = (
+                            int(group_summary["union_candidate_pair_count"]) + 1)
+                    if (a.get("morph_transitions") is True
+                            or b.get("morph_transitions") is True):
+                        group_summary["morph_candidate_pair_count"] = (
+                            int(group_summary["morph_candidate_pair_count"]) + 1)
+                else:
+                    group_summary["separated_pair_count"] = (
+                        int(group_summary["separated_pair_count"]) + 1)
     return summary
 
 
@@ -9557,9 +9713,14 @@ def check_material_plan_summary_requirements(
                 nested_field = field.removeprefix("theme_")
                 actual = theme_summary.get(nested_field)
                 summary_path = f"{base_path}.theme.{nested_field}"
+            matches = (
+                numbers_close(actual, spec[field])
+                if field in MATERIAL_CONTAINER_GROUP_FLOAT_SPEC_FIELDS
+                else actual == spec[field]
+            )
             report.check(
                 f"material plan summary {field} matches",
-                actual == spec[field],
+                matches,
                 path=summary_path,
                 expected=spec[field],
                 actual=actual,
@@ -10151,6 +10312,18 @@ def check_material_container_group_summary_contract(
     for field in MATERIAL_CONTAINER_GROUP_SUMMARY_FIELDS:
         expected = expected_summary.get(field)
         actual = group_summary.get(field)
+        matches = (
+            numbers_close(actual, expected, tolerance=0.1)
+            if field in {
+                "min_shape_gap",
+                "max_shape_gap",
+                "max_blend_distance",
+                "max_group_bounds_width",
+                "max_group_bounds_height",
+                "max_group_bounds_area",
+            }
+            else actual == expected
+        )
         report.check(
             f"{label} container_groups.{field} is non-negative",
             isinstance(actual, (int, float)) and not isinstance(actual, bool)
@@ -10165,7 +10338,7 @@ def check_material_container_group_summary_contract(
                 "explain grouped Liquid Glass behavior without visual guessing."))
         report.check(
             f"{label} container_groups.{field} matches plans",
-            actual == expected,
+            matches,
             path=f"{base_path}.container_groups.{field}",
             expected=expected,
             actual=actual,

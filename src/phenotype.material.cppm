@@ -12,7 +12,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 32;
+inline constexpr std::uint32_t material_plan_contract_version = 33;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -775,6 +775,17 @@ struct MaterialContainerGroupRuntimeSummary {
     std::uint32_t max_active_surfaces = 0;
     std::uint32_t max_sampled_backdrop_surfaces = 0;
     std::uint32_t max_fallback_surfaces = 0;
+    std::uint32_t total_shape_pair_count = 0;
+    std::uint32_t blend_candidate_pair_count = 0;
+    std::uint32_t union_candidate_pair_count = 0;
+    std::uint32_t morph_candidate_pair_count = 0;
+    std::uint32_t separated_pair_count = 0;
+    float min_shape_gap = 0.0f;
+    float max_shape_gap = 0.0f;
+    float max_blend_distance = 0.0f;
+    float max_group_bounds_width = 0.0f;
+    float max_group_bounds_height = 0.0f;
+    float max_group_bounds_area = 0.0f;
 };
 
 struct MaterialRuntimeSummary {
@@ -1132,7 +1143,101 @@ struct MaterialContainerGroupAccumulator {
     std::uint32_t morph_surfaces = 0;
     std::uint32_t interactive_surfaces = 0;
     std::uint32_t shared_backdrop_scope_surfaces = 0;
+    std::uint32_t shape_pair_count = 0;
+    std::uint32_t blend_candidate_pair_count = 0;
+    std::uint32_t union_candidate_pair_count = 0;
+    std::uint32_t morph_candidate_pair_count = 0;
+    std::uint32_t separated_pair_count = 0;
+    bool has_bounds = false;
+    bool has_shape_gap = false;
+    float min_x = 0.0f;
+    float min_y = 0.0f;
+    float max_x = 0.0f;
+    float max_y = 0.0f;
+    float min_shape_gap = 0.0f;
+    float max_shape_gap = 0.0f;
+    float max_blend_distance = 0.0f;
 };
+
+inline bool material_plan_in_container(
+        MaterialPlan const& plan,
+        std::uint32_t container_id) noexcept {
+    return plan.container.participates
+        && plan.container.container_id == container_id;
+}
+
+inline float material_rect_gap(MaterialGeometry const& a,
+                               MaterialGeometry const& b) noexcept {
+    auto const ax2 = a.x + std::max(0.0f, a.w);
+    auto const ay2 = a.y + std::max(0.0f, a.h);
+    auto const bx2 = b.x + std::max(0.0f, b.w);
+    auto const by2 = b.y + std::max(0.0f, b.h);
+    auto const dx = std::max(std::max(b.x - ax2, a.x - bx2), 0.0f);
+    auto const dy = std::max(std::max(b.y - ay2, a.y - by2), 0.0f);
+    return std::sqrt(dx * dx + dy * dy);
+}
+
+inline void accumulate_material_container_bounds(
+        MaterialContainerGroupAccumulator& group,
+        MaterialPlan const& plan) noexcept {
+    if (!plan.shape.valid)
+        return;
+    group.max_blend_distance =
+        std::max(group.max_blend_distance, plan.container.blend_distance);
+    auto const x0 = plan.geometry.x;
+    auto const y0 = plan.geometry.y;
+    auto const x1 = plan.geometry.x + std::max(0.0f, plan.geometry.w);
+    auto const y1 = plan.geometry.y + std::max(0.0f, plan.geometry.h);
+    if (!group.has_bounds) {
+        group.has_bounds = true;
+        group.min_x = x0;
+        group.min_y = y0;
+        group.max_x = x1;
+        group.max_y = y1;
+        return;
+    }
+    group.min_x = std::min(group.min_x, x0);
+    group.min_y = std::min(group.min_y, y0);
+    group.max_x = std::max(group.max_x, x1);
+    group.max_y = std::max(group.max_y, y1);
+}
+
+inline void accumulate_material_container_pair(
+        MaterialContainerGroupAccumulator& group,
+        MaterialPlan const& a,
+        MaterialPlan const& b) noexcept {
+    if (!a.shape.valid || !b.shape.valid)
+        return;
+    ++group.shape_pair_count;
+    auto const gap = material_rect_gap(a.geometry, b.geometry);
+    if (!group.has_shape_gap) {
+        group.has_shape_gap = true;
+        group.min_shape_gap = gap;
+        group.max_shape_gap = gap;
+    } else {
+        group.min_shape_gap = std::min(group.min_shape_gap, gap);
+        group.max_shape_gap = std::max(group.max_shape_gap, gap);
+    }
+    auto const blend_distance =
+        std::min(a.container.blend_distance, b.container.blend_distance);
+    group.max_blend_distance =
+        std::max(group.max_blend_distance, blend_distance);
+    auto const blend_candidate = gap <= blend_distance;
+    if (blend_candidate)
+        ++group.blend_candidate_pair_count;
+    else
+        ++group.separated_pair_count;
+    if (blend_candidate
+        && (a.container.shape_union_expected
+            || b.container.shape_union_expected)) {
+        ++group.union_candidate_pair_count;
+    }
+    if (blend_candidate
+        && (a.container.morph_transitions
+            || b.container.morph_transitions)) {
+        ++group.morph_candidate_pair_count;
+    }
+}
 
 inline MaterialContainerGroupRuntimeSummary summarize_material_container_groups(
         std::span<MaterialRuntimeRecord const> records) {
@@ -1164,6 +1269,7 @@ inline MaterialContainerGroupRuntimeSummary summarize_material_container_groups(
                 continue;
             }
             ++group.surface_count;
+            accumulate_material_container_bounds(group, candidate);
             if (candidate.primary_pass.active)
                 ++group.active_surfaces;
             if (candidate.backdrop_sampling)
@@ -1178,6 +1284,17 @@ inline MaterialContainerGroupRuntimeSummary summarize_material_container_groups(
                 ++group.interactive_surfaces;
             if (candidate.container.shared_backdrop_scope)
                 ++group.shared_backdrop_scope_surfaces;
+        }
+        for (std::size_t left = 0; left < records.size(); ++left) {
+            auto const& a = records[left].plan;
+            if (!material_plan_in_container(a, container_id))
+                continue;
+            for (std::size_t right = left + 1; right < records.size(); ++right) {
+                auto const& b = records[right].plan;
+                if (!material_plan_in_container(b, container_id))
+                    continue;
+                accumulate_material_container_pair(group, a, b);
+            }
         }
         ++summary.group_count;
         summary.max_group_size =
@@ -1202,6 +1319,36 @@ inline MaterialContainerGroupRuntimeSummary summarize_material_container_groups(
         if (group.fallback_surfaces > 0u
             && group.active_surfaces > group.fallback_surfaces) {
             ++summary.fallback_mixed_group_count;
+        }
+        summary.total_shape_pair_count += group.shape_pair_count;
+        summary.blend_candidate_pair_count += group.blend_candidate_pair_count;
+        summary.union_candidate_pair_count += group.union_candidate_pair_count;
+        summary.morph_candidate_pair_count += group.morph_candidate_pair_count;
+        summary.separated_pair_count += group.separated_pair_count;
+        if (group.has_shape_gap) {
+            summary.min_shape_gap =
+                summary.total_shape_pair_count == group.shape_pair_count
+                    ? group.min_shape_gap
+                    : std::min(summary.min_shape_gap, group.min_shape_gap);
+            summary.max_shape_gap =
+                std::max(summary.max_shape_gap, group.max_shape_gap);
+        }
+        summary.max_blend_distance =
+            std::max(summary.max_blend_distance, group.max_blend_distance);
+        if (group.has_bounds) {
+            auto const bounds_width =
+                std::max(0.0f, group.max_x - group.min_x);
+            auto const bounds_height =
+                std::max(0.0f, group.max_y - group.min_y);
+            summary.max_group_bounds_width = std::max(
+                summary.max_group_bounds_width,
+                bounds_width);
+            summary.max_group_bounds_height = std::max(
+                summary.max_group_bounds_height,
+                bounds_height);
+            summary.max_group_bounds_area = std::max(
+                summary.max_group_bounds_area,
+                bounds_width * bounds_height);
         }
     }
     return summary;

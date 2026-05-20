@@ -58,7 +58,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 32);
+    assert(material_plan_contract_version == 33);
     assert(std::string_view(plan.interaction.enablement_reason)
         == "noninteractive-container");
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
@@ -764,6 +764,17 @@ void test_container_group_runtime_summary_contract() {
     assert(groups.max_active_surfaces == 3u);
     assert(groups.max_sampled_backdrop_surfaces == 2u);
     assert(groups.max_fallback_surfaces == 1u);
+    assert(groups.total_shape_pair_count == 3u);
+    assert(groups.blend_candidate_pair_count == 3u);
+    assert(groups.union_candidate_pair_count == 2u);
+    assert(groups.morph_candidate_pair_count == 3u);
+    assert(groups.separated_pair_count == 0u);
+    assert(std::fabs(groups.min_shape_gap) < 0.0001f);
+    assert(std::fabs(groups.max_shape_gap) < 0.0001f);
+    assert(groups.max_blend_distance == 28.0f);
+    assert(groups.max_group_bounds_width == 240.0f);
+    assert(groups.max_group_bounds_height == 96.0f);
+    assert(groups.max_group_bounds_area == 240.0f * 96.0f);
 
     MaterialRuntimeSummary runtime_summary{};
     for (auto const& record : records)
@@ -771,6 +782,12 @@ void test_container_group_runtime_summary_contract() {
     finalize_material_runtime_summary(runtime_summary, records);
     assert(runtime_summary.container_groups.group_count == groups.group_count);
     assert(runtime_summary.container_groups.max_group_size == groups.max_group_size);
+    assert(runtime_summary.container_groups.total_shape_pair_count
+           == groups.total_shape_pair_count);
+    assert(runtime_summary.container_groups.blend_candidate_pair_count
+           == groups.blend_candidate_pair_count);
+    assert(runtime_summary.container_groups.max_group_bounds_area
+           == groups.max_group_bounds_area);
     assert(runtime_summary.max_saturation >= 1.0f);
     assert(runtime_summary.max_edge_highlight > 0.0f);
     assert(runtime_summary.max_edge_width > 0.0f);
@@ -792,6 +809,8 @@ void test_container_group_runtime_summary_contract() {
     finalize_material_executor_summary(executor_summary, records);
     assert(executor_summary.container_groups.group_count == groups.group_count);
     assert(executor_summary.container_groups.fallback_mixed_group_count == 1u);
+    assert(executor_summary.container_groups.union_candidate_pair_count == 2u);
+    assert(executor_summary.container_groups.morph_candidate_pair_count == 3u);
     assert(executor_summary.paint_layer_count == 3u);
     assert(executor_summary.active_paint_layer_count == 3u);
     assert(executor_summary.shadow_paint_layer_count == 1u);
