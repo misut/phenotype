@@ -972,6 +972,13 @@ The same summary can pin `container_modes`, `container_ids`, `union_ids`,
 `container_fallback_mixed_group_count`, `container_max_group_size`,
 `container_max_active_surfaces`, `container_max_sampled_backdrop_surfaces`, and
 `container_max_fallback_surfaces`.
+Within each plan, the verifier now validates the pure container policy fields:
+`blend_distance` must mirror `spacing`, `shape_blending_expected` must follow
+positive spacing on participating containers, `blend_policy` must match isolated,
+touching-only, container-proximity, or union-proximity behavior, `morph_policy`
+must explain static, active, union, or Reduced Motion-suppressed morphing, and
+`performance_policy` must describe whether the backend should use a single
+surface, shared container capture, or shared union capture path.
 Reference-model gates can pin `reference_technologies`, `reference_variants`,
 `reference_shapes`, `reference_shape_scopes`, `reference_blending_scopes`,
 `reference_semantic_thickness`, `reference_view_bounds_anchored`,
@@ -1188,7 +1195,10 @@ can additionally assert pure aggregate group facts:
 `container_shared_backdrop_scope_group_count`,
 `container_fallback_mixed_group_count`, `container_max_group_size`,
 `container_max_active_surfaces`, `container_max_sampled_backdrop_surfaces`, and
-`container_max_fallback_surfaces`. Optical gates can additionally pin
+`container_max_fallback_surfaces`. Per-plan container validation also checks
+the derived blend, morph, and performance policy strings, so a grouped-glass
+failure can point to planner policy drift before inspecting backend output.
+Optical gates can additionally pin
 `optical_backdrop_driven`, `optical_blur_active`, `optical_frosting_active`,
 `optical_tint_active`, `optical_saturation_active`,
 `optical_luminance_preservation_active`, `optical_edge_highlight_active`,

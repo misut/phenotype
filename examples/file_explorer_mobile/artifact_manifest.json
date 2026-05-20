@@ -42,7 +42,7 @@
     "fallback": 0,
     "backdrop_sampling": 30,
     "contract_versions": {
-      "30": 30
+      "31": 30
     },
     "theme_foreground_matches_theme": 30,
     "theme_accent_matches_theme": 0,
@@ -71,7 +71,7 @@
     "container_participating": 28,
     "container_unioned": 0,
     "container_interactive": 3,
-    "container_morph_transitions": 30,
+    "container_morph_transitions": 28,
     "reference_interactive_response": 3,
     "interaction_enabled": 3,
     "interaction_active": 0,

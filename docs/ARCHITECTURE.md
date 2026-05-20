@@ -844,10 +844,13 @@ minimum luma/color thresholds for sampled or fallback rendering, the semantic
 profile name, whether material container identity/morph contracts are expected,
 and the likely layer/pass that a failure should inspect first.
 `MaterialContainerAnalysis` records whether a surface is isolated, participates
-in a named material container, or belongs to a shape union. Reduced Motion keeps
-container identity intact but disables morph-transition expectations in the pure
-plan, matching Apple's guidance to coordinate related glass surfaces while still
-respecting accessibility settings.
+in a named material container, or belongs to a shape union. It also derives the
+explicit spacing-controlled `blend_distance`, `shape_blending_expected`,
+`blend_policy`, `morph_policy`, and `performance_policy` that backend adapters
+must execute. Reduced Motion keeps container identity and blending intact but
+records `reduced_motion_suppressed_morph` and disables morph-transition
+expectations in the pure plan, matching Apple's guidance to coordinate related
+glass surfaces while still respecting accessibility settings.
 When a stable backdrop descriptor is available, the pure planner also copies
 its source, readiness flags, foreground-exclusion flag, sanitized luminance
 statistics, luminance response bucket, optical response buckets, and

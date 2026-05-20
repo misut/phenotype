@@ -265,6 +265,11 @@ groups, and max active/sampled/fallback surfaces from resolved
 `MaterialRuntimeRecord` values. Runtime and executor summaries serialize that
 same `container_groups` object, so Apple-style grouping and future
 container-level resource reuse can be verified without backend-local policy.
+Schema 31 also makes each surface's container policy explicit: spacing resolves
+to `blend_distance`, positive spacing drives `shape_blending_expected`, union ids
+select the union-proximity blend policy, Reduced Motion suppresses only morphing,
+and `performance_policy` tells backend adapters whether to use a single surface,
+a shared container capture, or a shared union capture path.
 The current sampled-glass kernel is a pure tap-tier descriptor:
 `weighted-center`, `weighted-cross-5`, `weighted-3x3-grid`, or
 `weighted-5x5-manhattan`, with the resolved tap count, kernel radius, blur step
@@ -635,8 +640,8 @@ Apple-style glass interface while preserving platform parity:
 - semantic/debug snapshots that describe material style, fallback reason, and
   contrast expectations;
 - material container and shape-union identity that lets related glass surfaces
-  share backdrop scope and morph expectations without moving policy into a
-  backend;
+  share backdrop scope, spacing/blend policy, morph expectations, and capture
+  reuse policy without moving those decisions into a backend;
 - a glass showcase under `examples/` with controls/navigation as the glass
   layer and rich content below it;
 - desktop and mobile file explorer examples under `examples/` that translate

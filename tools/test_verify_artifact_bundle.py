@@ -142,9 +142,17 @@ def material_plan(
         "role": "surface",
         "container": {
             **container,
+            "blend_distance": 0.0,
             "participates": False,
+            "requested_morph_transitions": False,
             "shared_backdrop_scope": False,
             "shape_union_expected": False,
+            "shape_blending_expected": False,
+            "reduced_motion_suppressed_morph": False,
+            "spacing_clamped": False,
+            "blend_policy": "isolated",
+            "morph_policy": "isolated",
+            "performance_policy": "single-surface",
         },
         "reference_model": {
             "technology": "liquid-glass",
@@ -2123,10 +2131,18 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         descriptor["container"] = request_container
         plan_container.update({
             **request_container,
+            "blend_distance": 12.0,
+            "requested_morph_transitions": True,
             "morph_transitions": False,
             "participates": True,
             "shared_backdrop_scope": True,
             "shape_union_expected": False,
+            "shape_blending_expected": True,
+            "reduced_motion_suppressed_morph": True,
+            "spacing_clamped": False,
+            "blend_policy": "container-shape-proximity",
+            "morph_policy": "reduced-motion-static",
+            "performance_policy": "shared-container-capture",
         })
         verifier_contract["require_container_identity"] = True
         verifier_contract["require_container_morph_contract"] = False
@@ -2178,9 +2194,17 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         descriptor["container"] = request_container
         plan_container.update({
             **request_container,
+            "blend_distance": 12.0,
             "participates": True,
+            "requested_morph_transitions": True,
             "shared_backdrop_scope": True,
             "shape_union_expected": True,
+            "shape_blending_expected": True,
+            "reduced_motion_suppressed_morph": False,
+            "spacing_clamped": False,
+            "blend_policy": "union-shape-proximity",
+            "morph_policy": "union-morph",
+            "performance_policy": "shared-union-capture",
         })
         interaction["enabled"] = True
         interaction["enablement_reason"] = "interactive-container"

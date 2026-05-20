@@ -2041,11 +2041,22 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(container_plan.container.container_id == 41u);
     assert(container_plan.container.union_id == 7u);
     assert(container_plan.container.spacing == 24.0f);
+    assert(container_plan.container.blend_distance == 24.0f);
     assert(container_plan.container.participates);
     assert(container_plan.container.shared_backdrop_scope);
     assert(container_plan.container.shape_union_expected);
+    assert(container_plan.container.shape_blending_expected);
     assert(container_plan.container.interactive);
+    assert(container_plan.container.requested_morph_transitions);
     assert(container_plan.container.morph_transitions);
+    assert(!container_plan.container.reduced_motion_suppressed_morph);
+    assert(!container_plan.container.spacing_clamped);
+    assert(std::string_view(container_plan.container.blend_policy)
+           == "union-shape-proximity");
+    assert(std::string_view(container_plan.container.morph_policy)
+           == "union-morph");
+    assert(std::string_view(container_plan.container.performance_policy)
+           == "shared-union-capture");
     assert(std::string_view(container_plan.interaction.enablement_reason)
            == "interactive-container");
     assert(container_plan.command_descriptor.container.container_id == 41u);
@@ -2078,7 +2089,11 @@ void test_material_planner_backdrop_and_fallback_paths() {
         plan_material_surface(container_request, reduced_motion_container_env);
     assert(reduced_motion_container_plan.container.participates);
     assert(reduced_motion_container_plan.container.interactive);
+    assert(reduced_motion_container_plan.container.requested_morph_transitions);
     assert(!reduced_motion_container_plan.container.morph_transitions);
+    assert(reduced_motion_container_plan.container.reduced_motion_suppressed_morph);
+    assert(std::string_view(reduced_motion_container_plan.container.morph_policy)
+           == "reduced-motion-static");
     assert(!reduced_motion_container_plan.verifier.require_container_morph_contract);
     assert(std::string(
                reduced_motion_container_plan.reference_model
