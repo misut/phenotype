@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "25": 7
+      "26": 7
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -203,6 +203,29 @@
     "foreground_deterministic": 7,
     "foreground_min_primary_contrast_gte": 4.5,
     "foreground_minimum_contrast_gte": 4.5,
+    "optical_response_models": {
+      "sampled-backdrop": 7
+    },
+    "optical_blur_strategies": {
+      "backdrop-sample-blur": 7
+    },
+    "optical_color_strategies": {
+      "adaptive-backdrop-color": 7
+    },
+    "optical_depth_strategies": {
+      "layered-shadow-edge-noise": 7
+    },
+    "optical_backdrop_driven": 7,
+    "optical_blur_active": 7,
+    "optical_frosting_active": 7,
+    "optical_tint_active": 7,
+    "optical_saturation_active": 7,
+    "optical_luminance_preservation_active": 7,
+    "optical_edge_highlight_active": 7,
+    "optical_depth_shadow_active": 7,
+    "optical_noise_dither_active": 7,
+    "optical_foreground_vibrancy_active": 7,
+    "optical_deterministic_fallback": 7,
     "render_target_ready": 7,
     "render_target_within_backdrop_budget": 7,
     "render_target_pixel_formats": {

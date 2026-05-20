@@ -32,7 +32,7 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "25": 1
+      "26": 1
     },
     "theme_foreground_matches_theme": 1,
     "theme_accent_matches_theme": 1,
@@ -103,6 +103,29 @@
       "not-sampled": 1
     },
     "luminance_adapted": 0,
+    "optical_response_models": {
+      "deterministic-fallback": 1
+    },
+    "optical_blur_strategies": {
+      "fallback-fill": 1
+    },
+    "optical_color_strategies": {
+      "fallback-solid-color": 1
+    },
+    "optical_depth_strategies": {
+      "fallback-shadow-edge": 1
+    },
+    "optical_backdrop_driven": 0,
+    "optical_blur_active": 0,
+    "optical_frosting_active": 0,
+    "optical_tint_active": 1,
+    "optical_saturation_active": 0,
+    "optical_luminance_preservation_active": 1,
+    "optical_edge_highlight_active": 1,
+    "optical_depth_shadow_active": 1,
+    "optical_noise_dither_active": 0,
+    "optical_foreground_vibrancy_active": 0,
+    "optical_deterministic_fallback": 1,
     "render_target_ready": 1,
     "render_target_pixel_formats": {
       "rgba8unorm": 1

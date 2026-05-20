@@ -64,7 +64,7 @@
     "fallback": 0,
     "backdrop_sampling": 8,
     "contract_versions": {
-      "25": 9
+      "26": 9
     },
     "theme_foreground_matches_theme": 0,
     "theme_accent_matches_theme": 0,
@@ -166,7 +166,34 @@
     "luminance_curves": {
       "adaptive-backdrop-luma": 8,
       "fallback-flat": 1
-    }
+    },
+    "optical_response_models": {
+      "sampled-backdrop": 8,
+      "standard-content": 1
+    },
+    "optical_blur_strategies": {
+      "backdrop-sample-blur": 8,
+      "standard-fill": 1
+    },
+    "optical_color_strategies": {
+      "adaptive-backdrop-color": 8,
+      "standard-content-color": 1
+    },
+    "optical_depth_strategies": {
+      "layered-shadow-edge-noise": 8,
+      "standard-content-edge": 1
+    },
+    "optical_backdrop_driven": 8,
+    "optical_blur_active": 8,
+    "optical_frosting_active": 8,
+    "optical_tint_active": 9,
+    "optical_saturation_active": 8,
+    "optical_luminance_preservation_active": 9,
+    "optical_edge_highlight_active": 9,
+    "optical_depth_shadow_active": 9,
+    "optical_noise_dither_active": 8,
+    "optical_foreground_vibrancy_active": 8,
+    "optical_deterministic_fallback": 9
   },
   "require_capabilities": [
     "material_backdrop_blur"

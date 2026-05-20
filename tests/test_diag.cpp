@@ -1047,6 +1047,28 @@ void test_material_runtime_record_json_contract() {
            >= foreground.at("minimum_contrast_ratio").as_float());
     assert(foreground.at("accent_contrast_ratio").as_float()
            >= foreground.at("minimum_contrast_ratio").as_float());
+    auto const& optical_response = obj.at("optical_response").as_object();
+    assert(optical_response.at("response_model").as_string()
+           == "deterministic-fallback");
+    assert(optical_response.at("blur_strategy").as_string()
+           == "fallback-fill");
+    assert(optical_response.at("color_strategy").as_string()
+           == "fallback-solid-color");
+    assert(optical_response.at("depth_strategy").as_string()
+           == "fallback-shadow-edge");
+    assert(optical_response.at("backdrop_driven").as_bool() == false);
+    assert(optical_response.at("blur_active").as_bool() == false);
+    assert(optical_response.at("frosting_active").as_bool() == false);
+    assert(optical_response.at("tint_active").as_bool() == true);
+    assert(optical_response.at("saturation_active").as_bool() == false);
+    assert(optical_response.at("luminance_preservation_active").as_bool()
+           == true);
+    assert(optical_response.at("edge_highlight_active").as_bool() == true);
+    assert(optical_response.at("depth_shadow_active").as_bool() == true);
+    assert(optical_response.at("noise_dither_active").as_bool() == false);
+    assert(optical_response.at("foreground_vibrancy_active").as_bool()
+           == false);
+    assert(optical_response.at("deterministic_fallback").as_bool() == true);
     auto const& decision_trace = obj.at("decision_trace").as_object();
     assert(decision_trace.at("has_material").as_bool() == true);
     assert(decision_trace.at("role_allows_liquid_glass").as_bool() == true);

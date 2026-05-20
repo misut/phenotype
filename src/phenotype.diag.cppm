@@ -1509,6 +1509,54 @@ namespace detail {
             "deterministic",
             json::Value{plan.foreground.deterministic});
 
+        json::Object optical_response;
+        optical_response.emplace(
+            "response_model",
+            json::Value{plan.optical_response.response_model});
+        optical_response.emplace(
+            "blur_strategy",
+            json::Value{plan.optical_response.blur_strategy});
+        optical_response.emplace(
+            "color_strategy",
+            json::Value{plan.optical_response.color_strategy});
+        optical_response.emplace(
+            "depth_strategy",
+            json::Value{plan.optical_response.depth_strategy});
+        optical_response.emplace(
+            "backdrop_driven",
+            json::Value{plan.optical_response.backdrop_driven});
+        optical_response.emplace(
+            "blur_active",
+            json::Value{plan.optical_response.blur_active});
+        optical_response.emplace(
+            "frosting_active",
+            json::Value{plan.optical_response.frosting_active});
+        optical_response.emplace(
+            "tint_active",
+            json::Value{plan.optical_response.tint_active});
+        optical_response.emplace(
+            "saturation_active",
+            json::Value{plan.optical_response.saturation_active});
+        optical_response.emplace(
+            "luminance_preservation_active",
+            json::Value{
+                plan.optical_response.luminance_preservation_active});
+        optical_response.emplace(
+            "edge_highlight_active",
+            json::Value{plan.optical_response.edge_highlight_active});
+        optical_response.emplace(
+            "depth_shadow_active",
+            json::Value{plan.optical_response.depth_shadow_active});
+        optical_response.emplace(
+            "noise_dither_active",
+            json::Value{plan.optical_response.noise_dither_active});
+        optical_response.emplace(
+            "foreground_vibrancy_active",
+            json::Value{plan.optical_response.foreground_vibrancy_active});
+        optical_response.emplace(
+            "deterministic_fallback",
+            json::Value{plan.optical_response.deterministic_fallback});
+
         json::Object quality_policy;
         quality_policy.emplace(
             "allow_backdrop_sampling",
@@ -1680,6 +1728,9 @@ namespace detail {
             json::Value{std::move(backdrop_access)});
         out.emplace("theme", json::Value{std::move(theme)});
         out.emplace("foreground", json::Value{std::move(foreground)});
+        out.emplace(
+            "optical_response",
+            json::Value{std::move(optical_response)});
         out.emplace("fallback", json::Value{plan.fallback()});
         out.emplace(
             "fallback_path",

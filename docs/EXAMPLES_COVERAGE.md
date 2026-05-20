@@ -81,6 +81,10 @@ Use `examples/glass_showcase` when the artifact should prove material semantics
 across every public `MaterialKind`, including macOS sampled-backdrop rendering
 and fallback metadata. Use the desktop or mobile file explorer examples when
 the artifact should prove an app-like material workflow.
+Glass and file explorer manifests also pin `MaterialPlan.optical_response`
+summaries so sampled backdrop glass, standard content materials, deterministic
+fallbacks, blur/color/depth strategies, and the optical boolean contract fail as
+structured JSON before visual drift has to be interpreted from screenshots.
 The desktop file explorer additionally gates Finder-style icon-grid previews:
 the shared model exposes `chrome.thumbnail_system` in CLI/debug JSON, and the
 desktop manifest samples PDF, image, and video thumbnail regions so visual drift

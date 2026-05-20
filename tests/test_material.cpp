@@ -57,7 +57,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 25);
+    assert(material_plan_contract_version == 26);
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(!plan.shape.capsule);
     assert(plan.theme.default_glass_tokens);
@@ -97,6 +97,25 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.observation_contract.max_surface_sample_pixels == 240 * 96);
     assert(plan.observation_contract.expected_active_runtime_passes == 1u);
     assert(plan.observation_contract.expected_backdrop_runtime_passes == 1u);
+    assert(std::string_view(plan.optical_response.response_model)
+        == "sampled-backdrop");
+    assert(std::string_view(plan.optical_response.blur_strategy)
+        == "backdrop-sample-blur");
+    assert(std::string_view(plan.optical_response.color_strategy)
+        == "adaptive-backdrop-color");
+    assert(std::string_view(plan.optical_response.depth_strategy)
+        == "layered-shadow-edge-noise");
+    assert(plan.optical_response.backdrop_driven);
+    assert(plan.optical_response.blur_active);
+    assert(plan.optical_response.frosting_active);
+    assert(plan.optical_response.tint_active);
+    assert(plan.optical_response.saturation_active);
+    assert(plan.optical_response.luminance_preservation_active);
+    assert(plan.optical_response.edge_highlight_active);
+    assert(plan.optical_response.depth_shadow_active);
+    assert(plan.optical_response.noise_dither_active);
+    assert(plan.optical_response.foreground_vibrancy_active);
+    assert(plan.optical_response.deterministic_fallback);
     assert(plan.backdrop.luma_sample_count == 25u);
     assert(plan.backdrop.luma_sample_grid_width == 5u);
     assert(plan.backdrop.luma_sample_grid_height == 5u);
@@ -239,6 +258,25 @@ void test_content_layer_stays_standard_material_contract() {
         == "material-standard-pass");
     assert(std::string_view(plan.observation_contract.likely_pass)
         == "standard-material-fill");
+    assert(std::string_view(plan.optical_response.response_model)
+        == "standard-content");
+    assert(std::string_view(plan.optical_response.blur_strategy)
+        == "standard-fill");
+    assert(std::string_view(plan.optical_response.color_strategy)
+        == "standard-content-color");
+    assert(std::string_view(plan.optical_response.depth_strategy)
+        == "standard-content-edge");
+    assert(!plan.optical_response.backdrop_driven);
+    assert(!plan.optical_response.blur_active);
+    assert(!plan.optical_response.frosting_active);
+    assert(plan.optical_response.tint_active);
+    assert(!plan.optical_response.saturation_active);
+    assert(plan.optical_response.luminance_preservation_active);
+    assert(plan.optical_response.edge_highlight_active);
+    assert(plan.optical_response.depth_shadow_active);
+    assert(!plan.optical_response.noise_dither_active);
+    assert(!plan.optical_response.foreground_vibrancy_active);
+    assert(plan.optical_response.deterministic_fallback);
     std::puts("PASS: content layer stays standard material contract");
 }
 
@@ -277,6 +315,25 @@ void test_fallback_backdrop_access_contract() {
         == "none");
     assert(std::string_view(plan.observation_contract.backdrop_capture_reason)
         == "not-required");
+    assert(std::string_view(plan.optical_response.response_model)
+        == "deterministic-fallback");
+    assert(std::string_view(plan.optical_response.blur_strategy)
+        == "fallback-fill");
+    assert(std::string_view(plan.optical_response.color_strategy)
+        == "fallback-solid-color");
+    assert(std::string_view(plan.optical_response.depth_strategy)
+        == "fallback-shadow-edge");
+    assert(!plan.optical_response.backdrop_driven);
+    assert(!plan.optical_response.blur_active);
+    assert(!plan.optical_response.frosting_active);
+    assert(plan.optical_response.tint_active);
+    assert(!plan.optical_response.saturation_active);
+    assert(plan.optical_response.luminance_preservation_active);
+    assert(plan.optical_response.edge_highlight_active);
+    assert(plan.optical_response.depth_shadow_active);
+    assert(!plan.optical_response.noise_dither_active);
+    assert(!plan.optical_response.foreground_vibrancy_active);
+    assert(plan.optical_response.deterministic_fallback);
     std::puts("PASS: fallback backdrop access contract");
 }
 
