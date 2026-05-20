@@ -640,6 +640,9 @@ struct MaterialExecutorSummary {
     std::uint32_t plan_count = 0;
     std::uint32_t material_instance_count = 0;
     std::uint32_t fallback_instance_count = 0;
+    std::uint32_t sampled_backdrop_instance_count = 0;
+    std::uint32_t standard_fill_instance_count = 0;
+    std::uint32_t deterministic_fallback_instance_count = 0;
     std::uint32_t material_draw_calls = 0;
     std::uint32_t backdrop_copy_count = 0;
     std::uint32_t backdrop_copy_skipped_count = 0;
@@ -733,6 +736,27 @@ inline bool material_stage_matches(
     return actual && std::string_view{actual} == expected;
 }
 
+inline bool material_plan_uses_sampled_backdrop_executor(
+        MaterialPlan const& plan) noexcept {
+    return plan.primary_pass.active
+        && plan.primary_pass.requires_backdrop
+        && material_stage_matches(plan.primary_pass.executor, "backdrop-filter");
+}
+
+inline bool material_plan_uses_standard_fill_executor(
+        MaterialPlan const& plan) noexcept {
+    return plan.primary_pass.active
+        && !plan.primary_pass.requires_backdrop
+        && material_stage_matches(plan.primary_pass.executor, "standard-fill");
+}
+
+inline bool material_plan_uses_deterministic_fallback_executor(
+        MaterialPlan const& plan) noexcept {
+    return plan.primary_pass.active
+        && !plan.primary_pass.requires_backdrop
+        && material_stage_matches(plan.primary_pass.executor, "fallback-fill");
+}
+
 inline void accumulate_material_executor_plan_summary(
         MaterialExecutorSummary& summary,
         MaterialPlan const& plan) noexcept {
@@ -746,6 +770,12 @@ inline void accumulate_material_executor_plan_summary(
             plan.sample_taps);
         summary.material_total_sample_taps += plan.sample_taps;
     }
+    if (material_plan_uses_sampled_backdrop_executor(plan))
+        ++summary.sampled_backdrop_instance_count;
+    if (material_plan_uses_standard_fill_executor(plan))
+        ++summary.standard_fill_instance_count;
+    if (material_plan_uses_deterministic_fallback_executor(plan))
+        ++summary.deterministic_fallback_instance_count;
     for (unsigned int i = 0; i < plan.execution_stage_count; ++i) {
         auto const& stage = plan.execution_stages[i];
         ++summary.execution_stage_count;

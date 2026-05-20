@@ -818,9 +818,10 @@ growth, stage-capacity overflow, texture-copy budget drift, and material shape
 drift such as a clamped radius not matching the backend-executed radius.
 Backends separately publish `renderer.material_executor_summary` for edge-only
 execution telemetry: material instances, fallback instances, material draw
-calls, planned shared frame capture count/pixels, planned surface sample
-pixels, upload bytes/capacity, framebuffer-history copy bounds, CPU enqueue
-timings, `foreground_text_candidate_count`, and
+calls, primary executor instance counts for sampled backdrop, standard fill, and
+deterministic fallback fill, planned shared frame capture count/pixels, planned
+surface sample pixels, upload bytes/capacity, framebuffer-history copy bounds,
+CPU enqueue timings, `foreground_text_candidate_count`, and
 `foreground_text_remap_count`. The same summary includes the exact backdrop
 luminance descriptor that fed the pure planner (`backdrop_descriptor_luma_*`)
 and any bounded sampling skip reason. `renderer.material_backdrop_luma_descriptor`

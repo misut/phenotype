@@ -777,6 +777,12 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
     backdrop_access = plan["backdrop_access"]
     assert isinstance(primary, dict)
     assert isinstance(backdrop_access, dict)
+    sampled_backdrop_instances = (
+        1 if primary["executor"] == "backdrop-filter" else 0)
+    standard_fill_instances = (
+        1 if primary["executor"] == "standard-fill" else 0)
+    deterministic_fallback_instances = (
+        1 if primary["executor"] == "fallback-fill" else 0)
     primary_stages = [
         stage for stage in stages
         if isinstance(stage, dict)
@@ -788,7 +794,11 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "plan_count": 1,
         "material_instance_count": 0 if plan["fallback"] else 1,
         "fallback_instance_count": 1 if plan["fallback"] else 0,
-        "material_draw_calls": 0 if plan["fallback"] else 1,
+        "sampled_backdrop_instance_count": sampled_backdrop_instances,
+        "standard_fill_instance_count": standard_fill_instances,
+        "deterministic_fallback_instance_count": (
+            deterministic_fallback_instances),
+        "material_draw_calls": sampled_backdrop_instances,
         "backdrop_copy_count": 0,
         "execution_stage_count": len(stages),
         "active_execution_stage_count": len(active_stages),
@@ -2833,6 +2843,32 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["actual"], 25)
         self.assertEqual(failure["likely_pass"], "material-executor")
         self.assertIn("MaterialPlan.sample_taps", failure["hint"])
+
+    def test_material_executor_sampled_instance_mismatch_is_llm_actionable(
+            self) -> None:
+        root = snapshot(sampled_material_plan(sample_taps=13))
+        renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+        assert isinstance(renderer, dict)
+        executor = renderer["material_executor_summary"]
+        assert isinstance(executor, dict)
+        executor["sampled_backdrop_instance_count"] = 0
+
+        code, report = self.run_verifier(root)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material executor summary sampled_backdrop_instance_count "
+                "matches plans"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_executor_summary"
+            ".sampled_backdrop_instance_count")
+        self.assertEqual(failure["expected"], 1)
+        self.assertEqual(failure["actual"], 0)
+        self.assertEqual(failure["likely_pass"], "material-executor")
+        self.assertIn("material_executor_summary", failure["hint"])
 
     def test_material_executor_stage_count_mismatch_is_llm_actionable(self) -> None:
         root = snapshot(sampled_material_plan(sample_taps=13))

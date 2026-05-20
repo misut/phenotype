@@ -8361,6 +8361,14 @@ def check_material_executor_summary_contract(
     stage_executors = summary.get("stage_executors")
     if not isinstance(stage_executors, dict):
         stage_executors = {}
+    sampled_backdrop_instances = stage_executors.get("backdrop-filter", 0)
+    standard_fill_instances = stage_executors.get("standard-fill", 0)
+    deterministic_fallback_instances = stage_executors.get("fallback-fill", 0)
+    expected_fields.update({
+        "sampled_backdrop_instance_count": sampled_backdrop_instances,
+        "standard_fill_instance_count": standard_fill_instances,
+        "deterministic_fallback_instance_count": deterministic_fallback_instances,
+    })
     expected_stage_fields = {
         "execution_stage_count": bounds.get("total_execution_stages"),
         "active_execution_stage_count": bounds.get("active_execution_stages"),
@@ -8408,6 +8416,9 @@ def check_material_executor_summary_contract(
         "plan_count",
         "material_instance_count",
         "fallback_instance_count",
+        "sampled_backdrop_instance_count",
+        "standard_fill_instance_count",
+        "deterministic_fallback_instance_count",
         "material_draw_calls",
         "backdrop_copy_count",
         "execution_stage_count",
@@ -8500,10 +8511,10 @@ def check_material_executor_summary_contract(
         if isinstance(bounds, dict):
             max_pass_count = bounds.get("max_pass_count")
         draw_call_limit = (
-            material_instances * max_pass_count
-            if isinstance(material_instances, int)
+            sampled_backdrop_instances * max_pass_count
+            if isinstance(sampled_backdrop_instances, int)
             and isinstance(max_pass_count, int)
-            else material_instances)
+            else sampled_backdrop_instances)
         report.check(
             "material executor draw calls are bounded by pass budget",
             isinstance(draw_call_limit, int)
@@ -8514,8 +8525,8 @@ def check_material_executor_summary_contract(
             likely_layer="platform-runtime",
             likely_pass="material-executor",
             hint=(
-                "Material draw calls should stay within material instances "
-                "times MaterialResourceBudget.max_pass_count."))
+                "Material draw calls should stay within sampled backdrop "
+                "instances times MaterialResourceBudget.max_pass_count."))
 
     expected_sample_fields = {
         "material_max_sample_taps": bounds.get("max_plan_sample_taps"),

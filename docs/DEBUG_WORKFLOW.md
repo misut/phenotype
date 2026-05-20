@@ -1170,9 +1170,10 @@ from `renderer.material_plans[]` and reports the exact summary field if the
 backend's view of executed material work drifts from the resolved plans.
 Backends also serialize `renderer.material_executor_summary` for edge-only
 work that cannot be derived from the pure plan, including material instance
-count, fallback instance count, material draw calls, encoded material sample
-tap totals, planned shared frame capture count/pixels, planned surface sample
-pixels, next-frame capture plan count, upload bytes/capacity,
+count, fallback instance count, primary executor instance counts for sampled
+backdrop, standard fill, and deterministic fallback fill, material draw calls,
+encoded material sample tap totals, planned shared frame capture count/pixels,
+planned surface sample pixels, next-frame capture plan count, upload bytes/capacity,
 framebuffer-history copy pixels, and CPU
 enqueue timings. Foreground execution counters report how many text commands
 landed inside material surfaces and how many default material text tokens were
@@ -1184,10 +1185,15 @@ likely `material-executor` pass when the path targets the executor summary.
 Whenever material plans are present, the verifier also cross-checks executor
 counts against `renderer.material_plans#summary`: `plan_count`,
 `fallback_instance_count`, `material_instance_count`,
-`material_max_sample_taps`, and `material_total_sample_taps` must match the
-resolved plan aggregate. `fallback_instance_count` means explicit
+`sampled_backdrop_instance_count`, `standard_fill_instance_count`,
+`deterministic_fallback_instance_count`, `material_max_sample_taps`, and
+`material_total_sample_taps` must match the resolved plan aggregate.
+`fallback_instance_count` means explicit
 `MaterialPlan.fallback == true`; a content-layer `standard-material-fill` pass
 is counted as a material instance with zero sample taps, not as fallback.
+The primary executor instance counters are stricter: they are derived from
+`MaterialPlan.primary_pass.executor`, so standard fills and deterministic
+fallback fills cannot be confused with sampled backdrop blur work.
 Executor stage counters must also match the pure
 `execution_stages` summary: total stages, active stages, backdrop-dependent
 stages, dropped stages, primary runtime stages, backdrop-filter stages,
@@ -1199,8 +1205,8 @@ and pixel budget. The resource-bound gate can
 also require
 `max_execution_stage_capacity_*` and `dropped_execution_stages_*` so artifacts
 prove that stage growth stayed inside the serialized capacity. Draw calls must
-stay within material instances times the pure pass budget, upload bytes must
-fit the reported material buffer capacity, and copied backdrop pixels must stay
+stay within sampled backdrop instances times the pure pass budget, upload bytes
+must fit the reported material buffer capacity, and copied backdrop pixels must stay
 within the pure resource budget. Foreground remaps must also be less than or
 equal to foreground text candidates, otherwise the backend has counted a remap
 without a material surface hit.
