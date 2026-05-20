@@ -2048,6 +2048,43 @@ namespace detail {
             "max_fallback_surfaces",
             json::Value{
                 static_cast<std::int64_t>(summary.max_fallback_surfaces)});
+        out.emplace(
+            "total_shape_pair_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.total_shape_pair_count)});
+        out.emplace(
+            "blend_candidate_pair_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.blend_candidate_pair_count)});
+        out.emplace(
+            "union_candidate_pair_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.union_candidate_pair_count)});
+        out.emplace(
+            "morph_candidate_pair_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.morph_candidate_pair_count)});
+        out.emplace(
+            "separated_pair_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.separated_pair_count)});
+        out.emplace("min_shape_gap", json::Value{summary.min_shape_gap});
+        out.emplace("max_shape_gap", json::Value{summary.max_shape_gap});
+        out.emplace(
+            "max_blend_distance",
+            json::Value{summary.max_blend_distance});
+        out.emplace(
+            "max_group_bounds_width",
+            json::Value{summary.max_group_bounds_width});
+        out.emplace(
+            "max_group_bounds_height",
+            json::Value{summary.max_group_bounds_height});
+        out.emplace(
+            "max_group_bounds_area",
+            json::Value{summary.max_group_bounds_area});
         return json::Value{std::move(out)};
     }
 

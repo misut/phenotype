@@ -36,7 +36,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "32": 8
+      "33": 8
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -84,6 +84,17 @@
     "container_max_active_surfaces": 4,
     "container_max_sampled_backdrop_surfaces": 4,
     "container_max_fallback_surfaces": 0,
+    "container_total_shape_pair_count": 6,
+    "container_blend_candidate_pair_count": 3,
+    "container_union_candidate_pair_count": 0,
+    "container_morph_candidate_pair_count": 3,
+    "container_separated_pair_count": 3,
+    "container_min_shape_gap": 8.0,
+    "container_max_shape_gap": 656.0,
+    "container_max_blend_distance": 28.0,
+    "container_max_group_bounds_width": 472.0,
+    "container_max_group_bounds_height": 1288.0,
+    "container_max_group_bounds_area": 566720.0,
     "reference_technologies": {
       "liquid-glass": 8
     },

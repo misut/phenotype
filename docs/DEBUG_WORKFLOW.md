@@ -954,6 +954,15 @@ the array and compares them with `observation.expected_*_paint_layers`,
 `renderer.material_runtime_summary`, and
 `renderer.material_executor_summary`, then reports exact JSON paths and likely
 layers when a backend serializes stale or hidden fallback policy.
+For schema 33 and later, inspect `renderer.material_runtime_summary.container_groups`
+and `renderer.material_executor_summary.container_groups` when grouped glass
+looks wrong. The verifier derives the same object from `renderer.material_plans[]`
+and checks group count, multi-surface groups, union/morph/interactive groups,
+shared-backdrop scope, fallback mixing, shape-pair counts, blend/union/morph
+candidate pairs, separated pairs, min/max shape gap, max blend distance, and max
+group bounds. A mismatch points at `layout::material_container`,
+`MaterialSurfaceOptions` inheritance, `MaterialRect` container payload encoding,
+or backend summary finalization before it points at shaders.
 `renderer.material_backdrop_luma_descriptor` is the edge-side view of that same
 contract. It reports the latest observed luma min/max/mean, sample grid, sample
 frame, pending state, skipped sample count, and status such as

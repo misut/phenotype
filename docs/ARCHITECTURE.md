@@ -820,8 +820,11 @@ aggregate container contract from immutable `MaterialRuntimeRecord` values. Both
 `renderer.material_executor_summary.container_groups` expose group count,
 multi-surface groups, union/morph/interactive groups, shared-backdrop-scope
 groups, mixed fallback groups, and max active/sampled/fallback surfaces per
-group. This keeps Apple-style grouped glass behavior reviewable from JSON before
-any backend introduces hidden per-container caches or extra blur passes.
+group. Schema 33 adds pure geometry fields to the same summary: total shape
+pairs, blend/union/morph candidate pairs, separated pairs, min/max shape gap,
+max blend distance, and max group bounds width/height/area. This keeps
+Apple-style grouped glass behavior reviewable from JSON before any backend
+introduces hidden per-container caches, shared captures, or extra blur passes.
 Backends use the pure `default_material_quality_policy()` and
 `sanitize_material_quality_policy()` helpers instead of owning hard-coded
 material quality limits locally, so policy changes stay visible in

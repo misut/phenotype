@@ -305,6 +305,10 @@ typed inputs such as `backdrop:high`, `density:dense`, `inspector:closed`,
 `note:...`, and `viewport:640x820@2`, then reports the final state, trace,
 public material kinds, and expected material plan count. This keeps material
 probe input debugging cheap before running the local glass artifact gate.
+The glass showcase manifests now also pin schema-33 container group geometry:
+shape-pair totals, blend/morph/separation counts, min/max gaps, blend distance,
+and group bounds. That makes the example a verifier-readable `GlassEffectContainer`
+probe instead of only a visual material ramp.
 
 `phenotype package bundle` is the lightweight packaging counterpart. It stages
 the package manifest, declared SVG app icon, all declared SVG image assets,

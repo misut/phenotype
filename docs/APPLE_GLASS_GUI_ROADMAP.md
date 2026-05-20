@@ -261,11 +261,13 @@ model; they do not own the policy.
 Container groups now have a second pure aggregate contract:
 `summarize_material_container_groups` derives group count, multi-surface groups,
 union/morph/interactive groups, shared-backdrop-scope groups, mixed fallback
-groups, and max active/sampled/fallback surfaces from resolved
-`MaterialRuntimeRecord` values. Runtime and executor summaries serialize that
-same `container_groups` object, so Apple-style grouping and future
-container-level resource reuse can be verified without backend-local policy.
-Schema 32 also moves deterministic non-backdrop rendering into the pure plan.
+groups, max active/sampled/fallback surfaces, shape-pair counts, blend/union/
+morph candidate pairs, separated pairs, min/max inter-shape gap, max blend
+distance, and group bounds from resolved `MaterialRuntimeRecord` values. Runtime
+and executor summaries serialize that same `container_groups` object, so
+Apple-style grouping and future container-level resource reuse can be verified
+without backend-local policy.
+Schema 32 moved deterministic non-backdrop rendering into the pure plan.
 Every non-sampled material now exposes a bounded `paint_layers[]` recipe with
 explicit shadow, fill, and edge-highlight layers, layer executors, offsets,
 inflation, radius deltas, stroke widths, colors, opacity, and drop counts.
@@ -274,7 +276,11 @@ material shader owns that path. Runtime and executor summaries count active,
 shadow, fill, edge, dropped, capacity, and maximum-inflation values so a
 fallback artifact can prove what was drawn without backend-local policy or
 visual guessing.
-Schema 32 also makes each surface's container policy explicit: spacing resolves
+Schema 33 makes container group geometry executable in artifacts: spacing
+resolves to a pure pairwise threshold, each pair records whether it should blend,
+morph, union, or remain separated, and the group bounds expose how large a future
+shared capture could become before a backend adds container-level caches.
+Each surface's container policy stays explicit: spacing resolves
 to `blend_distance`, positive spacing drives `shape_blending_expected`, union ids
 select the union-proximity blend policy, Reduced Motion suppresses only morphing,
 and `performance_policy` tells backend adapters whether to use a single surface,

@@ -916,10 +916,26 @@ def material_container_group_summary(plan: dict[str, object]) -> dict[str, objec
             "max_active_surfaces": 0,
             "max_sampled_backdrop_surfaces": 0,
             "max_fallback_surfaces": 0,
+            "total_shape_pair_count": 0,
+            "blend_candidate_pair_count": 0,
+            "union_candidate_pair_count": 0,
+            "morph_candidate_pair_count": 0,
+            "separated_pair_count": 0,
+            "min_shape_gap": 0.0,
+            "max_shape_gap": 0.0,
+            "max_blend_distance": 0.0,
+            "max_group_bounds_width": 0.0,
+            "max_group_bounds_height": 0.0,
+            "max_group_bounds_area": 0.0,
         }
     active = 1 if primary["active"] else 0
     sampled = 1 if plan["backdrop_sampling"] else 0
     fallback = 1 if plan["fallback"] else 0
+    geometry = plan["geometry"]
+    assert isinstance(geometry, dict)
+    width = float(geometry["w"])
+    height = float(geometry["h"])
+    blend_distance = float(container["blend_distance"])
     return {
         "group_count": 1,
         "multi_surface_group_count": 0,
@@ -933,6 +949,17 @@ def material_container_group_summary(plan: dict[str, object]) -> dict[str, objec
         "max_active_surfaces": active,
         "max_sampled_backdrop_surfaces": sampled,
         "max_fallback_surfaces": fallback,
+        "total_shape_pair_count": 0,
+        "blend_candidate_pair_count": 0,
+        "union_candidate_pair_count": 0,
+        "morph_candidate_pair_count": 0,
+        "separated_pair_count": 0,
+        "min_shape_gap": 0.0,
+        "max_shape_gap": 0.0,
+        "max_blend_distance": blend_distance,
+        "max_group_bounds_width": width,
+        "max_group_bounds_height": height,
+        "max_group_bounds_area": width * height,
     }
 
 
@@ -2351,6 +2378,17 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "container_max_active_surfaces": 1,
                 "container_max_sampled_backdrop_surfaces": 1,
                 "container_max_fallback_surfaces": 0,
+                "container_total_shape_pair_count": 0,
+                "container_blend_candidate_pair_count": 0,
+                "container_union_candidate_pair_count": 0,
+                "container_morph_candidate_pair_count": 0,
+                "container_separated_pair_count": 0,
+                "container_min_shape_gap": 0.0,
+                "container_max_shape_gap": 0.0,
+                "container_max_blend_distance": 12.0,
+                "container_max_group_bounds_width": 240.0,
+                "container_max_group_bounds_height": 96.0,
+                "container_max_group_bounds_area": 240.0 * 96.0,
             },
             "require_runtime_numeric_bounds": [
                 {
