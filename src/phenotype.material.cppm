@@ -12,7 +12,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 29;
+inline constexpr std::uint32_t material_plan_contract_version = 30;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr float material_max_blur_radius = 36.0f;
 inline constexpr unsigned int material_max_sample_taps = 25;
@@ -277,6 +277,11 @@ struct MaterialStageOptics {
     float noise_opacity = 0.0f;
     float shadow_alpha = 0.0f;
     float shadow_radius = 0.0f;
+    char const* specular_model = "none";
+    float specular_anchor_x = 0.5f;
+    float specular_anchor_y = 0.5f;
+    float specular_radius = 0.0f;
+    float specular_intensity = 0.0f;
 };
 
 struct MaterialExecutionStage {
@@ -380,6 +385,12 @@ struct MaterialInteractionResponse {
     char const* enablement_reason = "inactive-material";
     char const* response_model = "none";
     char const* motion_policy = "static";
+    char const* specular_model = "none";
+    bool specular_highlight_active = false;
+    float specular_anchor_x = 0.5f;
+    float specular_anchor_y = 0.5f;
+    float specular_radius = 0.0f;
+    float specular_intensity = 0.0f;
     bool deterministic = true;
 };
 
@@ -583,6 +594,11 @@ inline MaterialStageOptics material_edge_stage_optics(
     optics.channel = "edge-highlight";
     optics.edge_highlight = plan.edge_highlight;
     optics.edge_width = plan.edge_width;
+    optics.specular_model = plan.interaction.specular_model;
+    optics.specular_anchor_x = plan.interaction.specular_anchor_x;
+    optics.specular_anchor_y = plan.interaction.specular_anchor_y;
+    optics.specular_radius = plan.interaction.specular_radius;
+    optics.specular_intensity = plan.interaction.specular_intensity;
     return optics;
 }
 
@@ -735,6 +751,7 @@ struct MaterialRuntimeSummary {
     std::uint32_t interaction_enabled_count = 0;
     std::uint32_t interaction_active_count = 0;
     std::uint32_t interaction_reduce_motion_count = 0;
+    std::uint32_t interaction_specular_highlight_count = 0;
     std::uint32_t theme_default_glass_token_count = 0;
     std::uint32_t theme_custom_token_count = 0;
     MaterialContainerGroupRuntimeSummary container_groups{};
@@ -749,6 +766,8 @@ struct MaterialRuntimeSummary {
     float max_shadow_alpha = 0.0f;
     float max_shadow_radius = 0.0f;
     float max_interaction_response_strength = 0.0f;
+    float max_interaction_specular_radius = 0.0f;
+    float max_interaction_specular_intensity = 0.0f;
     float min_foreground_contrast_ratio = 0.0f;
     std::uint32_t unbounded_texture_copy = 0;
     std::uint32_t non_deterministic_fallback = 0;
@@ -791,7 +810,10 @@ struct MaterialExecutorSummary {
     std::uint32_t foreground_text_remap_count = 0;
     std::uint32_t interaction_enabled_count = 0;
     std::uint32_t interaction_active_count = 0;
+    std::uint32_t interaction_specular_highlight_count = 0;
     float max_interaction_response_strength = 0.0f;
+    float max_interaction_specular_radius = 0.0f;
+    float max_interaction_specular_intensity = 0.0f;
     bool backdrop_descriptor_luma_available = false;
     float backdrop_descriptor_luma_min = 0.0f;
     float backdrop_descriptor_luma_max = 1.0f;
@@ -1077,9 +1099,17 @@ inline void accumulate_material_executor_plan_summary(
         ++summary.interaction_enabled_count;
     if (plan.interaction.active)
         ++summary.interaction_active_count;
+    if (plan.interaction.specular_highlight_active)
+        ++summary.interaction_specular_highlight_count;
     summary.max_interaction_response_strength = std::max(
         summary.max_interaction_response_strength,
         plan.interaction.response_strength);
+    summary.max_interaction_specular_radius = std::max(
+        summary.max_interaction_specular_radius,
+        plan.interaction.specular_radius);
+    summary.max_interaction_specular_intensity = std::max(
+        summary.max_interaction_specular_intensity,
+        plan.interaction.specular_intensity);
     if (plan.backdrop_access.shared_frame_capture
         || plan.backdrop_access.next_frame_capture_required) {
         summary.planned_frame_capture_count = std::max(
@@ -1215,6 +1245,8 @@ inline void accumulate_material_runtime_summary(
         ++summary.interaction_active_count;
     if (plan.interaction.reduce_motion)
         ++summary.interaction_reduce_motion_count;
+    if (plan.interaction.specular_highlight_active)
+        ++summary.interaction_specular_highlight_count;
     if (plan.theme.default_glass_tokens)
         ++summary.theme_default_glass_token_count;
     else
@@ -1246,6 +1278,12 @@ inline void accumulate_material_runtime_summary(
     summary.max_interaction_response_strength = std::max(
         summary.max_interaction_response_strength,
         plan.interaction.response_strength);
+    summary.max_interaction_specular_radius = std::max(
+        summary.max_interaction_specular_radius,
+        plan.interaction.specular_radius);
+    summary.max_interaction_specular_intensity = std::max(
+        summary.max_interaction_specular_intensity,
+        plan.interaction.specular_intensity);
     if (plan.foreground.primary_contrast_ratio > 0.0f) {
         summary.min_foreground_contrast_ratio =
             summary.min_foreground_contrast_ratio == 0.0f
@@ -2281,6 +2319,24 @@ inline MaterialInteractionResponse material_resolve_interaction_response(
         strength = std::min(strength, 0.36f);
     response.response_strength = strength;
     response.active = strength > 0.0f;
+    auto const pointer_driven =
+        response.pointer_inside || response.hovered || response.pressed;
+    if (pointer_driven && response.active) {
+        auto const press_scale = response.pressed ? 1.0f : 0.0f;
+        auto const motion_scale = reduce_motion ? 0.45f : 1.0f;
+        response.specular_model = "pointer-specular";
+        response.specular_highlight_active = true;
+        response.specular_anchor_x = response.pointer_x;
+        response.specular_anchor_y = response.pointer_y;
+        response.specular_radius = std::clamp(
+            0.34f - 0.10f * press_scale,
+            0.20f,
+            0.38f);
+        response.specular_intensity = std::clamp(
+            motion_scale * (0.42f + 0.18f * press_scale) * strength,
+            0.0f,
+            0.75f);
+    }
     return response;
 }
 

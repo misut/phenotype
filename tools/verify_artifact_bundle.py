@@ -312,7 +312,12 @@ ALLOWED_MATERIAL_INTERACTION_MOTION_POLICIES = {
     "static",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 29
+ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS = {
+    "none",
+    "pointer-specular",
+}
+
+MATERIAL_PLAN_CONTRACT_VERSION = 30
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -2166,10 +2171,12 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "interaction_pointer_inside",
         "interaction_reduce_motion",
         "interaction_deterministic",
+        "interaction_specular_highlight_active",
         "interaction_states",
         "interaction_enablement_reasons",
         "interaction_response_models",
         "interaction_motion_policies",
+        "interaction_specular_models",
         "optical_response_models",
         "optical_blur_strategies",
         "optical_color_strategies",
@@ -2283,6 +2290,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "interaction_pointer_inside",
             "interaction_reduce_motion",
             "interaction_deterministic",
+            "interaction_specular_highlight_active",
             "optical_backdrop_driven",
             "optical_blur_active",
             "optical_frosting_active",
@@ -2367,6 +2375,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             ALLOWED_MATERIAL_INTERACTION_RESPONSE_MODELS),
         "interaction_motion_policies": (
             ALLOWED_MATERIAL_INTERACTION_MOTION_POLICIES),
+        "interaction_specular_models": (
+            ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS),
         "optical_response_models": ALLOWED_MATERIAL_OPTICAL_RESPONSE_MODELS,
         "optical_blur_strategies": ALLOWED_MATERIAL_OPTICAL_BLUR_STRATEGIES,
         "optical_color_strategies": ALLOWED_MATERIAL_OPTICAL_COLOR_STRATEGIES,
@@ -3232,6 +3242,10 @@ MATERIAL_STAGE_OPTICS_NUMERIC_FIELDS = (
     "noise_opacity",
     "shadow_alpha",
     "shadow_radius",
+    "specular_anchor_x",
+    "specular_anchor_y",
+    "specular_radius",
+    "specular_intensity",
 )
 MATERIAL_OBSERVATION_BOOL_FIELDS = (
     "semantic_material_required",
@@ -3339,6 +3353,7 @@ MATERIAL_INTERACTION_BOOL_FIELDS = (
     "focused",
     "pointer_inside",
     "reduce_motion",
+    "specular_highlight_active",
     "deterministic",
 )
 MATERIAL_INTERACTION_NUMERIC_FIELDS = (
@@ -3351,6 +3366,10 @@ MATERIAL_INTERACTION_NUMERIC_FIELDS = (
     "edge_highlight_delta",
     "shadow_alpha_delta",
     "shadow_radius_delta",
+    "specular_anchor_x",
+    "specular_anchor_y",
+    "specular_radius",
+    "specular_intensity",
 )
 MATERIAL_QUALITY_POLICY_BOOL_FIELDS = (
     "allow_backdrop_sampling",
@@ -4060,6 +4079,7 @@ def summarize_material_plans(
             "enablement_reasons": {},
             "response_models": {},
             "motion_policies": {},
+            "specular_models": {},
             "enabled": 0,
             "active": 0,
             "hovered": 0,
@@ -4067,9 +4087,12 @@ def summarize_material_plans(
             "focused": 0,
             "pointer_inside": 0,
             "reduce_motion": 0,
+            "specular_highlight_active": 0,
             "deterministic": 0,
             "max_response_strength": 0.0,
             "max_abs_optical_delta": 0.0,
+            "max_specular_radius": 0.0,
+            "max_specular_intensity": 0.0,
         },
         "optical_response": {
             "response_models": {},
@@ -5377,6 +5400,11 @@ def summarize_material_plans(
             hint=(
                 "MaterialPlan.interaction must expose the pure hover, press, "
                 "focus, and pointer response contract."))
+        plan_specular_model: str | None = None
+        plan_specular_anchor_x: int | float | None = None
+        plan_specular_anchor_y: int | float | None = None
+        plan_specular_radius: int | float | None = None
+        plan_specular_intensity: int | float | None = None
         if interaction is not None:
             interaction_summary = summary["interaction"]
             for key in MATERIAL_INTERACTION_BOOL_FIELDS:
@@ -5399,7 +5427,11 @@ def summarize_material_plans(
                     likely_layer="material-interaction",
                     hint="Interaction numeric response fields must be finite.")
                 if isinstance(value, (int, float)):
-                    if key in ("pointer_x", "pointer_y"):
+                    if key in (
+                            "pointer_x",
+                            "pointer_y",
+                            "specular_anchor_x",
+                            "specular_anchor_y"):
                         report.check(
                             f"material interaction {key} is normalized",
                             0.0 <= float(value) <= 1.0,
@@ -5408,9 +5440,32 @@ def summarize_material_plans(
                             actual=value,
                             likely_layer="material-interaction",
                             hint=(
-                                "Pointer coordinates should be normalized "
+                                "Pointer and specular coordinates should be normalized "
                                 "inside the material surface."),
                             record_success=False)
+                    elif key in ("specular_radius", "specular_intensity"):
+                        report.check(
+                            f"material interaction {key} is normalized",
+                            0.0 <= float(value) <= 1.0,
+                            path=f"{plan_path}.interaction.{key}",
+                            expected={"between": [0.0, 1.0]},
+                            actual=value,
+                            likely_layer="material-interaction",
+                            hint=(
+                                "Specular highlight radius and intensity should "
+                                "stay normalized and bounded."),
+                            record_success=False)
+                        summary_key = (
+                            "max_specular_radius"
+                            if key == "specular_radius"
+                            else "max_specular_intensity")
+                        interaction_summary[summary_key] = max(
+                            float(interaction_summary[summary_key]),
+                            float(value))
+                        if key == "specular_radius":
+                            plan_specular_radius = value
+                        else:
+                            plan_specular_intensity = value
                     elif key.endswith("_delta"):
                         interaction_summary["max_abs_optical_delta"] = max(
                             float(interaction_summary["max_abs_optical_delta"]),
@@ -5419,6 +5474,10 @@ def summarize_material_plans(
                         interaction_summary["max_response_strength"] = max(
                             float(interaction_summary["max_response_strength"]),
                             float(value))
+                    if key == "specular_anchor_x":
+                        plan_specular_anchor_x = value
+                    elif key == "specular_anchor_y":
+                        plan_specular_anchor_y = value
             state = check_string_field(
                 report,
                 interaction,
@@ -5521,9 +5580,33 @@ def summarize_material_plans(
                     likely_layer="material-interaction",
                     hint="Add intentional interaction motion vocabulary to the verifier.",
                     record_success=False)
+            specular_model = check_string_field(
+                report,
+                interaction,
+                "specular_model",
+                f"{plan_path}.interaction",
+                likely_layer="material-interaction",
+                hint="Interaction specular model must use the stable verifier vocabulary.")
+            if isinstance(specular_model, str):
+                plan_specular_model = specular_model
+                models = interaction_summary["specular_models"]
+                models[specular_model] = models.get(specular_model, 0) + 1
+                report.check(
+                    "material interaction specular_model is known",
+                    specular_model
+                    in ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS,
+                    path=f"{plan_path}.interaction.specular_model",
+                    expected=sorted(
+                        ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS),
+                    actual=specular_model,
+                    likely_layer="material-interaction",
+                    hint="Add intentional interaction specular vocabulary to the verifier.",
+                    record_success=False)
             enabled = bool_at(interaction, "enabled")
             active = bool_at(interaction, "active")
+            specular_active = bool_at(interaction, "specular_highlight_active")
             strength = number_at(interaction, "response_strength")
+            specular_intensity = number_at(interaction, "specular_intensity")
             if isinstance(enabled, bool) and isinstance(active, bool):
                 report.check(
                     "material interaction active implies enabled",
@@ -5575,6 +5658,46 @@ def summarize_material_plans(
                         "Interaction response strength should be positive "
                         "exactly when the interaction is active."),
                     record_success=False)
+            if (isinstance(specular_active, bool)
+                    and isinstance(specular_intensity, (int, float))):
+                report.check(
+                    "material interaction specular highlight matches intensity",
+                    specular_active is (float(specular_intensity) > 0.0),
+                    path=f"{plan_path}.interaction.specular_intensity",
+                    expected={"> 0": specular_active},
+                    actual=specular_intensity,
+                    likely_layer="material-interaction",
+                    hint=(
+                        "Pointer specular highlight intensity should be "
+                        "positive exactly when the highlight is active."),
+                    record_success=False)
+                if isinstance(active, bool):
+                    report.check(
+                        "material interaction specular highlight implies active response",
+                        (not specular_active) or active,
+                        path=f"{plan_path}.interaction.specular_highlight_active",
+                        expected={"active": True},
+                        actual={"active": active,
+                                "specular_highlight_active": specular_active},
+                        likely_layer="material-interaction",
+                        hint=(
+                            "Pointer specular highlight should only render for "
+                            "an active interaction response."),
+                        record_success=False)
+                if isinstance(specular_model, str):
+                    expected_specular_model = (
+                        "pointer-specular" if specular_active else "none")
+                    report.check(
+                        "material interaction specular_model matches highlight state",
+                        specular_model == expected_specular_model,
+                        path=f"{plan_path}.interaction.specular_model",
+                        expected=expected_specular_model,
+                        actual=specular_model,
+                        likely_layer="material-interaction",
+                        hint=(
+                            "Specular model should mirror whether the pointer "
+                            "highlight is active."),
+                        record_success=False)
         sample_taps = check_number_field(
             report,
             plan,
@@ -8185,6 +8308,28 @@ def summarize_material_plans(
                                 "Add intentional stage optical channels to the "
                                 "verifier before changing artifact shape."),
                             record_success=False)
+                    stage_specular_model = check_string_field(
+                        report,
+                        stage_optics,
+                        "specular_model",
+                        f"{stage_path}.optics",
+                        likely_layer="material-stage-optics",
+                        hint="Stage optics must expose the specular highlight model.")
+                    if isinstance(stage_specular_model, str):
+                        report.check(
+                            "material execution stage optics specular_model is known",
+                            stage_specular_model
+                            in ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS,
+                            path=f"{stage_path}.optics.specular_model",
+                            expected=sorted(
+                                ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS),
+                            actual=stage_specular_model,
+                            likely_layer="material-stage-optics",
+                            likely_pass=stage_name_for_hint,
+                            hint=(
+                                "Stage specular optics must use the same stable "
+                                "interaction vocabulary as MaterialPlan.interaction."),
+                            record_success=False)
                     optics_numbers: dict[str, int | float | None] = {}
                     for optics_key in MATERIAL_STAGE_OPTICS_NUMERIC_FIELDS:
                         optics_numbers[optics_key] = check_number_field(
@@ -8224,6 +8369,10 @@ def summarize_material_plans(
                         expected_numbers = {
                             "edge_highlight": plan_edge_highlight,
                             "edge_width": plan_edge_width,
+                            "specular_anchor_x": plan_specular_anchor_x,
+                            "specular_anchor_y": plan_specular_anchor_y,
+                            "specular_radius": plan_specular_radius,
+                            "specular_intensity": plan_specular_intensity,
                         }
                     elif stage_name_for_hint == "noise-dither":
                         expected_channel = "noise-dither"
@@ -8258,6 +8407,20 @@ def summarize_material_plans(
                                     "Stage optics must echo the resolved pure "
                                     "MaterialPlan scalar that this stage consumes."),
                                 record_success=False)
+                    if (stage_name_for_hint == "edge-highlight"
+                            and isinstance(plan_specular_model, str)):
+                        report.check(
+                            "material execution stage optics specular_model matches plan",
+                            stage_specular_model == plan_specular_model,
+                            path=f"{stage_path}.optics.specular_model",
+                            expected=plan_specular_model,
+                            actual=stage_specular_model,
+                            likely_layer="material-stage-optics",
+                            likely_pass=stage_name_for_hint,
+                            hint=(
+                                "Edge-highlight stage optics should carry the "
+                                "same specular model resolved by the pure plan."),
+                            record_success=False)
                 if stage_texture_copy_pixels is not None:
                     if stage_active is False:
                         report.check(
@@ -8533,6 +8696,7 @@ def check_material_plan_summary_requirements(
             "interaction_pointer_inside",
             "interaction_reduce_motion",
             "interaction_deterministic",
+            "interaction_specular_highlight_active",
             "optical_backdrop_driven",
             "optical_blur_active",
             "optical_frosting_active",
@@ -8896,6 +9060,9 @@ def check_material_plan_summary_requirements(
         "interaction_motion_policies": (
             "material-interaction",
             "Inspect MaterialPlan.interaction.motion_policy and reduce-motion handling."),
+        "interaction_specular_models": (
+            "material-interaction",
+            "Inspect MaterialPlan.interaction.specular_model and pointer highlight policy."),
         "optical_response_models": (
             "material-optical-response",
             "Inspect MaterialPlan.optical_response.response_model and role/sampling policy."),
@@ -8962,6 +9129,7 @@ def check_material_plan_summary_requirements(
             "interaction_enablement_reasons",
             "interaction_response_models",
             "interaction_motion_policies",
+            "interaction_specular_models",
             "optical_response_models",
             "optical_blur_strategies",
             "optical_color_strategies",
@@ -9078,6 +9246,7 @@ def check_material_plan_summary_requirements(
                     "interaction_enablement_reasons": "enablement_reasons",
                     "interaction_response_models": "response_models",
                     "interaction_motion_policies": "motion_policies",
+                    "interaction_specular_models": "specular_models",
                 }[field]
                 actual = interaction_summary.get(nested)
                 summary_path = f"{base_path}.interaction.{nested}"

@@ -34,7 +34,7 @@
     },
     "fallback_reasons": {},
     "contract_versions": {
-      "29": 7
+      "30": 7
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -135,6 +135,7 @@
     "interaction_pointer_inside": 1,
     "interaction_reduce_motion": 0,
     "interaction_deterministic": 7,
+    "interaction_specular_highlight_active": 1,
     "interaction_states": {
       "inactive": 6,
       "hovered": 1
@@ -146,6 +147,10 @@
     "interaction_response_models": {
       "none": 6,
       "liquid-glass-interaction": 1
+    },
+    "interaction_specular_models": {
+      "none": 6,
+      "pointer-specular": 1
     },
     "interaction_motion_policies": {
       "static": 6,
@@ -545,6 +550,20 @@
       "equals": 7
     },
     {
+      "path": "renderer.material_executor_summary.interaction_specular_highlight_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.max_interaction_specular_radius",
+      "gte": 0.2,
+      "lte": 0.38
+    },
+    {
+      "path": "renderer.material_executor_summary.max_interaction_specular_intensity",
+      "gte": 0.01,
+      "lte": 0.75
+    },
+    {
       "path": "renderer.material_executor_summary.container_groups.group_count",
       "equals": 3
     },
@@ -673,6 +692,20 @@
       "path": "renderer.material_runtime_summary.max_shadow_radius",
       "gte": 1.0,
       "lte": 40.0
+    },
+    {
+      "path": "renderer.material_runtime_summary.interaction_specular_highlight_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_runtime_summary.max_interaction_specular_radius",
+      "gte": 0.2,
+      "lte": 0.38
+    },
+    {
+      "path": "renderer.material_runtime_summary.max_interaction_specular_intensity",
+      "gte": 0.01,
+      "lte": 0.75
     }
   ],
   "require_material_fallback": true,

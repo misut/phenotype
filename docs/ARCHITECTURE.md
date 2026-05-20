@@ -642,11 +642,14 @@ the raw input state, but the plan keeps `interaction.enabled=false`.
 `plan_material_surface` turns the immutable input into enabled/active state,
 an `enablement_reason` (`inactive-material`, `noninteractive-container`, or
 `interactive-container`), reduced-motion policy, response strength, and
-per-channel optical deltas.
+per-channel optical deltas. Pointer-driven active responses also resolve a
+bounded `pointer-specular` highlight descriptor: normalized anchor, radius,
+intensity, and stable model name. That descriptor is part of the pure plan and
+stage optics contract, not a backend-local hover heuristic.
 Backends only decode the `MaterialRect` interaction payload and execute the
 resolved plan; they do not decide whether hover should increase opacity,
 whether press should tighten blur, or whether focus should lift the edge
-highlight.
+highlight, or where an interactive specular highlight should land.
 
 Live input state is lowered into that same immutable descriptor before the
 command leaves the core renderer. `AppState` keeps the latest pointer snapshot

@@ -40,7 +40,7 @@
     "fallback": 0,
     "backdrop_sampling": 28,
     "contract_versions": {
-      "29": 28
+      "30": 28
     },
     "theme_foreground_matches_theme": 28,
     "theme_accent_matches_theme": 28,
@@ -72,6 +72,7 @@
     "reference_interactive_response": 1,
     "interaction_enabled": 1,
     "interaction_active": 0,
+    "interaction_specular_highlight_active": 0,
     "interaction_states": {
       "idle": 1,
       "inactive": 27
@@ -83,6 +84,9 @@
     "interaction_response_models": {
       "liquid-glass-interaction": 1,
       "none": 27
+    },
+    "interaction_specular_models": {
+      "none": 28
     },
     "interaction_motion_policies": {
       "animated-optical-response": 1,

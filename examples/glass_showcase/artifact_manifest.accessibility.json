@@ -36,7 +36,7 @@
       "reduced transparency disables backdrop sampling": 7
     },
     "contract_versions": {
-      "29": 7
+      "30": 7
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -126,6 +126,7 @@
     "interaction_pointer_inside": 1,
     "interaction_reduce_motion": 7,
     "interaction_deterministic": 7,
+    "interaction_specular_highlight_active": 1,
     "interaction_states": {
       "inactive": 6,
       "hovered": 1
@@ -137,6 +138,10 @@
     "interaction_response_models": {
       "none": 6,
       "liquid-glass-interaction": 1
+    },
+    "interaction_specular_models": {
+      "none": 6,
+      "pointer-specular": 1
     },
     "interaction_motion_policies": {
       "static": 6,
@@ -466,6 +471,20 @@
     {
       "path": "renderer.material_executor_summary.noise_dither_stage_count",
       "equals": 0
+    },
+    {
+      "path": "renderer.material_executor_summary.interaction_specular_highlight_count",
+      "equals": 1
+    },
+    {
+      "path": "renderer.material_executor_summary.max_interaction_specular_radius",
+      "gte": 0.2,
+      "lte": 0.38
+    },
+    {
+      "path": "renderer.material_executor_summary.max_interaction_specular_intensity",
+      "gte": 0.001,
+      "lte": 0.4
     },
     {
       "path": "renderer.material_executor_summary.material_draw_calls",

@@ -32,7 +32,7 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "29": 1
+      "30": 1
     },
     "theme_foreground_matches_theme": 1,
     "theme_accent_matches_theme": 1,
@@ -115,6 +115,7 @@
     "interaction_enabled": 0,
     "interaction_active": 0,
     "interaction_deterministic": 1,
+    "interaction_specular_highlight_active": 0,
     "interaction_states": {
       "inactive": 1
     },
@@ -122,6 +123,9 @@
       "noninteractive-container": 1
     },
     "interaction_response_models": {
+      "none": 1
+    },
+    "interaction_specular_models": {
       "none": 1
     },
     "interaction_motion_policies": {

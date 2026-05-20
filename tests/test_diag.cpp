@@ -1089,6 +1089,12 @@ void test_material_runtime_record_json_contract() {
            == "noninteractive-container");
     assert(interaction.at("response_model").as_string() == "none");
     assert(interaction.at("motion_policy").as_string() == "static");
+    assert(interaction.at("specular_model").as_string() == "none");
+    assert(interaction.at("specular_highlight_active").as_bool() == false);
+    assert(interaction.at("specular_anchor_x").as_float() == 0.5f);
+    assert(interaction.at("specular_anchor_y").as_float() == 0.5f);
+    assert(std::fabs(interaction.at("specular_radius").as_float()) < 0.0001f);
+    assert(std::fabs(interaction.at("specular_intensity").as_float()) < 0.0001f);
     assert(interaction.at("deterministic").as_bool() == true);
     auto const& optical_response = obj.at("optical_response").as_object();
     assert(optical_response.at("response_model").as_string()
@@ -1224,6 +1230,13 @@ void test_material_runtime_record_json_contract() {
            == obj.at("edge_highlight").as_float());
     assert(edge_optics.at("edge_width").as_float()
            == obj.at("edge_width").as_float());
+    assert(edge_optics.at("specular_model").as_string() == "none");
+    assert(edge_optics.at("specular_anchor_x").as_float() == 0.5f);
+    assert(edge_optics.at("specular_anchor_y").as_float() == 0.5f);
+    assert(std::fabs(edge_optics.at("specular_radius").as_float())
+           < 0.0001f);
+    assert(std::fabs(edge_optics.at("specular_intensity").as_float())
+           < 0.0001f);
 
     std::vector<MaterialRuntimeRecord> records{record};
     auto plans = diag::detail::material_plans_runtime_json(records);
@@ -1309,6 +1322,12 @@ void test_material_runtime_record_json_contract() {
            == obj.at("shadow_alpha").as_float());
     assert(summary_obj.at("max_shadow_radius").as_float()
            == obj.at("shadow_radius").as_float());
+    assert(summary_obj.at("interaction_specular_highlight_count").as_integer()
+           == 0);
+    assert(std::fabs(summary_obj.at("max_interaction_specular_radius").as_float())
+           < 0.0001f);
+    assert(std::fabs(summary_obj.at("max_interaction_specular_intensity")
+                         .as_float()) < 0.0001f);
     assert(summary_obj.at("max_container_spacing").as_float() == 0.0f);
 
     MaterialExecutorSummary executor_summary;
@@ -1375,6 +1394,12 @@ void test_material_runtime_record_json_contract() {
            == 1.0f);
     assert(executor_obj.at("material_max_shader_blur_step_pixels").as_float()
            == 0.0f);
+    assert(executor_obj.at("interaction_specular_highlight_count").as_integer()
+           == 0);
+    assert(std::fabs(executor_obj.at("max_interaction_specular_radius")
+                         .as_float()) < 0.0001f);
+    assert(std::fabs(executor_obj.at("max_interaction_specular_intensity")
+                         .as_float()) < 0.0001f);
     assert(executor_obj.at("cpu_decode_ns").as_integer() == 120);
 
     auto empty = diag::detail::empty_material_renderer_contract(

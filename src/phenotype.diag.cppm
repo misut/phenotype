@@ -1587,6 +1587,24 @@ namespace detail {
             "motion_policy",
             json::Value{plan.interaction.motion_policy});
         interaction.emplace(
+            "specular_model",
+            json::Value{plan.interaction.specular_model});
+        interaction.emplace(
+            "specular_highlight_active",
+            json::Value{plan.interaction.specular_highlight_active});
+        interaction.emplace(
+            "specular_anchor_x",
+            json::Value{plan.interaction.specular_anchor_x});
+        interaction.emplace(
+            "specular_anchor_y",
+            json::Value{plan.interaction.specular_anchor_y});
+        interaction.emplace(
+            "specular_radius",
+            json::Value{plan.interaction.specular_radius});
+        interaction.emplace(
+            "specular_intensity",
+            json::Value{plan.interaction.specular_intensity});
+        interaction.emplace(
             "deterministic",
             json::Value{plan.interaction.deterministic});
 
@@ -1773,6 +1791,21 @@ namespace detail {
             optics_json.emplace(
                 "shadow_radius",
                 json::Value{optics.shadow_radius});
+            optics_json.emplace(
+                "specular_model",
+                json::Value{optics.specular_model});
+            optics_json.emplace(
+                "specular_anchor_x",
+                json::Value{optics.specular_anchor_x});
+            optics_json.emplace(
+                "specular_anchor_y",
+                json::Value{optics.specular_anchor_y});
+            optics_json.emplace(
+                "specular_radius",
+                json::Value{optics.specular_radius});
+            optics_json.emplace(
+                "specular_intensity",
+                json::Value{optics.specular_intensity});
             json::Object out_stage;
             out_stage.emplace("name", json::Value{stage.name});
             out_stage.emplace("active", json::Value{stage.active});
@@ -2118,6 +2151,11 @@ namespace detail {
                 static_cast<std::int64_t>(
                     summary.interaction_reduce_motion_count)});
         out.emplace(
+            "interaction_specular_highlight_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.interaction_specular_highlight_count)});
+        out.emplace(
             "theme_default_glass_token_count",
             json::Value{
                 static_cast<std::int64_t>(
@@ -2153,6 +2191,12 @@ namespace detail {
         out.emplace(
             "max_interaction_response_strength",
             json::Value{summary.max_interaction_response_strength});
+        out.emplace(
+            "max_interaction_specular_radius",
+            json::Value{summary.max_interaction_specular_radius});
+        out.emplace(
+            "max_interaction_specular_intensity",
+            json::Value{summary.max_interaction_specular_intensity});
         out.emplace(
             "min_foreground_contrast_ratio",
             json::Value{summary.min_foreground_contrast_ratio});
@@ -2344,8 +2388,19 @@ namespace detail {
                 static_cast<std::int64_t>(
                     summary.interaction_active_count)});
         out.emplace(
+            "interaction_specular_highlight_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.interaction_specular_highlight_count)});
+        out.emplace(
             "max_interaction_response_strength",
             json::Value{summary.max_interaction_response_strength});
+        out.emplace(
+            "max_interaction_specular_radius",
+            json::Value{summary.max_interaction_specular_radius});
+        out.emplace(
+            "max_interaction_specular_intensity",
+            json::Value{summary.max_interaction_specular_intensity});
         out.emplace(
             "backdrop_descriptor_luma_available",
             json::Value{summary.backdrop_descriptor_luma_available});
