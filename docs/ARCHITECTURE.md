@@ -675,11 +675,12 @@ deterministic fallback plans use `sample_taps: 0` even when the quality budget
 allows more. The pure planner normalizes caller tap limits to executable
 backdrop kernels of 1, 5, 9, 13, or 25 taps, selecting the largest kernel that
 does not exceed `quality_policy.max_sample_taps`. `sampling_kernel` then names
-the exact bounded blur kernel (`weighted-5x5-manhattan` today), its radius,
-resolved tap count, blur step scale, weight profile, and whether it requires a
-backdrop source. Deterministic fallback plans use the inactive `none` kernel so
-stale blur metadata cannot leak into fallback artifacts. macOS uploads the
-kernel's blur step scale to Metal instead of hard-coding that policy in the
+the exact bounded blur kernel (`weighted-center`, `weighted-cross-5`,
+`weighted-3x3-grid`, or `weighted-5x5-manhattan`), its radius, resolved tap
+count, blur step scale, weight profile, and whether it requires a backdrop
+source. Deterministic fallback plans use the inactive `none` kernel so stale
+blur metadata cannot leak into fallback artifacts. macOS uploads the kernel's
+blur step scale and radius to Metal instead of hard-coding that policy in the
 shader; other backends serialize the same kernel contract before they gain an
 advanced material executor. Reduced-motion plans also disable material noise
 and cap backdrop sample taps before any backend executes the pass.

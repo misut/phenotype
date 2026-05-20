@@ -151,13 +151,20 @@ ALLOWED_MATERIAL_DEPTH_RESPONSES = {
 
 ALLOWED_MATERIAL_SAMPLING_KERNELS = {
     "none",
+    "weighted-3x3-grid",
+    "weighted-center",
+    "weighted-cross-5",
     "weighted-5x5-manhattan",
 }
 
 ALLOWED_MATERIAL_SAMPLING_WEIGHT_PROFILES = {
+    "center4",
+    "center4-cardinal2",
     "center4-cardinal2-diagonal1",
     "none",
 }
+
+MATERIAL_SAMPLING_TAP_TIERS = {0, 1, 5, 9, 13, 25}
 
 ALLOWED_MATERIAL_LUMINANCE_CURVES = {
     "adaptive-backdrop-luma",
@@ -807,6 +814,57 @@ def numbers_close(
         and not isinstance(expected, bool)
         and abs(float(actual) - float(expected)) <= tolerance
     )
+
+
+def expected_material_sampling_kernel(
+    *,
+    backdrop_sampling: bool,
+    sample_taps: int,
+) -> JsonObject:
+    if not backdrop_sampling or sample_taps <= 0:
+        return {
+            "name": "none",
+            "radius": 0,
+            "blur_step_scale": 0.0,
+            "weight_profile": "none",
+            "requires_backdrop": False,
+            "bounded": True,
+        }
+    if sample_taps <= 1:
+        return {
+            "name": "weighted-center",
+            "radius": 0,
+            "blur_step_scale": 0.0,
+            "weight_profile": "center4",
+            "requires_backdrop": True,
+            "bounded": True,
+        }
+    if sample_taps <= 5:
+        return {
+            "name": "weighted-cross-5",
+            "radius": 1,
+            "blur_step_scale": 0.35,
+            "weight_profile": "center4-cardinal2",
+            "requires_backdrop": True,
+            "bounded": True,
+        }
+    if sample_taps <= 9:
+        return {
+            "name": "weighted-3x3-grid",
+            "radius": 1,
+            "blur_step_scale": 0.35,
+            "weight_profile": "center4-cardinal2-diagonal1",
+            "requires_backdrop": True,
+            "bounded": True,
+        }
+    return {
+        "name": "weighted-5x5-manhattan",
+        "radius": 2,
+        "blur_step_scale": 0.35,
+        "weight_profile": "center4-cardinal2-diagonal1",
+        "requires_backdrop": True,
+        "bounded": True,
+    }
 
 
 def material_container_from(value: JsonObject) -> JsonObject | None:
@@ -5078,6 +5136,7 @@ def summarize_material_plans(
             kernel_weight_profile = ""
             kernel_radius: int | float | None = None
             kernel_taps: int | float | None = None
+            kernel_blur_step_scale: int | float | None = None
             kernel_requires_backdrop: bool | None = None
             kernel_bounded: bool | None = None
             for key in MATERIAL_SAMPLING_KERNEL_FIELDS:
@@ -5113,6 +5172,8 @@ def summarize_material_plans(
                                 int(value))
                     elif key == "sample_taps":
                         kernel_taps = value
+                    elif key == "blur_step_scale":
+                        kernel_blur_step_scale = value
                 else:
                     value = check_string_field(
                         report,
@@ -5160,6 +5221,88 @@ def summarize_material_plans(
                     likely_pass="sampling-kernel",
                     hint="Keep MaterialPlan.sample_taps and sampling_kernel.sample_taps in sync.",
                     record_success=False)
+            if isinstance(sample_taps, (int, float)):
+                report.check(
+                    "material sample taps use executable tap tier",
+                    int(sample_taps) in MATERIAL_SAMPLING_TAP_TIERS,
+                    path=f"{plan_path}.sample_taps",
+                    expected=sorted(MATERIAL_SAMPLING_TAP_TIERS),
+                    actual=int(sample_taps),
+                    likely_layer=likely_layer,
+                    likely_pass="sampling-kernel",
+                    hint="MaterialPlan.sample_taps must come from material_resolve_sample_taps.",
+                    record_success=False)
+            if (
+                isinstance(sample_taps, (int, float))
+                and isinstance(backdrop_sampling, bool)
+            ):
+                expected_kernel = expected_material_sampling_kernel(
+                    backdrop_sampling=backdrop_sampling,
+                    sample_taps=int(sample_taps))
+                report.check(
+                    "material sampling kernel name matches tap tier",
+                    kernel_name == expected_kernel["name"],
+                    path=f"{plan_path}.sampling_kernel.name",
+                    expected=expected_kernel["name"],
+                    actual=kernel_name,
+                    likely_layer=likely_layer,
+                    likely_pass="sampling-kernel",
+                    hint="Keep MaterialPlan.sampling_kernel.name aligned with the pure tap-tier resolver.",
+                    record_success=False)
+                report.check(
+                    "material sampling kernel radius matches tap tier",
+                    isinstance(kernel_radius, (int, float))
+                    and int(kernel_radius) == int(expected_kernel["radius"]),
+                    path=f"{plan_path}.sampling_kernel.radius",
+                    expected=expected_kernel["radius"],
+                    actual=kernel_radius,
+                    likely_layer=likely_layer,
+                    likely_pass="sampling-kernel",
+                    hint="The backend shader radius must come from the pure sampling kernel descriptor.",
+                    record_success=False)
+                report.check(
+                    "material sampling kernel blur step matches tap tier",
+                    numbers_close(
+                        kernel_blur_step_scale,
+                        expected_kernel["blur_step_scale"]),
+                    path=f"{plan_path}.sampling_kernel.blur_step_scale",
+                    expected=expected_kernel["blur_step_scale"],
+                    actual=kernel_blur_step_scale,
+                    likely_layer=likely_layer,
+                    likely_pass="sampling-kernel",
+                    hint="The blur spread must stay in the pure sampling kernel descriptor, not backend-local code.",
+                    record_success=False)
+                report.check(
+                    "material sampling kernel weight profile matches tap tier",
+                    kernel_weight_profile == expected_kernel["weight_profile"],
+                    path=f"{plan_path}.sampling_kernel.weight_profile",
+                    expected=expected_kernel["weight_profile"],
+                    actual=kernel_weight_profile,
+                    likely_layer=likely_layer,
+                    likely_pass="sampling-kernel",
+                    hint="The verifier expects tap-tier weight profiles to mirror the backend blur shader.",
+                    record_success=False)
+                report.check(
+                    "material sampling kernel backdrop flag matches tap tier",
+                    kernel_requires_backdrop
+                    == expected_kernel["requires_backdrop"],
+                    path=f"{plan_path}.sampling_kernel.requires_backdrop",
+                    expected=expected_kernel["requires_backdrop"],
+                    actual=kernel_requires_backdrop,
+                    likely_layer=likely_layer,
+                    likely_pass="sampling-kernel",
+                    hint="Backdrop dependency must be explicit and derived from the pure plan.",
+                    record_success=False)
+                report.check(
+                    "material sampling kernel bounded flag matches tap tier",
+                    kernel_bounded == expected_kernel["bounded"],
+                    path=f"{plan_path}.sampling_kernel.bounded",
+                    expected=expected_kernel["bounded"],
+                    actual=kernel_bounded,
+                    likely_layer=likely_layer,
+                    likely_pass="sampling-kernel",
+                    hint="Sampling kernels must stay explicitly bounded before backend execution.",
+                    record_success=False)
             if backdrop_sampling is True:
                 report.check(
                     "material backdrop sampling uses active kernel",
@@ -5167,7 +5310,8 @@ def summarize_material_plans(
                     and kernel_requires_backdrop is True
                     and kernel_bounded is True
                     and isinstance(kernel_radius, (int, float))
-                    and int(kernel_radius) > 0
+                    and isinstance(kernel_taps, (int, float))
+                    and int(kernel_taps) > 0
                     and kernel_weight_profile != "none",
                     path=f"{plan_path}.sampling_kernel",
                     expected="active bounded backdrop kernel",
