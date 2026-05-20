@@ -451,6 +451,17 @@ auto spec() -> cppx::cli::CommandSpec {
                 .options = {help_option()},
                 .subcommands = {
                     {
+                        .name = "check",
+                        .summary =
+                            "Run the full built-in icon source and presentation contract gate",
+                        .options = {help_option(), json_option()},
+                        .allow_positionals = false,
+                        .examples = {
+                            "phenotype icons check --json",
+                            "phenotype icons check",
+                        },
+                    },
+                    {
                         .name = "catalog",
                         .summary =
                             "Emit the macOS-style SVG icon catalog metadata",

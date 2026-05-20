@@ -753,11 +753,11 @@
     },
     {
       "path": "application.file_explorer.chrome.sidebar_selected_row_background_alpha",
-      "equals": 238
+      "equals": 255
     },
     {
       "path": "application.file_explorer.chrome.sidebar_selected_row_hover_background_alpha",
-      "equals": 248
+      "equals": 255
     },
     {
       "path": "application.file_explorer.chrome.sidebar_selection_policy",

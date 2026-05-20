@@ -3,11 +3,13 @@
 #include <string>
 
 import phenotype.icon_catalog;
+import phenotype_cli.icon_audit;
 import phenotype_cli.icons_common;
 import phenotype_cli.icons_render;
 
 int main() {
     namespace icon_catalog = phenotype::icon_catalog;
+    namespace cli_audit = phenotype_cli::icon_audit;
     namespace cli_icons = phenotype_cli::icons;
 
     auto synthetic_source = icon_catalog::SymbolSourceAttribution{
@@ -60,4 +62,18 @@ int main() {
     assert(json.find("\"likely_pass\":\"standalone_svg_wrapper\"")
         != std::string::npos);
     assert(json.find("\"output\":null") != std::string::npos);
+
+    auto groups = cli_audit::icon_check_groups();
+    assert(groups.size() == 3);
+    auto audit_json = cli_audit::icon_check_json(groups);
+    assert(audit_json.find("\"command\":\"icons check\"")
+        != std::string::npos);
+    assert(audit_json.find("\"ok\":true") != std::string::npos);
+    assert(audit_json.find("\"name\":\"catalog\"") != std::string::npos);
+    assert(audit_json.find("\"name\":\"sources\"") != std::string::npos);
+    assert(audit_json.find("\"name\":\"file_types\"") != std::string::npos);
+    assert(audit_json.find("\"lucide_source_symbols\":39")
+        != std::string::npos);
+    assert(audit_json.find("\"apple_asset_symbols\":0")
+        != std::string::npos);
 }
