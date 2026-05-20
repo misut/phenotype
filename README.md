@@ -118,7 +118,7 @@ through `update`, then re-runs `view` to rebuild the layout tree.
 | `button<Msg>(label, msg, variant?, disabled?)` / `ButtonStyleOptions` | Clickable button that posts `msg` on click; background and focus ring fade on hover / focus, with optional explicit chrome for app-like controls |
 | `checkbox<Msg>(label, checked, msg)` / `radio<Msg>(label, selected, msg)` | Selection controls with a hover highlight on the row and a halo on focus |
 | `switch_<Msg>(label, on, msg)` | Labelled on/off toggle; the thumb slides and the track cross-fades on flip |
-| `tabs<Msg>(items, selected, on_select)` | Segmented row with a 2 px sliding indicator under the selected tab |
+| `tabs<Msg>(items, selected, on_select, TabsStyleOptions?)` | Material-backed segmented row with a 2 px sliding indicator under the selected tab |
 | `progress(value, max_width?)` | Determinate progress bar |
 | `progress_indeterminate(max_width?)` | Looping progress bar — a slug oscillates left↔right while the widget is on screen |
 | `text_field<Msg>(hint, current, mapper, error?, disabled?)` | Text input that maps each new value through `mapper` to a `Msg` |
@@ -345,7 +345,7 @@ for the current feature-to-example coverage matrix.
 - [x] Keyboard navigation (Tab/Enter, animated focus ring grow/fade across every focusable widget)
 - [x] View-time animation primitives (`animate_color`, `animate_float`, `animate_value<T>`) backed by `framework_local` per-call-site state
 - [x] Animation auto-tick — host loop schedules ~16 ms `trigger_rebuild` callbacks while `g_app.has_active_animations` is set; paint subtree cache invalidates whenever a view-time interpolation is in flight so fade-outs finish
-- [x] Animated widgets — `widget::switch_` thumb slide + track cross-fade, `widget::tabs` sliding indicator with a raised-slot active style, `widget::progress_indeterminate` looping slug
+- [x] Animated widgets — `widget::switch_` thumb slide + track cross-fade, `widget::tabs` material-backed sliding indicator with a raised-slot active style, `widget::progress_indeterminate` looping slug
 - [x] Layout primitives (`overlay`, `dialog`, `scroll_view`, `accordion`, `weighted`, `sized_box`, `grid`)
 - [x] OpenTelemetry-shaped logs and metrics (`phenotype.diag`)
 - [x] Host `measure_text` cache (cross-rebuild memoization keyed by font size + content)

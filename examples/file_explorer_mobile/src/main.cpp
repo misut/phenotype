@@ -971,6 +971,11 @@ void top_bar(State const& state, file_explorer_demo::Snapshot const& snap) {
             static_cast<unsigned int>(state.labels.tab_create.size()));
         widget::tabs<Msg>(tabs, explorer.mobile_tab, [](std::size_t index) -> Msg {
             return SelectTab{index};
+        },
+        TabsStyleOptions{
+            .kind = MaterialKind::Regular,
+            .role = MaterialSurfaceRole::Navigation,
+            .semantic_label = "Mobile Mode Segmented Control",
         });
     });
 }

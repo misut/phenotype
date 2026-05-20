@@ -315,16 +315,20 @@ high-level Apple-glass surface presets used by examples. They are not a new
 renderer path: each preset lowers to `MaterialSurfaceOptions`, then to the same
 pure `MaterialStyle` and `MaterialRect` command contract as
 `layout::material_surface`. The preset enum captures product roles such as
-window, toolbar, toolbar group, navigation, sidebar, content, and status bar so
-example code does not hand-roll blur thickness, semantic role, alignment, and
-chrome radius for every surface.
+window, toolbar, toolbar group, segmented control, navigation, sidebar,
+content, status bar, and popover so example code does not hand-roll blur
+thickness, semantic role, alignment, and chrome radius for every surface.
 `MaterialSurfaceOptions.interactive` is the surface-level opt-in for glass that
 belongs to controls. It does not create a backend policy branch: it marks the
 resolved material container descriptor as interactive before command emission,
 so `plan_material_surface` can decide the response from immutable input.
-`ToolbarGroup` and `Navigation` presets set this flag by default because they
-represent clickable chrome; passive window, content, sidebar, and status-bar
-surfaces stay noninteractive unless the app opts in explicitly.
+`ToolbarGroup`, `SegmentedControl`, `Navigation`, and `Popover` presets set this
+flag by default because they represent clickable chrome; passive window,
+content, sidebar, and status-bar surfaces stay noninteractive unless the app
+opts in explicitly. `widget::tabs` uses the same material contract by default
+through `TabsStyleOptions`, so text tabs, mobile mode pickers, and native
+examples show up as semantic material nodes and resolved runtime plans instead
+of only as painted pill backgrounds.
 
 `phenotype.svg` is a pure vector image layer. It parses a bounded SVG subset
 (`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,
@@ -983,16 +987,17 @@ core material API remains a cross-platform semantic contract with explicit
 fallbacks rather than a claim to reproduce private system component behavior.
 The layout DSL exposes this boundary through `layout::material_surface` for
 low-level material containers and `layout::toolbar`, `layout::navigation`,
-`layout::sidebar`, and `layout::status_bar` for common app chrome. Those
+`layout::segmented_control_surface`, `layout::popover`, `layout::sidebar`, and
+`layout::status_bar` for common app chrome. Those
 helpers only configure layout, semantic labels, and `MaterialSurfaceRole`; they
 still emit the same `MaterialRect` command and flow through the pure
 planner/backend executor contract above. Artifact gates can require roles such
-as `toolbar`, `sidebar`, `status_bar`, `navigation`, or `surface` without
-changing backend rendering policy. `MaterialSurfaceOptions` also carries
-explicit border radius and border width overrides; these are view/layout chrome
-decisions that shape the emitted command while leaving material optics,
-fallback decisions, and pass selection in the pure planner/backend executor
-contract.
+as `toolbar`, `sidebar`, `status_bar`, `navigation`, `overlay`, or `surface`
+without changing backend rendering policy. `MaterialSurfaceOptions` also
+carries explicit border radius and border width overrides; these are
+view/layout chrome decisions that shape the emitted command while leaving
+material optics, fallback decisions, and pass selection in the pure
+planner/backend executor contract.
 The chrome helpers also accept `MaterialSurfaceOptions` directly, so app-like
 examples can keep custom Finder-style dimensions, radii, and border decisions
 while still going through the typed toolbar/navigation/sidebar/status-bar

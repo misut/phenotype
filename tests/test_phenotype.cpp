@@ -2793,13 +2793,33 @@ void test_glass_surface_presets_emit_material_contract() {
     auto toolbar_group = layout::glass_surface_options(
         layout::GlassSurfacePreset::ToolbarGroup);
     assert(toolbar_group.interactive);
+    auto segmented = layout::glass_surface_options(
+        layout::GlassSurfacePreset::SegmentedControl);
+    assert(segmented.kind == MaterialKind::Regular);
+    assert(segmented.role == MaterialSurfaceRole::Navigation);
+    assert(segmented.direction == FlexDirection::Row);
+    assert(segmented.interactive);
+    assert(std::string_view{segmented.semantic_label}
+           == "Segmented Control");
     auto navigation = layout::glass_surface_options(
         layout::GlassSurfacePreset::Navigation);
     assert(navigation.interactive);
+    auto popover = layout::glass_surface_options(
+        layout::GlassSurfacePreset::Popover,
+        "Actions");
+    assert(popover.kind == MaterialKind::Regular);
+    assert(popover.role == MaterialSurfaceRole::Overlay);
+    assert(popover.direction == FlexDirection::Column);
+    assert(popover.interactive);
+    assert(std::string_view{popover.semantic_label} == "Actions");
     assert(std::string_view{
         layout::glass_surface_preset_name(
             layout::GlassSurfacePreset::ToolbarGroup)}
         == "toolbar_group");
+    assert(std::string_view{
+        layout::glass_surface_preset_name(
+            layout::GlassSurfacePreset::SegmentedControl)}
+        == "segmented_control");
 
     auto content = layout::glass_surface_options(
         layout::GlassSurfacePreset::Content,

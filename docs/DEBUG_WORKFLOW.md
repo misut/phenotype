@@ -768,6 +768,11 @@ It also compares semantic material roles against runtime plan roles, so app
 chrome can prove that a glass surface was emitted as `toolbar`, `sidebar`,
 `status_bar`, `navigation`, `content`, `overlay`, or a generic `surface`
 without visual inspection.
+Material-backed controls should therefore have stable semantic labels, not just
+pixel signatures. For example, `widget::tabs` emits a segmented-control
+material node through `TabsStyleOptions`, and Finder-style examples can require
+labels such as `Density Segmented Control` or `Mobile Mode Segmented Control`
+to prove that the pure material planner saw the control chrome.
 It also compares semantic material container descriptors against
 `MaterialPlan.command_descriptor.container` and compares resolved container
 identity against `MaterialPlan.container`; a container mismatch points at layout
