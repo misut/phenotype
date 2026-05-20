@@ -58,7 +58,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 27);
+    assert(material_plan_contract_version == 28);
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(!plan.shape.capsule);
     assert(plan.theme.default_glass_tokens);
@@ -454,6 +454,71 @@ void test_increase_contrast_raises_foreground_readability_contract() {
     std::puts("PASS: increase contrast raises foreground readability contract");
 }
 
+void test_interactive_material_modulates_optics_contract() {
+    auto request = regular_request();
+    request.style.container = MaterialContainerDescriptor{
+        .container_id = 88u,
+        .union_id = 0u,
+        .spacing = 18.0f,
+        .interactive = true,
+        .morph_transitions = true,
+    };
+    request.style.interaction = MaterialInteractionDescriptor{
+        .hovered = true,
+        .pressed = false,
+        .focused = true,
+        .pointer_inside = true,
+        .pointer_x = 0.75f,
+        .pointer_y = 0.25f,
+    };
+
+    auto baseline = regular_request();
+    baseline.style.container = request.style.container;
+    auto baseline_plan =
+        plan_material_surface(baseline, sampled_environment());
+    auto plan = plan_material_surface(request, sampled_environment());
+
+    assert(plan.container.interactive);
+    assert(plan.interaction.enabled);
+    assert(plan.interaction.active);
+    assert(plan.interaction.hovered);
+    assert(plan.interaction.focused);
+    assert(plan.interaction.pointer_inside);
+    assert(!plan.interaction.pressed);
+    assert(std::string_view(plan.interaction.state) == "hovered");
+    assert(std::string_view(plan.interaction.response_model)
+        == "liquid-glass-interaction");
+    assert(std::string_view(plan.interaction.motion_policy)
+        == "animated-optical-response");
+    assert(plan.interaction.response_strength > 0.0f);
+    assert(plan.opacity > baseline_plan.opacity);
+    assert(plan.blur_radius > baseline_plan.blur_radius);
+    assert(plan.saturation > baseline_plan.saturation);
+    assert(plan.edge_highlight > baseline_plan.edge_highlight);
+    assert(plan.shadow_alpha > baseline_plan.shadow_alpha);
+    assert(plan.shadow_radius > baseline_plan.shadow_radius);
+    assert(plan.interaction.opacity_delta
+           == plan.opacity - baseline_plan.opacity);
+    assert(plan.interaction.blur_radius_delta
+           == plan.blur_radius - baseline_plan.blur_radius);
+    assert(plan.reference_model.interactive_response);
+    assert(plan.optical_response.interaction_active);
+    assert(plan.optical_response.interaction_modulates_optics);
+
+    auto reduced_env = sampled_environment();
+    reduced_env.capabilities.reduce_motion = true;
+    auto reduced_plan = plan_material_surface(request, reduced_env);
+    assert(reduced_plan.interaction.enabled);
+    assert(reduced_plan.interaction.active);
+    assert(reduced_plan.interaction.reduce_motion);
+    assert(std::string_view(reduced_plan.interaction.motion_policy)
+        == "reduced-motion-static");
+    assert(reduced_plan.interaction.response_strength
+           <= plan.interaction.response_strength);
+    assert(!reduced_plan.container.morph_transitions);
+    std::puts("PASS: interactive material modulates optics contract");
+}
+
 void test_warmup_backdrop_access_contract() {
     auto env = sampled_environment();
     env.capabilities.frame_history = false;
@@ -681,6 +746,7 @@ int main() {
     test_command_material_preserves_theme_snapshot_contract();
     test_foreground_contrast_gap_uses_absolute_contrast_candidate();
     test_increase_contrast_raises_foreground_readability_contract();
+    test_interactive_material_modulates_optics_contract();
     test_warmup_backdrop_access_contract();
     test_surface_sample_pixels_are_scaled_and_bounded();
     test_executor_frame_capture_policy_contract();

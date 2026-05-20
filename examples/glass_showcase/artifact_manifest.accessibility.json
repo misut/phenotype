@@ -36,7 +36,7 @@
       "reduced transparency disables backdrop sampling": 7
     },
     "contract_versions": {
-      "27": 7
+      "28": 7
     },
     "theme_foreground_matches_theme": 7,
     "theme_accent_matches_theme": 7,
@@ -118,6 +118,26 @@
     "reference_legibility_preserved": 7,
     "reference_vibrancy_expected": 0,
     "reference_deterministic_degradation": 7,
+    "interaction_enabled": 1,
+    "interaction_active": 1,
+    "interaction_hovered": 1,
+    "interaction_pressed": 0,
+    "interaction_focused": 1,
+    "interaction_pointer_inside": 1,
+    "interaction_reduce_motion": 7,
+    "interaction_deterministic": 7,
+    "interaction_states": {
+      "inactive": 6,
+      "hovered": 1
+    },
+    "interaction_response_models": {
+      "none": 6,
+      "liquid-glass-interaction": 1
+    },
+    "interaction_motion_policies": {
+      "static": 6,
+      "reduced-motion-static": 1
+    },
     "shape_valid": 7,
     "shape_rounded": 7,
     "shape_radius_clamped": 0,
@@ -216,6 +236,8 @@
     "optical_depth_shadow_active": 7,
     "optical_noise_dither_active": 0,
     "optical_foreground_vibrancy_active": 0,
+    "optical_interaction_active": 1,
+    "optical_interaction_modulates_optics": 1,
     "optical_deterministic_fallback": 7,
     "render_target_ready": 7,
     "render_target_within_backdrop_budget": 7,

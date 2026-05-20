@@ -167,6 +167,43 @@ inline MaterialContainerDescriptor material_container_descriptor_from_wire(
         (flags & 2u) != 0u};
 }
 
+struct MaterialInteractionDescriptor {
+    bool hovered = false;
+    bool pressed = false;
+    bool focused = false;
+    bool pointer_inside = false;
+    float pointer_x = 0.5f;
+    float pointer_y = 0.5f;
+
+    constexpr bool active() const noexcept {
+        return hovered || pressed || focused || pointer_inside;
+    }
+
+    constexpr bool operator==(MaterialInteractionDescriptor const&) const =
+        default;
+};
+
+inline unsigned int material_interaction_flags(
+        MaterialInteractionDescriptor descriptor) noexcept {
+    return (descriptor.hovered ? 1u : 0u)
+        | (descriptor.pressed ? 2u : 0u)
+        | (descriptor.focused ? 4u : 0u)
+        | (descriptor.pointer_inside ? 8u : 0u);
+}
+
+inline MaterialInteractionDescriptor material_interaction_descriptor_from_wire(
+        unsigned int flags,
+        float pointer_x,
+        float pointer_y) noexcept {
+    return MaterialInteractionDescriptor{
+        (flags & 1u) != 0u,
+        (flags & 2u) != 0u,
+        (flags & 4u) != 0u,
+        (flags & 8u) != 0u,
+        pointer_x,
+        pointer_y};
+}
+
 struct MaterialStyle {
     MaterialKind kind = MaterialKind::None;
     MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
@@ -192,6 +229,7 @@ struct MaterialStyle {
     char const* contrast_intent = "standard";
     char const* plan_id = "material.none";
     char const* verifier_profile = "none";
+    MaterialInteractionDescriptor interaction{};
 };
 
 struct MaterialCommandDescriptor {
@@ -209,6 +247,7 @@ struct MaterialCommandDescriptor {
     float noise_opacity = 0.0f;
     float shadow_alpha = 0.0f;
     float shadow_radius = 0.0f;
+    MaterialInteractionDescriptor interaction{};
 };
 
 // A solid convex quadrilateral in canvas-local coordinates. Intended
@@ -960,7 +999,8 @@ enum class Cmd : unsigned int {
     // RGBA tint + saturation/luminance_floor/luminance_gain/
     // edge_highlight/edge_width/noise_opacity/shadow_alpha/
     // shadow_radius f32 + container_id/union_id u32 +
-    // container_spacing f32 + container_flags u32.
+    // container_spacing f32 + container_flags u32 +
+    // interaction_flags u32 + interaction pointer_x/pointer_y f32.
     // Backends with backdrop sampling render a glass/material effect;
     // backends without it draw the tint as a rounded-rect fallback.
     MaterialRect = 15,

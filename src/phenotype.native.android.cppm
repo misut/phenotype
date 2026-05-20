@@ -4299,6 +4299,9 @@ inline void decode_android_color_commands(unsigned char const* buf,
             auto const union_id = read_u32();
             auto const container_spacing = read_f32();
             auto const container_flags = read_u32();
+            auto const interaction_flags = read_u32();
+            auto const interaction_x = read_f32();
+            auto const interaction_y = read_f32();
             auto material_env_for_command = material_env;
             material_env_for_command.debug_seed.node = current_command_index;
             ::phenotype::MaterialCommandDescriptor descriptor{
@@ -4319,7 +4322,11 @@ inline void decode_android_color_commands(unsigned char const* buf,
                 edge_width,
                 noise_opacity,
                 shadow_alpha,
-                shadow_radius};
+                shadow_radius,
+                ::phenotype::material_interaction_descriptor_from_wire(
+                    interaction_flags,
+                    interaction_x,
+                    interaction_y)};
             auto plan = ::phenotype::plan_material_surface(
                 ::phenotype::material_request_for_command(
                     descriptor,

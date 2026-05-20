@@ -436,6 +436,7 @@ state. `widget::symbol_button` composes those helpers on top of
 `widget::canvas_button`, so Finder-like toolbar/navigation/action controls use
 the same visual, press-state, and activation-region contract in both examples
 and tests while remaining LLM-debuggable without consulting AppKit.
+
 The same pure catalog exposes a Finder-style file-type symbol set and tint
 policy for folder, document, PDF, text, image, movie, archive, audio, code,
 spreadsheet, and presentation glyphs, which desktop
@@ -604,10 +605,11 @@ metadata, debug seed, and quality policy — then execute the returned
 across the backend boundary: kind, functional surface role, material container
 identity, union identity, container spacing/flags, opacity, blur, tint,
 saturation, luminance curve, edge highlight, edge width, noise opacity, and
-shadow. In C++ this is represented as `MaterialCommandDescriptor`; backends
-reconstruct `MaterialRequest` from that descriptor plus geometry, then call the
-pure planner. They should not re-derive these style values, functional roles, or
-container grouping from the current theme after the command has been emitted.
+shadow, plus the pure interaction descriptor. In C++ this is represented as
+`MaterialCommandDescriptor`; backends reconstruct `MaterialRequest` from that
+descriptor plus geometry, then call the pure planner. They should not re-derive
+these style values, functional roles, interaction state, or container grouping
+from the current theme after the command has been emitted.
 
 ```cpp
 MaterialPlan plan = plan_material_surface(request, environment);
@@ -624,6 +626,15 @@ policy, foreground legibility/vibrancy recommendation, an Apple Liquid Glass
 resolved sampling kernel, bounded execution stages, verifier expectations, and
 an `observation_contract` that mirrors the pure facts the artifact verifier
 must observe at runtime.
+`MaterialPlan.interaction` follows the same boundary. Layout code may set
+`MaterialSurfaceOptions.interaction` with hover, press, focus, pointer-inside,
+and normalized pointer coordinates, but the core planner owns all response
+policy. `plan_material_surface` turns that immutable input into enabled/active
+state, reduced-motion policy, response strength, and per-channel optical
+deltas. Backends only decode the `MaterialRect` interaction payload and execute
+the resolved plan; they do not decide whether hover should increase opacity,
+whether press should tighten blur, or whether focus should lift the edge
+highlight.
 `reference_model` is intentionally pure. It records that the surface follows the
 Apple material model, including `technology`, `layer`, and `material_policy`.
 Functional chrome/control roles resolve to `liquid-glass` on the

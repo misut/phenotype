@@ -100,10 +100,20 @@ def material_plan(
         "interactive": False,
         "morph_transitions": False,
     }
+    interaction_descriptor: dict[str, object] = {
+        "hovered": False,
+        "pressed": False,
+        "focused": False,
+        "pointer_inside": False,
+        "active": False,
+        "pointer_x": 0.5,
+        "pointer_y": 0.5,
+    }
     command_descriptor: dict[str, object] = {
         "kind": "regular",
         "role": "surface",
         "container": container,
+        "interaction": interaction_descriptor,
         "opacity": 0.58,
         "blur_radius": 22.0,
         "tint": {"r": 255, "g": 255, "b": 255, "a": 148},
@@ -300,6 +310,28 @@ def material_plan(
             "uses_vibrancy": False,
             "deterministic": True,
         },
+        "interaction": {
+            "enabled": False,
+            "active": False,
+            "hovered": False,
+            "pressed": False,
+            "focused": False,
+            "pointer_inside": False,
+            "reduce_motion": False,
+            "pointer_x": 0.5,
+            "pointer_y": 0.5,
+            "response_strength": 0.0,
+            "opacity_delta": 0.0,
+            "blur_radius_delta": 0.0,
+            "saturation_delta": 0.0,
+            "edge_highlight_delta": 0.0,
+            "shadow_alpha_delta": 0.0,
+            "shadow_radius_delta": 0.0,
+            "state": "inactive",
+            "response_model": "none",
+            "motion_policy": "static",
+            "deterministic": True,
+        },
         "fallback": True,
         "fallback_path": "unsupported-backend",
         "fallback_reason": "backend reports no material backdrop blur support",
@@ -427,11 +459,13 @@ def refresh_reference_model(plan: dict[str, object]) -> None:
     tint = plan["tint"]
     container = plan["container"]
     foreground = plan["foreground"]
+    interaction = plan["interaction"]
     budget = plan["resource_budget"]
     assert isinstance(shape, dict)
     assert isinstance(tint, dict)
     assert isinstance(container, dict)
     assert isinstance(foreground, dict)
+    assert isinstance(interaction, dict)
     assert isinstance(budget, dict)
     shape_valid = bool(shape["valid"])
     shape_kind = str(shape.get("kind", "invalid"))
@@ -476,7 +510,7 @@ def refresh_reference_model(plan: dict[str, object]) -> None:
         "view_bounds_anchored": kind != "none" and shape_valid,
         "shape_matches_geometry": kind != "none" and shape_valid,
         "tint_applied": kind != "none" and int(tint["a"]) > 0,
-        "interactive_response": bool(container["interactive"]),
+        "interactive_response": bool(interaction["enabled"]),
         "container_grouped": bool(container["participates"]),
         "container_union": bool(container["shape_union_expected"]),
         "container_morphing": bool(container["morph_transitions"]),
@@ -493,12 +527,14 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
     tint = plan["tint"]
     curve = plan["luminance_curve"]
     foreground = plan["foreground"]
+    interaction = plan["interaction"]
     budget = plan["resource_budget"]
     reference = plan["reference_model"]
     assert isinstance(primary, dict)
     assert isinstance(tint, dict)
     assert isinstance(curve, dict)
     assert isinstance(foreground, dict)
+    assert isinstance(interaction, dict)
     assert isinstance(budget, dict)
     assert isinstance(reference, dict)
     backdrop_sampling = bool(plan["backdrop_sampling"])
@@ -567,6 +603,18 @@ def refresh_optical_response(plan: dict[str, object]) -> None:
         "depth_shadow_active": bool(primary["active"]) and shadow,
         "noise_dither_active": noise,
         "foreground_vibrancy_active": bool(foreground["uses_vibrancy"]),
+        "interaction_active": bool(interaction["active"]),
+        "interaction_modulates_optics": (
+            bool(interaction["active"])
+            and any(
+                abs(float(interaction[key])) > 0.0001
+                for key in (
+                    "opacity_delta",
+                    "blur_radius_delta",
+                    "saturation_delta",
+                    "edge_highlight_delta",
+                    "shadow_alpha_delta",
+                    "shadow_radius_delta"))),
         "deterministic_fallback": bool(budget["deterministic_fallback"]),
     }
 
@@ -2076,10 +2124,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         descriptor = plan["command_descriptor"]
         resource_budget = plan["resource_budget"]
         verifier_contract = plan["verifier"]
+        interaction = plan["interaction"]
         assert isinstance(plan_container, dict)
         assert isinstance(descriptor, dict)
         assert isinstance(resource_budget, dict)
         assert isinstance(verifier_contract, dict)
+        assert isinstance(interaction, dict)
         request_container = {
             "mode": "union",
             "container_id": 41,
@@ -2095,6 +2145,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "shared_backdrop_scope": True,
             "shape_union_expected": True,
         })
+        interaction["enabled"] = True
+        interaction["response_model"] = "liquid-glass-interaction"
+        interaction["state"] = "idle"
         resource_budget["max_container_spacing"] = 12.0
         verifier_contract["require_container_identity"] = True
         verifier_contract["require_container_morph_contract"] = True
@@ -2603,6 +2656,106 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["actual"], "deterministic-fallback")
         self.assertEqual(failure["likely_layer"], "material-optical-response")
         self.assertIn("MaterialPlan.optical_response", failure["suggested_action"])
+
+    def test_interaction_summary_and_optical_contract_are_reported(self) -> None:
+        plan = material_plan()
+        container = plan["container"]
+        descriptor = plan["command_descriptor"]
+        interaction = plan["interaction"]
+        assert isinstance(container, dict)
+        assert isinstance(descriptor, dict)
+        assert isinstance(descriptor["container"], dict)
+        assert isinstance(interaction, dict)
+        container["interactive"] = True
+        descriptor["container"]["interactive"] = True
+        descriptor["interaction"] = {
+            "hovered": True,
+            "pressed": False,
+            "focused": True,
+            "pointer_inside": True,
+            "active": True,
+            "pointer_x": 0.62,
+            "pointer_y": 0.38,
+        }
+        interaction.update({
+            "enabled": True,
+            "active": True,
+            "hovered": True,
+            "pressed": False,
+            "focused": True,
+            "pointer_inside": True,
+            "pointer_x": 0.62,
+            "pointer_y": 0.38,
+            "response_strength": 0.58,
+            "opacity_delta": 0.03,
+            "blur_radius_delta": 1.6,
+            "saturation_delta": 0.04,
+            "edge_highlight_delta": 0.09,
+            "shadow_alpha_delta": 0.02,
+            "shadow_radius_delta": 2.4,
+            "state": "hovered",
+            "response_model": "liquid-glass-interaction",
+            "motion_policy": "animated-optical-response",
+        })
+        refresh_observation_contract(plan)
+        manifest = {
+            "require_material_plan_summary": {
+                "interaction_enabled": 1,
+                "interaction_active": 1,
+                "interaction_hovered": 1,
+                "interaction_focused": 1,
+                "interaction_pointer_inside": 1,
+                "interaction_deterministic": 1,
+                "interaction_states": {"hovered": 1},
+                "interaction_response_models": {
+                    "liquid-glass-interaction": 1,
+                },
+                "interaction_motion_policies": {
+                    "animated-optical-response": 1,
+                },
+                "optical_interaction_active": 1,
+                "optical_interaction_modulates_optics": 1,
+            },
+        }
+
+        root = snapshot(plan)
+        material_node = root["debug"]["semantic_tree"]["children"][0]
+        assert isinstance(material_node, dict)
+        material = material_node["material"]
+        assert isinstance(material, dict)
+        material["container"] = descriptor["container"]
+
+        code, report = self.run_verifier(root, manifest)
+
+        self.assertEqual(code, 0)
+        self.assertTrue(report["ok"])
+        self.assertEqual(report["material_plans"]["interaction"]["enabled"], 1)
+        self.assertEqual(report["material_plans"]["interaction"]["states"], {
+            "hovered": 1,
+        })
+        self.assertEqual(
+            report["material_plans"]["optical_response"][
+                "interaction_modulates_optics"],
+            1)
+
+    def test_interaction_pointer_failure_points_to_material_interaction(self) -> None:
+        plan = material_plan()
+        interaction = plan["interaction"]
+        assert isinstance(interaction, dict)
+        interaction["pointer_x"] = 1.5
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material interaction pointer_x is normalized")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".interaction.pointer_x")
+        self.assertEqual(failure["likely_layer"], "material-interaction")
+        self.assertIn("MaterialPlan.interaction", failure["suggested_action"])
 
     def test_manifest_can_require_fallback_reason_summary(self) -> None:
         manifest = {

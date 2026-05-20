@@ -287,7 +287,26 @@ ALLOWED_MATERIAL_OPTICAL_DEPTH_STRATEGIES = {
     "standard-content-edge",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 27
+ALLOWED_MATERIAL_INTERACTION_STATES = {
+    "focused",
+    "hovered",
+    "idle",
+    "inactive",
+    "pressed",
+}
+
+ALLOWED_MATERIAL_INTERACTION_RESPONSE_MODELS = {
+    "liquid-glass-interaction",
+    "none",
+}
+
+ALLOWED_MATERIAL_INTERACTION_MOTION_POLICIES = {
+    "animated-optical-response",
+    "reduced-motion-static",
+    "static",
+}
+
+MATERIAL_PLAN_CONTRACT_VERSION = 28
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -475,6 +494,10 @@ def suggested_action_for_failure(
         return (
             "Inspect MaterialPlan.foreground, foreground contrast selection, "
             "and the material style theme tokens used by the pure planner.")
+    if likely_layer == "material-interaction":
+        return (
+            "Inspect MaterialPlan.interaction, MaterialSurfaceOptions.interaction, "
+            "and MaterialRect interaction payload decoding.")
     if likely_layer == "material-optical-response":
         return (
             "Inspect MaterialPlan.optical_response and the pure blur, tint, "
@@ -2128,6 +2151,17 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "foreground_deterministic",
         "foreground_min_primary_contrast_gte",
         "foreground_minimum_contrast_gte",
+        "interaction_enabled",
+        "interaction_active",
+        "interaction_hovered",
+        "interaction_pressed",
+        "interaction_focused",
+        "interaction_pointer_inside",
+        "interaction_reduce_motion",
+        "interaction_deterministic",
+        "interaction_states",
+        "interaction_response_models",
+        "interaction_motion_policies",
         "optical_response_models",
         "optical_blur_strategies",
         "optical_color_strategies",
@@ -2142,6 +2176,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "optical_depth_shadow_active",
         "optical_noise_dither_active",
         "optical_foreground_vibrancy_active",
+        "optical_interaction_active",
+        "optical_interaction_modulates_optics",
         "optical_deterministic_fallback",
         "theme_foreground_matches_theme",
         "theme_accent_matches_theme",
@@ -2231,6 +2267,14 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "foreground_high_contrast",
             "foreground_vibrant",
             "foreground_deterministic",
+            "interaction_enabled",
+            "interaction_active",
+            "interaction_hovered",
+            "interaction_pressed",
+            "interaction_focused",
+            "interaction_pointer_inside",
+            "interaction_reduce_motion",
+            "interaction_deterministic",
             "optical_backdrop_driven",
             "optical_blur_active",
             "optical_frosting_active",
@@ -2241,6 +2285,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             "optical_depth_shadow_active",
             "optical_noise_dither_active",
             "optical_foreground_vibrancy_active",
+            "optical_interaction_active",
+            "optical_interaction_modulates_optics",
             "optical_deterministic_fallback",
             "theme_foreground_matches_theme",
             "theme_accent_matches_theme",
@@ -2306,6 +2352,11 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
             ALLOWED_MATERIAL_FOREGROUND_CONTRAST_POLICIES),
         "foreground_remap_policies": (
             ALLOWED_MATERIAL_FOREGROUND_REMAP_POLICIES),
+        "interaction_states": ALLOWED_MATERIAL_INTERACTION_STATES,
+        "interaction_response_models": (
+            ALLOWED_MATERIAL_INTERACTION_RESPONSE_MODELS),
+        "interaction_motion_policies": (
+            ALLOWED_MATERIAL_INTERACTION_MOTION_POLICIES),
         "optical_response_models": ALLOWED_MATERIAL_OPTICAL_RESPONSE_MODELS,
         "optical_blur_strategies": ALLOWED_MATERIAL_OPTICAL_BLUR_STRATEGIES,
         "optical_color_strategies": ALLOWED_MATERIAL_OPTICAL_COLOR_STRATEGIES,
@@ -2996,6 +3047,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "backdrop_access",
     "theme",
     "foreground",
+    "interaction",
     "optical_response",
     "fallback",
     "fallback_path",
@@ -3265,7 +3317,30 @@ MATERIAL_OPTICAL_RESPONSE_BOOL_FIELDS = (
     "depth_shadow_active",
     "noise_dither_active",
     "foreground_vibrancy_active",
+    "interaction_active",
+    "interaction_modulates_optics",
     "deterministic_fallback",
+)
+MATERIAL_INTERACTION_BOOL_FIELDS = (
+    "enabled",
+    "active",
+    "hovered",
+    "pressed",
+    "focused",
+    "pointer_inside",
+    "reduce_motion",
+    "deterministic",
+)
+MATERIAL_INTERACTION_NUMERIC_FIELDS = (
+    "pointer_x",
+    "pointer_y",
+    "response_strength",
+    "opacity_delta",
+    "blur_radius_delta",
+    "saturation_delta",
+    "edge_highlight_delta",
+    "shadow_alpha_delta",
+    "shadow_radius_delta",
 )
 MATERIAL_QUALITY_POLICY_BOOL_FIELDS = (
     "allow_backdrop_sampling",
@@ -3970,6 +4045,21 @@ def summarize_material_plans(
             "min_minimum_contrast": 0.0,
             "max_background_luma": 0.0,
         },
+        "interaction": {
+            "states": {},
+            "response_models": {},
+            "motion_policies": {},
+            "enabled": 0,
+            "active": 0,
+            "hovered": 0,
+            "pressed": 0,
+            "focused": 0,
+            "pointer_inside": 0,
+            "reduce_motion": 0,
+            "deterministic": 0,
+            "max_response_strength": 0.0,
+            "max_abs_optical_delta": 0.0,
+        },
         "optical_response": {
             "response_models": {},
             "blur_strategies": {},
@@ -3985,6 +4075,8 @@ def summarize_material_plans(
             "depth_shadow_active": 0,
             "noise_dither_active": 0,
             "foreground_vibrancy_active": 0,
+            "interaction_active": 0,
+            "interaction_modulates_optics": 0,
             "deterministic_fallback": 0,
         },
         "optical_bounds": {
@@ -4672,6 +4764,38 @@ def summarize_material_plans(
                     "MaterialPlan.container. Resolved morph_transitions may differ "
                     "when Reduce Motion is enabled."),
                 record_success=False)
+            descriptor_interaction = check_object_field(
+                report,
+                command_descriptor,
+                "interaction",
+                f"{plan_path}.command_descriptor",
+                likely_layer="material-interaction",
+                hint=(
+                    "The decoded MaterialRect interaction payload should feed "
+                    "MaterialPlan.interaction."))
+            if descriptor_interaction is not None:
+                for key in (
+                        "hovered",
+                        "pressed",
+                        "focused",
+                        "pointer_inside",
+                        "active"):
+                    check_bool_field(
+                        report,
+                        descriptor_interaction,
+                        key,
+                        f"{plan_path}.command_descriptor.interaction",
+                        likely_layer="material-interaction",
+                        hint="Interaction command descriptor booleans must stay explicit.")
+                for key in ("pointer_x", "pointer_y"):
+                    check_number_field(
+                        report,
+                        descriptor_interaction,
+                        key,
+                        f"{plan_path}.command_descriptor.interaction",
+                        min_value=0.0,
+                        likely_layer="material-interaction",
+                        hint="Interaction pointer command descriptor fields must be numeric.")
             descriptor_tint = check_object_field(
                 report,
                 command_descriptor,
@@ -5232,6 +5356,171 @@ def summarize_material_plans(
                     },
                     likely_layer="material-foreground",
                     hint="Sampled Liquid Glass plans should expose vibrancy-driven foreground metadata.",
+                    record_success=False)
+        interaction = check_object_field(
+            report,
+            plan,
+            "interaction",
+            plan_path,
+            likely_layer="material-interaction",
+            hint=(
+                "MaterialPlan.interaction must expose the pure hover, press, "
+                "focus, and pointer response contract."))
+        if interaction is not None:
+            interaction_summary = summary["interaction"]
+            for key in MATERIAL_INTERACTION_BOOL_FIELDS:
+                value = check_bool_field(
+                    report,
+                    interaction,
+                    key,
+                    f"{plan_path}.interaction",
+                    likely_layer="material-interaction",
+                    hint="Interaction booleans must stay explicit pure-plan facts.")
+                if value is True:
+                    interaction_summary[key] = (
+                        int(interaction_summary[key]) + 1)
+            for key in MATERIAL_INTERACTION_NUMERIC_FIELDS:
+                value = check_number_field(
+                    report,
+                    interaction,
+                    key,
+                    f"{plan_path}.interaction",
+                    likely_layer="material-interaction",
+                    hint="Interaction numeric response fields must be finite.")
+                if isinstance(value, (int, float)):
+                    if key in ("pointer_x", "pointer_y"):
+                        report.check(
+                            f"material interaction {key} is normalized",
+                            0.0 <= float(value) <= 1.0,
+                            path=f"{plan_path}.interaction.{key}",
+                            expected={"between": [0.0, 1.0]},
+                            actual=value,
+                            likely_layer="material-interaction",
+                            hint=(
+                                "Pointer coordinates should be normalized "
+                                "inside the material surface."),
+                            record_success=False)
+                    elif key.endswith("_delta"):
+                        interaction_summary["max_abs_optical_delta"] = max(
+                            float(interaction_summary["max_abs_optical_delta"]),
+                            abs(float(value)))
+                    elif key == "response_strength":
+                        interaction_summary["max_response_strength"] = max(
+                            float(interaction_summary["max_response_strength"]),
+                            float(value))
+            state = check_string_field(
+                report,
+                interaction,
+                "state",
+                f"{plan_path}.interaction",
+                likely_layer="material-interaction",
+                hint="Interaction state must use the stable verifier vocabulary.")
+            if isinstance(state, str):
+                states = interaction_summary["states"]
+                states[state] = states.get(state, 0) + 1
+                report.check(
+                    "material interaction state is known",
+                    state in ALLOWED_MATERIAL_INTERACTION_STATES,
+                    path=f"{plan_path}.interaction.state",
+                    expected=sorted(ALLOWED_MATERIAL_INTERACTION_STATES),
+                    actual=state,
+                    likely_layer="material-interaction",
+                    hint="Add intentional interaction state vocabulary to the verifier.",
+                    record_success=False)
+            response_model = check_string_field(
+                report,
+                interaction,
+                "response_model",
+                f"{plan_path}.interaction",
+                likely_layer="material-interaction",
+                hint="Interaction response model must use the stable verifier vocabulary.")
+            if isinstance(response_model, str):
+                models = interaction_summary["response_models"]
+                models[response_model] = models.get(response_model, 0) + 1
+                report.check(
+                    "material interaction response_model is known",
+                    response_model
+                    in ALLOWED_MATERIAL_INTERACTION_RESPONSE_MODELS,
+                    path=f"{plan_path}.interaction.response_model",
+                    expected=sorted(
+                        ALLOWED_MATERIAL_INTERACTION_RESPONSE_MODELS),
+                    actual=response_model,
+                    likely_layer="material-interaction",
+                    hint="Add intentional interaction response vocabulary to the verifier.",
+                    record_success=False)
+            motion_policy = check_string_field(
+                report,
+                interaction,
+                "motion_policy",
+                f"{plan_path}.interaction",
+                likely_layer="material-interaction",
+                hint="Interaction motion policy must use the stable verifier vocabulary.")
+            if isinstance(motion_policy, str):
+                policies = interaction_summary["motion_policies"]
+                policies[motion_policy] = policies.get(motion_policy, 0) + 1
+                report.check(
+                    "material interaction motion_policy is known",
+                    motion_policy in ALLOWED_MATERIAL_INTERACTION_MOTION_POLICIES,
+                    path=f"{plan_path}.interaction.motion_policy",
+                    expected=sorted(
+                        ALLOWED_MATERIAL_INTERACTION_MOTION_POLICIES),
+                    actual=motion_policy,
+                    likely_layer="material-interaction",
+                    hint="Add intentional interaction motion vocabulary to the verifier.",
+                    record_success=False)
+            enabled = bool_at(interaction, "enabled")
+            active = bool_at(interaction, "active")
+            strength = number_at(interaction, "response_strength")
+            if isinstance(enabled, bool) and isinstance(active, bool):
+                report.check(
+                    "material interaction active implies enabled",
+                    (not active) or enabled,
+                    path=f"{plan_path}.interaction.active",
+                    expected={"enabled": True},
+                    actual={"enabled": enabled, "active": active},
+                    likely_layer="material-interaction",
+                    hint=(
+                        "Active hover/press/focus response should only be "
+                        "possible for interactive material containers."),
+                    record_success=False)
+                if isinstance(plan_container, dict):
+                    expected_enabled = (
+                        kind != "none"
+                        and plan_container.get("interactive") is True)
+                    report.check(
+                        "material interaction enabled mirrors container interactive",
+                        enabled is expected_enabled,
+                        path=f"{plan_path}.interaction.enabled",
+                        expected=expected_enabled,
+                        actual=enabled,
+                        likely_layer="material-interaction",
+                        hint=(
+                            "MaterialPlan.interaction.enabled should derive "
+                            "from MaterialContainerDescriptor.interactive."),
+                        record_success=False)
+                if isinstance(response_model, str):
+                    expected_model = (
+                        "liquid-glass-interaction" if enabled else "none")
+                    report.check(
+                        "material interaction response_model matches enabled state",
+                        response_model == expected_model,
+                        path=f"{plan_path}.interaction.response_model",
+                        expected=expected_model,
+                        actual=response_model,
+                        likely_layer="material-interaction",
+                        hint="Interaction response model should mirror enabled state.",
+                        record_success=False)
+            if isinstance(active, bool) and isinstance(strength, (int, float)):
+                report.check(
+                    "material interaction active matches response strength",
+                    active is (float(strength) > 0.0),
+                    path=f"{plan_path}.interaction.response_strength",
+                    expected={"> 0": active},
+                    actual=strength,
+                    likely_layer="material-interaction",
+                    hint=(
+                        "Interaction response strength should be positive "
+                        "exactly when the interaction is active."),
                     record_success=False)
         sample_taps = check_number_field(
             report,
@@ -7443,6 +7732,22 @@ def summarize_material_plans(
                 "foreground_vibrancy_active": (
                     foreground.get("uses_vibrancy")
                     if isinstance(foreground, dict) else None),
+                "interaction_active": (
+                    interaction.get("active")
+                    if isinstance(interaction, dict) else None),
+                "interaction_modulates_optics": (
+                    interaction.get("active") is True
+                    and any(
+                        isinstance(interaction.get(key), (int, float))
+                        and abs(float(interaction.get(key))) > 0.0001
+                        for key in (
+                            "opacity_delta",
+                            "blur_radius_delta",
+                            "saturation_delta",
+                            "edge_highlight_delta",
+                            "shadow_alpha_delta",
+                            "shadow_radius_delta")))
+                    if isinstance(interaction, dict) else None,
             }
             resource_budget_for_optical = plan.get("resource_budget")
             if isinstance(resource_budget_for_optical, dict):
@@ -8167,6 +8472,14 @@ def check_material_plan_summary_requirements(
             "foreground_high_contrast",
             "foreground_vibrant",
             "foreground_deterministic",
+            "interaction_enabled",
+            "interaction_active",
+            "interaction_hovered",
+            "interaction_pressed",
+            "interaction_focused",
+            "interaction_pointer_inside",
+            "interaction_reduce_motion",
+            "interaction_deterministic",
             "optical_backdrop_driven",
             "optical_blur_active",
             "optical_frosting_active",
@@ -8177,6 +8490,8 @@ def check_material_plan_summary_requirements(
             "optical_depth_shadow_active",
             "optical_noise_dither_active",
             "optical_foreground_vibrancy_active",
+            "optical_interaction_active",
+            "optical_interaction_modulates_optics",
             "optical_deterministic_fallback",
             "verifier_require_backdrop_source",
             "verifier_require_container_identity",
@@ -8305,6 +8620,13 @@ def check_material_plan_summary_requirements(
                     nested_field = "vibrant"
                 actual = foreground_summary.get(nested_field)
                 summary_path = f"{base_path}.foreground.{nested_field}"
+            elif field.startswith("interaction_"):
+                interaction_summary = summary.get("interaction")
+                if not isinstance(interaction_summary, dict):
+                    interaction_summary = {}
+                nested_field = field.removeprefix("interaction_")
+                actual = interaction_summary.get(nested_field)
+                summary_path = f"{base_path}.interaction.{nested_field}"
             elif field.startswith("optical_"):
                 optical_summary = summary.get("optical_response")
                 if not isinstance(optical_summary, dict):
@@ -8509,6 +8831,15 @@ def check_material_plan_summary_requirements(
         "foreground_remap_policies": (
             "material-foreground",
             "Inspect MaterialPlan.foreground.remap_policy and text role mapping."),
+        "interaction_states": (
+            "material-interaction",
+            "Inspect MaterialPlan.interaction.state and input state resolution."),
+        "interaction_response_models": (
+            "material-interaction",
+            "Inspect MaterialPlan.interaction.response_model and container interactivity."),
+        "interaction_motion_policies": (
+            "material-interaction",
+            "Inspect MaterialPlan.interaction.motion_policy and reduce-motion handling."),
         "optical_response_models": (
             "material-optical-response",
             "Inspect MaterialPlan.optical_response.response_model and role/sampling policy."),
@@ -8571,6 +8902,9 @@ def check_material_plan_summary_requirements(
             "foreground_sources",
             "foreground_contrast_policies",
             "foreground_remap_policies",
+            "interaction_states",
+            "interaction_response_models",
+            "interaction_motion_policies",
             "optical_response_models",
             "optical_blur_strategies",
             "optical_color_strategies",
@@ -8678,6 +9012,17 @@ def check_material_plan_summary_requirements(
                 }[field]
                 actual = foreground_summary.get(nested)
                 summary_path = f"{base_path}.foreground.{nested}"
+            elif field.startswith("interaction_"):
+                interaction_summary = summary.get("interaction")
+                if not isinstance(interaction_summary, dict):
+                    interaction_summary = {}
+                nested = {
+                    "interaction_states": "states",
+                    "interaction_response_models": "response_models",
+                    "interaction_motion_policies": "motion_policies",
+                }[field]
+                actual = interaction_summary.get(nested)
+                summary_path = f"{base_path}.interaction.{nested}"
             elif field.startswith("optical_"):
                 optical_summary = summary.get("optical_response")
                 if not isinstance(optical_summary, dict):

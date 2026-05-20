@@ -2316,6 +2316,7 @@ void weighted(float grow, F&& builder) {
 struct MaterialSurfaceOptions {
     MaterialKind kind = MaterialKind::Regular;
     MaterialSurfaceRole role = MaterialSurfaceRole::Surface;
+    MaterialInteractionDescriptor interaction{};
     FlexDirection direction = FlexDirection::Column;
     SpaceToken padding = SpaceToken::Lg;
     SpaceToken gap = SpaceToken::Md;
@@ -2359,6 +2360,7 @@ inline void configure_material_surface(LayoutNode& node,
     auto const& t = detail::g_app.theme;
     node.material = material_style(options.kind);
     node.material.role = options.role;
+    node.material.interaction = options.interaction;
     node.material.container = options.inherit_material_container
         ? current_material_container()
         : options.container;

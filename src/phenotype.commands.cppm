@@ -182,6 +182,9 @@ inline std::vector<DrawCommand> parse_commands(
             auto union_id = read_u32();
             auto container_spacing = read_f32();
             auto container_flags = read_u32();
+            auto interaction_flags = read_u32();
+            auto interaction_x = read_f32();
+            auto interaction_y = read_f32();
             out.emplace_back(MaterialRectCmd{
                 x,
                 y,
@@ -206,7 +209,11 @@ inline std::vector<DrawCommand> parse_commands(
                     edge_width,
                     noise_opacity,
                     shadow_alpha,
-                    shadow_radius}});
+                    shadow_radius,
+                    material_interaction_descriptor_from_wire(
+                        interaction_flags,
+                        interaction_x,
+                        interaction_y)}});
             break;
         }
         case Cmd::DrawText: {

@@ -194,7 +194,18 @@ static void view(State const& state) {
                     auto const control_probe =
                         glass::glass_material_probe_at(4);
                     layout::material_surface(
-                        material_kind(control_probe.kind), [&] {
+                        layout::MaterialSurfaceOptions{
+                            .kind = material_kind(control_probe.kind),
+                            .interaction =
+                                MaterialInteractionDescriptor{
+                                    .hovered = true,
+                                    .focused = true,
+                                    .pointer_inside = true,
+                                    .pointer_x = 0.62f,
+                                    .pointer_y = 0.38f,
+                                },
+                        },
+                        [&] {
                         widget::text(phenotype::str{
                             control_probe.label.data(),
                             static_cast<unsigned int>(

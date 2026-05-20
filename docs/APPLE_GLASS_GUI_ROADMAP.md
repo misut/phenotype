@@ -188,12 +188,21 @@ snapshot, and verifier expectations. The plan also carries a
 `luminance_curve` contract: sampled glass uses the backdrop-driven
 `adaptive-backdrop-luma` curve, while deterministic fallback uses
 `fallback-flat`.
+Interactive surfaces now carry a pure `MaterialInteractionDescriptor` from
+layout through the `MaterialRect` command payload into
+`MaterialPlan.interaction`. The planner resolves hover, press, focus, pointer
+presence, normalized pointer coordinates, reduced-motion handling, and the
+exact opacity/blur/saturation/edge/shadow deltas before any backend runs. This
+keeps Liquid Glass response policy out of AppKit, Metal, Android, Windows, and
+artifact-writing code while still giving each adapter an executable response
+contract.
 `MaterialPlan.optical_response` is the compact schema-stable summary of that
 contract. It classifies each surface as sampled backdrop glass, content-layer
 standard material, deterministic fallback, or inactive, then records the
 blur/color/depth strategy and explicit booleans for blur, frosting, tint,
 saturation, luminance preservation, edge highlight, depth shadow, noise/dither,
-foreground vibrancy, and fallback behavior.
+foreground vibrancy, interaction-driven optical modulation, and fallback
+behavior.
 `MaterialPlan.reference_model` maps the current Apple references into a
 backend-independent product contract: functional roles are `liquid-glass` on
 the `functional-layer`, content roles are `standard-material` on the
