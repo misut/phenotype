@@ -264,6 +264,21 @@ struct MaterialResourceBudget {
     bool deterministic_fallback = true;
 };
 
+struct MaterialStageOptics {
+    char const* channel = "none";
+    float opacity = 0.0f;
+    float blur_radius = 0.0f;
+    float tint_alpha = 0.0f;
+    float saturation = 1.0f;
+    float luminance_floor = 0.0f;
+    float luminance_gain = 1.0f;
+    float edge_highlight = 0.0f;
+    float edge_width = 0.0f;
+    float noise_opacity = 0.0f;
+    float shadow_alpha = 0.0f;
+    float shadow_radius = 0.0f;
+};
+
 struct MaterialExecutionStage {
     char const* name = "none";
     bool active = false;
@@ -273,6 +288,7 @@ struct MaterialExecutionStage {
     char const* executor = "none";
     std::int64_t max_texture_copy_pixels = 0;
     bool bounded = true;
+    MaterialStageOptics optics{};
 };
 
 struct MaterialBackdropAnalysis {
@@ -501,6 +517,50 @@ struct MaterialRuntimeRecord {
     MaterialPlan plan{};
     std::uint32_t command_index = 0;
 };
+
+inline float material_alpha_fraction(Color color) noexcept {
+    return static_cast<float>(color.a) / 255.0f;
+}
+
+inline MaterialStageOptics material_primary_stage_optics(
+        MaterialPlan const& plan) noexcept {
+    MaterialStageOptics optics{};
+    optics.channel = plan.primary_pass.executor;
+    optics.opacity = plan.opacity;
+    optics.blur_radius = plan.blur_radius;
+    optics.tint_alpha = material_alpha_fraction(plan.tint);
+    optics.saturation = plan.saturation;
+    optics.luminance_floor = plan.luminance_floor;
+    optics.luminance_gain = plan.luminance_gain;
+    return optics;
+}
+
+inline MaterialStageOptics material_shadow_stage_optics(
+        MaterialPlan const& plan) noexcept {
+    MaterialStageOptics optics{};
+    optics.channel = "shape-shadow";
+    optics.edge_width = plan.edge_width;
+    optics.shadow_alpha = plan.shadow_alpha;
+    optics.shadow_radius = plan.shadow_radius;
+    return optics;
+}
+
+inline MaterialStageOptics material_edge_stage_optics(
+        MaterialPlan const& plan) noexcept {
+    MaterialStageOptics optics{};
+    optics.channel = "edge-highlight";
+    optics.edge_highlight = plan.edge_highlight;
+    optics.edge_width = plan.edge_width;
+    return optics;
+}
+
+inline MaterialStageOptics material_noise_stage_optics(
+        MaterialPlan const& plan) noexcept {
+    MaterialStageOptics optics{};
+    optics.channel = "noise-dither";
+    optics.noise_opacity = plan.noise_opacity;
+    return optics;
+}
 
 inline bool material_plan_uses_standard_content_layer(
         MaterialPlan const& plan) noexcept {
@@ -2661,6 +2721,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
                 "shape-shadow",
                 0,
                 true,
+                material_shadow_stage_optics(plan),
             });
     }
     if (plan.primary_pass.active) {
@@ -2675,6 +2736,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
                 plan.primary_pass.executor,
                 plan.primary_pass.max_texture_copy_pixels,
                 true,
+                material_primary_stage_optics(plan),
             });
     }
     if (has_material && plan.edge_highlight > 0.0f && plan.primary_pass.active) {
@@ -2690,6 +2752,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
                 "edge-highlight",
                 0,
                 true,
+                material_edge_stage_optics(plan),
             });
     }
     if (has_material && plan.noise_opacity > 0.0f && plan.backdrop_sampling) {
@@ -2704,6 +2767,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
                 "ordered-dither",
                 0,
                 true,
+                material_noise_stage_optics(plan),
             });
     }
     plan.verifier.require_backdrop_source = plan.backdrop_sampling;

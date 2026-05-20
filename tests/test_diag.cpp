@@ -1155,6 +1155,29 @@ void test_material_runtime_record_json_contract() {
            == "material-fallback-pass");
     assert(observation.at("likely_pass").as_string()
            == "translucent-rounded-rect");
+    auto const& stages = obj.at("execution_stages").as_array();
+    assert(stages.size() == 3);
+    auto const& shadow_stage = stages[0].as_object();
+    auto const& shadow_optics = shadow_stage.at("optics").as_object();
+    assert(shadow_optics.at("channel").as_string() == "shape-shadow");
+    assert(shadow_optics.at("shadow_alpha").as_float()
+           == obj.at("shadow_alpha").as_float());
+    assert(shadow_optics.at("shadow_radius").as_float()
+           == obj.at("shadow_radius").as_float());
+    auto const& primary_stage = stages[1].as_object();
+    auto const& primary_optics = primary_stage.at("optics").as_object();
+    assert(primary_optics.at("channel").as_string() == "fallback-fill");
+    assert(primary_optics.at("blur_radius").as_float()
+           == obj.at("blur_radius").as_float());
+    assert(primary_optics.at("saturation").as_float()
+           == obj.at("saturation").as_float());
+    auto const& edge_stage = stages[2].as_object();
+    auto const& edge_optics = edge_stage.at("optics").as_object();
+    assert(edge_optics.at("channel").as_string() == "edge-highlight");
+    assert(edge_optics.at("edge_highlight").as_float()
+           == obj.at("edge_highlight").as_float());
+    assert(edge_optics.at("edge_width").as_float()
+           == obj.at("edge_width").as_float());
 
     std::vector<MaterialRuntimeRecord> records{record};
     auto plans = diag::detail::material_plans_runtime_json(records);

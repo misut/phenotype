@@ -794,6 +794,21 @@ def number_at(value: JsonObject, key: str) -> int | float | None:
     return item if isinstance(item, (int, float)) and not isinstance(item, bool) else None
 
 
+def numbers_close(
+    actual: int | float | None,
+    expected: int | float | None,
+    *,
+    tolerance: float = 0.0001,
+) -> bool:
+    return (
+        isinstance(actual, (int, float))
+        and not isinstance(actual, bool)
+        and isinstance(expected, (int, float))
+        and not isinstance(expected, bool)
+        and abs(float(actual) - float(expected)) <= tolerance
+    )
+
+
 def material_container_from(value: JsonObject) -> JsonObject | None:
     container = value.get("container")
     if not isinstance(container, dict):
@@ -3059,6 +3074,28 @@ MATERIAL_PASS_FIELDS = (
     "max_texture_copy_pixels",
 )
 MATERIAL_EXECUTION_STAGE_FIELDS = MATERIAL_PASS_FIELDS + ("bounded",)
+ALLOWED_MATERIAL_STAGE_OPTICS_CHANNELS = {
+    "backdrop-filter",
+    "edge-highlight",
+    "fallback-fill",
+    "noise-dither",
+    "none",
+    "shape-shadow",
+    "standard-fill",
+}
+MATERIAL_STAGE_OPTICS_NUMERIC_FIELDS = (
+    "opacity",
+    "blur_radius",
+    "tint_alpha",
+    "saturation",
+    "luminance_floor",
+    "luminance_gain",
+    "edge_highlight",
+    "edge_width",
+    "noise_opacity",
+    "shadow_alpha",
+    "shadow_radius",
+)
 MATERIAL_OBSERVATION_BOOL_FIELDS = (
     "semantic_material_required",
     "runtime_plan_required",
@@ -4583,13 +4620,16 @@ def summarize_material_plans(
             summary["command_descriptor_missing"] = int(
                 summary["command_descriptor_missing"]) + 1
 
+        plan_opacity: int | float | None = None
         plan_blur_radius: int | float | None = None
         plan_edge_highlight: int | float | None = None
+        plan_edge_width: int | float | None = None
         plan_luminance_floor: int | float | None = None
         plan_luminance_gain: int | float | None = None
         plan_saturation: int | float | None = None
         plan_noise_opacity: int | float | None = None
         plan_shadow_alpha: int | float | None = None
+        plan_shadow_radius: int | float | None = None
         for key in MATERIAL_PLAN_NUMERIC_FIELDS:
             number = check_number_field(
                 report,
@@ -4599,7 +4639,9 @@ def summarize_material_plans(
                 min_value=0.0,
                 likely_layer=likely_layer,
                 hint="Check pure MaterialPlan clamping and backend JSON serialization.")
-            if key == "blur_radius":
+            if key == "opacity":
+                plan_opacity = number
+            elif key == "blur_radius":
                 plan_blur_radius = number
                 if isinstance(number, (int, float)):
                     bounds = summary["resource_bounds"]
@@ -4621,6 +4663,7 @@ def summarize_material_plans(
                         float(optical_bounds["max_edge_highlight"]),
                         float(number))
             elif key == "edge_width":
+                plan_edge_width = number
                 if isinstance(number, (int, float)):
                     optical_bounds = summary["optical_bounds"]
                     optical_bounds["max_edge_width"] = max(
@@ -4645,6 +4688,7 @@ def summarize_material_plans(
                         float(optical_bounds["max_shadow_alpha"]),
                         float(number))
             elif key == "shadow_radius":
+                plan_shadow_radius = number
                 if isinstance(number, (int, float)):
                     optical_bounds = summary["optical_bounds"]
                     optical_bounds["max_shadow_radius"] = max(
@@ -5703,6 +5747,11 @@ def summarize_material_plans(
                     min_value=0.0,
                     likely_layer=likely_layer,
                     hint="Check MaterialPlan tint RGBA serialization.")
+        plan_tint_alpha = (
+            float(number_at(tint, "a")) / 255.0
+            if isinstance(tint, dict)
+            and isinstance(number_at(tint, "a"), (int, float))
+            else None)
 
         backdrop = check_object_field(
             report,
@@ -7461,6 +7510,109 @@ def summarize_material_plans(
                                 likely_layer=likely_layer,
                                 likely_pass=stage_name_for_hint,
                                 hint="Add intentional material stage executors to the verifier contract.",
+                                record_success=False)
+                stage_optics = check_object_field(
+                    report,
+                    stage_entry,
+                    "optics",
+                    stage_path,
+                    likely_layer="material-stage-optics",
+                    hint=(
+                        "Each material execution stage must expose the pure "
+                        "optical inputs it consumes."))
+                if stage_optics is not None:
+                    channel = check_string_field(
+                        report,
+                        stage_optics,
+                        "channel",
+                        f"{stage_path}.optics",
+                        likely_layer="material-stage-optics",
+                        hint="Stage optics must name the optical channel.")
+                    if isinstance(channel, str):
+                        report.check(
+                            "material execution stage optics channel is known",
+                            channel in ALLOWED_MATERIAL_STAGE_OPTICS_CHANNELS,
+                            path=f"{stage_path}.optics.channel",
+                            expected=sorted(ALLOWED_MATERIAL_STAGE_OPTICS_CHANNELS),
+                            actual=channel,
+                            likely_layer="material-stage-optics",
+                            likely_pass=stage_name_for_hint,
+                            hint=(
+                                "Add intentional stage optical channels to the "
+                                "verifier before changing artifact shape."),
+                            record_success=False)
+                    optics_numbers: dict[str, int | float | None] = {}
+                    for optics_key in MATERIAL_STAGE_OPTICS_NUMERIC_FIELDS:
+                        optics_numbers[optics_key] = check_number_field(
+                            report,
+                            stage_optics,
+                            optics_key,
+                            f"{stage_path}.optics",
+                            min_value=0.0,
+                            likely_layer="material-stage-optics",
+                            likely_pass=stage_name_for_hint,
+                            hint=(
+                                "Stage optics values must be numeric pure "
+                                "MaterialPlan inputs."))
+                    expected_channel: str | None = None
+                    expected_numbers: dict[str, int | float | None] = {}
+                    if stage_name_for_hint == "shape-shadow":
+                        expected_channel = "shape-shadow"
+                        expected_numbers = {
+                            "edge_width": plan_edge_width,
+                            "shadow_alpha": plan_shadow_alpha,
+                            "shadow_radius": plan_shadow_radius,
+                        }
+                    elif stage_name_for_hint == primary_pass_name:
+                        expected_channel = (
+                            string_at(stage_entry, "executor")
+                            if isinstance(stage_entry, dict) else None)
+                        expected_numbers = {
+                            "opacity": plan_opacity,
+                            "blur_radius": plan_blur_radius,
+                            "tint_alpha": plan_tint_alpha,
+                            "saturation": plan_saturation,
+                            "luminance_floor": plan_luminance_floor,
+                            "luminance_gain": plan_luminance_gain,
+                        }
+                    elif stage_name_for_hint == "edge-highlight":
+                        expected_channel = "edge-highlight"
+                        expected_numbers = {
+                            "edge_highlight": plan_edge_highlight,
+                            "edge_width": plan_edge_width,
+                        }
+                    elif stage_name_for_hint == "noise-dither":
+                        expected_channel = "noise-dither"
+                        expected_numbers = {
+                            "noise_opacity": plan_noise_opacity,
+                        }
+                    if isinstance(expected_channel, str):
+                        report.check(
+                            "material execution stage optics channel matches stage",
+                            channel == expected_channel,
+                            path=f"{stage_path}.optics.channel",
+                            expected=expected_channel,
+                            actual=channel,
+                            likely_layer="material-stage-optics",
+                            likely_pass=stage_name_for_hint,
+                            hint=(
+                                "Stage optics channel should be derived from "
+                                "the stage name/executor, not backend policy."),
+                            record_success=False)
+                    for optics_key, expected_number in expected_numbers.items():
+                        if isinstance(expected_number, (int, float)):
+                            actual_number = optics_numbers.get(optics_key)
+                            report.check(
+                                f"material execution stage optics {optics_key} matches plan",
+                                numbers_close(actual_number, expected_number),
+                                path=f"{stage_path}.optics.{optics_key}",
+                                expected=expected_number,
+                                actual=actual_number,
+                                likely_layer="material-stage-optics",
+                                likely_pass=stage_name_for_hint,
+                                hint=(
+                                    "Stage optics must echo the resolved pure "
+                                    "MaterialPlan scalar that this stage consumes."),
                                 record_success=False)
                 if stage_texture_copy_pixels is not None:
                     if stage_active is False:
