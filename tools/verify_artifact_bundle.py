@@ -8663,6 +8663,12 @@ def check_material_executor_summary_contract(
         "backdrop_copy_excludes_foreground_text",
         "foreground_pass_after_backdrop_copy",
         "backdrop_descriptor_luma_available",
+        "material_pipeline_ready",
+        "material_backdrop_source_ready",
+        "material_sampled_backdrop_upload_required",
+        "material_sampled_backdrop_draw_required",
+        "material_sampled_backdrop_uploaded",
+        "material_sampled_backdrop_drawn",
     )
     for field in bool_fields:
         actual = executor_summary.get(field)
@@ -8675,6 +8681,61 @@ def check_material_executor_summary_contract(
             likely_layer="platform-runtime",
             likely_pass="material-executor",
             hint="Executor foreground/capture ordering telemetry must be explicit.")
+
+    upload_status = check_string_field(
+        report,
+        executor_summary,
+        "material_upload_status",
+        base_path,
+        likely_layer="platform-runtime",
+        hint=(
+            "Sampled material upload status should explain whether the backend "
+            "uploaded the buffer or skipped it before any draw call."))
+    draw_status = check_string_field(
+        report,
+        executor_summary,
+        "material_draw_status",
+        base_path,
+        likely_layer="platform-runtime",
+        hint=(
+            "Sampled material draw status should explain whether the backend "
+            "drew the sampled backdrop pass or which edge dependency blocked it."))
+    allowed_upload_statuses = {
+        "not-needed",
+        "uploaded",
+        "skipped-material-pipeline-unavailable",
+        "skipped-material-buffer-upload-not-recorded",
+    }
+    allowed_draw_statuses = {
+        "not-needed",
+        "drawn",
+        "skipped-material-pipeline-unavailable",
+        "skipped-material-backdrop-source-unavailable",
+        "skipped-material-buffer-upload-not-recorded",
+        "skipped-material-draw-not-recorded",
+    }
+    report.check(
+        "material executor upload status is recognized",
+        upload_status in allowed_upload_statuses,
+        path=f"{base_path}.material_upload_status",
+        expected=sorted(allowed_upload_statuses),
+        actual=upload_status,
+        likely_layer="platform-runtime",
+        likely_pass="material-executor",
+        hint=(
+            "Use a stable upload status string so CI logs can identify the "
+            "blocked sampled-material edge dependency."))
+    report.check(
+        "material executor draw status is recognized",
+        draw_status in allowed_draw_statuses,
+        path=f"{base_path}.material_draw_status",
+        expected=sorted(allowed_draw_statuses),
+        actual=draw_status,
+        likely_layer="platform-runtime",
+        likely_pass="material-executor",
+        hint=(
+            "Use a stable draw status string so CI logs can identify the "
+            "blocked sampled-material edge dependency."))
 
     foreground_candidates = executor_summary.get("foreground_text_candidate_count")
     foreground_remaps = executor_summary.get("foreground_text_remap_count")
@@ -8718,6 +8779,123 @@ def check_material_executor_summary_contract(
                 "Material draw calls should stay within sampled backdrop "
                 "instances times MaterialResourceBudget.max_pass_count."))
 
+    upload_bytes = executor_summary.get("material_upload_bytes")
+    sampled_upload_required = executor_summary.get(
+        "material_sampled_backdrop_upload_required")
+    sampled_draw_required = executor_summary.get(
+        "material_sampled_backdrop_draw_required")
+    sampled_uploaded = executor_summary.get("material_sampled_backdrop_uploaded")
+    sampled_drawn = executor_summary.get("material_sampled_backdrop_drawn")
+    pipeline_ready = executor_summary.get("material_pipeline_ready")
+    backdrop_source_ready = executor_summary.get("material_backdrop_source_ready")
+    if isinstance(sampled_backdrop_instances, int):
+        expected_required = sampled_backdrop_instances > 0
+        report.check(
+            "material executor upload requirement matches sampled plans",
+            sampled_upload_required is expected_required,
+            path=f"{base_path}.material_sampled_backdrop_upload_required",
+            expected=expected_required,
+            actual=sampled_upload_required,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "Only plans using the sampled backdrop executor need material "
+                "instance buffer upload."))
+        report.check(
+            "material executor draw requirement matches sampled plans",
+            sampled_draw_required is expected_required,
+            path=f"{base_path}.material_sampled_backdrop_draw_required",
+            expected=expected_required,
+            actual=sampled_draw_required,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "Only plans using the sampled backdrop executor need a material "
+                "draw pass."))
+    if isinstance(upload_bytes, (int, float)) and not isinstance(upload_bytes, bool):
+        expected_uploaded = float(upload_bytes) > 0.0
+        report.check(
+            "material executor uploaded flag matches upload bytes",
+            sampled_uploaded is expected_uploaded,
+            path=f"{base_path}.material_sampled_backdrop_uploaded",
+            expected=expected_uploaded,
+            actual=sampled_uploaded,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "The uploaded flag should be a machine-readable mirror of "
+                "material_upload_bytes."))
+    if isinstance(draw_calls, (int, float)) and not isinstance(draw_calls, bool):
+        expected_drawn = float(draw_calls) > 0.0
+        report.check(
+            "material executor drawn flag matches draw calls",
+            sampled_drawn is expected_drawn,
+            path=f"{base_path}.material_sampled_backdrop_drawn",
+            expected=expected_drawn,
+            actual=sampled_drawn,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "The drawn flag should be a machine-readable mirror of "
+                "material_draw_calls."))
+    if (isinstance(sampled_backdrop_instances, int)
+            and isinstance(pipeline_ready, bool)
+            and isinstance(upload_bytes, (int, float))
+            and not isinstance(upload_bytes, bool)):
+        expected_upload_status = "not-needed"
+        if sampled_backdrop_instances > 0:
+            if float(upload_bytes) > 0.0:
+                expected_upload_status = "uploaded"
+            elif not pipeline_ready:
+                expected_upload_status = "skipped-material-pipeline-unavailable"
+            else:
+                expected_upload_status = (
+                    "skipped-material-buffer-upload-not-recorded")
+        report.check(
+            "material executor upload status matches edge facts",
+            upload_status == expected_upload_status,
+            path=f"{base_path}.material_upload_status",
+            expected=expected_upload_status,
+            actual=upload_status,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "The upload status should be derived from edge facts: sampled "
+                "plan count, pipeline readiness, and upload bytes, not hidden "
+                "backend policy."))
+    if (isinstance(sampled_backdrop_instances, int)
+            and isinstance(pipeline_ready, bool)
+            and isinstance(backdrop_source_ready, bool)
+            and isinstance(upload_bytes, (int, float))
+            and not isinstance(upload_bytes, bool)
+            and isinstance(draw_calls, (int, float))
+            and not isinstance(draw_calls, bool)):
+        expected_draw_status = "not-needed"
+        if sampled_backdrop_instances > 0:
+            if float(draw_calls) > 0.0:
+                expected_draw_status = "drawn"
+            elif not pipeline_ready:
+                expected_draw_status = "skipped-material-pipeline-unavailable"
+            elif not backdrop_source_ready:
+                expected_draw_status = (
+                    "skipped-material-backdrop-source-unavailable")
+            elif float(upload_bytes) <= 0.0:
+                expected_draw_status = (
+                    "skipped-material-buffer-upload-not-recorded")
+            else:
+                expected_draw_status = "skipped-material-draw-not-recorded"
+        report.check(
+            "material executor draw status matches edge facts",
+            draw_status == expected_draw_status,
+            path=f"{base_path}.material_draw_status",
+            expected=expected_draw_status,
+            actual=draw_status,
+            likely_layer="platform-runtime",
+            likely_pass="material-executor",
+            hint=(
+                "The draw status should be derived from sampled plan count, "
+                "pipeline/backdrop readiness, upload bytes, and draw calls."))
+
     expected_sample_fields = {
         "material_max_sample_taps": bounds.get("max_plan_sample_taps"),
         "material_total_sample_taps": bounds.get("total_plan_sample_taps"),
@@ -8736,7 +8914,6 @@ def check_material_executor_summary_contract(
                 "The backend must encode the resolved MaterialPlan.sample_taps "
                 "into material instances instead of using a hidden shader default."))
 
-    upload_bytes = executor_summary.get("material_upload_bytes")
     upload_capacity = executor_summary.get("material_buffer_capacity_bytes")
     if (isinstance(upload_bytes, (int, float))
             and not isinstance(upload_bytes, bool)

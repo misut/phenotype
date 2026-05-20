@@ -2227,6 +2227,34 @@ namespace detail {
                             ? summary.backdrop_descriptor_source
                             : "none"});
         out.emplace(
+            "material_pipeline_ready",
+            json::Value{summary.material_pipeline_ready});
+        out.emplace(
+            "material_backdrop_source_ready",
+            json::Value{summary.material_backdrop_source_ready});
+        out.emplace(
+            "material_sampled_backdrop_upload_required",
+            json::Value{summary.material_sampled_backdrop_upload_required});
+        out.emplace(
+            "material_sampled_backdrop_draw_required",
+            json::Value{summary.material_sampled_backdrop_draw_required});
+        out.emplace(
+            "material_sampled_backdrop_uploaded",
+            json::Value{summary.material_sampled_backdrop_uploaded});
+        out.emplace(
+            "material_sampled_backdrop_drawn",
+            json::Value{summary.material_sampled_backdrop_drawn});
+        out.emplace(
+            "material_upload_status",
+            json::Value{summary.material_upload_status
+                            ? summary.material_upload_status
+                            : "not-needed"});
+        out.emplace(
+            "material_draw_status",
+            json::Value{summary.material_draw_status
+                            ? summary.material_draw_status
+                            : "not-needed"});
+        out.emplace(
             "backdrop_luma_sampling_skipped_count",
             json::Value{static_cast<std::int64_t>(
                 summary.backdrop_luma_sampling_skipped_count)});

@@ -832,10 +832,16 @@ surface sample pixels, upload bytes/capacity, framebuffer-history copy bounds,
 CPU enqueue timings, `foreground_text_candidate_count`, and
 `foreground_text_remap_count`. The same summary includes the exact backdrop
 luminance descriptor that fed the pure planner (`backdrop_descriptor_luma_*`)
-and any bounded sampling skip reason. `renderer.material_backdrop_luma_descriptor`
-exposes the latest observed backend descriptor independently of the plans, so an
-artifact can tell whether the backend had a completed async sample, a pending
-sample, or a deterministic unsupported fallback. macOS additionally separates
+and any bounded sampling skip reason. It also repeats the sampled-material edge
+readiness (`material_pipeline_ready`, `material_backdrop_source_ready`) and the
+purely derived upload/draw status strings (`material_upload_status`,
+`material_draw_status`). Backends fill only the edge facts and counters; the
+status helper derives `uploaded`, `drawn`, or a stable `skipped-*` reason from
+those facts so policy decisions remain inspectable instead of hiding in a
+renderer branch. `renderer.material_backdrop_luma_descriptor` exposes the latest
+observed backend descriptor independently of the plans, so an artifact can tell
+whether the backend had a completed async sample, a pending sample, or a
+deterministic unsupported fallback. macOS additionally separates
 the material backdrop texture from the final debug/readback texture. The
 backend only allocates or blits that backdrop texture when the pure executor
 summary says a shared-frame or next-frame capture is required; standard content

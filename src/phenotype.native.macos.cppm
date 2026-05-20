@@ -7336,6 +7336,10 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
 
     MaterialExecutorSummary material_summary;
     material_summary.cpu_decode_ns = decode_ns;
+    material_summary.material_pipeline_ready =
+        material_env.capabilities.shader_blur;
+    material_summary.material_backdrop_source_ready =
+        material_env.backdrop.available;
     material_summary.foreground_text_candidate_count =
         g_renderer.scratch.foreground_text_candidate_count;
     material_summary.foreground_text_remap_count =
@@ -7853,6 +7857,7 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     command_buffer->commit();
     material_summary.cpu_total_ns =
         metrics::detail::now_ns() - flush_started;
+    finalize_material_executor_execution_status(material_summary);
     g_renderer.material_executor_summary = material_summary;
 
     pool->release();

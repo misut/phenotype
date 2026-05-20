@@ -825,6 +825,15 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         1 if primary["executor"] == "standard-fill" else 0)
     deterministic_fallback_instances = (
         1 if primary["executor"] == "fallback-fill" else 0)
+    sampled_required = sampled_backdrop_instances > 0
+    pipeline_ready = sampled_required
+    backdrop_source_ready = sampled_required
+    upload_bytes = 128 if sampled_required else 0
+    draw_calls = sampled_backdrop_instances
+    sampled_uploaded = upload_bytes > 0
+    sampled_drawn = draw_calls > 0
+    upload_status = "uploaded" if sampled_required else "not-needed"
+    draw_status = "drawn" if sampled_required else "not-needed"
     primary_stages = [
         stage for stage in stages
         if isinstance(stage, dict)
@@ -840,7 +849,7 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "standard_fill_instance_count": standard_fill_instances,
         "deterministic_fallback_instance_count": (
             deterministic_fallback_instances),
-        "material_draw_calls": sampled_backdrop_instances,
+        "material_draw_calls": draw_calls,
         "backdrop_copy_count": 0,
         "execution_stage_count": len(stages),
         "active_execution_stage_count": len(active_stages),
@@ -880,8 +889,8 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "backdrop_copy_pixels": 0,
         "backdrop_copy_excludes_foreground_text": False,
         "foreground_pass_after_backdrop_copy": False,
-        "material_upload_bytes": 0,
-        "material_buffer_capacity_bytes": 0,
+        "material_upload_bytes": upload_bytes,
+        "material_buffer_capacity_bytes": upload_bytes,
         "material_buffer_reallocations": 0,
         "foreground_text_candidate_count": 1,
         "foreground_text_remap_count": 1,
@@ -900,6 +909,14 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "backdrop_descriptor_luma_status": (
             plan["backdrop"]["luma_sample_status"]),
         "backdrop_descriptor_source": plan["backdrop"]["source"],
+        "material_pipeline_ready": pipeline_ready,
+        "material_backdrop_source_ready": backdrop_source_ready,
+        "material_sampled_backdrop_upload_required": sampled_required,
+        "material_sampled_backdrop_draw_required": sampled_required,
+        "material_sampled_backdrop_uploaded": sampled_uploaded,
+        "material_sampled_backdrop_drawn": sampled_drawn,
+        "material_upload_status": upload_status,
+        "material_draw_status": draw_status,
         "backdrop_luma_sampling_skipped_count": 0,
         "backdrop_luma_sampling_skip_reason": "none",
         "container_groups": material_container_group_summary(plan),
@@ -3015,6 +3032,61 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["likely_layer"], "platform-runtime")
         self.assertEqual(failure["likely_pass"], "material-executor")
         self.assertIn("renderer.material_plans", failure["hint"])
+
+    def test_material_executor_upload_status_mismatch_is_llm_actionable(
+            self) -> None:
+        root = snapshot(sampled_material_plan(sample_taps=13))
+        renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+        assert isinstance(renderer, dict)
+        executor = renderer["material_executor_summary"]
+        assert isinstance(executor, dict)
+        executor["material_upload_bytes"] = 0
+        executor["material_sampled_backdrop_uploaded"] = False
+        executor["material_upload_status"] = "uploaded"
+
+        code, report = self.run_verifier(root)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"]
+            == "material executor upload status matches edge facts")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_executor_summary"
+            ".material_upload_status")
+        self.assertEqual(
+            failure["expected"],
+            "skipped-material-buffer-upload-not-recorded")
+        self.assertEqual(failure["actual"], "uploaded")
+        self.assertEqual(failure["likely_pass"], "material-executor")
+        self.assertIn("edge facts", failure["hint"])
+
+    def test_material_executor_draw_status_mismatch_is_llm_actionable(
+            self) -> None:
+        root = snapshot(sampled_material_plan(sample_taps=13))
+        renderer = root["debug"]["platform_runtime"]["details"]["renderer"]
+        assert isinstance(renderer, dict)
+        executor = renderer["material_executor_summary"]
+        assert isinstance(executor, dict)
+        executor["material_draw_calls"] = 0
+        executor["material_sampled_backdrop_drawn"] = False
+        executor["material_draw_status"] = "drawn"
+
+        code, report = self.run_verifier(root)
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == "material executor draw status matches edge facts")
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_executor_summary"
+            ".material_draw_status")
+        self.assertEqual(failure["expected"], "skipped-material-draw-not-recorded")
+        self.assertEqual(failure["actual"], "drawn")
+        self.assertEqual(failure["likely_pass"], "material-executor")
+        self.assertIn("pipeline/backdrop readiness", failure["hint"])
 
     def test_manifest_can_compare_pixel_region_metrics(self) -> None:
         manifest = {
