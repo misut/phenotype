@@ -57,6 +57,36 @@ def material_pass(sample_taps: int) -> dict[str, object]:
     }
 
 
+def sampling_kernel_contract(sample_taps: int) -> dict[str, object]:
+    if sample_taps <= 1:
+        return {
+            "name": "weighted-center",
+            "radius": 0,
+            "blur_step_scale": 0.0,
+            "weight_profile": "center4",
+        }
+    if sample_taps <= 5:
+        return {
+            "name": "weighted-cross-5",
+            "radius": 1,
+            "blur_step_scale": 0.35,
+            "weight_profile": "center4-cardinal2",
+        }
+    if sample_taps <= 9:
+        return {
+            "name": "weighted-3x3-grid",
+            "radius": 1,
+            "blur_step_scale": 0.35,
+            "weight_profile": "center4-cardinal2-diagonal1",
+        }
+    return {
+        "name": "weighted-5x5-manhattan",
+        "radius": 2,
+        "blur_step_scale": 0.35,
+        "weight_profile": "center4-cardinal2-diagonal1",
+    }
+
+
 def material_plan(
     sample_taps: int = 0,
     primary_sample_taps: int = 0,
@@ -659,12 +689,13 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "executor": "backdrop-filter",
         "max_texture_copy_pixels": 320 * 240,
     })
+    kernel_contract = sampling_kernel_contract(sample_taps)
     plan["sampling_kernel"].update({
-        "name": "weighted-5x5-manhattan",
-        "radius": 2,
+        "name": kernel_contract["name"],
+        "radius": kernel_contract["radius"],
         "sample_taps": sample_taps,
-        "blur_step_scale": 0.35,
-        "weight_profile": "center4-cardinal2-diagonal1",
+        "blur_step_scale": kernel_contract["blur_step_scale"],
+        "weight_profile": kernel_contract["weight_profile"],
         "requires_backdrop": True,
         "bounded": True,
     })
@@ -679,7 +710,9 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "uses_vibrancy": True,
     })
     assert isinstance(plan["resource_budget"], dict)
-    plan["resource_budget"]["max_sampling_kernel_radius"] = 2
+    plan["resource_budget"]["max_sampling_kernel_radius"] = (
+        kernel_contract["radius"]
+    )
     plan["resource_budget"]["max_frame_capture_count"] = 1
     plan["resource_budget"]["max_frame_capture_pixels"] = 320 * 240
     plan["resource_budget"]["max_surface_sample_pixels"] = 240 * 96
@@ -2412,6 +2445,61 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["actual"], 25)
         self.assertEqual(failure["likely_pass"], "sampling-kernel")
         self.assertIn("MaterialPlan.sampling_kernel", failure["suggested_action"])
+
+    def test_center_sampling_kernel_accepts_zero_radius(self) -> None:
+        plan = sampled_material_plan(sample_taps=1)
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 0)
+        self.assertEqual(
+            report["material_plans"]["sampling_kernels"],
+            {"weighted-center": 1})
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"]
+            ["max_sampling_kernel_radius"],
+            0)
+
+    def test_sampling_kernel_radius_mismatch_is_llm_actionable(self) -> None:
+        plan = sampled_material_plan(sample_taps=5)
+        assert isinstance(plan["sampling_kernel"], dict)
+        plan["sampling_kernel"]["radius"] = 2
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material sampling kernel radius matches tap tier"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".sampling_kernel.radius")
+        self.assertEqual(failure["expected"], 1)
+        self.assertEqual(failure["actual"], 2)
+        self.assertEqual(failure["likely_pass"], "sampling-kernel")
+        self.assertIn("shader radius", failure["hint"])
+
+    def test_sampling_kernel_rejects_non_tier_taps(self) -> None:
+        plan = sampled_material_plan(sample_taps=5)
+        plan["sample_taps"] = 7
+        refresh_observation_contract(plan)
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material sample taps use executable tap tier"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".sample_taps")
+        self.assertEqual(failure["expected"], [0, 1, 5, 9, 13, 25])
+        self.assertEqual(failure["actual"], 7)
+        self.assertIn("material_resolve_sample_taps", failure["hint"])
 
     def test_luminance_curve_mismatch_is_llm_actionable(self) -> None:
         plan = sampled_material_plan(sample_taps=25)

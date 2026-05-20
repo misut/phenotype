@@ -211,11 +211,13 @@ groups, and max active/sampled/fallback surfaces from resolved
 `MaterialRuntimeRecord` values. Runtime and executor summaries serialize that
 same `container_groups` object, so Apple-style grouping and future
 container-level resource reuse can be verified without backend-local policy.
-The current sampled-glass kernel is a pure `weighted-5x5-manhattan` descriptor
-with the resolved tap count, kernel radius, blur step scale, and weight profile;
-fallback plans serialize the inactive `none` kernel. This keeps blur spread and
-tap-shape policy in `plan_material_surface` while macOS Metal executes the
-descriptor and other backends publish deterministic fallback metadata.
+The current sampled-glass kernel is a pure tap-tier descriptor:
+`weighted-center`, `weighted-cross-5`, `weighted-3x3-grid`, or
+`weighted-5x5-manhattan`, with the resolved tap count, kernel radius, blur step
+scale, and weight profile; fallback plans serialize the inactive `none` kernel.
+This keeps blur spread and tap-shape policy in `plan_material_surface` while
+macOS Metal executes the descriptor and other backends publish deterministic
+fallback metadata.
 Backdrops also degrade through an explicit
 `quality-policy` fallback when the pure quality policy disables sampling or
 sets an unusable blur/tap budget, and when the render target exceeds the

@@ -1505,6 +1505,22 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(material_resolve_sample_taps(10) == 9);
     assert(material_resolve_sample_taps(24) == 13);
     assert(material_resolve_sample_taps(25) == 25);
+    auto const kernel1 = material_resolve_sampling_kernel(true, 1);
+    assert(std::string(kernel1.name) == "weighted-center");
+    assert(kernel1.radius == 0);
+    assert(kernel1.blur_step_scale == 0.0f);
+    auto const kernel5 = material_resolve_sampling_kernel(true, 5);
+    assert(std::string(kernel5.name) == "weighted-cross-5");
+    assert(kernel5.radius == 1);
+    assert(std::string(kernel5.weight_profile) == "center4-cardinal2");
+    auto const kernel9 = material_resolve_sampling_kernel(true, 9);
+    assert(std::string(kernel9.name) == "weighted-3x3-grid");
+    assert(kernel9.radius == 1);
+    assert(std::string(kernel9.weight_profile)
+           == "center4-cardinal2-diagonal1");
+    auto const kernel13 = material_resolve_sampling_kernel(true, 13);
+    assert(std::string(kernel13.name) == "weighted-5x5-manhattan");
+    assert(kernel13.radius == 2);
 
     auto default_quality = default_material_quality_policy();
     assert(default_quality.allow_backdrop_sampling);
@@ -2269,7 +2285,7 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(!budget_plan.quality_policy.allow_shadow);
     assert(budget_plan.resource_budget.max_blur_radius == 12.0f);
     assert(budget_plan.resource_budget.max_sample_taps == 5);
-    assert(budget_plan.resource_budget.max_sampling_kernel_radius == 2);
+    assert(budget_plan.resource_budget.max_sampling_kernel_radius == 1);
     assert(budget_plan.resource_budget.max_pass_count == 1);
     assert(budget_plan.resource_budget.max_execution_stages == 4);
     assert(budget_plan.execution_stage_capacity == 4);

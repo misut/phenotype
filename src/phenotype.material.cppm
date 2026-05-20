@@ -1509,6 +1509,36 @@ inline MaterialSamplingKernel material_resolve_sampling_kernel(
         unsigned int sample_taps) noexcept {
     if (!backdrop_sampling || sample_taps == 0u)
         return {};
+    if (sample_taps <= 1u)
+        return MaterialSamplingKernel{
+            "weighted-center",
+            0u,
+            sample_taps,
+            0.0f,
+            "center4",
+            true,
+            true,
+        };
+    if (sample_taps <= 5u)
+        return MaterialSamplingKernel{
+            "weighted-cross-5",
+            1u,
+            sample_taps,
+            0.35f,
+            "center4-cardinal2",
+            true,
+            true,
+        };
+    if (sample_taps <= 9u)
+        return MaterialSamplingKernel{
+            "weighted-3x3-grid",
+            1u,
+            sample_taps,
+            0.35f,
+            "center4-cardinal2-diagonal1",
+            true,
+            true,
+        };
     return MaterialSamplingKernel{
         "weighted-5x5-manhattan",
         2u,

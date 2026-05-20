@@ -4082,6 +4082,7 @@ fragment float4 fs_material(
     float blur_px = clamp(in.params.y, 0.0, 36.0);
     uint sample_taps = uint(clamp(round(in.params.w), 1.0, 25.0));
     float blur_step_scale = max(in.sampling.x, 0.0);
+    uint kernel_radius = uint(clamp(round(in.sampling.y), 0.0, 2.0));
     float2 step_uv = texel * max(1.0, blur_px * blur_step_scale);
     float4 acc = float4(0.0);
     float weight_sum = 0.0;
@@ -4091,11 +4092,12 @@ fragment float4 fs_material(
             int ay = abs(y);
             int manhattan = ax + ay;
             int chebyshev = max(ax, ay);
-            bool include = sample_taps >= 25u
+            bool within_radius = uint(chebyshev) <= kernel_radius;
+            bool include = within_radius && (sample_taps >= 25u
                 || (sample_taps >= 13u && manhattan <= 2)
                 || (sample_taps >= 9u && chebyshev <= 1)
                 || (sample_taps >= 5u && manhattan <= 1)
-                || (sample_taps >= 1u && manhattan == 0);
+                || (sample_taps >= 1u && manhattan == 0));
             if (!include)
                 continue;
             float dist = float(manhattan);

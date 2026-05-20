@@ -806,12 +806,16 @@ before a backend receives the plan. The artifact verifier repeats those cap
 checks for `quality_policy` and `resource_budget`, so over-budget shader work
 fails with the exact JSON path instead of becoming backend-specific behavior.
 `sampling_kernel.name` is `weighted-5x5-manhattan` for active sampled glass and
-`none` for deterministic fallback. Its `blur_step_scale` is part of the pure
-contract and is uploaded to the macOS material shader, so changing blur spread
-requires changing the plan, serializer, verifier vocabulary, and docs together.
-Reduced-motion plans disable material noise and cap backdrop sample taps before
-a backend executes the pass; increased-contrast plans raise opacity and
-luminance legibility in the same pure layer.
+`none` for deterministic fallback at the default 25-tap quality tier. Lower
+quality tiers use `weighted-center` (1 tap), `weighted-cross-5` (5 taps), and
+`weighted-3x3-grid` (9 taps) before the 13/25-tap
+`weighted-5x5-manhattan` descriptor. Its `radius` and `blur_step_scale` are
+part of the pure contract and are uploaded to the macOS material shader, so
+changing blur spread requires changing the plan, serializer, verifier
+vocabulary, and docs together. Reduced-motion plans disable material noise and
+cap backdrop sample taps before a backend executes the pass;
+increased-contrast plans raise opacity and luminance legibility in the same
+pure layer.
 `luminance_curve` is the backend-executed contrast transform. Active sampled
 glass must use `adaptive-backdrop-luma` with `backdrop_driven: true`; fallback
 plans must use `fallback-flat` with `backdrop_driven: false`. `floor` and
@@ -1174,8 +1178,11 @@ material pass names, sampling kernel names, and luminance curve names as fixed
 vocabularies. Current fallback paths are `none`, `no-material`, `invalid-geometry`,
 `unsupported-backend`, `no-backdrop-source`, `reduced-transparency`, and
 `quality-policy`; current pass names are `none`, `backdrop-sample-blur`, and
-`translucent-rounded-rect`; current sampling kernels are `none` and
-`weighted-5x5-manhattan`; current luminance curves are
+`translucent-rounded-rect`; current sampling kernels are `none`,
+`weighted-center`, `weighted-cross-5`, `weighted-3x3-grid`, and
+`weighted-5x5-manhattan`; current sampling weight profiles are `none`,
+`center4`, `center4-cardinal2`, and `center4-cardinal2-diagonal1`; current
+luminance curves are
 `adaptive-backdrop-luma` and `fallback-flat`. Current reference blending scopes
 are `none`, `sampled-backdrop`, and `deterministic-fallback`; current reference
 shapes are `none`, `invalid`, `rectangle`, `rounded-rectangle`, and `capsule`; current
