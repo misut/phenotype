@@ -67,6 +67,50 @@ def material_pass(sample_taps: int) -> dict[str, object]:
     }
 
 
+def material_paint_layers(primary_name: str) -> list[dict[str, object]]:
+    return [
+        {
+            "name": "fallback-shadow",
+            "active": True,
+            "executor": "rounded-shadow",
+            "x_offset": 0.0,
+            "y_offset": 2.52,
+            "inflate": 7.0,
+            "radius_delta": 7.0,
+            "stroke_width": 0.0,
+            "color": {"r": 0, "g": 0, "b": 0, "a": 255},
+            "opacity": 0.14,
+            "bounded": True,
+        },
+        {
+            "name": primary_name,
+            "active": True,
+            "executor": "rounded-fill",
+            "x_offset": 0.0,
+            "y_offset": 0.0,
+            "inflate": 0.0,
+            "radius_delta": 0.0,
+            "stroke_width": 0.0,
+            "color": {"r": 255, "g": 255, "b": 255, "a": 148},
+            "opacity": 0.58,
+            "bounded": True,
+        },
+        {
+            "name": "fallback-edge-highlight",
+            "active": True,
+            "executor": "rounded-edge",
+            "x_offset": 0.0,
+            "y_offset": 0.0,
+            "inflate": 0.0,
+            "radius_delta": 0.0,
+            "stroke_width": 1.0,
+            "color": {"r": 255, "g": 255, "b": 255, "a": 87},
+            "opacity": 1.0,
+            "bounded": True,
+        },
+    ]
+
+
 def sampling_kernel_contract(sample_taps: int) -> dict[str, object]:
     if sample_taps <= 1:
         return {
@@ -386,16 +430,20 @@ def material_plan(
             "max_sampling_kernel_radius": 0,
             "max_pass_count": 1,
             "max_execution_stages": 4,
+            "max_paint_layers": 3,
             "max_backdrop_pixels": 320 * 240,
             "max_frame_capture_count": 0,
             "max_frame_capture_pixels": 0,
             "max_surface_sample_pixels": 0,
             "max_container_spacing": 0.0,
+            "max_paint_layer_inflate": 7.0,
             "bounded_texture_copy": True,
             "deterministic_fallback": True,
         },
         "execution_stage_capacity": 4,
         "dropped_execution_stage_count": 0,
+        "paint_layer_capacity": 3,
+        "dropped_paint_layer_count": 0,
         "verifier": {
             "require_backdrop_source": False,
             "require_edge_highlight": False,
@@ -429,6 +477,7 @@ def material_plan(
                 ),
             }
         ],
+        "paint_layers": material_paint_layers(str(primary["name"])),
     }
     refresh_observation_contract(plan)
     return plan
@@ -649,11 +698,13 @@ def refresh_observation_contract(plan: dict[str, object]) -> None:
     refresh_optical_response(plan)
     primary = plan["primary_pass"]
     stages = plan["execution_stages"]
+    paint_layers = plan["paint_layers"]
     budget = plan["resource_budget"]
     backdrop_access = plan["backdrop_access"]
     verifier_contract = plan["verifier"]
     assert isinstance(primary, dict)
     assert isinstance(stages, list)
+    assert isinstance(paint_layers, list)
     assert isinstance(budget, dict)
     assert isinstance(backdrop_access, dict)
     assert isinstance(verifier_contract, dict)
@@ -693,6 +744,19 @@ def refresh_observation_contract(plan: dict[str, object]) -> None:
         "expected_backdrop_execution_stages": sum(
             1 for stage in stages
             if isinstance(stage, dict) and stage["requires_backdrop"]),
+        "expected_paint_layers": len(paint_layers),
+        "expected_active_paint_layers": sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict) and layer["active"]),
+        "expected_shadow_paint_layers": sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict) and layer["executor"] == "rounded-shadow"),
+        "expected_fill_paint_layers": sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict) and layer["executor"] == "rounded-fill"),
+        "expected_edge_paint_layers": sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict) and layer["executor"] == "rounded-edge"),
         "max_frame_capture_count": backdrop_access["max_frame_capture_count"],
         "max_frame_capture_pixels": backdrop_access["max_frame_capture_pixels"],
         "max_surface_sample_pixels": backdrop_access["max_surface_sample_pixels"],
@@ -794,6 +858,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     plan["resource_budget"]["max_frame_capture_count"] = 1
     plan["resource_budget"]["max_frame_capture_pixels"] = 320 * 240
     plan["resource_budget"]["max_surface_sample_pixels"] = 240 * 96
+    plan["resource_budget"]["max_paint_layer_inflate"] = 0.0
     plan["passes"] = [plan["primary_pass"]]
     plan["execution_stages"] = [
         {
@@ -816,6 +881,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
             ),
         }
     ]
+    plan["paint_layers"] = []
     assert isinstance(plan["verifier"], dict)
     plan["verifier"].update({
         "require_backdrop_source": True,
@@ -876,13 +942,31 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     shape = plan["shape"]
     backdrop_access = plan["backdrop_access"]
     execution_stages = plan["execution_stages"]
+    paint_layers = plan["paint_layers"]
     interaction = plan["interaction"]
     assert isinstance(budget, dict)
     assert isinstance(primary, dict)
     assert isinstance(shape, dict)
     assert isinstance(backdrop_access, dict)
     assert isinstance(execution_stages, list)
+    assert isinstance(paint_layers, list)
     assert isinstance(interaction, dict)
+    active_paint_layers = [
+        layer for layer in paint_layers
+        if isinstance(layer, dict) and layer["active"]
+    ]
+    shadow_paint_layers = [
+        layer for layer in paint_layers
+        if isinstance(layer, dict) and layer["executor"] == "rounded-shadow"
+    ]
+    fill_paint_layers = [
+        layer for layer in paint_layers
+        if isinstance(layer, dict) and layer["executor"] == "rounded-fill"
+    ]
+    edge_paint_layers = [
+        layer for layer in paint_layers
+        if isinstance(layer, dict) and layer["executor"] == "rounded-edge"
+    ]
     return {
         "plan_count": 1,
         "fallback_count": 1 if plan["fallback"] else 0,
@@ -901,7 +985,18 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         ),
         "dropped_execution_stages": plan["dropped_execution_stage_count"],
         "max_execution_stage_count": len(execution_stages),
+        "max_execution_stages": budget["max_execution_stages"],
         "max_execution_stage_capacity": plan["execution_stage_capacity"],
+        "total_paint_layers": len(paint_layers),
+        "active_paint_layers": len(active_paint_layers),
+        "dropped_paint_layers": plan["dropped_paint_layer_count"],
+        "shadow_paint_layers": len(shadow_paint_layers),
+        "fill_paint_layers": len(fill_paint_layers),
+        "edge_paint_layers": len(edge_paint_layers),
+        "max_paint_layer_count": len(paint_layers),
+        "max_paint_layers": budget["max_paint_layers"],
+        "max_paint_layer_capacity": plan["paint_layer_capacity"],
+        "max_paint_layer_inflate": budget["max_paint_layer_inflate"],
         "max_pass_texture_copy_pixels": primary["max_texture_copy_pixels"],
         "total_pass_texture_copy_pixels": primary["max_texture_copy_pixels"],
         "backdrop_access_count": 1 if backdrop_access["required"] else 0,
@@ -922,7 +1017,6 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "max_sample_taps": budget["max_sample_taps"],
         "max_sampling_kernel_radius": budget["max_sampling_kernel_radius"],
         "max_pass_count": budget["max_pass_count"],
-        "max_execution_stages": budget["max_execution_stages"],
         "max_backdrop_pixels": budget["max_backdrop_pixels"],
         "max_container_spacing": budget["max_container_spacing"],
         "containered_count": (
@@ -983,7 +1077,9 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
 def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
     sample_taps = 0 if plan["fallback"] else int(plan["sample_taps"])
     stages = plan["execution_stages"]
+    paint_layers = plan["paint_layers"]
     assert isinstance(stages, list)
+    assert isinstance(paint_layers, list)
     active_stages = [
         stage for stage in stages
         if isinstance(stage, dict) and stage["active"]
@@ -1031,6 +1127,10 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
             stage.get(key) == primary.get(key)
             for key in verifier.MATERIAL_PASS_FIELDS)
     ]
+    active_paint_layers = [
+        layer for layer in paint_layers
+        if isinstance(layer, dict) and layer["active"]
+    ]
     return {
         "plan_count": 1,
         "material_instance_count": 0 if plan["fallback"] else 1,
@@ -1046,6 +1146,23 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "backdrop_execution_stage_count": len(backdrop_stages),
         "primary_execution_stage_count": len(primary_stages),
         "dropped_execution_stage_count": plan["dropped_execution_stage_count"],
+        "paint_layer_count": len(paint_layers),
+        "active_paint_layer_count": len(active_paint_layers),
+        "dropped_paint_layer_count": plan["dropped_paint_layer_count"],
+        "shadow_paint_layer_count": sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict) and layer["executor"] == "rounded-shadow"
+        ),
+        "fill_paint_layer_count": sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict) and layer["executor"] == "rounded-fill"
+        ),
+        "edge_paint_layer_count": sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict) and layer["executor"] == "rounded-edge"
+        ),
+        "max_paint_layer_inflate": plan["resource_budget"][
+            "max_paint_layer_inflate"],
         "backdrop_filter_stage_count": sum(
             1 for stage in stages
             if isinstance(stage, dict) and stage["executor"] == "backdrop-filter"
@@ -2412,6 +2529,14 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "max_execution_stage_capacity_gte": 4,
                 "max_execution_stages_lte": 4,
                 "max_execution_stages_gte": 4,
+                "total_paint_layers_lte": 0,
+                "total_paint_layers_gte": 0,
+                "max_paint_layers_lte": 3,
+                "max_paint_layers_gte": 3,
+                "max_paint_layer_capacity_lte": 3,
+                "max_paint_layer_capacity_gte": 3,
+                "max_paint_layer_inflate_lte": 0,
+                "max_paint_layer_inflate_gte": 0,
                 "max_frame_capture_count_lte": 1,
                 "max_frame_capture_count_gte": 1,
                 "max_frame_capture_pixels_lte": 320 * 240,
@@ -2457,6 +2582,18 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "max_execution_stage_capacity"],
             4)
         self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "total_paint_layers"],
+            0)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "max_paint_layers"],
+            3)
+        self.assertEqual(
+            report["material_plans"]["resource_bounds"][
+                "max_paint_layer_capacity"],
+            3)
+        self.assertEqual(
             report["material_plans"]["backdrop_access"]["required"],
             1)
         self.assertEqual(
@@ -2480,6 +2617,16 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "stage_executors": {
                     "fallback-fill": 1,
                 },
+                "paint_layer_names": {
+                    "fallback-shadow": 1,
+                    "translucent-rounded-rect": 1,
+                    "fallback-edge-highlight": 1,
+                },
+                "paint_layer_executors": {
+                    "rounded-shadow": 1,
+                    "rounded-fill": 1,
+                    "rounded-edge": 1,
+                },
             },
         }
         code, report = self.run_verifier(snapshot(material_plan()), manifest)
@@ -2492,6 +2639,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["stage_executors"],
             {"fallback-fill": 1})
+        self.assertEqual(
+            report["material_plans"]["paint_layer_executors"],
+            {"rounded-shadow": 1, "rounded-fill": 1, "rounded-edge": 1})
 
     def test_manifest_can_require_backdrop_access_summary(self) -> None:
         manifest = {

@@ -4020,6 +4020,63 @@ inline void normalize_color(::phenotype::Color const& c, float out[4]) {
     out[3] = static_cast<float>(c.a) / 255.0f;
 }
 
+inline float material_paint_layer_alpha(
+        ::phenotype::MaterialPaintLayer const& layer) noexcept {
+    auto const color_alpha = static_cast<float>(layer.color.a) / 255.0f;
+    if (::phenotype::material_paint_layer_matches(
+            layer.executor,
+            "rounded-fill")) {
+        return std::max(color_alpha, layer.opacity);
+    }
+    return color_alpha * layer.opacity;
+}
+
+inline void append_material_paint_layer_instance(
+        std::vector<ColorInstanceGPU>& out,
+        ::phenotype::MaterialPlan const& plan,
+        ::phenotype::MaterialPaintLayer const& layer) {
+    if (!layer.active)
+        return;
+    auto const inflate = std::max(layer.inflate, 0.0f);
+    auto const x = plan.geometry.x + layer.x_offset - inflate;
+    auto const y = plan.geometry.y + layer.y_offset - inflate;
+    auto const w = plan.geometry.w + inflate * 2.0f;
+    auto const h = plan.geometry.h + inflate * 2.0f;
+    if (w <= 0.0f || h <= 0.0f)
+        return;
+
+    ColorInstanceGPU inst{};
+    inst.rect[0] = x;
+    inst.rect[1] = y;
+    inst.rect[2] = w;
+    inst.rect[3] = h;
+    normalize_color(layer.color, inst.color);
+    inst.color[3] = material_paint_layer_alpha(layer);
+    inst.params[0] =
+        std::max(0.0f, plan.shape.effective_radius + layer.radius_delta);
+    inst.params[1] =
+        ::phenotype::material_paint_layer_matches(
+            layer.executor,
+            "rounded-edge")
+            ? std::max(layer.stroke_width, 0.5f)
+            : 0.0f;
+    inst.params[2] =
+        ::phenotype::material_paint_layer_matches(
+            layer.executor,
+            "rounded-edge")
+            ? 3.0f
+            : 2.0f;
+    out.push_back(inst);
+}
+
+inline void append_material_paint_layer_instances(
+        std::vector<ColorInstanceGPU>& out,
+        ::phenotype::MaterialPlan const& plan) {
+    for (unsigned int i = 0; i < plan.paint_layer_count; ++i) {
+        append_material_paint_layer_instance(out, plan, plan.paint_layers[i]);
+    }
+}
+
 inline void append_linear_gradient_instances(
         std::vector<ColorInstanceGPU>& out,
         float x, float y, float w, float h,
@@ -4338,14 +4395,9 @@ inline void decode_android_color_commands(unsigned char const* buf,
                     plan,
                     current_command_index});
             prepare_batch_for_pipeline(out, 0);
-            ColorInstanceGPU inst{};
-            inst.rect[0] = x; inst.rect[1] = y;
-            inst.rect[2] = w; inst.rect[3] = h;
-            normalize_color(plan.tint, inst.color);
-            inst.params[0] = plan.shape.effective_radius;
-            inst.params[1] = 0.0f;
-            inst.params[2] = 2.0f; // Round fallback
-            out.batches.back().colors.push_back(inst);
+            append_material_paint_layer_instances(
+                out.batches.back().colors,
+                plan);
         } else if (cmd == ::phenotype::Cmd::DrawLine) {
             float x1 = read_f32(), y1 = read_f32();
             float x2 = read_f32(), y2 = read_f32();
@@ -5010,14 +5062,9 @@ inline void decode_android_color_commands_legacy(unsigned char const* buf,
                         plan,
                         current_command_index});
                 prepare_batch_for_pipeline(out, 0);
-                ColorInstanceGPU inst{};
-                inst.rect[0] = c.x; inst.rect[1] = c.y;
-                inst.rect[2] = c.w; inst.rect[3] = c.h;
-                normalize_color(plan.tint, inst.color);
-                inst.params[0] = c.radius;
-                inst.params[1] = 0.0f;
-                inst.params[2] = 2.0f; // draw_type = Round fallback
-                out.batches.back().colors.push_back(inst);
+                append_material_paint_layer_instances(
+                    out.batches.back().colors,
+                    plan);
             } else if constexpr (std::same_as<T, ::phenotype::DrawLineCmd>) {
                 float dx = c.x2 - c.x1;
                 float dy = c.y2 - c.y1;

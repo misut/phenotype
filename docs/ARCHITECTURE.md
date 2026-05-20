@@ -911,6 +911,19 @@ that the pure glass response survived serialization and execution. Interaction
 summaries also expose `enablement_reasons`, so a missing hover response can be
 debugged from the artifact without guessing whether the surface was inactive,
 not marked interactive, or eligible for Liquid Glass interaction.
+For deterministic non-backdrop work, the planner also emits `paint_layers[]`.
+Those layers are the complete pure recipe for fallback paint: a bounded shadow
+layer, a fill layer, and an edge-highlight layer when the resolved plan calls
+for them. Each layer carries its executor, geometry deltas, color, opacity, and
+bounded-resource flag. Backends may batch or translate those layers into native
+draw calls, but they must not invent extra shadow/fill/edge policy after
+planning. The macOS Metal, Android Vulkan, and Windows D3D12 paths translate
+the same layer recipe into their native color pipelines. Sampled backdrop glass
+keeps `paint_layers[]` empty because the
+material shader executes the resolved blur/tint/frosting plan. Runtime and
+executor summaries expose the paint-layer counts and maximum inflation so CI
+can catch fallback drift, capacity overflow, or accidental hidden backend
+decisions.
 Backends separately publish `renderer.material_executor_summary` for edge-only
 execution telemetry: material instances, fallback instances, material draw
 calls, primary executor instance counts for sampled backdrop, standard fill, and

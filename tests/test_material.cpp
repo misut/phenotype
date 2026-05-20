@@ -58,7 +58,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 31);
+    assert(material_plan_contract_version == 32);
     assert(std::string_view(plan.interaction.enablement_reason)
         == "noninteractive-container");
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
@@ -122,6 +122,12 @@ void test_sampled_backdrop_access_contract() {
     assert(material_plan_uses_sampled_backdrop_executor(plan));
     assert(!material_plan_uses_standard_fill_executor(plan));
     assert(!material_plan_uses_deterministic_fallback_executor(plan));
+    assert(plan.paint_layer_count == 0u);
+    assert(plan.dropped_paint_layer_count == 0u);
+    assert(plan.resource_budget.max_paint_layers == material_max_paint_layers);
+    assert(plan.resource_budget.max_paint_layer_inflate == 0.0f);
+    assert(plan.observation_contract.expected_paint_layers == 0u);
+    assert(plan.observation_contract.expected_active_paint_layers == 0u);
     assert(plan.backdrop.luma_sample_count == 25u);
     assert(plan.backdrop.luma_sample_grid_width == 5u);
     assert(plan.backdrop.luma_sample_grid_height == 5u);
@@ -286,6 +292,22 @@ void test_content_layer_stays_standard_material_contract() {
     assert(!material_plan_uses_sampled_backdrop_executor(plan));
     assert(material_plan_uses_standard_fill_executor(plan));
     assert(!material_plan_uses_deterministic_fallback_executor(plan));
+    assert(plan.paint_layer_count == 3u);
+    assert(plan.dropped_paint_layer_count == 0u);
+    assert(std::string_view(plan.paint_layers[0].name) == "fallback-shadow");
+    assert(std::string_view(plan.paint_layers[0].executor) == "rounded-shadow");
+    assert(plan.paint_layers[0].inflate > 0.0f);
+    assert(std::string_view(plan.paint_layers[1].name) == "standard-material-fill");
+    assert(std::string_view(plan.paint_layers[1].executor) == "rounded-fill");
+    assert(plan.paint_layers[1].color.a == plan.tint.a);
+    assert(std::fabs(plan.paint_layers[1].opacity - plan.opacity) < 0.0001f);
+    assert(std::string_view(plan.paint_layers[2].name) == "fallback-edge-highlight");
+    assert(std::string_view(plan.paint_layers[2].executor) == "rounded-edge");
+    assert(std::fabs(plan.paint_layers[2].stroke_width - plan.edge_width) < 0.0001f);
+    assert(plan.observation_contract.expected_paint_layers == 3u);
+    assert(plan.observation_contract.expected_shadow_paint_layers == 1u);
+    assert(plan.observation_contract.expected_fill_paint_layers == 1u);
+    assert(plan.observation_contract.expected_edge_paint_layers == 1u);
     std::puts("PASS: content layer stays standard material contract");
 }
 
@@ -346,6 +368,20 @@ void test_fallback_backdrop_access_contract() {
     assert(!material_plan_uses_sampled_backdrop_executor(plan));
     assert(!material_plan_uses_standard_fill_executor(plan));
     assert(material_plan_uses_deterministic_fallback_executor(plan));
+    assert(plan.paint_layer_count == 3u);
+    assert(plan.dropped_paint_layer_count == 0u);
+    assert(std::string_view(plan.paint_layers[0].executor) == "rounded-shadow");
+    assert(std::string_view(plan.paint_layers[1].name)
+        == "translucent-rounded-rect");
+    assert(std::string_view(plan.paint_layers[1].executor) == "rounded-fill");
+    assert(std::string_view(plan.paint_layers[2].executor) == "rounded-edge");
+    assert(plan.resource_budget.max_paint_layer_inflate
+        == plan.paint_layers[0].inflate);
+    assert(plan.observation_contract.expected_paint_layers == 3u);
+    assert(plan.observation_contract.expected_active_paint_layers == 3u);
+    assert(plan.observation_contract.expected_shadow_paint_layers == 1u);
+    assert(plan.observation_contract.expected_fill_paint_layers == 1u);
+    assert(plan.observation_contract.expected_edge_paint_layers == 1u);
     std::puts("PASS: fallback backdrop access contract");
 }
 
@@ -741,6 +777,14 @@ void test_container_group_runtime_summary_contract() {
     assert(runtime_summary.max_noise_opacity > 0.0f);
     assert(runtime_summary.max_shadow_alpha > 0.0f);
     assert(runtime_summary.max_shadow_radius > 0.0f);
+    assert(runtime_summary.total_paint_layers == 3u);
+    assert(runtime_summary.active_paint_layers == 3u);
+    assert(runtime_summary.shadow_paint_layers == 1u);
+    assert(runtime_summary.fill_paint_layers == 1u);
+    assert(runtime_summary.edge_paint_layers == 1u);
+    assert(runtime_summary.max_paint_layer_count == 3u);
+    assert(runtime_summary.max_paint_layers == material_max_paint_layers);
+    assert(runtime_summary.max_paint_layer_inflate > 0.0f);
 
     MaterialExecutorSummary executor_summary{};
     for (auto const& record : records)
@@ -748,6 +792,13 @@ void test_container_group_runtime_summary_contract() {
     finalize_material_executor_summary(executor_summary, records);
     assert(executor_summary.container_groups.group_count == groups.group_count);
     assert(executor_summary.container_groups.fallback_mixed_group_count == 1u);
+    assert(executor_summary.paint_layer_count == 3u);
+    assert(executor_summary.active_paint_layer_count == 3u);
+    assert(executor_summary.shadow_paint_layer_count == 1u);
+    assert(executor_summary.fill_paint_layer_count == 1u);
+    assert(executor_summary.edge_paint_layer_count == 1u);
+    assert(executor_summary.max_paint_layer_inflate
+        == runtime_summary.max_paint_layer_inflate);
     std::puts("PASS: container group runtime summary contract");
 }
 

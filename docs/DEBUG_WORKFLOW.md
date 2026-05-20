@@ -945,6 +945,15 @@ instead of a silent debug-plane mismatch.
 The renderer contract also publishes `material_plan_contract_version` next to
 `material_plans[]`, so snapshot-only or empty material renderers still expose the
 same artifact schema version without requiring a per-plan object.
+For schema 32 and later, inspect `paint_layers[]` whenever a material surface is
+not sampled backdrop glass. This array is the pure fallback draw recipe, not
+backend telemetry: shadow, fill, and edge layers expose their executor,
+geometry deltas, color, opacity, and bounded-resource flag. Sampled backdrop
+plans must keep the array empty. The verifier recomputes paint-layer counts from
+the array and compares them with `observation.expected_*_paint_layers`,
+`renderer.material_runtime_summary`, and
+`renderer.material_executor_summary`, then reports exact JSON paths and likely
+layers when a backend serializes stale or hidden fallback policy.
 `renderer.material_backdrop_luma_descriptor` is the edge-side view of that same
 contract. It reports the latest observed luma min/max/mean, sample grid, sample
 frame, pending state, skipped sample count, and status such as

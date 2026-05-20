@@ -1216,6 +1216,31 @@ namespace detail {
                 static_cast<std::int64_t>(
                     observation.expected_backdrop_execution_stages)});
         observation_contract.emplace(
+            "expected_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(
+                    observation.expected_paint_layers)});
+        observation_contract.emplace(
+            "expected_active_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(
+                    observation.expected_active_paint_layers)});
+        observation_contract.emplace(
+            "expected_shadow_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(
+                    observation.expected_shadow_paint_layers)});
+        observation_contract.emplace(
+            "expected_fill_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(
+                    observation.expected_fill_paint_layers)});
+        observation_contract.emplace(
+            "expected_edge_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(
+                    observation.expected_edge_paint_layers)});
+        observation_contract.emplace(
             "max_frame_capture_count",
             json::Value{
                 static_cast<std::int64_t>(
@@ -1284,6 +1309,11 @@ namespace detail {
                 static_cast<std::int64_t>(
                     plan.resource_budget.max_execution_stages)});
         resource_budget.emplace(
+            "max_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.resource_budget.max_paint_layers)});
+        resource_budget.emplace(
             "max_backdrop_pixels",
             json::Value{plan.resource_budget.max_backdrop_pixels});
         resource_budget.emplace(
@@ -1300,6 +1330,9 @@ namespace detail {
         resource_budget.emplace(
             "max_container_spacing",
             json::Value{plan.resource_budget.max_container_spacing});
+        resource_budget.emplace(
+            "max_paint_layer_inflate",
+            json::Value{plan.resource_budget.max_paint_layer_inflate});
         resource_budget.emplace(
             "bounded_texture_copy",
             json::Value{plan.resource_budget.bounded_texture_copy});
@@ -1846,6 +1879,24 @@ namespace detail {
             execution_stages.push_back(json::Value{std::move(out_stage)});
         }
 
+        json::Array paint_layers;
+        for (unsigned int i = 0; i < plan.paint_layer_count; ++i) {
+            auto const& layer = plan.paint_layers[i];
+            json::Object layer_json;
+            layer_json.emplace("name", json::Value{layer.name});
+            layer_json.emplace("active", json::Value{layer.active});
+            layer_json.emplace("executor", json::Value{layer.executor});
+            layer_json.emplace("x_offset", json::Value{layer.x_offset});
+            layer_json.emplace("y_offset", json::Value{layer.y_offset});
+            layer_json.emplace("inflate", json::Value{layer.inflate});
+            layer_json.emplace("radius_delta", json::Value{layer.radius_delta});
+            layer_json.emplace("stroke_width", json::Value{layer.stroke_width});
+            layer_json.emplace("color", color_to_json(layer.color));
+            layer_json.emplace("opacity", json::Value{layer.opacity});
+            layer_json.emplace("bounded", json::Value{layer.bounded});
+            paint_layers.push_back(json::Value{std::move(layer_json)});
+        }
+
         json::Object out;
         out.emplace(
             "command_index",
@@ -1922,12 +1973,22 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     plan.dropped_execution_stage_count)});
+        out.emplace(
+            "paint_layer_capacity",
+            json::Value{
+                static_cast<std::int64_t>(plan.paint_layer_capacity)});
+        out.emplace(
+            "dropped_paint_layer_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    plan.dropped_paint_layer_count)});
         out.emplace("verifier", json::Value{std::move(verifier)});
         out.emplace(
             "observation_contract",
             json::Value{std::move(observation_contract)});
         out.emplace("passes", json::Value{std::move(passes)});
         out.emplace("execution_stages", json::Value{std::move(execution_stages)});
+        out.emplace("paint_layers", json::Value{std::move(paint_layers)});
         return json::Value{std::move(out)};
     }
 
@@ -2044,6 +2105,45 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.max_execution_stage_capacity)});
+        out.emplace(
+            "total_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(summary.total_paint_layers)});
+        out.emplace(
+            "active_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(summary.active_paint_layers)});
+        out.emplace(
+            "dropped_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(summary.dropped_paint_layers)});
+        out.emplace(
+            "shadow_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(summary.shadow_paint_layers)});
+        out.emplace(
+            "fill_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(summary.fill_paint_layers)});
+        out.emplace(
+            "edge_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(summary.edge_paint_layers)});
+        out.emplace(
+            "max_paint_layer_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.max_paint_layer_count)});
+        out.emplace(
+            "max_paint_layers",
+            json::Value{
+                static_cast<std::int64_t>(summary.max_paint_layers)});
+        out.emplace(
+            "max_paint_layer_capacity",
+            json::Value{
+                static_cast<std::int64_t>(summary.max_paint_layer_capacity)});
+        out.emplace(
+            "max_paint_layer_inflate",
+            json::Value{summary.max_paint_layer_inflate});
         out.emplace(
             "max_pass_texture_copy_pixels",
             json::Value{summary.max_pass_texture_copy_pixels});
@@ -2310,6 +2410,38 @@ namespace detail {
             json::Value{
                 static_cast<std::int64_t>(
                     summary.dropped_execution_stage_count)});
+        out.emplace(
+            "paint_layer_count",
+            json::Value{
+                static_cast<std::int64_t>(summary.paint_layer_count)});
+        out.emplace(
+            "active_paint_layer_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.active_paint_layer_count)});
+        out.emplace(
+            "dropped_paint_layer_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.dropped_paint_layer_count)});
+        out.emplace(
+            "shadow_paint_layer_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.shadow_paint_layer_count)});
+        out.emplace(
+            "fill_paint_layer_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.fill_paint_layer_count)});
+        out.emplace(
+            "edge_paint_layer_count",
+            json::Value{
+                static_cast<std::int64_t>(
+                    summary.edge_paint_layer_count)});
+        out.emplace(
+            "max_paint_layer_inflate",
+            json::Value{summary.max_paint_layer_inflate});
         out.emplace(
             "backdrop_filter_stage_count",
             json::Value{
