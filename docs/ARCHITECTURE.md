@@ -332,7 +332,11 @@ of only as painted pill backgrounds. Text input keeps the same boundary:
 `TextFieldStyleOptions` can carry an explicit `MaterialStyle`, and
 `widget::glass_text_field_style` is the Finder-style search-field preset that
 marks the field as interactive material without moving search/input policy into
-the backend.
+the backend. Selection chrome follows the same boundary through
+`GlassSelectionStyleOptions` and `widget::glass_selection_button_style`.
+Examples use it for Finder sidebar/list/icon rows so the selected row is a
+semantic material command with a resolved `MaterialPlan`, while unselected rows
+remain lightweight non-material buttons unless a caller explicitly opts in.
 
 `phenotype.svg` is a pure vector image layer. It parses a bounded SVG subset
 (`svg/viewBox`, `g`, `path`, `rect`, `circle`, `ellipse`, `line`, `polyline`,

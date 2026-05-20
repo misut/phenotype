@@ -776,7 +776,12 @@ to prove that the pure material planner saw the control chrome.
 Search fields follow the same rule: examples label their glass text inputs as
 `Search Field` or `Mobile Search Field`, which lets verifier output explain
 that the input surface produced a real `MaterialPlan` instead of an ordinary
-painted rectangle.
+painted rectangle. Finder-style selected rows use
+`widget::glass_selection_button_style`; the desktop manifest now expects one
+extra sampled sidebar selection plan, an isolated interactive container, and a
+bounded increase from 200 to 225 total sample taps. If that count changes,
+start with the selected sidebar row semantic material node before investigating
+the backend.
 It also compares semantic material container descriptors against
 `MaterialPlan.command_descriptor.container` and compares resolved container
 identity against `MaterialPlan.container`; a container mismatch points at layout

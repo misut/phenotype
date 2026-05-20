@@ -215,6 +215,11 @@ Finder-style search fields now use the same typed path through
 `TextFieldStyleOptions` and `widget::glass_text_field_style`, so input chrome
 can be verified as interactive material while keyboard-only focus-ring behavior
 stays in the core input/focus contract.
+Finder-style selected rows now use `GlassSelectionStyleOptions` and
+`widget::glass_selection_button_style`, giving sidebar/list/icon selection a
+first-class material plan instead of ad hoc painted button chrome. Unselected
+rows stay non-material by default so the selection affordance is debuggable
+without adding frame-to-frame material work for every file row.
 Pointer-driven active responses now include a pure, normalized
 `pointer-specular` highlight descriptor. The macOS Metal executor consumes that
 descriptor as shader input to add a bounded glint near the pointer anchor, while
@@ -509,8 +514,9 @@ Finder-like text and canvas buttons can share native-looking chrome without
 copying sidebar/toolbar constants in each example. `ButtonStyleOptions` now has
 an optional `MaterialStyle`, and `widget::glass_control_button_style` /
 `widget::glass_button` attach resolved material metadata to regular and canvas
-buttons. Segmented controls and popovers still need the same first-class
-material-aware treatment.
+buttons. `widget::glass_selection_button_style` extends that contract to
+Finder-like selected rows while preserving non-material unselected rows.
+Menu row chrome still needs the same first-class material-aware treatment.
 
 ### CLI and packaging direction
 
@@ -846,11 +852,12 @@ Current seed:
 ## Next recommended PR
 
 The initial G0-G4 path is now landed, and segmented controls/popovers/search
-fields now use the first-class material helper path. The next useful PR should avoid another
-schema-only increment unless a real failure appears. Recommended directions:
+fields/selected rows now use the first-class material helper path. The next
+useful PR should avoid another schema-only increment unless a real failure
+appears. Recommended directions:
 
-- expand first-class material-aware controls beyond buttons and segmented
-  controls/search fields, especially menu/list selection chrome;
+- expand first-class material-aware controls beyond buttons, segmented
+  controls, search fields, and selected rows, especially menu/popup item chrome;
 - tighten macOS material executor budgets after collecting a small sample of
   local and CI timing/copy values;
 - add Android CI emulator wiring if runner capacity and cost are acceptable;

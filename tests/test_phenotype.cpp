@@ -4264,6 +4264,62 @@ void test_glass_control_button_style_material_contract() {
     std::puts("PASS: glass control button style emits material contract");
 }
 
+void test_glass_selection_button_style_material_contract() {
+    set_theme(Theme{});
+
+    auto style = widget::glass_selection_button_style(
+        GlassSelectionStyleOptions{
+            .chrome = GlassSelectionChrome::SidebarPill,
+            .role = MaterialSurfaceRole::Sidebar,
+            .selected = true,
+            .width = 188.0f,
+            .height = 30.0f,
+            .border_radius = 9.0f,
+        });
+    assert(style.has_material);
+    assert(style.material.kind == MaterialKind::Thin);
+    assert(style.material.role == MaterialSurfaceRole::Sidebar);
+    assert(style.material.fallback);
+    assert(style.material.container.interactive);
+    assert(style.has_background);
+    assert(style.has_hover_background);
+    assert(style.has_pressed_background);
+    assert(style.border_width == 0.0f);
+    assert(style.border_radius == 9.0f);
+    assert(style.max_width == 188.0f);
+    assert(style.fixed_height == 30.0f);
+    assert(style.text_color == detail::g_app.theme.accent);
+
+    auto btn_h = button_test::build_canvas_button_with_options(style);
+    auto& btn = detail::node_at(btn_h);
+    assert(btn.interaction_role == InteractionRole::Button);
+    assert(btn.material.kind == MaterialKind::Thin);
+    assert(btn.material.role == MaterialSurfaceRole::Sidebar);
+    assert(btn.material.fallback);
+    assert(btn.material.container.interactive);
+    assert(btn.material.tint == btn.background);
+    assert(btn.material.border == btn.border_color);
+    assert(btn.material.foreground == btn.text_color);
+    assert(btn.children.size() == 1);
+
+    auto unselected = widget::glass_selection_button_style(
+        GlassSelectionStyleOptions{
+            .role = MaterialSurfaceRole::Surface,
+            .selected = false,
+            .width = 160.0f,
+            .height = 28.0f,
+        });
+    assert(!unselected.has_material);
+    auto unselected_h =
+        button_test::build_canvas_button_with_options(unselected);
+    auto& unselected_btn = detail::node_at(unselected_h);
+    assert(unselected_btn.material.kind == MaterialKind::None);
+    assert(unselected_btn.style.max_width == 160.0f);
+    assert(unselected_btn.style.fixed_height == 28.0f);
+
+    std::puts("PASS: glass selection button style emits material contract");
+}
+
 void test_symbol_button_minimum_hit_region_contract() {
     icons::SymbolButtonOptions options;
     options.role = icons::SymbolPresentationRole::Toolbar;
@@ -5281,6 +5337,7 @@ int main() {
     test_symbol_button_macos_contract();
     test_macos_control_button_style_contract();
     test_glass_control_button_style_material_contract();
+    test_glass_selection_button_style_material_contract();
     test_symbol_button_minimum_hit_region_contract();
     test_symbol_button_visual_state_token_contract();
     test_symbol_button_disabled_contract();
