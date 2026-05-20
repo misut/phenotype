@@ -2163,17 +2163,25 @@ void file_action_button(char const* label,
                         phenotype::icons::Symbol symbol,
                         std::uint64_t token) {
     std::string semantic_label(label);
+    auto const symbol_options = phenotype::icons::SymbolButtonOptions{
+        .role = phenotype::icons::SymbolPresentationRole::Navigation,
+        .disabled = !enabled,
+        .width = k_toolbar_icon_button_width,
+        .height = k_toolbar_icon_button_height,
+        .token_salt = token,
+    };
     phenotype::widget::symbol_button<Msg>(
         phenotype::str{semantic_label},
         symbol,
         std::move(msg),
-        phenotype::icons::SymbolButtonOptions{
-            .role = phenotype::icons::SymbolPresentationRole::Navigation,
-            .disabled = !enabled,
-            .width = k_toolbar_icon_button_width,
-            .height = k_toolbar_icon_button_height,
-            .token_salt = token,
-        });
+        symbol_options,
+        phenotype::widget::glass_menu_item_button_style(
+            phenotype::GlassMenuItemStyleOptions{
+                .disabled = !enabled,
+                .width = k_toolbar_icon_button_width,
+                .height = k_toolbar_icon_button_height,
+                .border_radius = k_toolbar_group_radius,
+            }));
 }
 
 void navigation_button(char const* label,
