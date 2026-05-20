@@ -313,6 +313,10 @@ Schema 34 extends the same probe with runtime capability limits. macOS artifacts
 now show the Metal-derived material capability profile, 2D texture limit, shader
 tap budget, and bounded 16M backdrop-copy budget, while Android and other
 unsupported backends keep deterministic fallback capability snapshots.
+Schema 35 adds execution-audit coverage to the same artifacts. The verifier now
+checks that every material plan's observation contract matches its executable
+pass, stage, and paint-layer arrays and that runtime/executor summaries report
+zero execution-contract mismatches.
 
 `phenotype package bundle` is the lightweight packaging counterpart. It stages
 the package manifest, declared SVG app icon, all declared SVG image assets,

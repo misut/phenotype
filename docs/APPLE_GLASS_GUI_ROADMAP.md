@@ -288,6 +288,12 @@ quality policy and records whether the render target fits both the caller budget
 and backend limits before a backend sees the command. macOS derives this from
 `MTLDevice.supportsFamily` and the public Metal capability tables, then exposes
 the same numbers in debug artifacts.
+Schema 35 adds a pure execution audit beside the observation contract. Each
+plan now reports the actual pass, execution-stage, and paint-layer counts that
+the backend is expected to execute, compares them with the verifier-facing
+observation contract, and rolls the result into runtime and executor summaries.
+This makes a stale pass array, missing edge layer, or unbounded fallback visible
+as an explicit contract mismatch before a shader or native draw call is blamed.
 Each surface's container policy stays explicit: spacing resolves
 to `blend_distance`, positive spacing drives `shape_blending_expected`, union ids
 select the union-proximity blend policy, Reduced Motion suppresses only morphing,

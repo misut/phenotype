@@ -971,6 +971,11 @@ The verifier checks that `decision_trace.capability_*` mirrors the snapshot and
 that `backdrop_pixels_within_budget` combines the quality budget with those
 backend limits. A failure here points at the platform capability provider or
 `MaterialEnvironment` construction, not at Metal fragment math.
+For schema 35 and later, inspect `execution_audit` immediately after
+`observation_contract`. It compares the observation contract with the actual
+serialized pass, stage, and paint-layer arrays. A mismatch points at pure
+planning, command serialization, or debug JSON assembly. It should not be fixed
+by adding backend policy branches.
 `renderer.material_backdrop_luma_descriptor` is the edge-side view of that same
 contract. It reports the latest observed luma min/max/mean, sample grid, sample
 frame, pending state, skipped sample count, and status such as

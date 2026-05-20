@@ -352,7 +352,7 @@ ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS = {
     "pointer-specular",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 34
+MATERIAL_PLAN_CONTRACT_VERSION = 35
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -3226,6 +3226,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "dropped_paint_layer_count",
     "verifier",
     "observation_contract",
+    "execution_audit",
     "passes",
     "execution_stages",
     "paint_layers",
@@ -3469,6 +3470,42 @@ MATERIAL_OBSERVATION_STRING_FIELDS = (
     "primary_pass",
     "primary_executor",
     "region_name",
+    "likely_layer",
+    "likely_pass",
+)
+MATERIAL_EXECUTION_AUDIT_BOOL_FIELDS = (
+    "runtime_passes_match",
+    "active_runtime_passes_match",
+    "backdrop_runtime_passes_match",
+    "execution_stages_match",
+    "active_execution_stages_match",
+    "backdrop_execution_stages_match",
+    "paint_layers_match",
+    "active_paint_layers_match",
+    "shadow_paint_layers_match",
+    "fill_paint_layers_match",
+    "edge_paint_layers_match",
+    "bounded_texture_copy",
+    "deterministic_fallback",
+    "contract_satisfied",
+)
+MATERIAL_EXECUTION_AUDIT_INT_FIELDS = (
+    "schema_version",
+    "actual_runtime_passes",
+    "actual_active_runtime_passes",
+    "actual_backdrop_runtime_passes",
+    "actual_execution_stages",
+    "actual_active_execution_stages",
+    "actual_backdrop_execution_stages",
+    "actual_paint_layers",
+    "actual_active_paint_layers",
+    "actual_shadow_paint_layers",
+    "actual_fill_paint_layers",
+    "actual_edge_paint_layers",
+    "mismatch_count",
+)
+MATERIAL_EXECUTION_AUDIT_STRING_FIELDS = (
+    "first_mismatch",
     "likely_layer",
     "likely_pass",
 )
@@ -3975,6 +4012,252 @@ def check_material_observation_contract(
                 record_success=False)
 
 
+def check_material_execution_audit(
+    report: Report,
+    plan: JsonObject,
+    plan_path: str,
+    likely_layer: str,
+) -> None:
+    audit = check_object_field(
+        report,
+        plan,
+        "execution_audit",
+        plan_path,
+        likely_layer="material-execution-contract",
+        hint=(
+            "MaterialPlan.execution_audit should prove the pure observation "
+            "contract matches executable pass, stage, and paint-layer counts."))
+    if audit is None:
+        return
+
+    audit_path = f"{plan_path}.execution_audit"
+    audit_likely_pass = string_at(audit, "likely_pass") or "none"
+    audit_bools: dict[str, bool] = {}
+    audit_numbers: dict[str, int | float] = {}
+    for key in MATERIAL_EXECUTION_AUDIT_BOOL_FIELDS:
+        value = check_bool_field(
+            report,
+            audit,
+            key,
+            audit_path,
+            likely_layer="material-execution-contract",
+            likely_pass=audit_likely_pass,
+            hint="Execution audit booleans must be explicit pure-plan facts.")
+        if isinstance(value, bool):
+            audit_bools[key] = value
+    for key in MATERIAL_EXECUTION_AUDIT_INT_FIELDS:
+        value = check_number_field(
+            report,
+            audit,
+            key,
+            audit_path,
+            min_value=0.0,
+            likely_layer="material-execution-contract",
+            likely_pass=audit_likely_pass,
+            hint="Execution audit counts must be non-negative.")
+        if isinstance(value, (int, float)):
+            audit_numbers[key] = value
+    for key in MATERIAL_EXECUTION_AUDIT_STRING_FIELDS:
+        check_string_field(
+            report,
+            audit,
+            key,
+            audit_path,
+            likely_layer="material-execution-contract",
+            hint="Execution audit strings should identify the first mismatch path.")
+
+    contract_version = plan.get("contract_version")
+    schema_version = audit.get("schema_version")
+    report.check(
+        "material execution audit schema version matches plan",
+        schema_version == contract_version,
+        path=f"{audit_path}.schema_version",
+        expected=contract_version,
+        actual=schema_version,
+        likely_layer="material-execution-contract",
+        likely_pass=audit_likely_pass,
+        hint="Keep MaterialPlan.contract_version and execution_audit.schema_version synchronized.",
+        record_success=False)
+    report.check(
+        "material execution audit schema version is supported",
+        schema_version == MATERIAL_PLAN_CONTRACT_VERSION,
+        path=f"{audit_path}.schema_version",
+        expected=MATERIAL_PLAN_CONTRACT_VERSION,
+        actual=schema_version,
+        likely_layer="material-execution-contract",
+        likely_pass=audit_likely_pass,
+        hint="Update the execution-audit verifier when the material schema changes.",
+        record_success=False)
+
+    passes = plan.get("passes")
+    if isinstance(passes, list):
+        actuals = {
+            "actual_runtime_passes": len(passes),
+            "actual_active_runtime_passes": sum(
+                1 for pass_plan in passes
+                if isinstance(pass_plan, dict)
+                and pass_plan.get("active") is True),
+            "actual_backdrop_runtime_passes": sum(
+                1 for pass_plan in passes
+                if isinstance(pass_plan, dict)
+                and pass_plan.get("requires_backdrop") is True),
+        }
+        for key, expected in actuals.items():
+            report.check(
+                f"material execution audit {key} matches passes",
+                audit.get(key) == expected,
+                path=f"{audit_path}.{key}",
+                expected=expected,
+                actual=audit.get(key),
+                likely_layer="material-execution-contract",
+                likely_pass=audit_likely_pass,
+                hint="Execution audit pass counts should mirror MaterialPlan.passes.",
+                record_success=False)
+
+    execution_stages = plan.get("execution_stages")
+    if isinstance(execution_stages, list):
+        actuals = {
+            "actual_execution_stages": len(execution_stages),
+            "actual_active_execution_stages": sum(
+                1 for stage in execution_stages
+                if isinstance(stage, dict) and stage.get("active") is True),
+            "actual_backdrop_execution_stages": sum(
+                1 for stage in execution_stages
+                if isinstance(stage, dict)
+                and stage.get("requires_backdrop") is True),
+        }
+        for key, expected in actuals.items():
+            report.check(
+                f"material execution audit {key} matches stages",
+                audit.get(key) == expected,
+                path=f"{audit_path}.{key}",
+                expected=expected,
+                actual=audit.get(key),
+                likely_layer="material-execution-contract",
+                likely_pass=audit_likely_pass,
+                hint="Execution audit stage counts should mirror MaterialPlan.execution_stages.",
+                record_success=False)
+
+    paint_layers = plan.get("paint_layers")
+    if isinstance(paint_layers, list):
+        actuals = {
+            "actual_paint_layers": len(paint_layers),
+            "actual_active_paint_layers": sum(
+                1 for layer in paint_layers
+                if isinstance(layer, dict) and layer.get("active") is True),
+            "actual_shadow_paint_layers": sum(
+                1 for layer in paint_layers
+                if isinstance(layer, dict)
+                and layer.get("executor") == "rounded-shadow"),
+            "actual_fill_paint_layers": sum(
+                1 for layer in paint_layers
+                if isinstance(layer, dict)
+                and layer.get("executor") == "rounded-fill"),
+            "actual_edge_paint_layers": sum(
+                1 for layer in paint_layers
+                if isinstance(layer, dict)
+                and layer.get("executor") == "rounded-edge"),
+        }
+        for key, expected in actuals.items():
+            report.check(
+                f"material execution audit {key} matches paint layers",
+                audit.get(key) == expected,
+                path=f"{audit_path}.{key}",
+                expected=expected,
+                actual=audit.get(key),
+                likely_layer="material-execution-contract",
+                likely_pass=audit_likely_pass,
+                hint="Execution audit paint-layer counts should mirror MaterialPlan.paint_layers.",
+                record_success=False)
+
+    observation = plan.get("observation_contract")
+    mismatch_count = 0
+    first_mismatch = "none"
+    if isinstance(observation, dict):
+        count_pairs = (
+            ("runtime_passes_match", "expected_runtime_passes", "actual_runtime_passes", "runtime-pass-count"),
+            ("active_runtime_passes_match", "expected_active_runtime_passes", "actual_active_runtime_passes", "active-runtime-pass-count"),
+            ("backdrop_runtime_passes_match", "expected_backdrop_runtime_passes", "actual_backdrop_runtime_passes", "backdrop-runtime-pass-count"),
+            ("execution_stages_match", "expected_execution_stages", "actual_execution_stages", "execution-stage-count"),
+            ("active_execution_stages_match", "expected_active_execution_stages", "actual_active_execution_stages", "active-execution-stage-count"),
+            ("backdrop_execution_stages_match", "expected_backdrop_execution_stages", "actual_backdrop_execution_stages", "backdrop-execution-stage-count"),
+            ("paint_layers_match", "expected_paint_layers", "actual_paint_layers", "paint-layer-count"),
+            ("active_paint_layers_match", "expected_active_paint_layers", "actual_active_paint_layers", "active-paint-layer-count"),
+            ("shadow_paint_layers_match", "expected_shadow_paint_layers", "actual_shadow_paint_layers", "shadow-paint-layer-count"),
+            ("fill_paint_layers_match", "expected_fill_paint_layers", "actual_fill_paint_layers", "fill-paint-layer-count"),
+            ("edge_paint_layers_match", "expected_edge_paint_layers", "actual_edge_paint_layers", "edge-paint-layer-count"),
+        )
+        for match_key, expected_key, actual_key, mismatch_name in count_pairs:
+            expected_match = observation.get(expected_key) == audit.get(actual_key)
+            if not expected_match:
+                mismatch_count += 1
+                if first_mismatch == "none":
+                    first_mismatch = mismatch_name
+            report.check(
+                f"material execution audit {match_key} matches observation",
+                audit.get(match_key) == expected_match,
+                path=f"{audit_path}.{match_key}",
+                expected=expected_match,
+                actual=audit.get(match_key),
+                likely_layer="material-execution-contract",
+                likely_pass=audit_likely_pass,
+                hint=(
+                    "Execution audit match flags should compare "
+                    "observation_contract expectations with actual plan counts."),
+                record_success=False)
+        for audit_key, observation_key, mismatch_name in (
+                ("bounded_texture_copy", "bounded_texture_copy_required", "bounded-texture-copy"),
+                ("deterministic_fallback", "deterministic_fallback_required", "deterministic-fallback")):
+            audit_value = audit.get(audit_key)
+            required = observation.get(observation_key)
+            if required is True and audit_value is not True:
+                mismatch_count += 1
+                if first_mismatch == "none":
+                    first_mismatch = mismatch_name
+            report.check(
+                f"material execution audit {audit_key} satisfies observation",
+                required is not True or audit_value is True,
+                path=f"{audit_path}.{audit_key}",
+                expected={"required_by_observation": required},
+                actual=audit_value,
+                likely_layer="material-execution-contract",
+                likely_pass=audit_likely_pass,
+                hint="Execution audit safety flags must satisfy observation requirements.",
+                record_success=False)
+
+    expected_satisfied = mismatch_count == 0
+    report.check(
+        "material execution audit contract_satisfied matches mismatch count",
+        audit.get("contract_satisfied") == expected_satisfied,
+        path=f"{audit_path}.contract_satisfied",
+        expected=expected_satisfied,
+        actual=audit.get("contract_satisfied"),
+        likely_layer="material-execution-contract",
+        likely_pass=audit_likely_pass,
+        hint="A material execution contract is satisfied only when no audit mismatches remain.",
+        record_success=False)
+    report.check(
+        "material execution audit mismatch_count is exact",
+        audit.get("mismatch_count") == mismatch_count,
+        path=f"{audit_path}.mismatch_count",
+        expected=mismatch_count,
+        actual=audit.get("mismatch_count"),
+        likely_layer="material-execution-contract",
+        likely_pass=audit_likely_pass,
+        hint="mismatch_count should count every failed pass/stage/layer/safety check.",
+        record_success=False)
+    report.check(
+        "material execution audit first_mismatch is exact",
+        audit.get("first_mismatch") == first_mismatch,
+        path=f"{audit_path}.first_mismatch",
+        expected=first_mismatch,
+        actual=audit.get("first_mismatch"),
+        likely_layer="material-execution-contract",
+        likely_pass=audit_likely_pass,
+        hint="first_mismatch should name the first failed execution-audit gate.",
+        record_success=False)
+
+
 def expected_reference_accessibility_response(plan: JsonObject) -> str | None:
     decision_trace = plan.get("decision_trace")
     if not isinstance(decision_trace, dict):
@@ -4406,6 +4689,12 @@ def summarize_material_plans(
             "total_pass_texture_copy_pixels": 0,
             "unbounded_texture_copy": 0,
             "non_deterministic_fallback": 0,
+        },
+        "execution_audit": {
+            "satisfied": 0,
+            "mismatched": 0,
+            "mismatch_total": 0,
+            "first_mismatch": "none",
         },
         "quality_policy": {
             "backdrop_sampling_disabled": 0,
@@ -9547,6 +9836,26 @@ def summarize_material_plans(
             plan,
             plan_path,
             likely_layer)
+        check_material_execution_audit(
+            report,
+            plan,
+            plan_path,
+            likely_layer)
+        execution_audit = plan.get("execution_audit")
+        if isinstance(execution_audit, dict):
+            audit_summary = summary["execution_audit"]
+            if execution_audit.get("contract_satisfied") is True:
+                audit_summary["satisfied"] = int(audit_summary["satisfied"]) + 1
+            else:
+                audit_summary["mismatched"] = int(audit_summary["mismatched"]) + 1
+                if audit_summary["first_mismatch"] == "none":
+                    audit_summary["first_mismatch"] = (
+                        execution_audit.get("first_mismatch") or "unknown")
+            mismatch_count = execution_audit.get("mismatch_count")
+            if isinstance(mismatch_count, (int, float)):
+                audit_summary["mismatch_total"] = (
+                    int(audit_summary["mismatch_total"])
+                    + int(mismatch_count))
     group_summary = summary["container_groups"]
     group_summary["group_count"] = len(container_group_accumulators)
     for group in container_group_accumulators.values():
@@ -10552,6 +10861,9 @@ def check_material_runtime_summary_contract(
     optical_bounds = summary.get("optical_bounds")
     if not isinstance(optical_bounds, dict):
         optical_bounds = {}
+    execution_audit = summary.get("execution_audit")
+    if not isinstance(execution_audit, dict):
+        execution_audit = {}
     expected_fields = {
         "plan_count": summary.get("count"),
         "fallback_count": summary.get("fallback"),
@@ -10649,6 +10961,12 @@ def check_material_runtime_summary_contract(
             if isinstance(summary.get("foreground"), dict) else None,
         "unbounded_texture_copy": bounds.get("unbounded_texture_copy"),
         "non_deterministic_fallback": bounds.get("non_deterministic_fallback"),
+        "execution_contract_satisfied_count": execution_audit.get("satisfied"),
+        "execution_contract_mismatch_count": execution_audit.get("mismatched"),
+        "execution_contract_mismatch_total": execution_audit.get(
+            "mismatch_total"),
+        "first_execution_contract_mismatch": execution_audit.get(
+            "first_mismatch"),
     }
     for field, expected in expected_fields.items():
         actual = runtime_summary.get(field)
@@ -10753,6 +11071,17 @@ def check_material_executor_summary_contract(
             "total_surface_sample_pixels"),
     }
     expected_fields.update(expected_access_fields)
+    execution_audit = summary.get("execution_audit")
+    if not isinstance(execution_audit, dict):
+        execution_audit = {}
+    expected_fields.update({
+        "execution_contract_satisfied_count": execution_audit.get("satisfied"),
+        "execution_contract_mismatch_count": execution_audit.get("mismatched"),
+        "execution_contract_mismatch_total": execution_audit.get(
+            "mismatch_total"),
+        "first_execution_contract_mismatch": execution_audit.get(
+            "first_mismatch"),
+    })
     render_target = summary.get("render_target")
     if not isinstance(render_target, dict):
         render_target = {}
@@ -10832,6 +11161,9 @@ def check_material_executor_summary_contract(
         "material_upload_bytes",
         "material_buffer_capacity_bytes",
         "material_buffer_reallocations",
+        "execution_contract_satisfied_count",
+        "execution_contract_mismatch_count",
+        "execution_contract_mismatch_total",
         "foreground_text_candidate_count",
         "foreground_text_remap_count",
         "backdrop_descriptor_luma_min",

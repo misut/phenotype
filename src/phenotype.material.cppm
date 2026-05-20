@@ -12,7 +12,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 34;
+inline constexpr std::uint32_t material_plan_contract_version = 35;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -320,6 +320,39 @@ struct MaterialObservationContract {
     std::int64_t max_texture_copy_pixels = 0;
     char const* region_name = "material";
     char const* likely_layer = "material-fallback";
+    char const* likely_pass = "none";
+};
+
+struct MaterialExecutionAudit {
+    std::uint32_t schema_version = material_plan_contract_version;
+    std::uint32_t actual_runtime_passes = 0;
+    std::uint32_t actual_active_runtime_passes = 0;
+    std::uint32_t actual_backdrop_runtime_passes = 0;
+    std::uint32_t actual_execution_stages = 0;
+    std::uint32_t actual_active_execution_stages = 0;
+    std::uint32_t actual_backdrop_execution_stages = 0;
+    std::uint32_t actual_paint_layers = 0;
+    std::uint32_t actual_active_paint_layers = 0;
+    std::uint32_t actual_shadow_paint_layers = 0;
+    std::uint32_t actual_fill_paint_layers = 0;
+    std::uint32_t actual_edge_paint_layers = 0;
+    bool runtime_passes_match = true;
+    bool active_runtime_passes_match = true;
+    bool backdrop_runtime_passes_match = true;
+    bool execution_stages_match = true;
+    bool active_execution_stages_match = true;
+    bool backdrop_execution_stages_match = true;
+    bool paint_layers_match = true;
+    bool active_paint_layers_match = true;
+    bool shadow_paint_layers_match = true;
+    bool fill_paint_layers_match = true;
+    bool edge_paint_layers_match = true;
+    bool bounded_texture_copy = true;
+    bool deterministic_fallback = true;
+    bool contract_satisfied = true;
+    std::uint32_t mismatch_count = 0;
+    char const* first_mismatch = "none";
+    char const* likely_layer = "material-execution-contract";
     char const* likely_pass = "none";
 };
 
@@ -689,6 +722,7 @@ struct MaterialPlan {
     MaterialPaintLayer paint_layers[material_max_paint_layers]{};
     MaterialVerifierExpectation verifier{};
     MaterialObservationContract observation_contract{};
+    MaterialExecutionAudit execution_audit{};
 
     constexpr bool fallback() const noexcept {
         return fallback_path != MaterialFallbackPath::None;
@@ -860,6 +894,130 @@ inline MaterialObservationContract material_observation_contract(
     return contract;
 }
 
+inline void material_record_execution_mismatch(
+        MaterialExecutionAudit& audit,
+        bool condition,
+        char const* mismatch) noexcept {
+    if (condition)
+        return;
+    audit.contract_satisfied = false;
+    ++audit.mismatch_count;
+    if (audit.first_mismatch == nullptr
+        || std::string_view{audit.first_mismatch} == "none") {
+        audit.first_mismatch =
+            mismatch != nullptr && mismatch[0] ? mismatch : "unknown";
+    }
+}
+
+inline MaterialExecutionAudit material_execution_audit(
+        MaterialPlan const& plan) noexcept {
+    auto const& observation = plan.observation_contract;
+    MaterialExecutionAudit audit{};
+    audit.schema_version = plan.contract_version;
+    audit.actual_runtime_passes = 1;
+    audit.actual_active_runtime_passes =
+        plan.primary_pass.active ? 1u : 0u;
+    audit.actual_backdrop_runtime_passes =
+        plan.primary_pass.requires_backdrop ? 1u : 0u;
+    audit.actual_execution_stages = plan.execution_stage_count;
+    audit.actual_paint_layers = plan.paint_layer_count;
+    audit.bounded_texture_copy = plan.resource_budget.bounded_texture_copy;
+    audit.deterministic_fallback =
+        plan.resource_budget.deterministic_fallback;
+    audit.likely_layer =
+        observation.likely_layer != nullptr && observation.likely_layer[0]
+            ? observation.likely_layer
+            : "material-execution-contract";
+    audit.likely_pass =
+        observation.likely_pass != nullptr && observation.likely_pass[0]
+            ? observation.likely_pass
+            : "none";
+
+    for (unsigned int i = 0; i < plan.execution_stage_count; ++i) {
+        auto const& stage = plan.execution_stages[i];
+        if (stage.active)
+            ++audit.actual_active_execution_stages;
+        if (stage.requires_backdrop)
+            ++audit.actual_backdrop_execution_stages;
+    }
+    for (unsigned int i = 0; i < plan.paint_layer_count; ++i) {
+        auto const& layer = plan.paint_layers[i];
+        if (layer.active)
+            ++audit.actual_active_paint_layers;
+        if (material_paint_layer_matches(layer.executor, "rounded-shadow"))
+            ++audit.actual_shadow_paint_layers;
+        if (material_paint_layer_matches(layer.executor, "rounded-fill"))
+            ++audit.actual_fill_paint_layers;
+        if (material_paint_layer_matches(layer.executor, "rounded-edge"))
+            ++audit.actual_edge_paint_layers;
+    }
+
+    audit.runtime_passes_match =
+        observation.expected_runtime_passes == audit.actual_runtime_passes;
+    audit.active_runtime_passes_match =
+        observation.expected_active_runtime_passes
+            == audit.actual_active_runtime_passes;
+    audit.backdrop_runtime_passes_match =
+        observation.expected_backdrop_runtime_passes
+            == audit.actual_backdrop_runtime_passes;
+    audit.execution_stages_match =
+        observation.expected_execution_stages == audit.actual_execution_stages;
+    audit.active_execution_stages_match =
+        observation.expected_active_execution_stages
+            == audit.actual_active_execution_stages;
+    audit.backdrop_execution_stages_match =
+        observation.expected_backdrop_execution_stages
+            == audit.actual_backdrop_execution_stages;
+    audit.paint_layers_match =
+        observation.expected_paint_layers == audit.actual_paint_layers;
+    audit.active_paint_layers_match =
+        observation.expected_active_paint_layers
+            == audit.actual_active_paint_layers;
+    audit.shadow_paint_layers_match =
+        observation.expected_shadow_paint_layers
+            == audit.actual_shadow_paint_layers;
+    audit.fill_paint_layers_match =
+        observation.expected_fill_paint_layers
+            == audit.actual_fill_paint_layers;
+    audit.edge_paint_layers_match =
+        observation.expected_edge_paint_layers
+            == audit.actual_edge_paint_layers;
+
+    material_record_execution_mismatch(
+        audit, audit.runtime_passes_match, "runtime-pass-count");
+    material_record_execution_mismatch(
+        audit, audit.active_runtime_passes_match, "active-runtime-pass-count");
+    material_record_execution_mismatch(
+        audit, audit.backdrop_runtime_passes_match, "backdrop-runtime-pass-count");
+    material_record_execution_mismatch(
+        audit, audit.execution_stages_match, "execution-stage-count");
+    material_record_execution_mismatch(
+        audit, audit.active_execution_stages_match, "active-execution-stage-count");
+    material_record_execution_mismatch(
+        audit, audit.backdrop_execution_stages_match, "backdrop-execution-stage-count");
+    material_record_execution_mismatch(
+        audit, audit.paint_layers_match, "paint-layer-count");
+    material_record_execution_mismatch(
+        audit, audit.active_paint_layers_match, "active-paint-layer-count");
+    material_record_execution_mismatch(
+        audit, audit.shadow_paint_layers_match, "shadow-paint-layer-count");
+    material_record_execution_mismatch(
+        audit, audit.fill_paint_layers_match, "fill-paint-layer-count");
+    material_record_execution_mismatch(
+        audit, audit.edge_paint_layers_match, "edge-paint-layer-count");
+    material_record_execution_mismatch(
+        audit,
+        !observation.bounded_texture_copy_required
+            || audit.bounded_texture_copy,
+        "bounded-texture-copy");
+    material_record_execution_mismatch(
+        audit,
+        !observation.deterministic_fallback_required
+            || audit.deterministic_fallback,
+        "deterministic-fallback");
+    return audit;
+}
+
 struct MaterialForegroundTextResolution {
     Color color{};
     char const* role = "none";
@@ -969,6 +1127,10 @@ struct MaterialRuntimeSummary {
     float min_foreground_contrast_ratio = 0.0f;
     std::uint32_t unbounded_texture_copy = 0;
     std::uint32_t non_deterministic_fallback = 0;
+    std::uint32_t execution_contract_satisfied_count = 0;
+    std::uint32_t execution_contract_mismatch_count = 0;
+    std::uint32_t execution_contract_mismatch_total = 0;
+    char const* first_execution_contract_mismatch = "none";
 };
 
 struct MaterialExecutorSummary {
@@ -1011,6 +1173,10 @@ struct MaterialExecutorSummary {
     std::int64_t material_upload_bytes = 0;
     std::int64_t material_buffer_capacity_bytes = 0;
     std::uint32_t material_buffer_reallocations = 0;
+    std::uint32_t execution_contract_satisfied_count = 0;
+    std::uint32_t execution_contract_mismatch_count = 0;
+    std::uint32_t execution_contract_mismatch_total = 0;
+    char const* first_execution_contract_mismatch = "none";
     std::uint32_t foreground_text_candidate_count = 0;
     std::uint32_t foreground_text_remap_count = 0;
     std::uint32_t interaction_enabled_count = 0;
@@ -1558,6 +1724,18 @@ inline void accumulate_material_executor_plan_summary(
     }
     summary.planned_surface_sample_pixels +=
         plan.backdrop_access.max_surface_sample_pixels;
+    if (plan.execution_audit.contract_satisfied) {
+        ++summary.execution_contract_satisfied_count;
+    } else {
+        ++summary.execution_contract_mismatch_count;
+        if (std::string_view{summary.first_execution_contract_mismatch}
+                == "none") {
+            summary.first_execution_contract_mismatch =
+                plan.execution_audit.first_mismatch;
+        }
+    }
+    summary.execution_contract_mismatch_total +=
+        plan.execution_audit.mismatch_count;
 }
 
 inline void finalize_material_executor_summary(
@@ -1755,6 +1933,18 @@ inline void accumulate_material_runtime_summary(
         ++summary.unbounded_texture_copy;
     if (!plan.resource_budget.deterministic_fallback)
         ++summary.non_deterministic_fallback;
+    if (plan.execution_audit.contract_satisfied) {
+        ++summary.execution_contract_satisfied_count;
+    } else {
+        ++summary.execution_contract_mismatch_count;
+        if (std::string_view{summary.first_execution_contract_mismatch}
+                == "none") {
+            summary.first_execution_contract_mismatch =
+                plan.execution_audit.first_mismatch;
+        }
+    }
+    summary.execution_contract_mismatch_total +=
+        plan.execution_audit.mismatch_count;
 }
 
 inline void finalize_material_runtime_summary(
@@ -3632,6 +3822,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
     plan.verifier.likely_pass = plan.primary_pass.name;
     plan.optical_response = material_resolve_optical_response(plan);
     plan.observation_contract = material_observation_contract(plan);
+    plan.execution_audit = material_execution_audit(plan);
     return plan;
 }
 

@@ -502,6 +502,7 @@ def material_plan(
         "paint_layers": material_paint_layers(str(primary["name"])),
     }
     refresh_observation_contract(plan)
+    refresh_execution_audit(plan)
     return plan
 
 
@@ -789,6 +790,89 @@ def refresh_observation_contract(plan: dict[str, object]) -> None:
     }
 
 
+def refresh_execution_audit(plan: dict[str, object]) -> None:
+    observation = plan["observation_contract"]
+    passes = plan["passes"]
+    stages = plan["execution_stages"]
+    paint_layers = plan["paint_layers"]
+    budget = plan["resource_budget"]
+    assert isinstance(observation, dict)
+    assert isinstance(passes, list)
+    assert isinstance(stages, list)
+    assert isinstance(paint_layers, list)
+    assert isinstance(budget, dict)
+    actuals: dict[str, int] = {
+        "actual_runtime_passes": len(passes),
+        "actual_active_runtime_passes": sum(
+            1 for pass_plan in passes
+            if isinstance(pass_plan, dict) and pass_plan["active"]),
+        "actual_backdrop_runtime_passes": sum(
+            1 for pass_plan in passes
+            if isinstance(pass_plan, dict) and pass_plan["requires_backdrop"]),
+        "actual_execution_stages": len(stages),
+        "actual_active_execution_stages": sum(
+            1 for stage in stages
+            if isinstance(stage, dict) and stage["active"]),
+        "actual_backdrop_execution_stages": sum(
+            1 for stage in stages
+            if isinstance(stage, dict) and stage["requires_backdrop"]),
+        "actual_paint_layers": len(paint_layers),
+        "actual_active_paint_layers": sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict) and layer["active"]),
+        "actual_shadow_paint_layers": sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict) and layer["executor"] == "rounded-shadow"),
+        "actual_fill_paint_layers": sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict) and layer["executor"] == "rounded-fill"),
+        "actual_edge_paint_layers": sum(
+            1 for layer in paint_layers
+            if isinstance(layer, dict) and layer["executor"] == "rounded-edge"),
+    }
+    match_pairs = (
+        ("runtime_passes_match", "expected_runtime_passes", "actual_runtime_passes", "runtime-pass-count"),
+        ("active_runtime_passes_match", "expected_active_runtime_passes", "actual_active_runtime_passes", "active-runtime-pass-count"),
+        ("backdrop_runtime_passes_match", "expected_backdrop_runtime_passes", "actual_backdrop_runtime_passes", "backdrop-runtime-pass-count"),
+        ("execution_stages_match", "expected_execution_stages", "actual_execution_stages", "execution-stage-count"),
+        ("active_execution_stages_match", "expected_active_execution_stages", "actual_active_execution_stages", "active-execution-stage-count"),
+        ("backdrop_execution_stages_match", "expected_backdrop_execution_stages", "actual_backdrop_execution_stages", "backdrop-execution-stage-count"),
+        ("paint_layers_match", "expected_paint_layers", "actual_paint_layers", "paint-layer-count"),
+        ("active_paint_layers_match", "expected_active_paint_layers", "actual_active_paint_layers", "active-paint-layer-count"),
+        ("shadow_paint_layers_match", "expected_shadow_paint_layers", "actual_shadow_paint_layers", "shadow-paint-layer-count"),
+        ("fill_paint_layers_match", "expected_fill_paint_layers", "actual_fill_paint_layers", "fill-paint-layer-count"),
+        ("edge_paint_layers_match", "expected_edge_paint_layers", "actual_edge_paint_layers", "edge-paint-layer-count"),
+    )
+    audit: dict[str, object] = {
+        "schema_version": plan["contract_version"],
+        **actuals,
+        "bounded_texture_copy": budget["bounded_texture_copy"],
+        "deterministic_fallback": budget["deterministic_fallback"],
+        "likely_layer": observation["likely_layer"],
+        "likely_pass": observation["likely_pass"],
+    }
+    mismatch_count = 0
+    first_mismatch = "none"
+    for match_key, expected_key, actual_key, mismatch_name in match_pairs:
+        matched = observation[expected_key] == audit[actual_key]
+        audit[match_key] = matched
+        if not matched:
+            mismatch_count += 1
+            if first_mismatch == "none":
+                first_mismatch = mismatch_name
+    for audit_key, observation_key, mismatch_name in (
+            ("bounded_texture_copy", "bounded_texture_copy_required", "bounded-texture-copy"),
+            ("deterministic_fallback", "deterministic_fallback_required", "deterministic-fallback")):
+        if observation[observation_key] is True and audit[audit_key] is not True:
+            mismatch_count += 1
+            if first_mismatch == "none":
+                first_mismatch = mismatch_name
+    audit["contract_satisfied"] = mismatch_count == 0
+    audit["mismatch_count"] = mismatch_count
+    audit["first_mismatch"] = first_mismatch
+    plan["execution_audit"] = audit
+
+
 def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
     plan = material_plan(sample_taps=sample_taps, primary_sample_taps=sample_taps)
     assert isinstance(plan["decision_trace"], dict)
@@ -920,6 +1004,7 @@ def sampled_material_plan(sample_taps: int = 25) -> dict[str, object]:
         "likely_pass": "backdrop-sample-blur",
     })
     refresh_observation_contract(plan)
+    refresh_execution_audit(plan)
     return plan
 
 
@@ -999,6 +1084,7 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     execution_stages = plan["execution_stages"]
     paint_layers = plan["paint_layers"]
     interaction = plan["interaction"]
+    audit = plan["execution_audit"]
     assert isinstance(budget, dict)
     assert isinstance(primary, dict)
     assert isinstance(shape, dict)
@@ -1006,6 +1092,7 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     assert isinstance(execution_stages, list)
     assert isinstance(paint_layers, list)
     assert isinstance(interaction, dict)
+    assert isinstance(audit, dict)
     active_paint_layers = [
         layer for layer in paint_layers
         if isinstance(layer, dict) and layer["active"]
@@ -1125,6 +1212,12 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "non_deterministic_fallback": (
             0 if budget["deterministic_fallback"] else 1
         ),
+        "execution_contract_satisfied_count": (
+            1 if audit["contract_satisfied"] else 0),
+        "execution_contract_mismatch_count": (
+            0 if audit["contract_satisfied"] else 1),
+        "execution_contract_mismatch_total": audit["mismatch_count"],
+        "first_execution_contract_mismatch": audit["first_mismatch"],
         "container_groups": material_container_group_summary(plan),
     }
 
@@ -1146,9 +1239,11 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
     primary = plan["primary_pass"]
     backdrop_access = plan["backdrop_access"]
     interaction = plan["interaction"]
+    audit = plan["execution_audit"]
     assert isinstance(primary, dict)
     assert isinstance(backdrop_access, dict)
     assert isinstance(interaction, dict)
+    assert isinstance(audit, dict)
     sampled_backdrop_instances = (
         1 if primary["executor"] == "backdrop-filter" else 0)
     standard_fill_instances = (
@@ -1254,6 +1349,12 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "material_upload_bytes": upload_bytes,
         "material_buffer_capacity_bytes": upload_bytes,
         "material_buffer_reallocations": 0,
+        "execution_contract_satisfied_count": (
+            1 if audit["contract_satisfied"] else 0),
+        "execution_contract_mismatch_count": (
+            0 if audit["contract_satisfied"] else 1),
+        "execution_contract_mismatch_total": audit["mismatch_count"],
+        "first_execution_contract_mismatch": audit["first_mismatch"],
         "foreground_text_candidate_count": 1,
         "foreground_text_remap_count": 1,
         "interaction_enabled_count": 1 if interaction["enabled"] else 0,
@@ -2391,6 +2492,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         verifier_contract["require_container_identity"] = True
         verifier_contract["require_container_morph_contract"] = True
         refresh_observation_contract(plan)
+        refresh_execution_audit(plan)
 
         root = snapshot(plan)
         material_node = root["debug"]["semantic_tree"]["children"][0]
@@ -2883,6 +2985,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         plan = sampled_material_plan(sample_taps=5)
         plan["sample_taps"] = 7
         refresh_observation_contract(plan)
+        refresh_execution_audit(plan)
 
         code, report = self.run_verifier(snapshot(plan))
 
@@ -2988,6 +3091,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "specular_intensity": 0.24,
         })
         refresh_observation_contract(plan)
+        refresh_execution_audit(plan)
         manifest = {
             "require_material_plan_summary": {
                 "interaction_enabled": 1,
@@ -3371,6 +3475,30 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(failure["likely_layer"], "material-observation")
         self.assertEqual(failure["likely_pass"], "backdrop-sample-blur")
         self.assertIn("active/backdrop pass counts", failure["hint"])
+
+    def test_execution_audit_mismatch_points_to_execution_contract(self) -> None:
+        plan = sampled_material_plan()
+        audit = plan["execution_audit"]
+        assert isinstance(audit, dict)
+        audit["actual_backdrop_execution_stages"] = 0
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material execution audit actual_backdrop_execution_stages "
+                "matches stages"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".execution_audit.actual_backdrop_execution_stages")
+        self.assertEqual(failure["expected"], 1)
+        self.assertEqual(failure["actual"], 0)
+        self.assertEqual(failure["likely_layer"], "material-execution-contract")
+        self.assertEqual(failure["likely_pass"], "backdrop-sample-blur")
+        self.assertIn("stage counts", failure["hint"])
 
     def test_fallback_pass_texture_copy_points_to_pass_contract(self) -> None:
         plan = material_plan()

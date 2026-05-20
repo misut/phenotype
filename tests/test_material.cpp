@@ -58,7 +58,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 34);
+    assert(material_plan_contract_version == 35);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -69,6 +69,13 @@ void test_sampled_backdrop_access_contract() {
     assert(plan.capability_snapshot.target_within_backdrop_budget);
     assert(plan.decision_trace.capability_target_within_texture_limits);
     assert(plan.decision_trace.capability_target_within_backdrop_budget);
+    assert(plan.execution_audit.contract_satisfied);
+    assert(plan.execution_audit.mismatch_count == 0u);
+    assert(std::string_view(plan.execution_audit.first_mismatch) == "none");
+    assert(plan.execution_audit.actual_runtime_passes
+           == plan.observation_contract.expected_runtime_passes);
+    assert(plan.execution_audit.actual_execution_stages
+           == plan.observation_contract.expected_execution_stages);
     assert(std::string_view(plan.interaction.enablement_reason)
         == "noninteractive-container");
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
@@ -828,6 +835,16 @@ void test_container_group_runtime_summary_contract() {
     assert(executor_summary.edge_paint_layer_count == 1u);
     assert(executor_summary.max_paint_layer_inflate
         == runtime_summary.max_paint_layer_inflate);
+    assert(runtime_summary.execution_contract_satisfied_count == records.size());
+    assert(runtime_summary.execution_contract_mismatch_count == 0u);
+    assert(runtime_summary.execution_contract_mismatch_total == 0u);
+    assert(std::string_view(runtime_summary.first_execution_contract_mismatch)
+           == "none");
+    assert(executor_summary.execution_contract_satisfied_count == records.size());
+    assert(executor_summary.execution_contract_mismatch_count == 0u);
+    assert(executor_summary.execution_contract_mismatch_total == 0u);
+    assert(std::string_view(executor_summary.first_execution_contract_mismatch)
+           == "none");
     std::puts("PASS: container group runtime summary contract");
 }
 

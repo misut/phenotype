@@ -807,6 +807,13 @@ backend decisions. Schema 34 makes `decision_trace.backdrop_pixels_within_budget
 depend on both the caller quality policy and this capability snapshot, so an
 oversized Retina window or unsupported texture size takes a deterministic
 `quality-policy` fallback in pure code.
+`execution_audit` is the schema-35 guardrail that proves `observation_contract`
+still matches the executable plan. It records actual runtime-pass,
+execution-stage, and paint-layer counts, mirrors bounded texture-copy and
+deterministic fallback safety, reports the first mismatch, and is aggregated into
+both `material_runtime_summary` and `material_executor_summary`. Backends should
+treat a nonzero execution-contract mismatch as a planner/serialization bug
+instead of silently compensating in native drawing code.
 `backdrop_access` mirrors the active shared frame contract per plan:
 sampled-backdrop plans require `capture_scope: shared-frame` and
 `capture_reason: sample-current-frame` with one bounded frame-history copy that
