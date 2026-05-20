@@ -328,6 +328,7 @@ def material_plan(
             "shadow_alpha_delta": 0.0,
             "shadow_radius_delta": 0.0,
             "state": "inactive",
+            "enablement_reason": "noninteractive-container",
             "response_model": "none",
             "motion_policy": "static",
             "deterministic": True,
@@ -2146,6 +2147,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "shape_union_expected": True,
         })
         interaction["enabled"] = True
+        interaction["enablement_reason"] = "interactive-container"
         interaction["response_model"] = "liquid-glass-interaction"
         interaction["state"] = "idle"
         resource_budget["max_container_spacing"] = 12.0
@@ -2694,6 +2696,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "shadow_alpha_delta": 0.02,
             "shadow_radius_delta": 2.4,
             "state": "hovered",
+            "enablement_reason": "interactive-container",
             "response_model": "liquid-glass-interaction",
             "motion_policy": "animated-optical-response",
         })
@@ -2707,6 +2710,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "interaction_pointer_inside": 1,
                 "interaction_deterministic": 1,
                 "interaction_states": {"hovered": 1},
+                "interaction_enablement_reasons": {
+                    "interactive-container": 1,
+                },
                 "interaction_response_models": {
                     "liquid-glass-interaction": 1,
                 },
@@ -2734,9 +2740,37 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "hovered": 1,
         })
         self.assertEqual(
+            report["material_plans"]["interaction"]["enablement_reasons"],
+            {"interactive-container": 1})
+        self.assertEqual(
             report["material_plans"]["optical_response"][
                 "interaction_modulates_optics"],
             1)
+
+    def test_interaction_enablement_reason_mismatch_is_llm_actionable(self) -> None:
+        plan = material_plan()
+        interaction = plan["interaction"]
+        assert isinstance(interaction, dict)
+        interaction["enablement_reason"] = "interactive-container"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material interaction enablement_reason mirrors container "
+                "eligibility"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".interaction.enablement_reason")
+        self.assertEqual(failure["expected"], "noninteractive-container")
+        self.assertEqual(failure["actual"], "interactive-container")
+        self.assertEqual(failure["likely_layer"], "material-interaction")
+        self.assertIn(
+            "MaterialPlan.interaction.enablement_reason",
+            failure["suggested_action"])
 
     def test_interaction_pointer_failure_points_to_material_interaction(self) -> None:
         plan = material_plan()

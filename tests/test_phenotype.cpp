@@ -2046,6 +2046,8 @@ void test_material_planner_backdrop_and_fallback_paths() {
     assert(container_plan.container.shape_union_expected);
     assert(container_plan.container.interactive);
     assert(container_plan.container.morph_transitions);
+    assert(std::string_view(container_plan.interaction.enablement_reason)
+           == "interactive-container");
     assert(container_plan.command_descriptor.container.container_id == 41u);
     assert(container_plan.resource_budget.max_container_spacing == 24.0f);
     assert(container_plan.verifier.require_container_identity);
@@ -2768,6 +2770,8 @@ void test_material_surface_interactive_option_enables_plan_response() {
     assert(plan.interaction.active);
     assert(plan.interaction.pressed);
     assert(plan.interaction.pointer_inside);
+    assert(std::string_view(plan.interaction.enablement_reason)
+           == "interactive-container");
     assert(plan.interaction.response_strength > 0.9f);
     assert(plan.reference_model.interactive_response);
     assert(plan.optical_response.interaction_active);

@@ -32,7 +32,7 @@
       "backend reports no material backdrop blur support": 1
     },
     "contract_versions": {
-      "28": 1
+      "29": 1
     },
     "theme_foreground_matches_theme": 1,
     "theme_accent_matches_theme": 1,
@@ -111,6 +111,21 @@
     "luminance_adapted": 0,
     "optical_response_models": {
       "deterministic-fallback": 1
+    },
+    "interaction_enabled": 0,
+    "interaction_active": 0,
+    "interaction_deterministic": 1,
+    "interaction_states": {
+      "inactive": 1
+    },
+    "interaction_enablement_reasons": {
+      "noninteractive-container": 1
+    },
+    "interaction_response_models": {
+      "none": 1
+    },
+    "interaction_motion_policies": {
+      "static": 1
     },
     "optical_blur_strategies": {
       "fallback-fill": 1

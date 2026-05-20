@@ -1578,6 +1578,9 @@ namespace detail {
             json::Value{plan.interaction.shadow_radius_delta});
         interaction.emplace("state", json::Value{plan.interaction.state});
         interaction.emplace(
+            "enablement_reason",
+            json::Value{plan.interaction.enablement_reason});
+        interaction.emplace(
             "response_model",
             json::Value{plan.interaction.response_model});
         interaction.emplace(

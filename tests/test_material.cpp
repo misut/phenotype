@@ -58,7 +58,9 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 28);
+    assert(material_plan_contract_version == 29);
+    assert(std::string_view(plan.interaction.enablement_reason)
+        == "noninteractive-container");
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
     assert(!plan.shape.capsule);
     assert(plan.theme.default_glass_tokens);
@@ -486,6 +488,8 @@ void test_interactive_material_modulates_optics_contract() {
     assert(plan.interaction.pointer_inside);
     assert(!plan.interaction.pressed);
     assert(std::string_view(plan.interaction.state) == "hovered");
+    assert(std::string_view(plan.interaction.enablement_reason)
+        == "interactive-container");
     assert(std::string_view(plan.interaction.response_model)
         == "liquid-glass-interaction");
     assert(std::string_view(plan.interaction.motion_policy)
@@ -511,6 +515,8 @@ void test_interactive_material_modulates_optics_contract() {
     assert(reduced_plan.interaction.enabled);
     assert(reduced_plan.interaction.active);
     assert(reduced_plan.interaction.reduce_motion);
+    assert(std::string_view(reduced_plan.interaction.enablement_reason)
+        == "interactive-container");
     assert(std::string_view(reduced_plan.interaction.motion_policy)
         == "reduced-motion-static");
     assert(reduced_plan.interaction.response_strength

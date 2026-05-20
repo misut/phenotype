@@ -40,7 +40,7 @@
     "fallback": 0,
     "backdrop_sampling": 28,
     "contract_versions": {
-      "28": 28
+      "29": 28
     },
     "theme_foreground_matches_theme": 28,
     "theme_accent_matches_theme": 28,
@@ -75,6 +75,10 @@
     "interaction_states": {
       "idle": 1,
       "inactive": 27
+    },
+    "interaction_enablement_reasons": {
+      "interactive-container": 1,
+      "noninteractive-container": 27
     },
     "interaction_response_models": {
       "liquid-glass-interaction": 1,

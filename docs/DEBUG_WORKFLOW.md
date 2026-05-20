@@ -795,6 +795,8 @@ container or `MaterialSurfaceOptions.interactive` surface opt-in, `active` is
 true only when hover, press, focus, or pointer presence produces a positive
 response strength, `state` uses the stable
 `inactive`/`idle`/`focused`/`hovered`/`pressed` vocabulary, and
+`enablement_reason` explains the pure eligibility decision as
+`inactive-material`, `noninteractive-container`, or `interactive-container`.
 `response_model` is either `none` or `liquid-glass-interaction`.
 Reduced-motion plans keep the response deterministic, cap the response
 strength, and report `motion_policy: reduced-motion-static`. The delta fields
@@ -816,10 +818,12 @@ requires keyboard-visible focus (`focus_visible=true`); pointer focus should
 leave `interaction.focused=false` while still allowing hover, press, or
 `pointer_inside` to drive glass response. If `command_descriptor.interaction`
 shows the expected hover/press/pointer data but `MaterialPlan.interaction`
-still has `enabled=false`, inspect
+still has `enabled=false`, inspect `MaterialPlan.interaction.enablement_reason`
+first. `noninteractive-container` points to
 `MaterialPlan.command_descriptor.container.interactive` and the source
 `MaterialSurfaceOptions.interactive` / `material_container(... interactive=true)`
-call before changing a backend pass.
+call; `inactive-material` points to material kind resolution. Only investigate
+backend passes after the pure plan reports `interactive-container`.
 `MaterialPlan.geometry` preserves the raw decoded rectangle. `MaterialPlan.shape`
 is the pure executable shape contract: validity, surface area, min/max extent,
 radius limit, effective radius, normalized radius, rounded flag, and whether the
@@ -1158,7 +1162,8 @@ Interaction gates can additionally pin `interaction_enabled`,
 `interaction_active`, `interaction_hovered`, `interaction_pressed`,
 `interaction_focused`, `interaction_pointer_inside`,
 `interaction_reduce_motion`, `interaction_deterministic`, and exact maps for
-`interaction_states`, `interaction_response_models`, and
+`interaction_states`, `interaction_enablement_reasons`,
+`interaction_response_models`, and
 `interaction_motion_policies`.
 Theme gates can additionally pin
 `theme_foreground_matches_theme`, `theme_accent_matches_theme`,

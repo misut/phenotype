@@ -295,6 +295,12 @@ ALLOWED_MATERIAL_INTERACTION_STATES = {
     "pressed",
 }
 
+ALLOWED_MATERIAL_INTERACTION_ENABLEMENT_REASONS = {
+    "inactive-material",
+    "interactive-container",
+    "noninteractive-container",
+}
+
 ALLOWED_MATERIAL_INTERACTION_RESPONSE_MODELS = {
     "liquid-glass-interaction",
     "none",
@@ -306,7 +312,7 @@ ALLOWED_MATERIAL_INTERACTION_MOTION_POLICIES = {
     "static",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 28
+MATERIAL_PLAN_CONTRACT_VERSION = 29
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -496,8 +502,9 @@ def suggested_action_for_failure(
             "and the material style theme tokens used by the pure planner.")
     if likely_layer == "material-interaction":
         return (
-            "Inspect MaterialPlan.interaction, MaterialSurfaceOptions.interaction, "
-            "and MaterialRect interaction payload decoding.")
+            "Inspect MaterialPlan.interaction.enablement_reason, "
+            "MaterialSurfaceOptions.interaction, and MaterialRect interaction "
+            "payload decoding.")
     if likely_layer == "material-optical-response":
         return (
             "Inspect MaterialPlan.optical_response and the pure blur, tint, "
@@ -2160,6 +2167,7 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "interaction_reduce_motion",
         "interaction_deterministic",
         "interaction_states",
+        "interaction_enablement_reasons",
         "interaction_response_models",
         "interaction_motion_policies",
         "optical_response_models",
@@ -2353,6 +2361,8 @@ def material_plan_summary_spec_from_manifest(value: Any) -> JsonObject | None:
         "foreground_remap_policies": (
             ALLOWED_MATERIAL_FOREGROUND_REMAP_POLICIES),
         "interaction_states": ALLOWED_MATERIAL_INTERACTION_STATES,
+        "interaction_enablement_reasons": (
+            ALLOWED_MATERIAL_INTERACTION_ENABLEMENT_REASONS),
         "interaction_response_models": (
             ALLOWED_MATERIAL_INTERACTION_RESPONSE_MODELS),
         "interaction_motion_policies": (
@@ -4047,6 +4057,7 @@ def summarize_material_plans(
         },
         "interaction": {
             "states": {},
+            "enablement_reasons": {},
             "response_models": {},
             "motion_policies": {},
             "enabled": 0,
@@ -5427,6 +5438,48 @@ def summarize_material_plans(
                     likely_layer="material-interaction",
                     hint="Add intentional interaction state vocabulary to the verifier.",
                     record_success=False)
+            enablement_reason = check_string_field(
+                report,
+                interaction,
+                "enablement_reason",
+                f"{plan_path}.interaction",
+                likely_layer="material-interaction",
+                hint=(
+                    "Interaction enablement reason must explain the pure "
+                    "kind/container eligibility decision."))
+            if isinstance(enablement_reason, str):
+                reasons = interaction_summary["enablement_reasons"]
+                reasons[enablement_reason] = reasons.get(enablement_reason, 0) + 1
+                report.check(
+                    "material interaction enablement_reason is known",
+                    enablement_reason
+                    in ALLOWED_MATERIAL_INTERACTION_ENABLEMENT_REASONS,
+                    path=f"{plan_path}.interaction.enablement_reason",
+                    expected=sorted(
+                        ALLOWED_MATERIAL_INTERACTION_ENABLEMENT_REASONS),
+                    actual=enablement_reason,
+                    likely_layer="material-interaction",
+                    hint="Add intentional interaction enablement vocabulary to the verifier.",
+                    record_success=False)
+                if isinstance(plan_container, dict):
+                    expected_reason = "inactive-material"
+                    if kind != "none":
+                        expected_reason = (
+                            "interactive-container"
+                            if plan_container.get("interactive") is True
+                            else "noninteractive-container")
+                    report.check(
+                        "material interaction enablement_reason mirrors container eligibility",
+                        enablement_reason == expected_reason,
+                        path=f"{plan_path}.interaction.enablement_reason",
+                        expected=expected_reason,
+                        actual=enablement_reason,
+                        likely_layer="material-interaction",
+                        hint=(
+                            "MaterialPlan.interaction.enablement_reason "
+                            "should derive only from kind and "
+                            "MaterialContainerDescriptor.interactive."),
+                        record_success=False)
             response_model = check_string_field(
                 report,
                 interaction,
@@ -8834,6 +8887,9 @@ def check_material_plan_summary_requirements(
         "interaction_states": (
             "material-interaction",
             "Inspect MaterialPlan.interaction.state and input state resolution."),
+        "interaction_enablement_reasons": (
+            "material-interaction",
+            "Inspect MaterialPlan.interaction.enablement_reason and container eligibility."),
         "interaction_response_models": (
             "material-interaction",
             "Inspect MaterialPlan.interaction.response_model and container interactivity."),
@@ -8903,6 +8959,7 @@ def check_material_plan_summary_requirements(
             "foreground_contrast_policies",
             "foreground_remap_policies",
             "interaction_states",
+            "interaction_enablement_reasons",
             "interaction_response_models",
             "interaction_motion_policies",
             "optical_response_models",
@@ -9018,6 +9075,7 @@ def check_material_plan_summary_requirements(
                     interaction_summary = {}
                 nested = {
                     "interaction_states": "states",
+                    "interaction_enablement_reasons": "enablement_reasons",
                     "interaction_response_models": "response_models",
                     "interaction_motion_policies": "motion_policies",
                 }[field]
