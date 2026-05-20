@@ -322,6 +322,34 @@ ALLOWED_MATERIAL_OPTICAL_DEPTH_STRATEGIES = {
     "standard-content-edge",
 }
 
+ALLOWED_MATERIAL_OPTICAL_FROSTING_SOURCES = {
+    "none",
+    "sampled-backdrop-frosting",
+    "solid-fallback-frosting",
+    "standard-material-fill",
+}
+
+ALLOWED_MATERIAL_OPTICAL_TINT_SOURCES = {
+    "adaptive-backdrop-tint",
+    "none",
+    "style-tint",
+}
+
+ALLOWED_MATERIAL_OPTICAL_INTERACTION_SOURCES = {
+    "liquid-glass-interaction",
+    "none",
+}
+
+ALLOWED_MATERIAL_OPTICAL_FALLBACK_SOURCES = {
+    "invalid-geometry",
+    "no-backdrop-source",
+    "no-material",
+    "none",
+    "quality-policy",
+    "reduced-transparency",
+    "unsupported-backend",
+}
+
 ALLOWED_MATERIAL_INTERACTION_STATES = {
     "focused",
     "hovered",
@@ -352,7 +380,7 @@ ALLOWED_MATERIAL_INTERACTION_SPECULAR_MODELS = {
     "pointer-specular",
 }
 
-MATERIAL_PLAN_CONTRACT_VERSION = 35
+MATERIAL_PLAN_CONTRACT_VERSION = 36
 MATERIAL_MAX_BLUR_RADIUS = 36.0
 MATERIAL_MAX_SAMPLE_TAPS = 25
 
@@ -1567,6 +1595,36 @@ def check_file_explorer_native_chrome_contract(
         runtime_window = object_at(debug, "platform_runtime.details.window")
         if isinstance(runtime_window, dict) and (
                 runtime_window.get("surface_kind") == "macos_window"):
+            composition_actual = {
+                "window_opaque": runtime_window.get("window_opaque"),
+                "window_background_clear": runtime_window.get(
+                    "window_background_clear"),
+                "window_background_alpha": runtime_window.get(
+                    "window_background_alpha"),
+                "metal_layer_opaque": runtime_window.get(
+                    "metal_layer_opaque"),
+            }
+            report.check(
+                "file explorer macOS window is transparent for sidebar backdrop",
+                composition_actual["window_opaque"] is False
+                and composition_actual["window_background_clear"] is True
+                and composition_actual["window_background_alpha"] == 0
+                and composition_actual["metal_layer_opaque"] is False,
+                path="debug.platform_runtime.details.window",
+                expected={
+                    "window_opaque": False,
+                    "window_background_clear": True,
+                    "window_background_alpha": 0,
+                    "metal_layer_opaque": False,
+                },
+                actual=composition_actual,
+                likely_layer="native-window-composition",
+                likely_pass="appkit-metal-layer",
+                hint=(
+                    "The Finder sidebar cannot reveal desktop/backdrop "
+                    "context if the NSWindow or CAMetalLayer stays opaque. "
+                    "Check configure_window(), renderer_init(), and the "
+                    "frame clear alpha for integrated titlebar windows."))
             runtime_controls = object_at(runtime_window, "native_window_controls")
             actual = runtime_controls if isinstance(runtime_controls, dict) else None
             report.check(
@@ -1795,6 +1853,236 @@ def check_file_explorer_finder_visual_contract(
             "metrics: OS-owned traffic lights/caption buttons, no embedded "
             "Apple/SF Symbols assets, keyboard-only focus rings, and the "
             "same sidebar/thumbnail policies used by the renderer."))
+
+
+def descriptor_is_desktop_sidebar_glass_candidate(value: Any) -> bool:
+    if not isinstance(value, dict):
+        return False
+    container = value.get("container")
+    return (
+        value.get("kind") == "thin"
+        and value.get("role") == "sidebar"
+        and isinstance(container, dict)
+        and container.get("mode") == "container"
+        and container.get("container_id") == 2100)
+
+
+def desktop_sidebar_glass_actual(value: JsonObject | None) -> JsonObject:
+    if not isinstance(value, dict):
+        return {}
+    container = value.get("container")
+    tint = value.get("tint")
+    return {
+        "kind": value.get("kind"),
+        "role": value.get("role"),
+        "container_mode": (
+            container.get("mode") if isinstance(container, dict) else None),
+        "container_id": (
+            container.get("container_id") if isinstance(container, dict)
+            else None),
+        "opacity": value.get("opacity"),
+        "blur_radius": value.get("blur_radius"),
+        "tint_alpha": (
+            tint.get("a") if isinstance(tint, dict) else None),
+        "saturation": value.get("saturation"),
+        "edge_highlight": value.get("edge_highlight"),
+        "noise_opacity": value.get("noise_opacity"),
+        "shadow_alpha": value.get("shadow_alpha"),
+        "shadow_radius": value.get("shadow_radius"),
+    }
+
+
+def desktop_sidebar_glass_descriptor_ok(value: JsonObject | None) -> bool:
+    if not descriptor_is_desktop_sidebar_glass_candidate(value):
+        return False
+    assert isinstance(value, dict)
+    tint = value.get("tint")
+    opacity = number_at(value, "opacity")
+    blur_radius = number_at(value, "blur_radius")
+    saturation = number_at(value, "saturation")
+    edge_highlight = number_at(value, "edge_highlight")
+    tint_alpha = number_at(tint, "a") if isinstance(tint, dict) else None
+    return (
+        opacity is not None
+        and float(opacity) <= 0.36
+        and blur_radius is not None
+        and float(blur_radius) >= 24.0
+        and saturation is not None
+        and float(saturation) >= 1.20
+        and edge_highlight is not None
+        and float(edge_highlight) >= 0.28
+        and tint_alpha is not None
+        and int(tint_alpha) <= 96)
+
+
+def sidebar_plan_actual(index: int, plan: JsonObject) -> JsonObject:
+    command = plan.get("command_descriptor")
+    command_actual = (
+        desktop_sidebar_glass_actual(command)
+        if isinstance(command, dict)
+        else {})
+    primary_pass = plan.get("primary_pass")
+    return {
+        "index": index,
+        "plan_id": plan.get("plan_id"),
+        "kind": plan.get("kind"),
+        "role": plan.get("role"),
+        "backdrop_sampling": plan.get("backdrop_sampling"),
+        "fallback": plan.get("fallback"),
+        "fallback_path": plan.get("fallback_path"),
+        "fallback_reason": plan.get("fallback_reason"),
+        "blur_radius": plan.get("blur_radius"),
+        "opacity": plan.get("opacity"),
+        "saturation": plan.get("saturation"),
+        "primary_pass": (
+            primary_pass.get("name") if isinstance(primary_pass, dict)
+            else None),
+        "primary_executor": (
+            primary_pass.get("executor") if isinstance(primary_pass, dict)
+            else None),
+        "command_descriptor": command_actual,
+    }
+
+
+def check_file_explorer_desktop_sidebar_glass_contract(
+        report: Report,
+        debug: JsonObject,
+        semantic_summary: JsonObject,
+        material_plan_summary: JsonObject | None,
+        renderer_details: JsonObject | None,
+        capabilities: JsonObject) -> None:
+    file_explorer = object_at(debug, "application.file_explorer")
+    if not isinstance(file_explorer, dict):
+        return
+    if file_explorer.get("profile") != "desktop":
+        return
+
+    material_roles = semantic_summary.get("material_roles")
+    runtime_roles = (
+        material_plan_summary.get("roles")
+        if isinstance(material_plan_summary, dict)
+        else {})
+    semantic_sidebar_count = (
+        material_roles.get("sidebar", 0)
+        if isinstance(material_roles, dict)
+        else 0)
+    runtime_sidebar_count = (
+        runtime_roles.get("sidebar", 0)
+        if isinstance(runtime_roles, dict)
+        else 0)
+    if semantic_sidebar_count == 0 and runtime_sidebar_count == 0:
+        return
+
+    descriptors = semantic_summary.get("material_descriptors")
+    sidebar_descriptors = [
+        item for item in descriptors
+        if descriptor_is_desktop_sidebar_glass_candidate(item)
+    ] if isinstance(descriptors, list) else []
+    semantic_actual = [
+        desktop_sidebar_glass_actual(item)
+        for item in sidebar_descriptors
+        if isinstance(item, dict)
+    ]
+    report.check(
+        "file explorer desktop sidebar uses translucent Liquid Glass descriptor",
+        bool(sidebar_descriptors)
+        and any(
+            desktop_sidebar_glass_descriptor_ok(item)
+            for item in sidebar_descriptors
+            if isinstance(item, dict)),
+        path=(
+            "debug.semantic_tree.material_descriptors"
+            "[role=sidebar,kind=thin,container_id=2100]"),
+        expected={
+            "kind": "thin",
+            "role": "sidebar",
+            "container_id": 2100,
+            "opacity_lte": 0.36,
+            "blur_radius_gte": 24.0,
+            "tint_alpha_lte": 96,
+            "saturation_gte": 1.20,
+            "edge_highlight_gte": 0.28,
+        },
+        actual=semantic_actual,
+        likely_layer="finder-sidebar-glass",
+        likely_pass="material-command",
+        hint=(
+            "The Finder desktop sidebar must stay a low-tint thin material; "
+            "otherwise it reads as an opaque white panel instead of showing "
+            "blurred backdrop context. Check finder_sidebar_material_style() "
+            "and layout::MaterialSurfaceOptions.material_override."))
+
+    plans = (
+        renderer_details.get("material_plans")
+        if isinstance(renderer_details, dict)
+        else None)
+    runtime_candidates: list[tuple[int, JsonObject]] = []
+    if isinstance(plans, list):
+        for index, plan in enumerate(plans):
+            if not isinstance(plan, dict):
+                continue
+            command = plan.get("command_descriptor")
+            descriptor = (
+                material_descriptor_from(command)
+                if isinstance(command, dict)
+                else None)
+            if descriptor_is_desktop_sidebar_glass_candidate(descriptor):
+                runtime_candidates.append((index, plan))
+
+    runtime_actual = [
+        sidebar_plan_actual(index, plan)
+        for index, plan in runtime_candidates
+    ]
+    backdrop_capable = (
+        bool_at(capabilities, "material_backdrop_blur") is True
+        and bool_at(capabilities, "material_shader_blur") is True)
+
+    def runtime_plan_ok(plan: JsonObject) -> bool:
+        command = plan.get("command_descriptor")
+        descriptor = (
+            material_descriptor_from(command)
+            if isinstance(command, dict)
+            else None)
+        if not desktop_sidebar_glass_descriptor_ok(descriptor):
+            return False
+        if backdrop_capable:
+            blur_radius = number_at(plan, "blur_radius")
+            return (
+                plan.get("plan_id") == "material.thin.liquid-glass"
+                and bool_at(plan, "backdrop_sampling") is True
+                and bool_at(plan, "fallback") is False
+                and blur_radius is not None
+                and float(blur_radius) >= 24.0)
+        return (
+            bool_at(plan, "fallback") is True
+            and isinstance(plan.get("fallback_reason"), str)
+            and bool(plan.get("fallback_reason")))
+
+    report.check(
+        "file explorer desktop sidebar material plan preserves backdrop translucency",
+        bool(runtime_candidates)
+        and any(runtime_plan_ok(plan) for _, plan in runtime_candidates),
+        path=(
+            "debug.platform_runtime.details.renderer.material_plans"
+            "[role=sidebar,kind=thin,container_id=2100]"),
+        expected={
+            "plan_id": (
+                "material.thin.liquid-glass"
+                if backdrop_capable
+                else "deterministic fallback with reason"),
+            "backdrop_sampling": True if backdrop_capable else "fallback",
+            "fallback": False if backdrop_capable else True,
+            "blur_radius_gte": 24.0,
+            "command_descriptor": "matches translucent sidebar descriptor",
+        },
+        actual=runtime_actual,
+        likely_layer="finder-sidebar-glass",
+        likely_pass="backdrop-sample-blur",
+        hint=(
+            "The backend should execute the pure sidebar MaterialPlan as a "
+            "backdrop-sampling thin glass pass on capable macOS targets. If "
+            "this fails, inspect the MaterialRect command payload, backend "
+            "capability snapshot, and material pass scheduling."))
 
 
 def list_of_strings(value: Any, key: str) -> list[str]:
@@ -3210,6 +3498,7 @@ REQUIRED_MATERIAL_PLAN_FIELDS = (
     "theme",
     "foreground",
     "interaction",
+    "optical_composition",
     "optical_response",
     "fallback",
     "fallback_path",
@@ -3570,6 +3859,48 @@ MATERIAL_OPTICAL_RESPONSE_BOOL_FIELDS = (
     "interaction_active",
     "interaction_modulates_optics",
     "deterministic_fallback",
+)
+MATERIAL_OPTICAL_COMPOSITION_STRING_FIELDS = (
+    "model",
+    "blur_source",
+    "frosting_source",
+    "tint_source",
+    "luminance_source",
+    "depth_source",
+    "interaction_source",
+    "fallback_source",
+)
+MATERIAL_OPTICAL_COMPOSITION_BOOL_FIELDS = (
+    "backdrop_sampled",
+    "blur_required",
+    "frosting_required",
+    "tint_required",
+    "saturation_required",
+    "luminance_required",
+    "edge_required",
+    "shadow_required",
+    "noise_required",
+    "interaction_required",
+    "fallback_required",
+    "bounded",
+    "deterministic",
+)
+MATERIAL_OPTICAL_COMPOSITION_NUMERIC_FIELDS = (
+    "opacity",
+    "blur_radius",
+    "tint_alpha",
+    "saturation",
+    "luminance_floor",
+    "luminance_gain",
+    "edge_highlight",
+    "edge_width",
+    "noise_opacity",
+    "shadow_alpha",
+    "shadow_radius",
+    "interaction_response_strength",
+    "sample_taps",
+    "max_texture_copy_pixels",
+    "max_surface_sample_pixels",
 )
 MATERIAL_INTERACTION_BOOL_FIELDS = (
     "enabled",
@@ -4642,6 +4973,33 @@ def summarize_material_plans(
             "interaction_active": 0,
             "interaction_modulates_optics": 0,
             "deterministic_fallback": 0,
+        },
+        "optical_composition": {
+            "models": {},
+            "blur_sources": {},
+            "frosting_sources": {},
+            "tint_sources": {},
+            "luminance_sources": {},
+            "depth_sources": {},
+            "interaction_sources": {},
+            "fallback_sources": {},
+            "backdrop_sampled": 0,
+            "blur_required": 0,
+            "frosting_required": 0,
+            "tint_required": 0,
+            "saturation_required": 0,
+            "luminance_required": 0,
+            "edge_required": 0,
+            "shadow_required": 0,
+            "noise_required": 0,
+            "interaction_required": 0,
+            "fallback_required": 0,
+            "bounded": 0,
+            "deterministic": 0,
+            "max_blur_radius": 0.0,
+            "max_sample_taps": 0,
+            "max_texture_copy_pixels": 0,
+            "max_surface_sample_pixels": 0,
         },
         "optical_bounds": {
             "max_saturation": 0.0,
@@ -8708,6 +9066,330 @@ def summarize_material_plans(
                             "from MaterialPlan.render_target.pixel_count."),
                         record_success=False)
 
+        optical_composition = check_object_field(
+            report,
+            plan,
+            "optical_composition",
+            plan_path,
+            likely_layer="material-optical-composition",
+            hint=(
+                "MaterialPlan.optical_composition should expose the pure "
+                "blur, frosting, tint, luminance, depth, interaction, and "
+                "fallback inputs consumed by execution stages."))
+        if optical_composition is not None:
+            composition_summary = summary["optical_composition"]
+            schema_version = check_number_field(
+                report,
+                optical_composition,
+                "schema_version",
+                f"{plan_path}.optical_composition",
+                min_value=0.0,
+                likely_layer="material-optical-composition",
+                hint=(
+                    "Keep optical_composition.schema_version synchronized "
+                    "with MaterialPlan.contract_version."))
+            if isinstance(schema_version, (int, float)):
+                report.check(
+                    "material optical composition schema version is supported",
+                    int(schema_version) == MATERIAL_PLAN_CONTRACT_VERSION,
+                    path=f"{plan_path}.optical_composition.schema_version",
+                    expected=MATERIAL_PLAN_CONTRACT_VERSION,
+                    actual=schema_version,
+                    likely_layer="material-optical-composition",
+                    hint=(
+                        "Update the verifier before emitting a new "
+                        "MaterialOpticalComposition schema."),
+                    record_success=False)
+            composition_string_specs = {
+                "model": (
+                    "models",
+                    ALLOWED_MATERIAL_OPTICAL_RESPONSE_MODELS),
+                "blur_source": (
+                    "blur_sources",
+                    ALLOWED_MATERIAL_OPTICAL_BLUR_STRATEGIES),
+                "frosting_source": (
+                    "frosting_sources",
+                    ALLOWED_MATERIAL_OPTICAL_FROSTING_SOURCES),
+                "tint_source": (
+                    "tint_sources",
+                    ALLOWED_MATERIAL_OPTICAL_TINT_SOURCES),
+                "luminance_source": (
+                    "luminance_sources",
+                    ALLOWED_MATERIAL_LUMINANCE_CURVES),
+                "depth_source": (
+                    "depth_sources",
+                    ALLOWED_MATERIAL_OPTICAL_DEPTH_STRATEGIES),
+                "interaction_source": (
+                    "interaction_sources",
+                    ALLOWED_MATERIAL_OPTICAL_INTERACTION_SOURCES),
+                "fallback_source": (
+                    "fallback_sources",
+                    ALLOWED_MATERIAL_OPTICAL_FALLBACK_SOURCES),
+            }
+            composition_values: JsonObject = {}
+            for key, (summary_key, allowed) in composition_string_specs.items():
+                value = check_string_field(
+                    report,
+                    optical_composition,
+                    key,
+                    f"{plan_path}.optical_composition",
+                    likely_layer="material-optical-composition",
+                    hint=(
+                        "Optical composition strings must use stable pure-plan "
+                        "vocabulary."))
+                if isinstance(value, str):
+                    composition_values[key] = value
+                    bucket = composition_summary[summary_key]
+                    bucket[value] = bucket.get(value, 0) + 1
+                    report.check(
+                        f"material optical composition {key} is known",
+                        value in allowed,
+                        path=f"{plan_path}.optical_composition.{key}",
+                        expected=sorted(allowed),
+                        actual=value,
+                        likely_layer="material-optical-composition",
+                        hint=(
+                            "Add intentional optical composition vocabulary "
+                            "to the verifier before changing artifact shape."),
+                        record_success=False)
+            expected_model = expected_optical_response_model(
+                kind if isinstance(kind, str) else None,
+                role if isinstance(role, str) else None,
+                backdrop_sampling if isinstance(backdrop_sampling, bool) else None)
+            expected_blur = expected_optical_blur_strategy(primary_pass)
+            expected_depth = expected_optical_depth_strategy(
+                fallback if isinstance(fallback, bool) else None,
+                role if isinstance(role, str) else None,
+                backdrop_sampling if isinstance(backdrop_sampling, bool) else None,
+                primary_pass,
+                plan_edge_highlight,
+                plan_shadow_alpha,
+                plan_noise_opacity)
+            expected_frosting: str | None = None
+            if isinstance(kind, str) and kind == "none":
+                expected_frosting = "none"
+            elif backdrop_sampling is True:
+                expected_frosting = "sampled-backdrop-frosting"
+            elif fallback is True:
+                expected_frosting = "solid-fallback-frosting"
+            elif isinstance(role, str) and role == "content":
+                expected_frosting = "standard-material-fill"
+            elif isinstance(kind, str):
+                expected_frosting = "none"
+            expected_tint: str | None = None
+            if isinstance(kind, str) and isinstance(tint, dict):
+                tint_alpha = number_at(tint, "a")
+                if kind == "none" or not isinstance(tint_alpha, (int, float)):
+                    expected_tint = "none"
+                elif int(tint_alpha) <= 0:
+                    expected_tint = "none"
+                elif backdrop_sampling is True:
+                    expected_tint = "adaptive-backdrop-tint"
+                else:
+                    expected_tint = "style-tint"
+            expected_luminance = (
+                luminance_curve.get("name")
+                if isinstance(luminance_curve, dict) else None)
+            expected_interaction_source = (
+                interaction.get("response_model")
+                if isinstance(interaction, dict)
+                and interaction.get("active") is True
+                and isinstance(interaction.get("response_model"), str)
+                else "none")
+            expected_fallback_source = (
+                plan.get("fallback_path") if fallback is True else "none")
+            composition_expected_strings = {
+                "model": expected_model,
+                "blur_source": expected_blur,
+                "frosting_source": expected_frosting,
+                "tint_source": expected_tint,
+                "luminance_source": expected_luminance,
+                "depth_source": expected_depth,
+                "interaction_source": expected_interaction_source,
+                "fallback_source": expected_fallback_source,
+            }
+            for key, expected in composition_expected_strings.items():
+                if isinstance(expected, str):
+                    report.check(
+                        f"material optical composition {key} matches plan",
+                        composition_values.get(key) == expected,
+                        path=f"{plan_path}.optical_composition.{key}",
+                        expected=expected,
+                        actual=composition_values.get(key),
+                        likely_layer="material-optical-composition",
+                        likely_pass=primary_pass_name,
+                        hint=(
+                            "Optical composition must be derived from the "
+                            "resolved pure MaterialPlan, not backend policy."),
+                        record_success=False)
+
+            expected_bools = {
+                "backdrop_sampled": backdrop_sampling,
+                "blur_required": (
+                    primary_pass.get("requires_backdrop")
+                    if isinstance(primary_pass, dict) else None),
+                "frosting_required": backdrop_sampling,
+                "tint_required": (
+                    kind != "none"
+                    and isinstance(tint, dict)
+                    and isinstance(number_at(tint, "a"), (int, float))
+                    and int(number_at(tint, "a")) > 0)
+                    if isinstance(kind, str) else None,
+                "saturation_required": (
+                    backdrop_sampling is True
+                    and isinstance(plan_saturation, (int, float))
+                    and abs(float(plan_saturation) - 1.0) > 0.0001),
+                "luminance_required": (
+                    kind != "none"
+                    and isinstance(luminance_curve, dict)
+                    and isinstance(foreground, dict)
+                    and (luminance_curve.get("bounded") is True
+                         or (
+                             isinstance(
+                                 foreground.get("primary_contrast_ratio"),
+                                 (int, float))
+                             and isinstance(
+                                 foreground.get("minimum_contrast_ratio"),
+                                 (int, float))
+                             and float(foreground["primary_contrast_ratio"])
+                             >= float(foreground["minimum_contrast_ratio"]))))
+                    if isinstance(kind, str) else None,
+                "edge_required": (
+                    isinstance(primary_pass, dict)
+                    and primary_pass.get("active") is True
+                    and isinstance(plan_edge_highlight, (int, float))
+                    and float(plan_edge_highlight) > 0.0),
+                "shadow_required": (
+                    isinstance(primary_pass, dict)
+                    and primary_pass.get("active") is True
+                    and isinstance(plan_shadow_alpha, (int, float))
+                    and float(plan_shadow_alpha) > 0.0),
+                "noise_required": (
+                    backdrop_sampling is True
+                    and isinstance(plan_noise_opacity, (int, float))
+                    and float(plan_noise_opacity) > 0.0),
+                "interaction_required": (
+                    interaction.get("active")
+                    if isinstance(interaction, dict) else None),
+                "fallback_required": fallback,
+            }
+            resource_budget_for_composition = plan.get("resource_budget")
+            sampling_kernel_for_composition = plan.get("sampling_kernel")
+            backdrop_access_for_composition = plan.get("backdrop_access")
+            if (isinstance(resource_budget_for_composition, dict)
+                    and isinstance(sampling_kernel_for_composition, dict)
+                    and isinstance(backdrop_access_for_composition, dict)
+                    and isinstance(luminance_curve, dict)):
+                expected_bools["bounded"] = (
+                    resource_budget_for_composition.get("bounded_texture_copy")
+                    is True
+                    and sampling_kernel_for_composition.get("bounded") is True
+                    and luminance_curve.get("bounded") is True
+                    and backdrop_access_for_composition.get("bounded") is True)
+                expected_bools["deterministic"] = (
+                    resource_budget_for_composition.get("deterministic_fallback")
+                    is True
+                    and isinstance(foreground, dict)
+                    and foreground.get("deterministic") is True
+                    and isinstance(interaction, dict)
+                    and interaction.get("deterministic") is True)
+            for key in MATERIAL_OPTICAL_COMPOSITION_BOOL_FIELDS:
+                value = check_bool_field(
+                    report,
+                    optical_composition,
+                    key,
+                    f"{plan_path}.optical_composition",
+                    likely_layer="material-optical-composition",
+                    hint=(
+                        "Optical composition booleans must stay explicit "
+                        "pure-plan facts."))
+                if value is True:
+                    composition_summary[key] = (
+                        int(composition_summary[key]) + 1)
+                expected = expected_bools.get(key)
+                if isinstance(expected, bool):
+                    report.check(
+                        f"material optical composition {key} matches plan",
+                        value is expected,
+                        path=f"{plan_path}.optical_composition.{key}",
+                        expected=expected,
+                        actual=value,
+                        likely_layer="material-optical-composition",
+                        likely_pass=primary_pass_name,
+                        hint=(
+                            "Optical composition booleans should be derived "
+                            "from nearby MaterialPlan fields."),
+                        record_success=False)
+            expected_numbers = {
+                "opacity": plan_opacity,
+                "blur_radius": plan_blur_radius,
+                "tint_alpha": plan_tint_alpha,
+                "saturation": plan_saturation,
+                "luminance_floor": plan_luminance_floor,
+                "luminance_gain": plan_luminance_gain,
+                "edge_highlight": plan_edge_highlight,
+                "edge_width": plan_edge_width,
+                "noise_opacity": plan_noise_opacity,
+                "shadow_alpha": plan_shadow_alpha,
+                "shadow_radius": plan_shadow_radius,
+                "interaction_response_strength": (
+                    interaction.get("response_strength")
+                    if isinstance(interaction, dict) else None),
+                "sample_taps": plan.get("sample_taps"),
+                "max_texture_copy_pixels": (
+                    primary_pass.get("max_texture_copy_pixels")
+                    if isinstance(primary_pass, dict) else None),
+                "max_surface_sample_pixels": (
+                    backdrop_access_for_composition.get(
+                        "max_surface_sample_pixels")
+                    if isinstance(backdrop_access_for_composition, dict)
+                    else None),
+            }
+            for key in MATERIAL_OPTICAL_COMPOSITION_NUMERIC_FIELDS:
+                value = check_number_field(
+                    report,
+                    optical_composition,
+                    key,
+                    f"{plan_path}.optical_composition",
+                    min_value=0.0,
+                    likely_layer="material-optical-composition",
+                    likely_pass=primary_pass_name,
+                    hint=(
+                        "Optical composition numeric fields should mirror "
+                        "the resolved pure MaterialPlan scalars."))
+                if key == "blur_radius" and isinstance(value, (int, float)):
+                    composition_summary["max_blur_radius"] = max(
+                        float(composition_summary["max_blur_radius"]),
+                        float(value))
+                elif key == "sample_taps" and isinstance(value, (int, float)):
+                    composition_summary["max_sample_taps"] = max(
+                        int(composition_summary["max_sample_taps"]),
+                        int(value))
+                elif (key == "max_texture_copy_pixels"
+                      and isinstance(value, (int, float))):
+                    composition_summary["max_texture_copy_pixels"] = max(
+                        int(composition_summary["max_texture_copy_pixels"]),
+                        int(value))
+                elif (key == "max_surface_sample_pixels"
+                      and isinstance(value, (int, float))):
+                    composition_summary["max_surface_sample_pixels"] = max(
+                        int(composition_summary["max_surface_sample_pixels"]),
+                        int(value))
+                expected = expected_numbers.get(key)
+                if isinstance(expected, (int, float)):
+                    report.check(
+                        f"material optical composition {key} matches plan",
+                        numbers_close(value, expected),
+                        path=f"{plan_path}.optical_composition.{key}",
+                        expected=expected,
+                        actual=value,
+                        likely_layer="material-optical-composition",
+                        likely_pass=primary_pass_name,
+                        hint=(
+                            "Optical composition values should be copied from "
+                            "the pure plan before backend execution."),
+                        record_success=False)
+
         optical_response = check_object_field(
             report,
             plan,
@@ -12308,6 +12990,14 @@ def verify(args: argparse.Namespace) -> int:
             hint="Enable renderer.material_plans before requiring semantic/runtime parity.")
         if isinstance(material_plan_summary, dict):
             check_material_semantic_runtime_match(summary, material_plan_summary, report)
+
+    check_file_explorer_desktop_sidebar_glass_contract(
+        report,
+        debug,
+        summary,
+        material_plan_summary,
+        renderer_details,
+        capabilities)
 
     report.data["artifact_context"] = material_failure_context(
         capabilities,

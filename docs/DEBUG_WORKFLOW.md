@@ -698,6 +698,12 @@ the actual `material_plans` executed for the frame. Each plan includes:
   backdrop, blur, frosting, tint, saturation, luminance preservation, edge
   highlight, shadow depth, noise/dither, foreground vibrancy, and deterministic
   fallback;
+- `optical_composition`, the schema-36 pure execution recipe for the same
+  surface. It names the blur, frosting, tint, luminance, depth, interaction,
+  and fallback sources, records which optical channels are required, proves the
+  composition is bounded and deterministic, and exposes the exact scalar values,
+  sample taps, texture-copy pixels, and surface-sample pixels consumed by stage
+  optics;
 - raw `geometry`, derived `shape` analysis, tint, blur radius, saturation,
   luminance curve, edge highlight, noise, and shadow values for the resolved
   plan. `shape.kind` classifies the backend-executable geometry as
@@ -976,6 +982,10 @@ For schema 35 and later, inspect `execution_audit` immediately after
 serialized pass, stage, and paint-layer arrays. A mismatch points at pure
 planning, command serialization, or debug JSON assembly. It should not be fixed
 by adding backend policy branches.
+For schema 36 and later, inspect `optical_composition` before comparing stage
+optics or shader constants. A mismatch in `execution_stages[n].optics` should
+trace back to this pure object, while a mismatch inside `optical_composition`
+itself points at `plan_material_surface` policy or stale JSON serialization.
 `renderer.material_backdrop_luma_descriptor` is the edge-side view of that same
 contract. It reports the latest observed luma min/max/mean, sample grid, sample
 frame, pending state, skipped sample count, and status such as
@@ -1158,6 +1168,13 @@ On macOS, `titlebar_transparent=true`, `full_size_content_view=true`,
 `title_hidden=true`, and `background_drag_enabled=true` are read back from the
 live `NSWindow`, not inferred from the request, so a Finder-style artifact can
 detect a shell that accepted `WindowOptions` but failed to apply AppKit chrome.
+Finder-style sidebar glass also depends on the native window compositor staying
+transparent before the material pass executes. Check
+`window_opaque=false`, `window_background_clear=true`,
+`window_background_alpha=0`, and `metal_layer_opaque=false` in the same
+`window` object. If those fields drift, fix AppKit/CAMetalLayer setup before
+tuning sidebar material tint, blur, or opacity; an opaque native surface hides
+the real backdrop even when the pure `MaterialPlan` requests sampled glass.
 Plan-level failures route to `plan_material_surface` and runtime plan
 serialization; semantic/runtime contract failures route to semantic material
 nodes, `MaterialRect` command emission, and `renderer.material_plans[]` parity.

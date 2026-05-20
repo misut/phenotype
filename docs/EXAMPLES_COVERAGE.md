@@ -82,9 +82,10 @@ across every public `MaterialKind`, including macOS sampled-backdrop rendering
 and fallback metadata. Use the desktop or mobile file explorer examples when
 the artifact should prove an app-like material workflow.
 Glass and file explorer manifests also pin `MaterialPlan.optical_response`
-summaries so sampled backdrop glass, standard content materials, deterministic
-fallbacks, blur/color/depth strategies, and the optical boolean contract fail as
-structured JSON before visual drift has to be interpreted from screenshots.
+summaries and the schema-36 `optical_composition` contract, so sampled backdrop
+glass, standard content materials, deterministic fallbacks, blur/frost/tint/
+luminance/depth sources, and the optical boolean contract fail as structured
+JSON before visual drift has to be interpreted from screenshots.
 The desktop file explorer additionally gates Finder-style icon-grid previews:
 the shared model exposes `chrome.thumbnail_system` in CLI/debug JSON, and the
 desktop manifest samples PDF, image, and video thumbnail regions so visual drift
@@ -317,6 +318,9 @@ Schema 35 adds execution-audit coverage to the same artifacts. The verifier now
 checks that every material plan's observation contract matches its executable
 pass, stage, and paint-layer arrays and that runtime/executor summaries report
 zero execution-contract mismatches.
+Schema 36 adds optical-composition coverage. The verifier now checks that stage
+optics and summaries are derived from one pure composition object instead of
+backend-local blur, tint, luminance, edge, shadow, or noise decisions.
 
 `phenotype package bundle` is the lightweight packaging counterpart. It stages
 the package manifest, declared SVG app icon, all declared SVG image assets,

@@ -2,10 +2,12 @@
 
 Status: implementation baseline for `origin/main` after
 `feat(theme): add pure glass theme contract`, with the in-progress material
-runtime branch adding the schema-20 theme snapshot to `MaterialPlan`. This includes the pure
-material-planning boundary, macOS sampled-backdrop execution, deterministic
-fallback contracts on non-macOS backends, edge executor telemetry, pure
-observation contracts, and the artifact verifier gates described below.
+runtime branch carrying the schema-36 material contract through
+`MaterialPlan.optical_composition`. This includes the pure material-planning
+boundary, macOS sampled-backdrop execution, deterministic fallback contracts on
+non-macOS backends, edge executor telemetry, pure observation/execution
+contracts, transparent native window composition for integrated glass chrome,
+and the artifact verifier gates described below.
 
 This document turns the current long-term goal into concrete deliverables:
 
@@ -248,6 +250,14 @@ blur/color/depth strategy and explicit booleans for blur, frosting, tint,
 saturation, luminance preservation, edge highlight, depth shadow, noise/dither,
 foreground vibrancy, interaction-driven optical modulation, and fallback
 behavior.
+Schema 36 adds `MaterialPlan.optical_composition`, the fuller pure optical
+recipe consumed by execution stages. It carries the resolved model plus blur,
+frosting, tint, luminance, depth, interaction, and fallback sources; booleans
+for every required optical channel; bounded/deterministic safety flags; and the
+scalar values and copy/sample bounds that backend adapters are allowed to use.
+Stage `optics` are now derived from this composition, so a backend cannot
+silently invent a different blur, tint, luminance, edge, shadow, or noise
+contract.
 `MaterialPlan.reference_model` maps the current Apple references into a
 backend-independent product contract: functional roles are `liquid-glass` on
 the `functional-layer`, content roles are `standard-material` on the

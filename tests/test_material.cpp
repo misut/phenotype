@@ -58,7 +58,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 35);
+    assert(material_plan_contract_version == 36);
     assert(plan.capability_snapshot.material_surfaces);
     assert(plan.capability_snapshot.material_backdrop_blur);
     assert(plan.capability_snapshot.shader_blur);
@@ -125,6 +125,39 @@ void test_sampled_backdrop_access_contract() {
         == "adaptive-backdrop-color");
     assert(std::string_view(plan.optical_response.depth_strategy)
         == "layered-shadow-edge-noise");
+    assert(plan.optical_composition.schema_version
+           == material_plan_contract_version);
+    assert(std::string_view(plan.optical_composition.model)
+        == "sampled-backdrop");
+    assert(std::string_view(plan.optical_composition.blur_source)
+        == "backdrop-sample-blur");
+    assert(std::string_view(plan.optical_composition.frosting_source)
+        == "sampled-backdrop-frosting");
+    assert(std::string_view(plan.optical_composition.tint_source)
+        == "adaptive-backdrop-tint");
+    assert(std::string_view(plan.optical_composition.luminance_source)
+        == "adaptive-backdrop-luma");
+    assert(std::string_view(plan.optical_composition.depth_source)
+        == "layered-shadow-edge-noise");
+    assert(std::string_view(plan.optical_composition.fallback_source)
+        == "none");
+    assert(plan.optical_composition.backdrop_sampled);
+    assert(plan.optical_composition.blur_required);
+    assert(plan.optical_composition.frosting_required);
+    assert(plan.optical_composition.tint_required);
+    assert(plan.optical_composition.saturation_required);
+    assert(plan.optical_composition.luminance_required);
+    assert(plan.optical_composition.edge_required);
+    assert(plan.optical_composition.shadow_required);
+    assert(plan.optical_composition.noise_required);
+    assert(!plan.optical_composition.fallback_required);
+    assert(plan.optical_composition.bounded);
+    assert(plan.optical_composition.deterministic);
+    assert(plan.optical_composition.sample_taps == plan.sample_taps);
+    assert(plan.optical_composition.max_texture_copy_pixels
+           == plan.primary_pass.max_texture_copy_pixels);
+    assert(plan.optical_composition.max_surface_sample_pixels
+           == plan.backdrop_access.max_surface_sample_pixels);
     assert(plan.optical_response.backdrop_driven);
     assert(plan.optical_response.blur_active);
     assert(plan.optical_response.frosting_active);
@@ -371,6 +404,32 @@ void test_fallback_backdrop_access_contract() {
         == "fallback-solid-color");
     assert(std::string_view(plan.optical_response.depth_strategy)
         == "fallback-shadow-edge");
+    assert(std::string_view(plan.optical_composition.model)
+        == "deterministic-fallback");
+    assert(std::string_view(plan.optical_composition.blur_source)
+        == "fallback-fill");
+    assert(std::string_view(plan.optical_composition.frosting_source)
+        == "solid-fallback-frosting");
+    assert(std::string_view(plan.optical_composition.tint_source)
+        == "style-tint");
+    assert(std::string_view(plan.optical_composition.luminance_source)
+        == "fallback-flat");
+    assert(std::string_view(plan.optical_composition.depth_source)
+        == "fallback-shadow-edge");
+    assert(std::string_view(plan.optical_composition.fallback_source)
+        == "unsupported-backend");
+    assert(!plan.optical_composition.backdrop_sampled);
+    assert(!plan.optical_composition.blur_required);
+    assert(!plan.optical_composition.frosting_required);
+    assert(plan.optical_composition.tint_required);
+    assert(!plan.optical_composition.saturation_required);
+    assert(plan.optical_composition.luminance_required);
+    assert(plan.optical_composition.edge_required);
+    assert(plan.optical_composition.shadow_required);
+    assert(!plan.optical_composition.noise_required);
+    assert(plan.optical_composition.fallback_required);
+    assert(plan.optical_composition.bounded);
+    assert(plan.optical_composition.deterministic);
     assert(!plan.optical_response.backdrop_driven);
     assert(!plan.optical_response.blur_active);
     assert(!plan.optical_response.frosting_active);
@@ -566,6 +625,11 @@ void test_interactive_material_modulates_optics_contract() {
     assert(plan.interaction.blur_radius_delta
            == plan.blur_radius - baseline_plan.blur_radius);
     assert(plan.reference_model.interactive_response);
+    assert(plan.optical_composition.interaction_required);
+    assert(std::string_view(plan.optical_composition.interaction_source)
+        == "liquid-glass-interaction");
+    assert(plan.optical_composition.interaction_response_strength
+           == plan.interaction.response_strength);
     assert(plan.optical_response.interaction_active);
     assert(plan.optical_response.interaction_modulates_optics);
 

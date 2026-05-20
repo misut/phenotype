@@ -94,6 +94,7 @@ struct Document {
 struct RenderOptions {
     Color current_color = {28, 28, 30, 255};
     bool preserve_aspect_ratio = true;
+    float stroke_scale = 1.0f;
 };
 
 using DocumentSummary = phenotype::svg_contract::DocumentSummary;
@@ -1493,13 +1494,15 @@ auto paint_token(Document const& doc,
                  float width,
                  float height,
                  Color current_color,
-                 bool preserve_aspect_ratio = true) noexcept
+                 bool preserve_aspect_ratio = true,
+                 float stroke_scale = 1.0f) noexcept
         -> std::uint64_t {
     auto state = document_token(doc);
     detail::hash_float(state, width);
     detail::hash_float(state, height);
     detail::hash_color(state, current_color);
     detail::hash_mix(state, preserve_aspect_ratio ? 1u : 0u);
+    detail::hash_float(state, stroke_scale);
     return state == 0 ? 1469598103934665603ull : state;
 }
 
@@ -1539,7 +1542,10 @@ void paint(Painter& painter,
         if (auto fill = detail::resolve_paint(shape.style.fill, shape.style, options))
             painter.fill_path(transformed, *fill);
         if (auto stroke = detail::resolve_paint(shape.style.stroke, shape.style, options)) {
-            auto const thickness = shape.style.stroke_width * stroke_scale;
+            auto const option_stroke_scale =
+                options.stroke_scale < 0.0f ? 0.0f : options.stroke_scale;
+            auto const thickness =
+                shape.style.stroke_width * stroke_scale * option_stroke_scale;
             if (thickness > 0.0f)
                 painter.stroke_path(transformed, thickness, *stroke);
         }

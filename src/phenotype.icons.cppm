@@ -346,6 +346,7 @@ struct SymbolPresentation {
     float point_size = 24.0f;
     float hit_target_size = 36.0f;
     float optical_y_offset = 0.0f;
+    float stroke_scale = 1.0f;
 };
 
 struct SymbolInteractionState {
@@ -1013,6 +1014,7 @@ inline auto presentation(Symbol symbol,
         point_size(scale),
         hit_target_size(role),
         optical_y_offset(role),
+        1.0f,
     };
 }
 
@@ -1201,9 +1203,48 @@ void paint_symbol(Painter& painter,
                   float x,
                   float y,
                   float size,
-                  Color color) {
+                  Color color,
+                  float stroke_scale) {
     auto doc = document(symbol);
-    svg::paint(painter, doc, x, y, size, size, svg::RenderOptions{color, true});
+    svg::paint(
+        painter,
+        doc,
+        x,
+        y,
+        size,
+        size,
+        svg::RenderOptions{color, true, stroke_scale});
+}
+
+void paint_symbol(Painter& painter,
+                  Symbol symbol,
+                  float x,
+                  float y,
+                  float size,
+                  Color color) {
+    paint_symbol(painter, symbol, x, y, size, color, 1.0f);
+}
+
+void paint_symbol(Painter& painter,
+                  SymbolDocumentCache const& cache,
+                  Symbol symbol,
+                  float x,
+                  float y,
+                  float size,
+                  Color color,
+                  float stroke_scale) {
+    if (auto const* doc = cached_document(cache, symbol)) {
+        svg::paint(
+            painter,
+            *doc,
+            x,
+            y,
+            size,
+            size,
+            svg::RenderOptions{color, true, stroke_scale});
+        return;
+    }
+    paint_symbol(painter, symbol, x, y, size, color, stroke_scale);
 }
 
 void paint_symbol(Painter& painter,
@@ -1213,18 +1254,7 @@ void paint_symbol(Painter& painter,
                   float y,
                   float size,
                   Color color) {
-    if (auto const* doc = cached_document(cache, symbol)) {
-        svg::paint(
-            painter,
-            *doc,
-            x,
-            y,
-            size,
-            size,
-            svg::RenderOptions{color, true});
-        return;
-    }
-    paint_symbol(painter, symbol, x, y, size, color);
+    paint_symbol(painter, cache, symbol, x, y, size, color, 1.0f);
 }
 
 void paint_symbol(Painter& painter,
@@ -1237,7 +1267,8 @@ void paint_symbol(Painter& painter,
         x,
         y + style.optical_y_offset,
         style.point_size,
-        style.color);
+        style.color,
+        style.stroke_scale);
 }
 
 void paint_symbol(Painter& painter,
@@ -1252,7 +1283,8 @@ void paint_symbol(Painter& painter,
         x,
         y + style.optical_y_offset,
         style.point_size,
-        style.color);
+        style.color,
+        style.stroke_scale);
 }
 
 void paint_symbol_centered(Painter& painter,
@@ -1326,6 +1358,9 @@ inline auto paint_token(Symbol symbol, float size, Color color) noexcept
 inline auto paint_token(SymbolPresentation const& style) noexcept
     -> std::uint64_t {
     auto h = paint_token(style.symbol, style.point_size, style.color);
+    unsigned int stroke_bits = 0;
+    std::memcpy(&stroke_bits, &style.stroke_scale, 4);
+    h ^= static_cast<std::uint64_t>(stroke_bits);
     h ^= static_cast<std::uint64_t>(style.role) << 8;
     h ^= static_cast<std::uint64_t>(style.tone) << 16;
     h ^= static_cast<std::uint64_t>(style.scale) << 24;

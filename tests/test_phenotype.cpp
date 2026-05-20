@@ -2647,6 +2647,64 @@ void test_material_surface_shape_overrides() {
     std::puts("PASS: material surface shape overrides");
 }
 
+void test_material_surface_style_override_emits_explicit_material_contract() {
+    detail::g_app.arena.reset();
+    detail::g_app.prev_arena.reset();
+    detail::g_app.callbacks.clear();
+    CMD_LEN = 0;
+
+    auto override_material = layout::material_style(MaterialKind::Thin);
+    override_material.role = MaterialSurfaceRole::Sidebar;
+    override_material.opacity = 0.34f;
+    override_material.blur_radius = 28.0f;
+    override_material.tint = Color{248, 248, 250, 76};
+    override_material.border = Color{255, 255, 255, 84};
+    override_material.saturation = 1.28f;
+    override_material.contrast_intent = "context";
+
+    auto root_h = detail::alloc_node();
+    detail::node_at(root_h).style.flex_direction = FlexDirection::Column;
+    Scope scope(root_h);
+    Scope::set_current(&scope);
+    layout::material_surface(
+        layout::MaterialSurfaceOptions{
+            .kind = MaterialKind::Thick,
+            .role = MaterialSurfaceRole::Sidebar,
+            .fixed_height = 48.0f,
+            .border_width = 0.0f,
+            .semantic_label = "Custom Sidebar Material",
+            .has_material_override = true,
+            .material_override = override_material,
+        },
+        [] {
+            widget::text("Sidebar glass");
+        });
+    Scope::set_current(nullptr);
+
+    auto const& surface = detail::node_at(detail::node_at(root_h).children[0]);
+    assert(surface.material.border.a == 84);
+
+    LAYOUT_NODE(root_h, 320.0f);
+    PAINT_NODE(root_h, 0, 0, 0, 600.0f);
+
+    auto cmds = parse_commands(CMD_BUF, CMD_LEN);
+    auto const* material = static_cast<MaterialRectCmd const*>(nullptr);
+    for (auto const& cmd : cmds) {
+        if (auto const* m = std::get_if<MaterialRectCmd>(&cmd))
+            material = m;
+    }
+
+    assert(material != nullptr);
+    assert(material->material.kind == MaterialKind::Thin);
+    assert(material->material.role == MaterialSurfaceRole::Sidebar);
+    assert(std::fabs(material->material.opacity - 0.34f) < 0.0001f);
+    assert(std::fabs(material->material.blur_radius - 28.0f) < 0.0001f);
+    assert(material->material.tint.a == 76);
+    assert(std::fabs(material->material.saturation - 1.28f) < 0.0001f);
+
+    std::puts("PASS: material surface style override emits explicit material contract");
+}
+
 struct MaterialInteractionClick {};
 using MaterialInteractionMsg = std::variant<MaterialInteractionClick>;
 
@@ -5511,6 +5569,7 @@ int main() {
     test_material_text_foreground_resolution();
     test_material_surface_emits_material_rect_command();
     test_material_surface_shape_overrides();
+    test_material_surface_style_override_emits_explicit_material_contract();
     test_material_surface_resolves_live_input_interaction();
     test_material_surface_interactive_option_enables_plan_response();
     test_glass_surface_presets_emit_material_contract();

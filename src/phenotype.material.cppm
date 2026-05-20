@@ -12,7 +12,7 @@ import phenotype.types;
 
 export namespace phenotype {
 
-inline constexpr std::uint32_t material_plan_contract_version = 35;
+inline constexpr std::uint32_t material_plan_contract_version = 36;
 inline constexpr unsigned int material_max_execution_stages = 4;
 inline constexpr unsigned int material_max_paint_layers = 3;
 inline constexpr float material_max_blur_radius = 36.0f;
@@ -569,6 +569,46 @@ struct MaterialOpticalResponseContract {
     bool deterministic_fallback = true;
 };
 
+struct MaterialOpticalComposition {
+    std::uint32_t schema_version = material_plan_contract_version;
+    char const* model = "inactive";
+    char const* blur_source = "none";
+    char const* frosting_source = "none";
+    char const* tint_source = "none";
+    char const* luminance_source = "none";
+    char const* depth_source = "none";
+    char const* interaction_source = "none";
+    char const* fallback_source = "none";
+    bool backdrop_sampled = false;
+    bool blur_required = false;
+    bool frosting_required = false;
+    bool tint_required = false;
+    bool saturation_required = false;
+    bool luminance_required = false;
+    bool edge_required = false;
+    bool shadow_required = false;
+    bool noise_required = false;
+    bool interaction_required = false;
+    bool fallback_required = false;
+    bool bounded = true;
+    bool deterministic = true;
+    float opacity = 0.0f;
+    float blur_radius = 0.0f;
+    float tint_alpha = 0.0f;
+    float saturation = 1.0f;
+    float luminance_floor = 0.0f;
+    float luminance_gain = 1.0f;
+    float edge_highlight = 0.0f;
+    float edge_width = 0.0f;
+    float noise_opacity = 0.0f;
+    float shadow_alpha = 0.0f;
+    float shadow_radius = 0.0f;
+    float interaction_response_strength = 0.0f;
+    unsigned int sample_taps = 0;
+    std::int64_t max_texture_copy_pixels = 0;
+    std::int64_t max_surface_sample_pixels = 0;
+};
+
 struct MaterialThemeSnapshot {
     Color foreground = {0, 0, 0, 255};
     Color secondary_foreground = {0, 0, 0, 255};
@@ -700,6 +740,7 @@ struct MaterialPlan {
     MaterialThemeSnapshot theme{};
     MaterialForegroundRecommendation foreground{};
     MaterialInteractionResponse interaction{};
+    MaterialOpticalComposition optical_composition{};
     MaterialOpticalResponseContract optical_response{};
     MaterialFallbackPath fallback_path = MaterialFallbackPath::None;
     char const* fallback_reason = "";
@@ -740,33 +781,36 @@ inline float material_alpha_fraction(Color color) noexcept {
 
 inline MaterialStageOptics material_primary_stage_optics(
         MaterialPlan const& plan) noexcept {
+    auto const& composition = plan.optical_composition;
     MaterialStageOptics optics{};
     optics.channel = plan.primary_pass.executor;
-    optics.opacity = plan.opacity;
-    optics.blur_radius = plan.blur_radius;
-    optics.tint_alpha = material_alpha_fraction(plan.tint);
-    optics.saturation = plan.saturation;
-    optics.luminance_floor = plan.luminance_floor;
-    optics.luminance_gain = plan.luminance_gain;
+    optics.opacity = composition.opacity;
+    optics.blur_radius = composition.blur_radius;
+    optics.tint_alpha = composition.tint_alpha;
+    optics.saturation = composition.saturation;
+    optics.luminance_floor = composition.luminance_floor;
+    optics.luminance_gain = composition.luminance_gain;
     return optics;
 }
 
 inline MaterialStageOptics material_shadow_stage_optics(
         MaterialPlan const& plan) noexcept {
+    auto const& composition = plan.optical_composition;
     MaterialStageOptics optics{};
     optics.channel = "shape-shadow";
-    optics.edge_width = plan.edge_width;
-    optics.shadow_alpha = plan.shadow_alpha;
-    optics.shadow_radius = plan.shadow_radius;
+    optics.edge_width = composition.edge_width;
+    optics.shadow_alpha = composition.shadow_alpha;
+    optics.shadow_radius = composition.shadow_radius;
     return optics;
 }
 
 inline MaterialStageOptics material_edge_stage_optics(
         MaterialPlan const& plan) noexcept {
+    auto const& composition = plan.optical_composition;
     MaterialStageOptics optics{};
     optics.channel = "edge-highlight";
-    optics.edge_highlight = plan.edge_highlight;
-    optics.edge_width = plan.edge_width;
+    optics.edge_highlight = composition.edge_highlight;
+    optics.edge_width = composition.edge_width;
     optics.specular_model = plan.interaction.specular_model;
     optics.specular_anchor_x = plan.interaction.specular_anchor_x;
     optics.specular_anchor_y = plan.interaction.specular_anchor_y;
@@ -777,9 +821,10 @@ inline MaterialStageOptics material_edge_stage_optics(
 
 inline MaterialStageOptics material_noise_stage_optics(
         MaterialPlan const& plan) noexcept {
+    auto const& composition = plan.optical_composition;
     MaterialStageOptics optics{};
     optics.channel = "noise-dither";
-    optics.noise_opacity = plan.noise_opacity;
+    optics.noise_opacity = composition.noise_opacity;
     return optics;
 }
 
@@ -3404,41 +3449,131 @@ inline char const* material_optical_depth_strategy_name(
     return "none";
 }
 
-inline MaterialOpticalResponseContract material_resolve_optical_response(
+inline char const* material_optical_frosting_source_name(
         MaterialPlan const& plan) noexcept {
-    MaterialOpticalResponseContract response{};
-    response.response_model = material_optical_response_model_name(plan);
-    response.blur_strategy = material_optical_blur_strategy_name(plan);
-    response.color_strategy = material_optical_color_strategy_name(plan);
-    response.depth_strategy = material_optical_depth_strategy_name(plan);
-    response.backdrop_driven = plan.backdrop_sampling;
-    response.blur_active = plan.primary_pass.requires_backdrop;
-    response.frosting_active = plan.backdrop_sampling;
-    response.tint_active = plan.kind != MaterialKind::None && plan.tint.a > 0;
-    response.saturation_active =
+    if (plan.kind == MaterialKind::None)
+        return "none";
+    if (plan.backdrop_sampling)
+        return "sampled-backdrop-frosting";
+    if (plan.fallback())
+        return "solid-fallback-frosting";
+    if (material_plan_uses_standard_content_layer(plan))
+        return "standard-material-fill";
+    return "none";
+}
+
+inline char const* material_optical_tint_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.kind == MaterialKind::None || plan.tint.a == 0)
+        return "none";
+    if (plan.backdrop_sampling)
+        return "adaptive-backdrop-tint";
+    return "style-tint";
+}
+
+inline char const* material_optical_interaction_source_name(
+        MaterialPlan const& plan) noexcept {
+    if (plan.interaction.active
+        && plan.interaction.response_model
+        && plan.interaction.response_model[0])
+        return plan.interaction.response_model;
+    return "none";
+}
+
+inline MaterialOpticalComposition material_resolve_optical_composition(
+        MaterialPlan const& plan) noexcept {
+    MaterialOpticalComposition composition{};
+    composition.schema_version = plan.contract_version;
+    composition.model = material_optical_response_model_name(plan);
+    composition.blur_source = material_optical_blur_strategy_name(plan);
+    composition.frosting_source = material_optical_frosting_source_name(plan);
+    composition.tint_source = material_optical_tint_source_name(plan);
+    composition.luminance_source = plan.luminance_curve.name;
+    composition.depth_source = material_optical_depth_strategy_name(plan);
+    composition.interaction_source =
+        material_optical_interaction_source_name(plan);
+    composition.fallback_source = plan.fallback()
+        ? material_fallback_path_name(plan.fallback_path)
+        : "none";
+    composition.backdrop_sampled = plan.backdrop_sampling;
+    composition.blur_required = plan.primary_pass.requires_backdrop;
+    composition.frosting_required = plan.backdrop_sampling;
+    composition.tint_required =
+        plan.kind != MaterialKind::None && plan.tint.a > 0;
+    composition.saturation_required =
         plan.backdrop_sampling && std::fabs(plan.saturation - 1.0f) > 0.0001f;
-    response.luminance_preservation_active =
+    composition.luminance_required =
         plan.kind != MaterialKind::None
         && (plan.luminance_curve.bounded
-            || plan.reference_model.legibility_preserved);
-    response.edge_highlight_active =
+            || plan.foreground.primary_contrast_ratio
+                >= plan.foreground.minimum_contrast_ratio);
+    composition.edge_required =
         plan.primary_pass.active && plan.edge_highlight > 0.0f;
-    response.depth_shadow_active =
+    composition.shadow_required =
         plan.primary_pass.active && plan.shadow_alpha > 0.0f;
-    response.noise_dither_active =
+    composition.noise_required =
         plan.backdrop_sampling && plan.noise_opacity > 0.0f;
+    composition.interaction_required = plan.interaction.active;
+    composition.fallback_required = plan.fallback();
+    composition.bounded =
+        plan.resource_budget.bounded_texture_copy
+        && plan.sampling_kernel.bounded
+        && plan.luminance_curve.bounded
+        && plan.backdrop_access.bounded;
+    composition.deterministic =
+        plan.resource_budget.deterministic_fallback
+        && plan.foreground.deterministic
+        && plan.interaction.deterministic;
+    composition.opacity = plan.opacity;
+    composition.blur_radius = plan.blur_radius;
+    composition.tint_alpha = material_alpha_fraction(plan.tint);
+    composition.saturation = plan.saturation;
+    composition.luminance_floor = plan.luminance_floor;
+    composition.luminance_gain = plan.luminance_gain;
+    composition.edge_highlight = plan.edge_highlight;
+    composition.edge_width = plan.edge_width;
+    composition.noise_opacity = plan.noise_opacity;
+    composition.shadow_alpha = plan.shadow_alpha;
+    composition.shadow_radius = plan.shadow_radius;
+    composition.interaction_response_strength =
+        plan.interaction.response_strength;
+    composition.sample_taps = plan.sample_taps;
+    composition.max_texture_copy_pixels =
+        plan.primary_pass.max_texture_copy_pixels;
+    composition.max_surface_sample_pixels =
+        plan.backdrop_access.max_surface_sample_pixels;
+    return composition;
+}
+
+inline MaterialOpticalResponseContract material_resolve_optical_response(
+        MaterialPlan const& plan) noexcept {
+    auto const& composition = plan.optical_composition;
+    MaterialOpticalResponseContract response{};
+    response.response_model = composition.model;
+    response.blur_strategy = composition.blur_source;
+    response.color_strategy = material_optical_color_strategy_name(plan);
+    response.depth_strategy = composition.depth_source;
+    response.backdrop_driven = composition.backdrop_sampled;
+    response.blur_active = composition.blur_required;
+    response.frosting_active = composition.frosting_required;
+    response.tint_active = composition.tint_required;
+    response.saturation_active = composition.saturation_required;
+    response.luminance_preservation_active =
+        composition.luminance_required;
+    response.edge_highlight_active = composition.edge_required;
+    response.depth_shadow_active = composition.shadow_required;
+    response.noise_dither_active = composition.noise_required;
     response.foreground_vibrancy_active = plan.foreground.uses_vibrancy;
-    response.interaction_active = plan.interaction.active;
+    response.interaction_active = composition.interaction_required;
     response.interaction_modulates_optics =
-        plan.interaction.active
+        composition.interaction_required
         && (std::fabs(plan.interaction.opacity_delta) > 0.0001f
             || std::fabs(plan.interaction.blur_radius_delta) > 0.0001f
             || std::fabs(plan.interaction.saturation_delta) > 0.0001f
             || std::fabs(plan.interaction.edge_highlight_delta) > 0.0001f
             || std::fabs(plan.interaction.shadow_alpha_delta) > 0.0001f
             || std::fabs(plan.interaction.shadow_radius_delta) > 0.0001f);
-    response.deterministic_fallback =
-        plan.resource_budget.deterministic_fallback;
+    response.deterministic_fallback = composition.deterministic;
     return response;
 }
 
@@ -3745,6 +3880,7 @@ inline MaterialPlan plan_material_surface(MaterialRequest request,
             0,
         };
     }
+    plan.optical_composition = material_resolve_optical_composition(plan);
     if (has_material && plan.shadow_alpha > 0.0f) {
         append_material_execution_stage(
             plan,

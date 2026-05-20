@@ -268,6 +268,31 @@ inline SEL sel_set_titlebar_appears_transparent() {
     return sel;
 }
 
+inline SEL sel_set_background_color() {
+    static auto sel = sel_registerName("setBackgroundColor:");
+    return sel;
+}
+
+inline SEL sel_background_color() {
+    static auto sel = sel_registerName("backgroundColor");
+    return sel;
+}
+
+inline SEL sel_clear_color() {
+    static auto sel = sel_registerName("clearColor");
+    return sel;
+}
+
+inline SEL sel_set_opaque() {
+    static auto sel = sel_registerName("setOpaque:");
+    return sel;
+}
+
+inline SEL sel_is_opaque() {
+    static auto sel = sel_registerName("isOpaque");
+    return sel;
+}
+
 inline SEL sel_titlebar_appears_transparent() {
     static auto sel = sel_registerName("titlebarAppearsTransparent");
     return sel;
@@ -7282,6 +7307,22 @@ inline void configure_window(native_surface_handle handle,
         ns_window,
         sel_set_movable_by_window_background(),
         static_cast<ObjcBool>(1));
+    objc_send<void>(
+        ns_window,
+        sel_set_opaque(),
+        static_cast<ObjcBool>(0));
+    auto color_class = static_cast<Class>(objc_getClass("NSColor"));
+    if (color_class) {
+        auto clear_color = objc_send<id>(
+            class_as_id(color_class),
+            sel_clear_color());
+        if (clear_color) {
+            objc_send<void>(
+                ns_window,
+                sel_set_background_color(),
+                clear_color);
+        }
+    }
 }
 
 inline void renderer_init(native_surface_handle handle) {
@@ -7311,6 +7352,14 @@ inline void renderer_init(native_surface_handle handle) {
     g_renderer.layer->setDevice(g_renderer.device);
     g_renderer.layer->setPixelFormat(MTL::PixelFormatBGRA8Unorm);
     g_renderer.layer->setFramebufferOnly(false);
+    if (surface->window_options_valid
+        && surface->window_chrome == WindowChromeStyle::IntegratedTitlebar) {
+        using ObjcBool = signed char;
+        objc_send<void>(
+            reinterpret_cast<id>(g_renderer.layer),
+            sel_set_opaque(),
+            static_cast<ObjcBool>(0));
+    }
 
     int fbw = 0;
     int fbh = 0;
@@ -7388,7 +7437,12 @@ inline void renderer_flush(unsigned char const* buf, unsigned int len) {
     double cr = 0.98;
     double cg = 0.98;
     double cb = 0.98;
-    double ca = 1.0;
+    bool const transparent_window_surface =
+        g_renderer.surface
+        && g_renderer.surface->window_options_valid
+        && g_renderer.surface->window_chrome
+            == WindowChromeStyle::IntegratedTitlebar;
+    double ca = transparent_window_surface ? 0.0 : 1.0;
     (void)process_completed_images();
     process_completed_material_backdrop_luma_sample();
     int fbw = 0;
@@ -9433,6 +9487,18 @@ inline json::Object macos_window_runtime_json() {
         : 0;
     bool const background_drag_enabled = ns_window
         && objc_send<bool>(ns_window, sel_is_movable_by_window_background());
+    bool const window_opaque = ns_window
+        && objc_send<bool>(ns_window, sel_is_opaque());
+    auto const background_color = ns_window
+        ? objc_send<id>(ns_window, sel_background_color())
+        : nullptr;
+    auto const background_rgba = nscolor_to_srgb_color(background_color);
+    bool const window_background_clear =
+        background_rgba.has_value() && background_rgba->a == 0;
+    bool const metal_layer_opaque = g_renderer.layer
+        && objc_send<bool>(
+            reinterpret_cast<id>(g_renderer.layer),
+            sel_is_opaque());
     bool const app_active = ns_app
         && objc_send<bool>(ns_app, sel_is_active());
     bool const window_visible = ns_window
@@ -9482,6 +9548,16 @@ inline json::Object macos_window_runtime_json() {
     window.emplace("full_size_content_view", json::Value{full_size_content_view});
     window.emplace("title_hidden", json::Value{title_visibility == hidden_title});
     window.emplace("background_drag_enabled", json::Value{background_drag_enabled});
+    window.emplace("window_opaque", json::Value{window_opaque});
+    window.emplace(
+        "window_background_clear",
+        json::Value{window_background_clear});
+    window.emplace(
+        "window_background_alpha",
+        json::Value{
+            static_cast<std::int64_t>(
+                background_rgba.has_value() ? background_rgba->a : 255)});
+    window.emplace("metal_layer_opaque", json::Value{metal_layer_opaque});
     window.emplace(
         "native_window_controls",
         native_window_controls_runtime_json(

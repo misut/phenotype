@@ -742,6 +742,7 @@ void test_builtin_icons_parse() {
             icons::SymbolInteractionState{false, true}));
     assert(toolbar.scale == icons::SymbolScale::Medium);
     assert(toolbar.point_size == 24.0f);
+    assert(toolbar.stroke_scale == 1.0f);
     auto toolbar_chrome = icons::macos_control_chrome(
         icons::SymbolPresentationRole::Toolbar,
         icons::SymbolInteractionState{false, true});
@@ -755,6 +756,9 @@ void test_builtin_icons_parse() {
            == 44.0f);
     assert((toolbar.color == Color{96, 96, 100, 255}));
     assert(icons::paint_token(toolbar) != 0);
+    auto thin_toolbar = toolbar;
+    thin_toolbar.stroke_scale = 0.86f;
+    assert(icons::paint_token(thin_toolbar) != icons::paint_token(toolbar));
     auto toolbar_pressed = icons::macos_presentation(
         icons::Symbol::Search,
         icons::SymbolPresentationRole::Toolbar,
@@ -790,6 +794,34 @@ void test_builtin_icons_parse() {
     CapturePainter presentation_painter;
     icons::paint_symbol(presentation_painter, cache, sidebar, 0.0f, 0.0f);
     assert(presentation_painter.fills + presentation_painter.strokes > 0);
+
+    auto line_doc = svg::parse(R"SVG(
+        <svg viewBox="0 0 24 24">
+          <path d="M4 12 L20 12" fill="none" stroke="currentColor"
+                stroke-width="2"/>
+        </svg>
+    )SVG");
+    CapturePainter normal_line;
+    svg::paint(normal_line, line_doc, 0.0f, 0.0f, 24.0f, 24.0f,
+               svg::RenderOptions{{0, 122, 255, 255}, true});
+    CapturePainter thin_line;
+    svg::paint(thin_line, line_doc, 0.0f, 0.0f, 24.0f, 24.0f,
+               svg::RenderOptions{{0, 122, 255, 255}, true, 0.5f});
+    assert(normal_line.last_thickness == 2.0f);
+    assert(thin_line.last_thickness == 1.0f);
+    assert(svg::paint_token(
+               line_doc,
+               24.0f,
+               24.0f,
+               Color{0, 122, 255, 255},
+               true)
+           != svg::paint_token(
+               line_doc,
+               24.0f,
+               24.0f,
+               Color{0, 122, 255, 255},
+               true,
+               0.5f));
 
     std::puts("PASS: built-in phenotype icon catalog is valid SVG");
 }
