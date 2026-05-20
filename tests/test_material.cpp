@@ -58,7 +58,7 @@ void test_sampled_backdrop_access_contract() {
     auto plan = plan_material_surface(regular_request(), sampled_environment());
 
     assert(plan.contract_version == material_plan_contract_version);
-    assert(material_plan_contract_version == 29);
+    assert(material_plan_contract_version == 30);
     assert(std::string_view(plan.interaction.enablement_reason)
         == "noninteractive-container");
     assert(plan.shape.kind == MaterialShapeKind::RoundedRectangle);
@@ -494,6 +494,13 @@ void test_interactive_material_modulates_optics_contract() {
         == "liquid-glass-interaction");
     assert(std::string_view(plan.interaction.motion_policy)
         == "animated-optical-response");
+    assert(std::string_view(plan.interaction.specular_model)
+        == "pointer-specular");
+    assert(plan.interaction.specular_highlight_active);
+    assert(std::fabs(plan.interaction.specular_anchor_x - 0.75f) < 0.0001f);
+    assert(std::fabs(plan.interaction.specular_anchor_y - 0.25f) < 0.0001f);
+    assert(plan.interaction.specular_radius > 0.0f);
+    assert(plan.interaction.specular_intensity > 0.0f);
     assert(plan.interaction.response_strength > 0.0f);
     assert(plan.opacity > baseline_plan.opacity);
     assert(plan.blur_radius > baseline_plan.blur_radius);
@@ -519,6 +526,9 @@ void test_interactive_material_modulates_optics_contract() {
         == "interactive-container");
     assert(std::string_view(reduced_plan.interaction.motion_policy)
         == "reduced-motion-static");
+    assert(reduced_plan.interaction.specular_highlight_active);
+    assert(reduced_plan.interaction.specular_intensity
+           < plan.interaction.specular_intensity);
     assert(reduced_plan.interaction.response_strength
            <= plan.interaction.response_strength);
     assert(!reduced_plan.container.morph_transitions);

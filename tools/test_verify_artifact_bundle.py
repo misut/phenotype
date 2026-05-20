@@ -28,6 +28,11 @@ def stage_optics(
     noise_opacity: float = 0.0,
     shadow_alpha: float = 0.0,
     shadow_radius: float = 0.0,
+    specular_model: str = "none",
+    specular_anchor_x: float = 0.5,
+    specular_anchor_y: float = 0.5,
+    specular_radius: float = 0.0,
+    specular_intensity: float = 0.0,
 ) -> dict[str, object]:
     return {
         "channel": channel,
@@ -42,6 +47,11 @@ def stage_optics(
         "noise_opacity": noise_opacity,
         "shadow_alpha": shadow_alpha,
         "shadow_radius": shadow_radius,
+        "specular_model": specular_model,
+        "specular_anchor_x": specular_anchor_x,
+        "specular_anchor_y": specular_anchor_y,
+        "specular_radius": specular_radius,
+        "specular_intensity": specular_intensity,
     }
 
 
@@ -331,6 +341,12 @@ def material_plan(
             "enablement_reason": "noninteractive-container",
             "response_model": "none",
             "motion_policy": "static",
+            "specular_model": "none",
+            "specular_highlight_active": False,
+            "specular_anchor_x": 0.5,
+            "specular_anchor_y": 0.5,
+            "specular_radius": 0.0,
+            "specular_intensity": 0.0,
             "deterministic": True,
         },
         "fallback": True,
@@ -852,11 +868,13 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
     shape = plan["shape"]
     backdrop_access = plan["backdrop_access"]
     execution_stages = plan["execution_stages"]
+    interaction = plan["interaction"]
     assert isinstance(budget, dict)
     assert isinstance(primary, dict)
     assert isinstance(shape, dict)
     assert isinstance(backdrop_access, dict)
     assert isinstance(execution_stages, list)
+    assert isinstance(interaction, dict)
     return {
         "plan_count": 1,
         "fallback_count": 1 if plan["fallback"] else 0,
@@ -924,6 +942,12 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "foreground_vibrant_count": (
             1 if plan["foreground"]["uses_vibrancy"] else 0
         ),
+        "interaction_enabled_count": 1 if interaction["enabled"] else 0,
+        "interaction_active_count": 1 if interaction["active"] else 0,
+        "interaction_reduce_motion_count": (
+            1 if interaction["reduce_motion"] else 0),
+        "interaction_specular_highlight_count": (
+            1 if interaction["specular_highlight_active"] else 0),
         "max_surface_area": shape["surface_area"],
         "max_effective_radius": shape["effective_radius"],
         "max_radius_limit": shape["radius_limit"],
@@ -934,6 +958,9 @@ def material_runtime_summary(plan: dict[str, object]) -> dict[str, object]:
         "max_noise_opacity": plan["noise_opacity"],
         "max_shadow_alpha": plan["shadow_alpha"],
         "max_shadow_radius": plan["shadow_radius"],
+        "max_interaction_response_strength": interaction["response_strength"],
+        "max_interaction_specular_radius": interaction["specular_radius"],
+        "max_interaction_specular_intensity": interaction["specular_intensity"],
         "min_foreground_contrast_ratio": (
             plan["foreground"]["primary_contrast_ratio"]
         ),
@@ -959,8 +986,10 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
     ]
     primary = plan["primary_pass"]
     backdrop_access = plan["backdrop_access"]
+    interaction = plan["interaction"]
     assert isinstance(primary, dict)
     assert isinstance(backdrop_access, dict)
+    assert isinstance(interaction, dict)
     sampled_backdrop_instances = (
         1 if primary["executor"] == "backdrop-filter" else 0)
     standard_fill_instances = (
@@ -1047,6 +1076,13 @@ def material_executor_summary(plan: dict[str, object]) -> dict[str, object]:
         "material_buffer_reallocations": 0,
         "foreground_text_candidate_count": 1,
         "foreground_text_remap_count": 1,
+        "interaction_enabled_count": 1 if interaction["enabled"] else 0,
+        "interaction_active_count": 1 if interaction["active"] else 0,
+        "interaction_specular_highlight_count": (
+            1 if interaction["specular_highlight_active"] else 0),
+        "max_interaction_response_strength": interaction["response_strength"],
+        "max_interaction_specular_radius": interaction["specular_radius"],
+        "max_interaction_specular_intensity": interaction["specular_intensity"],
         "backdrop_descriptor_luma_available": False,
         "backdrop_descriptor_luma_min": plan["backdrop"]["luma_min"],
         "backdrop_descriptor_luma_max": plan["backdrop"]["luma_max"],
@@ -2699,6 +2735,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
             "enablement_reason": "interactive-container",
             "response_model": "liquid-glass-interaction",
             "motion_policy": "animated-optical-response",
+            "specular_model": "pointer-specular",
+            "specular_highlight_active": True,
+            "specular_anchor_x": 0.62,
+            "specular_anchor_y": 0.38,
+            "specular_radius": 0.34,
+            "specular_intensity": 0.24,
         })
         refresh_observation_contract(plan)
         manifest = {
@@ -2708,6 +2750,7 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 "interaction_hovered": 1,
                 "interaction_focused": 1,
                 "interaction_pointer_inside": 1,
+                "interaction_specular_highlight_active": 1,
                 "interaction_deterministic": 1,
                 "interaction_states": {"hovered": 1},
                 "interaction_enablement_reasons": {
@@ -2718,6 +2761,9 @@ class ArtifactVerifierContractTest(unittest.TestCase):
                 },
                 "interaction_motion_policies": {
                     "animated-optical-response": 1,
+                },
+                "interaction_specular_models": {
+                    "pointer-specular": 1,
                 },
                 "optical_interaction_active": 1,
                 "optical_interaction_modulates_optics": 1,
@@ -2742,6 +2788,12 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertEqual(
             report["material_plans"]["interaction"]["enablement_reasons"],
             {"interactive-container": 1})
+        self.assertEqual(
+            report["material_plans"]["interaction"]["specular_models"],
+            {"pointer-specular": 1})
+        self.assertEqual(
+            report["material_plans"]["interaction"]["specular_highlight_active"],
+            1)
         self.assertEqual(
             report["material_plans"]["optical_response"][
                 "interaction_modulates_optics"],
@@ -2771,6 +2823,28 @@ class ArtifactVerifierContractTest(unittest.TestCase):
         self.assertIn(
             "MaterialPlan.interaction.enablement_reason",
             failure["suggested_action"])
+
+    def test_interaction_specular_model_mismatch_is_llm_actionable(self) -> None:
+        plan = material_plan()
+        interaction = plan["interaction"]
+        assert isinstance(interaction, dict)
+        interaction["specular_model"] = "pointer-specular"
+
+        code, report = self.run_verifier(snapshot(plan))
+
+        self.assertEqual(code, 1)
+        failure = next(
+            item for item in report["failures"]
+            if item["name"] == (
+                "material interaction specular_model matches highlight state"))
+        self.assertEqual(
+            failure["path"],
+            "debug.platform_runtime.details.renderer.material_plans[0]"
+            ".interaction.specular_model")
+        self.assertEqual(failure["expected"], "none")
+        self.assertEqual(failure["actual"], "pointer-specular")
+        self.assertEqual(failure["likely_layer"], "material-interaction")
+        self.assertIn("MaterialPlan.interaction", failure["suggested_action"])
 
     def test_interaction_pointer_failure_points_to_material_interaction(self) -> None:
         plan = material_plan()

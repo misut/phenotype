@@ -206,6 +206,11 @@ chrome can now opt in with `MaterialSurfaceOptions.interactive`; the built-in
 toolbar-group and navigation glass presets use that opt-in so Finder-style
 toolbar clusters and segmented navigation controls expose interaction response
 without requiring every app to wrap them in a separate material container.
+Pointer-driven active responses now include a pure, normalized
+`pointer-specular` highlight descriptor. The macOS Metal executor consumes that
+descriptor as shader input to add a bounded glint near the pointer anchor, while
+fallback backends publish the same semantic/debug contract with zero specular
+intensity when no active pointer response exists.
 `MaterialPlan.optical_response` is the compact schema-stable summary of that
 contract. It classifies each surface as sampled backdrop glass, content-layer
 standard material, deterministic fallback, or inactive, then records the
@@ -542,8 +547,8 @@ The current debug plane already provides important pieces:
 - remote image queue/debug state on macOS and Windows.
 - resolved material plans with pass expectations, quality policy, foreground
   contrast recommendations, resource budgets, fallback paths/reasons, verifier
-  expectations, pure observation contracts, derived runtime summaries, and
-  backend executor counters.
+  expectations, pure observation contracts, pointer-specular interaction
+  descriptors, derived runtime summaries, and backend executor counters.
 
 This is now strong enough for the current material CI gates: an LLM can inspect
 the manifest failure path, material plan summary, fallback reason distribution,
@@ -651,8 +656,8 @@ Done means `examples/` is a local acceptance suite, not just demos:
 | Requirement | Current evidence | Gap |
 |---|---|---|
 | Analyze current phenotype progress | This document, `README.md`, `docs/ARCHITECTURE.md`, `docs/DEBUG_WORKFLOW.md`, examples and tests | Keep updated as milestones land |
-| Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, material container/union identity, macOS sampled-backdrop rendering, resolved runtime fallback plans on Windows/Android, snapshot fallback contracts elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
-| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, pure material observation contracts, interaction enablement reasons, foreground-excluded backdrop access/capture contracts, pure container-group summaries, bounded material execution stages, per-stage optical input descriptors, explicit stage-capacity/drop counters, startup bundle verifier, optional pixel-region checks, material/container/group/shape/foreground/backdrop-access/interaction plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, runtime optical scalar bounds, executor numeric bounds, sampled upload/draw readiness/status gates, foreground text execution counters, foreground-feedback guard counters, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
+| Apple glass style GUI | First-class material surfaces exist with `MaterialRect`, material container/union identity, macOS sampled-backdrop rendering, pure pointer-specular interaction descriptors executed by the macOS Metal path, resolved runtime fallback plans on Windows/Android, snapshot fallback contracts elsewhere, plus `examples/glass_showcase` for the target scene shape | Add Windows/Android/Web native material rendering or keep explicit fallback |
+| LLM can debug GUI completely | Debug plane exists with snapshot, semantic tree, input debug, runtime, frame capture, material metadata, resolved material plans, pure material observation contracts, interaction enablement reasons/specular descriptors, foreground-excluded backdrop access/capture contracts, pure container-group summaries, bounded material execution stages, per-stage optical input descriptors, explicit stage-capacity/drop counters, startup bundle verifier, optional pixel-region checks, material/container/group/shape/foreground/backdrop-access/interaction plan summary gates, fallback reason summary/stale-metadata gates, semantic/runtime material parity gates, material quality/resource bound gates, runtime optical scalar bounds, executor numeric bounds, sampled upload/draw readiness/status gates, foreground text execution counters, foreground-feedback guard counters, ratio-based blur probes, a glass showcase manifest, a local glass showcase gate, CI artifact builds, and a local Android contract runner | Add Android CI wiring and mirror blur-specific probes on future native material backends |
 | Stability is priority | Existing tests cover core widgets, native debug, text, remote images, command parsing | Add tests before each material/backend expansion |
 | Performance is priority | Existing paint cache, scissor, batching, native renderer optimizations, pure material resource bounds for blur radius, sample taps, pass count, execution stage count/capacity, dropped-stage count, backdrop pixels, shared frame capture count/pixels, surface sample pixels, bounded texture copies, deterministic fallback, pure effective-radius shape bounds, pure optical scalar bounds, pure container-group max surface counters, backend `material_runtime_summary` counters cross-checked by the verifier, and backend `material_executor_summary` budget/timing/stage telemetry guarded by artifact manifests | Keep tightening backend timing budgets as more native material renderers land |
 | Runnable examples under `examples/` | Native, glass showcase, desktop/mobile file explorer, and Android examples exist | Add Android CI device/emulator wiring when runner capacity allows |

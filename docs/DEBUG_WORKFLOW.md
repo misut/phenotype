@@ -803,6 +803,10 @@ strength, and report `motion_policy: reduced-motion-static`. The delta fields
 (`opacity_delta`, `blur_radius_delta`, `saturation_delta`,
 `edge_highlight_delta`, `shadow_alpha_delta`, and `shadow_radius_delta`) explain
 exactly which optical channels changed before the backend executed a pass.
+Pointer-driven active plans also publish `specular_model`,
+`specular_highlight_active`, normalized `specular_anchor_x/y`, and bounded
+`specular_radius` / `specular_intensity`. A backend should consume those fields
+as shader input; it should not invent its own pointer highlight policy.
 The verifier cross-checks those deltas against
 `MaterialPlan.optical_response.interaction_active` and
 `interaction_modulates_optics`, so a failed hover/press response identifies the
@@ -1161,10 +1165,15 @@ can additionally assert pure aggregate group facts:
 Interaction gates can additionally pin `interaction_enabled`,
 `interaction_active`, `interaction_hovered`, `interaction_pressed`,
 `interaction_focused`, `interaction_pointer_inside`,
-`interaction_reduce_motion`, `interaction_deterministic`, and exact maps for
+`interaction_reduce_motion`, `interaction_deterministic`,
+`interaction_specular_highlight_active`, and exact maps for
 `interaction_states`, `interaction_enablement_reasons`,
-`interaction_response_models`, and
-`interaction_motion_policies`.
+`interaction_response_models`, `interaction_specular_models`, and
+`interaction_motion_policies`. Runtime gates can also check
+`renderer.material_runtime_summary.interaction_specular_highlight_count`,
+`max_interaction_specular_radius`, and
+`max_interaction_specular_intensity`, with matching executor-summary counters
+when a backend turns the plan into draw inputs.
 Theme gates can additionally pin
 `theme_foreground_matches_theme`, `theme_accent_matches_theme`,
 `theme_tint_matches_surface`, `theme_border_matches_theme`, and

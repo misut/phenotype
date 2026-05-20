@@ -1597,6 +1597,8 @@ struct MaterialInstanceGPU {
     float sampling[4]{};
     // gamma, midpoint, contrast, edge lift
     float luminance_curve[4]{};
+    // specular anchor x/y, radius, intensity
+    float interaction[4]{};
 };
 
 // Per-vertex GPU layout for the triangle pipeline (FillPath fast path).
@@ -2282,6 +2284,10 @@ inline void append_material_instance(std::vector<MaterialInstanceGPU>& out,
     inst.luminance_curve[1] = plan.luminance_curve.midpoint;
     inst.luminance_curve[2] = plan.luminance_curve.contrast;
     inst.luminance_curve[3] = plan.luminance_curve.edge_lift;
+    inst.interaction[0] = plan.interaction.specular_anchor_x;
+    inst.interaction[1] = plan.interaction.specular_anchor_y;
+    inst.interaction[2] = plan.interaction.specular_radius;
+    inst.interaction[3] = plan.interaction.specular_intensity;
     out.push_back(inst);
 }
 
@@ -4027,6 +4033,7 @@ struct MaterialVsOut {
     float4 effects;
     float4 sampling;
     float4 luminance_curve;
+    float4 interaction;
 };
 
 struct MaterialInstance {
@@ -4037,6 +4044,7 @@ struct MaterialInstance {
     float4 effects;
     float4 sampling;
     float4 luminance_curve;
+    float4 interaction;
 };
 
 vertex MaterialVsOut vs_material(
@@ -4067,6 +4075,7 @@ vertex MaterialVsOut vs_material(
     out.effects = inst.effects;
     out.sampling = inst.sampling;
     out.luminance_curve = inst.luminance_curve;
+    out.interaction = inst.interaction;
     return out;
 }
 
@@ -4149,6 +4158,22 @@ fragment float4 fs_material(
     float edge = 1.0 - smoothstep(0.0, edge_width, signed_edge_distance);
     float edge_lift = clamp(in.luminance_curve.w, 0.0, 1.0);
     rgb += float3(edge * edge_lift);
+    float specular_intensity = clamp(in.interaction.w, 0.0, 1.0);
+    if (specular_intensity > 0.0) {
+        float2 anchor = clamp(in.interaction.xy, float2(0.0), float2(1.0))
+            * max(in.rect_size, float2(1.0));
+        float specular_radius = clamp(in.interaction.z, 0.05, 1.0)
+            * max(min(in.rect_size.x, in.rect_size.y), 1.0);
+        float pointer_distance = distance(in.local_pos, anchor);
+        float glow = 1.0 - smoothstep(0.0, specular_radius, pointer_distance);
+        glow *= glow * specular_intensity;
+        float edge_focus = edge * (1.0 - smoothstep(
+            0.0,
+            specular_radius * 0.75,
+            pointer_distance));
+        rgb += float3(glow * (0.22 + 0.18 * edge_lift));
+        rgb += float3(edge_focus * specular_intensity * 0.28);
+    }
     float shadow_radius = clamp(in.effects.z, 0.0, 64.0);
     float shadow_band = max(edge_width, shadow_radius);
     float lower_depth = smoothstep(
